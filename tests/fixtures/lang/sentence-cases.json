@@ -234,6 +234,16 @@
         "Version 2.0 is out.",
         "Speed rose 3.5 times."
       ]
+    },
+    {
+      "name": "it_accented_vowels_packed",
+      "language": "it",
+      "text": "Perché la città è già pronta? Sì, però la qualità è più alta. L'università offrirà un'attività in più! Così è.",
+      "budget_tokens": 22,
+      "expect_segments": [
+        "Perché la città è già pronta? Sì, però la qualità è più alta.",
+        "L'università offrirà un'attività in più! Così è."
+      ]
     }
   ]
 }

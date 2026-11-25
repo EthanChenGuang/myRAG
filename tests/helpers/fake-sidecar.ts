@@ -20,6 +20,8 @@ interface ManifestEntry {
 
 export interface FakeSidecarManifest {
   fixtures: ManifestEntry[];
+  /** Loaded only into the isolated table_split tenants of the ingest fixture mode (03.2-30). */
+  long_table_fixtures?: ManifestEntry[];
 }
 
 export interface FakeSidecarJobSpec {
@@ -78,6 +80,7 @@ function recordedSources(): RecordedSource[] {
   const chain = JSON.parse(readFileSync(PARSE_CHAIN_MANIFEST, 'utf8')) as FakeSidecarManifest;
   return [
     ...loadManifest().fixtures.map((entry) => ({ base: FIXTURES, entry })),
+    ...(loadManifest().long_table_fixtures ?? []).map((entry) => ({ base: FIXTURES, entry })),
     ...chain.fixtures.map((entry) => ({ base: PARSE_FIXTURES, entry })),
   ];
 }

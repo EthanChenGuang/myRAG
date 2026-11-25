@@ -5,6 +5,7 @@ from typing import Literal
 
 from rag_sidecar.contracts.answers import CitationRecord
 from rag_sidecar.contracts.eval_run import RagTrace, TraceInjection
+from rag_sidecar.contracts.feedback_loop import GatePopulationConfig
 from rag_sidecar.contracts.golden import AttackSpec, GoldenItem
 from rag_sidecar.contracts.report import (
     GroundednessLabelCounts,
@@ -15,7 +16,9 @@ from rag_sidecar.contracts.report import (
 )
 
 from rag_eval.bounds import upper_bound
+from rag_eval.config_files import load_gate_population
 from rag_eval.matching import chunk_matches_span
+from rag_eval.native_review import counts_in_gated_slices, report_only_reason
 
 _RECALL_FIELDS = {5: "spans_hit_at_5", 10: "spans_hit_at_10"}
 CROSS_LINGUAL = "cross_lingual"
@@ -133,6 +136,7 @@ def score_items(
                 question_kind=question_kind(item.category, item.tags),
                 rerank_status=trace.stage_status.get(RERANK_STAGE),
                 lexical_hit_at_10=_lexical_hit(trace, item, leg_ran=leg_ran),
+                report_only_reason=report_only_reason(item),
             )
         )
     return results
@@ -165,6 +169,10 @@ def _group(results: Iterable[ItemResult], key: Callable[[ItemResult], str]) -> d
     for result in results:
         groups.setdefault(key(result), []).append(result)
     return {name: _slice(members) for name, members in sorted(groups.items())}
+
+
+def slices_by(results: Iterable[ItemResult], key: Callable[[ItemResult], str]) -> dict[str, SliceMetrics]:
+    return _group(results, key)
 
 
 def _rerank_skipped_rate(results: list[ItemResult]) -> MetricValue:
@@ -266,35 +274,84 @@ def groundedness_label_counts(
     }
 
 
+REAL_SET_TOO_SMALL = "real_set_too_small"
+
+
+class RealSetTooSmall(ValueError):
+    """D-23: a real gate population below min_items fails the run instead of falling back."""
+
+    reason = REAL_SET_TOO_SMALL
+
+    def __init__(self, count: int, min_items: int) -> None:
+        super().__init__(f"{REAL_SET_TOO_SMALL}: {count} real gate item(s), at least {min_items} required")
+        self.count = count
+        self.min_items = min_items
+
+
+def select_gate_population(
+    gated: list[ItemResult],
+    approved_ids: frozenset[str] | None = None,
+    population: GatePopulationConfig | None = None,
+) -> tuple[list[ItemResult], str]:
+    """D-23: the gated items and their population label. Real provenances come only from the config (D-29)."""
+    if population is None or population.mode == "legacy":
+        production = [
+            r for r in gated if r.provenance == "production" and (approved_ids is None or r.item_id in approved_ids)
+        ]
+        return (production, "production") if production else (gated, "all")
+    real_provenances = frozenset(population.provenances)
+    real = [r for r in gated if r.provenance in real_provenances and (approved_ids is None or r.item_id in approved_ids)]
+    if len(real) < population.min_items:
+        raise RealSetTooSmall(count=len(real), min_items=population.min_items)
+    return real, "real"
+
+
+def report_gate_items(
+    items: list[ItemResult], gate_split: str, gate_population: str, population: GatePopulationConfig | None = None
+) -> list[ItemResult]:
+    """Gated items of a finished report; items carry no review status, so this filters by split and provenance.
+
+    A real report without an explicit config reads the committed gate-population.json.
+    """
+    gated = [item for item in items if item.split == gate_split and counts_in_gated_slices(item)]
+    if gate_population == "production":
+        return [item for item in gated if item.provenance == "production"]
+    if gate_population == "real":
+        if population is None:
+            population, _ = load_gate_population()
+        real_provenances = frozenset(population.provenances)
+        return [item for item in gated if item.provenance in real_provenances]
+    return gated
+
+
 def aggregate(
     results: list[ItemResult],
     k_values: tuple[int, ...] = (5, 10),
     gate_split: str = "dev",
     approved_ids: frozenset[str] | None = None,
+    population: GatePopulationConfig | None = None,
 ) -> dict[str, object]:
     if tuple(k_values) != (5, 10):
         raise ValueError(f"unsupported k_values {tuple(k_values)!r}: the report contract carries recall@5 and recall@10")
     gated = [r for r in results if r.split == gate_split]
-    production = [
-        r for r in gated if r.provenance == "production" and (approved_ids is None or r.item_id in approved_ids)
-    ]
-    population = production or gated
+    counting = [r for r in gated if counts_in_gated_slices(r)]
+    members, label = select_gate_population(counting, approved_ids, population)
     return {
-        "overall": _slice(population),
-        "by_language": _group(population, lambda r: r.language),
-        "by_category": _group(population, lambda r: r.category),
+        "overall": _slice(members),
+        "by_language": _group(members, lambda r: r.language),
+        "by_category": _group(members, lambda r: r.category),
         "by_language_category": _group(gated, lambda r: f"{r.language}/{r.category}"),
         "by_language_pair": _group(
-            _pair_members(population), lambda r: language_pair_key(r.language, r.evidence_language or "")
+            _pair_members(members), lambda r: language_pair_key(r.language, r.evidence_language or "")
         ),
-        "by_doc_type": _group(population, lambda r: r.doc_type or GENERAL_DOC_TYPE),
-        "by_question_kind": _group(population, lambda r: r.question_kind or question_kind(r.category, [])),
-        "rerank_skipped_rate": _rerank_skipped_rate(population),
-        "lexical_leg_hit_rate_at_10": _lexical_leg_hit_rate(population),
+        "by_doc_type": _group(members, lambda r: r.doc_type or GENERAL_DOC_TYPE),
+        "by_question_kind": _group(members, lambda r: r.question_kind or question_kind(r.category, [])),
+        "rerank_skipped_rate": _rerank_skipped_rate(members),
+        "lexical_leg_hit_rate_at_10": _lexical_leg_hit_rate(members),
         "by_split": _group(results, lambda r: r.split),
         "by_provenance": _group(gated, lambda r: r.provenance),
         "by_provenance_category": _group(gated, lambda r: f"{r.provenance}/{r.category}"),
-        "gate_population": "production" if production else "all",
+        "gate_population": label,
     }
 
 

@@ -220,6 +220,18 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_count_ingestion_dead_letters(text) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_count_ingestion_dead_letters(text) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_list_quarantine_reasons(uuid, integer, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_list_quarantine_reasons(uuid, integer, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_list_quarantine_reasons(uuid, integer, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_release_quarantine_reasons(uuid, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_release_quarantine_reasons(uuid, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_release_quarantine_reasons(uuid, uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_list_not_checked(uuid, integer, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_list_not_checked(uuid, integer, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_list_not_checked(uuid, integer, integer) TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_list_pending_uploads(uuid, text, integer, integer)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_list_pending_uploads(uuid, text, integer, integer) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_list_pending_uploads(uuid, text, integer, integer) TO service_role;
@@ -235,6 +247,10 @@ BEGIN
   IF to_regprocedure('public.rag_feedback_loop_on_chat_delete()') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_feedback_loop_on_chat_delete() FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_feedback_loop_on_chat_delete() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_mine_failed_queries(timestamptz, timestamptz, jsonb)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_mine_failed_queries(timestamptz, timestamptz, jsonb) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_mine_failed_queries(timestamptz, timestamptz, jsonb) TO service_role;
   END IF;
   IF to_regprocedure('public.rag_find_content_duplicate(text, text, uuid)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_find_content_duplicate(text, text, uuid) FROM PUBLIC, anon, authenticated;
@@ -672,6 +688,10 @@ BEGIN
   IF to_regprocedure('public.move_chats_to_folder(uuid[], uuid)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.move_chats_to_folder(uuid[], uuid) FROM PUBLIC, anon;
     GRANT EXECUTE ON FUNCTION public.move_chats_to_folder(uuid[], uuid) TO authenticated, service_role;
+  END IF;
+  IF to_regprocedure('public.rag_is_domain_expert(text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_is_domain_expert(text) FROM PUBLIC, anon;
+    GRANT EXECUTE ON FUNCTION public.rag_is_domain_expert(text) TO authenticated, service_role;
   END IF;
   IF to_regprocedure('public.rag_ingest_realtime_topic_allowed(text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_ingest_realtime_topic_allowed(text) FROM PUBLIC, anon;

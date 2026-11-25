@@ -1,6 +1,7 @@
 import { redisvlInvalidationTarget } from '../../cache/emit';
 import { scheduleAfterResponse } from '../../trace/schedule';
 import { scopeKey } from '../../tenant/scope';
+import { buildIngestFingerprint, collectFingerprintParts } from '../fingerprint';
 import { afterPublish } from '../post-publish';
 import { requireDocument, type IngestResult, type IngestStatus, type StageContext, type StageOutcome, type StageSpec } from '../types';
 import { IngestWriterError } from '../writer';
@@ -39,8 +40,15 @@ async function holdForReview(ctx: StageContext, documentId: string, version: num
   }
 }
 
+/** D-10: the version records how it was ingested before it is published or held; the same builder serves inline and queued runs. */
+async function writeFingerprint(ctx: StageContext, documentId: string): Promise<void> {
+  const parts = collectFingerprintParts(ctx);
+  await ctx.writer.setFields(documentId, { ingest_fingerprint: buildIngestFingerprint(parts), metadata: { ingest_fingerprint_parts: parts } });
+}
+
 async function run(ctx: StageContext): Promise<StageOutcome> {
   const document = requireDocument(ctx, 'publish');
+  await writeFingerprint(ctx, document.id);
   if (ctx.state.approval?.required === true && !quarantinedByScan(ctx)) return holdForReview(ctx, document.id, document.version);
 
   const batchHold = ctx.state.publishHold;

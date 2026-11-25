@@ -89,6 +89,11 @@ async function loadProcessDocument() {
   }));
   vi.doMock('@supabase/supabase-js', () => ({ createClient: () => adminClient() }));
   vi.doMock('@/lib/rag', () => ({
+    // Upload approval off (D-56): the legacy writers are not refused.
+    assertLegacyWriteAllowed: () => undefined,
+    legacyWriteRefused: () => false,
+    legacyApprovalRefusal: () => new Response(null, { status: 503 }),
+    UploadApprovalRequiresUnifiedError: class UploadApprovalRequiresUnifiedError extends Error {},
     assertCloudAllowed: () => ({ ok: true }),
     CloudRefused: class CloudRefused extends Error {},
     embedText: async () => {
@@ -128,6 +133,11 @@ async function loadScraper(kind: 'scrape' | 'crawl') {
   baseMocks();
   vi.doMock('@/lib/supabase', () => ({ getSupabaseAdmin: () => adminClient() }));
   vi.doMock('@/lib/rag', () => ({
+    // Upload approval off (D-56): the legacy writers are not refused.
+    assertLegacyWriteAllowed: () => undefined,
+    legacyWriteRefused: () => false,
+    legacyApprovalRefusal: () => new Response(null, { status: 503 }),
+    UploadApprovalRequiresUnifiedError: class UploadApprovalRequiresUnifiedError extends Error {},
     isAdminUser: async (admin: ReturnType<typeof adminClient>, userId: string) => {
       const { data } = await admin.from('admin_users').eq('id', userId).abortSignal().maybeSingle();
       return Boolean(data);

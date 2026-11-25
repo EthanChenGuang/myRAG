@@ -1,0 +1,6276 @@
+{
+  "approved_production": {
+    "by_category": {
+      "ambiguous": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.6666666666666666
+        },
+        "false_refusal_upper_95": 0.9830475724915586,
+        "mrr": {
+          "n": 3,
+          "value": 0.611111111111111
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 1.0
+        }
+      },
+      "compound": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.15476190476190477
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.0
+        }
+      },
+      "cross_lingual": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.125
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "general": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 4,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9023885371135857,
+        "mrr": {
+          "n": 4,
+          "value": 0.16666666666666666
+        },
+        "recall_at_10": {
+          "n": 4,
+          "value": 0.75
+        },
+        "recall_at_5": {
+          "n": 4,
+          "value": 0.5
+        }
+      },
+      "injection": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 1,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.9500000000000001,
+        "mrr": {
+          "n": 1,
+          "value": 0.0
+        },
+        "recall_at_10": {
+          "n": 1,
+          "value": 0.0
+        },
+        "recall_at_5": {
+          "n": 1,
+          "value": 0.0
+        }
+      },
+      "injection_evasive": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 1,
+          "value": 1.0
+        },
+        "false_refusal_upper_95": 1.0,
+        "mrr": {
+          "n": 1,
+          "value": 0.25
+        },
+        "recall_at_10": {
+          "n": 1,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 1,
+          "value": 1.0
+        }
+      },
+      "multi_turn": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 1,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.9500000000000001,
+        "mrr": {
+          "n": 1,
+          "value": 0.3333333333333333
+        },
+        "recall_at_10": {
+          "n": 1,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 1,
+          "value": 1.0
+        }
+      },
+      "no_answer": {
+        "correct_refusal_rate": {
+          "n": 4,
+          "value": 0.75
+        },
+        "false_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_upper_95": 1.0,
+        "mrr": {
+          "n": 0,
+          "value": null
+        },
+        "recall_at_10": {
+          "n": 0,
+          "value": null
+        },
+        "recall_at_5": {
+          "n": 0,
+          "value": null
+        }
+      },
+      "selective_filter": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.3214285714285714
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "table": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.6315968501359613,
+        "mrr": {
+          "n": 3,
+          "value": 0.12222222222222223
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 0.6666666666666666
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 0.3333333333333333
+        }
+      }
+    },
+    "by_doc_type": {
+      "general": {
+        "correct_refusal_rate": {
+          "n": 4,
+          "value": 0.75
+        },
+        "false_refusal_rate": {
+          "n": 19,
+          "value": 0.42105263157894735
+        },
+        "false_refusal_upper_95": 0.6318847929794849,
+        "mrr": {
+          "n": 19,
+          "value": 0.2448621553884712
+        },
+        "recall_at_10": {
+          "n": 19,
+          "value": 0.7368421052631579
+        },
+        "recall_at_5": {
+          "n": 19,
+          "value": 0.5263157894736842
+        }
+      }
+    },
+    "by_language": {
+      "en": {
+        "correct_refusal_rate": {
+          "n": 2,
+          "value": 1.0
+        },
+        "false_refusal_rate": {
+          "n": 6,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.8468388820247769,
+        "mrr": {
+          "n": 6,
+          "value": 0.3111111111111111
+        },
+        "recall_at_10": {
+          "n": 6,
+          "value": 0.75
+        },
+        "recall_at_5": {
+          "n": 6,
+          "value": 0.6666666666666666
+        }
+      },
+      "it": {
+        "correct_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_rate": {
+          "n": 7,
+          "value": 0.5714285714285714
+        },
+        "false_refusal_upper_95": 0.8712436071957573,
+        "mrr": {
+          "n": 7,
+          "value": 0.17857142857142858
+        },
+        "recall_at_10": {
+          "n": 7,
+          "value": 0.5714285714285714
+        },
+        "recall_at_5": {
+          "n": 7,
+          "value": 0.42857142857142855
+        }
+      },
+      "zh": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 6,
+          "value": 0.16666666666666666
+        },
+        "false_refusal_upper_95": 0.581803409252026,
+        "mrr": {
+          "n": 6,
+          "value": 0.25595238095238093
+        },
+        "recall_at_10": {
+          "n": 6,
+          "value": 0.9166666666666666
+        },
+        "recall_at_5": {
+          "n": 6,
+          "value": 0.5
+        }
+      }
+    },
+    "by_language_category": {
+      "en/ambiguous": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.75
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        }
+      },
+      "en/colloquial": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.16666666666666666
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "en/compound": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.3333333333333333
+        },
+        "false_refusal_upper_95": 0.8646496378284163,
+        "mrr": {
+          "n": 3,
+          "value": 0.16984126984126982
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 0.16666666666666666
+        }
+      },
+      "en/cross_lingual": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 5,
+          "value": 0.4
+        },
+        "false_refusal_upper_95": 0.8107446225622292,
+        "mrr": {
+          "n": 5,
+          "value": 0.1519047619047619
+        },
+        "recall_at_10": {
+          "n": 5,
+          "value": 0.8
+        },
+        "recall_at_5": {
+          "n": 5,
+          "value": 0.4
+        }
+      },
+      "en/exact_term": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.3333333333333333
+        },
+        "false_refusal_upper_95": 0.8646496378284163,
+        "mrr": {
+          "n": 3,
+          "value": 0.27777777777777773
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 0.6666666666666666
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 0.6666666666666666
+        }
+      },
+      "en/general": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 5,
+          "value": 0.2
+        },
+        "false_refusal_upper_95": 0.6574083180011387,
+        "mrr": {
+          "n": 5,
+          "value": 0.2785714285714286
+        },
+        "recall_at_10": {
+          "n": 5,
+          "value": 0.6
+        },
+        "recall_at_5": {
+          "n": 5,
+          "value": 0.4
+        }
+      },
+      "en/injection": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.25
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "en/injection_evasive": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.125
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "en/multi_turn": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.26666666666666666
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        }
+      },
+      "en/no_answer": {
+        "correct_refusal_rate": {
+          "n": 8,
+          "value": 0.625
+        },
+        "false_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_upper_95": 1.0,
+        "mrr": {
+          "n": 0,
+          "value": null
+        },
+        "recall_at_10": {
+          "n": 0,
+          "value": null
+        },
+        "recall_at_5": {
+          "n": 0,
+          "value": null
+        }
+      },
+      "en/scanned": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.125
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "en/selective_filter": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.26666666666666666
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        }
+      },
+      "en/table": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.3333333333333333
+        },
+        "false_refusal_upper_95": 0.8646496378284163,
+        "mrr": {
+          "n": 3,
+          "value": 0.12222222222222223
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 0.6666666666666666
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 0.3333333333333333
+        }
+      },
+      "en/typo": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.7763932022500211,
+        "mrr": {
+          "n": 2,
+          "value": 0.75
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        }
+      },
+      "it/ambiguous": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.16666666666666666
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "it/colloquial": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.18333333333333335
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "it/compound": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 1,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.9500000000000001,
+        "mrr": {
+          "n": 1,
+          "value": 0.14285714285714285
+        },
+        "recall_at_10": {
+          "n": 1,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 1,
+          "value": 0.0
+        }
+      },
+      "it/cross_lingual": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 7,
+          "value": 0.42857142857142855
+        },
+        "false_refusal_upper_95": 0.7746784159675523,
+        "mrr": {
+          "n": 7,
+          "value": 0.15612244897959182
+        },
+        "recall_at_10": {
+          "n": 7,
+          "value": 0.7142857142857143
+        },
+        "recall_at_5": {
+          "n": 7,
+          "value": 0.42857142857142855
+        }
+      },
+      "it/exact_term": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.7763932022500211,
+        "mrr": {
+          "n": 2,
+          "value": 0.29166666666666663
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        }
+      },
+      "it/general": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 4,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9023885371135857,
+        "mrr": {
+          "n": 4,
+          "value": 0.3541666666666667
+        },
+        "recall_at_10": {
+          "n": 4,
+          "value": 0.75
+        },
+        "recall_at_5": {
+          "n": 4,
+          "value": 0.5
+        }
+      },
+      "it/injection": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.07142857142857142
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.0
+        }
+      },
+      "it/injection_evasive": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 1,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.9500000000000001,
+        "mrr": {
+          "n": 1,
+          "value": 0.25
+        },
+        "recall_at_10": {
+          "n": 1,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 1,
+          "value": 1.0
+        }
+      },
+      "it/multi_turn": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.3333333333333333
+        },
+        "false_refusal_upper_95": 0.8646496378284163,
+        "mrr": {
+          "n": 3,
+          "value": 0.11428571428571428
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 0.6666666666666666
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 0.3333333333333333
+        }
+      },
+      "it/no_answer": {
+        "correct_refusal_rate": {
+          "n": 6,
+          "value": 0.6666666666666666
+        },
+        "false_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_upper_95": 1.0,
+        "mrr": {
+          "n": 0,
+          "value": null
+        },
+        "recall_at_10": {
+          "n": 0,
+          "value": null
+        },
+        "recall_at_5": {
+          "n": 0,
+          "value": null
+        }
+      },
+      "it/selective_filter": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.41666666666666663
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        }
+      },
+      "it/table": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.3333333333333333
+        },
+        "false_refusal_upper_95": 0.8646496378284163,
+        "mrr": {
+          "n": 3,
+          "value": 0.5
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 0.6666666666666666
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 0.6666666666666666
+        }
+      },
+      "zh/ambiguous": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.75
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        }
+      },
+      "zh/colloquial": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 1,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.9500000000000001,
+        "mrr": {
+          "n": 1,
+          "value": 0.3333333333333333
+        },
+        "recall_at_10": {
+          "n": 1,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 1,
+          "value": 1.0
+        }
+      },
+      "zh/compound": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.15476190476190477
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.0
+        }
+      },
+      "zh/cross_lingual": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 5,
+          "value": 0.2
+        },
+        "false_refusal_upper_95": 0.6574083180011387,
+        "mrr": {
+          "n": 5,
+          "value": 0.3185714285714286
+        },
+        "recall_at_10": {
+          "n": 5,
+          "value": 0.8
+        },
+        "recall_at_5": {
+          "n": 5,
+          "value": 0.6
+        }
+      },
+      "zh/exact_term": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.3333333333333333
+        },
+        "false_refusal_upper_95": 0.8646496378284163,
+        "mrr": {
+          "n": 3,
+          "value": 0.27777777777777773
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 0.6666666666666666
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 0.6666666666666666
+        }
+      },
+      "zh/general": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 5,
+          "value": 0.4
+        },
+        "false_refusal_upper_95": 0.8107446225622292,
+        "mrr": {
+          "n": 5,
+          "value": 0.3119047619047619
+        },
+        "recall_at_10": {
+          "n": 5,
+          "value": 0.8
+        },
+        "recall_at_5": {
+          "n": 5,
+          "value": 0.4
+        }
+      },
+      "zh/injection": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 1,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.9500000000000001,
+        "mrr": {
+          "n": 1,
+          "value": 0.2
+        },
+        "recall_at_10": {
+          "n": 1,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 1,
+          "value": 1.0
+        }
+      },
+      "zh/injection_evasive": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.25
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "zh/multi_turn": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.7763932022500211,
+        "mrr": {
+          "n": 2,
+          "value": 0.29166666666666663
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        }
+      },
+      "zh/no_answer": {
+        "correct_refusal_rate": {
+          "n": 7,
+          "value": 0.8571428571428571
+        },
+        "false_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_upper_95": 1.0,
+        "mrr": {
+          "n": 0,
+          "value": null
+        },
+        "recall_at_10": {
+          "n": 0,
+          "value": null
+        },
+        "recall_at_5": {
+          "n": 0,
+          "value": null
+        }
+      },
+      "zh/scanned": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.125
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "zh/selective_filter": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 4,
+          "value": 0.25
+        },
+        "false_refusal_upper_95": 0.7513953742698186,
+        "mrr": {
+          "n": 4,
+          "value": 0.13988095238095238
+        },
+        "recall_at_10": {
+          "n": 4,
+          "value": 0.75
+        },
+        "recall_at_5": {
+          "n": 4,
+          "value": 0.25
+        }
+      },
+      "zh/table": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.7763932022500211,
+        "mrr": {
+          "n": 2,
+          "value": 0.18333333333333335
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "zh/typo": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 1,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.9500000000000001,
+        "mrr": {
+          "n": 1,
+          "value": 1.0
+        },
+        "recall_at_10": {
+          "n": 1,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 1,
+          "value": 1.0
+        }
+      }
+    },
+    "by_language_pair": {
+      "it->zh": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 1,
+          "value": 1.0
+        },
+        "false_refusal_upper_95": 1.0,
+        "mrr": {
+          "n": 1,
+          "value": 0.0
+        },
+        "recall_at_10": {
+          "n": 1,
+          "value": 0.0
+        },
+        "recall_at_5": {
+          "n": 1,
+          "value": 0.0
+        }
+      },
+      "zh->it": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 1,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.9500000000000001,
+        "mrr": {
+          "n": 1,
+          "value": 0.25
+        },
+        "recall_at_10": {
+          "n": 1,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 1,
+          "value": 1.0
+        }
+      }
+    },
+    "by_provenance": {
+      "production": {
+        "correct_refusal_rate": {
+          "n": 4,
+          "value": 0.75
+        },
+        "false_refusal_rate": {
+          "n": 19,
+          "value": 0.42105263157894735
+        },
+        "false_refusal_upper_95": 0.6318847929794849,
+        "mrr": {
+          "n": 19,
+          "value": 0.2448621553884712
+        },
+        "recall_at_10": {
+          "n": 19,
+          "value": 0.7368421052631579
+        },
+        "recall_at_5": {
+          "n": 19,
+          "value": 0.5263157894736842
+        }
+      },
+      "synthetic_fixture": {
+        "correct_refusal_rate": {
+          "n": 17,
+          "value": 0.7058823529411765
+        },
+        "false_refusal_rate": {
+          "n": 77,
+          "value": 0.3246753246753247
+        },
+        "false_refusal_upper_95": 0.4230258937650576,
+        "mrr": {
+          "n": 77,
+          "value": 0.2753555967841682
+        },
+        "recall_at_10": {
+          "n": 77,
+          "value": 0.7402597402597403
+        },
+        "recall_at_5": {
+          "n": 77,
+          "value": 0.551948051948052
+        }
+      }
+    },
+    "by_provenance_category": {
+      "production/ambiguous": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.6666666666666666
+        },
+        "false_refusal_upper_95": 0.9830475724915586,
+        "mrr": {
+          "n": 3,
+          "value": 0.611111111111111
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 1.0
+        }
+      },
+      "production/compound": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.15476190476190477
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.0
+        }
+      },
+      "production/cross_lingual": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.125
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "production/general": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 4,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9023885371135857,
+        "mrr": {
+          "n": 4,
+          "value": 0.16666666666666666
+        },
+        "recall_at_10": {
+          "n": 4,
+          "value": 0.75
+        },
+        "recall_at_5": {
+          "n": 4,
+          "value": 0.5
+        }
+      },
+      "production/injection": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 1,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.9500000000000001,
+        "mrr": {
+          "n": 1,
+          "value": 0.0
+        },
+        "recall_at_10": {
+          "n": 1,
+          "value": 0.0
+        },
+        "recall_at_5": {
+          "n": 1,
+          "value": 0.0
+        }
+      },
+      "production/injection_evasive": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 1,
+          "value": 1.0
+        },
+        "false_refusal_upper_95": 1.0,
+        "mrr": {
+          "n": 1,
+          "value": 0.25
+        },
+        "recall_at_10": {
+          "n": 1,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 1,
+          "value": 1.0
+        }
+      },
+      "production/multi_turn": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 1,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.9500000000000001,
+        "mrr": {
+          "n": 1,
+          "value": 0.3333333333333333
+        },
+        "recall_at_10": {
+          "n": 1,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 1,
+          "value": 1.0
+        }
+      },
+      "production/no_answer": {
+        "correct_refusal_rate": {
+          "n": 4,
+          "value": 0.75
+        },
+        "false_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_upper_95": 1.0,
+        "mrr": {
+          "n": 0,
+          "value": null
+        },
+        "recall_at_10": {
+          "n": 0,
+          "value": null
+        },
+        "recall_at_5": {
+          "n": 0,
+          "value": null
+        }
+      },
+      "production/selective_filter": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.3214285714285714
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "production/table": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.6315968501359613,
+        "mrr": {
+          "n": 3,
+          "value": 0.12222222222222223
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 0.6666666666666666
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 0.3333333333333333
+        }
+      },
+      "synthetic_fixture/ambiguous": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.3333333333333333
+        },
+        "false_refusal_upper_95": 0.8646496378284163,
+        "mrr": {
+          "n": 3,
+          "value": 0.5
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 0.6666666666666666
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 0.6666666666666666
+        }
+      },
+      "synthetic_fixture/colloquial": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 5,
+          "value": 0.4
+        },
+        "false_refusal_upper_95": 0.8107446225622292,
+        "mrr": {
+          "n": 5,
+          "value": 0.20666666666666664
+        },
+        "recall_at_10": {
+          "n": 5,
+          "value": 0.8
+        },
+        "recall_at_5": {
+          "n": 5,
+          "value": 0.6
+        }
+      },
+      "synthetic_fixture/compound": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 4,
+          "value": 0.25
+        },
+        "false_refusal_upper_95": 0.7513953742698186,
+        "mrr": {
+          "n": 4,
+          "value": 0.1630952380952381
+        },
+        "recall_at_10": {
+          "n": 4,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 4,
+          "value": 0.125
+        }
+      },
+      "synthetic_fixture/cross_lingual": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 15,
+          "value": 0.3333333333333333
+        },
+        "false_refusal_upper_95": 0.5774436628428433,
+        "mrr": {
+          "n": 15,
+          "value": 0.21301587301587302
+        },
+        "recall_at_10": {
+          "n": 15,
+          "value": 0.8
+        },
+        "recall_at_5": {
+          "n": 15,
+          "value": 0.4666666666666667
+        }
+      },
+      "synthetic_fixture/exact_term": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 8,
+          "value": 0.25
+        },
+        "false_refusal_upper_95": 0.599689389190833,
+        "mrr": {
+          "n": 8,
+          "value": 0.28125
+        },
+        "recall_at_10": {
+          "n": 8,
+          "value": 0.75
+        },
+        "recall_at_5": {
+          "n": 8,
+          "value": 0.75
+        }
+      },
+      "synthetic_fixture/general": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 10,
+          "value": 0.3
+        },
+        "false_refusal_upper_95": 0.6066242161054135,
+        "mrr": {
+          "n": 10,
+          "value": 0.37023809523809526
+        },
+        "recall_at_10": {
+          "n": 10,
+          "value": 0.7
+        },
+        "recall_at_5": {
+          "n": 10,
+          "value": 0.4
+        }
+      },
+      "synthetic_fixture/injection": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 4,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9023885371135857,
+        "mrr": {
+          "n": 4,
+          "value": 0.21071428571428572
+        },
+        "recall_at_10": {
+          "n": 4,
+          "value": 0.75
+        },
+        "recall_at_5": {
+          "n": 4,
+          "value": 0.5
+        }
+      },
+      "synthetic_fixture/injection_evasive": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 4,
+          "value": 0.25
+        },
+        "false_refusal_upper_95": 0.7513953742698186,
+        "mrr": {
+          "n": 4,
+          "value": 0.1875
+        },
+        "recall_at_10": {
+          "n": 4,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 4,
+          "value": 0.5
+        }
+      },
+      "synthetic_fixture/multi_turn": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 6,
+          "value": 0.3333333333333333
+        },
+        "false_refusal_upper_95": 0.7286616274802475,
+        "mrr": {
+          "n": 6,
+          "value": 0.1876984126984127
+        },
+        "recall_at_10": {
+          "n": 6,
+          "value": 0.8333333333333334
+        },
+        "recall_at_5": {
+          "n": 6,
+          "value": 0.6666666666666666
+        }
+      },
+      "synthetic_fixture/no_answer": {
+        "correct_refusal_rate": {
+          "n": 17,
+          "value": 0.7058823529411765
+        },
+        "false_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_upper_95": 1.0,
+        "mrr": {
+          "n": 0,
+          "value": null
+        },
+        "recall_at_10": {
+          "n": 0,
+          "value": null
+        },
+        "recall_at_5": {
+          "n": 0,
+          "value": null
+        }
+      },
+      "synthetic_fixture/scanned": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 4,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9023885371135857,
+        "mrr": {
+          "n": 4,
+          "value": 0.125
+        },
+        "recall_at_10": {
+          "n": 4,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 4,
+          "value": 0.5
+        }
+      },
+      "synthetic_fixture/selective_filter": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 6,
+          "value": 0.3333333333333333
+        },
+        "false_refusal_upper_95": 0.7286616274802475,
+        "mrr": {
+          "n": 6,
+          "value": 0.21388888888888888
+        },
+        "recall_at_10": {
+          "n": 6,
+          "value": 0.8333333333333334
+        },
+        "recall_at_5": {
+          "n": 6,
+          "value": 0.6666666666666666
+        }
+      },
+      "synthetic_fixture/table": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 5,
+          "value": 0.4
+        },
+        "false_refusal_upper_95": 0.8107446225622292,
+        "mrr": {
+          "n": 5,
+          "value": 0.37333333333333335
+        },
+        "recall_at_10": {
+          "n": 5,
+          "value": 0.8
+        },
+        "recall_at_5": {
+          "n": 5,
+          "value": 0.6
+        }
+      },
+      "synthetic_fixture/typo": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.6315968501359613,
+        "mrr": {
+          "n": 3,
+          "value": 0.8333333333333334
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 1.0
+        }
+      }
+    },
+    "by_question_kind": {
+      "context_heavy": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.3333333333333333
+        },
+        "false_refusal_upper_95": 0.8646496378284163,
+        "mrr": {
+          "n": 3,
+          "value": 0.21428571428571427
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 0.6666666666666666
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 0.3333333333333333
+        }
+      },
+      "fact_lookup": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 7,
+          "value": 0.2857142857142857
+        },
+        "false_refusal_upper_95": 0.6587385638446641,
+        "mrr": {
+          "n": 7,
+          "value": 0.1476190476190476
+        },
+        "recall_at_10": {
+          "n": 7,
+          "value": 0.7142857142857143
+        },
+        "recall_at_5": {
+          "n": 7,
+          "value": 0.42857142857142855
+        }
+      },
+      "other": {
+        "correct_refusal_rate": {
+          "n": 4,
+          "value": 0.75
+        },
+        "false_refusal_rate": {
+          "n": 9,
+          "value": 0.5555555555555556
+        },
+        "false_refusal_upper_95": 0.831249504012676,
+        "mrr": {
+          "n": 9,
+          "value": 0.3306878306878307
+        },
+        "recall_at_10": {
+          "n": 9,
+          "value": 0.7777777777777778
+        },
+        "recall_at_5": {
+          "n": 9,
+          "value": 0.6666666666666666
+        }
+      }
+    },
+    "by_split": {
+      "dev": {
+        "correct_refusal_rate": {
+          "n": 21,
+          "value": 0.7142857142857143
+        },
+        "false_refusal_rate": {
+          "n": 96,
+          "value": 0.34375
+        },
+        "false_refusal_upper_95": 0.4315727956070955,
+        "mrr": {
+          "n": 96,
+          "value": 0.2693204365079365
+        },
+        "recall_at_10": {
+          "n": 96,
+          "value": 0.7395833333333334
+        },
+        "recall_at_5": {
+          "n": 96,
+          "value": 0.546875
+        }
+      },
+      "test": {
+        "correct_refusal_rate": {
+          "n": 9,
+          "value": 0.6666666666666666
+        },
+        "false_refusal_rate": {
+          "n": 38,
+          "value": 0.34210526315789475
+        },
+        "false_refusal_upper_95": 0.487961825095237,
+        "mrr": {
+          "n": 38,
+          "value": 0.2444235588972431
+        },
+        "recall_at_10": {
+          "n": 38,
+          "value": 0.6842105263157895
+        },
+        "recall_at_5": {
+          "n": 38,
+          "value": 0.42105263157894735
+        }
+      }
+    },
+    "gate_population": "production",
+    "lexical_leg_hit_rate_at_10": {
+      "n": 0,
+      "value": null
+    },
+    "overall": {
+      "correct_refusal_rate": {
+        "n": 4,
+        "value": 0.75
+      },
+      "false_refusal_rate": {
+        "n": 19,
+        "value": 0.42105263157894735
+      },
+      "false_refusal_upper_95": 0.6318847929794849,
+      "mrr": {
+        "n": 19,
+        "value": 0.2448621553884712
+      },
+      "recall_at_10": {
+        "n": 19,
+        "value": 0.7368421052631579
+      },
+      "recall_at_5": {
+        "n": 19,
+        "value": 0.5263157894736842
+      }
+    },
+    "rerank_skipped_rate": {
+      "n": 0,
+      "value": null
+    }
+  },
+  "no_production": {
+    "by_category": {
+      "ambiguous": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 6,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.8468388820247769,
+        "mrr": {
+          "n": 6,
+          "value": 0.5555555555555556
+        },
+        "recall_at_10": {
+          "n": 6,
+          "value": 0.8333333333333334
+        },
+        "recall_at_5": {
+          "n": 6,
+          "value": 0.8333333333333334
+        }
+      },
+      "colloquial": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 5,
+          "value": 0.4
+        },
+        "false_refusal_upper_95": 0.8107446225622292,
+        "mrr": {
+          "n": 5,
+          "value": 0.20666666666666664
+        },
+        "recall_at_10": {
+          "n": 5,
+          "value": 0.8
+        },
+        "recall_at_5": {
+          "n": 5,
+          "value": 0.6
+        }
+      },
+      "compound": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 6,
+          "value": 0.3333333333333333
+        },
+        "false_refusal_upper_95": 0.7286616274802475,
+        "mrr": {
+          "n": 6,
+          "value": 0.1603174603174603
+        },
+        "recall_at_10": {
+          "n": 6,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 6,
+          "value": 0.08333333333333333
+        }
+      },
+      "cross_lingual": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 17,
+          "value": 0.35294117647058826
+        },
+        "false_refusal_upper_95": 0.5802946483738276,
+        "mrr": {
+          "n": 17,
+          "value": 0.2026610644257703
+        },
+        "recall_at_10": {
+          "n": 17,
+          "value": 0.7647058823529411
+        },
+        "recall_at_5": {
+          "n": 17,
+          "value": 0.47058823529411764
+        }
+      },
+      "exact_term": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 8,
+          "value": 0.25
+        },
+        "false_refusal_upper_95": 0.599689389190833,
+        "mrr": {
+          "n": 8,
+          "value": 0.28125
+        },
+        "recall_at_10": {
+          "n": 8,
+          "value": 0.75
+        },
+        "recall_at_5": {
+          "n": 8,
+          "value": 0.75
+        }
+      },
+      "general": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 14,
+          "value": 0.35714285714285715
+        },
+        "false_refusal_upper_95": 0.6095851324700833,
+        "mrr": {
+          "n": 14,
+          "value": 0.3120748299319728
+        },
+        "recall_at_10": {
+          "n": 14,
+          "value": 0.7142857142857143
+        },
+        "recall_at_5": {
+          "n": 14,
+          "value": 0.42857142857142855
+        }
+      },
+      "injection": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 5,
+          "value": 0.4
+        },
+        "false_refusal_upper_95": 0.8107446225622292,
+        "mrr": {
+          "n": 5,
+          "value": 0.16857142857142857
+        },
+        "recall_at_10": {
+          "n": 5,
+          "value": 0.6
+        },
+        "recall_at_5": {
+          "n": 5,
+          "value": 0.4
+        }
+      },
+      "injection_evasive": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 5,
+          "value": 0.4
+        },
+        "false_refusal_upper_95": 0.8107446225622292,
+        "mrr": {
+          "n": 5,
+          "value": 0.2
+        },
+        "recall_at_10": {
+          "n": 5,
+          "value": 0.6
+        },
+        "recall_at_5": {
+          "n": 5,
+          "value": 0.6
+        }
+      },
+      "multi_turn": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 7,
+          "value": 0.2857142857142857
+        },
+        "false_refusal_upper_95": 0.6587385638446641,
+        "mrr": {
+          "n": 7,
+          "value": 0.2085034013605442
+        },
+        "recall_at_10": {
+          "n": 7,
+          "value": 0.8571428571428571
+        },
+        "recall_at_5": {
+          "n": 7,
+          "value": 0.7142857142857143
+        }
+      },
+      "no_answer": {
+        "correct_refusal_rate": {
+          "n": 21,
+          "value": 0.7142857142857143
+        },
+        "false_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_upper_95": 1.0,
+        "mrr": {
+          "n": 0,
+          "value": null
+        },
+        "recall_at_10": {
+          "n": 0,
+          "value": null
+        },
+        "recall_at_5": {
+          "n": 0,
+          "value": null
+        }
+      },
+      "scanned": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 4,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9023885371135857,
+        "mrr": {
+          "n": 4,
+          "value": 0.125
+        },
+        "recall_at_10": {
+          "n": 4,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 4,
+          "value": 0.5
+        }
+      },
+      "selective_filter": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 8,
+          "value": 0.375
+        },
+        "false_refusal_upper_95": 0.7107591834981907,
+        "mrr": {
+          "n": 8,
+          "value": 0.24077380952380953
+        },
+        "recall_at_10": {
+          "n": 8,
+          "value": 0.875
+        },
+        "recall_at_5": {
+          "n": 8,
+          "value": 0.625
+        }
+      },
+      "table": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 8,
+          "value": 0.25
+        },
+        "false_refusal_upper_95": 0.599689389190833,
+        "mrr": {
+          "n": 8,
+          "value": 0.2791666666666667
+        },
+        "recall_at_10": {
+          "n": 8,
+          "value": 0.75
+        },
+        "recall_at_5": {
+          "n": 8,
+          "value": 0.5
+        }
+      },
+      "typo": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.6315968501359613,
+        "mrr": {
+          "n": 3,
+          "value": 0.8333333333333334
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 1.0
+        }
+      }
+    },
+    "by_doc_type": {
+      "general": {
+        "correct_refusal_rate": {
+          "n": 21,
+          "value": 0.7142857142857143
+        },
+        "false_refusal_rate": {
+          "n": 96,
+          "value": 0.34375
+        },
+        "false_refusal_upper_95": 0.4315727956070955,
+        "mrr": {
+          "n": 96,
+          "value": 0.2693204365079365
+        },
+        "recall_at_10": {
+          "n": 96,
+          "value": 0.7395833333333334
+        },
+        "recall_at_5": {
+          "n": 96,
+          "value": 0.546875
+        }
+      }
+    },
+    "by_language": {
+      "en": {
+        "correct_refusal_rate": {
+          "n": 8,
+          "value": 0.625
+        },
+        "false_refusal_rate": {
+          "n": 35,
+          "value": 0.37142857142857144
+        },
+        "false_refusal_upper_95": 0.5244041881717724,
+        "mrr": {
+          "n": 35,
+          "value": 0.264625850340136
+        },
+        "recall_at_10": {
+          "n": 35,
+          "value": 0.7
+        },
+        "recall_at_5": {
+          "n": 35,
+          "value": 0.5571428571428572
+        }
+      },
+      "it": {
+        "correct_refusal_rate": {
+          "n": 6,
+          "value": 0.6666666666666666
+        },
+        "false_refusal_rate": {
+          "n": 29,
+          "value": 0.3793103448275862
+        },
+        "false_refusal_upper_95": 0.5487654286810684,
+        "mrr": {
+          "n": 29,
+          "value": 0.24154351395730705
+        },
+        "recall_at_10": {
+          "n": 29,
+          "value": 0.7413793103448276
+        },
+        "recall_at_5": {
+          "n": 29,
+          "value": 0.5172413793103449
+        }
+      },
+      "zh": {
+        "correct_refusal_rate": {
+          "n": 7,
+          "value": 0.8571428571428571
+        },
+        "false_refusal_rate": {
+          "n": 32,
+          "value": 0.28125
+        },
+        "false_refusal_upper_95": 0.43944669326090996,
+        "mrr": {
+          "n": 32,
+          "value": 0.2996279761904762
+        },
+        "recall_at_10": {
+          "n": 32,
+          "value": 0.78125
+        },
+        "recall_at_5": {
+          "n": 32,
+          "value": 0.5625
+        }
+      }
+    },
+    "by_language_category": {
+      "en/ambiguous": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.75
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        }
+      },
+      "en/colloquial": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.16666666666666666
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "en/compound": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.3333333333333333
+        },
+        "false_refusal_upper_95": 0.8646496378284163,
+        "mrr": {
+          "n": 3,
+          "value": 0.16984126984126982
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 0.16666666666666666
+        }
+      },
+      "en/cross_lingual": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 5,
+          "value": 0.4
+        },
+        "false_refusal_upper_95": 0.8107446225622292,
+        "mrr": {
+          "n": 5,
+          "value": 0.1519047619047619
+        },
+        "recall_at_10": {
+          "n": 5,
+          "value": 0.8
+        },
+        "recall_at_5": {
+          "n": 5,
+          "value": 0.4
+        }
+      },
+      "en/exact_term": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.3333333333333333
+        },
+        "false_refusal_upper_95": 0.8646496378284163,
+        "mrr": {
+          "n": 3,
+          "value": 0.27777777777777773
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 0.6666666666666666
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 0.6666666666666666
+        }
+      },
+      "en/general": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 5,
+          "value": 0.2
+        },
+        "false_refusal_upper_95": 0.6574083180011387,
+        "mrr": {
+          "n": 5,
+          "value": 0.2785714285714286
+        },
+        "recall_at_10": {
+          "n": 5,
+          "value": 0.6
+        },
+        "recall_at_5": {
+          "n": 5,
+          "value": 0.4
+        }
+      },
+      "en/injection": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.25
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "en/injection_evasive": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.125
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "en/multi_turn": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.26666666666666666
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        }
+      },
+      "en/no_answer": {
+        "correct_refusal_rate": {
+          "n": 8,
+          "value": 0.625
+        },
+        "false_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_upper_95": 1.0,
+        "mrr": {
+          "n": 0,
+          "value": null
+        },
+        "recall_at_10": {
+          "n": 0,
+          "value": null
+        },
+        "recall_at_5": {
+          "n": 0,
+          "value": null
+        }
+      },
+      "en/scanned": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.125
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "en/selective_filter": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.26666666666666666
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        }
+      },
+      "en/table": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.3333333333333333
+        },
+        "false_refusal_upper_95": 0.8646496378284163,
+        "mrr": {
+          "n": 3,
+          "value": 0.12222222222222223
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 0.6666666666666666
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 0.3333333333333333
+        }
+      },
+      "en/typo": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.7763932022500211,
+        "mrr": {
+          "n": 2,
+          "value": 0.75
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        }
+      },
+      "it/ambiguous": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.16666666666666666
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "it/colloquial": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.18333333333333335
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "it/compound": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 1,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.9500000000000001,
+        "mrr": {
+          "n": 1,
+          "value": 0.14285714285714285
+        },
+        "recall_at_10": {
+          "n": 1,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 1,
+          "value": 0.0
+        }
+      },
+      "it/cross_lingual": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 7,
+          "value": 0.42857142857142855
+        },
+        "false_refusal_upper_95": 0.7746784159675523,
+        "mrr": {
+          "n": 7,
+          "value": 0.15612244897959182
+        },
+        "recall_at_10": {
+          "n": 7,
+          "value": 0.7142857142857143
+        },
+        "recall_at_5": {
+          "n": 7,
+          "value": 0.42857142857142855
+        }
+      },
+      "it/exact_term": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.7763932022500211,
+        "mrr": {
+          "n": 2,
+          "value": 0.29166666666666663
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        }
+      },
+      "it/general": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 4,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9023885371135857,
+        "mrr": {
+          "n": 4,
+          "value": 0.3541666666666667
+        },
+        "recall_at_10": {
+          "n": 4,
+          "value": 0.75
+        },
+        "recall_at_5": {
+          "n": 4,
+          "value": 0.5
+        }
+      },
+      "it/injection": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.07142857142857142
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.0
+        }
+      },
+      "it/injection_evasive": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 1,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.9500000000000001,
+        "mrr": {
+          "n": 1,
+          "value": 0.25
+        },
+        "recall_at_10": {
+          "n": 1,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 1,
+          "value": 1.0
+        }
+      },
+      "it/multi_turn": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.3333333333333333
+        },
+        "false_refusal_upper_95": 0.8646496378284163,
+        "mrr": {
+          "n": 3,
+          "value": 0.11428571428571428
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 0.6666666666666666
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 0.3333333333333333
+        }
+      },
+      "it/no_answer": {
+        "correct_refusal_rate": {
+          "n": 6,
+          "value": 0.6666666666666666
+        },
+        "false_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_upper_95": 1.0,
+        "mrr": {
+          "n": 0,
+          "value": null
+        },
+        "recall_at_10": {
+          "n": 0,
+          "value": null
+        },
+        "recall_at_5": {
+          "n": 0,
+          "value": null
+        }
+      },
+      "it/selective_filter": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.41666666666666663
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        }
+      },
+      "it/table": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.3333333333333333
+        },
+        "false_refusal_upper_95": 0.8646496378284163,
+        "mrr": {
+          "n": 3,
+          "value": 0.5
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 0.6666666666666666
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 0.6666666666666666
+        }
+      },
+      "zh/ambiguous": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.75
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        }
+      },
+      "zh/colloquial": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 1,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.9500000000000001,
+        "mrr": {
+          "n": 1,
+          "value": 0.3333333333333333
+        },
+        "recall_at_10": {
+          "n": 1,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 1,
+          "value": 1.0
+        }
+      },
+      "zh/compound": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.15476190476190477
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.0
+        }
+      },
+      "zh/cross_lingual": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 5,
+          "value": 0.2
+        },
+        "false_refusal_upper_95": 0.6574083180011387,
+        "mrr": {
+          "n": 5,
+          "value": 0.3185714285714286
+        },
+        "recall_at_10": {
+          "n": 5,
+          "value": 0.8
+        },
+        "recall_at_5": {
+          "n": 5,
+          "value": 0.6
+        }
+      },
+      "zh/exact_term": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.3333333333333333
+        },
+        "false_refusal_upper_95": 0.8646496378284163,
+        "mrr": {
+          "n": 3,
+          "value": 0.27777777777777773
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 0.6666666666666666
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 0.6666666666666666
+        }
+      },
+      "zh/general": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 5,
+          "value": 0.4
+        },
+        "false_refusal_upper_95": 0.8107446225622292,
+        "mrr": {
+          "n": 5,
+          "value": 0.3119047619047619
+        },
+        "recall_at_10": {
+          "n": 5,
+          "value": 0.8
+        },
+        "recall_at_5": {
+          "n": 5,
+          "value": 0.4
+        }
+      },
+      "zh/injection": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 1,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.9500000000000001,
+        "mrr": {
+          "n": 1,
+          "value": 0.2
+        },
+        "recall_at_10": {
+          "n": 1,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 1,
+          "value": 1.0
+        }
+      },
+      "zh/injection_evasive": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.25
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "zh/multi_turn": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.7763932022500211,
+        "mrr": {
+          "n": 2,
+          "value": 0.29166666666666663
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        }
+      },
+      "zh/no_answer": {
+        "correct_refusal_rate": {
+          "n": 7,
+          "value": 0.8571428571428571
+        },
+        "false_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_upper_95": 1.0,
+        "mrr": {
+          "n": 0,
+          "value": null
+        },
+        "recall_at_10": {
+          "n": 0,
+          "value": null
+        },
+        "recall_at_5": {
+          "n": 0,
+          "value": null
+        }
+      },
+      "zh/scanned": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.125
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "zh/selective_filter": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 4,
+          "value": 0.25
+        },
+        "false_refusal_upper_95": 0.7513953742698186,
+        "mrr": {
+          "n": 4,
+          "value": 0.13988095238095238
+        },
+        "recall_at_10": {
+          "n": 4,
+          "value": 0.75
+        },
+        "recall_at_5": {
+          "n": 4,
+          "value": 0.25
+        }
+      },
+      "zh/table": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.7763932022500211,
+        "mrr": {
+          "n": 2,
+          "value": 0.18333333333333335
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "zh/typo": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 1,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.9500000000000001,
+        "mrr": {
+          "n": 1,
+          "value": 1.0
+        },
+        "recall_at_10": {
+          "n": 1,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 1,
+          "value": 1.0
+        }
+      }
+    },
+    "by_language_pair": {
+      "en->it": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.3333333333333333
+        },
+        "false_refusal_upper_95": 0.8646496378284163,
+        "mrr": {
+          "n": 3,
+          "value": 0.16984126984126982
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 0.3333333333333333
+        }
+      },
+      "en->zh": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.125
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "it->en": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.3333333333333333
+        },
+        "false_refusal_upper_95": 0.8646496378284163,
+        "mrr": {
+          "n": 3,
+          "value": 0.10317460317460318
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 0.6666666666666666
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 0.0
+        }
+      },
+      "it->zh": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 4,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9023885371135857,
+        "mrr": {
+          "n": 4,
+          "value": 0.19583333333333333
+        },
+        "recall_at_10": {
+          "n": 4,
+          "value": 0.75
+        },
+        "recall_at_5": {
+          "n": 4,
+          "value": 0.75
+        }
+      },
+      "zh->en": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.6315968501359613,
+        "mrr": {
+          "n": 3,
+          "value": 0.38095238095238093
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 0.6666666666666666
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 0.3333333333333333
+        }
+      },
+      "zh->it": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.225
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        }
+      }
+    },
+    "by_provenance": {
+      "synthetic_fixture": {
+        "correct_refusal_rate": {
+          "n": 21,
+          "value": 0.7142857142857143
+        },
+        "false_refusal_rate": {
+          "n": 96,
+          "value": 0.34375
+        },
+        "false_refusal_upper_95": 0.4315727956070955,
+        "mrr": {
+          "n": 96,
+          "value": 0.2693204365079365
+        },
+        "recall_at_10": {
+          "n": 96,
+          "value": 0.7395833333333334
+        },
+        "recall_at_5": {
+          "n": 96,
+          "value": 0.546875
+        }
+      }
+    },
+    "by_provenance_category": {
+      "synthetic_fixture/ambiguous": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 6,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.8468388820247769,
+        "mrr": {
+          "n": 6,
+          "value": 0.5555555555555556
+        },
+        "recall_at_10": {
+          "n": 6,
+          "value": 0.8333333333333334
+        },
+        "recall_at_5": {
+          "n": 6,
+          "value": 0.8333333333333334
+        }
+      },
+      "synthetic_fixture/colloquial": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 5,
+          "value": 0.4
+        },
+        "false_refusal_upper_95": 0.8107446225622292,
+        "mrr": {
+          "n": 5,
+          "value": 0.20666666666666664
+        },
+        "recall_at_10": {
+          "n": 5,
+          "value": 0.8
+        },
+        "recall_at_5": {
+          "n": 5,
+          "value": 0.6
+        }
+      },
+      "synthetic_fixture/compound": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 6,
+          "value": 0.3333333333333333
+        },
+        "false_refusal_upper_95": 0.7286616274802475,
+        "mrr": {
+          "n": 6,
+          "value": 0.1603174603174603
+        },
+        "recall_at_10": {
+          "n": 6,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 6,
+          "value": 0.08333333333333333
+        }
+      },
+      "synthetic_fixture/cross_lingual": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 17,
+          "value": 0.35294117647058826
+        },
+        "false_refusal_upper_95": 0.5802946483738276,
+        "mrr": {
+          "n": 17,
+          "value": 0.2026610644257703
+        },
+        "recall_at_10": {
+          "n": 17,
+          "value": 0.7647058823529411
+        },
+        "recall_at_5": {
+          "n": 17,
+          "value": 0.47058823529411764
+        }
+      },
+      "synthetic_fixture/exact_term": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 8,
+          "value": 0.25
+        },
+        "false_refusal_upper_95": 0.599689389190833,
+        "mrr": {
+          "n": 8,
+          "value": 0.28125
+        },
+        "recall_at_10": {
+          "n": 8,
+          "value": 0.75
+        },
+        "recall_at_5": {
+          "n": 8,
+          "value": 0.75
+        }
+      },
+      "synthetic_fixture/general": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 14,
+          "value": 0.35714285714285715
+        },
+        "false_refusal_upper_95": 0.6095851324700833,
+        "mrr": {
+          "n": 14,
+          "value": 0.3120748299319728
+        },
+        "recall_at_10": {
+          "n": 14,
+          "value": 0.7142857142857143
+        },
+        "recall_at_5": {
+          "n": 14,
+          "value": 0.42857142857142855
+        }
+      },
+      "synthetic_fixture/injection": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 5,
+          "value": 0.4
+        },
+        "false_refusal_upper_95": 0.8107446225622292,
+        "mrr": {
+          "n": 5,
+          "value": 0.16857142857142857
+        },
+        "recall_at_10": {
+          "n": 5,
+          "value": 0.6
+        },
+        "recall_at_5": {
+          "n": 5,
+          "value": 0.4
+        }
+      },
+      "synthetic_fixture/injection_evasive": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 5,
+          "value": 0.4
+        },
+        "false_refusal_upper_95": 0.8107446225622292,
+        "mrr": {
+          "n": 5,
+          "value": 0.2
+        },
+        "recall_at_10": {
+          "n": 5,
+          "value": 0.6
+        },
+        "recall_at_5": {
+          "n": 5,
+          "value": 0.6
+        }
+      },
+      "synthetic_fixture/multi_turn": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 7,
+          "value": 0.2857142857142857
+        },
+        "false_refusal_upper_95": 0.6587385638446641,
+        "mrr": {
+          "n": 7,
+          "value": 0.2085034013605442
+        },
+        "recall_at_10": {
+          "n": 7,
+          "value": 0.8571428571428571
+        },
+        "recall_at_5": {
+          "n": 7,
+          "value": 0.7142857142857143
+        }
+      },
+      "synthetic_fixture/no_answer": {
+        "correct_refusal_rate": {
+          "n": 21,
+          "value": 0.7142857142857143
+        },
+        "false_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_upper_95": 1.0,
+        "mrr": {
+          "n": 0,
+          "value": null
+        },
+        "recall_at_10": {
+          "n": 0,
+          "value": null
+        },
+        "recall_at_5": {
+          "n": 0,
+          "value": null
+        }
+      },
+      "synthetic_fixture/scanned": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 4,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9023885371135857,
+        "mrr": {
+          "n": 4,
+          "value": 0.125
+        },
+        "recall_at_10": {
+          "n": 4,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 4,
+          "value": 0.5
+        }
+      },
+      "synthetic_fixture/selective_filter": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 8,
+          "value": 0.375
+        },
+        "false_refusal_upper_95": 0.7107591834981907,
+        "mrr": {
+          "n": 8,
+          "value": 0.24077380952380953
+        },
+        "recall_at_10": {
+          "n": 8,
+          "value": 0.875
+        },
+        "recall_at_5": {
+          "n": 8,
+          "value": 0.625
+        }
+      },
+      "synthetic_fixture/table": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 8,
+          "value": 0.25
+        },
+        "false_refusal_upper_95": 0.599689389190833,
+        "mrr": {
+          "n": 8,
+          "value": 0.2791666666666667
+        },
+        "recall_at_10": {
+          "n": 8,
+          "value": 0.75
+        },
+        "recall_at_5": {
+          "n": 8,
+          "value": 0.5
+        }
+      },
+      "synthetic_fixture/typo": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.6315968501359613,
+        "mrr": {
+          "n": 3,
+          "value": 0.8333333333333334
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 1.0
+        }
+      }
+    },
+    "by_question_kind": {
+      "context_heavy": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 13,
+          "value": 0.3076923076923077
+        },
+        "false_refusal_upper_95": 0.5726193394082125,
+        "mrr": {
+          "n": 13,
+          "value": 0.18626373626373624
+        },
+        "recall_at_10": {
+          "n": 13,
+          "value": 0.6923076923076923
+        },
+        "recall_at_5": {
+          "n": 13,
+          "value": 0.4230769230769231
+        }
+      },
+      "fact_lookup": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 30,
+          "value": 0.3
+        },
+        "false_refusal_upper_95": 0.46507270657030925,
+        "mrr": {
+          "n": 30,
+          "value": 0.2950793650793651
+        },
+        "recall_at_10": {
+          "n": 30,
+          "value": 0.7333333333333333
+        },
+        "recall_at_5": {
+          "n": 30,
+          "value": 0.5333333333333333
+        }
+      },
+      "other": {
+        "correct_refusal_rate": {
+          "n": 21,
+          "value": 0.7142857142857143
+        },
+        "false_refusal_rate": {
+          "n": 53,
+          "value": 0.37735849056603776
+        },
+        "false_refusal_upper_95": 0.4994541499429867,
+        "mrr": {
+          "n": 53,
+          "value": 0.27511230907457324
+        },
+        "recall_at_10": {
+          "n": 53,
+          "value": 0.7547169811320755
+        },
+        "recall_at_5": {
+          "n": 53,
+          "value": 0.5849056603773585
+        }
+      }
+    },
+    "by_split": {
+      "dev": {
+        "correct_refusal_rate": {
+          "n": 21,
+          "value": 0.7142857142857143
+        },
+        "false_refusal_rate": {
+          "n": 96,
+          "value": 0.34375
+        },
+        "false_refusal_upper_95": 0.4315727956070955,
+        "mrr": {
+          "n": 96,
+          "value": 0.2693204365079365
+        },
+        "recall_at_10": {
+          "n": 96,
+          "value": 0.7395833333333334
+        },
+        "recall_at_5": {
+          "n": 96,
+          "value": 0.546875
+        }
+      },
+      "test": {
+        "correct_refusal_rate": {
+          "n": 9,
+          "value": 0.6666666666666666
+        },
+        "false_refusal_rate": {
+          "n": 38,
+          "value": 0.34210526315789475
+        },
+        "false_refusal_upper_95": 0.487961825095237,
+        "mrr": {
+          "n": 38,
+          "value": 0.2444235588972431
+        },
+        "recall_at_10": {
+          "n": 38,
+          "value": 0.6842105263157895
+        },
+        "recall_at_5": {
+          "n": 38,
+          "value": 0.42105263157894735
+        }
+      }
+    },
+    "gate_population": "all",
+    "lexical_leg_hit_rate_at_10": {
+      "n": 0,
+      "value": null
+    },
+    "overall": {
+      "correct_refusal_rate": {
+        "n": 21,
+        "value": 0.7142857142857143
+      },
+      "false_refusal_rate": {
+        "n": 96,
+        "value": 0.34375
+      },
+      "false_refusal_upper_95": 0.4315727956070955,
+      "mrr": {
+        "n": 96,
+        "value": 0.2693204365079365
+      },
+      "recall_at_10": {
+        "n": 96,
+        "value": 0.7395833333333334
+      },
+      "recall_at_5": {
+        "n": 96,
+        "value": 0.546875
+      }
+    },
+    "rerank_skipped_rate": {
+      "n": 0,
+      "value": null
+    }
+  },
+  "unapproved_production": {
+    "by_category": {
+      "ambiguous": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 6,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.8468388820247769,
+        "mrr": {
+          "n": 6,
+          "value": 0.5555555555555556
+        },
+        "recall_at_10": {
+          "n": 6,
+          "value": 0.8333333333333334
+        },
+        "recall_at_5": {
+          "n": 6,
+          "value": 0.8333333333333334
+        }
+      },
+      "colloquial": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 5,
+          "value": 0.4
+        },
+        "false_refusal_upper_95": 0.8107446225622292,
+        "mrr": {
+          "n": 5,
+          "value": 0.20666666666666664
+        },
+        "recall_at_10": {
+          "n": 5,
+          "value": 0.8
+        },
+        "recall_at_5": {
+          "n": 5,
+          "value": 0.6
+        }
+      },
+      "compound": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 6,
+          "value": 0.3333333333333333
+        },
+        "false_refusal_upper_95": 0.7286616274802475,
+        "mrr": {
+          "n": 6,
+          "value": 0.1603174603174603
+        },
+        "recall_at_10": {
+          "n": 6,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 6,
+          "value": 0.08333333333333333
+        }
+      },
+      "cross_lingual": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 17,
+          "value": 0.35294117647058826
+        },
+        "false_refusal_upper_95": 0.5802946483738276,
+        "mrr": {
+          "n": 17,
+          "value": 0.2026610644257703
+        },
+        "recall_at_10": {
+          "n": 17,
+          "value": 0.7647058823529411
+        },
+        "recall_at_5": {
+          "n": 17,
+          "value": 0.47058823529411764
+        }
+      },
+      "exact_term": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 8,
+          "value": 0.25
+        },
+        "false_refusal_upper_95": 0.599689389190833,
+        "mrr": {
+          "n": 8,
+          "value": 0.28125
+        },
+        "recall_at_10": {
+          "n": 8,
+          "value": 0.75
+        },
+        "recall_at_5": {
+          "n": 8,
+          "value": 0.75
+        }
+      },
+      "general": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 14,
+          "value": 0.35714285714285715
+        },
+        "false_refusal_upper_95": 0.6095851324700833,
+        "mrr": {
+          "n": 14,
+          "value": 0.3120748299319728
+        },
+        "recall_at_10": {
+          "n": 14,
+          "value": 0.7142857142857143
+        },
+        "recall_at_5": {
+          "n": 14,
+          "value": 0.42857142857142855
+        }
+      },
+      "injection": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 5,
+          "value": 0.4
+        },
+        "false_refusal_upper_95": 0.8107446225622292,
+        "mrr": {
+          "n": 5,
+          "value": 0.16857142857142857
+        },
+        "recall_at_10": {
+          "n": 5,
+          "value": 0.6
+        },
+        "recall_at_5": {
+          "n": 5,
+          "value": 0.4
+        }
+      },
+      "injection_evasive": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 5,
+          "value": 0.4
+        },
+        "false_refusal_upper_95": 0.8107446225622292,
+        "mrr": {
+          "n": 5,
+          "value": 0.2
+        },
+        "recall_at_10": {
+          "n": 5,
+          "value": 0.6
+        },
+        "recall_at_5": {
+          "n": 5,
+          "value": 0.6
+        }
+      },
+      "multi_turn": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 7,
+          "value": 0.2857142857142857
+        },
+        "false_refusal_upper_95": 0.6587385638446641,
+        "mrr": {
+          "n": 7,
+          "value": 0.2085034013605442
+        },
+        "recall_at_10": {
+          "n": 7,
+          "value": 0.8571428571428571
+        },
+        "recall_at_5": {
+          "n": 7,
+          "value": 0.7142857142857143
+        }
+      },
+      "no_answer": {
+        "correct_refusal_rate": {
+          "n": 21,
+          "value": 0.7142857142857143
+        },
+        "false_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_upper_95": 1.0,
+        "mrr": {
+          "n": 0,
+          "value": null
+        },
+        "recall_at_10": {
+          "n": 0,
+          "value": null
+        },
+        "recall_at_5": {
+          "n": 0,
+          "value": null
+        }
+      },
+      "scanned": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 4,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9023885371135857,
+        "mrr": {
+          "n": 4,
+          "value": 0.125
+        },
+        "recall_at_10": {
+          "n": 4,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 4,
+          "value": 0.5
+        }
+      },
+      "selective_filter": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 8,
+          "value": 0.375
+        },
+        "false_refusal_upper_95": 0.7107591834981907,
+        "mrr": {
+          "n": 8,
+          "value": 0.24077380952380953
+        },
+        "recall_at_10": {
+          "n": 8,
+          "value": 0.875
+        },
+        "recall_at_5": {
+          "n": 8,
+          "value": 0.625
+        }
+      },
+      "table": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 8,
+          "value": 0.25
+        },
+        "false_refusal_upper_95": 0.599689389190833,
+        "mrr": {
+          "n": 8,
+          "value": 0.2791666666666667
+        },
+        "recall_at_10": {
+          "n": 8,
+          "value": 0.75
+        },
+        "recall_at_5": {
+          "n": 8,
+          "value": 0.5
+        }
+      },
+      "typo": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.6315968501359613,
+        "mrr": {
+          "n": 3,
+          "value": 0.8333333333333334
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 1.0
+        }
+      }
+    },
+    "by_doc_type": {
+      "general": {
+        "correct_refusal_rate": {
+          "n": 21,
+          "value": 0.7142857142857143
+        },
+        "false_refusal_rate": {
+          "n": 96,
+          "value": 0.34375
+        },
+        "false_refusal_upper_95": 0.4315727956070955,
+        "mrr": {
+          "n": 96,
+          "value": 0.2693204365079365
+        },
+        "recall_at_10": {
+          "n": 96,
+          "value": 0.7395833333333334
+        },
+        "recall_at_5": {
+          "n": 96,
+          "value": 0.546875
+        }
+      }
+    },
+    "by_language": {
+      "en": {
+        "correct_refusal_rate": {
+          "n": 8,
+          "value": 0.625
+        },
+        "false_refusal_rate": {
+          "n": 35,
+          "value": 0.37142857142857144
+        },
+        "false_refusal_upper_95": 0.5244041881717724,
+        "mrr": {
+          "n": 35,
+          "value": 0.264625850340136
+        },
+        "recall_at_10": {
+          "n": 35,
+          "value": 0.7
+        },
+        "recall_at_5": {
+          "n": 35,
+          "value": 0.5571428571428572
+        }
+      },
+      "it": {
+        "correct_refusal_rate": {
+          "n": 6,
+          "value": 0.6666666666666666
+        },
+        "false_refusal_rate": {
+          "n": 29,
+          "value": 0.3793103448275862
+        },
+        "false_refusal_upper_95": 0.5487654286810684,
+        "mrr": {
+          "n": 29,
+          "value": 0.24154351395730705
+        },
+        "recall_at_10": {
+          "n": 29,
+          "value": 0.7413793103448276
+        },
+        "recall_at_5": {
+          "n": 29,
+          "value": 0.5172413793103449
+        }
+      },
+      "zh": {
+        "correct_refusal_rate": {
+          "n": 7,
+          "value": 0.8571428571428571
+        },
+        "false_refusal_rate": {
+          "n": 32,
+          "value": 0.28125
+        },
+        "false_refusal_upper_95": 0.43944669326090996,
+        "mrr": {
+          "n": 32,
+          "value": 0.2996279761904762
+        },
+        "recall_at_10": {
+          "n": 32,
+          "value": 0.78125
+        },
+        "recall_at_5": {
+          "n": 32,
+          "value": 0.5625
+        }
+      }
+    },
+    "by_language_category": {
+      "en/ambiguous": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.75
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        }
+      },
+      "en/colloquial": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.16666666666666666
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "en/compound": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.3333333333333333
+        },
+        "false_refusal_upper_95": 0.8646496378284163,
+        "mrr": {
+          "n": 3,
+          "value": 0.16984126984126982
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 0.16666666666666666
+        }
+      },
+      "en/cross_lingual": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 5,
+          "value": 0.4
+        },
+        "false_refusal_upper_95": 0.8107446225622292,
+        "mrr": {
+          "n": 5,
+          "value": 0.1519047619047619
+        },
+        "recall_at_10": {
+          "n": 5,
+          "value": 0.8
+        },
+        "recall_at_5": {
+          "n": 5,
+          "value": 0.4
+        }
+      },
+      "en/exact_term": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.3333333333333333
+        },
+        "false_refusal_upper_95": 0.8646496378284163,
+        "mrr": {
+          "n": 3,
+          "value": 0.27777777777777773
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 0.6666666666666666
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 0.6666666666666666
+        }
+      },
+      "en/general": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 5,
+          "value": 0.2
+        },
+        "false_refusal_upper_95": 0.6574083180011387,
+        "mrr": {
+          "n": 5,
+          "value": 0.2785714285714286
+        },
+        "recall_at_10": {
+          "n": 5,
+          "value": 0.6
+        },
+        "recall_at_5": {
+          "n": 5,
+          "value": 0.4
+        }
+      },
+      "en/injection": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.25
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "en/injection_evasive": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.125
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "en/multi_turn": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.26666666666666666
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        }
+      },
+      "en/no_answer": {
+        "correct_refusal_rate": {
+          "n": 8,
+          "value": 0.625
+        },
+        "false_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_upper_95": 1.0,
+        "mrr": {
+          "n": 0,
+          "value": null
+        },
+        "recall_at_10": {
+          "n": 0,
+          "value": null
+        },
+        "recall_at_5": {
+          "n": 0,
+          "value": null
+        }
+      },
+      "en/scanned": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.125
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "en/selective_filter": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.26666666666666666
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        }
+      },
+      "en/table": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.3333333333333333
+        },
+        "false_refusal_upper_95": 0.8646496378284163,
+        "mrr": {
+          "n": 3,
+          "value": 0.12222222222222223
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 0.6666666666666666
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 0.3333333333333333
+        }
+      },
+      "en/typo": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.7763932022500211,
+        "mrr": {
+          "n": 2,
+          "value": 0.75
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        }
+      },
+      "it/ambiguous": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.16666666666666666
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "it/colloquial": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.18333333333333335
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "it/compound": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 1,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.9500000000000001,
+        "mrr": {
+          "n": 1,
+          "value": 0.14285714285714285
+        },
+        "recall_at_10": {
+          "n": 1,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 1,
+          "value": 0.0
+        }
+      },
+      "it/cross_lingual": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 7,
+          "value": 0.42857142857142855
+        },
+        "false_refusal_upper_95": 0.7746784159675523,
+        "mrr": {
+          "n": 7,
+          "value": 0.15612244897959182
+        },
+        "recall_at_10": {
+          "n": 7,
+          "value": 0.7142857142857143
+        },
+        "recall_at_5": {
+          "n": 7,
+          "value": 0.42857142857142855
+        }
+      },
+      "it/exact_term": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.7763932022500211,
+        "mrr": {
+          "n": 2,
+          "value": 0.29166666666666663
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        }
+      },
+      "it/general": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 4,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9023885371135857,
+        "mrr": {
+          "n": 4,
+          "value": 0.3541666666666667
+        },
+        "recall_at_10": {
+          "n": 4,
+          "value": 0.75
+        },
+        "recall_at_5": {
+          "n": 4,
+          "value": 0.5
+        }
+      },
+      "it/injection": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.07142857142857142
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.0
+        }
+      },
+      "it/injection_evasive": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 1,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.9500000000000001,
+        "mrr": {
+          "n": 1,
+          "value": 0.25
+        },
+        "recall_at_10": {
+          "n": 1,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 1,
+          "value": 1.0
+        }
+      },
+      "it/multi_turn": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.3333333333333333
+        },
+        "false_refusal_upper_95": 0.8646496378284163,
+        "mrr": {
+          "n": 3,
+          "value": 0.11428571428571428
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 0.6666666666666666
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 0.3333333333333333
+        }
+      },
+      "it/no_answer": {
+        "correct_refusal_rate": {
+          "n": 6,
+          "value": 0.6666666666666666
+        },
+        "false_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_upper_95": 1.0,
+        "mrr": {
+          "n": 0,
+          "value": null
+        },
+        "recall_at_10": {
+          "n": 0,
+          "value": null
+        },
+        "recall_at_5": {
+          "n": 0,
+          "value": null
+        }
+      },
+      "it/selective_filter": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.41666666666666663
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        }
+      },
+      "it/table": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.3333333333333333
+        },
+        "false_refusal_upper_95": 0.8646496378284163,
+        "mrr": {
+          "n": 3,
+          "value": 0.5
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 0.6666666666666666
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 0.6666666666666666
+        }
+      },
+      "zh/ambiguous": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.75
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        }
+      },
+      "zh/colloquial": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 1,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.9500000000000001,
+        "mrr": {
+          "n": 1,
+          "value": 0.3333333333333333
+        },
+        "recall_at_10": {
+          "n": 1,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 1,
+          "value": 1.0
+        }
+      },
+      "zh/compound": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.15476190476190477
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.0
+        }
+      },
+      "zh/cross_lingual": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 5,
+          "value": 0.2
+        },
+        "false_refusal_upper_95": 0.6574083180011387,
+        "mrr": {
+          "n": 5,
+          "value": 0.3185714285714286
+        },
+        "recall_at_10": {
+          "n": 5,
+          "value": 0.8
+        },
+        "recall_at_5": {
+          "n": 5,
+          "value": 0.6
+        }
+      },
+      "zh/exact_term": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.3333333333333333
+        },
+        "false_refusal_upper_95": 0.8646496378284163,
+        "mrr": {
+          "n": 3,
+          "value": 0.27777777777777773
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 0.6666666666666666
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 0.6666666666666666
+        }
+      },
+      "zh/general": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 5,
+          "value": 0.4
+        },
+        "false_refusal_upper_95": 0.8107446225622292,
+        "mrr": {
+          "n": 5,
+          "value": 0.3119047619047619
+        },
+        "recall_at_10": {
+          "n": 5,
+          "value": 0.8
+        },
+        "recall_at_5": {
+          "n": 5,
+          "value": 0.4
+        }
+      },
+      "zh/injection": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 1,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.9500000000000001,
+        "mrr": {
+          "n": 1,
+          "value": 0.2
+        },
+        "recall_at_10": {
+          "n": 1,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 1,
+          "value": 1.0
+        }
+      },
+      "zh/injection_evasive": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.25
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "zh/multi_turn": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.7763932022500211,
+        "mrr": {
+          "n": 2,
+          "value": 0.29166666666666663
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        }
+      },
+      "zh/no_answer": {
+        "correct_refusal_rate": {
+          "n": 7,
+          "value": 0.8571428571428571
+        },
+        "false_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_upper_95": 1.0,
+        "mrr": {
+          "n": 0,
+          "value": null
+        },
+        "recall_at_10": {
+          "n": 0,
+          "value": null
+        },
+        "recall_at_5": {
+          "n": 0,
+          "value": null
+        }
+      },
+      "zh/scanned": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.125
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "zh/selective_filter": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 4,
+          "value": 0.25
+        },
+        "false_refusal_upper_95": 0.7513953742698186,
+        "mrr": {
+          "n": 4,
+          "value": 0.13988095238095238
+        },
+        "recall_at_10": {
+          "n": 4,
+          "value": 0.75
+        },
+        "recall_at_5": {
+          "n": 4,
+          "value": 0.25
+        }
+      },
+      "zh/table": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.7763932022500211,
+        "mrr": {
+          "n": 2,
+          "value": 0.18333333333333335
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "zh/typo": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 1,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.9500000000000001,
+        "mrr": {
+          "n": 1,
+          "value": 1.0
+        },
+        "recall_at_10": {
+          "n": 1,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 1,
+          "value": 1.0
+        }
+      }
+    },
+    "by_language_pair": {
+      "en->it": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.3333333333333333
+        },
+        "false_refusal_upper_95": 0.8646496378284163,
+        "mrr": {
+          "n": 3,
+          "value": 0.16984126984126982
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 0.3333333333333333
+        }
+      },
+      "en->zh": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.125
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "it->en": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.3333333333333333
+        },
+        "false_refusal_upper_95": 0.8646496378284163,
+        "mrr": {
+          "n": 3,
+          "value": 0.10317460317460318
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 0.6666666666666666
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 0.0
+        }
+      },
+      "it->zh": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 4,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9023885371135857,
+        "mrr": {
+          "n": 4,
+          "value": 0.19583333333333333
+        },
+        "recall_at_10": {
+          "n": 4,
+          "value": 0.75
+        },
+        "recall_at_5": {
+          "n": 4,
+          "value": 0.75
+        }
+      },
+      "zh->en": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.6315968501359613,
+        "mrr": {
+          "n": 3,
+          "value": 0.38095238095238093
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 0.6666666666666666
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 0.3333333333333333
+        }
+      },
+      "zh->it": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.225
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 1.0
+        }
+      }
+    },
+    "by_provenance": {
+      "production": {
+        "correct_refusal_rate": {
+          "n": 4,
+          "value": 0.75
+        },
+        "false_refusal_rate": {
+          "n": 19,
+          "value": 0.42105263157894735
+        },
+        "false_refusal_upper_95": 0.6318847929794849,
+        "mrr": {
+          "n": 19,
+          "value": 0.2448621553884712
+        },
+        "recall_at_10": {
+          "n": 19,
+          "value": 0.7368421052631579
+        },
+        "recall_at_5": {
+          "n": 19,
+          "value": 0.5263157894736842
+        }
+      },
+      "synthetic_fixture": {
+        "correct_refusal_rate": {
+          "n": 17,
+          "value": 0.7058823529411765
+        },
+        "false_refusal_rate": {
+          "n": 77,
+          "value": 0.3246753246753247
+        },
+        "false_refusal_upper_95": 0.4230258937650576,
+        "mrr": {
+          "n": 77,
+          "value": 0.2753555967841682
+        },
+        "recall_at_10": {
+          "n": 77,
+          "value": 0.7402597402597403
+        },
+        "recall_at_5": {
+          "n": 77,
+          "value": 0.551948051948052
+        }
+      }
+    },
+    "by_provenance_category": {
+      "production/ambiguous": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.6666666666666666
+        },
+        "false_refusal_upper_95": 0.9830475724915586,
+        "mrr": {
+          "n": 3,
+          "value": 0.611111111111111
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 1.0
+        }
+      },
+      "production/compound": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.15476190476190477
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.0
+        }
+      },
+      "production/cross_lingual": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.125
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "production/general": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 4,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9023885371135857,
+        "mrr": {
+          "n": 4,
+          "value": 0.16666666666666666
+        },
+        "recall_at_10": {
+          "n": 4,
+          "value": 0.75
+        },
+        "recall_at_5": {
+          "n": 4,
+          "value": 0.5
+        }
+      },
+      "production/injection": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 1,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.9500000000000001,
+        "mrr": {
+          "n": 1,
+          "value": 0.0
+        },
+        "recall_at_10": {
+          "n": 1,
+          "value": 0.0
+        },
+        "recall_at_5": {
+          "n": 1,
+          "value": 0.0
+        }
+      },
+      "production/injection_evasive": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 1,
+          "value": 1.0
+        },
+        "false_refusal_upper_95": 1.0,
+        "mrr": {
+          "n": 1,
+          "value": 0.25
+        },
+        "recall_at_10": {
+          "n": 1,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 1,
+          "value": 1.0
+        }
+      },
+      "production/multi_turn": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 1,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.9500000000000001,
+        "mrr": {
+          "n": 1,
+          "value": 0.3333333333333333
+        },
+        "recall_at_10": {
+          "n": 1,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 1,
+          "value": 1.0
+        }
+      },
+      "production/no_answer": {
+        "correct_refusal_rate": {
+          "n": 4,
+          "value": 0.75
+        },
+        "false_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_upper_95": 1.0,
+        "mrr": {
+          "n": 0,
+          "value": null
+        },
+        "recall_at_10": {
+          "n": 0,
+          "value": null
+        },
+        "recall_at_5": {
+          "n": 0,
+          "value": null
+        }
+      },
+      "production/selective_filter": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 2,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9746794344808964,
+        "mrr": {
+          "n": 2,
+          "value": 0.3214285714285714
+        },
+        "recall_at_10": {
+          "n": 2,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 2,
+          "value": 0.5
+        }
+      },
+      "production/table": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.6315968501359613,
+        "mrr": {
+          "n": 3,
+          "value": 0.12222222222222223
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 0.6666666666666666
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 0.3333333333333333
+        }
+      },
+      "synthetic_fixture/ambiguous": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.3333333333333333
+        },
+        "false_refusal_upper_95": 0.8646496378284163,
+        "mrr": {
+          "n": 3,
+          "value": 0.5
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 0.6666666666666666
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 0.6666666666666666
+        }
+      },
+      "synthetic_fixture/colloquial": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 5,
+          "value": 0.4
+        },
+        "false_refusal_upper_95": 0.8107446225622292,
+        "mrr": {
+          "n": 5,
+          "value": 0.20666666666666664
+        },
+        "recall_at_10": {
+          "n": 5,
+          "value": 0.8
+        },
+        "recall_at_5": {
+          "n": 5,
+          "value": 0.6
+        }
+      },
+      "synthetic_fixture/compound": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 4,
+          "value": 0.25
+        },
+        "false_refusal_upper_95": 0.7513953742698186,
+        "mrr": {
+          "n": 4,
+          "value": 0.1630952380952381
+        },
+        "recall_at_10": {
+          "n": 4,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 4,
+          "value": 0.125
+        }
+      },
+      "synthetic_fixture/cross_lingual": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 15,
+          "value": 0.3333333333333333
+        },
+        "false_refusal_upper_95": 0.5774436628428433,
+        "mrr": {
+          "n": 15,
+          "value": 0.21301587301587302
+        },
+        "recall_at_10": {
+          "n": 15,
+          "value": 0.8
+        },
+        "recall_at_5": {
+          "n": 15,
+          "value": 0.4666666666666667
+        }
+      },
+      "synthetic_fixture/exact_term": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 8,
+          "value": 0.25
+        },
+        "false_refusal_upper_95": 0.599689389190833,
+        "mrr": {
+          "n": 8,
+          "value": 0.28125
+        },
+        "recall_at_10": {
+          "n": 8,
+          "value": 0.75
+        },
+        "recall_at_5": {
+          "n": 8,
+          "value": 0.75
+        }
+      },
+      "synthetic_fixture/general": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 10,
+          "value": 0.3
+        },
+        "false_refusal_upper_95": 0.6066242161054135,
+        "mrr": {
+          "n": 10,
+          "value": 0.37023809523809526
+        },
+        "recall_at_10": {
+          "n": 10,
+          "value": 0.7
+        },
+        "recall_at_5": {
+          "n": 10,
+          "value": 0.4
+        }
+      },
+      "synthetic_fixture/injection": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 4,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9023885371135857,
+        "mrr": {
+          "n": 4,
+          "value": 0.21071428571428572
+        },
+        "recall_at_10": {
+          "n": 4,
+          "value": 0.75
+        },
+        "recall_at_5": {
+          "n": 4,
+          "value": 0.5
+        }
+      },
+      "synthetic_fixture/injection_evasive": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 4,
+          "value": 0.25
+        },
+        "false_refusal_upper_95": 0.7513953742698186,
+        "mrr": {
+          "n": 4,
+          "value": 0.1875
+        },
+        "recall_at_10": {
+          "n": 4,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 4,
+          "value": 0.5
+        }
+      },
+      "synthetic_fixture/multi_turn": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 6,
+          "value": 0.3333333333333333
+        },
+        "false_refusal_upper_95": 0.7286616274802475,
+        "mrr": {
+          "n": 6,
+          "value": 0.1876984126984127
+        },
+        "recall_at_10": {
+          "n": 6,
+          "value": 0.8333333333333334
+        },
+        "recall_at_5": {
+          "n": 6,
+          "value": 0.6666666666666666
+        }
+      },
+      "synthetic_fixture/no_answer": {
+        "correct_refusal_rate": {
+          "n": 17,
+          "value": 0.7058823529411765
+        },
+        "false_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_upper_95": 1.0,
+        "mrr": {
+          "n": 0,
+          "value": null
+        },
+        "recall_at_10": {
+          "n": 0,
+          "value": null
+        },
+        "recall_at_5": {
+          "n": 0,
+          "value": null
+        }
+      },
+      "synthetic_fixture/scanned": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 4,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.9023885371135857,
+        "mrr": {
+          "n": 4,
+          "value": 0.125
+        },
+        "recall_at_10": {
+          "n": 4,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 4,
+          "value": 0.5
+        }
+      },
+      "synthetic_fixture/selective_filter": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 6,
+          "value": 0.3333333333333333
+        },
+        "false_refusal_upper_95": 0.7286616274802475,
+        "mrr": {
+          "n": 6,
+          "value": 0.21388888888888888
+        },
+        "recall_at_10": {
+          "n": 6,
+          "value": 0.8333333333333334
+        },
+        "recall_at_5": {
+          "n": 6,
+          "value": 0.6666666666666666
+        }
+      },
+      "synthetic_fixture/table": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 5,
+          "value": 0.4
+        },
+        "false_refusal_upper_95": 0.8107446225622292,
+        "mrr": {
+          "n": 5,
+          "value": 0.37333333333333335
+        },
+        "recall_at_10": {
+          "n": 5,
+          "value": 0.8
+        },
+        "recall_at_5": {
+          "n": 5,
+          "value": 0.6
+        }
+      },
+      "synthetic_fixture/typo": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 3,
+          "value": 0.0
+        },
+        "false_refusal_upper_95": 0.6315968501359613,
+        "mrr": {
+          "n": 3,
+          "value": 0.8333333333333334
+        },
+        "recall_at_10": {
+          "n": 3,
+          "value": 1.0
+        },
+        "recall_at_5": {
+          "n": 3,
+          "value": 1.0
+        }
+      }
+    },
+    "by_question_kind": {
+      "context_heavy": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 13,
+          "value": 0.3076923076923077
+        },
+        "false_refusal_upper_95": 0.5726193394082125,
+        "mrr": {
+          "n": 13,
+          "value": 0.18626373626373624
+        },
+        "recall_at_10": {
+          "n": 13,
+          "value": 0.6923076923076923
+        },
+        "recall_at_5": {
+          "n": 13,
+          "value": 0.4230769230769231
+        }
+      },
+      "fact_lookup": {
+        "correct_refusal_rate": {
+          "n": 0,
+          "value": null
+        },
+        "false_refusal_rate": {
+          "n": 30,
+          "value": 0.3
+        },
+        "false_refusal_upper_95": 0.46507270657030925,
+        "mrr": {
+          "n": 30,
+          "value": 0.2950793650793651
+        },
+        "recall_at_10": {
+          "n": 30,
+          "value": 0.7333333333333333
+        },
+        "recall_at_5": {
+          "n": 30,
+          "value": 0.5333333333333333
+        }
+      },
+      "other": {
+        "correct_refusal_rate": {
+          "n": 21,
+          "value": 0.7142857142857143
+        },
+        "false_refusal_rate": {
+          "n": 53,
+          "value": 0.37735849056603776
+        },
+        "false_refusal_upper_95": 0.4994541499429867,
+        "mrr": {
+          "n": 53,
+          "value": 0.27511230907457324
+        },
+        "recall_at_10": {
+          "n": 53,
+          "value": 0.7547169811320755
+        },
+        "recall_at_5": {
+          "n": 53,
+          "value": 0.5849056603773585
+        }
+      }
+    },
+    "by_split": {
+      "dev": {
+        "correct_refusal_rate": {
+          "n": 21,
+          "value": 0.7142857142857143
+        },
+        "false_refusal_rate": {
+          "n": 96,
+          "value": 0.34375
+        },
+        "false_refusal_upper_95": 0.4315727956070955,
+        "mrr": {
+          "n": 96,
+          "value": 0.2693204365079365
+        },
+        "recall_at_10": {
+          "n": 96,
+          "value": 0.7395833333333334
+        },
+        "recall_at_5": {
+          "n": 96,
+          "value": 0.546875
+        }
+      },
+      "test": {
+        "correct_refusal_rate": {
+          "n": 9,
+          "value": 0.6666666666666666
+        },
+        "false_refusal_rate": {
+          "n": 38,
+          "value": 0.34210526315789475
+        },
+        "false_refusal_upper_95": 0.487961825095237,
+        "mrr": {
+          "n": 38,
+          "value": 0.2444235588972431
+        },
+        "recall_at_10": {
+          "n": 38,
+          "value": 0.6842105263157895
+        },
+        "recall_at_5": {
+          "n": 38,
+          "value": 0.42105263157894735
+        }
+      }
+    },
+    "gate_population": "all",
+    "lexical_leg_hit_rate_at_10": {
+      "n": 0,
+      "value": null
+    },
+    "overall": {
+      "correct_refusal_rate": {
+        "n": 21,
+        "value": 0.7142857142857143
+      },
+      "false_refusal_rate": {
+        "n": 96,
+        "value": 0.34375
+      },
+      "false_refusal_upper_95": 0.4315727956070955,
+      "mrr": {
+        "n": 96,
+        "value": 0.2693204365079365
+      },
+      "recall_at_10": {
+        "n": 96,
+        "value": 0.7395833333333334
+      },
+      "recall_at_5": {
+        "n": 96,
+        "value": 0.546875
+      }
+    },
+    "rerank_skipped_rate": {
+      "n": 0,
+      "value": null
+    }
+  }
+}

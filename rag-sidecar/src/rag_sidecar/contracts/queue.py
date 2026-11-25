@@ -91,12 +91,16 @@ class JobSettingsSnapshot(_Contract):
     hidden_text_check: HiddenTextCheckMode = "off"
     approval: UploadApproval | None = None
     hold_publish: bool = False
+    # D-17: the primary of the configured languages ocr_languages was built from; None when the profile's list applies.
+    ocr_primary_language: Language | None = None
 
     @model_validator(mode="after")
     def _tiers_are_ordered(self) -> JobSettingsSnapshot:
         if self.min_tier and self.max_tier and _TIER_ORDER[self.min_tier] > _TIER_ORDER[self.max_tier]:
             raise ValueError("min_tier must not rank above max_tier")
         check_language_selection(self.languages, self.primary_language)
+        if self.ocr_primary_language is not None and self.ocr_primary_language not in self.ocr_languages:
+            raise ValueError("ocr_primary_language must be one of ocr_languages")
         return self
 
 

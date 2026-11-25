@@ -113,6 +113,18 @@ describe('queued fixed tracer: one upload from enqueueIngest through the ledger,
     assert.ok(chunks.some((chunk) => /second page text about the dock/i.test(String(chunk.content))));
   });
 
+  test('the queued version carries the same kind of fingerprint as an inline run, from the same builder (D-10)', async () => {
+    const { buildIngestFingerprint } = await import('@/lib/rag/ingest/fingerprint');
+    const [document] = await harness.rows('SELECT ingest_fingerprint, metadata, parser_version FROM documents WHERE id = $1', [queued.documentId]);
+    assert.ok(document);
+    const parts = (document.metadata as Row).ingest_fingerprint_parts as Parameters<typeof buildIngestFingerprint>[0];
+    assert.ok(parts, 'metadata.ingest_fingerprint_parts is stored');
+    assert.equal(parts.parser_used, 'llamaparse');
+    assert.equal(parts.parser_version, document.parser_version, 'the part names the parser version the parse reported');
+    assert.ok(parts.ocr_engine_codes.every((code) => code.startsWith('llamaparse:')) && parts.ocr_engine_codes.length > 0);
+    assert.equal(document.ingest_fingerprint, buildIngestFingerprint(parts));
+  });
+
   test('the chunks are retrievable for tenant u:A and never for o:B', async () => {
     const retrieve = async (scope: typeof harness.scopeA) =>
       rag.runRetrieval({

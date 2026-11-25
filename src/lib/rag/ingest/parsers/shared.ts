@@ -2,6 +2,7 @@ import type { ParseResult } from '@/lib/rag-eval/contracts.generated';
 import type { TenantScope } from '../../tenant/scope';
 import type { PremiumContext, Reservation } from '../guard/cloud-budget';
 import type { ProcessingProfile } from '../profiles/load';
+import type { EffectiveIngestSettings } from '../routing/effective-settings';
 
 /** The two parsers that call a service. */
 export type NetworkParserName = 'llamaparse' | 'docling';
@@ -60,6 +61,8 @@ export interface ParseRequest {
   onSubmitted: (job: PendingJob) => Promise<void>;
   /** Present only for queued tiered jobs; inline and fixed runs leave it unset and only the cloud switch applies. */
   guard?: ParseGuard;
+  /** The effective ingestion settings (effectiveIngestSettings); absent, a parser builds today's request from the profile. */
+  settings?: EffectiveIngestSettings;
 }
 
 export type ParseAttempt =

@@ -7,6 +7,7 @@ import { startFakeEdge, type FakeEdge } from './fake-edge.mts';
 import { createEmptyFixtureDatabase, prechunkedWriter, relexFixtureChunks, type DeploymentMode, type FixtureDatabase } from './pglite-supabase.mts';
 import { applyFixtureProcessEnv } from './process-env.mts';
 import { RunConfigError } from './run-config.mts';
+import { isTableSplitItem, loadTableSplitTenants, tableSplitCorpusParts, type TableSplitTenant } from './table-split.mts';
 import type { ChunkingProfile } from '../../src/lib/rag-eval/contracts.generated.ts';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { IngestInput } from '@/lib/rag/ingest/types';
@@ -130,6 +131,14 @@ export function ingestModeGoldenPaths(): string[] {
 }
 
 /**
+ * How ingest mode routes golden items by category: table_split items run against their isolated tenants (table-split.mts) after
+ * every other item, so the other items run exactly as they did before the table documents existed (research Pitfall 10).
+ */
+export function partitionIngestModeItems<T extends { category: string }>(items: T[]): { main: T[]; tableSplit: T[] } {
+  return { main: items.filter((item) => !isTableSplitItem(item)), tableSplit: items.filter((item) => isTableSplitItem(item)) };
+}
+
+/**
  * Retrieval-time env for ingest-mode fixture eval. The ingest builder turns exact-id lookup on; the recorded ingest baseline
  * assumes retrieval still runs it. Pinned smoke env sets it off, and live process.env must override frozen `@/lib/env` for
  * v2 harness overlays, so this is applied again when the eval route is prepared.
@@ -154,10 +163,16 @@ export function mergeGoldenFiles(paths: string[], outPath: string): string {
  * prechunked baseline: the gate compares this value and refuses the pair. The parse fixtures are part of the corpus, and a queued
  * build names its routing and forced tier, so a routed run is never gated against the inline baseline by accident.
  */
-function ingestCorpusSha256(corpusSha256: string, parseFixtures: ParseFixtureDocument[], routing?: IngestRoutingOptions): string {
+function ingestCorpusSha256(
+  corpusSha256: string,
+  parseFixtures: ParseFixtureDocument[],
+  routing?: IngestRoutingOptions,
+  tableSplit = false,
+): string {
   const hash = crypto.createHash('sha256').update('fixture-mode:ingest').update(Buffer.from([0])).update(corpusSha256);
   for (const fixture of parseFixtures) hash.update(Buffer.from([0])).update(`parse:${fixture.filename}:${fixture.sha256}`);
   if (routing) hash.update(Buffer.from([0])).update(`routing:${routing.routing}:${routing.forceTier ?? 'none'}`);
+  if (tableSplit) for (const part of tableSplitCorpusParts()) hash.update(Buffer.from([0])).update(part);
   return hash.digest('hex');
 }
 
@@ -341,8 +356,20 @@ export async function buildIngestFixtureDatabase(options: {
   parseFixtureIds?: string[];
   /** Through the queue instead of inline ingest() (D-40). */
   routing?: IngestRoutingOptions;
-}): Promise<FixtureDatabase & { buildState: IngestFixtureBuildState; routingSummary?: IngestRoutingSummary }> {
+  /**
+   * After the fixture tenant is filled, load the long-table documents into the isolated table_split tenants (table-split.mts).
+   * Inline ingest() only: a queued --routing build leaves the table_split items out.
+   */
+  tableSplit?: boolean;
+}): Promise<
+  FixtureDatabase & { buildState: IngestFixtureBuildState; routingSummary?: IngestRoutingSummary; tableSplitTenants?: TableSplitTenant[] }
+> {
   const { deploymentMode, routing } = options;
+  const tableSplit = options.tableSplit === true;
+  if (tableSplit && routing) throw new Error('[Ingest Mode] the table_split tenants are loaded by inline ingest(); drop them under --routing');
+  if (tableSplit && (options.continueFrom || options.onAfterCorpusSlice || options.splitAtCorpusIndex !== undefined)) {
+    throw new Error('[Ingest Mode] the table_split tenants are loaded only by a build in one pass');
+  }
   if (routing && (options.continueFrom || options.onAfterCorpusSlice || options.splitAtCorpusIndex !== undefined)) {
     throw new Error('[Ingest Mode] --routing builds the whole database in one pass');
   }
@@ -370,7 +397,7 @@ export async function buildIngestFixtureDatabase(options: {
   const parseFixtures = includeTyped
     ? allParseFixtures.filter((fixture) => !fixture.typedTwin && (parseWanted === null || parseWanted.has(fixture.id)))
     : [];
-  const corpusSha256 = ingestCorpusSha256(corpus.corpusSha256, includeTyped ? allParseFixtures : [], routing);
+  const corpusSha256 = ingestCorpusSha256(corpus.corpusSha256, includeTyped ? allParseFixtures : [], routing, tableSplit);
   const parseById = new Map(allParseFixtures.map((fixture) => [fixture.id, fixture]));
 
   const empty = options.continueFrom?.fixture ?? (await createEmptyFixtureDatabase(options));
@@ -380,6 +407,7 @@ export async function buildIngestFixtureDatabase(options: {
   let sidecarUploads: FixtureDatabase['ingestSidecarUploads'];
   let llamaAttempts = 0;
   let routingSummary: IngestRoutingSummary | undefined;
+  let tableSplitTenants: TableSplitTenant[] | undefined;
   const harnessEnv: Record<string, string> = {
     RAG_INGEST_PIPELINE: 'unified',
     RAG_PARSER: 'llamaparse',
@@ -413,7 +441,7 @@ export async function buildIngestFixtureDatabase(options: {
     const { fixtureAdminClient, installIngestFakes } = await import('./ingest-fakes.mts');
     const { ingest } = await import('@/lib/rag/ingest');
     const { buildSourceKey } = await import('@/lib/rag/ingest/identity');
-    const { mintScope } = await import('@/lib/rag/tenant/scope');
+    const { mintScope, scopeKey } = await import('@/lib/rag/tenant/scope');
 
     const { INGEST_MODE_FEATURE_ENV } = await import('./ingest-fakes.mts');
     const fakes = await installIngestFakes({ db: fixtureAdminClient(edge.url), env: INGEST_MODE_FEATURE_ENV });
@@ -546,6 +574,20 @@ export async function buildIngestFixtureDatabase(options: {
     }));
     llamaAttempts = fakes.llamaParseAttempts();
 
+    if (tableSplit) {
+      tableSplitTenants = await loadTableSplitTenants({
+        edge,
+        homeDb: empty.db,
+        deploymentMode,
+        createDatabase: () => createEmptyFixtureDatabase(options),
+        ingest,
+        buildSourceKey,
+        mintScope,
+        scopeKey,
+      });
+      if (fakes.llamaParseAttempts() !== llamaAttempts) throw new Error('[Ingest Mode] the table_split tenants reached LlamaParse');
+    }
+
     if (edge.errors.length > 0) {
       const sample = edge.errors
         .slice(0, 3)
@@ -554,6 +596,7 @@ export async function buildIngestFixtureDatabase(options: {
       throw new Error(`[Ingest Mode] the fake edge refused ${edge.errors.length} request(s) while ingesting: ${sample}`);
     }
   } catch (error) {
+    for (const tenant of tableSplitTenants ?? []) await tenant.db.close().catch(() => undefined);
     await runCleanups(cleanups);
     await uninstall?.().catch(() => undefined);
     uninstall = undefined;
@@ -577,6 +620,7 @@ export async function buildIngestFixtureDatabase(options: {
     ...(seeded.length > 0 ? { seededChunkingProfiles: seeded.map((profile) => profile.id) } : {}),
     buildState,
     ...(routingSummary ? { routingSummary } : {}),
+    ...(tableSplitTenants ? { tableSplitTenants } : {}),
   };
 }
 

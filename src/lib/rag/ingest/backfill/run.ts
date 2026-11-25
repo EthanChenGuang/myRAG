@@ -10,6 +10,7 @@ import { profileFor, type DocType } from '../profiles/load';
 import { resolveDocType } from '../profiles/resolve-doc-type';
 import { queueConfigFromProcessEnv, type QueueConfig } from '../queue-config';
 import { loadRoutingConfig } from '../routing/config';
+import { ingestLanguageSettings } from '../routing/effective-settings';
 import { buildJobSettings } from '../routing/settings-snapshot';
 import { effectiveTierBounds } from '../routing/tier-bounds';
 import type { BackfillBatchRef, InventoryEntry } from './inventory';
@@ -222,6 +223,8 @@ export async function enqueueRun(batch: BackfillBatchRef, entries: readonly RunE
         kind,
         isBackfill: true,
         embedProfileProvider,
+        ingestConfig,
+        languageSettings: ingestLanguageSettings(ingestConfig),
       });
       settingsByType.set(docType, settings);
     }

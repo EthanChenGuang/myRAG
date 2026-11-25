@@ -34,6 +34,13 @@ const PATHS: Path[] = ['all', 'exact_id', 'translated'];
 const QUERY_OF: Record<Path, string> = { all: V2_EXACT_QUERY, exact_id: `${V2_EXACT_CODE} catalogue item`, translated: V2_TRANSLATED_QUESTION };
 const VOICE_SECRET = crypto.randomBytes(24).toString('hex');
 const OPTIONS = { maxResults: 25, fallbackToLowerThreshold: true };
+const D01_ENV: Record<string, string> = {
+  RAG_PIPELINE: 'v2',
+  RAG_LEXICAL_SEARCH: 'true',
+  RAG_RERANKER: 'auto',
+  RAG_REFUSAL_THRESHOLD: 'true',
+  RAG_REFUSAL_FLOOR: 'legacy_rule',
+};
 
 interface RerankBody {
   model: string;
@@ -86,6 +93,7 @@ describe('every v2 retrieval path stays inside the caller tenant, for every entr
     collectorModule = await import('@/lib/rag/trace/collector');
     paramsModule = await import('@/lib/rag/v2/retrieval-params');
     const { createCohereReranker } = await import('@/lib/rag/rerank/cohere');
+    const { createLocalBm25Reranker } = await import('@/lib/rag/rerank/local-bm25');
 
     adminClient = createClient(edge.url, processEnv.SUPABASE_SERVICE_ROLE_KEY as string, {
       auth: { persistSession: false, autoRefreshToken: false },
@@ -115,8 +123,10 @@ describe('every v2 retrieval path stays inside the caller tenant, for every entr
       rerankBodies.push({ model: body.model, query: body.query, documents: body.documents });
       return fetch(input, init);
     };
-    selectModule.setRerankerFactoryForTests((_provider, _model, env) =>
-      createCohereReranker({ fetch: recordingFetch, apiKey: env.COHERE_API_KEY ?? '', baseUrl: env.COHERE_BASE_URL ?? '', model: 'fake-quality-v1' }),
+    selectModule.setRerankerFactoryForTests((provider, _model, env) =>
+      provider === 'local_bm25'
+        ? createLocalBm25Reranker()
+        : createCohereReranker({ fetch: recordingFetch, apiKey: env.COHERE_API_KEY ?? '', baseUrl: env.COHERE_BASE_URL ?? '', model: 'fake-quality-v1' }),
     );
     translateModule.setTranslatorForTests(
       translateModule.createFixtureTranslator({
@@ -494,6 +504,48 @@ describe('every v2 retrieval path stays inside the caller tenant, for every entr
     assert.equal(rpcCalls().length, calls);
   });
 
+  test('two-tenant matrix under the D-01 values: multi-tenant, keyless and with the fixture key, every profile and tenant stays inside the caller tenant', async () => {
+    const fixtureKey = process.env.COHERE_API_KEY as string;
+    const variants = [
+      { name: 'keyless', env: { ...D01_ENV, COHERE_API_KEY: '' }, hosted: false },
+      { name: 'fixture key', env: { ...D01_ENV, COHERE_API_KEY: fixtureKey, COHERE_BASE_URL: process.env.COHERE_BASE_URL as string }, hosted: true },
+    ];
+    assert.ok(fixtureKey, 'the fake edge supplies a placeholder Cohere key');
+    try {
+      for (const variant of variants) {
+        depsModule.setRagDepsForTests({ ragEnv: () => variant.env });
+        configModule.resetRagConfigForTests();
+        for (const profile of PROFILES) {
+          for (const label of LABELS) {
+            const where = `D-01 ${variant.name} ${profile}/${label}`;
+            const t = tenant(label);
+            const scope = await scopeFor(profile, label);
+            assert.equal(scopeModule.scopeKey(scope), t.scopeKey);
+            const { result, rerank } = await retrieve(scope, profile, V2_EXACT_QUERY);
+
+            assert.ok(['ok', 'empty'].includes(result.status), `${where}: status ${result.status} (${result.reason})`);
+            assert.ok(rpcCalls().some((call) => call.path.endsWith('/rpc/hybrid_search_chunks')), `${where}: served by v2`);
+            assert.ok(result.candidates.length > 0 || (result.voice?.results ?? []).length > 0, `${where}: the caller's own candidates come back`);
+            await assertOwnRows(label, result, where);
+            assertNoForeignText(label, { result, stages: result.stages, rerankRequests: rerank }, where);
+            const rerankStage = stage(result, 'rerank');
+            if (variant.hosted) {
+              assert.ok(rerank.length >= 1, `${where}: auto with a Cohere key reranks on the edge`);
+              for (const body of rerank) assertNoForeignText(label, { query: body.query, documents: body.documents }, `${where} rerank input`);
+            } else {
+              assert.equal(rerank.length, 0, `${where}: no key, no rerank request`);
+              assert.equal(rerankStage?.detail, 'auto:local_bm25', `${where}: keyless auto takes the no-key fallback`);
+              assert.notEqual(rerankStage?.status, 'degraded', `${where}: keyless auto is not degraded`);
+            }
+          }
+        }
+      }
+    } finally {
+      depsModule.setRagDepsForTests({ ragEnv: () => allOnEnv });
+      configModule.resetRagConfigForTests();
+    }
+  });
+
   test('the fixture edge saw no unsupported request', () => {
     assert.deepEqual(edge.errors, []);
   });
@@ -561,6 +613,48 @@ describe('single-tenant deployment accepts only the default tenant key', () => {
       assert.equal(refused.status, 'error');
       assert.equal(refused.reason, 'backend_error');
       assert.equal(refused.candidates.length, 0);
+    }
+  });
+
+  test('two-tenant matrix under the D-01 values: single-tenant, keyless and with the fixture key, only the default tenant key retrieves', async () => {
+    const variants = [
+      { ...D01_ENV, COHERE_API_KEY: '' },
+      { ...D01_ENV, COHERE_API_KEY: process.env.COHERE_API_KEY as string, COHERE_BASE_URL: process.env.COHERE_BASE_URL as string },
+    ];
+    const selectModule = await import('@/lib/rag/rerank/select');
+    const { createCohereReranker } = await import('@/lib/rag/rerank/cohere');
+    const { createLocalBm25Reranker } = await import('@/lib/rag/rerank/local-bm25');
+    selectModule.setRerankerFactoryForTests((provider, _model, env, fetchImpl) =>
+      provider === 'local_bm25'
+        ? createLocalBm25Reranker()
+        : createCohereReranker({ fetch: fetchImpl, apiKey: env.COHERE_API_KEY ?? '', baseUrl: env.COHERE_BASE_URL ?? '', model: 'fake-quality-v1' }),
+    );
+    try {
+      for (const env of variants) {
+        depsModule.setRagDepsForTests({ ragEnv: () => env });
+        configModule.resetRagConfigForTests();
+        const where = `D-01 single-tenant ${env.COHERE_API_KEY ? 'fixture key' : 'keyless'}`;
+        const single = await run(scopeModule.mintScope('single', null, null));
+        assert.ok(['ok', 'empty'].includes(single.status), `${where}: single scope status ${single.status} (${single.reason})`);
+        assert.ok(single.candidates.length > 0, `${where}: the default tenant has its corpus`);
+        const rerankStage = single.stages.find((record) => record.name === 'rerank');
+        assert.equal(rerankStage?.status, 'ok', `${where}: rerank ran`);
+        assert.equal(rerankStage?.detail, env.COHERE_API_KEY ? 'auto:cohere' : 'auto:local_bm25', `${where}: auto resolved by key presence`);
+        const keys = await fixture.db.query<{ tenant_key: string }>('SELECT DISTINCT tenant_key FROM document_chunks WHERE id = ANY($1::uuid[])', [
+          single.candidates.map((row) => row.chunk_id),
+        ]);
+        assert.deepEqual(keys.rows.map((row) => row.tenant_key), ['s:default'], `${where}: every candidate is a default-tenant chunk`);
+        for (const scope of [scopeModule.mintScope('personal', TWO_TENANT_IDS.userA, null), scopeModule.mintScope('org', null, TWO_TENANT_IDS.orgO)]) {
+          const refused = await run(scope);
+          assert.equal(refused.status, 'error', `${where}: a multi-tenant key is refused`);
+          assert.equal(refused.reason, 'backend_error');
+          assert.equal(refused.candidates.length, 0);
+        }
+      }
+    } finally {
+      selectModule.resetRerankerFactoryForTests();
+      depsModule.setRagDepsForTests({ ragEnv: () => ({ RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'true' }) });
+      configModule.resetRagConfigForTests();
     }
   });
 

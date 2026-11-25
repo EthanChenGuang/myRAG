@@ -41,6 +41,8 @@ export interface FixtureDatabase {
   ingestLlamaParseAttempts?: number;
   /** Chunking profile ids the ingest-mode builder seeded as building before ingestion. */
   seededChunkingProfiles?: string[];
+  /** Ingest mode with table_split items: the isolated tenants of the long-table documents; the caller closes their databases. */
+  tableSplitTenants?: import('./table-split.mts').TableSplitTenant[];
 }
 
 export const SUPABASE_SHIM_SQL = `
@@ -259,6 +261,8 @@ export async function createFixtureDatabase(options: {
   relex?: boolean;
   /** Ingest mode only: candidate chunking profiles seeded before the first document. */
   chunkingProfiles?: import('../../src/lib/rag-eval/contracts.generated.ts').ChunkingProfile[];
+  /** Ingest mode only: also load the isolated table_split tenants. */
+  tableSplit?: boolean;
 }): Promise<FixtureDatabase> {
   const { deploymentMode, corpusDir } = options;
   if (deploymentMode !== 'single-tenant' && deploymentMode !== 'multi-tenant') {
@@ -280,8 +284,10 @@ export async function createFixtureDatabase(options: {
       setupSqlPath: options.setupSqlPath,
       ...(options.chunkingProfiles?.length ? { chunkingProfiles: options.chunkingProfiles } : {}),
       ...(options.ingestRouting ? { routing: options.ingestRouting } : {}),
+      ...(options.tableSplit ? { tableSplit: true } : {}),
     });
   }
+  if (options.tableSplit) throw new Error('[Fixture DB] the table_split tenants need the ingest fixture mode');
   if (options.chunkingProfiles?.length) throw new Error('[Fixture DB] chunking profiles are seeded only in the ingest fixture mode');
   if (options.ingestRouting) throw new Error('[Fixture DB] routing and forced tiers need the ingest fixture mode');
 

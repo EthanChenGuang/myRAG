@@ -27,8 +27,16 @@ import { runContextStages } from './stages/context';
 import { runQueryStages } from './stages/query';
 import { runRankStages } from './stages/rank';
 import { runSearchStages } from './stages/search';
-import { bindingHashFields, planBindingLegs, startBindingEmbeds, type BindingEmbed, type BindingLegsPlan } from './stages/binding-legs';
-import { buildV2Result, fusedHitsToVoiceChunks } from './result';
+import {
+  bindingHashFields,
+  planBindingLegs,
+  startBindingEmbeds,
+  unresolvedEvalOverride,
+  type BindingEmbed,
+  type BindingLegsPlan,
+} from './stages/binding-legs';
+import { buildSmallTalkResult, buildV2Result, fusedHitsToVoiceChunks } from './result';
+import { variantDenseTexts } from '../query/variants';
 
 export const V2_PROFILES = ['chat', 'embed', 'eval', 'voice'] as const;
 
@@ -111,8 +119,28 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
     queryLanguage = query.queryLanguage;
     queryPlan = query.queryLayer?.plan ?? null;
 
+    // D-10: small talk under the layer skips the search, rank and context groups; the model answers without KB context.
+    if (query.queryLayer?.shortCircuit?.kind === 'small_talk') {
+      return buildSmallTalkResult({ collector, profile, queryContext, queryLanguage, queryPlan });
+    }
+
     // D-18: planned before the embed stage, so the binding map is known before anything reads the config hash.
     bindingPlan = await planBindingLegs({ profile, config, scope, filters: query.filters, options: input.options });
+    // 03.1.1-10: an eval binding override naming a profile that cannot be resolved fails the request; it never measures the global profile.
+    const unresolved = profile === 'eval' ? unresolvedEvalOverride(bindingPlan) : null;
+    if (unresolved) {
+      const reason = unresolved.resolveFailure === 'mismatch' ? PROFILE_FAILURE_REASONS.mismatch : PROFILE_FAILURE_REASONS.unavailable;
+      const at = collector.now();
+      collector.record({
+        name: 'embed',
+        status: 'error',
+        reason: 'failed',
+        startedAt: at,
+        endedAt: at,
+        detail: `${unresolved.resolveKind ?? unresolved.resolveFailure}:${unresolved.docType}`,
+      });
+      return failure(collector, 'error', reason, queryContext);
+    }
     const originalText = query.variants.find((variant) => variant.kind === 'original')?.text ?? input.query;
     const bindingEmbeds: Promise<BindingEmbed>[] =
       bindingPlan.legs.length > 0 ? startBindingEmbeds(bindingPlan.legs, originalText, signal, config.v2.domainEmbeddings.timeoutMs) : [];
@@ -122,11 +150,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
         spec('embed', 'throw'),
         signal,
         (stageSignal) =>
-          embedForRetrieval(
-            input,
-            query.variants.map((variant) => variant.text),
-            stageSignal,
-          ),
+          embedForRetrieval(input, variantDenseTexts(query.variants), stageSignal),
         collector,
         { detail: (value) => value[0]?.profile?.id },
       ),
@@ -146,6 +170,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
       stageOverrides: input.stageOverrides,
       variants: query.variants,
       variantEmbeddings,
+      ...(query.queryLayer ? { trackStandalone: true } : {}),
       filters: query.filters,
       bindings: { plan: bindingPlan, embeds: bindingEmbeds },
     });
@@ -246,6 +271,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
         ...(rank.rerank.scoreByChunk.has(row.hit.chunkId)
           ? { rerank_score: rank.rerank.scoreByChunk.get(row.hit.chunkId) }
           : {}),
+        ...(row.standaloneSimilarity !== undefined ? { standaloneSimilarity: row.standaloneSimilarity } : {}),
       }));
     }
   } catch (error) {

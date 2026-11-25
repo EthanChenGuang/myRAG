@@ -1,0 +1,623 @@
+{
+  "schema_version": 1,
+  "entries": [
+    {
+      "name": "RAG_ADAPTIVE_RETRIEVAL",
+      "side": "query"
+    },
+    {
+      "name": "RAG_ADJACENCY_WINDOW",
+      "side": "query"
+    },
+    {
+      "name": "RAG_ADJACENT_CHUNKS",
+      "side": "query"
+    },
+    {
+      "name": "RAG_ANSWER_FEEDBACK",
+      "side": "query"
+    },
+    {
+      "name": "RAG_BEHAVIOR_MODE",
+      "side": "query"
+    },
+    {
+      "name": "RAG_BGE_M3_SERVING",
+      "side": "query"
+    },
+    {
+      "name": "RAG_CACHE_ENABLED",
+      "side": "query"
+    },
+    {
+      "name": "RAG_CAPTION_LANGUAGE",
+      "side": "ingestion",
+      "mechanism": "recaption"
+    },
+    {
+      "name": "RAG_CITATIONS",
+      "side": "query"
+    },
+    {
+      "name": "RAG_CLAUDE_CITATIONS",
+      "side": "query"
+    },
+    {
+      "name": "RAG_COMPLETENESS_CONFIDENCE",
+      "side": "query"
+    },
+    {
+      "name": "RAG_CONTEXT_COMPRESSION",
+      "side": "query"
+    },
+    {
+      "name": "RAG_CONTEXT_EDGE_ORDER",
+      "side": "query"
+    },
+    {
+      "name": "RAG_CONTEXT_TAGGING",
+      "side": "query"
+    },
+    {
+      "name": "RAG_CONTEXT_TOKEN_BUDGET",
+      "side": "query"
+    },
+    {
+      "name": "RAG_DISABLED_STAGES",
+      "side": "query"
+    },
+    {
+      "name": "RAG_DIVERSITY_WEIGHT",
+      "side": "query"
+    },
+    {
+      "name": "RAG_DOCUMENT_COMPLETENESS_THRESHOLD",
+      "side": "query"
+    },
+    {
+      "name": "RAG_DOC_TRANSLATION",
+      "side": "ingestion",
+      "mechanism": "retranslate"
+    },
+    {
+      "name": "RAG_DOC_TRANSLATION_MODEL",
+      "side": "ingestion",
+      "mechanism": "retranslate"
+    },
+    {
+      "name": "RAG_DOC_TYPE_LLM_DETECT",
+      "side": "ingestion",
+      "mechanism": "reparse"
+    },
+    {
+      "name": "RAG_DOMAIN_EMBEDDINGS",
+      "side": "both",
+      "mechanism": "reembed"
+    },
+    {
+      "name": "RAG_DOMAIN_EMBEDDING_MAX_LEGS",
+      "side": "query"
+    },
+    {
+      "name": "RAG_DOMAIN_EMBEDDING_TIMEOUT_MS",
+      "side": "query"
+    },
+    {
+      "name": "RAG_DOMAIN_EXPERT_REVIEW",
+      "side": "query"
+    },
+    {
+      "name": "RAG_EFFECTIVE_DATES",
+      "side": "query"
+    },
+    {
+      "name": "RAG_EFFECTIVE_DATE_LLM_EXTRACT",
+      "side": "query"
+    },
+    {
+      "name": "RAG_EMBEDDING_PROFILES",
+      "side": "both",
+      "mechanism": "reembed"
+    },
+    {
+      "name": "RAG_EMBED_BATCH_MODE",
+      "side": "query"
+    },
+    {
+      "name": "RAG_EMBED_FEEDBACK",
+      "side": "query"
+    },
+    {
+      "name": "RAG_EMBED_FEEDBACK_SECRET",
+      "side": "query"
+    },
+    {
+      "name": "RAG_EMBED_TENANT",
+      "side": "query"
+    },
+    {
+      "name": "RAG_ENABLE_ADJACENT_CHUNKS",
+      "side": "query"
+    },
+    {
+      "name": "RAG_ENABLE_HYBRID_SEARCH",
+      "side": "query"
+    },
+    {
+      "name": "RAG_ENABLE_MULTI_PASS",
+      "side": "query"
+    },
+    {
+      "name": "RAG_EVAL_ALLOWED_SCOPES",
+      "side": "query"
+    },
+    {
+      "name": "RAG_EVAL_ENDPOINT_ENABLED",
+      "side": "query"
+    },
+    {
+      "name": "RAG_EVAL_RETRIEVAL_MIN_SIMILARITY",
+      "side": "query"
+    },
+    {
+      "name": "RAG_EVAL_SECRET",
+      "side": "query"
+    },
+    {
+      "name": "RAG_EXACT_ID_LOOKUP",
+      "side": "query"
+    },
+    {
+      "name": "RAG_EXACT_SCAN_CUTOFF",
+      "side": "query"
+    },
+    {
+      "name": "RAG_EXACT_THRESHOLD",
+      "side": "query"
+    },
+    {
+      "name": "RAG_EXTRACT_KEY_TERMS",
+      "side": "query"
+    },
+    {
+      "name": "RAG_FALLBACK_LOWER_THRESHOLD",
+      "side": "query"
+    },
+    {
+      "name": "RAG_FINAL_RESULT_COUNT",
+      "side": "query"
+    },
+    {
+      "name": "RAG_FINANCIAL_BOOST",
+      "side": "query"
+    },
+    {
+      "name": "RAG_FINANCIAL_CONFIDENCE_MIN",
+      "side": "query"
+    },
+    {
+      "name": "RAG_GROUNDEDNESS",
+      "side": "query"
+    },
+    {
+      "name": "RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS",
+      "side": "query"
+    },
+    {
+      "name": "RAG_GROUNDEDNESS_TIMEOUT_MS",
+      "side": "query"
+    },
+    {
+      "name": "RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK",
+      "side": "query"
+    },
+    {
+      "name": "RAG_GROUNDEDNESS_VECTARA_OPT_IN",
+      "side": "query"
+    },
+    {
+      "name": "RAG_HIDDEN_TEXT_CHECK",
+      "side": "ingestion",
+      "mechanism": "rescan"
+    },
+    {
+      "name": "RAG_HIGH_THRESHOLD",
+      "side": "query"
+    },
+    {
+      "name": "RAG_HNSW_ITERATIVE_SCAN",
+      "side": "query"
+    },
+    {
+      "name": "RAG_INGEST_ASYNC",
+      "side": "query"
+    },
+    {
+      "name": "RAG_INGEST_JOB_RETENTION_DAYS",
+      "side": "query"
+    },
+    {
+      "name": "RAG_INGEST_LINK_CHECK",
+      "side": "ingestion",
+      "mechanism": "rescan"
+    },
+    {
+      "name": "RAG_INGEST_MAINTENANCE",
+      "side": "query"
+    },
+    {
+      "name": "RAG_INGEST_MAINTENANCE_INTERVAL_SECONDS",
+      "side": "query"
+    },
+    {
+      "name": "RAG_INGEST_PIPELINE",
+      "side": "ingestion",
+      "mechanism": "reparse"
+    },
+    {
+      "name": "RAG_INGEST_WORKER_CONCURRENCY",
+      "side": "query"
+    },
+    {
+      "name": "RAG_INITIAL_MATCH_COUNT",
+      "side": "query"
+    },
+    {
+      "name": "RAG_INJECTION_CHECK",
+      "side": "query"
+    },
+    {
+      "name": "RAG_INJECTION_LAKERA",
+      "side": "query"
+    },
+    {
+      "name": "RAG_INJECTION_LAKERA_MULTI_TENANT_ACK",
+      "side": "query"
+    },
+    {
+      "name": "RAG_INJECTION_PROMPT_GUARD",
+      "side": "query"
+    },
+    {
+      "name": "RAG_INJECTION_SCAN",
+      "side": "ingestion",
+      "mechanism": "rescan"
+    },
+    {
+      "name": "RAG_INVOICE_LLM_EXTRACT",
+      "side": "ingestion",
+      "mechanism": "reparse"
+    },
+    {
+      "name": "RAG_LANGUAGE_AWARE_INGEST",
+      "side": "ingestion",
+      "mechanism": "rechunk"
+    },
+    {
+      "name": "RAG_LEXICAL_SEARCH",
+      "side": "query"
+    },
+    {
+      "name": "RAG_LEXICAL_TRANSLATION",
+      "side": "query"
+    },
+    {
+      "name": "RAG_LOW_THRESHOLD",
+      "side": "query"
+    },
+    {
+      "name": "RAG_MATCH_MULTIPLIER",
+      "side": "query"
+    },
+    {
+      "name": "RAG_MAX_KEY_TERMS",
+      "side": "query"
+    },
+    {
+      "name": "RAG_MAX_RETRIEVAL_PASSES",
+      "side": "query"
+    },
+    {
+      "name": "RAG_MEDIUM_THRESHOLD",
+      "side": "query"
+    },
+    {
+      "name": "RAG_MIN_CONFIDENCE",
+      "side": "query"
+    },
+    {
+      "name": "RAG_MMR_LAMBDA",
+      "side": "query"
+    },
+    {
+      "name": "RAG_MULTI_PASS",
+      "side": "query"
+    },
+    {
+      "name": "RAG_OUTPUT_LINK_ALLOWLIST",
+      "side": "both",
+      "mechanism": "rescan"
+    },
+    {
+      "name": "RAG_PARENT_CHILD",
+      "side": "query"
+    },
+    {
+      "name": "RAG_PARSER",
+      "side": "ingestion",
+      "mechanism": "reparse"
+    },
+    {
+      "name": "RAG_PARSER_ALLOW_CLOUD",
+      "side": "ingestion",
+      "mechanism": "reparse"
+    },
+    {
+      "name": "RAG_PARSE_ESCALATION",
+      "side": "ingestion",
+      "mechanism": "reparse"
+    },
+    {
+      "name": "RAG_PARSE_POLL_BUDGET_MS",
+      "side": "query"
+    },
+    {
+      "name": "RAG_PARSE_PREMIUM_MAX_PAGES_PER_DOC",
+      "side": "ingestion",
+      "mechanism": "reparse"
+    },
+    {
+      "name": "RAG_PARSE_PREMIUM_PAGE_BUDGET",
+      "side": "ingestion",
+      "mechanism": "reparse"
+    },
+    {
+      "name": "RAG_PARSE_PROGRESSIVE",
+      "side": "query"
+    },
+    {
+      "name": "RAG_PARSE_ROUTING",
+      "side": "ingestion",
+      "mechanism": "reparse"
+    },
+    {
+      "name": "RAG_PARSE_VLM_DETECT",
+      "side": "ingestion",
+      "mechanism": "reparse"
+    },
+    {
+      "name": "RAG_PARSE_VLM_MODEL",
+      "side": "ingestion",
+      "mechanism": "reparse"
+    },
+    {
+      "name": "RAG_PDF_IMAGE_CHUNKS",
+      "side": "ingestion",
+      "mechanism": "reparse"
+    },
+    {
+      "name": "RAG_PERFORMANCE_MODE",
+      "side": "query"
+    },
+    {
+      "name": "RAG_PIPELINE",
+      "side": "query"
+    },
+    {
+      "name": "RAG_POST_CONTEXT",
+      "side": "query"
+    },
+    {
+      "name": "RAG_PRE_CONTEXT",
+      "side": "query"
+    },
+    {
+      "name": "RAG_PRIMARY_LANGUAGE",
+      "side": "query"
+    },
+    {
+      "name": "RAG_QUERY_CONDENSE",
+      "side": "query"
+    },
+    {
+      "name": "RAG_QUERY_DATE_NORMALIZE",
+      "side": "query"
+    },
+    {
+      "name": "RAG_QUERY_DECOMPOSE",
+      "side": "query"
+    },
+    {
+      "name": "RAG_QUERY_ENHANCEMENT",
+      "side": "query"
+    },
+    {
+      "name": "RAG_QUERY_EXPAND",
+      "side": "query"
+    },
+    {
+      "name": "RAG_QUERY_FRAMEWORK",
+      "side": "query"
+    },
+    {
+      "name": "RAG_QUERY_HYDE",
+      "side": "query"
+    },
+    {
+      "name": "RAG_QUERY_LAYER",
+      "side": "query"
+    },
+    {
+      "name": "RAG_QUERY_LLM_MODEL",
+      "side": "both",
+      "mechanism": "retranslate"
+    },
+    {
+      "name": "RAG_QUERY_TRANSLATE",
+      "side": "query"
+    },
+    {
+      "name": "RAG_QUERY_TRANSLATE_DISABLED_PROFILES",
+      "side": "query"
+    },
+    {
+      "name": "RAG_QUERY_VOICE_TRANSFORMS",
+      "side": "query"
+    },
+    {
+      "name": "RAG_QWEN_EMBED_FALLBACK",
+      "side": "query"
+    },
+    {
+      "name": "RAG_REFUSAL_FEEDBACK",
+      "side": "query"
+    },
+    {
+      "name": "RAG_REFUSAL_FLOOR",
+      "side": "query"
+    },
+    {
+      "name": "RAG_REFUSAL_THRESHOLD",
+      "side": "query"
+    },
+    {
+      "name": "RAG_RERANKER",
+      "side": "query"
+    },
+    {
+      "name": "RAG_RERANKING",
+      "side": "query"
+    },
+    {
+      "name": "RAG_RERANKING_STRATEGY",
+      "side": "query"
+    },
+    {
+      "name": "RAG_RERANK_TIER_CHAT",
+      "side": "query"
+    },
+    {
+      "name": "RAG_RERANK_TIER_VOICE",
+      "side": "query"
+    },
+    {
+      "name": "RAG_RERANK_VOYAGE_MODEL_BY_LANG",
+      "side": "query"
+    },
+    {
+      "name": "RAG_RETRIEVAL_LOG",
+      "side": "query"
+    },
+    {
+      "name": "RAG_RETRIEVAL_LOG_RETENTION_DAYS",
+      "side": "query"
+    },
+    {
+      "name": "RAG_RETRIEVAL_PARAMS_OVERRIDE",
+      "side": "query"
+    },
+    {
+      "name": "RAG_SCOPE_TAGS",
+      "side": "query"
+    },
+    {
+      "name": "RAG_SCOPE_TAG_SUGGEST",
+      "side": "query"
+    },
+    {
+      "name": "RAG_SEMANTIC_CACHE",
+      "side": "query"
+    },
+    {
+      "name": "RAG_SEMANTIC_CACHE_EMBED_STORE",
+      "side": "query"
+    },
+    {
+      "name": "RAG_SEMANTIC_CACHE_MAX_DISTANCE",
+      "side": "query"
+    },
+    {
+      "name": "RAG_SEMANTIC_CACHE_REFUSAL_TTL",
+      "side": "query"
+    },
+    {
+      "name": "RAG_SEMANTIC_CACHE_TTL",
+      "side": "query"
+    },
+    {
+      "name": "RAG_SEMANTIC_CLASSIFICATION",
+      "side": "query"
+    },
+    {
+      "name": "RAG_SIDECAR_SECRET",
+      "side": "query"
+    },
+    {
+      "name": "RAG_SIDECAR_URL",
+      "side": "query"
+    },
+    {
+      "name": "RAG_SIMILARITY_THRESHOLD",
+      "side": "query"
+    },
+    {
+      "name": "RAG_SOURCE_OPEN_SIGNAL",
+      "side": "query"
+    },
+    {
+      "name": "RAG_STAGE_TIMEOUTS",
+      "side": "query"
+    },
+    {
+      "name": "RAG_SUPERSESSION_DETECT",
+      "side": "query"
+    },
+    {
+      "name": "RAG_SUPPORTED_LANGUAGES",
+      "side": "ingestion",
+      "mechanism": "reparse"
+    },
+    {
+      "name": "RAG_SYSTEM_PROMPT",
+      "side": "query"
+    },
+    {
+      "name": "RAG_TABLE_HEADER_REPEAT",
+      "side": "ingestion",
+      "mechanism": "rechunk"
+    },
+    {
+      "name": "RAG_TABLE_ROW_SERIALIZATION",
+      "side": "ingestion",
+      "mechanism": "rechunk"
+    },
+    {
+      "name": "RAG_TEMPORAL_BOOST",
+      "side": "query"
+    },
+    {
+      "name": "RAG_TEMPORAL_CONFIDENCE_MIN",
+      "side": "query"
+    },
+    {
+      "name": "RAG_TEMPORAL_MATCHING",
+      "side": "query"
+    },
+    {
+      "name": "RAG_TOOL_RESULT_GUARD",
+      "side": "query"
+    },
+    {
+      "name": "RAG_UPLOAD_APPROVAL",
+      "side": "query"
+    },
+    {
+      "name": "RAG_VOICE_TOKEN_SECRET",
+      "side": "query"
+    },
+    {
+      "name": "RAG_VOICE_TOKEN_TTL_SECONDS",
+      "side": "query"
+    }
+  ]
+}

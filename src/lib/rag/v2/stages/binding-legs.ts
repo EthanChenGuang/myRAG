@@ -24,6 +24,8 @@ export interface BindingLegPlan {
   profile: EmbeddingProfile | null;
   source: 'binding' | 'eval_override';
   resolveFailure?: BindingLegFailureReason;
+  /** The profile mismatch kind (for example unknown_profile) when resolveFailure is mismatch. */
+  resolveKind?: string;
 }
 
 export interface BindingLegsPlan {
@@ -78,7 +80,14 @@ async function overrideLegs(overrides: Record<string, string | undefined>, deps:
       try {
         return { docType, profileId, profile: await deps.profileById(profileId), source: 'eval_override' };
       } catch (error) {
-        return { docType, profileId, profile: null, source: 'eval_override', resolveFailure: failureReason(error) };
+        return {
+          docType,
+          profileId,
+          profile: null,
+          source: 'eval_override',
+          resolveFailure: failureReason(error),
+          ...(error instanceof EmbeddingProfileMismatchError ? { resolveKind: error.kind } : {}),
+        };
       }
     }),
   );
@@ -121,6 +130,11 @@ export async function planBindingLegs(input: PlanBindingLegsInput, deps: Binding
 
   if (legs.length === 0 && controlLeg === null && failures.length === 0) return EMPTY_PLAN;
   return { legs, controlLeg, failures };
+}
+
+/** The first planned eval-override leg whose profile could not be resolved: the request must fail, never search the global profile. */
+export function unresolvedEvalOverride(plan: BindingLegsPlan): BindingLegPlan | null {
+  return plan.legs.find((leg) => leg.source === 'eval_override' && leg.resolveFailure !== undefined) ?? null;
 }
 
 export function hasBindingWork(plan: BindingLegsPlan): boolean {

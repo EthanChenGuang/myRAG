@@ -4698,6 +4698,7 @@
         "ocr_languages": [
           "en"
         ],
+        "ocr_primary_language": null,
         "premium_max_pages_per_doc": 20,
         "premium_page_budget": 0,
         "primary_language": null,
@@ -4875,6 +4876,7 @@
       "ocr_languages": [
         "en"
       ],
+      "ocr_primary_language": null,
       "premium_max_pages_per_doc": 20,
       "premium_page_budget": 0,
       "primary_language": null,

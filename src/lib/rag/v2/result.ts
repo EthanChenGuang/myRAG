@@ -1,5 +1,5 @@
 import { getRetrievalBackend } from '../backend/registry';
-import type { RagConfig } from '../config';
+import { CORE_STAGES, QUERY_LAYER_STAGES, type RagConfig } from '../config';
 import { getActiveChunkingProfiles } from '../chunking/active';
 import { LEGACY_PROFILE } from '../embeddings/active-profile';
 import type { QueryEmbedding } from '../embeddings/query-embedding';
@@ -14,7 +14,7 @@ import type { RefusalRecord } from '../refusal/types';
 import { describeReranker } from '../rerank/select';
 import { RERANK_TEXT_VERSION } from '../rerank/types';
 import type { TraceCollector } from '../trace/collector';
-import type { Candidate, InjectionSummary, Profile, RetrievalResult, RunRetrievalInput } from '../types';
+import type { Candidate, InjectionSummary, Profile, RetrievalResult, RunRetrievalInput, StageRecord } from '../types';
 import type { TemporalQueryContext } from '../query/temporal-query-detector';
 import { isMultiTenant } from '@/lib/deployment-mode';
 import { getRagDeps } from '../deps';
@@ -66,6 +66,41 @@ export function fusedHitsToVoiceChunks(hits: FusedHit[], scoreByChunk?: Map<stri
   });
 }
 
+const QUERY_LAYER_STAGE_NAMES: ReadonlySet<string> = new Set(QUERY_LAYER_STAGES);
+const CORE_STAGE_NAMES: ReadonlySet<string> = new Set(CORE_STAGES);
+
+/**
+ * A-2: query-layer stages are soft. semantic_cache never affects the status; the other query-layer stages are left out
+ * only when nothing survived and every core stage (embed, the original-query search, fuse) is ok, so a slow optional
+ * transform cannot turn a legitimate empty answer into a degraded one. The records themselves stay in the trace.
+ */
+export function statusRecords(records: readonly StageRecord[], survivors: number): StageRecord[] {
+  const withoutCache = records.filter((record) => record.name !== 'semantic_cache');
+  if (survivors > 0) return withoutCache;
+  const core = records.filter((record) => CORE_STAGE_NAMES.has(record.name));
+  const coreOk = core.length > 0 && core.every((record) => record.status === 'ok');
+  if (!coreOk) return withoutCache;
+  return withoutCache.filter((record) => !QUERY_LAYER_STAGE_NAMES.has(record.name));
+}
+
+/** D-10: small talk under the query layer skips retrieval; ok with an empty context, never a refusal candidate. */
+export function buildSmallTalkResult(ctx: {
+  collector: TraceCollector;
+  profile: Profile;
+  queryContext: TemporalQueryContext | null;
+  queryLanguage: string | null;
+  queryPlan: QueryPlan | null;
+}): RetrievalResult {
+  const base = failure(ctx.collector, 'ok', 'small_talk', ctx.queryContext);
+  return {
+    ...base,
+    ...(ctx.queryPlan ? { queryPlan: ctx.queryPlan } : {}),
+    ...(ctx.profile === 'voice' ? { voice: { results: [], source_images: [] } } : {}),
+    refusal: null,
+    queryLanguage: ctx.queryLanguage,
+  };
+}
+
 function survivorCount(assembly: AssembleOutput<Candidate>): number {
   return assembly.usedDocuments.length + assembly.relevantChunks.length;
 }
@@ -112,7 +147,7 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
   const survivors = profile === 'voice' ? voiceCount : assembly ? survivorCount(assembly) : outputCandidates.length;
   const assemblyWeight = profile === 'voice' ? (voiceCount > 0 ? 1 : 0) : assembly ? 1 : 0;
 
-  const derived = assembleDisabledStatus(records, deriveStatus(records, survivors), assemblyWeight);
+  const derived = assembleDisabledStatus(records, deriveStatus(statusRecords(records, survivors), survivors), assemblyWeight);
   const injectionFiltered = (profile === 'voice' || assembly !== null) && injectionFilteredAll(injection, survivors, derived);
   let status: RetrievalResult['status'] = injectionFiltered ? 'empty' : derived;
   let reason = injectionFiltered

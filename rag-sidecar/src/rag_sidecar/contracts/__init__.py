@@ -211,6 +211,7 @@ from rag_sidecar.contracts.report import (
     InjectionReport,
     ItemResult,
     MetricValue,
+    NativeReviewBacklogEntry,
     SliceMetrics,
 )
 from rag_sidecar.contracts.retrieval import (
@@ -394,6 +395,7 @@ __all__ = [
     "EvalReport",
     "InjectionReport",
     "ItemResult",
+    "NativeReviewBacklogEntry",
     "MetricValue",
     "SliceMetrics",
     "DraftedItemBatch",

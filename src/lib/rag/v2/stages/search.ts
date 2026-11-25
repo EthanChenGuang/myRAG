@@ -34,6 +34,8 @@ export interface SearchStagesInput {
   /** Index-aligned with variants; a missing entry falls back to the embedding of the original. */
   variantEmbeddings?: QueryEmbedding[];
   filters?: RetrievalFilters;
+  /** Query layer on: record each hit's dense similarity under the standalone variant (condensed, else original). */
+  trackStandalone?: boolean;
   /** Planned binding legs and their embeds, started before the global embed stage (D-18). */
   bindings?: { plan: BindingLegsPlan; embeds: readonly Promise<BindingEmbed>[] };
 }
@@ -186,6 +188,21 @@ function listsFromLegs(
   return lists;
 }
 
+/** D-06: the standalone variant is the condensed one when present, else the original; never hyde, expanded or translated. */
+function standaloneVariantIndex(variants: readonly QueryVariant[]): number {
+  const condensed = variants.findIndex((variant) => variant.kind === 'condensed');
+  return condensed >= 0 ? condensed : variants.findIndex((variant) => variant.kind === 'original');
+}
+
+function withStandaloneSimilarity(fused: FusedHit[], variants: readonly QueryVariant[], legsByVariant: BackendLegs[]): FusedHit[] {
+  const index = standaloneVariantIndex(variants);
+  const similarity = new Map<string, number>();
+  for (const hit of index >= 0 ? (legsByVariant[index]?.dense ?? []) : []) {
+    if (!similarity.has(hit.chunkId)) similarity.set(hit.chunkId, hit.similarity ?? 0);
+  }
+  return fused.map((row) => ({ ...row, standaloneSimilarity: similarity.get(row.hit.chunkId) ?? 0 }));
+}
+
 function sliceCap(fused: FusedHit[], cap: number): DedupeResult {
   const hits = fused.slice(0, cap);
   return {
@@ -240,7 +257,8 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     const legsByVariant = await Promise.all(
       variants.map(async (variant, index) => {
         const variantEmbedding = ctx.variantEmbeddings?.[index] ?? embedding;
-        const useLexical = lexicalEnabled && verdict.icuAvailable;
+        // P-6: a dense-only variant (HyDE) sends no lexical tokens, so it contributes no lexical list.
+        const useLexical = lexicalEnabled && verdict.icuAvailable && variant.legs !== 'dense';
         const tokens = useLexical ? queryLexicalTokens(variant.text) : [];
         const legs = await backend.search({
           scope,
@@ -341,7 +359,8 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
         const lists = searchValue.flatMap((legs, index) => listsFromLegs(index, legs.dense, legs.lexical, params));
         if (exactList) lists.push(exactList);
         lists.push(...domainLists);
-        return rrf(lists, params.rrf_k);
+        const fusedHits = rrf(lists, params.rrf_k);
+        return ctx.trackStandalone ? withStandaloneSimilarity(fusedHits, variants, searchValue) : fusedHits;
       },
       collector,
       { candidatesOut: (value) => value.length },

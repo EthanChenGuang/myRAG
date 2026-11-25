@@ -276,10 +276,19 @@ describe('the re-recorded ingest baseline (T-03.1-104)', () => {
       .map((line) => JSON.parse(line) as { id: string; category: string })
       .filter((item) => item.category === 'injection' || item.category === 'injection_evasive')
       .map((item) => item.id);
+    // Plan 03.2-30 added the table_split items to golden-ingest.jsonl; they run against their isolated tenants.
+    const tableSplitIds = fs
+      .readFileSync(path.join(ROOT, 'eval/fixtures/ingest/golden-ingest.jsonl'), 'utf8')
+      .split('\n')
+      .filter((line) => line.trim() !== '')
+      .map((line) => JSON.parse(line) as { id: string; category: string })
+      .filter((item) => item.category === 'table_split')
+      .map((item) => item.id);
     const added = Object.keys(current.items).filter((id) => !(id in previous.items)).sort();
     assert.ok(parseIds.length >= 30);
     assert.equal(injectionIds.length, 18);
-    assert.deepEqual(added, [...parseIds, ...injectionIds].sort());
+    assert.equal(tableSplitIds.length, 15);
+    assert.deepEqual(added, [...parseIds, ...injectionIds, ...tableSplitIds].sort());
     assert.notEqual(current.corpus_sha256, previous.corpus_sha256, 'the parse fixtures are part of the ingest corpus hash');
   });
 });

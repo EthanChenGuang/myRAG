@@ -31,6 +31,8 @@ export interface Candidate {
   parent_id?: string | null;
   legs?: Record<string, number>;
   language?: string | null;
+  /** Query layer only: the dense similarity under the standalone variant's list (0 when that list missed the chunk). */
+  standaloneSimilarity?: number;
 }
 
 export type StageRunStatus = 'ok' | 'skipped' | 'disabled' | 'degraded' | 'error' | 'timeout' | 'aborted';
@@ -162,10 +164,12 @@ export interface QueryVariant {
   text: string;
   language: string | null;
   kind: QueryVariantKind;
-  /** Retrieval legs this variant searches; absent means every leg (Phase 4 behaviour). */
-  legs?: Array<'dense' | 'lexical'>;
+  /** Retrieval legs this variant searches: 'dense' sends no lexical tokens (HyDE); absent means both (Phase 4 behaviour). */
+  legs?: 'both' | 'dense';
   /** sub_question variants only: the index into QueryPlan.sub_questions. */
   subQuestionIndex?: number;
+  /** The text embedded for the dense leg when it differs from text; absent means text. */
+  denseText?: string;
 }
 
 export interface RetrievalOverrides {
@@ -233,6 +237,32 @@ export interface RunRetrievalInput {
   classification?: QueryClassification;
   /** The client's IANA time zone for relative dates (D-11); validated where it is used. */
   timeZone?: string;
+  /** Who asked and through which channel; read only by the retrieval log when this call owns its trace. */
+  logContext?: LogContext;
+}
+
+export type LogOutcomeValue = 'answered' | 'refused_no_context' | 'kb_unavailable' | 'degraded_answer' | 'unknown';
+
+/** Set by every pipeline exit with value unknown; routes update it in place, and copies made with object spread share it. */
+export interface LogOutcome {
+  value: LogOutcomeValue;
+  /** A language code of the final answer, never its text (D-03a). */
+  answerLanguage: string | null;
+  /** The pipeline that produced the result, set by runRetrieval. */
+  pipeline?: 'legacy' | 'v2';
+}
+
+export type LogChannel = 'chat' | 'embed' | 'voice';
+
+/** The request facts the retrieval log needs; no row is written without a channel. */
+export interface LogContext {
+  userId?: string | null;
+  organizationId?: string | null;
+  chatId?: string | null;
+  channel?: LogChannel;
+  ragMode?: RagMode | null;
+  /** True for requests that must never be logged. */
+  skip?: boolean;
 }
 
 /** What the injection_check stage found and did for one request (ids and rule ids only, never text). */
@@ -295,4 +325,6 @@ export interface RetrievalResult {
   injection?: InjectionSummary;
   /** The D-03 query plan; absent unless the query layer ran. */
   queryPlan?: QueryPlan;
+  /** Mutable holder the route sets before it returns (D-07); read by the after-response retrieval log write. */
+  logOutcome?: LogOutcome;
 }

@@ -1,7 +1,7 @@
 import { scrapeUrl, crawlWebsite } from './firecrawl-client';
 import { processDocument } from '@/lib/document-processor';
 import type { ProcessDocumentMetadata } from '@/lib/document-processor';
-import { buildSourceKey, ingest, scheduleIngestWake, submitIngest } from '@/lib/rag';
+import { assertLegacyWriteAllowed, buildSourceKey, ingest, scheduleIngestWake, submitIngest } from '@/lib/rag';
 import type { EnqueueResult, IngestResult, TenantScope } from '@/lib/rag';
 import { scraperPipeline } from './ingest-switch';
 import { normalizeScrapedUrl } from './url-utils';
@@ -88,6 +88,8 @@ export async function scrapeAndProcess(options: ScrapeOptions): Promise<{
     if (scraperPipeline() === 'unified') {
         return scrapeAndIngest(options, requireUnifiedIdentity(options));
     }
+    // D-56: the legacy processor cannot hold a document for upload approval.
+    assertLegacyWriteAllowed();
     return scrapeAndProcessLegacy(requireLegacyUser(options) as LegacyScrapeOptions);
 }
 
@@ -167,6 +169,7 @@ export async function crawlAndProcess(options: CrawlOptions): Promise<{
     if (scraperPipeline() === 'unified') {
         return crawlAndIngest(options, requireUnifiedIdentity(options));
     }
+    assertLegacyWriteAllowed();
     return crawlAndProcessLegacy(requireLegacyUser(options) as LegacyCrawlOptions);
 }
 

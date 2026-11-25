@@ -190,6 +190,20 @@ describe('ingest tracer: one Markdown upload from ingest() to retrieval', () => 
     assert.ok(String(chunks[1]?.content).includes('receiving dock'));
   });
 
+  test('the published version carries its ingestion fingerprint, built from the parts stored beside it, and no ledger row (D-10)', async () => {
+    assert.ok(first?.documentId, 'the first test ingested the document');
+    const { buildIngestFingerprint } = await import('@/lib/rag/ingest/fingerprint');
+    const [document] = await rows('SELECT ingest_fingerprint, metadata FROM documents WHERE id = $1', [first.documentId]);
+    assert.ok(document);
+    const parts = (document.metadata as Row).ingest_fingerprint_parts as Parameters<typeof buildIngestFingerprint>[0];
+    assert.ok(parts, 'metadata.ingest_fingerprint_parts is stored');
+    assert.equal(parts.parser_used, 'text');
+    assert.equal(parts.processing_profile_id, 'general@1');
+    assert.match(String(document.ingest_fingerprint), /^[0-9a-f]{64}$/);
+    assert.equal(document.ingest_fingerprint, buildIngestFingerprint(parts));
+    assert.deepEqual(await rows('SELECT id FROM ingestion_jobs WHERE document_id = $1', [first.documentId]), [], 'an inline run writes no ledger row');
+  });
+
   test('retrieval returns the ingested chunk for its tenant and never for the other tenant', async () => {
     assert.ok(first?.documentId, 'the first test ingested the document');
     const retrieve = async (userId: string) =>

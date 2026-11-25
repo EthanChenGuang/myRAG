@@ -110,7 +110,12 @@ def test_splits_equal_manifest_and_rule(items):
     raw = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     assert raw["rule"] == SPLIT_RULE
     # The ingest golden file's parse-fixture items (03.1-47) are listed too; test_ingest_golden checks them.
-    ingest_ids = {item.id for item in load_golden(REPO_ROOT / "eval/fixtures/ingest/golden-ingest.jsonl") if "parse_fixtures" in item.tags}
+    # So are its table_split items (03.2-30).
+    ingest_ids = {
+        item.id
+        for item in load_golden(REPO_ROOT / "eval/fixtures/ingest/golden-ingest.jsonl")
+        if "parse_fixtures" in item.tags or item.category == "table_split"
+    }
     assert set(manifest) == {item.id for item in items} | ingest_ids
     for item in items:
         assert manifest[item.id] == item.split == assign_split(item.id), item.id
