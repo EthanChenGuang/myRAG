@@ -32,6 +32,7 @@ const KNOWN_REASONS = new Set([
   'document_not_writable',
   'document_not_publishable',
   'document_is_current',
+  'not_holdable',
 ]);
 
 /** A failed writer RPC. Carries the function name and the error code only: the database message can echo row content. */
@@ -157,7 +158,10 @@ export interface ChunkingProfileRow {
   status: 'building' | 'ready' | 'active' | 'retired';
 }
 
-export type PublishOutcome = 'published' | 'already_current' | 'quarantined';
+/** pending_review and held come from the publish guard of 0803: the version stays out of retrieval and nothing is swapped. */
+export type PublishOutcome = 'published' | 'already_current' | 'quarantined' | 'pending_review' | 'held';
+
+const PUBLISH_OUTCOMES: ReadonlySet<string> = new Set<PublishOutcome>(['published', 'already_current', 'quarantined', 'pending_review', 'held']);
 
 export interface PublishResult {
   outcome: PublishOutcome;
@@ -225,6 +229,12 @@ export interface IngestWriter {
   /** The chunking profile registry (every doc type, every status). */
   listChunkingProfiles(): Promise<ChunkingProfileRow[]>;
   publish(documentId: string): Promise<PublishResult>;
+  /** Moves a processing version and its chunks to pending_review (rag_hold_document_for_review); refused with not_holdable otherwise. */
+  holdForReview(documentId: string): Promise<{ documentId: string; version: number }>;
+  /** rag_is_tenant_admin for this tenant: the Quarantine panel's access rule. */
+  isTenantAdmin(userId: string): Promise<boolean>;
+  /** The tenant's upload-approval exemptions (rag_upload_exemptions_for). */
+  uploadExemptions(): Promise<Array<{ kind: string; ref: string }>>;
   /** Per profile the newest backfill run that applies to this tenant, a running one first. */
   findBackfillRuns(): Promise<BackfillRunRow[]>;
   /** Records chunks that have no vector for a profile; returns how many rows were written. */
@@ -476,15 +486,53 @@ export function createIngestWriter(input: CreateIngestWriterInput): IngestWriter
         p_tenant_key: identity().tenantKey,
       });
       const outcome = text(row, 'outcome');
-      if (outcome !== 'published' && outcome !== 'already_current' && outcome !== 'quarantined') {
+      if (outcome === null || !PUBLISH_OUTCOMES.has(outcome)) {
         throw new IngestWriterError('rag_publish_document_version', 'bad_response');
       }
       return {
-        outcome,
+        outcome: outcome as PublishOutcome,
         documentId: requireText('rag_publish_document_version', row, 'document_id'),
         version: integer(row, 'version') ?? 0,
         supersededDocumentId: text(row, 'superseded_document_id'),
       };
+    },
+
+    async holdForReview(documentId) {
+      const row = await callOne('rag_hold_document_for_review', {
+        p_document_id: documentId,
+        p_tenant_key: identity().tenantKey,
+      });
+      if (text(row, 'outcome') !== 'pending_review') throw new IngestWriterError('rag_hold_document_for_review', 'bad_response');
+      return { documentId: requireText('rag_hold_document_for_review', row, 'document_id'), version: integer(row, 'version') ?? 0 };
+    },
+
+    async isTenantAdmin(userId) {
+      signal.throwIfAborted();
+      const response = await db.rpc('rag_is_tenant_admin', { p_user: userId, p_tenant_key: identity().tenantKey }).abortSignal(signal);
+      signal.throwIfAborted();
+      if (response.error) throw new IngestWriterError('rag_is_tenant_admin', response.error.code ?? null, reasonOf(response.error.message));
+      const data: unknown = response.data;
+      if (typeof data === 'boolean') return data;
+      if (Array.isArray(data) && data.length === 1) {
+        const first: unknown = data[0];
+        if (typeof first === 'boolean') return first;
+        if (first && typeof first === 'object') {
+          const value = (first as Row).rag_is_tenant_admin;
+          if (typeof value === 'boolean') return value;
+        }
+      }
+      throw new IngestWriterError('rag_is_tenant_admin', 'bad_response');
+    },
+
+    async uploadExemptions() {
+      const rows = await call('rag_upload_exemptions_for', { p_tenant_key: identity().tenantKey });
+      const exemptions: Array<{ kind: string; ref: string }> = [];
+      for (const row of rows) {
+        const kind = text(row, 'kind');
+        const ref = text(row, 'ref');
+        if (kind !== null && ref !== null) exemptions.push({ kind, ref });
+      }
+      return exemptions;
     },
 
     async findBackfillRuns() {

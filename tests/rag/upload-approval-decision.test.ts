@@ -1,6 +1,14 @@
-import { describe, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { UploadApprovalSchema } from '@/lib/rag-eval/contracts.generated';
 import { decideUploadApproval, normalizeUploaderId, type UploadApprovalInput } from '@/lib/rag/ingest/approval/decide';
+import { loadIngestConfig } from '@/lib/rag/ingest/config';
+import { getIngestDeps } from '@/lib/rag/ingest/deps';
+import { resolveUploadApproval } from '@/lib/rag/ingest/approval/resolve';
+import { identifyStage } from '@/lib/rag/ingest/stages/identify';
+import { publishStage } from '@/lib/rag/ingest/stages/publish';
+import { emptyIngestState, type IngestResult, type StageContext } from '@/lib/rag/ingest/types';
+import { IngestWriterError, type IngestWriter, type PublishOutcome } from '@/lib/rag/ingest/writer';
+import { mintScope, type TenantScope } from '@/lib/rag/tenant/scope';
 
 const MEMBER = '00000000-0000-4000-8000-0000000000a1';
 const ADMIN = '00000000-0000-4000-8000-0000000000a2';
@@ -98,5 +106,193 @@ describe('decideUploadApproval', () => {
     expect(normalizeUploaderId('not-a-uuid')).toBeNull();
     expect(normalizeUploaderId(42)).toBeNull();
     expect(normalizeUploaderId(undefined)).toBeNull();
+  });
+});
+
+// ---- identify-side resolution, the publish stage and the post-publish seam (fake writer, no database) ----
+
+
+const ORG = '00000000-0000-4000-8000-0000000000c1';
+const DOC = '00000000-0000-4000-8000-0000000000d9';
+
+interface FakeWriterOptions {
+  admin?: boolean | Error;
+  exemptions?: Array<{ kind: string; ref: string }> | Error;
+  publishOutcome?: PublishOutcome;
+  holdError?: Error;
+  rowStatus?: string;
+}
+
+function fakeWriter(options: FakeWriterOptions = {}) {
+  const calls: string[] = [];
+  const writer = {
+    async isTenantAdmin(userId: string) {
+      calls.push(`isTenantAdmin:${userId}`);
+      if (options.admin instanceof Error) throw options.admin;
+      return options.admin ?? false;
+    },
+    async uploadExemptions() {
+      calls.push('uploadExemptions');
+      if (options.exemptions instanceof Error) throw options.exemptions;
+      return options.exemptions ?? [];
+    },
+    async holdForReview(documentId: string) {
+      calls.push(`holdForReview:${documentId}`);
+      if (options.holdError) throw options.holdError;
+      return { documentId, version: 3 };
+    },
+    async getDocument() {
+      calls.push('getDocument');
+      return { status: options.rowStatus ?? 'processing', version: 3 } as Awaited<ReturnType<IngestWriter['getDocument']>>;
+    },
+    async setFields(documentId: string, fields: Record<string, unknown>) {
+      calls.push(`setFields:${documentId}:${JSON.stringify(fields)}`);
+    },
+    async publish(documentId: string) {
+      calls.push(`publish:${documentId}`);
+      return { outcome: options.publishOutcome ?? 'published', documentId, version: 3, supersededDocumentId: null };
+    },
+  };
+  return { writer: writer as unknown as IngestWriter, calls };
+}
+
+function ctxFor(scope: TenantScope, writer: IngestWriter, overrides: { mode?: 'off' | 'members' | 'all'; uploaderId?: string | null; options?: Record<string, unknown> } = {}): StageContext {
+  const deps = getIngestDeps();
+  return {
+    input: {
+      scope,
+      source: 'config_upload',
+      sourceKey: 'root/notes.md',
+      text: '# Notes\n\nA neutral sentence about a blue widget.\n',
+      filename: 'notes.md',
+      mimeType: 'text/markdown',
+      signal: new AbortController().signal,
+      ...(overrides.uploaderId !== undefined ? { uploaderId: overrides.uploaderId } : {}),
+      ...(overrides.options ? { options: overrides.options } : {}),
+    },
+    deps,
+    writer,
+    config: loadIngestConfig({ RAG_UPLOAD_APPROVAL: overrides.mode ?? 'members' }),
+    signal: new AbortController().signal,
+    deadline: Number.POSITIVE_INFINITY,
+    state: emptyIngestState(),
+    warnings: [],
+    identity: null,
+    document: { id: DOC, version: 3, lineageId: 'lineage', resumed: false },
+    parserUsed: 'text',
+    work: { parseText: null, parserVersion: null, chunks: [], chunksWritten: 2 },
+  };
+}
+
+describe('resolveUploadApproval', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  test('single-tenant: the caller-set uploader is asked about, and an admin publishes', async () => {
+    const { writer, calls } = fakeWriter({ admin: true });
+    const decision = await resolveUploadApproval(ctxFor(mintScope('single', null, null), writer, { uploaderId: ADMIN.toUpperCase() }));
+    expect(decision).toMatchObject({ required: false, reason: 'admin_upload', uploader_id: ADMIN });
+    expect(calls).toEqual(['uploadExemptions', `isTenantAdmin:${ADMIN}`]);
+  });
+
+  test('single-tenant without an uploader: held as unknown_uploader, and no admin check is made', async () => {
+    const { writer, calls } = fakeWriter({ admin: true });
+    const decision = await resolveUploadApproval(ctxFor(mintScope('single', null, null), writer));
+    expect(decision).toMatchObject({ required: true, reason: 'unknown_uploader', uploader_id: null });
+    expect(calls).toEqual(['uploadExemptions']);
+  });
+
+  test("an organization scope's verified user wins over a caller-set uploader id", async () => {
+    const { writer, calls } = fakeWriter({ admin: false });
+    const decision = await resolveUploadApproval(ctxFor(mintScope('org', MEMBER, ORG), writer, { uploaderId: ADMIN }));
+    expect(decision).toMatchObject({ required: true, reason: 'member_upload', uploader_id: MEMBER });
+    expect(calls).toContain(`isTenantAdmin:${MEMBER}`);
+  });
+
+  test('a failed lookup can only hold: admin check and exemptions unavailable count as member and none', async () => {
+    const { writer } = fakeWriter({ admin: new Error('down'), exemptions: new Error('down') });
+    const decision = await resolveUploadApproval(ctxFor(mintScope('org', ADMIN, ORG), writer, { options: { nangoConnectionId: 'conn-1' } }));
+    expect(decision).toMatchObject({ required: true, reason: 'member_upload' });
+  });
+
+  test("a connector exemption matches the upload's connection id", async () => {
+    const { writer } = fakeWriter({ exemptions: [{ kind: 'connector', ref: 'conn-1' }] });
+    const decision = await resolveUploadApproval(ctxFor(mintScope('single', null, null), writer, { options: { nangoConnectionId: 'conn-1' } }));
+    expect(decision).toMatchObject({ required: false, reason: 'exempt_connector' });
+  });
+
+  test('a personal workspace owner is not asked about and publishes under members', async () => {
+    const { writer, calls } = fakeWriter();
+    const decision = await resolveUploadApproval(ctxFor(mintScope('personal', OWNER, null), writer));
+    expect(decision).toMatchObject({ required: false, reason: 'personal_workspace' });
+    expect(calls).toEqual(['uploadExemptions']);
+  });
+
+  test('identify with the switch off makes no call and stores no decision', async () => {
+    const { writer, calls } = fakeWriter();
+    const ctx = ctxFor(mintScope('single', null, null), writer, { mode: 'off', uploaderId: MEMBER });
+    ctx.document = null;
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const outcome = await identifyStage.run(ctx);
+    expect(outcome.kind).toBe('next');
+    expect(calls).toEqual([]);
+    expect('approval' in ctx.state).toBe(false);
+  });
+});
+
+describe('publish stage with an approval decision', () => {
+  beforeEach(() => {
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  const required = { mode: 'members' as const, required: true, reason: 'member_upload' as const, uploader_id: MEMBER, decided_at: AT };
+
+  async function publishWith(options: FakeWriterOptions, state: Partial<StageContext['state']> = {}) {
+    const { writer, calls } = fakeWriter(options);
+    const ctx = ctxFor(mintScope('single', null, null), writer);
+    Object.assign(ctx.state, state);
+    const outcome = await publishStage.run(ctx);
+    expect(outcome.kind).toBe('done');
+    return { result: (outcome as { result: IngestResult }).result, calls };
+  }
+
+  test('approval required: the version is held for review and the publish function is not called', async () => {
+    const { result, calls } = await publishWith({}, { approval: required });
+    expect(result).toMatchObject({ status: 'pending_review', documentId: DOC, version: 3, chunkCount: 2 });
+    expect(calls).toEqual([`holdForReview:${DOC}`]);
+  });
+
+  test('no decision: publish is called as today and maps published to ready', async () => {
+    const { result, calls } = await publishWith({});
+    expect(result).toEqual({ status: 'ready', documentId: DOC, version: 3, parserUsed: 'text', chunkCount: 2, warnings: [] });
+    expect(calls).toEqual([`publish:${DOC}`]);
+  });
+
+  test('a decision that requires nothing publishes', async () => {
+    const { result, calls } = await publishWith({}, { approval: { ...required, required: false, reason: 'admin_upload' } });
+    expect(result.status).toBe('ready');
+    expect(calls).toEqual([`publish:${DOC}`]);
+  });
+
+  test('quarantine wins: a scan-quarantined version goes to the publish function, which keeps it quarantined', async () => {
+    const { result, calls } = await publishWith({ publishOutcome: 'quarantined' }, { approval: required, quarantine: { ruleIds: ['r'], released: false } });
+    expect(result.status).toBe('quarantined');
+    expect(calls).toEqual([`publish:${DOC}`]);
+  });
+
+  test('a resumed publish of an already held version answers pending_review without holding twice', async () => {
+    const { result } = await publishWith({ holdError: new IngestWriterError('rag_hold_document_for_review', 'P0001', 'not_holdable'), rowStatus: 'pending_review' }, { approval: required });
+    expect(result.status).toBe('pending_review');
+  });
+
+  test('not_holdable on a version that is neither pending nor quarantined fails the stage', async () => {
+    await expect(publishWith({ holdError: new IngestWriterError('rag_hold_document_for_review', 'P0001', 'not_holdable'), rowStatus: 'ready' }, { approval: required })).rejects.toThrow();
   });
 });
