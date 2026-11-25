@@ -214,6 +214,81 @@ describe('rag:relex job (src/lib/rag/ingest/relex)', () => {
     }
   });
 
+  test('table row serialization (D-21): the switch on writes row lines into table chunks under the unchanged LEXICAL_VERSION, off restores the plain text', async () => {
+    const { chunkLexicalText } = await import('@/lib/rag/lexical/chunk-text');
+    const { tableRowLanguage, tableRowSeparator } = await import('@/lib/rag/ingest/text/table-rows');
+    await relex.runRelex({ db: db(), batchSize: 500 });
+    const chunkId = TWO_TENANT_IDS.chunkA;
+    const [original] = await rows('SELECT content, chunk_kind FROM document_chunks WHERE id = $1', [chunkId]);
+    const table = '| Item | Count |\n| --- | --- |\n| first sample | 1 |\n| second sample | 2 |';
+    const tableChunks = Number((await rows("SELECT count(*)::int AS n FROM document_chunks WHERE chunk_kind = 'table'"))[0]?.n);
+    try {
+      await fixture.db.query("UPDATE document_chunks SET chunk_kind = 'table', content = $2 WHERE id = $1", [chunkId, table]);
+      const stored = async () =>
+        (await rows(
+          `SELECT c.lexical_text, c.lexical_version, c.section_path, c.metadata, c.language, d.filename, d.language AS document_language
+           FROM document_chunks c JOIN documents d ON d.id = c.document_id WHERE c.id = $1`,
+          [chunkId],
+        ))[0] as Row;
+      const before = await stored();
+      const input = {
+        sectionPath: before.section_path as string[],
+        content: table,
+        chunkKind: 'table',
+        metadata: before.metadata as Record<string, unknown>,
+        documentFilename: String(before.filename),
+      };
+      const separator = tableRowSeparator(
+        true,
+        'table',
+        tableRowLanguage({ chunkLanguage: before.language as string | null, documentLanguage: before.document_language as string | null }),
+      );
+      const plain = chunkLexicalText(input);
+      const serialized = chunkLexicalText({ ...input, tableRowSeparator: separator });
+      assert.notEqual(serialized, plain);
+
+      const restore = await relex.runRelex({ db: db(), tableRowSerialization: false, tenantKey: TENANT_A });
+      assert.equal(restore.tables, 1, 'the edited chunk gets the plain text of its new content');
+      assert.equal((await stored()).lexical_text, plain);
+
+      const on = await relex.runRelex({ db: db(), tableRowSerialization: true, tenantKey: TENANT_A });
+      assert.equal(on.tables, 1);
+      const afterOn = await stored();
+      assert.equal(afterOn.lexical_text, serialized);
+      assert.equal(afterOn.lexical_version, LEXICAL_VERSION);
+      assert.deepEqual(await relex.dryRunRelex({ db: db(), tableRowSerialization: true }), { tenants: {}, total: 0, tables: 0 });
+      assert.equal((await relex.runRelex({ db: db(), tableRowSerialization: true })).updated, 0, 'a second run with the switch on rewrites nothing');
+
+      const off = await relex.runRelex({ db: db(), tableRowSerialization: false });
+      assert.equal(off.tables, 1);
+      const afterOff = await stored();
+      assert.equal(afterOff.lexical_text, plain);
+      assert.equal(afterOff.lexical_version, LEXICAL_VERSION);
+      assert.equal((await relex.runRelex({ db: db(), tableRowSerialization: false })).updated, 0);
+      assert.equal(Number((await rows("SELECT count(*)::int AS n FROM document_chunks WHERE chunk_kind = 'table'"))[0]?.n), tableChunks + 1);
+    } finally {
+      await fixture.db.query('UPDATE document_chunks SET chunk_kind = $2, content = $3 WHERE id = $1', [chunkId, original?.chunk_kind, original?.content]);
+      await relex.runRelex({ db: db(), tableRowSerialization: false });
+    }
+  });
+
+  test('rag_relex_table_candidates is service-role only', async () => {
+    const fns = await rows(
+      `SELECT has_function_privilege('anon', p.oid, 'EXECUTE') AS anon,
+              has_function_privilege('authenticated', p.oid, 'EXECUTE') AS auth,
+              has_function_privilege('service_role', p.oid, 'EXECUTE') AS service,
+              p.prosecdef AS definer, p.proconfig AS config
+       FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+       WHERE n.nspname = 'public' AND p.proname = 'rag_relex_table_candidates'`,
+    );
+    assert.equal(fns.length, 1);
+    assert.deepEqual(
+      { anon: fns[0]?.anon, auth: fns[0]?.auth, service: fns[0]?.service, definer: fns[0]?.definer },
+      { anon: false, auth: false, service: true, definer: false },
+    );
+    assert.deepEqual(fns[0]?.config, ['search_path=""']);
+  });
+
   test('CLI parse accepts documented flags', () => {
     const parsed = cli.parseRelexArgs(['--dry-run', '--batch-size', '20', '--tenant', TENANT_A, '--resume-after', TWO_TENANT_IDS.chunkA]);
     assert.deepEqual(parsed, {
