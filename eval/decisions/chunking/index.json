@@ -1,0 +1,29 @@
+[
+  {
+    "build_run_id": null,
+    "chosen_on": {
+      "clause_context_tokens": 857.5,
+      "clause_mrr": 1.0,
+      "clause_recall_at_k": 1.0,
+      "context_tokens": 857.5,
+      "false_refusal_rate": 0.0,
+      "latency_p95_ms": 104.0,
+      "mrr": 1.0,
+      "overall_context_tokens": 695.7008547008547,
+      "overall_correct_refusal_rate": 0.2857142857142857,
+      "overall_false_refusal_rate": 0.20833333333333334,
+      "overall_latency_p95_ms": 143.0,
+      "overall_mrr": 0.5756944444444444,
+      "overall_recall_at_k": 0.6770833333333334,
+      "recall_at_k": 1.0
+    },
+    "decided_by": "fixture-demo",
+    "doc_type": "contract_legal",
+    "gate_passed": true,
+    "profile_id": "legacy",
+    "recorded_at": "2026-11-25",
+    "regressions": [],
+    "report_hash": "a41e42436d7531f2a51d5fca1cfac37933bcc9ce127361fa8458dd352b6136ee",
+    "source": "fixture"
+  }
+]
