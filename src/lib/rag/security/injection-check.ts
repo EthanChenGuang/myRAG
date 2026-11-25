@@ -62,6 +62,37 @@ export function injectionItems(
   return items;
 }
 
+/** Document id (one row per document version) to the rule ids an admin released that version for. */
+export type ReleasedRules = ReadonlyMap<string, ReadonlySet<string>>;
+
+interface ReleasedRow {
+  id: string;
+  metadata?: Record<string, any> | null;
+}
+
+function stringList(value: unknown): string[] | null {
+  return Array.isArray(value) && value.every((entry) => typeof entry === 'string') ? (value as string[]) : null;
+}
+
+/**
+ * The released rule ids per document version, read only from document rows the caller already loaded under its own
+ * scope (fetchAssemblyRows or the overview lookup); never a lookup by id. A version counts as released only when
+ * metadata.quarantine.released_at is set; the ids are released_rule_ids, else rule_ids.
+ */
+export function releasedRulesFromRows(rows: Iterable<ReleasedRow> | ReadonlyMap<string, ReleasedRow> | null | undefined): ReleasedRules {
+  const released = new Map<string, ReadonlySet<string>>();
+  if (!rows) return released;
+  const list = rows instanceof Map ? rows.values() : (rows as Iterable<ReleasedRow>);
+  for (const row of list) {
+    const quarantine = row?.metadata?.quarantine;
+    if (!quarantine || typeof quarantine !== 'object' || Array.isArray(quarantine)) continue;
+    if (typeof quarantine.released_at !== 'string' || quarantine.released_at === '') continue;
+    const ids = stringList(quarantine.released_rule_ids) ?? stringList(quarantine.rule_ids) ?? [];
+    if (ids.length > 0 && typeof row.id === 'string') released.set(row.id, new Set(ids));
+  }
+  return released;
+}
+
 export type InjectionDetectorId = 'rules' | 'prompt_guard' | 'lakera';
 
 const RULES_ONLY_PROFILES: readonly Profile[] = ['voice', 'media'];
@@ -85,12 +116,16 @@ export function injectionVersions(detectors: readonly InjectionDetectorId[]): st
 export function runInjectionCheck(input: {
   items: readonly InjectionCheckItem[];
   mode: ActiveInjectionMode;
+  /** Rule ids ignored for the named document version only; other rules still apply. */
+  released?: ReleasedRules;
 }): InjectionVerdicts {
   const verdicts = new Map<string, InjectionVerdict>();
   for (const item of input.items) {
     try {
       const scan = scanText(item.text);
-      verdicts.set(item.key, { flagged: scan.matched, ruleIds: [...scan.rule_ids], error: false });
+      const exempt = input.released?.get(item.documentId);
+      const ruleIds = exempt ? scan.rule_ids.filter((ruleId) => !exempt.has(ruleId)) : [...scan.rule_ids];
+      verdicts.set(item.key, { flagged: ruleIds.length > 0, ruleIds, error: false });
     } catch {
       console.warn('[RAG Security] Injection rules failed for one item, treated as unflagged', {
         chunkIds: item.chunkIds,

@@ -28,6 +28,7 @@ import {
   fetchOverviewDocuments,
   type OverviewContext,
 } from './context/overview';
+import type { AssemblyDocumentRow } from './context/assemble';
 import { assembleVoiceResults, enrichVoiceCandidates, voiceContext, type VoiceResults } from './context/voice';
 import { getRagDeps, type RagDeps } from './deps';
 import { getEmbeddingProfileById } from './embeddings/active-profile';
@@ -43,6 +44,7 @@ import {
   injectionDetectorsFor,
   injectionItems,
   injectionVersions,
+  releasedRulesFromRows,
   logInjectionSummary,
   runInjectionCheck,
   type ActiveInjectionMode,
@@ -50,6 +52,7 @@ import {
   type InjectionCheckItem,
   type InjectionMarks,
   type ItemCandidate,
+  type ReleasedRules,
 } from './security/injection-check';
 import { exactIdStage, mergeExactCandidates } from './retrieval/exact-id';
 import { hybridRerank } from './rerank/local-hybrid';
@@ -243,6 +246,8 @@ interface InjectionStageInput<C extends ItemCandidate> {
   items: readonly InjectionCheckItem[];
   candidates: readonly C[];
   referenced: ReferencedState | null;
+  /** Released rule ids from document rows already loaded under the caller's scope. */
+  released?: ReleasedRules;
 }
 
 interface InjectionStageRun<C extends ItemCandidate> {
@@ -262,7 +267,7 @@ async function runInjectionStage<C extends ItemCandidate>(input: InjectionStageI
     { ...spec, timeoutMs: spec.timeoutMs + INJECTION_STAGE_GUARD_MS },
     input.signal,
     () => {
-      const verdicts = runInjectionCheck({ items, mode });
+      const verdicts = runInjectionCheck({ items, mode, ...(input.released ? { released: input.released } : {}) });
       const applied = applyInjectionAction({
         candidates: input.candidates,
         referenced: input.referenced,
@@ -515,6 +520,22 @@ export async function runRefsStage(
   return { usedDocuments, context, sections };
 }
 
+/**
+ * The overview document rows, loaded once before the check so the released rule ids come from rows returned under the
+ * caller's scope (the ids are the scoped search results); assemble reuses them. A failed read leaves no exemption and
+ * assemble reads again, so the check never fails open.
+ */
+async function loadOverviewDocumentsForCheck(rawChunks: RawChunk[], signal: AbortSignal): Promise<Map<string, AssemblyDocumentRow> | null> {
+  const admin = getRagDeps().adminClient();
+  if (!admin || rawChunks.length === 0) return null;
+  try {
+    return await fetchOverviewDocuments(rawChunks, { admin, signal });
+  } catch {
+    signal.throwIfAborted();
+    return null;
+  }
+}
+
 async function runOverviewPipeline(
   input: RunRetrievalInput,
   collector: TraceCollector,
@@ -562,9 +583,11 @@ async function runOverviewPipeline(
     );
 
     let flaggedForRender: ReadonlySet<string> | undefined;
+    let documentRows: Map<string, AssemblyDocumentRow> | null = null;
     if (security.injectionCheck !== 'off') {
       const mode = security.injectionCheck;
       warnInjectionCheckDisabled(config, mode);
+      documentRows = await loadOverviewDocumentsForCheck(rawChunks, signal);
       const run = await runInjectionStage({
         spec: spec('injection_check', 'skip'),
         signal,
@@ -575,6 +598,7 @@ async function runOverviewPipeline(
         items: injectionItems(rawChunks, null, referenced),
         candidates: rawChunks,
         referenced,
+        released: releasedRulesFromRows(documentRows),
       });
       injectionStalled = run.stalled;
       if (run.applied) {
@@ -593,7 +617,7 @@ async function runOverviewPipeline(
       async (stageSignal) => {
         const adminClient = deps.adminClient();
         if (!adminClient) throw new Error('[RAG Overview] admin client unavailable');
-        const documents = await fetchOverviewDocuments(rawChunks, { admin: adminClient, signal: stageSignal });
+        const documents = documentRows ?? (await fetchOverviewDocuments(rawChunks, { admin: adminClient, signal: stageSignal }));
         return assembleOverviewContext(rawChunks, documents, referenced?.usedDocuments ?? [], {
           ...(security.contextTagging ? { contextTagging: true } : {}),
           ...(flaggedForRender ? { flaggedChunkIds: flaggedForRender } : {}),
@@ -829,6 +853,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
           items: injectionItems(current ? current.relevantChunks : candidates, loadedRows?.chunkMetadata ?? null, referenced),
           candidates,
           referenced,
+          released: releasedRulesFromRows(loadedRows?.documents),
         });
         injectionStalled = run.stalled;
         if (run.applied) {
