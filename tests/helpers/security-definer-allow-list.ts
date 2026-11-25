@@ -5,6 +5,8 @@ import type { AllowListEntry } from './sql-function-acl';
  * Keys are normalised full signatures (name and argument types, as `signatureKey` and `regprocedure::text` print them), so a new overload that
  * shares an allow-listed name is not approved. Look entries up with allowListEntryFor, never by name.
  * anon says whether anon keeps EXECUTE (only where an RLS policy without a TO clause evaluates the function for anon).
+ * Service-role-only definers such as rag_purge_retrieval_log(integer,integer) and rag_feedback_loop_on_chat_delete() are deliberately absent:
+ * their lock is section 1 of 0410, and tests/rag-db/retrieval-log-purge.test.mts asserts they never appear here.
  */
 export const AUTHENTICATED_ALLOW_LIST: Record<string, AllowListEntry> = {
   'delete_folder(uuid,boolean)': { anon: false, reason: 'called with the user session from chat-store.ts and /api/folders/[id]; checks auth.uid() ownership' },
