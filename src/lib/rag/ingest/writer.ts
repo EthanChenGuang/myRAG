@@ -69,6 +69,8 @@ export type BeginResult =
 export interface DocumentFields {
   content_hash?: string | null;
   language?: string | null;
+  /** D-13: every language with at least 10% of the detected tokens, in registry order. */
+  languages?: string[];
   doc_date?: string | null;
   doc_type?: string | null;
   doc_type_origin?: string | null;
@@ -102,6 +104,10 @@ export interface ChunkWrite {
   page_end?: number | null;
   content_hash?: string | null;
   lexical_text?: string | null;
+  /** The chunk's own language (D-13, RAG_LANGUAGE_AWARE_INGEST=on); without the key the chunk mirrors the document language. */
+  language?: string;
+  /** 0..1, rounded to 4 decimals; without the key the column stays null. */
+  language_confidence?: number;
   metadata: Record<string, unknown>;
 }
 
