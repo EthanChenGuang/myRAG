@@ -1,0 +1,430 @@
+{
+  "$defs": {
+    "AnswerFeedback": {
+      "additionalProperties": false,
+      "properties": {
+        "comment": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Comment"
+        },
+        "reasons": {
+          "items": {
+            "enum": [
+              "wrong",
+              "incomplete",
+              "not_from_documents",
+              "bad_citation"
+            ],
+            "type": "string"
+          },
+          "maxItems": 4,
+          "title": "Reasons",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "updatedAt": {
+          "minLength": 1,
+          "title": "Updatedat",
+          "type": "string"
+        },
+        "vote": {
+          "enum": [
+            "helpful",
+            "not_helpful"
+          ],
+          "title": "Vote",
+          "type": "string"
+        }
+      },
+      "required": [
+        "vote",
+        "updatedAt"
+      ],
+      "title": "AnswerFeedback",
+      "type": "object"
+    },
+    "AnswerGroundedness": {
+      "additionalProperties": false,
+      "properties": {
+        "checkedAt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Checkedat"
+        },
+        "label": {
+          "anyOf": [
+            {
+              "enum": [
+                "verified",
+                "possibly_unreliable",
+                "not_checked"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label"
+        },
+        "latencyMs": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Latencyms"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "score": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Score"
+        },
+        "scorer": {
+          "anyOf": [
+            {
+              "enum": [
+                "hhem_2_3_vectara",
+                "hhem_2_1_open",
+                "none"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scorer"
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "scored",
+            "not_checked"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "threshold": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Threshold"
+        },
+        "thresholdSource": {
+          "anyOf": [
+            {
+              "enum": [
+                "default",
+                "calibrated"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Thresholdsource"
+        },
+        "truncated": {
+          "default": false,
+          "title": "Truncated",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "AnswerGroundedness",
+      "type": "object"
+    },
+    "CitationRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "alias": {
+          "pattern": "^S[1-9][0-9]*$",
+          "title": "Alias",
+          "type": "string"
+        },
+        "chunkIds": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Chunkids",
+          "type": "array"
+        },
+        "documentId": {
+          "minLength": 1,
+          "title": "Documentid",
+          "type": "string"
+        },
+        "documentName": {
+          "title": "Documentname",
+          "type": "string"
+        },
+        "documentVersion": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Documentversion"
+        },
+        "n": {
+          "minimum": 1,
+          "title": "N",
+          "type": "integer"
+        },
+        "page": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page"
+        },
+        "quote": {
+          "minLength": 1,
+          "title": "Quote",
+          "type": "string"
+        },
+        "quoteHash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Quotehash",
+          "type": "string"
+        },
+        "sectionPath": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sectionpath"
+        },
+        "strategy": {
+          "enum": [
+            "claude-citations",
+            "chunk-alias"
+          ],
+          "title": "Strategy",
+          "type": "string"
+        }
+      },
+      "required": [
+        "n",
+        "alias",
+        "chunkIds",
+        "documentId",
+        "documentName",
+        "quote",
+        "quoteHash",
+        "strategy"
+      ],
+      "title": "CitationRecord",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "answerId": {
+      "format": "uuid",
+      "title": "Answerid",
+      "type": "string"
+    },
+    "answerLanguage": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Answerlanguage"
+    },
+    "chatId": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Chatid"
+    },
+    "citationStrategy": {
+      "anyOf": [
+        {
+          "enum": [
+            "claude-citations",
+            "chunk-alias"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Citationstrategy"
+    },
+    "citations": {
+      "items": {
+        "$ref": "#/$defs/CitationRecord"
+      },
+      "title": "Citations",
+      "type": "array"
+    },
+    "createdAt": {
+      "minLength": 1,
+      "title": "Createdat",
+      "type": "string"
+    },
+    "documents": {
+      "additionalProperties": {
+        "enum": [
+          "current",
+          "unavailable"
+        ],
+        "type": "string"
+      },
+      "title": "Documents",
+      "type": "object"
+    },
+    "feedback": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AnswerFeedback"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "feedbackEnabled": {
+      "default": false,
+      "title": "Feedbackenabled",
+      "type": "boolean"
+    },
+    "groundedness": {
+      "$ref": "#/$defs/AnswerGroundedness"
+    },
+    "invalidCitations": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Invalidcitations",
+      "type": "integer"
+    },
+    "modelId": {
+      "minLength": 1,
+      "title": "Modelid",
+      "type": "string"
+    },
+    "ragMode": {
+      "enum": [
+        "strict",
+        "balanced",
+        "flexible",
+        "bypass"
+      ],
+      "title": "Ragmode",
+      "type": "string"
+    },
+    "traceId": {
+      "minLength": 1,
+      "title": "Traceid",
+      "type": "string"
+    },
+    "updatedAt": {
+      "minLength": 1,
+      "title": "Updatedat",
+      "type": "string"
+    }
+  },
+  "required": [
+    "answerId",
+    "traceId",
+    "modelId",
+    "ragMode",
+    "groundedness",
+    "createdAt",
+    "updatedAt"
+  ],
+  "title": "AnswerRecord",
+  "type": "object"
+}

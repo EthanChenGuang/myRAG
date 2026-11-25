@@ -1,8 +1,18 @@
 import base64
+import hashlib
 from datetime import datetime, timezone
 from typing import Any
 
 from rag_sidecar.contracts import (
+    AnswerFeedback,
+    AnswerFeedbackRequest,
+    AnswerGroundedness,
+    AnswerRecord,
+    CitationRecord,
+    GroundednessRequest,
+    GroundednessResult,
+    GroundednessThresholdCell,
+    GroundednessThresholds,
     AdvanceRequest,
     AdvanceResponse,
     BackfillDryRunReport,
@@ -810,8 +820,96 @@ def _activation_evidence() -> ActivationEvidence:
     )
 
 
+_CITED_QUOTE = "Employees receive twenty days of paid leave per calendar year."
+
+
+def _citation_record() -> CitationRecord:
+    return CitationRecord(
+        n=1,
+        alias="S1",
+        chunkIds=["00000000-0000-4000-8000-0000000000c1", "00000000-0000-4000-8000-0000000000c2"],
+        documentId="00000000-0000-4000-8000-0000000000d1",
+        documentName="leave-policy.pdf",
+        documentVersion=2,
+        page=4,
+        sectionPath=["Leave", "Annual leave"],
+        quote=_CITED_QUOTE,
+        quoteHash=hashlib.sha256(_CITED_QUOTE.encode("utf-8")).hexdigest(),
+        strategy="chunk-alias",
+    )
+
+
+def _answer_record(*, pending: bool = False) -> AnswerRecord:
+    groundedness = (
+        AnswerGroundedness(status="pending")
+        if pending
+        else AnswerGroundedness(
+            status="scored",
+            scorer="hhem_2_1_open",
+            score=0.82,
+            label="verified",
+            threshold=0.5,
+            thresholdSource="default",
+            latencyMs=640,
+            checkedAt="2026-01-01T00:00:03.000Z",
+        )
+    )
+    return AnswerRecord(
+        answerId="00000000-0000-4000-8000-0000000000a1",
+        chatId=None if pending else "00000000-0000-4000-8000-0000000000b1",
+        traceId="0123456789abcdef0123456789abcdef",
+        modelId="generator/model-b",
+        citationStrategy="chunk-alias",
+        ragMode="strict",
+        answerLanguage="en",
+        citations=[] if pending else [_citation_record()],
+        groundedness=groundedness,
+        feedback=None
+        if pending
+        else AnswerFeedback(
+            vote="not_helpful",
+            reasons=["incomplete"],
+            comment="It left out carry-over days.",
+            updatedAt="2026-01-01T00:00:10.000Z",
+        ),
+        documents={} if pending else {"00000000-0000-4000-8000-0000000000d1": "current"},
+        feedbackEnabled=not pending,
+        createdAt="2026-01-01T00:00:00.000Z",
+        updatedAt="2026-01-01T00:00:10.000Z",
+    )
+
+
+def _groundedness_thresholds() -> GroundednessThresholds:
+    return GroundednessThresholds(
+        cells=[
+            GroundednessThresholdCell(scorer="hhem_2_3_vectara", language="en", threshold=0.5, source="default"),
+            GroundednessThresholdCell(scorer="hhem_2_3_vectara", language="zh-Hans", threshold=0.5, source="default"),
+            GroundednessThresholdCell(scorer="hhem_2_1_open", language="en", threshold=0.5, source="default"),
+        ]
+    )
+
+
 def _models() -> dict[str, Any]:
     return {
+        "CitationRecord": _citation_record(),
+        "GroundednessRequest": GroundednessRequest(
+            request_id="00000000-0000-4000-8000-0000000000a1",
+            language="en",
+            premise_texts=[_CITED_QUOTE],
+            hypothesis="Employees get twenty days of paid leave each year.",
+            allow_vectara=False,
+        ),
+        "GroundednessResult": GroundednessResult(
+            status="scored", scorer="hhem_2_1_open", score=0.82, latency_ms=640
+        ),
+        "GroundednessThresholds": _groundedness_thresholds(),
+        "AnswerFeedbackRequest": AnswerFeedbackRequest(
+            vote="not_helpful",
+            reasons=["incomplete", "bad_citation"],
+            comment="It left out carry-over days.",
+            chatId="00000000-0000-4000-8000-0000000000b1",
+        ),
+        "AnswerRecord": _answer_record(),
         "ConversationTurn": ConversationTurn(role="user", content="Tell me about leave."),
         "ProcessingProfileSet": ProcessingProfileSet(profiles=[_processing_profile(name) for name in _DOC_TYPES]),
         "DocTypeDetection": DocTypeDetection(
@@ -971,6 +1069,20 @@ def _models() -> dict[str, Any]:
 def build_samples() -> dict[str, dict[str, Any]]:
     samples = {name: model.model_dump(mode="json") for name, model in _models().items()}
     variants: dict[str, dict[str, Any]] = {
+        "AnswerRecord:pending_unlinked": {
+            "model": "AnswerRecord",
+            "value": _answer_record(pending=True).model_dump(mode="json"),
+        },
+        "GroundednessResult:not_checked": {
+            "model": "GroundednessResult",
+            "value": GroundednessResult(
+                status="not_checked", scorer="none", reason="unsupported_language", latency_ms=0
+            ).model_dump(mode="json"),
+        },
+        "AnswerFeedbackRequest:vote_only": {
+            "model": "AnswerFeedbackRequest",
+            "value": {"vote": "helpful"},
+        },
         "GoldenItem:no_answer_null_expected": {
             "model": "GoldenItem",
             "value": _no_answer_item().model_dump(mode="json"),

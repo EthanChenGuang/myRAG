@@ -1,3 +1,16 @@
+from rag_sidecar.contracts.answers import (
+    AnswerFeedback,
+    AnswerFeedbackRequest,
+    AnswerGroundedness,
+    AnswerRecord,
+    CitationRecord,
+)
+from rag_sidecar.contracts.groundedness import (
+    GroundednessRequest,
+    GroundednessResult,
+    GroundednessThresholdCell,
+    GroundednessThresholds,
+)
 from rag_sidecar.contracts.baseline import (
     Baseline,
     BaselineMetricStat,
@@ -115,6 +128,15 @@ from rag_sidecar.contracts.eval_run import (
 )
 
 __all__ = [
+    "AnswerFeedback",
+    "AnswerFeedbackRequest",
+    "AnswerGroundedness",
+    "AnswerRecord",
+    "CitationRecord",
+    "GroundednessRequest",
+    "GroundednessResult",
+    "GroundednessThresholdCell",
+    "GroundednessThresholds",
     "ChunkerSettings",
     "DoclingOptions",
     "DocTypeDetection",
