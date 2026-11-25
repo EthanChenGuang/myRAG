@@ -1668,10 +1668,12 @@ requires-dist = [
     { name = "tiktoken", marker = "extra == 'chunking'", specifier = "==0.14.0" },
     { name = "tiktoken", marker = "extra == 'docling'", specifier = "==0.14.0" },
     { name = "torch", marker = "extra == 'docling'", specifier = "==2.15.0", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "torch", marker = "extra == 'hhem'", specifier = "==2.15.0", index = "https://download.pytorch.org/whl/cpu" },
     { name = "torchvision", marker = "extra == 'docling'", specifier = "==0.29.2", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "transformers", marker = "extra == 'hhem'", specifier = "==5.23.0" },
     { name = "uvicorn", specifier = "==0.54.0" },
 ]
-provides-extras = ["chunking", "preflight", "docling", "ray"]
+provides-extras = ["chunking", "preflight", "docling", "ray", "hhem"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = "==9.2.0" }]
