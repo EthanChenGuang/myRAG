@@ -387,3 +387,152 @@ def test_private_files_stay_ignored_by_git(private_root, monkeypatch):
         ["git", "status", "--porcelain", "eval/golden/private"], cwd=private_root.parents[2], capture_output=True, text=True, check=True
     )
     assert status.stdout.strip() == ""
+
+
+ADMIN_TOKEN = "admin-bearer-placeholder-token"
+APP_URL = "http://app.invalid"
+
+
+def _db_item(trace: str, answer_id: str, reasons: list[str], **overrides) -> dict:
+    row = {
+        "trace_id": trace,
+        "observation_id": answer_id,
+        "captured_at": "2026-11-05T10:00:00.000Z",
+        "tenant_key": "s:default",
+        "language": "en",
+        "query_masked": "How many leave days do employees get? mail [EMAIL]",
+        "answer_masked": "Twenty days per year.",
+        "context_masked": "Employees receive twenty days of leave per year.",
+        "model": "generator/model-b",
+        "tags": ["review_candidate", *[f"review:{reason}" for reason in reasons]],
+        "reasons": reasons,
+    }
+    row.update(overrides)
+    return row
+
+
+def _mock_app(monkeypatch, items: list[dict], status: int = 200, seen: list | None = None) -> None:
+    from rag_eval import review_queue
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if seen is not None:
+            seen.append(request)
+        if status != 200:
+            return httpx.Response(status, json={"error": "nope"})
+        return httpx.Response(200, json={"items": items})
+
+    monkeypatch.setattr(review_queue, "_http_client", lambda: httpx.Client(transport=httpx.MockTransport(handler), timeout=5.0))
+
+
+def test_pull_fills_reasons_from_review_tags_and_marks_plain_candidates_sampled(private_root, monkeypatch):
+    rows = [
+        _obs(1, tags=["review_candidate"]),
+        _obs(2, tags=["review_candidate", "review:feedback_negative"]),
+        _obs(3, tags=["review_candidate", "review:groundedness_flagged", "review:unknown_reason"]),
+    ]
+    with FakeLangfuse(rows) as fake:
+        _configure(monkeypatch, fake)
+        assert main(["pull", "--from", FROM, "--to", TO]) == 0
+    by_trace = {row["trace_id"]: row for row in _read_queue(private_root)}
+    assert by_trace[f"{1:032x}"]["reasons"] == ["sampled"]
+    assert by_trace[f"{2:032x}"]["reasons"] == ["feedback_negative"]
+    assert by_trace[f"{3:032x}"]["reasons"] == ["groundedness_flagged"]
+
+
+def test_pull_deduplicates_langfuse_items_by_trace_id_and_unions_reasons(private_root, monkeypatch):
+    sampled = _obs(1, tags=["review_candidate"])
+    flagged = _obs(1, id=f"{99:016x}", startTime="2026-11-01T10:00:09.000Z", tags=["review_candidate", "review:feedback_negative"])
+    with FakeLangfuse([sampled, flagged]) as fake:
+        _configure(monkeypatch, fake)
+        assert main(["pull", "--from", FROM, "--to", TO]) == 0
+    (row,) = _read_queue(private_root)
+    assert row["trace_id"] == f"{1:032x}"
+    assert row["reasons"] == ["sampled", "feedback_negative"]
+    assert "review:feedback_negative" in row["tags"]
+
+
+def test_pull_source_db_reads_the_admin_route_with_the_bearer_token(private_root, monkeypatch, capsys):
+    seen: list[httpx.Request] = []
+    items = [_db_item("a" * 32, "00000000-0000-4000-8000-000000000001", ["feedback_negative"])]
+    _mock_app(monkeypatch, items, seen=seen)
+    monkeypatch.setenv("RAG_ADMIN_BEARER", ADMIN_TOKEN)
+    assert main(["pull", "--from", FROM, "--to", TO, "--source", "db", "--base-url", APP_URL]) == 0
+    (request,) = seen
+    assert request.url.path == "/api/rag/admin/review-candidates"
+    assert request.url.params["from"] == FROM and request.url.params["to"] == TO
+    assert request.headers["authorization"] == f"Bearer {ADMIN_TOKEN}"
+    (row,) = _read_queue(private_root)
+    assert row["observation_id"] == "00000000-0000-4000-8000-000000000001"
+    assert row["reasons"] == ["feedback_negative"]
+    captured = capsys.readouterr()
+    assert ADMIN_TOKEN not in captured.out + captured.err
+
+
+def test_pull_source_db_masks_again_and_skips_invalid_items(private_root, monkeypatch):
+    items = [
+        _db_item("b" * 32, "00000000-0000-4000-8000-000000000002", ["groundedness_flagged"], answer_masked="Sent to jane.doe@example.com"),
+        {"trace_id": "c" * 32, "smuggled": True},
+    ]
+    _mock_app(monkeypatch, items)
+    monkeypatch.setenv("RAG_ADMIN_BEARER", ADMIN_TOKEN)
+    assert main(["pull", "--from", FROM, "--to", TO, "--source", "db", "--base-url", APP_URL]) == 0
+    (row,) = _read_queue(private_root)
+    assert row["answer_masked"] == "Sent to [EMAIL]"
+
+
+def test_pull_source_db_without_the_token_exits_non_zero_naming_the_variable(private_root, monkeypatch, capsys):
+    seen: list[httpx.Request] = []
+    _mock_app(monkeypatch, [], seen=seen)
+    monkeypatch.delenv("RAG_ADMIN_BEARER", raising=False)
+    assert main(["pull", "--from", FROM, "--to", TO, "--source", "db", "--base-url", APP_URL]) == 2
+    assert "RAG_ADMIN_BEARER" in capsys.readouterr().err
+    monkeypatch.setenv("CUSTOM_ADMIN_TOKEN", "")
+    assert main(["pull", "--from", FROM, "--to", TO, "--source", "db", "--base-url", APP_URL, "--token-env", "CUSTOM_ADMIN_TOKEN"]) == 2
+    assert "CUSTOM_ADMIN_TOKEN" in capsys.readouterr().err
+    assert seen == []
+    assert not (private_root / "review-queue").exists()
+
+
+def test_pull_source_db_needs_a_base_url(private_root, monkeypatch, capsys):
+    _mock_app(monkeypatch, [])
+    monkeypatch.setenv("RAG_ADMIN_BEARER", ADMIN_TOKEN)
+    assert main(["pull", "--from", FROM, "--to", TO, "--source", "db"]) == 2
+    assert "--base-url" in capsys.readouterr().err
+
+
+def test_pull_source_db_reports_an_http_failure_without_the_token(private_root, monkeypatch, capsys):
+    _mock_app(monkeypatch, [], status=403)
+    monkeypatch.setenv("RAG_ADMIN_BEARER", ADMIN_TOKEN)
+    assert main(["pull", "--from", FROM, "--to", TO, "--source", "db", "--base-url", APP_URL]) == 4
+    captured = capsys.readouterr()
+    assert "403" in captured.err
+    assert ADMIN_TOKEN not in captured.out + captured.err
+    assert not (private_root / "review-queue").exists()
+
+
+def test_pull_source_both_merges_and_deduplicates_by_trace_id(private_root, monkeypatch):
+    shared = f"{1:032x}"
+    items = [
+        _db_item(shared, "00000000-0000-4000-8000-000000000003", ["feedback_negative"]),
+        _db_item("d" * 32, "00000000-0000-4000-8000-000000000004", ["groundedness_flagged"]),
+    ]
+    _mock_app(monkeypatch, items)
+    monkeypatch.setenv("RAG_ADMIN_BEARER", ADMIN_TOKEN)
+    with FakeLangfuse([_obs(1, tags=["review_candidate"]), _obs(2, tags=["review_candidate"])]) as fake:
+        _configure(monkeypatch, fake)
+        assert main(["pull", "--from", FROM, "--to", TO, "--source", "both", "--base-url", APP_URL]) == 0
+    rows = _read_queue(private_root)
+    assert sorted(row["trace_id"] for row in rows) == sorted([shared, f"{2:032x}", "d" * 32])
+    merged = next(row for row in rows if row["trace_id"] == shared)
+    assert merged["reasons"] == ["sampled", "feedback_negative"]
+
+
+def test_pull_source_langfuse_is_the_default_and_never_calls_the_app(private_root, monkeypatch):
+    seen: list[httpx.Request] = []
+    _mock_app(monkeypatch, [], seen=seen)
+    monkeypatch.setenv("RAG_ADMIN_BEARER", ADMIN_TOKEN)
+    with FakeLangfuse([_obs(1)]) as fake:
+        _configure(monkeypatch, fake)
+        assert main(["pull", "--from", FROM, "--to", TO]) == 0
+    assert seen == []
+    assert len(_read_queue(private_root)) == 1

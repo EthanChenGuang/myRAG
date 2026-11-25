@@ -8,7 +8,7 @@ const ENV_PATH = path.join(REPO_ROOT, '.env.local');
 // Default model configurations
 const DEFAULT_OPENAI_MODELS = '[{"id":"gpt-4.1-mini","displayName":"GPT-4.1 Mini"},{"id":"gpt-4.1","displayName":"GPT-4.1"},{"id":"o3","displayName":"o3"},{"id":"o4-mini","displayName":"o4 Mini"}]';
 
-const DEFAULT_OPENROUTER_MODELS = '[{"id":"anthropic/claude-sonnet-4.5","displayName":"Claude Sonnet 4.5","isDefault":true},{"id":"openai/gpt-5.2-chat","displayName":"GPT-5.2"},{"id":"openai/gpt-4.1-mini","displayName":"GPT-4.1 Mini"},{"id":"openai/gpt-4.1","displayName":"GPT-4.1"},{"id":"anthropic/claude-opus-4.1","displayName":"Claude Opus 4.1"},{"id":"google/gemini-2.5-flash-lite","displayName":"Gemini 2.5 Flash Lite"},{"id":"google/gemini-2.5-flash","displayName":"Gemini 2.5 Flash"},{"id":"meta-llama/llama-4-maverick","displayName":"Llama 4 Maverick","isOpenSource":true},{"id":"cognitivecomputations/dolphin-mistral-24b-venice-edition:free","displayName":"Venice: Uncensored","isFree":true,"isOpenSource":true,"isUncensored":true}]';
+const DEFAULT_OPENROUTER_MODELS = '[{"id":"anthropic/claude-sonnet-4.5","displayName":"Claude Sonnet 4.5","isDefault":true},{"id":"openai/gpt-5.2-chat","displayName":"GPT-5.2"},{"id":"openai/gpt-4.1-mini","displayName":"GPT-4.1 Mini"},{"id":"openai/gpt-4.1","displayName":"GPT-4.1"},{"id":"anthropic/claude-opus-4.1","displayName":"Claude Opus 4.1"},{"id":"anthropic/claude-opus-5.5","displayName":"Claude Opus 5.5","anthropicId":"claude-opus-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"anthropic/claude-sonnet-5.5","displayName":"Claude Sonnet 5.5","anthropicId":"claude-sonnet-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"anthropic/claude-haiku-5.5","displayName":"Claude Haiku 5.5","anthropicId":"claude-haiku-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"google/gemini-2.5-flash-lite","displayName":"Gemini 2.5 Flash Lite"},{"id":"google/gemini-2.5-flash","displayName":"Gemini 2.5 Flash"},{"id":"meta-llama/llama-4-maverick","displayName":"Llama 4 Maverick","isOpenSource":true},{"id":"cognitivecomputations/dolphin-mistral-24b-venice-edition:free","displayName":"Venice: Uncensored","isFree":true,"isOpenSource":true,"isUncensored":true}]';
 
 // Groq free tier has strict rate limits - only Llama 3.3 70B works reliably with RAG contexts
 // Users with paid Groq tiers can add more models: llama-3.1-8b-instant, mixtral-8x7b-32768, gemma2-9b-it
@@ -418,6 +418,28 @@ RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS=3000
 RAG_ANSWER_FEEDBACK=false
 # Multi-tenant only: set after the Vectara data-retention terms were recorded in live verification
 RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK=false
+
+# -----------------------------
+# PROMPT-INJECTION DEFENSE
+# -----------------------------
+# Wrap retrieved chunks in tagged <doc> blocks with an untrusted-content notice
+RAG_CONTEXT_TAGGING=false
+# Retrieval-time injection check: off | flag | drop | downweight (drop is recommended; downweight is weaker than drop)
+RAG_INJECTION_CHECK=off
+# Prompt Guard 2 detector in the sidecar (optional; en and it only)
+RAG_INJECTION_PROMPT_GUARD=false
+# Lakera Guard hosted detector (sends chunk text to Lakera, a third party)
+RAG_INJECTION_LAKERA=false
+# Lakera Guard API key (never logged)
+LAKERA_GUARD_API_KEY=
+# Lakera Guard base URL; empty uses https://api.lakera.ai (regional hosts such as the EU one are allowed)
+LAKERA_GUARD_BASE_URL=
+# Multi-tenant only: set after the Lakera data-retention terms were recorded in live verification
+RAG_INJECTION_LAKERA_MULTI_TENANT_ACK=false
+# Tool results (web search, MCP) in the model context: off | tag | tag_and_flag
+RAG_TOOL_RESULT_GUARD=off
+# Render markdown images in answers only from allowed hosts (inlined at build time; needs a rebuild)
+NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST=false
 
 # -----------------------------
 # INGESTION AND EMBEDDING PROFILES

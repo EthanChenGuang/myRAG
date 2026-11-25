@@ -5,6 +5,8 @@ interface AnswerRecordsState {
   records: Record<string, AnswerRecord>;
   upsert: (record: AnswerRecord) => void;
   upsertMany: (records: AnswerRecord[]) => void;
+  /** Replaces one record's feedback (optimistic vote or rollback); no-op when the record is not loaded. */
+  setFeedback: (answerId: string, feedback: AnswerRecord['feedback']) => void;
 }
 
 function isNewer(incoming: AnswerRecord, current: AnswerRecord | undefined): boolean {
@@ -35,5 +37,11 @@ export const useAnswerRecordsStore = create<AnswerRecordsState>()((set) => ({
   upsertMany: (incoming) => set((state) => {
     const records = upsertAll(state.records, incoming);
     return records === state.records ? state : { records };
+  }),
+  setFeedback: (answerId, feedback) => set((state) => {
+    const current = Object.prototype.hasOwnProperty.call(state.records, answerId) ? state.records[answerId] : undefined;
+    if (!current || current.feedback === feedback) return state;
+    const updatedAt = feedback && Date.parse(feedback.updatedAt) > Date.parse(current.updatedAt) ? feedback.updatedAt : current.updatedAt;
+    return { records: { ...state.records, [answerId]: { ...current, feedback, updatedAt } } };
   }),
 }));

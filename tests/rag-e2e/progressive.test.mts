@@ -397,6 +397,30 @@ describe('progressive mode end to end: the worker, both callbacks and the ledger
     return mintScope('personal', userId, null);
   }
 
+  /** An organization tenant of its own: an owner and a separate member who uploads, so the version owner is observable. */
+  async function newOrganizationTenant(): Promise<{ scope: QueuedHarness['scopeA']; ownerId: string; uploaderId: string; organizationId: string }> {
+    const ownerId = randomUUID();
+    const uploaderId = randomUUID();
+    const organizationId = randomUUID();
+    await harness.db.query('INSERT INTO auth.users (id, email) VALUES ($1, $2), ($3, $4)', [
+      ownerId,
+      `progressive-owner-${ownerId.slice(0, 8)}@example.invalid`,
+      uploaderId,
+      `progressive-member-${uploaderId.slice(0, 8)}@example.invalid`,
+    ]);
+    await harness.db.query('INSERT INTO organizations (id, name, slug, owner_id, is_personal) VALUES ($1, $2, $3, $4, false)', [
+      organizationId,
+      'Progressive org',
+      `progressive-${organizationId.slice(0, 8)}`,
+      ownerId,
+    ]);
+    await harness.db.query(
+      "INSERT INTO organization_members (organization_id, user_id, role) VALUES ($1, $2, 'owner'), ($1, $3, 'member')",
+      [organizationId, ownerId, uploaderId],
+    );
+    return { scope: mintScope('org', uploaderId, organizationId), ownerId, uploaderId, organizationId };
+  }
+
   async function uploadMixed(
     scope: QueuedHarness['scopeA'],
     options: { progressive?: boolean; batchId?: string } = {},
@@ -523,6 +547,31 @@ describe('progressive mode end to end: the worker, both callbacks and the ledger
       { adminClient: admin, signal: new AbortController().signal },
     );
     assert.ok(assembled.chunkMetadata.has(String(oldChunks[0]?.id)), 'a citation to version 1 still resolves');
+  });
+
+  test('organization tenant: the routed run begins version 2 under the organization owner and the job ends ready', async () => {
+    const tenant = await newOrganizationTenant();
+    const queued = await uploadMixed(tenant.scope);
+    assertWorkerReady(await runWorker(queued.jobId));
+    const [job] = await harness.rows('SELECT status, tenant_key, document_id, provisional_published_at, error_class FROM ingestion_jobs WHERE id = $1', [queued.jobId]);
+    assert.equal(job?.status, 'ready', `job error_class: ${String(job?.error_class)}`);
+    assert.equal(job?.tenant_key, `o:${tenant.organizationId}`);
+    assert.ok(job?.provisional_published_at, 'the job did publish provisionally');
+    const versions = await harness.rows(
+      `SELECT d.id, d.version, d.status, d.is_current, d.provisional, d.user_id, d.organization_id, d.tenant_key
+         FROM documents d
+        WHERE d.lineage_id = (SELECT lineage_id FROM documents WHERE id = $1)
+        ORDER BY d.version`,
+      [queued.documentId],
+    );
+    assert.deepEqual(
+      versions.map((row) => [row.version, row.status, row.is_current, row.provisional, row.user_id, row.organization_id, row.tenant_key]),
+      [
+        [1, 'ready', false, true, tenant.uploaderId, tenant.organizationId, `o:${tenant.organizationId}`],
+        [2, 'ready', true, false, tenant.ownerId, tenant.organizationId, `o:${tenant.organizationId}`],
+      ],
+    );
+    assert.equal(job?.document_id, versions[1]?.id, 'the job ends on the routed version');
   });
 
   test('same normalised text in the routed run: no version 2, flags cleared in place, job ready', async () => {
