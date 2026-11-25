@@ -1,6 +1,6 @@
 import base64
 import hashlib
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 
 from rag_sidecar.contracts import (
@@ -143,6 +143,21 @@ from rag_sidecar.contracts.eval_run import (
     TraceSecurityVersions,
 )
 from rag_sidecar.contracts.golden import AttackSpec
+from rag_sidecar.contracts.query import (
+    CondensedQuery,
+    DateRange,
+    HypotheticalDocument,
+    QueryParams,
+    QueryParamsOverride,
+    QueryPlan,
+    QueryTransformToggles,
+    QueryTranslation,
+    QueryVariantOut,
+    QueryVariants,
+    RewriteGateResult,
+    SkippedTransform,
+    SubQuestions,
+)
 from rag_sidecar.contracts.report import GroundednessLabelCounts, InjectionReport, StrategySlice
 from rag_sidecar.contracts.routing import (
     DetectCounts,
@@ -162,6 +177,99 @@ _SAMPLE_JOB_ID = "00000000-0000-4000-8000-000000000001"
 _SAMPLE_DOC_ID = "00000000-0000-4000-8000-000000000002"
 _SAMPLE_NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
 _TINY_PNG = base64.b64encode(b"\x89PNG" + b"\x00" * 8).decode("ascii")
+
+
+_QUERY_ORIGINAL = "Does it cover ERR_TIMEOUT, and how long is it?"
+_QUERY_STANDALONE = "Does the product warranty cover ERR_TIMEOUT, and how long is the warranty?"
+_QUERY_SUB_QUESTIONS = [
+    "Does the product warranty cover ERR_TIMEOUT?",
+    "How long is the product warranty?",
+]
+
+
+def _rewrite_gate() -> RewriteGateResult:
+    return RewriteGateResult(
+        rewrite=True,
+        transforms=["condense_history", "decompose"],
+        reasons=["pronoun_with_history", "multi_part_question"],
+        lang="en",
+        protected_tokens=["ERR_TIMEOUT"],
+        skip_retrieval=False,
+    )
+
+
+def _query_plan() -> QueryPlan:
+    return QueryPlan(
+        original=_QUERY_ORIGINAL,
+        standalone=_QUERY_STANDALONE,
+        language="en",
+        gate=_rewrite_gate(),
+        date_range=DateRange(
+            from_date=date(2026, 1, 1),
+            to_date=date(2026, 3, 31),
+            include_undated=False,
+            time_zone="UTC",
+        ),
+        variants=[
+            QueryVariantOut(text=_QUERY_ORIGINAL, language="en", kind="original", protected_ok=True),
+            QueryVariantOut(text=_QUERY_STANDALONE, language="en", kind="condensed", protected_ok=True),
+            QueryVariantOut(
+                text=_QUERY_SUB_QUESTIONS[0],
+                language="en",
+                kind="sub_question",
+                sub_question_index=0,
+                protected_ok=True,
+            ),
+            QueryVariantOut(
+                text=_QUERY_SUB_QUESTIONS[1],
+                language="en",
+                kind="sub_question",
+                sub_question_index=1,
+                protected_ok=True,
+            ),
+        ],
+        sub_questions=list(_QUERY_SUB_QUESTIONS),
+        skipped=[SkippedTransform(transform="hyde", reason="disabled_for_profile")],
+        framework="llamaindex",
+    )
+
+
+def _query_contract_samples() -> dict[str, Any]:
+    return {
+        "RewriteGateResult": _rewrite_gate(),
+        "QueryPlan": _query_plan(),
+        "CondensedQuery": CondensedQuery(standalone=_QUERY_STANDALONE, unchanged=False),
+        "QueryVariants": QueryVariants(
+            queries=[
+                "ERR_TIMEOUT warranty coverage",
+                "product warranty length and ERR_TIMEOUT faults",
+            ]
+        ),
+        "HypotheticalDocument": HypotheticalDocument(
+            passage="The product warranty lasts two years and covers ERR_TIMEOUT faults caused by the device."
+        ),
+        "SubQuestions": SubQuestions(questions=list(_QUERY_SUB_QUESTIONS)),
+        "QueryTranslation": QueryTranslation(
+            target_language="zh", text="产品保修是否涵盖 ERR_TIMEOUT？保修期多长？"
+        ),
+        "QueryParams": QueryParams(),
+    }
+
+
+def _query_overrides_request() -> RagRunRequest:
+    return RagRunRequest(
+        item_id="en-general-001",
+        query=_QUERY_ORIGINAL,
+        conversation=[ConversationTurn(role="user", content="Tell me about the product warranty.")],
+        rag_mode="strict",
+        options=RagRunOptions(
+            query_framework="langchain",
+            query_layer=True,
+            query_transforms=QueryTransformToggles(condense=True, decompose=True, hyde=False),
+            semantic_cache="off",
+            query_params=QueryParamsOverride(max_llm_variants=1, max_searches=4),
+        ),
+    )
 
 
 def _phase31_contract_samples() -> dict[str, Any]:
@@ -1229,6 +1337,7 @@ def _models() -> dict[str, Any]:
             source="fixture",
         ),
         **_phase31_contract_samples(),
+        **_query_contract_samples(),
     }
 
 
@@ -1272,6 +1381,16 @@ def build_samples() -> dict[str, dict[str, Any]]:
         "RagTrace:answer_null": {
             "model": "RagTrace",
             "value": _trace(None).model_dump(mode="json"),
+        },
+        "RagTrace:query_plan": {
+            "model": "RagTrace",
+            "value": _trace("Twenty days per year.")
+            .model_copy(update={"query_plan": _query_plan()})
+            .model_dump(mode="json"),
+        },
+        "RagRunRequest:query_overrides": {
+            "model": "RagRunRequest",
+            "value": _query_overrides_request().model_dump(mode="json"),
         },
         "RagRunRequest:query_only": {
             "model": "RagRunRequest",
