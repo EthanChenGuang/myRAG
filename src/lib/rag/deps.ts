@@ -7,6 +7,7 @@ import type { EmbeddingProfile } from './embeddings/active-profile';
 import { EmbeddingProfileMismatch } from './embeddings/mrl';
 import { embedText } from './embeddings/openai';
 import { getEmbeddingProvider } from './embeddings/registry';
+import { readSecurityConfig, type SecurityConfig } from './security/config';
 
 export interface ProfileQueryEmbedding {
   vector: number[];
@@ -27,6 +28,8 @@ export interface RagDeps {
   now: () => number;
   randomId: () => string;
   ragEnv: () => RagEnvInput;
+  /** Phase 5.1 switches, read at call time. */
+  securityConfig: () => SecurityConfig;
   fetch: typeof fetch;
 }
 
@@ -75,6 +78,7 @@ const defaults: RagDeps = {
   now: () => Date.now(),
   randomId: () => randomUUID(),
   ragEnv: () => readRagEnvInput(),
+  securityConfig: () => readSecurityConfig(),
   fetch: globalThis.fetch.bind(globalThis),
 };
 

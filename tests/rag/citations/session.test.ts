@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createEnhancedRAGPrompt, createCitationSession, type ContextBlock } from '@/lib/rag';
 import { attachedDocumentsSentence, citationInstruction } from '@/lib/rag/generation/citations/instructions';
 
@@ -130,5 +130,97 @@ describe('createCitationSession', () => {
     const session = createCitationSession({ capabilities: { citations: true }, ragMode: 'strict', modelId: 'm', language: 'en', config: { citations: true } });
     session.attach({ blocks: [block('S2', 'x')] });
     expect(session.strategy).toBeNull();
+  });
+});
+
+describe('createCitationSession on a Claude Citations turn', () => {
+  const MODELS = JSON.stringify([{ id: 'anthropic/claude-sonnet-5.5', displayName: 'Claude Sonnet 5.5', anthropicId: 'claude-sonnet-5-5' }]);
+  const facts = { mcp: false, multiStep: false, webSearch: false, reasoning: false };
+  const config = { citations: false, claudeCitations: true, anthropicApiKey: 'test-anthropic-key-placeholder' };
+
+  beforeEach(() => {
+    vi.stubEnv('NEXT_PUBLIC_OPENROUTER_MODELS', MODELS);
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  function claudeSession() {
+    const session = createCitationSession({
+      capabilities: { citations: true },
+      ragMode: 'strict',
+      modelId: 'anthropic/claude-sonnet-5.5',
+      language: 'it',
+      config,
+      facts,
+    });
+    session.attach({
+      blocks: [
+        block('S1', 'Refunds within 30 days.'),
+        block(null, 'Caption: aisle 7 holds probes.', { isImage: true }),
+        block('S2', 'Annual plans renew yearly.'),
+      ],
+      links: [],
+    });
+    return session;
+  }
+
+  it('labels the blocks with RAG_CITATIONS off and picks claude-citations', () => {
+    const session = claudeSession();
+    expect(session.labeler).toBeDefined();
+    expect(session.strategy).toBe('claude-citations');
+    expect(session.transforms()).toEqual([]);
+  });
+
+  it('builds the system text from the attached-documents sentence and the image captions, never the block text', () => {
+    const system = claudeSession().claudeSystemPrompt(BASE_PROMPT);
+    expect(system).toBe(
+      createEnhancedRAGPrompt(BASE_PROMPT, `${attachedDocumentsSentence('it')}\n\nCaption: aisle 7 holds probes.`, 'strict'),
+    );
+    expect(system).not.toContain('Refunds within 30 days.');
+  });
+
+  it('decorates the OpenRouter prompt with the alias instruction, because it is the fallback prompt', () => {
+    expect(claudeSession().decorateSystemPrompt('P')).toBe(`P\n\n${citationInstruction('it')}`);
+  });
+
+  it('falls back once to chunk-alias and records the reason', () => {
+    const session = claudeSession();
+    expect(session.finishMetadata()).toEqual({ citations: [], citationStrategy: 'claude-citations', invalidCitations: 0 });
+    session.fallback('status_429');
+    expect(session.strategy).toBe('chunk-alias');
+    expect(session.fallbackReason).toBe('status_429');
+    expect(session.transforms()).toHaveLength(1);
+    session.fallback('timeout');
+    expect(session.fallbackReason).toBe('status_429');
+  });
+
+  it('refuses to start the direct call on any other strategy', () => {
+    const session = claudeSession();
+    session.fallback('error');
+    expect(() =>
+      session.startClaude({
+        system: 's',
+        history: [],
+        question: 'q',
+        reasoning: false,
+        abortSignal: new AbortController().signal,
+        onError: () => {},
+      }),
+    ).toThrow();
+  });
+
+  it('never picks claude-citations without the turn facts', () => {
+    const session = createCitationSession({
+      capabilities: { citations: true },
+      ragMode: 'strict',
+      modelId: 'anthropic/claude-sonnet-5.5',
+      language: 'en',
+      config: { ...config, citations: true },
+    });
+    session.attach({ blocks: [block('S1', 'x')] });
+    expect(session.strategy).toBe('chunk-alias');
   });
 });

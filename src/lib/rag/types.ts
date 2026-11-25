@@ -4,6 +4,7 @@ import type { VoiceResults } from './context/voice';
 import type { StageName, StageTimeouts } from './config';
 import type { TemporalQueryContext } from './query/temporal-query-detector';
 import type { RefusalRecord } from './refusal/types';
+import type { InjectionCheckMode } from './security/config';
 import type { RerankProviderId } from './rerank/types';
 import type { TenantScope } from './tenant/scope';
 import type { TraceCollector } from './trace/collector';
@@ -196,6 +197,22 @@ export interface RunRetrievalInput {
   citationLabeler?: CitationLabeler;
 }
 
+/** What the injection_check stage found and did for one request (ids and rule ids only, never text). */
+export interface InjectionSummary {
+  mode: Exclude<InjectionCheckMode, 'off'>;
+  checkedCount: number;
+  /** Flagged retrieved chunks and the chunks of flagged referenced sections. */
+  flaggedChunkIds: string[];
+  /** Documents whose referenced section was flagged. */
+  flaggedReferenceIds: string[];
+  droppedChunkIds: string[];
+  droppedReferenceIds: string[];
+  downweightedChunkIds: string[];
+  ruleIds: string[];
+  detectorsUnavailable: string[];
+  flagged: boolean;
+}
+
 export interface RetrievalResult {
   status: RetrievalStatus;
   reason: string;
@@ -217,4 +234,6 @@ export interface RetrievalResult {
   queryLanguage?: string | null;
   /** The final context blocks in render order; absent when no assembly ran. */
   blocks?: ContextBlock[];
+  /** Absent when RAG_INJECTION_CHECK is off or the stage did not run. */
+  injection?: InjectionSummary;
 }

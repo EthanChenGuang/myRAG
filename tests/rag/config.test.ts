@@ -6,6 +6,7 @@ import {
   loadRagConfig,
   resetRagConfigForTests,
   resolveFinalResultCount,
+  warnInjectionCheckDisabled,
 } from '@/lib/rag/config';
 
 let warn: MockInstance<(...args: unknown[]) => void>;
@@ -41,6 +42,7 @@ const CHAT_DEFAULTS = {
   refusal: 1000,
   expand_parents: 3000,
   compress: 1000,
+  injection_check: 400,
 };
 
 describe('stage tables', () => {
@@ -61,6 +63,7 @@ describe('stage tables', () => {
       'refusal',
       'expand_parents',
       'compress',
+      'injection_check',
     ]);
   });
 
@@ -70,6 +73,8 @@ describe('stage tables', () => {
     }
     expect(PROFILE_STAGE_DEFAULTS.eval.rerank).toBe(60000);
     expect(PROFILE_STAGE_DEFAULTS.eval.expand_parents).toBe(10000);
+    expect(PROFILE_STAGE_DEFAULTS.eval.injection_check).toBe(60000);
+    expect(PROFILE_STAGE_DEFAULTS.voice.injection_check).toBe(1000);
     expect(PROFILE_STAGE_DEFAULTS.voice).toMatchObject({
       embed: 5000,
       rerank: 250,
@@ -195,6 +200,33 @@ describe('loadRagConfig', () => {
   test('identical env snapshots are memoised', () => {
     const env = { RAG_STAGE_TIMEOUTS: 'embed=2000', RAG_RERANKER: 'voyage' };
     expect(loadRagConfig(env)).toBe(loadRagConfig({ ...env }));
+  });
+});
+
+describe('injection_check stage', () => {
+  test('RAG_STAGE_TIMEOUTS accepts injection_check globally and per profile', () => {
+    const config = loadRagConfig({ RAG_STAGE_TIMEOUTS: 'injection_check=50,voice.injection_check=700' });
+    expect(config.timeouts.chat.injection_check).toBe(50);
+    expect(config.timeouts.eval.injection_check).toBe(50);
+    expect(config.timeouts.voice.injection_check).toBe(700);
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test('injection_check can be listed in RAG_DISABLED_STAGES', () => {
+    const config = loadRagConfig({ RAG_DISABLED_STAGES: 'injection_check' });
+    expect(config.disabledStages.has('injection_check')).toBe(true);
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test('disabling it while RAG_INJECTION_CHECK is on warns once; with the check off it never warns', () => {
+    const disabled = loadRagConfig({ RAG_DISABLED_STAGES: 'injection_check' });
+    expect(warnInjectionCheckDisabled(disabled, 'off')).toBe(false);
+    expect(configWarnings()).toHaveLength(0);
+    for (let i = 0; i < 3; i += 1) expect(warnInjectionCheckDisabled(disabled, 'drop')).toBe(true);
+    expect(configWarnings()).toHaveLength(1);
+    expect(configWarnings()[0]).toContain('injection_check');
+    expect(warnInjectionCheckDisabled(loadRagConfig({}), 'drop')).toBe(false);
+    expect(disabled.warnings).toEqual([]);
   });
 });
 

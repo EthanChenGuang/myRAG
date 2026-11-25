@@ -1,5 +1,7 @@
 import { formatURLsForContext, type ExtractedURL } from '@/lib/url-extractor';
 import { renderReferencedSection } from '../refs/resolve';
+import type { InjectionMarks } from '../security/injection-check';
+import { docsFromBlocks, wrapDocuments, type WrapDoc } from './wrap';
 import type {
   CitationLabel,
   CitationLabeler,
@@ -48,6 +50,10 @@ export interface AssembleInput<C extends AssemblyCandidate = AssemblyCandidate> 
   blockRuns?: Map<string, string>;
   /** Chunk ids a rendered chunk stands for (a parent standing in for its children); defaults to its own id. */
   blockChunkIds?: Map<string, string[]>;
+  /** RAG_CONTEXT_TAGGING: render the final blocks through wrapDocuments when there is at least one entry. */
+  contextTagging?: boolean;
+  /** Downweight: flagged chunks render after unflagged ones and their entries are marked flagged. */
+  injectionMarks?: InjectionMarks | null;
 }
 
 export interface FilteredCandidates<C extends AssemblyCandidate = AssemblyCandidate> {
@@ -203,6 +209,9 @@ class BlockLabeller {
 
   constructor(private readonly labeler: CitationLabeler | undefined) {}
 
+  /** Block index to the label line written before it. */
+  readonly headers = new Map<number, string>();
+
   /** Records the block; returns its label when a labeler is set and the block is not an image. */
   add(draft: DraftBlock): CitationLabel | null {
     const unlabelled = { ...draft, title: blockTitle(draft) };
@@ -212,9 +221,32 @@ class BlockLabeller {
     }
     this.ordinal += 1;
     const label = this.labeler(unlabelled, this.ordinal);
+    this.headers.set(this.blocks.length, label.header);
     this.blocks.push({ ...unlabelled, text: label.text, alias: label.alias });
     return label;
   }
+}
+
+type WrapEntry = { block: number; reference: boolean; flagged: boolean } | { missing: string };
+
+/** Entries in render order: blocks through docsFromBlocks, unreadable references as empty reference docs, then links. */
+function wrapEntries(entries: readonly WrapEntry[], labeller: BlockLabeller, linksSection: string): WrapDoc[] {
+  const referencedIndexes = new Set<number>();
+  for (const entry of entries) if ('block' in entry && entry.reference) referencedIndexes.add(entry.block);
+  const blockDocs = docsFromBlocks(labeller.blocks, { labels: labeller.headers, referencedIndexes });
+  const docs: WrapDoc[] = [];
+  let missing = 0;
+  for (const entry of entries) {
+    if ('missing' in entry) {
+      missing += 1;
+      docs.push({ id: `r${missing}`, kind: 'reference', source: entry.missing, text: '' });
+      continue;
+    }
+    const doc = blockDocs[entry.block]!;
+    docs.push(entry.flagged ? { ...doc, flagged: true } : doc);
+  }
+  if (docs.length > 0 && linksSection.trim()) docs.push({ id: 'links', kind: 'links', text: linksSection });
+  return docs;
 }
 
 export function buildContext<C extends AssemblyCandidate>(
@@ -228,11 +260,17 @@ export function buildContext<C extends AssemblyCandidate>(
   }
 
   const labeller = new BlockLabeller(input.citationLabeler);
+  const marks = input.injectionMarks ?? null;
+  const entries: WrapEntry[] = [];
   let context = filtered.referencedContext;
   const sections = input.referenced?.sections;
   if (sections?.length) {
-    const rendered = sections.map((section) => {
-      if (section.missing) return renderReferencedSection(section);
+    const rendered = sections.map((section, sectionIndex) => {
+      if (section.missing) {
+        entries.push({ missing: section.documentName });
+        return renderReferencedSection(section);
+      }
+      entries.push({ block: labeller.blocks.length, reference: true, flagged: marks?.sectionIndexes.has(sectionIndex) ?? false });
       const label = labeller.add({
         documentId: section.documentId,
         documentName: section.documentName,
@@ -248,6 +286,7 @@ export function buildContext<C extends AssemblyCandidate>(
     if (input.citationLabeler) context = rendered.join('');
   }
   let links: ExtractedURL[] = [];
+  let linksSection = '';
 
   if (filtered.hasQuery && relevantChunks.length > 0) {
     const chunksByDocument = new Map<
@@ -310,6 +349,11 @@ export function buildContext<C extends AssemblyCandidate>(
     } else {
       docNameOrder.push(...chunksByDocument.keys());
     }
+    if (marks) {
+      const onlyFlagged = (name: string) => chunksByDocument.get(name)!.every((chunk) => marks.chunkIds.has(chunk.chunkId));
+      const reordered = [...docNameOrder.filter((name) => !onlyFlagged(name)), ...docNameOrder.filter(onlyFlagged)];
+      docNameOrder.splice(0, docNameOrder.length, ...reordered);
+    }
 
     for (const docName of docNameOrder) {
       const chunks = chunksByDocument.get(docName);
@@ -318,6 +362,10 @@ export function buildContext<C extends AssemblyCandidate>(
       if (isImageDoc) continue;
 
       chunks.sort((a, b) => {
+        if (marks) {
+          const flaggedA = marks.chunkIds.has(a.chunkId);
+          if (flaggedA !== marks.chunkIds.has(b.chunkId)) return flaggedA ? 1 : -1;
+        }
         if (a.chunkNum && b.chunkNum) return a.chunkNum - b.chunkNum;
         return b.similarity - a.similarity;
       });
@@ -363,6 +411,11 @@ export function buildContext<C extends AssemblyCandidate>(
           text: group.map((piece) => piece.body).join('\n\n'),
           isImage: first.isImage,
         };
+        entries.push({
+          block: labeller.blocks.length,
+          reference: false,
+          flagged: marks !== null && draft.chunkIds.some((chunkId) => marks.chunkIds.has(chunkId)),
+        });
         const label = labeller.add(draft);
         if (label) contextParts.push(`${label.header}\n${label.text}`);
         else contextParts.push(...group.map((piece) => piece.rendered));
@@ -377,10 +430,16 @@ export function buildContext<C extends AssemblyCandidate>(
       const urlSection = formatURLsForContext(uniqueURLs);
       if (urlSection) {
         contextParts.push(urlSection);
+        linksSection = urlSection;
       }
     }
 
     context += contextParts.join('\n\n');
+  }
+
+  if (input.contextTagging) {
+    const wrapped = wrapDocuments(wrapEntries(entries, labeller, linksSection));
+    if (wrapped !== null) context = wrapped;
   }
 
   if (!context.trim()) {
