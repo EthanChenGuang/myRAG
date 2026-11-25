@@ -78,6 +78,10 @@ export { refusalCalibrationStatus, currentRefusalCalibrationStatus } from './ref
 export type { RefusalCalibrationStatus } from './refusal/status';
 export type {
   Candidate,
+  LogChannel,
+  LogContext,
+  LogOutcome,
+  LogOutcomeValue,
   Profile,
   RetrievalOptions,
   RetrievalResult,

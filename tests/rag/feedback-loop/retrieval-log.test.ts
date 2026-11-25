@@ -122,7 +122,7 @@ describe('buildRetrievalLogRow (D-03, D-04)', () => {
           status: 'empty',
           reason: 'refused',
           retrievalConfigHash: 'h'.repeat(64),
-          refusal: { decision: 'refuse', basis: 'similarity_floor', reason: null, topScore: 0.2, threshold: 0.65 } as RetrievalResult['refusal'],
+          refusal: { decision: 'refuse', basis: 'similarity_floor', reason: null, topScore: 0.2, threshold: 0.65, cellKey: null } as unknown as RetrievalResult['refusal'],
           logOutcome: { value: 'refused_no_context', answerLanguage: null, pipeline: 'v2' },
         }),
       }),
