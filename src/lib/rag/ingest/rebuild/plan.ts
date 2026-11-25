@@ -61,6 +61,35 @@ export function rebuildSettingsHash(mechanism: RebuildMechanism, proposal: Recor
 export interface PlanOptions {
   ingestAsync: boolean;
   settingsHash: string;
+  /** child_tokens of the `legacy` chunking profile per doc type (0406); a rechunk profile copies them. */
+  legacyChildTokens?: Readonly<Record<string, number>>;
+}
+
+/** The legacy chunking sizes of 0406, used when the registry could not be read. */
+export const LEGACY_CHILD_TOKENS: Readonly<Record<string, number>> = Object.freeze({
+  financial_report: 512,
+  contract_legal: 768,
+  invoice_receipt: 512,
+  product_technical: 512,
+  scanned_image: 512,
+  general: 512,
+});
+
+/** The id of the chunking profile a rechunk rebuild under these settings creates: one id for every doc type it covers. */
+export function rebuildProfileId(settingsHash: string): string {
+  return `rb-${settingsHash.slice(0, 12)}`;
+}
+
+/** Fixed command prefixes; only the tenant key of a selected document is appended, never request input. */
+const TENANT_COMMANDS: Readonly<Record<'relex' | 'reembed' | 'recaption' | 'retranslate', string>> = Object.freeze({
+  relex: 'npm run rag:relex --',
+  reembed: 'npm run rag:reembed --',
+  recaption: 'npm run rag:reembed -- --recaption',
+  retranslate: 'npm run rag:translate --',
+});
+
+function inOrder<T>(values: Iterable<T>): T[] {
+  return [...new Set(values)].sort((a, b) => (String(a) < String(b) ? -1 : String(a) > String(b) ? 1 : 0));
 }
 
 export type RebuildPlan =
@@ -82,15 +111,37 @@ export interface ProfileBuild {
 
 /**
  * D-11, pure: how a rebuild of the selected documents runs. reparse re-ingests them from the stored originals as a held batch when the
- * queue is on (RAG_INGEST_ASYNC=on), otherwise it lists the count and the command.
+ * queue is on (RAG_INGEST_ASYNC=on), otherwise it lists the count and the command. rechunk builds one chunking profile per affected doc type
+ * with the legacy child size and no parents, from stored parse output (research F-9); the profile covers every current document of the doc
+ * type, because the pointer flip (rag:chunking activate) is per doc type and requires a complete profile. relex, reembed, recaption
+ * (the D-24 recaption job of plan 03.2-33) and retranslate are existing commands, one per tenant of the affected documents.
  */
 export function planRebuild(mechanism: RebuildableMechanism, selection: RebuildSelection, options: PlanOptions): RebuildPlan {
   const affected = selection.documents.length;
   if (affected === 0) return { kind: 'nothing', mechanism, affected: 0 };
-  void options.settingsHash;
-  if (mechanism === 'reparse') {
-    if (!options.ingestAsync) return { kind: 'needs_async', mechanism, affected, command: MECHANISM_COMMANDS.reparse };
-    return { kind: 'held_batch', mechanism, activation: 'rebuild_batch', affected, documents: selection.documents };
+  switch (mechanism) {
+    case 'reparse':
+      if (!options.ingestAsync) return { kind: 'needs_async', mechanism, affected, command: MECHANISM_COMMANDS.reparse };
+      return { kind: 'held_batch', mechanism, activation: 'rebuild_batch', affected, documents: selection.documents };
+    case 'rechunk': {
+      const sizes = options.legacyChildTokens ?? LEGACY_CHILD_TOKENS;
+      const profileId = rebuildProfileId(options.settingsHash);
+      const profiles = inOrder(selection.documents.map((document) => document.docType)).map(
+        (docType): ProfileBuild => ({
+          profileId,
+          docType,
+          childTokens: sizes[docType] ?? LEGACY_CHILD_TOKENS[docType] ?? LEGACY_CHILD_TOKENS.general ?? 512,
+          parentMode: 'none',
+          parentTokens: null,
+          preset: 'custom',
+        }),
+      );
+      return { kind: 'chunking_profile', mechanism, activation: 'chunking_profiles', affected, profiles, documents: selection.documents };
+    }
+    default: {
+      const prefix = TENANT_COMMANDS[mechanism];
+      const commands = inOrder(selection.documents.map((document) => document.tenantKey)).map((tenantKey) => `${prefix} --tenant ${tenantKey}`);
+      return { kind: 'command', mechanism, activation: mechanism === 'reembed' ? 'embedding_profiles' : 'none', affected, commands };
+    }
   }
-  return { kind: 'nothing', mechanism, affected: 0 };
 }

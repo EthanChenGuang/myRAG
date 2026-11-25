@@ -217,7 +217,7 @@ describe('ingest-fingerprint admin routes', () => {
         rechunk: 'ui',
         relex: 'cli',
         reembed: 'cli',
-        recaption: 'ui',
+        recaption: 'cli',
         retranslate: 'cli',
         rescan: 'cli',
       });

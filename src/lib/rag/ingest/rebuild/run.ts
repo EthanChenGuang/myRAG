@@ -13,12 +13,14 @@ import { afterPublish } from '../post-publish';
 import { DOC_TYPE_IDS } from '../profiles/doc-type-defaults';
 import type { DocType } from '../profiles/load';
 import { queueConfigFromProcessEnv } from '../queue-config';
+import { runRechunkBatch, type RechunkReport } from '../rechunk/run';
 import { INGEST_SOURCES, type IngestSource } from '../types';
 import {
   isRebuildableMechanism,
   planRebuild,
   rebuildSettingsHash,
   selectAffected,
+  type ProfileBuild,
   type RebuildCandidate,
   type RebuildPlan,
   type RebuildableMechanism,
@@ -326,6 +328,72 @@ async function submitPending(db: RpcClient, runId: string, deps: RebuildDeps, si
   }
 }
 
+/** child_tokens of the legacy chunking profile per doc type, from the registry (0406). */
+async function legacyChildTokens(db: RpcClient, signal: AbortSignal): Promise<Record<string, number>> {
+  const sizes: Record<string, number> = {};
+  for (const row of await call(db, 'rag_list_chunking_profiles', {}, signal)) {
+    const docType = text(row, 'doc_type');
+    if (text(row, 'id') === 'legacy' && docType !== null && count(row, 'child_tokens') > 0) sizes[docType] = count(row, 'child_tokens');
+  }
+  return sizes;
+}
+
+/** Creates the building profile of each doc type unless it exists (a resumed run), with the legacy size and parent_mode none. */
+async function ensureProfiles(db: RpcClient, profiles: readonly ProfileBuild[], signal: AbortSignal): Promise<void> {
+  const existing = new Set((await call(db, 'rag_list_chunking_profiles', {}, signal)).map((row) => `${text(row, 'id')}|${text(row, 'doc_type')}`));
+  for (const profile of profiles) {
+    if (existing.has(`${profile.profileId}|${profile.docType}`)) continue;
+    await call(
+      db,
+      'rag_create_chunking_profile',
+      {
+        p_id: profile.profileId,
+        p_doc_type: profile.docType,
+        p_child_tokens: profile.childTokens,
+        p_parent_mode: profile.parentMode,
+        p_parent_tokens: profile.parentTokens,
+        p_preset: profile.preset,
+      },
+      signal,
+    );
+  }
+}
+
+/**
+ * D-11 rechunk: builds each profile side by side through the rechunk job (stored parse.md, zero parser calls) until the deadline, and
+ * reports the summed counts on the run. Activation stays with `rag:chunking activate` and its completeness and eval gates (D-12).
+ */
+async function buildProfiles(db: RpcClient, runId: string, profiles: readonly ProfileBuild[], deps: RebuildDeps, signal: AbortSignal, deadline: number | null): Promise<boolean> {
+  await ensureProfiles(db, profiles, signal);
+  const reports: RechunkReport[] = [];
+  let more = false;
+  for (const profile of profiles) {
+    let report: RechunkReport;
+    do {
+      const left = deadline === null ? undefined : Math.max(deadline - Date.now(), 1);
+      report = await runRechunkBatch({
+        db,
+        profileId: profile.profileId,
+        docType: profile.docType,
+        signal,
+        ...(left !== undefined ? { deadlineMs: left } : {}),
+        ...(deps.scopeFor ? { scopeFor: deps.scopeFor } : {}),
+      });
+    } while (report.more && (deadline === null || Date.now() < deadline));
+    reports.push(report);
+    if (report.more) {
+      more = true;
+      break;
+    }
+  }
+  const total = reports.reduce((sum, report) => sum + report.docsTotal, 0);
+  const done = reports.reduce((sum, report) => sum + report.docsDone, 0);
+  const gaps = reports.reduce((sum, report) => sum + report.gaps.length + (report.status === 'failed' ? 1 : 0), 0);
+  const finished = !more && reports.length === profiles.length;
+  await call(db, 'rag_rebuild_report', { p_run_id: runId, p_total: total, p_done: done, p_gaps: gaps, p_finished: finished }, signal);
+  return more;
+}
+
 function startedRun(row: Row | undefined): { run: RebuildRunRow; resumed: boolean } {
   const id = row ? text(row, 'run_id') : null;
   if (!row || id === null) throw new RebuildUnavailable('rag_rebuild_start', 'bad_response');
@@ -362,11 +430,12 @@ export async function startRebuild(input: StartRebuildInput, deps: RebuildDeps =
   const settingsHash = rebuildSettingsHash(mechanism, proposal);
   const selection = selectAffected(await loadCandidates(db, signal), mechanism, proposal);
   const ingestAsync = deps.ingestAsync ? deps.ingestAsync() : queueConfigFromProcessEnv().ingestAsync;
-  const plan = planRebuild(mechanism, selection, { ingestAsync, settingsHash });
+  const legacy = mechanism === 'rechunk' && selection.documents.length > 0 ? await legacyChildTokens(db, signal) : undefined;
+  const plan = planRebuild(mechanism, selection, { ingestAsync, settingsHash, ...(legacy ? { legacyChildTokens: legacy } : {}) });
   const base = { mechanism, affected: selection.documents.length, withoutFingerprint: selection.withoutFingerprint, plan };
   if (input.dryRun) return { status: 'dry_run', ...base };
   if (plan.kind === 'nothing') return { status: 'nothing', ...base };
-  if (plan.kind !== 'held_batch') return { status: 'command', ...base };
+  if (plan.kind !== 'held_batch' && plan.kind !== 'chunking_profile') return { status: 'command', ...base };
 
   const deadline = input.deadlineMs !== undefined ? Date.now() + input.deadlineMs : null;
   const started = await call(
@@ -376,15 +445,23 @@ export async function startRebuild(input: StartRebuildInput, deps: RebuildDeps =
       p_mechanism: mechanism,
       p_settings_hash: settingsHash,
       p_activation: plan.activation,
-      p_plan: { kind: plan.kind, affected: plan.affected },
-      p_items: plan.documents.map((document) => ({ tenant_key: document.tenantKey, document_id: document.documentId })),
+      p_plan:
+        plan.kind === 'chunking_profile'
+          ? { kind: plan.kind, affected: plan.affected, profiles: plan.profiles.map((profile) => ({ id: profile.profileId, doc_type: profile.docType })) }
+          : { kind: plan.kind, affected: plan.affected },
+      p_items: plan.kind === 'held_batch' ? plan.documents.map((document) => ({ tenant_key: document.tenantKey, document_id: document.documentId })) : null,
       p_total: plan.affected,
       p_started_by: input.startedBy,
     },
     signal,
   );
   const { run, resumed } = startedRun(started[0]);
-  const more = await submitPending(db, run.id, deps, signal, deadline);
+  const more =
+    plan.kind === 'held_batch'
+      ? await submitPending(db, run.id, deps, signal, deadline)
+      : run.state === 'complete'
+        ? false
+        : await buildProfiles(db, run.id, plan.profiles, deps, signal, deadline);
   const current = (await getRebuildRun(run.id, { ...deps, db, signal })) ?? run;
   console.log('[Rebuild] run started', { runId: current.id, mechanism, resumed, total: current.total, more });
   return { status: 'started', ...base, run: current, resumed, more };
