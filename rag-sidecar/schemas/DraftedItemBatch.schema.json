@@ -46,7 +46,10 @@
             "cross_lingual",
             "selective_filter",
             "injection",
-            "injection_evasive"
+            "injection_evasive",
+            "cache_paraphrase",
+            "cache_near_miss",
+            "small_talk"
           ],
           "title": "Category",
           "type": "string"

@@ -22,8 +22,14 @@ Category = Literal[
     "selective_filter",
     "injection",
     "injection_evasive",
+    "cache_paraphrase",
+    "cache_near_miss",
+    "small_talk",
 ]
 INJECTION_CATEGORIES = frozenset({"injection", "injection_evasive"})
+CACHE_PAIR_CATEGORIES = frozenset({"cache_paraphrase", "cache_near_miss"})
+UNANSWERABLE_CATEGORIES = frozenset({"no_answer", "small_talk"})
+ITEM_ID_PATTERN = r"^[a-z0-9][a-z0-9._-]{2,63}$"
 ReviewStatus = Literal["draft", "approved", "rejected"]
 Provenance = Literal["synthetic_fixture", "claude_draft", "ragas_generated", "human", "production"]
 Split = Literal["dev", "test"]
@@ -58,7 +64,7 @@ class AttackSpec(_Contract):
 
 
 class GoldenItem(_Contract):
-    id: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{2,63}$")
+    id: str = Field(pattern=ITEM_ID_PATTERN)
     question: str
     conversation: list[ConversationTurn] = Field(default_factory=list)
     language: Language
@@ -73,20 +79,21 @@ class GoldenItem(_Contract):
     retrieval_filters: RetrievalFilters | None = None
     tags: list[str] = Field(default_factory=list)
     attack: AttackSpec | None = None
+    pair_of: str | None = Field(default=None, pattern=ITEM_ID_PATTERN)
 
     @model_validator(mode="after")
     def _check_rules(self) -> "GoldenItem":
         if self.category in INJECTION_CATEGORIES and not self.answerable:
             raise ValueError("injection items must be answerable")
-        if (self.category == "no_answer") == self.answerable:
-            raise ValueError("category no_answer if and only if answerable is false")
+        if (self.category in UNANSWERABLE_CATEGORIES) == self.answerable:
+            raise ValueError("category no_answer or small_talk if and only if answerable is false")
         if self.answerable:
             if not self.gold_evidence:
                 raise ValueError("answerable items need at least one gold_evidence span")
             if not (self.expected_answer and self.expected_answer.strip()):
                 raise ValueError("answerable items need a non-empty expected_answer")
         elif self.gold_evidence:
-            raise ValueError("no_answer items must have no gold_evidence spans")
+            raise ValueError("no_answer and small_talk items must have no gold_evidence spans")
         if self.category == "multi_turn" and not self.conversation:
             raise ValueError("multi_turn items need a non-empty conversation")
         if len(set(self.gold_evidence)) != len(self.gold_evidence):
@@ -98,8 +105,15 @@ class GoldenItem(_Contract):
                 raise ValueError("cross_lingual evidence_language must differ from the question language")
         elif self.evidence_language is not None and self.evidence_language != self.language:
             raise ValueError("evidence_language must equal the question language outside cross_lingual items")
+        self._check_pair()
         self._check_attack()
         return self
+
+    def _check_pair(self) -> None:
+        if (self.category in CACHE_PAIR_CATEGORIES) != (self.pair_of is not None):
+            raise ValueError("pair_of is required exactly for cache_paraphrase and cache_near_miss items")
+        if self.pair_of is not None and self.pair_of == self.id:
+            raise ValueError("pair_of must name another item")
 
     def _check_attack(self) -> None:
         if (self.category in INJECTION_CATEGORIES) != (self.attack is not None):
