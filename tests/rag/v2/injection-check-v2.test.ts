@@ -493,7 +493,7 @@ describe('v2 renderer wraps the final blocks (D-01, D-02, A-5, R1, R7)', () => {
     const textIds = ids.filter((id) => id!.startsWith('c'));
     expect(textIds).toEqual(textIds.map((_, index) => `c${index + 1}`));
     expect(ids).toContain('img1');
-    expect(context).toContain('<doc id="img1" kind="image"');
+    expect(context).toMatch(/<doc id="img1"[^>]*kind="image"/);
     expect(ids[ids.length - 1]).toBe('links');
     expect(context).toContain('<doc id="links" kind="links">');
   });
