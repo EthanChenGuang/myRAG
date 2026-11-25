@@ -3,7 +3,7 @@ import axios from 'axios';
 import { AssemblyAISTT } from './providers/assemblyai.js';
 import { ResembleTTS } from './providers/resemble.js';
 
-import { RAGClient } from './rag_client.js';
+import { RAGClient, type RAGQueryResult } from './rag_client.js';
 import { STTEvent, TTSProvider } from './providers/types.js';
 
 export class VoicePipeline {
@@ -127,6 +127,34 @@ export class VoicePipeline {
         this.history.push({ role: 'system', content: this.systemPrompt });
     }
 
+    private recordTurn(message: OpenAI.Chat.Completions.ChatCompletionMessageParam): void {
+        this.history.push(message);
+    }
+
+    private recordExchange(userContent: string, assistantContent: string): void {
+        this.recordTurn({ role: 'user', content: userContent });
+        this.recordTurn({ role: 'assistant', content: assistantContent });
+    }
+
+    private async retrieve(text: string, requestId: number): Promise<{ rewrittenQuery: string; ragResult?: RAGQueryResult }> {
+        // 1. Contextual Query Rewriting for better RAG retrieval
+        const rewrittenQuery = await this.rewriteQueryWithContext(text);
+
+        // CHECK: Was this request superseded by a newer one?
+        if (this.currentRequestId !== requestId) {
+            console.log(`[VoicePipeline] 🛑 Request ${requestId} cancelled (superseded by ${this.currentRequestId})`);
+            return { rewrittenQuery };
+        }
+
+        // NOTE: We do NOT update the user transcript with the rewritten query.
+        // The rewritten query is only used internally for better RAG retrieval.
+        // The user should see exactly what they said, not an LLM-expanded version.
+
+        // 2. RAG Retrieval with rewritten query
+        const ragResult = await this.rag.query(rewrittenQuery, this.scopeToken, this.userId);
+        return { rewrittenQuery, ragResult };
+    }
+
     async start() {
         console.log('[VoicePipeline] Starting...');
 
@@ -220,7 +248,7 @@ export class VoicePipeline {
                     audioDurationMs: durationMs
                 });
                 await this.onAudioOutput(audio);
-                this.history.push({ role: 'assistant', content: message });
+                this.recordTurn({ role: 'assistant', content: message });
                 console.log('[VoicePipeline] ✅ Greeting complete');
                 return;
             }
@@ -253,7 +281,7 @@ export class VoicePipeline {
             await this.onAudioOutput(greetingAudio);
 
             // Add to conversation history so the AI knows what it said
-            this.history.push({ role: 'assistant', content: message });
+            this.recordTurn({ role: 'assistant', content: message });
 
             console.log('[VoicePipeline] ✅ Greeting complete');
         } catch (error) {
@@ -462,21 +490,10 @@ Examples:
         this.isProcessing = true;
         this.cancelCurrentPlayback = false;
 
-        // 1. Contextual Query Rewriting for better RAG retrieval
-        const rewrittenQuery = await this.rewriteQueryWithContext(text);
-
-        // CHECK: Was this request superseded by a newer one?
-        if (this.currentRequestId !== requestId) {
-            console.log(`[VoicePipeline] 🛑 Request ${requestId} cancelled (superseded by ${this.currentRequestId})`);
+        const { rewrittenQuery, ragResult } = await this.retrieve(text, requestId);
+        if (!ragResult) {
             return;
         }
-
-        // NOTE: We do NOT update the user transcript with the rewritten query.
-        // The rewritten query is only used internally for better RAG retrieval.
-        // The user should see exactly what they said, not an LLM-expanded version.
-
-        // 2. RAG Retrieval with rewritten query
-        const ragResult = await this.rag.query(rewrittenQuery, this.scopeToken, this.userId);
 
         // CHECK: Was this request superseded by a newer one?
         if (this.currentRequestId !== requestId) {
@@ -818,10 +835,7 @@ Examples:
                 // This fixes the issue where "How much is it?" is shown instead of "How much is myRAG?"
                 // Strip quotes if present
                 const cleanRewrittenQuery = rewrittenQuery.replace(/^["']|["']$/g, '');
-                this.history.push({ role: 'user', content: cleanRewrittenQuery });
-
-                // Save assistant response
-                this.history.push({ role: 'assistant', content: fullResponse });
+                this.recordExchange(cleanRewrittenQuery, fullResponse);
 
                 // Store source metadata if available (sources OR images)
                 const hasSources = sources && sources.length > 0;
