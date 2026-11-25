@@ -760,6 +760,28 @@ for (const mode of MODES) {
       assert.match(await failure(ctx.db, PURGE_SQL, ['not-a-key', older.lineage_id, []]), /malformed tenant key/);
     });
 
+    it('a second apply of 0806 succeeds and leaves the catalog unchanged', async () => {
+      const snapshot = async (): Promise<Row[]> => [
+        ...(await rows(
+          ctx.db,
+          `SELECT p.oid::regprocedure::text AS sig, pg_get_functiondef(p.oid) AS def, p.proacl::text AS acl FROM pg_proc p
+            JOIN pg_namespace n ON n.oid = p.pronamespace
+           WHERE n.nspname = 'public' AND (p.proname LIKE 'rag\\_%supersession%' OR p.proname IN ('rag_publish_document_version', 'rag_approve_upload'))
+           ORDER BY 1`,
+        )),
+        ...(await rows(
+          ctx.db,
+          `SELECT k.conrelid::regclass::text AS rel, k.conname::text AS name, pg_get_constraintdef(k.oid) AS def FROM pg_constraint k
+            WHERE k.conrelid IN ('public.rag_supersession_candidates'::regclass, 'public.rag_supersession_links'::regclass, 'public.rag_admin_audit'::regclass)
+            ORDER BY 1, 2`,
+        )),
+        ...(await rows(ctx.db, "SELECT indexname, indexdef FROM pg_indexes WHERE tablename LIKE 'rag\\_supersession%' ORDER BY 1")),
+      ];
+      const before = await snapshot();
+      await ctx.db.exec(fs.readFileSync(path.join(REPO_ROOT, MIGRATION), 'utf8'));
+      assert.deepEqual(await snapshot(), before);
+    });
+
     it('confirm, undo and publish take the lineage advisory locks before touching documents (concurrency backstop)', async () => {
       const defs = await rows(
         ctx.db,
@@ -777,8 +799,8 @@ for (const mode of MODES) {
       assert.ok(pairLock.indexOf('pg_advisory_xact_lock') < pairLock.indexOf('FOR UPDATE'), 'advisory locks first, then document rows');
       assert.match(pairLock, /ORDER BY d\.id FOR UPDATE/);
       const publishBody = def('rag_publish_document_version');
-      assert.ok(publishBody.indexOf('pg_advisory_xact_lock') < publishBody.indexOf('rag_supersession_links'), 'publish checks links under the lineage lock');
-      assert.ok(publishBody.indexOf("'held'") < publishBody.indexOf('rag_supersession_links'), 'the hold branches come before the link check');
+      assert.ok(publishBody.indexOf('pg_advisory_xact_lock') < publishBody.indexOf('FROM public.rag_supersession_links'), 'publish checks links under the lineage lock');
+      assert.ok(publishBody.indexOf("'held'") < publishBody.indexOf('FROM public.rag_supersession_links'), 'the hold branches come before the link check');
     });
   });
 }

@@ -9,6 +9,12 @@
 -- non-admin and an admin of another tenant both get not_found.
 -- Locking: a decision locks the candidate row, then the lineage advisory locks of both documents (the lock rag_publish_document_version
 -- takes) in key order, then both document rows in id order, and checks the candidate's status and staleness after the locks.
+-- Publish (D-42): rag_publish_document_version is replaced from its 0803 body (signature and grants unchanged). The quarantined, pending_review
+-- and held branches still return first; after the lineage lock, a document of a lineage retired by a confirmed link is stored ready but not
+-- current, with superseded_by the current document the link chain leads to, raises one pending candidate (origin detected, no direction)
+-- and returns outcome superseded_lineage. rag_approve_upload is replaced from its 0803 body to accept that outcome as a completed decision.
+-- rag_release_quarantine is not defined here: its newest body is in 0804, which accepts the same outcome. Re-running 0803 puts back the
+-- 0803 publish and approve bodies: re-run this file after it.
 -- Purge: rag_purge_hook_supersession(p_tenant_key, p_lineage_id, p_document_ids) removes the candidates and links of a purged lineage.
 -- Every function here is service_role only: REVOKE ALL FROM PUBLIC, anon, authenticated and GRANT EXECUTE TO service_role per signature.
 -- Not folded into the setup files. Idempotent: CREATE OR REPLACE, IF NOT EXISTS, constraints rebuilt by name.
@@ -111,18 +117,76 @@ ALTER TABLE public.rag_supersession_links ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.rag_supersession_links FROM PUBLIC, anon, authenticated, service_role;
 GRANT SELECT ON TABLE public.rag_supersession_links TO service_role;
 
--- Whether a candidate can no longer be decided as raised: one of its documents is gone from the tenant, not ready, or no longer current.
+-- A document's standing in a candidate: current (current and ready), retired (ready, retired by a confirmed link to the other document of the
+-- candidate, and the newest ready version of its lineage), or NULL (deleted, not ready, superseded within its lineage, another tenant).
+CREATE OR REPLACE FUNCTION public.rag_supersession_document_state(p_tenant_key text, p_document_id uuid, p_other_document_id uuid)
+ RETURNS text
+ LANGUAGE sql
+ STABLE SECURITY INVOKER
+ SET search_path TO ''
+AS $function$
+  SELECT CASE
+    WHEN d.is_current THEN 'current'
+    WHEN d.superseded_by = p_other_document_id
+      AND EXISTS (SELECT 1 FROM public.rag_supersession_links l WHERE l.tenant_key = d.tenant_key AND l.older_lineage_id = d.lineage_id)
+      AND NOT EXISTS (
+        SELECT 1 FROM public.documents v
+        WHERE v.tenant_key = d.tenant_key AND v.lineage_id = d.lineage_id AND v.id <> d.id AND v.status = 'ready' AND v.version > d.version
+      )
+    THEN 'retired'
+  END
+  FROM public.documents d
+  WHERE d.id = p_document_id AND d.tenant_key = p_tenant_key AND d.status = 'ready'
+$function$;
+
+-- Whether a candidate can no longer be decided: one of its documents has no standing, or neither is current.
 CREATE OR REPLACE FUNCTION public.rag_supersession_stale(p_candidate_id uuid)
  RETURNS boolean
  LANGUAGE sql
  STABLE SECURITY INVOKER
  SET search_path TO ''
 AS $function$
-  SELECT (
-    SELECT count(*) FROM public.rag_supersession_candidates c
-    JOIN public.documents d ON d.id IN (c.document_id, c.candidate_document_id) AND d.tenant_key = c.tenant_key
-    WHERE c.id = p_candidate_id AND d.status = 'ready' AND d.is_current
-  ) <> 2
+  SELECT NOT COALESCE(
+    (a IS NOT NULL AND b IS NOT NULL AND 'current' IN (a, b)),
+    false
+  )
+  FROM (
+    SELECT public.rag_supersession_document_state(c.tenant_key, c.document_id, c.candidate_document_id) AS a,
+           public.rag_supersession_document_state(c.tenant_key, c.candidate_document_id, c.document_id) AS b
+    FROM public.rag_supersession_candidates c WHERE c.id = p_candidate_id
+  ) s
+$function$;
+
+-- The current ready document a retired lineage now resolves to: the newer lineage's current document, following further links (at most 32
+-- steps, cycles stop the walk); NULL when the chain ends without a current document.
+CREATE OR REPLACE FUNCTION public.rag_supersession_successor(p_tenant_key text, p_lineage_id uuid)
+ RETURNS uuid
+ LANGUAGE plpgsql
+ STABLE SECURITY INVOKER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  lineage uuid := p_lineage_id;
+  seen uuid[] := '{}'::uuid[];
+  hit uuid;
+  step integer;
+BEGIN
+  FOR step IN 1..32 LOOP
+    SELECT d.id INTO hit FROM public.documents d
+    WHERE d.tenant_key = p_tenant_key AND d.lineage_id = lineage AND d.is_current AND d.status = 'ready'
+    ORDER BY d.version DESC LIMIT 1;
+    IF hit IS NOT NULL THEN
+      RETURN hit;
+    END IF;
+    seen := seen || lineage;
+    SELECT l.newer_lineage_id INTO lineage FROM public.rag_supersession_links l
+    WHERE l.tenant_key = p_tenant_key AND l.older_lineage_id = lineage;
+    IF NOT FOUND OR lineage = ANY (seen) THEN
+      RETURN NULL;
+    END IF;
+  END LOOP;
+  RETURN NULL;
+END
 $function$;
 
 -- Raise a candidate (service path: the detector, the upload route, the answer-conflict writer). Both documents must be current and ready in
@@ -208,6 +272,8 @@ DECLARE
   newer_id uuid;
   older public.documents%ROWTYPE;
   newer public.documents%ROWTYPE;
+  older_state text;
+  newer_state text;
   created uuid;
 BEGIN
   keys := public.rag_upload_approval_keys(p_actor);
@@ -238,16 +304,32 @@ BEGIN
 
   SELECT * INTO older FROM public.documents d WHERE d.id = older_id AND d.tenant_key = cand.tenant_key;
   SELECT * INTO newer FROM public.documents d WHERE d.id = newer_id AND d.tenant_key = cand.tenant_key;
-  IF public.rag_supersession_stale(cand.id) OR NOT (older.is_current AND newer.is_current) THEN
+  older_state := public.rag_supersession_document_state(cand.tenant_key, older_id, newer_id);
+  newer_state := public.rag_supersession_document_state(cand.tenant_key, newer_id, older_id);
+  IF older_state IS NULL OR newer_state IS NULL OR 'current' NOT IN (older_state, newer_state) THEN
     RAISE EXCEPTION 'stale_candidate';
   END IF;
 
-  UPDATE public.documents d SET is_current = false, superseded_by = newer.id WHERE d.id = older.id;
-  UPDATE public.document_chunks c SET is_current = false WHERE c.document_id = older.id;
+  IF older_state = 'retired' THEN
+    -- The older document is already retired by a link to the newer one (a version published into a superseded lineage): acknowledge.
+    SELECT l.id INTO created FROM public.rag_supersession_links l WHERE l.tenant_key = cand.tenant_key AND l.older_lineage_id = older.lineage_id;
+  ELSE
+    IF newer_state = 'retired' THEN
+      -- The admin names the current document as the older one: the newer document's lineage is no longer retired.
+      DELETE FROM public.rag_supersession_links l WHERE l.tenant_key = cand.tenant_key AND l.older_lineage_id = newer.lineage_id;
+      UPDATE public.documents d SET is_current = true, superseded_by = NULL WHERE d.id = newer.id;
+      UPDATE public.document_chunks c SET is_current = true WHERE c.document_id = newer.id;
+    END IF;
 
-  INSERT INTO public.rag_supersession_links (tenant_key, older_lineage_id, newer_lineage_id, older_document_id, newer_document_id, candidate_id, created_by)
-  VALUES (cand.tenant_key, older.lineage_id, newer.lineage_id, older.id, newer.id, cand.id, p_actor)
-  RETURNING id INTO created;
+    UPDATE public.documents d SET is_current = false, superseded_by = newer.id WHERE d.id = older.id;
+    UPDATE public.document_chunks c SET is_current = false WHERE c.document_id = older.id;
+
+    -- A link left from a chain that ended without a current document no longer applies to this lineage.
+    DELETE FROM public.rag_supersession_links l WHERE l.tenant_key = cand.tenant_key AND l.older_lineage_id = older.lineage_id;
+    INSERT INTO public.rag_supersession_links (tenant_key, older_lineage_id, newer_lineage_id, older_document_id, newer_document_id, candidate_id, created_by)
+    VALUES (cand.tenant_key, older.lineage_id, newer.lineage_id, older.id, newer.id, cand.id, p_actor)
+    RETURNING id INTO created;
+  END IF;
 
   UPDATE public.rag_supersession_candidates c
   SET status = 'confirmed', older_document_id = older.id, decided_by = p_actor, decided_at = pg_catalog.now()
@@ -436,11 +518,190 @@ BEGIN
 END
 $function$;
 
+CREATE OR REPLACE FUNCTION public.rag_publish_document_version(p_document_id uuid, p_tenant_key text)
+ RETURNS TABLE(outcome text, document_id uuid, version integer, superseded_document_id uuid)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+#variable_conflict use_column
+DECLARE
+  doc public.documents%ROWTYPE;
+  previous public.documents%ROWTYPE;
+  has_slug boolean;
+  moved_type text;
+  moved_slug text;
+  retired_by public.rag_supersession_links%ROWTYPE;
+  successor uuid;
+BEGIN
+  SELECT * INTO doc FROM public.documents d WHERE d.id = p_document_id AND d.tenant_key = p_tenant_key FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'tenant_mismatch' USING DETAIL = 'document not found in tenant';
+  END IF;
+  IF doc.status = 'quarantined' THEN
+    RETURN QUERY SELECT 'quarantined'::text, doc.id, doc.version, NULL::uuid;
+    RETURN;
+  END IF;
+  IF doc.status = 'pending_review' THEN
+    RETURN QUERY SELECT 'pending_review'::text, doc.id, doc.version, NULL::uuid;
+    RETURN;
+  END IF;
+  IF doc.metadata ? 'publish_hold' THEN
+    RETURN QUERY SELECT 'held'::text, doc.id, doc.version, NULL::uuid;
+    RETURN;
+  END IF;
+  IF doc.status IN ('failed', 'deleted') THEN
+    RAISE EXCEPTION 'document_not_publishable' USING DETAIL = 'status is ' || doc.status;
+  END IF;
+  IF doc.is_current AND doc.status = 'ready' THEN
+    RETURN QUERY SELECT 'already_current'::text, doc.id, doc.version, NULL::uuid;
+    RETURN;
+  END IF;
+
+  PERFORM pg_advisory_xact_lock(hashtextextended(doc.tenant_key || '|' || doc.source || '|' || doc.source_key, 0));
+
+  -- D-42: a lineage retired by a confirmed supersession link stays retired. The new version is stored ready but not current, points at the
+  -- current document the link chain leads to, and raises a pending candidate for the admin. Without a current successor the link no longer
+  -- applies and the version publishes as usual.
+  SELECT * INTO retired_by FROM public.rag_supersession_links l WHERE l.tenant_key = doc.tenant_key AND l.older_lineage_id = doc.lineage_id;
+  IF FOUND THEN
+    successor := public.rag_supersession_successor(doc.tenant_key, retired_by.newer_lineage_id);
+    IF successor IS NOT NULL THEN
+      UPDATE public.documents d SET is_current = false, status = 'ready', superseded_by = successor WHERE d.id = doc.id;
+      UPDATE public.document_chunks c SET is_current = false, status = 'ready' WHERE c.document_id = doc.id;
+      INSERT INTO public.rag_supersession_candidates (tenant_key, document_id, candidate_document_id, signals, direction, origin)
+      VALUES (
+        doc.tenant_key, doc.id, successor,
+        pg_catalog.jsonb_build_object('reason', 'superseded_lineage', 'link_id', retired_by.id), NULL, 'detected'
+      )
+      ON CONFLICT DO NOTHING;
+      RETURN QUERY SELECT 'superseded_lineage'::text, doc.id, doc.version, NULL::uuid;
+      RETURN;
+    END IF;
+  END IF;
+
+  has_slug := (
+    SELECT count(*) = 2 FROM pg_catalog.pg_attribute
+    WHERE attrelid = 'public.documents'::regclass AND attname IN ('content_type', 'slug') AND NOT attisdropped
+  );
+
+  SELECT * INTO previous FROM public.documents d
+  WHERE d.tenant_key = p_tenant_key AND d.source = doc.source AND d.source_key = doc.source_key AND d.is_current AND d.id <> doc.id
+  FOR UPDATE;
+  IF FOUND THEN
+    IF has_slug THEN
+      EXECUTE 'SELECT content_type, slug FROM public.documents WHERE id = $1' INTO moved_type, moved_slug USING previous.id;
+    END IF;
+    UPDATE public.documents d SET is_current = false, superseded_by = doc.id WHERE d.id = previous.id;
+    IF has_slug THEN
+      EXECUTE 'UPDATE public.documents SET content_type = NULL, slug = NULL WHERE id = $1' USING previous.id;
+    END IF;
+    UPDATE public.document_chunks c SET is_current = false, embedding = NULL WHERE c.document_id = previous.id;
+    DELETE FROM public.chunk_embeddings ce USING public.document_chunks c WHERE ce.chunk_id = c.id AND c.document_id = previous.id;
+    DELETE FROM public.embedding_backfill_gaps g USING public.document_chunks c WHERE g.chunk_id = c.id AND c.document_id = previous.id;
+  END IF;
+
+  UPDATE public.documents d SET is_current = true, status = 'ready' WHERE d.id = doc.id;
+  IF previous.id IS NOT NULL AND has_slug AND (moved_type IS NOT NULL OR moved_slug IS NOT NULL) THEN
+    EXECUTE 'UPDATE public.documents SET content_type = $2, slug = $3 WHERE id = $1' USING doc.id, moved_type, moved_slug;
+  END IF;
+  UPDATE public.document_chunks c SET is_current = true, status = 'ready' WHERE c.document_id = doc.id;
+
+  RETURN QUERY SELECT 'published'::text, doc.id, doc.version, previous.id;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION public.rag_approve_upload(p_document_id uuid, p_actor uuid)
+ RETURNS TABLE(outcome text, document_id uuid, version integer, superseded_document_id uuid)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+#variable_conflict use_column
+DECLARE
+  keys text[];
+  doc public.documents%ROWTYPE;
+  published record;
+BEGIN
+  keys := public.rag_upload_approval_keys(p_actor);
+  SELECT * INTO doc FROM public.documents d WHERE d.id = p_document_id AND d.tenant_key = ANY (keys) FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'not_found';
+  END IF;
+  IF doc.status IS DISTINCT FROM 'pending_review' THEN
+    RAISE EXCEPTION 'not_pending';
+  END IF;
+
+  -- The lineage lock the publish function takes, so no newer version can become current between this check and the publish.
+  PERFORM pg_advisory_xact_lock(hashtextextended(doc.tenant_key || '|' || doc.source || '|' || doc.source_key, 0));
+  IF EXISTS (
+    SELECT 1 FROM public.documents d
+    WHERE d.tenant_key = doc.tenant_key AND d.source = doc.source AND d.source_key = doc.source_key
+      AND d.is_current AND d.id <> doc.id AND d.version > doc.version
+  ) THEN
+    RAISE EXCEPTION 'superseded_by_newer';
+  END IF;
+
+  UPDATE public.documents d SET status = 'processing', approved_by = p_actor, approved_at = now() WHERE d.id = doc.id;
+  UPDATE public.document_chunks c SET approved_by = p_actor WHERE c.document_id = doc.id;
+
+  SELECT p.outcome, p.superseded_document_id INTO published FROM public.rag_publish_document_version(doc.id, doc.tenant_key) AS p;
+  -- superseded_lineage (0806) is a completed decision: the approved version is stored, retired by a confirmed link.
+  IF published.outcome IS NULL OR published.outcome NOT IN ('published', 'superseded_lineage') THEN
+    RAISE EXCEPTION 'approve_failed: %', COALESCE(published.outcome, 'unknown');
+  END IF;
+
+  INSERT INTO public.rag_admin_audit (action, document_id, lineage_id, tenant_key, version, actor, rule_ids)
+  VALUES ('approve_upload', doc.id, doc.lineage_id, doc.tenant_key, doc.version, p_actor, '{}'::text[]);
+
+  RETURN QUERY SELECT published.outcome, doc.id, doc.version, published.superseded_document_id;
+END
+$function$;
+
+-- Purge hook (phase rule: every new 3.2 store): removes the candidates and links of a purged lineage or of the listed documents in that
+-- tenant. Returns the number of rows removed.
+CREATE OR REPLACE FUNCTION public.rag_purge_hook_supersession(p_tenant_key text, p_lineage_id uuid, p_document_ids uuid[])
+ RETURNS bigint
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  docs uuid[];
+  removed_links bigint;
+  removed_candidates bigint;
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  docs := COALESCE(p_document_ids, '{}'::uuid[]) || COALESCE(
+    (SELECT array_agg(d.id) FROM public.documents d WHERE d.tenant_key = p_tenant_key AND d.lineage_id = p_lineage_id),
+    '{}'::uuid[]
+  );
+  DELETE FROM public.rag_supersession_links l
+  WHERE l.tenant_key = p_tenant_key
+    AND (l.older_lineage_id = p_lineage_id OR l.newer_lineage_id = p_lineage_id OR l.older_document_id = ANY (docs) OR l.newer_document_id = ANY (docs));
+  GET DIAGNOSTICS removed_links = ROW_COUNT;
+  DELETE FROM public.rag_supersession_candidates c
+  WHERE c.tenant_key = p_tenant_key AND (c.document_id = ANY (docs) OR c.candidate_document_id = ANY (docs));
+  GET DIAGNOSTICS removed_candidates = ROW_COUNT;
+  RETURN removed_links + removed_candidates;
+END
+$function$;
+
 REVOKE ALL ON FUNCTION public.rag_supersession_raise(text, uuid, uuid, jsonb, text, text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rag_supersession_raise(text, uuid, uuid, jsonb, text, text) TO service_role;
 REVOKE ALL ON FUNCTION public.rag_confirm_supersession(uuid, uuid, uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rag_confirm_supersession(uuid, uuid, uuid) TO service_role;
 
+REVOKE ALL ON FUNCTION public.rag_supersession_document_state(text, uuid, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_supersession_document_state(text, uuid, uuid) TO service_role;
+REVOKE ALL ON FUNCTION public.rag_supersession_successor(text, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_supersession_successor(text, uuid) TO service_role;
+REVOKE ALL ON FUNCTION public.rag_publish_document_version(uuid, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_publish_document_version(uuid, text) TO service_role;
+REVOKE ALL ON FUNCTION public.rag_approve_upload(uuid, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_approve_upload(uuid, uuid) TO service_role;
+REVOKE ALL ON FUNCTION public.rag_purge_hook_supersession(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_purge_hook_supersession(text, uuid, uuid[]) TO service_role;
 REVOKE ALL ON FUNCTION public.rag_supersession_stale(uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rag_supersession_stale(uuid) TO service_role;
 REVOKE ALL ON FUNCTION public.rag_supersession_lock_pair(text, uuid, uuid) FROM PUBLIC, anon, authenticated;
