@@ -111,6 +111,26 @@ describe('eval route per-request stage overrides', () => {
     });
   });
 
+  it('records the defense versions in effective_config only while the injection check is on (D-18)', async () => {
+    const saved = env.RAG_INJECTION_CHECK;
+    try {
+      delete env.RAG_INJECTION_CHECK;
+      let route = await loadRoute();
+      const off = (await (await route.POST(evalRequest(undefined))).json()) as { effective_config: Record<string, unknown> };
+      expect(off.effective_config.security ?? null).toBeNull();
+
+      env.RAG_INJECTION_CHECK = 'flag';
+      route = await loadRoute();
+      const on = (await (await route.POST(evalRequest(undefined))).json()) as { effective_config: { security?: Record<string, string> } };
+      const { injectionTraceVersions } = await import('@/lib/rag');
+      expect(on.effective_config.security).toEqual(injectionTraceVersions());
+      expect(on.effective_config.security?.rules_version).toMatch(/^[0-9a-f]{12}$/);
+    } finally {
+      if (saved === undefined) delete env.RAG_INJECTION_CHECK;
+      else env.RAG_INJECTION_CHECK = saved;
+    }
+  });
+
   it('passes no overrides when the options name none', async () => {
     const route = await loadRoute();
     const response = await route.POST(evalRequest({ max_results: 5 }));
