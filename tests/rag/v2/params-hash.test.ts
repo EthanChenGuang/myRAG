@@ -10,6 +10,7 @@ import { effectiveRetrievalParams } from '@/lib/rag/v2/retrieval-params';
 import { v2ProfileSettings } from '@/lib/rag/v2/profiles';
 import { computeRetrievalConfigHash, securityHashComponent, type RetrievalConfigHashInput } from '@/lib/rag/v2/config-hash';
 import { readSecurityConfig } from '@/lib/rag/security/config';
+import { describeReranker } from '@/lib/rag/rerank/select';
 import {
   getActiveChunkingProfiles,
   refreshActiveChunkingProfiles,
@@ -39,7 +40,7 @@ function baseHashInput(chunking: Record<string, string> | null = { pdf: 'legacy-
     lexicalVersion: LEXICAL_VERSION,
     rerankTextVersion: RERANK_TEXT_VERSION,
     params,
-    reranker: { id: config.v2.reranker, model: 'none' },
+    reranker: describeReranker(config, 'chat', ''),
     thresholdsConfigHash: 'abcd'.repeat(16),
     activeChunkingProfiles: chunking,
     switches: {

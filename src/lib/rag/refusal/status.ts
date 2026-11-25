@@ -117,11 +117,13 @@ function usable(cell: RefusalCellStatus): boolean {
  * cell can be changed through it (thresholds change only through the calibration tool and a pull request).
  */
 export function refusalCalibrationStatus(thresholds: RefusalThresholds | null, config: RagConfig): RefusalCalibrationStatus {
-  const provider = config.v2.reranker;
+  const provider = describeReranker(config, 'chat', '').id;
   const semantics = SCORE_SEMANTICS[provider];
   const tiers = {} as RefusalCalibrationStatus['reranker']['tiers'];
+  const providerByTier = {} as Record<Tier, RerankerKind>;
   for (const tier of TIERS) {
     const models = {} as Record<QueryLanguage, string>;
+    providerByTier[tier] = describeReranker(config, tier, '').id;
     for (const language of LANGUAGES) models[language] = describeReranker(config, tier, language).model;
     tiers[tier] = { tier: tier === 'voice' ? config.v2.rerankTier.voice : config.v2.rerankTier.chat, models };
   }
@@ -142,7 +144,7 @@ export function refusalCalibrationStatus(thresholds: RefusalThresholds | null, c
       for (const tier of TIERS) {
         for (const language of LANGUAGES) {
           const model = tiers[tier].models[language];
-          const key = `${provider}|${model}|${language}|same`;
+          const key = `${providerByTier[tier]}|${model}|${language}|same`;
           if (cells.some((entry) => entry.key === key && usable(entry))) continue;
           if (missing.some((entry) => entry.model === model && entry.query_language === language)) continue;
           missing.push({ tier, model, query_language: language });

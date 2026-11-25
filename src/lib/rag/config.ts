@@ -113,6 +113,8 @@ const MAX_TIMEOUT_MS = 60000;
 const PROFILES = Object.keys(PROFILE_STAGE_DEFAULTS) as Profile[];
 
 export type RerankerKind = 'none' | 'cohere' | 'voyage' | 'local_bm25';
+/** RAG_RERANKER as configured; `auto` resolves per request to a RerankerKind (src/lib/rag/rerank/select.ts). */
+export type RerankerSetting = RerankerKind | 'auto';
 export type RerankTier = 'quality' | 'fast';
 export type IterativeScanMode = 'off' | 'relaxed_order' | 'strict_order';
 export type BgeM3Serving = 'hosted' | 'sidecar';
@@ -136,7 +138,7 @@ export type RefusalFloorPolicy = (typeof REFUSAL_FLOOR_POLICIES)[number];
 
 export interface V2Config {
   lexicalSearch: boolean;
-  reranker: RerankerKind;
+  reranker: RerankerSetting;
   rerankTier: { chat: RerankTier; voice: RerankTier };
   voyageModelByLang: Record<string, string>;
   refusalThreshold: boolean;
@@ -276,10 +278,10 @@ function parseExactIdSwitch(raw: string | undefined, warnings: string[]): boolea
   return false;
 }
 
-function parseReranker(raw: string | undefined, warnings: string[]): RerankerKind {
+function parseReranker(raw: string | undefined, warnings: string[]): RerankerSetting {
   const value = (raw ?? '').trim().toLowerCase();
   if (value === '' || value === 'none') return 'none';
-  if (value === 'cohere' || value === 'voyage' || value === 'local_bm25') return value;
+  if (value === 'cohere' || value === 'voyage' || value === 'local_bm25' || value === 'auto') return value;
   problem(warnings, `reranker:${value}`, 'Unsupported RAG_RERANKER value, using none', { value });
   return 'none';
 }

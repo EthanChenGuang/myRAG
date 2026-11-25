@@ -4,14 +4,14 @@ import { LEGACY_PROFILE } from '../../embeddings/active-profile';
 import type { QueryEmbedding } from '../../embeddings/query-embedding';
 import type { FusedHit } from '../../fusion/rrf';
 import { LEXICAL_VERSION } from '../../lexical/chunk-text';
-import { runStage, stageSpec, type StageSpec } from '../../pipeline';
+import { runStage, StageError, stageSpec, type StageSpec } from '../../pipeline';
 import type { DedupeCounts } from '../../fusion/dedupe';
 import { decideRefusal, type GateCandidate, type GateInput, type QueryLanguage } from '../../refusal/gate';
 import { legacyQueryTerms } from '../../context/relevance';
 import { evalFloorCalibration, floorsFromCalibration, legacyRuleFloor, similarityFloor } from '../../refusal/floor';
 import { loadThresholds } from '../../refusal/thresholds';
 import type { RefusalRecord } from '../../refusal/types';
-import { resolveReranker } from '../../rerank/select';
+import { describeReranker, resolveReranker } from '../../rerank/select';
 import { rerankText } from '../../rerank/text';
 import { RERANK_TEXT_VERSION, type RerankScore, type RerankSpan } from '../../rerank/types';
 import type { TraceCollector } from '../../trace/collector';
@@ -171,12 +171,22 @@ async function runRerankStage(ctx: RankStagesInput): Promise<RerankStageResult> 
 
   if (!baseSpec.enabled) {
     await runStage(baseSpec, signal, async () => null, collector, { candidatesIn: hits.length });
-    return notRun(hits, 'disabled', config.v2.reranker, null);
+    const configured =
+      config.v2.reranker === 'auto'
+        ? describeReranker(config, profile, queryLanguage ?? '', stageOverrides?.retrievalOverrides).id
+        : config.v2.reranker;
+    return notRun(hits, 'disabled', configured, null);
   }
 
   const resolved = resolveReranker(config, profile, queryLanguage ?? '', stageOverrides?.retrievalOverrides, deps.ragEnv(), deps.fetch);
   if (resolved.provider === 'none') {
-    await runStage({ ...baseSpec, enabled: false }, signal, async () => null, collector, { candidatesIn: hits.length });
+    if (resolved.auto) {
+      if (signal.aborted) throw new StageError('rerank', 'aborted', signal.reason);
+      const at = collector.now();
+      collector.record({ name: 'rerank', status: 'disabled', reason: 'disabled', startedAt: at, endedAt: at, candidatesIn: hits.length, detail: 'auto:none' });
+    } else {
+      await runStage({ ...baseSpec, enabled: false }, signal, async () => null, collector, { candidatesIn: hits.length });
+    }
     return notRun(hits, 'disabled', 'none', null);
   }
 
@@ -234,7 +244,7 @@ async function runRerankStage(ctx: RankStagesInput): Promise<RerankStageResult> 
         }
         return counts;
       },
-      detail: () => `${reranker.id}:${reranker.model}`,
+      detail: () => (resolved.auto ? `auto:${resolved.provider}` : `${reranker.id}:${reranker.model}`),
     },
   );
 
