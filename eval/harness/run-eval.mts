@@ -207,6 +207,10 @@ export async function prepareInProcessEval(options: {
     translatorModule.setTranslatorForTests(translatorModule.createFixtureTranslator(table));
   }
 
+  const floorModule = await import('../../src/lib/rag/refusal/floor.ts');
+  const { loadFixtureScoreCalibration } = await import('./fixture-floor.mts');
+  floorModule.setEvalScoreCalibration(loadFixtureScoreCalibration(fixtureMode === 'ingest' ? 'ingest' : 'prechunked'));
+
   return {
     POST: route.POST as unknown as InProcessEval['POST'],
     secret,
@@ -216,6 +220,7 @@ export async function prepareInProcessEval(options: {
     sqlSha256: fixture.sqlSha256,
     close: async () => {
       translatorModule?.resetTranslatorForTests();
+      floorModule.resetEvalScoreCalibration();
       if (ownsEdge) await startedEdge.close();
       if (ownsDb) await fixture.db.close().catch(() => undefined);
     },
