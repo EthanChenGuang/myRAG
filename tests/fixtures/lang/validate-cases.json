@@ -1,0 +1,853 @@
+{
+  "description": "Phase 3.2 D-07: one case file for every entry point of validateLanguageSettings (app settings.ts, scripts/init-env.js, scripts/config-server.js). context.reranker and context.embeddingProfile are {id, supportedLanguages} or null; context.registryChange edits one shipped pack the way tests/fixtures/rag/language-pack-completeness-cases.json does. expect.settings is what getLanguageSettings() returns for the same two raw values.",
+  "cases": [
+    {
+      "name": "valid_three_languages",
+      "supported": "zh,en,it",
+      "primary": "en",
+      "context": {
+        "reranker": null,
+        "embeddingProfile": null
+      },
+      "expect": {
+        "ok": true,
+        "errors": [],
+        "warnings": [
+          {
+            "code": "groundedness_not_checked",
+            "language": "it"
+          }
+        ],
+        "verifiedAgainstActiveProfile": false,
+        "normalized": {
+          "languages": [
+            "zh",
+            "en",
+            "it"
+          ],
+          "primary": "en",
+          "supported": "zh,en,it"
+        },
+        "settings": {
+          "configured": true,
+          "languages": [
+            "zh",
+            "en",
+            "it"
+          ],
+          "primary": "en",
+          "monolingual": false
+        }
+      }
+    },
+    {
+      "name": "empty_set",
+      "supported": "",
+      "primary": "",
+      "context": {
+        "reranker": null,
+        "embeddingProfile": null
+      },
+      "expect": {
+        "ok": false,
+        "errors": [
+          {
+            "code": "empty_set"
+          },
+          {
+            "code": "primary_not_in_set"
+          }
+        ],
+        "warnings": [],
+        "verifiedAgainstActiveProfile": false,
+        "normalized": null,
+        "settings": {
+          "configured": false,
+          "languages": [],
+          "primary": null,
+          "monolingual": false
+        }
+      }
+    },
+    {
+      "name": "duplicate_mixed_case_and_spaces",
+      "supported": " ZH , en,zh",
+      "primary": " En ",
+      "context": {
+        "reranker": null,
+        "embeddingProfile": null
+      },
+      "expect": {
+        "ok": true,
+        "errors": [],
+        "warnings": [],
+        "verifiedAgainstActiveProfile": false,
+        "normalized": {
+          "languages": [
+            "zh",
+            "en"
+          ],
+          "primary": "en",
+          "supported": "zh,en"
+        },
+        "settings": {
+          "configured": true,
+          "languages": [
+            "zh",
+            "en"
+          ],
+          "primary": "en",
+          "monolingual": false
+        }
+      }
+    },
+    {
+      "name": "unset_values",
+      "supported": null,
+      "primary": null,
+      "context": {
+        "reranker": null,
+        "embeddingProfile": null
+      },
+      "expect": {
+        "ok": false,
+        "errors": [
+          {
+            "code": "empty_set"
+          },
+          {
+            "code": "primary_not_in_set"
+          }
+        ],
+        "warnings": [],
+        "verifiedAgainstActiveProfile": false,
+        "normalized": null,
+        "settings": {
+          "configured": false,
+          "languages": [],
+          "primary": null,
+          "monolingual": false
+        }
+      }
+    },
+    {
+      "name": "whitespace_only_values",
+      "supported": "  ,  , ",
+      "primary": "   ",
+      "context": {
+        "reranker": null,
+        "embeddingProfile": null
+      },
+      "expect": {
+        "ok": false,
+        "errors": [
+          {
+            "code": "empty_set"
+          },
+          {
+            "code": "primary_not_in_set"
+          }
+        ],
+        "warnings": [],
+        "verifiedAgainstActiveProfile": false,
+        "normalized": null,
+        "settings": {
+          "configured": false,
+          "languages": [],
+          "primary": null,
+          "monolingual": false
+        }
+      }
+    },
+    {
+      "name": "primary_without_set",
+      "supported": "",
+      "primary": "en",
+      "context": {
+        "reranker": null,
+        "embeddingProfile": null
+      },
+      "expect": {
+        "ok": false,
+        "errors": [
+          {
+            "code": "empty_set"
+          },
+          {
+            "code": "primary_not_in_set",
+            "language": "en"
+          }
+        ],
+        "warnings": [],
+        "verifiedAgainstActiveProfile": false,
+        "normalized": null,
+        "settings": {
+          "configured": false,
+          "languages": [],
+          "primary": null,
+          "monolingual": false
+        }
+      }
+    },
+    {
+      "name": "order_it_zh",
+      "supported": "it,zh",
+      "primary": "zh",
+      "context": {
+        "reranker": null,
+        "embeddingProfile": null
+      },
+      "expect": {
+        "ok": true,
+        "errors": [],
+        "warnings": [
+          {
+            "code": "groundedness_not_checked",
+            "language": "it"
+          }
+        ],
+        "verifiedAgainstActiveProfile": false,
+        "normalized": {
+          "languages": [
+            "zh",
+            "it"
+          ],
+          "primary": "zh",
+          "supported": "zh,it"
+        },
+        "settings": {
+          "configured": true,
+          "languages": [
+            "zh",
+            "it"
+          ],
+          "primary": "zh",
+          "monolingual": false
+        }
+      }
+    },
+    {
+      "name": "order_zh_it",
+      "supported": "zh,it",
+      "primary": "zh",
+      "context": {
+        "reranker": null,
+        "embeddingProfile": null
+      },
+      "expect": {
+        "ok": true,
+        "errors": [],
+        "warnings": [
+          {
+            "code": "groundedness_not_checked",
+            "language": "it"
+          }
+        ],
+        "verifiedAgainstActiveProfile": false,
+        "normalized": {
+          "languages": [
+            "zh",
+            "it"
+          ],
+          "primary": "zh",
+          "supported": "zh,it"
+        },
+        "settings": {
+          "configured": true,
+          "languages": [
+            "zh",
+            "it"
+          ],
+          "primary": "zh",
+          "monolingual": false
+        }
+      }
+    },
+    {
+      "name": "single_language_monolingual",
+      "supported": "en",
+      "primary": "en",
+      "context": {
+        "reranker": null,
+        "embeddingProfile": null
+      },
+      "expect": {
+        "ok": true,
+        "errors": [],
+        "warnings": [],
+        "verifiedAgainstActiveProfile": false,
+        "normalized": {
+          "languages": [
+            "en"
+          ],
+          "primary": "en",
+          "supported": "en"
+        },
+        "settings": {
+          "configured": true,
+          "languages": [
+            "en"
+          ],
+          "primary": "en",
+          "monolingual": true
+        }
+      }
+    },
+    {
+      "name": "primary_missing",
+      "supported": "zh,en",
+      "primary": "",
+      "context": {
+        "reranker": null,
+        "embeddingProfile": null
+      },
+      "expect": {
+        "ok": false,
+        "errors": [
+          {
+            "code": "primary_not_in_set"
+          }
+        ],
+        "warnings": [],
+        "verifiedAgainstActiveProfile": false,
+        "normalized": null,
+        "settings": {
+          "configured": false,
+          "languages": [],
+          "primary": null,
+          "monolingual": false
+        }
+      }
+    },
+    {
+      "name": "primary_outside_set",
+      "supported": "zh,en",
+      "primary": "it",
+      "context": {
+        "reranker": null,
+        "embeddingProfile": null
+      },
+      "expect": {
+        "ok": false,
+        "errors": [
+          {
+            "code": "primary_not_in_set",
+            "language": "it"
+          }
+        ],
+        "warnings": [],
+        "verifiedAgainstActiveProfile": false,
+        "normalized": null,
+        "settings": {
+          "configured": false,
+          "languages": [],
+          "primary": null,
+          "monolingual": false
+        }
+      }
+    },
+    {
+      "name": "unknown_code",
+      "supported": "en,xx",
+      "primary": "en",
+      "context": {
+        "reranker": null,
+        "embeddingProfile": null
+      },
+      "expect": {
+        "ok": false,
+        "errors": [
+          {
+            "code": "unknown_language",
+            "language": "xx"
+          }
+        ],
+        "warnings": [],
+        "verifiedAgainstActiveProfile": false,
+        "normalized": null,
+        "settings": {
+          "configured": false,
+          "languages": [],
+          "primary": null,
+          "monolingual": false
+        }
+      }
+    },
+    {
+      "name": "regional_code_zh_cn",
+      "supported": "zh-CN,en",
+      "primary": "en",
+      "context": {
+        "reranker": null,
+        "embeddingProfile": null
+      },
+      "expect": {
+        "ok": false,
+        "errors": [
+          {
+            "code": "unknown_language",
+            "language": "zh-cn"
+          }
+        ],
+        "warnings": [],
+        "verifiedAgainstActiveProfile": false,
+        "normalized": null,
+        "settings": {
+          "configured": false,
+          "languages": [],
+          "primary": null,
+          "monolingual": false
+        }
+      }
+    },
+    {
+      "name": "unknown_primary_listed_in_set",
+      "supported": "xx,en",
+      "primary": "XX",
+      "context": {
+        "reranker": null,
+        "embeddingProfile": null
+      },
+      "expect": {
+        "ok": false,
+        "errors": [
+          {
+            "code": "unknown_language",
+            "language": "xx"
+          }
+        ],
+        "warnings": [],
+        "verifiedAgainstActiveProfile": false,
+        "normalized": null,
+        "settings": {
+          "configured": false,
+          "languages": [],
+          "primary": null,
+          "monolingual": false
+        }
+      }
+    },
+    {
+      "name": "full_width_zh",
+      "supported": "ｚｈ,en",
+      "primary": "en",
+      "context": {
+        "reranker": null,
+        "embeddingProfile": null
+      },
+      "expect": {
+        "ok": false,
+        "errors": [
+          {
+            "code": "unknown_language",
+            "language": "ｚｈ"
+          }
+        ],
+        "warnings": [],
+        "verifiedAgainstActiveProfile": false,
+        "normalized": null,
+        "settings": {
+          "configured": false,
+          "languages": [],
+          "primary": null,
+          "monolingual": false
+        }
+      }
+    },
+    {
+      "name": "full_width_primary",
+      "supported": "zh,en",
+      "primary": "ｚｈ",
+      "context": {
+        "reranker": null,
+        "embeddingProfile": null
+      },
+      "expect": {
+        "ok": false,
+        "errors": [
+          {
+            "code": "primary_not_in_set",
+            "language": "ｚｈ"
+          }
+        ],
+        "warnings": [],
+        "verifiedAgainstActiveProfile": false,
+        "normalized": null,
+        "settings": {
+          "configured": false,
+          "languages": [],
+          "primary": null,
+          "monolingual": false
+        }
+      }
+    },
+    {
+      "name": "incomplete_pack",
+      "supported": "en,it",
+      "primary": "en",
+      "context": {
+        "reranker": null,
+        "embeddingProfile": null,
+        "registryChange": {
+          "base": "it",
+          "op": "set",
+          "path": [
+            "segmentation"
+          ],
+          "value": null
+        }
+      },
+      "expect": {
+        "ok": false,
+        "errors": [
+          {
+            "code": "incomplete_pack",
+            "language": "it"
+          }
+        ],
+        "warnings": [
+          {
+            "code": "groundedness_not_checked",
+            "language": "it"
+          }
+        ],
+        "verifiedAgainstActiveProfile": false,
+        "normalized": null,
+        "settings": {
+          "configured": false,
+          "languages": [],
+          "primary": null,
+          "monolingual": false
+        }
+      }
+    },
+    {
+      "name": "incomplete_pack_deleted_part",
+      "supported": "zh,en",
+      "primary": "en",
+      "context": {
+        "reranker": null,
+        "embeddingProfile": null,
+        "registryChange": {
+          "base": "zh",
+          "op": "delete",
+          "path": [
+            "ocr_codes",
+            "docling"
+          ]
+        }
+      },
+      "expect": {
+        "ok": false,
+        "errors": [
+          {
+            "code": "incomplete_pack",
+            "language": "zh"
+          }
+        ],
+        "warnings": [],
+        "verifiedAgainstActiveProfile": false,
+        "normalized": null,
+        "settings": {
+          "configured": false,
+          "languages": [],
+          "primary": null,
+          "monolingual": false
+        }
+      }
+    },
+    {
+      "name": "reranker_lacks_language",
+      "supported": "zh,en,it",
+      "primary": "en",
+      "context": {
+        "reranker": {
+          "id": "cohere",
+          "supportedLanguages": [
+            "zh",
+            "en"
+          ]
+        },
+        "embeddingProfile": null
+      },
+      "expect": {
+        "ok": false,
+        "errors": [
+          {
+            "code": "reranker_unsupported",
+            "language": "it",
+            "id": "cohere"
+          }
+        ],
+        "warnings": [
+          {
+            "code": "groundedness_not_checked",
+            "language": "it"
+          }
+        ],
+        "verifiedAgainstActiveProfile": false,
+        "normalized": null
+      }
+    },
+    {
+      "name": "reranker_declares_all",
+      "supported": "zh,en",
+      "primary": "zh",
+      "context": {
+        "reranker": {
+          "id": "local_bm25",
+          "supportedLanguages": [
+            "zh",
+            "en",
+            "it"
+          ]
+        },
+        "embeddingProfile": null
+      },
+      "expect": {
+        "ok": true,
+        "errors": [],
+        "warnings": [],
+        "verifiedAgainstActiveProfile": false,
+        "normalized": {
+          "languages": [
+            "zh",
+            "en"
+          ],
+          "primary": "zh",
+          "supported": "zh,en"
+        }
+      }
+    },
+    {
+      "name": "groundedness_none_warning_only",
+      "supported": "it",
+      "primary": "it",
+      "context": {
+        "reranker": null,
+        "embeddingProfile": null
+      },
+      "expect": {
+        "ok": true,
+        "errors": [],
+        "warnings": [
+          {
+            "code": "groundedness_not_checked",
+            "language": "it"
+          }
+        ],
+        "verifiedAgainstActiveProfile": false,
+        "normalized": {
+          "languages": [
+            "it"
+          ],
+          "primary": "it",
+          "supported": "it"
+        },
+        "settings": {
+          "configured": true,
+          "languages": [
+            "it"
+          ],
+          "primary": "it",
+          "monolingual": true
+        }
+      }
+    },
+    {
+      "name": "several_errors_fixed_order",
+      "supported": "it,yy,zh,en,xx",
+      "primary": "de",
+      "context": {
+        "reranker": {
+          "id": "voyage",
+          "supportedLanguages": [
+            "en"
+          ]
+        },
+        "embeddingProfile": {
+          "id": "fixture-profile",
+          "supportedLanguages": [
+            "en"
+          ]
+        },
+        "registryChange": {
+          "base": "zh",
+          "op": "set",
+          "path": [
+            "fixtures",
+            "golden_slices"
+          ],
+          "value": false
+        }
+      },
+      "expect": {
+        "ok": false,
+        "errors": [
+          {
+            "code": "unknown_language",
+            "language": "xx"
+          },
+          {
+            "code": "unknown_language",
+            "language": "yy"
+          },
+          {
+            "code": "primary_not_in_set",
+            "language": "de"
+          },
+          {
+            "code": "incomplete_pack",
+            "language": "zh"
+          },
+          {
+            "code": "embedding_profile_unsupported",
+            "language": "zh",
+            "id": "fixture-profile"
+          },
+          {
+            "code": "embedding_profile_unsupported",
+            "language": "it",
+            "id": "fixture-profile"
+          },
+          {
+            "code": "reranker_unsupported",
+            "language": "zh",
+            "id": "voyage"
+          },
+          {
+            "code": "reranker_unsupported",
+            "language": "it",
+            "id": "voyage"
+          }
+        ],
+        "warnings": [
+          {
+            "code": "groundedness_not_checked",
+            "language": "it"
+          }
+        ],
+        "verifiedAgainstActiveProfile": true,
+        "normalized": null
+      }
+    },
+    {
+      "name": "embedding_profile_null",
+      "supported": "zh,en",
+      "primary": "en",
+      "context": {
+        "reranker": null,
+        "embeddingProfile": null
+      },
+      "expect": {
+        "ok": true,
+        "errors": [],
+        "warnings": [],
+        "verifiedAgainstActiveProfile": false,
+        "normalized": {
+          "languages": [
+            "zh",
+            "en"
+          ],
+          "primary": "en",
+          "supported": "zh,en"
+        }
+      }
+    },
+    {
+      "name": "embedding_profile_lacks_language",
+      "supported": "zh,en",
+      "primary": "en",
+      "context": {
+        "reranker": null,
+        "embeddingProfile": {
+          "id": "fixture-profile",
+          "supportedLanguages": [
+            "en"
+          ]
+        }
+      },
+      "expect": {
+        "ok": false,
+        "errors": [
+          {
+            "code": "embedding_profile_unsupported",
+            "language": "zh",
+            "id": "fixture-profile"
+          }
+        ],
+        "warnings": [],
+        "verifiedAgainstActiveProfile": true,
+        "normalized": null
+      }
+    },
+    {
+      "name": "embedding_profile_declares_all",
+      "supported": "zh,en,it",
+      "primary": "it",
+      "context": {
+        "reranker": null,
+        "embeddingProfile": {
+          "id": "fixture-profile",
+          "supportedLanguages": [
+            "it",
+            "en",
+            "zh"
+          ]
+        }
+      },
+      "expect": {
+        "ok": true,
+        "errors": [],
+        "warnings": [
+          {
+            "code": "groundedness_not_checked",
+            "language": "it"
+          }
+        ],
+        "verifiedAgainstActiveProfile": true,
+        "normalized": {
+          "languages": [
+            "zh",
+            "en",
+            "it"
+          ],
+          "primary": "it",
+          "supported": "zh,en,it"
+        }
+      }
+    },
+    {
+      "name": "saved_set_revalidates",
+      "supported": "zh,en",
+      "primary": "zh",
+      "context": {
+        "reranker": null,
+        "embeddingProfile": null
+      },
+      "expect": {
+        "ok": true,
+        "errors": [],
+        "warnings": [],
+        "verifiedAgainstActiveProfile": false,
+        "normalized": {
+          "languages": [
+            "zh",
+            "en"
+          ],
+          "primary": "zh",
+          "supported": "zh,en"
+        },
+        "settings": {
+          "configured": true,
+          "languages": [
+            "zh",
+            "en"
+          ],
+          "primary": "zh",
+          "monolingual": false
+        }
+      }
+    }
+  ]
+}
