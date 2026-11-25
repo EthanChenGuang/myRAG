@@ -1,0 +1,36 @@
+{
+  "additionalProperties": false,
+  "description": "D-23. The provenances that count as real are named here and in the GoldenItem Provenance Literal only.",
+  "properties": {
+    "min_items": {
+      "default": 100,
+      "minimum": 1,
+      "title": "Min Items",
+      "type": "integer"
+    },
+    "mode": {
+      "default": "legacy",
+      "enum": [
+        "legacy",
+        "real"
+      ],
+      "title": "Mode",
+      "type": "string"
+    },
+    "provenances": {
+      "items": {
+        "enum": [
+          "production",
+          "human"
+        ],
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Provenances",
+      "type": "array",
+      "uniqueItems": true
+    }
+  },
+  "title": "GatePopulationConfig",
+  "type": "object"
+}

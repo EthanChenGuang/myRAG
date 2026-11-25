@@ -1,0 +1,191 @@
+{
+  "$defs": {
+    "FailureEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "enum": [
+            "multi_turn",
+            "compound",
+            "exact_term",
+            "table",
+            "scanned",
+            "no_answer",
+            "general",
+            "colloquial",
+            "ambiguous",
+            "typo",
+            "cross_lingual",
+            "selective_filter",
+            "injection",
+            "injection_evasive",
+            "cache_paraphrase",
+            "cache_near_miss",
+            "small_talk"
+          ],
+          "title": "Category",
+          "type": "string"
+        },
+        "domain_set": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{8,64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Domain Set"
+        },
+        "item_id": {
+          "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$",
+          "title": "Item Id",
+          "type": "string"
+        },
+        "language": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Language"
+        },
+        "layer": {
+          "enum": [
+            "retrieval",
+            "rerank_or_assembly",
+            "refusal",
+            "generation",
+            "groundedness",
+            "injection"
+          ],
+          "title": "Layer",
+          "type": "string"
+        },
+        "run_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Run Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "item_id",
+        "run_id",
+        "layer",
+        "category"
+      ],
+      "title": "FailureEntry",
+      "type": "object"
+    },
+    "LayerCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "generation": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Generation",
+          "type": "integer"
+        },
+        "groundedness": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Groundedness",
+          "type": "integer"
+        },
+        "injection": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Injection",
+          "type": "integer"
+        },
+        "refusal": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Refusal",
+          "type": "integer"
+        },
+        "rerank_or_assembly": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Rerank Or Assembly",
+          "type": "integer"
+        },
+        "retrieval": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Retrieval",
+          "type": "integer"
+        }
+      },
+      "title": "LayerCounts",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Phase 7 D-23 failure report, taken over by Phase 5.1.1 D-02: ids and codes only.",
+  "properties": {
+    "by_layer": {
+      "$ref": "#/$defs/LayerCounts"
+    },
+    "entries": {
+      "items": {
+        "$ref": "#/$defs/FailureEntry"
+      },
+      "title": "Entries",
+      "type": "array"
+    },
+    "generated_at": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Generated At",
+      "type": "string"
+    },
+    "previous_report_sha256": {
+      "anyOf": [
+        {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Previous Report Sha256"
+    },
+    "run_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Run Ids",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "since": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Since",
+      "type": "string"
+    }
+  },
+  "required": [
+    "generated_at",
+    "since",
+    "by_layer"
+  ],
+  "title": "FailureReport",
+  "type": "object"
+}

@@ -1,0 +1,85 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "category": {
+      "enum": [
+        "multi_turn",
+        "compound",
+        "exact_term",
+        "table",
+        "scanned",
+        "no_answer",
+        "general",
+        "colloquial",
+        "ambiguous",
+        "typo",
+        "cross_lingual",
+        "selective_filter",
+        "injection",
+        "injection_evasive",
+        "cache_paraphrase",
+        "cache_near_miss",
+        "small_talk"
+      ],
+      "title": "Category",
+      "type": "string"
+    },
+    "domain_set": {
+      "anyOf": [
+        {
+          "pattern": "^[a-f0-9]{8,64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Domain Set"
+    },
+    "item_id": {
+      "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$",
+      "title": "Item Id",
+      "type": "string"
+    },
+    "language": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Language"
+    },
+    "layer": {
+      "enum": [
+        "retrieval",
+        "rerank_or_assembly",
+        "refusal",
+        "generation",
+        "groundedness",
+        "injection"
+      ],
+      "title": "Layer",
+      "type": "string"
+    },
+    "run_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Run Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "item_id",
+    "run_id",
+    "layer",
+    "category"
+  ],
+  "title": "FailureEntry",
+  "type": "object"
+}

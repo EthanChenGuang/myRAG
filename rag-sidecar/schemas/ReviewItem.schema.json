@@ -1,0 +1,600 @@
+{
+  "$defs": {
+    "DictionaryTerm": {
+      "additionalProperties": false,
+      "properties": {
+        "canonical_language": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Target language of canonical_term; required when relation is translation.",
+          "title": "Canonical Language"
+        },
+        "canonical_term": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Canonical Term",
+          "type": "string"
+        },
+        "observed_term": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Observed Term",
+          "type": "string"
+        },
+        "relation": {
+          "enum": [
+            "synonym",
+            "abbreviation",
+            "translation",
+            "misspelling"
+          ],
+          "title": "Relation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "observed_term",
+        "canonical_term",
+        "relation"
+      ],
+      "title": "DictionaryTerm",
+      "type": "object"
+    },
+    "ExpertEvidenceSpan": {
+      "additionalProperties": false,
+      "properties": {
+        "chunk_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Chunk Id",
+          "type": "string"
+        },
+        "document_id": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "title": "Document Id",
+          "type": "string"
+        },
+        "document_name": {
+          "maxLength": 512,
+          "minLength": 1,
+          "title": "Document Name",
+          "type": "string"
+        },
+        "quote": {
+          "maxLength": 2000,
+          "minLength": 2,
+          "title": "Quote",
+          "type": "string"
+        },
+        "section": {
+          "maxLength": 512,
+          "title": "Section",
+          "type": "string"
+        }
+      },
+      "required": [
+        "chunk_id",
+        "document_id",
+        "document_name",
+        "section",
+        "quote"
+      ],
+      "title": "ExpertEvidenceSpan",
+      "type": "object"
+    },
+    "ExpertLabel": {
+      "additionalProperties": false,
+      "description": "D-18 label. A later contract version may add optional fields with defaults; unknown keys stay forbidden.",
+      "properties": {
+        "answerable": {
+          "title": "Answerable",
+          "type": "boolean"
+        },
+        "category": {
+          "enum": [
+            "multi_turn",
+            "compound",
+            "exact_term",
+            "table",
+            "scanned",
+            "no_answer",
+            "general",
+            "colloquial",
+            "ambiguous",
+            "typo",
+            "cross_lingual",
+            "selective_filter",
+            "injection",
+            "injection_evasive",
+            "cache_paraphrase",
+            "cache_near_miss",
+            "small_talk"
+          ],
+          "title": "Category",
+          "type": "string"
+        },
+        "confirm_near_duplicate_of": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confirm Near Duplicate Of"
+        },
+        "dictionary_terms": {
+          "items": {
+            "$ref": "#/$defs/DictionaryTerm"
+          },
+          "maxItems": 20,
+          "title": "Dictionary Terms",
+          "type": "array"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/ExpertEvidenceSpan"
+          },
+          "maxItems": 20,
+          "title": "Evidence",
+          "type": "array"
+        },
+        "expected_answer": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expected Answer"
+        },
+        "language": {
+          "enum": [
+            "zh",
+            "en",
+            "it"
+          ],
+          "title": "Language",
+          "type": "string"
+        },
+        "not_relevant_chunk_ids": {
+          "items": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 50,
+          "title": "Not Relevant Chunk Ids",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "paraphrased_question": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Paraphrased Question"
+        },
+        "pii_checked": {
+          "default": false,
+          "title": "Pii Checked",
+          "type": "boolean"
+        },
+        "triage": {
+          "items": {
+            "enum": [
+              "dictionary",
+              "training",
+              "golden",
+              "kb_gap",
+              "not_a_failure"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Triage",
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "answerable",
+        "category",
+        "language",
+        "triage"
+      ],
+      "title": "ExpertLabel",
+      "type": "object"
+    },
+    "RetrievalLogCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "chunk_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Chunk Id",
+          "type": "string"
+        },
+        "document_id": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "title": "Document Id",
+          "type": "string"
+        },
+        "fused_score": {
+          "title": "Fused Score",
+          "type": "number"
+        },
+        "kept": {
+          "title": "Kept",
+          "type": "boolean"
+        },
+        "language": {
+          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$",
+          "title": "Language",
+          "type": "string"
+        },
+        "rank": {
+          "minimum": 1,
+          "title": "Rank",
+          "type": "integer"
+        },
+        "rerank_score": {
+          "title": "Rerank Score",
+          "type": "number"
+        },
+        "similarity": {
+          "title": "Similarity",
+          "type": "number"
+        }
+      },
+      "required": [
+        "chunk_id",
+        "document_id",
+        "rank",
+        "similarity",
+        "kept"
+      ],
+      "title": "RetrievalLogCandidate",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "D-14 queue row as the review routes return it; the snapshot survives the log purge.",
+  "properties": {
+    "answer_language": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Answer Language"
+    },
+    "answer_masked": {
+      "anyOf": [
+        {
+          "maxLength": 20000,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Answer Masked"
+    },
+    "candidates": {
+      "items": {
+        "$ref": "#/$defs/RetrievalLogCandidate"
+      },
+      "maxItems": 50,
+      "title": "Candidates",
+      "type": "array"
+    },
+    "channel": {
+      "enum": [
+        "chat",
+        "embed",
+        "voice"
+      ],
+      "title": "Channel",
+      "type": "string"
+    },
+    "chunk_languages": {
+      "items": {
+        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$",
+        "type": "string"
+      },
+      "title": "Chunk Languages",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "expires_at": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Expires At"
+    },
+    "id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "label": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ExpertLabel"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "labelled_at": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Labelled At"
+    },
+    "labelled_by": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Labelled By"
+    },
+    "mined_at": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Mined At",
+      "type": "string"
+    },
+    "mining_window": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Mining Window"
+    },
+    "occurrences": {
+      "default": 1,
+      "minimum": 1,
+      "title": "Occurrences",
+      "type": "integer"
+    },
+    "outcome": {
+      "enum": [
+        "answered",
+        "refused_no_context",
+        "kb_unavailable",
+        "degraded_answer",
+        "unknown"
+      ],
+      "title": "Outcome",
+      "type": "string"
+    },
+    "query_language": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Query Language"
+    },
+    "query_language_confidence": {
+      "anyOf": [
+        {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Query Language Confidence"
+    },
+    "query_masked": {
+      "anyOf": [
+        {
+          "maxLength": 2000,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Query Masked"
+    },
+    "reasons": {
+      "items": {
+        "enum": [
+          "feedback_negative",
+          "refusal_disputed",
+          "groundedness_flagged",
+          "refused_high_score",
+          "zero_results",
+          "low_score",
+          "no_source_opened"
+        ],
+        "type": "string"
+      },
+      "title": "Reasons",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "retrieval_config_hash": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Retrieval Config Hash"
+    },
+    "retrieval_log_id": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Retrieval Log Id"
+    },
+    "split": {
+      "anyOf": [
+        {
+          "enum": [
+            "dev",
+            "test"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Split"
+    },
+    "split_group": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Split Group"
+    },
+    "status": {
+      "enum": [
+        "open",
+        "labelled",
+        "skipped",
+        "exported"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "tags": {
+      "items": {
+        "pattern": "^[a-z_]{1,32}$",
+        "type": "string"
+      },
+      "title": "Tags",
+      "type": "array"
+    },
+    "tenant_key": {
+      "pattern": "^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
+      "title": "Tenant Key",
+      "type": "string"
+    },
+    "trace_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Trace Id",
+      "type": "string"
+    },
+    "triage": {
+      "items": {
+        "enum": [
+          "dictionary",
+          "training",
+          "golden",
+          "kb_gap",
+          "not_a_failure"
+        ],
+        "type": "string"
+      },
+      "title": "Triage",
+      "type": "array",
+      "uniqueItems": true
+    }
+  },
+  "required": [
+    "id",
+    "tenant_key",
+    "trace_id",
+    "channel",
+    "outcome",
+    "status",
+    "mined_at"
+  ],
+  "title": "ReviewItem",
+  "type": "object"
+}

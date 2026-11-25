@@ -1153,6 +1153,24 @@
       ],
       "worker_id": "worker-1"
     },
+    "DictionaryCandidate": {
+      "canonical_language": null,
+      "canonical_term": "widget",
+      "example_review_item_ids": [
+        "00000000-0000-4000-8000-000000000011"
+      ],
+      "language": "en",
+      "observed_term": "wdgt",
+      "occurrences": 3,
+      "relation": "abbreviation",
+      "tenant_key": "s:default"
+    },
+    "DictionaryTerm": {
+      "canonical_language": "en",
+      "canonical_term": "blue widget",
+      "observed_term": "widget azzurro",
+      "relation": "translation"
+    },
     "DocTypeDetection": {
       "confidence": 0.85,
       "doc_type": "invoice_receipt",
@@ -1181,6 +1199,13 @@
           "question": "How many leave days do employees get?"
         }
       ]
+    },
+    "EmbedFeedbackRequest": {
+      "reasons": [
+        "incomplete"
+      ],
+      "token": "placeholder.token",
+      "vote": "not_helpful"
     },
     "EmbeddingProfileComparison": {
       "active_profile": "openai-3-small-1536",
@@ -2113,6 +2138,152 @@
       "schema_version": 1,
       "tier": "smoke"
     },
+    "ExpertEvidenceSpan": {
+      "chunk_id": "chunk-0001",
+      "document_id": "00000000-0000-4000-8000-000000000001",
+      "document_name": "Synthetic widget guide",
+      "quote": "The blue widget ships in a red box.",
+      "section": "Packaging"
+    },
+    "ExpertLabel": {
+      "answerable": true,
+      "category": "general",
+      "confirm_near_duplicate_of": null,
+      "dictionary_terms": [
+        {
+          "canonical_language": null,
+          "canonical_term": "widget",
+          "observed_term": "wdgt",
+          "relation": "abbreviation"
+        }
+      ],
+      "evidence": [
+        {
+          "chunk_id": "chunk-0001",
+          "document_id": "00000000-0000-4000-8000-000000000001",
+          "document_name": "Synthetic widget guide",
+          "quote": "The blue widget ships in a red box.",
+          "section": "Packaging"
+        }
+      ],
+      "expected_answer": "The blue widget ships in a red box.",
+      "language": "en",
+      "not_relevant_chunk_ids": [
+        "chunk-0002"
+      ],
+      "paraphrased_question": null,
+      "pii_checked": true,
+      "triage": [
+        "golden",
+        "training",
+        "dictionary"
+      ]
+    },
+    "FailureEntry": {
+      "category": "general",
+      "domain_set": null,
+      "item_id": "dom-0001",
+      "language": "en",
+      "layer": "retrieval",
+      "run_id": "run-0001"
+    },
+    "FailureReport": {
+      "by_layer": {
+        "generation": 0,
+        "groundedness": 0,
+        "injection": 0,
+        "refusal": 1,
+        "rerank_or_assembly": 0,
+        "retrieval": 1
+      },
+      "entries": [
+        {
+          "category": "general",
+          "domain_set": null,
+          "item_id": "dom-0001",
+          "language": "en",
+          "layer": "retrieval",
+          "run_id": "run-0001"
+        },
+        {
+          "category": "no_answer",
+          "domain_set": "0101010101010101",
+          "item_id": "dom-0002",
+          "language": "it",
+          "layer": "refusal",
+          "run_id": "run-0001"
+        }
+      ],
+      "generated_at": "2026-11-23T04:00:00Z",
+      "previous_report_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "run_ids": [
+        "run-0001"
+      ],
+      "schema_version": 1,
+      "since": "2026-11-16T00:00:00Z"
+    },
+    "FeedbackLoopStats": {
+      "schema_version": 1,
+      "since": "2026-11-16T00:00:00Z",
+      "tenants": [
+        {
+          "items_exported": 1,
+          "items_labelled": 2,
+          "items_mined": 4,
+          "items_skipped": 1,
+          "low_score_rate": 0.1,
+          "outcomes": {
+            "answered": 33,
+            "degraded_answer": 1,
+            "kb_unavailable": 1,
+            "refused_no_context": 5,
+            "unknown": 0
+          },
+          "refusal_disputes": 1,
+          "refusal_rate": 0.125,
+          "retrievals": 40,
+          "retrievals_by_channel": {
+            "chat": 30,
+            "embed": 8,
+            "voice": 2
+          },
+          "source_open_rate": 0.3,
+          "tenant_hash": "0101010101010101",
+          "thumbs_down_rate": 0.25,
+          "triage": {
+            "dictionary": 0,
+            "golden": 1,
+            "kb_gap": 1,
+            "not_a_failure": 0,
+            "training": 1
+          },
+          "votes": {
+            "answer_down": 2,
+            "answer_up": 6,
+            "embed_down": 0,
+            "embed_up": 1,
+            "refusal_down": 1,
+            "refusal_up": 0
+          },
+          "zero_result_rate": 0.05
+        }
+      ],
+      "until": "2026-11-23T00:00:00Z"
+    },
+    "FeedbackMiningConfig": {
+      "low_score_ceiling": {
+        "rerank": 0.2,
+        "similarity": 0.5
+      },
+      "open_item_ttl_days": 90,
+      "per_tenant_limit": 50,
+      "refused_high_score_floor": {
+        "rerank": 0.6,
+        "similarity": 0.7
+      },
+      "schema_version": 1,
+      "window_days": 7
+    },
     "FingerprintImpact": {
       "by_mechanism": [
         {
@@ -2131,6 +2302,14 @@
       ],
       "total_current": 10,
       "without_fingerprint": 1
+    },
+    "GatePopulationConfig": {
+      "min_items": 100,
+      "mode": "legacy",
+      "provenances": [
+        "production",
+        "human"
+      ]
     },
     "GateResult": {
       "mismatches": [],
@@ -3261,6 +3440,32 @@
         }
       ]
     },
+    "MiningRunResult": {
+      "config_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "disabled_reason": null,
+      "purged_log_rows": 12,
+      "purged_review_items": 1,
+      "schema_version": 1,
+      "since": "2026-11-16T00:00:00Z",
+      "status": "completed",
+      "tenants": [
+        {
+          "by_reason": {
+            "feedback_negative": 2,
+            "groundedness_flagged": 0,
+            "low_score": 0,
+            "no_source_opened": 0,
+            "refusal_disputed": 0,
+            "refused_high_score": 0,
+            "zero_results": 1
+          },
+          "inserted": 3,
+          "tenant_hash": "0101010101010101"
+        }
+      ],
+      "total_inserted": 3,
+      "until": "2026-11-23T00:00:00Z"
+    },
     "NoiseConfig": {
       "floor": 0.02,
       "gated_slice_prefixes": [
@@ -4343,6 +4548,12 @@
       "schema_version": 1,
       "target_false_refusal": 0.05
     },
+    "RefusalFeedbackRequest": {
+      "reasons": [
+        "answer_exists"
+      ],
+      "vote": "expected_answer"
+    },
     "RefusalThresholds": {
       "cells": [],
       "config_hash": null,
@@ -4363,6 +4574,74 @@
       "sources": [
         "manual"
       ]
+    },
+    "RetrievalLogCandidate": {
+      "chunk_id": "chunk-0001",
+      "document_id": "00000000-0000-4000-8000-000000000001",
+      "kept": true,
+      "language": "en",
+      "rank": 1,
+      "rerank_score": 0.91,
+      "similarity": 0.82
+    },
+    "RetrievalLogEntry": {
+      "answer_id": null,
+      "answer_language": "en",
+      "candidate_count": 2,
+      "candidates": [
+        {
+          "chunk_id": "chunk-0001",
+          "document_id": "00000000-0000-4000-8000-000000000001",
+          "kept": true,
+          "language": "en",
+          "rank": 1,
+          "rerank_score": 0.91,
+          "similarity": 0.82
+        },
+        {
+          "chunk_id": "chunk-0002",
+          "document_id": "00000000-0000-4000-8000-000000000010",
+          "kept": false,
+          "rank": 2,
+          "similarity": 0.64
+        }
+      ],
+      "channel": "chat",
+      "chat_id": "00000000-0000-4000-8000-000000000111",
+      "chunk_languages": [
+        "en",
+        "und"
+      ],
+      "created_at": "2026-11-20T11:59:00Z",
+      "feedback_at": "2026-11-20T12:00:00Z",
+      "feedback_kind": "answer",
+      "feedback_reasons": [
+        "incomplete"
+      ],
+      "feedback_vote": -1,
+      "id": "00000000-0000-4000-8000-000000000100",
+      "latency_ms": 180,
+      "organization_id": null,
+      "outcome": "answered",
+      "pipeline": "v2",
+      "query_fingerprint": "1111111111111111111111111111111111111111111111111111111111111111",
+      "query_language": "en",
+      "query_language_confidence": 0.5,
+      "query_masked": "Which box does the blue widget ship in?",
+      "rag_mode": "strict",
+      "refusal_decision": null,
+      "refusal_reason": null,
+      "retrieval_config_hash": "cfg-0001",
+      "source_opened_count": 1,
+      "stage_latency": {
+        "embed": 40.0,
+        "search": 90.0
+      },
+      "status": "ok",
+      "tenant_key": "s:default",
+      "top_score": 0.91,
+      "trace_id": "0123456789abcdef0123456789abcdef",
+      "user_id": "00000000-0000-4000-8000-000000000110"
     },
     "RetrievalOverrides": {
       "candidate_pool_size": null,
@@ -4389,6 +4668,191 @@
       "rrf_k": 60,
       "schema_version": 1,
       "sub_question_coverage": true
+    },
+    "ReviewItem": {
+      "answer_language": "en",
+      "answer_masked": null,
+      "candidates": [
+        {
+          "chunk_id": "chunk-0001",
+          "document_id": "00000000-0000-4000-8000-000000000001",
+          "kept": true,
+          "language": "en",
+          "rank": 1,
+          "rerank_score": 0.91,
+          "similarity": 0.82
+        },
+        {
+          "chunk_id": "chunk-0002",
+          "document_id": "00000000-0000-4000-8000-000000000010",
+          "kept": false,
+          "rank": 2,
+          "similarity": 0.64
+        }
+      ],
+      "channel": "chat",
+      "chunk_languages": [
+        "en"
+      ],
+      "expires_at": "2027-02-21T03:00:00Z",
+      "id": "00000000-0000-4000-8000-000000000011",
+      "label": {
+        "answerable": true,
+        "category": "general",
+        "confirm_near_duplicate_of": null,
+        "dictionary_terms": [
+          {
+            "canonical_language": null,
+            "canonical_term": "widget",
+            "observed_term": "wdgt",
+            "relation": "abbreviation"
+          }
+        ],
+        "evidence": [
+          {
+            "chunk_id": "chunk-0001",
+            "document_id": "00000000-0000-4000-8000-000000000001",
+            "document_name": "Synthetic widget guide",
+            "quote": "The blue widget ships in a red box.",
+            "section": "Packaging"
+          }
+        ],
+        "expected_answer": "The blue widget ships in a red box.",
+        "language": "en",
+        "not_relevant_chunk_ids": [
+          "chunk-0002"
+        ],
+        "paraphrased_question": null,
+        "pii_checked": true,
+        "triage": [
+          "golden",
+          "training",
+          "dictionary"
+        ]
+      },
+      "labelled_at": "2026-11-21T10:00:00Z",
+      "labelled_by": "00000000-0000-4000-8000-000000000101",
+      "mined_at": "2026-11-23T03:00:00Z",
+      "mining_window": "2026-11-16/2026-11-23",
+      "occurrences": 2,
+      "outcome": "answered",
+      "query_language": "en",
+      "query_language_confidence": 1.0,
+      "query_masked": "Which box does the blue widget ship in?",
+      "reasons": [
+        "feedback_negative",
+        "low_score"
+      ],
+      "retrieval_config_hash": "cfg-0001",
+      "retrieval_log_id": "00000000-0000-4000-8000-000000000100",
+      "split": "dev",
+      "split_group": "g-0001",
+      "status": "labelled",
+      "tags": [
+        "representative"
+      ],
+      "tenant_key": "s:default",
+      "trace_id": "0123456789abcdef0123456789abcdef",
+      "triage": [
+        "golden",
+        "training",
+        "dictionary"
+      ]
+    },
+    "ReviewItemListResponse": {
+      "items": [
+        {
+          "answer_language": "en",
+          "answer_masked": null,
+          "candidates": [
+            {
+              "chunk_id": "chunk-0001",
+              "document_id": "00000000-0000-4000-8000-000000000001",
+              "kept": true,
+              "language": "en",
+              "rank": 1,
+              "rerank_score": 0.91,
+              "similarity": 0.82
+            },
+            {
+              "chunk_id": "chunk-0002",
+              "document_id": "00000000-0000-4000-8000-000000000010",
+              "kept": false,
+              "rank": 2,
+              "similarity": 0.64
+            }
+          ],
+          "channel": "chat",
+          "chunk_languages": [
+            "en"
+          ],
+          "expires_at": "2027-02-21T03:00:00Z",
+          "id": "00000000-0000-4000-8000-000000000011",
+          "label": {
+            "answerable": true,
+            "category": "general",
+            "confirm_near_duplicate_of": null,
+            "dictionary_terms": [
+              {
+                "canonical_language": null,
+                "canonical_term": "widget",
+                "observed_term": "wdgt",
+                "relation": "abbreviation"
+              }
+            ],
+            "evidence": [
+              {
+                "chunk_id": "chunk-0001",
+                "document_id": "00000000-0000-4000-8000-000000000001",
+                "document_name": "Synthetic widget guide",
+                "quote": "The blue widget ships in a red box.",
+                "section": "Packaging"
+              }
+            ],
+            "expected_answer": "The blue widget ships in a red box.",
+            "language": "en",
+            "not_relevant_chunk_ids": [
+              "chunk-0002"
+            ],
+            "paraphrased_question": null,
+            "pii_checked": true,
+            "triage": [
+              "golden",
+              "training",
+              "dictionary"
+            ]
+          },
+          "labelled_at": "2026-11-21T10:00:00Z",
+          "labelled_by": "00000000-0000-4000-8000-000000000101",
+          "mined_at": "2026-11-23T03:00:00Z",
+          "mining_window": "2026-11-16/2026-11-23",
+          "occurrences": 2,
+          "outcome": "answered",
+          "query_language": "en",
+          "query_language_confidence": 1.0,
+          "query_masked": "Which box does the blue widget ship in?",
+          "reasons": [
+            "feedback_negative",
+            "low_score"
+          ],
+          "retrieval_config_hash": "cfg-0001",
+          "retrieval_log_id": "00000000-0000-4000-8000-000000000100",
+          "split": "dev",
+          "split_group": "g-0001",
+          "status": "labelled",
+          "tags": [
+            "representative"
+          ],
+          "tenant_key": "s:default",
+          "trace_id": "0123456789abcdef0123456789abcdef",
+          "triage": [
+            "golden",
+            "training",
+            "dictionary"
+          ]
+        }
+      ],
+      "next_cursor": "cursor-0001"
     },
     "ReviewQueueItem": {
       "answer_masked": "Twenty days per year.",
@@ -4518,6 +4982,21 @@
       ],
       "schema_version": 1
     },
+    "ShipCheckResult": {
+      "baseline_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "candidate_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+      "ci_high": 0.05,
+      "ci_low": 0.01,
+      "gate_population": "real",
+      "manifest_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "passed": true,
+      "reasons": [],
+      "resamples": 10000,
+      "schema_version": 1,
+      "seed": 0,
+      "target_delta": 0.03,
+      "target_metric": "recall_at_5"
+    },
     "SidecarError": {
       "error": "synthetic error"
     },
@@ -4536,11 +5015,49 @@
       ],
       "status": "ready"
     },
+    "SourceSignalRequest": {
+      "kind": "source_opened"
+    },
     "SubQuestions": {
       "questions": [
         "Does the product warranty cover ERR_TIMEOUT?",
         "How long is the product warranty?"
       ]
+    },
+    "TrainingNegative": {
+      "chunk_id": "chunk-0003",
+      "confirmed": false,
+      "document_id": "00000000-0000-4000-8000-000000000010",
+      "rank": 3,
+      "score": 0.41
+    },
+    "TrainingPair": {
+      "document_group": "g-0001",
+      "hard_negatives": [
+        {
+          "chunk_id": "chunk-0002",
+          "confirmed": true,
+          "document_id": "00000000-0000-4000-8000-000000000010",
+          "rank": 2,
+          "score": 0.64
+        }
+      ],
+      "language": "en",
+      "positive": {
+        "chunk_id": "chunk-0001",
+        "document_id": "00000000-0000-4000-8000-000000000001",
+        "quote": "ships in a red box"
+      },
+      "query_masked": "Which box does the blue widget ship in?",
+      "review_item_id": "00000000-0000-4000-8000-000000000011",
+      "source": "production_feedback",
+      "split": "train",
+      "tenant_key": "s:default"
+    },
+    "TrainingPositive": {
+      "chunk_id": "chunk-0001",
+      "document_id": "00000000-0000-4000-8000-000000000001",
+      "quote": "ships in a red box"
     },
     "UploadApproval": {
       "decided_at": "2026-01-01T00:00:00Z",
@@ -4548,6 +5065,111 @@
       "reason": "member_upload",
       "required": true,
       "uploader_id": "00000000-0000-4000-8000-0000000000c1"
+    },
+    "WeeklyReport": {
+      "failures": {
+        "by_layer": {
+          "generation": 0,
+          "groundedness": 0,
+          "injection": 0,
+          "refusal": 1,
+          "rerank_or_assembly": 0,
+          "retrieval": 1
+        },
+        "entries": [
+          {
+            "category": "general",
+            "domain_set": null,
+            "item_id": "dom-0001",
+            "language": "en",
+            "layer": "retrieval",
+            "run_id": "run-0001"
+          },
+          {
+            "category": "no_answer",
+            "domain_set": "0101010101010101",
+            "item_id": "dom-0002",
+            "language": "it",
+            "layer": "refusal",
+            "run_id": "run-0001"
+          }
+        ],
+        "generated_at": "2026-11-23T04:00:00Z",
+        "previous_report_sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+        "run_ids": [
+          "run-0001"
+        ],
+        "schema_version": 1,
+        "since": "2026-11-16T00:00:00Z"
+      },
+      "generated_at": "2026-11-23T04:00:00Z",
+      "schema_version": 1,
+      "since": "2026-11-16T00:00:00Z",
+      "stats": {
+        "schema_version": 1,
+        "since": "2026-11-16T00:00:00Z",
+        "tenants": [
+          {
+            "items_exported": 1,
+            "items_labelled": 2,
+            "items_mined": 4,
+            "items_skipped": 1,
+            "low_score_rate": 0.1,
+            "outcomes": {
+              "answered": 33,
+              "degraded_answer": 1,
+              "kb_unavailable": 1,
+              "refused_no_context": 5,
+              "unknown": 0
+            },
+            "refusal_disputes": 1,
+            "refusal_rate": 0.125,
+            "retrievals": 40,
+            "retrievals_by_channel": {
+              "chat": 30,
+              "embed": 8,
+              "voice": 2
+            },
+            "source_open_rate": 0.3,
+            "tenant_hash": "0101010101010101",
+            "thumbs_down_rate": 0.25,
+            "triage": {
+              "dictionary": 0,
+              "golden": 1,
+              "kb_gap": 1,
+              "not_a_failure": 0,
+              "training": 1
+            },
+            "votes": {
+              "answer_down": 2,
+              "answer_up": 6,
+              "embed_down": 0,
+              "embed_up": 1,
+              "refusal_down": 1,
+              "refusal_up": 0
+            },
+            "zero_result_rate": 0.05
+          }
+        ],
+        "until": "2026-11-23T00:00:00Z"
+      },
+      "stats_skipped_reason": null,
+      "trend": [
+        {
+          "config_hash": "cfg-0001",
+          "correct_refusal_rate": 0.95,
+          "domain_set": "0101010101010101",
+          "false_refusal_rate": 0.05,
+          "gate_population": "real",
+          "manifest_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+          "mrr": 0.7,
+          "recall_at_10": 0.9,
+          "recall_at_5": 0.8,
+          "run_id": "run-0001",
+          "started_at": "2026-11-22T01:00:00Z"
+        }
+      ],
+      "until": "2026-11-23T00:00:00Z"
     }
   },
   "variants": {

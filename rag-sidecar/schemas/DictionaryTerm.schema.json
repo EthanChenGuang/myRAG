@@ -1,0 +1,48 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "canonical_language": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Target language of canonical_term; required when relation is translation.",
+      "title": "Canonical Language"
+    },
+    "canonical_term": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Canonical Term",
+      "type": "string"
+    },
+    "observed_term": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Observed Term",
+      "type": "string"
+    },
+    "relation": {
+      "enum": [
+        "synonym",
+        "abbreviation",
+        "translation",
+        "misspelling"
+      ],
+      "title": "Relation",
+      "type": "string"
+    }
+  },
+  "required": [
+    "observed_term",
+    "canonical_term",
+    "relation"
+  ],
+  "title": "DictionaryTerm",
+  "type": "object"
+}

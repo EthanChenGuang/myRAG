@@ -12,8 +12,22 @@
       "title": "Assignments",
       "type": "object"
     },
+    "group_assignments": {
+      "additionalProperties": {
+        "enum": [
+          "dev",
+          "test"
+        ],
+        "type": "string"
+      },
+      "title": "Group Assignments",
+      "type": "object"
+    },
     "rule": {
-      "const": "sha256-first8hex-mod100-lt70-dev",
+      "enum": [
+        "sha256-first8hex-mod100-lt70-dev",
+        "docgroup-sha256-first8hex-mod100-lt70-dev"
+      ],
       "title": "Rule",
       "type": "string"
     },

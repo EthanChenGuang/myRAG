@@ -1,0 +1,118 @@
+{
+  "additionalProperties": false,
+  "description": "D-24 ship rule result; passed exactly when no reason code is listed.",
+  "properties": {
+    "baseline_hash": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Baseline Hash",
+      "type": "string"
+    },
+    "candidate_hash": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Candidate Hash",
+      "type": "string"
+    },
+    "ci_high": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ci High"
+    },
+    "ci_low": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ci Low"
+    },
+    "gate_population": {
+      "enum": [
+        "all",
+        "production",
+        "real"
+      ],
+      "title": "Gate Population",
+      "type": "string"
+    },
+    "manifest_hash": {
+      "anyOf": [
+        {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Manifest Hash"
+    },
+    "passed": {
+      "title": "Passed",
+      "type": "boolean"
+    },
+    "reasons": {
+      "items": {
+        "pattern": "^[a-z][a-z0-9_]{0,63}$",
+        "type": "string"
+      },
+      "title": "Reasons",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "resamples": {
+      "default": 10000,
+      "minimum": 1,
+      "title": "Resamples",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "seed": {
+      "default": 0,
+      "title": "Seed",
+      "type": "integer"
+    },
+    "target_delta": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Target Delta"
+    },
+    "target_metric": {
+      "pattern": "^[a-z][a-z0-9_@.]{0,63}$",
+      "title": "Target Metric",
+      "type": "string"
+    }
+  },
+  "required": [
+    "passed",
+    "target_metric",
+    "baseline_hash",
+    "candidate_hash",
+    "gate_population"
+  ],
+  "title": "ShipCheckResult",
+  "type": "object"
+}

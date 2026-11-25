@@ -1,0 +1,719 @@
+{
+  "$defs": {
+    "ChannelCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "chat": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Chat",
+          "type": "integer"
+        },
+        "embed": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Embed",
+          "type": "integer"
+        },
+        "voice": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Voice",
+          "type": "integer"
+        }
+      },
+      "title": "ChannelCounts",
+      "type": "object"
+    },
+    "EvalTrendPoint": {
+      "additionalProperties": false,
+      "properties": {
+        "config_hash": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Config Hash"
+        },
+        "correct_refusal_rate": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Correct Refusal Rate"
+        },
+        "domain_set": {
+          "pattern": "^[a-f0-9]{8,64}$",
+          "title": "Domain Set",
+          "type": "string"
+        },
+        "false_refusal_rate": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "False Refusal Rate"
+        },
+        "gate_population": {
+          "enum": [
+            "all",
+            "production",
+            "real"
+          ],
+          "title": "Gate Population",
+          "type": "string"
+        },
+        "manifest_hash": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Manifest Hash"
+        },
+        "mrr": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mrr"
+        },
+        "recall_at_10": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recall At 10"
+        },
+        "recall_at_5": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recall At 5"
+        },
+        "run_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Run Id",
+          "type": "string"
+        },
+        "started_at": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Started At",
+          "type": "string"
+        }
+      },
+      "required": [
+        "domain_set",
+        "run_id",
+        "started_at",
+        "gate_population"
+      ],
+      "title": "EvalTrendPoint",
+      "type": "object"
+    },
+    "FailureEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "enum": [
+            "multi_turn",
+            "compound",
+            "exact_term",
+            "table",
+            "scanned",
+            "no_answer",
+            "general",
+            "colloquial",
+            "ambiguous",
+            "typo",
+            "cross_lingual",
+            "selective_filter",
+            "injection",
+            "injection_evasive",
+            "cache_paraphrase",
+            "cache_near_miss",
+            "small_talk"
+          ],
+          "title": "Category",
+          "type": "string"
+        },
+        "domain_set": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{8,64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Domain Set"
+        },
+        "item_id": {
+          "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$",
+          "title": "Item Id",
+          "type": "string"
+        },
+        "language": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Language"
+        },
+        "layer": {
+          "enum": [
+            "retrieval",
+            "rerank_or_assembly",
+            "refusal",
+            "generation",
+            "groundedness",
+            "injection"
+          ],
+          "title": "Layer",
+          "type": "string"
+        },
+        "run_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Run Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "item_id",
+        "run_id",
+        "layer",
+        "category"
+      ],
+      "title": "FailureEntry",
+      "type": "object"
+    },
+    "FailureReport": {
+      "additionalProperties": false,
+      "description": "Phase 7 D-23 failure report, taken over by Phase 5.1.1 D-02: ids and codes only.",
+      "properties": {
+        "by_layer": {
+          "$ref": "#/$defs/LayerCounts"
+        },
+        "entries": {
+          "items": {
+            "$ref": "#/$defs/FailureEntry"
+          },
+          "title": "Entries",
+          "type": "array"
+        },
+        "generated_at": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Generated At",
+          "type": "string"
+        },
+        "previous_report_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Previous Report Sha256"
+        },
+        "run_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Run Ids",
+          "type": "array"
+        },
+        "schema_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "since": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Since",
+          "type": "string"
+        }
+      },
+      "required": [
+        "generated_at",
+        "since",
+        "by_layer"
+      ],
+      "title": "FailureReport",
+      "type": "object"
+    },
+    "FeedbackLoopStats": {
+      "additionalProperties": false,
+      "properties": {
+        "schema_version": {
+          "const": 1,
+          "default": 1,
+          "title": "Schema Version",
+          "type": "integer"
+        },
+        "since": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Since",
+          "type": "string"
+        },
+        "tenants": {
+          "items": {
+            "$ref": "#/$defs/TenantLoopStats"
+          },
+          "title": "Tenants",
+          "type": "array"
+        },
+        "until": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Until",
+          "type": "string"
+        }
+      },
+      "required": [
+        "since",
+        "until"
+      ],
+      "title": "FeedbackLoopStats",
+      "type": "object"
+    },
+    "LayerCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "generation": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Generation",
+          "type": "integer"
+        },
+        "groundedness": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Groundedness",
+          "type": "integer"
+        },
+        "injection": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Injection",
+          "type": "integer"
+        },
+        "refusal": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Refusal",
+          "type": "integer"
+        },
+        "rerank_or_assembly": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Rerank Or Assembly",
+          "type": "integer"
+        },
+        "retrieval": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Retrieval",
+          "type": "integer"
+        }
+      },
+      "title": "LayerCounts",
+      "type": "object"
+    },
+    "OutcomeCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "answered": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Answered",
+          "type": "integer"
+        },
+        "degraded_answer": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Degraded Answer",
+          "type": "integer"
+        },
+        "kb_unavailable": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Kb Unavailable",
+          "type": "integer"
+        },
+        "refused_no_context": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Refused No Context",
+          "type": "integer"
+        },
+        "unknown": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Unknown",
+          "type": "integer"
+        }
+      },
+      "title": "OutcomeCounts",
+      "type": "object"
+    },
+    "TenantLoopStats": {
+      "additionalProperties": false,
+      "properties": {
+        "items_exported": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Items Exported",
+          "type": "integer"
+        },
+        "items_labelled": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Items Labelled",
+          "type": "integer"
+        },
+        "items_mined": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Items Mined",
+          "type": "integer"
+        },
+        "items_skipped": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Items Skipped",
+          "type": "integer"
+        },
+        "low_score_rate": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Low Score Rate"
+        },
+        "outcomes": {
+          "$ref": "#/$defs/OutcomeCounts"
+        },
+        "refusal_disputes": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Refusal Disputes",
+          "type": "integer"
+        },
+        "refusal_rate": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Refusal Rate"
+        },
+        "retrievals": {
+          "minimum": 0,
+          "title": "Retrievals",
+          "type": "integer"
+        },
+        "retrievals_by_channel": {
+          "$ref": "#/$defs/ChannelCounts"
+        },
+        "source_open_rate": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Open Rate"
+        },
+        "tenant_hash": {
+          "pattern": "^[a-f0-9]{8,64}$",
+          "title": "Tenant Hash",
+          "type": "string"
+        },
+        "thumbs_down_rate": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Thumbs Down Rate"
+        },
+        "triage": {
+          "$ref": "#/$defs/TriageCounts"
+        },
+        "votes": {
+          "$ref": "#/$defs/VoteCounts"
+        },
+        "zero_result_rate": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Zero Result Rate"
+        }
+      },
+      "required": [
+        "tenant_hash",
+        "retrievals",
+        "retrievals_by_channel",
+        "outcomes",
+        "votes",
+        "triage"
+      ],
+      "title": "TenantLoopStats",
+      "type": "object"
+    },
+    "TriageCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "dictionary": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Dictionary",
+          "type": "integer"
+        },
+        "golden": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Golden",
+          "type": "integer"
+        },
+        "kb_gap": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Kb Gap",
+          "type": "integer"
+        },
+        "not_a_failure": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Not A Failure",
+          "type": "integer"
+        },
+        "training": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Training",
+          "type": "integer"
+        }
+      },
+      "title": "TriageCounts",
+      "type": "object"
+    },
+    "VoteCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "answer_down": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Answer Down",
+          "type": "integer"
+        },
+        "answer_up": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Answer Up",
+          "type": "integer"
+        },
+        "embed_down": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Embed Down",
+          "type": "integer"
+        },
+        "embed_up": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Embed Up",
+          "type": "integer"
+        },
+        "refusal_down": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Refusal Down",
+          "type": "integer"
+        },
+        "refusal_up": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Refusal Up",
+          "type": "integer"
+        }
+      },
+      "title": "VoteCounts",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "failures": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/FailureReport"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "generated_at": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Generated At",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "since": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Since",
+      "type": "string"
+    },
+    "stats": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/FeedbackLoopStats"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "stats_skipped_reason": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Stats Skipped Reason"
+    },
+    "trend": {
+      "items": {
+        "$ref": "#/$defs/EvalTrendPoint"
+      },
+      "title": "Trend",
+      "type": "array"
+    },
+    "until": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Until",
+      "type": "string"
+    }
+  },
+  "required": [
+    "generated_at",
+    "since",
+    "until"
+  ],
+  "title": "WeeklyReport",
+  "type": "object"
+}
