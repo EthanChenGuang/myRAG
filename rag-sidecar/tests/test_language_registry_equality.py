@@ -1,8 +1,8 @@
 """The registry equals the sidecar's current language constants, one check per consumer (Phase 3.2 D-05).
 
-lang.py and the Docling OCR mapping do not read the registry yet; these checks keep both in step until they do.
+Since plan 03.2-10, lang.py and the Docling OCR mapping read the registry; the checks below prove they follow it.
 Detector 3 (docling_adapter.detect_language) keeps its own stopword list and threshold (research F-10):
-its outputs are pinned here unchanged, and plan 03.2-10 decides its future.
+its outputs are pinned here unchanged; only its language codes come from the registry.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ pytest.importorskip("docling_core")
 pytest.importorskip("regex")
 
 from rag_sidecar.contracts.languages import LanguagePack, LanguageRegistry  # noqa: E402
-from rag_sidecar.ingest.lang import _EN_STOPWORDS, _IT_STOPWORDS  # noqa: E402
+from rag_sidecar.ingest.lang import detect_language_with_confidence  # noqa: E402
 from rag_sidecar.parse.docling_adapter import detect_language as docling_detect_language  # noqa: E402
 from rag_sidecar.parse.docling_adapter import to_ppocr_code  # noqa: E402
 
@@ -27,10 +27,15 @@ VECTORS = json.loads((REPO_ROOT / "tests" / "fixtures" / "ingest" / "lang-vector
     "vectors"
 ]
 
-_LANG_PY_STOPWORDS: dict[str, frozenset[str]] = {"zh": frozenset(), "en": _EN_STOPWORDS, "it": _IT_STOPWORDS}
-
-# Detector 3 returns None on an en/it stopword tie where detectors 1 and 2 return en (pinned, not changed here).
-_DOCLING_DETECTOR_DIFFERS = {"mixed-it-en-tie": None, "en-it-equal-two": None}
+# Detector 3 returns None on an en/it stopword tie where detectors 1 and 2 return en, and needs a 0.3 CJK share
+# where they need 0.2 (pinned, not changed here). It takes no candidate list, so candidate vectors are skipped.
+_DOCLING_DETECTOR_DIFFERS = {
+    "mixed-it-en-tie": None,
+    "en-it-equal-two": None,
+    "en-it-tie-four": None,
+    "mixed-zh-en-balanced": "en",
+}
+_DOCLING_VECTORS = [vector for vector in VECTORS if "candidates" not in vector]
 
 
 def _raw() -> dict:
@@ -41,16 +46,11 @@ def _packs(raw: dict | None = None) -> list[LanguagePack]:
     return LanguageRegistry.model_validate(raw or _raw()).packs
 
 
-def _lang_py_stopwords(packs: list[LanguagePack]) -> list[str]:
-    return [pack.code for pack in packs if set(pack.stopwords.detection) != _LANG_PY_STOPWORDS.get(pack.code)]
-
-
 def _docling_ocr_codes(packs: list[LanguagePack]) -> list[str]:
     return [pack.code for pack in packs if [pack.ocr_codes.docling.rapidocr] != to_ppocr_code([pack.code])]
 
 
 CONSUMERS: dict[str, Callable[[list[LanguagePack]], list[str]]] = {
-    "lang.py detection stopwords": _lang_py_stopwords,
     "docling_adapter.to_ppocr_code": _docling_ocr_codes,
 }
 
@@ -64,15 +64,18 @@ def test_to_ppocr_code_maps_each_registry_language_to_its_rapidocr_code():
     assert [to_ppocr_code([code])[0] for code in ("zh", "en", "it")] == ["ch", "en", "it"]
 
 
-@pytest.mark.parametrize("vector", VECTORS, ids=[vector["name"] for vector in VECTORS])
+@pytest.mark.parametrize("vector", _DOCLING_VECTORS, ids=[vector["name"] for vector in _DOCLING_VECTORS])
 def test_docling_detector_outputs_are_pinned(vector):
     expected = _DOCLING_DETECTOR_DIFFERS.get(vector["name"], vector["language"])
     assert docling_detect_language(vector["text"]) == expected
 
 
-def test_changing_one_detection_stopword_fails_exactly_the_stopword_check():
+def test_changing_one_detection_stopword_changes_lang_py_and_fails_no_consumer_check():
     raw = _raw()
     italian = next(pack for pack in raw["packs"] if pack["code"] == "it")
     italian["stopwords"]["detection"] = italian["stopwords"]["detection"][1:] + ["parolanuova"]
     failing = [name for name, check in CONSUMERS.items() if check(_packs(raw))]
-    assert failing == ["lang.py detection stopwords"]
+    assert failing == []
+    drifted = LanguageRegistry.model_validate(raw)
+    assert detect_language_with_confidence("parolanuova", registry=drifted).language == "it"
+    assert detect_language_with_confidence("parolanuova").language is None

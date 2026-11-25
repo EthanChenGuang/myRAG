@@ -135,7 +135,8 @@ export function answerGroundednessLanguage(answer: string): GroundednessLanguage
   const text = stripCitationMarkers(answer);
   const language = detectLanguage(text);
   if (language === null) return 'unknown';
-  if (language !== 'zh') return language;
+  if (language === 'en' || language === 'it') return language;
+  if (language !== 'zh') return 'unknown';
   const script = chineseScript(text);
   if (script === 'hans') return 'zh-Hans';
   if (script === 'hant') return 'zh-Hant';
