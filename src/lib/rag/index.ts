@@ -5,7 +5,7 @@ export type { RetrievalFilterInput } from './backend/types';
 export { LEXICAL_VERSION } from './lexical/chunk-text';
 export { RERANK_TEXT_VERSION } from './rerank/types';
 export { countTokens } from './ingest/text/tokens';
-export { isQueryLayerEnabled, isV2Pipeline } from './v2/switch';
+export { isQueryLayerEnabled, isV2Pipeline, voiceServerCondenses } from './v2/switch';
 export { isSmallTalkResult } from './v2/result';
 export { buildHistoryWindow } from './query/history';
 export type { HistoryWindowLimits } from './query/history';
@@ -81,6 +81,7 @@ export { refusalCalibrationStatus, currentRefusalCalibrationStatus } from './ref
 export type { RefusalCalibrationStatus } from './refusal/status';
 export type {
   Candidate,
+  HistoryTurn,
   LogChannel,
   LogContext,
   LogOutcome,
