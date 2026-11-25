@@ -1,6 +1,25 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import http from 'node:http';
+import type { AddressInfo } from 'node:net';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { InsertAnswerRecordInput } from '@/lib/answers/store';
 import { AnswerRecordSchema, type GroundednessRequest, type GroundednessResult } from '@/lib/rag-eval/contracts.generated';
-import { scoreAnswerGroundedness, type ScoreAnswerGroundednessInput } from '@/lib/rag/generation/groundedness';
+import {
+  createGroundednessStep,
+  mintAnswerId,
+  scheduleAnswerFinish,
+  type AnswerFinishDeps,
+  type AnswerFinishInput,
+  type GroundednessStepDeps,
+} from '@/lib/rag/generation/answer-finish';
+import { scoreAnswerGroundedness, type AnswerGroundedness, type ScoreAnswerGroundednessInput } from '@/lib/rag/generation/groundedness';
+import { requestGroundedness } from '@/lib/rag/generation/groundedness-client';
+import type { LangfuseConfig } from '@/lib/rag/trace/config';
+import { resetLangfuseForTests } from '@/lib/rag/trace/langfuse';
+import { isSampled } from '@/lib/rag/trace/sample';
+import { scoreId } from '@/lib/rag/trace/scores';
+import { mintScope } from '@/lib/rag/tenant/scope';
+import { startFakeLangfuse, type FakeLangfuse } from '../../helpers/fake-langfuse.mts';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -174,5 +193,367 @@ describe('scoreAnswerGroundedness', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const result = await scoreAnswerGroundedness(scoreInput(), { request, now: () => NOW });
     expect(result).toMatchObject({ status: 'not_checked', label: 'not_checked', reason: 'error' });
+  });
+});
+
+const USER = '00000000-0000-4000-8000-0000000018b1';
+const QUERY = 'What is the refund window for annual plans?';
+const LF_PUBLIC = 'pk-lf-test-placeholder';
+const LF_SECRET = 'sk-lf-test-placeholder';
+const ATTR = 'langfuse.observation.metadata.';
+
+function traceIdWhere(sampled: boolean, rate: number): string {
+  for (let i = 0; i < 10_000; i += 1) {
+    const candidate = i.toString(16).padStart(32, 'a');
+    if (isSampled(candidate, rate, 'trace') === sampled) return candidate;
+  }
+  throw new Error('no trace id found');
+}
+
+function finishInput(overrides: Partial<AnswerFinishInput> = {}): AnswerFinishInput {
+  return {
+    answerId: mintAnswerId(),
+    scope: mintScope('single', null, null),
+    userId: USER,
+    chatId: null,
+    traceId: 'f'.repeat(32),
+    modelId: 'test/model',
+    ragMode: 'strict',
+    queryText: QUERY,
+    citations: [
+      {
+        n: 1,
+        alias: 'S1',
+        chunkIds: ['c1'],
+        documentId: 'd1',
+        documentName: 'Refunds.pdf',
+        documentVersion: 1,
+        page: null,
+        sectionPath: null,
+        quote: BLOCK_ONE,
+        quoteHash: 'a'.repeat(64),
+        strategy: 'chunk-alias',
+      },
+    ],
+    citationStrategy: 'chunk-alias',
+    invalidCitations: 0,
+    answerText: ANSWER,
+    aborted: false,
+    groundednessEligible: true,
+    toolOutputUsed: false,
+    premise: {
+      blocks: [
+        { alias: 'S1', text: BLOCK_ONE },
+        { alias: 'S2', text: BLOCK_TWO },
+      ],
+      webSearchTexts: [WEB_TEXT],
+    },
+    requestLanguage: 'en',
+    ...overrides,
+  };
+}
+
+function langfuseConfig(baseUrl: string, overrides: Partial<LangfuseConfig> = {}): LangfuseConfig {
+  return {
+    enabled: true,
+    publicKey: LF_PUBLIC,
+    secretKey: LF_SECRET,
+    baseUrl,
+    sampleRate: 1,
+    reviewSampleRate: 0,
+    captureContent: false,
+    ...overrides,
+  };
+}
+
+interface StepHarness {
+  inserts: InsertAnswerRecordInput[];
+  updates: Array<{ id: string; groundedness: AnswerGroundedness }>;
+  tasks: Array<() => Promise<void>>;
+  deps: Partial<AnswerFinishDeps>;
+  run(): Promise<void>;
+}
+
+function stepHarness(step: Partial<GroundednessStepDeps> = {}, options: { inserted?: boolean; updateError?: boolean } = {}): StepHarness {
+  const inserts: InsertAnswerRecordInput[] = [];
+  const updates: Array<{ id: string; groundedness: AnswerGroundedness }> = [];
+  const tasks: Array<() => Promise<void>> = [];
+  const deps: Partial<AnswerFinishDeps> = {
+    admin: () => ({}) as SupabaseClient,
+    insert: async (_admin, input) => {
+      inserts.push(input);
+      return { inserted: options.inserted !== false };
+    },
+    schedule: (task) => {
+      tasks.push(task);
+    },
+    readConfig: () => ({ groundedness: true }),
+    onPending: createGroundednessStep({
+      readConfig: () => CONFIG,
+      multiTenant: () => false,
+      langfuse: () => langfuseConfig('http://127.0.0.1:1', { enabled: false }),
+      update: async (_admin, input) => {
+        if (options.updateError) throw new Error('update failed (PGRST301)');
+        updates.push(input);
+        return true;
+      },
+      ...step,
+    }),
+  };
+  return {
+    inserts,
+    updates,
+    tasks,
+    deps,
+    async run() {
+      for (const task of tasks.splice(0)) await task();
+    },
+  };
+}
+
+function scoredRequest(score: number) {
+  return vi.fn(async (body: GroundednessRequest) => {
+    void body;
+    return { status: 'scored', scorer: 'hhem_2_1_open', score, reason: null, truncated: false, latency_ms: 37 } as GroundednessResult;
+  });
+}
+
+async function startHangingSidecar(): Promise<{ url: string; requests: () => number; close: () => Promise<void> }> {
+  let count = 0;
+  const held: http.ServerResponse[] = [];
+  const server = http.createServer((_req, res) => {
+    count += 1;
+    held.push(res);
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+  const { port } = server.address() as AddressInfo;
+  return {
+    url: `http://127.0.0.1:${port}`,
+    requests: () => count,
+    async close() {
+      for (const res of held) res.destroy();
+      server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    },
+  };
+}
+
+function captureConsole() {
+  const lines: string[] = [];
+  const capture = (...args: unknown[]) => {
+    lines.push(args.map((arg) => (typeof arg === 'string' ? arg : JSON.stringify(arg))).join(' '));
+  };
+  for (const method of ['log', 'info', 'warn', 'error', 'debug'] as const) vi.spyOn(console, method).mockImplementation(capture);
+  return lines;
+}
+
+const TEXTS = [ANSWER, 'Annual plans can be refunded within 30 days', BLOCK_ONE, BLOCK_TWO, WEB_TEXT, QUERY];
+
+describe('the groundedness step after the pending insert', () => {
+  it('inserts, scores and updates the row once, and the stored groundedness parses with the record schema', async () => {
+    const lines = captureConsole();
+    const request = scoredRequest(0.71);
+    const h = stepHarness({ request, now: () => NOW });
+    const input = finishInput();
+    scheduleAnswerFinish(input, h.deps);
+    expect(request).not.toHaveBeenCalled();
+    await h.run();
+    expect(h.inserts).toHaveLength(1);
+    expect(h.inserts[0].groundedness).toEqual({ status: 'pending' });
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(request.mock.calls[0][0]).toMatchObject({ request_id: input.answerId, language: 'en', allow_vectara: false });
+    expect(h.updates).toHaveLength(1);
+    expect(h.updates[0].id).toBe(input.answerId);
+    const stored = recordSchema.parse(h.updates[0].groundedness);
+    expect(stored).toEqual({
+      status: 'scored',
+      label: 'verified',
+      scorer: 'hhem_2_1_open',
+      score: 0.71,
+      threshold: 0.5,
+      thresholdSource: 'default',
+      reason: null,
+      truncated: false,
+      latencyMs: 37,
+      checkedAt: NOW.toISOString(),
+    });
+    expect(lines.filter((line) => line.startsWith('[Groundedness]'))).toHaveLength(1);
+  });
+
+  it('stores not_checked timeout when the sidecar never answers within the limit', async () => {
+    captureConsole();
+    const sidecar = await startHangingSidecar();
+    try {
+      const h = stepHarness({
+        readConfig: () => ({ ...CONFIG, groundednessTimeoutMs: 50 }),
+        request: (body, options) => requestGroundedness(body, { ...options, url: sidecar.url, secret: 'sidecar-secret-placeholder' }),
+      });
+      scheduleAnswerFinish(finishInput(), h.deps);
+      expect(sidecar.requests()).toBe(0);
+      await h.run();
+      expect(sidecar.requests()).toBe(1);
+      expect(h.updates).toHaveLength(1);
+      expect(recordSchema.parse(h.updates[0].groundedness)).toMatchObject({ status: 'not_checked', label: 'not_checked', reason: 'timeout', scorer: 'none' });
+    } finally {
+      await sidecar.close();
+    }
+  });
+
+  it('writes one [Groundedness] line with codes and numbers only, never answer, block, premise or query text', async () => {
+    const lines = captureConsole();
+    const input = finishInput();
+    const h = stepHarness({ request: scoredRequest(0.2) });
+    scheduleAnswerFinish(input, h.deps);
+    await h.run();
+    const groundednessLines = lines.filter((line) => line.startsWith('[Groundedness]'));
+    expect(groundednessLines).toHaveLength(1);
+    const payload = JSON.parse(groundednessLines[0].slice(groundednessLines[0].indexOf('{'))) as Record<string, unknown>;
+    expect(Object.keys(payload).sort()).toEqual(['answerId', 'label', 'language', 'latencyMs', 'scorer', 'status', 'truncated']);
+    expect(payload).toMatchObject({ answerId: input.answerId, status: 'scored', scorer: 'hhem_2_1_open', label: 'possibly_unreliable', language: 'en', truncated: false, latencyMs: 37 });
+    const all = lines.join('\n');
+    for (const text of TEXTS) expect(all).not.toContain(text);
+  });
+
+  it('runs nothing after an insert that did not create the row', async () => {
+    const request = scoredRequest(0.9);
+    const h = stepHarness({ request }, { inserted: false });
+    scheduleAnswerFinish(finishInput(), h.deps);
+    await h.run();
+    expect(request).not.toHaveBeenCalled();
+    expect(h.updates).toHaveLength(0);
+  });
+
+  it('still logs the result when the update fails, and never throws', async () => {
+    const lines = captureConsole();
+    const h = stepHarness({ request: scoredRequest(0.9) }, { updateError: true });
+    scheduleAnswerFinish(finishInput(), h.deps);
+    await expect(h.run()).resolves.toBeUndefined();
+    expect(lines.filter((line) => line.startsWith('[Groundedness]'))).toHaveLength(1);
+    expect(lines.some((line) => line.startsWith('[Answer Record]') && line.includes('PGRST301'))).toBe(true);
+  });
+
+  it('stores not_checked error when scoring itself throws', async () => {
+    captureConsole();
+    const h = stepHarness({
+      request: async () => {
+        throw new Error('boom');
+      },
+    });
+    scheduleAnswerFinish(finishInput(), h.deps);
+    await h.run();
+    expect(h.updates[0].groundedness).toMatchObject({ status: 'not_checked', reason: 'error' });
+  });
+
+  describe('Langfuse span and scores', () => {
+    let fake: FakeLangfuse;
+
+    beforeAll(async () => {
+      fake = await startFakeLangfuse();
+    });
+
+    afterAll(async () => {
+      await resetLangfuseForTests();
+      await fake.close();
+    });
+
+    beforeEach(() => {
+      fake.reset();
+    });
+
+    afterEach(async () => {
+      await resetLangfuseForTests();
+    });
+
+    function groundednessSpans(traceId: string) {
+      return fake.spans.filter((span) => span.traceId === traceId && span.name === 'groundedness');
+    }
+
+    it('exports one groundedness span and posts the numeric and categorical scores when the trace was sampled', async () => {
+      const lines = captureConsole();
+      const traceId = traceIdWhere(true, 0.5);
+      const h = stepHarness({ request: scoredRequest(0.71), langfuse: () => langfuseConfig(fake.url, { sampleRate: 0.5 }) });
+      scheduleAnswerFinish(finishInput({ traceId }), h.deps);
+      await h.run();
+
+      const spans = groundednessSpans(traceId);
+      expect(spans).toHaveLength(1);
+      expect(spans[0].attributes[`${ATTR}status`]).toBe('ok');
+      expect(spans[0].attributes[`${ATTR}scorer`]).toBe('hhem_2_1_open');
+      expect(spans[0].attributes[`${ATTR}label`]).toBe('verified');
+      expect(spans[0].attributes[`${ATTR}latency_ms`]).toBe(37);
+      expect(fake.scores).toEqual([
+        expect.objectContaining({ id: scoreId(traceId, 'groundedness'), traceId, name: 'groundedness', value: 0.71, dataType: 'NUMERIC' }),
+        expect.objectContaining({ id: scoreId(traceId, 'groundedness_label'), traceId, name: 'groundedness_label', value: 'verified', dataType: 'CATEGORICAL' }),
+      ]);
+      const exported = JSON.stringify(fake.spans) + JSON.stringify(fake.scores) + lines.join('\n');
+      for (const text of TEXTS) expect(exported).not.toContain(text);
+      expect(exported).not.toContain(LF_SECRET);
+    });
+
+    it('sends neither span nor scores for an unsampled trace labelled verified', async () => {
+      captureConsole();
+      const traceId = traceIdWhere(false, 0.5);
+      const h = stepHarness({ request: scoredRequest(0.71), langfuse: () => langfuseConfig(fake.url, { sampleRate: 0.5 }) });
+      scheduleAnswerFinish(finishInput({ traceId }), h.deps);
+      await h.run();
+      expect(h.updates).toHaveLength(1);
+      expect(fake.requests).toHaveLength(0);
+    });
+
+    it('posts the scores for possibly_unreliable whatever the sampling', async () => {
+      captureConsole();
+      const traceId = traceIdWhere(false, 0.5);
+      const h = stepHarness({ request: scoredRequest(0.2), langfuse: () => langfuseConfig(fake.url, { sampleRate: 0.5 }) });
+      scheduleAnswerFinish(finishInput({ traceId }), h.deps);
+      await h.run();
+      expect(fake.scores).toEqual([
+        expect.objectContaining({ traceId, name: 'groundedness', value: 0.2 }),
+        expect.objectContaining({ traceId, name: 'groundedness_label', value: 'possibly_unreliable' }),
+      ]);
+      expect(groundednessSpans(traceId)).toHaveLength(1);
+    });
+
+    it('posts only the label score when there is no numeric score', async () => {
+      captureConsole();
+      const traceId = traceIdWhere(true, 1);
+      const h = stepHarness({
+        request: async () => ({ status: 'not_checked', scorer: 'none', score: null, reason: 'scorer_unavailable', truncated: false, latency_ms: 0 }),
+        langfuse: () => langfuseConfig(fake.url),
+      });
+      scheduleAnswerFinish(finishInput({ traceId }), h.deps);
+      await h.run();
+      expect(fake.scores).toEqual([expect.objectContaining({ traceId, name: 'groundedness_label', value: 'not_checked' })]);
+    });
+
+    it('keeps the row and the log line when Langfuse fails', async () => {
+      const lines = captureConsole();
+      fake.setTraceMode('error500');
+      const traceId = traceIdWhere(true, 1);
+      const h = stepHarness({
+        request: scoredRequest(0.2),
+        langfuse: () => langfuseConfig(fake.url),
+        postScores: async () => {
+          throw new Error('scores down');
+        },
+        langfuseTimeoutMs: 200,
+      });
+      scheduleAnswerFinish(finishInput({ traceId }), h.deps);
+      await expect(h.run()).resolves.toBeUndefined();
+      expect(h.updates).toHaveLength(1);
+      expect(lines.filter((line) => line.startsWith('[Groundedness]'))).toHaveLength(1);
+    });
+
+    it('time-boxes a hanging Langfuse export', async () => {
+      captureConsole();
+      fake.setTraceMode('hang');
+      const traceId = traceIdWhere(true, 1);
+      const h = stepHarness({ request: scoredRequest(0.9), langfuse: () => langfuseConfig(fake.url), langfuseTimeoutMs: 100 });
+      scheduleAnswerFinish(finishInput({ traceId }), h.deps);
+      const started = Date.now();
+      await h.run();
+      expect(Date.now() - started).toBeLessThan(3000);
+      expect(h.updates).toHaveLength(1);
+      fake.release();
+    });
   });
 });

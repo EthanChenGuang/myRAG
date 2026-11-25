@@ -6,7 +6,12 @@ import { getSupabaseAdmin } from '@/lib/supabase';
 import { detectLanguage } from '../lang/detect';
 import { isTenantScope, type TenantScope } from '../tenant/scope';
 import { scheduleAfterResponse } from '../trace/schedule';
+import type { LangfuseConfig } from '../trace/config';
+import type { CollectedTrace, ExportTraceOptions } from '../trace/langfuse';
+import type { LangfuseScoreInput, PostScoresOptions, PostScoresResult } from '../trace/scores';
 import { readGenerationConfig, type GenerationConfig } from './config';
+import type { AnswerGroundedness } from './groundedness';
+import type { requestGroundedness } from './groundedness-client';
 
 export type AnswerSwitches = Pick<GenerationConfig, 'citations' | 'claudeCitations' | 'groundedness' | 'feedback'>;
 
@@ -53,6 +58,24 @@ export interface AnswerFinishDeps {
   readConfig: () => Pick<GenerationConfig, 'groundedness'>;
   /** Continues with scoring when the record was inserted as pending. */
   onPending?: (context: AnswerPendingContext) => Promise<void>;
+}
+
+export interface GroundednessStepDeps {
+  readConfig: () => Pick<GenerationConfig, 'vectaraOptIn' | 'vectaraMultiTenantAck' | 'maxPremiseTokens' | 'groundednessTimeoutMs'>;
+  multiTenant: () => boolean;
+  request: typeof requestGroundedness;
+  update: (admin: SupabaseClient, input: { id: string; groundedness: AnswerGroundedness }) => Promise<boolean>;
+  langfuse: () => LangfuseConfig;
+  exportTrace: (trace: CollectedTrace, options: ExportTraceOptions) => Promise<void>;
+  postScores: (scores: readonly LangfuseScoreInput[], options: PostScoresOptions) => Promise<PostScoresResult>;
+  now: () => Date;
+  updateTimeoutMs: number;
+  langfuseTimeoutMs: number;
+}
+
+/** The onPending continuation (D-15): score, store, log, then report to Langfuse when allowed. Never throws. */
+export function createGroundednessStep(_deps: Partial<GroundednessStepDeps> = {}): (context: AnswerPendingContext) => Promise<void> {
+  return async () => {};
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
