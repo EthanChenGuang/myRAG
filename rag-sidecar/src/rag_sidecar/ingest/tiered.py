@@ -151,8 +151,12 @@ async def _blocking(deps: WorkerDeps, cfg: ParseRoutingConfig, priority: int, ta
     return outcome[1]
 
 
-def _preflight_job(preflight: Callable[..., Any], path: Path, settings: Any, cfg: ParseRoutingConfig, converter: Any, sha: str) -> Any:
-    return preflight(path, settings, cfg, converter, file_sha=sha)
+def _preflight_job(
+    preflight: Callable[..., Any], path: Path, settings: Any, cfg: ParseRoutingConfig, converter: Any, sha: str, vlm_app: Any = None
+) -> Any:
+    if vlm_app is None:
+        return preflight(path, settings, cfg, converter, file_sha=sha)
+    return preflight(path, settings, cfg, converter, file_sha=sha, vlm_app=vlm_app)
 
 
 def _chunk_job(doc: DoclingDocument, request: ParseJobRequest, out_dir: Path, version: str, text_layer_share: float | None) -> ParseResult:
@@ -419,6 +423,21 @@ async def _resume_preflight(run: _Run) -> PreflightResult | None:
         return None
 
 
+def _vlm_app(run: _Run) -> Any:
+    """The L3 bridge for this job, or None when the snapshot does not ask for L3 (vlm_detect, tiered, cloud allowed, budget).
+
+    Preflight runs in a pool thread; the bridge hands each detect-vlm call back to this loop, which owns the app client.
+    """
+    from rag_sidecar.preflight.l3 import LoopVlmApp, l3_enabled
+
+    if run.cfg.l3.max_pages_per_doc <= 0 or not l3_enabled(run.job.settings):
+        return None
+    if getattr(run.deps.app, "detect_vlm", None) is None:
+        return None
+    attempt_no = max(run.last_attempt_no, len(run.job.attempts)) + 1
+    return LoopVlmApp(run.deps.app, run.job.id, run.deps.worker_id, attempt_no, asyncio.get_running_loop())
+
+
 async def _run_preflight(run: _Run) -> PreflightResult:
     resumed = await _resume_preflight(run)
     if resumed is not None:
@@ -428,9 +447,10 @@ async def _run_preflight(run: _Run) -> PreflightResult:
         from rag_sidecar.preflight.run import run_preflight
 
         preflight = run_preflight
+    vlm_app = _vlm_app(run)
     started = time.perf_counter()
     output = await _blocking(
-        run.deps, run.cfg, run.job.priority, _preflight_job, preflight, run.path, run.job.settings, run.cfg, run.converter, run.sha
+        run.deps, run.cfg, run.job.priority, _preflight_job, preflight, run.path, run.job.settings, run.cfg, run.converter, run.sha, vlm_app
     )
     elapsed = int((time.perf_counter() - started) * 1000)
     run.reusable = dict(output.reusable_fast)
