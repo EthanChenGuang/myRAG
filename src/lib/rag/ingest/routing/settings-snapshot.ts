@@ -1,6 +1,7 @@
 import { JobSettingsSnapshotSchema, type UploadApproval } from '@/lib/rag-eval/contracts.generated';
 import { JOB_SETTINGS_PHASE32_DEFAULTS, omitDefaultFields, type JobSettingsSnapshotWire } from '../wire-defaults';
 import { imageCaptionModelId } from '../captioner';
+import type { IngestCheckMode } from '../config';
 import type { QueueConfig } from '../queue-config';
 import type { ProcessingProfile } from '../profiles/load';
 import type { ParseRoutingConfig } from './config';
@@ -24,6 +25,8 @@ export interface BuildJobSettingsInput {
   ingestConfig?: EffectiveIngestSettingsInput['ingestConfig'];
   /** The language settings (lang/settings.ts) at enqueue; absent, the languages are unset and the profile's ocr_languages apply. */
   languageSettings?: EffectiveLanguageInput;
+  /** RAG_HIDDEN_TEXT_CHECK at enqueue (D-33): the worker checks the original at preflight when it is not off; absent, off. */
+  hiddenTextCheck?: IngestCheckMode;
 }
 
 const DEFAULT_SWITCHES: EffectiveIngestSettingsInput['ingestConfig'] = { languageAwareIngest: 'off', tableHeaderRepeat: 'profile', tableRowSerialization: false };
@@ -41,6 +44,7 @@ export function buildJobSettings(input: BuildJobSettingsInput): JobSettingsSnaps
     holdPublish = false,
     ingestConfig = DEFAULT_SWITCHES,
     languageSettings = UNSET_LANGUAGES,
+    hiddenTextCheck = 'off',
   } = input;
   const effective = effectiveIngestSettings({ ingestConfig, profile, languageSettings });
 
@@ -77,6 +81,7 @@ export function buildJobSettings(input: BuildJobSettingsInput): JobSettingsSnaps
     repeat_table_header_effective: effective.repeatTableHeaderForced ? effective.repeatTableHeader : null,
     carry_table_header: effective.carryTableHeader,
     row_serialization: effective.rowSerialization,
+    hidden_text_check: hiddenTextCheck,
   };
 
   return omitDefaultFields(JobSettingsSnapshotSchema.parse(snapshot), JOB_SETTINGS_PHASE32_DEFAULTS);

@@ -24,6 +24,7 @@ import { applyParseResult, stripBom } from '../stages/parse';
 import { createLedgerStateStore, saveContextState } from '../state-store';
 import { ingestStateFromRecord } from '../status';
 import { createIngestWriter } from '../writer';
+import { workerHiddenTextReport } from '../../security/hidden-text';
 import { INGEST_SOURCES, type ChunkDraft, type IngestInput, type IngestResult, type IngestSource, type StageContext, type StageName, type StageSpec } from '../types';
 import { isTerminal, leaseHolds, mapError, refuse, type CallbackResult } from './common';
 
@@ -171,6 +172,16 @@ export function applySnapshotDecisions(ctx: StageContext, job: IngestionJob): vo
   else delete ctx.state.approval;
   if (job.settings.hold_publish === true && job.batch_id) ctx.state.publishHold = { batchId: job.batch_id };
   else delete ctx.state.publishHold;
+}
+
+/**
+ * The hidden-text report the worker made at preflight (D-33), handed to scan_injection so it makes no sidecar call. It is used only while
+ * the check is on and only for this job's original; a report that fails validation is kept as null, which the stage treats as a checker
+ * that could not answer.
+ */
+export function applyWorkerHiddenText(ctx: StageContext, job: IngestionJob, raw: unknown): void {
+  if (raw === undefined || raw === null || ctx.config.hiddenTextCheck === 'off' || !job.file_sha256) return;
+  ctx.workerHiddenText = workerHiddenTextReport(raw, job.file_sha256);
 }
 
 function parseHasText(ctx: StageContext): boolean {
@@ -523,6 +534,7 @@ export async function handleAdvance(jobId: string, body: AdvanceBody, options: {
     if (!built.ok) return refuse(built.reason === 'document_not_processing' ? 409 : 404, built.reason);
     const { ctx } = built;
     applySnapshotDecisions(ctx, job);
+    applyWorkerHiddenText(ctx, job, body.hidden_text_report);
 
     if (position === null) {
       const cached = await readParseResultForJob(job, body.parse_cache_id, signal);

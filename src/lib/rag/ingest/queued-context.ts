@@ -2,7 +2,7 @@ import { z } from 'zod/v3';
 import type { IngestionJob } from '@/lib/rag-eval/contracts.generated';
 import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
 import { loadArtifact, versionPrefix, type ArtifactContext } from './artifacts';
-import { loadIngestConfig } from './config';
+import { loadIngestConfig, type IngestCheckMode, type IngestConfig } from './config';
 import { getIngestDeps } from './deps';
 import { ORIGINALS_BUCKET, getObjectStore } from './object-store';
 import { getProcessingProfile, profileFor, type DocType } from './profiles/load';
@@ -95,6 +95,18 @@ function profileOf(source: IngestSource, docType: string, warnings: string[]): {
   }
 }
 
+const CHECK_RANK: Readonly<Record<IngestCheckMode, number>> = { off: 0, flag: 1, quarantine: 2 };
+
+/**
+ * The hidden-text mode of a queued job: the stricter of the current variable and the job's snapshot (D-33). The worker checked the
+ * original under the snapshot's mode, so a later relaxation of RAG_HIDDEN_TEXT_CHECK does not let the job skip it; a snapshot without
+ * the field (off) changes nothing.
+ */
+export function withSnapshotChecks(config: IngestConfig, job: Pick<IngestionJob, 'settings'>): IngestConfig {
+  const snapshot = job.settings.hidden_text_check ?? 'off';
+  return CHECK_RANK[snapshot] > CHECK_RANK[config.hiddenTextCheck] ? { ...config, hiddenTextCheck: snapshot } : config;
+}
+
 /**
  * The stage context of a queued job, rebuilt from the job row, the tenant-scoped document row, the stored original and the
  * queued-input record. Every read goes through the writer of the scope that was minted from the job, so another tenant's document
@@ -169,7 +181,7 @@ export async function buildQueuedContext(input: BuildQueuedContextInput): Promis
     input: ingestInput,
     deps,
     writer,
-    config: loadIngestConfig(deps.ingestEnv()),
+    config: withSnapshotChecks(loadIngestConfig(deps.ingestEnv()), job),
     signal,
     deadline: deps.now() + input.deadlineMs,
     state,

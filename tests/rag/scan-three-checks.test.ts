@@ -4,6 +4,9 @@ import { loadIngestConfig } from '@/lib/rag/ingest/config';
 import { getIngestDeps } from '@/lib/rag/ingest/deps';
 import { reapplyHiddenTextRemoval, scanInjectionStage } from '@/lib/rag/ingest/stages/scan-injection';
 import { emptyIngestState, type StageContext } from '@/lib/rag/ingest/types';
+import { applyWorkerHiddenText } from '@/lib/rag/ingest/callbacks/advance';
+import { withSnapshotChecks } from '@/lib/rag/ingest/queued-context';
+import type { IngestionJob } from '@/lib/rag-eval/contracts.generated';
 import { createIngestWriter } from '@/lib/rag/ingest/writer';
 import { findZeroWidth, resetHiddenTextRulesForTests, setHiddenTextRulesForTests, stripZeroWidth } from '@/lib/rag/security/zero-width';
 import { resetHiddenTextClientForTests, setHiddenTextClientForTests, type HiddenTextOutcome, type HiddenTextReport } from '@/lib/rag/security/hidden-text';
@@ -349,6 +352,54 @@ describe('the sidecar hidden-text report (plan 03.2-37)', () => {
     expect(await scanInjectionStage.run(open.ctx)).toEqual({ kind: 'next', outcome: 'hidden_text:not_checked' });
     expect(fieldsOf(open.calls)[0]).toMatchObject({ hidden_text_check: 'not_checked' });
     expect(open.ctx.warnings).toContain('hidden_text_not_checked');
+  });
+
+  describe('a queued job whose worker checked the original at preflight (plan 03.2-38)', () => {
+    const jobWith = (hidden_text_check?: 'off' | 'flag' | 'quarantine') =>
+      ({ file_sha256: SHA, settings: hidden_text_check ? { hidden_text_check } : {} }) as unknown as IngestionJob;
+
+    test('the worker report is used and the sidecar is not called', async () => {
+      const { ctx, calls } = setupFile({ RAG_HIDDEN_TEXT_CHECK: 'quarantine' }, PDF_TEXT, 'application/pdf', 'notes.pdf');
+      applyWorkerHiddenText(ctx, jobWith('quarantine'), report('hidden_found', [HIDDEN]));
+      expect(await scanInjectionStage.run(ctx)).toEqual({ kind: 'next', outcome: 'hidden_text:quarantined' });
+      expect(requests).toHaveLength(0);
+      expect(ctx.work.parseText).not.toContain('grey lever');
+      const writes = fieldsOf(calls);
+      expect(writes[0]).toMatchObject({ status: 'quarantined', hidden_text_check: 'hidden_found' });
+      const reason = QuarantineReasonSchema.parse((((writes[0]?.metadata as Record<string, unknown>).quarantine as Record<string, unknown>).reasons as unknown[])[0]);
+      expect(reason).toMatchObject({ kind: 'hidden_text', spans: [{ page: 1, text: HIDDEN, reason: 'color_near_background' }], unlocated: 0 });
+    });
+
+    test('an invalid worker report fails the run closed under quarantine and is not_checked under flag, with no sidecar call (T-03.2-381)', async () => {
+      const forged = { status: 'hidden_found', spans: [], checker_version: 'hidden-text/1/test' };
+      const quarantine = setupFile({ RAG_HIDDEN_TEXT_CHECK: 'quarantine' }, PDF_TEXT, 'application/pdf', 'notes.pdf');
+      applyWorkerHiddenText(quarantine.ctx, jobWith('quarantine'), forged);
+      expect(await scanInjectionStage.run(quarantine.ctx)).toEqual({ kind: 'fail', reason: 'hidden_text_checker_unavailable' });
+      const flag = setupFile({ RAG_HIDDEN_TEXT_CHECK: 'flag' }, PDF_TEXT, 'application/pdf', 'notes.pdf');
+      applyWorkerHiddenText(flag.ctx, jobWith('flag'), { status: 'clean', spans: [{ page: 1, text: HIDDEN, reason: 'color_near_background', bbox: null }], checker_version: 'x' });
+      expect(await scanInjectionStage.run(flag.ctx)).toEqual({ kind: 'next', outcome: 'hidden_text:not_checked' });
+      expect(flag.ctx.warnings).toContain('hidden_text_not_checked');
+      expect(requests).toHaveLength(0);
+    });
+
+    test('a report for another original or with the check off is ignored', async () => {
+      const other = setupFile({ RAG_HIDDEN_TEXT_CHECK: 'quarantine' }, PDF_TEXT, 'application/pdf', 'notes.pdf');
+      applyWorkerHiddenText(other.ctx, { ...jobWith('quarantine'), file_sha256: 'b'.repeat(64) } as IngestionJob, report('hidden_found', [HIDDEN]));
+      expect(await scanInjectionStage.run(other.ctx)).toEqual({ kind: 'next', outcome: 'hidden_text:clean' });
+      expect(requests).toHaveLength(1);
+
+      const off = setupFile({}, PDF_TEXT, 'application/pdf', 'notes.pdf');
+      applyWorkerHiddenText(off.ctx, jobWith(), report('hidden_found', [HIDDEN]));
+      expect(off.ctx.workerHiddenText).toBeUndefined();
+    });
+
+    test('the queued mode is the stricter of the variable and the snapshot; a snapshot without the field changes nothing', () => {
+      const config = loadIngestConfig({ RAG_HIDDEN_TEXT_CHECK: 'flag' });
+      expect(withSnapshotChecks(config, jobWith())).toBe(config);
+      expect(withSnapshotChecks(config, jobWith('off'))).toBe(config);
+      expect(withSnapshotChecks(config, jobWith('quarantine')).hiddenTextCheck).toBe('quarantine');
+      expect(withSnapshotChecks(loadIngestConfig({ RAG_HIDDEN_TEXT_CHECK: 'quarantine' }), jobWith('flag')).hiddenTextCheck).toBe('quarantine');
+    });
   });
 
   test('a retried stage reuses the saved report, removes each span once and gives the same reasons', async () => {

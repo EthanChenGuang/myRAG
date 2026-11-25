@@ -87,7 +87,7 @@ async def publish_provisional(run: _Run, result: PreflightResult) -> None:
         run.job.attempts[-1].attempt_no if run.job.attempts else 1
     )
     ended = await _advance_until_done(
-        run.deps, run.job, cache_id, attempt_no, provisional=True
+        run.deps, run.job, cache_id, attempt_no, provisional=True, hidden_text_report=run.hidden_text_report
     )
     if ended.status != PROVISIONAL_STAGE:
         raise ProgressiveEnded(ended)

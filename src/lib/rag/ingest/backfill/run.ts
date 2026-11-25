@@ -225,6 +225,7 @@ export async function enqueueRun(batch: BackfillBatchRef, entries: readonly RunE
         embedProfileProvider,
         ingestConfig,
         languageSettings: ingestLanguageSettings(ingestConfig),
+        hiddenTextCheck: ingestConfig.hiddenTextCheck,
       });
       settingsByType.set(docType, settings);
     }
