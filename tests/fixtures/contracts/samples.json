@@ -6568,7 +6568,10 @@
       "query_transforms": [
         {
           "kind": "rewrite",
-          "text": "leave days per year"
+          "reason": null,
+          "status": null,
+          "text": "leave days per year",
+          "transform": null
         }
       ],
       "refusal": null,
@@ -8251,7 +8254,10 @@
         "query_transforms": [
           {
             "kind": "rewrite",
-            "text": "leave days per year"
+            "reason": null,
+            "status": null,
+            "text": "leave days per year",
+            "transform": null
           }
         ],
         "refusal": null,
@@ -8416,7 +8422,10 @@
         "query_transforms": [
           {
             "kind": "rewrite",
-            "text": "leave days per year"
+            "reason": null,
+            "status": null,
+            "text": "leave days per year",
+            "transform": null
           }
         ],
         "refusal": null,
@@ -8614,7 +8623,10 @@
         "query_transforms": [
           {
             "kind": "rewrite",
-            "text": "leave days per year"
+            "reason": null,
+            "status": null,
+            "text": "leave days per year",
+            "transform": null
           }
         ],
         "refusal": null,

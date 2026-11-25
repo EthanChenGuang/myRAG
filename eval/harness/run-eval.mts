@@ -38,6 +38,12 @@ export interface EvalRequestOptions {
   >;
   citations?: boolean;
   groundedness?: boolean;
+  /** D-38 eval-only query-layer overrides, sent as they are. */
+  query_framework?: NonNullable<RagRunRequest['options']>['query_framework'];
+  query_layer?: NonNullable<RagRunRequest['options']>['query_layer'];
+  query_transforms?: NonNullable<RagRunRequest['options']>['query_transforms'];
+  semantic_cache?: NonNullable<RagRunRequest['options']>['semantic_cache'];
+  query_params?: NonNullable<RagRunRequest['options']>['query_params'];
 }
 
 /** 'fake' is the deterministic citation generator (D-24); it serves fixture runs with --citations or --groundedness. */
@@ -66,6 +72,7 @@ export interface InProcessEval {
   fixtureUserId: string;
   corpusSha256: string;
   sqlSha256: Record<string, string>;
+  fakeQueryLlm?: import('./fake-query-llm.mts').FakeQueryLlm;
   close: () => Promise<void>;
 }
 
@@ -213,6 +220,15 @@ export function shouldInstallFixtureTranslator(env: Record<string, string> | und
   return switchIsOn(env?.RAG_PIPELINE, 'v2') && switchIsOn(env?.RAG_LEXICAL_TRANSLATION, 'true');
 }
 
+/**
+ * D-39: an in-process v2 run whose overlay or request options turn the query layer on gets the deterministic fake query LLM, so
+ * no fixture run calls a live model. Legacy keeps the layer inert, so it never needs one.
+ */
+export function shouldInstallFakeQueryLlm(env: Record<string, string | undefined> | undefined, options: { queryLayer?: boolean } = {}): boolean {
+  if (!switchIsOn(env?.RAG_PIPELINE, 'v2')) return false;
+  return switchIsOn(env?.RAG_QUERY_LAYER, 'true') || options.queryLayer === true;
+}
+
 export async function prepareInProcessEval(options: {
   corpusDir: string;
   deploymentMode: DeploymentMode;
@@ -229,6 +245,8 @@ export async function prepareInProcessEval(options: {
   chunkingProfiles?: import('../../src/lib/rag-eval/contracts.generated.ts').ChunkingProfile[];
   /** Ingest mode: also load the isolated table_split tenants (table-split.mts). */
   tableSplit?: boolean;
+  /** The run's requests set options.query_layer=true (D-38); with the env overlay it decides the fake query LLM install (D-39). */
+  queryLayer?: boolean;
 }): Promise<InProcessEval> {
   const {
     corpusDir,
@@ -315,6 +333,19 @@ export async function prepareInProcessEval(options: {
     translatorModule.setTranslatorForTests(translatorModule.createFixtureTranslator(table));
   }
 
+  // The effective env: the pinned eval env with the overlay applied above.
+  let fakeQueryLlm: import('./fake-query-llm.mts').FakeQueryLlm | undefined;
+  let restoreQueryLlm: (() => void) | undefined;
+  if (shouldInstallFakeQueryLlm(process.env, { queryLayer: options.queryLayer })) {
+    const depsModule = await import('../../src/lib/rag/deps.ts');
+    const { createFakeQueryLlm } = await import('./fake-query-llm.mts');
+    const previous = depsModule.getRagDeps().queryLlm;
+    const fake = createFakeQueryLlm();
+    fakeQueryLlm = fake;
+    depsModule.setRagDepsForTests({ queryLlm: () => fake });
+    restoreQueryLlm = () => depsModule.setRagDepsForTests({ queryLlm: previous });
+  }
+
   const floorModule = await import('../../src/lib/rag/refusal/floor.ts');
   const { loadFixtureScoreCalibration } = await import('./fixture-floor.mts');
   floorModule.setEvalScoreCalibration(loadFixtureScoreCalibration(fixtureMode === 'ingest' ? 'ingest' : 'prechunked'));
@@ -329,7 +360,9 @@ export async function prepareInProcessEval(options: {
     fixtureUserId: fixture.fixtureUserId,
     corpusSha256: fixture.corpusSha256,
     sqlSha256: fixture.sqlSha256,
+    ...(fakeQueryLlm ? { fakeQueryLlm } : {}),
     close: async () => {
+      restoreQueryLlm?.();
       translatorModule?.resetTranslatorForTests();
       floorModule.resetEvalScoreCalibration();
       if (ownsEdge) await startedEdge.close();
@@ -550,6 +583,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
           ...(runConfig && Object.keys(runConfig.env).length > 0 ? { envOverrides: runConfig.env } : {}),
           ...(runConfig?.chunkingProfiles?.length ? { chunkingProfiles: runConfig.chunkingProfiles } : {}),
           ...(options.appEnv && Object.keys(options.appEnv).length > 0 ? { appEnv: options.appEnv } : {}),
+          ...(requestOptions.query_layer === true ? { queryLayer: true } : {}),
         });
         inProcess = prepared;
       }

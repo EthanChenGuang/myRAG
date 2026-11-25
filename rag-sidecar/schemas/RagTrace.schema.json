@@ -908,9 +908,63 @@
           "title": "Kind",
           "type": "string"
         },
+        "reason": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "status": {
+          "anyOf": [
+            {
+              "enum": [
+                "ok",
+                "skipped",
+                "disabled",
+                "degraded",
+                "error",
+                "timeout",
+                "aborted"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Status"
+        },
         "text": {
           "title": "Text",
           "type": "string"
+        },
+        "transform": {
+          "anyOf": [
+            {
+              "enum": [
+                "condense",
+                "normalize_dates",
+                "expand",
+                "hyde",
+                "decompose",
+                "translate"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Transform"
         }
       },
       "required": [
