@@ -191,3 +191,11 @@ export function expectedFingerprintFor(
   const next = IngestFingerprintPartsSchema.parse({ ...stored, ocr_engine_codes: ocrCodes, language_pack_versions: packs, switches });
   return { parts: next, fingerprint: buildIngestFingerprint(next) };
 }
+
+export function getSettingsClassification(): never {
+  throw new Error('not implemented');
+}
+
+export function ingestionKeysOf(_proposed: Record<string, unknown>): Array<{ name: string; mechanism: string }> {
+  return [];
+}

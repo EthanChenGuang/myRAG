@@ -11,6 +11,8 @@ import {
   collectFingerprintParts,
   effectiveOcrLanguages,
   expectedFingerprintFor,
+  getSettingsClassification,
+  ingestionKeysOf,
   ocrEngineCodes,
 } from '@/lib/rag/ingest/fingerprint';
 import { getProcessingProfile } from '@/lib/rag/ingest/profiles/load';
@@ -287,5 +289,52 @@ describe('legacy ingest pipeline', () => {
       .map((file) => path.relative(root, file).split(path.sep).join('/'));
     expect(writers.length).toBeGreaterThan(0);
     expect(writers.filter((file) => !file.startsWith('lib/rag/ingest/'))).toEqual([]);
+  });
+});
+
+describe('settings classification', () => {
+  const D47_INGESTION: Record<string, string> = {
+    RAG_SUPPORTED_LANGUAGES: 'reparse',
+    RAG_LANGUAGE_AWARE_INGEST: 'rechunk',
+    RAG_TABLE_HEADER_REPEAT: 'rechunk',
+    RAG_TABLE_ROW_SERIALIZATION: 'rechunk',
+    RAG_CAPTION_LANGUAGE: 'recaption',
+    RAG_DOC_TRANSLATION: 'retranslate',
+    RAG_DOC_TRANSLATION_MODEL: 'retranslate',
+    RAG_HIDDEN_TEXT_CHECK: 'rescan',
+    RAG_INGEST_LINK_CHECK: 'rescan',
+    RAG_OUTPUT_LINK_ALLOWLIST: 'rescan',
+  };
+  const D47_QUERY = [
+    'RAG_PRIMARY_LANGUAGE',
+    'RAG_BGE_M3_SERVING',
+    'RAG_UPLOAD_APPROVAL',
+    'RAG_SCOPE_TAGS',
+    'RAG_SCOPE_TAG_SUGGEST',
+    'RAG_SUPERSESSION_DETECT',
+    'RAG_EFFECTIVE_DATES',
+    'RAG_EFFECTIVE_DATE_LLM_EXTRACT',
+  ];
+
+  test('the loader validates the file once and returns every entry', () => {
+    const classification = getSettingsClassification();
+    expect(classification.schema_version).toBe(1);
+    expect(getSettingsClassification()).toBe(classification);
+    expect(classification.entries.length).toBeGreaterThan(100);
+  });
+
+  test('ingestionKeysOf returns each of the ten ingestion-side variables of D-47 with its mechanism', () => {
+    const proposed = Object.fromEntries(Object.keys(D47_INGESTION).map((name) => [name, 'x']));
+    expect(ingestionKeysOf(proposed)).toEqual(
+      Object.entries(D47_INGESTION)
+        .map(([name, mechanism]) => ({ name, mechanism }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    );
+  });
+
+  test('ingestionKeysOf leaves out query-side and unknown keys', () => {
+    const proposed = Object.fromEntries([...D47_QUERY, 'RAG_RERANKER', 'RAG_NOT_A_SETTING', 'OPENAI_API_KEY'].map((name) => [name, 'x']));
+    expect(ingestionKeysOf(proposed)).toEqual([]);
+    expect(ingestionKeysOf({ RAG_PARSER: 'docling', RAG_PIPELINE: 'v2' })).toEqual([{ name: 'RAG_PARSER', mechanism: 'reparse' }]);
   });
 });
