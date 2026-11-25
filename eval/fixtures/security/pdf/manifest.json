@@ -42,6 +42,12 @@
       "reason": "covered_by_object",
       "sha256": "20e481595481b23a665b040a0b42ce6d64b86b260ca317282c4ca090f6937f70"
     },
+    "form-white-text.pdf": {
+      "expected": "hidden_found",
+      "hidden_text": "This white sentence sits inside a form object.",
+      "reason": "color_near_background",
+      "sha256": "10c25d200441170ac620e306f5955a6830c73a022662cd5fe8ef1d7057339d6a"
+    },
     "invisible-render.pdf": {
       "expected": "hidden_found",
       "hidden_text": "This sentence uses the invisible text render mode.",

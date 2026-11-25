@@ -161,6 +161,7 @@ HIDDEN_CASES = [
     ("off-page.pdf", "outside_page"),
     ("invisible-render.pdf", "invisible_render_mode"),
     ("covered-text.pdf", "covered_by_object"),
+    ("form-white-text.pdf", "color_near_background"),
 ]
 VISIBLE_LINES = {
     "white-on-white.pdf": "VISIBLE_EN",
@@ -168,6 +169,7 @@ VISIBLE_LINES = {
     "off-page.pdf": "VISIBLE_IT",
     "invisible-render.pdf": "VISIBLE_EN",
     "covered-text.pdf": "VISIBLE_IT",
+    "form-white-text.pdf": "VISIBLE_EN",
 }
 CLEAN_CASES = [
     "clean-plain.pdf",

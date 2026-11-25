@@ -228,8 +228,46 @@ def _background(text: _Obj, objects: list[_Obj]) -> tuple[float, float, float] |
     return PAGE_WHITE
 
 
+def _over_image(text: _Obj, objects: list[_Obj], rules: PdfHiddenTextRules) -> bool:
+    """Invisible text drawn over an image is an OCR text layer, not hidden text."""
+    return any(
+        obj.kind == "image" and _coverage(obj.box, text) >= rules.covered_overlap_min
+        for obj in objects[: objects.index(text)]
+    )
+
+
+def _outside(text: _Obj, page_box: Box, margin: float) -> bool:
+    grown = (page_box[0] - margin, page_box[1] - margin, page_box[2] + margin, page_box[3] + margin)
+    return not _contains_point(grown, text.center)
+
+
+def _too_small(text: _Obj, rules: PdfHiddenTextRules, median: float) -> bool:
+    if text.size >= rules.min_font_size_pt:
+        return False
+    return median <= 0 or text.size < rules.min_font_size_ratio * median
+
+
+def _covered(text: _Obj, objects: list[_Obj], rules: PdfHiddenTextRules) -> bool:
+    """An opaque filled path or image drawn after the text hides enough of it."""
+    for obj in objects[objects.index(text) + 1 :]:
+        if not obj.opaque:
+            continue
+        if (obj.kind == "path" and obj.filled) or obj.kind == "image":
+            if _coverage(obj.box, text) >= rules.covered_overlap_min:
+                return True
+    return False
+
+
 def _hidden_reason(text: _Obj, objects: list[_Obj], rules: PdfHiddenTextRules, page_box: Box, median: float) -> HiddenTextSpanReason | None:
-    del page_box, median
+    """First matching rule wins, in a fixed order, so every span has one reason."""
+    if text.mode in INVISIBLE_MODES:
+        return None if _over_image(text, objects, rules) else "invisible_render_mode"
+    if _outside(text, page_box, rules.outside_page_margin_pt):
+        return "outside_page"
+    if _too_small(text, rules, median):
+        return "font_too_small"
+    if _covered(text, objects, rules):
+        return "covered_by_object"
     if text.mode in STROKE_ONLY_MODES:
         color, alpha = text.stroke[:3], text.stroke[3]
     else:

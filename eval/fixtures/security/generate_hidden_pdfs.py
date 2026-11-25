@@ -44,6 +44,7 @@ HIDDEN_SENTENCE = {
     "off-page": "Questa frase si trova fuori dal bordo della pagina.",
     "invisible-render": "This sentence uses the invisible text render mode.",
     "covered-text": "Questa frase viene coperta da un rettangolo bianco.",
+    "form-white-text": "This white sentence sits inside a form object.",
 }
 LINK_TARGET = "https://example.org/reference/overview"
 
@@ -56,6 +57,7 @@ class Page:
     ops: list[bytes] = field(default_factory=list)
     links: list[tuple[tuple[float, float, float, float], str]] = field(default_factory=list)
     uses_image: bool = False
+    forms: list[bytes] = field(default_factory=list)
 
     def text(
         self,
@@ -84,6 +86,14 @@ class Page:
     def image(self, x: float, y: float, w: float, h: float) -> Page:
         self.uses_image = True
         self.ops.append(b"q %s 0 0 %s %s %s cm /Im1 Do Q" % (_num(w), _num(h), _num(x), _num(y)))
+        return self
+
+    def form(self, x: float, y: float, scale: float, inner: Page) -> Page:
+        """Draw `inner`'s operations as a form XObject, placed at (x, y) and scaled."""
+        self.forms.append(b"\n".join(inner.ops))
+        self.ops.append(
+            b"q %s 0 0 %s %s %s cm /Fm%d Do Q" % (_num(scale), _num(scale), _num(x), _num(y), len(self.forms))
+        )
         return self
 
     def link(self, rect: tuple[float, float, float, float], uri: str) -> Page:
@@ -152,9 +162,19 @@ def write_pdf(pages: list[Page]) -> bytes:
                     % (_num(x0), _num(y0), _num(x1), _num(y1), uri.encode("ascii"))
                 )
             )
+        fonts = b"<< /Font << /F1 %d 0 R /F2 %d 0 R >> >>" % (helvetica, song)
+        xobjects = [b"/Im1 %d 0 R" % image] if page.uses_image else []
+        for number, form_content in enumerate(page.forms, start=1):
+            form_ref = add(
+                b"<< /Type /XObject /Subtype /Form /BBox [0 0 %s %s] /Resources %s /Length %d >>\nstream\n"
+                % (_num(page.width), _num(page.height), fonts, len(form_content))
+                + form_content
+                + b"\nendstream"
+            )
+            xobjects.append(b"/Fm%d %d 0 R" % (number, form_ref))
         resources = b"<< /Font << /F1 %d 0 R /F2 %d 0 R >>" % (helvetica, song)
-        if page.uses_image:
-            resources += b" /XObject << /Im1 %d 0 R >>" % image
+        if xobjects:
+            resources += b" /XObject << %s >>" % b" ".join(xobjects)
         resources += b" >>"
         body = b"<< /Type /Page /Parent %d 0 R /MediaBox [0 0 %s %s]" % (
             pages_ref,
@@ -237,6 +257,13 @@ def covered_text() -> bytes:
     page.rect(68, y - 5, 440, 18, WHITE)
     _paragraph(page, VISIBLE_IT[2:], y - 16)
     return write_pdf([page])
+
+
+def form_white_text() -> bytes:
+    page = Page()
+    _paragraph(page, VISIBLE_EN, 760)
+    inner = Page().text(10, 20, HIDDEN_SENTENCE["form-white-text"], size=5.5, fill=WHITE)
+    return write_pdf([page.form(60, 500, 2.0, inner)])
 
 
 def clean_dark_header() -> bytes:
@@ -352,6 +379,7 @@ HIDDEN_FIXTURES = {
     "off-page.pdf": (off_page, "outside_page"),
     "invisible-render.pdf": (invisible_render, "invisible_render_mode"),
     "covered-text.pdf": (covered_text, "covered_by_object"),
+    "form-white-text.pdf": (form_white_text, "color_near_background"),
 }
 CLEAN_FIXTURES = {
     "clean-plain.pdf": clean_plain,
