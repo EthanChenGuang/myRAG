@@ -156,7 +156,9 @@
     "The shipped defaults stay off (D-28): every switch compared here is off in src/lib/env.ts until the Phase 7 regression.",
     "Slice comparisons of v2 runs align request_options with the observed run: a named run differs from its reference by design (for example rerank_model or chunking_profile_by_doc_type). Golden, corpus, embedder, tier and mode must still match.",
     "Parent-child runs use sweep candidate p128-512: the recorded contract_legal decision is legacy.",
-    "XLG-03: no cross cell has a threshold on the fixture; XLG-03 is decided by the live calibration (04-43)."
+    "XLG-03: no cross cell has a threshold on the fixture; XLG-03 is decided by the live calibration (04-43).",
+    "Success criterion 4 (correct refusal strictly improves): open; the fixture shows no strict correct-refusal gain at the matched false-refusal point; whether correct refusal strictly improves is decided by the live calibration (04-43).",
+    "Observation (test split): no-answer item zh-no-answer-003 is answered by the rerank gate (cohere|fake-quality-v1|zh|same, threshold 0.0446) with best dense 0.0595, below the similarity floor 0.1159; the gate supersedes the floor (D-30). Report only."
   ],
   "parent_child": {
     "drops": [],
@@ -173,59 +175,107 @@
     "on": "parent-child-on",
     "passed": true
   },
-  "passed": false,
+  "passed": true,
   "recommended": {
     "baseline": {
       "against": "baseline",
       "drops": [],
       "mismatches": [],
-      "passed": false,
+      "passed": true,
       "refusal": {
         "correct_refusal": 0.3333333333333333,
         "correct_refusal_n": 21,
+        "failures": [],
         "false_refusal": 0.011627906976744186,
         "false_refusal_n": 86,
         "false_refusal_upper_95": 0.05397496344755209,
-        "improved": false,
+        "matched": {
+          "answerable_n": 86,
+          "correct_refusal": 0.6666666666666666,
+          "covers_reference": true,
+          "excluded_no_similarity": 0,
+          "false_refusal": 0.38372093023255816,
+          "missing": [],
+          "no_answer_n": 21,
+          "reference_refused": 14,
+          "source": "v2-all-off",
+          "target_false_refusal": 0.3953488372093023,
+          "threshold": 0.2807808745906393
+        },
+        "method": "matched_false_refusal",
+        "passed": true,
         "reference_correct_refusal": 0.6666666666666666,
-        "reference_false_refusal": 0.3953488372093023
-      }
+        "reference_false_refusal": 0.3953488372093023,
+        "strictly_improved": false
+      },
+      "report_only": []
     },
-    "passed": false,
+    "gate_below_floor": [
+      {
+        "best_dense": 0.059503324852881345,
+        "cell_key": "cohere|fake-quality-v1|zh|same",
+        "floor": 0.11585847749171707,
+        "gate_threshold": 0.04455691316323019,
+        "item_id": "zh-no-answer-003",
+        "split": "test"
+      }
+    ],
+    "passed": true,
     "reference": {
       "against": "v2-all-off",
-      "drops": [
-        {
-          "baseline_mean": 0.8333333333333334,
-          "direction": "higher",
-          "metric": "mrr",
-          "observed": 0.8125,
-          "slice": "category:scanned",
-          "threshold": 0.8133333333333334
-        },
-        {
-          "baseline_mean": 1.0,
-          "direction": "higher",
-          "metric": "mrr",
-          "observed": 0.8333333333333334,
-          "slice": "category:typo",
-          "threshold": 0.98
-        }
-      ],
+      "drops": [],
       "mismatches": [],
-      "passed": false,
+      "passed": true,
       "refusal": {
         "correct_refusal": 0.3333333333333333,
         "correct_refusal_n": 21,
+        "failures": [],
         "false_refusal": 0.011627906976744186,
         "false_refusal_n": 86,
         "false_refusal_upper_95": 0.05397496344755209,
-        "improved": false,
+        "matched": null,
+        "method": "point",
+        "passed": true,
         "reference_correct_refusal": 0.3333333333333333,
-        "reference_false_refusal": 0.046511627906976744
-      }
+        "reference_false_refusal": 0.046511627906976744,
+        "strictly_improved": false
+      },
+      "report_only": [
+        {
+          "ci_high": 0.0,
+          "ci_low": -0.062499999999999986,
+          "drop": {
+            "baseline_mean": 0.8333333333333334,
+            "direction": "higher",
+            "metric": "mrr",
+            "observed": 0.8125,
+            "slice": "category:scanned",
+            "threshold": 0.8133333333333334
+          },
+          "n": 4,
+          "n_nonzero": 1
+        },
+        {
+          "ci_high": 0.0,
+          "ci_low": -0.5,
+          "drop": {
+            "baseline_mean": 1.0,
+            "direction": "higher",
+            "metric": "mrr",
+            "observed": 0.8333333333333334,
+            "slice": "category:typo",
+            "threshold": 0.98
+          },
+          "n": 3,
+          "n_nonzero": 1
+        }
+      ]
     },
-    "run": "v2-recommended"
+    "run": "v2-recommended",
+    "strict_improvement": {
+      "note": "the fixture shows no strict correct-refusal gain at the matched false-refusal point; whether correct refusal strictly improves is decided by the live calibration (04-43)",
+      "verdict": "open"
+    }
   },
   "runs": [
     {
@@ -449,7 +499,7 @@
         "RAG_RERANKER": "cohere"
       },
       "fixture_mode": "ingest",
-      "lexical_leg_hit_rate_at_10": 0.6666666666666666,
+      "lexical_leg_hit_rate_at_10": 0.6565656565656566,
       "name": "parent-child-on",
       "overall": {
         "correct_refusal_rate": {

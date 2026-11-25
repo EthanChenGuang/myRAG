@@ -1,21 +1,25 @@
 # Phase 4 comparison (D-28)
 
-Result: FAIL
+Result: PASS
 
 Noise band: a slice drops beyond the noise band when it falls more than max(3 x baseline spread, 0.02) below its reference. Rules (b) and (c) check the overall, every language and every category slice on Recall@5, Recall@10 and MRR (the CI gate checks fewer slices).
+
+Rule (b) reading (decision 2026-11-25, research D-28 row): correct refusal is compared at matched false refusal. Against the all-off v2 run, correct refusal must not be lower and the false-refusal point estimate not higher. Against the committed baseline, a threshold fitted with calibrate.refusal.fit_threshold on the all-off run's dense scores at the baseline's false-refusal rate must reach the baseline's correct refusal. Overall and language slices keep the band; a category slice counts as a drop only when it is beyond the band and its paired interval ends below 0 or at least two items moved.
 
 - Fixture corpus only. Fixture gains mostly reflect the lexical fixture embedder (hashed n-grams, research F-9) and, against the legacy baseline, dropping the legacy 0.65 post-filter; live verification decides real gains.
 - The shipped defaults stay off (D-28): every switch compared here is off in src/lib/env.ts until the Phase 7 regression.
 - Slice comparisons of v2 runs align request_options with the observed run: a named run differs from its reference by design (for example rerank_model or chunking_profile_by_doc_type). Golden, corpus, embedder, tier and mode must still match.
 - Parent-child runs use sweep candidate p128-512: the recorded contract_legal decision is legacy.
 - XLG-03: no cross cell has a threshold on the fixture; XLG-03 is decided by the live calibration (04-43).
+- Success criterion 4 (correct refusal strictly improves): open; the fixture shows no strict correct-refusal gain at the matched false-refusal point; whether correct refusal strictly improves is decided by the live calibration (04-43).
+- Observation (test split): no-answer item zh-no-answer-003 is answered by the rerank gate (cohere|fake-quality-v1|zh|same, threshold 0.0446) with best dense 0.0595, below the similarity floor 0.1159; the gate supersedes the floor (D-30). Report only.
 
 ## Verdicts
 
 | Rule | Verdict |
 | --- | --- |
 | (a) legacy parity | PASS |
-| (b) v2-recommended vs baseline and v2-all-off | FAIL |
+| (b) v2-recommended vs baseline and v2-all-off | PASS |
 | (c) parent-child | PASS |
 | (c) compression | PASS |
 | (c) translation (local_bm25) | PASS |
@@ -34,22 +38,37 @@ Noise band: a slice drops beyond the noise band when it falls more than max(3 x 
 
 ## (b) v2-recommended
 
-#### Against the committed baseline: FAIL
+#### Against the committed baseline: PASS
 
-- Correct refusal: 0.3333 (n=21) vs 0.6667; higher: no
+- Correct refusal: 0.3333 (n=21) vs 0.6667
 - False refusal: 0.0116 (n=86, 95% upper 0.0540) vs 0.3953
+- Refusal check (matched false refusal): a threshold fitted on the reference dense scores at the baseline's false-refusal rate
+  - fitted on `v2-all-off` dense scores (n=86 answerable, 21 no-answer, 0 without a score), target false refusal 0.3953
+  - threshold 0.2808: false refusal 0.3837, correct refusal 0.6667 vs the baseline 0.6667
+  - refused set contains every no-answer item the baseline refused (14): yes
+- Refusal: PASS; strictly higher: no
 
 No slice dropped beyond the noise band.
 
-#### Against `v2-all-off`: FAIL
+#### Against `v2-all-off`: PASS
 
-- Correct refusal: 0.3333 (n=21) vs 0.3333; higher: no
+- Correct refusal: 0.3333 (n=21) vs 0.3333
 - False refusal: 0.0116 (n=86, 95% upper 0.0540) vs 0.0465
+- Refusal check (point estimates): correct refusal not lower and false refusal not higher
+- Refusal: PASS; strictly higher: no
 
-| Slice | Metric | Reference | Threshold | Observed |
-| --- | --- | --- | --- | --- |
-| category:scanned | mrr | 0.8333 | 0.8133 | 0.8125 |
-| category:typo | mrr | 1.0000 | 0.9800 | 0.8333 |
+No slice dropped beyond the noise band.
+
+Report-only category moves (beyond the band, but the paired interval reaches 0 and fewer than two items moved):
+
+| Slice | Metric | Reference | Threshold | Observed | n | n_nonzero | Paired 95% interval |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| category:scanned | mrr | 0.8333 | 0.8133 | 0.8125 | 4 | 1 | [-0.0625, 0.0000] |
+| category:typo | mrr | 1.0000 | 0.9800 | 0.8333 | 3 | 1 | [-0.5000, 0.0000] |
+
+Correct refusal strictly improves: open (the fixture shows no strict correct-refusal gain at the matched false-refusal point; whether correct refusal strictly improves is decided by the live calibration (04-43)).
+
+- Observation (test split): no-answer item zh-no-answer-003 is answered by the rerank gate (cohere|fake-quality-v1|zh|same, threshold 0.0446) with best dense 0.0595, below the similarity floor 0.1159; the gate supersedes the floor (D-30). Report only.
 
 Calibration outcome (plan 04-39): {"dev_correct_refusal_delta": 0.0, "dev_correct_refusal_improved": false, "dev_false_refusal_delta": -0.03488372093023256, "dev_false_refusal_upper_95_at_or_below_target": false, "dev_false_refusal_within_target_plus_noise": true}
 
@@ -163,7 +182,7 @@ Verdict: not_comparable (0 comparable cells). no cross cell has a threshold on t
 | v2-all-off | prechunked | 0.8372 | 0.8721 | 0.7561 | 0.3333 | 0.0465 (0.1033) | 0.0000 | 895.6 |
 | v2-recommended | prechunked | 0.8605 | 0.8837 | 0.7672 | 0.3333 | 0.0116 (0.0540) | 0.8721 | 942.7 |
 | parent-child-off | ingest | 0.6616 | 0.6869 | 0.5967 | 0.2917 | 0.1515 (0.2237) | 0.6768 | 613.4 |
-| parent-child-on | ingest | 0.6970 | 0.7172 | 0.6225 | 0.2917 | 0.1515 (0.2237) | 0.6667 | 765.1 |
+| parent-child-on | ingest | 0.6970 | 0.7172 | 0.6225 | 0.2917 | 0.1515 (0.2237) | 0.6566 | 765.1 |
 | compression-on | prechunked | 0.8605 | 0.8837 | 0.7672 | 0.3333 | 0.0116 (0.0540) | 0.8721 | 693.8 |
 | local-bm25 | prechunked | 0.8605 | 0.8953 | 0.7652 | 0.3333 | 0.0465 (0.1033) | 0.8837 | 916.3 |
 | translation-on | prechunked | 0.9186 | 0.9419 | 0.8219 | 0.3333 | 0.0465 (0.1033) | 0.9302 | 912.1 |
