@@ -259,13 +259,14 @@ for (const mode of MODES) {
     });
 
     // 0425 later replaces 0351's functions with an empty search_path, 0426 replaces rag_advance_ingestion_job again and 0427 replaces
-    // rag_record_parse_attempt, so a re-run of 0351 is followed by 0425, 0426 and 0427, as in migration order.
-    test('applying 0351 twice (then 0425, 0426 and 0427, which supersede its functions) leaves the catalog unchanged', async () => {
+    // rag_record_parse_attempt, and 0440 replaces 0425's rag_chunk_embeddings_guard, so a re-run of 0351 is followed by 0425, 0426, 0427 and
+    // 0440, as in migration order.
+    test('applying 0351 twice (then 0425, 0426, 0427 and 0440, which supersede its functions) leaves the catalog unchanged', async () => {
       const once = await createFixtureDatabase({ deploymentMode: mode, corpusDir: REAL_CORPUS, migrations: true, supabaseGrants: true });
       const before = await catalogDump(once.db);
       const fs = await import('node:fs');
       await once.db.exec(fs.readFileSync(path.join(REPO_ROOT, MIGRATION_0351), 'utf8'));
-      for (const file of migrationFiles(mode).filter((relpath) => /^supabase\/migrations\/042[5-7]_/.test(relpath))) {
+      for (const file of migrationFiles(mode).filter((relpath) => /^supabase\/migrations\/(042[5-7]|0440)_/.test(relpath))) {
         await once.db.exec(fs.readFileSync(path.join(REPO_ROOT, file), 'utf8'));
       }
       const after = await catalogDump(once.db);

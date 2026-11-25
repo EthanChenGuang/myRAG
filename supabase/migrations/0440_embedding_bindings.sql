@@ -14,6 +14,7 @@
 -- it was changed by hand or 0425 was not applied: compare pg_get_functiondef with the repository before applying.
 --   SELECT 'f7aa72d3c0bcc173f7dd103cced69c03' AS expected, pg_catalog.md5(p.prosrc) AS live
 --     FROM pg_catalog.pg_proc p WHERE p.oid = pg_catalog.to_regprocedure('public.rag_chunk_embeddings_guard()');
+-- Re-running 0425 after this file puts back the 0425 guard without the scope check, so re-run 0440 after it.
 -- Idempotent: ADD COLUMN IF NOT EXISTS, constraints added only when absent, ON CONFLICT DO NOTHING, IF NOT EXISTS, CREATE OR REPLACE.
 
 BEGIN;
