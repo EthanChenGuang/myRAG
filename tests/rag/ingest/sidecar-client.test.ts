@@ -84,6 +84,18 @@ describe('sidecar Docling client', () => {
       ocr_languages: ['zh', 'en', 'it'],
       docling: { table_mode: 'accurate', ocr: true, force_full_page_ocr: false },
     });
+    // Phase 3.2 fields at their defaults are not sent, so a sidecar deployed before them still accepts the body.
+    expect(Object.keys(sent as Record<string, unknown>).sort()).toEqual([
+      'docling',
+      'input_format',
+      'max_tokens',
+      'ocr_languages',
+      'page_cap',
+      'profile_id',
+      'profile_version',
+      'repeat_table_header',
+      'tokenizer',
+    ]);
     expect(ParseResultSchema.safeParse(attempt.result).success).toBe(true);
     const tables = attempt.result.chunks.filter((chunk) => chunk.is_table && chunk.table_header !== null);
     expect(tables.length).toBeGreaterThan(1);

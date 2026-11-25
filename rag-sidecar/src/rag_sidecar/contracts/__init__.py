@@ -110,6 +110,33 @@ from rag_sidecar.contracts.query import (
     SubQuestions,
 )
 from rag_sidecar.contracts.review import ReviewQueueItem
+from rag_sidecar.contracts.ingest_settings import (
+    FingerprintImpact,
+    FingerprintImpactRow,
+    FingerprintSwitches,
+    IngestFingerprintParts,
+    IngestionSettingEntry,
+    LanguageSettings,
+    QuerySettingEntry,
+    SettingsClassification,
+)
+from rag_sidecar.contracts.ingest_security import (
+    DocxHiddenTextRules,
+    HiddenTextQuarantineReason,
+    HiddenTextReport,
+    HiddenTextRequest,
+    HiddenTextRules,
+    HiddenTextSpan,
+    LinkCheckResult,
+    LinkTargetFinding,
+    PdfHiddenTextRules,
+    UploadApproval,
+    InjectionRuleQuarantineReason,
+    InvoiceExtractionQuarantineReason,
+    QuarantineReason,
+    QuarantineSpan,
+    UntrustedLinkQuarantineReason,
+)
 from rag_sidecar.contracts.parse_eval import (
     BackfillDryRunReport,
     BackfillManifestEntry,
@@ -181,6 +208,29 @@ from rag_sidecar.contracts.eval_run import (
 )
 
 __all__ = [
+    "FingerprintImpact",
+    "FingerprintImpactRow",
+    "FingerprintSwitches",
+    "IngestFingerprintParts",
+    "IngestionSettingEntry",
+    "LanguageSettings",
+    "QuerySettingEntry",
+    "SettingsClassification",
+    "DocxHiddenTextRules",
+    "HiddenTextReport",
+    "HiddenTextRequest",
+    "HiddenTextRules",
+    "HiddenTextSpan",
+    "LinkCheckResult",
+    "LinkTargetFinding",
+    "PdfHiddenTextRules",
+    "UploadApproval",
+    "HiddenTextQuarantineReason",
+    "InjectionRuleQuarantineReason",
+    "InvoiceExtractionQuarantineReason",
+    "QuarantineReason",
+    "QuarantineSpan",
+    "UntrustedLinkQuarantineReason",
     "CacheCheckRequest",
     "CacheCheckResponse",
     "CachedAnswer",
