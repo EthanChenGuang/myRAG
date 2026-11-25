@@ -147,7 +147,20 @@ status: complete
 - `query_layer: true` cannot switch the layer on while the env has it off (06-13/06-19 rule). If 06-41 or 06-43 need options-only switching, `effectiveQueryLayerConfig` and `queryLayerActive` are the seam. The route classifies the query only when the env enables the layer.
 
 ## Gate results
-(filled below)
+All gates passed in one full run at `c0ad903`:
+- `npx next typegen && npx tsc --noEmit -p tsconfig.json`: 0 errors.
+- `npx vitest run`: 6,509 passed and 4 skipped.
+- `node --import tsx --test tests/*.test.mts`: 172 passed.
+- `node --import tsx --test tests/rag-db/*.test.mts`: 1,976 passed.
+- Boundary check and its node test: pass.
+- `node scripts/check-config.mjs`: pass.
+- `check-workflows.py`: pass.
+- Sidecar pytest: 1,857 passed and 11 skipped.
+- Eval pytest: 1,053 passed.
+- `npm run gen:schemas`: no diff.
+- `npm run test-rag -- --out eval/out/06-29`: gate PASS, all paired differences zero.
+- `npm run test-rag -- --fixture-mode ingest --out eval/out/06-29-ingest`: gate PASS, all paired differences zero.
+- Plan verify: `npm run test-rag -- --run-config eval/config/runs/query-layer-llamaindex.json --no-gate --out eval/out/p6-29-ql` scored 164 items, with no `[Query Layer]` line in the harness log, so no live client was used.
 
 ## Operator actions
 - None. No live LLM is called. The live LlamaIndex vs LangChain comparison stays with 06-43.
