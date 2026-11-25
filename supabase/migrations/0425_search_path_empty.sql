@@ -8,16 +8,24 @@
 -- pg_temp. Each function below is replaced with SET search_path = '' and a body that differs from the one it replaces only by schema-qualified
 -- names: public. tables, row types, functions and the vector and halfvec types, OPERATOR(public.<=>) for pgvector (both setup files install
 -- vector in public), and pg_catalog. catalog tables. Signature, defaults, volatility, SECURITY mode, owner and grants are unchanged: CREATE OR
--- REPLACE keeps the ACL and this file issues no GRANT or REVOKE. Every function must already exist (the first block checks and stops
--- otherwise), so the file never creates one with default PUBLIC execute. tests/rag-db/search-path-empty.test.mts. Idempotent: CREATE OR
--- REPLACE only.
+-- REPLACE keeps the ACL and this file issues no GRANT or REVOKE. The first block stops with 55000 unless pgvector is in schema public (the
+-- bodies name public.vector and OPERATOR(public.<=>)) and every function already exists, so the file never creates one with default PUBLIC
+-- execute. tests/rag-db/search-path-empty.test.mts. Idempotent: CREATE OR REPLACE only.
 
 BEGIN;
 
 DO $search_path_precheck$
 DECLARE
   v_missing text[];
+  v_vector_schema text;
 BEGIN
+  SELECT n.nspname INTO v_vector_schema
+  FROM pg_catalog.pg_extension e JOIN pg_catalog.pg_namespace n ON n.oid = e.extnamespace
+  WHERE e.extname = 'vector';
+  IF v_vector_schema IS DISTINCT FROM 'public' THEN
+    RAISE EXCEPTION '0425: pgvector must be in schema public, found %; check with: SELECT extname, extnamespace::regnamespace FROM pg_catalog.pg_extension WHERE extname = ''vector''',
+      COALESCE(v_vector_schema, 'no vector extension') USING ERRCODE = '55000';
+  END IF;
   SELECT pg_catalog.array_agg(s.sig ORDER BY s.sig) INTO v_missing
   FROM pg_catalog.unnest(ARRAY[
     'public.check_admin_status()',
