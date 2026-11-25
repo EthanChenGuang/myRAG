@@ -131,7 +131,23 @@ const configServerAdapter: EntryPointAdapter = {
   cleanup: cleanupTempRoots,
 };
 
-export const ENTRY_POINT_ADAPTERS: EntryPointAdapter[] = [appAdapter, configServerAdapter];
+const initEnv = requireScript('../../scripts/init-env.js') as {
+  validateLanguageChoice(
+    candidate: { supported: string | null; primary: string | null },
+    options: ScriptValidateOptions,
+  ): LanguageValidationResult;
+};
+
+const initEnvAdapter: EntryPointAdapter = {
+  name: 'init-env (scripts/init-env.js)',
+  readsActiveProfile: false,
+  validate(entry) {
+    return initEnv.validateLanguageChoice({ supported: entry.supported, primary: entry.primary }, scriptInputs(entry));
+  },
+  cleanup: cleanupTempRoots,
+};
+
+export const ENTRY_POINT_ADAPTERS: EntryPointAdapter[] = [appAdapter, initEnvAdapter, configServerAdapter];
 
 describe.each(ENTRY_POINT_ADAPTERS)('$name', (adapter) => {
   afterEach(() => adapter.cleanup());

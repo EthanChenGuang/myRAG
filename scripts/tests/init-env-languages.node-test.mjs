@@ -123,7 +123,7 @@ test('only complete packs are listed', async () => {
 });
 
 test('a multi-select answer and a primary write both variables in registry order', async () => {
-  const { result, text } = await run(['3,1', '2']);
+  const { result, text } = await run(['3,1', '1']);
   assert.equal(result.prompted, true);
   assert.equal(result.saved, true);
   assert.deepEqual(linesFor('RAG_SUPPORTED_LANGUAGES'), ['RAG_SUPPORTED_LANGUAGES=zh,it']);
