@@ -7,7 +7,12 @@ import type { EmbeddingProfile } from './embeddings/active-profile';
 import { EmbeddingProfileMismatch } from './embeddings/mrl';
 import { embedText } from './embeddings/openai';
 import { getEmbeddingProviderFor } from './embeddings/registry';
+import { isMultiTenant } from '@/lib/deployment-mode';
 import { readSecurityConfig, type SecurityConfig } from './security/config';
+import { loadInjectionDetectorConfig, type Detector } from './security/detectors';
+import type { PromptGuardClassifier } from './security/injection-check';
+import { createLakeraDetector, lakeraSettingsFrom } from './security/lakera';
+import { classifyWithPromptGuard } from './security/prompt-guard-client';
 
 export interface ProfileQueryEmbedding {
   vector: number[];
@@ -30,6 +35,10 @@ export interface RagDeps {
   ragEnv: () => RagEnvInput;
   /** Phase 5.1 switches, read at call time. */
   securityConfig: () => SecurityConfig;
+  /** The Lakera adapter; its own gate re-checks lakeraAllowed with the real deployment mode before every request. */
+  lakeraDetector: () => Detector;
+  /** The sidecar Prompt Guard client; answers not_configured without RAG_SIDECAR_URL and RAG_SIDECAR_SECRET. */
+  promptGuardClassifier: PromptGuardClassifier;
   fetch: typeof fetch;
 }
 
@@ -88,6 +97,13 @@ const defaults: RagDeps = {
   randomId: () => randomUUID(),
   ragEnv: () => readRagEnvInput(),
   securityConfig: () => readSecurityConfig(),
+  lakeraDetector: () =>
+    createLakeraDetector({
+      config: loadInjectionDetectorConfig().lakera,
+      fetch: (input, init) => getRagDeps().fetch(input, init),
+      gate: () => lakeraSettingsFrom(getRagDeps().securityConfig(), isMultiTenant()),
+    }),
+  promptGuardClassifier: (items, opts) => classifyWithPromptGuard(items, { ...opts, fetch: getRagDeps().fetch }),
   fetch: globalThis.fetch.bind(globalThis),
 };
 

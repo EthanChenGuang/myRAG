@@ -1,6 +1,12 @@
+import { isMultiTenant } from '@/lib/deployment-mode';
+import { detectLanguage } from '../lang/detect';
+import type { TenantScope } from '../tenant/scope';
 import { readSecurityConfig, type InjectionCheckMode, type SecurityConfig } from './config';
-import { detectorsConfigVersion } from './detectors';
+import { detectorsConfigVersion, loadInjectionDetectorConfig, type Detector, type DetectorProfile } from './detectors';
 import { injectionRulesVersion, scanText } from './injection-rules';
+import { lakeraAllowed } from './lakera';
+import type { PromptGuardItem, PromptGuardOutcome } from './prompt-guard-client';
+import { createVerdictCache, verdictCacheKey, type VerdictCache } from './verdict-cache';
 import type { InjectionItemRecord, InjectionSummary, Profile, ReferencedSection, ReferencedState } from '../types';
 
 export type ActiveInjectionMode = Exclude<InjectionCheckMode, 'off'>;
@@ -22,6 +28,8 @@ export interface InjectionVerdict {
   ruleIds: string[];
   /** The matcher threw for this item; it counts as unflagged for this request. */
   error: boolean;
+  /** The detectors that flagged the item; absent means the rules. */
+  sources?: InjectionDetectorId[];
 }
 
 export type InjectionVerdicts = ReadonlyMap<string, InjectionVerdict>;
@@ -99,8 +107,9 @@ export type InjectionDetectorId = 'rules' | 'prompt_guard' | 'lakera';
 
 const RULES_ONLY_PROFILES: readonly Profile[] = ['voice', 'media'];
 
-/** ML detectors with a client in this build; empty until plan 05.1-21 wires Prompt Guard and Lakera. */
-const WIRED_ML_DETECTORS: readonly Exclude<InjectionDetectorId, 'rules'>[] = [];
+export type MlDetectorId = Exclude<InjectionDetectorId, 'rules'>;
+
+const WIRED_ML_DETECTORS: readonly MlDetectorId[] = ['prompt_guard', 'lakera'];
 
 /** The detectors a profile runs: voice and media run the rules only whatever the ML switches say (D-09, A-11). */
 export function injectionDetectorsFor(profile: Profile, config: Pick<SecurityConfig, 'promptGuard' | 'lakera'>): InjectionDetectorId[] {
@@ -115,9 +124,11 @@ export function injectionTraceVersions(env: Record<string, string | undefined> =
   return { rules_version: injectionRulesVersion(), detectors_version: detectorsConfigVersion() };
 }
 
-/** Detector versions recorded on the stage entry, e.g. rules@8eade169ab89. */
+/** Detector versions recorded on the stage entry, e.g. rules@8eade169ab89 and, with an ML detector, detectors@<config version>. */
 export function injectionVersions(detectors: readonly InjectionDetectorId[]): string[] {
-  return detectors.includes('rules') ? [`rules@${injectionRulesVersion()}`] : [];
+  const versions = detectors.includes('rules') ? [`rules@${injectionRulesVersion()}`] : [];
+  if (detectors.some((id) => id !== 'rules')) versions.push(`detectors@${detectorsConfigVersion()}`);
+  return versions;
 }
 
 /** Runs the rules on every item synchronously; never awaits, so a stage timeout cannot skip it. */
@@ -242,6 +253,10 @@ export function applyInjectionAction<C extends ItemCandidate>(input: {
   const flaggedItems = flaggedChunks.size + flaggedSections.size;
   const dropCount = mode === 'drop' ? flaggedItems : 0;
   const downweightCount = mode === 'downweight' ? flaggedItems : 0;
+  const rulesFlagged = items.filter((item) => {
+    const verdict = verdicts.get(item.key);
+    return verdict?.flagged === true && (verdict.sources ?? ['rules']).includes('rules');
+  }).length;
   return {
     candidates,
     referenced,
@@ -252,9 +267,9 @@ export function applyInjectionAction<C extends ItemCandidate>(input: {
       dropped: dropCount,
       downweighted: downweightCount,
       rules_checked: items.length,
-      rules_flagged: flaggedItems,
-      rules_dropped: dropCount,
-      rules_downweighted: downweightCount,
+      rules_flagged: rulesFlagged,
+      rules_dropped: mode === 'drop' ? rulesFlagged : 0,
+      rules_downweighted: mode === 'downweight' ? rulesFlagged : 0,
     },
     summary: {
       mode,
@@ -282,6 +297,9 @@ export function logInjectionSummary(summary: InjectionSummary, counts: Record<st
     flaggedChunkIds: summary.flaggedChunkIds,
     flaggedReferenceIds: summary.flaggedReferenceIds,
     droppedChunkIds: summary.droppedChunkIds,
+    ...(summary.detectorsUnavailable.length > 0 ? { detectorsUnavailable: summary.detectorsUnavailable } : {}),
+    ...(summary.detectorsDisabled ? { detectorsDisabled: summary.detectorsDisabled } : {}),
+    ...(summary.detectorFailures ? { detectorFailures: summary.detectorFailures } : {}),
     ...(extra.stalled ? { stalled: true } : {}),
   });
 }
@@ -297,4 +315,359 @@ export function setInjectionStallForTests(stall: (() => Promise<void>) | null): 
 export function afterRules<T>(value: T): T | Promise<T> {
   if (!stallForTests) return value;
   return stallForTests().then(() => value);
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// ML detectors (D-07, D-09, A-3, A-9, A-11, A-12): run in parallel on the items the rules did not flag, under an
+// inner deadline below the stage race, with every failure reported as a value.
+
+export type PromptGuardClassifier = (items: PromptGuardItem[], opts: { signal?: AbortSignal; timeoutMs: number }) => Promise<PromptGuardOutcome>;
+
+export interface InjectionDetectorsInput {
+  items: readonly InjectionCheckItem[];
+  /** The rules verdicts; an item they flagged is never sent to an ML detector. */
+  verdicts: InjectionVerdicts;
+  profile: Profile;
+  security: SecurityConfig;
+  /** Keys the verdict cache; without a tenant no ML detector runs. */
+  scope: TenantScope | null;
+  traceId: string | null;
+  /** The stage signal. */
+  signal: AbortSignal;
+  /** The configured stage budget; the ML fan-out stops at budget minus inner_reserve_ms. */
+  budgetMs: number;
+  lakeraDetector: () => Detector;
+  promptGuardClassifier: PromptGuardClassifier;
+  /** Defaults to the real deployment-mode resolver. */
+  multiTenant?: () => boolean;
+}
+
+export interface InjectionDetectorsRun {
+  verdicts: InjectionVerdicts;
+  /** ML detectors that report counts for this request. */
+  reported: MlDetectorId[];
+  counts: Record<string, number>;
+  /** Detectors that failed while an unflagged item needed them; sets degraded / injection_check_detector_unavailable. */
+  unavailable: MlDetectorId[];
+  /** Detectors that were configured but refused or not usable for this request, with the reason. */
+  disabled: Partial<Record<MlDetectorId, string>>;
+  /** The first failure reason of each unavailable detector. */
+  failures: Partial<Record<MlDetectorId, string>>;
+}
+
+/** Background warming of the Prompt Guard cache is bounded by this ceiling and never awaited by a request. */
+export const PROMPT_GUARD_WARM_TIMEOUT_MS = 60000;
+
+const ML_PROFILES: readonly DetectorProfile[] = ['chat', 'embed', 'eval'];
+
+let verdictCache: VerdictCache | null = null;
+let warmInFlight: Promise<void> | null = null;
+
+function cache(): VerdictCache {
+  if (!verdictCache) verdictCache = createVerdictCache({ maxEntries: loadInjectionDetectorConfig().cache.max_entries });
+  return verdictCache;
+}
+
+export function resetInjectionDetectorsForTests(): void {
+  verdictCache = null;
+  warmInFlight = null;
+}
+
+/** Resolves when the current background warm batch, if any, has finished. */
+export async function injectionWarmIdleForTests(): Promise<void> {
+  while (warmInFlight) await warmInFlight;
+}
+
+function promptGuardVersion(): string {
+  const config = loadInjectionDetectorConfig().prompt_guard;
+  return `${config.model_id}@${config.revision}`;
+}
+
+function isMlProfile(profile: Profile): profile is DetectorProfile {
+  return (ML_PROFILES as readonly string[]).includes(profile);
+}
+
+type ScopedInput = InjectionDetectorsInput & { scope: TenantScope };
+
+type ItemOutcome = { kind: 'verdict'; flagged: boolean } | { kind: 'unavailable'; reason: string };
+
+interface DetectorState {
+  outcomes: Map<string, ItemOutcome>;
+  counts: { checked: number; unavailable: number; unsupported_language: number; cache_hit: number; cache_miss: number };
+  disabledReason: string | null;
+  unavailableReason: string | null;
+  warmDropped: number;
+  /** Items sent inline and still awaited; marked unavailable when the inner deadline fires first. */
+  inFlight: InjectionCheckItem[];
+}
+
+function newState(): DetectorState {
+  return {
+    outcomes: new Map(),
+    counts: { checked: 0, unavailable: 0, unsupported_language: 0, cache_hit: 0, cache_miss: 0 },
+    disabledReason: null,
+    unavailableReason: null,
+    warmDropped: 0,
+    inFlight: [],
+  };
+}
+
+function abortPromise(signal: AbortSignal): Promise<'aborted'> {
+  return new Promise((resolve) => {
+    if (signal.aborted) resolve('aborted');
+    else signal.addEventListener('abort', () => resolve('aborted'), { once: true });
+  });
+}
+
+/** Cache lookups first; returns the items still needing a call. */
+function lookup(state: DetectorState, pending: readonly InjectionCheckItem[], keyOf: (item: InjectionCheckItem) => string): InjectionCheckItem[] {
+  const misses: InjectionCheckItem[] = [];
+  for (const item of pending) {
+    const hit = cache().get(keyOf(item));
+    if (hit) {
+      state.outcomes.set(item.key, { kind: 'verdict', flagged: hit.flagged });
+      state.counts.cache_hit += 1;
+      state.counts.checked += 1;
+    } else {
+      state.counts.cache_miss += 1;
+      misses.push(item);
+    }
+  }
+  return misses;
+}
+
+function markUnavailable(state: DetectorState, items: readonly InjectionCheckItem[], reason: string): void {
+  for (const item of items) {
+    if (state.outcomes.has(item.key)) continue;
+    state.outcomes.set(item.key, { kind: 'unavailable', reason });
+    state.counts.unavailable += 1;
+  }
+  if (items.length > 0 && state.unavailableReason === null) state.unavailableReason = reason;
+}
+
+function chunked<T>(values: readonly T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let index = 0; index < values.length; index += size) out.push(values.slice(index, index + size));
+  return out;
+}
+
+/** Calls Prompt Guard for the items in groups of max_items; caches every verdict. Never throws. */
+async function classifyPromptGuard(
+  items: readonly InjectionCheckItem[],
+  classifier: PromptGuardClassifier,
+  scope: TenantScope,
+  opts: { signal?: AbortSignal; timeoutMs: number },
+): Promise<{ verdicts: Map<string, boolean>; failure: string | null }> {
+  const config = loadInjectionDetectorConfig().prompt_guard;
+  const version = promptGuardVersion();
+  const verdicts = new Map<string, boolean>();
+  for (const group of chunked(items, config.max_items)) {
+    let outcome: PromptGuardOutcome;
+    try {
+      outcome = await classifier(
+        group.map((item, index) => ({ id: `i${index}`, text: item.text })),
+        opts,
+      );
+    } catch {
+      outcome = { ok: false, reason: 'unreachable' };
+    }
+    if (!outcome.ok) return { verdicts, failure: outcome.reason };
+    group.forEach((item, index) => {
+      const result = outcome.ok ? outcome.results[index] : undefined;
+      if (!result) return;
+      const flagged = result.score >= config.threshold;
+      verdicts.set(item.key, flagged);
+      cache().set(verdictCacheKey(scope, 'prompt_guard', version, item.text), { flagged, score: result.score, at: Date.now() });
+    });
+  }
+  return { verdicts, failure: null };
+}
+
+/** At most one warm batch per process; a request never waits for it. Returns false when the batch was dropped. */
+function scheduleWarm(items: readonly InjectionCheckItem[], classifier: PromptGuardClassifier, scope: TenantScope): boolean {
+  if (items.length === 0) return true;
+  if (warmInFlight) return false;
+  const batch = items.map((item) => ({ ...item }));
+  const job = classifyPromptGuard(batch, classifier, scope, { timeoutMs: PROMPT_GUARD_WARM_TIMEOUT_MS })
+    .then(() => undefined, () => undefined)
+    .finally(() => {
+      if (warmInFlight === job) warmInFlight = null;
+    });
+  warmInFlight = job;
+  return true;
+}
+
+async function runPromptGuard(
+  state: DetectorState,
+  unflagged: readonly InjectionCheckItem[],
+  input: ScopedInput,
+  profile: DetectorProfile,
+  inner: AbortSignal,
+  innerMs: number,
+): Promise<void> {
+  const config = loadInjectionDetectorConfig().prompt_guard;
+  const inline = config.inline_profiles.includes(profile);
+  const warm = config.warm_profiles.includes(profile);
+  if (!inline && !warm) {
+    state.disabledReason = 'profile_disabled';
+    return;
+  }
+  const languages = config.languages as readonly string[];
+  const supported: InjectionCheckItem[] = [];
+  for (const item of unflagged) {
+    const language = detectLanguage(item.text);
+    if (language !== null && languages.includes(language)) supported.push(item);
+    else state.counts.unsupported_language += 1;
+  }
+  const version = promptGuardVersion();
+  const misses = lookup(state, supported, (item) => verdictCacheKey(input.scope, 'prompt_guard', version, item.text));
+  if (misses.length === 0) return;
+
+  if (!inline) {
+    if (!scheduleWarm(misses, input.promptGuardClassifier, input.scope)) state.warmDropped += 1;
+    return;
+  }
+  state.inFlight = misses;
+  const result = await classifyPromptGuard(misses, input.promptGuardClassifier, input.scope, { signal: inner, timeoutMs: innerMs });
+  for (const [key, flagged] of result.verdicts) {
+    state.outcomes.set(key, { kind: 'verdict', flagged });
+    state.counts.checked += 1;
+  }
+  if (result.failure === 'not_configured') {
+    state.disabledReason = 'not_configured';
+    return;
+  }
+  if (result.failure !== null) {
+    const reason = result.failure === 'aborted' && !input.signal.aborted ? 'timeout' : result.failure;
+    markUnavailable(state, misses, reason);
+  }
+}
+
+async function runLakera(
+  state: DetectorState,
+  unflagged: readonly InjectionCheckItem[],
+  input: ScopedInput,
+  profile: DetectorProfile,
+  inner: AbortSignal,
+): Promise<void> {
+  if (!loadInjectionDetectorConfig().lakera.profiles.includes(profile)) {
+    state.disabledReason = 'profile_disabled';
+    return;
+  }
+  const detector = input.lakeraDetector();
+  const misses = lookup(state, unflagged, (item) => verdictCacheKey(input.scope, 'lakera', detector.version, item.text));
+  if (misses.length === 0) return;
+  state.inFlight = misses;
+  let outcomes: Awaited<ReturnType<typeof detector.classify>>;
+  try {
+    outcomes = await detector.classify(
+      misses.map((item) => item.text),
+      { signal: inner, profile, traceId: input.traceId, scope: input.scope },
+    );
+  } catch {
+    outcomes = misses.map(() => ({ kind: 'unavailable', reason: 'network' }));
+  }
+  const failed: InjectionCheckItem[] = [];
+  let failure: string | null = null;
+  misses.forEach((item, index) => {
+    const outcome = outcomes[index];
+    if (outcome?.kind === 'verdict') {
+      state.outcomes.set(item.key, { kind: 'verdict', flagged: outcome.verdict.flagged });
+      state.counts.checked += 1;
+      cache().set(verdictCacheKey(input.scope, 'lakera', detector.version, item.text), outcome.verdict);
+      return;
+    }
+    failed.push(item);
+    const reason = outcome?.reason ?? 'network';
+    failure ??= reason === 'aborted' && !input.signal.aborted ? 'timeout' : reason;
+  });
+  if (failed.length > 0) markUnavailable(state, failed, failure ?? 'network');
+}
+
+/**
+ * The gate for each ML detector and the parallel fan-out. Voice and media never reach a detector; the Lakera gate is
+ * lakeraAllowed with the real deployment mode, evaluated before any Lakera call is built.
+ */
+export async function runInjectionDetectors(input: InjectionDetectorsInput): Promise<InjectionDetectorsRun> {
+  const none: InjectionDetectorsRun = { verdicts: input.verdicts, reported: [], counts: {}, unavailable: [], disabled: {}, failures: {} };
+  const { security, profile } = input;
+  if (security.injectionCheck === 'off' || !isMlProfile(profile) || input.scope === null) return none;
+  const scoped: ScopedInput = { ...input, scope: input.scope };
+
+  const states = new Map<MlDetectorId, DetectorState>();
+  if (security.promptGuard) states.set('prompt_guard', newState());
+  if (security.lakera || security.lakeraMultiTenantAck) {
+    const state = newState();
+    const gate = lakeraAllowed({
+      injectionCheck: security.injectionCheck,
+      lakera: security.lakera,
+      multiTenant: (input.multiTenant ?? isMultiTenant)(),
+      ack: security.lakeraMultiTenantAck,
+      apiKeyPresent: (security.lakeraApiKey?.trim() ?? '') !== '',
+    });
+    if (!gate.allowed) state.disabledReason = gate.reason;
+    states.set('lakera', state);
+  }
+  if (states.size === 0) return none;
+
+  const unflagged = input.items.filter((item) => input.verdicts.get(item.key)?.flagged !== true);
+  const reserve = loadInjectionDetectorConfig().inner_reserve_ms;
+  const innerMs = Math.max(1, input.budgetMs - reserve);
+  const inner = AbortSignal.any([input.signal, AbortSignal.timeout(innerMs)]);
+
+  const runs: Array<{ id: MlDetectorId; items: readonly InjectionCheckItem[]; run: Promise<void> }> = [];
+  const promptGuard = states.get('prompt_guard');
+  if (promptGuard && unflagged.length > 0) {
+    runs.push({ id: 'prompt_guard', items: unflagged, run: runPromptGuard(promptGuard, unflagged, scoped, profile, inner, innerMs) });
+  }
+  const lakera = states.get('lakera');
+  if (lakera && lakera.disabledReason === null && unflagged.length > 0) {
+    runs.push({ id: 'lakera', items: unflagged, run: runLakera(lakera, unflagged, scoped, profile, inner) });
+  }
+  if (runs.length > 0) {
+    const settled = await Promise.race([Promise.all(runs.map((entry) => entry.run.catch(() => undefined))), abortPromise(inner)]);
+    if (settled === 'aborted') {
+      const reason = input.signal.aborted ? 'aborted' : 'timeout';
+      for (const state of states.values()) markUnavailable(state, state.inFlight, reason);
+    }
+  }
+
+  const merged = new Map<string, InjectionVerdict>(input.verdicts);
+  const flaggedBy = new Map<MlDetectorId, number>();
+  for (const item of unflagged) {
+    const sources: MlDetectorId[] = [];
+    for (const [id, state] of states) {
+      const outcome = state.outcomes.get(item.key);
+      if (outcome?.kind === 'verdict' && outcome.flagged) sources.push(id);
+    }
+    if (sources.length === 0) continue;
+    for (const id of sources) flaggedBy.set(id, (flaggedBy.get(id) ?? 0) + 1);
+    const base = input.verdicts.get(item.key);
+    merged.set(item.key, { flagged: true, ruleIds: base?.ruleIds ?? [], error: base?.error ?? false, sources });
+  }
+
+  const counts: Record<string, number> = {};
+  const unavailable: MlDetectorId[] = [];
+  const disabled: Partial<Record<MlDetectorId, string>> = {};
+  const failures: Partial<Record<MlDetectorId, string>> = {};
+  const mode = security.injectionCheck;
+  for (const [id, state] of states) {
+    const flagged = flaggedBy.get(id) ?? 0;
+    counts[`${id}_checked`] = state.counts.checked;
+    counts[`${id}_flagged`] = flagged;
+    counts[`${id}_dropped`] = mode === 'drop' ? flagged : 0;
+    counts[`${id}_downweighted`] = mode === 'downweight' ? flagged : 0;
+    counts[`${id}_unavailable`] = state.counts.unavailable;
+    counts[`${id}_disabled`] = state.disabledReason === null ? 0 : 1;
+    counts[`${id}_unsupported_language`] = state.counts.unsupported_language;
+    counts[`${id}_cache_hit`] = state.counts.cache_hit;
+    counts[`${id}_cache_miss`] = state.counts.cache_miss;
+    if (id === 'prompt_guard') counts.prompt_guard_warm_dropped = state.warmDropped;
+    if (state.disabledReason !== null) disabled[id] = state.disabledReason;
+    if (state.counts.unavailable > 0) {
+      unavailable.push(id);
+      failures[id] = state.unavailableReason ?? 'unavailable';
+    }
+  }
+  return { verdicts: merged, reported: [...states.keys()], counts, unavailable, disabled, failures };
 }

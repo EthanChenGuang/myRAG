@@ -47,7 +47,10 @@ import {
   releasedRulesFromRows,
   logInjectionSummary,
   runInjectionCheck,
+  runInjectionDetectors,
   type ActiveInjectionMode,
+  type InjectionDetectorsRun,
+  type InjectionVerdicts,
   type InjectionApplied,
   type InjectionCheckItem,
   type InjectionMarks,
@@ -56,7 +59,7 @@ import {
 } from './security/injection-check';
 import { exactIdStage, mergeExactCandidates } from './retrieval/exact-id';
 import { hybridRerank } from './rerank/local-hybrid';
-import { assertTenantScope, scopeKey } from './tenant/scope';
+import { assertTenantScope, scopeKey, type TenantScope } from './tenant/scope';
 import { createTraceCollector, sanitizeStageCounts, type TraceCollector } from './trace/collector';
 import { finishTrace } from './trace/finish';
 import { voiceKeywordFallback, type VoiceChunk } from './voice/keyword-fallback';
@@ -90,6 +93,8 @@ export interface StageRunOptions<T> {
   rules?: (value: T) => string[];
   versions?: (value: T) => string[];
   detail?: (value: T) => string | undefined;
+  /** Defaults to ok; injection_check reports degraded when a needed ML detector was unavailable. */
+  status?: (value: T) => Extract<StageRecord['status'], 'ok' | 'degraded'>;
 }
 
 export class StageError extends Error {
@@ -161,7 +166,7 @@ export async function runStage<T>(
     const counts = options.counts ? sanitizeStageCounts(options.counts(value)) : undefined;
     collector.record({
       name: spec.name,
-      status: 'ok',
+      status: options.status ? options.status(value) : 'ok',
       startedAt,
       endedAt: collector.now(),
       candidatesIn,
@@ -199,12 +204,20 @@ export async function runStage<T>(
   }
 }
 
+export const INJECTION_DETECTOR_UNAVAILABLE = 'detector_unavailable';
+
+function detectorUnavailable(record: StageRecord): boolean {
+  return record.name === 'injection_check' && record.status === 'degraded' && record.detail === INJECTION_DETECTOR_UNAVAILABLE;
+}
+
 export function deriveStatus(records: StageRecord[], survivingCount: number): RetrievalResult['status'] {
   if (records.some((record) => record.status === 'error' || record.status === 'timeout' || record.status === 'aborted')) {
     return 'error';
   }
-  if (records.some((record) => record.status === 'skipped' || record.status === 'degraded')) return 'degraded';
-  return survivingCount === 0 ? 'empty' : 'ok';
+  // A detector outage degrades only a result that would otherwise be ok: with nothing surviving it stays empty.
+  if (records.some((record) => record.status === 'skipped' || (record.status === 'degraded' && !detectorUnavailable(record)))) return 'degraded';
+  if (survivingCount === 0) return 'empty';
+  return records.some(detectorUnavailable) ? 'degraded' : 'ok';
 }
 
 export function stageSpec(
@@ -246,6 +259,8 @@ export interface InjectionStageInput<C extends ItemCandidate> {
   items: readonly InjectionCheckItem[];
   candidates: readonly C[];
   referenced: ReferencedState | null;
+  /** The request's tenant: it keys the ML verdict cache (A-9). Without one no ML detector runs. */
+  scope: TenantScope | null;
   /** Released rule ids from document rows already loaded under the caller's scope. */
   released?: ReleasedRules;
   /** Document filenames from the same rows, recorded on the summary's item records. */
@@ -257,28 +272,57 @@ export interface InjectionStageRun<C extends ItemCandidate> {
   stalled: boolean;
 }
 
+function withDetectors<C extends ItemCandidate>(applied: InjectionApplied<C>, run: InjectionDetectorsRun): InjectionApplied<C> {
+  if (run.reported.length === 0) return applied;
+  const disabled = Object.keys(run.disabled).length > 0 ? { detectorsDisabled: { ...run.disabled } as Record<string, string> } : {};
+  const failures = Object.keys(run.failures).length > 0 ? { detectorFailures: { ...run.failures } as Record<string, string> } : {};
+  return {
+    ...applied,
+    counts: { ...applied.counts, ...run.counts },
+    summary: { ...applied.summary, detectorsUnavailable: [...run.unavailable], ...disabled, ...failures },
+  };
+}
+
 /**
  * The injection_check stage shared by every legacy graph and the v2 graph. The rules run synchronously before any await and their
- * result is held outside the stage race, so a stage timeout can never lose it (A-3).
+ * result is held outside the stage race, so a stage timeout can never lose it (A-3). The ML detectors then run on the items the rules
+ * did not flag, under an inner deadline below the race; a needed detector that failed marks the stage degraded, never skipped.
  */
 export async function runInjectionStage<C extends ItemCandidate>(input: InjectionStageInput<C>): Promise<InjectionStageRun<C>> {
   const { spec, items, mode } = input;
+  const deps = getRagDeps();
   const versions = injectionVersions(injectionDetectorsFor(input.profile, input.security));
   let held: InjectionApplied<C> | null = null;
+  const apply = (verdicts: InjectionVerdicts) =>
+    applyInjectionAction({
+      candidates: input.candidates,
+      referenced: input.referenced,
+      items,
+      verdicts,
+      mode,
+      renderSection: renderReferencedSection,
+      ...(input.documentNames ? { documentNames: input.documentNames } : {}),
+    });
   const checked = await runStage(
     { ...spec, timeoutMs: spec.timeoutMs + INJECTION_STAGE_GUARD_MS },
     input.signal,
-    () => {
+    async (stageSignal) => {
       const verdicts = runInjectionCheck({ items, mode, ...(input.released ? { released: input.released } : {}) });
-      const applied = applyInjectionAction({
-        candidates: input.candidates,
-        referenced: input.referenced,
+      const rulesApplied = apply(verdicts);
+      held = rulesApplied;
+      const detectors = await runInjectionDetectors({
         items,
         verdicts,
-        mode,
-        renderSection: renderReferencedSection,
-        ...(input.documentNames ? { documentNames: input.documentNames } : {}),
+        profile: input.profile,
+        security: input.security,
+        scope: input.scope,
+        traceId: input.collector.traceId,
+        signal: stageSignal,
+        budgetMs: spec.timeoutMs,
+        lakeraDetector: deps.lakeraDetector,
+        promptGuardClassifier: deps.promptGuardClassifier,
       });
+      const applied = withDetectors(detectors.verdicts === verdicts ? rulesApplied : apply(detectors.verdicts), detectors);
       held = applied;
       return afterRules(applied);
     },
@@ -289,6 +333,8 @@ export async function runInjectionStage<C extends ItemCandidate>(input: Injectio
       counts: (value) => value.counts,
       rules: (value) => value.summary.ruleIds,
       versions: () => versions,
+      status: (value) => (value.summary.detectorsUnavailable.length > 0 ? 'degraded' : 'ok'),
+      detail: (value) => (value.summary.detectorsUnavailable.length > 0 ? INJECTION_DETECTOR_UNAVAILABLE : undefined),
     },
   );
   const applied: InjectionApplied<C> | null = checked.skipped ? held : checked.value;
@@ -381,6 +427,7 @@ export function assembleDisabledStatus(
 export function degradedReason(records: StageRecord[]): string {
   const skipped = records.find((record) => record.status === 'skipped');
   if (skipped) return `${skipped.name}_${skipped.reason ?? 'skipped'}`;
+  if (records.some(detectorUnavailable)) return `injection_check_${INJECTION_DETECTOR_UNAVAILABLE}`;
   return records.some((record) => record.name === 'assemble' && record.status === 'disabled') ? 'assemble_disabled' : 'degraded';
 }
 
@@ -435,6 +482,7 @@ async function runMediaPipeline(input: RunRetrievalInput, collector: TraceCollec
         spec: spec('injection_check', 'skip'),
         signal,
         collector,
+        scope,
         profile,
         security,
         mode: 'drop',
@@ -602,6 +650,7 @@ async function runOverviewPipeline(
         spec: spec('injection_check', 'skip'),
         signal,
         collector,
+        scope,
         profile,
         security,
         mode,
@@ -858,6 +907,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
           spec: spec('injection_check', 'skip'),
           signal,
           collector,
+          scope,
           profile,
           security,
           mode,
@@ -1035,6 +1085,7 @@ async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollec
         spec: spec('injection_check', 'skip'),
         signal,
         collector,
+        scope,
         profile,
         security,
         mode,

@@ -224,6 +224,10 @@ export interface InjectionSummary {
   downweightedChunkIds: string[];
   ruleIds: string[];
   detectorsUnavailable: string[];
+  /** Set only when an ML detector was configured but refused or unusable for this request, with the reason. */
+  detectorsDisabled?: Record<string, string>;
+  /** Set only when a needed ML detector failed: the first failure reason per detector (e.g. timeout, http_429). */
+  detectorFailures?: Record<string, string>;
   flagged: boolean;
   /** Every checked item in check order; the eval trace's injection record is built from it. */
   items?: InjectionItemRecord[];

@@ -265,6 +265,7 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
       spec: spec('injection_check', 'skip'),
       signal,
       collector,
+      scope: input.scope ?? null,
       profile,
       security,
       mode: security.injectionCheck,
