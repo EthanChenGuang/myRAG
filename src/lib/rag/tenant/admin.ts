@@ -47,10 +47,10 @@ export async function isAdminUser(admin: RagAdminDb, userId: string, signal: Abo
 }
 
 /**
- * Fail-closed admin guard. The caller is a verified Supabase user (SSR cookie session, or a Bearer access
- * token validated by auth.getUser) whose id is in admin_users. A cookie or token value is never read as a user id.
+ * The verified Supabase user of a request (SSR cookie session, or a Bearer access token validated by auth.getUser), lowercased.
+ * A cookie or token value is never read as a user id. No admin check: callers add their own.
  */
-export async function requireRagAdmin(input: RequireRagAdminInput): Promise<RagAdminResult> {
+export async function verifyRagUser(input: RequireRagAdminInput): Promise<RagAdminResult> {
   const admin = input.admin === undefined ? getRagDeps().adminClient() : input.admin;
 
   let userId: string;
@@ -78,7 +78,17 @@ export async function requireRagAdmin(input: RequireRagAdminInput): Promise<RagA
   }
 
   if (typeof userId !== 'string' || !UUID_RE.test(userId)) return refuse(401, 'invalid_session');
-  userId = userId.toLowerCase();
+  return { ok: true, userId: userId.toLowerCase() };
+}
+
+/**
+ * Fail-closed admin guard. The caller is a verified Supabase user (verifyRagUser) whose id is in admin_users.
+ */
+export async function requireRagAdmin(input: RequireRagAdminInput): Promise<RagAdminResult> {
+  const admin = input.admin === undefined ? getRagDeps().adminClient() : input.admin;
+  const verified = await verifyRagUser({ ...input, admin });
+  if (!verified.ok) return verified;
+  const userId = verified.userId;
 
   if (!admin) return refuse(503, 'admin_check_unavailable');
   let member: boolean;

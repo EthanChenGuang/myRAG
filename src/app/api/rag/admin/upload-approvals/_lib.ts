@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod/v3';
-import { adminDenied } from '@/lib/admin-route-auth';
-import type { RagAdminResult } from '@/lib/rag';
-import { resolveAdminWorkspaceScope, scopeKey } from '@/lib/rag';
-import type { ApprovalFailure } from '@/lib/rag';
+import { adminWorkspaceDenied } from '@/lib/admin-route-auth';
+import type { AdminWorkspaceResult } from '@/lib/admin-route-auth';
+import type { ApprovalFailure, PendingUpload, UploadExemption } from '@/lib/rag';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
 
@@ -26,19 +25,10 @@ export function issues(error: z.ZodError): Details {
 
 export type Admission = { ok: true; actorUserId: string; tenantKey: string } | { ok: false; response: NextResponse };
 
-/** The verified actor and the workspace tenant key the request may act on, or the standard denial. */
-export async function admit(admin: RagAdminResult, organizationId: string | null | undefined, signal: AbortSignal): Promise<Admission> {
-  if (!admin.ok) return { ok: false, response: adminDenied(admin.status) };
-  const workspace = await resolveAdminWorkspaceScope({
-    adminUserId: admin.userId,
-    requestedOrganizationId: organizationId ?? null,
-    requiredOrganizationRoles: ['owner', 'admin'],
-    signal,
-  });
-  if (!workspace.ok) {
-    return { ok: false, response: jsonNoStore({ success: false, error: workspace.status === 403 ? 'Forbidden' : 'Workspace verification unavailable' }, workspace.status) };
-  }
-  return { ok: true, actorUserId: admin.userId, tenantKey: scopeKey(workspace.scope) };
+/** The verified actor and the one workspace tenant key the request may act on, or the denial. */
+export function admission(result: AdminWorkspaceResult): Admission {
+  if (!result.ok) return { ok: false, response: adminWorkspaceDenied(result) };
+  return { ok: true, actorUserId: result.userId, tenantKey: result.tenantKey };
 }
 
 /**
@@ -79,4 +69,22 @@ export async function refuseBody(request: Request): Promise<NextResponse | null>
   }
   const checked = EmptyBodySchema.safeParse(body);
   return checked.success ? null : invalidRequest(issues(checked.error));
+}
+
+export function projectPending(item: PendingUpload) {
+  return {
+    id: item.documentId,
+    lineage_id: item.lineageId,
+    file_name: item.filename,
+    uploader: item.uploader,
+    source: item.source,
+    doc_type: item.docType,
+    version: item.version,
+    uploaded_at: item.uploadedAt,
+    new_version: item.newVersion,
+  };
+}
+
+export function projectExemption(item: UploadExemption) {
+  return { id: item.id, kind: item.kind, ref: item.ref, display: item.display, added_by: item.addedBy, added_at: item.addedAt };
 }
