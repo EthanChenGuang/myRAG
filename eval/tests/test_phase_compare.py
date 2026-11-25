@@ -869,12 +869,15 @@ def test_default_runner_passes_switches_and_harness_flags(tmp_path: Path):
 
 # ---------- Phase 5.1: absolute_zero and category_noise (D-14), retrieval_unchanged with exclusions, gate
 
+SPEC51 = REPO_ROOT / "eval" / "config" / "phase51-comparison.json"
 ASR_PATH = 'injection.attack_success_rate["category:injection"]'
 FP_PATH = "injection.rules_false_positive_count"
 
 
 def _injection(asr: float | None = 0.0, n: int = 12, rules_fp: int = 0, label: str = "recommended") -> InjectionReport:
     rates = {"category:injection": MetricValue(value=asr, n=n)}
+    for language in ("en", "zh", "it"):
+        rates[f"language_category:{language}:injection"] = MetricValue(value=asr, n=n // 3)
     return InjectionReport(
         config_label=label,
         items=n,
@@ -986,4 +989,84 @@ def test_phase5_comparison_output_has_no_injection_key_when_no_run_measured_inje
     commands, _ = _env_commands()
     run_switch_comparison(spec, tmp_path / "out", runner=_switch_runner(_passing_outputs(spec), {}), commands=commands)
     stored = json.loads((tmp_path / "out" / "comparison.json").read_text(encoding="utf-8"))
-    assert all("injection" not in run for run in stored["runs"])
+    assert all("injection" not in run and "run_config_env" not in run for run in stored["runs"])
+
+
+def _spec51_world(tmp_path: Path) -> SwitchComparisonSpec:
+    baseline = _baseline(_output())
+    (tmp_path / "prechunked.json").write_text(baseline.model_dump_json(), encoding="utf-8")
+    raw = json.loads(SPEC51.read_text(encoding="utf-8"))
+    raw["baselines"] = {"prechunked": str(tmp_path / "prechunked.json")}
+    return SwitchComparisonSpec.model_validate(raw)
+
+
+def _spec51_outputs(spec: SwitchComparisonSpec, **changes: RunOutput) -> dict[str, RunOutput]:
+    labels = {"all-off": "all_off", "recommended": "recommended", "tagging-only": "tagging_only"}
+    outputs = {
+        run.name: _with_injection(_output(), _injection(asr=0.0 if run.name == "recommended" else 0.5, label=labels.get(run.name, "other")))
+        for run in spec.runs
+    }
+    outputs.update(changes)
+    return outputs
+
+
+def test_committed_phase51_spec_gates_all_off_and_recommended_and_reports_the_rest():
+    spec = SwitchComparisonSpec.model_validate_json(SPEC51.read_text(encoding="utf-8"))
+    runs = {run.name: run for run in spec.runs}
+    assert set(runs) == {"all-off", "recommended", "tagging-only", "flag", "downweight"}
+    assert runs["all-off"].base == "eval/config/runs/sec-all-off.json"
+    assert {"gate", "paired_all_zero"} <= set(runs["all-off"].checks)
+    recommended = runs["recommended"]
+    assert recommended.base == "eval/config/runs/sec-recommended.json" and recommended.env == {}
+    kinds = {getattr(check, "kind", check): check for check in recommended.checks}
+    assert "gate" in kinds
+    zero_paths = {check.path for check in recommended.checks if getattr(check, "kind", None) == "absolute_zero"}
+    assert zero_paths == {ASR_PATH, FP_PATH}
+    assert sorted(kinds["category_noise"].exclude) == ["injection", "injection_evasive"]
+    assert sorted(kinds["retrieval_unchanged"].exclude_categories) == ["injection", "injection_evasive"]
+    assert runs["flag"].base == runs["downweight"].base == "eval/config/runs/sec-recommended.json"
+    assert runs["flag"].env == {"RAG_INJECTION_CHECK": "flag"} and runs["downweight"].env == {"RAG_INJECTION_CHECK": "downweight"}
+    for name in ("tagging-only", "flag", "downweight"):
+        assert runs[name].checks == ["report_only"]
+
+
+def test_run_switch_comparison_phase51_passes_and_records_injection(tmp_path: Path):
+    spec = _spec51_world(tmp_path)
+    seen: dict = {}
+    commands, _ = _env_commands()
+    result = run_switch_comparison(spec, tmp_path / "out", runner=_switch_runner(_spec51_outputs(spec), seen), commands=commands)
+    assert result.passed is True, result.model_dump_json(indent=2)
+    assert seen["flag"].run_config["env"]["RAG_INJECTION_CHECK"] == "flag"
+    assert seen["flag"].run_config["env"]["RAG_CONTEXT_TAGGING"] == "true"
+    assert seen["recommended"].run_config["env"]["RAG_INJECTION_CHECK"] == "drop"
+    stored = json.loads((tmp_path / "out" / "comparison.json").read_text(encoding="utf-8"))
+    by_name = {run["name"]: run for run in stored["runs"]}
+    assert by_name["tagging-only"]["injection"]["attack_success_rate"]["category:injection"]["value"] == 0.5
+    md = (tmp_path / "out" / "comparison.md").read_text(encoding="utf-8")
+    assert "attack success" in md.lower() and "report_only" in md
+    assert "Run-config env: RAG_CONTEXT_TAGGING=true, RAG_INJECTION_CHECK=flag" in md
+    assert by_name["flag"]["run_config_env"]["RAG_INJECTION_CHECK"] == "flag"
+    assert "stub extractive generator" in stored["notes"][0]
+
+
+@pytest.mark.parametrize("breaker", ["attack_succeeded", "rules_false_positive", "category_dropped", "off_moved", "no_injection_block"])
+def test_run_switch_comparison_phase51_fails_on_each_gated_condition(tmp_path: Path, breaker: str):
+    spec = _spec51_world(tmp_path)
+    changes = {
+        "attack_succeeded": {"recommended": _with_injection(_output(), _injection(asr=1 / 12))},
+        "rules_false_positive": {"recommended": _with_injection(_output(), _injection(rules_fp=1))},
+        "category_dropped": {"recommended": _with_injection(_output(misses=("en-table-001",)), _injection())},
+        "off_moved": {"all-off": _with_injection(_output(rank2=("en-general-001",)), _injection(asr=0.5, label="all_off"))},
+        "no_injection_block": {"recommended": _with_injection(_output(), None)},
+    }[breaker]
+    commands, _ = _env_commands()
+    result = run_switch_comparison(spec, tmp_path / "out", runner=_switch_runner(_spec51_outputs(spec, **changes), {}), commands=commands)
+    assert result.passed is False
+
+
+def test_report_only_runs_never_fail_the_comparison(tmp_path: Path):
+    spec = _spec51_world(tmp_path)
+    worse = _with_injection(_output(misses=("en-general-001", "en-table-001", "en-clause-001")), _injection(asr=1.0, label="other"))
+    commands, _ = _env_commands()
+    result = run_switch_comparison(spec, tmp_path / "out", runner=_switch_runner(_spec51_outputs(spec, flag=worse), {}), commands=commands)
+    assert result.passed is True

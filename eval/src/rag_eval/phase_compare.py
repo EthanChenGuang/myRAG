@@ -1446,6 +1446,7 @@ class SwitchComparisonSpec(_Model):
     baselines: dict[FixtureMode, str]
     runs: list[SwitchRun] = Field(min_length=1)
     commands: dict[str, list[str]] = Field(default_factory=dict)
+    fixture_note: str | None = None
     notes: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
@@ -1484,6 +1485,7 @@ class SwitchRunResult(_Model):
     overall: SliceMetrics
     invalid_citation_rate: float | None
     citation_coverage: float | None
+    run_config_env: dict[str, str] | None = None
     injection: InjectionReport | None = None
     passed: bool
     checks: list[CheckResult]
@@ -1671,10 +1673,11 @@ def run_switch_comparison(
     results: list[SwitchRunResult] = []
     for run in spec.runs:
         print(f"[Phase Compare] run {run.name} ({run.fixture_mode})", file=sys.stderr)
+        run_config = _switch_run_config(run)
         output = runner(
             RunRequest(
                 name=run.name,
-                run_config=_switch_run_config(run),
+                run_config=run_config,
                 fixture_mode=run.fixture_mode,
                 out_dir=harness_dir / run.name,
                 process_env=dict(run.switches),
@@ -1722,6 +1725,7 @@ def run_switch_comparison(
                 overall=report.overall,
                 invalid_citation_rate=report.invalid_citation_rate.value if report.invalid_citation_rate is not None else None,
                 citation_coverage=report.citation_coverage.value if report.citation_coverage is not None else None,
+                run_config_env=dict(run_config["env"]) if run.base is not None else None,
                 injection=report.injection,
                 passed=all(check.passed for check in checks),
                 checks=checks,
@@ -1733,12 +1737,13 @@ def run_switch_comparison(
         noise_floor=noise.floor,
         noise_k=noise.k,
         runs=results,
-        notes=[SWITCH_FIXTURE_NOTE, SWITCH_DEFAULTS_NOTE, *spec.notes],
+        notes=[spec.fixture_note or SWITCH_FIXTURE_NOTE, SWITCH_DEFAULTS_NOTE, *spec.notes],
     )
     payload = comparison.model_dump(mode="json")
     for run_payload in payload["runs"]:
-        if run_payload.get("injection") is None:
-            run_payload.pop("injection", None)
+        for optional in ("run_config_env", "injection"):
+            if run_payload.get(optional) is None:
+                run_payload.pop(optional, None)
     _write_text(out_dir / JSON_NAME, json.dumps(payload, sort_keys=True, indent=2) + "\n")
     _write_text(out_dir / MARKDOWN_NAME, render_switch_markdown(comparison))
     return comparison
@@ -1794,6 +1799,11 @@ def render_switch_markdown(c: SwitchComparison) -> str:
             "",
             f"Switches: {switches}. Harness flags: {' '.join(r.harness_flags) or 'none'}.",
             "",
+            *(
+                [f"Run-config env: {', '.join(f'{k}={v}' for k, v in sorted(r.run_config_env.items())) or 'none'}.", ""]
+                if r.run_config_env is not None
+                else []
+            ),
             *_injection_lines(r.injection),
             (
                 f"Recall@5 {_num(o.recall_at_5.value)}, Recall@10 {_num(o.recall_at_10.value)}, MRR {_num(o.mrr.value)}, "
