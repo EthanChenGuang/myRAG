@@ -51,3 +51,23 @@ describe('AGENTS.md reflects the Phase 5.1 prompt-injection defense', () => {
     expect(AGENTS).toContain(fragment);
   });
 });
+
+describe('AGENTS.md reflects the Phase 3.1.1 domain embedding bindings', () => {
+  const section6 = AGENTS.slice(AGENTS.indexOf('## 6. RAG & Data Pipeline'), AGENTS.indexOf('## 7. AI Model Management'));
+
+  test.each([
+    '`RAG_DOMAIN_EMBEDDINGS=off`',
+    '`npm run rag:embedding -- bindings`',
+    'binding',
+    'additive',
+    'real items',
+    'stale',
+    'scoped re-embed',
+  ])('section 6 mentions %s', (fragment) => {
+    expect(section6).toContain(fragment);
+  });
+
+  test('the fold sentence names Phase 3.1.1', () => {
+    expect(AGENTS).toContain('Phase 3.1.1 (0440–0442)');
+  });
+});
