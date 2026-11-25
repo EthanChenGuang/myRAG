@@ -1,52 +1,189 @@
-import type { GroundednessResult } from '@/lib/rag-eval/contracts.generated';
+import rawThresholds from '../../../../eval/config/groundedness-thresholds.json';
+import { stripCitationMarkers } from '@/lib/citations/marker-grammar';
+import { GroundednessThresholdsSchema, type GroundednessResult } from '@/lib/rag-eval/contracts.generated';
+import { countTokens as cl100kCountTokens } from '../ingest/text/tokens';
+import { detectLanguage } from '../lang/detect';
+import { chineseScript } from '../lang/script';
 import type { RetrievalStatus } from '../types';
 import type { AliasedBlock } from './citations/blocks';
+import type { GenerationConfig } from './config';
 
 export interface GroundednessEligibilityInput {
+  /** RAG_GROUNDEDNESS. */
   enabled: boolean;
+  /** The request came from the web chat with the citations capability (D-05). */
   webChatWithCitations: boolean;
   ragMode: string;
   retrievalStatus: RetrievalStatus;
+  /** Knowledge-base blocks actually sent to the model. */
   blockCount: number;
+  /** The strict refusal or the knowledge-base-unavailable message. */
   isRefusal: boolean;
   ghostChat: boolean;
+  /** An MCP tool result was used in the answer. */
   toolOutputUsed: boolean;
 }
-export type GroundednessEligibility = { eligible: true } | { eligible: false; reason: 'not_eligible' | 'tool_output' };
-export function groundednessEligibility(_input: GroundednessEligibilityInput): GroundednessEligibility {
+
+export type GroundednessEligibility =
+  | { eligible: true }
+  | { eligible: false; reason: 'not_eligible' | 'tool_output' };
+
+const SCORED_MODES = new Set(['strict', 'balanced']);
+
+/** D-14: every condition must hold; an MCP tool result on an otherwise eligible answer is tool_output. */
+export function groundednessEligibility(input: GroundednessEligibilityInput): GroundednessEligibility {
+  const hasContext =
+    (input.retrievalStatus === 'ok' || input.retrievalStatus === 'degraded') && input.blockCount > 0;
+  const eligible =
+    input.enabled &&
+    input.webChatWithCitations &&
+    SCORED_MODES.has(input.ragMode) &&
+    hasContext &&
+    !input.isRefusal &&
+    !input.ghostChat;
+  if (!eligible) return { eligible: false, reason: 'not_eligible' };
+  if (input.toolOutputUsed) return { eligible: false, reason: 'tool_output' };
   return { eligible: true };
 }
+
 export interface PremiseInput {
+  /** The alias blocks in the order they were sent. */
   blocks: readonly AliasedBlock[];
   citedAliases: Iterable<string>;
+  /** webSearch result texts, only when that tool ran. */
   webSearchTexts: readonly string[];
+  /** RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS. */
   maxTokens: number;
   countTokens?: (text: string) => number;
 }
-export type Premise = { status: 'ok'; premiseTexts: string[]; truncated: boolean } | { status: 'too_long' } | { status: 'empty_premise' };
-export function buildPremise(_input: PremiseInput): Premise {
-  return { status: 'empty_premise' };
+
+export type Premise =
+  | { status: 'ok'; premiseTexts: string[]; truncated: boolean }
+  | { status: 'too_long' }
+  | { status: 'empty_premise' };
+
+interface PremisePiece {
+  order: number;
+  text: string;
+  tokens: number;
 }
+
+/**
+ * D-14: the evidence actually sent. Under the cap everything is kept in order. Above it the cited blocks go first,
+ * then the other blocks in alias order, then the webSearch texts; whatever fits is returned in the original order.
+ */
+export function buildPremise(input: PremiseInput): Premise {
+  const count = input.countTokens ?? cl100kCountTokens;
+  const cited = new Set(input.citedAliases);
+  const citedPieces: PremisePiece[] = [];
+  const otherPieces: PremisePiece[] = [];
+  let order = 0;
+  for (const block of input.blocks) {
+    const index = order++;
+    if (!block.text.trim()) continue;
+    const piece = { order: index, text: block.text, tokens: count(block.text) };
+    (cited.has(block.alias) ? citedPieces : otherPieces).push(piece);
+  }
+  for (const text of input.webSearchTexts) {
+    const index = order++;
+    if (!text.trim()) continue;
+    otherPieces.push({ order: index, text, tokens: count(text) });
+  }
+
+  const all = [...citedPieces, ...otherPieces];
+  if (all.length === 0) return { status: 'empty_premise' };
+
+  const citedTokens = citedPieces.reduce((sum, piece) => sum + piece.tokens, 0);
+  if (citedTokens > input.maxTokens) return { status: 'too_long' };
+
+  const kept: PremisePiece[] = [...citedPieces];
+  let used = citedTokens;
+  let truncated = false;
+  for (const piece of otherPieces) {
+    if (used + piece.tokens <= input.maxTokens) {
+      kept.push(piece);
+      used += piece.tokens;
+    } else {
+      truncated = true;
+    }
+  }
+  if (kept.length === 0) return { status: 'too_long' };
+  kept.sort((a, b) => a.order - b.order);
+  return { status: 'ok', premiseTexts: kept.map((piece) => piece.text), truncated };
+}
+
 export type Hypothesis = { status: 'ok'; hypothesis: string } | { status: 'not_checked'; reason: 'empty_answer' };
+
+/** D-14: the final answer with every citation marker stripped. */
 export function buildHypothesis(answer: string): Hypothesis {
-  return { status: 'ok', hypothesis: answer };
+  const hypothesis = stripCitationMarkers(answer).trim();
+  if (!hypothesis) return { status: 'not_checked', reason: 'empty_answer' };
+  return { status: 'ok', hypothesis };
 }
+
+/** zh is Chinese with no script decision; only en and zh-Hans can be scored (D-11). */
 export type GroundednessLanguage = 'en' | 'it' | 'zh-Hans' | 'zh-Hant' | 'zh' | 'unknown';
-export function answerGroundednessLanguage(_answer: string): GroundednessLanguage {
-  return 'unknown';
+
+/** D-14: the pipeline's zh/en/it detector on the answer; Chinese is split by script (research Open Question 3). */
+export function answerGroundednessLanguage(answer: string): GroundednessLanguage {
+  const text = stripCitationMarkers(answer);
+  const language = detectLanguage(text);
+  if (language === null) return 'unknown';
+  if (language !== 'zh') return language;
+  const script = chineseScript(text);
+  if (script === 'hans') return 'zh-Hans';
+  if (script === 'hant') return 'zh-Hant';
+  return 'zh';
 }
-export function allowVectaraFor(_config: { vectaraOptIn: boolean; vectaraMultiTenantAck: boolean }, _multiTenant: boolean): boolean {
+
+/** D-21: Vectara only on opt-in; multi-tenant also needs the recorded retention acknowledgement. Fails closed. */
+export function allowVectaraFor(
+  config: Pick<GenerationConfig, 'vectaraOptIn' | 'vectaraMultiTenantAck'>,
+  multiTenant: boolean,
+): boolean {
+  if (config.vectaraOptIn !== true) return false;
+  if (multiTenant) return config.vectaraMultiTenantAck === true;
   return true;
 }
+
 export type ThresholdSource = 'default' | 'calibrated';
 export type GroundednessThresholdCells = ReadonlyMap<string, { threshold: number; source: ThresholdSource }>;
-export function loadGroundednessThresholdsFromData(_data: unknown): { cells: GroundednessThresholdCells } {
-  return { cells: new Map() };
+
+const DEFAULT_THRESHOLD = 0.5;
+let warnedInvalidThresholds = false;
+
+function cellKey(scorer: string, language: string): string {
+  return `${scorer}:${language}`;
 }
+
+export function loadGroundednessThresholdsFromData(data: unknown): { cells: GroundednessThresholdCells } {
+  const parsed = GroundednessThresholdsSchema.safeParse(data);
+  if (!parsed.success) {
+    if (!warnedInvalidThresholds) {
+      warnedInvalidThresholds = true;
+      console.warn('[Groundedness] Invalid groundedness-thresholds.json, default thresholds used', {
+        issues: parsed.error.issues.length,
+      });
+    }
+    return { cells: new Map() };
+  }
+  const cells = new Map<string, { threshold: number; source: ThresholdSource }>();
+  for (const cell of parsed.data.cells ?? []) {
+    cells.set(cellKey(cell.scorer, cell.language), { threshold: cell.threshold, source: cell.source });
+  }
+  return { cells };
+}
+
+let cachedThresholds: { cells: GroundednessThresholdCells } | null = null;
+
+/** The committed thresholds, validated once (the 04-13 pattern). */
 export function loadGroundednessThresholds(): { cells: GroundednessThresholdCells } {
-  return { cells: new Map() };
+  cachedThresholds ??= loadGroundednessThresholdsFromData(rawThresholds);
+  return cachedThresholds;
 }
+
 export type GroundednessLabel = 'verified' | 'possibly_unreliable' | 'not_checked';
+
 export interface LabelledGroundedness {
   status: GroundednessResult['status'];
   label: GroundednessLabel;
@@ -58,6 +195,37 @@ export interface LabelledGroundedness {
   truncated: boolean;
   latencyMs: number;
 }
-export function labelGroundedness(result: GroundednessResult, _language: string, _cells?: GroundednessThresholdCells): LabelledGroundedness {
-  return { status: result.status, label: 'not_checked', scorer: result.scorer, score: null, threshold: null, thresholdSource: null, reason: null, truncated: false, latencyMs: 0 };
+
+/** D-13: score at or above the (scorer, language) threshold is verified, below is possibly_unreliable; no score is not_checked. */
+export function labelGroundedness(
+  result: GroundednessResult,
+  language: string,
+  cells: GroundednessThresholdCells = loadGroundednessThresholds().cells,
+): LabelledGroundedness {
+  const base = {
+    scorer: result.scorer,
+    reason: result.reason ?? null,
+    truncated: result.truncated ?? false,
+    latencyMs: result.latency_ms,
+  };
+  const score = result.score ?? null;
+  if (result.status !== 'scored' || score === null || result.scorer === 'none') {
+    return {
+      ...base,
+      status: 'not_checked',
+      label: 'not_checked',
+      score: null,
+      threshold: null,
+      thresholdSource: null,
+    };
+  }
+  const cell = cells.get(cellKey(result.scorer, language)) ?? { threshold: DEFAULT_THRESHOLD, source: 'default' as const };
+  return {
+    ...base,
+    status: 'scored',
+    label: score >= cell.threshold ? 'verified' : 'possibly_unreliable',
+    score,
+    threshold: cell.threshold,
+    thresholdSource: cell.source,
+  };
 }
