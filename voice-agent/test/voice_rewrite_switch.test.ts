@@ -230,7 +230,7 @@ test('token refresh: earlier turns keep the old binding, later turns get the new
         );
         assert.deepEqual(h.ragCalls[2].history, [
             { role: 'assistant', content: 'greeting line', binding: oldBinding },
-            { role: 'user', content: 'before refresh', binding: oldBinding },
+            { role: 'user', content: 'rewritten query', binding: oldBinding },
             { role: 'assistant', content: 'answer before', binding: oldBinding },
             { role: 'user', content: 'first after refresh', binding: newBinding },
             { role: 'assistant', content: 'answer after', binding: newBinding },

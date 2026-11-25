@@ -3,7 +3,7 @@ import axios from 'axios';
 import { AssemblyAISTT } from './providers/assemblyai.js';
 import { ResembleTTS } from './providers/resemble.js';
 
-import { RAGClient, type RAGQueryResult } from './rag_client.js';
+import { HISTORY_MAX_TURNS, RAGClient, scopeTokenBinding, type HistoryTurn, type RAGQueryResult } from './rag_client.js';
 import { STTEvent, TTSProvider } from './providers/types.js';
 
 export class VoicePipeline {
@@ -40,6 +40,11 @@ export class VoicePipeline {
     private userId?: string;
     private scopeToken?: string;
 
+    // Server-side follow-up condensation (VOICE_SERVER_QUERY_REWRITE)
+    private readonly serverQueryRewriteEnabled: boolean;
+    private serverRewrite = false;
+    private turnBindings = new WeakMap<OpenAI.Chat.Completions.ChatCompletionMessageParam, string>();
+
     // For chat persistence
     private ragApiUrl: string;
     private ragApiKey: string;
@@ -74,6 +79,8 @@ export class VoicePipeline {
         humeApiKey?: string, // Hume AI API key
         humeVoice?: string // Hume voice ID (UUID) or name (default: 'Ava Song')
     }, onAudioOutput: (audio: Buffer) => void, onTextOutput?: (payload: any) => void) {
+
+        this.serverQueryRewriteEnabled = process.env.VOICE_SERVER_QUERY_REWRITE === 'true';
 
         // Set provider (default to openai)
         this.llmProvider = config.llmProvider || 'openai';
@@ -128,7 +135,20 @@ export class VoicePipeline {
     }
 
     private recordTurn(message: OpenAI.Chat.Completions.ChatCompletionMessageParam): void {
+        if (this.scopeToken) {
+            this.turnBindings.set(message, scopeTokenBinding(this.scopeToken));
+        }
         this.history.push(message);
+    }
+
+    private boundHistory(): HistoryTurn[] {
+        const turns: HistoryTurn[] = [];
+        for (const m of this.history.filter(m => m.role !== 'system').slice(-HISTORY_MAX_TURNS)) {
+            const binding = this.turnBindings.get(m);
+            if (!binding || (m.role !== 'user' && m.role !== 'assistant') || typeof m.content !== 'string' || m.content.length === 0) continue;
+            turns.push({ role: m.role, content: m.content, binding });
+        }
+        return turns;
     }
 
     private recordExchange(userContent: string, assistantContent: string): void {
@@ -137,8 +157,11 @@ export class VoicePipeline {
     }
 
     private async retrieve(text: string, requestId: number): Promise<{ rewrittenQuery: string; ragResult?: RAGQueryResult }> {
+        // The server condenses only while its latest response said so (x-rag-server-query-rewrite: 1)
+        const useServerRewrite = this.serverQueryRewriteEnabled && this.serverRewrite && !!this.scopeToken;
+
         // 1. Contextual Query Rewriting for better RAG retrieval
-        const rewrittenQuery = await this.rewriteQueryWithContext(text);
+        const rewrittenQuery = useServerRewrite ? text : await this.rewriteQueryWithContext(text);
 
         // CHECK: Was this request superseded by a newer one?
         if (this.currentRequestId !== requestId) {
@@ -151,7 +174,12 @@ export class VoicePipeline {
         // The user should see exactly what they said, not an LLM-expanded version.
 
         // 2. RAG Retrieval with rewritten query
-        const ragResult = await this.rag.query(rewrittenQuery, this.scopeToken, this.userId);
+        const ragResult = useServerRewrite
+            ? await this.rag.query(rewrittenQuery, this.scopeToken, this.userId, this.boundHistory())
+            : await this.rag.query(rewrittenQuery, this.scopeToken, this.userId);
+        if (this.serverQueryRewriteEnabled) {
+            this.serverRewrite = ragResult.ok && ragResult.serverQueryRewrite;
+        }
         return { rewrittenQuery, ragResult };
     }
 
@@ -334,6 +362,7 @@ export class VoicePipeline {
 
     public clearScope() {
         this.scopeToken = undefined;
+        this.serverRewrite = false;
         this.userId = undefined;
     }
 
@@ -922,6 +951,7 @@ Examples:
         this.history = [];
         this.history.push({ role: 'system', content: this.systemPrompt });
         this.messageMetadata.clear();
+        this.serverRewrite = false;
         this.cancelCurrentPlayback = true;
         this.isProcessing = false;
     }
