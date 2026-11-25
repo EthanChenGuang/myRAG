@@ -136,6 +136,14 @@ def build_document(spec: Any, binary_hash: int) -> DoclingDocument:
             height = TABLE_ROW_HEIGHT * len(block.rows)
             doc.add_table(data=_table_data(block.rows), prov=_prov(block.page, top, height))
             cursor[block.page] = top + height + 10.0
+        elif isinstance(block, specs.ColumnParagraph):
+            # Columns share a top; the left one is read first, and the page moves on below the taller column.
+            width = (specs.PAGE_WIDTH - 2 * MARGIN_X) / 2
+            left = MARGIN_X + block.column * width
+            height = 2 * _text_height(block.text, spec.language)
+            doc.add_text(DocItemLabel.TEXT, block.text, prov=_prov(block.page, top, height, left=left, right=left + width - 6.0, text_length=len(block.text)))
+            if block.column > 0:
+                cursor[block.page] = top + height + 6.0
         elif isinstance(block, specs.Picture):
             width_pt, height_pt = specs.PICTURE_SIZE_PT
             left = (specs.PAGE_WIDTH - width_pt) / 2
