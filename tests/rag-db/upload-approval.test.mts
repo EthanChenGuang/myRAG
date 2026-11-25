@@ -473,3 +473,204 @@ for (const mode of MODES) {
     });
   });
 }
+
+const ADD_SQL = 'SELECT * FROM rag_upload_exemption_add(p_actor => $1, p_tenant_key => $2, p_kind => $3, p_ref => $4)';
+const REMOVE_SQL = 'SELECT * FROM rag_upload_exemption_remove(p_actor => $1, p_exemption_id => $2)';
+const EXEMPT_LIST_SQL = 'SELECT * FROM rag_upload_exemption_list(p_actor => $1, p_tenant_key => $2, p_limit => $3, p_offset => $4)';
+const RELEASE_SQL = 'SELECT * FROM rag_release_publish_hold(p_document_id => $1, p_tenant_key => $2)';
+const IS_ADMIN_SQL = 'SELECT rag_is_tenant_admin(p_user => $1, p_tenant_key => $2) AS ok';
+
+/** Signatures of every function this migration adds or replaces. */
+const FUNCTIONS = [
+  'rag_approve_upload(uuid,uuid)',
+  'rag_hold_document_for_review(uuid,text)',
+  'rag_is_tenant_admin(uuid,text)',
+  'rag_list_pending_uploads(uuid,text,integer,integer)',
+  'rag_publish_document_version(uuid,text)',
+  'rag_reject_upload(uuid,uuid)',
+  'rag_release_publish_hold(uuid,text)',
+  'rag_upload_approval_keys(uuid)',
+  'rag_upload_exemption_add(uuid,text,text,text)',
+  'rag_upload_exemption_list(uuid,text,integer,integer)',
+  'rag_upload_exemption_remove(uuid,uuid)',
+  'rag_upload_exemptions_for(text)',
+];
+
+async function catalog(db: PGlite): Promise<Row[]> {
+  const functions = await rows(
+    db,
+    `SELECT p.oid::regprocedure::text AS sig, pg_get_functiondef(p.oid) AS def, p.proacl::text AS acl FROM pg_proc p
+      JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.oid::regprocedure::text = ANY($1::text[]) ORDER BY 1`,
+    [FUNCTIONS],
+  );
+  const table = await rows(
+    db,
+    `SELECT c.relname, c.relrowsecurity AS rls, c.relacl::text AS acl,
+            (SELECT array_agg(conname::text || ':' || pg_get_constraintdef(k.oid) ORDER BY conname) FROM pg_constraint k WHERE k.conrelid = c.oid) AS checks,
+            (SELECT count(*)::int FROM pg_policy p WHERE p.polrelid = c.oid) AS policies
+       FROM pg_class c WHERE c.oid = 'public.rag_upload_approval_exemptions'::regclass`,
+  );
+  const columns = await rows(
+    db,
+    `SELECT table_name, column_name, data_type, column_default, is_nullable FROM information_schema.columns
+      WHERE table_schema = 'public' AND (table_name = 'rag_upload_approval_exemptions' OR (table_name = 'ingestion_batches' AND column_name = 'hold_publish'))
+      ORDER BY 1, 2`,
+  );
+  const audit = await rows(db, "SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conname = 'rag_admin_audit_action_check'");
+  return [...functions, ...table, ...columns, ...audit];
+}
+
+for (const mode of MODES) {
+  describe(`0803 upload approval: exemptions, tenant admin and publish hold (${mode})`, () => {
+    let ctx: Ctx;
+    const it = (name: string, run: () => Promise<void>) => test(`${name} [${mode}]`, run);
+
+    before(async () => {
+      ctx = await createCtx(mode);
+    });
+
+    after(async () => {
+      await ctx?.db.close();
+    });
+
+    it('anon and authenticated can neither touch the exemptions table nor call any new function', async () => {
+      await rows(ctx.db, ADD_SQL, [ctx.admin, ctx.key, 'uploader', next('ref')]);
+      for (const role of ['anon', 'authenticated'] as const) {
+        await asRole(ctx.db, role, async () => {
+          for (const sql of [
+            'SELECT * FROM rag_upload_approval_exemptions',
+            `INSERT INTO rag_upload_approval_exemptions (tenant_key, kind, ref, created_by) VALUES ('${ctx.key}', 'uploader', 'x', '${ctx.admin}')`,
+            "UPDATE rag_upload_approval_exemptions SET ref = 'y'",
+            'DELETE FROM rag_upload_approval_exemptions',
+          ]) {
+            const refused = await failure(ctx.db, sql);
+            assert.equal(refused?.code, '42501', `${role}: ${sql.slice(0, 40)} is denied`);
+          }
+          for (const sig of FUNCTIONS) {
+            const allowed = (await rows(ctx.db, 'SELECT has_function_privilege($1, $2::regprocedure, $3) AS ok', [role, `public.${sig}`, 'EXECUTE']))[0];
+            assert.equal(allowed?.ok, false, `${role} cannot execute ${sig}`);
+          }
+        });
+      }
+      for (const sig of FUNCTIONS) {
+        const meta = (
+          await rows(
+            ctx.db,
+            "SELECT has_function_privilege('service_role', $1::regprocedure, 'EXECUTE') AS ok, array_to_string(proconfig, ',') AS config FROM pg_proc WHERE oid = $1::regprocedure",
+            [`public.${sig}`],
+          )
+        )[0];
+        assert.equal(meta?.ok, true, `service_role executes ${sig}`);
+        assert.equal(meta?.config, 'search_path=""', `${sig} has an empty search_path`);
+      }
+      const table = (await rows(ctx.db, "SELECT relrowsecurity AS rls, (SELECT count(*)::int FROM pg_policy WHERE polrelid = 'public.rag_upload_approval_exemptions'::regclass) AS policies FROM pg_class WHERE oid = 'public.rag_upload_approval_exemptions'::regclass"))[0];
+      assert.equal(table?.rls, true);
+      assert.equal(table?.policies, 0);
+    });
+
+    it('add, list and remove work for a tenant admin, are not_found for anyone else, and the pipeline reads the exemptions', async () => {
+      const ref = next('connref');
+      const added = (await rows(ctx.db, ADD_SQL, [ctx.admin, ctx.key, 'connector', ref]))[0] as Row;
+      assert.equal(added.outcome, 'added');
+      const again = (await rows(ctx.db, ADD_SQL, [ctx.admin, ctx.key, 'connector', ref]))[0] as Row;
+      assert.equal(again.outcome, 'exists');
+      assert.equal(again.id, added.id);
+
+      const listed = await rows(ctx.db, EXEMPT_LIST_SQL, [ctx.admin, null, 50, 0]);
+      const mine = listed.find((row) => row.id === added.id);
+      assert.ok(mine);
+      assert.equal(mine.kind, 'connector');
+      assert.equal(mine.ref, ref);
+      assert.equal(mine.created_by, ctx.admin);
+      assert.equal(mine.tenant_key, ctx.key);
+
+      const pipeline = await rows(ctx.db, 'SELECT kind, ref FROM rag_upload_exemptions_for($1)', [ctx.key]);
+      assert.ok(pipeline.some((row) => row.kind === 'connector' && row.ref === ref));
+      assert.equal((await failure(ctx.db, 'SELECT * FROM rag_upload_exemptions_for($1)', ['not-a-key']))?.code, '22023');
+
+      for (const actor of [ctx.member, ...(ctx.otherAdmin ? [ctx.otherAdmin] : [])]) {
+        assert.match((await failure(ctx.db, ADD_SQL, [actor, ctx.key, 'uploader', next('ref')]))?.message ?? '', /not_found/);
+        assert.match((await failure(ctx.db, REMOVE_SQL, [actor, added.id]))?.message ?? '', /not_found/);
+        assert.ok(!(await rows(ctx.db, EXEMPT_LIST_SQL, [actor, null, 50, 0])).some((row) => row.id === added.id));
+      }
+      assert.match((await failure(ctx.db, ADD_SQL, [ctx.admin, ctx.key, 'group', next('ref')]))?.message ?? '', /invalid_kind/);
+      assert.match((await failure(ctx.db, ADD_SQL, [ctx.admin, ctx.key, 'uploader', '  ']))?.message ?? '', /invalid_ref/);
+
+      const removed = (await rows(ctx.db, REMOVE_SQL, [ctx.admin, added.id]))[0] as Row;
+      assert.equal(removed.outcome, 'removed');
+      assert.match((await failure(ctx.db, REMOVE_SQL, [ctx.admin, added.id]))?.message ?? '', /not_found/);
+      assert.ok(!(await rows(ctx.db, 'SELECT ref FROM rag_upload_exemptions_for($1)', [ctx.key])).some((row) => row.ref === ref));
+    });
+
+    it('the pair tenant_key, kind, ref is unique and the kind and tenant key are checked', async () => {
+      const ref = next('uniq');
+      const insert = `INSERT INTO rag_upload_approval_exemptions (tenant_key, kind, ref, created_by) VALUES ($1, $2, $3, $4::uuid)`;
+      assert.equal(await failure(ctx.db, insert, [ctx.key, 'uploader', ref, ctx.admin]), null);
+      assert.equal((await failure(ctx.db, insert, [ctx.key, 'uploader', ref, ctx.admin]))?.code, '23505');
+      assert.equal(await failure(ctx.db, insert, [ctx.key, 'connector', ref, ctx.admin]), null, 'another kind with the same ref is a different exemption');
+      assert.equal((await failure(ctx.db, insert, [ctx.key, 'group', next('ref'), ctx.admin]))?.code, '23514');
+      assert.equal((await failure(ctx.db, insert, ['tenant-x', 'uploader', next('ref'), ctx.admin]))?.code, '23514');
+    });
+
+    it('rag_is_tenant_admin follows the Quarantine panel access rule', async () => {
+      const isAdmin = async (user: string, key: string) => (await rows(ctx.db, IS_ADMIN_SQL, [user, key]))[0]?.ok;
+      assert.equal(await isAdmin(ctx.admin, ctx.key), true, 'an admin of the tenant');
+      assert.equal(await isAdmin(ctx.member, ctx.key), false, 'a member is not an admin');
+      if (ctx.mode === 'multi-tenant') {
+        assert.equal(await isAdmin(ctx.otherAdmin as string, ctx.key), false, 'an admin of another tenant');
+        assert.equal(await isAdmin(ctx.otherAdmin as string, `u:${ctx.otherAdmin}`), true, 'a deployment admin for their own personal workspace');
+        assert.equal(await isAdmin(ctx.admin, `u:${ctx.otherAdmin}`), false, 'not for the personal workspace of someone else');
+        assert.equal(await isAdmin(ctx.member, `u:${ctx.member}`), false, 'a non-admin is not an admin of their own workspace');
+        assert.equal((await failure(ctx.db, IS_ADMIN_SQL, [ctx.admin, 's:default']))?.code, '22023', 'the tenant key is asserted');
+      } else {
+        assert.equal((await failure(ctx.db, IS_ADMIN_SQL, [ctx.admin, `u:${ctx.admin}`]))?.code, '22023', 'the tenant key is asserted');
+      }
+      assert.equal(await isAdmin('00000000-0000-4000-8000-0000000008ff', ctx.key), false, 'an unknown user');
+    });
+
+    it('a document with metadata.publish_hold returns held from publish until rag_release_publish_hold clears it', async () => {
+      const sourceKey = `approval/${next('heldkey')}.md`;
+      const id = await begin(ctx, sourceKey, next('held'));
+      await writeChunks(ctx, id, [`${next('tokheld')} neutral probe sentence for a held document`]);
+      await rows(ctx.db, `UPDATE documents SET metadata = COALESCE(metadata, '{}'::jsonb) || '{"publish_hold": {"batch_id": "b1"}}'::jsonb WHERE id = $1`, [id]);
+      assert.equal(await publish(ctx, id), 'held');
+      const heldDoc = await docState(ctx, id);
+      assert.equal(heldDoc.status, 'processing');
+      assert.equal(heldDoc.is_current, false);
+
+      const otherKey = ctx.mode === 'single-tenant' ? `u:${ADMIN}` : `u:${TWO_TENANT_IDS.userB}`;
+      assert.ok(await failure(ctx.db, RELEASE_SQL, [id, otherKey]), 'another tenant cannot release the hold');
+      assert.equal(await publish(ctx, id), 'held');
+
+      assert.equal(((await rows(ctx.db, RELEASE_SQL, [id, ctx.key]))[0] as Row).outcome, 'released');
+      assert.ok(!(((await docState(ctx, id)).metadata as Row) ?? {}).hasOwnProperty('publish_hold'));
+      assert.equal(((await rows(ctx.db, RELEASE_SQL, [id, ctx.key]))[0] as Row).outcome, 'not_held');
+      assert.equal(await publish(ctx, id), 'published');
+    });
+
+    it('a quarantined or pending document wins over the publish hold', async () => {
+      const quarantined = await begin(ctx, `approval/${next('qh')}.md`, next('qh'));
+      await rows(ctx.db, `UPDATE documents SET status = 'quarantined', metadata = '{"publish_hold": {}}'::jsonb WHERE id = $1`, [quarantined]);
+      assert.equal(await publish(ctx, quarantined), 'quarantined');
+      const pending = await pendingNewDocument(ctx, 'ph');
+      await rows(ctx.db, `UPDATE documents SET metadata = '{"publish_hold": {}}'::jsonb WHERE id = $1`, [pending]);
+      assert.equal(await publish(ctx, pending), 'pending_review');
+    });
+
+    it('ingestion_batches.hold_publish defaults to false', async () => {
+      const column = (
+        await rows(
+          ctx.db,
+          "SELECT data_type, column_default, is_nullable FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'ingestion_batches' AND column_name = 'hold_publish'",
+        )
+      )[0];
+      assert.deepEqual(column, { data_type: 'boolean', column_default: 'false', is_nullable: 'NO' });
+    });
+
+    it('a second apply of 0803 succeeds and leaves the catalog unchanged', async () => {
+      const before = await catalog(ctx.db);
+      await ctx.db.exec(fs.readFileSync(path.join(REPO_ROOT, MIGRATION), 'utf8'));
+      assert.deepEqual(await catalog(ctx.db), before);
+    });
+  });
+}
