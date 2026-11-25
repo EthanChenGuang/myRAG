@@ -41,8 +41,18 @@ class ListItem:
 
 @dataclass(frozen=True)
 class Table:
+    """A table starting on `page`. `page_rows` splits it over consecutive pages (row counts per page, header included);
+    `header` False makes the first row a data row; `column_rows` are the rows the column widths are measured on."""
+
     rows: tuple[tuple[str, ...], ...]
     page: int = 1
+    header: bool = True
+    page_rows: tuple[int, ...] = ()
+    column_rows: tuple[tuple[str, ...], ...] = ()
+
+    @property
+    def last_page(self) -> int:
+        return self.page + max(len(self.page_rows), 1) - 1
 
 
 @dataclass(frozen=True)
@@ -74,7 +84,7 @@ class FixtureSpec:
 
     @property
     def page_count(self) -> int:
-        return max(block.page for block in self.blocks)
+        return max(getattr(block, "last_page", block.page) for block in self.blocks)
 
 
 def picture_rgb(name: str) -> bytes:
@@ -429,6 +439,158 @@ def _injection_it() -> FixtureSpec:
     )
 
 
+LONG_TABLE_BODY_ROWS = 60
+LONG_TABLE_FIRST_PAGE_ROWS = 44
+
+
+@dataclass(frozen=True)
+class LongTableSubject:
+    """A synthetic 60-row table: two key columns, two value columns of one unit, one category column.
+
+    Row i (0-based) takes key_values[i // 10] and the (i % 10 + 1)th key_format; each value column takes
+    base + (2 * ((multiplier * i + offset) % 600) + parity) * step, even steps in the first column and odd in the second,
+    so no value repeats inside the table. No random seed is involved.
+    """
+
+    language: str
+    subject: str
+    title: str
+    intro: str
+    closing: str
+    header: tuple[str, str, str, str, str]
+    key_values: tuple[str, ...]
+    key_format: str
+    categories: tuple[str, str, str]
+    base_steps: int
+    decimals: int
+    decimal_mark: str
+    rules: tuple[tuple[int, int], tuple[int, int]]
+    target_row: int
+
+
+LONG_TABLE_SUBJECTS = {
+    "en": LongTableSubject(
+        language="en",
+        subject="water level readings of six synthetic storage basins",
+        title="Synthetic Basin Level Readings",
+        intro="This table lists invented morning and evening water levels of six storage basins over ten survey weeks. All readings are synthetic and serve parsing and retrieval tests only.",
+        closing="The basin names and readings above are invented for testing.",
+        header=("Basin", "Survey week", "Morning level (cm)", "Evening level (cm)", "Trend"),
+        key_values=("North Basin", "East Basin", "South Basin", "West Basin", "Upper Basin", "Lower Basin"),
+        key_format="Survey week {:02d}",
+        categories=("rising slowly", "holding steady", "falling slowly"),
+        base_steps=3000,
+        decimals=1,
+        decimal_mark=".",
+        rules=((37, 11), (53, 251)),
+        target_row=54,
+    ),
+    "zh": LongTableSubject(
+        language="zh",
+        subject="六个虚构试验地块的作物株高测量",
+        title="试验地块作物株高记录",
+        intro="下表列出六个虚构试验地块在十个测量批次中的首测株高和复测株高，单位为厘米。所有数据均为合成数据，仅用于解析和检索测试。",
+        closing="以上地块名称和测量数据均为虚构。",
+        header=("地块", "测量批次", "首测株高（厘米）", "复测株高（厘米）", "长势"),
+        key_values=("甲区", "乙区", "丙区", "丁区", "戊区", "己区"),
+        key_format="第{:02d}批",
+        categories=("良好", "一般", "偏弱"),
+        base_steps=400,
+        decimals=1,
+        decimal_mark=".",
+        rules=((41, 97), (59, 7)),
+        target_row=51,
+    ),
+    "it": LongTableSubject(
+        language="it",
+        subject="spessore di campioni di vetro sintetici",
+        title="Registro sintetico dello spessore dei campioni di vetro",
+        intro="La tabella riporta lo spessore iniziale e lo spessore finale, in millimetri, di sessanta campioni di vetro inventati, divisi in sei lotti. Tutti i valori sono sintetici e servono solo per le prove di analisi e di ricerca.",
+        closing="I nomi dei lotti e le misure riportate sono inventati.",
+        header=("Lotto", "Campione", "Spessore iniziale (mm)", "Spessore finale (mm)", "Esito"),
+        key_values=("Lotto Rosso", "Lotto Verde", "Lotto Blu", "Lotto Giallo", "Lotto Grigio", "Lotto Viola"),
+        key_format="Campione n. {:02d}",
+        categories=("conforme alla prova", "da verificare di nuovo", "non conforme alla prova"),
+        base_steps=2000,
+        decimals=3,
+        decimal_mark=",",
+        rules=((43, 173), (31, 419)),
+        target_row=48,
+    ),
+}
+
+
+def _long_table_value(subject: LongTableSubject, row: int, column: int) -> str:
+    multiplier, offset = subject.rules[column]
+    steps = subject.base_steps + 2 * ((multiplier * row + offset) % 600) + column
+    whole, fraction = divmod(steps, 10**subject.decimals)
+    return f"{whole}{subject.decimal_mark}{fraction:0{subject.decimals}d}"
+
+
+def long_table_rows(language: str) -> tuple[tuple[str, ...], tuple[tuple[str, ...], ...]]:
+    """Header and the 60 data rows of the long table of a language."""
+    subject = LONG_TABLE_SUBJECTS[language]
+    body = tuple(
+        (
+            subject.key_values[row // 10],
+            subject.key_format.format(row % 10 + 1),
+            _long_table_value(subject, row, 0),
+            _long_table_value(subject, row, 1),
+            subject.categories[(row * 7) % 3],
+        )
+        for row in range(LONG_TABLE_BODY_ROWS)
+    )
+    return subject.header, body
+
+
+def _long_table(language: str, continued: bool) -> FixtureSpec:
+    subject = LONG_TABLE_SUBJECTS[language]
+    header, body = long_table_rows(language)
+    rows = (header, *body)
+    first = LONG_TABLE_FIRST_PAGE_ROWS
+    if continued:
+        tables: tuple[Block, ...] = (
+            Table(rows[: first + 1], 1, column_rows=rows),
+            Table(body[first:], 2, header=False, column_rows=rows),
+        )
+        layout = [
+            {"first_page": 1, "last_page": 1, "header_row": True, "body_rows": first},
+            {"first_page": 2, "last_page": 2, "header_row": False, "body_rows": LONG_TABLE_BODY_ROWS - first},
+        ]
+    else:
+        tables = (Table(rows, 1, page_rows=(first + 1, LONG_TABLE_BODY_ROWS - first)),)
+        layout = [{"first_page": 1, "last_page": 2, "header_row": True, "body_rows": LONG_TABLE_BODY_ROWS}]
+    blocks: tuple[Block, ...] = (
+        Heading(subject.title, 1, 1),
+        Paragraph(subject.intro, 1),
+        *tables,
+        Paragraph(subject.closing, 2),
+    )
+    facts = {
+        "headings": [{"level": 1, "text": subject.title, "page": 1}],
+        "page_count": 2,
+        "long_table": {
+            "subject": subject.subject,
+            "header": list(header),
+            "key_columns": list(header[:2]),
+            "value_columns": list(header[2:4]),
+            "category_column": header[4],
+            "body_rows": LONG_TABLE_BODY_ROWS,
+            "target_row": subject.target_row,
+            "target_values": list(body[subject.target_row]),
+            "continued": continued,
+            "tables": layout,
+        },
+    }
+    suffix = "-continued" if continued else ""
+    return FixtureSpec(f"long-table-{language}{suffix}", language, "general", "digital", blocks, facts, write_text=True)
+
+
+def long_table_specs() -> tuple[FixtureSpec, ...]:
+    """The long-table fixtures; kept out of all_specs() so the loaded fixture tenant does not change (research Pitfall 10)."""
+    return (_long_table("en", False),)
+
+
 def all_specs() -> tuple[FixtureSpec, ...]:
     return (
         _report_zh(),
@@ -466,7 +628,7 @@ def parse_spec_by_id(spec_id: str) -> FixtureSpec:
 
 
 def spec_by_id(spec_id: str) -> FixtureSpec:
-    for spec in all_specs():
+    for spec in (*all_specs(), *long_table_specs()):
         if spec.id == spec_id:
             return spec
     raise KeyError(spec_id)

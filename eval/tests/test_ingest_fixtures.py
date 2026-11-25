@@ -33,6 +33,9 @@ DIGITAL_IDS = {
 }
 SCANNED_IDS = {"scan-zh", "scan-en", "scan-it"}
 TEXT_IDS = {"contract-zh", "injection-zh", "injection-en", "injection-it"}
+LONG_TABLE_PLAIN = ["long-table-en"]
+LONG_TABLE_CONTINUED: list[str] = []
+LONG_TABLE_IDS = LONG_TABLE_PLAIN + LONG_TABLE_CONTINUED
 
 
 def _load(name: str):
@@ -131,7 +134,7 @@ def test_the_generator_runs_reportlab_in_invariant_mode():
 @requires_reportlab
 def test_digital_pdfs_are_written_for_every_digital_fixture(tmp_path):
     written = generate.generate(tmp_path / "pdf", tmp_path / "text", cjk_font=None)
-    assert set(written) == DIGITAL_IDS
+    assert set(written) == DIGITAL_IDS | set(LONG_TABLE_IDS)
     for spec_id in DIGITAL_IDS:
         data = (tmp_path / "pdf" / f"{spec_id}.pdf").read_bytes()
         assert data.startswith(b"%PDF-")
@@ -142,7 +145,7 @@ def test_digital_pdfs_are_written_for_every_digital_fixture(tmp_path):
 def test_regenerating_the_digital_pdfs_gives_identical_bytes(tmp_path):
     first = generate.generate(tmp_path / "a" / "pdf", tmp_path / "a" / "text", cjk_font=None)
     second = generate.generate(tmp_path / "b" / "pdf", tmp_path / "b" / "text", cjk_font=None)
-    assert first == second and len(first) == len(DIGITAL_IDS)
+    assert first == second and len(first) == len(DIGITAL_IDS) + len(LONG_TABLE_IDS)
     for spec_id in DIGITAL_IDS:
         left = (tmp_path / "a" / "pdf" / f"{spec_id}.pdf").read_bytes()
         right = (tmp_path / "b" / "pdf" / f"{spec_id}.pdf").read_bytes()
@@ -152,14 +155,14 @@ def test_regenerating_the_digital_pdfs_gives_identical_bytes(tmp_path):
 @requires_reportlab
 def test_committed_digital_pdfs_equal_a_fresh_build(tmp_path):
     fresh = generate.generate(tmp_path / "pdf", tmp_path / "text", cjk_font=None)
-    assert set(fresh) == DIGITAL_IDS
+    assert set(fresh) == DIGITAL_IDS | set(LONG_TABLE_IDS)
     for spec_id, digest in fresh.items():
         assert _sha256(_read(PDF_DIR / f"{spec_id}.pdf")) == digest, f"{spec_id}.pdf differs from the generator output"
 
 
 def test_every_fixture_has_a_committed_pdf_and_digital_ones_have_a_text_layer():
     committed = {path.stem for path in PDF_DIR.glob("*.pdf")}
-    assert committed == DIGITAL_IDS | SCANNED_IDS
+    assert committed == DIGITAL_IDS | SCANNED_IDS | set(LONG_TABLE_IDS)
     assert len(committed) >= 9
     for spec_id in DIGITAL_IDS:
         assert _text_operator_count(_read(PDF_DIR / f"{spec_id}.pdf")) > 0, spec_id
@@ -196,7 +199,7 @@ def test_build_info_records_the_scan_font_hash():
 
 def test_contract_and_injection_fixtures_are_also_written_as_markdown():
     committed = {path.stem for path in TEXT_DIR.glob("*.md")}
-    assert committed == TEXT_IDS
+    assert committed == TEXT_IDS | set(LONG_TABLE_IDS)
     for spec_id in TEXT_IDS:
         expected = specs.render_markdown(specs.spec_by_id(spec_id))
         assert _read(TEXT_DIR / f"{spec_id}.md").decode("utf-8") == expected
@@ -205,7 +208,7 @@ def test_contract_and_injection_fixtures_are_also_written_as_markdown():
 @requires_reportlab
 def test_the_generator_writes_the_markdown_next_to_the_pdfs(tmp_path):
     generate.generate(tmp_path / "pdf", tmp_path / "text", cjk_font=None)
-    assert {path.stem for path in (tmp_path / "text").glob("*.md")} == TEXT_IDS
+    assert {path.stem for path in (tmp_path / "text").glob("*.md")} == TEXT_IDS | set(LONG_TABLE_IDS)
 
 
 MANIFEST = INGEST / "manifest.json"
@@ -451,16 +454,13 @@ def test_recorded_docling_json_is_valid_and_tagged_with_the_parser():
 
 def test_the_recorded_directory_holds_only_files_the_manifest_names():
     named = set()
-    for entry in _manifest()["fixtures"]:
+    for entry in [*_manifest()["fixtures"], *_manifest()["long_table_fixtures"]]:
         named |= {Path(entry["recorded"]["parse_result"]).name, Path(entry["recorded"]["docling"]).name}
         named |= {Path(path).name for path in entry["recorded"]["artifacts"].values()}
     on_disk = {path.name for path in RECORDED.iterdir()} if RECORDED.is_dir() else set()
     assert on_disk == named and len(named) >= 24
 
 
-LONG_TABLE_PLAIN = ["long-table-en"]
-LONG_TABLE_CONTINUED: list[str] = []
-LONG_TABLE_IDS = LONG_TABLE_PLAIN + LONG_TABLE_CONTINUED
 LONG_TABLE_BODY_ROWS = 60
 PROFILES = REPO_ROOT / "config/rag/processing-profiles.json"
 OFF_SUBJECT_WORDS = (

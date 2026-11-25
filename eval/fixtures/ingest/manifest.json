@@ -595,6 +595,78 @@
     "render_dpi": 200,
     "reportlab": "5.1.0"
   },
+  "long_table_fixtures": [
+    {
+      "doc_type": "general",
+      "expected": {
+        "headings": [
+          {
+            "level": 1,
+            "page": 1,
+            "text": "Synthetic Basin Level Readings"
+          }
+        ],
+        "long_table": {
+          "body_rows": 60,
+          "category_column": "Trend",
+          "continued": false,
+          "header": [
+            "Basin",
+            "Survey week",
+            "Morning level (cm)",
+            "Evening level (cm)",
+            "Trend"
+          ],
+          "key_columns": [
+            "Basin",
+            "Survey week"
+          ],
+          "subject": "water level readings of six synthetic storage basins",
+          "tables": [
+            {
+              "body_rows": 60,
+              "first_page": 1,
+              "header_row": true,
+              "last_page": 2
+            }
+          ],
+          "target_row": 54,
+          "target_values": [
+            "Lower Basin",
+            "Survey week 05",
+            "341.8",
+            "322.7",
+            "rising slowly"
+          ],
+          "value_columns": [
+            "Morning level (cm)",
+            "Evening level (cm)"
+          ]
+        },
+        "page_count": 2
+      },
+      "file_sha256": "2c998bd84467b9c3bf6fc7674fc25da74c6c23098bd94b1038d69725fced696b",
+      "id": "long-table-en",
+      "language": "en",
+      "mime": "application/pdf",
+      "path": "pdf/long-table-en.pdf",
+      "profile_id": "general@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "recorded/long-table-en.docling.json"
+        },
+        "docling": "recorded/long-table-en.docling.json",
+        "parse_result": "recorded/long-table-en.parse.json"
+      },
+      "size_bytes": 19524,
+      "text": {
+        "mime": "text/markdown",
+        "path": "text/long-table-en.md",
+        "sha256": "501c88f78fb37762ec411500972c47dcd346b6e4ead66b3916efa76cbf8baa01"
+      },
+      "text_layer": "digital"
+    }
+  ],
   "recorded_with": {
     "adapter": "rag_sidecar.parse.docling_adapter.to_parse_result",
     "docling_core": "2.107.1",
