@@ -1,4 +1,5 @@
 import { logger } from '@/lib/logger';
+import { describeStageCause } from '../stage-error-cause';
 import { RetrievalBackendError } from '../backend/supabase-rpc';
 import { isMissingPhase4Function, markV2Unavailable, resolveEffectivePipeline, V2_UNAVAILABLE } from './readiness';
 import { loadRagConfig } from '../config';
@@ -261,7 +262,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
         logger.error('RAG Pipeline', 'Backend error', { rpc: error.original.rpc, code: error.original.code });
         return failure(collector, 'error', 'backend_error', queryContext);
       }
-      logger.error('RAG Pipeline', 'Stage failure', { stage: error.stage, reason: error.reason });
+      logger.error('RAG Pipeline', 'Stage failure', { stage: error.stage, reason: error.reason, ...describeStageCause(error.original) });
       return failure(collector, 'error', `${error.stage}_${error.reason}`, queryContext);
     }
     if (signal.aborted) return failure(collector, 'error', 'aborted', queryContext);
