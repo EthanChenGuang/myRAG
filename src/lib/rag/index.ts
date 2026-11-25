@@ -190,6 +190,14 @@ export type {
   ResumeIngestOptions,
 } from './ingest';
 export { loadIngestConfig } from './ingest/config';
+export {
+  UPLOAD_APPROVAL_REQUIRES_UNIFIED,
+  UploadApprovalRequiresUnifiedError,
+  approvalRequiresUnified,
+  assertLegacyWriteAllowed,
+  legacyApprovalRefusal,
+  legacyWriteRefused,
+} from './ingest/approval/legacy-refusal';
 export { assertCloudAllowed, CloudRefused } from './ingest/guard/cloud-budget';
 export { findInvoices } from './retrieval/invoices';
 export type { FindInvoicesDeps, InvoiceFilters, InvoiceHit } from './retrieval/invoices';

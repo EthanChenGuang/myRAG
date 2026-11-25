@@ -73,6 +73,17 @@ async function uploadPipeline(): Promise<UploadPipeline> {
   }
 }
 
+/** D-56: the legacy image writer cannot hold a document; with upload approval on a knowledge-base upload refuses before storage. */
+async function legacyUploadRefused(): Promise<boolean> {
+  try {
+    const { legacyWriteRefused } = await import('@/lib/rag');
+    return legacyWriteRefused();
+  } catch {
+    const raw = (process.env.RAG_UPLOAD_APPROVAL ?? '').trim().toLowerCase();
+    return raw === 'members' || raw === 'all';
+  }
+}
+
 function refusal(status: 401 | 403 | 503): NextResponse {
   const error = status === 403 ? 'Forbidden' : status === 401 ? 'Authentication required' : 'Workspace verification unavailable';
   return NextResponse.json({ error }, { status });
@@ -175,6 +186,10 @@ export async function POST(request: NextRequest) {
     const pipeline = processRag ? await uploadPipeline() : 'legacy';
     if (pipeline === 'blocked') {
       return NextResponse.json({ error: 'languages_not_configured' }, { status: 503 });
+    }
+    if (processRag && pipeline === 'legacy' && (await legacyUploadRefused())) {
+      const { legacyApprovalRefusal } = await import('@/lib/rag');
+      return legacyApprovalRefusal();
     }
     if (pipeline === 'unified') {
       const resolved = await resolveUploadScope(request, formData, sessionUser);
