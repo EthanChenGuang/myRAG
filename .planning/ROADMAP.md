@@ -632,21 +632,22 @@ Plans:
 
 ### Phase 5.3: Evaluation Gates & Online Monitoring (INSERTED)
 **Goal**: A change that makes the system answer questions its documents cannot answer is stopped before release, whether it comes through CI or the Config UI, after release a drift in refusals, scores or votes raises an alert within a day, and the test set keeps looking like the questions real users ask
-**Depends on**: Phase 5.1.1 (retrieval log, review queue and domain experts), Phase 5.2 (`off_topic_context` items), Phase 4.2 (per-mode refusal operating points)
+**Depends on**: Phase 5.1.1 (retrieval log, review queue and domain experts), Phase 5.2 (`off_topic_context` items), Phase 4.2 (per-mode refusal operating points); off-domain (QRY-14) items arrive with Phase 6.2
 **Requirements**: EVAL-22, EVAL-23, EVAL-24, EVAL-25, OBS-03, EVAL-27, EVAL-28, EVAL-29, EVAL-30
 **Success Criteria** (what must be TRUE):
   1. A gated set whose no-answer share falls below 15% in any language fails the run; a fake model that answers 3 of 20 no-answer items fails CI on the absolute false-answer ceiling even when the noise-band rule would pass; ceilings and floors live in `eval/config/quality-gates.json`.
   2. In the Config UI, saving an edited `RAG_SYSTEM_PROMPT` that drops the refusal instruction shows a failing smoke-tier result before it applies; saving anyway needs a reason that is stored with the config hash and appears in the weekly report; changing the reranker model marks its refusal cells `uncalibrated` with a warning; a finished backfill batch starts the nightly tier on that tenant's real set.
   3. With `RAG_MONITOR` on, a seeded retrieval log whose refusal rate rises from 12% to 38% on day 5 while not-helpful votes stay flat raises one alert for that tenant and language; a shifted top-score distribution flags recalibration; alerts carry ids and counts but no query or answer text; with the switch off nothing runs.
   4. The judge-agreement report shows Cohen's kappa and accuracy per language and metric on a labelled sample; a judge seeded to disagree becomes report-only for that slice and the nightly gate ignores it; the length-bias check, the expanded- and assertive-answer probes and the judge's recall on human-flagged unsupported answers are reported; holistic 1–5 scores never gate.
-  5. A commit whose nightly tier was skipped for missing keys, or whose `ship_check` failed, cannot be promoted to production: `rag-release-gate` reports `skipped` or `failed` and the promotion step stops; `pr-smoke` is a required check on trunk and `main`; an override needs an admin and a reason and appears in the weekly report.
+  5. A commit whose nightly tier was skipped for missing keys, or whose `ship_check` failed, cannot be promoted to production: `rag-release-gate` is not `success` (state `failure`, description `failed` or `skipped: <reason>`) and the promotion step stops; `pr-smoke` is a required check on trunk and `main`; an override needs an admin and a reason and appears in the weekly report.
   6. A seeded spike in knowledge-base `degraded` results raises an alert that lists the switch flipped in the same window and links sample trace ids.
   7. On a seeded production log, the weekly representative sample covers every topic cluster in proportion (within tolerance) and lands in the review queue tagged `representative`; reports show unweighted and production-weighted scores.
   8. When seeded production traffic shifts towards a cluster the test set barely covers, the drift report names that cluster, an alert says the test set is no longer representative, and the next sample draws from it; an offline score far above the online judge score on a slice is flagged the same way.
   9. Replacing the gold evidence document of a golden item marks the item `stale` and removes it from the gate until it is re-labelled or retired; every report prints the set version and manifest hash, and a run whose stale share exceeds the limit fails.
   10. An imported file of historical questions is PII-masked, tenant-tagged and queued with provenance `historical`; pilot users are sampled at the higher rate; paraphrased variants are reported for coverage only; synthetic `implicit_condition` items exist in zh/en/it.
 **Live verification**: Run the daily monitor on a week of real logs and confirm a test alert reaches the admin channel; measure real judge agreement on expert-labelled review-queue cases; confirm a failing release gate blocks a real Vercel promotion.
-**Plans**: TBD
+**Plans**: 52 plans in 14 waves (see `phases/05.3-evaluation-gates-and-online-monitoring/05.3-PLAN-INDEX.md`); every plan runs after 05.1.1-22; migrations 0960–0976 (block 0960–0979, not folded); human steps H-1..H-10 in plans 49 and 50 (branch protection, secrets, Vercel promotion setup — option B recommended, live migration push, seed-label confirmation, a week of real logs and a test alert, answer checks, ratifying floors and bands, `RAG_CONFIG_GATE` enforcement, report-only tier ratification)
+**UI**: approved `05.3-UI-SPEC.md` (Config UI gate result, alert banner, monitoring and judge panels)
 **UI hint**: yes
 
 ### Phase 6: Query Layer (LlamaIndex & LangChain)
@@ -859,7 +860,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 3.1.1 → 3.2 → 3.2
 | 5.1.1. Feedback Loop & Real Domain Test Set (INSERTED) | 0/25 | Planned (plan-check PASS) | - |
 | 5.2. Grounded Answers & Output Safety (INSERTED) | 0/40 | Planned (plan-check PASS) | - |
 | 5.2.1. Calculation Tool & Prompt Budget (INSERTED) | 0/26 | Planned (plan-check PASS) | - |
-| 5.3. Evaluation Gates & Online Monitoring (INSERTED) | 0/TBD | Not planned | - |
+| 5.3. Evaluation Gates & Online Monitoring (INSERTED) | 0/52 | Planned (plan-check PASS) | - |
 | 6. Query Layer (LlamaIndex & LangChain) | 12/46 | In Progress | - |
 | 6.1. Embedding Fine-tuning Pipeline (INSERTED) | 0/20 | Planned (plan-check PASS) | - |
 | 6.2. Query Layer Additions (INSERTED) | 0/TBD | Not planned | - |
