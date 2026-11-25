@@ -7,7 +7,9 @@ from typing import Annotated, Any, Literal
 
 from pydantic import Field, field_validator, model_validator
 
-from rag_sidecar.contracts.ingest import DocType, OcrLanguage, ParseResult
+from rag_sidecar.contracts.ingest import DocType, OcrLanguage, ParseResult, check_language_selection
+from rag_sidecar.contracts.ingest_security import UploadApproval
+from rag_sidecar.contracts.languages import Language
 from rag_sidecar.contracts.routing import (
     DetectCounts,
     PageRange,
@@ -30,10 +32,12 @@ JobStatus = Literal[
     "quarantined",
     "needs_review",
     "skipped_duplicate",
+    "pending_review",
 ]
-JobKind = Literal["ingest", "dry_run", "delete"]
+JobKind = Literal["ingest", "dry_run", "delete", "translate"]
 RunnerKind = Literal["worker", "ray"]
 RoutingMode = Literal["fixed", "tiered"]
+HiddenTextCheckMode = Literal["off", "flag", "quarantine"]
 EmbedMode = Literal["sync", "batch_api"]
 AdvancePhase = Literal["begin", "post_parse"]
 ParseExternalMode = Literal["chain", "native", "premium"]
@@ -54,6 +58,12 @@ class OriginalRef(_Contract):
 
 
 class JobSettingsSnapshot(_Contract):
+    """Settings frozen on a ledger job at enqueue.
+
+    The Phase 3.2 fields default to today's behaviour and are written only when they differ from it. The model
+    keeps extra="forbid", so an older sidecar rejects a snapshot carrying them: deploy the sidecar first.
+    """
+
     routing: RoutingMode
     cloud_allowed: bool
     escalation: bool
@@ -70,11 +80,23 @@ class JobSettingsSnapshot(_Contract):
     embed_mode: EmbedMode
     ocr_languages: list[OcrLanguage] = Field(min_length=1)
     routing_config_version: str
+    # Phase 3.2 (D-13, D-19 to D-21, D-33, D-36): every default reproduces the behaviour before this phase.
+    language_aware: bool = False
+    languages: list[Language] = Field(default_factory=list)
+    primary_language: Language | None = None
+    # None means "use repeat_table_header of the processing profile".
+    repeat_table_header_effective: bool | None = None
+    carry_table_header: bool = False
+    row_serialization: bool = False
+    hidden_text_check: HiddenTextCheckMode = "off"
+    approval: UploadApproval | None = None
+    hold_publish: bool = False
 
     @model_validator(mode="after")
     def _tiers_are_ordered(self) -> JobSettingsSnapshot:
         if self.min_tier and self.max_tier and _TIER_ORDER[self.min_tier] > _TIER_ORDER[self.max_tier]:
             raise ValueError("min_tier must not rank above max_tier")
+        check_language_selection(self.languages, self.primary_language)
         return self
 
 

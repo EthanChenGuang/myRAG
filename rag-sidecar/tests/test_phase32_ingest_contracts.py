@@ -371,7 +371,7 @@ def test_new_snapshot_and_request_fields_are_validated():
     )
     request = {**OLD_PARSE_JOB_REQUEST, **REQUEST_DEFAULTS}
     _rejects("ParseJobRequest", {**request, "primary_language": "en"})
-    _rejects("ParseJobRequest", {**request, "carry_table_header": "yes"})
+    _rejects("ParseJobRequest", {**request, "carry_table_header": "maybe"})
     _model("ParseJobRequest").model_validate({**request, "languages": ["en"], "primary_language": "en", "carry_table_header": True})
 
 

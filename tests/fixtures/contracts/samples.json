@@ -2429,10 +2429,16 @@
       "run_after": null,
       "runner": null,
       "settings": {
+        "approval": null,
+        "carry_table_header": false,
         "cloud_allowed": true,
         "doc_type": "general",
         "embed_mode": "sync",
         "escalation": true,
+        "hidden_text_check": "off",
+        "hold_publish": false,
+        "language_aware": false,
+        "languages": [],
         "max_tier": "premium",
         "min_tier": "fast",
         "ocr_languages": [
@@ -2440,11 +2446,14 @@
         ],
         "premium_max_pages_per_doc": 20,
         "premium_page_budget": 0,
+        "primary_language": null,
         "profile_id": "general@1",
         "profile_version": 1,
         "progressive": false,
+        "repeat_table_header_effective": null,
         "routing": "tiered",
         "routing_config_version": "1",
+        "row_serialization": false,
         "vlm_detect": false,
         "vlm_model": null
       },
@@ -2597,10 +2606,16 @@
       "tax_total": "22.00"
     },
     "JobSettingsSnapshot": {
+      "approval": null,
+      "carry_table_header": false,
       "cloud_allowed": true,
       "doc_type": "general",
       "embed_mode": "sync",
       "escalation": true,
+      "hidden_text_check": "off",
+      "hold_publish": false,
+      "language_aware": false,
+      "languages": [],
       "max_tier": "premium",
       "min_tier": "fast",
       "ocr_languages": [
@@ -2608,11 +2623,14 @@
       ],
       "premium_max_pages_per_doc": 20,
       "premium_page_budget": 0,
+      "primary_language": null,
       "profile_id": "general@1",
       "profile_version": 1,
       "progressive": false,
+      "repeat_table_header_effective": null,
       "routing": "tiered",
       "routing_config_version": "1",
+      "row_serialization": false,
       "vlm_detect": false,
       "vlm_model": null
     },
@@ -3349,6 +3367,7 @@
       "job_id": "job-0123abcd"
     },
     "ParseJobRequest": {
+      "carry_table_header": false,
       "docling": {
         "force_full_page_ocr": false,
         "generate_picture_images": true,
@@ -3357,6 +3376,8 @@
         "table_mode": "accurate"
       },
       "input_format": "pdf",
+      "language_aware": false,
+      "languages": [],
       "max_tokens": 512,
       "ocr_languages": [
         "zh",
@@ -3364,6 +3385,7 @@
         "it"
       ],
       "page_cap": 200,
+      "primary_language": null,
       "profile_id": "financial_report@1",
       "profile_version": 1,
       "repeat_table_header": true,
