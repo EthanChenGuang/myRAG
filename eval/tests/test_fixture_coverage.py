@@ -46,11 +46,12 @@ def items():
     return load_golden(GOLDEN_PATH)
 
 
-def test_corpus_has_thirteen_documents_per_language():
+def test_corpus_has_nineteen_documents_per_language():
+    """Thirteen documents plus the sec-topics and sec-attacks pair per language from plan 05.1-09."""
     documents = load_corpus(CORPUS_DIR)
     counts = collections.Counter(doc.language for doc in documents)
-    assert len(documents) == 13
-    assert (counts["zh"], counts["en"], counts["it"]) == (4, 5, 4)
+    assert len(documents) == 19
+    assert (counts["zh"], counts["en"], counts["it"]) == (6, 7, 6)
 
 
 def test_corpus_has_one_image_caption_document():
