@@ -33,7 +33,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 5.1: Prompt Injection Defense** (INSERTED) - Tagged, instruction-free context, runtime injection detection and an injection eval gated at 0
 - [ ] **Phase 05.1.1: Feedback Loop & Real Domain Test Set** (INSERTED) - Tenant-safe retrieval log, refusal and embed feedback, weekly failure mining into an expert-labelled queue, dictionary and training exports, and a real domain test set that gates releases
 - [ ] **Phase 5.2: Grounded Answers & Output Safety** (INSERTED) - Partial-answer rule, a citation per factual sentence, claim-level grounding marks, LLM-judge groundedness for unsupported languages, output-length cap, per-language refusal texts, output link and credential guard, uploader tracing
-- [ ] **Phase 5.3: Evaluation Gates & Online Monitoring** (INSERTED) - No-answer share and absolute false-answer gates, eval gate on Config UI changes, LLM-judge agreement checks, daily drift alerts
+- [ ] **Phase 5.3: Evaluation Gates & Online Monitoring** (INSERTED) - No-answer share and absolute false-answer gates, eval gate on Config UI changes, release gate on production promotion, LLM-judge agreement checks, daily drift alerts
 - [ ] **Phase 6: Query Layer (LlamaIndex & LangChain)** - History rewrite, multi-query fusion, HyDE and sub-questions with a router and budgets, in two switchable frameworks compared in eval
 - [ ] **Phase 06.1: Embedding fine-tuning pipeline: synthetic queries, hard negatives, MNRL training, re-embed and switch** (INSERTED) - Consent-gated per-tenant export, synthetic and mined pairs, hard negatives, CachedMNRL training, offline proof, fine-tune slots switched through the EMB-05 gate or 3.1.1 bindings
 - [ ] **Phase 6.2: Query Layer Additions** (INSERTED) - Complete decomposition, per-sub-question filters, comparison answers, translation glossary, query-language confidence, voice cross-language, speculative retrieval and Auto model routing behind switches
@@ -596,13 +596,15 @@ Plans:
 ### Phase 5.3: Evaluation Gates & Online Monitoring (INSERTED)
 **Goal**: A change that makes the system answer questions its documents cannot answer is stopped before release, whether it comes through CI or the Config UI, and after release a drift in refusals, scores or votes raises an alert within a day
 **Depends on**: Phase 5.1.1 (retrieval log, review queue and domain experts), Phase 5.2 (`off_topic_context` items), Phase 4.2 (per-mode refusal operating points)
-**Requirements**: EVAL-22, EVAL-23, EVAL-24, OBS-03
+**Requirements**: EVAL-22, EVAL-23, EVAL-24, EVAL-25, OBS-03
 **Success Criteria** (what must be TRUE):
   1. A gated set whose no-answer share falls below 15% in any language fails the run; a fake model that answers 3 of 20 no-answer items fails CI on the absolute false-answer ceiling even when the noise-band rule would pass; ceilings and floors live in `eval/config/quality-gates.json`.
   2. In the Config UI, saving an edited `RAG_SYSTEM_PROMPT` that drops the refusal instruction shows a failing smoke-tier result before it applies; saving anyway needs a reason that is stored with the config hash and appears in the weekly report; changing the reranker model marks its refusal cells `uncalibrated` with a warning; a finished backfill batch starts the nightly tier on that tenant's real set.
   3. With `RAG_MONITOR` on, a seeded retrieval log whose refusal rate rises from 12% to 38% on day 5 while not-helpful votes stay flat raises one alert for that tenant and language; a shifted top-score distribution flags recalibration; alerts carry ids and counts but no query or answer text; with the switch off nothing runs.
   4. The judge-agreement report shows Cohen's kappa and accuracy per language and metric on a labelled sample; a judge seeded to disagree becomes report-only for that slice and the nightly gate ignores it; the length-bias check is reported.
-**Live verification**: Run the daily monitor on a week of real logs; measure real judge agreement on expert-labelled review-queue cases.
+  5. A commit whose nightly tier was skipped for missing keys, or whose `ship_check` failed, cannot be promoted to production: `rag-release-gate` reports `skipped` or `failed` and the promotion step stops; `pr-smoke` is a required check on trunk and `main`; an override needs an admin and a reason and appears in the weekly report.
+  6. A seeded spike in knowledge-base `degraded` results raises an alert that lists the switch flipped in the same window and links sample trace ids.
+**Live verification**: Run the daily monitor on a week of real logs and confirm a test alert reaches the admin channel; measure real judge agreement on expert-labelled review-queue cases; confirm a failing release gate blocks a real Vercel promotion.
 **Plans**: TBD
 **UI hint**: yes
 
