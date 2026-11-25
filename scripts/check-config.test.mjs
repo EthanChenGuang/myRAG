@@ -651,3 +651,91 @@ test('compares the .env.local model list only when .env.local exists', () => {
     cleanup(root);
   }
 });
+
+const PHASE6_NAMES = [
+  'RAG_QUERY_LAYER',
+  'RAG_QUERY_FRAMEWORK',
+  'RAG_QUERY_LLM_MODEL',
+  'RAG_QUERY_CONDENSE',
+  'RAG_QUERY_EXPAND',
+  'RAG_QUERY_DECOMPOSE',
+  'RAG_QUERY_TRANSLATE',
+  'RAG_QUERY_DATE_NORMALIZE',
+  'RAG_QUERY_HYDE',
+  'RAG_QUERY_TRANSLATE_DISABLED_PROFILES',
+  'RAG_QUERY_VOICE_TRANSFORMS',
+  'RAG_SEMANTIC_CACHE',
+  'RAG_SEMANTIC_CACHE_TTL',
+  'RAG_SEMANTIC_CACHE_REFUSAL_TTL',
+  'RAG_SEMANTIC_CACHE_MAX_DISTANCE',
+  'RAG_SEMANTIC_CACHE_EMBED_STORE',
+  'REDIS_URL',
+];
+
+function removeName(root, relative, name) {
+  const file = path.join(root, relative);
+  const text = fs.readFileSync(file, 'utf8').replace(new RegExp(`(?<![A-Z0-9_])${name}(?![A-Z0-9_])`, 'g'), 'REMOVED_NAME');
+  fs.writeFileSync(file, text);
+}
+
+test('fails and names the location when RAG_QUERY_LAYER is missing from the config UI', () => {
+  const root = copyRealTree();
+  try {
+    removeName(root, 'scripts/config-ui/index.html', 'RAG_QUERY_LAYER');
+    const { code, out } = run(root);
+    assert.equal(code, 1, out);
+    assert.match(out, /RAG_QUERY_LAYER \[config-ui\] missing from this location/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('fails when RAG_SEMANTIC_CACHE_EMBED_STORE is missing from the config-server templates', () => {
+  const root = copyRealTree();
+  try {
+    removeName(root, 'scripts/config-server.js', 'RAG_SEMANTIC_CACHE_EMBED_STORE');
+    const { code, out } = run(root);
+    assert.equal(code, 1, out);
+    assert.match(out, /RAG_SEMANTIC_CACHE_EMBED_STORE \[config-server\] missing from this location/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('fails when REDIS_URL is missing from env.ts, although its name is outside the discovery pattern', () => {
+  const root = copyRealTree();
+  try {
+    removeName(root, 'src/lib/env.ts', 'REDIS_URL');
+    const { code, out } = run(root);
+    assert.equal(code, 1, out);
+    assert.match(out, /REDIS_URL \[env-ts\] missing from this location/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('the manifest lists the Phase 6 names as managed and keeps the legacy query and cache names legacy', () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(REPO, MANIFEST), 'utf8'));
+  const byName = new Map(manifest.vars.map((entry) => [entry.name, entry]));
+  for (const name of PHASE6_NAMES) {
+    const entry = byName.get(name);
+    assert.ok(entry, `${name} is not in the manifest`);
+    assert.equal(entry.status, 'managed', name);
+    assert.deepEqual(entry.knownGaps, [], name);
+  }
+  for (const name of ['RAG_QUERY_ENHANCEMENT', 'NEXT_PUBLIC_RAG_QUERY_ENHANCEMENT_ENABLED', 'RAG_CACHE_ENABLED', 'NEXT_PUBLIC_RAG_CACHE_ENABLED', 'NEXT_PUBLIC_RAG_CACHE_TTL']) {
+    assert.equal(byName.get(name)?.status, 'legacy', name);
+  }
+});
+
+test('each of the three config-server templates writes every Phase 6 name', () => {
+  const text = fs.readFileSync(path.join(REPO, 'scripts/config-server.js'), 'utf8');
+  const standard = text.slice(text.indexOf('function getStandardTemplate()'), text.indexOf('function getFullTemplate()'));
+  const full = text.slice(text.indexOf('function getFullTemplate()'), text.indexOf('async function checkAdminUsers()'));
+  const saved = text.slice(0, text.indexOf('function getMinimalTemplate()'));
+  for (const [label, block] of [['save', saved], ['standard', standard], ['full', full]]) {
+    for (const name of PHASE6_NAMES) {
+      assert.match(block, new RegExp(`^\\$?\\{?[^\\n]*(?<![A-Z0-9_])${name}=`, 'm'), `${name} missing from the ${label} template`);
+    }
+  }
+});
