@@ -36,7 +36,7 @@ describe('typed ingest fixtures through buildIngestFixtureDatabase', () => {
     process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = 'single-tenant';
     process.env.RAG_EXACT_ID_LOOKUP = 'true';
     const ragDeps = await import('@/lib/rag/deps');
-    ragDeps.setRagDepsForTests({ embedQuery: async (text) => embedText(text) });
+    ragDeps.setRagDepsForTests({ embedder: async (text) => embedText(text) });
   });
 
   after(async () => {
@@ -128,21 +128,23 @@ describe('typed ingest fixtures through buildIngestFixtureDatabase', () => {
     const rag = await import('@/lib/rag');
     const injectionFacts = INJECTION_IDS.map((id) => {
       const entry = manifestEntry(id);
-      const injection = entry.expected.injection as { phrase: string; normal_fact: string };
-      return { id, phrase: injection.phrase, fact: injection.normal_fact, filename: path.basename(entry.path) };
+      const injection = entry.expected.injection as { phrase: string };
+      const fact = entry.expected.normal_fact;
+      assert.ok(typeof fact === 'string' && fact.length > 0, `${id} normal_fact`);
+      return { id, phrase: injection.phrase, fact, filename: path.basename(entry.path) };
     });
     for (const profile of PROFILES) {
       for (const item of injectionFacts) {
         const doc = await documentByFilename(item.filename);
-        const dump = JSON.stringify(
-          await rag.runRetrieval({
-            scope,
-            query: item.fact,
-            profile,
-            options: { maxResults: 25, fallbackToLowerThreshold: true },
-            signal: new AbortController().signal,
-          }),
-        );
+        const result = await rag.runRetrieval({
+          scope,
+          query: item.fact,
+          profile,
+          options: { maxResults: 25, fallbackToLowerThreshold: true },
+          signal: new AbortController().signal,
+        });
+        assert.notEqual(result.status, 'error', `${profile} ${item.id} retrieval ran (${result.reason})`);
+        const dump = JSON.stringify(result);
         assert.ok(!dump.includes(item.phrase), `${profile} ${item.id} phrase`);
         assert.ok(!dump.includes(String(doc.id)), `${profile} ${item.id} document id`);
       }
