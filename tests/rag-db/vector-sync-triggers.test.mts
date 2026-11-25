@@ -163,6 +163,21 @@ for (const mode of MODES) {
       assert.equal(await outboxCount(db), 0);
     });
 
+    test('no enabled target: every trigger function returns before reading a transition row', async () => {
+      const r = await db.query<{ name: string; src: string; definer: boolean; config: string[] | null }>(
+        `SELECT p.proname AS name, p.prosrc AS src, p.prosecdef AS definer, p.proconfig AS config
+           FROM pg_trigger t JOIN pg_proc p ON p.oid = t.tgfoid
+          WHERE NOT t.tgisinternal AND t.tgname LIKE 'rag_vector_sync_%'`,
+      );
+      assert.equal(r.rows.length, 10);
+      const earlyExit = /^\s*(DECLARE[\s\S]*?)?BEGIN\s+IF NOT EXISTS \(SELECT 1 FROM public\.rag_vector_sync_targets t WHERE t\.enabled\) THEN\s+RETURN NULL;\s+END IF;/;
+      for (const row of r.rows) {
+        assert.match(row.src, earlyExit, `${row.name} lacks the early exit`);
+        assert.equal(row.definer, true, `${row.name} must be SECURITY DEFINER`);
+        assert.deepEqual(row.config, ['search_path=""'], `${row.name} search_path`);
+      }
+    });
+
     test('qdrant enabled: 50 chunks of one document in one statement enqueue exactly one document row', async () => {
       await setTargets(db, ['qdrant']);
       const docId = await createDocument(db, mode, 50);
@@ -348,8 +363,8 @@ for (const mode of MODES) {
         await db.exec('SET ROLE authenticated');
         try {
           await db.query("SELECT set_config('request.jwt.claim.sub', $1, false), set_config('request.jwt.claim.role', 'authenticated', false)", [FIXTURE_USER_ID]);
-          const r = await db.query<{ id: string }>("UPDATE public.document_chunks SET lexical_text = 'owner edit' WHERE document_id = $1 RETURNING id", [docId]);
-          assert.equal(r.rows.length, 2, 'the owner can update its chunks under RLS');
+          const r = await db.query<{ id: string }>('DELETE FROM public.document_chunks WHERE document_id = $1 RETURNING id', [docId]);
+          assert.equal(r.rows.length, 2, 'the owner can delete its chunks under RLS');
           await assert.rejects(() => db.query('SELECT 1 FROM public.vector_sync_outbox'), (e: unknown) => (e as { code?: string }).code === '42501');
         } finally {
           await db.exec('RESET ROLE');
