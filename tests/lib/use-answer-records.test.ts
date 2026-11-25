@@ -207,7 +207,7 @@ describe('createAnswerRecordsController', () => {
   });
 
   it('polls a finished answer in a chat that has no id yet and skips answers already scored', async () => {
-    const fetch = vi.fn(async () => json(200, record('scored')));
+    const fetch = vi.fn(async (_input: string) => json(200, record('scored')));
     const controller = createAnswerRecordsController({ fetch, sleep: async () => {}, upsert: vi.fn(), upsertMany: vi.fn() });
     controller.update({
       chatId: null,

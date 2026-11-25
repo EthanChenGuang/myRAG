@@ -72,10 +72,34 @@ export function pickAnswerMetadata(metadata: unknown): AnswerMessageMetadata {
   return picked;
 }
 
-export function extractStreamAnswerMetadata(_metadata: unknown, previous: StreamAnswerMetadata = {}): StreamAnswerMetadata {
-  return previous;
+/** The answer fields of a start or finish messageMetadata, merged over what earlier parts carried. */
+export function extractStreamAnswerMetadata(metadata: unknown, previous: StreamAnswerMetadata = {}): StreamAnswerMetadata {
+  const source = asRecord(metadata);
+  if (!source) return previous;
+  const next: StreamAnswerMetadata = { ...previous };
+  if (typeof source.ragTraceId === 'string' && source.ragTraceId.length > 0) next.ragTraceId = source.ragTraceId;
+  return { ...next, ...pickCitationFields(source) };
 }
 
-export function mergeAnswerRecord<T extends { metadata?: Record<string, unknown> }>(messages: T[], _record: AnswerRecord): T[] {
-  return messages;
+function sameJson(a: unknown, b: unknown): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/** Sets groundedness and feedback from the record on the matching message; the same array when nothing changes. */
+export function mergeAnswerRecord<T extends { metadata?: Record<string, unknown> }>(messages: T[], record: AnswerRecord): T[] {
+  let changed = false;
+  const next = messages.map((message) => {
+    const metadata = message.metadata;
+    if (!metadata || metadata.answerId !== record.answerId) return message;
+    const feedback = record.feedback ?? undefined;
+    const sameGroundedness = sameJson(metadata.groundedness, record.groundedness);
+    const sameFeedback = feedback ? sameJson(metadata.feedback, feedback) : !('feedback' in metadata);
+    if (sameGroundedness && sameFeedback) return message;
+    changed = true;
+    const updated: Record<string, unknown> = { ...metadata, groundedness: record.groundedness };
+    if (feedback) updated.feedback = feedback;
+    else delete updated.feedback;
+    return { ...message, metadata: updated };
+  });
+  return changed ? next : messages;
 }
