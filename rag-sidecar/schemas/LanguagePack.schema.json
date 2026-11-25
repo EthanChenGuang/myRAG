@@ -198,6 +198,7 @@
       "type": "string"
     },
     "effective_date_end_patterns": {
+      "default": [],
       "items": {
         "type": "string"
       },

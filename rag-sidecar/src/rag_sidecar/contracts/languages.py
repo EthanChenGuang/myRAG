@@ -101,7 +101,7 @@ class LanguagePack(_Contract):
     texts: LanguageTexts
     groundedness: GroundednessSupport
     effective_date_patterns: list[str]
-    effective_date_end_patterns: list[str] = Field(default_factory=list)
+    effective_date_end_patterns: list[str] = Field(default=[])
     version_markers: list[str]
     fixtures: LanguageFixtures
     pack_version: int = Field(ge=1)
