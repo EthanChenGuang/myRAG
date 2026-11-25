@@ -133,6 +133,62 @@ describe('every SECURITY DEFINER function is service_role only unless allow-list
     expect([...(acls.get('unguarded_definer(uuid)')?.exec ?? [])]).toContain('PUBLIC');
   });
 
+  test('a required signature that is dropped and created again is tracked as a new, fully exposed function', () => {
+    const recreated = `
+      DO $check$ BEGIN
+        IF pg_catalog.to_regprocedure('public.legacy_definer(uuid)') IS NULL THEN RAISE EXCEPTION 'missing'; END IF;
+        IF pg_catalog.to_regprocedure('public.other_definer(uuid)') IS NULL THEN RAISE EXCEPTION 'missing'; END IF;
+      END $check$;
+      DROP FUNCTION public.legacy_definer(uuid);
+      CREATE FUNCTION public.legacy_definer(p uuid) RETURNS integer LANGUAGE sql SECURITY DEFINER SET search_path = '' AS $$ SELECT 1 $$;
+      DROP FUNCTION IF EXISTS public.other_definer(uuid);
+      CREATE OR REPLACE FUNCTION public.other_definer(p uuid) RETURNS integer LANGUAGE sql SECURITY DEFINER SET search_path = '' AS $$ SELECT 1 $$;
+    `;
+    const acls = simulateFunctionAcls([recreated]);
+    expect([...(acls.get('legacy_definer(uuid)')?.exec ?? [])]).toContain('PUBLIC');
+    expect([...(acls.get('other_definer(uuid)')?.exec ?? [])]).toContain('PUBLIC');
+  });
+
+  test('only CREATE OR REPLACE of a required signature keeps an unseen ACL; a plain CREATE is a new function', () => {
+    const created = `
+      DO $check$ BEGIN
+        IF pg_catalog.to_regprocedure('public.legacy_definer(uuid)') IS NULL THEN RAISE EXCEPTION 'missing'; END IF;
+      END $check$;
+      CREATE FUNCTION public.legacy_definer(p uuid) RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path = '' AS $$ SELECT true $$;
+    `;
+    expect([...(simulateFunctionAcls([created]).get('legacy_definer(uuid)')?.exec ?? [])]).toContain('PUBLIC');
+  });
+
+  test('a guard that raises when the function exists (IS NOT NULL, or NOT ... IS NULL) does not mark it as required', () => {
+    const reversed = `
+      DO $check$ BEGIN
+        IF pg_catalog.to_regprocedure('public.brand_new(uuid)') IS NOT NULL THEN RAISE EXCEPTION 'already there'; END IF;
+        IF NOT (to_regprocedure('public.brand_new_two(uuid)') IS NULL) THEN RAISE EXCEPTION 'already there'; END IF;
+      END $check$;
+      CREATE OR REPLACE FUNCTION public.brand_new(p uuid) RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path = '' AS $$ SELECT true $$;
+      CREATE OR REPLACE FUNCTION public.brand_new_two(p uuid) RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path = '' AS $$ SELECT true $$;
+    `;
+    const acls = simulateFunctionAcls([reversed]);
+    expect([...(acls.get('brand_new(uuid)')?.exec ?? [])]).toContain('PUBLIC');
+    expect([...(acls.get('brand_new_two(uuid)')?.exec ?? [])]).toContain('PUBLIC');
+  });
+
+  test('a list of signatures checked through unnest and to_regprocedure(s.sig) IS NULL, as 0425 does, is required', () => {
+    const listed = `
+      DO $check$ DECLARE v_missing text[]; BEGIN
+        SELECT pg_catalog.array_agg(s.sig) INTO v_missing
+        FROM pg_catalog.unnest(ARRAY['public.legacy_definer(uuid)', 'public.match_x(text,public.halfvec)']::text[]) AS s(sig)
+        WHERE pg_catalog.to_regprocedure(s.sig) IS NULL;
+        IF v_missing IS NOT NULL THEN RAISE EXCEPTION 'missing: %', v_missing; END IF;
+      END $check$;
+      CREATE OR REPLACE FUNCTION public.legacy_definer(p uuid) RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path = '' AS $$ SELECT true $$;
+      CREATE OR REPLACE FUNCTION public.match_x(a text, b public.halfvec) RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path = '' AS $$ SELECT true $$;
+    `;
+    const acls = simulateFunctionAcls([listed]);
+    expect(acls.has('legacy_definer(uuid)')).toBe(false);
+    expect(acls.has('match_x(text,halfvec)')).toBe(false);
+  });
+
   test('a new overload that shares an allow-listed name is not approved', () => {
     const overloads = `
       CREATE FUNCTION public.delete_folder(folder_uuid uuid) RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, public AS $$ SELECT true $$;
