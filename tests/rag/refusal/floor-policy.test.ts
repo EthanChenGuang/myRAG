@@ -7,6 +7,7 @@ import { LEXICAL_VERSION } from '@/lib/rag/lexical/chunk-text';
 import { LEGACY_IMAGE_FLOOR, LEGACY_TEXT_FLOOR, legacyRuleFloor } from '@/lib/rag/refusal/floor';
 import { cellKey, type ThresholdCells } from '@/lib/rag/refusal/gate';
 import * as thresholds from '@/lib/rag/refusal/thresholds';
+import { rerankerSupportedLanguages } from '@/lib/rag/rerank/languages';
 import { resetRerankerFactoryForTests, setRerankerFactoryForTests } from '@/lib/rag/rerank/select';
 import { RERANK_TEXT_VERSION, type Reranker } from '@/lib/rag/rerank/types';
 import { mintScope } from '@/lib/rag/tenant/scope';
@@ -266,6 +267,7 @@ describe('v2 refusal stage floor policy', () => {
       id: 'cohere',
       model: 'fake-quality-v1',
       scoreSemantics: 'calibrated',
+      supportedLanguages: rerankerSupportedLanguages('cohere'),
       async rerank(_query, docs) {
         return { scores: docs.map((_, index) => ({ index, score: 0.3 })) };
       },
