@@ -458,6 +458,9 @@ def main(argv: list[str] | None = None) -> int:
     retrieval.add_argument("--pools", default=None, help="comma-separated candidate pool sizes (default 25,50,75,100)")
     retrieval.add_argument("--top-ks", default=None, help="comma-separated final top-k values (default 5,8,10,15,20)")
     retrieval.set_defaults(handler=_retrieval)
+    from rag_eval.sweep.chunking import register as register_chunking
+
+    register_chunking(commands)
     args = parser.parse_args(argv)
     return args.handler(args)
 

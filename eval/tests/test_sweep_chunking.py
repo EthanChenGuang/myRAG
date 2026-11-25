@@ -5,7 +5,12 @@ from types import SimpleNamespace
 
 import pytest
 from rag_sidecar.contracts.golden import GoldenItem
-from rag_sidecar.contracts.retrieval import ChunkingDecision, ChunkingProfile, ChunkingSweepReport
+from rag_sidecar.contracts.retrieval import (
+    ChunkingDecision,
+    ChunkingProfile,
+    ChunkingSweepReport,
+)
+from test_report_runner import QUOTE, _manifest, _trace
 
 from rag_eval.golden_io import load_golden, write_golden
 from rag_eval.harness_runner import dev_only_golden, golden_for_splits, run_harness
@@ -20,7 +25,6 @@ from rag_eval.sweep.chunking import (
     run_chunking_sweep,
 )
 from rag_eval.sweep.retrieval import main
-from test_report_runner import QUOTE, _manifest, _trace
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONTRACT_DOC = "contract-zh.pdf"
@@ -254,7 +258,7 @@ def test_a_poisoned_test_item_never_reaches_the_runner_or_the_report(tmp_path: P
 
 
 def test_decide_writes_a_valid_decision_and_index_and_is_byte_identical_on_rerun(tmp_path: Path):
-    report, _ = _sweep(tmp_path, _Spawner())
+    _sweep(tmp_path, _Spawner())
     report_path = tmp_path / "out" / "chunking-sweep.json"
     out_dir = tmp_path / "decisions"
     decision = decide_chunking_profile(report_path, "contract_legal", "p256-1024", "fixture-demo", out_dir, recorded_at="2026-11-25")
