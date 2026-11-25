@@ -460,7 +460,7 @@ class _Doubles:
             time.sleep(0.5)
             with self.lock:
                 job = self.ledger.jobs[job_id]
-                self.ledger.jobs[job_id] = job.model_copy(update={"status": "ready", "locked_by": None, "lease_until": None})
+                self.ledger.jobs[job_id] = job.model_copy(update={"status": "ready", "lease_until": None})
 
         threading.Thread(target=finish, daemon=True).start()
 
