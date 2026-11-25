@@ -2,6 +2,7 @@ import type { RetrievalFilters } from '../../backend/types';
 import type { RagConfig, StageName } from '../../config';
 import { legacyAnalyze } from '../../legacy/enhanced-retrieval';
 import { buildRetrievalFilters } from '../../query/filters';
+import { mergeLayerDateRange } from '../../query/layer-filters';
 import { queryLanguage } from '../../query/language';
 import { getTranslator, NONE_TRANSLATOR, NONE_TRANSLATOR_NAME } from '../../query/translate';
 import { buildQueryVariants, type TranslatedQuery } from '../../query/variants';
@@ -91,10 +92,11 @@ export async function runQueryStages(ctx: QueryStagesInput): Promise<QueryStages
     if (!translation.skipped) translated = translation.value;
   }
 
-  const filters = buildRetrievalFilters({
+  const built = buildRetrievalFilters({
     explicit: input.retrievalFilters,
     referencedDocumentIds: referencedDocumentIds(referenced),
   });
+  const filters = queryLayer?.dateRange ? mergeLayerDateRange(built, queryLayer.dateRange) : built;
 
   return {
     referenced,
