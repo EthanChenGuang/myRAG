@@ -38,7 +38,7 @@ export type RollbackResult = { ok: true; restored: string; rolledBack: string } 
 export type SetStatusResult = { ok: true; profileId: string; status: string } | ProfileRefusal;
 export type RecordEvidenceResult = { ok: true; profileId: string } | ProfileRefusal;
 
-const REFUSAL = /^((?:activation|rollback|profile_status|evidence)_refused): ([a-z_]+)/;
+const REFUSAL = /^((?:activation|rollback|profile_status|evidence|binding)_refused): ([a-z_]+)/;
 
 function refusalFrom(error: RpcError): ProfileRefusal | null {
   const match = REFUSAL.exec(error.message);
@@ -56,7 +56,8 @@ function text(row: Record<string, unknown>, key: string): string | null {
   return typeof value === 'string' ? value : null;
 }
 
-async function callGate(fn: string, args: Record<string, unknown>): Promise<{ refusal: ProfileRefusal } | { row: Record<string, unknown> }> {
+/** Calls a registry gate function: a named refusal comes back as data, anything else unexpected throws ProfileUnavailableError. */
+export async function callGate(fn: string, args: Record<string, unknown>): Promise<{ refusal: ProfileRefusal } | { row: Record<string, unknown> }> {
   const client = requireRegistryClient();
   let response;
   try {
