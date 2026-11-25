@@ -22,6 +22,7 @@ export function derivePinnedEvalEnv(initEnvText: string): Record<string, string>
     pinned[name] = value;
   }
   pinned.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = 'single-tenant';
+  pinned.NEXT_PUBLIC_MCP_SYSTEM_ENABLED = 'true';
   pinned.OPENAI_EMBEDDING_MODEL = 'text-embedding-3-small';
   return sortKeys(pinned);
 }

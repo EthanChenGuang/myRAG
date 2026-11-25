@@ -64,7 +64,7 @@ jobs:
           node scripts/ci/check-rag-boundary.mjs
           node --test scripts/tests/check-rag-boundary.node-test.mjs
       - name: Config check and type-check self-tests
-        run: node --test scripts/check-config.test.mjs scripts/typecheck-new.test.mjs scripts/tests/tsc-ratchet.node-test.mjs scripts/tests/check-node-runtime.node-test.mjs
+        run: node --test scripts/check-config.test.mjs scripts/typecheck-new.test.mjs scripts/tests/tsc-ratchet.node-test.mjs scripts/tests/check-node-runtime.node-test.mjs scripts/tests/config-server-security.node-test.mjs
       - name: Zod generator self-test
         run: node --test scripts/tests/gen-zod.node-test.mjs
       - name: New-code type-check
