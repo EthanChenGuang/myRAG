@@ -226,6 +226,28 @@ for (const mode of MODES) {
       assert.equal(row?.attempts?.length, 2);
     });
 
+    test('the attempt cost the sidecar sends as est_cost_usd is added to the job total', async () => {
+      const { db } = fixture;
+      const tenant = tenantFor(mode);
+      const jobId = await enqueue(db, tenant, `attempt-usd/${crypto.randomUUID()}`);
+      await claim(db, jobId, 'pu');
+      for (const attempt of [
+        { tier: 'fast', preset: 'fast', reason: 'initial', est_cost_usd: 0.125 },
+        { tier: 'premium', preset: 'premium', reason: 'escalation', est_cost_usd: 0.25 },
+      ]) {
+        await db.query(`SELECT rag_record_parse_attempt($1, 'pu', $2::jsonb)`, [jobId, JSON.stringify(attempt)]);
+      }
+      const row = (
+        await db.query<{ est_cost_usd: string; costs: number[] }>(
+          `SELECT est_cost_usd::text, ARRAY(SELECT (a ->> 'est_cost_usd')::float8 FROM jsonb_array_elements(attempts) a) AS costs
+             FROM ingestion_jobs WHERE id = $1`,
+          [jobId],
+        )
+      ).rows[0];
+      assert.deepEqual(row?.costs, [0.125, 0.25]);
+      assert.equal(Number(row?.est_cost_usd), 0.375);
+    });
+
     test('retryable fail backoff and fourth failure; permanent fails at once; releases reservations', async () => {
       const { db } = fixture;
       const tenant = tenantFor(mode);
