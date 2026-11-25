@@ -37,7 +37,7 @@ export function CitationSourceEntry({ source, language, focused = false }: Citat
       data-document-id={source.documentId}
       data-focused={focused ? 'true' : undefined}
       className={cn(
-        'scroll-mt-4 rounded-2xl bg-white/25 dark:bg-black/20 backdrop-blur-sm border p-5 transition-[box-shadow,border-color] duration-300',
+        'scroll-mt-4 rounded-2xl bg-white/25 dark:bg-black/20 backdrop-blur-sm border p-5 transition-[box-shadow,border-color] duration-300 motion-reduce:transition-none',
         focused
           ? 'border-[#FF6417]/70 dark:border-[#FF8A4D]/70 ring-2 ring-[#FF6417]/30 dark:ring-[#FF8A4D]/30'
           : 'border-[#FFE0D0]/60 dark:border-white/10',
@@ -55,7 +55,7 @@ export function CitationSourceEntry({ source, language, focused = false }: Citat
           {location.length > 0 && (
             <p className="mt-1 break-words text-xs text-gray-500 dark:text-gray-400">{location.join(' · ')}</p>
           )}
-          <blockquote className="mt-3 whitespace-pre-wrap break-words border-l-2 border-[#FF6417]/40 pl-3 text-sm leading-relaxed text-gray-700 dark:border-[#FF8A4D]/40 dark:text-gray-300">
+          <blockquote className="mt-3 whitespace-pre-wrap break-words rounded-lg bg-[#FF6417]/5 px-3 py-2 text-sm leading-relaxed text-gray-700 dark:bg-[#FF8A4D]/10 dark:text-gray-300">
             {citation.quote}
           </blockquote>
           {citation.unavailable && (
@@ -124,7 +124,8 @@ export function SourcesSidebar({
       const target = sidebarRef.current?.querySelector<HTMLElement>(
         `[data-citation-n="${focus.n}"][data-message-id="${CSS.escape(focus.messageId)}"]`,
       );
-      target?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      target?.scrollIntoView({ block: 'nearest', behavior: reduceMotion ? 'auto' : 'smooth' });
     }, 120);
     return () => clearTimeout(timer);
   }, [isSourcesOpen, focus, sources]);
@@ -342,7 +343,7 @@ export function SourcesSidebar({
               <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3 custom-scrollbar">
                 {citationEntries.length > 0 && (
                   <section aria-label={qualityStrings.citationsHeading} className="space-y-3">
-                    <h3 className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                    <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 text-balance">
                       {qualityStrings.citationsHeading}
                     </h3>
                     {citationEntries.map((source) => (
