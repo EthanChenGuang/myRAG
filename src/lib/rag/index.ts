@@ -134,6 +134,7 @@ export type {
   CitationFinishMetadata,
   CitationSession,
   CitationSessionInput,
+  ClaudeStartInput,
   HistoryMessage,
 } from './generation/citations/session';
 export { mintAnswerId, scheduleAnswerFinish, shouldPersistAnswer } from './generation/answer-finish';
@@ -146,8 +147,17 @@ export type {
   ScoreAnswerGroundednessDeps,
   ScoreAnswerGroundednessInput,
 } from './generation/groundedness';
-export { selectCitationStrategy } from './generation/citations/strategy';
-export type { CitationRagMode, CitationStrategyId, CitationTurn } from './generation/citations/strategy';
+export { claudeTurnEligibility, preRetrievalCitations, selectCitationStrategy } from './generation/citations/strategy';
+export { CLAUDE_FIRST_TOKEN_TIMEOUT_MS, errorStatusOf, fallbackReasonFor, firstTokenGate } from './generation/citations/fallback';
+export type { FallbackReason, FirstTokenGateResult } from './generation/citations/fallback';
+export type {
+  CitationRagMode,
+  CitationStrategyId,
+  CitationTurn,
+  ClaudeIneligibleReason,
+  ClaudeTurnEligibility,
+  ClaudeTurnFacts,
+} from './generation/citations/strategy';
 export { repairOwnerMembership } from './tenant/repair-owner';
 export type { RepairOwnerMembershipInput } from './tenant/repair-owner';
 export { resolveDocumentRefs } from './refs/resolve';
