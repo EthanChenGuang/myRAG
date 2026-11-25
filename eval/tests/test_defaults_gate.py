@@ -616,3 +616,14 @@ def test_the_module_and_the_committed_criteria_hold_no_baseline_value():
                 text = repr(round(stat["mean"], 4))
                 assert text not in source, f"{name} value {text} in the module"
                 assert text not in rules_text, f"{name} value {text} in the criteria rules"
+
+
+def test_the_committed_criteria_validate_and_name_existing_run_configs():
+    raw = json.loads((REPO / "eval" / "config" / "defaults-gate.json").read_text(encoding="utf-8"))
+    criteria = DefaultsGateCriteria.model_validate(raw)
+    assert criteria.absolute is not None
+    for name in [*criteria.configuration_names(), criteria.legacy_run_config]:
+        assert (REPO / "eval" / "config" / "runs" / f"{name}.json").is_file(), name
+    assert criteria.gated_metrics == NoiseConfig.model_validate_json(
+        (REPO / criteria.noise_path).read_text(encoding="utf-8")
+    ).metrics
