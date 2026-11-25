@@ -1,5 +1,5 @@
 import type { IngestJobState } from '@/lib/hooks/use-ingest-job-status';
-import type { Language } from '@/lib/rag/lang/registry';
+import type { Language } from '@/lib/rag';
 
 export type IngestStatusTone = 'pending' | 'info' | 'success' | 'warning' | 'error' | 'neutral';
 

@@ -1,5 +1,5 @@
 import { ProcessingProfileSetSchema } from '@/lib/rag-eval/contracts.generated';
-import type { Language } from '@/lib/rag/lang/registry';
+import type { Language } from '@/lib/rag';
 
 /** The six document type identifiers (D-12), aligned with the generated profile schema. */
 export const DOC_TYPE_IDS = ProcessingProfileSetSchema.shape.profiles.element.shape.doc_type.options;
