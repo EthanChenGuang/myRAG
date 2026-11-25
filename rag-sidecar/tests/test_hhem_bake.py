@@ -51,7 +51,8 @@ class _FakeHub:
 
 
 def _pinned_sha256(path: Path) -> str:
-    return bake_module.PINNED_SHA256[path.name]
+    repo_id = path.parents[2].name.removeprefix("models--").replace("--", "/")
+    return bake_module.PINNED_SHA256[repo_id][path.name]
 
 
 class _FakeLoader:
@@ -87,7 +88,9 @@ def test_pinned_constants_match_the_reviewed_artifacts():
         "spiece.model",
     )
     assert set(HHEM_FILES) == {"config.json", "configuration_hhem_v2.py", "modeling_hhem_v2.py", "model.safetensors"}
-    assert bake_module.PINNED_SHA256["model.safetensors"] == HHEM_SAFETENSORS_SHA256
+    assert bake_module.PINNED_SHA256[HHEM_MODEL_ID]["model.safetensors"] == HHEM_SAFETENSORS_SHA256
+    assert set(bake_module.PINNED_SHA256[FLAN_T5_MODEL_ID]) == set(FLAN_T5_FILES)
+    assert set(bake_module.PINNED_SHA256[HHEM_MODEL_ID]) == {"configuration_hhem_v2.py", "modeling_hhem_v2.py", "model.safetensors"}
 
 
 def test_bake_downloads_flan_then_hhem_with_pinned_revisions_and_file_lists(hf_home):
