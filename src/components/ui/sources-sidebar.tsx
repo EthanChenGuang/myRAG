@@ -25,6 +25,16 @@ interface Source {
   toolResultId?: string;
 }
 
+export interface CitationSourceEntryProps {
+  source: Source;
+  language: string;
+  focused?: boolean;
+}
+
+export function CitationSourceEntry(_props: CitationSourceEntryProps) {
+  return null;
+}
+
 interface SourcesSidebarProps {
   sources: Source[];
 }

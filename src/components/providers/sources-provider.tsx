@@ -2,7 +2,17 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef, useMemo } from 'react';
 
-interface Source {
+export interface SourceCitation {
+  n: number;
+  alias: string;
+  quote: string;
+  page: number | null;
+  sectionPath: string[] | null;
+  unavailable: boolean;
+  messageId?: string;
+}
+
+export interface Source {
   title: string;
   url?: string;
   snippet?: string;
@@ -18,6 +28,19 @@ interface Source {
   toolName?: string;
   toolResultId?: string;
   explicitly_referenced?: boolean;
+  citation?: SourceCitation;
+  cited?: boolean;
+}
+
+export type AnswerDocumentStatus = Readonly<Record<string, 'current' | 'unavailable'>>;
+
+export function citationSourcesFor(
+  _metadata: unknown,
+  _documents: AnswerDocumentStatus | undefined,
+  existing: Source[] = [],
+  _messageId?: string,
+): Source[] {
+  return existing;
 }
 
 interface SourcesContextType {
