@@ -1,6 +1,7 @@
 import { generateText, NoObjectGeneratedError, NoOutputGeneratedError, Output, type LanguageModel } from 'ai';
 import type { ZodType, ZodTypeDef } from 'zod/v3';
 import { env, getAppName } from '@/lib/env';
+import type { QueryTranslation } from '@/lib/rag-eval/contracts.generated';
 
 export type QueryLlmTransform = 'condense' | 'expand' | 'hyde' | 'decompose' | 'translate';
 export type QueryLlmErrorKind = 'unavailable' | 'aborted' | 'invalid_output' | 'error';
@@ -25,7 +26,7 @@ export interface QueryLlmRequest<T> {
   /** The query the transform works on; the real client ignores it (it is in the prompt), the fake keys on it. */
   input: string;
   /** translate only: the language asked for; the real client has it in the prompt, the fake keys on it. */
-  targetLanguage?: 'zh' | 'en' | 'it';
+  targetLanguage?: QueryTranslation['target_language'];
   signal: AbortSignal;
 }
 

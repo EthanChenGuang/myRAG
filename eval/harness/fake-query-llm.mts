@@ -1,8 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import type { QueryTranslation } from '../../src/lib/rag-eval/contracts.generated';
 import { QueryLlmError, type QueryLlm, type QueryLlmRequest, type QueryLlmTransform } from '../../src/lib/rag/query/llm';
 
-type Lang = 'zh' | 'en' | 'it';
+type Lang = QueryTranslation['target_language'];
 
 export interface FakeQueryLlmEntry {
   transform: QueryLlmTransform;
