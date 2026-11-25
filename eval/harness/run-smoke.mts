@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
-import { ingestModeGoldenPaths, mergeGoldenFiles } from './ingest-mode.mts';
+import { ingestModeGoldenPaths, mergeGoldenFiles, parseIngestRoutingFlags } from './ingest-mode.mts';
 import { runEval, type EvalRequestOptions } from './run-eval.mts';
 import { loadRunConfig, RunConfigError } from './run-config.mts';
 import type { DeploymentMode, FixtureMode } from './pglite-supabase.mts';
@@ -43,6 +43,8 @@ async function main(): Promise<number> {
       'run-config': { type: 'string' },
       org: { type: 'string' },
       user: { type: 'string' },
+      routing: { type: 'string' },
+      'force-tier': { type: 'string' },
     },
     strict: true,
   });
@@ -59,6 +61,10 @@ async function main(): Promise<number> {
   if (fixtureMode === 'ingest' && values['base-url']) {
     throw new Error('--fixture-mode ingest builds the fixture database itself and cannot be combined with --base-url');
   }
+  // --routing fixed|tiered sends every document through the queue and the sidecar job function; --force-tier fast|structured|premium
+  // pins every page to one tier (D-40).
+  const ingestRouting = parseIngestRoutingFlags({ routing: values.routing, 'force-tier': values['force-tier'] });
+  if (ingestRouting && fixtureMode !== 'ingest') throw new Error('--routing and --force-tier need --fixture-mode ingest');
 
   let maxResults: number | undefined;
   if (values['max-results'] !== undefined) {
@@ -100,6 +106,8 @@ async function main(): Promise<number> {
 
   let gate = !values['no-gate'];
   if (embeddingProfileId) gate = false;
+  // A queued build has its own corpus hash; it is compared with another routing mode by the parser gate, not with the inline baseline.
+  if (ingestRouting && values.baseline === undefined) gate = false;
   if (gate && baseUrl && values.baseline === undefined) {
     console.error('[Eval Harness] a --base-url run needs --baseline <live baseline> or --no-gate');
     return 2;
@@ -126,6 +134,7 @@ async function main(): Promise<number> {
     baseUrl,
     includeDrafts: values['include-drafts'],
     embeddingProfileId,
+    ...(ingestRouting ? { ingestRouting } : {}),
     ...(runConfig ? { runConfig } : {}),
   });
 

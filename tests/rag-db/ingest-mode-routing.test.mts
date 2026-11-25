@@ -16,7 +16,7 @@ import {
 import type { FixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
 
 type Row = Record<string, unknown>;
-type Built = FixtureDatabase & { routingSummary?: { jobs: number; llamaUploads: number } };
+type Built = FixtureDatabase & { routingSummary?: { jobs: number; llamaUploads: number; needsReview: Array<{ filename: string; reason: string }> } };
 
 const CORPUS_DIR = path.join(process.cwd(), 'eval/fixtures/corpus');
 
@@ -198,16 +198,22 @@ describe('ingest mode by routing', () => {
     }
   });
 
-  test('--force-tier fast: every PDF page is parsed fast, so the scan loses its text', async () => {
+  test('--force-tier fast: every PDF page is parsed fast, so the scan has no text and is not published', async () => {
     const forced = await build({ typed: ['scan-en'], parse: ['table-en'] }, { routing: 'tiered', forceTier: 'fast' });
     try {
       const jobs = await jobsByFilename(forced.db);
       assert.equal(jobs.size, 2);
       for (const [filename, job] of jobs) {
-        assert.ok(tiersOf(job).every((tier) => tier === 'fast'), `${filename}: ${tiersOf(job).join(',')}`);
+        assert.ok(tiersOf(job).length > 0 && tiersOf(job).every((tier) => tier === 'fast'), `${filename}: ${tiersOf(job).join(',')}`);
       }
+      assert.equal(jobs.get('scan-en.pdf')?.status, 'needs_review');
+      assert.deepEqual(
+        forced.routingSummary?.needsReview.find((entry) => entry.filename === 'scan-en.pdf'),
+        { filename: 'scan-en.pdf', reason: 'max_tier' },
+        'the pinned tier is the ceiling the scan needed to rise above',
+      );
       const prints = await fingerprints(forced.db);
-      assert.ok(!(prints.get('scan-en.pdf') ?? []).some((chunk) => String(chunk.content).includes('AC-2025-0232')), 'no OCR text under fast');
+      assert.equal(prints.has('scan-en.pdf'), false, 'no published chunk for the scan under fast');
       assert.equal((await rows(forced.db, 'SELECT count(*)::int AS n FROM rag_parse_tier_overrides'))[0]?.n, 0);
     } finally {
       await close(forced);

@@ -1,0 +1,41 @@
+{
+  "artifacts": [
+    "docling.json"
+  ],
+  "chunks": [
+    {
+      "contextualized_text": "Quarterly parts list\nThe table on page two exercises structured_full tier scoring.",
+      "headings": [
+        "Quarterly parts list"
+      ],
+      "is_table": false,
+      "pages": [
+        1
+      ],
+      "table_header": null,
+      "text": "The table on page two exercises structured_full tier scoring."
+    },
+    {
+      "contextualized_text": "Quarterly parts list\nInventory\n| Item   |   Qty |   Unit |\n|--------|-------|--------|\n| Row-01 |     1 |   2.50 |\n| Row-02 |     2 |   4.50 |\n| Row-03 |     3 |   6.50 |\n| Row-04 |     4 |   8.50 |\n| Row-05 |     5 |  10.50 |\n| Row-06 |     6 |  12.50 |\n| Row-07 |     7 |  14.50 |\n| Row-08 |     8 |  16.50 |\n| Row-09 |     9 |  18.50 |\n| Row-10 |    10 |  20.50 |\n| Row-11 |    11 |  22.50 |\n| Row-12 |    12 |  24.50 |",
+      "headings": [
+        "Quarterly parts list",
+        "Inventory"
+      ],
+      "is_table": true,
+      "pages": [
+        2
+      ],
+      "table_header": "| Item   |   Qty |   Unit |\n|--------|-------|--------|",
+      "text": "| Item   |   Qty |   Unit |\n|--------|-------|--------|\n| Row-01 |     1 |   2.50 |\n| Row-02 |     2 |   4.50 |\n| Row-03 |     3 |   6.50 |\n| Row-04 |     4 |   8.50 |\n| Row-05 |     5 |  10.50 |\n| Row-06 |     6 |  12.50 |\n| Row-07 |     7 |  14.50 |\n| Row-08 |     8 |  16.50 |\n| Row-09 |     9 |  18.50 |\n| Row-10 |    10 |  20.50 |\n| Row-11 |    11 |  22.50 |\n| Row-12 |    12 |  24.50 |"
+    }
+  ],
+  "language": "en",
+  "markdown": "## Quarterly parts list\n\nThe table on page two exercises structured\\_full tier scoring.\n\n### Inventory\n\n| Item   |   Qty |   Unit |\n|--------|-------|--------|\n| Row-01 |     1 |   2.50 |\n| Row-02 |     2 |   4.50 |\n| Row-03 |     3 |   6.50 |\n| Row-04 |     4 |   8.50 |\n| Row-05 |     5 |  10.50 |\n| Row-06 |     6 |  12.50 |\n| Row-07 |     7 |  14.50 |\n| Row-08 |     8 |  16.50 |\n| Row-09 |     9 |  18.50 |\n| Row-10 |    10 |  20.50 |\n| Row-11 |    11 |  22.50 |\n| Row-12 |    12 |  24.50 |",
+  "page_count": 2,
+  "parser": "docling",
+  "parser_version": "docling-2.107.1",
+  "partial": false,
+  "pictures": [],
+  "text_layer_page_share": 1.0,
+  "warnings": []
+}

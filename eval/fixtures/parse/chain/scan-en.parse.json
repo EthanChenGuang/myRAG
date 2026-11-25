@@ -1,0 +1,41 @@
+{
+  "artifacts": [
+    "docling.json"
+  ],
+  "chunks": [
+    {
+      "contextualized_text": "Equipment Acceptance Notice\nThis notice confirms that the second batch of inspection equipment was accepted on site on 15 March 2025. All units passed the functional check.",
+      "headings": [
+        "Equipment Acceptance Notice"
+      ],
+      "is_table": false,
+      "pages": [
+        1
+      ],
+      "table_header": null,
+      "text": "This notice confirms that the second batch of inspection equipment was accepted on site on 15 March 2025. All units passed the functional check."
+    },
+    {
+      "contextualized_text": "Equipment Acceptance Notice\nConclusion\nAcceptance reference AC-2025-0232. The equipment is released for use by the example maintenance team.",
+      "headings": [
+        "Equipment Acceptance Notice",
+        "Conclusion"
+      ],
+      "is_table": false,
+      "pages": [
+        1
+      ],
+      "table_header": null,
+      "text": "Acceptance reference AC-2025-0232. The equipment is released for use by the example maintenance team."
+    }
+  ],
+  "language": "en",
+  "markdown": "## Equipment Acceptance Notice\n\nThis notice confirms that the second batch of inspection equipment was accepted on site on 15 March 2025. All units passed the functional check.\n\n### Conclusion\n\nAcceptance reference AC-2025-0232. The equipment is released for use by the example maintenance team.",
+  "page_count": 1,
+  "parser": "docling",
+  "parser_version": "docling-2.107.1",
+  "partial": false,
+  "pictures": [],
+  "text_layer_page_share": 0.0,
+  "warnings": []
+}
