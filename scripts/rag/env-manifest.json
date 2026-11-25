@@ -348,6 +348,11 @@
       ]
     },
     {
+      "name": "RAG_DOMAIN_EXPERT_REVIEW",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_EFFECTIVE_DATES",
       "status": "managed",
       "knownGaps": []
@@ -359,6 +364,16 @@
     },
     {
       "name": "RAG_EMBED_BATCH_MODE",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_EMBED_FEEDBACK",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_EMBED_FEEDBACK_SECRET",
       "status": "managed",
       "knownGaps": []
     },
@@ -852,6 +867,11 @@
       "knownGaps": []
     },
     {
+      "name": "RAG_REFUSAL_FEEDBACK",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_REFUSAL_FLOOR",
       "status": "managed",
       "knownGaps": []
@@ -895,6 +915,16 @@
         "config-ui",
         "env-ts"
       ]
+    },
+    {
+      "name": "RAG_RETRIEVAL_LOG",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_RETRIEVAL_LOG_RETENTION_DAYS",
+      "status": "managed",
+      "knownGaps": []
     },
     {
       "name": "RAG_RETRIEVAL_PARAMS_OVERRIDE",
@@ -965,6 +995,11 @@
       "knownGaps": [
         "config-ui"
       ]
+    },
+    {
+      "name": "RAG_SOURCE_OPEN_SIGNAL",
+      "status": "managed",
+      "knownGaps": []
     },
     {
       "name": "RAG_STAGE_TIMEOUTS",
