@@ -11,6 +11,10 @@
 -- REPLACE keeps the ACL and this file issues no GRANT or REVOKE. The first block stops with 55000 unless pgvector is in schema public (the
 -- bodies name public.vector and OPERATOR(public.<=>)) and every function already exists, so the file never creates one with default PUBLIC
 -- execute. tests/rag-db/search-path-empty.test.mts. Idempotent: CREATE OR REPLACE only.
+--
+-- Live upgrade. The first block proves only that the functions exist: 0425 overwrites every live body with the repository's version. Run
+-- the read-only dry run in the header of 0425_search_path_empty.sql first; it covers this file's functions too. Re-running any migration
+-- below 0425 after 0425 puts back that migration's search_path and body, so re-run 0425 (the common file, then this file) after it.
 
 BEGIN;
 

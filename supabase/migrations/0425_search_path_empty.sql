@@ -11,6 +11,21 @@
 -- REPLACE keeps the ACL and this file issues no GRANT or REVOKE. The first block stops with 55000 unless pgvector is in schema public (the
 -- bodies name public.vector and OPERATOR(public.<=>)) and every function already exists, so the file never creates one with default PUBLIC
 -- execute. tests/rag-db/search-path-empty.test.mts. Idempotent: CREATE OR REPLACE only.
+--
+-- Live upgrade. The first block proves only that the functions exist, not that their bodies are the ones this file was generated from:
+-- 0425 overwrites every live body with the repository's version. A body hot-fixed by hand or left behind by a skipped body-only migration
+-- (0424, for example) is replaced without notice, and a skipped ACL-only migration (0409 to 0411) stays skipped, since grants are not
+-- compared. Run this read-only dry run first. It lists every target of this file and of the mode file whose live md5(prosrc) differs from
+-- the hash expected before 0425 (generated from the pre-0425 harness build, supabase/migrations/0425_expected_pre_hashes.json). Paste that
+-- file's contents and the deployment mode into the two placeholders. No rows means every live body is the expected one; for each row,
+-- compare pg_get_functiondef with the repository before applying.
+--   SELECT x.sig, x.md5 AS expected, pg_catalog.md5(p.prosrc) AS live
+--     FROM pg_catalog.jsonb_each_text('<contents of supabase/migrations/0425_expected_pre_hashes.json>'::jsonb -> '<single-tenant or multi-tenant>') AS x(sig, md5)
+--     LEFT JOIN pg_catalog.pg_proc p ON p.oid = pg_catalog.to_regprocedure(x.sig)
+--    WHERE p.oid IS NULL OR pg_catalog.md5(p.prosrc) <> x.md5
+--    ORDER BY 1;
+-- Re-running any migration below 0425 after 0425 puts back that migration's search_path and body, so re-run 0425 (this file, then the mode
+-- file) after it.
 
 BEGIN;
 

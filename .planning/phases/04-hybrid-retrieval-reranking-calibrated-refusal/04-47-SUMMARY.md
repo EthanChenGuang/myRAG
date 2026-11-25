@@ -22,6 +22,7 @@ tech-stack:
 key-files:
   created:
     - supabase/migrations/0425_search_path_empty.sql
+    - supabase/migrations/0425_expected_pre_hashes.json
     - supabase/migrations/0425_search_path_empty.single-tenant.sql
     - supabase/migrations/0425_search_path_empty.multi-tenant.sql
     - tests/rag-db/search-path-empty.test.mts
@@ -97,7 +98,7 @@ plan_head_after: 9ba5fcf028002ece0c440d9abe65a637d5f4fdc6
 
 - Phase 4 total: 17 final definitions. The verifier's other Phase 4 functions (hybrid_search_chunks, rag_write_profile_chunks, rag_fetch_parents and the 0413 set) were already `''` in their final definitions: 0413, then 0602 for hybrid_search_chunks. 0425 does not touch hybrid_search_chunks, so 0602's include-undated rule and the 0413 image/invoice_header rule stay as they are.
 - Allow-list entries: none.
-- Files: `0425_search_path_empty.sql` (111 functions identical in both modes), `.single-tenant.sql` (15), `.multi-tenant.sql` (24). Each file starts with a DO block that raises `55000` when any of its targets is missing.
+- Files: `0425_search_path_empty.sql` (111 functions identical in both modes), `.single-tenant.sql` (15), `.multi-tenant.sql` (24). Each file starts with a DO block that raises `55000` when pgvector is not in schema `public` or when any of its targets is missing. The block proves only that the targets exist; it does not compare their bodies.
 
 ### Gap 1: frontend design gate
 
@@ -178,6 +179,10 @@ Python, contracts and golden data were not touched, so pytest and gen:schemas we
 
 ## Operator Actions
 
-- Apply `supabase/migrations/0425_search_path_empty.sql` and then the file for the deployment mode, after 0424. It stops with `55000` if an earlier migration is missing. A fresh install from either setup file already includes it.
+- Check pgvector's schema first: `SELECT extname, extnamespace::regnamespace FROM pg_extension WHERE extname = 'vector'` must show `public`. Each 0425 file stops with `55000` otherwise. Do not act on Supabase lint 0014 (`extension_in_public`) for `vector`.
+- Run the read-only dry run in the header of `supabase/migrations/0425_search_path_empty.sql`. Paste in the contents of `supabase/migrations/0425_expected_pre_hashes.json` and the deployment mode. Each row it returns is a function whose live body differs from the one expected before 0425. Resolve every row before applying.
+- Apply `0425_search_path_empty.sql`, then the file for the deployment mode, after 0424. The precheck proves only that the replaced functions exist: it stops with `55000` if one is missing, and it compares neither bodies nor grants. 0425 overwrites every live body with the repository's version. A body hot-fixed by hand, or one left behind by a skipped body-only migration, is replaced without notice. A skipped ACL-only migration (0409 to 0411) stays skipped. The common file and the mode file are separate transactions; if the mode file stops, re-run both.
+- Re-run 0425 (the common file, then the mode file) after re-running any earlier migration. Re-running a migration below 0425 puts back that migration's search_path and body.
+- A fresh install from either setup file already includes 0425.
 
 ## Self-Check: PASSED
