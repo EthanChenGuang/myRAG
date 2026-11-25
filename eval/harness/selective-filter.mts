@@ -309,9 +309,11 @@ export async function measureSelectiveFilter(
 }
 
 export async function createSelectiveFilterDatabase(): Promise<SelectiveFixtureDatabase> {
-  const started = Date.now();
   const fixture = await createEmptyFixtureDatabase({ deploymentMode: 'multi-tenant', supabaseGrants: true });
   const { db } = fixture;
+  // The 04-18 budget covers this database's rows and HNSW build, not the shared setup SQL and migrations,
+  // which every fixture pays and which grow with each phase.
+  const started = Date.now();
   const ids = SELECTIVE_IDS;
   const bigKey = `u:${ids.bigUser}`;
   const smallKey = `u:${ids.smallUser}`;
