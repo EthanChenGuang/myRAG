@@ -6,6 +6,7 @@ import { detectLanguageWithConfidence, type LanguageDetection } from '../lang/de
 import { maskPII } from '../trace/mask';
 import type { Candidate, LogChannel, LogContext, LogOutcomeValue, RagMode, RetrievalResult } from '../types';
 import type { RetrievalLogLevel } from './config';
+import type { EffectiveLogModeDeps } from './settings';
 
 export type { LogContext } from '../types';
 
@@ -204,6 +205,8 @@ export interface WriteRetrievalLogOptions {
   client?: SupabaseClient | LogClient | null;
   timeoutMs?: number;
   log?: (line: string) => void;
+  /** Overrides for the tenant-setting read (D-06); the writer's client is used when none is given. */
+  settings?: EffectiveLogModeDeps;
 }
 
 class WriteTimeout extends Error {}
