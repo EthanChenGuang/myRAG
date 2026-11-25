@@ -16,7 +16,9 @@ import { rerankText } from '../../rerank/text';
 import { RERANK_TEXT_VERSION, type RerankScore, type RerankSpan } from '../../rerank/types';
 import type { TraceCollector } from '../../trace/collector';
 import type { Profile, QueryVariant, ReferencedState, RunRetrievalInput, StageOverrides } from '../../types';
+import type { QueryPlan } from '@/lib/rag-eval/contracts.generated';
 import { v2ProfileSettings } from '../profiles';
+import { reserveSubQuestionCoverage } from '../subq-coverage';
 import type { ContextRerankInput } from './context';
 
 export interface RankStagesInput {
@@ -32,6 +34,10 @@ export interface RankStagesInput {
   stageOverrides?: StageOverrides;
   variants?: QueryVariant[];
   dedupeCounts?: DedupeCounts;
+  /** Query layer only (D-06): rerank and refusal read the plan's standalone query and Candidate.standaloneSimilarity. */
+  queryPlan?: QueryPlan | null;
+  /** D-07: sub-question coverage over the final top-k (retrieval-params `sub_question_coverage`). */
+  coverage?: { enabled: boolean; topK: number };
 }
 
 export interface RankRerankOutput extends ContextRerankInput {
@@ -78,6 +84,11 @@ function gateLanguage(language: string | null): QueryLanguage | null {
   return language !== null && GATE_LANGUAGES.includes(language) ? (language as QueryLanguage) : null;
 }
 
+/** D-06: under the query layer the floor reads the standalone variant's similarity, never a HyDE, expanded or translated list. */
+function floorSimilarity(row: FusedHit, standalone: boolean): number | null {
+  return standalone ? (row.standaloneSimilarity ?? 0) : row.hit.similarity;
+}
+
 function applyRefusal(
   config: RagConfig,
   profile: Profile,
@@ -86,6 +97,7 @@ function applyRefusal(
   fusedHits: FusedHit[],
   rerankGate: RerankGateState,
   query: string,
+  standalone: boolean,
 ): { record: RefusalRecord; gate: RefusalRecord } {
   const { cells } = loadThresholds();
   const gate = decideRefusal({
@@ -108,7 +120,7 @@ function applyRefusal(
       floors,
       terms: legacyQueryTerms(query),
       candidates: fusedHits.map((row) => ({
-        similarity: row.hit.similarity,
+        similarity: floorSimilarity(row, standalone),
         hasImage: hitHasImage(row.hit),
         filename: row.hit.document.filename,
         text: `${row.hit.content} ${row.hit.document.contentPreview}`,
@@ -119,7 +131,7 @@ function applyRefusal(
   const record = similarityFloor({
     floors,
     candidates: fusedHits.map((row) => ({
-      similarity: row.hit.similarity,
+      similarity: floorSimilarity(row, standalone),
       hasImage: hitHasImage(row.hit),
     })),
   });
@@ -210,7 +222,11 @@ async function runRerankStage(ctx: RankStagesInput): Promise<RerankStageResult> 
 
   const wantSpans = settings.compression;
   const texts = hits.map((row) => rerankText({ sectionPath: row.hit.sectionPath, content: row.hit.content }));
-  const variants = ctx.variants ?? [{ text: input.query, language: queryLanguage, kind: 'original' as const }];
+  const rerankQuery = ctx.queryPlan ? ctx.queryPlan.standalone : input.query;
+  // D-06: under the layer every document is scored against the standalone query, never a generated or translated text.
+  const queryByDoc = ctx.queryPlan
+    ? hits.map(() => rerankQuery)
+    : queryByDocument(hits, ctx.variants ?? [{ text: input.query, language: queryLanguage, kind: 'original' as const }], input.query);
   const capturedFrom = ctx.dedupeCounts?.capped_from ?? hits.length;
 
   const outcome = await runStage(
@@ -219,13 +235,13 @@ async function runRerankStage(ctx: RankStagesInput): Promise<RerankStageResult> 
     async (stageSignal) => {
       if (hits.length === 0) return { scores: [] as RerankScore[], usage: undefined };
       const response = await reranker.rerank(
-        input.query,
+        rerankQuery,
         texts.map((entry) => entry.text),
         {
           signal: stageSignal,
           timeoutMs,
           wantSpans,
-          ...(reranker.id === 'local_bm25' ? { queryByDoc: queryByDocument(hits, variants, input.query) } : {}),
+          ...(reranker.id === 'local_bm25' ? { queryByDoc } : {}),
         },
       );
       if (response.scores.length !== hits.length) {
@@ -290,18 +306,39 @@ export async function runRankStages(ctx: RankStagesInput): Promise<RankStagesOut
   const reranked = await runRerankStage(ctx);
   const rankedHits = reranked.hits;
   const preRefusalHits = rankedHits;
+  const standalone = Boolean(ctx.queryPlan);
+  const refusalQuery = ctx.queryPlan ? ctx.queryPlan.standalone : ctx.input.query;
+  const variants = ctx.variants ?? [];
+  // D-07: only when decomposition produced sub-questions; otherwise the stage output is exactly Phase 4's.
+  const coverageActive =
+    ctx.coverage !== undefined &&
+    (ctx.queryPlan?.sub_questions?.length ?? 0) > 0 &&
+    variants.some((variant) => variant.subQuestionIndex !== undefined);
+
+  const decide = () => {
+    const refusal = applyRefusal(config, profile, embedding, queryLanguage, rankedHits, reranked.gate, refusalQuery, standalone);
+    if (refusal.record.decision === 'refuse') return { ...refusal, survivors: [] as FusedHit[], reserved: 0 };
+    if (!coverageActive || !ctx.coverage) return { ...refusal, survivors: rankedHits, reserved: 0 };
+    const topK = Math.max(0, ctx.coverage.topK);
+    const covered = reserveSubQuestionCoverage(rankedHits.slice(0, topK), rankedHits.slice(topK), variants, {
+      enabled: ctx.coverage.enabled,
+      max: 4,
+    });
+    return { ...refusal, survivors: [...covered.topK, ...covered.pool], reserved: covered.reserved };
+  };
 
   const refused = await runStage(
     spec('refusal', 'skip'),
     signal,
-    async () => applyRefusal(config, profile, embedding, queryLanguage, rankedHits, reranked.gate, ctx.input.query),
+    async () => decide(),
     collector,
     {
       candidatesIn: rankedHits.length,
-      counts: ({ record }): Record<string, number> => {
-        if (record.decision === 'refuse') return { refused: 1 };
-        if (record.decision === 'answer') return { answered: 1 };
-        return { not_applied: 1 };
+      counts: ({ record, reserved }): Record<string, number> => {
+        const extra: Record<string, number> = coverageActive ? { subq_reserved: reserved } : {};
+        if (record.decision === 'refuse') return { refused: 1, ...extra };
+        if (record.decision === 'answer') return { answered: 1, ...extra };
+        return { not_applied: 1, ...extra };
       },
       detail: ({ record, gate }) => {
         const base = record.basis !== 'none' ? record.basis : record.reason;
@@ -310,10 +347,6 @@ export async function runRankStages(ctx: RankStagesInput): Promise<RankStagesOut
     },
   );
 
-  const { record: decision, gate } = refused.skipped
-    ? applyRefusal(config, profile, embedding, queryLanguage, rankedHits, reranked.gate, ctx.input.query)
-    : refused.value;
-
-  const survivors = decision.decision === 'refuse' ? [] : rankedHits;
+  const { record: decision, gate, survivors } = refused.skipped ? decide() : refused.value;
   return { decision, gate, survivors, preRefusalHits, rerank: reranked.output };
 }

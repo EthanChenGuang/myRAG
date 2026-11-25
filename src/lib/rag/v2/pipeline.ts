@@ -188,6 +188,18 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
       stageOverrides: input.stageOverrides,
       variants: query.variants,
       dedupeCounts: search.dedupeCounts,
+      ...(query.queryLayer
+        ? {
+            queryPlan,
+            coverage: {
+              enabled: params.sub_question_coverage,
+              topK:
+                profile === 'voice'
+                  ? (validResultCount(input.options?.maxResults) ?? VOICE_DEFAULT_MATCH_COUNT)
+                  : params.final_top_k,
+            },
+          }
+        : {}),
     });
     refusal = rank.decision;
 
