@@ -144,6 +144,62 @@
       "title": "InvoiceFilter",
       "type": "object"
     },
+    "NativeReview": {
+      "additionalProperties": false,
+      "description": "Native-speaker review state of an item (D-45, XLG-02 delta); provenance is unchanged.",
+      "properties": {
+        "origin": {
+          "enum": [
+            "native",
+            "machine_translated",
+            "llm_drafted"
+          ],
+          "title": "Origin",
+          "type": "string"
+        },
+        "reviewed_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reviewed At"
+        },
+        "reviewer": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reviewer"
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "approved"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "origin",
+        "status"
+      ],
+      "title": "NativeReview",
+      "type": "object"
+    },
     "RetrievalFilters": {
       "additionalProperties": false,
       "properties": {
@@ -303,6 +359,35 @@
       },
       "title": "ScopeFilter",
       "type": "object"
+    },
+    "TableAnswer": {
+      "additionalProperties": false,
+      "description": "The one cell a table_split item asks for, plus same-unit values from other cells (D-45).",
+      "properties": {
+        "column": {
+          "minLength": 1,
+          "title": "Column",
+          "type": "string"
+        },
+        "distractor_values": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Distractor Values",
+          "type": "array"
+        },
+        "value": {
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "value",
+        "column"
+      ],
+      "title": "TableAnswer",
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -340,7 +425,8 @@
         "injection_evasive",
         "cache_paraphrase",
         "cache_near_miss",
-        "small_talk"
+        "small_talk",
+        "table_split"
       ],
       "title": "Category",
       "type": "string"
@@ -402,6 +488,9 @@
       "title": "Language",
       "type": "string"
     },
+    "native_review": {
+      "$ref": "#/$defs/NativeReview"
+    },
     "pair_of": {
       "anyOf": [
         {
@@ -457,6 +546,9 @@
       ],
       "title": "Split",
       "type": "string"
+    },
+    "table_answer": {
+      "$ref": "#/$defs/TableAnswer"
     },
     "tags": {
       "items": {

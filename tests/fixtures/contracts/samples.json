@@ -7272,6 +7272,46 @@
         "tags": []
       }
     },
+    "GoldenItem:table_split": {
+      "model": "GoldenItem",
+      "value": {
+        "answerable": true,
+        "attack": null,
+        "category": "table_split",
+        "conversation": [],
+        "evidence_language": null,
+        "expected_answer": "Column B lists 418 for row key K-17.",
+        "gold_evidence": [
+          {
+            "document": "synthetic-table.en.pdf",
+            "quote": "K-17 | 205 | 418",
+            "section": "Table 1"
+          }
+        ],
+        "id": "en-table-split-001",
+        "language": "en",
+        "native_review": {
+          "origin": "llm_drafted",
+          "reviewed_at": null,
+          "reviewer": null,
+          "status": "pending"
+        },
+        "pair_of": null,
+        "provenance": "synthetic_fixture",
+        "question": "Which value does the synthetic table list in column B for row key K-17?",
+        "retrieval_filters": null,
+        "review_status": "approved",
+        "split": "dev",
+        "table_answer": {
+          "column": "B",
+          "distractor_values": [
+            "205"
+          ],
+          "value": "418"
+        },
+        "tags": []
+      }
+    },
     "GroundednessResult:not_checked": {
       "model": "GroundednessResult",
       "value": {

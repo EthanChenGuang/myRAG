@@ -41,6 +41,8 @@ from rag_sidecar.contracts.golden import (
     GoldenItem,
     GoldenSplitManifest,
     GoldSpan,
+    NativeReview,
+    TableAnswer,
 )
 from rag_sidecar.contracts.ingest import (
     ChunkerSettings,
@@ -354,6 +356,8 @@ __all__ = [
     "GoldenItem",
     "GoldenSplitManifest",
     "GoldSpan",
+    "NativeReview",
+    "TableAnswer",
     "ConversationTurn",
     "GoldenFilter",
     "RagRunOptions",

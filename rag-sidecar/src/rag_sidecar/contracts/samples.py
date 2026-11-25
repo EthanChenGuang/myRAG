@@ -184,7 +184,7 @@ from rag_sidecar.contracts.eval_run import (
     TraceInjectionFlagged,
     TraceSecurityVersions,
 )
-from rag_sidecar.contracts.golden import AttackSpec
+from rag_sidecar.contracts.golden import AttackSpec, NativeReview, TableAnswer
 from rag_sidecar.contracts.query import (
     CondensedQuery,
     DateRange,
@@ -725,6 +725,23 @@ def _cross_lingual_item() -> GoldenItem:
         review_status="approved",
         provenance="synthetic_fixture",
         split="dev",
+    )
+
+
+def _table_split_item() -> GoldenItem:
+    return GoldenItem(
+        id="en-table-split-001",
+        question="Which value does the synthetic table list in column B for row key K-17?",
+        language="en",
+        category="table_split",
+        answerable=True,
+        expected_answer="Column B lists 418 for row key K-17.",
+        gold_evidence=[GoldSpan(document="synthetic-table.en.pdf", section="Table 1", quote="K-17 | 205 | 418")],
+        review_status="approved",
+        provenance="synthetic_fixture",
+        split="dev",
+        table_answer=TableAnswer(value="418", column="B", distractor_values=["205"]),
+        native_review=NativeReview(origin="llm_drafted", status="pending"),
     )
 
 
@@ -1822,6 +1839,10 @@ def build_samples() -> dict[str, dict[str, Any]]:
         "GoldenItem:cross_lingual": {
             "model": "GoldenItem",
             "value": _cross_lingual_item().model_dump(mode="json"),
+        },
+        "GoldenItem:table_split": {
+            "model": "GoldenItem",
+            "value": _table_split_item().model_dump(mode="json"),
         },
         "GoldenItem:cache_near_miss": {
             "model": "GoldenItem",
