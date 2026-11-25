@@ -492,3 +492,158 @@ test('does not discover an ANTHROPIC name embedded in a longer identifier', () =
     cleanup(root);
   }
 });
+
+const OPUS_JSON = '{"id":"anthropic/claude-opus-4.1","displayName":"Claude Opus 4.1"}';
+const OPUS_LITERAL = "{ id: 'anthropic/claude-opus-4.1', displayName: 'Claude Opus 4.1' },";
+const TEST_MODEL = 'anthropic/claude-test-9';
+
+function jsonEntry(id, anthropicId) {
+  const entry = { id, displayName: 'Test Model 9' };
+  if (anthropicId !== null) entry.anthropicId = anthropicId;
+  return JSON.stringify(entry);
+}
+
+function literalEntry(id, anthropicId) {
+  const mapped = anthropicId === null ? '' : `, anthropicId: '${anthropicId}'`;
+  return `{ id: '${id}', displayName: 'Test Model 9'${mapped} },`;
+}
+
+function replaceNth(text, needle, nth, replacement) {
+  let index = -1;
+  for (let i = 0; i <= nth; i += 1) {
+    index = text.indexOf(needle, index + 1);
+    assert.notEqual(index, -1, `anchor ${needle} occurrence ${nth} not found`);
+  }
+  return text.slice(0, index) + replacement + text.slice(index + needle.length);
+}
+
+/** plan: location -> anthropicId (string), null (entry without anthropicId) or undefined (no entry); config-ui takes an array of three. */
+function injectModel(root, id, plan) {
+  const edit = (relative, fn) => {
+    const file = path.join(root, relative);
+    fs.writeFileSync(file, fn(fs.readFileSync(file, 'utf8')));
+  };
+  for (const [location, relative] of [['init-env', 'scripts/init-env.js'], ['config-server', 'scripts/config-server.js']]) {
+    if (plan[location] === undefined) continue;
+    edit(relative, (text) => replaceNth(text, OPUS_JSON, 0, `${OPUS_JSON},${jsonEntry(id, plan[location])}`));
+  }
+  if (plan['env-ts'] !== undefined) {
+    edit('src/lib/env.ts', (text) => replaceNth(text, OPUS_LITERAL, 0, `${OPUS_LITERAL} ${literalEntry(id, plan['env-ts'])}`));
+  }
+  const ui = plan['config-ui'] ?? [];
+  edit('scripts/config-ui/index.html', (text) => {
+    let out = text;
+    for (let nth = 2; nth >= 0; nth -= 1) {
+      if (ui[nth] === undefined) continue;
+      out = replaceNth(out, OPUS_LITERAL, nth, `${OPUS_LITERAL} ${literalEntry(id, ui[nth])}`);
+    }
+    return out;
+  });
+}
+
+const everywhere = (anthropicId) => ({
+  'init-env': anthropicId,
+  'config-server': anthropicId,
+  'env-ts': anthropicId,
+  'config-ui': [anthropicId, anthropicId, anthropicId],
+});
+
+test('accepts a model mapped to the same anthropicId in every location', () => {
+  const root = copyRealTree();
+  try {
+    injectModel(root, TEST_MODEL, everywhere('claude-test-9'));
+    const { code, out } = run(root);
+    assert.equal(code, 0, out);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('fails and names both locations when an anthropicId differs between env.ts and init-env', () => {
+  const root = copyRealTree();
+  try {
+    injectModel(root, TEST_MODEL, { ...everywhere('claude-sonnet-5-5'), 'init-env': 'claude-sonnet-5' });
+    const { code, out } = run(root);
+    assert.equal(code, 1, out);
+    assert.match(out, /anthropic\/claude-test-9 \[init-env\] .*anthropicId/);
+    assert.match(out, /env-ts=claude-sonnet-5-5/);
+    assert.match(out, /init-env=claude-sonnet-5\b/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('fails for config-ui when a mapped model is missing from one of the three fallback arrays', () => {
+  const root = copyRealTree();
+  try {
+    const plan = everywhere('claude-test-9');
+    plan['config-ui'] = ['claude-test-9', undefined, 'claude-test-9'];
+    injectModel(root, TEST_MODEL, plan);
+    const { code, out } = run(root);
+    assert.equal(code, 1, out);
+    assert.match(out, /anthropic\/claude-test-9 \[config-ui\] .*fallback array 2 of 3/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('fails when a location lists the mapped model without an anthropicId', () => {
+  const root = copyRealTree();
+  try {
+    injectModel(root, TEST_MODEL, { ...everywhere('claude-test-9'), 'config-server': null });
+    const { code, out } = run(root);
+    assert.equal(code, 1, out);
+    assert.match(out, /anthropic\/claude-test-9 \[config-server\] .*without anthropicId/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('fails when an anthropicId does not look like an Anthropic model id', () => {
+  const root = copyRealTree();
+  try {
+    injectModel(root, TEST_MODEL, everywhere('gpt-4'));
+    const { code, out } = run(root);
+    assert.equal(code, 1, out);
+    assert.match(out, /anthropic\/claude-test-9 \[env-ts\] .*anthropicId "gpt-4" does not match/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('fails when a model outside anthropic/ carries an anthropicId', () => {
+  const root = copyRealTree();
+  try {
+    injectModel(root, 'openai/gpt-test', everywhere('claude-test-9'));
+    const { code, out } = run(root);
+    assert.equal(code, 1, out);
+    assert.match(out, /openai\/gpt-test \[env-ts\] .*only anthropic\/ models/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('compares the .env.local model list only when .env.local exists', () => {
+  const root = copyRealTree();
+  try {
+    injectModel(root, TEST_MODEL, everywhere('claude-test-9'));
+    const mapped = `[{"id":"anthropic/claude-sonnet-4.5","displayName":"Claude Sonnet 4.5","isDefault":true},${jsonEntry(TEST_MODEL, 'claude-test-9')}]`;
+    write(root, '.env.local', `NEXT_PUBLIC_OPENROUTER_MODELS=${mapped}\n`);
+    let { out } = run(root);
+    assert.doesNotMatch(out, /claude-test-9 \[env-local\]/);
+
+    write(root, '.env.local', `NEXT_PUBLIC_OPENROUTER_MODELS='${mapped.replace('claude-test-9"}', 'claude-test-8"}')}'\n`);
+    ({ out } = run(root));
+    assert.match(out, /anthropic\/claude-test-9 \[env-local\] .*env-local=claude-test-8/);
+
+    write(root, '.env.local', 'NEXT_PUBLIC_OPENROUTER_MODELS=[{"id":"anthropic/claude-sonnet-4.5","displayName":"Claude Sonnet 4.5"}]\n');
+    ({ out } = run(root));
+    assert.match(out, /anthropic\/claude-test-9 \[env-local\] .*missing/);
+
+    write(root, '.env.local', 'RAG_EVAL_ENDPOINT_ENABLED=false\n');
+    ({ out } = run(root));
+    assert.doesNotMatch(out, /claude-test-9 \[env-local\]/);
+  } finally {
+    cleanup(root);
+  }
+});
