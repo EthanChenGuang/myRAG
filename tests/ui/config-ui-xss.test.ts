@@ -92,7 +92,8 @@ describe('Config UI index.html renders untrusted data as text (XSS)', () => {
     const context = makeContext(doc, { selectedGrid, selectedSection, FileReader: FakeReader, Array });
     vm.runInContext(`${functionSource(html, 'showSelectedImages')}\nglobalThis.__run = showSelectedImages;`, context);
     (context.__run as (files: unknown[]) => void)([{ name: XSS_PAYLOAD }]);
-    expectNoInjection(doc);
+    expectNoInjection(doc, false);
+    expect(selectedGrid.querySelector('span')!.getAttribute('title')).toBe(XSS_PAYLOAD);
     const previews = selectedGrid.querySelectorAll('img');
     expect(previews).toHaveLength(1);
     expect(previews[0]!.getAttribute('alt')).toBe(XSS_PAYLOAD);
