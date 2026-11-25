@@ -489,6 +489,12 @@ RAG_PDF_IMAGE_CHUNKS=false
 RAG_INJECTION_SCAN=off
 # Embedding profile registry: off | on (off keeps the single configured embedding model)
 RAG_EMBEDDING_PROFILES=off
+# Domain embedding leg for document types with an active binding: off | on (needs RAG_EMBEDDING_PROFILES=on)
+RAG_DOMAIN_EMBEDDINGS=off
+# Maximum domain embedding legs per query (0..5; 0 keeps bindings without extra legs)
+RAG_DOMAIN_EMBEDDING_MAX_LEGS=2
+# Timeout for one domain embedding leg in milliseconds (100..5000)
+RAG_DOMAIN_EMBEDDING_TIMEOUT_MS=800
 # Fallback host when the Qwen embedding provider is unavailable: openrouter | none
 RAG_QWEN_EMBED_FALLBACK=openrouter
 

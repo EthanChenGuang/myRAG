@@ -343,6 +343,21 @@
       "knownGaps": []
     },
     {
+      "name": "RAG_DOMAIN_EMBEDDINGS",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_DOMAIN_EMBEDDING_MAX_LEGS",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_DOMAIN_EMBEDDING_TIMEOUT_MS",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_ENABLE_ADJACENT_CHUNKS",
       "status": "legacy",
       "knownGaps": [
