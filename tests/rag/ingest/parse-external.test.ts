@@ -117,7 +117,14 @@ function fakeDb(answers: Record<string, unknown>): { client: RpcClient; calls: A
   return { client, calls };
 }
 
-async function seedQueuedUpload(scopePath: string, file: Uint8Array, filename: string, mimeType: string, originalObject = 'original.md') {
+async function seedQueuedUpload(
+  scopePath: string,
+  file: Uint8Array,
+  filename: string,
+  mimeType: string,
+  originalObject = 'original.md',
+  kind: 'file' | 'text' = 'file',
+) {
   const store = installFakeObjectStore();
   const queued = encodeQueuedInput({
     v: 1,
@@ -125,7 +132,7 @@ async function seedQueuedUpload(scopePath: string, file: Uint8Array, filename: s
     sourceKey: 'notes.md',
     filename,
     mimeType,
-    kind: 'file',
+    kind,
     state: {},
   });
   await store.put(`${scopePath}${QUEUED_INPUT_ARTIFACT}`, queued, { contentType: 'application/json' });
@@ -297,6 +304,44 @@ describe('parse-external native mode', () => {
     );
     expect(result.body).toMatchObject({ status: 'done', pages: [{ page: 1, text: 'A chart with blue bars.' }] });
     expect(captionCalls).toHaveLength(1);
+  });
+
+  test('a text upload named like an image is its text, as in the Phase 3 chain, and is not captioned', async () => {
+    const captionCalls: number[] = [];
+    setCaptionerForTests(async () => {
+      captionCalls.push(1);
+      return 'A caption of something else.';
+    });
+    const text = '# Floor plan\n\nAisle A holding thermal probes and spare cables.';
+    installHarness(
+      {
+        rag_get_ingest_document: [
+          {
+            status: 'processing',
+            version: 1,
+            processing_status: 'parse',
+            processing_state: {},
+            filename: 'floorplan.png',
+            doc_type: 'general',
+            parser_used: null,
+            created_at: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      },
+      {
+        filename: 'floorplan.png',
+        mime_type: 'text/markdown',
+        original_ref: { bucket: 'rag-originals', path: `s:default/${LINEAGE}/1/original.png` },
+      },
+    );
+    await seedQueuedUpload(`s:default/${LINEAGE}/1/`, new TextEncoder().encode(text), 'floorplan.png', 'text/markdown', 'original.png', 'text');
+    const result = await handleParseExternal(
+      JOB_ID,
+      { worker_id: WORKER, attempt_no: 1, mode: 'native', continuation: null, cursor: null, pages: null, subpdf_ref: null, options_hash: OPTIONS_HASH },
+      { signal: new AbortController().signal },
+    );
+    expect(result.body).toMatchObject({ status: 'done', pages: [{ page: 1, text }] });
+    expect(captionCalls).toHaveLength(0);
   });
 
   test('docx and html return failed unsupported_mode', async () => {
