@@ -238,6 +238,8 @@ def check_pr(errors: list[str]) -> None:
             "scripts/tests/check-rag-boundary.node-test.mjs",
             "scripts/ci/check-language-literals.mjs",
             "scripts/tests/check-language-literals.node-test.mjs",
+            "scripts/ci/check-settings-classification.mjs",
+            "scripts/tests/check-settings-classification.node-test.mjs",
         ):
             if needle not in body:
                 errors.append(f"pr-smoke: job ts is missing '{needle}'")
