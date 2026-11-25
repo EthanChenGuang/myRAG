@@ -16,6 +16,7 @@ import { buildParserChain, parseWithFallback, type ChainOutcome } from '../parse
 import type { ParseArtifact, PendingJob } from '../parsers/shared';
 import { profileFor } from '../profiles/load';
 import { refineDocTypeAfterParse } from '../profiles/resolve-doc-type';
+import { effectiveIngestSettings, ingestLanguageSettings } from '../routing/effective-settings';
 import { saveContextState } from '../state-store';
 import {
   IngestStageError,
@@ -185,6 +186,7 @@ async function runChain(ctx: StageContext, bytes: Uint8Array, resume: PendingJob
       ctx.state.parseJob = { ...job };
       await saveContextState(ctx, 'processing');
     },
+    settings: effectiveIngestSettings({ ingestConfig: ctx.config, profile: identity.profile, languageSettings: ingestLanguageSettings(ctx.config) }),
   });
   for (const fallback of outcome.fallbacks) warn(ctx, `parser_fallback:${fallback.parser}:${fallback.reason}`);
   return outcome;

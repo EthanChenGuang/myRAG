@@ -163,6 +163,23 @@
           "title": "Ocr Languages",
           "type": "array"
         },
+        "ocr_primary_language": {
+          "anyOf": [
+            {
+              "enum": [
+                "zh",
+                "en",
+                "it"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Ocr Primary Language"
+        },
         "premium_max_pages_per_doc": {
           "minimum": 0,
           "title": "Premium Max Pages Per Doc",

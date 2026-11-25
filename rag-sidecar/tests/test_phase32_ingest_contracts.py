@@ -307,6 +307,7 @@ SNAPSHOT_DEFAULTS = {
     "hidden_text_check": "off",
     "approval": None,
     "hold_publish": False,
+    "ocr_primary_language": None,
 }
 REQUEST_DEFAULTS = {
     "language_aware": False,
@@ -358,6 +359,9 @@ def test_new_snapshot_and_request_fields_are_validated():
     _rejects("JobSettingsSnapshot", {**snapshot, "languages": ["xx"]})
     _rejects("JobSettingsSnapshot", {**snapshot, "languages": ["en", "en"]})
     _rejects("JobSettingsSnapshot", {**snapshot, "primary_language": "en"})
+    _rejects("JobSettingsSnapshot", {**snapshot, "ocr_languages": ["zh", "it"], "ocr_primary_language": "en"})
+    _rejects("JobSettingsSnapshot", {**snapshot, "ocr_primary_language": "xx"})
+    _model("JobSettingsSnapshot").model_validate({**snapshot, "ocr_languages": ["zh", "it"], "ocr_primary_language": "it"})
     _model("JobSettingsSnapshot").model_validate(
         {
             **snapshot,

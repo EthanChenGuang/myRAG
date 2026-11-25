@@ -190,7 +190,14 @@ export function createLlamaParseParser(config: LlamaParseConfig): DocumentParser
     const form = new FormData();
     const extension = extensionOf(request.filename);
     form.set('file', new Blob([request.bytes as unknown as BlobPart]), `document.${extension === '' ? 'bin' : extension}`);
-    form.set('configuration', JSON.stringify({ tier: config.tier, version: 'latest' }));
+    const languages = request.settings?.llamaparseLanguages ?? [];
+    // research F-3: OCR languages only when they are configured, primary first; unset, the configuration is today's.
+    const configuration = {
+      tier: config.tier,
+      version: 'latest',
+      ...(languages.length > 0 ? { processing_options: { ocr_parameters: { languages } } } : {}),
+    };
+    form.set('configuration', JSON.stringify(configuration));
     const response = await fetchParser('llamaparse', `${base}${UPLOAD_PATH}`, { method: 'POST', headers: headers(), body: form }, request.signal, timeoutFor(request));
     if (!response.ok) {
       await response.body?.cancel().catch(() => undefined);

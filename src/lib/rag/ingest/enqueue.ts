@@ -9,6 +9,7 @@ import { ORIGINALS_BUCKET } from './object-store';
 import { QUEUED_INPUT_ARTIFACT, encodeQueuedInput, type QueuedInputRecord } from './queued-context';
 import { queueConfigFromProcessEnv, type QueueConfig } from './queue-config';
 import { loadRoutingConfig } from './routing/config';
+import { ingestLanguageSettings } from './routing/effective-settings';
 import { buildJobSettings } from './routing/settings-snapshot';
 import { effectiveTierBounds } from './routing/tier-bounds';
 import { runIngestStages } from './runner';
@@ -136,6 +137,9 @@ export async function enqueueIngest(input: IngestInput, options: EnqueueIngestOp
       ...(isBackfill ? { embedProfileProvider: await backfillEmbedProvider() } : {}),
       approval: ctx.state.approval ?? null,
       ...(isBackfill && options.holdPublish === true ? { holdPublish: true } : {}),
+      // Frozen at enqueue: a later change of the variables reaches neither this job's requests nor its parse-cache key (D-17).
+      ingestConfig: ctx.config,
+      languageSettings: ingestLanguageSettings(ctx.config),
     });
     const base = {
       source: input.source,
