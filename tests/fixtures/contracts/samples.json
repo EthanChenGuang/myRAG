@@ -27,6 +27,72 @@
       "wait_ms": 0,
       "worker_id": "worker-1"
     },
+    "AnswerFeedbackRequest": {
+      "chatId": "00000000-0000-4000-8000-0000000000b1",
+      "comment": "It left out carry-over days.",
+      "reasons": [
+        "incomplete",
+        "bad_citation"
+      ],
+      "vote": "not_helpful"
+    },
+    "AnswerRecord": {
+      "answerId": "00000000-0000-4000-8000-0000000000a1",
+      "answerLanguage": "en",
+      "chatId": "00000000-0000-4000-8000-0000000000b1",
+      "citationStrategy": "chunk-alias",
+      "citations": [
+        {
+          "alias": "S1",
+          "chunkIds": [
+            "00000000-0000-4000-8000-0000000000c1",
+            "00000000-0000-4000-8000-0000000000c2"
+          ],
+          "documentId": "00000000-0000-4000-8000-0000000000d1",
+          "documentName": "leave-policy.pdf",
+          "documentVersion": 2,
+          "n": 1,
+          "page": 4,
+          "quote": "Employees receive twenty days of paid leave per calendar year.",
+          "quoteHash": "47b56646d72eb06958f6cd1642b43e163abfd20e36d888edfec3a6747594b2af",
+          "sectionPath": [
+            "Leave",
+            "Annual leave"
+          ],
+          "strategy": "chunk-alias"
+        }
+      ],
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "documents": {
+        "00000000-0000-4000-8000-0000000000d1": "current"
+      },
+      "feedback": {
+        "comment": "It left out carry-over days.",
+        "reasons": [
+          "incomplete"
+        ],
+        "updatedAt": "2026-01-01T00:00:10.000Z",
+        "vote": "not_helpful"
+      },
+      "feedbackEnabled": true,
+      "groundedness": {
+        "checkedAt": "2026-01-01T00:00:03.000Z",
+        "label": "verified",
+        "latencyMs": 640,
+        "reason": null,
+        "score": 0.82,
+        "scorer": "hhem_2_1_open",
+        "status": "scored",
+        "threshold": 0.5,
+        "thresholdSource": "default",
+        "truncated": false
+      },
+      "invalidCitations": 0,
+      "modelId": "generator/model-b",
+      "ragMode": "strict",
+      "traceId": "0123456789abcdef0123456789abcdef",
+      "updatedAt": "2026-01-01T00:00:10.000Z"
+    },
     "BackfillDryRunReport": {
       "budget_usd": 10.0,
       "class_shares": {
@@ -233,6 +299,25 @@
         "source": "defaults"
       },
       "schema_version": 1
+    },
+    "CitationRecord": {
+      "alias": "S1",
+      "chunkIds": [
+        "00000000-0000-4000-8000-0000000000c1",
+        "00000000-0000-4000-8000-0000000000c2"
+      ],
+      "documentId": "00000000-0000-4000-8000-0000000000d1",
+      "documentName": "leave-policy.pdf",
+      "documentVersion": 2,
+      "n": 1,
+      "page": 4,
+      "quote": "Employees receive twenty days of paid leave per calendar year.",
+      "quoteHash": "47b56646d72eb06958f6cd1642b43e163abfd20e36d888edfec3a6747594b2af",
+      "sectionPath": [
+        "Leave",
+        "Annual leave"
+      ],
+      "strategy": "chunk-alias"
     },
     "ConversationTurn": {
       "content": "Tell me about leave.",
@@ -1232,6 +1317,55 @@
         "en-no-answer-001": "test"
       },
       "rule": "sha256-first8hex-mod100-lt70-dev",
+      "schema_version": 1
+    },
+    "GroundednessRequest": {
+      "allow_vectara": false,
+      "hypothesis": "Employees get twenty days of paid leave each year.",
+      "language": "en",
+      "premise_texts": [
+        "Employees receive twenty days of paid leave per calendar year."
+      ],
+      "request_id": "00000000-0000-4000-8000-0000000000a1"
+    },
+    "GroundednessResult": {
+      "latency_ms": 640,
+      "reason": null,
+      "score": 0.82,
+      "scorer": "hhem_2_1_open",
+      "status": "scored",
+      "truncated": false
+    },
+    "GroundednessThresholds": {
+      "cells": [
+        {
+          "dev": null,
+          "fitted_at": null,
+          "holdout": null,
+          "language": "en",
+          "scorer": "hhem_2_3_vectara",
+          "source": "default",
+          "threshold": 0.5
+        },
+        {
+          "dev": null,
+          "fitted_at": null,
+          "holdout": null,
+          "language": "zh-Hans",
+          "scorer": "hhem_2_3_vectara",
+          "source": "default",
+          "threshold": 0.5
+        },
+        {
+          "dev": null,
+          "fitted_at": null,
+          "holdout": null,
+          "language": "en",
+          "scorer": "hhem_2_1_open",
+          "source": "default",
+          "threshold": 0.5
+        }
+      ],
       "schema_version": 1
     },
     "IngestionJob": {
@@ -2566,6 +2700,43 @@
     }
   },
   "variants": {
+    "AnswerFeedbackRequest:vote_only": {
+      "model": "AnswerFeedbackRequest",
+      "value": {
+        "vote": "helpful"
+      }
+    },
+    "AnswerRecord:pending_unlinked": {
+      "model": "AnswerRecord",
+      "value": {
+        "answerId": "00000000-0000-4000-8000-0000000000a1",
+        "answerLanguage": "en",
+        "chatId": null,
+        "citationStrategy": "chunk-alias",
+        "citations": [],
+        "createdAt": "2026-01-01T00:00:00.000Z",
+        "documents": {},
+        "feedback": null,
+        "feedbackEnabled": false,
+        "groundedness": {
+          "checkedAt": null,
+          "label": null,
+          "latencyMs": null,
+          "reason": null,
+          "score": null,
+          "scorer": null,
+          "status": "pending",
+          "threshold": null,
+          "thresholdSource": null,
+          "truncated": false
+        },
+        "invalidCitations": 0,
+        "modelId": "generator/model-b",
+        "ragMode": "strict",
+        "traceId": "0123456789abcdef0123456789abcdef",
+        "updatedAt": "2026-01-01T00:00:10.000Z"
+      }
+    },
     "GoldenItem:cross_lingual": {
       "model": "GoldenItem",
       "value": {
@@ -2608,6 +2779,17 @@
         "review_status": "approved",
         "split": "test",
         "tags": []
+      }
+    },
+    "GroundednessResult:not_checked": {
+      "model": "GroundednessResult",
+      "value": {
+        "latency_ms": 0,
+        "reason": "unsupported_language",
+        "score": null,
+        "scorer": "none",
+        "status": "not_checked",
+        "truncated": false
       }
     },
     "InvoiceFields:nothing_extracted": {

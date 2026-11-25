@@ -354,3 +354,17 @@ def test_answer_record_rejects(overrides):
 def test_answer_feedback_rejects_unknown_vote():
     with pytest.raises(ValidationError):
         AnswerFeedback.model_validate({"vote": "meh", "reasons": [], "updatedAt": "2026-11-25T00:00:00.000Z"})
+
+
+def test_committed_thresholds_file_holds_the_vendor_default_for_every_scorable_cell():
+    import json
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[2] / "eval" / "config" / "groundedness-thresholds.json"
+    thresholds = GroundednessThresholds.model_validate(json.loads(path.read_text(encoding="utf-8")))
+    assert {(cell.scorer, cell.language) for cell in thresholds.cells} == {
+        ("hhem_2_3_vectara", "en"),
+        ("hhem_2_3_vectara", "zh-Hans"),
+        ("hhem_2_1_open", "en"),
+    }
+    assert all(cell.threshold == 0.5 and cell.source == "default" and cell.fitted_at is None for cell in thresholds.cells)

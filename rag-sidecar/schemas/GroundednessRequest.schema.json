@@ -1,0 +1,42 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "allow_vectara": {
+      "title": "Allow Vectara",
+      "type": "boolean"
+    },
+    "hypothesis": {
+      "minLength": 1,
+      "title": "Hypothesis",
+      "type": "string"
+    },
+    "language": {
+      "minLength": 1,
+      "title": "Language",
+      "type": "string"
+    },
+    "premise_texts": {
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Premise Texts",
+      "type": "array"
+    },
+    "request_id": {
+      "minLength": 1,
+      "title": "Request Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "request_id",
+    "language",
+    "premise_texts",
+    "hypothesis",
+    "allow_vectara"
+  ],
+  "title": "GroundednessRequest",
+  "type": "object"
+}

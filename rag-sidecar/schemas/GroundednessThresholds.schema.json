@@ -1,0 +1,100 @@
+{
+  "$defs": {
+    "GroundednessThresholdCell": {
+      "additionalProperties": false,
+      "properties": {
+        "dev": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dev"
+        },
+        "fitted_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fitted At"
+        },
+        "holdout": {
+          "anyOf": [
+            {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Holdout"
+        },
+        "language": {
+          "minLength": 1,
+          "title": "Language",
+          "type": "string"
+        },
+        "scorer": {
+          "enum": [
+            "hhem_2_3_vectara",
+            "hhem_2_1_open"
+          ],
+          "title": "Scorer",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "default",
+            "calibrated"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "threshold": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Threshold",
+          "type": "number"
+        }
+      },
+      "required": [
+        "scorer",
+        "language",
+        "threshold",
+        "source"
+      ],
+      "title": "GroundednessThresholdCell",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "cells": {
+      "items": {
+        "$ref": "#/$defs/GroundednessThresholdCell"
+      },
+      "title": "Cells",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "title": "GroundednessThresholds",
+  "type": "object"
+}

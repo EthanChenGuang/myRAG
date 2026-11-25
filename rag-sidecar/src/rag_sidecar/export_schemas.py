@@ -7,6 +7,12 @@ from typing import Literal
 from pydantic import BaseModel
 
 from rag_sidecar.contracts import (
+    AnswerFeedbackRequest,
+    AnswerRecord,
+    CitationRecord,
+    GroundednessRequest,
+    GroundednessResult,
+    GroundednessThresholds,
     Baseline,
     ConversationTurn,
     DocTypeDetection,
@@ -129,6 +135,12 @@ CONTRACTS: list[tuple[type[BaseModel], Mode]] = [
     (ParserExpected, "validation"),
     (ParserEvalReport, "serialization"),
     (ParseGateReport, "serialization"),
+    (CitationRecord, "serialization"),
+    (GroundednessRequest, "validation"),
+    (GroundednessResult, "serialization"),
+    (GroundednessThresholds, "serialization"),
+    (AnswerFeedbackRequest, "validation"),
+    (AnswerRecord, "serialization"),
 ]
 
 
