@@ -1,0 +1,19 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "standalone": {
+      "title": "Standalone",
+      "type": "string"
+    },
+    "unchanged": {
+      "title": "Unchanged",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "standalone",
+    "unchanged"
+  ],
+  "title": "CondensedQuery",
+  "type": "object"
+}
