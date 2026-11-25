@@ -485,10 +485,10 @@ Plans:
   1. With `RAG_DOC_ACCESS_GROUPS` off, retrieval, cache and logs match the baseline and every document is in group `all`; with it on, a document restricted to one access group never appears in the retrieval candidates, context, citations, cache entries or logs of a member outside that group, on every leg (dense, lexical, exact-id, parents, translations, table rows) and on pgvector, and the filter runs before ranking.
   2. Groups come only from the verified session or signed scope token; a request body naming another group changes nothing; embedded chat sees only `all` documents unless its configuration names a group; voice uses the token's identity.
   3. The semantic cache never serves an answer across different group sets; the post-generation citation check drops a citation to a chunk the caller may not see and records a security event.
-  4. A Google Drive, Notion or Dropbox document shared with a group is mapped to the matching access group on sync and re-mapped after a sharing change; an unmappable permission leaves it visible only to the uploader and admins.
+  4. A Google Drive, Notion or Dropbox document shared with a group is mapped to the matching access group on sync and re-mapped after a sharing change; an unmappable permission leaves it visible only to the uploader and admins. In multi-tenant mode connector documents stay in the owner's personal workspace, so the mapping changes visibility only in single-tenant mode (4.3 A-10).
   5. The same-tenant cross-group canaries (EVAL-21) pass in CI as a release gate, including after group changes and re-uploads; no other slice drops beyond the noise band.
 **Live verification**: Sync a real shared Drive folder with restricted files and check the mapped groups; run the canaries against a real Supabase project in both deployment modes.
-**Plans**: TBD
+**Plans**: 38 plans in 13 waves (see `phases/04.3-document-access-groups/04.3-PLAN-INDEX.md`); migrations 0920–0931; human steps in 04.3-53 (live push of 0920–0931) and 04.3-54 (two-mode canaries, real Drive and Dropbox sync); pgvector and the seams (`scopeAccessFilter`, `document_chunks.access_groups`) are delivered here, the Weaviate/Qdrant filter by Phase 7 (07-38, 07-39)
 **UI hint**: yes
 
 ### Phase 5: Verified Citations & Groundedness
@@ -853,7 +853,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 3.1.1 → 3.2 → 3.2
 | 4.1. Hybrid Retrieval & Rerank On by Default (INSERTED) | 0/13 | Planned (plan-check PASS, revised 2026-11-25) | - |
 | 4.1.1. Domain Terminology Dictionary (INSERTED) | 0/18 | Planned (plan-check PASS, revised 2026-11-25) | - |
 | 4.2. Retrieval Tuning Additions (INSERTED) | 0/38 | Planned (plan-check PASS) | - |
-| 4.3. Document Access Groups (INSERTED) | 0/TBD | Not planned | - |
+| 4.3. Document Access Groups (INSERTED) | 0/38 | Planned (plan-check PASS) | - |
 | 5. Verified Citations & Groundedness | 18/26 | In Progress | - |
 | 5.1. Prompt Injection Defense (INSERTED) | 10/25 | In Progress | - |
 | 5.1.1. Feedback Loop & Real Domain Test Set (INSERTED) | 0/25 | Planned (plan-check PASS) | - |
