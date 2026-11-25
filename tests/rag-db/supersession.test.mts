@@ -371,6 +371,216 @@ for (const mode of MODES) {
   });
 }
 
+for (const mode of MODES) {
+  describe(`0806 supersession: pair, direction, dismiss, undo and stale rules (${mode})`, () => {
+    let ctx: Ctx;
+    const it = (name: string, run: () => Promise<void>) => test(`${name} [${mode}]`, run);
+
+    before(async () => {
+      ctx = await createCtx(mode);
+    });
+
+    after(async () => {
+      await ctx?.db.close();
+    });
+
+    it('two documents with the same content hash are a duplicate, not a candidate', async () => {
+      const p = await pair(ctx, 'dup');
+      await rows(ctx.db, "UPDATE documents SET content_hash = 'same-content-hash' WHERE id IN ($1, $2)", [p.older, p.newer]);
+      assert.match(await failure(ctx.db, RAISE_SQL, [ctx.key, p.newer, p.older, '{}', 'document_newer', 'detected']), /duplicate_not_candidate/);
+      const stored = await rows(ctx.db, 'SELECT count(*)::int AS n FROM rag_supersession_candidates WHERE document_id IN ($1, $2)', [p.older, p.newer]);
+      assert.equal(stored[0]?.n, 0);
+    });
+
+    it('raising the same pair twice, in either order, returns the existing pending candidate', async () => {
+      const p = await pair(ctx, 'twice');
+      const first = await raise(ctx, p.newer, p.older);
+      const again = await raise(ctx, p.newer, p.older);
+      const reversed = await raise(ctx, p.older, p.newer, null, 'uploader');
+      assert.equal(first.outcome, 'raised');
+      assert.equal(again.outcome, 'exists');
+      assert.equal(reversed.outcome, 'exists');
+      assert.equal(again.candidate_id, first.candidate_id);
+      assert.equal(reversed.candidate_id, first.candidate_id);
+      const stored = await rows(
+        ctx.db,
+        "SELECT count(*)::int AS n FROM rag_supersession_candidates WHERE status = 'pending' AND document_id IN ($1, $2)",
+        [p.older, p.newer],
+      );
+      assert.equal(stored[0]?.n, 1);
+    });
+
+    it('a candidate without a direction is refused with direction_required until the caller names one of the two documents as older', async () => {
+      const p = await pair(ctx, 'nodir');
+      const other = await currentDocument(ctx, 'nodir-other', next('tokother'));
+      const raised = await raise(ctx, p.newer, p.older, null);
+      assert.match(await failure(ctx.db, CONFIRM_SQL, [raised.candidate_id, ctx.admin]), /direction_required/);
+      assert.match(await failure(ctx.db, CONFIRM_OLDER_SQL, [raised.candidate_id, ctx.admin, other.id]), /direction_required/);
+      assert.equal((await candidate(ctx, String(raised.candidate_id))).status, 'pending');
+      assert.equal((await docState(ctx, p.older)).is_current, true);
+      assert.equal((await docState(ctx, other.id)).is_current, true);
+      const confirmed = (await rows(ctx.db, CONFIRM_OLDER_SQL, [raised.candidate_id, ctx.admin, p.older]))[0] as Row;
+      assert.equal(confirmed.older_document_id, p.older);
+      assert.equal((await docState(ctx, p.older)).is_current, false);
+      assert.equal((await candidate(ctx, String(raised.candidate_id))).older_document_id, p.older);
+    });
+
+    it('dismiss marks the candidate dismissed and changes no document', async () => {
+      const p = await pair(ctx, 'dismiss');
+      const raised = await raise(ctx, p.newer, p.older);
+      for (const actor of [ctx.member, ...(ctx.otherAdmin ? [ctx.otherAdmin] : [])]) {
+        assert.match(await failure(ctx.db, DISMISS_SQL, [raised.candidate_id, actor]), /not_found/);
+      }
+      const dismissed = (await rows(ctx.db, DISMISS_SQL, [raised.candidate_id, ctx.admin]))[0] as Row;
+      assert.equal(dismissed.outcome, 'dismissed');
+      const row = await candidate(ctx, String(raised.candidate_id));
+      assert.equal(row.status, 'dismissed');
+      assert.equal(row.decided_by, ctx.admin);
+      for (const id of [p.older, p.newer]) {
+        const doc = await docState(ctx, id);
+        assert.equal(doc.is_current, true);
+        assert.equal(doc.superseded_by, null);
+      }
+      assert.deepEqual(await hybridDocuments(ctx, p.shared), sortIds(p.older, p.newer));
+      assert.equal((await links(ctx, String(raised.candidate_id))).length, 0);
+    });
+
+    it('a second decision on a decided candidate returns already_decided', async () => {
+      const p = await pair(ctx, 'decided');
+      const confirmedFirst = await raise(ctx, p.newer, p.older);
+      await rows(ctx.db, CONFIRM_SQL, [confirmedFirst.candidate_id, ctx.admin]);
+      assert.match(await failure(ctx.db, CONFIRM_SQL, [confirmedFirst.candidate_id, ctx.admin]), /already_decided/);
+      assert.match(await failure(ctx.db, DISMISS_SQL, [confirmedFirst.candidate_id, ctx.admin]), /already_decided/);
+      assert.equal((await auditRows(ctx, p.older)).length, 1, 'only the first decision is audited');
+
+      const q = await pair(ctx, 'decided2');
+      const dismissedFirst = await raise(ctx, q.newer, q.older);
+      await rows(ctx.db, DISMISS_SQL, [dismissedFirst.candidate_id, ctx.admin]);
+      assert.match(await failure(ctx.db, CONFIRM_SQL, [dismissedFirst.candidate_id, ctx.admin]), /already_decided/);
+      assert.match(await failure(ctx.db, DISMISS_SQL, [dismissedFirst.candidate_id, ctx.admin]), /already_decided/);
+      assert.equal((await docState(ctx, q.older)).is_current, true);
+    });
+
+    it('undo restores the older document and its chunks, clears superseded_by, deletes the link and marks the candidate pending', async () => {
+      const p = await pair(ctx, 'undo');
+      const raised = await raise(ctx, p.newer, p.older);
+      assert.match(await failure(ctx.db, UNDO_SQL, [raised.candidate_id, ctx.admin]), /not_confirmed/);
+      await rows(ctx.db, CONFIRM_SQL, [raised.candidate_id, ctx.admin]);
+      assert.deepEqual(await hybridDocuments(ctx, p.shared), [p.newer]);
+      for (const actor of [ctx.member, ...(ctx.otherAdmin ? [ctx.otherAdmin] : [])]) {
+        assert.match(await failure(ctx.db, UNDO_SQL, [raised.candidate_id, actor]), /not_found/);
+      }
+      const undone = (await rows(ctx.db, UNDO_SQL, [raised.candidate_id, ctx.admin]))[0] as Row;
+      assert.equal(undone.outcome, 'undone');
+      const older = await docState(ctx, p.older);
+      assert.equal(older.is_current, true);
+      assert.equal(older.status, 'ready');
+      assert.equal(older.superseded_by, null);
+      assert.ok((await chunkStates(ctx, p.older)).every((chunk) => chunk.is_current === true && chunk.status === 'ready'));
+      assert.equal((await links(ctx, String(raised.candidate_id))).length, 0);
+      const row = await candidate(ctx, String(raised.candidate_id));
+      assert.equal(row.status, 'pending');
+      assert.equal(row.decided_by, null);
+      assert.equal(row.older_document_id, null);
+      assert.deepEqual(await hybridDocuments(ctx, p.shared), sortIds(p.older, p.newer));
+      assert.deepEqual((await auditRows(ctx, p.older)).map((entry) => entry.action), ['confirm_supersession', 'undo_supersession']);
+      assert.match(await failure(ctx.db, UNDO_SQL, [raised.candidate_id, ctx.admin]), /not_confirmed/);
+    });
+
+    it('a candidate whose document was superseded or deleted in the meantime is stale and cannot be confirmed', async () => {
+      const p = await pair(ctx, 'stale');
+      const raised = await raise(ctx, p.newer, p.older);
+      const v2 = await begin(ctx, p.olderKey, next('stale-v2'));
+      await writeChunks(ctx, v2, [probe(next('tokv2'))]);
+      assert.equal(await publish(ctx, v2), 'published');
+      assert.match(await failure(ctx.db, CONFIRM_SQL, [raised.candidate_id, ctx.admin]), /stale_candidate/);
+      assert.equal((await candidate(ctx, String(raised.candidate_id))).status, 'pending');
+      assert.equal((await docState(ctx, p.newer)).is_current, true);
+      assert.equal((await docState(ctx, v2)).is_current, true);
+
+      const q = await pair(ctx, 'stale-deleted');
+      const deletedCandidate = await raise(ctx, q.newer, q.older);
+      await rows(ctx.db, "UPDATE documents SET status = 'deleted', is_current = false WHERE id = $1", [q.newer]);
+      assert.match(await failure(ctx.db, CONFIRM_SQL, [deletedCandidate.candidate_id, ctx.admin]), /stale_candidate/);
+      assert.equal((await docState(ctx, q.older)).is_current, true);
+      const dismissed = (await rows(ctx.db, DISMISS_SQL, [deletedCandidate.candidate_id, ctx.admin]))[0] as Row;
+      assert.equal(dismissed.outcome, 'dismissed', 'a stale candidate can still be dismissed');
+    });
+  });
+
+  describe(`0806 supersession: list (${mode})`, () => {
+    let ctx: Ctx;
+    const it = (name: string, run: () => Promise<void>) => test(`${name} [${mode}]`, run);
+
+    before(async () => {
+      ctx = await createCtx(mode);
+    });
+
+    after(async () => {
+      await ctx?.db.close();
+    });
+
+    it('lists pending candidates oldest first with both documents, then confirmed links with decision time and actor; stale candidates are flagged', async () => {
+      const a = await pair(ctx, 'lista');
+      const b = await pair(ctx, 'listb');
+      const c = await pair(ctx, 'listc');
+      await rows(ctx.db, "UPDATE documents SET doc_date = DATE '2024-01-02', effective_from = DATE '2024-02-01' WHERE id = $1", [a.older]);
+      const first = await raise(ctx, a.newer, a.older);
+      const second = await raise(ctx, b.newer, b.older, null);
+      const confirmedOne = await raise(ctx, c.newer, c.older);
+      await rows(ctx.db, CONFIRM_SQL, [confirmedOne.candidate_id, ctx.admin]);
+      await rows(ctx.db, "UPDATE documents SET status = 'deleted', is_current = false WHERE id = $1", [b.newer]);
+
+      const listed = await rows(ctx.db, LIST_SQL, [ctx.admin, ctx.key, 50, 0]);
+      assert.deepEqual(
+        listed.map((row) => [row.kind, row.candidate_id]),
+        [
+          ['candidate', first.candidate_id],
+          ['candidate', second.candidate_id],
+          ['link', confirmedOne.candidate_id],
+        ],
+      );
+      assert.ok(listed.every((row) => Number(row.total_count) === 3));
+      const [one, two, link] = listed as [Row, Row, Row];
+      assert.equal(one.stale, false);
+      assert.equal(one.status, 'pending');
+      assert.equal(one.direction, 'document_newer');
+      assert.equal(one.older_document_id, a.older);
+      const doc = one.document as Row;
+      const cand = one.candidate_document as Row;
+      assert.equal(doc.id, a.newer);
+      assert.equal(cand.id, a.older);
+      for (const key of ['id', 'filename', 'doc_type', 'doc_date', 'effective_from', 'effective_to', 'uploaded_at', 'uploader_id', 'version']) {
+        assert.ok(key in doc, `document carries ${key}`);
+        assert.ok(key in cand, `candidate document carries ${key}`);
+      }
+      assert.equal(cand.doc_type, 'general');
+      assert.equal(cand.doc_date, '2024-01-02');
+      assert.equal(cand.effective_from, '2024-02-01');
+      assert.ok(String(cand.filename).endsWith('.md'));
+      assert.equal(two.stale, true, 'a candidate whose document was deleted is stale');
+      assert.equal(two.older_document_id, null);
+      assert.equal(link.status, 'confirmed');
+      assert.equal(link.decided_by, ctx.admin);
+      assert.ok(link.decided_at instanceof Date);
+      assert.ok(link.link_id);
+      assert.equal((link.document as Row).id, c.older);
+      assert.equal((link.candidate_document as Row).id, c.newer);
+
+      const paged = await rows(ctx.db, LIST_SQL, [ctx.admin, ctx.key, 1, 1]);
+      assert.deepEqual(paged.map((row) => row.candidate_id), [second.candidate_id]);
+      assert.equal(Number(paged[0]?.total_count), 3);
+
+      assert.equal((await rows(ctx.db, LIST_SQL, [ctx.member, ctx.key, 50, 0])).length, 0, 'a non-admin lists nothing');
+      if (ctx.otherAdmin) {
+        assert.equal((await rows(ctx.db, LIST_SQL, [ctx.otherAdmin, ctx.key, 50, 0])).length, 0, 'an admin of another tenant lists nothing');
+        assert.equal((await rows(ctx.db, LIST_SQL, [ctx.otherAdmin, null, 50, 0])).length, 0);
+      }
+      assert.equal((await rows(ctx.db, LIST_SQL, [ctx.admin, null, 50, 0])).length, 3);
+    });
+  });
+}
+
 describe('0806 migration file', () => {
   test('is one transaction that reloads the PostgREST schema', () => {
     assert.ok(fs.existsSync(path.join(REPO_ROOT, MIGRATION)), `${MIGRATION} exists`);
