@@ -198,6 +198,20 @@
       "minLength": 1,
       "title": "Report Path",
       "type": "string"
+    },
+    "supported_languages": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Supported Languages",
+      "type": "array"
+    },
+    "undeclared_languages": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Undeclared Languages",
+      "type": "array"
     }
   },
   "required": [
