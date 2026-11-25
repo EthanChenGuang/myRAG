@@ -106,9 +106,14 @@ export function itemRequestOptions(base: EvalRequestOptions, item: GoldenItem): 
   return options;
 }
 
-/** Stub until the smoke tier answers injection items (05.1-19). */
-export function answersItemForInjectionMetrics(_tier: EvalTier, _item: GoldenItem): boolean {
-  return false;
+const INJECTION_CATEGORIES: ReadonlySet<string> = new Set(['injection', 'injection_evasive']);
+
+/**
+ * D-14: the smoke tier asks the stub extractive generator to answer the injection and injection_evasive items, so attack success
+ * (canary or forbidden claim in the answer) is measured in CI. Every other item, and every other tier, is sent exactly as before.
+ */
+export function answersItemForInjectionMetrics(tier: EvalTier, item: GoldenItem): boolean {
+  return tier === 'smoke' && INJECTION_CATEGORIES.has(item.category);
 }
 
 const ROUTE_PATH = '/api/internal/rag/run';
@@ -410,6 +415,8 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
   if (items.length === 0) {
     throw new Error(`[Eval Harness] no golden items with review_status in [${goldenFilter.review_statuses.join(', ')}] in ${goldenPath}`);
   }
+  // Run-level answers keep their own generator; otherwise an in-process smoke run answers the injection items with the stub only.
+  const stubInjectionAnswers = !includeAnswer && !baseUrl && items.some((item) => answersItemForInjectionMetrics(tier, item));
   fs.mkdirSync(outDir, { recursive: true });
   const tracesPath = path.join(outDir, 'traces.jsonl');
   const logPath = path.join(outDir, 'harness.log');
@@ -465,7 +472,10 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         });
         inProcess = prepared;
       }
-      if (includeAnswer) {
+      if (stubInjectionAnswers) {
+        answerModule = await import('../../src/lib/rag-eval/answer.ts');
+        answerModule.setEvalLanguageModelFactory(() => createStubLanguageModel());
+      } else if (includeAnswer) {
         answerModule = await import('../../src/lib/rag-eval/answer.ts');
         if (generator === 'stub') {
           answerModule.setEvalLanguageModelFactory(() => createStubLanguageModel());
@@ -504,6 +514,8 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
       if (inProcess && deploymentMode === 'multi-tenant' && !options.user_id) {
         options.user_id = inProcess.fixtureUserId;
       }
+      const stubAnswer = stubInjectionAnswers && answersItemForInjectionMetrics(tier, item);
+      if (stubAnswer) options.generator_model = STUB_GENERATOR_MODEL;
       const payload = {
         schema_version: 1 as const,
         query: item.question,
@@ -512,7 +524,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         web_search: false as const,
         options,
         item_id: item.id,
-        ...(includeAnswer ? { include_answer: true as const } : {}),
+        ...(includeAnswer || stubAnswer ? { include_answer: true as const } : {}),
       } as RagRunRequest;
 
       const { status, body } = await send(payload);
@@ -523,7 +535,8 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
       const trace = RagTraceSchema.parse(body);
       trace.item_id = item.id;
       if (firstEffectiveConfig === null) {
-        firstEffectiveConfig = trace.effective_config;
+        // A per-item stub answer is not part of the run's configuration: the run-level hash stays what it was without it.
+        firstEffectiveConfig = stubAnswer ? { ...trace.effective_config, generator_model: null } : trace.effective_config;
         const serverMode = trace.effective_config.deployment_mode;
         if (baseUrl && serverMode !== 'single-tenant' && serverMode !== 'multi-tenant') {
           throw new Error(`[Eval Harness] server reports unknown deployment_mode ${JSON.stringify(serverMode)}`);

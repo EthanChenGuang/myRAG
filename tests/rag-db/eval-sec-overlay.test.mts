@@ -103,7 +103,7 @@ describe('SEC run-config allow-list (T-05.1-58)', () => {
   for (const [name, value] of [
     ['RAG_INJECTION_CHECK', 'block'],
     ['RAG_CONTEXT_TAGGING', 'yes'],
-    ['RAG_INJECTION_PROMPT_GUARD', 'on'],
+    ['RAG_INJECTION_PROMPT_GUARD', 'enabled'],
     ['RAG_INJECTION_LAKERA', '1'],
     ['RAG_TOOL_RESULT_GUARD', 'drop'],
   ] as const) {
@@ -175,15 +175,20 @@ describe('smoke-tier stub answers for injection items (D-14)', () => {
     assert.equal((injectionTrace.answer ?? '').includes(canary), false);
   });
 
-  test('with every SEC switch at its default the non-injection trace has no answer and no injection record', async () => {
+  test('with every SEC switch at its default (npm run test-rag, no run config) only the injection item is answered', () => {
+    // A separate process: the app modules keep the fake edge URL they saw at first import, so one in-process run per process.
     const dir = makeTmpDir();
     const goldenPath = path.join(dir, 'two.jsonl');
     fs.writeFileSync(goldenPath, goldenItems(['en-general-001', 'en-injection-001']).map((item) => JSON.stringify(item)).join('\n') + '\n');
-
-    const result = await runEval({ goldenPath, corpusDir: CORPUS_DIR, outDir: path.join(dir, 'out'), deploymentMode: 'single-tenant' });
+    const out = path.join(dir, 'out');
+    const result = spawnSync(process.execPath, ['--import', 'tsx', 'eval/harness/run-smoke.mts', '--golden', goldenPath, '--no-gate', '--out', out], {
+      cwd: REPO_ROOT,
+      encoding: 'utf8',
+    });
+    assert.equal(result.status, 0, result.stderr);
 
     const traces = fs
-      .readFileSync(result.tracesPath, 'utf8')
+      .readFileSync(path.join(out, 'traces.jsonl'), 'utf8')
       .trim()
       .split('\n')
       .map((line) => RagTraceSchema.parse(JSON.parse(line)));
@@ -191,9 +196,13 @@ describe('smoke-tier stub answers for injection items (D-14)', () => {
     assert.equal(traces[0].effective_config.generator_model, null);
     assert.equal(traces[0].injection ?? null, null);
     assert.equal(traces[1].injection ?? null, null);
+    assert.equal(traces[1].effective_config.generator_model, STUB_GENERATOR_MODEL);
     assert.equal(typeof traces[1].answer, 'string');
-    assert.equal(result.manifest.request_options.generator_model ?? null, null);
-    assert.equal(result.manifest.effective_config_hash.length, 64);
+    const manifest = JSON.parse(fs.readFileSync(path.join(out, 'run.json'), 'utf8')) as { request_options: { generator_model?: string | null } };
+    assert.equal(manifest.request_options.generator_model ?? null, null);
+    const report = JSON.parse(fs.readFileSync(path.join(out, 'report.json'), 'utf8')) as { injection: { config_label: string; gate: string } | null };
+    assert.equal(report.injection?.config_label, 'all_off');
+    assert.equal(report.injection?.gate, 'report_only');
   });
 });
 
