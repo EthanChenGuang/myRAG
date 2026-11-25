@@ -38,6 +38,7 @@ const FAILURES: Array<[ClaudeIneligibleReason, (input: ClaudeTurnEligibilityInpu
   ['mcp', (i) => ({ ...i, facts: { ...i.facts, mcp: true } })],
   ['multi_step', (i) => ({ ...i, facts: { ...i.facts, multiStep: true } })],
   ['web_search', (i) => ({ ...i, facts: { ...i.facts, webSearch: true } })],
+  ['attachments', (i) => ({ ...i, facts: { ...i.facts, attachments: true } })],
   ['reasoning_unsupported', (i) => ({ ...i, modelId: 'anthropic/claude-opus-4.5', facts: { ...i.facts, reasoning: true } })],
 ];
 

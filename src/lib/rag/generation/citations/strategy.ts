@@ -15,6 +15,8 @@ export interface ClaudeTurnFacts {
   webSearch: boolean;
   /** The user asked for reasoning on this turn. */
   reasoning: boolean;
+  /** The question carries image parts; the direct request sends the question as text only. */
+  attachments?: boolean;
 }
 
 export interface CitationTurn {
@@ -38,6 +40,7 @@ export type ClaudeIneligibleReason =
   | 'mcp'
   | 'multi_step'
   | 'web_search'
+  | 'attachments'
   | 'reasoning_unsupported';
 
 export type ClaudeTurnEligibility =
@@ -78,6 +81,7 @@ export function claudeTurnEligibility(input: ClaudeTurnEligibilityInput): Claude
   if (facts.mcp) return { eligible: false, reason: 'mcp' };
   if (facts.multiStep) return { eligible: false, reason: 'multi_step' };
   if (facts.webSearch && !CLAUDE_WEB_SEARCH_ELIGIBLE) return { eligible: false, reason: 'web_search' };
+  if (facts.attachments) return { eligible: false, reason: 'attachments' };
   if (facts.reasoning && !claudeReasoningEligibility(anthropicId).eligible) {
     return { eligible: false, reason: 'reasoning_unsupported' };
   }
