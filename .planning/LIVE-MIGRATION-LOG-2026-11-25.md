@@ -144,3 +144,69 @@ Body check: after each apply, an aggregate md5 over `proname=md5(prosrc)` of eve
 - Free substitute for leaked-password protection (owner: avoid paid plans): `password_min_length` 6 → 10 and `password_required_characters` = letters (lower and upper) plus digits, set through the Management API and read back. Applies to new sign-ups and password changes only. The app has no client-side length rule, so Supabase's own error message is shown.
 - Backup: direct Postgres connections are refused from the cloud session, so `pg_dump` cannot run here. Free path: the owner takes a local `pg_dump` (schema, data and roles) and keeps the files off the repository.
 - Owner decision (2026-11-25): no backup for now, because the project is not in production yet. Revisit before going live.
+
+## 0440 and 0801 (applied after train 14, 2026-11-25)
+
+Applied to `<live-project-ref>` from `origin/main` 207ba4b1 (train 14, PR #61), before the app redeploy. Neither file has a `.single-tenant`/`.multi-tenant` variant. For each file, only the top-level `BEGIN;` and `COMMIT;` were left out; the rest is the exact file text. No statement failed and nothing was retried.
+
+### 0440 precondition
+- Live `public.rag_chunk_embeddings_guard()` body md5 = `f7aa72d3c0bcc173f7dd103cced69c03` (777 characters), the 0425 body the file names. It matched, so 0440 could be applied. The function was SECURITY DEFINER with `search_path=""`.
+- No live migration after 0440 (0501–0703, 0410_r2, 0426, 0427) redefines the guard.
+- 0440 is numbered before 0501–0703, which are already live. It touches none of their objects, so applying it now is equivalent.
+
+### Steps
+| # | Migration name | Result |
+|---|---|---|
+| 1 | 0440_embedding_bindings | ok |
+| 2 | 0410_security_definer_rpc_grants_r3 | ok. Re-run because the repo's 0410 changed since r2. 03.1.1-04 added `rag_embedding_bindings_guard()`, and the same file now also lists the three `rag_semantic_cache_on_documents_*` trigger functions. The file only changes grants. |
+| 3 | 0801_phase32_columns_checks | ok |
+
+### Verification
+- **0440 body md5 matches the repo:**
+  - `rag_chunk_embeddings_guard`: 985c1dd4957184b824b1dfd34f03637d, 1227 characters.
+  - `rag_embedding_bindings_guard`: fc58a4c08e42f465f5ecfbd44956f886.
+  - `rag_embedding_profiles_scope_guard`: 4106d1bb6132698b026c3439ba28aea4.
+- **0440 function settings:**
+  - Each function has one overload and `search_path=""`.
+  - The two guards are SECURITY DEFINER.
+  - The scope guard is SECURITY INVOKER, as the file defines it.
+  - EXECUTE is granted to service_role only; anon and authenticated are refused.
+- **0440 table:** `embedding_profile_bindings` exists with RLS on and no anon or authenticated grants. It has 0 rows.
+- **0440 seeded profiles:** three scoped profiles were added with status `available` (5 → 8 profiles), each with its partial HNSW index.
+- **0410 r3 grants:** after the re-run, `rag_embedding_bindings_guard`, `rag_chunk_embeddings_guard` and the three `rag_semantic_cache_on_documents_*` functions are service_role only.
+- **0801 body md5 matches the repo:** all 13 replaced functions match (13/13):
+  - rag_set_document_fields
+  - rag_write_chunks
+  - rag_write_profile_chunks
+  - rag_advance_ingestion_job: adc43aa306d5c659051ccf69fd05209f, replacing the 0426 body
+  - rag_claim_ingestion_job
+  - rag_claim_ingestion_jobs
+  - rag_enqueue_backfill_jobs
+  - rag_enqueue_ingestion_job
+  - rag_list_batch_jobs
+  - rag_purge_stale_ingestion_jobs
+  - rag_ingest_job_status_for_stage
+  - rag_ingest_mirror_processing_status
+  - rag_publish_deferred_ingestion_job
+- **0801 function settings:**
+  - Each function has one overload and `search_path=""`.
+  - SECURITY mode is unchanged from before. These three are invokers: rag_ingest_job_status_for_stage, rag_ingest_mirror_processing_status and rag_publish_deferred_ingestion_job. The other ten are definers.
+  - EXECUTE is granted to service_role only.
+- **0801 columns, checks and indexes:**
+  - 15 new columns are present.
+  - Rebuilt checks: documents, document_chunks and ingestion_jobs status, and ingestion_jobs kind.
+  - Six new value and order checks.
+  - Indexes `document_chunks_scopes_gin` and `documents_tenant_fingerprint_idx`.
+- **Whole database:**
+  - Public functions: 343 → 345 (the two new 0440 functions).
+  - Public tables with RLS off: 0.
+  - Only one SECURITY DEFINER function lacks `search_path=""`: `rls_auto_enable()`, Supabase's own function, as before.
+- **Security advisors:**
+  - No ERROR.
+  - No new WARN. The same set as after the continuation: function_search_path_mutable on the same 4 legacy functions, extension_in_public (vector, pg_trgm), GraphQL exposure (0026/0027), the by-design anon and authenticated definers plus rls_auto_enable, and leaked password protection.
+  - The only new item is INFO rls_enabled_no_policy on `embedding_profile_bindings` (21 → 22 server-only tables), as intended.
+- **Data intact:** documents 1, chunks 1, chunk_embeddings 0, ingestion_jobs 0 and vector_sync_outbox 0, the same as before. All document and chunk statuses are `ready`.
+
+### Re-run notes
+- Re-running 0425 restores the guard without the scope check, so re-run 0440 after it.
+- Re-running any migration below 0801 that defines one of its 13 functions (0359, 0420, 0424, 0425, 0426) restores that older body, so re-run 0801 after it.
