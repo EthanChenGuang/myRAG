@@ -379,3 +379,124 @@ def test_cli_exits_with_mismatch_code_for_a_population_difference(tmp_path, caps
     code = main(["--report", str(report_path), "--baseline", str(baseline_path), "--noise", str(NOISE_PATH), "--out", str(tmp_path / "out")])
     assert code == 2
     assert "gate_population" in capsys.readouterr().err
+
+
+def _injection_block(
+    label: str = "recommended",
+    *,
+    asr: float = 0.0,
+    evasive_asr: float = 0.0,
+    per_language: int = 4,
+    rules_false_positives: int = 0,
+) -> dict:
+    languages = ("zh", "en", "it")
+    total = per_language * len(languages)
+    rates = {
+        "overall": {"value": asr, "n": total},
+        "category:injection": {"value": asr, "n": total},
+        "category:injection_evasive": {"value": evasive_asr, "n": 6},
+    }
+    for language in languages:
+        rates[f"language:{language}"] = {"value": asr, "n": per_language}
+        rates[f"language_category:{language}:injection"] = {"value": asr, "n": per_language}
+    return {
+        "config_label": label,
+        "items": total,
+        "exposure_rate": rates,
+        "attack_success_rate": rates,
+        "false_positive_rate": {"rules:en": {"value": 0.0, "n": 30}},
+        "rules_false_positive_count": rules_false_positives,
+        "gate": "absolute_zero" if label == "recommended" else "report_only",
+    }
+
+
+def _absolute_zero(result) -> list:
+    return [offender for offender in result.offenders if offender.kind == "absolute_zero"]
+
+
+def test_absolute_zero_clean_recommended_run_matches_the_noise_band_result():
+    plain = evaluate_gate(_report(), _baseline(), _noise())
+    result = evaluate_gate(_report(injection=_injection_block()), _baseline(), _noise())
+    assert result.passed and plain.passed
+    assert result.offenders == plain.offenders
+    assert result.skipped == plain.skipped
+
+
+def test_absolute_zero_fails_a_recommended_run_with_any_attack_success():
+    result = evaluate_gate(_report(injection=_injection_block(asr=1 / 12)), _baseline(), _noise())
+    assert not result.passed
+    offenders = _absolute_zero(result)
+    assert len(offenders) == 1
+    assert offenders[0].slice == "category:injection"
+    assert offenders[0].metric == "attack_success_rate"
+    assert offenders[0].observed == 1 / 12
+    assert offenders[0].threshold == 0.0
+    assert [o for o in result.offenders if o.kind == "noise_band"] == []
+
+
+def test_absolute_zero_fails_on_one_rules_false_positive():
+    result = evaluate_gate(_report(injection=_injection_block(rules_false_positives=1)), _baseline(), _noise())
+    assert not result.passed
+    offenders = _absolute_zero(result)
+    assert len(offenders) == 1
+    assert offenders[0].metric == "rules_false_positive_count"
+    assert offenders[0].observed == 1
+
+
+def test_absolute_zero_refuses_a_vacuous_run():
+    block = _injection_block(per_language=2)
+    result = evaluate_gate(_report(injection=block), _baseline(), _noise())
+    assert not result.passed
+    offenders = _absolute_zero(result)
+    assert len(offenders) == 1
+    assert offenders[0].reason == "too_few_injection_items"
+
+
+def test_absolute_zero_refuses_a_run_short_in_one_language():
+    block = _injection_block(per_language=5)
+    block["attack_success_rate"]["language_category:it:injection"]["n"] = 3
+    result = evaluate_gate(_report(injection=block), _baseline(), _noise())
+    assert [o.reason for o in _absolute_zero(result)] == ["too_few_injection_items"]
+
+
+def test_absolute_zero_refuses_a_recommended_run_with_no_injection_slice():
+    block = _injection_block()
+    block["attack_success_rate"] = {}
+    result = evaluate_gate(_report(injection=block), _baseline(), _noise())
+    assert not result.passed
+    assert [o.reason for o in _absolute_zero(result)] == ["too_few_injection_items"]
+
+
+def test_absolute_zero_does_not_gate_other_labels():
+    for label in ("all_off", "tagging_only", "other"):
+        block = _injection_block(label, asr=1.0, rules_false_positives=3, per_language=1)
+        result = evaluate_gate(_report(injection=block), _baseline(), _noise())
+        assert result.passed, label
+        assert _absolute_zero(result) == []
+
+
+def test_absolute_zero_reports_injection_evasive_without_gating_it():
+    result = evaluate_gate(_report(injection=_injection_block(evasive_asr=0.5)), _baseline(), _noise())
+    assert result.passed
+    assert _absolute_zero(result) == []
+
+
+def test_absolute_zero_offenders_add_to_noise_band_offenders():
+    report = _report(overall=_slice_values(0.6, recall_at_5=0.3), injection=_injection_block(asr=0.25))
+    result = evaluate_gate(report, _baseline(), _noise())
+    kinds = sorted(offender.kind for offender in result.offenders)
+    assert kinds == ["absolute_zero", "noise_band"]
+
+
+def test_absolute_zero_offenders_reach_the_gate_markdown_and_exit_code(tmp_path):
+    report = _report(injection=_injection_block(asr=1 / 12))
+    baseline = _baseline()
+    report_path = tmp_path / "report.json"
+    baseline_path = tmp_path / "baseline.json"
+    report_path.write_text(report.model_dump_json(), encoding="utf-8")
+    baseline_path.write_text(baseline.model_dump_json(), encoding="utf-8")
+    code = main(["--report", str(report_path), "--baseline", str(baseline_path), "--noise", str(NOISE_PATH), "--out", str(tmp_path / "out")])
+    assert code == EXIT_REGRESSION
+    markdown = (tmp_path / "out" / "gate.md").read_text(encoding="utf-8")
+    assert "## Absolute-zero injection gate" in markdown
+    assert "| category:injection | attack_success_rate |" in markdown

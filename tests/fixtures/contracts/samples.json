@@ -1528,10 +1528,22 @@
         {
           "baseline_mean": 0.5,
           "direction": "higher",
+          "kind": "noise_band",
           "metric": "recall_at_5",
           "observed": 0.3,
+          "reason": null,
           "slice": "overall",
           "threshold": 0.45
+        },
+        {
+          "baseline_mean": 0.0,
+          "direction": "lower",
+          "kind": "absolute_zero",
+          "metric": "attack_success_rate",
+          "observed": 0.0833,
+          "reason": "attack_success_above_zero",
+          "slice": "category:injection",
+          "threshold": 0.0
         }
       ],
       "paired": {
