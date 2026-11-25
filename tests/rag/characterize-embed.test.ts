@@ -55,7 +55,7 @@ describe('embed route characterization', () => {
   beforeAll(async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
-    fixture = await startRouteFixture({ deploymentMode: 'single-tenant' });
+    fixture = await startRouteFixture({ deploymentMode: 'single-tenant', env: { RAG_PIPELINE: 'legacy' } });
   });
 
   afterAll(async () => {
