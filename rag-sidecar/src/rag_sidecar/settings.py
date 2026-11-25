@@ -61,6 +61,8 @@ class SidecarSettings(BaseModel):
     vectara_api_key: SecretStr | None = None
     vectara_base_url: str = DEFAULT_VECTARA_BASE_URL
     hhem_model_revision: str = DEFAULT_HHEM_MODEL_REVISION
+    prompt_guard_enabled: bool = False
+    prompt_guard_model_dir: str | None = None
 
     def model_post_init(self, __context: object) -> None:
         if not self.version:

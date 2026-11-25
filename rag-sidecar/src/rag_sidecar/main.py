@@ -84,6 +84,7 @@ def create_app(
     settings: SidecarSettings | None = None,
     converter: Converter | None = None,
     scorers: Mapping[str, Scorer] | None = None,
+    injection_scorer: object | None = None,
 ) -> FastAPI:
     resolved = settings if settings is not None else load_settings()
     active_converter = converter if converter is not None else default_converter()
