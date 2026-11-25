@@ -116,7 +116,7 @@ function withCitedQuotes(records: CitationRecord[], quotes: ReadonlyMap<string, 
 }
 
 export function startClaudeCitationStream(
-  input: ClaudeCitationRequestInput & { tools?: ToolSet },
+  input: ClaudeCitationRequestInput & { tools?: ToolSet; onError?: (error: unknown) => void },
 ): ClaudeCitationStream {
   const { aliasMap } = input;
   const parser = createMarkerParser({ aliases: aliasMap.aliases });
@@ -148,6 +148,7 @@ export function startClaudeCitationStream(
   const result = streamText({
     ...buildClaudeCitationRequest(input),
     ...(input.tools ? { tools: input.tools } : {}),
+    ...(input.onError ? { onError: ({ error }: { error: unknown }) => input.onError?.(error) } : {}),
     experimental_transform: [
       claudeMarkerTransform(aliasMap, {
         cite(citation: ClaudeCitation) {

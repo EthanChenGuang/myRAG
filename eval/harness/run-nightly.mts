@@ -27,6 +27,8 @@ async function main(): Promise<number> {
       'generator-model': { type: 'string' },
       'deployment-mode': { type: 'string', default: 'single-tenant' },
       'include-drafts': { type: 'boolean', default: false },
+      citations: { type: 'boolean', default: false },
+      groundedness: { type: 'boolean', default: false },
     },
     strict: true,
   });
@@ -59,6 +61,9 @@ async function main(): Promise<number> {
       includeAnswer: true,
       generator: generator as EvalGenerator,
       includeDrafts: values['include-drafts'],
+      // D-24: the judge tier compares Faithfulness per citation strategy; groundedness is scored against the fake sidecar.
+      ...(values.citations ? { citations: true } : {}),
+      ...(values.groundedness ? { groundedness: true } : {}),
     });
   } catch (error) {
     if (error instanceof LiveGenerationKeyMissingError) {

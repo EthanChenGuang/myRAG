@@ -1,14 +1,26 @@
-import type { StreamTextTransform, ToolSet } from 'ai';
+import type { ModelMessage, StreamTextTransform, ToolSet } from 'ai';
 import { z } from 'zod/v3';
 import { stripCitationMarkers } from '@/lib/citations/marker-grammar';
 import { CitationRecordSchema, type CitationRecord } from '@/lib/rag-eval/contracts.generated';
+import { formatURLsForContext, type ExtractedURL } from '@/lib/url-extractor';
 import type { CitationLabeler, ContextBlock } from '../../types';
 import type { GenerationConfig } from '../config';
+import { createEnhancedRAGPrompt } from '../prompt';
 import { createMarkerParser, type MarkerParser } from './marker-parser';
 import { buildAliasMap, createCitationLabeler, type AliasMap } from './blocks';
-import { citationInstruction } from './instructions';
+import { createClaudeProvider, startClaudeCitationStream, type ClaudeCitationStream } from './claude';
+import type { FallbackReason } from './fallback';
+import { attachedDocumentsSentence, citationInstruction } from './instructions';
+import { anthropicIdFor } from './models';
 import { buildCitationRecords, capQuotes } from './record';
-import { selectCitationStrategy, type CitationRagMode, type CitationStrategyId } from './strategy';
+import {
+  preRetrievalCitations,
+  selectCitationStrategy,
+  type CitationRagMode,
+  type CitationStrategyConfig,
+  type CitationStrategyId,
+  type ClaudeTurnFacts,
+} from './strategy';
 import { aliasParserTransform } from './transforms';
 
 export interface CitationCapabilities {
@@ -20,7 +32,20 @@ export interface CitationSessionInput {
   ragMode: CitationRagMode;
   modelId: string;
   language: string;
-  config: Pick<GenerationConfig, 'citations'>;
+  config: CitationStrategyConfig & Partial<Pick<GenerationConfig, 'anthropicBaseUrl'>>;
+  /** Absent: the direct Claude path is never chosen. */
+  facts?: ClaudeTurnFacts;
+}
+
+export interface ClaudeStartInput {
+  system: string;
+  /** Earlier turns, already stripped of markers. */
+  history: ModelMessage[];
+  question: string;
+  reasoning: boolean;
+  abortSignal: AbortSignal;
+  onError(error: unknown): void;
+  fetch?: typeof fetch;
 }
 
 export interface CitationFinishMetadata {
@@ -38,12 +63,23 @@ export interface CitationSession {
   /** Passed to runRetrieval; undefined when citations cannot apply to this turn. */
   readonly labeler: CitationLabeler | undefined;
   readonly strategy: CitationStrategyId | null;
+  /** Why the direct Claude call was given up for chunk-alias; null when it was not. */
+  readonly fallbackReason: FallbackReason | null;
   /** Binds the final context blocks that were sent to the model; null when no context was sent. */
-  attach(result: { blocks?: ContextBlock[] } | null): void;
+  attach(result: { blocks?: ContextBlock[]; links?: ExtractedURL[] } | null): void;
+  /** On a Claude turn the OpenRouter prompt is the fallback prompt, so it carries the alias instruction too. */
   decorateSystemPrompt(prompt: string): string;
+  /** D-09: {{context}} becomes the attached-documents sentence, the image captions and the links section. */
+  claudeSystemPrompt(basePrompt: string): string;
+  /** Starts the direct call; only on a claude-citations turn. */
+  startClaude(input: ClaudeStartInput): ClaudeCitationStream;
+  /** D-10: one switch from the direct call to chunk-alias on the OpenRouter path. */
+  fallback(reason: FallbackReason): void;
   /** Removes markers from earlier assistant turns; aliases belong to the request that made them. */
   stripHistory<T extends HistoryMessage>(messages: T[]): T[];
   transforms(): Array<StreamTextTransform<ToolSet>>;
+  /** A non-streamed chunk-alias answer: parses the whole text once, as the stream transform would. */
+  ingestFullText(text: string): void;
   finishMetadata(): CitationFinishMetadata;
   /** The validated records with full quotes, for the answer record; null when no strategy is active. */
   fullRecords(): { citations: CitationRecord[]; invalidCitations: number } | null;
@@ -67,11 +103,20 @@ function logFailure(reason: string, counts: Record<string, number>): void {
 }
 
 export function createCitationSession(input: CitationSessionInput): CitationSession {
-  const capable =
-    input.config.citations && input.capabilities?.citations === true && input.ragMode !== 'bypass';
+  const capable = preRetrievalCitations({
+    config: input.config,
+    modelId: input.modelId,
+    capabilities: input.capabilities,
+    ragMode: input.ragMode,
+    ...(input.facts ? { facts: input.facts } : {}),
+  });
   const labeler = capable ? createCitationLabeler() : undefined;
 
   let strategy: CitationStrategyId | null = null;
+  let fallbackReason: FallbackReason | null = null;
+  let claude: ClaudeCitationStream | null = null;
+  let sideBlocks: string[] = [];
+  let links: ExtractedURL[] = [];
   let aliasMap: AliasMap | null = null;
   let parser: MarkerParser | null = null;
   let failed = false;
@@ -87,6 +132,18 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
 
   const finalize = () => {
     if (finished || !parser || !aliasMap || !strategy) return finished;
+    if (strategy === 'claude-citations') {
+      if (!claude) return null;
+      const result = claude.citations();
+      try {
+        finished = { citations: CitationListSchema.parse(capQuotes(result.citations)), invalidCitations: result.invalidCitations };
+        full = result.citations;
+      } catch {
+        fail('record_error');
+        finished = { citations: [], invalidCitations: 0 };
+      }
+      return finished;
+    }
     if (failed) {
       finished = { citations: [], invalidCitations: 0 };
       return finished;
@@ -108,18 +165,28 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
     get strategy() {
       return strategy;
     },
+    get fallbackReason() {
+      return fallbackReason;
+    },
     attach(result) {
       if (!labeler) return;
       try {
         const map = buildAliasMap(result?.blocks);
         strategy = selectCitationStrategy({
           modelId: input.modelId,
-          turn: { capabilities: { citations: true }, ragMode: input.ragMode, aliasCount: map.ordered.length },
+          turn: {
+            capabilities: { citations: true },
+            ragMode: input.ragMode,
+            aliasCount: map.ordered.length,
+            ...(input.facts ? { facts: input.facts } : {}),
+          },
           config: input.config,
         });
         if (strategy) {
           aliasMap = map;
           parser = createMarkerParser({ aliases: map.aliases });
+          sideBlocks = (result?.blocks ?? []).filter((block) => block.isImage).map((block) => block.text);
+          links = result?.links ?? [];
         }
       } catch {
         strategy = null;
@@ -127,8 +194,50 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
       }
     },
     decorateSystemPrompt(prompt) {
-      if (strategy !== 'chunk-alias') return prompt;
+      if (strategy !== 'chunk-alias' && strategy !== 'claude-citations') return prompt;
       return `${prompt}\n\n${citationInstruction(input.language)}`;
+    },
+    claudeSystemPrompt(basePrompt) {
+      const context = [attachedDocumentsSentence(input.language), ...sideBlocks, formatURLsForContext(links)]
+        .filter((part) => part.trim().length > 0)
+        .join('\n\n');
+      return createEnhancedRAGPrompt(basePrompt, context, input.ragMode);
+    },
+    startClaude(start) {
+      if (strategy !== 'claude-citations' || !aliasMap || claude) {
+        throw new Error('the direct Claude call needs an unstarted claude-citations turn');
+      }
+      const anthropicId = anthropicIdFor(input.modelId);
+      const apiKey = input.config.anthropicApiKey;
+      if (!anthropicId || !apiKey) throw new Error('the direct Claude call needs a mapped model and a key');
+      const provider = createClaudeProvider({
+        apiKey,
+        baseUrl: input.config.anthropicBaseUrl ?? null,
+        ...(start.fetch ? { fetch: start.fetch } : {}),
+      });
+      claude = startClaudeCitationStream({
+        provider,
+        aliasMap,
+        system: start.system,
+        history: start.history,
+        question: start.question,
+        anthropicId,
+        reasoning: start.reasoning,
+        abortSignal: start.abortSignal,
+        onError: start.onError,
+      });
+      return claude;
+    },
+    fallback(reason) {
+      if (strategy !== 'claude-citations' || !aliasMap) return;
+      fallbackReason = reason;
+      strategy = 'chunk-alias';
+      claude = null;
+      failed = false;
+      finished = null;
+      full = [];
+      answer = '';
+      parser = createMarkerParser({ aliases: aliasMap.aliases });
     },
     stripHistory(messages) {
       if (!strategy) return messages;
@@ -154,6 +263,19 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
           fail,
         }),
       ];
+    },
+    ingestFullText(text) {
+      if (strategy !== 'chunk-alias' || !parser || finished) return;
+      answer += text;
+      if (!failed) {
+        try {
+          parser.feed('full', text);
+          parser.end('full');
+        } catch {
+          fail('parser_error');
+        }
+      }
+      finalize();
     },
     finishMetadata() {
       if (!strategy) return {};
