@@ -186,8 +186,8 @@ async function assertRagFunctionsNotCallableByClients(db: PGlite): Promise<void>
 }
 
 async function assertPhase4FunctionsServiceRoleOnly(db: PGlite): Promise<void> {
-  const result = await db.query<{ proname: string; signature: string; anon: boolean; authenticated: boolean; service_role: boolean }>(
-    `SELECT p.proname, p.oid::regprocedure::text AS signature,
+  const result = await db.query<{ proname: string; signature: string; trigger: boolean; anon: boolean; authenticated: boolean; service_role: boolean }>(
+    `SELECT p.proname, p.oid::regprocedure::text AS signature, p.prorettype = 'trigger'::regtype AS trigger,
             has_function_privilege('anon', p.oid, 'EXECUTE') AS anon,
             has_function_privilege('authenticated', p.oid, 'EXECUTE') AS authenticated,
             has_function_privilege('service_role', p.oid, 'EXECUTE') AS service_role
@@ -201,7 +201,12 @@ async function assertPhase4FunctionsServiceRoleOnly(db: PGlite): Promise<void> {
     [],
     'anon and authenticated have no EXECUTE on a Phase 4 function',
   );
-  assert.deepEqual(result.rows.filter((row) => !row.service_role).map((row) => row.signature), [], 'service_role can execute every Phase 4 function');
+  // Trigger functions run without an EXECUTE check, so some are revoked from every role; every callable function is granted to service_role.
+  assert.deepEqual(
+    result.rows.filter((row) => !row.trigger && !row.service_role).map((row) => row.signature),
+    [],
+    'service_role can execute every callable Phase 4 function',
+  );
 }
 
 async function tenantKeyGuardError(db: PGlite, tenantKey: string): Promise<string | null> {
