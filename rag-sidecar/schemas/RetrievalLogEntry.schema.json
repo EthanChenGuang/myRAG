@@ -1,0 +1,447 @@
+{
+  "$defs": {
+    "RetrievalLogCandidate": {
+      "additionalProperties": false,
+      "properties": {
+        "chunk_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Chunk Id",
+          "type": "string"
+        },
+        "document_id": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "title": "Document Id",
+          "type": "string"
+        },
+        "fused_score": {
+          "title": "Fused Score",
+          "type": "number"
+        },
+        "kept": {
+          "title": "Kept",
+          "type": "boolean"
+        },
+        "language": {
+          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$",
+          "title": "Language",
+          "type": "string"
+        },
+        "rank": {
+          "minimum": 1,
+          "title": "Rank",
+          "type": "integer"
+        },
+        "rerank_score": {
+          "title": "Rerank Score",
+          "type": "number"
+        },
+        "similarity": {
+          "title": "Similarity",
+          "type": "number"
+        }
+      },
+      "required": [
+        "chunk_id",
+        "document_id",
+        "rank",
+        "similarity",
+        "kept"
+      ],
+      "title": "RetrievalLogCandidate",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "answer_id": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Answer Id"
+    },
+    "answer_language": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Answer Language"
+    },
+    "candidate_count": {
+      "minimum": 0,
+      "title": "Candidate Count",
+      "type": "integer"
+    },
+    "candidates": {
+      "items": {
+        "$ref": "#/$defs/RetrievalLogCandidate"
+      },
+      "maxItems": 50,
+      "title": "Candidates",
+      "type": "array"
+    },
+    "channel": {
+      "enum": [
+        "chat",
+        "embed",
+        "voice"
+      ],
+      "title": "Channel",
+      "type": "string"
+    },
+    "chat_id": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Chat Id"
+    },
+    "chunk_languages": {
+      "items": {
+        "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$",
+        "type": "string"
+      },
+      "title": "Chunk Languages",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "created_at": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Created At"
+    },
+    "feedback_at": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Feedback At"
+    },
+    "feedback_kind": {
+      "anyOf": [
+        {
+          "enum": [
+            "answer",
+            "refusal",
+            "embed"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Feedback Kind"
+    },
+    "feedback_reasons": {
+      "items": {
+        "enum": [
+          "wrong",
+          "incomplete",
+          "not_from_documents",
+          "bad_citation",
+          "not_relevant",
+          "answer_exists",
+          "wrong_language",
+          "other"
+        ],
+        "type": "string"
+      },
+      "title": "Feedback Reasons",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "feedback_vote": {
+      "anyOf": [
+        {
+          "enum": [
+            -1,
+            1
+          ],
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Feedback Vote"
+    },
+    "id": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Id"
+    },
+    "latency_ms": {
+      "minimum": 0,
+      "title": "Latency Ms",
+      "type": "integer"
+    },
+    "organization_id": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Organization Id"
+    },
+    "outcome": {
+      "enum": [
+        "answered",
+        "refused_no_context",
+        "kb_unavailable",
+        "degraded_answer",
+        "unknown"
+      ],
+      "title": "Outcome",
+      "type": "string"
+    },
+    "pipeline": {
+      "enum": [
+        "legacy",
+        "v2"
+      ],
+      "title": "Pipeline",
+      "type": "string"
+    },
+    "query_fingerprint": {
+      "anyOf": [
+        {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Query Fingerprint"
+    },
+    "query_language": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Query Language"
+    },
+    "query_language_confidence": {
+      "anyOf": [
+        {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Query Language Confidence"
+    },
+    "query_masked": {
+      "anyOf": [
+        {
+          "maxLength": 2000,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Query Masked"
+    },
+    "rag_mode": {
+      "anyOf": [
+        {
+          "enum": [
+            "strict",
+            "balanced",
+            "flexible",
+            "bypass"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Rag Mode"
+    },
+    "refusal_decision": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Refusal Decision"
+    },
+    "refusal_reason": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Refusal Reason"
+    },
+    "retrieval_config_hash": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Retrieval Config Hash"
+    },
+    "source_opened_count": {
+      "default": 0,
+      "maximum": 20,
+      "minimum": 0,
+      "title": "Source Opened Count",
+      "type": "integer"
+    },
+    "stage_latency": {
+      "additionalProperties": {
+        "minimum": 0,
+        "type": "number"
+      },
+      "title": "Stage Latency",
+      "type": "object"
+    },
+    "status": {
+      "enum": [
+        "ok",
+        "empty",
+        "error",
+        "degraded"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "tenant_key": {
+      "anyOf": [
+        {
+          "pattern": "^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Tenant Key"
+    },
+    "top_score": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Top Score"
+    },
+    "trace_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Trace Id",
+      "type": "string"
+    },
+    "user_id": {
+      "anyOf": [
+        {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "User Id"
+    }
+  },
+  "required": [
+    "trace_id",
+    "channel",
+    "pipeline",
+    "status",
+    "outcome",
+    "candidate_count",
+    "latency_ms"
+  ],
+  "title": "RetrievalLogEntry",
+  "type": "object"
+}

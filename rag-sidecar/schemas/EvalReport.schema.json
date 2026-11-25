@@ -1792,7 +1792,8 @@
       "default": "all",
       "enum": [
         "all",
-        "production"
+        "production",
+        "real"
       ],
       "title": "Gate Population",
       "type": "string"

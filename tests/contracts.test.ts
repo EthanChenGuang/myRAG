@@ -199,3 +199,72 @@ describe('Phase 3.2 golden additions (plan 03.2-06, D-45)', () => {
     expect(schemaFor('GoldenItem').safeParse({ ...value, native_review: review }).success).toBe(false);
   });
 });
+
+describe('feedback-loop contracts (Phase 5.1.1)', () => {
+  const NEW_MODELS = [
+    'RetrievalLogCandidate',
+    'RetrievalLogEntry',
+    'RefusalFeedbackRequest',
+    'EmbedFeedbackRequest',
+    'SourceSignalRequest',
+    'ReviewItem',
+    'ReviewItemListResponse',
+    'ExpertLabel',
+    'ExpertEvidenceSpan',
+    'DictionaryTerm',
+    'DictionaryCandidate',
+    'TrainingPair',
+    'TrainingPositive',
+    'TrainingNegative',
+    'FeedbackMiningConfig',
+    'MiningRunResult',
+    'FeedbackLoopStats',
+    'WeeklyReport',
+    'FailureReport',
+    'FailureEntry',
+    'GatePopulationConfig',
+    'ShipCheckResult',
+  ];
+
+  it.each(NEW_MODELS)('%s has a committed schema, a generated parser and a sample', (model) => {
+    expect(models).toContain(model);
+    expect(schemas[`${model}Schema`]).toBeDefined();
+    expect(fixture.samples[model]).toBeDefined();
+  });
+
+  it('a gold span without document_id parses without gaining the key', () => {
+    const item = fixture.samples.GoldenItem as { gold_evidence: Array<Record<string, unknown>> };
+    expect(item.gold_evidence.every((span) => !('document_id' in span))).toBe(true);
+    const parsed = schemas.GoldenItemSchema?.safeParse(item);
+    expect(parsed?.success).toBe(true);
+    expect(parsed?.data.gold_evidence.every((span: Record<string, unknown>) => !('document_id' in span))).toBe(true);
+  });
+
+  it('language fields take codes only', () => {
+    const entry = fixture.samples.RetrievalLogEntry;
+    const schema = schemas.RetrievalLogEntrySchema;
+    expect(schema?.safeParse({ ...entry, answer_language: 'zh-Hant' }).success).toBe(true);
+    expect(schema?.safeParse({ ...entry, answer_language: 'English' }).success).toBe(false);
+    expect(schema?.safeParse({ ...entry, chunk_languages: ['this is a sentence of forty characters!!'] }).success).toBe(false);
+    expect(schema?.safeParse({ ...entry, query_language_confidence: 1.2 }).success).toBe(false);
+  });
+
+  it('review item tags follow the tag pattern', () => {
+    const item = fixture.samples.ReviewItem;
+    const schema = schemas.ReviewItemSchema;
+    expect(schema?.safeParse({ ...item, tags: ['representative'] }).success).toBe(true);
+    expect(schema?.safeParse({ ...item, tags: ['Representative'] }).success).toBe(false);
+    expect(schema?.safeParse({ ...item, reasons: [] }).success).toBe(true);
+  });
+
+  it('feedback bodies reject a tenant or free-text field', () => {
+    expect(schemas.RefusalFeedbackRequestSchema?.safeParse({ vote: 'expected_answer', tenant_key: 's:default' }).success).toBe(false);
+    expect(schemas.EmbedFeedbackRequestSchema?.safeParse({ token: 't', vote: 'helpful', comment: 'x' }).success).toBe(false);
+    expect(schemas.SourceSignalRequestSchema?.safeParse({ kind: 'source_opened' }).success).toBe(true);
+  });
+
+  it('gate_population accepts real on reports and baselines', () => {
+    expect(schemas.EvalReportSchema?.safeParse({ ...fixture.samples.EvalReport, gate_population: 'real' }).success).toBe(true);
+    expect(schemas.BaselineSchema?.safeParse({ ...fixture.samples.Baseline, gate_population: 'real' }).success).toBe(true);
+  });
+});
