@@ -3,7 +3,7 @@ import contextlib
 import json
 import random
 import tempfile
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -24,6 +24,7 @@ from rag_sidecar.contracts import (
     SidecarReady,
 )
 from rag_sidecar.extract.invoice import extract_invoice
+from rag_sidecar.groundedness.scorer import Scorer
 from rag_sidecar.ingest.app_client import AppClient
 from rag_sidecar.ingest.ledger_client import LedgerClient
 from rag_sidecar.ingest.pool import UPLOAD_PRIORITY, PriorityPool
@@ -78,7 +79,11 @@ def _run_preflight_job(
         return {"__preflight_error__": "encrypted_pdf"}
 
 
-def create_app(settings: SidecarSettings | None = None, converter: Converter | None = None) -> FastAPI:
+def create_app(
+    settings: SidecarSettings | None = None,
+    converter: Converter | None = None,
+    scorers: Mapping[str, Scorer] | None = None,
+) -> FastAPI:
     resolved = settings if settings is not None else load_settings()
     active_converter = converter if converter is not None else default_converter()
     docling_in_use = converter is None and active_converter is not None
