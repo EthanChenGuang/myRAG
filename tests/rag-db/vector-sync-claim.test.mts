@@ -262,11 +262,11 @@ for (const mode of MODES) {
     });
 
     test('set_target enables a backend, enqueues one tenant row per tenant with current documents and marks index state building', async () => {
-      let tenants = [tenant];
-      if (mode === 'multi-tenant') {
-        const { orgId } = await createOrgDocument(db);
-        tenants = [tenant, `o:${orgId}`].sort();
-      }
+      if (mode === 'multi-tenant') await createOrgDocument(db);
+      const tenants = (await db.query<{ k: string }>('SELECT DISTINCT tenant_key AS k FROM public.documents WHERE is_current ORDER BY 1')).rows.map((r) => r.k);
+      assert.ok(tenants.includes(tenant));
+      if (mode === 'single-tenant') assert.deepEqual(tenants, ['s:default']);
+      if (mode === 'multi-tenant') assert.ok(tenants.length >= 2, 'a personal and an organisation tenant');
       await db.query("UPDATE public.embedding_profiles SET status = 'backfilling' WHERE id = 'voyage-4-large-1024'");
       await db.exec('DELETE FROM public.vector_sync_outbox');
       const n = (await db.query<{ n: number }>("SELECT public.rag_vector_sync_set_target('qdrant', true, 'ops@example.invalid') AS n")).rows[0]!.n;
@@ -281,7 +281,7 @@ for (const mode of MODES) {
       const state = (await db.query<{ profile_id: string; tenant_key: string; state: string }>(
         "SELECT profile_id, tenant_key, state FROM public.rag_backend_index_state WHERE target = 'qdrant' ORDER BY profile_id, tenant_key",
       )).rows;
-      const expected = ['openai-3-small-1536', 'voyage-4-large-1024'].flatMap((p) => tenants.map((t) => ({ profile_id: p, tenant_key: t, state: 'building' })));
+      const expected = ['openai-3-small-1536', 'voyage-4-large-1024'].flatMap((p) => [...tenants].sort().map((t) => ({ profile_id: p, tenant_key: t, state: 'building' })));
       assert.deepEqual(state, expected);
       await db.query("UPDATE public.embedding_profiles SET status = 'available' WHERE id = 'voyage-4-large-1024'");
 

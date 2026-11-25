@@ -9,12 +9,13 @@
 
 BEGIN;
 
--- Internal: one set-based insert per call, for every enabled target, skipping entities that already wait untried.
+-- Internal: one set-based insert per call, for every enabled target (or only p_target), skipping entities that already wait untried.
 CREATE OR REPLACE FUNCTION public.rag_vector_sync_enqueue(
   p_entity text,
   p_entity_ids text[],
   p_tenant_keys text[],
-  p_profile_ids text[]
+  p_profile_ids text[],
+  p_target text DEFAULT NULL
 )
 RETURNS integer
 LANGUAGE plpgsql
@@ -37,6 +38,7 @@ BEGIN
     ) s
     CROSS JOIN public.rag_vector_sync_targets t
    WHERE t.enabled
+     AND (p_target IS NULL OR t.target = p_target)
      AND NOT EXISTS (
        SELECT 1 FROM public.vector_sync_outbox o
         WHERE o.target = t.target
@@ -53,8 +55,8 @@ BEGIN
 END
 $$;
 
-REVOKE ALL ON FUNCTION public.rag_vector_sync_enqueue(text, text[], text[], text[]) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.rag_vector_sync_enqueue(text, text[], text[], text[]) TO service_role;
+REVOKE ALL ON FUNCTION public.rag_vector_sync_enqueue(text, text[], text[], text[], text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_vector_sync_enqueue(text, text[], text[], text[], text) TO service_role;
 
 -- The trigger functions below are SECURITY DEFINER because the inserting role (an owner editing a chunk, an ingest RPC) cannot
 -- write the server-only outbox. They take no caller input: they read only transition rows and insert into the outbox.
