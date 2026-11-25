@@ -104,6 +104,8 @@ from rag_sidecar.contracts import (
     LinkCheckResult,
     SettingsClassification,
     UploadApproval,
+    ScopeTagSuggestion,
+    ScopeVocabularyEntry,
 )
 from rag_sidecar.contracts.samples import build_samples
 
@@ -211,6 +213,8 @@ CONTRACTS: list[tuple[type[BaseModel], Mode]] = [
     (HiddenTextRules, "validation"),
     (LinkCheckResult, "serialization"),
     (UploadApproval, "validation"),
+    (ScopeVocabularyEntry, "validation"),
+    (ScopeTagSuggestion, "validation"),
 ]
 
 

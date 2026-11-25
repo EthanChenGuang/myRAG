@@ -137,6 +137,12 @@ from rag_sidecar.contracts.ingest_security import (
     QuarantineSpan,
     UntrustedLinkQuarantineReason,
 )
+from rag_sidecar.contracts.scopes import (
+    ScopeFilter,
+    ScopeTagSuggestion,
+    ScopeTagSuggestionItem,
+    ScopeVocabularyEntry,
+)
 from rag_sidecar.contracts.parse_eval import (
     BackfillDryRunReport,
     BackfillManifestEntry,
@@ -387,6 +393,10 @@ __all__ = [
     "RefusalCell",
     "RefusalThresholds",
     "RetrievalFilters",
+    "ScopeFilter",
+    "ScopeTagSuggestion",
+    "ScopeTagSuggestionItem",
+    "ScopeVocabularyEntry",
     "RetrievalOverrides",
     "RetrievalParams",
     "compute_config_hash",

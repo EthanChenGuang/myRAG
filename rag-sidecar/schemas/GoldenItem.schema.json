@@ -203,6 +203,10 @@
           "default": null,
           "title": "Document Ids"
         },
+        "include_untagged": {
+          "title": "Include Untagged",
+          "type": "boolean"
+        },
         "invoice": {
           "anyOf": [
             {
@@ -234,6 +238,9 @@
           "default": null,
           "title": "Languages"
         },
+        "scopes": {
+          "$ref": "#/$defs/ScopeFilter"
+        },
         "sources": {
           "anyOf": [
             {
@@ -251,6 +258,50 @@
         }
       },
       "title": "RetrievalFilters",
+      "type": "object"
+    },
+    "ScopeFilter": {
+      "additionalProperties": false,
+      "description": "DATA-08 scope filter (D-39): OR within a dimension, AND across dimensions; only the three fixed dimensions.",
+      "properties": {
+        "department": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "title": "Department",
+          "type": "array"
+        },
+        "legal_entity": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "title": "Legal Entity",
+          "type": "array"
+        },
+        "region": {
+          "items": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "type": "string"
+          },
+          "maxItems": 50,
+          "minItems": 1,
+          "title": "Region",
+          "type": "array"
+        }
+      },
+      "title": "ScopeFilter",
       "type": "object"
     }
   },

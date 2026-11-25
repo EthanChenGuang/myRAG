@@ -4476,6 +4476,29 @@
       },
       "tier": "smoke"
     },
+    "ScopeTagSuggestion": {
+      "suggestions": [
+        {
+          "dimension": "region",
+          "source": "rule",
+          "value": "north"
+        },
+        {
+          "dimension": "department",
+          "source": "model",
+          "value": "unit-b"
+        }
+      ]
+    },
+    "ScopeVocabularyEntry": {
+      "active": true,
+      "aliases": [
+        "UA"
+      ],
+      "dimension": "legal_entity",
+      "label": "Unit A",
+      "value": "unit-a"
+    },
     "SemanticCacheCalibration": {
       "profiles": [
         {
@@ -5852,6 +5875,28 @@
         ]
       }
     },
+    "RetrievalFilters:scopes": {
+      "model": "RetrievalFilters",
+      "value": {
+        "current_only": true,
+        "date_range": null,
+        "doc_types": null,
+        "document_ids": null,
+        "include_untagged": true,
+        "invoice": null,
+        "languages": null,
+        "scopes": {
+          "legal_entity": [
+            "unit-a",
+            "unit-b"
+          ],
+          "region": [
+            "north"
+          ]
+        },
+        "sources": null
+      }
+    },
     "RetrievalParams:sub_question_coverage_off": {
       "model": "RetrievalParams",
       "value": {
@@ -5870,6 +5915,27 @@
         "rrf_k": 60,
         "schema_version": 1,
         "sub_question_coverage": false
+      }
+    },
+    "RetrievalParams:translation_weight": {
+      "model": "RetrievalParams",
+      "value": {
+        "candidate_pool_size": 75,
+        "config_hash": null,
+        "final_top_k": 8,
+        "leg_weights": {
+          "dense": 1.0,
+          "exact_id": 1.0,
+          "lexical": 1.0,
+          "translation": 0.5
+        },
+        "provenance": {
+          "source": "defaults"
+        },
+        "rerank_input_cap": 75,
+        "rrf_k": 60,
+        "schema_version": 1,
+        "sub_question_coverage": true
       }
     }
   }

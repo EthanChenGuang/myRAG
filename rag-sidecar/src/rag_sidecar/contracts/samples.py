@@ -209,6 +209,8 @@ from rag_sidecar.contracts.routing import (
     ParseAttemptPages as RoutingParseAttemptPages,
     default_parse_routing_config,
 )
+from rag_sidecar.contracts.retrieval import RetrievalLegWeights
+from rag_sidecar.contracts.scopes import ScopeFilter, ScopeTagSuggestion, ScopeTagSuggestionItem, ScopeVocabularyEntry
 
 _HASH_A = "a" * 64
 _HASH_B = "b" * 64
@@ -1574,6 +1576,7 @@ def _models() -> dict[str, Any]:
         **_query_contract_samples(),
         **_cache_contract_samples(),
         **_phase32_ingest_contract_samples(),
+        **_phase32_query_contract_samples(),
     }
 
 
@@ -1706,6 +1709,37 @@ def _phase32_ingest_contract_variants() -> dict[str, dict[str, Any]]:
     }
 
 
+def _phase32_query_contract_samples() -> dict[str, Any]:
+    return {
+        "ScopeVocabularyEntry": ScopeVocabularyEntry(
+            dimension="legal_entity", value="unit-a", label="Unit A", aliases=["UA"], active=True
+        ),
+        "ScopeTagSuggestion": ScopeTagSuggestion(
+            suggestions=[
+                ScopeTagSuggestionItem(dimension="region", value="north", source="rule"),
+                ScopeTagSuggestionItem(dimension="department", value="unit-b", source="model"),
+            ]
+        ),
+    }
+
+
+def _phase32_query_contract_variants() -> dict[str, dict[str, Any]]:
+    return {
+        "RetrievalFilters:scopes": {
+            "model": "RetrievalFilters",
+            "value": RetrievalFilters(
+                scopes=ScopeFilter(region=["north"], legal_entity=["unit-a", "unit-b"]), include_untagged=True
+            ).model_dump(mode="json"),
+        },
+        "RetrievalParams:translation_weight": {
+            "model": "RetrievalParams",
+            "value": RetrievalParams(
+                leg_weights=RetrievalLegWeights(dense=1.0, lexical=1.0, exact_id=1.0, translation=0.5)
+            ).model_dump(mode="json"),
+        },
+    }
+
+
 def build_samples() -> dict[str, dict[str, Any]]:
     samples = {name: model.model_dump(mode="json") for name, model in _models().items()}
     variants: dict[str, dict[str, Any]] = {
@@ -1799,4 +1833,5 @@ def build_samples() -> dict[str, dict[str, Any]]:
         },
     }
     variants.update(_phase32_ingest_contract_variants())
+    variants.update(_phase32_query_contract_variants())
     return {"samples": samples, "variants": variants}
