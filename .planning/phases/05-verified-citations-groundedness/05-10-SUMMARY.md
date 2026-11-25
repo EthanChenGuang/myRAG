@@ -113,13 +113,13 @@ No other deviations. Migration numbers: none used.
 
 ## Design skills
 
-- **frontend-design:** n/a. The change adds model entries to existing arrays and builds no new interface.
-- **impeccable:** n/a, for the same reason.
-- **web-design-guidelines:** ran on the 9 changed lines in `scripts/config-ui/index.html` and on how `renderModels` displays them. The hunks themselves have no findings. The entries show as a display name (short), the model id, and the existing reasoning icon. `anthropicId` and `contextLength` are not rendered, and the copy has no typography issues. Problems already in `renderModels` are out of scope and were left unchanged:
-  - `scripts/config-ui/index.html` ~L16899-16912: status SVG icons have `title` but neither `aria-label` nor `aria-hidden`;
-  - ~L16929: drag-to-reorder has no keyboard alternative;
-  - ~L16944: Remove acts at once, with no confirmation or undo;
-  - ~L16935: `displayName` and `id` go into `innerHTML` without escaping (admin-only input).
+| Skill | Outcome |
+|-------|---------|
+| frontend-design | n/a. The change adds model entries to existing arrays and builds no new interface. |
+| Impeccable | n/a, for the same reason. |
+| web-design-guidelines | pass. Ran on the 9 changed lines in `scripts/config-ui/index.html` and on how `renderModels` displays them; the hunks have no findings. The entries show as a display name (short), the model id and the existing reasoning icon; `anthropicId` and `contextLength` are not rendered. |
+
+Problems already in `renderModels` when this plan ran were outside its hunks. Merge train 8 brings `exec/fix-config-ui-bugs`, which resolves all four (`.planning/quick/2026-11-25-config-ui-fixes.md`): status icons get `role="img"` and `aria-label`, Move up/down buttons give a keyboard alternative to drag-to-reorder, Remove asks for confirmation in a `<dialog>`, and `displayName` and `id` are rendered through `textContent`.
 
 ## Deferred
 
