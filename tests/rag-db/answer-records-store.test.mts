@@ -6,7 +6,13 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { createEmptyFixtureDatabase, type DeploymentMode } from '../../eval/harness/pglite-supabase.mts';
 import { createPgliteAdmin } from '../helpers/pglite-admin.ts';
 import { mintScope, scopeKey, type TenantScope } from '@/lib/rag/tenant/scope';
-import {
+import type { InsertAnswerRecordInput } from '@/lib/answers/store';
+
+process.env.OPENAI_API_KEY ||= 'placeholder-openai-key';
+process.env.SUPABASE_SERVICE_ROLE_KEY ||= 'placeholder-service-role-key';
+process.env.NEXT_PUBLIC_SUPABASE_URL ||= 'http://127.0.0.1:9';
+process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||= 'placeholder-anon-key';
+const {
   answerIdsInMessages,
   appendReviewReason,
   attachAnswersToChat,
@@ -15,8 +21,7 @@ import {
   readOwnedAnswerRecord,
   setAnswerFeedback,
   updateAnswerGroundedness,
-  type InsertAnswerRecordInput,
-} from '@/lib/answers/store';
+} = await import('@/lib/answers/store');
 
 const MODES: DeploymentMode[] = ['single-tenant', 'multi-tenant'];
 const JSON_COLUMNS = ['citations', 'groundedness', 'feedback', 'messages'];
