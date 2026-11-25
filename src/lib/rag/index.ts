@@ -73,6 +73,8 @@ export { validateChunkingProfile } from './chunking/validate';
 export type { ChunkingFinding, ChunkingValidationContext, ChunkingValidationResult } from './chunking/validate';
 export { getChunkingSweepReport, getChunkingDecisions, ChunkingReportInvalid } from './chunking/report';
 export type { ChunkingReportCode } from './chunking/report';
+export { refusalCalibrationStatus, currentRefusalCalibrationStatus } from './refusal/status';
+export type { RefusalCalibrationStatus } from './refusal/status';
 export type {
   Candidate,
   Profile,
