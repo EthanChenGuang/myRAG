@@ -39,9 +39,15 @@ export interface EffectiveIngestSettings {
 const DEFAULT_SWITCHES: EffectiveIngestSettingsInput['ingestConfig'] = { languageAwareIngest: 'off', tableHeaderRepeat: 'profile', tableRowSerialization: false };
 const UNSET: EffectiveLanguageInput = { configured: false, languages: [], primary: null };
 
-/** The language settings for an ingestion run: read only on the unified pipeline, so the legacy path never reads them (D-02). */
-export function ingestLanguageSettings(config: Pick<IngestConfig, 'pipeline' | 'pipelineBlocked'>): EffectiveLanguageInput {
-  if (config.pipeline !== 'unified' || config.pipelineBlocked !== null) return UNSET;
+/**
+ * The language settings for an ingestion run: read on the unified pipeline, or when RAG_LANGUAGE_AWARE_INGEST=on routes legacy uploads
+ * through it (D-16), so the default legacy path never reads them (D-02).
+ */
+export function ingestLanguageSettings(
+  config: Pick<IngestConfig, 'pipeline' | 'pipelineBlocked'> & Partial<Pick<IngestConfig, 'languageAwareIngest'>>,
+): EffectiveLanguageInput {
+  if (config.pipelineBlocked !== null) return UNSET;
+  if (config.pipeline !== 'unified' && config.languageAwareIngest !== 'on') return UNSET;
   return getLanguageSettings();
 }
 

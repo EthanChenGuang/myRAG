@@ -204,6 +204,14 @@ export {
 } from './ingest/approval/legacy-refusal';
 export { assertCloudAllowed, CloudRefused } from './ingest/guard/cloud-budget';
 export { legacyLlamaparseLanguages } from './ingest/routing/effective-settings';
+export {
+  LANGUAGE_AWARE_REQUIRES_UNIFIED,
+  LanguageAwareIngestError,
+  assertLegacySplitterAllowed,
+  currentLegacyUploadRoute,
+  legacyUploadRoute,
+} from './ingest/routing/language-aware-routing';
+export type { LegacyUploadRoute } from './ingest/routing/language-aware-routing';
 export { findInvoices } from './retrieval/invoices';
 export type { FindInvoicesDeps, InvoiceFilters, InvoiceHit } from './retrieval/invoices';
 export { runChunkingBuildStep } from './ingest/rechunk/build-step';

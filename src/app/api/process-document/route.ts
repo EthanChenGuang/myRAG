@@ -13,6 +13,7 @@ import {
   legacyApprovalRefusal,
   legacyWriteRefused,
   legacyLlamaparseLanguages,
+  currentLegacyUploadRoute,
   embedText,
   ingest,
   submitIngest,
@@ -952,6 +953,17 @@ export async function POST(req: Request) {
     }
     // D-56: the legacy writer below cannot hold a document, so a knowledge-base upload refuses while upload approval is on.
     if (!isTemporary && legacyWriteRefused()) return legacyApprovalRefusal();
+    // D-16: with RAG_LANGUAGE_AWARE_INGEST=on a knowledge-base upload skips the legacy writer for the unified pipeline.
+    if (!isTemporary) {
+      const languageAwareIngest = currentLegacyUploadRoute();
+      if (languageAwareIngest === 'languages_not_configured') {
+        console.warn('[ProcessDocument] language-aware ingestion refused: supported languages are not configured');
+        return NextResponse.json({ error: 'languages_not_configured' }, { status: 503 });
+      }
+      if (languageAwareIngest === 'unified') {
+        return await uploadThroughIngest({ req, formData, file, userId, orgIdFromForm, startedAt });
+      }
+    }
 
     console.log('Processing file', isTemporary ? '(temporary)' : '(permanent)');
     const buffer = Buffer.from(await file.arrayBuffer());

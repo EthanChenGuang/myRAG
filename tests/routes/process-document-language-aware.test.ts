@@ -274,20 +274,43 @@ describe('document-processor entry under RAG_LANGUAGE_AWARE_INGEST=on (D-16)', (
     expect(state.llamaUrls).toEqual([]);
   });
 
-  it('switch on, languages configured: the scraper and Nango switches choose the unified path; off keeps legacy', async () => {
+  it.each([
+    ['on', ['zh,en,it', 'en'], 'unified'],
+    ['off', ['zh,en,it', 'en'], 'legacy'],
+    ['', ['zh,en,it', 'en'], 'legacy'],
+    ['on', null, 'legacy'],
+  ] as const)('switch %j, languages %j: the scraper and Nango switches choose %s', async (languageAware, languages, expected) => {
     vi.resetModules();
-    stubEnv({ languageAware: 'on' });
+    stubEnv({ languageAware, languages: languages ? [...languages] as [string, string] : null });
     const scrapers = await import('@/lib/scrapers/ingest-switch');
     const nango = await import('@/lib/nango/document-adapter');
-    expect(scrapers.scraperPipeline()).toBe('unified');
-    expect(nango.nangoPipeline()).toBe('unified');
-    vi.stubEnv('RAG_LANGUAGE_AWARE_INGEST', 'off');
-    expect(scrapers.scraperPipeline()).toBe('legacy');
-    expect(nango.nangoPipeline()).toBe('legacy');
-    vi.stubEnv('RAG_LANGUAGE_AWARE_INGEST', 'on');
-    vi.stubEnv('RAG_SUPPORTED_LANGUAGES', '');
-    vi.stubEnv('RAG_PRIMARY_LANGUAGE', '');
-    expect(scrapers.scraperPipeline()).toBe('legacy');
-    expect(nango.nangoPipeline()).toBe('legacy');
+    expect(scrapers.scraperPipeline()).toBe(expected);
+    expect(nango.nangoPipeline()).toBe(expected);
+  });
+});
+
+describe('ingestLanguageSettings under RAG_INGEST_PIPELINE=legacy (D-16)', () => {
+  it('reads the languages when language-aware ingestion routes legacy uploads through the unified pipeline, and never with the switch off', async () => {
+    vi.resetModules();
+    stubEnv({});
+    const settings = await import('@/lib/rag/lang/settings');
+    const { ingestLanguageSettings } = await import('@/lib/rag/ingest/routing/effective-settings');
+    expect(ingestLanguageSettings({ pipeline: 'legacy', pipelineBlocked: null, languageAwareIngest: 'on' })).toMatchObject({
+      configured: true,
+      languages: ['zh', 'en', 'it'],
+      primary: 'en',
+    });
+    let trapped = 0;
+    settings.setLanguageSettingsTrapForTests(() => {
+      trapped += 1;
+      throw new Error('[Language-aware Test] the language settings were read');
+    });
+    try {
+      expect(ingestLanguageSettings({ pipeline: 'legacy', pipelineBlocked: null, languageAwareIngest: 'off' }).configured).toBe(false);
+      expect(ingestLanguageSettings({ pipeline: 'legacy', pipelineBlocked: null }).configured).toBe(false);
+      expect(trapped).toBe(0);
+    } finally {
+      settings.setLanguageSettingsTrapForTests(null);
+    }
   });
 });

@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { storeDocument } from './supabase';
 import { env } from './env';
-import { embedText, embedBatch, CloudRefused, assertCloudAllowed, assertLegacyWriteAllowed, legacyLlamaparseLanguages } from '@/lib/rag';
+import { embedText, embedBatch, CloudRefused, assertCloudAllowed, assertLegacyWriteAllowed, assertLegacySplitterAllowed, legacyLlamaparseLanguages } from '@/lib/rag';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -411,6 +411,8 @@ async function processDocument(
   console.log('Processing document');
   // D-56: this legacy writer stores ready rows and cannot hold a document for upload approval.
   assertLegacyWriteAllowed();
+  // D-16: with language-aware ingestion on, callers use the unified pipeline; the legacy splitter never runs.
+  assertLegacySplitterAllowed();
   let tempFilePath: string | null = null;
 
   try {
