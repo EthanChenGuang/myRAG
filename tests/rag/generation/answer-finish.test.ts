@@ -172,7 +172,7 @@ describe('scheduleAnswerFinish', () => {
   });
 
   function logged(): string[] {
-    return [...errors.mock.calls, ...warnings.mock.calls].map((call) => call.map((part) => (typeof part === 'string' ? part : JSON.stringify(part))).join(' '));
+    return [...errors.mock.calls, ...warnings.mock.calls].map((call) => call.map((part: unknown) => (typeof part === 'string' ? part : JSON.stringify(part))).join(' '));
   }
 
   it('inserts exactly one row after the response, with the full citations and no query text', async () => {
