@@ -6517,6 +6517,7 @@
                                                 <label class="label" for="RAG_RERANKER"><span class="label-text">Reranker</span></label>
                                                 <select id="RAG_RERANKER" name="RAG_RERANKER" translate="no" class="select select-bordered w-full">
                                                     <option value="none" selected>none</option>
+                                                    <option value="auto">auto</option>
                                                     <option value="cohere">cohere</option>
                                                     <option value="voyage">voyage</option>
                                                     <option value="local_bm25">local_bm25</option>
@@ -6559,6 +6560,14 @@
                                                     <input type="url" id="COHERE_BASE_URL" name="COHERE_BASE_URL" placeholder="https://api.cohere.com"
                                                         autocomplete="off" spellcheck="false" translate="no" class="input input-bordered w-full">
                                                 </div>
+                                            </div>
+                                            <div class="form-control">
+                                                <label class="label" for="RAG_REFUSAL_FLOOR"><span class="label-text">Refusal floor</span></label>
+                                                <select id="RAG_REFUSAL_FLOOR" name="RAG_REFUSAL_FLOOR" translate="no" aria-describedby="rag-refusal-floor-help" class="select select-bordered w-full">
+                                                    <option value="similarity" selected>similarity</option>
+                                                    <option value="legacy_rule">legacy_rule</option>
+                                                </select>
+                                                <label class="label"><span class="label-text-alt" id="rag-refusal-floor-help">Fallback used when no calibrated refusal threshold applies to a request</span></label>
                                             </div>
                                             <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
                                                 <div class="flex flex-col gap-1">

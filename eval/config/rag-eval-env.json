@@ -101,6 +101,7 @@
   "RAG_QUERY_TRANSLATE_DISABLED_PROFILES": "",
   "RAG_QUERY_VOICE_TRANSFORMS": "condense_history,normalize_dates",
   "RAG_QWEN_EMBED_FALLBACK": "openrouter",
+  "RAG_REFUSAL_FLOOR": "similarity",
   "RAG_REFUSAL_THRESHOLD": "false",
   "RAG_RERANKER": "none",
   "RAG_RERANKING": "true",

@@ -350,7 +350,8 @@ RAG_STAGE_TIMEOUTS=
 # -----------------------------
 # Lexical hybrid search leg
 RAG_LEXICAL_SEARCH=false
-# Reranker: none | cohere | voyage | local_bm25
+# Reranker: none | auto | cohere | voyage | local_bm25
+# auto uses Cohere when COHERE_API_KEY is set and a local fallback otherwise
 RAG_RERANKER=none
 RAG_RERANK_TIER_CHAT=quality
 RAG_RERANK_TIER_VOICE=fast
@@ -360,6 +361,8 @@ COHERE_API_KEY=
 COHERE_BASE_URL=
 # Refusal and context assembly
 RAG_REFUSAL_THRESHOLD=false
+# Fallback refusal floor when no calibrated rerank cell applies: similarity | legacy_rule
+RAG_REFUSAL_FLOOR=similarity
 RAG_CONTEXT_EDGE_ORDER=false
 RAG_CONTEXT_COMPRESSION=false
 RAG_CONTEXT_TOKEN_BUDGET=6000

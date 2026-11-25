@@ -853,13 +853,8 @@
     },
     {
       "name": "RAG_REFUSAL_FLOOR",
-      "status": "legacy",
-      "knownGaps": [
-        "config-server",
-        "config-ui",
-        "env-ts",
-        "init-env"
-      ]
+      "status": "managed",
+      "knownGaps": []
     },
     {
       "name": "RAG_REFUSAL_THRESHOLD",
