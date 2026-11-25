@@ -108,8 +108,8 @@
     }
   },
   "stopwords": {
-    "en": ["the", "is", "are", "what", "which", "how", "of"],
-    "it": ["il", "lo", "la", "gli", "che", "di", "è", "perché", "quale", "come", "sono", "della"]
+    "en": ["the", "is", "are", "what", "which", "how", "of", "to", "for", "on", "with", "do", "does", "did", "can", "when", "where", "who", "and", "or", "it", "this", "that", "was", "were", "be", "have", "has", "my", "i"],
+    "it": ["il", "lo", "la", "gli", "che", "di", "è", "perché", "quale", "come", "sono", "della", "per", "un", "una", "uno", "del", "dei", "delle", "degli", "nel", "nella", "al", "alla", "entro", "quando", "quanto", "quanta", "quanti", "quante", "ho", "ha", "devo", "posso", "non", "con", "su", "da", "se", "cosa", "chi", "dove", "qual"]
   },
   "personal_data": {
     "phone": "(?<![\\d+])(?:\\+\\d{1,3}[\\s-]?)?(?:\\(?\\d{2,4}\\)?[\\s-]?){2,4}\\d{3,4}(?!\\d)",
