@@ -307,3 +307,123 @@ def test_cli_rejects_an_invalid_routing_report(tmp_path):
     routing_path.write_text('{"fixtures": []}', encoding="utf-8")
     with pytest.raises(SystemExit):
         main(["--fixtures", str(PARSE_ROOT), "--routing", str(routing_path), "--out", str(tmp_path / "out.json")])
+
+
+# Recall@k per tier from forced-tier ingest runs (03.1-47, D-40, SC6).
+GOLDEN_INGEST = EVAL_ROOT / "fixtures" / "ingest" / "golden-ingest.jsonl"
+REPORTS = EVAL_ROOT / "reports" / "phase-03.1"
+TABLE_AND_SCANNED = ("table", "scanned_zh", "scanned_en", "scanned_it")
+
+
+def _golden_lines() -> list[dict]:
+    return [json.loads(line) for line in GOLDEN_INGEST.read_text(encoding="utf-8").splitlines() if line.strip()]
+
+
+def _fixture_of(item: dict) -> str | None:
+    return next((tag.split(":", 1)[1] for tag in item.get("tags", []) if tag.startswith("parse_fixture:")), None)
+
+
+def _write_run(root: Path, name: str, misses: set[str], drop: set[str] | None = None) -> Path:
+    """A run output as run-smoke writes it: golden.merged.jsonl and report.json; items of fixtures in `misses` miss every span."""
+    run = root / name
+    run.mkdir(parents=True)
+    lines = _golden_lines()
+    (run / "golden.merged.jsonl").write_text("\n".join(json.dumps(item) for item in lines) + "\n", encoding="utf-8")
+    items = []
+    for item in lines:
+        if item["id"] in (drop or set()):
+            continue
+        spans = len(item["gold_evidence"])
+        hit = 0 if _fixture_of(item) in misses else spans
+        items.append(
+            {
+                "item_id": item["id"],
+                "language": item["language"],
+                "category": item["category"],
+                "split": item["split"],
+                "provenance": item["provenance"],
+                "answerable": item["answerable"],
+                "refused": False,
+                "span_count": spans,
+                "spans_hit_at_5": hit,
+                "spans_hit_at_10": hit,
+                "first_hit_rank": 1 if hit else None,
+            }
+        )
+    (run / "report.json").write_text(json.dumps({"run_id": f"run-{name}", "corpus_sha256": "c" * 64, "items": items}), encoding="utf-8")
+    return run
+
+
+def _linked(fixtures: set[str] | None = None) -> list[dict]:
+    return [item for item in _golden_lines() if item["answerable"] and _fixture_of(item) and (fixtures is None or _fixture_of(item) in fixtures)]
+
+
+def _recall_runs(tmp_path: Path, fast_misses: set[str]) -> dict[str, Path]:
+    return {
+        "fast": _write_run(tmp_path, "fast", fast_misses),
+        "structured": _write_run(tmp_path, "structured", set()),
+        "premium": _write_run(tmp_path, "premium", {"table-en"}),
+    }
+
+
+def test_recall_runs_fill_recall_at_k_per_tier(tmp_path):
+    misses = {"table-en", "scan-en", "scan-it", "scan-zh"}
+    report, details = build_parser_eval(PARSE_ROOT, routing_from_expected(), load_routing_config(), recall_runs=_recall_runs(tmp_path, misses))
+    linked = _linked()
+    hit = [item for item in linked if _fixture_of(item) not in misses]
+    assert report.by_tier["fast"].recall_at_k == pytest.approx(len(hit) / len(linked))
+    for tier in ("structured_layout", "structured_full", "structured_ocr"):
+        assert report.by_tier[tier].recall_at_k == 1.0
+    assert details.recall_at_k_measured is True
+    assert [run.tier for run in details.recall_runs] == ["fast", "structured", "premium"]
+    per_fixture = {item.fixture_id: item for item in details.fixtures}
+    assert per_fixture["table-en"].by_tier["fast"].recall_at_k == 0.0
+    assert per_fixture["table-en"].by_tier["structured_full"].recall_at_k == 1.0
+
+
+def test_premium_recall_counts_only_fixtures_with_premium_recordings(tmp_path):
+    report, details = build_parser_eval(PARSE_ROOT, routing_from_expected(), load_routing_config(), recall_runs=_recall_runs(tmp_path, set()))
+    premium = next(item for item in details.tiers if item.tier == "premium")
+    assert "table-en" not in premium.fixtures
+    assert report.by_tier["premium"].recall_at_k == 1.0, "the table-en miss in the premium run is outside premium coverage"
+
+
+def test_recall_by_class_lists_every_parse_class_per_forced_tier(tmp_path):
+    _report, details = build_parser_eval(PARSE_ROOT, routing_from_expected(), load_routing_config(), recall_runs=_recall_runs(tmp_path, {"table-en"}))
+    rows = {(row.tier, row.parse_class): row for row in details.recall_by_class}
+    classes = {row["class"] for row in MANIFEST["fixtures"] if row["class"] != "bench"}
+    assert {parse_class for tier, parse_class in rows if tier == "fast"} == classes
+    assert rows[("fast", "table")].recall_at_k == 0.0
+    assert rows[("structured", "table")].recall_at_k == 1.0
+    assert rows[("fast", "table")].items == len(_linked({"table-en"}))
+
+
+def test_a_run_without_a_linked_item_is_an_error(tmp_path):
+    item = _linked({"table-en"})[0]["id"]
+    runs = _recall_runs(tmp_path, set())
+    runs["fast"] = _write_run(tmp_path, "fast-short", set(), drop={item})
+    with pytest.raises(ValueError, match=item):
+        build_parser_eval(PARSE_ROOT, routing_from_expected(), load_routing_config(), recall_runs=runs)
+
+
+def test_cli_reads_recall_runs(tmp_path):
+    runs = _recall_runs(tmp_path, {"table-en"})
+    routing_path = tmp_path / "routing.json"
+    routing_path.write_text(json.dumps(routing_from_expected().model_dump(mode="json")), encoding="utf-8")
+    out = tmp_path / "parser-eval.json"
+    args = ["--fixtures", str(PARSE_ROOT), "--routing", str(routing_path), "--out", str(out), "--recall-runs", *(f"{tier}={path}" for tier, path in runs.items())]
+    assert main(args) == 0
+    details = ParserEvalDetails.model_validate_json(out.with_name("parser-eval-details.json").read_text(encoding="utf-8"))
+    assert details.recall_at_k_measured is True
+    with pytest.raises(SystemExit):
+        main([*args[:-3], "--recall-runs", "native=" + str(runs["fast"])])
+
+
+def test_committed_report_measures_recall_and_structured_is_not_below_fast_on_tables_and_scans():
+    details = ParserEvalDetails.model_validate_json((REPORTS / "parser-eval-details.json").read_text(encoding="utf-8"))
+    assert details.recall_at_k_measured is True
+    rows = {(row.tier, row.parse_class): row for row in details.recall_by_class}
+    for parse_class in TABLE_AND_SCANNED:
+        assert rows[("structured", parse_class)].recall_at_k >= rows[("fast", parse_class)].recall_at_k, parse_class
+    report = ParserEvalReport.model_validate_json((REPORTS / "parser-eval.json").read_text(encoding="utf-8"))
+    assert all(0.0 <= metrics.recall_at_k <= 1.0 for metrics in report.by_tier.values())

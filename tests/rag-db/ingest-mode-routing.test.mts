@@ -5,6 +5,7 @@
  */
 import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import path from 'node:path';
 import type { PGlite } from '@electric-sql/pglite';
 import {
@@ -238,5 +239,39 @@ describe('ingest mode by routing', () => {
     } finally {
       await close(forced);
     }
+  });
+});
+
+describe('the re-recorded ingest baseline (T-03.1-104)', () => {
+  const ROOT = process.cwd();
+  /** The ingest baseline as it was before the parse fixtures joined the corpus (03-41 shape, recorded at 925beab2). */
+  const PREVIOUS = path.join(ROOT, 'eval/baselines/history/fixture-ingest-baseline.pre-03.1-47.json');
+  const CURRENT = path.join(ROOT, 'eval/baselines/fixture-ingest-baseline.json');
+  type Baseline = { corpus_sha256: string; runs: unknown[]; items: Record<string, Record<string, Array<number | null>>> };
+  const read = (file: string) => JSON.parse(fs.readFileSync(file, 'utf8')) as Baseline;
+
+  test('every pre-existing item has exactly its previous metrics in every run: the paired differences are zero', () => {
+    const previous = read(PREVIOUS);
+    const current = read(CURRENT);
+    assert.ok(current.runs.length >= 3, 'recorded with at least three runs');
+    const moved = Object.keys(previous.items).filter((id) => JSON.stringify(current.items[id]) !== JSON.stringify(previous.items[id]));
+    assert.deepEqual(moved, [], `items whose metrics moved: ${moved.join(', ')}`);
+  });
+
+  test('the items the new baseline adds are exactly the parse fixture items, on a new corpus hash', () => {
+    const previous = read(PREVIOUS);
+    const current = read(CURRENT);
+    const parseIds = fs
+      .readFileSync(path.join(ROOT, 'eval/fixtures/ingest/golden-ingest.jsonl'), 'utf8')
+      .split('\n')
+      .filter((line) => line.trim() !== '')
+      .map((line) => JSON.parse(line) as { id: string; tags?: string[] })
+      .filter((item) => item.tags?.includes('parse_fixtures'))
+      .map((item) => item.id)
+      .sort();
+    const added = Object.keys(current.items).filter((id) => !(id in previous.items)).sort();
+    assert.ok(parseIds.length >= 30);
+    assert.deepEqual(added, parseIds);
+    assert.notEqual(current.corpus_sha256, previous.corpus_sha256, 'the parse fixtures are part of the ingest corpus hash');
   });
 });

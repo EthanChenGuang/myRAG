@@ -24,7 +24,7 @@ import re
 import sys
 import unicodedata
 from collections import Counter
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -108,6 +108,8 @@ class ParserEvalDetails(_Model):
     page_tier: list[ComboAccuracy]
     excluded_fixtures: list[str]
     recall_at_k_measured: bool
+    recall_runs: list[dict[str, Any]] = Field(default_factory=list)
+    recall_by_class: list[dict[str, Any]] = Field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -557,6 +559,7 @@ def build_parser_eval(
     fixtures_dir: Path,
     routing: RoutingReport,
     cfg: ParseRoutingConfig,
+    recall_runs: Mapping[str, Path] | None = None,
 ) -> tuple[ParserEvalReport, ParserEvalDetails]:
     """The test-set report (micro-averaged over fixtures) and its details: per fixture, per tier coverage, routing misses."""
     scored, excluded = _scored_fixtures(fixtures_dir)
@@ -623,6 +626,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--routing", required=True, help="routing report from python -m rag_sidecar.preflight.report")
     parser.add_argument("--out", default=DEFAULT_OUT)
     parser.add_argument("--details-out", default=None, help="defaults to <out stem>-details.json beside --out")
+    parser.add_argument("--recall-runs", nargs="*", default=[])
     parser.add_argument("--routing-config", default=None, help="routing data with the cost table (default config/rag/parse-routing.json)")
     args = parser.parse_args(argv)
 
