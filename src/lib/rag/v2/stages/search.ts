@@ -7,9 +7,7 @@ import type { RagConfig, StageName } from '../../config';
 import { getRagDeps, type RagDeps } from '../../deps';
 import { dedupeAndCap, type DedupeCounts, type DedupeResult } from '../../fusion/dedupe';
 import { rrf, type FusedHit, type RankedList } from '../../fusion/rrf';
-import { LEGACY_PROFILE } from '../../embeddings/active-profile';
 import type { QueryEmbedding } from '../../embeddings/query-embedding';
-import { queryLexicalTokens } from '../../lexical/tokenize';
 import { requireValue, runStage, stageSpec, type StageSpec } from '../../pipeline';
 import { exactIdStage, type ExactIdRow } from '../../retrieval/exact-id';
 import type { TenantScope } from '../../tenant/scope';
@@ -17,6 +15,7 @@ import type { TraceCollector } from '../../trace/collector';
 import type { Profile, QueryVariant, RunRetrievalInput, StageOverrides } from '../../types';
 import { getV2StartupVerdict } from '../startup';
 import { evalChunkingOverride } from '../overrides';
+import { listsFromLegs, variantSearchRequest } from '../port';
 import { bindingFailureDetail, hasBindingWork, runBindingLegs, type BindingEmbed, type BindingLegsOutput, type BindingLegsPlan } from './binding-legs';
 import type { RetrievalParams } from '@/lib/rag-eval/contracts.generated';
 
@@ -69,14 +68,6 @@ export function hasNarrowingFilters(filters: RetrievalFilters): boolean {
     nonEmpty(filters.languages) ||
     (invoice !== undefined && Object.values(invoice).some((value) => value !== undefined))
   );
-}
-
-function lexicalLanguagesFor(variant: QueryVariant): string[] | null {
-  return variant.kind === 'translated' && variant.language ? [variant.language] : null;
-}
-
-function profileId(embedding: QueryEmbedding): string {
-  return embedding.profile?.id ?? LEGACY_PROFILE.id;
 }
 
 function requireAdminSearchClient(deps: RagDeps): RpcClient {
@@ -171,23 +162,6 @@ async function exactIdRankedList(
   return { id: 'exact_id', weight, hits };
 }
 
-function listsFromLegs(
-  variantIndex: number,
-  dense: RankedHit[],
-  lexical: RankedHit[],
-  params: RetrievalParams,
-): RankedList[] {
-  const lists: RankedList[] = [];
-  const weights = params.leg_weights ?? { dense: 1, lexical: 1, exact_id: 1 };
-  if (dense.length > 0) {
-    lists.push({ id: `dense:${variantIndex}`, weight: weights.dense, hits: dense });
-  }
-  if (lexical.length > 0) {
-    lists.push({ id: `lexical:${variantIndex}`, weight: weights.lexical, hits: lexical });
-  }
-  return lists;
-}
-
 /** D-06: the standalone variant is the condensed one when present, else the original; never hyde, expanded or translated. */
 function standaloneVariantIndex(variants: readonly QueryVariant[]): number {
   const condensed = variants.findIndex((variant) => variant.kind === 'condensed');
@@ -256,22 +230,18 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     const domainPending = runDomainLegs(stageSignal);
     const legsByVariant = await Promise.all(
       variants.map(async (variant, index) => {
-        const variantEmbedding = ctx.variantEmbeddings?.[index] ?? embedding;
-        // P-6: a dense-only variant (HyDE) sends no lexical tokens, so it contributes no lexical list.
-        const useLexical = lexicalEnabled && verdict.icuAvailable && variant.legs !== 'dense';
-        const tokens = useLexical ? queryLexicalTokens(variant.text) : [];
-        const legs = await backend.search({
-          scope,
-          embeddingProfileId: profileId(variantEmbedding),
-          denseVector: variantEmbedding.vector,
-          lexicalTokens: tokens,
-          lexicalLanguages: lexicalLanguagesFor(variant),
-          filters,
-          denseLimit: pool,
-          lexicalLimit: pool,
-          signal: stageSignal,
-          ...(chunkingOverride ? { chunkingProfileOverride: chunkingOverride } : {}),
-        });
+        const legs = await backend.search(
+          variantSearchRequest({
+            scope,
+            variant,
+            embedding: ctx.variantEmbeddings?.[index] ?? embedding,
+            filters,
+            pool,
+            lexicalEnabled: lexicalEnabled && verdict.icuAvailable,
+            signal: stageSignal,
+            chunkingProfileOverride: chunkingOverride,
+          }),
+        );
         denseTotal += legs.dense.length;
         lexicalTotal += legs.lexical.length;
         return legs;
