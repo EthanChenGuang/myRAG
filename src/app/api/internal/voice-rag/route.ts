@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod/v3';
 import { env } from '@/lib/env';
-import { deriveVoiceKeywords, readSecurityConfig, resolveVoiceScope, runRetrieval } from '@/lib/rag';
-import { readFeedbackLoopConfig } from '@/lib/rag/feedback-loop/config';
+import { deriveVoiceKeywords, readFeedbackLoopConfig, readSecurityConfig, resolveVoiceScope, runRetrieval } from '@/lib/rag';
 import { internalApiKeyMatches } from '@/lib/internal-api-key';
 
 export const runtime = 'nodejs';

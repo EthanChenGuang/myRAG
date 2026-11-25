@@ -11,8 +11,10 @@ import {
   detectLanguage,
   finishTrace,
   isV2Pipeline,
+  knowledgeBaseUnavailableLanguage,
   knowledgeBaseUnavailableMessage,
   parseRetrievalFilters,
+  readFeedbackLoopConfig,
   resolveEmbedScope,
   runRetrieval,
   scopeKey,
@@ -21,8 +23,6 @@ import {
   type RetrievalResult,
   type TraceCollector,
 } from '@/lib/rag';
-import { knowledgeBaseUnavailableLanguage } from '@/lib/rag/generation/messages';
-import { readFeedbackLoopConfig } from '@/lib/rag/feedback-loop/config';
 
 // Use Node.js runtime instead of Edge
 export const runtime = 'nodejs';

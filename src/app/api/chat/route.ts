@@ -19,10 +19,13 @@ import {
   detectLanguage,
   finishTrace,
   isV2Pipeline,
+  knowledgeBaseUnavailableLanguage,
   knowledgeBaseUnavailableMessage,
   noKnowledgeBaseResponse,
+  noKnowledgeBaseResponseLanguage,
   mintAnswerId,
   parseRetrievalFilters,
+  readFeedbackLoopConfig,
   readGenerationConfig,
   repairOwnerMembership,
   resolveTenantScope,
@@ -37,8 +40,6 @@ import {
   type TenantScope,
   type TraceCollector,
 } from '@/lib/rag';
-import { knowledgeBaseUnavailableLanguage, noKnowledgeBaseResponseLanguage } from '@/lib/rag/generation/messages';
-import { readFeedbackLoopConfig } from '@/lib/rag/feedback-loop/config';
 // Import URL extraction utilities
 import { formatURLsForContext, type ExtractedURL } from '@/lib/url-extractor';
 import type { JSONValue } from '@ai-sdk/provider';
