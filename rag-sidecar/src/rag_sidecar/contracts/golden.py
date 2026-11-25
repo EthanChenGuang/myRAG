@@ -6,7 +6,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from rag_sidecar.contracts.eval_run import ConversationTurn
 from rag_sidecar.contracts.retrieval import RetrievalFilters
 
-Language = Literal["zh", "en", "it"]
+from .languages import Language
+
 Category = Literal[
     "multi_turn",
     "compound",

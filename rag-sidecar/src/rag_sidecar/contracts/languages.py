@@ -7,11 +7,20 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterable
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    WithJsonSchema,
+    field_validator,
+    model_validator,
+)
 
 from rag_sidecar.config_files import resolve_config_file
 
@@ -165,3 +174,27 @@ def get_language_pack(code: str, registry: LanguageRegistry | None = None) -> La
 
 def complete_packs(registry: LanguageRegistry | None = None) -> list[LanguagePack]:
     return [pack for pack in (registry or load_language_registry()).packs if not pack_missing_parts(pack)]
+
+
+def language_codes(registry: LanguageRegistry | None = None) -> tuple[str, ...]:
+    """The registry's language codes, in registry order."""
+    return tuple(pack.code for pack in (registry or load_language_registry()).packs)
+
+
+def build_language_type(codes: Iterable[str], extra: Iterable[str] = ()) -> Any:
+    """A string type limited to `codes` (plus `extra`), exported to JSON Schema as an enum in that order (D-06)."""
+    allowed = tuple(dict.fromkeys([*codes, *extra]))
+    if not allowed:
+        raise ValueError("a language type needs at least one code")
+    accepted = frozenset(allowed)
+
+    def _known(value: str) -> str:
+        if value not in accepted:
+            raise ValueError(f"unknown language code {value!r}; expected one of {', '.join(allowed)}")
+        return value
+
+    return Annotated[str, AfterValidator(_known), WithJsonSchema({"type": "string", "enum": list(allowed)})]
+
+
+LANGUAGE_CODES: tuple[str, ...] = language_codes()
+Language = build_language_type(LANGUAGE_CODES)
