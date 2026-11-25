@@ -5,7 +5,8 @@
 import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { startQueuedHarness, type QueuedHarness } from '../../eval/harness/queued-ingest.mts';
+import { SIDECAR_SECRET, startQueuedHarness, type QueuedHarness } from '../../eval/harness/queued-ingest.mts';
+import { spawnSidecarModule } from '../../eval/harness/sidecar-worker.mts';
 
 type Row = Record<string, unknown>;
 
@@ -289,5 +290,249 @@ describe('enqueueIngest with a batch id (03.1-43 follow-up)', () => {
     assert.equal(snapshot.progressive, false);
     assert.equal(snapshot.embed_mode, 'sync');
     await harness.rows("UPDATE ingestion_jobs SET status = 'failed' WHERE id = $1", [row.id]);
+  });
+});
+
+describe('backfill run: enqueue, monitor, end report and resume after a kill (D-25, D-33, D-34, D-36)', () => {
+  const TERMINAL = new Set(['ready', 'failed', 'quarantined', 'needs_review', 'skipped_duplicate']);
+  let run: typeof import('@/lib/rag/ingest/backfill/run');
+  let rpc: import('@/lib/rag/backend/supabase-rpc').RpcClient;
+  let serviceKey: string;
+  const writeSizes: number[] = [];
+
+  before(async () => {
+    run = await import('@/lib/rag/ingest/backfill/run');
+    const deps = await import('@/lib/rag/ingest/deps');
+    const admin = deps.getIngestDeps().db();
+    assert.ok(admin, 'admin client');
+    rpc = admin;
+    // Writer spy: every chunk write of the app goes through this client (D-25).
+    deps.setIngestDepsForTests({
+      db: () => ({
+        rpc(fn: string, args: Record<string, unknown>) {
+          if (fn === 'rag_write_chunks' && Array.isArray(args.p_chunks)) writeSizes.push(args.p_chunks.length);
+          return admin.rpc(fn, args);
+        },
+      }),
+    });
+    const { fixtureProcessEnv } = await import('../../eval/harness/fake-edge.mts');
+    serviceKey = String(fixtureProcessEnv(harness.edge.url).SUPABASE_SERVICE_ROLE_KEY);
+    // Open jobs of the begin cases would be claimed by the always-on worker below.
+    await harness.rows(
+      "UPDATE ingestion_jobs SET deleted_at = now() WHERE status NOT IN ('ready', 'failed', 'quarantined', 'needs_review', 'skipped_duplicate')",
+    );
+  });
+
+  function item(sourceKey: string, bytes: Uint8Array): import('@/lib/rag/ingest/backfill/sources').SourceItem {
+    return {
+      sourceKey,
+      size: bytes.byteLength,
+      ext: 'txt',
+      async open() {
+        const { Readable } = await import('node:stream');
+        return Readable.from([Buffer.from(bytes)]);
+      },
+    };
+  }
+
+  async function* listOf(items: import('@/lib/rag/ingest/backfill/sources').SourceItem[]) {
+    for (const entry of items) yield entry;
+  }
+
+  function startWorker(): { kill(): void; done: Promise<{ exitCode: number | null; stderr: string }> } {
+    return spawnSidecarModule(
+      'uvicorn',
+      ['rag_sidecar.main:app', '--host', '127.0.0.1', '--port', '0', '--log-level', 'warning'],
+      {
+        RAG_INGEST_WORKER: 'on',
+        RAG_INGEST_WORKER_CONCURRENCY: '4',
+        RAG_INGEST_MAINTENANCE: 'off',
+        RAG_SIDECAR_SECRET: SIDECAR_SECRET,
+        NEXT_PUBLIC_SUPABASE_URL: harness.edge.url,
+        SUPABASE_SERVICE_ROLE_KEY: serviceKey,
+        RAG_APP_INTERNAL_URL: harness.app.url,
+        UV_OFFLINE: '1',
+        UV_FROZEN: '1',
+      },
+      { timeoutMs: 600_000 },
+    );
+  }
+
+  async function waitFor(check: () => Promise<boolean>, timeoutMs: number, what: string): Promise<void> {
+    const started = Date.now();
+    while (!(await check())) {
+      if (Date.now() - started > timeoutMs) assert.fail(`timed out waiting for ${what}`);
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+  }
+
+  async function ingestCounts(batchId: string): Promise<Record<string, number>> {
+    const rows = await harness.rows("SELECT status, count(*)::int AS n FROM ingestion_jobs WHERE batch_id = $1 AND kind = 'ingest' GROUP BY status", [
+      batchId,
+    ]);
+    return Object.fromEntries(rows.map((row) => [String(row.status), Number(row.n)]));
+  }
+
+  test('a 30-file archive with 4 duplicates runs on the worker with batch concurrency 2, survives a kill and reconciles to 30', async () => {
+    const signal = new AbortController().signal;
+    // Two files the tenant already has, ingested before the batch.
+    const existing = [textFile('run-existing-0'), textFile('run-existing-1')];
+    const seedBatch = await createBatch(tenantA);
+    for (const [index, bytes] of existing.entries()) {
+      const { jobId } = await enqueueStaged(seedBatch, `run-existing-${index}`, { bytes });
+      assert.equal((await harness.runWorker(jobId)).exitCode, 0);
+    }
+
+    const unique = Array.from({ length: 26 }, (_, index) => textFile(`run-file-${String(index).padStart(2, '0')}`));
+    const items = [
+      ...unique.map((bytes, index) => item(`archive/file-${String(index).padStart(2, '0')}.txt`, bytes)),
+      item('archive/copies/file-00.txt', unique[0] as Uint8Array),
+      item('archive/copies/file-01.txt', unique[1] as Uint8Array),
+      item('archive/old/existing-0.txt', existing[0] as Uint8Array),
+      item('archive/old/existing-1.txt', existing[1] as Uint8Array),
+    ];
+    const batchId = await createBatch(tenantA, 2);
+    const batch = { id: batchId, scope: harness.scopeA };
+    const { inventory } = await import('@/lib/rag/ingest/backfill/inventory');
+    const inv = await inventory(batch, listOf(items), { rpc, signal });
+    assert.equal(inv.entries.length, 26);
+    const opener = new Map(items.map((entry) => [entry.sourceKey, entry.open]));
+    const entries = inv.entries.map((entry) => ({ ...entry, open: opener.get(entry.sourceKey) as (typeof items)[number]['open'] }));
+
+    const { loadQueueConfig } = await import('@/lib/rag/ingest/queue-config');
+    const snapshot = () => loadQueueConfig({ RAG_INGEST_PIPELINE: 'unified', RAG_INGEST_ASYNC: 'on', RAG_PARSE_PROGRESSIVE: 'true' });
+    const first = await run.enqueueRun(batch, entries, { signal, snapshot });
+    assert.equal(first.enqueued, 26);
+    const queued = await harness.rows("SELECT * FROM ingestion_jobs WHERE batch_id = $1 AND kind = 'ingest' AND status = 'queued'", [batchId]);
+    assert.equal(queued.length, 26);
+    for (const row of queued) {
+      assert.equal(row.priority, 10);
+      assert.equal(row.document_id, null);
+      assert.equal((row.settings as Row).progressive, false, 'a backfill snapshot is never progressive');
+      assert.equal((row.original_ref as Row).bucket, 'rag-originals');
+      assert.ok(String((row.original_ref as Row).path).startsWith(`${tenantA}/backfill/${batchId}/`));
+    }
+    assert.deepEqual(await ingestCounts(batchId), { queued: 26, skipped_duplicate: 4 });
+    const shas = inv.entries.map((entry) => entry.fileSha256);
+    const [none] = await harness.rows('SELECT count(*)::int AS n FROM documents WHERE file_sha256 = ANY($1)', [shas]);
+    assert.equal(Number(none?.n), 0, 'no document row before a claim');
+
+    const again = await run.enqueueRun(batch, entries, { signal, snapshot });
+    assert.equal(again.enqueued, 0);
+    assert.equal(again.existing, 26);
+    assert.deepEqual(await ingestCounts(batchId), { queued: 26, skipped_duplicate: 4 });
+
+    let maxLeased = 0;
+    const sample = setInterval(() => {
+      harness
+        .rows(
+          "SELECT count(*)::int AS n FROM ingestion_jobs WHERE batch_id = $1 AND status IN ('preflight', 'parsing', 'checking', 'chunking', 'embedding') AND lease_until > now()",
+          [batchId],
+        )
+        .then((rows) => {
+          maxLeased = Math.max(maxLeased, Number(rows[0]?.n ?? 0));
+        })
+        .catch(() => undefined);
+    }, 100);
+    try {
+      const worker = startWorker();
+      await waitFor(async () => ((await ingestCounts(batchId)).ready ?? 0) >= 10, 240_000, '10 ready jobs');
+      worker.kill();
+      await worker.done;
+      const readyBefore = await harness.rows(
+        "SELECT id, retries, jsonb_array_length(attempts) AS attempts, updated_at::text AS updated_at, document_id FROM ingestion_jobs WHERE batch_id = $1 AND status = 'ready' ORDER BY id",
+        [batchId],
+      );
+      assert.ok(readyBefore.length >= 10);
+      assert.ok(readyBefore.length < 26, 'killed mid-run');
+      // The killed worker's leases run out (120 s in production; expired here so the test does not wait).
+      await harness.rows("UPDATE ingestion_jobs SET lease_until = now() - interval '1 second' WHERE batch_id = $1 AND lease_until IS NOT NULL", [batchId]);
+
+      const restarted = startWorker();
+      const progress: Array<{ leased: number }> = [];
+      const final = await run.monitor(batch, { signal, intervalMs: 250, timeoutMs: 300_000, onProgress: (p) => progress.push(p) });
+      restarted.kill();
+      await restarted.done;
+      assert.equal(run.openJobs(final), 0, JSON.stringify(final));
+      assert.ok(progress.every((p) => p.leased <= 2), 'monitor never saw more than 2 leased jobs');
+
+      const readyAfter = await harness.rows(
+        `SELECT id, retries, jsonb_array_length(attempts) AS attempts, updated_at::text AS updated_at, document_id FROM ingestion_jobs WHERE id = ANY($1) ORDER BY id`,
+        [readyBefore.map((row) => row.id)],
+      );
+      assert.deepEqual(readyAfter, readyBefore, 'ready jobs are never processed again');
+    } finally {
+      clearInterval(sample);
+    }
+    assert.ok(maxLeased <= 2, `batch concurrency exceeded: ${maxLeased}`);
+    assert.ok(maxLeased >= 1);
+
+    assert.deepEqual(await ingestCounts(batchId), { ready: 26, skipped_duplicate: 4 });
+    const docs = await harness.rows(
+      'SELECT file_sha256, count(*)::int AS versions, bool_and(status = $2) AS ready, bool_and(is_current) AS current, min(tenant_key) AS tenant FROM documents WHERE file_sha256 = ANY($1) GROUP BY file_sha256',
+      [shas, 'ready'],
+    );
+    assert.equal(docs.length, 26, 'one document per unique file');
+    assert.ok(docs.every((row) => row.versions === 1 && row.ready === true && row.current === true && row.tenant === tenantA));
+
+    const report = await run.endReport(batch, { signal });
+    assert.equal(report.ingest.total, 30);
+    assert.deepEqual(report.ingest.byStatus, { ready: 26, skipped_duplicate: 4 });
+    assert.equal(report.sample.total, 0);
+    assert.deepEqual(report.failures, []);
+    assert.deepEqual(report.needsReview, []);
+
+    assert.ok(writeSizes.length >= 26, `chunk writes seen: ${writeSizes.length}`);
+    assert.ok(Math.max(...writeSizes) <= 300, `a chunk write carried ${Math.max(...writeSizes)} rows`);
+    assert.equal(harness.edge.calls.filter((call) => call.path.endsWith('/rag_activate_embedding_profile')).length, 0, 'no profile activation');
+
+    const staged = queued.map((row) => String((row.original_ref as Row).path));
+    assert.equal(await run.releaseStagedOriginals(batch, { signal }), 26);
+    for (const key of staged) assert.equal(await store.exists(key), false);
+    const [kept] = await harness.rows("SELECT count(*)::int AS n FROM documents WHERE file_sha256 = ANY($1) AND original_path LIKE '%/original.txt'", [shas]);
+    assert.equal(Number(kept?.n), 26, 'every version keeps its own original');
+  });
+
+  test('endReport lists needs_review documents with reasons, failures with error classes, the sample apart, and actual against projected cost', async () => {
+    const signal = new AbortController().signal;
+    const batchId = await createBatch(tenantA);
+    const jobs = [
+      { kind: 'ingest', source: 'config_upload', source_key: 'r/ready.txt', status: 'ready', settings: {} },
+      { kind: 'ingest', source: 'config_upload', source_key: 'r/review.txt', status: 'needs_review', settings: {} },
+      { kind: 'ingest', source: 'config_upload', source_key: 'r/failed.txt', status: 'failed', settings: {} },
+      { kind: 'ingest', source: 'config_upload', source_key: 'r/dup.txt', status: 'skipped_duplicate', settings: {} },
+      { kind: 'dry_run', source: 'config_upload', source_key: 'r/ready.txt', status: 'ready', settings: {} },
+    ];
+    await harness.rows('SELECT rag_enqueue_backfill_jobs($1, $2::jsonb)', [batchId, JSON.stringify(jobs)]);
+    await harness.rows("UPDATE ingestion_jobs SET est_cost_usd = 0.25 WHERE batch_id = $1 AND source_key = 'r/ready.txt'", [batchId]);
+    await harness.rows(
+      "UPDATE ingestion_jobs SET needs_review_reason = 'batch_budget_exhausted', est_cost_usd = 0.5 WHERE batch_id = $1 AND source_key = 'r/review.txt'",
+      [batchId],
+    );
+    await harness.rows(
+      "UPDATE ingestion_jobs SET error_class = 'parse_timeout', dead_letter_at = now() WHERE batch_id = $1 AND source_key = 'r/failed.txt'",
+      [batchId],
+    );
+    await harness.rows("SELECT rag_update_ingestion_batch($1, NULL, $2::jsonb, NULL)", [
+      batchId,
+      JSON.stringify({ projected_cost: { premium_parse_usd: 0.5, vlm_usd: 0, embeddings_usd: 0.25, total_usd: 0.75 } }),
+    ]);
+
+    const report = await run.endReport({ id: batchId, scope: harness.scopeA }, { signal });
+    assert.equal(report.ingest.total, 4);
+    assert.deepEqual(report.ingest.byStatus, { ready: 1, needs_review: 1, failed: 1, skipped_duplicate: 1 });
+    assert.deepEqual(report.sample, { total: 1, byStatus: { ready: 1 } });
+    assert.deepEqual(report.needsReview, [{ sourceKey: 'r/review.txt', documentId: null, reason: 'batch_budget_exhausted' }]);
+    assert.deepEqual(report.failures, [{ sourceKey: 'r/failed.txt', errorClass: 'parse_timeout', deadLetter: true }]);
+    assert.deepEqual(report.cost, { projectedUsd: 0.75, actualUsd: 1, spentUsd: 0, differenceUsd: 0.25 });
+  });
+
+  test('the run refuses a batch of another tenant', async () => {
+    const signal = new AbortController().signal;
+    const batchId = await createBatch(tenantA);
+    const foreign = { id: batchId, scope: harness.scopeB };
+    await assert.rejects(run.enqueueRun(foreign, [], { signal }), /tenant mismatch/);
+    await assert.rejects(run.endReport(foreign, { signal }), /tenant mismatch/);
+    await assert.rejects(run.monitor(foreign, { signal }), /tenant mismatch/);
   });
 });
