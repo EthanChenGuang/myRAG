@@ -19,6 +19,12 @@ export interface CacheKeyParts {
   entryProfile: EntryProfile;
   /** hashSystemPromptTemplate of the template before {{context}} substitution. */
   systemPromptHash: string;
+  /** D-39: the resolved scope tags; absent (or empty) for no filter, so a filter-free key is unchanged. */
+  scopes?: readonly string[];
+  /** D-39: only with scopes. */
+  scopesIncludeUntagged?: boolean;
+  /** D-44: the effective date passed to retrieval; absent while RAG_EFFECTIVE_DATES is off. */
+  effectiveOn?: string;
 }
 
 export interface CacheQuery extends CacheKeyParts {
