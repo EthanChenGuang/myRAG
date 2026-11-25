@@ -4,7 +4,7 @@ import { imageCaptionModelId } from '../captioner';
 import type { QueueConfig } from '../queue-config';
 import type { ProcessingProfile } from '../profiles/load';
 import type { ParseRoutingConfig } from './config';
-import type { EffectiveIngestSettingsInput, EffectiveLanguageInput } from './effective-settings';
+import { effectiveIngestSettings, type EffectiveIngestSettingsInput, type EffectiveLanguageInput } from './effective-settings';
 import type { EffectiveTierBounds } from './tier-bounds';
 
 export interface BuildJobSettingsInput {
@@ -26,6 +26,9 @@ export interface BuildJobSettingsInput {
   languageSettings?: EffectiveLanguageInput;
 }
 
+const DEFAULT_SWITCHES: EffectiveIngestSettingsInput['ingestConfig'] = { languageAwareIngest: 'off', tableHeaderRepeat: 'profile', tableRowSerialization: false };
+const UNSET_LANGUAGES: EffectiveLanguageInput = { configured: false, languages: [], primary: null };
+
 export function buildJobSettings(input: BuildJobSettingsInput): JobSettingsSnapshotWire {
   const {
     queueConfig,
@@ -36,7 +39,10 @@ export function buildJobSettings(input: BuildJobSettingsInput): JobSettingsSnaps
     embedProfileProvider = 'openai',
     approval = null,
     holdPublish = false,
+    ingestConfig = DEFAULT_SWITCHES,
+    languageSettings = UNSET_LANGUAGES,
   } = input;
+  const effective = effectiveIngestSettings({ ingestConfig, profile, languageSettings });
 
   // A held upload is never visible before approval, so a provisional version would only end the job before its routed run (D-30, D-36).
   const progressive = isBackfill || approval?.required === true ? false : queueConfig.parseProgressive;
@@ -50,7 +56,7 @@ export function buildJobSettings(input: BuildJobSettingsInput): JobSettingsSnaps
     escalation: queueConfig.parseEscalation === 'on',
     max_tier: bounds.max_tier,
     min_tier: bounds.min_tier,
-    ocr_languages: profile.parser.ocr_languages,
+    ocr_languages: effective.ocrLanguages,
     premium_max_pages_per_doc: queueConfig.premiumMaxPagesPerDoc,
     premium_page_budget: queueConfig.premiumPageBudget,
     profile_id: profile.id,
@@ -62,6 +68,8 @@ export function buildJobSettings(input: BuildJobSettingsInput): JobSettingsSnaps
     vlm_model: queueConfig.vlmModel ?? imageCaptionModelId(),
     ...(approval?.required === true ? { approval } : {}),
     ...(holdPublish && isBackfill ? { hold_publish: true } : {}),
+    // Each field below is dropped by omitDefaultFields while it holds its default (D-17, research Pitfall 17).
+    ocr_primary_language: effective.ocrPrimaryLanguage,
   };
 
   return omitDefaultFields(JobSettingsSnapshotSchema.parse(snapshot), JOB_SETTINGS_PHASE32_DEFAULTS);

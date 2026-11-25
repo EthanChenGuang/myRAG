@@ -13,6 +13,7 @@ import { getObjectStore } from '../object-store';
 import { getLlamaParseParser, tierFor } from '../parsers/llamaparse-v2';
 import { ParserError, type ParseAttempt, type PendingJob } from '../parsers/shared';
 import { getProcessingProfile } from '../profiles/load';
+import { effectiveIngestSettingsFromSnapshot } from '../routing/effective-settings';
 import { lookupParseCache, putParseResult } from '../parse-cache';
 import type { IngestState } from '../types';
 import type { CallbackResult } from './common';
@@ -180,6 +181,8 @@ export async function handlePremiumMode(
         pollUntil,
         resume: continuationJob,
         onSubmitted: async () => undefined,
+        // The job's frozen snapshot, never the current variables (D-17).
+        settings: effectiveIngestSettingsFromSnapshot(job.settings, profile),
       });
     } catch (error) {
       if (error instanceof CloudRefused) return refused(body.worker_id, error.reason);

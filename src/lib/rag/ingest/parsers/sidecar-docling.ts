@@ -93,15 +93,16 @@ export function createSidecarParser(config: SidecarConfig): DocumentParser {
   }
 
   async function submit(request: ParseRequest, format: SidecarInputFormat, attempt: number): Promise<PendingJob> {
+    const effective = request.settings;
     const parsedRequest = ParseJobRequestSchema.safeParse({
       profile_id: request.profile.id,
       profile_version: request.profile.version,
       input_format: format,
       docling: request.profile.parser.docling,
-      ocr_languages: request.profile.parser.ocr_languages,
+      ocr_languages: effective?.ocrLanguages ?? request.profile.parser.ocr_languages,
       tokenizer: 'cl100k_base',
       max_tokens: request.profile.chunker.max_tokens,
-      repeat_table_header: request.profile.chunker.repeat_table_header,
+      repeat_table_header: effective?.repeatTableHeader ?? request.profile.chunker.repeat_table_header,
       page_cap: null,
     });
     if (!parsedRequest.success) throw new ParserError('docling', 'invalid_request');
