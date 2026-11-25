@@ -1,12 +1,18 @@
 import rawThresholds from '../../../../eval/config/groundedness-thresholds.json';
 import { stripCitationMarkers } from '@/lib/citations/marker-grammar';
-import { GroundednessThresholdsSchema, type GroundednessResult } from '@/lib/rag-eval/contracts.generated';
+import {
+  GroundednessThresholdsSchema,
+  type AnswerRecord,
+  type GroundednessRequest,
+  type GroundednessResult,
+} from '@/lib/rag-eval/contracts.generated';
 import { countTokens as cl100kCountTokens } from '../ingest/text/tokens';
 import { detectLanguage } from '../lang/detect';
 import { chineseScript } from '../lang/script';
 import type { RetrievalStatus } from '../types';
 import type { AliasedBlock } from './citations/blocks';
 import type { GenerationConfig } from './config';
+import { requestGroundedness, type GroundednessClientOptions } from './groundedness-client';
 
 export interface GroundednessEligibilityInput {
   /** RAG_GROUNDEDNESS. */
@@ -48,7 +54,7 @@ export function groundednessEligibility(input: GroundednessEligibilityInput): Gr
 
 export interface PremiseInput {
   /** The alias blocks in the order they were sent. */
-  blocks: readonly AliasedBlock[];
+  blocks: ReadonlyArray<Pick<AliasedBlock, 'alias' | 'text'>>;
   citedAliases: Iterable<string>;
   /** webSearch result texts, only when that tool ran. */
   webSearchTexts: readonly string[];
@@ -227,5 +233,104 @@ export function labelGroundedness(
     score,
     threshold: cell.threshold,
     thresholdSource: cell.source,
+  };
+}
+
+/** The stored groundedness of one answer (the AnswerRecord contract shape). */
+export type AnswerGroundedness = AnswerRecord['groundedness'];
+
+export interface ScoreAnswerGroundednessInput {
+  /** Sent as the sidecar request_id. */
+  answerId: string;
+  /** The streamed answer, markers included. */
+  answerText: string;
+  blocks: ReadonlyArray<Pick<AliasedBlock, 'alias' | 'text'>>;
+  citedAliases: Iterable<string>;
+  webSearchTexts: readonly string[];
+  eligibility: GroundednessEligibility;
+  multiTenant: boolean;
+  config: Pick<GenerationConfig, 'vectaraOptIn' | 'vectaraMultiTenantAck' | 'maxPremiseTokens' | 'groundednessTimeoutMs'>;
+}
+
+export interface ScoreAnswerGroundednessDeps {
+  request?: (request: GroundednessRequest, options?: GroundednessClientOptions) => Promise<GroundednessResult>;
+  countTokens?: (text: string) => number;
+  cells?: GroundednessThresholdCells;
+  now?: () => Date;
+}
+
+/** Only these answer languages have a scorer (D-11); anything else is not_checked without a request. */
+const SCORABLE_LANGUAGES: ReadonlySet<GroundednessLanguage> = new Set(['en', 'zh-Hans']);
+
+function skipped(reason: string, checkedAt: string): AnswerGroundedness {
+  return {
+    status: 'not_checked',
+    label: 'not_checked',
+    scorer: 'none',
+    score: null,
+    threshold: null,
+    thresholdSource: null,
+    reason,
+    truncated: false,
+    latencyMs: 0,
+    checkedAt,
+  };
+}
+
+/**
+ * D-13, D-14, D-21: turns one answer and the evidence it was given into a labelled groundedness result.
+ * Skipped cases send nothing to the sidecar; every failure is a not_checked result, never a throw.
+ */
+export async function scoreAnswerGroundedness(
+  input: ScoreAnswerGroundednessInput,
+  deps: ScoreAnswerGroundednessDeps = {},
+): Promise<AnswerGroundedness> {
+  const now = deps.now ?? (() => new Date());
+  if (!input.eligibility.eligible) return skipped(input.eligibility.reason, now().toISOString());
+
+  const hypothesis = buildHypothesis(input.answerText);
+  if (hypothesis.status !== 'ok') return skipped(hypothesis.reason, now().toISOString());
+
+  const language = answerGroundednessLanguage(input.answerText);
+  if (!SCORABLE_LANGUAGES.has(language)) return skipped('unsupported_language', now().toISOString());
+
+  const premise = buildPremise({
+    blocks: input.blocks,
+    citedAliases: input.citedAliases,
+    webSearchTexts: input.webSearchTexts,
+    maxTokens: input.config.maxPremiseTokens,
+    ...(deps.countTokens ? { countTokens: deps.countTokens } : {}),
+  });
+  if (premise.status !== 'ok') return skipped(premise.status, now().toISOString());
+
+  let result: GroundednessResult;
+  try {
+    result = await (deps.request ?? requestGroundedness)(
+      {
+        request_id: input.answerId,
+        premise_texts: premise.premiseTexts,
+        hypothesis: hypothesis.hypothesis,
+        language,
+        allow_vectara: allowVectaraFor(input.config, input.multiTenant),
+      },
+      { timeoutMs: input.config.groundednessTimeoutMs },
+    );
+  } catch (error) {
+    console.warn('[Groundedness] Scoring request failed', { error: error instanceof Error ? error.name : typeof error });
+    return skipped('error', now().toISOString());
+  }
+
+  const labelled = labelGroundedness(result, language, deps.cells);
+  return {
+    status: labelled.status,
+    label: labelled.label,
+    scorer: labelled.scorer,
+    score: labelled.score,
+    threshold: labelled.threshold,
+    thresholdSource: labelled.thresholdSource,
+    reason: labelled.reason,
+    truncated: premise.truncated || labelled.truncated,
+    latencyMs: labelled.latencyMs,
+    checkedAt: now().toISOString(),
   };
 }
