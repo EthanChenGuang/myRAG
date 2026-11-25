@@ -92,7 +92,10 @@ export class RAGClient {
 
             // Format context for LLM
             console.log(`[RAG] Found ${results.length} context chunks.`);
-            const contextText = results.map(r => `[Context from document ${r.document_id}]: ${r.content}`).join('\n\n');
+            const serverContext: unknown = response.data.context;
+            const contextText = typeof serverContext === 'string' && serverContext.trim() !== ''
+                ? serverContext
+                : results.map(r => `[Context from document ${r.document_id}]: ${r.content}`).join('\n\n');
 
             // Format sources for UI
             const sources = results.map(r => {
