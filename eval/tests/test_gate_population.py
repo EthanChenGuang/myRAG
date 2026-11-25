@@ -7,18 +7,26 @@ from rag_sidecar.contracts import GatePopulationConfig
 from rag_sidecar.contracts.eval_run import RagTrace
 from rag_sidecar.contracts.golden import GoldenItem
 from rag_sidecar.contracts.report import EvalReport, ItemResult
+from test_paired import _baseline, _noise, _rows
+from test_paired import _item as _paired_item
+from test_paired import _report as _paired_report_fixture
+from test_report_runner import (
+    _four_items,
+    _item,
+    _manifest,
+    _score_args,
+    _trace,
+    _write_inputs,
+)
 
 from rag_eval.config_files import GATE_POPULATION_PATH, load_gate_population
 from rag_eval.golden_io import load_golden
 from rag_eval.metrics import RealSetTooSmall, aggregate, score_items
 from rag_eval.paired import paired_report
+from rag_eval.parse_gate import _gated_items as _parse_gate_items
 from rag_eval.paths import REPO_ROOT
 from rag_eval.report import build_report, write_report
 from rag_eval.runner import EXIT_REAL_SET_TOO_SMALL, main
-from test_paired import _baseline, _noise, _rows
-from test_paired import _item as _paired_item
-from test_paired import _report as _paired_report_fixture
-from test_report_runner import _four_items, _item, _manifest, _score_args, _trace, _write_inputs
 
 LEGACY_SNAPSHOT = Path(__file__).parent / "data" / "gate-population-legacy-aggregates.json"
 FIXTURE_GOLDEN = REPO_ROOT / "eval" / "fixtures" / "golden.jsonl"
@@ -248,6 +256,8 @@ def test_runner_fails_a_small_real_set_with_its_own_exit_code_and_writes_no_repo
     golden, traces = _real_golden()
     traces_path, golden_path, manifest_path, out = _write_inputs(tmp_path, traces, golden)
     config_path = _write_config(tmp_path, _real(["production", "human"], min_items=100))
+    out.mkdir()
+    (out / "report.json").write_text("{}", encoding="utf-8")
     code = main([*_score_args(traces_path, golden_path, manifest_path, out), "--gate-population", str(config_path)])
     assert code == EXIT_REAL_SET_TOO_SMALL
     assert code not in (0, 1, 2)
@@ -291,3 +301,14 @@ def test_paired_report_under_real_pairs_only_the_configured_provenances():
     assert both is not None and human is not None
     assert both.slices["overall"]["recall_at_5"].n == 2
     assert human.slices["overall"]["recall_at_5"].n == 1
+
+
+def test_parse_gate_selects_real_items_from_the_committed_config_provenances():
+    items = [
+        _paired_item("p1", provenance="production"),
+        _paired_item("h1", provenance="human"),
+        _paired_item("f1", provenance="synthetic_fixture"),
+        _paired_item("t1", provenance="production", split="test"),
+    ]
+    selected = _parse_gate_items(_paired_report_fixture(items, "real"))
+    assert [item.item_id for item in selected] == ["p1", "h1"]
