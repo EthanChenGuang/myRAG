@@ -3,6 +3,7 @@ import {
   CORE_STAGES,
   OPTIONAL_STAGES,
   PROFILE_STAGE_DEFAULTS,
+  QUERY_LAYER_STAGES,
   loadRagConfig,
   resetRagConfigForTests,
   resolveFinalResultCount,
@@ -21,6 +22,11 @@ beforeEach(() => {
 afterEach(() => {
   warn.mockRestore();
 });
+
+function phase4Disabled(config: { disabledStages: ReadonlySet<string> }): string[] {
+  const queryLayer = new Set<string>(QUERY_LAYER_STAGES);
+  return [...config.disabledStages].filter((name) => !queryLayer.has(name)).sort();
+}
 
 function configWarnings(): string[] {
   return warn.mock.calls
@@ -45,6 +51,13 @@ const CHAT_DEFAULTS = {
   expand_parents: 3000,
   compress: 1000,
   injection_check: 400,
+  query_gate: 50,
+  condense: 600,
+  normalize_dates: 50,
+  expand: 700,
+  hyde: 900,
+  decompose: 800,
+  semantic_cache: 150,
 };
 
 describe('stage tables', () => {
@@ -66,6 +79,13 @@ describe('stage tables', () => {
       'expand_parents',
       'compress',
       'injection_check',
+      'query_gate',
+      'condense',
+      'normalize_dates',
+      'expand',
+      'hyde',
+      'decompose',
+      'semantic_cache',
     ]);
   });
 
@@ -90,7 +110,7 @@ describe('loadRagConfig', () => {
   test('empty values give legacy, v2 switch-off stages disabled and profile defaults', () => {
     const config = loadRagConfig({});
     expect(config.pipeline).toBe('legacy');
-    expect([...config.disabledStages].sort()).toEqual(['compress', 'expand_parents', 'rerank', 'translate']);
+    expect(phase4Disabled(config)).toEqual(['compress', 'expand_parents', 'rerank', 'translate']);
     expect(config.timeouts.chat).toEqual(PROFILE_STAGE_DEFAULTS.chat);
     expect(config.v2.reranker).toBe('none');
     expect(config.v2.tokenBudget).toBe(6000);
@@ -114,19 +134,19 @@ describe('loadRagConfig', () => {
 
   test('optional stages can be disabled explicitly', () => {
     const config = loadRagConfig({ RAG_DISABLED_STAGES: 'legacy_rank, assemble' });
-    expect([...config.disabledStages].sort()).toEqual(['assemble', 'compress', 'expand_parents', 'legacy_rank', 'rerank', 'translate']);
+    expect(phase4Disabled(config)).toEqual(['assemble', 'compress', 'expand_parents', 'legacy_rank', 'rerank', 'translate']);
   });
 
   test('a core stage in the disabled list is dropped and logged once', () => {
     const env = { RAG_DISABLED_STAGES: 'embed,legacy_rank,search' };
     const config = loadRagConfig(env);
-    expect([...config.disabledStages].sort()).toEqual(['compress', 'expand_parents', 'legacy_rank', 'rerank', 'translate']);
+    expect(phase4Disabled(config)).toEqual(['compress', 'expand_parents', 'legacy_rank', 'rerank', 'translate']);
     expect(configWarnings()).toHaveLength(2);
   });
 
   test('rerank is a valid optional stage name in RAG_DISABLED_STAGES', () => {
     const config = loadRagConfig({ RAG_DISABLED_STAGES: 'rerank,post_filter' });
-    expect([...config.disabledStages].sort()).toEqual(['compress', 'expand_parents', 'post_filter', 'rerank', 'translate']);
+    expect(phase4Disabled(config)).toEqual(['compress', 'expand_parents', 'post_filter', 'rerank', 'translate']);
     expect(configWarnings()).toEqual([]);
   });
 
@@ -171,7 +191,7 @@ describe('loadRagConfig', () => {
   test('RAG_RERANKER=cohere removes rerank from disabledStages', () => {
     const config = loadRagConfig({ RAG_RERANKER: 'cohere' });
     expect(config.disabledStages.has('rerank')).toBe(false);
-    expect([...config.disabledStages].sort()).toEqual(['compress', 'expand_parents', 'translate']);
+    expect(phase4Disabled(config)).toEqual(['compress', 'expand_parents', 'translate']);
   });
 
   test('hasCohereKey reflects presence only and warnings never echo the key', () => {
@@ -449,7 +469,7 @@ describe('Phase 3.2 typed switches (D-47)', () => {
     const rag = loadRagConfig({});
     expect({
       pipeline: rag.pipeline,
-      disabledStages: [...rag.disabledStages].sort(),
+      disabledStages: phase4Disabled(rag),
       timeouts: rag.timeouts,
       exactIdLookup: rag.exactIdLookup,
       v2: rag.v2,
@@ -548,5 +568,167 @@ describe('domain embeddings switches', () => {
     const off = loadRagConfig({ RAG_EMBEDDING_PROFILES: 'on', RAG_DOMAIN_EMBEDDINGS: 'off' });
     expect(on.v2.domainEmbeddings?.enabled).toBe(true);
     expect(off.v2.domainEmbeddings?.enabled).toBe(false);
+  });
+});
+
+function queryLayerWarnings(prefix: '[Query Layer]' | '[Semantic Cache]'): string[] {
+  return warn.mock.calls
+    .filter((call) => String(call[0]).includes(prefix))
+    .map((call) => call.map((part) => (typeof part === 'string' ? part : JSON.stringify(part))).join(' '));
+}
+
+const PHASE4_CHAT_TIMEOUTS = Object.fromEntries(
+  Object.entries(CHAT_DEFAULTS).filter(([name]) => !(QUERY_LAYER_STAGES as readonly string[]).includes(name)),
+);
+
+describe('query layer', () => {
+  test('the default config disables every query-layer stage and keeps the Phase 4 fields for legacy and v2', () => {
+    for (const pipeline of ['legacy', 'v2'] as const) {
+      resetRagConfigForTests();
+      const config = loadRagConfig({ RAG_PIPELINE: pipeline });
+      for (const stage of QUERY_LAYER_STAGES) expect(config.disabledStages.has(stage)).toBe(true);
+      expect(config.queryLayer.enabled).toBe(false);
+      expect(config.semanticCache.backend).toBe('off');
+      expect({
+        disabled: phase4Disabled(config),
+        chat: Object.fromEntries(Object.entries(config.timeouts.chat).filter(([name]) => name in PHASE4_CHAT_TIMEOUTS)),
+        evalTranslate: config.timeouts.eval.translate,
+        voiceTranslate: config.timeouts.voice.translate,
+        v2: config.v2,
+        warnings: config.warnings,
+      }).toEqual({
+        disabled: ['compress', 'expand_parents', 'rerank', 'translate'],
+        chat: PHASE4_CHAT_TIMEOUTS,
+        evalTranslate: 1000,
+        voiceTranslate: 300,
+        v2: loadRagConfig({}).v2,
+        warnings: [],
+      });
+    }
+    expect(queryLayerWarnings('[Query Layer]')).toEqual([]);
+    expect(queryLayerWarnings('[Semantic Cache]')).toEqual([]);
+  });
+
+  test('v2 with RAG_QUERY_LAYER=true turns the layer on with the recommended profile', () => {
+    const config = loadRagConfig({ RAG_PIPELINE: 'v2', RAG_QUERY_LAYER: 'true' });
+    expect(config.queryLayer).toEqual({
+      enabled: true,
+      framework: 'llamaindex',
+      model: 'openai/gpt-4.1-nano',
+      transforms: { condense: true, expand: true, decompose: true, translate: true, normalizeDates: true, hyde: false },
+      translateDisabledProfiles: [],
+      voiceTransforms: ['condense_history', 'normalize_dates'],
+    });
+    for (const stage of ['query_gate', 'condense', 'normalize_dates', 'expand', 'decompose'] as const) {
+      expect(config.disabledStages.has(stage)).toBe(false);
+    }
+    expect(config.disabledStages.has('hyde')).toBe(true);
+    expect(config.disabledStages.has('semantic_cache')).toBe(true);
+    expect(config.warnings).toEqual([]);
+  });
+
+  test('a sub-switch turned off disables only its stage while the layer is on', () => {
+    const config = loadRagConfig({ RAG_PIPELINE: 'v2', RAG_QUERY_LAYER: 'true', RAG_QUERY_EXPAND: 'false', RAG_QUERY_HYDE: 'true' });
+    expect(config.queryLayer.transforms.expand).toBe(false);
+    expect(config.disabledStages.has('expand')).toBe(true);
+    expect(config.disabledStages.has('hyde')).toBe(false);
+    expect(config.disabledStages.has('condense')).toBe(false);
+  });
+
+  test('the layer and the cache under legacy stay off with one warning each across calls', () => {
+    const env = { RAG_PIPELINE: 'legacy', RAG_QUERY_LAYER: 'true', RAG_SEMANTIC_CACHE: 'pgvector' };
+    const first = loadRagConfig(env);
+    const second = loadRagConfig({ ...env, RAG_RERANK_TIER_CHAT: 'quality' });
+    expect(second).not.toBe(first);
+    for (const config of [first, second]) {
+      expect(config.queryLayer.enabled).toBe(false);
+      expect(config.semanticCache.backend).toBe('off');
+      for (const stage of QUERY_LAYER_STAGES) expect(config.disabledStages.has(stage)).toBe(true);
+    }
+    expect(queryLayerWarnings('[Query Layer]')).toHaveLength(1);
+    expect(queryLayerWarnings('[Semantic Cache]')).toHaveLength(1);
+  });
+
+  test('pgvector under v2 enables the semantic_cache stage without the layer', () => {
+    const config = loadRagConfig({ RAG_PIPELINE: 'v2', RAG_SEMANTIC_CACHE: 'pgvector' });
+    expect(config.semanticCache).toEqual({ backend: 'pgvector', ttl: 3600, refusalTtl: 600, maxDistance: 0.05, embedStore: false });
+    expect(config.disabledStages.has('semantic_cache')).toBe(false);
+    expect(config.queryLayer.enabled).toBe(false);
+  });
+
+  test('an unknown framework falls back to llamaindex with one warning', () => {
+    const config = loadRagConfig({ RAG_PIPELINE: 'v2', RAG_QUERY_LAYER: 'true', RAG_QUERY_FRAMEWORK: 'bogus' });
+    expect(config.queryLayer.framework).toBe('llamaindex');
+    expect(queryLayerWarnings('[Query Layer]')).toHaveLength(1);
+    expect(config.warnings).toHaveLength(1);
+  });
+
+  test('expand, hyde and decompose are dropped from the voice allow-list with one warning naming them', () => {
+    const config = loadRagConfig({ RAG_PIPELINE: 'v2', RAG_QUERY_LAYER: 'true', RAG_QUERY_VOICE_TRANSFORMS: 'condense_history,hyde,expand' });
+    expect(config.queryLayer.voiceTransforms).toEqual(['condense_history']);
+    const logged = queryLayerWarnings('[Query Layer]');
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toContain('hyde');
+    expect(logged[0]).toContain('expand');
+    expect(loadRagConfig({ RAG_QUERY_VOICE_TRANSFORMS: 'translate,normalize_dates' }).queryLayer.voiceTransforms).toEqual([
+      'translate',
+      'normalize_dates',
+    ]);
+  });
+
+  test('translate-disabled profiles keep known profiles and drop unknown ones with a warning', () => {
+    const config = loadRagConfig({ RAG_QUERY_TRANSLATE_DISABLED_PROFILES: 'voice, embed,nope' });
+    expect(config.queryLayer.translateDisabledProfiles).toEqual(['voice', 'embed']);
+    expect(queryLayerWarnings('[Query Layer]')).toHaveLength(1);
+  });
+
+  test('profile timeouts follow D-27 and RAG_STAGE_TIMEOUTS overrides only the named profile', () => {
+    const config = loadRagConfig({ RAG_PIPELINE: 'v2', RAG_QUERY_LAYER: 'true', RAG_STAGE_TIMEOUTS: 'chat.condense=400' });
+    for (const profile of ['chat', 'embed'] as const) {
+      expect(config.timeouts[profile]).toMatchObject({
+        translate: 600,
+        expand: 700,
+        decompose: 800,
+        hyde: 900,
+        semantic_cache: 150,
+        query_gate: 50,
+        normalize_dates: 50,
+      });
+    }
+    expect(config.timeouts.chat.condense).toBe(400);
+    expect(config.timeouts.embed.condense).toBe(600);
+    expect(config.timeouts.voice).toMatchObject({ condense: 300, query_gate: 50, normalize_dates: 50, translate: 300 });
+    for (const stage of [...QUERY_LAYER_STAGES, 'translate'] as const) expect(config.timeouts.eval[stage]).toBe(60000);
+    expect(loadRagConfig({ RAG_PIPELINE: 'v2', RAG_QUERY_LAYER: 'true', RAG_STAGE_TIMEOUTS: 'translate=900' }).timeouts.chat.translate).toBe(900);
+  });
+
+  test('the cache distance is capped at 0.2 and TTLs are bounded', () => {
+    const config = loadRagConfig({ RAG_PIPELINE: 'v2', RAG_SEMANTIC_CACHE: 'pgvector', RAG_SEMANTIC_CACHE_MAX_DISTANCE: '0.5' });
+    expect(config.semanticCache.maxDistance).toBe(0.05);
+    expect(queryLayerWarnings('[Semantic Cache]')).toHaveLength(1);
+    expect(loadRagConfig({ RAG_SEMANTIC_CACHE_MAX_DISTANCE: '0.12' }).semanticCache.maxDistance).toBe(0.12);
+    expect(loadRagConfig({ RAG_SEMANTIC_CACHE_MAX_DISTANCE: '0' }).semanticCache.maxDistance).toBe(0.05);
+    expect(loadRagConfig({ RAG_SEMANTIC_CACHE_TTL: '0' }).semanticCache.ttl).toBe(3600);
+    expect(loadRagConfig({ RAG_SEMANTIC_CACHE_REFUSAL_TTL: '120', RAG_SEMANTIC_CACHE_EMBED_STORE: 'true' }).semanticCache).toMatchObject({
+      refusalTtl: 120,
+      embedStore: true,
+    });
+    expect(loadRagConfig({ RAG_SEMANTIC_CACHE: 'redis' }).semanticCache.backend).toBe('off');
+  });
+
+  test('a malformed model id falls back to the default and the warning does not echo it', () => {
+    const config = loadRagConfig({ RAG_QUERY_LLM_MODEL: 'bad model<script>' });
+    expect(config.queryLayer.model).toBe('openai/gpt-4.1-nano');
+    expect(loadRagConfig({ RAG_QUERY_LLM_MODEL: 'mistralai/mistral-small-3.2-24b-instruct' }).queryLayer.model).toBe(
+      'mistralai/mistral-small-3.2-24b-instruct',
+    );
+    expect(JSON.stringify(warn.mock.calls)).not.toContain('<script>');
+  });
+
+  test('the new switches are part of the memo key', () => {
+    const off = loadRagConfig({ RAG_PIPELINE: 'v2' });
+    const on = loadRagConfig({ RAG_PIPELINE: 'v2', RAG_QUERY_LAYER: 'true' });
+    expect(off).not.toBe(on);
+    expect(loadRagConfig({ RAG_PIPELINE: 'v2', RAG_QUERY_LAYER: 'true', RAG_QUERY_HYDE: 'true' })).not.toBe(on);
   });
 });
