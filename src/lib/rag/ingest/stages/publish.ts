@@ -1,3 +1,5 @@
+import { scopeKey } from '../../tenant/scope';
+import { afterPublish } from '../post-publish';
 import { requireDocument, type IngestResult, type IngestStatus, type StageContext, type StageOutcome, type StageSpec } from '../types';
 import { IngestWriterError } from '../writer';
 
@@ -51,6 +53,12 @@ async function run(ctx: StageContext): Promise<StageOutcome> {
     case 'held':
       // D-12: the batch's hold keeps the version out of retrieval until activation; for the ledger the job's work is done.
       return result(ctx, 'ready', published.documentId, published.version, 'publish_held');
+    case 'published': {
+      const tenantKey = ctx.identity?.tenantKey ?? scopeKey(ctx.input.scope).toLowerCase();
+      // Never awaited: post-publish work must not delay or fail the ingest result (D-29, D-41).
+      void afterPublish({ documentId: published.documentId, tenantKey });
+      return result(ctx, 'ready', published.documentId, published.version);
+    }
     default:
       return result(ctx, 'ready', published.documentId, published.version);
   }
