@@ -16,6 +16,7 @@ import {
   OPTIONAL_STAGES,
   parseRetrievalFilters,
   readGenerationConfig,
+  injectionTraceVersions,
   RERANK_TEXT_VERSION,
   runRetrieval,
   scopeKey,
@@ -359,7 +360,7 @@ export async function POST(req: NextRequest) {
       const queryContext = result.queryContext;
       const stageCounts = stageCountsOf(result.stages);
       const v2Result = result.retrievalConfigHash !== undefined;
-      const effectiveConfig = buildEffectiveConfig();
+      const effectiveConfig = buildEffectiveConfig({ security: injectionTraceVersions() });
       effectiveConfig.generator_model = generatorModel;
       const trace = {
         schema_version: 1 as const,

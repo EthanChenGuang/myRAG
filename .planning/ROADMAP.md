@@ -33,7 +33,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 5: Verified Citations & Groundedness** - Claude Citations, validated chunk-ID citations for other models, one persisted citation record and a post-stream groundedness badge
 - [ ] **Phase 5.1: Prompt Injection Defense** (INSERTED) - Tagged, instruction-free context, runtime injection detection and an injection eval gated at 0
 - [ ] **Phase 05.1.1: Feedback Loop & Real Domain Test Set** (INSERTED) - Tenant-safe retrieval log, refusal and embed feedback, weekly failure mining into an expert-labelled queue, dictionary and training exports, and a real domain test set that gates releases
-- [ ] **Phase 5.2: Grounded Answers & Output Safety** (INSERTED) - Partial-answer rule, a citation per factual sentence, claim-level grounding marks, LLM-judge groundedness for unsupported languages, output-length cap, per-language refusal texts, output link and credential guard, uploader tracing, calculation tool and numeric check
+- [ ] **Phase 5.2: Grounded Answers & Output Safety** (INSERTED) - Partial-answer rule, a citation per factual sentence, claim-level grounding marks, LLM-judge groundedness for unsupported languages, output-length cap, per-language refusal texts, output link and credential guard, uploader tracing
+- [ ] **Phase 5.2.1: Calculation Tool & Prompt Budget** (INSERTED) - Deterministic calculation tool and numeric check, whole-prompt token budget that never trims the question (split from 5.2)
 - [ ] **Phase 5.3: Evaluation Gates & Online Monitoring** (INSERTED) - No-answer share and absolute false-answer gates, eval gate on Config UI changes, release gate on production promotion, LLM-judge agreement checks, daily drift alerts, representative and versioned test sets with drift monitoring
 - [ ] **Phase 6: Query Layer (LlamaIndex & LangChain)** - History rewrite, multi-query fusion, HyDE and sub-questions with a router and budgets, in two switchable frameworks compared in eval
 - [ ] **Phase 06.1: Embedding fine-tuning pipeline: synthetic queries, hard negatives, MNRL training, re-embed and switch** (INSERTED) - Consent-gated per-tenant export, synthetic and mined pairs, hard negatives, CachedMNRL training, offline proof, fine-tune slots switched through the EMB-05 gate or 3.1.1 bindings
@@ -379,74 +380,86 @@ Plans:
 - [ ] 04-44-PLAN.md
 - [ ] 04-45-PLAN.md
 
-### Phase 04.1: Hybrid retrieval and rerank on by default, proven by eval (INSERTED)
-**Goal**: An install that sets nothing gets hybrid retrieval and reranking, refuses no-answer questions at least as reliably as today without refusing more answerable ones, and can return to today's behaviour exactly with `RAG_PIPELINE=legacy`, with all of this shown on the eval before the defaults change
-**Depends on**: Phase 4 (automated close, plan 04-42; 04-43 live checks not required)
+### Phase 4.1: Hybrid retrieval and rerank on by default, proven by eval (INSERTED)
+
+**Goal**: An install that has chosen its supported languages and sets nothing else gets hybrid retrieval and reranking, refuses no-answer questions at least as reliably as today without refusing more answerable ones, and can return to today's behaviour exactly with `RAG_PIPELINE=legacy`, with all of this shown on the eval before the defaults change; until the languages are chosen, or while the database lacks the Phase 4 functions, the install keeps serving the legacy pipeline
+**Depends on:** Phase 4 (automated close, plan 04-42; 04-43 live checks not required); Phase 3.2 (LANG-01): complete before plan 04.1-09 flips the defaults, and its LANG-01 implementation on trunk before plan 04.1-13 (plans 04.1-01 to 04.1-08 do not wait for it). Runs before Phase 4.2.
 **Requirements**: DFLT-01, DFLT-02, DFLT-03, DFLT-04, DFLT-05, DFLT-06, DFLT-07
 **Success Criteria** (what must be TRUE):
-  1. With no `RAG_*` variable set, chat, embed, eval and voice run the v2 pipeline with the lexical leg, `RAG_RERANKER=auto`, threshold refusal on and the recorded fallback floor; every other Phase 4 switch keeps its Phase 4 default; the two-tenant matrix passes on every entry point in both tenancy modes.
+  1. With the supported languages configured and no other `RAG_*` variable set, chat, embed, eval and voice run the v2 pipeline with the lexical leg, `RAG_RERANKER=auto`, threshold refusal on and the recorded fallback floor; every other Phase 4 switch keeps its Phase 4 default; the two-tenant matrix passes on every entry point in both tenancy modes.
   2. On a fresh install without rerank keys, `auto` reranks with the eval-chosen local fallback (or keeps the fused order) and no request is marked `degraded`; with `COHERE_API_KEY` set it uses Cohere's quality tier for chat and embed and its fast tier for voice, and Voyage is used only when named.
   3. Strict mode still answers verified-empty retrieval with "information not available" and never reports a knowledge-base failure that way; web search with Exa, `source_images` and the `{{context}}` placeholder work unchanged under the new defaults.
-  4. A pre-registered gate, committed before any run, passes on both fixture modes against the baselines in force, with and without fixture-calibrated cells: no gated slice beyond the noise band, ingest-mode Recall@10 at least 0.6195, overall false refusal not above and correct refusal not below baseline beyond the band, no category with n of at least 8 dropping beyond the band, latency within `eval/config/latency-budgets.json`; the decision record lists every number and is marked provisional until the real-golden re-run.
+  4. A pre-registered gate, committed before any run, passes on both fixture modes against the baselines in force, with and without fixture-calibrated cells: no gated slice beyond the noise band, ingest-mode overall Recall@10 at least the floor the gate tool derives from the ingest baseline in force when the criteria are committed (baseline minus the band, recorded with the baseline's sha256), overall false refusal not above and correct refusal not below baseline beyond the band (judged on the single-threshold behaviour), no category with n of at least 8 dropping beyond the band, latency within `eval/config/latency-budgets.json`; the decision record lists every number and is marked provisional until the real-golden re-run.
   5. Real Cohere and Voyage rerankers were measured once on the fixture dev split (at most 600 requests): hosted quality is not below the local paths beyond the band, chat p95 is at most 600 ms and voice fast-tier p95 at most 250 ms, or the decision record takes the failing entry point off hosted rerank.
-  6. A hosted deployment that never set `RAG_PIPELINE` and lacks the Phase 4 RPC serves legacy answers with one error log instead of failing; `RAG_PIPELINE=v2` set explicitly still fails loudly.
+  6. A deployment that never set `RAG_PIPELINE` serves legacy answers instead of failing in two cases: its database lacks a Phase 4 function (one error log; retrieval and the ingest dual write both keep working), or it has not chosen its supported languages (Phase 3.2's startup log and Config UI banner, LANG-01). `RAG_PIPELINE=v2` set explicitly still fails loudly in both cases (`backend_error`, `languages_not_configured`). One resolver makes the decision.
   7. With `RAG_PIPELINE=legacy`, both legacy smoke tiers show zero paired differences against the legacy baselines in CI, and the legacy characterization snapshots are byte-identical to before the phase.
-  8. The new switch and value are in every config location and the eval pin, `check-config` passes, and AGENTS.md and the deployment guide state the defaults, the vendor data flow under `auto`, the upgrade steps and the switch back.
-**Live verification**: When the real golden dev split reaches the live calibration minimums (20 answerable, 10 no-answer), re-run the gate's slice and refusal criteria on it and record the result next to the 04.1 decision; on a staging Supabase project without migration 0407, deploy with `RAG_PIPELINE` unset and confirm the legacy fallback, then apply the migrations and confirm v2; measure voice p95 end to end with a Cohere key.
-**Plans**: 12 plans in 7 waves — see `phases/04.1-hybrid-retrieval-and-rerank-on-by-default-proven-by-eval/04.1-PLAN-INDEX.md`
+  8. The new switch and value are in every config location and the eval pin, the templates leave `RAG_PIPELINE` empty so the default stays implicit, `check-config` passes, and AGENTS.md and the deployment guide state the defaults, the vendor data flow under `auto`, the upgrade steps and the switch back.
+**Live verification**: When the real golden dev split reaches the live calibration minimums (20 answerable, 10 no-answer), re-run the gate's slice and refusal criteria on it and record the result next to the 04.1 decision; on a staging Supabase project without migration 0407, deploy with `RAG_PIPELINE` unset and confirm the legacy fallback, then apply the migrations and confirm v2; measure voice p95 end to end with a Cohere key; on a fresh install skip the language picker and confirm legacy answers with the startup log and the banner, then choose the languages and confirm v2.
+**Plans**: 13 plans in 7 waves — see `phases/04.1-hybrid-retrieval-and-rerank-on-by-default-proven-by-eval/04.1-PLAN-INDEX.md`
 
 Plans:
 - [ ] 04.1-01-PLAN.md — Legacy-rule refusal floor behind RAG_REFUSAL_FLOOR, shared keep predicate, legacy byte-identical (wave 1)
 - [ ] 04.1-02-PLAN.md — Mirror RAG_REFUSAL_FLOOR and the auto value in every config location and the eval pin, defaults unchanged (wave 1)
-- [ ] 04.1-06-PLAN.md — Pre-registered gate criteria, run configs with placeholder-only key overlay, defaults gate tool (wave 1)
+- [ ] 04.1-06-PLAN.md — Run configs with placeholder-only key overlay, defaults gate tool, pre-registered criteria with the tool-derived floor (wave 1)
 - [ ] 04.1-03-PLAN.md — RAG_RERANKER=auto: Cohere with key, local fallback otherwise, never degraded, hashes as resolved provider (wave 2)
-- [ ] 04.1-04-PLAN.md — Implicit-default readiness: missing hybrid_search_chunks falls back to legacy, explicit v2 unchanged (wave 3)
+- [ ] 04.1-04-PLAN.md — Implicit-default resolver: a missing Phase 4 function (retrieval, ingest dual write) or unchosen languages serve legacy, explicit v2 unchanged (wave 3)
 - [ ] 04.1-05-PLAN.md — Pin legacy characterization; characterize the new defaults with AGENTS §14 assertions (wave 3)
 - [ ] 04.1-08-PLAN.md — Capped live Cohere and Voyage quality and latency on the fixture, report-only (wave 3)
 - [ ] 04.1-07-PLAN.md — Run the gate on both fixture modes with and without cells, record the retrieval-defaults decision (wave 4)
-- [ ] 04.1-09-PLAN.md — Flip the defaults in every location once the decision says flip (wave 5)
+- [ ] 04.1-13-PLAN.md — Connect the Phase 3.2 language reader to the resolver, prove the three language cases, characterize unset languages (wave 4; needs the Phase 3.2 LANG-01 implementation on trunk)
+- [ ] 04.1-09-PLAN.md — Flip the defaults in every location once the decision says flip and is current; templates keep the pipeline implicit (wave 5; needs Phase 3.2 complete)
 - [ ] 04.1-10-PLAN.md — Legacy baselines, re-recorded default baselines, legacy all-zero CI tiers (wave 6)
 - [ ] 04.1-11-PLAN.md — AGENTS.md and deployment guide: defaults, auto data flow, upgrade steps, switch back (wave 6)
-- [ ] 04.1-12-PLAN.md — Implicit defaults on every entry point, two tenants, un-migrated database, CI-equivalent run (wave 7)
+- [ ] 04.1-12-PLAN.md — Implicit defaults on every entry point, two tenants, un-migrated database, unchosen languages, CI-equivalent run (wave 7)
 
-**Cross-phase notes**:
+**Cross-phase notes for the roadmap**:
 - Phase 4 D-28's last sentence ("the shipped defaults stay off until the Phase 7 regression") is superseded for `RAG_PIPELINE`, `RAG_LEXICAL_SEARCH`, `RAG_RERANKER`, `RAG_REFUSAL_THRESHOLD` and `RAG_REFUSAL_FLOOR` by the product owner's decision of 2026-11-24; Phase 4 itself still closes with the defaults off (04-42 unchanged).
 - Phase 7 keeps external backends, the embedding-profile and reranker-model decision on the real locked test split, and the release-defaults check; its incumbent is the 04.1 decision record (see REQUIREMENTS-ADDITIONS.md).
 - Phases 5, 5.1, 5.1.1, 6, 6.1 and 7 run after the flip: their route-fixture tests that assert legacy output must pass `env: { RAG_PIPELINE: 'legacy' }`, and their "against Phase 4" comparisons use the post-flip baselines.
+- Phase 3.2 (LANG-01) owns the supported-languages reader, its startup log, the Config UI banner and the `languages_not_configured` error. Phase 4.1 consumes them through one resolver; the flip (04.1-09) stops and reports unless Phase 3.2 is complete on trunk.
+- Phase 4.2 (RNK-07) adds refusal thresholds per RAG mode. Phase 4.1 keeps the single-threshold behaviour, adds no mode key and records `refusal_basis: "single_threshold"`, so with the per-mode targets unset the Phase 4.2 result equals the 4.1 result.
+- Phase 7 plan 07-30 must accept the empty template value of `RAG_PIPELINE` (the 4.1 decision lists it in `implicit_in_templates`).
 
-### Phase 04.1.1: Domain terminology dictionary: expert-maintained synonyms, query expansion, index-time synonyms, log mining (INSERTED)
-**Goal**: When users ask in their own words (colloquial terms, abbreviations, product or part aliases) in Chinese, English or Italian, retrieval still finds the chunks that use the domain's terms, through a dictionary that domain experts maintain per deployment and per tenant, that is versioned and audited, that never lets expansion outweigh the original query, and that grows from reviewed candidates mined from missed queries
-**Depends on**: Phase 4.1
-**Requirements**: TERM-01, TERM-02, TERM-03, TERM-04, TERM-05, TERM-06, TERM-07, TERM-08, TERM-09, TERM-10, TERM-11
+*Section revised 2026-11-25. ROADMAP.md still carries the 2026-11-24 text; the differences are listed in `04.1-PLAN-INDEX.md` under "Wording changes needed outside this phase".*
+
+### Phase 4.1.1: Domain terminology dictionary: expert-maintained synonyms, query expansion, index-time synonyms, log mining (INSERTED)
+
+**Goal**: When users ask in their own words (informal terms, abbreviations, loosely typed codes and identifiers) in any enabled language, retrieval still finds the chunks that use the documents' own terms, through a dictionary that domain experts maintain per deployment and per tenant, that is versioned and audited, that never lets expansion outweigh the original query, that grows from reviewed candidates mined from missed queries, and that later phases read through one stable, tenant-scoped interface (tokenizer dictionary, translation glossary)
+**Depends on**: Phase 4.1 (after its last plan, 04.1-12); Phase 3.2's registry-derived language type and language settings module on trunk (plans 04.1.1-01 and 04.1.1-09 stop and report without them). Phase 6 is executing in parallel: each plan that touches one of its seams (stage order, variant cap, semantic-cache key, prompts) implements the branch that matches trunk and waits for nothing.
+**Requirements**: TERM-01, TERM-02, TERM-03, TERM-04, TERM-05, TERM-06, TERM-07, TERM-08, TERM-09, TERM-10, TERM-11, TERM-12
 **Success Criteria** (what must be TRUE):
-  1. On a local Postgres with pgvector seeded with the fixture corpus and a synthetic dictionary, a colloquial zh/en/it question whose wording does not occur in the corpus retrieves the gold chunk under v2 with `RAG_TERMINOLOGY` on, through a separate down-weighted lexical RRF list; the original dense and lexical lists are unchanged, expansion is one hop and capped, and with the switch off candidates and `retrievalConfigHash` are identical to a database without a dictionary.
-  2. Dictionary entries live in a shared layer and per-tenant workspace layers in service-role-only tables; a tenant's effective dictionary, previews, mined candidates and corpus document frequencies never include another tenant's data (two-tenant tests in both deployment modes); anon and authenticated cannot read the tables or execute any `rag_term_*` function.
-  3. Every change bumps its layer version with an append-only audit row and fails on a stale expected version; the version a request used appears in its trace and config hash.
-  4. Admins create, edit, delete, suppress, import (dry run, then atomic apply) and export (formula-safe CSV) entries and preview a query's expansion through Zod-validated admin routes; conflicts, chains, cycles, one-character Han variants and stopword-only variants are rejected with row-level issues; a Config UI Terminology panel built from a UI-SPEC covers all of it.
-  5. With `RAG_TERMINOLOGY_MINING` on, missed requests are recorded masked per tenant for 30 days, and `npm run rag:terms:mine` proposes candidate terms that admins accept (through the normal create path) or dismiss; nothing is applied automatically.
-  6. The eval compares dictionary off and on: the colloquial-term slice improves on Recall@k and MRR, no other slice, language or category drops beyond the noise band, no-answer items containing dictionary terms are still refused, and the terminology stage stays within its chat and voice latency budgets; the three switches stay off (synthetic items are report-only per EVAL-14).
-  7. Index-time synonyms are not built; the decision and its reasons (Supabase dictionary files, parser bypass, relex cost) are recorded, and the matched entries are exposed for the Phase 6 rewrite and HyDE prompts.
-**Live verification**: Apply 0471–0473 to the real Supabase project and confirm the anon key is refused on every terminology table and RPC; a domain expert imports a small real-domain CSV and checks previews; measure terminology and search p95 for chat and voice on staging; run the miner in dry-run mode on a short opt-in window.
-**Plans**: 16 plans in 9 waves (04.1.1-01..04.1.1-16) — see `phases/04.1.1-domain-terminology-dictionary-expert-maintained-synonyms-que/04.1.1-PLAN-INDEX.md`
+  1. On a local Postgres with pgvector seeded with the fixture corpus, synthetic documents and a synthetic dictionary, a colloquial question in each fixture language whose wording does not occur in the corpus retrieves the gold chunk under the effective v2 pipeline with `RAG_TERMINOLOGY` on, through a separate down-weighted lexical RRF list built from the standalone query after the query transforms and before the semantic cache and embedding; the original dense and lexical lists are unchanged, expansion is one hop and capped, and with the switch off candidates and `retrievalConfigHash` are identical to a database without a dictionary.
+  2. With full original lists, an expansion-only hit reaches the rerank input at every cap the contract allows (including Phase 4.2's lower floor) through a bounded reservation, and never ahead of an original hit; no pool size, cap or weight is assumed.
+  3. Dictionary entries live in a shared layer and per-tenant workspace layers in service-role-only tables; a tenant's effective dictionary, previews, read-API results, mined candidates and corpus document frequencies never include another tenant's data (two-tenant tests in both deployment modes); anon and authenticated cannot read the tables or execute any `rag_term_*` function, and CI fails if code outside the terminology module reads them.
+  4. Every change bumps its layer version with an append-only audit row and fails on a stale expected version; the version a request used appears in its trace, its config hash and its semantic-cache key.
+  5. Admins create, edit, delete, suppress, import (dry run, then atomic apply) and export (formula-safe CSV) entries, translation pairs included, and preview a query's expansion through Zod-validated admin routes; conflicts, chains, cycles, one-character Han variants, stopword-only variants, languages the deployment does not enable and malformed translation pairs are rejected with row-level issues; a Config UI Terminology panel built from a UI-SPEC covers all of it.
+  6. Translation pairs are stored with their source and target languages, never expand queries, and are returned with the effective terms by `getTerminologyLexicon(scope, options)` from `@/lib/rag`, whose version and content hash Phase 4.2 and Phase 6.2 use; a contract test locks its shape.
+  7. With `RAG_TERMINOLOGY_MINING` on, missed requests are recorded masked per tenant for 30 days, and `npm run rag:terms:mine` proposes candidate terms that admins accept (through the normal create path) or dismiss; nothing is applied automatically.
+  8. The eval compares dictionary off and on: the colloquial-term slice improves on Recall@k and MRR, no other slice, language or category drops beyond the noise band, no-answer items containing dictionary terms are still refused, and the terminology stage stays within its chat and voice latency budgets; the three switches stay off (synthetic items are report-only per EVAL-14).
+  9. Index-time synonyms are not built; the decision and its reasons (Supabase dictionary files, parser bypass, relex cost) are recorded, and the matched entries are exposed for the Phase 6 rewrite and HyDE prompts, both as stage output and through an earlier glossary helper.
+**Live verification**: Apply 0471–0473 to the real Supabase project and confirm the anon key is refused on every terminology table and RPC; a domain expert imports a small real-domain CSV, enters one translation pair and checks previews; measure terminology and search p95 for chat and voice on staging; run the miner in dry-run mode on a short opt-in window.
+**Plans**: 18 plans in 9 waves (04.1.1-01..04.1.1-18) — see `phases/04.1.1-domain-terminology-dictionary-expert-maintained-synonyms-que/04.1.1-PLAN-INDEX.md`
 **UI hint**: yes (plan 13 requires `/gsd-ui-phase 04.1.1` first)
 
 Plans:
-- [ ] 04.1.1-01-PLAN.md — Terminology Pydantic contracts and generated Zod (wave 1)
-- [ ] 04.1.1-02-PLAN.md — Three switches in the five config places and the manifest; `terminology` stage; run-config allowlist (wave 1)
-- [ ] 04.1.1-03-PLAN.md — 0471 tables, RLS, append-only audit, `rag_term_effective` with a two-tenant test (wave 1)
+- [ ] 04.1.1-01-PLAN.md — Terminology Pydantic contracts (translation pairs, read contract, stage name) and generated Zod (wave 1)
+- [ ] 04.1.1-02-PLAN.md — Three switches in the five config places and the manifest; `terminology` stage and its budgets; run-config allowlist (wave 1)
+- [ ] 04.1.1-03-PLAN.md — 0471 tables, RLS, append-only audit, translation-pair checks, `rag_term_effective` with a two-tenant test (wave 1)
 - [ ] 04.1.1-04-PLAN.md — 0472 actor-checked, versioned, audited writers, suppression and atomic import (wave 2)
-- [ ] 04.1.1-05-PLAN.md — TRACER: seeded dictionary → terminology stage → `term:0` list → RRF; caps, per-tenant cache (wave 2)
-- [ ] 04.1.1-06-PLAN.md — zh/en/it/identifier matching with property tests; conflict/chain/cycle validator (wave 3)
-- [ ] 04.1.1-07-PLAN.md — Dense terminology variant (never voice), Phase 6 hint, stage latency budgets (wave 3)
+- [ ] 04.1.1-05-PLAN.md — TRACER: seeded dictionary → terminology stage on the standalone query → `term:0` list → RRF; caps, per-tenant cache (wave 2)
+- [ ] 04.1.1-06-PLAN.md — Multi-script and identifier matching with property tests; validator with language and translation-pair rules (wave 3)
+- [ ] 04.1.1-07-PLAN.md — Dense terminology variant counted against the variant and search caps (never voice); glossary helper for Phase 6 prompts (wave 3)
+- [ ] 04.1.1-16-PLAN.md — Config-hash block and semantic-cache key, off-identity, multi-tenant end-to-end retrieval case (wave 3)
+- [ ] 04.1.1-17-PLAN.md — Stable read API `getTerminologyLexicon`, contract lock, boundary rule, two-tenant test (wave 3)
 - [ ] 04.1.1-08-PLAN.md — 0473 miss log (self-expiring), candidates, tenant df, decisions; opt-in masked miss recording (wave 4)
-- [ ] 04.1.1-09-PLAN.md — Admin service and CRUD/versions/audit routes; two-tenant route matrix (wave 4)
-- [ ] 04.1.1-10-PLAN.md — Fixture dictionary and seeding, colloquial-term golden items, run configs, zero-diff re-baseline (wave 4)
-- [ ] 04.1.1-11-PLAN.md — CSV import/export with dry run, expansion preview (wave 5)
+- [ ] 04.1.1-09-PLAN.md — Admin service and CRUD/versions/audit routes, translation pairs and enabled languages; two-tenant route matrix (wave 4)
+- [ ] 04.1.1-10-PLAN.md — Synthetic documents and fixture dictionary, colloquial-term golden items, run configs, zero-diff re-baselines (wave 4)
+- [ ] 04.1.1-18-PLAN.md — Bounded rerank-input reservation for expansion-only hits, proven with full lists at several caps (wave 4)
+- [ ] 04.1.1-11-PLAN.md — CSV import/export with translation columns and dry run, expansion preview (wave 5)
 - [ ] 04.1.1-12-PLAN.md — Miner CLI and candidate review routes; two-tenant mining matrix (wave 6)
-- [ ] 04.1.1-13-PLAN.md — Config UI Terminology panel after UI-SPEC (wave 7, autonomous: false)
+- [ ] 04.1.1-13-PLAN.md — Config UI Terminology panel after UI-SPEC, translation pairs included (wave 7, autonomous: false)
 - [ ] 04.1.1-14-PLAN.md — CLOSING: fold migrations, default-identity gates, on/off comparison, AGENTS.md (wave 8)
 - [ ] 04.1.1-15-PLAN.md — Live verification (wave 9, autonomous: false)
-- [ ] 04.1.1-16-PLAN.md — Config-hash block, off-identity and multi-tenant end-to-end retrieval case (wave 3)
 
 ### Phase 4.2: Retrieval Tuning Additions (INSERTED)
 **Goal**: Retrieval keeps the smallest rerank pool that works, matches company terms as single words, can answer questions about earlier policy versions, and its time to first token is gated
@@ -457,12 +470,12 @@ Plans:
   2. A multi-character term from a tenant's dictionary matches as one lexical term after `rag:relex`; Italian stemming makes singular and plural forms match and is turned on only if the it slice gains Recall with no other slice dropping.
   3. With `versions: all` or a period range, a fixture question comparing two versions of one policy retrieves chunks of both, superseded chunks carry their version and dates, and the default still returns current versions only; the semantic cache bypasses these queries.
   4. TTFT p50/p95 is on the trace for text, embed and voice, cache hits and misses are reported separately, and an injected pre-generation delay makes the CI latency gate fail.
-  5. With `RAG_TABLE_LOOKUP` on, a question naming a city and a grade retrieves the matching table row through the lookup leg as an extra RRF list within the verified tenant, the row reaches the context with its header, no LLM-written SQL exists anywhere, and the cross-tenant canary includes the row store.
+  5. With `RAG_TABLE_LOOKUP` on, a question naming two cell values of one table row retrieves the matching table row through the lookup leg as an extra RRF list within the verified tenant, the row reaches the context with its header, no LLM-written SQL exists anywhere, and the cross-tenant canary includes the row store.
   6. With `RAG_DUP_CLUSTERS` on, a fixture FAQ pasted into 30 documents forms one duplicate cluster per tenant (never across tenants), and deleting one source document updates the cluster; with `RAG_RESULT_DIVERSITY=collapse` (or `mmr`), a synthetic two-intent question in zh/en/it gets the duplicated answer once, with all its sources listed, plus the other intent's chunk in the top-k; the `duplicate_flood` slice gates top-k redundancy and per-intent evidence, and no other slice drops beyond the noise band.
   7. The refusal calibration report lists every candidate threshold with its false-answer and false-refusal rates; strict mode takes the threshold that keeps false answers at or below 5% and balanced keeps today's false-refusal target, each cell records its mode, and with the per-mode targets unset the chosen thresholds equal the Phase 4 result.
   8. With `RAG_IDENTIFIER_INDEX` and `RAG_IDENTIFIER_FILTER` on, the synthetic `identifier_near_miss` questions in every spelling retrieve and cite only the asked identifier, near-miss identifiers never reach the context, an identifier the tenant does not have gets the refusal with suggestions, admin-defined identifier patterns are honoured, and the descriptive-question slice does not drop.
 **Live verification**: Re-run the pool sweep with real rerankers including the 25 pool; measure real TTFT against the budget.
-**Plans**: TBD
+**Plans**: 38 plans in 11 waves (see `phases/04.2-retrieval-tuning-additions/04.2-PLAN-INDEX.md`); migrations 0851–0862 and 0864 (purge hooks, plan 38) (0863 only when the Phase 5.1.1 retrieval log exists); `hybrid_search_chunks` is redefined by Phase 3.2's 0802 first and then by 0856; human steps in plans 23, 25, 26 (design reviews) and 33 (live pool sweep and TTFT)
 
 ### Phase 4.3: Document Access Groups (INSERTED)
 **Goal**: Inside one tenant, a member can only retrieve, be answered from, or see cached or logged content of documents their access groups allow, and this is enforced in code before ranking, never by the prompt
@@ -472,10 +485,10 @@ Plans:
   1. With `RAG_DOC_ACCESS_GROUPS` off, retrieval, cache and logs match the baseline and every document is in group `all`; with it on, a document restricted to one access group never appears in the retrieval candidates, context, citations, cache entries or logs of a member outside that group, on every leg (dense, lexical, exact-id, parents, translations, table rows) and on pgvector, and the filter runs before ranking.
   2. Groups come only from the verified session or signed scope token; a request body naming another group changes nothing; embedded chat sees only `all` documents unless its configuration names a group; voice uses the token's identity.
   3. The semantic cache never serves an answer across different group sets; the post-generation citation check drops a citation to a chunk the caller may not see and records a security event.
-  4. A Google Drive, Notion or Dropbox document shared with a group is mapped to the matching access group on sync and re-mapped after a sharing change; an unmappable permission leaves it visible only to the uploader and admins.
+  4. A Google Drive, Notion or Dropbox document shared with a group is mapped to the matching access group on sync and re-mapped after a sharing change; an unmappable permission leaves it visible only to the uploader and admins. In multi-tenant mode connector documents stay in the owner's personal workspace, so the mapping changes visibility only in single-tenant mode (4.3 A-10).
   5. The same-tenant cross-group canaries (EVAL-21) pass in CI as a release gate, including after group changes and re-uploads; no other slice drops beyond the noise band.
 **Live verification**: Sync a real shared Drive folder with restricted files and check the mapped groups; run the canaries against a real Supabase project in both deployment modes.
-**Plans**: TBD
+**Plans**: 38 plans in 13 waves (see `phases/04.3-document-access-groups/04.3-PLAN-INDEX.md`); migrations 0920–0931; human steps in 04.3-53 (live push of 0920–0931) and 04.3-54 (two-mode canaries, real Drive and Dropbox sync); pgvector and the seams (`scopeAccessFilter`, `document_chunks.access_groups`) are delivered here, the Weaviate/Qdrant filter by Phase 7 (07-38, 07-39)
 **UI hint**: yes
 
 ### Phase 5: Verified Citations & Groundedness
@@ -537,7 +550,7 @@ Plans:
 **Depends on**: Phase 5.1 (and Phase 5: builds on `rag_answer_records`, the web answer vote and the review reasons; Phase 4.1.1 for plan 05.1.1-24 only)
 **Requirements**: FBK-01, FBK-02, FBK-03, FBK-04, FBK-05, FBK-06, FBK-07, FBK-08, FBK-09, FBK-10, EVAL-16 (embed and refusal extension), EVAL-17 (moved from Phase 7)
 **Success Criteria** (what must be TRUE):
-  1. With `RAG_RETRIEVAL_LOG` on, every chat, embed and voice retrieval writes one `rag_retrieval_log` row after the response (query masked or omitted, tenant, chunk ids, ranks and scores, config hash, refusal decision and outcome, latency), never answer or chunk text; eval, media and ghost chats are never logged; rows are service-role only, deleted with their user, organization or chat, purged after the retention window, and a tenant can lower or switch off logging; with every switch off the chat, embed and voice responses are byte-identical (characterization) and no row is written.
+  1. With `RAG_RETRIEVAL_LOG` on, every chat, embed and voice retrieval writes one `rag_retrieval_log` row after the response (query masked or omitted, tenant, chunk ids, ranks and scores, config hash, refusal decision and outcome, latency, and the language codes of the query, the kept chunks and the answer), never answer or chunk text; eval, media and ghost chats are never logged; rows are service-role only, deleted with their user, organization or chat, purged after the retention window, and a tenant can lower or switch off logging; with every switch off the chat, embed and voice responses are byte-identical (characterization) and no row is written.
   2. Users can mark a strict refusal as "I expected an answer", embed visitors can rate answers through a signed per-answer token, opening a source is counted, and Phase 5's web answer votes reach the same table; votes on another user's or another tenant's retrieval are impossible (404 tests).
   3. Weekly mining turns thumbs-down, disputed refusals, refusals with high scores, zero-result and low-score retrievals and flagged groundedness into a capped, deduplicated review queue per tenant; database RLS ensures an expert of tenant A never sees tenant B's cases, shown by two-tenant tests at the SQL and API levels, and operator admins see a tenant only after an explicit grant in multi-tenant mode.
   4. In the Config UI an expert labels a case (correct documents and exact evidence spans, expected answer, PII check) and triages it into dictionary candidates (for Phase 4.1.1), training pairs with hard negatives and document groups (for Phase 6.1) and golden candidates; no training pair uses a document of the domain test split.
@@ -545,7 +558,7 @@ Plans:
   6. The phase comparison against the Phase 5.1 closing report shows retrieval paired differences of exactly zero with the switches off and on, and request latency within the OBS-02 budgets.
 **Live verification**: Apply 0531 to 0535 to the real project and check two-tenant RLS; confirm after()-written rows and latency on real streams, embed and voice; collect and label 100–300 real user questions with domain experts, PII-review and promote them; switch the gate to real items, record a three-run real baseline and set improvement targets for Phases 6 and 6.1 (plan 05.1.1-23).
 **UI**: `/gsd-ui-phase 05.1.1` must produce `05.1.1-UI-SPEC.md` before execution (surfaces: Config UI switches, web chat refusal control and source-open signal, embed widget and window rating, Config UI expert labelling panel, Config UI feedback loop admin card).
-**Ordering note**: Phase 6 plans that edit `src/app/api/chat/route.ts`, `src/app/api/embed/chat/route.ts`, `src/lib/rag/trace/finish.ts`, `src/lib/rag/pipeline.ts`, `src/lib/rag/index.ts`, the five config files, `AGENTS.md` or the setup files depend on 05.1.1-22.
+**Ordering note**: Phase 6 plans that edit `src/app/api/chat/route.ts`, `src/app/api/embed/chat/route.ts`, `src/lib/rag/trace/finish.ts`, `src/lib/rag/pipeline.ts`, `src/lib/rag/index.ts`, `src/lib/rag/generation/messages.ts`, the five config files, `AGENTS.md` or the setup files depend on 05.1.1-22.
 **Plans**: 25 plans in 8 waves (05.1.1-01..05.1.1-25); closing plan 05.1.1-22 — plan index `phases/05.1.1-feedback-loop-and-real-domain-test-set-thumbs-failed-query-m/05.1.1-PLAN-INDEX.md`
 
 Plans:
@@ -592,20 +605,29 @@ Plans:
 
 ### Phase 5.2: Grounded Answers & Output Safety (INSERTED)
 **Goal**: When the documents answer only part of a question, the answer says so instead of filling the gap, every claim can be traced to a block, no answer can carry a phishing link or a credential request, and every computed number in an answer is produced and checked by deterministic code
-**Depends on**: Phase 5, Phase 5.1, Phase 5.1.1 (review queue and retrieval log)
-**Requirements**: GEN-08, GEN-09, GEN-10, GEN-11, GEN-12, LAT-05, LANG-09, SEC-06, SEC-10, GEN-14, EVAL-19, GEN-15, GEN-16, GEN-17, EVAL-26, RNK-08, EVAL-33 (plus the SEC-02 delta)
+**Depends on**: Phase 5, Phase 5.1, Phase 5.1.1 (review queue and retrieval log), Phase 3.2 (language registry texts, output link allowlist, `pending_review`, effective dates, supersession candidates)
+**Requirements**: GEN-08, GEN-09, GEN-10, GEN-11, GEN-12, LAT-05, LANG-09, SEC-06, SEC-10, GEN-14, EVAL-19, GEN-15 (plus the SEC-02 delta; GEN-16, GEN-17, EVAL-26, RNK-08 and EVAL-33 moved to Phase 5.2.1 on 2026-11-25)
 **Success Criteria** (what must be TRUE):
   1. With `RAG_PARTIAL_ANSWER_RULE` on, the `partial_answer` fixture items (e.g. a limit is stated but not what happens above it) are answered for the covered part and say for the rest that the documents do not cover it, in zh, en and it; the share of answers adding unsupported content is 0 in CI; when strict mode calls webSearch, document and web parts are labelled separately; `RAG_SYSTEM_PROMPT` and `{{context}}` are unchanged.
   2. The eval reports `uncited_sentence_rate`, the UI marks sentences without a valid citation, and with `RAG_CLAIM_CHECK` on unsupported sentences are marked "not confirmed by the documents" without deleting or blocking text; with the LLM judge opted in, Italian answers get a calibrated groundedness label instead of "not checked".
   3. With `RAG_MAX_OUTPUT_TOKENS` on, answers are capped and asked to be concise, the strict refusal is never cut, citations before a cut-off are persisted and the truncation rate stays below 2%; refusal and notice texts come from the registry in the question's language and today's English text is byte-identical.
   4. With `RAG_OUTPUT_GUARD` on, a fixture document carrying a hidden phishing link and a "log in again and enter your password" instruction produces answers with the link replaced and the request blocked, even across stream tokens; allowlisted links pass; WhatsApp replies are filtered and no server-side preview is fetched for non-allowlisted hosts; the system prompt forbids outputting links found only in material and asking for passwords.
-  5. Security events carry the uploader on the trace, in logs and in the review queue, and a fake uploader crossing the threshold raises an admin alert; with every switch off, results match the Phase 5.1 baseline.
+  5. Security events carry the uploader on the trace, in logs and in the review queue, and a fake uploader crossing the threshold raises an admin alert; with every switch off, results match the baseline recorded before this phase (the Phase 5.1.1 one).
   6. Context blocks carry version and effective-date labels; on the `stale_version` items the answer gives the current value and names its version, never both values, and the conflict sends both documents to the review queue as a supersession candidate.
   7. With `RAG_CONTEXT_RELEVANCE_RULE` on, the synthetic `off_topic_context` items (no-answer questions whose top chunks are on an adjacent subject) get the "information not available" text in strict mode and a labelled general answer in balanced mode, the share of answers repurposing adjacent context is 0 in CI, and with the switch off the strict characterization is byte-identical.
-  8. With `RAG_CALC_TOOL` on, the synthetic `multi_step_calc` items in zh/en/it are answered through the calculation tool with every step listed and the same number for every paraphrase; the tool rejects free-form code, unsourced operands and mixed units; with `RAG_CALC_CHECK` on, a fake model that skips the per-item rule gets a correction notice with the recomputed value, both values in metadata and a review-queue entry, and an operand missing from its cited chunk marks the answer "calculation not verified"; with both off, answers match the Phase 5.1 baseline.
-  9. With `RAG_PROMPT_BUDGET` on, the `context_overflow` items never exceed a small fake model window, the question is present and last in every request, history is trimmed before documents, the highest-ranked parents are kept in both the v2 and legacy assembly, and prompt-part token counts and dropped documents are on the trace; with it off results equal the baseline.
-**Live verification**: Run the claim check and the LLM judge on real answers; measure the live calculation error rate with and without the tool on real models; send a real WhatsApp reply with an injected link and confirm no preview fetch.
-**Plans**: TBD
+**Live verification**: Run the claim check and the LLM judge on real answers; send a real WhatsApp reply with an injected link and confirm no preview fetch.
+**Plans**: 40 plans in 13 waves (see `phases/05.2-grounded-answers-and-output-safety/05.2-PLAN-INDEX.md`); migrations 0940–0944; chat-route plans run in order 05→06→09→10→13→31; human steps: 05.2-15 decision on the WhatsApp stream parser (D-91), 05.2-39 live push of 0940–0944 (after 3.2's 0801–0810 and 5.1.1's 0531–0535 are live), 05.2-40 live claim check, judge calibration, WhatsApp link test and output-cap sweep
+**UI hint**: yes
+
+### Phase 5.2.1: Calculation Tool & Prompt Budget (INSERTED)
+**Goal**: Every computed number in an answer is produced and checked by deterministic code, and no request ever exceeds the model window or loses the user's question
+**Depends on**: Phase 5.2 (split from it on 2026-11-25)
+**Requirements**: GEN-16, GEN-17, EVAL-26, RNK-08, EVAL-33
+**Success Criteria** (what must be TRUE):
+  1. With `RAG_CALC_TOOL` on, the synthetic `multi_step_calc` items in zh/en/it are answered through the calculation tool with every step listed and the same number for every paraphrase; the tool rejects free-form code, unsourced operands and mixed units; with `RAG_CALC_CHECK` on, a fake model that skips the per-item rule gets a correction notice with the recomputed value, both values in metadata and a review-queue entry, and an operand missing from its cited chunk marks the answer "calculation not verified"; with both off, answers match the Phase 5.2 baseline.
+  2. With `RAG_PROMPT_BUDGET` on, the `context_overflow` items never exceed a small fake model window, the question is present and last in every request, history is trimmed before documents, the highest-ranked parents are kept in both the v2 and legacy assembly, and prompt-part token counts and dropped documents are on the trace; with it off results equal the baseline.
+**Live verification**: Push migration 0950 live; measure the live calculation error rate with and without the tool on real models; calibrate the token estimate against real usage.
+**Plans**: 26 plans in 8 waves (see `phases/05.2.1-calculation-tool-and-prompt-budget/05.2.1-PLAN-INDEX.md`); migration 0950; chat-route plans run in order 14→18→21→26; plan 26 (`RAG_CONTEXT_OVERFLOW=refine`) is optional and last; human step 05.2.1-25
 **UI hint**: yes
 
 ### Phase 5.3: Evaluation Gates & Online Monitoring (INSERTED)
@@ -641,7 +663,7 @@ Plans:
   7. With the semantic cache on, cache hits have much lower p95 latency than misses, any document change in the tenant invalidates affected entries, and the cross-tenant canary suite includes the cache.
 **Live verification**: Run both frameworks with real LLM keys; measure p50/p95 latency of each transform and of the whole pre-retrieval stage for chat (starting budget about 2 s before first token) and voice (about 800 ms), and replace the starting budgets with the measured ones; compare LlamaIndex and LangChain on the real golden set.
 **Plans**: 46 plans in 13 waves (06-01..06-46) — see `phases/06-query-layer-llamaindex-langchain/06-PLAN-INDEX.md`
-**Ordering note (2026-11-24, Phase 5.1.1)**: Phase 6 plans that edit `src/app/api/chat/route.ts`, `src/app/api/embed/chat/route.ts`, `src/lib/rag/trace/finish.ts`, `src/lib/rag/pipeline.ts`, `src/lib/rag/index.ts`, the five config files, `AGENTS.md` or the setup files depend on 05.1.1-22 (the Phase 5.1.1 close). The Phase 6 plans themselves are not yet rewritten for this edge; the executor adds it before running such a plan.
+**Ordering note (2026-11-24, Phase 5.1.1)**: Phase 6 plans that edit `src/app/api/chat/route.ts`, `src/app/api/embed/chat/route.ts`, `src/lib/rag/trace/finish.ts`, `src/lib/rag/pipeline.ts`, `src/lib/rag/index.ts`, `src/lib/rag/generation/messages.ts`, the five config files, `AGENTS.md` or the setup files depend on 05.1.1-22 (the Phase 5.1.1 close). The Phase 6 plans themselves are not yet rewritten for this edge; the executor adds it before running such a plan.
 **Defaults note (2026-11-24, Phase 4.1 D-21)**: Phase 6 was planned while legacy was the default. Once Phase 4.1 flips the defaults (04.1-09), route-fixture tests that assert legacy output must pin `env: { RAG_PIPELINE: 'legacy' }`, and comparisons "against Phase 4" use the post-flip baselines.
 
 Plans:
@@ -755,15 +777,15 @@ Plans:
   2. Purging a document leaves no chunk, parent, vector in any profile, table row, cluster membership, translation, parse-cache entry, original, external-backend vector or cache entry of its lineage; past citations show the withdrawn marker; the audit row names actor and reason; golden items on it are stale.
   3. With `RAG_SOURCE_RECHECK` on, a chunk whose document was deleted directly in the index is dropped before rerank and counted on the trace; on Weaviate and Qdrant the recheck is always on.
   4. With the SharePoint switch on, a fixture drive (recorded Graph delta responses) syncs added, changed and deleted items with stored delta tokens and maps item permissions to access groups; with it off nothing changes.
-  5. The deletion canaries pass in CI for `soft` and `purge`; with every new switch off and connections in `soft` mode, behaviour matches the Phase 6.2 baseline.
+  5. The deletion canaries pass in CI for `soft` and `purge`; with every new switch off and connections in the default deletion mode, behaviour matches the Phase 6.2 baseline.
 **Live verification**: Connect a real SharePoint test site, delete and restore a file, and confirm the answer stops and resumes; purge a document and run the verification query against the live database.
-**Plans**: TBD
+**Plans**: 27 plans in 10 waves (see `phases/06.3-source-deletion-sync-and-purge/06.3-PLAN-INDEX.md`); migrations 0720–0728; human steps in plans 24 (live migration push), 25 (live SharePoint and purge checks) and 26 (live permission mapping); 06.3-14 waits for Phase 7 plan 07-37, 06.3-26 for Phase 4.3
 **UI hint**: yes
 
 ### Phase 7: External Backends & Release Defaults
 **Goal**: Admins can switch retrieval to Weaviate or Qdrant without any cross-tenant leakage, every new provider and switch is configurable in the Config UI, and the shipped defaults are backed by a full regression
-**Depends on**: Phase 5, Phase 5.1, Phase 6, Phase 3.1.1, Phase 4.1, Phase 4.1.1, Phase 5.1.1, Phase 6.1, Phase 3.2, Phase 3.2.1, Phase 4.2, Phase 5.2, Phase 5.3, Phase 6.2, Phase 6.3, Phase 4.3 (the Weaviate and Qdrant adapters must inject the access-group filter on every query and prefetch)
-**Requirements**: RET-05, RET-06, RET-07, RET-08, RET-09, ADM-01, ADM-02, ADM-03, ADM-04, LANG-10, LANG-11, SEC-11 (plus the ADM-02 delta and the RET-05 delta: the outbox carries DATA-24 purges and RET-14 is always on for Weaviate and Qdrant; EVAL-17 moved to Phase 5.1.1 on 2026-11-24)
+**Depends on**: Phase 5, Phase 5.1, Phase 6, Phase 3.1.1, Phase 4.1, Phase 4.1.1, Phase 5.1.1, Phase 6.1, Phase 3.2, Phase 3.2.1, Phase 4.2, Phase 5.2, Phase 5.2.1, Phase 5.3, Phase 6.2, Phase 6.3, Phase 4.3 (the Weaviate and Qdrant adapters must inject the access-group filter on every query and prefetch)
+**Requirements**: RET-05, RET-06, RET-07, RET-08, RET-09, ADM-01, ADM-02, ADM-03, ADM-04, LANG-10, LANG-11, SEC-11, SEC-12 (Weaviate/Qdrant adapter clause) (plus the ADM-02 delta and the RET-05 delta: the outbox carries DATA-24 purges and RET-14 is always on for Weaviate and Qdrant; EVAL-17 moved to Phase 5.1.1 on 2026-11-24)
 **Success Criteria** (what must be TRUE):
   1. Tests against Weaviate and Qdrant containers in CI show that inserts, updates, deletes (including cascade deletes), version replacements and re-embeds in Supabase reach both stores through the outbox and drain worker, and that the reconcile job detects and repairs injected drift. Weaviate uses one tenant per workspace; Qdrant uses a shared collection per embedding profile with an `is_tenant` index and a tenant filter injected on every query and prefetch.
   2. The cross-tenant canary suite (personal vs organization, null organization, removed member, after delete, after version replace, after re-embed) passes on pgvector, Weaviate and Qdrant in CI and blocks release on failure; chunk IDs from an external backend that fail re-validation against Supabase under the caller's scope are dropped.
@@ -772,8 +794,8 @@ Plans:
   5. The regression runner evaluates backend, embedding profile and reranker combinations on the locked test split and writes a defaults decision record with its numbers (shown on fixtures). `AGENTS.md`, the `.env` templates and setup docs describe the sidecar, providers, switches, sync and eval workflow. A vendor data-flow inventory lists what content goes to Vectara, Cohere, Voyage, DeepInfra, Weaviate, Qdrant, Anthropic, LlamaCloud and any other external service the pipeline calls.
   6. *(Removed 2026-11-24: moved to Phase 5.1.1 with EVAL-17.)*
   7. Traces carry chunk languages; online judge scores, votes and the "information not available" rate are split per language, and a fixture where one language drops while the average holds raises an alert; a new embedding profile can be activated for chosen tenants or a traffic share first and rolled back per tenant; adding a fixture language records its baseline and reprocesses only `und`, scanned and out-of-date documents; a red-team run started from the Config UI replays the growing attack corpus and opens a review case per success; the defaults record includes cost per 1,000 documents and queries.
-**Live verification**: Provision Weaviate and Qdrant (cloud or self-hosted), host the drain worker within the 60 s function limit, and run the canary suite against them; run Test-connection for each real provider; run the full regression on the real locked test split with all real keys (the ADM-02 defaults decision is final only from this live run, not from fixtures); check voice latency end to end.
-**Plans**: 34 plans in 13 waves (30 active; 07-22, 07-23, 07-26 and 07-29 retired 2026-11-24, superseded by Phase 5.1.1) — see `phases/07-external-backends-release-defaults/07-PLAN-INDEX.md`
+**Live verification**: Provision Weaviate and Qdrant (cloud or self-hosted), host the drain worker within the 60 s function limit, and run the canary suite against them; run Test-connection for each real provider; run the full regression on the real locked test split with all real keys (the ADM-02 defaults decision is final only from this live run, not from fixtures); check voice latency end to end; run the 07-50 live checks (purge, source recheck and access groups on the hosted backends, a gradual rollout and the LANG-10 alert channel end to end, a red-team run started from the Config UI).
+**Plans**: 52 plans in 18 waves (48 active; 07-22, 07-23, 07-26 and 07-29 retired 2026-11-24, superseded by Phase 5.1.1; 07-35..07-52 added 2026-11-25 for the purge outbox, forced source recheck, access-group filter, LANG-10/11, SEC-11 red team and ADM-02 cost blocks; 07-37/07-44 wait for Phase 6.3, 07-38/07-39 for Phase 4.3, 07-46 for Phase 5.3; `/gsd-ui-phase 07` must produce `07-UI-SPEC.md` before 07-48, 07-49 and 07-52) — see `phases/07-external-backends-release-defaults/07-PLAN-INDEX.md`
 **Incumbent defaults (2026-11-24, Phase 4.1)**: the regression and the release-defaults check (07-17, 07-25, 07-30) start from the Phase 4.1 decision `eval/decisions/04.1-retrieval-defaults.json` as the incumbent; route-fixture tests that assert legacy output pin `RAG_PIPELINE=legacy`.
 
 Plans:
@@ -816,7 +838,7 @@ Plans:
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 3.1.1 → 3.2 → 3.2.1 → 4 → 4.1 → 4.1.1 → 4.2 → 4.3 → 5 → 5.1 → 5.1.1 → 5.2 → 5.3 → 6 → 6.1 → 6.2 → 6.3 → 7. Phase 6 depends on Phase 5 (its plans build on Phase 5 contracts) and runs after Phase 5.1, which touches the same files. Phase 7's backend and sync work needs only Phases 3 and 4; its regression and closeout need Phases 5 and 6. Inserted 2026-11-24: 3.1.1 follows 3.1 (and needs Phase 4's v2 search on trunk); 4.1 follows Phase 4's automated close (04-42) and flips the retrieval defaults that every later phase runs on; 4.1.1 follows 4.1; 5.1.1 follows 5.1 (plan 05.1.1-24 also needs 4.1.1), takes over EVAL-17 from Phase 7, and Phase 6 plans sharing its files depend on 05.1.1-22; 6.1 needs Phases 6, 3.1.1 and 5.1.1. Phases 3.2, 4.2, 5.2 and 6.2 were inserted on 2026-11-25 so that no plan of a phase already executing changes, 3.2.1 (BGE-M3, split from 3.2 on 2026-11-25) follows 3.2 and needs 3.1.1, and later phases do not wait for it; 5.3 (evaluation gates and online monitoring) follows 5.2 without holding up Phase 6; 6.3 (source deletion sync and purge) follows 6.2, and Phase 7's outbox must carry its purges; Phase 7 had 2 of 34 plans executed and gains requirements through a plan revision. Phase 6 depends on Phase 5 (its plans build on Phase 5 contracts) and runs after Phase 5.1, which touches the same files. Phase 7's backend and sync work needs only Phases 3 and 4; its regression and closeout need Phases 5 and 6.
+Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 3.1.1 → 3.2 → 3.2.1 → 4 → 4.1 → 4.1.1 → 4.2 → 4.3 → 5 → 5.1 → 5.1.1 → 5.2 → 5.2.1 → 5.3 → 6 → 6.1 → 6.2 → 6.3 → 7. Phase 6 depends on Phase 5 (its plans build on Phase 5 contracts) and runs after Phase 5.1, which touches the same files. Phase 7's backend and sync work needs only Phases 3 and 4; its regression and closeout need Phases 5 and 6. Inserted 2026-11-24: 3.1.1 follows 3.1 (and needs Phase 4's v2 search on trunk); 4.1 follows Phase 4's automated close (04-42) and flips the retrieval defaults that every later phase runs on; 4.1.1 follows 4.1; 5.1.1 follows 5.1 (plan 05.1.1-24 also needs 4.1.1), takes over EVAL-17 from Phase 7, and Phase 6 plans sharing its files depend on 05.1.1-22; 6.1 needs Phases 6, 3.1.1 and 5.1.1. Phases 3.2, 4.2, 5.2 and 6.2 were inserted on 2026-11-25 so that no plan of a phase already executing changes, 3.2.1 (BGE-M3, split from 3.2 on 2026-11-25) follows 3.2 and needs 3.1.1, and later phases do not wait for it; 5.3 (evaluation gates and online monitoring) follows 5.2 without holding up Phase 6; 6.3 (source deletion sync and purge) follows 6.2, and Phase 7's outbox must carry its purges; Phase 7 had 2 of 34 plans executed and gains requirements through a plan revision. Phase 6 depends on Phase 5 (its plans build on Phase 5 contracts) and runs after Phase 5.1, which touches the same files. Phase 7's backend and sync work needs only Phases 3 and 4; its regression and closeout need Phases 5 and 6.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -828,17 +850,18 @@ Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 3.1.1 → 3.2 → 3.2
 | 3.2. Language Support & Ingestion Hardening (INSERTED) | 0/65 | Planned | - |
 | 3.2.1. BGE-M3 Open-Source Fallback Embedding (INSERTED) | 0/5 | Planned (needs 3.1.1) | - |
 | 4. Hybrid Retrieval, Reranking & Calibrated Refusal | 46/47 | In Progress (04-43 live calibration) | - |
-| 4.1. Hybrid Retrieval & Rerank On by Default (INSERTED) | 0/12 | Planned (plan-check PASS) | - |
-| 4.1.1. Domain Terminology Dictionary (INSERTED) | 0/16 | Planned (plan-check PASS) | - |
-| 4.2. Retrieval Tuning Additions (INSERTED) | 0/TBD | Not planned | - |
-| 4.3. Document Access Groups (INSERTED) | 0/TBD | Not planned | - |
+| 4.1. Hybrid Retrieval & Rerank On by Default (INSERTED) | 0/13 | Planned (plan-check PASS, revised 2026-11-25) | - |
+| 4.1.1. Domain Terminology Dictionary (INSERTED) | 0/18 | Planned (plan-check PASS, revised 2026-11-25) | - |
+| 4.2. Retrieval Tuning Additions (INSERTED) | 0/38 | Planned (plan-check PASS) | - |
+| 4.3. Document Access Groups (INSERTED) | 0/38 | Planned (plan-check PASS) | - |
 | 5. Verified Citations & Groundedness | 18/26 | In Progress | - |
 | 5.1. Prompt Injection Defense (INSERTED) | 10/25 | In Progress | - |
 | 5.1.1. Feedback Loop & Real Domain Test Set (INSERTED) | 0/25 | Planned (plan-check PASS) | - |
-| 5.2. Grounded Answers & Output Safety (INSERTED) | 0/TBD | Not planned | - |
+| 5.2. Grounded Answers & Output Safety (INSERTED) | 0/40 | Planned (plan-check PASS) | - |
+| 5.2.1. Calculation Tool & Prompt Budget (INSERTED) | 0/26 | Planned (plan-check PASS) | - |
 | 5.3. Evaluation Gates & Online Monitoring (INSERTED) | 0/TBD | Not planned | - |
 | 6. Query Layer (LlamaIndex & LangChain) | 12/46 | In Progress | - |
 | 6.1. Embedding Fine-tuning Pipeline (INSERTED) | 0/20 | Planned (plan-check PASS) | - |
 | 6.2. Query Layer Additions (INSERTED) | 0/TBD | Not planned | - |
-| 6.3. Source Deletion Sync & Purge (INSERTED) | 0/TBD | Not planned | - |
-| 7. External Backends & Release Defaults | 2/34 | In Progress (needs plan revision for LANG-10, LANG-11, SEC-11) | - |
+| 6.3. Source Deletion Sync & Purge (INSERTED) | 0/27 | Planned (plan-check PASS) | - |
+| 7. External Backends & Release Defaults | 2/52 | In Progress (revision 4 planned 2026-11-25; UI-SPEC pending for 07-48, 07-49, 07-52) | - |

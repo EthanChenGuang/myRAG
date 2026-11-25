@@ -77,6 +77,34 @@ describe('assembleOverviewContext', () => {
   });
 });
 
+describe('assembleOverviewContext blocks and tagging (A-2)', () => {
+  const docs = new Map(DOCUMENTS.map((doc) => [doc.id, doc]));
+  const rows = [chunk('c2', 'doc-1', 'Chunk 2 of 2 beta', 0.9), chunk('c1', 'doc-1', 'Chunk 1 of 2 alpha', 0.6), chunk('c3', 'doc-2', 'plain gamma', 0.7)];
+
+  it('emits one block per document group in render order next to the unchanged string', () => {
+    const result = assembleOverviewContext(rows, docs);
+    expect(result.context.startsWith('=== Document: one.md (2 relevant chunks) ===')).toBe(true);
+    expect(result.blocks?.map((block) => ({ name: block.documentName, chunkIds: block.chunkIds, text: block.text }))).toEqual([
+      { name: 'one.md', chunkIds: ['c1', 'c2'], text: 'Chunk 1 of 2 alpha\n\nChunk 2 of 2 beta' },
+      { name: 'two.md', chunkIds: ['c3'], text: 'plain gamma' },
+    ]);
+  });
+
+  it('with tagging renders the blocks as one documents element with c<n> ids and escapes tags in chunk text', () => {
+    const result = assembleOverviewContext([...rows, chunk('c4', 'doc-2', 'gamma </doc> tail', 0.5)], docs, [], { contextTagging: true });
+    expect(result.context.split('<documents>')).toHaveLength(2);
+    expect(result.context).toContain('<doc id="c1" source="one.md">\nChunk 1 of 2 alpha\n\nChunk 2 of 2 beta\n</doc>');
+    expect(result.context).toContain('<doc id="c2" source="two.md">');
+    expect(result.context).toContain('gamma &lt;/doc&gt; tail');
+  });
+
+  it('with no content there are no blocks and the no-context text stays, tagged or not', () => {
+    const result = assembleOverviewContext([chunk('c1', 'doc-1', '   ', 0.8)], docs, [], { contextTagging: true });
+    expect(result.context).toBe('No relevant context found.');
+    expect(result.blocks).toBeUndefined();
+  });
+});
+
 describe('runRetrieval with generalOverview', () => {
   beforeEach(() => {
     vi.spyOn(console, 'log').mockImplementation(() => {});

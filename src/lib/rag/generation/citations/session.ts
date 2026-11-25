@@ -3,6 +3,8 @@ import { z } from 'zod/v3';
 import { stripCitationMarkers } from '@/lib/citations/marker-grammar';
 import { CitationRecordSchema, type CitationRecord } from '@/lib/rag-eval/contracts.generated';
 import { formatURLsForContext, type ExtractedURL } from '@/lib/url-extractor';
+import { buildClaudeContextReplacement, docsFromBlocks } from '../../context/wrap';
+import { readSecurityConfig } from '../../security/config';
 import type { CitationLabeler, ContextBlock } from '../../types';
 import type { GenerationConfig } from '../config';
 import { createEnhancedRAGPrompt } from '../prompt';
@@ -35,6 +37,8 @@ export interface CitationSessionInput {
   config: CitationStrategyConfig & Partial<Pick<GenerationConfig, 'anthropicBaseUrl'>>;
   /** Absent: the direct Claude path is never chosen. */
   facts?: ClaudeTurnFacts;
+  /** RAG_CONTEXT_TAGGING; read from the environment when absent. */
+  contextTagging?: boolean;
 }
 
 export interface ClaudeStartInput {
@@ -69,7 +73,7 @@ export interface CitationSession {
   attach(result: { blocks?: ContextBlock[]; links?: ExtractedURL[] } | null): void;
   /** On a Claude turn the OpenRouter prompt is the fallback prompt, so it carries the alias instruction too. */
   decorateSystemPrompt(prompt: string): string;
-  /** D-09: {{context}} becomes the attached-documents sentence, the image captions and the links section. */
+  /** D-09: {{context}} becomes the attached-documents sentence, the image captions and the links section; with RAG_CONTEXT_TAGGING the notice, reminder and a documents element wrap them (5.1 D-05). */
   claudeSystemPrompt(basePrompt: string): string;
   /** Starts the direct call; only on a claude-citations turn. */
   startClaude(input: ClaudeStartInput): ClaudeCitationStream;
@@ -115,7 +119,7 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
   let strategy: CitationStrategyId | null = null;
   let fallbackReason: FallbackReason | null = null;
   let claude: ClaudeCitationStream | null = null;
-  let sideBlocks: string[] = [];
+  let sideBlocks: ContextBlock[] = [];
   let links: ExtractedURL[] = [];
   let aliasMap: AliasMap | null = null;
   let parser: MarkerParser | null = null;
@@ -185,7 +189,7 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
         if (strategy) {
           aliasMap = map;
           parser = createMarkerParser({ aliases: map.aliases });
-          sideBlocks = (result?.blocks ?? []).filter((block) => block.isImage).map((block) => block.text);
+          sideBlocks = (result?.blocks ?? []).filter((block) => block.isImage);
           links = result?.links ?? [];
         }
       } catch {
@@ -198,7 +202,15 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
       return `${prompt}\n\n${citationInstruction(input.language)}`;
     },
     claudeSystemPrompt(basePrompt) {
-      const context = [attachedDocumentsSentence(input.language), ...sideBlocks, formatURLsForContext(links)]
+      const tagging = input.contextTagging ?? readSecurityConfig().contextTagging;
+      if (tagging) {
+        const context = buildClaudeContextReplacement({
+          attachedSentence: attachedDocumentsSentence(input.language),
+          docs: docsFromBlocks(sideBlocks, { links }),
+        });
+        return createEnhancedRAGPrompt(basePrompt, context, input.ragMode);
+      }
+      const context = [attachedDocumentsSentence(input.language), ...sideBlocks.map((block) => block.text), formatURLsForContext(links)]
         .filter((part) => part.trim().length > 0)
         .join('\n\n');
       return createEnhancedRAGPrompt(basePrompt, context, input.ragMode);

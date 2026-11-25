@@ -1,6 +1,7 @@
-import type { InjectionCheckMode } from './config';
-import { scanText } from './injection-rules';
-import type { InjectionSummary, ReferencedSection, ReferencedState } from '../types';
+import { readSecurityConfig, type InjectionCheckMode, type SecurityConfig } from './config';
+import { detectorsConfigVersion } from './detectors';
+import { injectionRulesVersion, scanText } from './injection-rules';
+import type { InjectionSummary, Profile, ReferencedSection, ReferencedState } from '../types';
 
 export type ActiveInjectionMode = Exclude<InjectionCheckMode, 'off'>;
 
@@ -25,7 +26,7 @@ export interface InjectionVerdict {
 
 export type InjectionVerdicts = ReadonlyMap<string, InjectionVerdict>;
 
-interface ItemCandidate {
+export interface ItemCandidate {
   chunk_id: string;
   document_id: string;
   content: string;
@@ -62,13 +63,77 @@ export function injectionItems(
   return items;
 }
 
+/** Document id (one row per document version) to the rule ids an admin released that version for. */
+export type ReleasedRules = ReadonlyMap<string, ReadonlySet<string>>;
+
+interface ReleasedRow {
+  id: string;
+  metadata?: Record<string, unknown> | null;
+}
+
+function stringList(value: unknown): string[] | null {
+  return Array.isArray(value) && value.every((entry) => typeof entry === 'string') ? (value as string[]) : null;
+}
+
+/**
+ * The released rule ids per document version, read only from document rows the caller already loaded under its own
+ * scope (fetchAssemblyRows or the overview lookup); never a lookup by id. A version counts as released only when
+ * metadata.quarantine.released_at is set; the ids are released_rule_ids, else rule_ids.
+ */
+export function releasedRulesFromRows(rows: Iterable<ReleasedRow> | ReadonlyMap<string, ReleasedRow> | null | undefined): ReleasedRules {
+  const released = new Map<string, ReadonlySet<string>>();
+  if (!rows) return released;
+  const list = rows instanceof Map ? rows.values() : (rows as Iterable<ReleasedRow>);
+  for (const row of list) {
+    const raw = row?.metadata?.quarantine;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+    const quarantine = raw as Record<string, unknown>;
+    if (typeof quarantine.released_at !== 'string' || quarantine.released_at === '') continue;
+    const ids = stringList(quarantine.released_rule_ids) ?? stringList(quarantine.rule_ids) ?? [];
+    if (ids.length > 0 && typeof row.id === 'string') released.set(row.id, new Set(ids));
+  }
+  return released;
+}
+
+export type InjectionDetectorId = 'rules' | 'prompt_guard' | 'lakera';
+
+const RULES_ONLY_PROFILES: readonly Profile[] = ['voice', 'media'];
+
+/** ML detectors with a client in this build; empty until plan 05.1-21 wires Prompt Guard and Lakera. */
+const WIRED_ML_DETECTORS: readonly Exclude<InjectionDetectorId, 'rules'>[] = [];
+
+/** The detectors a profile runs: voice and media run the rules only whatever the ML switches say (D-09, A-11). */
+export function injectionDetectorsFor(profile: Profile, config: Pick<SecurityConfig, 'promptGuard' | 'lakera'>): InjectionDetectorId[] {
+  if (RULES_ONLY_PROFILES.includes(profile)) return ['rules'];
+  const enabled = WIRED_ML_DETECTORS.filter((id) => (id === 'prompt_guard' ? config.promptGuard : config.lakera));
+  return ['rules', ...enabled];
+}
+
+/** The eval trace's security block while the injection check is on (D-18); null when it is off. */
+export function injectionTraceVersions(env: Record<string, string | undefined> = process.env): { rules_version: string; detectors_version: string } | null {
+  if (readSecurityConfig(env).injectionCheck === 'off') return null;
+  return { rules_version: injectionRulesVersion(), detectors_version: detectorsConfigVersion() };
+}
+
+/** Detector versions recorded on the stage entry, e.g. rules@8eade169ab89. */
+export function injectionVersions(detectors: readonly InjectionDetectorId[]): string[] {
+  return detectors.includes('rules') ? [`rules@${injectionRulesVersion()}`] : [];
+}
+
 /** Runs the rules on every item synchronously; never awaits, so a stage timeout cannot skip it. */
-export function runInjectionCheck(input: { items: readonly InjectionCheckItem[]; mode: ActiveInjectionMode }): InjectionVerdicts {
+export function runInjectionCheck(input: {
+  items: readonly InjectionCheckItem[];
+  mode: ActiveInjectionMode;
+  /** Rule ids ignored for the named document version only; other rules still apply. */
+  released?: ReleasedRules;
+}): InjectionVerdicts {
   const verdicts = new Map<string, InjectionVerdict>();
   for (const item of input.items) {
     try {
       const scan = scanText(item.text);
-      verdicts.set(item.key, { flagged: scan.matched, ruleIds: [...scan.rule_ids], error: false });
+      const exempt = input.released?.get(item.documentId);
+      const ruleIds = exempt ? scan.rule_ids.filter((ruleId) => !exempt.has(ruleId)) : [...scan.rule_ids];
+      verdicts.set(item.key, { flagged: ruleIds.length > 0, ruleIds, error: false });
     } catch {
       console.warn('[RAG Security] Injection rules failed for one item, treated as unflagged', {
         chunkIds: item.chunkIds,
@@ -91,7 +156,7 @@ export interface InjectionApplied<C extends ItemCandidate> {
   candidates: C[];
   referenced: ReferencedState | null;
   summary: InjectionSummary;
-  /** Stage counts: items checked, flagged, dropped and downweighted. */
+  /** Stage counts: items checked, flagged, dropped and downweighted, in total and per detector (`rules_*`). */
   counts: Record<string, number>;
   /** Set for downweight only. */
   marks: InjectionMarks | null;
@@ -159,6 +224,8 @@ export function applyInjectionAction<C extends ItemCandidate>(input: {
   }
 
   const flaggedItems = flaggedChunks.size + flaggedSections.size;
+  const dropCount = mode === 'drop' ? flaggedItems : 0;
+  const downweightCount = mode === 'downweight' ? flaggedItems : 0;
   return {
     candidates,
     referenced,
@@ -166,8 +233,12 @@ export function applyInjectionAction<C extends ItemCandidate>(input: {
     counts: {
       checked: items.length,
       flagged: flaggedItems,
-      dropped: mode === 'drop' ? flaggedItems : 0,
-      downweighted: mode === 'downweight' ? flaggedItems : 0,
+      dropped: dropCount,
+      downweighted: downweightCount,
+      rules_checked: items.length,
+      rules_flagged: flaggedItems,
+      rules_dropped: dropCount,
+      rules_downweighted: downweightCount,
     },
     summary: {
       mode,

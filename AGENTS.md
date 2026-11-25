@@ -78,7 +78,7 @@ myrag/
 
 ### Unified ingestion
 - Unified path entry point: `ingest()` and `resumeIngest()` in `src/lib/rag/ingest/` (13 stages: identify → file_hash_dedup → store_original → parse → content_hash_dedup → scan_injection → chunk → enrich → extract → images → embed → write → publish).
-- Fresh projects run `supabase/single-tenant-setup.sql` or `supabase/multi-tenant-setup.sql`, then apply ordered files under `supabase/migrations/` (common file first, then `.single-tenant.sql` / `.multi-tenant.sql` for that mode). Folded setup files already include Phase 3 (0301–0320), Phase 3.1 (0351–0359, 0420–0424) and Phase 4 (0401–0413); Phase 6 migrations are not folded yet; migrations remain the upgrade path and must be idempotent on top. pgvector must stay in schema `public`: 0425 stops with 55000 otherwise, so do not act on Supabase lint 0014 (`extension_in_public`) for `vector`.
+- Fresh projects run `supabase/single-tenant-setup.sql` or `supabase/multi-tenant-setup.sql`, then apply ordered files under `supabase/migrations/` (common file first, then `.single-tenant.sql` / `.multi-tenant.sql` for that mode). Folded setup files already include Phase 3 (0301–0320), Phase 3.1 (0351–0359, 0420–0424), Phase 4 (0401–0413, 0425) and Phase 5 (0501–0502); 0426, 0427 and Phase 6 migrations are not folded yet; migrations remain the upgrade path and must be idempotent on top. pgvector must stay in schema `public`: 0425 stops with 55000 otherwise, so do not act on Supabase lint 0014 (`extension_in_public`) for `vector`.
 - Switches (defaults in `src/lib/env.ts`): `RAG_INGEST_PIPELINE=legacy` (legacy writers vs unified pipeline), `RAG_EMBEDDING_PROFILES=off`, `RAG_INJECTION_SCAN=off`, `RAG_EXACT_ID_LOOKUP=false`, `RAG_PDF_IMAGE_CHUNKS=false`.
 - Originals land in the private **`rag-originals`** storage bucket; quarantined documents stay out of retrieval (D-08 filter on current, ready rows—no env switch).
 - Writer and search RPCs (`rag_*`, `match_chunks_by_profile`) are **service_role** only; tests assert anon/authenticated cannot execute them.
@@ -98,6 +98,16 @@ myrag/
 - Commands: `npm run rag:relex` (rebuild lexical text), `npm run rag:rechunk` (build a chunking profile), `npm run rag:chunking` (status, activate, rollback), `python -m rag_eval.sweep retrieval|chunking|chunking-decide` and `python -m rag_eval.calibrate refusal` (from `eval/`).
 - Only those tools write `eval/config/retrieval-params.json`, `eval/config/refusal-thresholds.json` and the chunking decisions; do not edit them by hand. Fixture-fitted cells and the fixture similarity floor (`RAG_EVAL_RETRIEVAL_MIN_SIMILARITY`) apply only in eval, never in production.
 - Chunking profiles: documents uploaded while `RAG_PIPELINE=legacy` are not written into non-legacy profiles; under v2 they are answered from their legacy chunks and counted as missing (v2 startup warning, admin list, Config UI), and `npm run rag:rechunk -- --profile <id>` repairs an active profile in place.
+
+### Verified citations and groundedness (Phase 5)
+- Every Phase 5 switch defaults to off (`src/lib/env.ts`): `RAG_CITATIONS=false`, `RAG_CLAUDE_CITATIONS=false`, `ANTHROPIC_API_KEY=`, `ANTHROPIC_BASE_URL=`, `RAG_GROUNDEDNESS=false`, `RAG_GROUNDEDNESS_VECTARA_OPT_IN=false`, `RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK=false`, `RAG_GROUNDEDNESS_TIMEOUT_MS=20000`, `RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS=3000`, `RAG_ANSWER_FEEDBACK=false`. Off reproduces the pre-Phase-5 chat byte for byte.
+- Citation strategies (`src/lib/rag/generation/citations/`): `chunk-alias` (`RAG_CITATIONS=true`) labels each context block with an alias, parses the markers the model writes and keeps only markers that name a block of that request's context; `claude-citations` (`RAG_CLAUDE_CITATIONS=true`, `ANTHROPIC_API_KEY` and a model with `anthropicId`) calls Anthropic directly with the blocks as documents. An ineligible turn (MCP, web search, attachments, multi-step) or a failure before the stream starts goes to `chunk-alias` when `RAG_CITATIONS=true`, else to today's uncited answer. Invalid markers are hidden, never rendered.
+- Each `CitationRecord` carries a snapshot of the cited text, so a citation still resolves after its document is deleted or re-versioned. Images are never cited; they stay in `source_images`.
+- Groundedness runs after the answer (`after()`), never on the answer path, through the sidecar `POST /v1/groundedness`: Vectara (en, zh-Hans) only with `RAG_GROUNDEDNESS_VECTARA_OPT_IN=true`, and in multi-tenant mode only when `RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK=true` too (set it only after the Vectara retention terms are recorded); otherwise local HHEM-2.1-Open (en) or `not_checked`. Labels: `verified`, `possibly_unreliable`, `not_checked`. Thresholds: `python -m rag_eval.calibrate groundedness` (from `eval/`).
+- `rag_answer_records` (0501, 0502) holds one server-written row per RAG answer: citations, groundedness, feedback and `review_reasons`. RLS lets `authenticated` read only its own rows; `anon` has no grant; only the service role writes. Routes: `GET /api/rag/answers?chatId=`, `GET /api/rag/answers/{answerId}`, `POST /api/rag/answers/{answerId}/feedback` (`RAG_ANSWER_FEEDBACK=true`), admin `GET /api/rag/admin/review-candidates`.
+- Review queue: a not-helpful vote adds `feedback_negative`, a `possibly_unreliable` label adds `groundedness_flagged`; `python -m rag_eval.review_queue pull --source db|both` reads them.
+- Local HHEM needs the sidecar image built with `docker build --target hhem rag-sidecar` (baked weights, offline); plan about 2 GB of memory for the scorer. The default image scores nothing locally.
+- Fixture proof: `python -m rag_eval.phase_compare --spec eval/config/phase5-comparison.json --out eval/reports/phase-05` (switches off: paired differences zero; on: retrieval unchanged, `invalid_citation_rate` 0).
 
 ---
 
@@ -120,8 +130,11 @@ interface Model {
   reasoningMethod?: 'effort' | 'max_tokens' | 'both' | 'none';
   contextLength?: number;
   description?: string;
+  anthropicId?: string; // Anthropic model id for the direct Claude Citations path, e.g. claude-<family>-<version>
 }
 ```
+
+`anthropicId` is optional and only allowed on `anthropic/` ids. When a model carries it, it must match in all five locations; `node scripts/check-config.mjs` fails otherwise. A model without it never takes the direct Claude path.
 
 UI icon cues:
 - 🧠 Reasoning/thinking (`supportsReasoning`)
@@ -191,6 +204,7 @@ Unified OAuth for Google Drive, Notion, Dropbox:
 - Strict RAG now allows safe tool results: when `webSearch` is enabled, strict mode may use Exa-powered web search rather than legacy `:online` model suffixes.
 - When strict RAG returns a verified `empty` retrieval status and web search is disabled, the chat API returns a structured "information not available" response instead of letting the model answer from general knowledge. A knowledge-base failure (`error`, or `degraded` with no documents) is never reported as "information not available": strict mode with web search off streams a localized "knowledge base temporarily unavailable" message; with web search on, or in balanced/flexible mode, the answer continues without knowledge-base context and the trace is flagged `degraded`.
 - Under `RAG_PIPELINE=v2` strict mode still answers "information not available" with the default `RAG_RERANKER=none`: without a calibrated rerank threshold the refusal stage applies the embedding profile's similarity floor (legacy 0.65 when the profile has no calibration).
+- Citations and groundedness are additive: strict refusal and the "knowledge base temporarily unavailable" message are produced before generation and never carry citations; webSearch with Exa, `source_images` and the `{{context}}` placeholder are unchanged with every Phase 5 switch on or off.
 - Source extraction now preserves `webSearch` tool results, document sources, and `source_images` through streaming and final message persistence; keep sidebar toggle click handling intact.
 - Voice work recently focused on UI timing and audio reliability: the overlay keeps the three-dot state until text and word timings are ready, the agent dynamically resamples incoming audio for VAD/STT, and Resemble timestamp failures fall back to estimated timings.
 
