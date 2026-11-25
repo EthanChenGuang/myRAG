@@ -382,68 +382,673 @@ def slice_drops(observed: EvalReport, reference: Baseline, noise: NoiseConfig) -
     return evaluate_gate(observed, aligned, _slice_noise(noise))
 
 
-def legacy_parity_rule(runs, noise: NoiseConfig) -> LegacyParityResult:
-    return LegacyParityResult(passed=False, runs=[])
+# ---------- rule (a)
 
 
-def recommended_rule(output, baseline, reference, noise, *, run: str, reference_name: str) -> RecommendedResult:
-    refusal = RefusalComparison(
-        correct_refusal=None, correct_refusal_n=0, reference_correct_refusal=None, improved=False,
-        false_refusal=None, false_refusal_n=0, false_refusal_upper_95=None, reference_false_refusal=None,
+def legacy_parity_rule(runs: Mapping[str, tuple[RunOutput, Baseline]], noise: NoiseConfig) -> LegacyParityResult:
+    checks: list[LegacyRunCheck] = []
+    for name, (output, baseline) in runs.items():
+        gate = evaluate_gate(output.report, baseline, noise)
+        nonzero = []
+        if gate.paired is not None:
+            nonzero = [
+                f"{slice_name}:{metric}"
+                for slice_name, stats in sorted(gate.paired.slices.items())
+                for metric, stat in stats.items()
+                if stat.n_nonzero
+            ]
+        checks.append(
+            LegacyRunCheck(
+                run=name,
+                all_zero=bool(gate.paired is not None and gate.paired.all_zero and not gate.mismatches),
+                gate_passed=gate.passed,
+                mismatches=list(gate.mismatches),
+                nonzero_cells=nonzero,
+            )
+        )
+    return LegacyParityResult(passed=bool(checks) and all(check.all_zero for check in checks), runs=checks)
+
+
+# ---------- rule (b)
+
+
+def _refusal(report: EvalReport, reference: Baseline) -> RefusalComparison:
+    recorded = reference.slices.get("overall", {})
+    ref_cr = recorded.get("correct_refusal_rate")
+    ref_fr = recorded.get("false_refusal_rate")
+    correct = report.overall.correct_refusal_rate
+    false = report.overall.false_refusal_rate
+    reference_correct = ref_cr.mean if ref_cr is not None else None
+    return RefusalComparison(
+        correct_refusal=correct.value,
+        correct_refusal_n=correct.n,
+        reference_correct_refusal=reference_correct,
+        improved=correct.value is not None and reference_correct is not None and correct.value > reference_correct,
+        false_refusal=false.value,
+        false_refusal_n=false.n,
+        false_refusal_upper_95=report.overall.false_refusal_upper_95,
+        reference_false_refusal=ref_fr.mean if ref_fr is not None else None,
     )
-    check = RecommendedCheck(against="", passed=False, mismatches=[], drops=[], refusal=refusal)
-    return RecommendedResult(run=run, passed=False, baseline=check, reference=check)
 
 
-def _stub_switch(on_name: str, off_name: str) -> SwitchResult:
-    return SwitchResult(on=on_name, off=off_name, passed=False, failures=["not implemented"], drops=[], measures={})
+def _recommended_check(output: RunOutput, reference: Baseline, noise: NoiseConfig, against: str) -> RecommendedCheck:
+    gate = slice_drops(output.report, reference, noise)
+    refusal = _refusal(output.report, reference)
+    return RecommendedCheck(
+        against=against,
+        passed=not gate.mismatches and not gate.offenders and refusal.improved,
+        mismatches=list(gate.mismatches),
+        drops=list(gate.offenders),
+        refusal=refusal,
+    )
+
+
+def recommended_rule(
+    output: RunOutput,
+    baseline: Baseline,
+    reference: RunOutput,
+    noise: NoiseConfig,
+    *,
+    run: str,
+    reference_name: str,
+) -> RecommendedResult:
+    """D-28 (b): against the committed baseline and against the all-off v2 run (research table, D-28 b and c)."""
+    against_baseline = _recommended_check(output, baseline, noise, "baseline")
+    against_reference = _recommended_check(
+        output, baseline_from_report(reference.report, tag=reference_name), noise, reference_name
+    )
+    return RecommendedResult(
+        run=run,
+        passed=against_baseline.passed and against_reference.passed,
+        baseline=against_baseline,
+        reference=against_reference,
+    )
+
+
+# ---------- rule (c)
+
+
+def _switch(on: str, off: str, failures: list[str], drops: list[GateOffender], measures: dict[str, float | None]) -> SwitchResult:
+    return SwitchResult(on=on, off=off, passed=not failures, failures=failures, drops=drops, measures=measures)
+
+
+def _drop_failures(gate: GateResult) -> list[str]:
+    failures = [f"report and reference differ: {problem}" for problem in gate.mismatches]
+    failures += [
+        f"{drop.slice} {drop.metric} dropped beyond the noise band ({drop.observed:.4f} < {drop.threshold:.4f})" for drop in gate.offenders
+    ]
+    return failures
 
 
 def parent_child_rule(on_run: RunOutput, off_run: RunOutput, noise: NoiseConfig, *, on_name: str, off_name: str) -> SwitchResult:
-    return _stub_switch(on_name, off_name)
+    """Success criterion 6: a clause-slice Recall gain and no slice dropping beyond the noise band."""
+    gate = slice_drops(on_run.report, baseline_from_report(off_run.report, tag=off_name), noise)
+    failures = _drop_failures(gate)
+    clause_on, clause_off = clause_recall(on_run), clause_recall(off_run)
+    clause_delta = _delta(clause_on, clause_off)
+    if clause_delta is None:
+        failures.append(f"no {CLAUSE_SLICE} items scored in one of the runs")
+    elif clause_delta <= 0:
+        failures.append(f"no {CLAUSE_SLICE}-slice Recall@10 gain ({clause_on:.4f} on vs {clause_off:.4f} off)")
+    measures = {
+        "clause_recall_at_10_on": clause_on,
+        "clause_recall_at_10_off": clause_off,
+        "clause_recall_at_10_delta": clause_delta,
+        "overall_recall_at_10_delta": _delta(_metric(on_run.report, "overall", CLAUSE_METRIC), _metric(off_run.report, "overall", CLAUSE_METRIC)),
+        "context_tokens_on": context_tokens_mean(on_run),
+        "context_tokens_off": context_tokens_mean(off_run),
+    }
+    return _switch(on_name, off_name, failures, list(gate.offenders), measures)
 
 
 def compression_rule(on_run: RunOutput, off_run: RunOutput, noise: NoiseConfig, *, on_name: str, off_name: str) -> SwitchResult:
-    return _stub_switch(on_name, off_name)
+    """No slice dropping beyond the noise band, with fewer context tokens than the off run."""
+    gate = slice_drops(on_run.report, baseline_from_report(off_run.report, tag=off_name), noise)
+    failures = _drop_failures(gate)
+    tokens_on, tokens_off = context_tokens_mean(on_run), context_tokens_mean(off_run)
+    if tokens_on is None or tokens_off is None:
+        failures.append("context tokens not measured")
+    elif tokens_on >= tokens_off:
+        failures.append(f"context tokens not reduced ({tokens_on:.1f} on vs {tokens_off:.1f} off)")
+    measures = {
+        "context_tokens_on": tokens_on,
+        "context_tokens_off": tokens_off,
+        "context_tokens_delta": _delta(tokens_on, tokens_off),
+        "overall_recall_at_10_delta": _delta(_metric(on_run.report, "overall", "recall_at_10"), _metric(off_run.report, "overall", "recall_at_10")),
+        "overall_mrr_delta": _delta(_metric(on_run.report, "overall", "mrr"), _metric(off_run.report, "overall", "mrr")),
+    }
+    return _switch(on_name, off_name, failures, list(gate.offenders), measures)
 
 
 def translation_rule(on_run: RunOutput, off_run: RunOutput, *, on_name: str, off_name: str) -> SwitchResult:
-    return _stub_switch(on_name, off_name)
+    """Success criterion 8: cross_lingual Recall@k and the lexical-leg hit rate at or above the off run."""
+    failures: list[str] = []
+    measures: dict[str, float | None] = {}
+    pairs = [
+        (f"cross_lingual_{metric}", _metric(on_run.report, CROSS_LINGUAL_SLICE, metric), _metric(off_run.report, CROSS_LINGUAL_SLICE, metric))
+        for metric in ("recall_at_5", "recall_at_10")
+    ]
+    pairs.append(("lexical_leg_hit_rate_at_10", _lexical_rate(on_run.report), _lexical_rate(off_run.report)))
+    pairs.append(("cross_lingual_lexical_leg_hit_rate_at_10", _cross_lingual_lexical_rate(on_run), _cross_lingual_lexical_rate(off_run)))
+    for name, value_on, value_off in pairs:
+        measures[f"{name}_on"] = value_on
+        measures[f"{name}_off"] = value_off
+        if value_on is None or value_off is None:
+            failures.append(f"{name} not measured")
+        elif value_on < value_off:
+            failures.append(f"{name} below the off run ({value_on:.4f} on vs {value_off:.4f} off)")
+    return _switch(on_name, off_name, failures, [], measures)
 
 
-def iterative_scan_rule(on_run, off_run, synthetic, *, fixture_slice: str, on_name: str, off_name: str) -> IterativeScanResult:
+def _parse_selective(report: Mapping[str, Any] | None) -> tuple[dict[str, dict[str, SelectiveModeMetrics]], list[str]]:
+    if not report:
+        return {}, ["the synthetic selective-filter report is missing"]
+    parsed: dict[str, dict[str, SelectiveModeMetrics]] = {}
+    failures: list[str] = []
+    for slice_name, modes in sorted(report.items()):
+        try:
+            parsed[slice_name] = {mode: SelectiveModeMetrics.model_validate(modes[mode]) for mode in SELECTIVE_MODES}
+        except (KeyError, TypeError, ValidationError) as exc:
+            failures.append(f"synthetic slice {slice_name} is incomplete: {exc}")
+    return parsed, failures
+
+
+def iterative_scan_rule(
+    on_run: RunOutput,
+    off_run: RunOutput,
+    synthetic: Mapping[str, Any] | None,
+    *,
+    fixture_slice: str,
+    on_name: str,
+    off_name: str,
+) -> IterativeScanResult:
+    """Success criterion 10 on the synthetic indexed database (research F-6); the fixture slice is reported, not judged."""
+    parsed, failures = _parse_selective(synthetic)
+    if synthetic and not parsed:
+        failures.append("the synthetic selective-filter report has no slice")
+    for slice_name, modes in parsed.items():
+        off = modes["off"]
+        if off.rows >= off.k:
+            failures.append(f"{slice_name}: iterative scan off returned {off.rows} rows, expected fewer than k={off.k}")
+        for mode in ("relaxed_order", "strict_order"):
+            if modes[mode].recall_at_k < ITERATIVE_RECALL_FLOOR:
+                failures.append(f"{slice_name}: {mode} recall {modes[mode].recall_at_k:.2f} below {ITERATIVE_RECALL_FLOOR}")
+        if modes["exact"].recall_at_k != 1.0:
+            failures.append(f"{slice_name}: the exact path differs from exact search (recall {modes['exact'].recall_at_k:.2f})")
+    fixture: dict[str, float | None] = {}
+    for metric in RETRIEVAL_METRICS:
+        fixture[f"{metric}_on"] = _metric(on_run.report, fixture_slice, metric)
+        fixture[f"{metric}_off"] = _metric(off_run.report, fixture_slice, metric)
+    equal = all(fixture[f"{metric}_on"] == fixture[f"{metric}_off"] for metric in RETRIEVAL_METRICS)
     return IterativeScanResult(
-        on=on_name, off=off_name, passed=False, failures=[], fixture_slice=fixture_slice, fixture={}, fixture_equal=False, synthetic={}
+        on=on_name,
+        off=off_name,
+        passed=not failures,
+        failures=failures,
+        fixture_slice=fixture_slice,
+        fixture=fixture,
+        fixture_equal=equal,
+        synthetic=parsed,
     )
 
 
+# ---------- rule (d), XLG-03 and local_bm25
+
+
 def command_result(command: list[str], exit_code: int) -> CommandResult:
-    return CommandResult(command=list(command), exit_code=exit_code, passed=False)
+    return CommandResult(command=list(command), exit_code=exit_code, passed=exit_code == 0)
 
 
 def xlg03_verdict(result: CalibrationResult) -> CrossLingualVerdict:
-    return CrossLingualVerdict(verdict="fail", comparable_cells=0, exceeding=[], comparisons=[], note="")
+    comparable = [row for row in result.cross_vs_same if row.comparable]
+    exceeding = [row.cross_key or f"{row.provider}|{row.model}|{row.query_language}|cross" for row in comparable if row.exceeds_noise_band]
+    if exceeding:
+        verdict, note = "fail", "cross-language false refusal is above same-language beyond the noise band"
+    elif comparable:
+        verdict, note = "pass", "cross-language false refusal is not above same-language beyond the noise band"
+    else:
+        verdict, note = "not_comparable", "no cross cell has a threshold on the fixture; XLG-03 is decided by the live calibration (04-43)"
+    return CrossLingualVerdict(
+        verdict=verdict, comparable_cells=len(comparable), exceeding=exceeding, comparisons=list(result.cross_vs_same), note=note
+    )
 
 
 def local_bm25_refusal_rule(output: RunOutput, *, run: str) -> LocalBm25RefusalResult:
-    return LocalBm25RefusalResult(run=run, passed=False, threshold_decisions=0, refusal_bases={}, overall=output.report.overall)
+    """Research F-3: local_bm25 scores are relative, so no refusal may rest on a rerank threshold."""
+    ids = {item.item_id for item in _gated_items(output)}
+    traces = [trace for trace in output.traces if trace.item_id in ids]
+    bases = Counter(
+        f"{trace.refusal.basis}/{trace.refusal.decision}" if trace.refusal is not None else "none" for trace in traces
+    )
+    threshold = sum(1 for trace in traces if trace.refusal is not None and trace.refusal.basis == THRESHOLD_BASIS)
+    return LocalBm25RefusalResult(
+        run=run, passed=threshold == 0, threshold_decisions=threshold, refusal_bases=dict(sorted(bases.items())), overall=output.report.overall
+    )
+
+
+# ---------- chunking profile
+
+
+def _slug(profile_id: str, doc_type: str) -> str:
+    suffix = f"-{doc_type}"
+    return profile_id[: -len(suffix)] if profile_id.endswith(suffix) else profile_id
 
 
 def resolve_chunking_profile(decision: ChunkingDecision, sweep: ChunkingSweepReport) -> ChunkingChoice:
-    return ChunkingChoice(profile_id=LEGACY_ID, source="decision", decision_profile_id=decision.profile_id, doc_type=decision.doc_type)
+    """The recorded decision, or, when it is legacy, the best gated candidate of the sweep (gate passed first, then fewest
+    regressions, then clause Recall@k, clause MRR and overall Recall@k; ties keep report order)."""
+    if decision.profile_id != LEGACY_ID:
+        return ChunkingChoice(
+            profile_id=_slug(decision.profile_id, decision.doc_type),
+            source="decision",
+            decision_profile_id=decision.profile_id,
+            doc_type=decision.doc_type,
+        )
+    candidates = [entry for entry in sweep.profiles if entry.gate is not None]
+    if not candidates:
+        return ChunkingChoice(profile_id=LEGACY_ID, source="decision", decision_profile_id=decision.profile_id, doc_type=decision.doc_type)
+
+    def key(entry) -> tuple:
+        clause = entry.metrics.by_question_kind.get(CLAUSE_SLICE)
+        clause_recall = clause.recall_at_k.value if clause is not None and clause.recall_at_k.value is not None else -1.0
+        clause_mrr = clause.mrr.value if clause is not None and clause.mrr.value is not None else -1.0
+        overall = entry.metrics.overall.recall_at_k.value if entry.metrics.overall.recall_at_k.value is not None else -1.0
+        return (not entry.gate.passed, len(entry.gate.regressions), -clause_recall, -clause_mrr, -overall)
+
+    best = min(candidates, key=key)
+    return ChunkingChoice(
+        profile_id=best.profile_id, source="sweep_candidate", decision_profile_id=decision.profile_id, doc_type=decision.doc_type
+    )
+
+
+def chunking_profiles(slug: str, doc_types: Mapping[str, str] | None = None) -> list[dict[str, Any]]:
+    if slug == LEGACY_ID:
+        return []
+    match = PRESET_SLUG.match(slug)
+    if match is None:
+        raise ComparisonError(f"chunking profile {slug!r} is not a sweep preset id (p<child>-<parent>)")
+    preset = parse_presets(f"{match.group(1)}/{match.group(2)}")[0]
+    types = sorted(set((doc_types if doc_types is not None else ingest_doc_types()).values()) | {GENERAL_DOC_TYPE})
+    return [profile.model_dump(mode="json") for profile in _profiles_for(preset, types)]
+
+
+# ---------- runs
+
+
+def materialise_run_config(run: RunSpec, profiles: list[dict[str, Any]]) -> dict[str, Any]:
+    try:
+        base = json.loads(resolve_cli_path(run.base).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ComparisonError(f"run {run.name}: base run-config {run.base} is unreadable: {exc}") from exc
+    if not isinstance(base, dict):
+        raise ComparisonError(f"run {run.name}: base run-config {run.base} must be a JSON object")
+    overrides = dict(base.get("overrides") or {})
+    for key in run.drop_overrides:
+        overrides.pop(key, None)
+    config: dict[str, Any] = {"name": run.name, "env": {**(base.get("env") or {}), **run.env}}
+    if run.chunking_profile == RECORDED_PROFILE and profiles:
+        overrides["chunking_profile_by_doc_type"] = {profile["doc_type"]: profile["id"] for profile in profiles}
+        config["chunking_profiles"] = [dict(profile) for profile in profiles]
+    config["overrides"] = overrides or None
+    return config
 
 
 def default_runner(request: RunRequest) -> RunOutput:
-    raise ComparisonError("not implemented")
+    """One in-process smoke run over the default golden files of its fixture mode; scoring only, the gate runs here."""
+    out_dir = Path(request.out_dir)
+    inputs = out_dir / "inputs"
+    inputs.mkdir(parents=True, exist_ok=True)
+    config_path = inputs / "run-config.json"
+    config_path.write_text(json.dumps(request.run_config, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    argv = [
+        "npx",
+        "tsx",
+        HARNESS_SCRIPT,
+        "--run-config",
+        str(config_path),
+        "--fixture-mode",
+        request.fixture_mode,
+        "--no-gate",
+        "--out",
+        str(out_dir),
+    ]
+    result = default_spawner(argv, REPO_ROOT)
+    if result.returncode != 0:
+        tail = _tail(result.stderr) or _tail(result.stdout)
+        raise HarnessError(
+            f"run {request.name}: harness exited with exit code {result.returncode}\n--- last {TAIL_LINES} lines ---\n{tail}",
+            exit_code=result.returncode,
+        )
+    try:
+        report = EvalReport.model_validate_json((out_dir / "report.json").read_text(encoding="utf-8"))
+        traces = load_traces(out_dir / "traces.jsonl")
+        golden = load_golden(out_dir / "golden.merged.jsonl")
+    except (OSError, ValidationError, ValueError) as exc:
+        raise HarnessError(f"run {request.name}: harness output in {out_dir} is unreadable: {exc}", exit_code=0) from exc
+    return RunOutput(report=report, traces=traces, golden=golden)
 
 
 def default_command_runner(argv: list[str]) -> int:
-    return 1
+    result = subprocess.run(argv, cwd=REPO_ROOT, capture_output=True, text=True, check=False)
+    if result.returncode != 0:
+        print(f"[Phase Compare] {' '.join(argv)} exited {result.returncode}", file=sys.stderr)
+        print(_tail(result.stdout + "\n" + result.stderr), file=sys.stderr)
+    return result.returncode
 
 
-def run_phase_comparison(spec, out: Path, runner: Runner = default_runner, commands: CommandRunner = default_command_runner) -> PhaseComparison:
-    raise ComparisonError("not implemented")
+def _record(name: str, mode: str, config: dict[str, Any], output: RunOutput) -> RunRecord:
+    return RunRecord(
+        name=name,
+        fixture_mode=mode,
+        env=dict(config["env"]),
+        overrides=config["overrides"],
+        chunking_profiles=[profile["id"] for profile in config.get("chunking_profiles", [])],
+        run_config_hash=output.report.run_config_hash,
+        overall=output.report.overall,
+        lexical_leg_hit_rate_at_10=_lexical_rate(output.report),
+        context_tokens_mean=context_tokens_mean(output),
+    )
+
+
+def _read_model(model, path: str, what: str):
+    try:
+        return model.model_validate_json(resolve_cli_path(path).read_text(encoding="utf-8"))
+    except (OSError, ValidationError, ValueError) as exc:
+        raise ComparisonError(f"{what} {path} is unreadable: {exc}") from exc
+
+
+def _read_json(path: str, what: str) -> dict[str, Any]:
+    try:
+        payload = json.loads(resolve_cli_path(path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ComparisonError(f"{what} {path} is unreadable: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise ComparisonError(f"{what} {path} must be a JSON object")
+    return payload
+
+
+def run_phase_comparison(
+    spec: ComparisonSpec | Path,
+    out: Path,
+    runner: Runner = default_runner,
+    commands: CommandRunner = default_command_runner,
+) -> PhaseComparison:
+    if not isinstance(spec, ComparisonSpec):
+        spec = _read_model(ComparisonSpec, str(spec), "comparison spec")
+    noise = _read_model(NoiseConfig, spec.noise, "noise config")
+    baselines = {mode: _read_model(Baseline, path, f"{mode} baseline") for mode, path in spec.baselines.items()}
+    decision = _read_model(ChunkingDecision, spec.chunking_decision, "chunking decision")
+    sweep = _read_model(ChunkingSweepReport, spec.chunking_sweep, "chunking sweep")
+    calibration = _read_model(CalibrationResult, spec.calibration_result, "calibration result")
+    outcome = _read_json(spec.calibration_outcome, "calibration outcome")
+
+    out_dir = Path(out)
+    harness_dir = out_dir / HARNESS_DIR
+    choice = resolve_chunking_profile(decision, sweep)
+    profiles = chunking_profiles(choice.profile_id)
+
+    outputs: dict[str, RunOutput] = {}
+    records: list[RunRecord] = []
+    for run in spec.runs:
+        config = materialise_run_config(run, profiles)
+        print(f"[Phase Compare] run {run.name} ({run.fixture_mode})", file=sys.stderr)
+        output = runner(RunRequest(name=run.name, run_config=config, fixture_mode=run.fixture_mode, out_dir=harness_dir / run.name))
+        outputs[run.name] = output
+        records.append(_record(run.name, run.fixture_mode, config, output))
+    modes = {run.name: run.fixture_mode for run in spec.runs}
+    rules = spec.rules
+
+    legacy = legacy_parity_rule({name: (outputs[name], baselines[modes[name]]) for name in rules.legacy_parity}, noise)
+    recommended = recommended_rule(
+        outputs[rules.recommended.run],
+        baselines[modes[rules.recommended.run]],
+        outputs[rules.recommended.reference],
+        noise,
+        run=rules.recommended.run,
+        reference_name=rules.recommended.reference,
+    )
+    pc, comp, tr, it = rules.parent_child, rules.compression, rules.translation, rules.iterative_scan
+    parent_child = parent_child_rule(outputs[pc.on], outputs[pc.off], noise, on_name=pc.on, off_name=pc.off)
+    compression = compression_rule(outputs[comp.on], outputs[comp.off], noise, on_name=comp.on, off_name=comp.off)
+    translation = translation_rule(outputs[tr.on], outputs[tr.off], on_name=tr.on, off_name=tr.off)
+
+    selective_path = harness_dir / SELECTIVE_REPORT
+    selective_path.parent.mkdir(parents=True, exist_ok=True)
+    selective_path.unlink(missing_ok=True)
+    selective_argv = [str(selective_path) if part == "{out}" else part for part in spec.commands.selective_filter]
+    synthetic: dict[str, Any] | None = None
+    if commands(selective_argv) == 0 and selective_path.is_file():
+        try:
+            loaded = json.loads(selective_path.read_text(encoding="utf-8"))
+            synthetic = loaded if isinstance(loaded, dict) else None
+        except json.JSONDecodeError:
+            synthetic = None
+    iterative = iterative_scan_rule(
+        outputs[it.on], outputs[it.off], synthetic, fixture_slice=it.fixture_slice, on_name=it.on, off_name=it.off
+    )
+    conformance = command_result(spec.commands.conformance, commands(list(spec.commands.conformance)))
+    voice_budget = command_result(spec.commands.voice_budget, commands(list(spec.commands.voice_budget)))
+    xlg03 = xlg03_verdict(calibration)
+    bm25 = local_bm25_refusal_rule(outputs[rules.local_bm25_refusal], run=rules.local_bm25_refusal)
+
+    notes = [FIXTURE_NOTE, DEFAULTS_NOTE, ALIGNED_NOTE]
+    if choice.source == "sweep_candidate":
+        notes.append(
+            f"Parent-child runs use sweep candidate {choice.profile_id}: the recorded {choice.doc_type} decision is "
+            f"{choice.decision_profile_id}."
+        )
+    if xlg03.verdict == "not_comparable":
+        notes.append(f"XLG-03: {xlg03.note}.")
+    passed = all(
+        (
+            legacy.passed,
+            recommended.passed,
+            parent_child.passed,
+            compression.passed,
+            translation.passed,
+            iterative.passed,
+            conformance.passed,
+            voice_budget.passed,
+            bm25.passed,
+            xlg03.verdict != "fail",
+        )
+    )
+    comparison = PhaseComparison(
+        passed=passed,
+        noise_floor=noise.floor,
+        noise_k=noise.k,
+        legacy_parity=legacy,
+        recommended=recommended,
+        parent_child=parent_child,
+        compression=compression,
+        translation=translation,
+        iterative_scan=iterative,
+        conformance=conformance,
+        voice_budget=voice_budget,
+        xlg03=xlg03,
+        local_bm25_refusal=bm25,
+        calibration_outcome=dict(outcome.get("comparison") or {}),
+        chunking_profile=choice,
+        runs=records,
+        notes=notes,
+    )
+    _write_text(out_dir / JSON_NAME, json.dumps(comparison.model_dump(mode="json"), sort_keys=True, indent=2) + "\n")
+    _write_text(out_dir / MARKDOWN_NAME, render_markdown(comparison))
+    return comparison
+
+
+# ---------- report
+
+
+def _verdict(passed: bool) -> str:
+    return "PASS" if passed else "FAIL"
+
+
+def _num(value: float | None, digits: int = 4) -> str:
+    return "n/a" if value is None else f"{value:.{digits}f}"
+
+
+def _drops_table(drops: list[GateOffender]) -> list[str]:
+    if not drops:
+        return ["No slice dropped beyond the noise band."]
+    lines = ["| Slice | Metric | Reference | Threshold | Observed |", "| --- | --- | --- | --- | --- |"]
+    lines += [f"| {d.slice} | {d.metric} | {_num(d.baseline_mean)} | {_num(d.threshold)} | {_num(d.observed)} |" for d in drops]
+    return lines
+
+
+def _failures(failures: list[str]) -> list[str]:
+    return [f"- {failure}" for failure in failures] if failures else ["- none"]
+
+
+def _switch_section(title: str, result: SwitchResult) -> list[str]:
+    lines = [f"### {title}: {_verdict(result.passed)}", "", f"On `{result.on}` vs off `{result.off}`.", "", "| Measure | Value |", "| --- | --- |"]
+    lines += [f"| {name} | {_num(value)} |" for name, value in result.measures.items()]
+    lines += ["", "Failures:", *_failures(result.failures), "", *_drops_table(result.drops), ""]
+    return lines
+
+
+def _recommended_section(check: RecommendedCheck, label: str) -> list[str]:
+    r = check.refusal
+    return [
+        f"#### Against {label}: {_verdict(check.passed)}",
+        "",
+        f"- Correct refusal: {_num(r.correct_refusal)} (n={r.correct_refusal_n}) vs {_num(r.reference_correct_refusal)}; "
+        f"higher: {'yes' if r.improved else 'no'}",
+        f"- False refusal: {_num(r.false_refusal)} (n={r.false_refusal_n}, 95% upper {_num(r.false_refusal_upper_95)}) "
+        f"vs {_num(r.reference_false_refusal)}",
+        *([f"- Data mismatch: {m}" for m in check.mismatches]),
+        "",
+        *_drops_table(check.drops),
+        "",
+    ]
+
+
+def render_markdown(c: PhaseComparison) -> str:
+    rec = c.recommended
+    lines = [
+        "# Phase 4 comparison (D-28)",
+        "",
+        f"Result: {_verdict(c.passed)}",
+        "",
+        f"Noise band: a slice drops beyond the noise band when it falls more than max({c.noise_k:g} x baseline spread, "
+        f"{c.noise_floor:g}) below its reference. Rules (b) and (c) check the overall, every language and every category "
+        "slice on Recall@5, Recall@10 and MRR (the CI gate checks fewer slices).",
+        "",
+        *[f"- {note}" for note in c.notes],
+        "",
+        "## Verdicts",
+        "",
+        "| Rule | Verdict |",
+        "| --- | --- |",
+        f"| (a) legacy parity | {_verdict(c.legacy_parity.passed)} |",
+        f"| (b) v2-recommended vs baseline and v2-all-off | {_verdict(rec.passed)} |",
+        f"| (c) parent-child | {_verdict(c.parent_child.passed)} |",
+        f"| (c) compression | {_verdict(c.compression.passed)} |",
+        f"| (c) translation (local_bm25) | {_verdict(c.translation.passed)} |",
+        f"| (c) iterative scan (synthetic database) | {_verdict(c.iterative_scan.passed)} |",
+        f"| (d) conformance suite | {_verdict(c.conformance.passed)} (exit {c.conformance.exit_code}) |",
+        f"| (d) voice budget | {_verdict(c.voice_budget.passed)} (exit {c.voice_budget.exit_code}) |",
+        f"| local_bm25 refusal not threshold-based (F-3) | {_verdict(c.local_bm25_refusal.passed)} |",
+        f"| XLG-03 cross vs same false refusal | {c.xlg03.verdict} |",
+        "",
+        "## (a) Legacy parity",
+        "",
+        "| Run | All paired differences zero | Gate passed | Non-zero cells |",
+        "| --- | --- | --- | --- |",
+    ]
+    for run in c.legacy_parity.runs:
+        cells = ", ".join(run.nonzero_cells) or "none"
+        lines.append(f"| {run.run} | {'yes' if run.all_zero else 'no'} | {'yes' if run.gate_passed else 'no'} | {cells} |")
+        lines += [f"| {run.run} mismatch | {m} | | |" for m in run.mismatches]
+    lines += [
+        "",
+        f"## (b) {rec.run}",
+        "",
+        *_recommended_section(rec.baseline, "the committed baseline"),
+        *_recommended_section(rec.reference, f"`{rec.reference.against}`"),
+        f"Calibration outcome (plan 04-39): {json.dumps(c.calibration_outcome, sort_keys=True)}",
+        "",
+        "## (c) Switches on and off",
+        "",
+        f"Chunking profile for the parent-child pair: `{c.chunking_profile.profile_id}` ({c.chunking_profile.source}; "
+        f"recorded {c.chunking_profile.doc_type} decision `{c.chunking_profile.decision_profile_id}`).",
+        "",
+        *_switch_section("Parent-child (ingest mode)", c.parent_child),
+        *_switch_section("Compression", c.compression),
+        *_switch_section("Translation with local_bm25", c.translation),
+        f"### Iterative scan: {_verdict(c.iterative_scan.passed)}",
+        "",
+        f"Fixture slice `{c.iterative_scan.fixture_slice}` ({c.iterative_scan.on} vs {c.iterative_scan.off}), report only "
+        f"(the fixture never uses the HNSW index, research F-6): equal {'yes' if c.iterative_scan.fixture_equal else 'no'}.",
+        "",
+        "| Measure | Value |",
+        "| --- | --- |",
+        *[f"| {name} | {_num(value)} |" for name, value in c.iterative_scan.fixture.items()],
+        "",
+        "Synthetic database (index forced):",
+        "",
+        "| Slice | Mode | Rows | Recall@k | k |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for slice_name, modes in c.iterative_scan.synthetic.items():
+        lines += [f"| {slice_name} | {mode} | {m.rows} | {_num(m.recall_at_k, 2)} | {m.k} |" for mode, m in modes.items()]
+    lines += ["", "Failures:", *_failures(c.iterative_scan.failures), ""]
+    bm = c.local_bm25_refusal
+    lines += [
+        "## (d) Commands",
+        "",
+        f"- Conformance: `{' '.join(c.conformance.command)}` exit {c.conformance.exit_code}",
+        f"- Voice budget: `{' '.join(c.voice_budget.command)}` exit {c.voice_budget.exit_code}",
+        "",
+        "## local_bm25 with threshold refusal not applied (F-3)",
+        "",
+        f"Run `{bm.run}`: rerank-threshold decisions {bm.threshold_decisions}; refusal bases "
+        f"{json.dumps(bm.refusal_bases, sort_keys=True)}; correct refusal {_num(bm.overall.correct_refusal_rate.value)}, "
+        f"false refusal {_num(bm.overall.false_refusal_rate.value)}.",
+        "",
+        "## XLG-03",
+        "",
+        f"Verdict: {c.xlg03.verdict} ({c.xlg03.comparable_cells} comparable cells). {c.xlg03.note}.",
+        "",
+        "## Runs",
+        "",
+        "| Run | Mode | Recall@5 | Recall@10 | MRR | Correct refusal | False refusal (95% upper) | Lexical hit@10 | Context tokens |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    for r in c.runs:
+        o = r.overall
+        lines.append(
+            f"| {r.name} | {r.fixture_mode} | {_num(o.recall_at_5.value)} | {_num(o.recall_at_10.value)} | {_num(o.mrr.value)} | "
+            f"{_num(o.correct_refusal_rate.value)} | {_num(o.false_refusal_rate.value)} ({_num(o.false_refusal_upper_95)}) | "
+            f"{_num(r.lexical_leg_hit_rate_at_10)} | {_num(r.context_tokens_mean, 1)} |"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def _write_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(text, encoding="utf-8")
+    tmp.replace(path)
 
 
 def main(argv: list[str] | None = None) -> int:
-    return EXIT_USAGE
+    parser = argparse.ArgumentParser(prog="rag_eval.phase_compare", description="Phase 4 D-28 comparison against the baseline")
+    parser.add_argument("--spec", required=True, type=Path)
+    parser.add_argument("--out", required=True, type=Path)
+    args = parser.parse_args(argv)
+    try:
+        result = run_phase_comparison(resolve_cli_path(args.spec), resolve_cli_path(args.out), runner=default_runner, commands=default_command_runner)
+    except ComparisonError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_USAGE
+    except HarnessError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_HARNESS
+    out_dir = repo_relative(resolve_cli_path(args.out))
+    print(f"[Phase Compare] {_verdict(result.passed)}: {out_dir}/{JSON_NAME}")
+    return EXIT_PASS if result.passed else EXIT_FAIL
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

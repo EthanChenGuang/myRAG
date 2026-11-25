@@ -38,8 +38,6 @@ NOISE = NoiseConfig.model_validate_json((REPO_ROOT / "eval" / "config" / "noise.
 SPEC = REPO_ROOT / "eval" / "config" / "phase4-comparison.json"
 SWEEP = REPO_ROOT / "eval" / "reports" / "chunking-sweep.json"
 DECISION = REPO_ROOT / "eval" / "decisions" / "chunking" / "contract_legal.json"
-CALIBRATION = REPO_ROOT / "eval" / "reports" / "refusal-calibration-fixture" / "refusal-calibration-result.json"
-OUTCOME = REPO_ROOT / "eval" / "reports" / "refusal-calibration-fixture" / "outcome.json"
 
 ANSWERABLE = ("en-general-001", "en-table-001", "zh-general-001", "it-general-001", "en-clause-001", "it-xl-001")
 NO_ANSWER = ("en-no_answer-001", "zh-no_answer-001")
