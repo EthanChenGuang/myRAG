@@ -5,6 +5,7 @@ import type { RpcClient } from '../../backend/supabase-rpc';
 import { backfillScope } from '../../tenant/backfill-scope';
 import type { TenantScope } from '../../tenant/scope';
 import { PARSE_ARTIFACT, loadArtifact, type ArtifactContext } from '../artifacts';
+import { currentIngestConfig } from '../current-config';
 import { getIngestDeps } from '../deps';
 import { resolveEmbeddingTargets, type EmbeddingTarget } from '../embedding-targets';
 import { ObjectStoreError } from '../object-store';
@@ -363,7 +364,11 @@ async function prepare(doc: RechunkDocument, profile: ChunkingProfileRow, signal
   let built: BuiltProfileChunks;
   try {
     const templateHeader = templateHeaderFor(processing.embedding_text_template, doc.templateRow);
-    built = buildProfileChunks({ filename: doc.filename, chunker: processing.chunker, templateHeader }, markdown, profile);
+    built = buildProfileChunks(
+      { filename: doc.filename, chunker: processing.chunker, templateHeader, languageAwareIngest: currentIngestConfig().languageAwareIngest },
+      markdown,
+      profile,
+    );
   } catch (error) {
     if (signal.aborted) throw error;
     return { kind: 'gap', reason: 'failed', detail: 'chunking_failed' };
@@ -443,12 +448,13 @@ async function writerFor(session: Session, tenantKey: string): Promise<IngestWri
   return writer;
 }
 
-async function targetsFor(session: Session, tenantKey: string, writer: IngestWriter): Promise<EmbeddingTarget[]> {
-  const known = session.targets.get(tenantKey);
+async function targetsFor(session: Session, doc: RechunkDocument, writer: IngestWriter): Promise<EmbeddingTarget[]> {
+  const key = JSON.stringify([doc.tenantKey, doc.docType]);
+  const known = session.targets.get(key);
   if (known) return known;
   try {
-    const targets = await resolveEmbeddingTargets(writer);
-    session.targets.set(tenantKey, targets);
+    const targets = await resolveEmbeddingTargets(writer, { docType: doc.docType, tenantKey: doc.tenantKey });
+    session.targets.set(key, targets);
     return targets;
   } catch (error) {
     if (session.signal.aborted) throw error;
@@ -463,8 +469,8 @@ type Outcome =
 
 /**
  * Builds one document's profile from its stored parse output, embeds the children for the active, backfilling and previous embedding profiles
- * and writes them under the document's own tenant scope in one transaction. A failing active target stops the run; a failing other target
- * leaves its vectors out. A refusal by the writer (a tenant that does not match, a document that is no longer writable) leaves the document as a gap.
+ * and the binding profiles of the document's doc type and tenant (D-15), and writes them under the document's own tenant scope in one
+ * transaction. A failing active target stops the run; a failing other target leaves its vectors out. A refusal by the writer (a tenant that does not match, a document that is no longer writable) leaves the document as a gap.
  */
 async function buildDocument(session: Session, doc: RechunkDocument): Promise<Outcome> {
   const prepared = await prepare(doc, session.profile, session.signal, session.warnings);
@@ -472,7 +478,7 @@ async function buildDocument(session: Session, doc: RechunkDocument): Promise<Ou
 
   const writer = await writerFor(session, doc.tenantKey);
   if (!writer) return { kind: 'gap', reason: 'failed', detail: 'tenant_scope_refused' };
-  const targets = await targetsFor(session, doc.tenantKey, writer);
+  const targets = await targetsFor(session, doc, writer);
   const { built } = prepared;
 
   const outcomes = await Promise.all(
@@ -767,8 +773,27 @@ export async function dryRunRechunk(input: DryRunRechunkInput): Promise<DryRunRe
   const rows = [...tenants.values()].sort((a, b) => (a.tenantKey < b.tenantKey ? -1 : a.tenantKey > b.tenantKey ? 1 : 0));
   const totals: Record<string, { chunks: number; tokens: number }> = {};
   for (const row of rows) totals[row.tenantKey] = { chunks: row.children, tokens: row.tokens };
+  const bindings = new Map<string, { target: EmbeddingTarget; tenantKeys: string[] }>();
+  for (const row of rows) {
+    let scoped: EmbeddingTarget[];
+    try {
+      scoped = await resolveEmbeddingTargets({ findBackfillRuns: async () => [] }, { docType: profile.docType, tenantKey: row.tenantKey });
+    } catch (error) {
+      if (error instanceof ProfileUnavailableError) throw new RechunkInputError('embedding_profile_unavailable');
+      throw error;
+    }
+    for (const target of scoped) {
+      if (target.role !== 'binding' || targets.some((global) => global.profile.id === target.profile.id)) continue;
+      const entry = bindings.get(target.profile.id) ?? { target, tenantKeys: [] };
+      entry.tenantKeys.push(row.tenantKey);
+      bindings.set(target.profile.id, entry);
+    }
+  }
   const cost = estimateRechunkCost(
-    targets.map((target) => ({ profileId: target.profile.id, provider: target.profile.provider })),
+    [
+      ...targets.map((target) => ({ profileId: target.profile.id, provider: target.profile.provider })),
+      ...[...bindings.values()].map(({ target, tenantKeys }) => ({ profileId: target.profile.id, provider: target.profile.provider, tenantKeys })),
+    ],
     totals,
   );
   return {
@@ -779,7 +804,7 @@ export async function dryRunRechunk(input: DryRunRechunkInput): Promise<DryRunRe
     parentMode: profile.parentMode,
     tenants: rows,
     gaps,
-    embeddingProfiles: targets.map((target) => target.profile.id),
+    embeddingProfiles: [...targets, ...[...bindings.values()].map(({ target }) => target)].map((target) => target.profile.id),
     cost,
   };
 }

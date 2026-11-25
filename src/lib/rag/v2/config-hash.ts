@@ -78,6 +78,10 @@ export interface RetrievalConfigHashInput {
   switches: RetrievalConfigHashSwitches;
   /** Present only when a 5.1 switch is not at its default (securityHashComponent). */
   security?: RetrievalConfigHashSecurity | null;
+  /** Doc type to binding profile id of the legs planned for the request; omitted (or empty) when none is planned. */
+  embeddingBindings?: Record<string, string> | null;
+  /** Eval only: the doc type of the control leg. */
+  domainControlLeg?: string | null;
 }
 
 function sortKeys(value: unknown): unknown {
@@ -119,6 +123,8 @@ function buildPayload(input: RetrievalConfigHashInput): Record<string, unknown> 
     switches: input.switches,
     thresholds_config_hash: input.switches.refusalThreshold ? input.thresholdsConfigHash : null,
     ...(input.security ? { security: input.security } : {}),
+    ...(input.embeddingBindings && Object.keys(input.embeddingBindings).length > 0 ? { embedding_bindings: input.embeddingBindings } : {}),
+    ...(input.domainControlLeg ? { domain_control_leg: input.domainControlLeg } : {}),
   };
 }
 

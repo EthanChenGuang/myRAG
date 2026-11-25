@@ -1,0 +1,17 @@
+{
+  "additionalProperties": false,
+  "description": "Structured model output of one chunk translation (D-29).",
+  "properties": {
+    "content": {
+      "maxLength": 50000,
+      "minLength": 1,
+      "title": "Content",
+      "type": "string"
+    }
+  },
+  "required": [
+    "content"
+  ],
+  "title": "ChunkTranslation",
+  "type": "object"
+}

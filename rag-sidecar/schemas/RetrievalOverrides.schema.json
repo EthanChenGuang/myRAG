@@ -25,6 +25,11 @@
           "exclusiveMinimum": 0,
           "title": "Lexical",
           "type": "number"
+        },
+        "translation": {
+          "exclusiveMinimum": 0,
+          "title": "Translation",
+          "type": "number"
         }
       },
       "title": "RetrievalLegWeights",

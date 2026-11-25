@@ -1,0 +1,165 @@
+{
+  "$defs": {
+    "MiningReasonCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "feedback_negative": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Feedback Negative",
+          "type": "integer"
+        },
+        "groundedness_flagged": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Groundedness Flagged",
+          "type": "integer"
+        },
+        "low_score": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Low Score",
+          "type": "integer"
+        },
+        "no_source_opened": {
+          "default": 0,
+          "minimum": 0,
+          "title": "No Source Opened",
+          "type": "integer"
+        },
+        "refusal_disputed": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Refusal Disputed",
+          "type": "integer"
+        },
+        "refused_high_score": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Refused High Score",
+          "type": "integer"
+        },
+        "zero_results": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Zero Results",
+          "type": "integer"
+        }
+      },
+      "title": "MiningReasonCounts",
+      "type": "object"
+    },
+    "MiningTenantResult": {
+      "additionalProperties": false,
+      "properties": {
+        "by_reason": {
+          "$ref": "#/$defs/MiningReasonCounts"
+        },
+        "inserted": {
+          "minimum": 0,
+          "title": "Inserted",
+          "type": "integer"
+        },
+        "tenant_hash": {
+          "pattern": "^[a-f0-9]{8,64}$",
+          "title": "Tenant Hash",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tenant_hash",
+        "inserted",
+        "by_reason"
+      ],
+      "title": "MiningTenantResult",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "config_sha256": {
+      "anyOf": [
+        {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Config Sha256"
+    },
+    "disabled_reason": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Disabled Reason"
+    },
+    "purged_log_rows": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Purged Log Rows",
+      "type": "integer"
+    },
+    "purged_review_items": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Purged Review Items",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "since": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Since",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "completed",
+        "disabled"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "tenants": {
+      "items": {
+        "$ref": "#/$defs/MiningTenantResult"
+      },
+      "title": "Tenants",
+      "type": "array"
+    },
+    "total_inserted": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Total Inserted",
+      "type": "integer"
+    },
+    "until": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Until",
+      "type": "string"
+    }
+  },
+  "required": [
+    "status",
+    "since",
+    "until"
+  ],
+  "title": "MiningRunResult",
+  "type": "object"
+}

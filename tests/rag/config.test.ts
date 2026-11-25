@@ -676,10 +676,11 @@ describe('query layer', () => {
     ]);
   });
 
-  test('translate-disabled profiles keep known profiles and drop unknown ones with a warning', () => {
-    const config = loadRagConfig({ RAG_QUERY_TRANSLATE_DISABLED_PROFILES: 'voice, embed,nope' });
-    expect(config.queryLayer.translateDisabledProfiles).toEqual(['voice', 'embed']);
+  test('translate-disabled profiles keep embedding-profile ids and drop malformed entries with a warning (D-24)', () => {
+    const config = loadRagConfig({ RAG_QUERY_TRANSLATE_DISABLED_PROFILES: 'openai-3-small-1536, synthetic.profile_b,openai-3-small-1536,bad id,<x>' });
+    expect(config.queryLayer.translateDisabledProfiles).toEqual(['openai-3-small-1536', 'synthetic.profile_b']);
     expect(queryLayerWarnings('[Query Layer]')).toHaveLength(1);
+    expect(loadRagConfig({ RAG_QUERY_TRANSLATE_DISABLED_PROFILES: 'synthetic-profile-c' }).queryLayer.translateDisabledProfiles).toEqual(['synthetic-profile-c']);
   });
 
   test('profile timeouts follow D-27 and RAG_STAGE_TIMEOUTS overrides only the named profile', () => {

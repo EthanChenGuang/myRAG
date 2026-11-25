@@ -635,6 +635,46 @@ const CHUNKING_LABELS = {
 
 const CHUNKING_DOC_TYPE_ORDER = Object.freeze(['general', 'financial_report', 'contract_legal', 'invoice_receipt', 'product_technical', 'scanned_image']);
 const CHUNKING_API = '/api/rag/admin/chunking-profiles';
+const CHUNKING_LANGUAGES_ENDPOINT = '/api/config/languages';
+const CHUNKING_LANGUAGE_CODE = /^[a-z]{2,3}$/;
+
+// D-06: the language codes come from the config server's languages answer, fetched once per page and cached here.
+let chunkingLanguageCodes = null;
+let chunkingLanguagesRequest = null;
+
+/** The pack codes of a GET /api/config/languages answer, in its order; null when the answer has none. */
+function chunkingLanguageCodesFrom(body) {
+  const packs = body && Array.isArray(body.packs) ? body.packs : null;
+  if (!packs) return null;
+  const codes = [];
+  for (const pack of packs) {
+    const code = pack && pack.code;
+    if (typeof code === 'string' && CHUNKING_LANGUAGE_CODE.test(code) && !codes.includes(code)) codes.push(code);
+  }
+  return codes.length > 0 ? codes : null;
+}
+
+/** Loads the language codes once; a failed request leaves them unset and lets the next call try again. */
+function loadChunkingLanguages(fetchImpl) {
+  if (chunkingLanguageCodes) return Promise.resolve(chunkingLanguageCodes);
+  if (chunkingLanguagesRequest) return chunkingLanguagesRequest;
+  chunkingLanguagesRequest = (async () => {
+    try {
+      const response = await fetchImpl(CHUNKING_LANGUAGES_ENDPOINT, { method: 'GET', credentials: 'same-origin', headers: { Accept: 'application/json' } });
+      if (response && response.ok) chunkingLanguageCodes = chunkingLanguageCodesFrom(await response.json());
+    } catch {
+      chunkingLanguageCodes = null;
+    }
+    chunkingLanguagesRequest = null;
+    return chunkingLanguageCodes;
+  })();
+  return chunkingLanguagesRequest;
+}
+
+function resetChunkingLanguagesForTests() {
+  chunkingLanguageCodes = null;
+  chunkingLanguagesRequest = null;
+}
 const CHUNKING_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const CHUNKING_RECORD_COMMAND = 'npm run rag:chunking -- record-decision <decision.json>';
 const CHUNKING_SWEEP_COMMAND = 'python -m rag_eval.sweep chunking';
@@ -930,11 +970,12 @@ function reportRows(report, slice) {
   });
 }
 
-/** The slices the comparison can show: overall, the six doc types, the three languages and the question kinds in the report. */
-function chunkingReportSlices(report) {
+/** The slices the comparison can show: overall, the six doc types, the configured languages (none until they arrive) and the question kinds in the report. */
+function chunkingReportSlices(report, languages) {
   const slices = [{ value: 'overall', group: null, key: null }];
   for (const docType of CHUNKING_DOC_TYPE_ORDER) slices.push({ value: 'doc_type:' + docType, group: 'docType', key: docType });
-  for (const lang of ['zh', 'en', 'it']) slices.push({ value: 'language:' + lang, group: 'language', key: lang });
+  const codes = Array.isArray(languages) ? languages : chunkingLanguageCodes || [];
+  for (const lang of codes) slices.push({ value: 'language:' + lang, group: 'language', key: lang });
   const kinds = new Set();
   const profiles = report && Array.isArray(report.profiles) ? report.profiles : [];
   for (const profile of profiles) {
@@ -1279,6 +1320,7 @@ class ChunkingProfilesPanel {
     this.root = root;
     this.locale = chunkingLocale(d.locale || chunkingDetectLocale());
     this.fetcher = d.fetcher || ((apiPath, init) => window.ragFetch(apiPath, init));
+    this.languagesFetcher = d.languagesFetcher || ((apiPath, init) => fetch(apiPath, init));
     this.appUrl = d.appUrl || null;
     this.mounted = false;
     this.tab = 'profiles';
@@ -1350,7 +1392,13 @@ class ChunkingProfilesPanel {
   }
 
   async refresh(announce) {
-    await Promise.all([this.loadList(announce), this.loadReport()]);
+    await Promise.all([this.loadList(announce), this.loadReport(), this.loadLanguages()]);
+  }
+
+  async loadLanguages() {
+    const before = chunkingLanguageCodes;
+    const codes = await loadChunkingLanguages(this.languagesFetcher);
+    if (codes && codes !== before && this.report && this.tab === 'report') this.renderReport();
   }
 
   async reload() {
@@ -2526,8 +2574,10 @@ class ChunkingProfilesPanel {
     select.appendChild(chunkingEl('option', { text: this.t('slice.overall'), attrs: { value: 'overall' } }));
     const groups = { docType: 'slice.group.docType', language: 'slice.group.language', kind: 'slice.group.kind' };
     for (const [group, labelKey] of Object.entries(groups)) {
+      const members = slices.filter((s) => s.group === group);
+      if (members.length === 0) continue;
       const optgroup = chunkingEl('optgroup', { attrs: { label: this.t(labelKey) } });
-      for (const slice of slices.filter((s) => s.group === group)) optgroup.appendChild(chunkingEl('option', { text: this.sliceName(slice.value), attrs: { value: slice.value } }));
+      for (const slice of members) optgroup.appendChild(chunkingEl('option', { text: this.sliceName(slice.value), attrs: { value: slice.value } }));
       select.appendChild(optgroup);
     }
     select.value = this.slice;
@@ -2716,6 +2766,9 @@ if (typeof module !== 'undefined' && module.exports) {
     chunkingRefusalMessage,
     reportRows,
     chunkingReportSlices,
+    chunkingLanguageCodesFrom,
+    loadChunkingLanguages,
+    resetChunkingLanguagesForTests,
     chunkingDecisionRows,
     chunkingFormFindings,
     chunkingSuggestedId,

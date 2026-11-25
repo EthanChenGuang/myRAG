@@ -57,7 +57,7 @@ class Baseline(_Contract):
     corpus_sha256: str | None = None
     golden_sha256: str
     golden_filter: GoldenFilter
-    gate_population: Literal["all", "production"] = "all"
+    gate_population: Literal["all", "production", "real"] = "all"
     embedder_id: str | None = None
     embedder_version: int | None = None
     embedder_source_sha256: str | None = None

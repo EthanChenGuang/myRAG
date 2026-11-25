@@ -1,4 +1,5 @@
 import type { ParseResult } from '@/lib/rag-eval/contracts.generated';
+import { blockSplitterForIngest, legacyBlockSplitter, type BlockSplitter } from '@/lib/rag/lang/sentences';
 import type { ProcessingProfile } from '../profiles/load';
 import type { ChunkDraft, ChunkResult } from '../types';
 import { chunkImageCaption } from './image-caption';
@@ -17,7 +18,8 @@ export interface ChunkSource {
   chunks?: readonly DoclingChunk[] | null;
 }
 
-export type Chunker = (_markdown: string, _config: ChunkerConfig) => ChunkResult;
+/** `sentences` picks the sentence splitter of each over-long block (D-15); absent, the legacy shared set. */
+export type Chunker = (_markdown: string, _config: ChunkerConfig, _sentences?: BlockSplitter) => ChunkResult;
 
 /** Raised for a chunker kind that no plan has registered yet. */
 export class ChunkerUnavailableError extends Error {
@@ -30,22 +32,23 @@ export class ChunkerUnavailableError extends Error {
   }
 }
 
-const budget = (config: ChunkerConfig) => ({
+const budget = (config: ChunkerConfig, sentences: BlockSplitter = legacyBlockSplitter) => ({
   maxTokens: config.max_tokens,
   overlapTokens: config.overlap_tokens,
   minChunkTokens: config.min_chunk_tokens,
   repeatTableHeader: config.repeat_table_header,
+  sentences,
 });
 
 /** Chunkers by profile chunker kind. */
 export const CHUNKERS: Partial<Record<ChunkerKind, Chunker>> = {
-  markdown_sections: (markdown, config) => ({ chunks: chunkMarkdownSections(markdown, budget(config)), warnings: [] }),
-  table_aware: (markdown, config) => chunkTableAware(markdown, budget(config)),
+  markdown_sections: (markdown, config, sentences) => ({ chunks: chunkMarkdownSections(markdown, budget(config, sentences)), warnings: [] }),
+  table_aware: (markdown, config, sentences) => chunkTableAware(markdown, budget(config, sentences)),
   invoice: (markdown, config) => chunkInvoice(markdown, budget(config)),
   image_caption: () => chunkImageCaption(),
-  legal_clauses: (markdown, config) =>
+  legal_clauses: (markdown, config, sentences) =>
     chunkLegalClauses(markdown, {
-      ...budget(config),
+      ...budget(config, sentences),
       clause_patterns: config.clause_patterns ?? [],
       lead_in_phrases: config.lead_in_phrases ?? [],
     }),
@@ -70,16 +73,22 @@ function fromDocling(chunks: readonly DoclingChunk[]): ChunkDraft[] {
   return drafts;
 }
 
+export interface ChunkDocumentOptions {
+  /** RAG_LANGUAGE_AWARE_INGEST: `on` splits each block at its own language's sentence ends; off (or absent) is today's splitter. */
+  languageAwareIngest?: 'off' | 'on';
+}
+
 /**
  * Chunks a parsed document by the profile's chunker kind. Docling's chunks are used as they are (headings as
  * section_path, pages, is_table, plain text) for markdown_sections and table_aware; legal_clauses always chunks
  * the Markdown, because Docling's heading inference does not know clause numbering.
  */
-export function chunkDocument(chunker: ChunkerConfig, parse: ChunkSource): ChunkResult {
+export function chunkDocument(chunker: ChunkerConfig, parse: ChunkSource, options: ChunkDocumentOptions = {}): ChunkResult {
   const chunk = CHUNKERS[chunker.kind];
   if (!chunk) throw new ChunkerUnavailableError(chunker.kind);
+  // Docling's chunks keep their own splitting here; the sidecar applies the language rule to them (plan 03.2-23).
   if (DOCLING_KINDS.has(chunker.kind) && parse.chunks && parse.chunks.length > 0) {
     return { chunks: fromDocling(parse.chunks), warnings: [] };
   }
-  return chunk(parse.markdown, chunker);
+  return chunk(parse.markdown, chunker, blockSplitterForIngest(options.languageAwareIngest));
 }

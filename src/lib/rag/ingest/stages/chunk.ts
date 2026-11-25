@@ -9,7 +9,7 @@ async function run(ctx: StageContext): Promise<StageOutcome> {
     result = chunkDocument(identity.profile.chunker, {
       markdown: ctx.work.parseText ?? '',
       chunks: ctx.work.parseChunks ?? null,
-    });
+    }, { languageAwareIngest: ctx.config?.languageAwareIngest });
   } catch (error) {
     if (error instanceof ChunkerUnavailableError) return { kind: 'fail', reason: 'chunker_unavailable' };
     throw error;

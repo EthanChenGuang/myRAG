@@ -1,5 +1,4 @@
-import { loadRagConfig } from '../../config';
-import { getRagDeps } from '../../deps';
+import { isMissingPhase4Function, markV2Unavailable, resolveEffectivePipeline } from '../../v2/readiness';
 import { EmbeddingProfileMismatch } from '../../embeddings/mrl';
 import { ProfileUnavailableError, type EmbeddingProfile } from '../../embeddings/active-profile';
 import { canonicalModelId, getEmbeddingProviderFor } from '../../embeddings/registry';
@@ -19,7 +18,7 @@ import { IngestWriterError, chunkIdFor, profileRowIdFor, type ChunkWrite, type P
 const MAX_BATCH_BYTES = 1_000_000;
 const BYTES_PER_VECTOR_DIM = 20;
 
-function toWrites(ctx: StageContext): ChunkWrite[] {
+export function toWrites(ctx: Pick<StageContext, 'work'>): ChunkWrite[] {
   return ctx.work.chunks.map((draft, index) => ({
     content: draft.content,
     chunk_index: index,
@@ -30,6 +29,8 @@ function toWrites(ctx: StageContext): ChunkWrite[] {
     page_end: draft.page_end,
     content_hash: draft.content_hash ?? null,
     lexical_text: draft.lexical_text ?? null,
+    ...(draft.language !== undefined ? { language: draft.language } : {}),
+    ...(draft.language_confidence !== undefined ? { language_confidence: draft.language_confidence } : {}),
     metadata: draft.metadata,
   }));
 }
@@ -157,6 +158,11 @@ async function dualWriteProfiles(ctx: StageContext, documentId: string, targets:
     rows = await ctx.writer.listChunkingProfiles();
   } catch (error) {
     if (ctx.signal.aborted) throw error;
+    // D-07: a defaulted v2 on a database without the Phase 4 functions ingests as legacy; an explicit v2 still fails.
+    if (error instanceof IngestWriterError && isMissingPhase4Function(error) && resolveEffectivePipeline().source === 'default') {
+      markV2Unavailable(error.rpc);
+      return;
+    }
     logProfileFailure('list', error);
     throw new IngestStageError('embed', 'chunking_profiles_unavailable');
   }
@@ -164,7 +170,11 @@ async function dualWriteProfiles(ctx: StageContext, documentId: string, targets:
 
   for (const profile of profiles) {
     ctx.signal.throwIfAborted();
-    const built = buildProfileChunks({ filename: identity.filename, chunker: identity.profile.chunker, templateHeader }, ctx.work.parseText ?? '', profile);
+    const built = buildProfileChunks(
+      { filename: identity.filename, chunker: identity.profile.chunker, templateHeader, languageAwareIngest: ctx.config?.languageAwareIngest },
+      ctx.work.parseText ?? '',
+      profile,
+    );
     if (built.children.length === 0) continue;
 
     const outcomes = await Promise.all(
@@ -218,17 +228,18 @@ async function dualWriteProfiles(ctx: StageContext, documentId: string, targets:
 }
 
 /**
- * Embeds each batch once per target (active, backfilling, previous active) from the same embedding text and writes the vectors in one call.
- * A failing active target fails the run (embed_failed, or embedding_profile_mismatch for a wrong model or dimensions); a failing other target
+ * Embeds each batch once per target (active, backfilling, previous active, and the binding profiles of the document's doc type and tenant)
+ * from the same embedding text and writes the vectors in one call. A failing active target fails the run (embed_failed, or embedding_profile_mismatch for a wrong model or dimensions); a failing other target
  * leaves its vectors out, stops being tried for the rest of the run, and records each affected chunk as a gap of its open run. With the
  * switch off the only target is the legacy profile, written exactly as before.
  */
 async function runEmbed(ctx: StageContext): Promise<StageOutcome> {
   const document = requireDocument(ctx, 'embed');
-  const dualWrite = loadRagConfig(getRagDeps().ragEnv()).pipeline === 'v2';
+  const identity = requireIdentity(ctx, 'embed');
+  const dualWrite = resolveEffectivePipeline().pipeline !== 'legacy';
   let targets: EmbeddingTarget[];
   try {
-    targets = await resolveEmbeddingTargets(ctx.writer);
+    targets = await resolveEmbeddingTargets(ctx.writer, { docType: identity.docType, tenantKey: identity.tenantKey });
   } catch (error) {
     if (error instanceof ProfileUnavailableError) throw new IngestStageError('embed', 'embedding_profile_unavailable');
     throw error;
@@ -311,11 +322,12 @@ async function runEmbed(ctx: StageContext): Promise<StageOutcome> {
 /**
  * D-35, Batch API backfill: the embed stage writes the chunks without vectors and leaves the embedding to the rag:backfill process, which
  * fills every target profile by chunk id before the job is published. Children of chunking profiles (RAG_PIPELINE=v2) are still embedded
- * here, because the Batch API path fills document_chunks only.
+ * here, because the Batch API path fills document_chunks only. Its targets carry no document scope, like the orchestrator's: binding profiles
+ * of such a document are filled by a scoped re-embed run.
  */
 async function runDeferredEmbed(ctx: StageContext): Promise<StageOutcome> {
   const document = requireDocument(ctx, 'embed');
-  const dualWrite = loadRagConfig(getRagDeps().ragEnv()).pipeline === 'v2';
+  const dualWrite = resolveEffectivePipeline().pipeline !== 'legacy';
   let targets: EmbeddingTarget[];
   try {
     targets = await resolveEmbeddingTargets(ctx.writer);
@@ -341,11 +353,27 @@ async function runDeferredEmbed(ctx: StageContext): Promise<StageOutcome> {
   return { kind: 'next', outcome: 'deferred' };
 }
 
+/**
+ * RAG_CAPTION_LANGUAGE=document (D-23): a picture caption inside a document keeps the language detected on the caption as written, not the
+ * document's. Only drafts the images stage marked carry a language, so with the switch at en nothing is called. A picture document needs
+ * no call: its document language is the caption's.
+ */
+async function writeCaptionLanguages(ctx: StageContext, documentId: string): Promise<void> {
+  if (ctx.work.captionOnly || !ctx.writer.setImageChunkLanguages) return;
+  const items: Array<{ imageUrl: string; language: string }> = [];
+  for (const draft of ctx.work.chunks) {
+    const imageUrl = draft.metadata.image_url;
+    if (draft.chunk_kind === 'image' && draft.language && typeof imageUrl === 'string') items.push({ imageUrl, language: draft.language });
+  }
+  if (items.length > 0) await ctx.writer.setImageChunkLanguages(documentId, items);
+}
+
 async function runWrite(ctx: StageContext): Promise<StageOutcome> {
   if (ctx.work.chunksWritten !== ctx.work.chunks.length) return { kind: 'fail', reason: 'write_incomplete' };
   // The text the chunker consumed (after the injection scan, which never changes it), stored once per version for the readers of documents.content.
   const document = requireDocument(ctx, 'write');
   if (ctx.work.parseText) await ctx.writer.setFields(document.id, { content: ctx.work.parseText });
+  await writeCaptionLanguages(ctx, document.id);
   return { kind: 'next' };
 }
 

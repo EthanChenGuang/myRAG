@@ -66,7 +66,9 @@ const READ_TIMEOUT_MS = 5_000;
 const LIST_BINDINGS_RPC = 'rag_list_embedding_bindings';
 const LIST_SCOPES_RPC = 'rag_list_embedding_profile_scopes';
 const STATUSES: readonly string[] = ['available', 'backfilling', 'active', 'retired'];
-const DOC_TYPES: readonly string[] = BindingActivationEvidenceSchema.shape.doc_type.options;
+/** The doc types a binding may name: the evidence contract's enum, the same list the SQL checks. */
+export const BINDING_DOC_TYPES = BindingActivationEvidenceSchema.shape.doc_type.options;
+const DOC_TYPES: readonly string[] = BINDING_DOC_TYPES;
 
 let cache: Snapshot | null = null;
 let inflight: Promise<Snapshot> | null = null;
@@ -155,6 +157,17 @@ export async function listBindingRows(): Promise<BindingRow[]> {
     if (row) rows.push(row);
   }
   return rows;
+}
+
+/** The doc types each scoped profile serves, read fresh, for operator views. Unscoped profiles are absent. */
+export async function listProfileScopes(): Promise<Record<string, string[]>> {
+  const out: Record<string, string[]> = {};
+  for (const raw of await readRpc(LIST_SCOPES_RPC)) {
+    const row = asRecord(raw);
+    const docTypes = docTypeList(row?.doc_types);
+    if (row && typeof row.id === 'string' && docTypes) out[row.id] = docTypes;
+  }
+  return out;
 }
 
 async function resolveProfile(id: string, scopes: Map<string, string[]>): Promise<BindingProfile | null> {

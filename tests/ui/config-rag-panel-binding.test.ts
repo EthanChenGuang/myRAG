@@ -12,6 +12,7 @@ const PANELS = [
   { file: 'ingestion.js', rootId: 'rag-administration-ingestion', instance: 'ingestionPanel' },
   { file: 'doc-types.js', rootId: 'rag-administration-doc-types', instance: 'docTypesPanel' },
   { file: 'embedding-profiles.js', rootId: 'rag-administration-profiles', instance: 'embeddingProfilesPanel' },
+  { file: 'embedding-bindings.js', rootId: 'rag-administration-bindings', instance: 'embeddingBindingsPanel' },
 ] as const;
 
 function addLink(doc: FakeDocument, label: string): FakeElement {

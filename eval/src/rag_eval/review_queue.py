@@ -10,6 +10,7 @@ from typing import Any
 
 from pydantic import ValidationError
 from rag_sidecar.contracts.golden import GoldenItem
+from rag_sidecar.contracts.languages import LANGUAGE_CODES
 from rag_sidecar.contracts.review import ReviewQueueItem
 
 from rag_eval.draft import writer
@@ -28,7 +29,7 @@ DEFAULT_TOKEN_ENV = "RAG_ADMIN_BEARER"
 SOURCES = ("langfuse", "db", "both")
 _REASONS = ("sampled", "feedback_negative", "groundedness_flagged")
 PROMOTED_NAME = "promoted.jsonl"
-LANGUAGES = ("zh", "en", "it")
+LANGUAGES: tuple[str, ...] = LANGUAGE_CODES
 
 # Python twin of src/lib/rag/trace/mask.ts; keep the patterns and their order identical.
 _EMAIL = re.compile(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", re.IGNORECASE | re.ASCII)

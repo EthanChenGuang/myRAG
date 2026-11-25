@@ -121,6 +121,40 @@ from rag_sidecar.contracts import (
     TraceUsedDocument,
 )
 
+from rag_sidecar.contracts.feedback_loop import (
+    ChannelCounts,
+    DictionaryCandidate,
+    DictionaryTerm,
+    EmbedFeedbackRequest,
+    EvalTrendPoint,
+    ExpertEvidenceSpan,
+    ExpertLabel,
+    FailureEntry,
+    FailureReport,
+    FeedbackLoopStats,
+    FeedbackMiningConfig,
+    GatePopulationConfig,
+    LayerCounts,
+    MiningReasonCounts,
+    MiningRunResult,
+    MiningTenantResult,
+    OutcomeCounts,
+    RefusalFeedbackRequest,
+    RetrievalLogCandidate,
+    RetrievalLogEntry,
+    ReviewItem,
+    ReviewItemListResponse,
+    ScoreThresholds,
+    ShipCheckResult,
+    SourceSignalRequest,
+    TenantLoopStats,
+    TrainingNegative,
+    TrainingPair,
+    TrainingPositive,
+    TriageCounts,
+    VoteCounts,
+    WeeklyReport,
+)
 from rag_sidecar.contracts.cache import (
     CacheCheckRequest,
     CacheCheckResponse,
@@ -184,7 +218,7 @@ from rag_sidecar.contracts.eval_run import (
     TraceInjectionFlagged,
     TraceSecurityVersions,
 )
-from rag_sidecar.contracts.golden import AttackSpec
+from rag_sidecar.contracts.golden import AttackSpec, NativeReview, TableAnswer
 from rag_sidecar.contracts.query import (
     CondensedQuery,
     DateRange,
@@ -209,6 +243,16 @@ from rag_sidecar.contracts.routing import (
     ParseAttemptPages as RoutingParseAttemptPages,
     default_parse_routing_config,
 )
+from rag_sidecar.contracts.embed import EmbedRequest, EmbedResponse
+from rag_sidecar.contracts.retrieval import RetrievalLegWeights
+from rag_sidecar.contracts.translation import ChunkTranslation, TranslationSettings
+from rag_sidecar.contracts.versions import (
+    EffectiveDateExtraction,
+    SupersessionCandidate,
+    SupersessionRules,
+    SupersessionSignals,
+)
+from rag_sidecar.contracts.scopes import ScopeFilter, ScopeTagSuggestion, ScopeTagSuggestionItem, ScopeVocabularyEntry
 
 _HASH_A = "a" * 64
 _HASH_B = "b" * 64
@@ -715,6 +759,23 @@ def _cross_lingual_item() -> GoldenItem:
         review_status="approved",
         provenance="synthetic_fixture",
         split="dev",
+    )
+
+
+def _table_split_item() -> GoldenItem:
+    return GoldenItem(
+        id="en-table-split-001",
+        question="Which value does the synthetic table list in column B for row key K-17?",
+        language="en",
+        category="table_split",
+        answerable=True,
+        expected_answer="Column B lists 418 for row key K-17.",
+        gold_evidence=[GoldSpan(document="synthetic-table.en.pdf", section="Table 1", quote="K-17 | 205 | 418")],
+        review_status="approved",
+        provenance="synthetic_fixture",
+        split="dev",
+        table_answer=TableAnswer(value="418", column="B", distractor_values=["205"]),
+        native_review=NativeReview(origin="llm_drafted", status="pending"),
     )
 
 
@@ -1574,6 +1635,7 @@ def _models() -> dict[str, Any]:
         **_query_contract_samples(),
         **_cache_contract_samples(),
         **_phase32_ingest_contract_samples(),
+        **_phase32_query_contract_samples(),
     }
 
 
@@ -1706,8 +1768,346 @@ def _phase32_ingest_contract_variants() -> dict[str, dict[str, Any]]:
     }
 
 
+def _phase32_query_contract_samples() -> dict[str, Any]:
+    return {
+        "ScopeVocabularyEntry": ScopeVocabularyEntry(
+            dimension="legal_entity", value="unit-a", label="Unit A", aliases=["UA"], active=True
+        ),
+        "ScopeTagSuggestion": ScopeTagSuggestion(
+            suggestions=[
+                ScopeTagSuggestionItem(dimension="region", value="north", source="rule"),
+                ScopeTagSuggestionItem(dimension="department", value="unit-b", source="model"),
+            ]
+        ),
+        "SupersessionCandidate": _supersession_candidate(),
+        "SupersessionRules": SupersessionRules(
+            rules_version="supersession@1",
+            title_similarity_min=0.9,
+            content_overlap_min_percent=70,
+            min_conflicting_numbers=1,
+        ),
+        "EffectiveDateExtraction": EffectiveDateExtraction(
+            effective_from=date(2026, 1, 1),
+            effective_to=None,
+            confidence=0.9,
+            evidence_quote="Valid from 1 January 2026.",
+        ),
+        "ChunkTranslation": ChunkTranslation(content="A neutral translated sentence."),
+        "TranslationSettings": TranslationSettings(
+            target_languages=[LANGUAGE_CODES[0]], enabled=True, updated_by="00000000-0000-4000-8000-0000000000e1"
+        ),
+        "EmbedRequest": EmbedRequest(inputs=["A neutral sentence.", "Another neutral sentence."]),
+        "EmbedResponse": EmbedResponse(revision="rev-0001", vectors=[_unit_vector(0), _unit_vector(1)]),
+    }
+
+
+def _unit_vector(position: int) -> list[float]:
+    vector = [0.0] * 1024
+    vector[position] = 1.0
+    return vector
+
+
+def _supersession_candidate(**update: Any) -> SupersessionCandidate:
+    base = SupersessionCandidate(
+        id="00000000-0000-4000-8000-0000000000d1",
+        document_id="00000000-0000-4000-8000-0000000000a1",
+        candidate_document_id="00000000-0000-4000-8000-0000000000b1",
+        signals=SupersessionSignals(title_match=True, content_overlap_percent=82, conflicting_numbers=3),
+        status="pending",
+        origin="detected",
+    )
+    return SupersessionCandidate.model_validate({**base.model_dump(mode="json"), **update})
+
+
+def _phase32_query_contract_variants() -> dict[str, dict[str, Any]]:
+    return {
+        "RetrievalFilters:scopes": {
+            "model": "RetrievalFilters",
+            "value": RetrievalFilters(
+                scopes=ScopeFilter(region=["north"], legal_entity=["unit-a", "unit-b"]), include_untagged=True
+            ).model_dump(mode="json"),
+        },
+        "SupersessionCandidate:confirmed": {
+            "model": "SupersessionCandidate",
+            "value": _supersession_candidate(
+                status="confirmed",
+                direction="document_is_newer",
+                decided_by="00000000-0000-4000-8000-0000000000e1",
+                decided_at="2026-01-02T00:00:00Z",
+            ).model_dump(mode="json"),
+        },
+        "TranslationSettings:unconfigured": {
+            "model": "TranslationSettings",
+            "value": TranslationSettings().model_dump(mode="json"),
+        },
+        "RetrievalParams:translation_weight": {
+            "model": "RetrievalParams",
+            "value": RetrievalParams(
+                leg_weights=RetrievalLegWeights(dense=1.0, lexical=1.0, exact_id=1.0, translation=0.5)
+            ).model_dump(mode="json"),
+        },
+    }
+
+
+_FL_DOC_A = "00000000-0000-4000-8000-000000000001"
+_FL_DOC_B = "00000000-0000-4000-8000-000000000010"
+_FL_ITEM = "00000000-0000-4000-8000-000000000011"
+_FL_LOG = "00000000-0000-4000-8000-000000000100"
+_FL_EXPERT = "00000000-0000-4000-8000-000000000101"
+_FL_SHA_A = "0" * 64
+_FL_SHA_B = "1" * 64
+_FL_TENANT_HASH = "0101010101010101"
+
+
+def _fl_candidates() -> list[RetrievalLogCandidate]:
+    return [
+        RetrievalLogCandidate(
+            chunk_id="chunk-0001", document_id=_FL_DOC_A, rank=1, similarity=0.82, rerank_score=0.91, kept=True, language="en"
+        ),
+        RetrievalLogCandidate(chunk_id="chunk-0002", document_id=_FL_DOC_B, rank=2, similarity=0.64, kept=False),
+    ]
+
+
+def _fl_label() -> ExpertLabel:
+    return ExpertLabel(
+        answerable=True,
+        category="general",
+        language="en",
+        expected_answer="The blue widget ships in a red box.",
+        evidence=[_fl_span()],
+        triage=["golden", "training", "dictionary"],
+        not_relevant_chunk_ids=["chunk-0002"],
+        dictionary_terms=[_fl_term()],
+        pii_checked=True,
+    )
+
+
+def _fl_span() -> ExpertEvidenceSpan:
+    return ExpertEvidenceSpan(
+        chunk_id="chunk-0001",
+        document_id=_FL_DOC_A,
+        document_name="Synthetic widget guide",
+        section="Packaging",
+        quote="The blue widget ships in a red box.",
+    )
+
+
+def _fl_term() -> DictionaryTerm:
+    return DictionaryTerm(observed_term="wdgt", canonical_term="widget", relation="abbreviation")
+
+
+def _fl_review_item() -> ReviewItem:
+    return ReviewItem(
+        id=_FL_ITEM,
+        tenant_key="s:default",
+        retrieval_log_id=_FL_LOG,
+        trace_id="0123456789abcdef0123456789abcdef",
+        query_masked="Which box does the blue widget ship in?",
+        channel="chat",
+        outcome="answered",
+        candidates=_fl_candidates(),
+        retrieval_config_hash="cfg-0001",
+        reasons=["feedback_negative", "low_score"],
+        occurrences=2,
+        tags=["representative"],
+        status="labelled",
+        triage=["golden", "training", "dictionary"],
+        label=_fl_label(),
+        labelled_by=_FL_EXPERT,
+        labelled_at="2026-11-21T10:00:00Z",
+        split="dev",
+        split_group="g-0001",
+        mining_window="2026-11-16/2026-11-23",
+        mined_at="2026-11-23T03:00:00Z",
+        expires_at="2027-02-21T03:00:00Z",
+        query_language="en",
+        query_language_confidence=1.0,
+        chunk_languages=["en"],
+        answer_language="en",
+    )
+
+
+def _fl_loop_stats() -> FeedbackLoopStats:
+    return FeedbackLoopStats(
+        since="2026-11-16T00:00:00Z",
+        until="2026-11-23T00:00:00Z",
+        tenants=[
+            TenantLoopStats(
+                tenant_hash=_FL_TENANT_HASH,
+                retrievals=40,
+                retrievals_by_channel=ChannelCounts(chat=30, embed=8, voice=2),
+                outcomes=OutcomeCounts(answered=33, refused_no_context=5, kb_unavailable=1, degraded_answer=1),
+                refusal_rate=0.125,
+                zero_result_rate=0.05,
+                low_score_rate=0.1,
+                votes=VoteCounts(answer_up=6, answer_down=2, refusal_down=1, embed_up=1),
+                thumbs_down_rate=0.25,
+                refusal_disputes=1,
+                source_open_rate=0.3,
+                items_mined=4,
+                items_labelled=2,
+                items_skipped=1,
+                items_exported=1,
+                triage=TriageCounts(golden=1, training=1, kb_gap=1),
+            )
+        ],
+    )
+
+
+def _fl_failure_report() -> FailureReport:
+    return FailureReport(
+        generated_at="2026-11-23T04:00:00Z",
+        since="2026-11-16T00:00:00Z",
+        run_ids=["run-0001"],
+        previous_report_sha256=_FL_SHA_A,
+        by_layer=LayerCounts(retrieval=1, refusal=1),
+        entries=[
+            FailureEntry(item_id="dom-0001", run_id="run-0001", layer="retrieval", category="general", language="en"),
+            FailureEntry(
+                item_id="dom-0002",
+                run_id="run-0001",
+                layer="refusal",
+                category="no_answer",
+                language="it",
+                domain_set=_FL_TENANT_HASH,
+            ),
+        ],
+    )
+
+
+def _feedback_loop_models() -> dict[str, Any]:
+    thresholds = ScoreThresholds(similarity=0.5, rerank=0.2)
+    return {
+        "RetrievalLogCandidate": _fl_candidates()[0],
+        "RetrievalLogEntry": RetrievalLogEntry(
+            id=_FL_LOG,
+            trace_id="0123456789abcdef0123456789abcdef",
+            user_id="00000000-0000-4000-8000-000000000110",
+            chat_id="00000000-0000-4000-8000-000000000111",
+            tenant_key="s:default",
+            channel="chat",
+            rag_mode="strict",
+            pipeline="v2",
+            retrieval_config_hash="cfg-0001",
+            query_masked="Which box does the blue widget ship in?",
+            query_fingerprint=_FL_SHA_B,
+            status="ok",
+            outcome="answered",
+            candidates=_fl_candidates(),
+            candidate_count=2,
+            top_score=0.91,
+            latency_ms=180,
+            stage_latency={"embed": 40.0, "search": 90.0},
+            feedback_vote=-1,
+            feedback_kind="answer",
+            feedback_reasons=["incomplete"],
+            feedback_at="2026-11-20T12:00:00Z",
+            source_opened_count=1,
+            created_at="2026-11-20T11:59:00Z",
+            query_language="en",
+            query_language_confidence=0.5,
+            chunk_languages=["en", "und"],
+            answer_language="en",
+        ),
+        "RefusalFeedbackRequest": RefusalFeedbackRequest(vote="expected_answer", reasons=["answer_exists"]),
+        "EmbedFeedbackRequest": EmbedFeedbackRequest(token="placeholder.token", vote="not_helpful", reasons=["incomplete"]),
+        "SourceSignalRequest": SourceSignalRequest(kind="source_opened"),
+        "ReviewItem": _fl_review_item(),
+        "ReviewItemListResponse": ReviewItemListResponse(items=[_fl_review_item()], next_cursor="cursor-0001"),
+        "ExpertLabel": _fl_label(),
+        "ExpertEvidenceSpan": _fl_span(),
+        "DictionaryTerm": DictionaryTerm(
+            observed_term="widget azzurro", canonical_term="blue widget", relation="translation", canonical_language="en"
+        ),
+        "DictionaryCandidate": DictionaryCandidate(
+            tenant_key="s:default",
+            language="en",
+            observed_term="wdgt",
+            canonical_term="widget",
+            relation="abbreviation",
+            example_review_item_ids=[_FL_ITEM],
+            occurrences=3,
+        ),
+        "TrainingPair": TrainingPair(
+            tenant_key="s:default",
+            query_masked="Which box does the blue widget ship in?",
+            language="en",
+            positive=TrainingPositive(chunk_id="chunk-0001", document_id=_FL_DOC_A, quote="ships in a red box"),
+            hard_negatives=[
+                TrainingNegative(chunk_id="chunk-0002", document_id=_FL_DOC_B, rank=2, score=0.64, confirmed=True)
+            ],
+            document_group="g-0001",
+            split="train",
+            source="production_feedback",
+            review_item_id=_FL_ITEM,
+        ),
+        "TrainingPositive": TrainingPositive(chunk_id="chunk-0001", document_id=_FL_DOC_A, quote="ships in a red box"),
+        "TrainingNegative": TrainingNegative(
+            chunk_id="chunk-0003", document_id=_FL_DOC_B, rank=3, score=0.41, confirmed=False
+        ),
+        "FeedbackMiningConfig": FeedbackMiningConfig(
+            low_score_ceiling=thresholds,
+            refused_high_score_floor=ScoreThresholds(similarity=0.7, rerank=0.6),
+        ),
+        "MiningRunResult": MiningRunResult(
+            status="completed",
+            since="2026-11-16T00:00:00Z",
+            until="2026-11-23T00:00:00Z",
+            config_sha256=_FL_SHA_A,
+            purged_log_rows=12,
+            purged_review_items=1,
+            total_inserted=3,
+            tenants=[
+                MiningTenantResult(
+                    tenant_hash=_FL_TENANT_HASH,
+                    inserted=3,
+                    by_reason=MiningReasonCounts(feedback_negative=2, zero_results=1),
+                )
+            ],
+        ),
+        "FeedbackLoopStats": _fl_loop_stats(),
+        "WeeklyReport": WeeklyReport(
+            generated_at="2026-11-23T04:00:00Z",
+            since="2026-11-16T00:00:00Z",
+            until="2026-11-23T00:00:00Z",
+            stats=_fl_loop_stats(),
+            trend=[
+                EvalTrendPoint(
+                    domain_set=_FL_TENANT_HASH,
+                    run_id="run-0001",
+                    started_at="2026-11-22T01:00:00Z",
+                    gate_population="real",
+                    config_hash="cfg-0001",
+                    manifest_hash=_FL_SHA_A,
+                    recall_at_5=0.8,
+                    recall_at_10=0.9,
+                    mrr=0.7,
+                    correct_refusal_rate=0.95,
+                    false_refusal_rate=0.05,
+                )
+            ],
+            failures=_fl_failure_report(),
+        ),
+        "FailureReport": _fl_failure_report(),
+        "FailureEntry": _fl_failure_report().entries[0],
+        "GatePopulationConfig": GatePopulationConfig(),
+        "ShipCheckResult": ShipCheckResult(
+            passed=True,
+            target_metric="recall_at_5",
+            target_delta=0.03,
+            ci_low=0.01,
+            ci_high=0.05,
+            baseline_hash=_FL_SHA_A,
+            candidate_hash=_FL_SHA_B,
+            manifest_hash=_FL_SHA_A,
+            gate_population="real",
+        ),
+    }
+
+
 def build_samples() -> dict[str, dict[str, Any]]:
-    samples = {name: model.model_dump(mode="json") for name, model in _models().items()}
+    models = {**_models(), **_feedback_loop_models()}
+    samples = {name: model.model_dump(mode="json") for name, model in models.items()}
     variants: dict[str, dict[str, Any]] = {
         "AnswerRecord:pending_unlinked": {
             "model": "AnswerRecord",
@@ -1730,6 +2130,10 @@ def build_samples() -> dict[str, dict[str, Any]]:
         "GoldenItem:cross_lingual": {
             "model": "GoldenItem",
             "value": _cross_lingual_item().model_dump(mode="json"),
+        },
+        "GoldenItem:table_split": {
+            "model": "GoldenItem",
+            "value": _table_split_item().model_dump(mode="json"),
         },
         "GoldenItem:cache_near_miss": {
             "model": "GoldenItem",
@@ -1799,4 +2203,5 @@ def build_samples() -> dict[str, dict[str, Any]]:
         },
     }
     variants.update(_phase32_ingest_contract_variants())
+    variants.update(_phase32_query_contract_variants())
     return {"samples": samples, "variants": variants}

@@ -49,7 +49,12 @@
         "enum": [
           "sampled",
           "feedback_negative",
-          "groundedness_flagged"
+          "groundedness_flagged",
+          "refusal_disputed",
+          "refused_high_score",
+          "zero_results",
+          "low_score",
+          "no_source_opened"
         ],
         "type": "string"
       },

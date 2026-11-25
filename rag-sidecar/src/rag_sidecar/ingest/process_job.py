@@ -37,7 +37,8 @@ FIXED_CHAIN_PARSER = "chain"
 FIXED_CHAIN_PARSER_VERSION = "phase3-chain"
 
 PERMANENT_PARSE_ERRORS = frozenset({"no_parser_available", "not_an_image", "image_url_invalid"})
-TERMINAL_SUCCESS = frozenset({"ready", "quarantined", "needs_review", "skipped_duplicate"})
+# pending_review (D-36): processing finished and the document is held for an admin; a success for the worker (research F-15).
+TERMINAL_SUCCESS = frozenset({"ready", "quarantined", "needs_review", "skipped_duplicate", "pending_review"})
 
 
 @dataclass(frozen=True)

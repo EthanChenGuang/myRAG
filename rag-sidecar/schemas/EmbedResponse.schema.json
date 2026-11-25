@@ -1,0 +1,44 @@
+{
+  "additionalProperties": false,
+  "description": "One L2-normalized dense vector per input, in input order (D-26).",
+  "properties": {
+    "dims": {
+      "const": 1024,
+      "default": 1024,
+      "title": "Dims",
+      "type": "integer"
+    },
+    "model": {
+      "const": "BAAI/bge-m3",
+      "default": "BAAI/bge-m3",
+      "title": "Model",
+      "type": "string"
+    },
+    "revision": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Revision",
+      "type": "string"
+    },
+    "vectors": {
+      "items": {
+        "items": {
+          "type": "number"
+        },
+        "maxItems": 1024,
+        "minItems": 1024,
+        "type": "array"
+      },
+      "maxItems": 32,
+      "minItems": 1,
+      "title": "Vectors",
+      "type": "array"
+    }
+  },
+  "required": [
+    "revision",
+    "vectors"
+  ],
+  "title": "EmbedResponse",
+  "type": "object"
+}

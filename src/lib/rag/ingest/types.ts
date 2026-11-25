@@ -1,4 +1,4 @@
-import type { DocTypeDetection, ParseResult } from '@/lib/rag-eval/contracts.generated';
+import type { DocTypeDetection, ParseResult, UploadApproval } from '@/lib/rag-eval/contracts.generated';
 import type { TenantScope } from '../tenant/scope';
 import type { TraceCollector } from '../trace/collector';
 import type { IngestConfig } from './config';
@@ -76,6 +76,11 @@ interface IngestInputBase {
   deadlineMs?: number;
   /** Admin type change only; see TypeChangeState. */
   typeChange?: TypeChangeState;
+  /**
+   * The server-verified uploader (the session user, or the owner of a connector's connection), for the upload-approval decision
+   * (D-37). Never taken from a request body. A personal or organization scope that carries its user takes precedence over it.
+   */
+  uploaderId?: string | null;
 }
 
 export type IngestInput = IngestInputBase &
@@ -83,7 +88,7 @@ export type IngestInput = IngestInputBase &
 
 export const DEFAULT_INGEST_DEADLINE_MS = 50000;
 
-export type IngestStatus = 'ready' | 'skipped_duplicate' | 'quarantined' | 'processing' | 'failed';
+export type IngestStatus = 'ready' | 'skipped_duplicate' | 'quarantined' | 'pending_review' | 'processing' | 'failed';
 
 export interface IngestResult {
   status: IngestStatus;
@@ -121,6 +126,10 @@ export interface IngestState {
   embeddingGaps: Array<{ profileId: string; chunkIndex: number }>;
   /** Present on an admin type change only; absent on every other run. */
   typeChange?: TypeChangeState;
+  /** The upload-approval decision of identify (D-36, D-56); absent while RAG_UPLOAD_APPROVAL is off. A queued job takes it from its snapshot. */
+  approval?: UploadApproval;
+  /** A job of a batch with hold_publish (D-12): publish records the hold on the document instead of making it current. */
+  publishHold?: { batchId: string };
 }
 
 export function emptyIngestState(): IngestState {
@@ -152,6 +161,12 @@ export interface ChunkDraft {
   /** Set by the enrich stage. */
   content_hash?: string;
   lexical_text?: string;
+  /**
+   * The chunk's own language (or `und`). Text chunks: set by the enrich stage only with RAG_LANGUAGE_AWARE_INGEST=on.
+   * Image chunks with RAG_CAPTION_LANGUAGE=document: the language detected on the caption as written (D-23).
+   */
+  language?: string;
+  language_confidence?: number;
 }
 
 /** What a chunker returns: the drafts plus stable warning codes for the stage to report. */
@@ -199,6 +214,8 @@ export interface IngestWork {
   templateRow?: Record<string, string | null> | null;
   chunks: ChunkDraft[];
   chunksWritten: number;
+  /** RAG_CAPTION_LANGUAGE=document: the caption target language, resolved once per run (null: no target, English prompt). */
+  captionTarget?: { language: string | null };
 }
 
 export interface StageContext {

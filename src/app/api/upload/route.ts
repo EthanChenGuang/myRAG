@@ -274,7 +274,7 @@ export async function POST(request: NextRequest) {
 
     let queuedIngest: EnqueueResult[] | null = null;
     if (ingestScope && pendingImages.length > 0) {
-      queuedIngest = await scheduleImageIngest(ingestScope, pendingImages, imageContext || undefined, startedAt);
+      queuedIngest = await scheduleImageIngest(ingestScope, sessionUser.id, pendingImages, imageContext || undefined, startedAt);
     }
 
     (async () => {
@@ -367,6 +367,7 @@ export async function POST(request: NextRequest) {
  */
 async function scheduleImageIngest(
   scope: TenantScope,
+  uploaderId: string,
   images: PendingImage[],
   imageContext: string | undefined,
   startedAt: number,
@@ -377,6 +378,7 @@ async function scheduleImageIngest(
     scope,
     source: 'image_upload' as const,
     sourceKey: image.filePath,
+    uploaderId,
     file: image.bytes,
     filename: image.name,
     mimeType: image.type,

@@ -1,6 +1,7 @@
 import { z } from 'zod/v3';
 import type { RetrievalFilterInput, RetrievalFilters } from '@/lib/rag/backend/types';
 import { RetrievalFiltersSchema } from '@/lib/rag-eval/contracts.generated';
+import { getLanguageRegistry } from '@/lib/rag/lang/registry';
 
 const DOC_TYPE_VALUES = [
   'general',
@@ -11,7 +12,13 @@ const DOC_TYPE_VALUES = [
   'scanned_image',
 ] as const;
 
-const LANGUAGE_VALUES = ['zh', 'en', 'it'] as const;
+function registryCodes(): [string, ...string[]] {
+  const [first, ...rest] = getLanguageRegistry().packs.map((pack) => pack.code);
+  if (first === undefined) throw new Error('[Retrieval Filters] the language registry lists no codes');
+  return [first, ...rest];
+}
+
+const LANGUAGE_VALUES = registryCodes();
 
 const amountPattern = /^-?\d+(\.\d{1,4})?$/;
 

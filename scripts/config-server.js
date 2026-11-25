@@ -215,7 +215,7 @@ app.post('/api/config', (req, res) => {
       return res.status(400).json({ error: 'Configuration contains values that cannot be stored', invalid: refused });
     }
 
-    for (const name of ['RAG_EVAL_SECRET', 'RAG_SIDECAR_SECRET', 'RAG_VOICE_TOKEN_SECRET', 'VOYAGE_API_KEY', 'DEEPINFRA_API_KEY', 'COHERE_API_KEY', 'LAKERA_GUARD_API_KEY']) {
+    for (const name of ['RAG_EVAL_SECRET', 'RAG_SIDECAR_SECRET', 'RAG_VOICE_TOKEN_SECRET', 'VOYAGE_API_KEY', 'DEEPINFRA_API_KEY', 'COHERE_API_KEY', 'LAKERA_GUARD_API_KEY', 'RAG_EMBED_FEEDBACK_SECRET']) {
       const value = fullValues[name];
       if (typeof value === 'string' && value.length > 0 && value.length < 32) {
         console.warn(`[Config] ${name} is ${value.length} characters; at least 32 are required or the endpoint answers 503`);
@@ -592,6 +592,15 @@ ${fullValues.RAG_GROUNDEDNESS_TIMEOUT_MS !== undefined ? `RAG_GROUNDEDNESS_TIMEO
 ${fullValues.RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS !== undefined ? `RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS=${fullValues.RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS}` : 'RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS=3000'}
 ${fullValues.RAG_ANSWER_FEEDBACK !== undefined ? `RAG_ANSWER_FEEDBACK=${fullValues.RAG_ANSWER_FEEDBACK}` : 'RAG_ANSWER_FEEDBACK=false'}
 ${fullValues.RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK !== undefined ? `RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK=${fullValues.RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK}` : 'RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK=false'}
+
+# Retrieval log and feedback
+${fullValues.RAG_RETRIEVAL_LOG !== undefined ? `RAG_RETRIEVAL_LOG=${fullValues.RAG_RETRIEVAL_LOG}` : 'RAG_RETRIEVAL_LOG=off'}
+${fullValues.RAG_RETRIEVAL_LOG_RETENTION_DAYS !== undefined ? `RAG_RETRIEVAL_LOG_RETENTION_DAYS=${fullValues.RAG_RETRIEVAL_LOG_RETENTION_DAYS}` : 'RAG_RETRIEVAL_LOG_RETENTION_DAYS=30'}
+${fullValues.RAG_REFUSAL_FEEDBACK !== undefined ? `RAG_REFUSAL_FEEDBACK=${fullValues.RAG_REFUSAL_FEEDBACK}` : 'RAG_REFUSAL_FEEDBACK=false'}
+${fullValues.RAG_EMBED_FEEDBACK !== undefined ? `RAG_EMBED_FEEDBACK=${fullValues.RAG_EMBED_FEEDBACK}` : 'RAG_EMBED_FEEDBACK=false'}
+${fullValues.RAG_EMBED_FEEDBACK_SECRET !== undefined ? `RAG_EMBED_FEEDBACK_SECRET=${fullValues.RAG_EMBED_FEEDBACK_SECRET}` : 'RAG_EMBED_FEEDBACK_SECRET='}
+${fullValues.RAG_SOURCE_OPEN_SIGNAL !== undefined ? `RAG_SOURCE_OPEN_SIGNAL=${fullValues.RAG_SOURCE_OPEN_SIGNAL}` : 'RAG_SOURCE_OPEN_SIGNAL=false'}
+${fullValues.RAG_DOMAIN_EXPERT_REVIEW !== undefined ? `RAG_DOMAIN_EXPERT_REVIEW=${fullValues.RAG_DOMAIN_EXPERT_REVIEW}` : 'RAG_DOMAIN_EXPERT_REVIEW=false'}
 
 # Prompt-injection defense
 ${fullValues.RAG_CONTEXT_TAGGING !== undefined ? `RAG_CONTEXT_TAGGING=${fullValues.RAG_CONTEXT_TAGGING}` : 'RAG_CONTEXT_TAGGING=false'}
@@ -1474,6 +1483,15 @@ RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS=${getEnvValue('RAG_GROUNDEDNESS_MAX_PREMISE_
 RAG_ANSWER_FEEDBACK=${getEnvValue('RAG_ANSWER_FEEDBACK') || 'false'}
 RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK=${getEnvValue('RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK') || 'false'}
 
+# Retrieval log and feedback
+RAG_RETRIEVAL_LOG=${getEnvValue('RAG_RETRIEVAL_LOG') || 'off'}
+RAG_RETRIEVAL_LOG_RETENTION_DAYS=${getEnvValue('RAG_RETRIEVAL_LOG_RETENTION_DAYS') || '30'}
+RAG_REFUSAL_FEEDBACK=${getEnvValue('RAG_REFUSAL_FEEDBACK') || 'false'}
+RAG_EMBED_FEEDBACK=${getEnvValue('RAG_EMBED_FEEDBACK') || 'false'}
+RAG_EMBED_FEEDBACK_SECRET=${getEnvValue('RAG_EMBED_FEEDBACK_SECRET') || ''}
+RAG_SOURCE_OPEN_SIGNAL=${getEnvValue('RAG_SOURCE_OPEN_SIGNAL') || 'false'}
+RAG_DOMAIN_EXPERT_REVIEW=${getEnvValue('RAG_DOMAIN_EXPERT_REVIEW') || 'false'}
+
 # Prompt-injection defense
 RAG_CONTEXT_TAGGING=${getEnvValue('RAG_CONTEXT_TAGGING') || 'false'}
 RAG_INJECTION_CHECK=${getEnvValue('RAG_INJECTION_CHECK') || 'off'}
@@ -1918,6 +1936,15 @@ RAG_GROUNDEDNESS_TIMEOUT_MS=${getEnvValue('RAG_GROUNDEDNESS_TIMEOUT_MS') || '200
 RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS=${getEnvValue('RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS') || '3000'}
 RAG_ANSWER_FEEDBACK=${getEnvValue('RAG_ANSWER_FEEDBACK') || 'false'}
 RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK=${getEnvValue('RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK') || 'false'}
+
+# Retrieval log and feedback
+RAG_RETRIEVAL_LOG=${getEnvValue('RAG_RETRIEVAL_LOG') || 'off'}
+RAG_RETRIEVAL_LOG_RETENTION_DAYS=${getEnvValue('RAG_RETRIEVAL_LOG_RETENTION_DAYS') || '30'}
+RAG_REFUSAL_FEEDBACK=${getEnvValue('RAG_REFUSAL_FEEDBACK') || 'false'}
+RAG_EMBED_FEEDBACK=${getEnvValue('RAG_EMBED_FEEDBACK') || 'false'}
+RAG_EMBED_FEEDBACK_SECRET=${getEnvValue('RAG_EMBED_FEEDBACK_SECRET') || ''}
+RAG_SOURCE_OPEN_SIGNAL=${getEnvValue('RAG_SOURCE_OPEN_SIGNAL') || 'false'}
+RAG_DOMAIN_EXPERT_REVIEW=${getEnvValue('RAG_DOMAIN_EXPERT_REVIEW') || 'false'}
 
 # Prompt-injection defense
 RAG_CONTEXT_TAGGING=${getEnvValue('RAG_CONTEXT_TAGGING') || 'false'}
@@ -2801,7 +2828,17 @@ class InjectionSummaryError extends Error {
   }
 }
 
-const INJECTION_RULE_LANGUAGES = ['zh', 'en', 'it', 'any'];
+/** D-06: the language codes ship with the code in config/rag/language-packs.json; read once at start. */
+function readShippedLanguageCodes() {
+  const registry = JSON.parse(fs.readFileSync(path.resolve(__dirname, '..', 'config', 'rag', 'language-packs.json'), 'utf8'));
+  const codes = Array.isArray(registry && registry.packs) ? registry.packs.map((pack) => pack && pack.code) : [];
+  if (codes.length === 0 || !codes.every((code) => typeof code === 'string' && code !== '')) {
+    throw new Error('config/rag/language-packs.json lists no language codes');
+  }
+  return codes;
+}
+
+const INJECTION_RULE_LANGUAGES = [...readShippedLanguageCodes(), 'any'];
 const PROMPT_GUARD_MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const PROMPT_GUARD_REVISION = /^[0-9a-f]{40}$/;
 const DETECTOR_CONFIG_VERSION = /^\d{4}-\d{2}-\d{2}\.[1-9][0-9]*$/;

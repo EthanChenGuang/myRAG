@@ -5,6 +5,8 @@ export type RechunkTenantTotals = TenantTokenTotals;
 export interface RechunkCostTarget {
   profileId: string;
   provider: string;
+  /** Only these tenants' children are embedded for the profile (a binding profile, D-15); absent: every tenant. */
+  tenantKeys?: readonly string[];
 }
 
 export interface RechunkTenantCost {
@@ -37,7 +39,8 @@ export function estimateRechunkCost(targets: readonly RechunkCostTarget[], total
   let note: string | null = null;
 
   for (const target of targets) {
-    const report = estimateReembedCost(target.provider, totals);
+    const scoped = target.tenantKeys === undefined ? totals : Object.fromEntries(Object.entries(totals).filter(([key]) => target.tenantKeys?.includes(key)));
+    const report = estimateReembedCost(target.provider, scoped);
     profiles.push({ profileId: target.profileId, provider: target.provider, usd: report.totals.usd });
     estimated ||= report.estimated;
     note ??= report.note;

@@ -22,7 +22,7 @@ import type { SecurityConfig } from '../security/config';
 import { computeRetrievalConfigHash, securityHashComponent } from './config-hash';
 import { effectiveRetrievalParams } from './retrieval-params';
 import type { AssembleOutput } from '../context/assemble';
-import type { RetrievalParams } from '@/lib/rag-eval/contracts.generated';
+import type { QueryPlan, RetrievalParams } from '@/lib/rag-eval/contracts.generated';
 
 export interface BuildV2ResultInput {
   input: RunRetrievalInput;
@@ -44,6 +44,10 @@ export interface BuildV2ResultInput {
   injectionStalled?: boolean;
   /** The request's security config; defaults to RagDeps.securityConfig(). */
   security?: SecurityConfig;
+  /** The planned binding legs (bindingHashFields); empty when none is planned. */
+  bindingHash?: { embeddingBindings?: Record<string, string>; domainControlLeg?: string };
+  /** The query layer's plan; absent while the layer is off, so the result stays identical to Phase 4. */
+  queryPlan?: QueryPlan | null;
 }
 
 export function fusedHitsToVoiceChunks(hits: FusedHit[], scoreByChunk?: Map<string, number>): ChunkWithScore[] {
@@ -99,6 +103,7 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
     voice = null,
     injection,
     injectionStalled = false,
+    queryPlan = null,
   } = ctx;
   const security = ctx.security ?? getRagDeps().securityConfig();
   const records = collector.stages();
@@ -153,9 +158,14 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
       ...(config.monolingual ? { monolingual: true as const } : {}),
     },
     security: securityHashComponent(security, { multiTenant: isMultiTenant() }),
+    ...(ctx.bindingHash ?? {}),
   });
 
-  const base = { ...failure(collector, status, reason, queryContext), ...(injection ? { injection } : {}) };
+  const base = {
+    ...failure(collector, status, reason, queryContext),
+    ...(injection ? { injection } : {}),
+    ...(queryPlan ? { queryPlan } : {}),
+  };
 
   if (profile === 'voice') {
     return {

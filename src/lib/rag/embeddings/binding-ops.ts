@@ -4,7 +4,8 @@ import {
   type BindingActivationEvidence,
   type BindingComparison,
 } from '@/lib/rag-eval/contracts.generated';
-import { ProfileUnavailableError, listEmbeddingProfiles } from './active-profile';
+import { ProfileUnavailableError, listEmbeddingProfiles, requireRegistryClient } from './active-profile';
+import { createReembedWriter } from '../ingest/writer';
 import { bindingKey, listBindingRows, refreshBindingsAfterOperation, type BindingRow } from './bindings';
 import { callGate, type ProfileRefusal } from './profile-ops';
 
@@ -172,4 +173,31 @@ export async function deactivateBinding(docType: string, tenantKey: string | nul
   if (!deactivated) throw new ProfileUnavailableError('rpc_failed', 'malformed_response');
   await refreshBindingsAfterOperation();
   return { ok: true, deactivated };
+}
+
+export type BindingCompleteness = { state: 'measured'; chunks: number; missing: number; percent: number } | { state: 'unavailable' };
+
+/**
+ * Completeness of each backfilling or active binding: current ready chunks of its profile's doc types, in its tenant scope (every tenant for a
+ * deployment-wide binding), that already hold a vector of the profile. Counted by the scope-aware re-embed count (0442); a count that cannot be
+ * read is reported unavailable, never complete. Available and retired bindings are not counted.
+ */
+export async function getBindingCompleteness(
+  entries: Array<Pick<BindingRow, 'id' | 'profileId' | 'tenantKey' | 'status'>>,
+  signal: AbortSignal = new AbortController().signal,
+): Promise<Record<string, BindingCompleteness>> {
+  const writer = createReembedWriter({ db: requireRegistryClient(), signal });
+  const out: Record<string, BindingCompleteness> = {};
+  for (const entry of entries) {
+    if (entry.status !== 'backfilling' && entry.status !== 'active') continue;
+    try {
+      const tenants = await writer.count(entry.profileId, entry.tenantKey);
+      const chunks = tenants.reduce((sum, tenant) => sum + tenant.chunks, 0);
+      const missing = tenants.reduce((sum, tenant) => sum + tenant.chunksMissing, 0);
+      out[entry.id] = { state: 'measured', chunks, missing, percent: chunks === 0 ? 100 : ((chunks - missing) * 100) / chunks };
+    } catch {
+      out[entry.id] = { state: 'unavailable' };
+    }
+  }
+  return out;
 }

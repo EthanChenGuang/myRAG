@@ -1,3 +1,4 @@
+import { blockSplitterForIngest } from '@/lib/rag/lang/sentences';
 import { enrichChunkWithURLs } from '@/lib/url-extractor';
 import { LEXICAL_VERSION, chunkLexicalText } from '../lexical/chunk-text';
 import type { ChunkerConfig } from './chunkers';
@@ -21,6 +22,8 @@ export interface ProfileDocument {
   /** The chunker of the document's processing profile; its kind and clause data decide how parents are cut. */
   chunker: ChunkerConfig;
   templateHeader?: string;
+  /** RAG_LANGUAGE_AWARE_INGEST: `on` splits each block at its own language's sentence ends (D-15); off or absent is today's splitter. */
+  languageAwareIngest?: 'off' | 'on';
 }
 
 export interface BuiltProfileChunks {
@@ -54,6 +57,7 @@ export function buildProfileChunks(document: ProfileDocument, parseMarkdown: str
     parseMarkdown,
     { childTokens: profile.childTokens, parentMode: profile.parentMode, parentTokens: profile.parentTokens },
     document.chunker,
+    blockSplitterForIngest(document.languageAwareIngest),
   );
   const parents: ProfileParentWrite[] = cut.parents.map((parent) => ({
     parent_index: parent.parent_index,

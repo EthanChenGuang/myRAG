@@ -1,5 +1,6 @@
 import { logger } from '@/lib/logger';
 import { RetrievalBackendError } from '../backend/supabase-rpc';
+import { isMissingPhase4Function, markV2Unavailable, resolveEffectivePipeline, V2_UNAVAILABLE } from './readiness';
 import { loadRagConfig } from '../config';
 import { getRagDeps } from '../deps';
 import { getEmbeddingProfileById } from '../embeddings/active-profile';
@@ -25,6 +26,7 @@ import { runContextStages } from './stages/context';
 import { runQueryStages } from './stages/query';
 import { runRankStages } from './stages/rank';
 import { runSearchStages } from './stages/search';
+import { bindingHashFields, planBindingLegs, startBindingEmbeds, type BindingEmbed, type BindingLegsPlan } from './stages/binding-legs';
 import { buildV2Result, fusedHitsToVoiceChunks } from './result';
 
 export const V2_PROFILES = ['chat', 'embed', 'eval', 'voice'] as const;
@@ -89,6 +91,8 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
   let voice: VoiceResults | null = null;
   let injection: InjectionSummary | undefined;
   let injectionStalled = false;
+  let bindingPlan: BindingLegsPlan | null = null;
+  let queryPlan: RetrievalResult['queryPlan'] | null = null;
   const security = deps.securityConfig();
   if (security.injectionCheck !== 'off') warnInjectionCheckDisabled(config, security.injectionCheck);
 
@@ -104,6 +108,13 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
     });
     queryContext = query.queryContext;
     queryLanguage = query.queryLanguage;
+    queryPlan = query.queryLayer?.plan ?? null;
+
+    // D-18: planned before the embed stage, so the binding map is known before anything reads the config hash.
+    bindingPlan = await planBindingLegs({ profile, config, scope, filters: query.filters, options: input.options });
+    const originalText = query.variants.find((variant) => variant.kind === 'original')?.text ?? input.query;
+    const bindingEmbeds: Promise<BindingEmbed>[] =
+      bindingPlan.legs.length > 0 ? startBindingEmbeds(bindingPlan.legs, originalText, signal, config.v2.domainEmbeddings.timeoutMs) : [];
 
     const variantEmbeddings = requireValue(
       await runStage(
@@ -135,6 +146,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
       variants: query.variants,
       variantEmbeddings,
       filters: query.filters,
+      bindings: { plan: bindingPlan, embeds: bindingEmbeds },
     });
 
     const rank = await runRankStages({
@@ -241,6 +253,11 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
       const profileReason = profileFailureReason(error.original);
       if (profileReason) return failure(collector, 'error', profileReason, queryContext);
       if (error.original instanceof RetrievalBackendError) {
+        // D-07: only a defaulted v2 turns a missing Phase 4 function into a legacy fallback; an explicit v2 keeps backend_error.
+        if (isMissingPhase4Function(error.original) && resolveEffectivePipeline().source === 'default') {
+          markV2Unavailable(error.original.rpc);
+          return failure(collector, 'error', V2_UNAVAILABLE, queryContext);
+        }
         logger.error('RAG Pipeline', 'Backend error', { rpc: error.original.rpc, code: error.original.code });
         return failure(collector, 'error', 'backend_error', queryContext);
       }
@@ -268,6 +285,8 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
     injection,
     injectionStalled,
     security,
+    ...(bindingPlan ? { bindingHash: bindingHashFields(bindingPlan) } : {}),
+    queryPlan,
   });
 }
 

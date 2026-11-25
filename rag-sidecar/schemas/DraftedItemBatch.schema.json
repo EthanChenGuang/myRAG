@@ -49,7 +49,8 @@
             "injection_evasive",
             "cache_paraphrase",
             "cache_near_miss",
-            "small_talk"
+            "small_talk",
+            "table_split"
           ],
           "title": "Category",
           "type": "string"
@@ -125,6 +126,11 @@
       "properties": {
         "document": {
           "title": "Document",
+          "type": "string"
+        },
+        "document_id": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "title": "Document Id",
           "type": "string"
         },
         "quote": {

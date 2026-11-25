@@ -737,6 +737,7 @@ async function uploadThroughIngest(input: {
     scope,
     source,
     sourceKey: buildSourceKey(source, { folderId: form.folder_id, filename: file.name }),
+    uploaderId: userId,
     file: bytes,
     filename: file.name,
     mimeType,

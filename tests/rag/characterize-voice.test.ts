@@ -37,7 +37,7 @@ describe('voice-rag route characterization', () => {
   beforeAll(async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
-    fixture = await startRouteFixture({ deploymentMode: 'single-tenant' });
+    fixture = await startRouteFixture({ deploymentMode: 'single-tenant', env: { RAG_PIPELINE: 'legacy' } });
     process.env.RAG_VOICE_TOKEN_SECRET = TOKEN_SECRET;
     const minted = mintVoiceToken({ scope: mintScope('single', null, null), secret: TOKEN_SECRET, ttlSeconds: 3600 });
     if (!minted.ok) throw new Error(`token mint failed: ${minted.reason}`);
@@ -77,7 +77,9 @@ describe('voice-rag route characterization', () => {
   });
 
   it('under RAG_PIPELINE=v2 returns the same wire contract as legacy for every fixture and intent query', async () => {
-    process.env.RAG_PIPELINE = 'v2';
+    const phase4Off = { RAG_LEXICAL_SEARCH: 'false', RAG_RERANKER: 'none', RAG_REFUSAL_THRESHOLD: 'false', RAG_REFUSAL_FLOOR: 'similarity' };
+    const saved = Object.fromEntries(Object.keys(phase4Off).map((name) => [name, process.env[name]]));
+    Object.assign(process.env, phase4Off, { RAG_PIPELINE: 'v2' });
     const { POST } = await fixture.loadRoute('internal/voice-rag');
     const queries = [...readGoldenQuestions().map((item) => item.question), ...INTENT_QUERIES];
     const actual: Array<{ query: string; results: unknown; source_images: unknown }> = [];
@@ -88,6 +90,10 @@ describe('voice-rag route characterization', () => {
       actual.push({ query, results: body.results ?? [], source_images: body.source_images ?? [] });
     }
     expectCharacterization('voice-v2', actual);
-    delete process.env.RAG_PIPELINE;
+    process.env.RAG_PIPELINE = 'legacy';
+    for (const [name, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
   });
 });

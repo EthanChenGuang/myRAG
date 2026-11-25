@@ -7,6 +7,9 @@ export type ParsedReembedArgs =
   | { ok: true; mode: 'run'; profileId: string; tenantKey: string | null; batchSize: number; deriveFrom: string | null; dryRun: boolean }
   | { ok: true; mode: 'resume'; runId: string; profileId: string | null; tenantKey: string | null; batchSize: number }
   | { ok: true; mode: 'rollback'; runId: string }
+  | { ok: true; mode: 'recaption'; tenantKey: string | null; batchSize: number; dryRun: boolean }
+  | { ok: true; mode: 'recaption-resume'; runId: string; tenantKey: string | null; batchSize: number }
+  | { ok: true; mode: 'recaption-rollback'; runId: string }
   | { ok: false; error: string };
 
 export interface CliIo {
@@ -15,6 +18,7 @@ export interface CliIo {
 }
 
 export const DEFAULT_REEMBED_BATCH_SIZE = 128;
+export const DEFAULT_RECAPTION_BATCH_SIZE = 32;
 const MAX_BATCH_SIZE = 1000;
 const RUN_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -22,6 +26,8 @@ export const USAGE = [
   'usage: npm run rag:reembed -- --profile <id> [--dry-run] [--batch-size 128] [--tenant <key>] [--derive-from <profileId>]',
   '       npm run rag:reembed -- --resume <runId> [--batch-size 128] [--profile <id>] [--tenant <key>]',
   '       npm run rag:reembed -- --rollback <runId>',
+  '       npm run rag:reembed -- --recaption [--tenant <key>] [--dry-run] [--batch-size 32]',
+  '       npm run rag:reembed -- --recaption --resume <runId> | --recaption --rollback <runId>',
 ].join('\n');
 
 const WITH_VALUE = new Set(['--profile', '--batch-size', '--tenant', '--resume', '--rollback', '--derive-from']);
@@ -34,11 +40,15 @@ const WITH_VALUE = new Set(['--profile', '--batch-size', '--tenant', '--resume',
 export function parseReembedArgs(argv: string[]): ParsedReembedArgs {
   const values = new Map<string, string>();
   let dryRun = false;
+  let recaption = false;
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i] as string;
     if (arg === '--dry-run') {
       if (dryRun) return { ok: false, error: '--dry-run was given twice' };
       dryRun = true;
+    } else if (arg === '--recaption') {
+      if (recaption) return { ok: false, error: '--recaption was given twice' };
+      recaption = true;
     } else if (WITH_VALUE.has(arg)) {
       const value = argv[(i += 1)];
       if (value === undefined || value.startsWith('--')) return { ok: false, error: `${arg} needs a value` };
@@ -66,6 +76,19 @@ export function parseReembedArgs(argv: string[]): ParsedReembedArgs {
     if (id !== null && !RUN_ID.test(id)) return { ok: false, error: `${flag} needs a run id (a UUID)` };
   }
 
+  if (recaption) {
+    if (profileId !== null || deriveFrom !== null) return { ok: false, error: '--recaption rewrites captions and every vector they have; it takes no --profile or --derive-from' };
+    if (rollback !== null) {
+      if (resume !== null || tenantKey !== null || dryRun || rawBatch !== undefined) return { ok: false, error: '--rollback takes only a run id' };
+      return { ok: true, mode: 'recaption-rollback', runId: rollback };
+    }
+    if (resume !== null) {
+      if (dryRun) return { ok: false, error: '--resume cannot be combined with --dry-run' };
+      return { ok: true, mode: 'recaption-resume', runId: resume, tenantKey, batchSize: rawBatch === undefined ? DEFAULT_RECAPTION_BATCH_SIZE : batchSize };
+    }
+    return { ok: true, mode: 'recaption', tenantKey, batchSize: rawBatch === undefined ? DEFAULT_RECAPTION_BATCH_SIZE : batchSize, dryRun };
+  }
+
   if (rollback !== null) {
     if (resume !== null || profileId !== null || tenantKey !== null || deriveFrom !== null || dryRun || rawBatch !== undefined) {
       return { ok: false, error: '--rollback takes only a run id' };
@@ -80,6 +103,65 @@ export function parseReembedArgs(argv: string[]): ParsedReembedArgs {
   if (profileId === null) return { ok: false, error: '--profile is required' };
   if (deriveFrom !== null && deriveFrom === profileId) return { ok: false, error: '--derive-from must name another profile' };
   return { ok: true, mode: 'run', profileId, tenantKey, batchSize, deriveFrom, dryRun };
+}
+
+type RecaptionArgs = Extract<ParsedReembedArgs, { mode: 'recaption' | 'recaption-resume' | 'recaption-rollback' }>;
+
+const RECAPTION_INPUT_MESSAGES: Readonly<Record<string, string>> = {
+  caption_language_not_document: 'set RAG_CAPTION_LANGUAGE=document first: the recaption writes captions in each document\'s language',
+  languages_not_configured: 'set RAG_SUPPORTED_LANGUAGES and RAG_PRIMARY_LANGUAGE first: without them there is no caption language to write',
+};
+
+/** The --recaption mode (D-24). Prints counts, dollars, run ids and reason words only, never caption text. */
+async function recaptionMain(parsed: RecaptionArgs, db: import('../../backend/supabase-rpc').RpcClient, io: CliIo, signal?: AbortSignal): Promise<number> {
+  const recaption = await import('./recaption');
+  try {
+    if (parsed.mode === 'recaption-rollback') {
+      const result = await recaption.rollbackRecaptionRun({ db, runId: parsed.runId, ...(signal ? { signal } : {}) });
+      io.out(`[Recaption] rolled back run ${parsed.runId}: restored ${result.chunksRestored} chunks, left ${result.chunksSkipped} rewritten by a later run`);
+      return 0;
+    }
+    if (parsed.mode === 'recaption' && parsed.dryRun) {
+      const report = await recaption.dryRunRecaption({ db, tenantKey: parsed.tenantKey, batchSize: parsed.batchSize, ...(signal ? { signal } : {}) });
+      const { formatUsd } = await import('./cost');
+      io.out('[Recaption] dry run, nothing written');
+      for (const tenant of report.tenants) io.out(`[Recaption] ${tenant.tenantKey}: image chunks ${tenant.imageChunks}, to recaption ${tenant.toRecaption}`);
+      const total = report.tenants.reduce((sum, tenant) => sum + tenant.toRecaption, 0);
+      io.out(`[Recaption] total: to recaption ${total}, estimated cost ${formatUsd(report.totalUsd)} USD (vision ${formatUsd(report.visionUsd)}, embedding ${formatUsd(report.embeddingUsd)})`);
+      io.out(`[Recaption] note: ${report.note}`);
+      return 0;
+    }
+    const report = await recaption.runRecaption({
+      db,
+      tenantKey: parsed.tenantKey,
+      batchSize: parsed.batchSize,
+      ...(parsed.mode === 'recaption-resume' ? { resumeRunId: parsed.runId } : {}),
+      onProgress: (line) => io.out(`[Recaption] ${line}`),
+      ...(signal ? { signal } : {}),
+    });
+    const skipped = Object.entries(report.skipped).sort(([a], [b]) => (a < b ? -1 : 1));
+    io.out(
+      `[Recaption] ${report.status}: run ${report.runId} rewrote ${report.recaptioned} of ${report.eligible} captions in another language (${report.examined} image chunks looked at, 0 parser calls)`,
+    );
+    if (skipped.length > 0) io.out(`[Recaption] left unchanged: ${skipped.map(([reason, n]) => `${reason} ${n}`).join(', ')}`);
+    if (report.status === 'failed') {
+      io.err(`[Recaption] failed: ${report.reason ?? 'unknown'}`);
+      io.err(`[Recaption] resume with: npm run rag:reembed -- --recaption --resume ${report.runId}`);
+      return 1;
+    }
+    io.out(`[Recaption] undo with: npm run rag:reembed -- --recaption --rollback ${report.runId}`);
+    return 0;
+  } catch (error) {
+    if (error instanceof recaption.RecaptionInputError) {
+      io.err(`[Recaption] ${RECAPTION_INPUT_MESSAGES[error.code] ?? error.code}`);
+      return 2;
+    }
+    if (error instanceof recaption.RecaptionWriterError) {
+      io.err(`[Recaption] refused: ${error.reason ?? 'database error'}${error.code ? ` (${error.code})` : ''}`);
+      return 1;
+    }
+    throw error;
+  }
 }
 
 const consoleIo: CliIo = { out: (line) => console.log(line), err: (line) => console.error(line) };
@@ -103,6 +185,14 @@ export async function main(argv: string[] = process.argv.slice(2), io: CliIo = c
     return 2;
   }
   const { getIngestDeps } = await import('../deps');
+  if (parsed.mode === 'recaption' || parsed.mode === 'recaption-resume' || parsed.mode === 'recaption-rollback') {
+    const db = getIngestDeps().db();
+    if (!db) {
+      io.err('[Recaption] admin client unavailable: set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY');
+      return 1;
+    }
+    return recaptionMain(parsed, db, io, signal);
+  }
   const run = await import('./run');
   const { ReembedWriterError } = await import('../writer');
   const { formatUsd } = await import('./cost');

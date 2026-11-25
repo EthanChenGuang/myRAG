@@ -396,3 +396,119 @@ def test_every_fixture_golden_item_still_validates():
     assert lines
     for line in lines:
         GoldenItem.model_validate(json.loads(line))
+
+
+# --- Phase 3.2 golden additions (plan 03.2-06, D-45) ---------------------------------------------------
+
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_GOLDEN_FILES = [
+    _REPO_ROOT / "eval" / "fixtures" / "golden.jsonl",
+    _REPO_ROOT / "eval" / "fixtures" / "ingest" / "golden-ingest.jsonl",
+]
+
+
+_PRE_PHASE32_ITEM_KEYS = {
+    "id", "question", "conversation", "language", "category", "answerable", "expected_answer", "gold_evidence",
+    "evidence_language", "review_status", "provenance", "split", "retrieval_filters", "tags", "attack", "pair_of",
+}
+_PRE_PHASE32_FILTER_KEYS = {
+    "date_range", "sources", "document_ids", "doc_types", "languages", "invoice", "current_only",
+}
+
+
+def _golden_lines() -> list[tuple[str, int, str]]:
+    lines = []
+    for path in _GOLDEN_FILES:
+        for number, line in enumerate(path.read_text(encoding="utf-8").split("\n"), start=1):
+            if line.strip():
+                lines.append((path.name, number, line))
+    return lines
+
+
+def test_every_committed_golden_line_still_validates_and_dumps_without_new_keys():
+    lines = _golden_lines()
+    assert len(lines) >= 192
+    for name, number, line in lines:
+        item = GoldenItem.model_validate_json(line)
+        dumped = item.model_dump(mode="json")
+        assert "table_answer" not in dumped, f"{name}:{number}"
+        assert "native_review" not in dumped, f"{name}:{number}"
+        assert set(dumped) == _PRE_PHASE32_ITEM_KEYS, f"{name}:{number}"
+        if dumped["retrieval_filters"] is not None:
+            assert set(dumped["retrieval_filters"]) == _PRE_PHASE32_FILTER_KEYS, f"{name}:{number}"
+        assert GoldenItem.model_validate(dumped) == item, f"{name}:{number}"
+
+
+def _table_item(**overrides):
+    base = _item(
+        "general",
+        id="en-table-split-001",
+        question="Which value does the synthetic table list in column B for row key K-17?",
+        expected_answer="Column B lists 418 for row key K-17.",
+        gold_evidence=[_span(document="synthetic-table.en.pdf", section="Table 1", quote="K-17 | 205 | 418")],
+    )
+    base.update({"category": "table_split", "table_answer": {"value": "418", "column": "B", "distractor_values": ["205"]}})
+    base.update(overrides)
+    return base
+
+
+def test_table_split_item_with_table_answer_validates():
+    item = GoldenItem.model_validate(_table_item())
+    dumped = item.model_dump(mode="json")
+    assert dumped["category"] == "table_split"
+    assert dumped["table_answer"] == {"value": "418", "column": "B", "distractor_values": ["205"]}
+
+
+def test_table_split_item_without_table_answer_fails():
+    item = _table_item()
+    del item["table_answer"]
+    with pytest.raises(ValidationError):
+        GoldenItem.model_validate(item)
+
+
+def test_table_answer_outside_table_split_fails():
+    with pytest.raises(ValidationError):
+        GoldenItem.model_validate(_table_item(category="table"))
+
+
+def test_table_answer_rejects_distractor_equal_to_value_and_empty_fields():
+    for table_answer in (
+        {"value": "418", "column": "B", "distractor_values": ["418"]},
+        {"value": "", "column": "B", "distractor_values": []},
+        {"value": "418", "column": "", "distractor_values": []},
+        {"value": "418", "column": "B", "distractor_values": ["205", "205"]},
+    ):
+        with pytest.raises(ValidationError):
+            GoldenItem.model_validate(_table_item(table_answer=table_answer))
+
+
+def test_native_review_pending_and_approved():
+    pending = {"origin": "llm_drafted", "status": "pending", "reviewer": None, "reviewed_at": None}
+    item = GoldenItem.model_validate(_table_item(native_review=pending))
+    assert item.model_dump(mode="json")["native_review"] == pending
+    approved = {"origin": "machine_translated", "status": "approved", "reviewer": "reviewer-01", "reviewed_at": "2026-01-02T00:00:00Z"}
+    assert GoldenItem.model_validate(_item("general", native_review=approved)).native_review is not None
+    assert GoldenItem.model_validate(_item("general", native_review={**approved, "origin": "native"})).native_review
+
+
+def test_native_review_approved_without_reviewer_fails():
+    for missing in ("reviewer", "reviewed_at"):
+        review = {"origin": "llm_drafted", "status": "approved", "reviewer": "reviewer-01", "reviewed_at": "2026-01-02T00:00:00Z"}
+        review[missing] = None
+        with pytest.raises(ValidationError):
+            GoldenItem.model_validate(_item("general", native_review=review))
+
+
+def test_native_review_rejects_unknown_values():
+    for review in (
+        {"origin": "human", "status": "pending"},
+        {"origin": "native", "status": "rejected"},
+        {"origin": "native", "status": "pending", "note": "x"},
+    ):
+        with pytest.raises(ValidationError):
+            GoldenItem.model_validate(_item("general", native_review=review))
+
+
+def test_provenance_is_unchanged_for_new_items():
+    with pytest.raises(ValidationError):
+        GoldenItem.model_validate(_table_item(provenance="llm_drafted"))
