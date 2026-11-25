@@ -106,7 +106,18 @@ export { assembleContext } from './context/assemble';
 export type { AssembleInput, AssembleOutput, AssemblyCandidate, AssemblyDocumentRow } from './context/assemble';
 export { fetchAssemblyRows } from './context/fetch-rows';
 export type { AssemblyRows } from './context/fetch-rows';
-export type { KeptBy, KeptChunk, RagMode, ReferencedState, SourceImage, UsedDocument } from './types';
+export type {
+  CitationLabel,
+  CitationLabeler,
+  ContextBlock,
+  KeptBy,
+  KeptChunk,
+  RagMode,
+  ReferencedSection,
+  ReferencedState,
+  SourceImage,
+  UsedDocument,
+} from './types';
 export type { VoiceResult, VoiceResults, VoiceSourceImage } from './context/voice';
 export { deriveVoiceKeywords } from './voice/keyword-fallback';
 export { createEnhancedRAGPrompt } from './generation/prompt';

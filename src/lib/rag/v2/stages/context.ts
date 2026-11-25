@@ -20,7 +20,7 @@ import type { FusedHit } from '../../fusion/rrf';
 import type { RagConfig, StageName } from '../../config';
 import { runStage, stageSpec, type StageSpec } from '../../pipeline';
 import type { TraceCollector } from '../../trace/collector';
-import type { Candidate, KeptBy, Profile, ReferencedState, RunRetrievalInput, StageOverrides } from '../../types';
+import type { Candidate, CitationLabeler, KeptBy, Profile, ReferencedState, RunRetrievalInput, StageOverrides } from '../../types';
 import { v2ProfileSettings } from '../profiles';
 import type { RetrievalParams } from '@/lib/rag-eval/contracts.generated';
 
@@ -110,13 +110,16 @@ interface AssembleStageValue {
   selected: Candidate[];
   parentChunkIds: Set<string>;
   groupOrder: string[];
+  blockRuns: Map<string, string>;
+  blockChunkIds: Map<string, string[]>;
   budgetTokens: number;
   usedTokens: number;
   groups: number;
 }
 
 interface CompressStageValue {
-  context: string;
+  output: AssembleOutput<Candidate>;
+  selected: Candidate[];
   compressed: number;
   savedTokens: number;
 }
@@ -133,7 +136,13 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
   const keptBy: KeptBy = rerank?.ran ? 'rerank' : 'fused';
   const isGPTModel = input.options?.isGPTModel ?? false;
 
-  const assemblyInput = (list: Candidate[], groupOrder: string[]): AssembleInput<Candidate> => ({
+  interface BlockShape {
+    runs: Map<string, string>;
+    chunkIds: Map<string, string[]>;
+    labeler?: CitationLabeler;
+  }
+
+  const assemblyInput = (list: Candidate[], groupOrder: string[], blocks?: BlockShape): AssembleInput<Candidate> => ({
     queryText: input.query,
     candidates: list,
     documents: rows.documents,
@@ -145,10 +154,13 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
     applyRelevanceFilter: false,
     groupOrder,
     keptByOverride: keptBy,
+    blockRuns: blocks?.runs,
+    blockChunkIds: blocks?.chunkIds,
+    citationLabeler: blocks?.labeler,
   });
 
-  const render = (list: Candidate[], groupOrder: string[]): AssembleOutput<Candidate> => {
-    const rendered = assemblyInput(list, groupOrder);
+  const render = (list: Candidate[], groupOrder: string[], blocks?: BlockShape): AssembleOutput<Candidate> => {
+    const rendered = assemblyInput(list, groupOrder, blocks);
     return buildContext(filterCandidates(rendered), rendered);
   };
 
@@ -222,16 +234,40 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
             rank,
           };
         });
-      const groupIds = mergeAdjacent(adjacent).map((group) => group.documentId);
+      const groups = mergeAdjacent(adjacent);
+      const groupIds = groups.map((group) => group.documentId);
       const groupOrder = config.v2.edgeOrder ? edgeOrder(groupIds) : groupIds;
 
-      const output = render(selected, groupOrder);
+      const blockRuns = new Map<string, string>();
+      for (const group of groups) {
+        group.runs.forEach((runChunks, index) => {
+          for (const chunk of runChunks) blockRuns.set(chunk.chunk_id, `${group.documentId}#${index}`);
+        });
+      }
+      const blockChunkIds = new Map<string, string[]>();
+      for (const candidate of selected) {
+        const parentId = candidate.parent_id;
+        if (!parentId || !parentSelection?.parentChunkIds.has(candidate.chunk_id)) continue;
+        const children = candidates
+          .filter((child) => child.parent_id === parentId && child.document_id === candidate.document_id)
+          .sort(
+            (x, y) =>
+              chunkIndexOf(hitById.get(x.chunk_id)!, rankById.get(x.chunk_id) ?? 0) -
+              chunkIndexOf(hitById.get(y.chunk_id)!, rankById.get(y.chunk_id) ?? 0),
+          )
+          .map((child) => child.chunk_id);
+        blockChunkIds.set(candidate.chunk_id, children);
+      }
+
+      const output = render(selected, groupOrder, { runs: blockRuns, chunkIds: blockChunkIds });
       const kept = output.kept.map((row) => ({ ...row, rank: rankById.get(row.chunk_id) ?? row.rank }));
       return {
         output: { ...output, kept },
         selected,
         parentChunkIds: parentSelection?.parentChunkIds ?? new Set<string>(),
         groupOrder,
+        blockRuns,
+        blockChunkIds,
         budgetTokens: settings.tokenBudget,
         usedTokens: selection.usedTokens,
         groups: groupIds.length,
@@ -284,7 +320,8 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
         savedTokens += Math.max(countTokens(candidate.content) - countTokens(next), 0);
         return { ...candidate, content: next };
       });
-      return { context: render(rewritten, base.groupOrder).context, compressed: changed, savedTokens };
+      const output = render(rewritten, base.groupOrder, { runs: base.blockRuns, chunkIds: base.blockChunkIds });
+      return { output, selected: rewritten, compressed: changed, savedTokens };
     },
     collector,
     {
@@ -293,6 +330,16 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
     },
   );
 
-  const assembly = compressed.skipped ? base.output : { ...base.output, context: compressed.value.context };
-  return { assembly, candidates };
+  const final = compressed.skipped
+    ? { output: base.output, selected: base.selected }
+    : {
+        output: { ...base.output, context: compressed.value.output.context, blocks: compressed.value.output.blocks },
+        selected: compressed.value.selected,
+      };
+
+  // Labelling is the last context step: it renders the final selection once more, in the same order, with the labels.
+  const labeler = input.citationLabeler;
+  if (!labeler) return { assembly: final.output, candidates };
+  const labelled = render(final.selected, base.groupOrder, { runs: base.blockRuns, chunkIds: base.blockChunkIds, labeler });
+  return { assembly: { ...final.output, context: labelled.context, blocks: labelled.blocks }, candidates };
 }

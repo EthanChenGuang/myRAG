@@ -1,5 +1,16 @@
 import { formatURLsForContext, type ExtractedURL } from '@/lib/url-extractor';
-import type { KeptBy, KeptChunk, RagMode, ReferencedState, SourceImage, UsedDocument } from '../types';
+import { renderReferencedSection } from '../refs/resolve';
+import type {
+  CitationLabel,
+  CitationLabeler,
+  ContextBlock,
+  KeptBy,
+  KeptChunk,
+  RagMode,
+  ReferencedState,
+  SourceImage,
+  UsedDocument,
+} from '../types';
 
 export interface AssemblyCandidate {
   chunk_id: string;
@@ -15,6 +26,7 @@ export interface AssemblyDocumentRow {
   created_at?: string | null;
   content?: string | null;
   metadata?: Record<string, any> | null;
+  version?: number | null;
 }
 
 export interface AssembleInput<C extends AssemblyCandidate = AssemblyCandidate> {
@@ -30,6 +42,12 @@ export interface AssembleInput<C extends AssemblyCandidate = AssemblyCandidate> 
   /** When set, document sections render in this id order (unknown ids are ignored). */
   groupOrder?: string[];
   keptByOverride?: KeptBy;
+  /** Renders a label before every non-image block; absent means the context is unchanged. */
+  citationLabeler?: CitationLabeler;
+  /** Chunk id to run key: consecutive rendered chunks of one document with the same key form one block. */
+  blockRuns?: Map<string, string>;
+  /** Chunk ids a rendered chunk stands for (a parent standing in for its children); defaults to its own id. */
+  blockChunkIds?: Map<string, string[]>;
 }
 
 export interface FilteredCandidates<C extends AssemblyCandidate = AssemblyCandidate> {
@@ -52,6 +70,7 @@ export interface AssembleOutput<C extends AssemblyCandidate = AssemblyCandidate>
   sourceImages: SourceImage[];
   links: ExtractedURL[];
   refusalCandidate: boolean;
+  blocks: ContextBlock[];
 }
 
 export const NO_CONTEXT_TEXT = 'No relevant context found.';
@@ -148,6 +167,56 @@ export function filterCandidates<C extends AssemblyCandidate>(input: AssembleInp
   };
 }
 
+type DraftBlock = Omit<ContextBlock, 'alias' | 'title'>;
+
+function chunkMetadataOf(chunk: AssemblyCandidate, rows: Map<string, Record<string, any> | null>): Record<string, any> | undefined {
+  let metadata = chunk.metadata ?? undefined;
+  if (!metadata || !metadata.image_url) {
+    const rowMetadata = rows.get(chunk.chunk_id);
+    if (rowMetadata) metadata = { ...(metadata || {}), ...rowMetadata };
+  }
+  return metadata;
+}
+
+function pageOf(metadata: Record<string, any> | undefined): number | null {
+  const page = metadata?.page_start ?? metadata?.page;
+  return typeof page === 'number' && Number.isFinite(page) ? page : null;
+}
+
+function sectionPathOf(metadata: Record<string, any> | undefined): string[] | null {
+  const path = metadata?.section_path;
+  if (!Array.isArray(path)) return null;
+  const parts = path.filter((part): part is string => typeof part === 'string' && part.length > 0);
+  return parts.length > 0 ? parts : null;
+}
+
+export function blockTitle(block: Pick<ContextBlock, 'documentName' | 'page' | 'sectionPath'>): string {
+  const page = block.page !== null ? `, p.${block.page}` : '';
+  const section = block.sectionPath?.length ? ` / ${block.sectionPath.join(' > ')}` : '';
+  return `${block.documentName}${page}${section}`;
+}
+
+/** Applies the labeler to non-image blocks in order, continuing the ordinal count. */
+class BlockLabeller {
+  readonly blocks: ContextBlock[] = [];
+  private ordinal = 0;
+
+  constructor(private readonly labeler: CitationLabeler | undefined) {}
+
+  /** Records the block; returns its label when a labeler is set and the block is not an image. */
+  add(draft: DraftBlock): CitationLabel | null {
+    const unlabelled = { ...draft, title: blockTitle(draft) };
+    if (!this.labeler || draft.isImage) {
+      this.blocks.push({ ...unlabelled, alias: null });
+      return null;
+    }
+    this.ordinal += 1;
+    const label = this.labeler(unlabelled, this.ordinal);
+    this.blocks.push({ ...unlabelled, text: label.text, alias: label.alias });
+    return label;
+  }
+}
+
 export function buildContext<C extends AssemblyCandidate>(
   filtered: FilteredCandidates<C>,
   input: AssembleInput<C>,
@@ -158,11 +227,33 @@ export function buildContext<C extends AssemblyCandidate>(
     if (!docById.has(doc.id)) docById.set(doc.id, doc);
   }
 
+  const labeller = new BlockLabeller(input.citationLabeler);
   let context = filtered.referencedContext;
+  const sections = input.referenced?.sections;
+  if (sections?.length) {
+    const rendered = sections.map((section) => {
+      if (section.missing) return renderReferencedSection(section);
+      const label = labeller.add({
+        documentId: section.documentId,
+        documentName: section.documentName,
+        documentVersion: null,
+        chunkIds: [...section.chunkIds],
+        page: null,
+        sectionPath: null,
+        text: section.text,
+        isImage: false,
+      });
+      return label ? renderReferencedSection({ ...section, text: label.text }, label.header) : renderReferencedSection(section);
+    });
+    if (input.citationLabeler) context = rendered.join('');
+  }
   let links: ExtractedURL[] = [];
 
   if (filtered.hasQuery && relevantChunks.length > 0) {
-    const chunksByDocument = new Map<string, Array<{ content: string; similarity: number; chunkNum?: number }>>();
+    const chunksByDocument = new Map<
+      string,
+      Array<{ content: string; similarity: number; chunkNum?: number; chunkId: string; documentId: string; metadata?: Record<string, any> }>
+    >();
     const collectedURLs: ExtractedURL[] = [];
 
     for (const chunk of relevantChunks) {
@@ -175,7 +266,14 @@ export function buildContext<C extends AssemblyCandidate>(
       if (!chunksByDocument.has(docName)) {
         chunksByDocument.set(docName, []);
       }
-      chunksByDocument.get(docName)!.push({ content: chunk.content, similarity: chunk.similarity, chunkNum });
+      chunksByDocument.get(docName)!.push({
+        content: chunk.content,
+        similarity: chunk.similarity,
+        chunkNum,
+        chunkId: chunk.chunk_id,
+        documentId: chunk.document_id,
+        metadata: chunkMetadataOf(chunk, input.chunkMetadata),
+      });
 
       const urls = input.chunkMetadata.get(chunk.chunk_id)?.urls;
       if (urls && Array.isArray(urls)) {
@@ -226,17 +324,50 @@ export function buildContext<C extends AssemblyCandidate>(
 
       contextParts.push(`\n--- Document: ${docName} (${chunks.length} relevant chunks) ---`);
 
-      const formattedChunks = chunks.map((c) => {
+      const pieces = chunks.map((c) => {
         const contentMatch = c.content.match(/^Document: [^.]+\.[^.]+\. Chunk \d+ of (\d+)\. Content: (.*)$/s);
         const actualContent = contentMatch ? contentMatch[2] : c.content;
-
-        if (input.isGPTModel && c.chunkNum) {
-          return `[Source: ${docName}]\n${actualContent}`;
-        }
-        return c.content;
+        const gptForm = Boolean(input.isGPTModel && c.chunkNum);
+        return {
+          chunk: c,
+          body: gptForm ? actualContent : c.content,
+          rendered: gptForm ? `[Source: ${docName}]\n${actualContent}` : c.content,
+          isImage: Boolean(c.metadata?.image_url),
+          run: input.blockRuns?.get(c.chunkId),
+        };
       });
 
-      contextParts.push(...formattedChunks);
+      let start = 0;
+      while (start < pieces.length) {
+        const first = pieces[start]!;
+        let end = start + 1;
+        while (
+          end < pieces.length &&
+          !first.isImage &&
+          first.run !== undefined &&
+          !pieces[end]!.isImage &&
+          pieces[end]!.run === first.run &&
+          pieces[end]!.chunk.documentId === first.chunk.documentId
+        ) {
+          end += 1;
+        }
+        const group = pieces.slice(start, end);
+        const documentVersion = input.documents.get(first.chunk.documentId)?.version;
+        const draft: DraftBlock = {
+          documentId: first.chunk.documentId,
+          documentName: docName,
+          documentVersion: typeof documentVersion === 'number' ? documentVersion : null,
+          chunkIds: group.flatMap((piece) => input.blockChunkIds?.get(piece.chunk.chunkId) ?? [piece.chunk.chunkId]),
+          page: group.map((piece) => pageOf(piece.chunk.metadata)).find((page) => page !== null) ?? null,
+          sectionPath: sectionPathOf(first.chunk.metadata),
+          text: group.map((piece) => piece.body).join('\n\n'),
+          isImage: first.isImage,
+        };
+        const label = labeller.add(draft);
+        if (label) contextParts.push(`${label.header}\n${label.text}`);
+        else contextParts.push(...group.map((piece) => piece.rendered));
+        start = end;
+      }
     }
     contextParts.push('=== END OF RELEVANT INFORMATION ===\n');
 
@@ -299,7 +430,7 @@ export function buildContext<C extends AssemblyCandidate>(
     });
   });
 
-  return { context, usedDocuments, relevantChunks, kept, queryTerms, sourceImages, links, refusalCandidate };
+  return { context, usedDocuments, relevantChunks, kept, queryTerms, sourceImages, links, refusalCandidate, blocks: labeller.blocks };
 }
 
 export function assembleContext<C extends AssemblyCandidate>(input: AssembleInput<C>): AssembleOutput<C> {

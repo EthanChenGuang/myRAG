@@ -167,6 +167,7 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
     kept: assembly.kept,
     queryTerms: assembly.queryTerms,
     refusalCandidate: assembly.refusalCandidate,
+    blocks: assembly.blocks,
     retrievalConfigHash,
     refusal,
     queryLanguage,
