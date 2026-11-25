@@ -88,8 +88,7 @@ function expectValid(row: unknown): void {
 }
 
 function expectNoText(row: Record<string, unknown>, ...texts: string[]): void {
-  const { query_masked: _masked, ...rest } = row;
-  const serialised = JSON.stringify(rest);
+  const serialised = JSON.stringify({ ...row, query_masked: null });
   for (const text of [CHUNK_TEXT, 'synthetic.pdf', ...texts]) expect(serialised).not.toContain(text);
 }
 
