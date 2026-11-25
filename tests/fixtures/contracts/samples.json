@@ -184,6 +184,8 @@
         "citations": false,
         "degrade": null,
         "disabled_stages": null,
+        "domain_control_leg": null,
+        "embedding_bindings": null,
         "embedding_profile": null,
         "generator_model": null,
         "groundedness": false,
@@ -277,6 +279,593 @@
       },
       "spread_kind": "stdev_ddof1",
       "tier": "smoke"
+    },
+    "BindingActivationEvidence": {
+      "backfill_run_id": "33333333-3333-4333-8333-333333333333",
+      "baseline_binding_profile": null,
+      "baseline_global_profile": "openai-3-small-1536",
+      "binding_id": "22222222-2222-4222-8222-222222222222",
+      "doc_type": "contract_legal",
+      "doc_type_slice": {
+        "by_language": {
+          "en": true,
+          "it": true,
+          "zh": true
+        },
+        "n": 40,
+        "passed": true,
+        "real_n": 30
+      },
+      "gate_passed": true,
+      "other_slices_passed": true,
+      "recorded_at": "2026-11-25T08:00:00.000Z",
+      "target_profile": "voyage-law-2-1024",
+      "tenant_key": null
+    },
+    "BindingArm": {
+      "by_doc_type": {
+        "contract_legal": {
+          "correct_refusal_rate": {
+            "n": 10,
+            "value": 0.5
+          },
+          "false_refusal_rate": {
+            "n": 10,
+            "value": 0.5
+          },
+          "false_refusal_upper_95": 0.25,
+          "mrr": {
+            "n": 10,
+            "value": 0.5
+          },
+          "recall_at_10": {
+            "n": 10,
+            "value": 0.5
+          },
+          "recall_at_5": {
+            "n": 10,
+            "value": 0.5
+          }
+        },
+        "general": {
+          "correct_refusal_rate": {
+            "n": 10,
+            "value": 0.5
+          },
+          "false_refusal_rate": {
+            "n": 10,
+            "value": 0.5
+          },
+          "false_refusal_upper_95": 0.25,
+          "mrr": {
+            "n": 10,
+            "value": 0.5
+          },
+          "recall_at_10": {
+            "n": 10,
+            "value": 0.5
+          },
+          "recall_at_5": {
+            "n": 10,
+            "value": 0.5
+          }
+        }
+      },
+      "by_language": {
+        "en": {
+          "correct_refusal_rate": {
+            "n": 10,
+            "value": 0.5
+          },
+          "false_refusal_rate": {
+            "n": 10,
+            "value": 0.5
+          },
+          "false_refusal_upper_95": 0.25,
+          "mrr": {
+            "n": 10,
+            "value": 0.5
+          },
+          "recall_at_10": {
+            "n": 10,
+            "value": 0.5
+          },
+          "recall_at_5": {
+            "n": 10,
+            "value": 0.5
+          }
+        }
+      },
+      "by_language_pair": {
+        "en->zh": {
+          "correct_refusal_rate": {
+            "n": 10,
+            "value": 0.5
+          },
+          "false_refusal_rate": {
+            "n": 10,
+            "value": 0.5
+          },
+          "false_refusal_upper_95": 0.25,
+          "mrr": {
+            "n": 10,
+            "value": 0.5
+          },
+          "recall_at_10": {
+            "n": 10,
+            "value": 0.5
+          },
+          "recall_at_5": {
+            "n": 10,
+            "value": 0.5
+          }
+        }
+      },
+      "doc_type_slice": {
+        "correct_refusal_rate": {
+          "n": 10,
+          "value": 0.5
+        },
+        "false_refusal_rate": {
+          "n": 10,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.25,
+        "mrr": {
+          "n": 10,
+          "value": 0.5
+        },
+        "recall_at_10": {
+          "n": 10,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 10,
+          "value": 0.5
+        }
+      },
+      "latency_ms": {
+        "embed": null,
+        "search": 120.0
+      },
+      "profile_id": "openai-3-small-1536",
+      "report_path": "eval/out/binding-compare/baseline/report.json"
+    },
+    "BindingCandidateResult": {
+      "beats_baseline": true,
+      "beats_control": true,
+      "by_language": {
+        "en": {
+          "correct_refusal_rate": {
+            "n": 10,
+            "value": 0.5
+          },
+          "false_refusal_rate": {
+            "n": 10,
+            "value": 0.5
+          },
+          "false_refusal_upper_95": 0.25,
+          "mrr": {
+            "n": 10,
+            "value": 0.5
+          },
+          "recall_at_10": {
+            "n": 10,
+            "value": 0.5
+          },
+          "recall_at_5": {
+            "n": 10,
+            "value": 0.5
+          }
+        }
+      },
+      "deltas_vs_baseline": {
+        "mrr": 0.02,
+        "recall_at_10": 0.1
+      },
+      "deltas_vs_control": {
+        "mrr": null,
+        "recall_at_10": 0.05
+      },
+      "doc_type_slice": {
+        "correct_refusal_rate": {
+          "n": 10,
+          "value": 0.5
+        },
+        "false_refusal_rate": {
+          "n": 10,
+          "value": 0.5
+        },
+        "false_refusal_upper_95": 0.25,
+        "mrr": {
+          "n": 10,
+          "value": 0.5
+        },
+        "recall_at_10": {
+          "n": 10,
+          "value": 0.5
+        },
+        "recall_at_5": {
+          "n": 10,
+          "value": 0.5
+        }
+      },
+      "language_regressions": [],
+      "latency_ms": {
+        "search": 140.0
+      },
+      "model": "voyage-law-2",
+      "other_slice_regressions": [],
+      "pair_regressions": [],
+      "profile_id": "voyage-law-2-1024",
+      "recommended": true,
+      "refusal_regressions": [],
+      "report_path": "eval/out/binding-compare/voyage-law-2-1024/report.json"
+    },
+    "BindingComparison": {
+      "baseline": {
+        "by_doc_type": {
+          "contract_legal": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          },
+          "general": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          }
+        },
+        "by_language": {
+          "en": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          }
+        },
+        "by_language_pair": {
+          "en->zh": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          }
+        },
+        "doc_type_slice": {
+          "correct_refusal_rate": {
+            "n": 10,
+            "value": 0.5
+          },
+          "false_refusal_rate": {
+            "n": 10,
+            "value": 0.5
+          },
+          "false_refusal_upper_95": 0.25,
+          "mrr": {
+            "n": 10,
+            "value": 0.5
+          },
+          "recall_at_10": {
+            "n": 10,
+            "value": 0.5
+          },
+          "recall_at_5": {
+            "n": 10,
+            "value": 0.5
+          }
+        },
+        "latency_ms": {
+          "embed": null,
+          "search": 120.0
+        },
+        "profile_id": "openai-3-small-1536",
+        "report_path": "eval/out/binding-compare/baseline/report.json"
+      },
+      "candidates": [
+        {
+          "beats_baseline": true,
+          "beats_control": true,
+          "by_language": {
+            "en": {
+              "correct_refusal_rate": {
+                "n": 10,
+                "value": 0.5
+              },
+              "false_refusal_rate": {
+                "n": 10,
+                "value": 0.5
+              },
+              "false_refusal_upper_95": 0.25,
+              "mrr": {
+                "n": 10,
+                "value": 0.5
+              },
+              "recall_at_10": {
+                "n": 10,
+                "value": 0.5
+              },
+              "recall_at_5": {
+                "n": 10,
+                "value": 0.5
+              }
+            }
+          },
+          "deltas_vs_baseline": {
+            "mrr": 0.02,
+            "recall_at_10": 0.1
+          },
+          "deltas_vs_control": {
+            "mrr": null,
+            "recall_at_10": 0.05
+          },
+          "doc_type_slice": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          },
+          "language_regressions": [],
+          "latency_ms": {
+            "search": 140.0
+          },
+          "model": "voyage-law-2",
+          "other_slice_regressions": [],
+          "pair_regressions": [],
+          "profile_id": "voyage-law-2-1024",
+          "recommended": true,
+          "refusal_regressions": [],
+          "report_path": "eval/out/binding-compare/voyage-law-2-1024/report.json"
+        }
+      ],
+      "control": {
+        "by_doc_type": {
+          "contract_legal": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          },
+          "general": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          }
+        },
+        "by_language": {
+          "en": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          }
+        },
+        "by_language_pair": {
+          "en->zh": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          }
+        },
+        "doc_type_slice": {
+          "correct_refusal_rate": {
+            "n": 10,
+            "value": 0.5
+          },
+          "false_refusal_rate": {
+            "n": 10,
+            "value": 0.5
+          },
+          "false_refusal_upper_95": 0.25,
+          "mrr": {
+            "n": 10,
+            "value": 0.5
+          },
+          "recall_at_10": {
+            "n": 10,
+            "value": 0.5
+          },
+          "recall_at_5": {
+            "n": 10,
+            "value": 0.5
+          }
+        },
+        "latency_ms": {
+          "embed": null,
+          "search": 120.0
+        },
+        "profile_id": "openai-3-small-1536",
+        "report_path": "eval/out/binding-compare/control/report.json"
+      },
+      "doc_type": "contract_legal",
+      "fixture_embedder": true,
+      "gate_passed": true,
+      "hashes": {
+        "catalog_version": 1,
+        "corpus_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "golden_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "noise_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "retrieval_params_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+      },
+      "notes": [
+        "Fixture sample only."
+      ],
+      "provenance_counts": {
+        "human": 30,
+        "synthetic_fixture": 10
+      },
+      "recommended_profile": "voyage-law-2-1024",
+      "reembed_run_ids": {
+        "voyage-law-2-1024": "33333333-3333-4333-8333-333333333333"
+      },
+      "schema_version": 1
+    },
+    "BindingDocTypeSlice": {
+      "by_language": {
+        "en": true,
+        "it": true,
+        "zh": true
+      },
+      "n": 40,
+      "passed": true,
+      "real_n": 30
     },
     "CacheCheckRequest": {
       "embedding_profile_id": "openai-3-small-1536",
@@ -1498,6 +2087,8 @@
         "citations": false,
         "degrade": null,
         "disabled_stages": null,
+        "domain_control_leg": null,
+        "embedding_bindings": null,
         "embedding_profile": null,
         "generator_model": null,
         "groundedness": false,
@@ -3415,6 +4006,8 @@
         "citations": false,
         "degrade": "drop_top_candidate",
         "disabled_stages": null,
+        "domain_control_leg": null,
+        "embedding_bindings": null,
         "embedding_profile": null,
         "generator_model": "generator/model-b",
         "groundedness": false,
@@ -3699,6 +4292,8 @@
         "citations": false,
         "degrade": null,
         "disabled_stages": null,
+        "domain_control_leg": null,
+        "embedding_bindings": null,
         "embedding_profile": null,
         "generator_model": null,
         "groundedness": false,
@@ -4225,6 +4820,8 @@
           "citations": false,
           "degrade": null,
           "disabled_stages": null,
+          "domain_control_leg": null,
+          "embedding_bindings": null,
           "embedding_profile": null,
           "generator_model": null,
           "groundedness": false,
@@ -4485,6 +5082,8 @@
           "citations": false,
           "degrade": null,
           "disabled_stages": null,
+          "domain_control_leg": null,
+          "embedding_bindings": null,
           "embedding_profile": null,
           "generator_model": null,
           "groundedness": false,

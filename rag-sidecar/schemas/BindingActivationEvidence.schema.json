@@ -1,0 +1,128 @@
+{
+  "$defs": {
+    "BindingDocTypeSlice": {
+      "additionalProperties": false,
+      "properties": {
+        "by_language": {
+          "additionalProperties": {
+            "type": "boolean"
+          },
+          "title": "By Language",
+          "type": "object"
+        },
+        "n": {
+          "minimum": 0,
+          "title": "N",
+          "type": "integer"
+        },
+        "passed": {
+          "title": "Passed",
+          "type": "boolean"
+        },
+        "real_n": {
+          "minimum": 0,
+          "title": "Real N",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "n",
+        "real_n",
+        "passed",
+        "by_language"
+      ],
+      "title": "BindingDocTypeSlice",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "backfill_run_id": {
+      "format": "uuid",
+      "title": "Backfill Run Id",
+      "type": "string"
+    },
+    "baseline_binding_profile": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Baseline Binding Profile"
+    },
+    "baseline_global_profile": {
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+      "title": "Baseline Global Profile",
+      "type": "string"
+    },
+    "binding_id": {
+      "format": "uuid",
+      "title": "Binding Id",
+      "type": "string"
+    },
+    "doc_type": {
+      "enum": [
+        "general",
+        "financial_report",
+        "contract_legal",
+        "invoice_receipt",
+        "product_technical",
+        "scanned_image"
+      ],
+      "title": "Doc Type",
+      "type": "string"
+    },
+    "doc_type_slice": {
+      "$ref": "#/$defs/BindingDocTypeSlice"
+    },
+    "gate_passed": {
+      "title": "Gate Passed",
+      "type": "boolean"
+    },
+    "other_slices_passed": {
+      "title": "Other Slices Passed",
+      "type": "boolean"
+    },
+    "recorded_at": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?(Z|[+-]\\d{2}:\\d{2})$",
+      "title": "Recorded At",
+      "type": "string"
+    },
+    "target_profile": {
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+      "title": "Target Profile",
+      "type": "string"
+    },
+    "tenant_key": {
+      "anyOf": [
+        {
+          "pattern": "^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Tenant Key"
+    }
+  },
+  "required": [
+    "binding_id",
+    "target_profile",
+    "doc_type",
+    "tenant_key",
+    "baseline_global_profile",
+    "baseline_binding_profile",
+    "gate_passed",
+    "doc_type_slice",
+    "other_slices_passed",
+    "backfill_run_id",
+    "recorded_at"
+  ],
+  "title": "BindingActivationEvidence",
+  "type": "object"
+}
