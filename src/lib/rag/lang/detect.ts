@@ -2,13 +2,13 @@ export type DetectedLanguage = 'zh' | 'en' | 'it';
 
 const HAN_SHARE_FOR_ZH = 0.2;
 
-const EN_STOPWORDS = new Set([
+export const EN_STOPWORDS: ReadonlySet<string> = new Set([
   'the', 'and', 'of', 'to', 'is', 'are', 'was', 'were', 'be', 'been', 'for', 'with', 'that', 'this', 'it',
   'as', 'on', 'at', 'by', 'from', 'or', 'not', 'have', 'has', 'will', 'can', 'if', 'within', 'you', 'your',
   'we', 'our', 'an', 'which', 'any', 'all', 'such', 'than', 'their', 'its',
 ]);
 
-const IT_STOPWORDS = new Set([
+export const IT_STOPWORDS: ReadonlySet<string> = new Set([
   'il', 'lo', 'la', 'le', 'gli', 'un', 'una', 'uno', 'di', 'del', 'della', 'dei', 'delle', 'degli', 'che',
   'è', 'per', 'con', 'su', 'sono', 'non', 'nel', 'nella', 'alla', 'al', 'dal', 'dalla', 'si', 'come', 'più',
   'anche', 'questo', 'questa', 'se', 'ha', 'hanno', 'entro', 'dei', 'nei', 'sul', 'tra', 'fra', 'ogni',

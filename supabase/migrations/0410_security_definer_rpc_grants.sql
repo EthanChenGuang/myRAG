@@ -136,6 +136,10 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_delete_quarantined(uuid, uuid) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_delete_quarantined(uuid, uuid) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_embedding_bindings_guard()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_embedding_bindings_guard() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_embedding_bindings_guard() TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_enqueue_backfill_jobs(uuid, jsonb)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_enqueue_backfill_jobs(uuid, jsonb) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_enqueue_backfill_jobs(uuid, jsonb) TO service_role;

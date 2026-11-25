@@ -1,0 +1,353 @@
+{
+  "$defs": {
+    "DoclingOcrCodes": {
+      "additionalProperties": false,
+      "properties": {
+        "rapidocr": {
+          "minLength": 1,
+          "title": "Rapidocr",
+          "type": "string"
+        }
+      },
+      "required": [
+        "rapidocr"
+      ],
+      "title": "DoclingOcrCodes",
+      "type": "object"
+    },
+    "GroundednessStateTexts": {
+      "additionalProperties": false,
+      "properties": {
+        "not_checked": {
+          "title": "Not Checked",
+          "type": "string"
+        },
+        "possibly_unreliable": {
+          "title": "Possibly Unreliable",
+          "type": "string"
+        },
+        "verified": {
+          "title": "Verified",
+          "type": "string"
+        }
+      },
+      "required": [
+        "verified",
+        "possibly_unreliable",
+        "not_checked"
+      ],
+      "title": "GroundednessStateTexts",
+      "type": "object"
+    },
+    "LanguageFixtures": {
+      "additionalProperties": false,
+      "properties": {
+        "corpus": {
+          "title": "Corpus",
+          "type": "boolean"
+        },
+        "golden_slices": {
+          "title": "Golden Slices",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "corpus",
+        "golden_slices"
+      ],
+      "title": "LanguageFixtures",
+      "type": "object"
+    },
+    "LanguageFolding": {
+      "additionalProperties": false,
+      "properties": {
+        "accents": {
+          "title": "Accents",
+          "type": "boolean"
+        },
+        "elision_prefixes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Elision Prefixes",
+          "type": "array"
+        },
+        "elision_suffixes": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Elision Suffixes",
+          "type": "array"
+        }
+      },
+      "required": [
+        "accents",
+        "elision_prefixes",
+        "elision_suffixes"
+      ],
+      "title": "LanguageFolding",
+      "type": "object"
+    },
+    "LanguageOcrCodes": {
+      "additionalProperties": false,
+      "properties": {
+        "docling": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DoclingOcrCodes"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "llamaparse": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Llamaparse"
+        }
+      },
+      "title": "LanguageOcrCodes",
+      "type": "object"
+    },
+    "LanguagePack": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "pattern": "^[a-z]{2,3}$",
+          "title": "Code",
+          "type": "string"
+        },
+        "effective_date_patterns": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Effective Date Patterns",
+          "type": "array"
+        },
+        "fixtures": {
+          "$ref": "#/$defs/LanguageFixtures"
+        },
+        "folding": {
+          "$ref": "#/$defs/LanguageFolding"
+        },
+        "groundedness": {
+          "enum": [
+            "hhem_2_3",
+            "hhem_2_1_open",
+            "none"
+          ],
+          "title": "Groundedness",
+          "type": "string"
+        },
+        "list_separator": {
+          "minLength": 1,
+          "title": "List Separator",
+          "type": "string"
+        },
+        "name": {
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "native_name": {
+          "minLength": 1,
+          "title": "Native Name",
+          "type": "string"
+        },
+        "ocr_codes": {
+          "$ref": "#/$defs/LanguageOcrCodes"
+        },
+        "pack_version": {
+          "minimum": 1,
+          "title": "Pack Version",
+          "type": "integer"
+        },
+        "rewrite_gate_lexicon": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rewrite Gate Lexicon"
+        },
+        "script": {
+          "pattern": "^[A-Z][a-z]{3}$",
+          "title": "Script",
+          "type": "string"
+        },
+        "segmentation": {
+          "anyOf": [
+            {
+              "enum": [
+                "intl_segmenter_han_bigrams",
+                "whitespace"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Segmentation"
+        },
+        "sentence_end": {
+          "minLength": 1,
+          "title": "Sentence End",
+          "type": "string"
+        },
+        "stemmer": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stemmer"
+        },
+        "stopwords": {
+          "$ref": "#/$defs/LanguageStopwords"
+        },
+        "texts": {
+          "$ref": "#/$defs/LanguageTexts"
+        },
+        "version_markers": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Version Markers",
+          "type": "array"
+        }
+      },
+      "required": [
+        "code",
+        "name",
+        "native_name",
+        "script",
+        "sentence_end",
+        "list_separator",
+        "folding",
+        "stopwords",
+        "ocr_codes",
+        "texts",
+        "groundedness",
+        "effective_date_patterns",
+        "version_markers",
+        "fixtures",
+        "pack_version"
+      ],
+      "title": "LanguagePack",
+      "type": "object"
+    },
+    "LanguageStopwords": {
+      "additionalProperties": false,
+      "properties": {
+        "detection": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Detection",
+          "type": "array"
+        },
+        "lexical": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Lexical",
+          "type": "array"
+        }
+      },
+      "required": [
+        "detection",
+        "lexical"
+      ],
+      "title": "LanguageStopwords",
+      "type": "object"
+    },
+    "LanguageTexts": {
+      "additionalProperties": false,
+      "properties": {
+        "attached_documents": {
+          "title": "Attached Documents",
+          "type": "string"
+        },
+        "citation_instruction": {
+          "title": "Citation Instruction",
+          "type": "string"
+        },
+        "groundedness_badges": {
+          "$ref": "#/$defs/GroundednessStateTexts"
+        },
+        "groundedness_tooltips": {
+          "$ref": "#/$defs/GroundednessStateTexts"
+        },
+        "knowledge_base_unavailable": {
+          "title": "Knowledge Base Unavailable",
+          "type": "string"
+        },
+        "strict_refusal": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Strict Refusal"
+        }
+      },
+      "required": [
+        "knowledge_base_unavailable",
+        "citation_instruction",
+        "attached_documents",
+        "groundedness_badges",
+        "groundedness_tooltips"
+      ],
+      "title": "LanguageTexts",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "packs": {
+      "items": {
+        "$ref": "#/$defs/LanguagePack"
+      },
+      "minItems": 1,
+      "title": "Packs",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "packs"
+  ],
+  "title": "LanguageRegistry",
+  "type": "object"
+}

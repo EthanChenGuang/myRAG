@@ -13,6 +13,7 @@ const SAFE_CELL_KEY = /^[a-z0-9_.|-]{1,120}$/;
 const REFUSAL_DECISION = new Set(['refuse', 'answer', 'not_applied']);
 const REFUSAL_BASIS = new Set(['rerank_threshold', 'similarity_floor', 'none']);
 const REFUSAL_REASON = /^[a-z][a-z0-9_]*$/;
+const DETECTOR_VERSION = /^[a-z_]{1,32}@[A-Za-z0-9._-]{1,64}$/;
 
 function finiteOrNull(value: number | null | undefined): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
@@ -60,9 +61,11 @@ export function buildTraceLogPayload(collector: TraceCollector, result: Retrieva
         candidates_out: stage.candidates_out,
         rules: stage.rules,
         ...(counts !== undefined ? { counts } : {}),
+        ...(stage.versions ? { versions: stage.versions.filter((version) => DETECTOR_VERSION.test(version)) } : {}),
       };
     }),
     ...(result.refusal ? { refusal: sanitizeRefusalForLog(result.refusal) } : {}),
+    ...(result.injection ? { injectionFlagged: result.injection.flagged === true } : {}),
   };
 }
 

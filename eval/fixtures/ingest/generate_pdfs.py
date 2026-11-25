@@ -125,17 +125,27 @@ def build_digital(spec: Any) -> bytes:
             place(Paragraph(escape(block.marker + block.text), item), 0.0, 3.0)
         elif isinstance(block, specs.Table):
             size = 8.0 if len(block.rows) > 20 else 9.5
-            table = Table([list(row) for row in block.rows], colWidths=_column_widths(block.rows, content_width))
-            commands: list[tuple[Any, ...]] = [
-                ("FONT", (0, 0), (-1, -1), body_font, size),
-                ("FONT", (0, 0), (-1, 0), heading_font, size),
-                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e6e6e6")),
-                ("TOPPADDING", (0, 0), (-1, -1), 2.0),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 2.0),
-            ]
-            table.setStyle(TableStyle(commands))
-            place(table, 4.0, 10.0)
+            widths = _column_widths(block.column_rows or block.rows, content_width)
+            slices = block.page_rows or (len(block.rows),)
+            if sum(slices) != len(block.rows):
+                raise LayoutError(f"{spec.id}: page_rows do not add up to the table's rows")
+            start = 0
+            for number, count in enumerate(slices):
+                if number > 0:
+                    pdf.showPage()
+                    page += 1
+                    y = specs.PAGE_HEIGHT - MARGIN_TOP
+                table = Table([list(row) for row in block.rows[start : start + count]], colWidths=widths)
+                commands: list[tuple[Any, ...]] = [("FONT", (0, 0), (-1, -1), body_font, size)]
+                if block.header and number == 0:
+                    commands.append(("FONT", (0, 0), (-1, 0), heading_font, size))
+                commands.append(("GRID", (0, 0), (-1, -1), 0.5, colors.grey))
+                if block.header and number == 0:
+                    commands.append(("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e6e6e6")))
+                commands += [("TOPPADDING", (0, 0), (-1, -1), 2.0), ("BOTTOMPADDING", (0, 0), (-1, -1), 2.0)]
+                table.setStyle(TableStyle(commands))
+                place(table, 4.0 if number == 0 else 0.0, 10.0)
+                start += count
         elif isinstance(block, specs.Picture):
             width_px, height_px = specs.PICTURE_PIXELS
             picture = Image.frombytes("RGB", (width_px, height_px), specs.picture_rgb(block.name))
@@ -236,7 +246,7 @@ def generate(out_dir: Path, text_dir: Path, cjk_font: Path | None, font_index: i
     out_dir.mkdir(parents=True, exist_ok=True)
     text_dir.mkdir(parents=True, exist_ok=True)
     written: dict[str, str] = {}
-    for spec in specs.all_specs():
+    for spec in (*specs.all_specs(), *specs.long_table_specs()):
         if spec.layer == "digital":
             data = build_digital(spec)
         elif cjk_font is not None:

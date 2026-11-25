@@ -15,6 +15,15 @@
           "title": "Direction",
           "type": "string"
         },
+        "kind": {
+          "default": "noise_band",
+          "enum": [
+            "noise_band",
+            "absolute_zero"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
         "metric": {
           "title": "Metric",
           "type": "string"
@@ -22,6 +31,18 @@
         "observed": {
           "title": "Observed",
           "type": "number"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
         },
         "slice": {
           "title": "Slice",

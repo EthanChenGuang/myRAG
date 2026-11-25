@@ -66,6 +66,12 @@ from rag_sidecar.contracts import (
     JudgeReport,
     LatencyBudgets,
     ActivationEvidence,
+    BindingActivationEvidence,
+    BindingArm,
+    BindingCandidateResult,
+    BindingComparison,
+    BindingComparisonHashes,
+    BindingDocTypeSlice,
     ComparisonSliceBlock,
     EmbeddingProfileComparison,
     PreMigrationEvidence,
@@ -128,6 +134,7 @@ from rag_sidecar.contracts.cache import (
     SemanticCacheCalibration,
     SemanticCacheProfileCalibration,
 )
+from rag_sidecar.contracts.languages import load_language_registry
 from rag_sidecar.contracts.latency import GroundednessBudgets, ScorerBudget
 from rag_sidecar.contracts.parse_eval import (
     DuplicateCounts,
@@ -1065,6 +1072,86 @@ def _activation_evidence() -> ActivationEvidence:
     )
 
 
+_BINDING_ID = "22222222-2222-4222-8222-222222222222"
+_BINDING_RUN_ID = "33333333-3333-4333-8333-333333333333"
+
+
+def _binding_doc_type_slice() -> BindingDocTypeSlice:
+    return BindingDocTypeSlice(n=40, real_n=30, passed=True, by_language={"en": True, "it": True, "zh": True})
+
+
+def _binding_activation_evidence() -> BindingActivationEvidence:
+    return BindingActivationEvidence(
+        binding_id=_BINDING_ID,
+        target_profile="voyage-law-2-1024",
+        doc_type="contract_legal",
+        tenant_key=None,
+        baseline_global_profile="openai-3-small-1536",
+        baseline_binding_profile=None,
+        gate_passed=True,
+        doc_type_slice=_binding_doc_type_slice(),
+        other_slices_passed=True,
+        backfill_run_id=_BINDING_RUN_ID,
+        recorded_at="2026-11-25T08:00:00.000Z",
+    )
+
+
+def _binding_arm(name: str) -> BindingArm:
+    metrics = _slice_metrics()
+    return BindingArm(
+        profile_id="openai-3-small-1536",
+        report_path=f"eval/out/binding-compare/{name}/report.json",
+        doc_type_slice=metrics,
+        by_language={"en": metrics},
+        by_language_pair={"en->zh": metrics},
+        by_doc_type={"contract_legal": metrics, "general": metrics},
+        latency_ms={"embed": None, "search": 120.0},
+    )
+
+
+def _binding_candidate() -> BindingCandidateResult:
+    metrics = _slice_metrics()
+    return BindingCandidateResult(
+        profile_id="voyage-law-2-1024",
+        model="voyage-law-2",
+        report_path="eval/out/binding-compare/voyage-law-2-1024/report.json",
+        doc_type_slice=metrics,
+        by_language={"en": metrics},
+        deltas_vs_baseline={"mrr": 0.02, "recall_at_10": 0.1},
+        deltas_vs_control={"mrr": None, "recall_at_10": 0.05},
+        beats_baseline=True,
+        beats_control=True,
+        language_regressions=[],
+        pair_regressions=[],
+        other_slice_regressions=[],
+        refusal_regressions=[],
+        latency_ms={"search": 140.0},
+        recommended=True,
+    )
+
+
+def _binding_comparison() -> BindingComparison:
+    return BindingComparison(
+        doc_type="contract_legal",
+        baseline=_binding_arm("baseline"),
+        control=_binding_arm("control"),
+        candidates=[_binding_candidate()],
+        provenance_counts={"human": 30, "synthetic_fixture": 10},
+        hashes=BindingComparisonHashes(
+            corpus_sha256="a" * 64,
+            golden_sha256="b" * 64,
+            noise_sha256="c" * 64,
+            retrieval_params_hash="d" * 64,
+            catalog_version=1,
+        ),
+        reembed_run_ids={"voyage-law-2-1024": _BINDING_RUN_ID},
+        fixture_embedder=True,
+        gate_passed=True,
+        recommended_profile="voyage-law-2-1024",
+        notes=["Fixture sample only."],
+    )
+
+
 _CITED_QUOTE = "Employees receive twenty days of paid leave per calendar year."
 
 
@@ -1293,6 +1380,8 @@ def _models() -> dict[str, Any]:
         "InjectionDetectorConfig": _injection_detector_config(),
         "ConversationTurn": ConversationTurn(role="user", content="Tell me about leave."),
         "ProcessingProfileSet": ProcessingProfileSet(profiles=[_processing_profile(name) for name in _DOC_TYPES]),
+        "LanguageRegistry": load_language_registry(),
+        "LanguagePack": load_language_registry().packs[0],
         "DocTypeDetection": DocTypeDetection(
             doc_type="invoice_receipt", confidence=0.85, signals=["keyword:invoice", "pattern:invoice_number"], method="rules"
         ),
@@ -1364,7 +1453,17 @@ def _models() -> dict[str, Any]:
                     threshold=0.45,
                     observed=0.3,
                     direction="higher",
-                )
+                ),
+                GateOffender(
+                    slice="category:injection",
+                    metric="attack_success_rate",
+                    baseline_mean=0.0,
+                    threshold=0.0,
+                    observed=0.0833,
+                    direction="lower",
+                    kind="absolute_zero",
+                    reason="attack_success_above_zero",
+                ),
             ],
             skipped=["by_category:table"],
             mismatches=[],
@@ -1414,6 +1513,11 @@ def _models() -> dict[str, Any]:
         "SidecarError": SidecarError(error="synthetic error"),
         "EmbeddingProfileComparison": _profile_comparison(),
         "ActivationEvidence": _activation_evidence(),
+        "BindingActivationEvidence": _binding_activation_evidence(),
+        "BindingDocTypeSlice": _binding_doc_type_slice(),
+        "BindingCandidateResult": _binding_candidate(),
+        "BindingArm": _binding_arm("baseline"),
+        "BindingComparison": _binding_comparison(),
         "RetrievalParams": RetrievalParams(),
         "RetrievalOverrides": RetrievalOverrides(final_top_k=10),
         "RetrievalFilters": RetrievalFilters(sources=["manual"], languages=["en"]),

@@ -115,12 +115,19 @@ const PROFILES = Object.keys(PROFILE_STAGE_DEFAULTS) as Profile[];
 export type RerankerKind = 'none' | 'cohere' | 'voyage' | 'local_bm25';
 export type RerankTier = 'quality' | 'fast';
 export type IterativeScanMode = 'off' | 'relaxed_order' | 'strict_order';
+export type BgeM3Serving = 'hosted' | 'sidecar';
 
 export interface RetrievalParamsOverride {
   candidate_pool_size?: number;
   rerank_input_cap?: number;
   final_top_k?: number;
   rrf_k?: number;
+}
+
+export interface DomainEmbeddingsConfig {
+  enabled: boolean;
+  maxLegs: number;
+  timeoutMs: number;
 }
 
 export interface V2Config {
@@ -139,6 +146,7 @@ export interface V2Config {
   paramsOverride: RetrievalParamsOverride;
   hasCohereKey: boolean;
   hasVoyageKey: boolean;
+  domainEmbeddings: DomainEmbeddingsConfig;
 }
 
 export interface RagEnvInput {
@@ -164,6 +172,15 @@ export interface RagEnvInput {
   RAG_RETRIEVAL_PARAMS_OVERRIDE?: string;
   VOYAGE_API_KEY?: string;
   VOYAGE_BASE_URL?: string;
+  RAG_EFFECTIVE_DATES?: string;
+  RAG_SCOPE_TAGS?: string;
+  RAG_DOC_TRANSLATION?: string;
+  RAG_BGE_M3_SERVING?: string;
+  RAG_OUTPUT_LINK_ALLOWLIST?: string;
+  RAG_EMBEDDING_PROFILES?: string;
+  RAG_DOMAIN_EMBEDDINGS?: string;
+  RAG_DOMAIN_EMBEDDING_MAX_LEGS?: string;
+  RAG_DOMAIN_EMBEDDING_TIMEOUT_MS?: string;
 }
 
 export interface RagConfig {
@@ -172,6 +189,12 @@ export interface RagConfig {
   timeouts: Record<Profile, StageTimeouts>;
   exactIdLookup: boolean;
   v2: V2Config;
+  effectiveDates: boolean;
+  scopeTags: boolean;
+  docTranslation: 'off' | 'on';
+  bgeM3Serving: BgeM3Serving;
+  /** Raw comma-separated domains; the output link filter parses it. */
+  outputLinkAllowlist: string;
   warnings: string[];
 }
 
@@ -216,6 +239,25 @@ function parseBooleanSwitch(raw: string | undefined, defaultValue: boolean, warn
   if (normalised === 'false') return false;
   problem(warnings, warnKey, `Unsupported switch value, using default ${defaultValue}`, { value });
   return defaultValue;
+}
+
+function parseNamedFlag(name: string, raw: string | undefined, warnings: string[]): boolean {
+  const value = (raw ?? '').trim();
+  if (value === '') return false;
+  const normalised = value.toLowerCase();
+  if (normalised === 'true') return true;
+  if (normalised === 'false') return false;
+  problem(warnings, `${name}:${value}`, `Unsupported ${name} value, expected true or false, using false`, { value });
+  return false;
+}
+
+function parseNamedChoice<T extends string>(name: string, raw: string | undefined, allowed: readonly T[], fallback: T, warnings: string[]): T {
+  const value = (raw ?? '').trim();
+  if (value === '') return fallback;
+  const match = allowed.find((candidate) => candidate === value.toLowerCase());
+  if (match !== undefined) return match;
+  problem(warnings, `${name}:${value}`, `Unsupported ${name} value, using ${fallback}`, { value });
+  return fallback;
 }
 
 function parseExactIdSwitch(raw: string | undefined, warnings: string[]): boolean {
@@ -284,6 +326,58 @@ function parseNonNegativeInt(raw: string | undefined, defaultValue: number, max:
     return defaultValue;
   }
   return n;
+}
+
+function parseBoundedInt(
+  raw: string | undefined,
+  defaultValue: number,
+  min: number,
+  max: number,
+  name: string,
+  warnings: string[],
+): number {
+  const value = (raw ?? '').trim();
+  if (value === '') return defaultValue;
+  const n = /^\d+$/.test(value) ? Number(value) : NaN;
+  if (!Number.isInteger(n) || n < min || n > max) {
+    problem(warnings, `${name}:${value}`, `Invalid ${name}, expected an integer from ${min} to ${max}, using ${defaultValue}`, { value });
+    return defaultValue;
+  }
+  return n;
+}
+
+function parseOnOff(raw: string | undefined, name: string, warnings: string[]): boolean {
+  const value = (raw ?? '').trim().toLowerCase();
+  if (value === '' || value === 'off') return false;
+  if (value === 'on') return true;
+  problem(warnings, `${name}:${value}`, `Unsupported ${name} value, using off`, { value });
+  return false;
+}
+
+export const DEFAULT_DOMAIN_EMBEDDING_MAX_LEGS = 2;
+export const DEFAULT_DOMAIN_EMBEDDING_TIMEOUT_MS = 800;
+
+/** Domain bindings need the embedding profile registry, so RAG_EMBEDDING_PROFILES=off keeps them off. */
+function parseDomainEmbeddings(env: RagEnvInput, warnings: string[]): DomainEmbeddingsConfig {
+  const requested = parseOnOff(env.RAG_DOMAIN_EMBEDDINGS, 'RAG_DOMAIN_EMBEDDINGS', warnings);
+  const profilesOn = (env.RAG_EMBEDDING_PROFILES ?? '').trim().toLowerCase() === 'on';
+  if (requested && !profilesOn) {
+    problem(warnings, 'domain-embeddings-profiles-off', 'domain-embeddings needs embedding profiles; RAG_DOMAIN_EMBEDDINGS stays off', {
+      RAG_EMBEDDING_PROFILES: (env.RAG_EMBEDDING_PROFILES ?? '').trim() || 'off',
+    });
+  }
+  return {
+    enabled: requested && profilesOn,
+    maxLegs: parseBoundedInt(env.RAG_DOMAIN_EMBEDDING_MAX_LEGS, DEFAULT_DOMAIN_EMBEDDING_MAX_LEGS, 0, 5, 'RAG_DOMAIN_EMBEDDING_MAX_LEGS', warnings),
+    timeoutMs: parseBoundedInt(
+      env.RAG_DOMAIN_EMBEDDING_TIMEOUT_MS,
+      DEFAULT_DOMAIN_EMBEDDING_TIMEOUT_MS,
+      100,
+      5000,
+      'RAG_DOMAIN_EMBEDDING_TIMEOUT_MS',
+      warnings,
+    ),
+  };
 }
 
 const PARAM_KEYS: Record<string, keyof RetrievalParamsOverride> = {
@@ -423,6 +517,15 @@ function memoKey(env: RagEnvInput): string {
     env.RAG_RETRIEVAL_PARAMS_OVERRIDE ?? '',
     (env.VOYAGE_API_KEY ?? '').trim() !== '',
     env.VOYAGE_BASE_URL ?? '',
+    env.RAG_EFFECTIVE_DATES ?? '',
+    env.RAG_SCOPE_TAGS ?? '',
+    env.RAG_DOC_TRANSLATION ?? '',
+    env.RAG_BGE_M3_SERVING ?? '',
+    env.RAG_OUTPUT_LINK_ALLOWLIST ?? '',
+    env.RAG_EMBEDDING_PROFILES ?? '',
+    env.RAG_DOMAIN_EMBEDDINGS ?? '',
+    env.RAG_DOMAIN_EMBEDDING_MAX_LEGS ?? '',
+    env.RAG_DOMAIN_EMBEDDING_TIMEOUT_MS ?? '',
   ]);
 }
 
@@ -462,11 +565,24 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
     paramsOverride: parseParamsOverride(env.RAG_RETRIEVAL_PARAMS_OVERRIDE, warnings),
     hasCohereKey: (env.COHERE_API_KEY ?? '').trim() !== '',
     hasVoyageKey: (env.VOYAGE_API_KEY ?? '').trim() !== '',
+    domainEmbeddings: parseDomainEmbeddings(env, warnings),
   };
 
   applyV2DisabledStages(v2, disabledStages);
 
-  const config: RagConfig = { pipeline, disabledStages, timeouts, exactIdLookup, v2, warnings };
+  const config: RagConfig = {
+    pipeline,
+    disabledStages,
+    timeouts,
+    exactIdLookup,
+    v2,
+    effectiveDates: parseNamedFlag('RAG_EFFECTIVE_DATES', env.RAG_EFFECTIVE_DATES, warnings),
+    scopeTags: parseNamedFlag('RAG_SCOPE_TAGS', env.RAG_SCOPE_TAGS, warnings),
+    docTranslation: parseNamedChoice('RAG_DOC_TRANSLATION', env.RAG_DOC_TRANSLATION, ['off', 'on'], 'off', warnings),
+    bgeM3Serving: parseNamedChoice('RAG_BGE_M3_SERVING', env.RAG_BGE_M3_SERVING, ['hosted', 'sidecar'], 'hosted', warnings),
+    outputLinkAllowlist: (env.RAG_OUTPUT_LINK_ALLOWLIST ?? '').trim(),
+    warnings,
+  };
   memo.set(snapshot, config);
   return config;
 }

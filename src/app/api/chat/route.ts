@@ -19,6 +19,7 @@ import {
   finishTrace,
   isV2Pipeline,
   knowledgeBaseUnavailableMessage,
+  noKnowledgeBaseResponse,
   mintAnswerId,
   parseRetrievalFilters,
   readGenerationConfig,
@@ -35,6 +36,8 @@ import {
 } from '@/lib/rag';
 // Import URL extraction utilities
 import { formatURLsForContext, type ExtractedURL } from '@/lib/url-extractor';
+import type { JSONValue } from '@ai-sdk/provider';
+import { REFERENCE_NOTICE, TOOL_RESULT_NOTICE, TOOL_RESULT_SENTENCE, readSecurityConfig, escapeToolOutput, scanToolOutput, type ToolResultGuardMode } from '@/lib/rag';
 // Keep custom tool definitions if needed
 
 import { ReadableStream } from 'stream/web';
@@ -81,6 +84,38 @@ const describeArgs = (input: unknown): { keys: string[]; bytes: number } => ({
 });
 
 // Define document reference tool for function calling using the 'tool' helper
+/** D-10/A-7: only the model's copy of a tool result is escaped; execute and its raw output stay unchanged. */
+function withToolResultGuard(
+  definition: Record<string, any>,
+  toolName: string,
+  guard: ToolResultGuardMode,
+  onFlag: (toolName: string, ruleIds: string[]) => void,
+): Record<string, any> {
+  if (guard === 'off') return definition;
+  return {
+    ...definition,
+    toModelOutput: ({ output }: { output: unknown }) => {
+      if (guard === 'tag_and_flag') {
+        let ruleIds: string[] = [];
+        try {
+          ruleIds = scanToolOutput(output);
+        } catch {
+          console.warn('[RAG Security] Tool result rules failed; the result is passed on escaped', { tool: toolName });
+        }
+        if (ruleIds.length > 0) onFlag(toolName, ruleIds);
+      }
+      return { type: 'json' as const, value: (escapeToolOutput(output) ?? null) as JSONValue };
+    },
+  };
+}
+
+/** D-10: tool results are data; the sentence joins the reference notice when the context is tagged. */
+function withToolResultNotice(prompt: string): string {
+  const tagged = `${REFERENCE_NOTICE}\n<documents>`;
+  if (prompt.includes(tagged)) return prompt.replace(tagged, () => `${REFERENCE_NOTICE}\n${TOOL_RESULT_SENTENCE}\n<documents>`);
+  return `${prompt}\n\n${TOOL_RESULT_NOTICE}`;
+}
+
 const documentReferenceTool = tool({
   description: 'IMPORTANT: This is a FUNCTION TOOL to track document usage internally. Call this tool when you use information from documents. DO NOT write "useDocument" as text in your response. This tool tracks which documents you referenced to answer the query.',
   inputSchema: z.object({
@@ -597,26 +632,6 @@ function createErrorResponse(message: string) {
       Connection: 'keep-alive'
     }
   });
-}
-
-function buildNoKnowledgeBaseResponse(language: Language): string {
-  if (language === 'es') {
-    return `# Información no disponible
-
-## Estado de la base de conocimiento
-- No encontré esta información en tu base de conocimiento.
-- La búsqueda web está desactivada, así que no puedo consultarla en línea.
-
-¿Quieres que active la búsqueda web para verificarlo? ¿Prefieres subir un documento con esa información? ¿Hay algún detalle específico que deba buscar?`;
-  }
-
-  return `# Information Not Available
-
-## Knowledge Base Status
-- I couldn’t find this information in your knowledge base.
-- Web search is turned off, so I can’t look it up online.
-
-Would you like me to turn on web search and check? Do you want to upload a document that contains this information? Is there a specific detail you want me to focus on?`;
 }
 
 // Add the missing extractSignificantPhrases function above the main route handler
@@ -2212,6 +2227,17 @@ IMPORTANT:
 
     } // End of RAG processing (skipped when disableRAG is true)
 
+    // A-8/A-14: one per-turn YOLO decision after retrieval; flagged content kept in the context (flag or downweight) suspends it
+    const injectionSummary = retrievalResult?.injection;
+    const injectionFlagged = injectionSummary ? injectionSummary.flagged && injectionSummary.mode !== 'drop' : undefined;
+    const injectionFlaggedField = injectionFlagged === undefined ? {} : { injectionFlagged };
+    const mcpYoloForTurn = mcpYoloAllowed && injectionFlagged !== true;
+    if (mcpYoloAllowed && injectionFlagged === true) {
+      console.warn('[RAG Security] YOLO suspended for a turn with flagged context; MCP tools need approval', {
+        traceId: ragTrace?.collector.traceId ?? null,
+      });
+    }
+
     const retrievalFailed =
       !effectiveDisableRAG &&
       retrievalResult !== null &&
@@ -2256,7 +2282,7 @@ IMPORTANT:
       context.trim().toLowerCase().startsWith('no relevant context found');
 
     if (shouldBlockNoContextResponse) {
-      const responseText = buildNoKnowledgeBaseResponse(fallbackLanguage);
+      const responseText = noKnowledgeBaseResponse(fallbackLanguage);
       ragTrace?.collector.setReviewContent({ answer: responseText, context });
       finishRagTrace();
       const stream = createUIMessageStream({
@@ -2844,7 +2870,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                 }
 
                 // Check if YOLO mode is enabled
-                const yoloModeEnabled = mcpYoloAllowed;
+                const yoloModeEnabled = mcpYoloForTurn;
                 console.log(`[CACHED TOOL] YOLO mode enabled: ${yoloModeEnabled}`);
 
                 if (yoloModeEnabled) {
@@ -2889,7 +2915,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                   Object.assign(approvalError, {
                     toolCallId: toolCallId,
                     toolName: toolName,
-                    toolArgs: params
+                    toolArgs: params,
+                    ...injectionFlaggedField
                   });
                   throw approvalError;
                 }
@@ -2941,7 +2968,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                     }
 
                     // Check if YOLO mode is enabled
-                    const yoloModeEnabled = mcpYoloAllowed;
+                    const yoloModeEnabled = mcpYoloForTurn;
                     console.log(`[MCP TOOL] YOLO mode enabled: ${yoloModeEnabled}`);
 
                     if (yoloModeEnabled) {
@@ -2985,7 +3012,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                       Object.assign(approvalError, {
                         toolCallId: toolCallId,
                         toolName: mcpTool.name,
-                        toolArgs: params
+                        toolArgs: params,
+                        ...injectionFlaggedField
                       });
                       throw approvalError;
                     }
@@ -3171,7 +3199,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                       params: transformedParams, // Use transformed parameters
                       meta: enhancedMeta
                     },
-                    result: null
+                    result: null,
+                    ...injectionFlaggedField
                   };
 
                   // 🎯 CRITICAL DEBUG: Log parameter storage
@@ -3180,7 +3209,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                   console.log(`[PARAM DEBUG] Stored approval state:`, (globalThis as any).toolApprovalState[toolCallId]);
 
                   // Check if YOLO mode is enabled
-                  const yoloModeEnabled = mcpYoloAllowed;
+                  const yoloModeEnabled = mcpYoloForTurn;
                   console.log(`[ENHANCED TOOL] YOLO mode enabled: ${yoloModeEnabled}`);
 
                   if (yoloModeEnabled) {
@@ -3228,7 +3257,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                     Object.assign(approvalError, {
                       toolCallId: toolCallId,
                       toolName: toolName,
-                      toolArgs: transformedParams // Use transformed parameters in error too
+                      toolArgs: transformedParams, // Use transformed parameters in error too
+                      ...injectionFlaggedField
                     });
                     throw approvalError;
                   }
@@ -3327,6 +3357,22 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           });
 
           console.log('API ROUTE: Web search tool added successfully with Exa');
+        }
+      }
+
+      const toolResultGuard = readSecurityConfig().toolResultGuard;
+      if (toolResultGuard !== 'off') {
+        const recordToolResultFlag = (toolName: string, ruleIds: string[]) => {
+          const collector = ragTrace?.collector;
+          if (collector) {
+            const at = collector.now();
+            collector.record({ name: 'tool_result_check', status: 'ok', startedAt: at, endedAt: at, rules: ruleIds, detail: toolName });
+          }
+          console.warn('[RAG Security] Tool result flagged; passed on escaped', { tool: toolName, ruleIds, traceId: collector?.traceId ?? null });
+        };
+        for (const toolName of Object.keys(allTools)) {
+          if (toolName === 'useDocument') continue;
+          allTools[toolName] = withToolResultGuard(allTools[toolName], toolName, toolResultGuard, recordToolResultFlag);
         }
       }
 
@@ -3518,6 +3564,14 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       const isClaudeSonnet4 = safeModelId.includes('claude-sonnet-4') ||
         safeModelId.includes('claude-4-sonnet') ||
         safeModelId.includes('anthropic/claude-sonnet-4');
+
+      const resultToolsReachModel = SUPPORTS_TOOLS && !isClaudeSonnet4 && Object.keys(allTools).some((toolName) => toolName !== 'useDocument');
+      if (toolResultGuard !== 'off' && resultToolsReachModel) {
+        const contextIndex = messagesForModel.findIndex((message) => message.id === systemContextMessage.id);
+        if (contextIndex >= 0) {
+          messagesForModel[contextIndex] = toMessage({ ...systemContextMessage, content: withToolResultNotice(enhancedSystemPrompt) });
+        }
+      }
 
       // Convert UI messages to model messages required by streamText
       const modelMessages = await convertToModelMessages(messagesForModel);
@@ -3883,7 +3937,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                   params: call.input,
                   meta: { toolCallId: call.toolCallId }
                 },
-                result: null
+                result: null,
+                ...injectionFlaggedField
               };
 
               // 🎯 CRITICAL DEBUG: Log tool call parameter storage
@@ -4121,8 +4176,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           }
           const messageMetadata = ({ part }: { part: { type: string; providerMetadata?: Record<string, any> } }) => {
             if (part.type === 'start') {
-              if (!ragTraceId && !answerId) return undefined;
-              return { ...(ragTraceId ? { ragTraceId } : {}), ...(answerId ? { answerId } : {}) };
+              if (!ragTraceId && !answerId && injectionFlagged === undefined) return undefined;
+              return { ...(ragTraceId ? { ragTraceId } : {}), ...(answerId ? { answerId } : {}), ...injectionFlaggedField };
             }
             if (part.type === 'finish-step') {
               captureReasoningDetails(part.providerMetadata?.openrouter);
@@ -4130,8 +4185,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             }
             if (part.type !== 'finish') return undefined;
             const finishMetadata = { ...buildFinishMetadata(), ...citationSession.finishMetadata() };
-            if (!ragTraceId && !answerId && Object.keys(finishMetadata).length === 0) return undefined;
-            return { ...(ragTraceId ? { ragTraceId } : {}), ...(answerId ? { answerId } : {}), ...finishMetadata };
+            if (!ragTraceId && !answerId && injectionFlagged === undefined && Object.keys(finishMetadata).length === 0) return undefined;
+            return { ...(ragTraceId ? { ragTraceId } : {}), ...(answerId ? { answerId } : {}), ...injectionFlaggedField, ...finishMetadata };
           };
           if (claudeStream) {
             const gate = await firstTokenGate(

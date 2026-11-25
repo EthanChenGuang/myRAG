@@ -6928,6 +6928,39 @@
                                         </div>
 
                                         <div class="form-control mb-4">
+                                            <label class="label" for="RAG_DOMAIN_EMBEDDINGS">
+                                                <span class="label-text">Domain embeddings</span>
+                                            </label>
+                                            <select id="RAG_DOMAIN_EMBEDDINGS" name="RAG_DOMAIN_EMBEDDINGS" class="select select-bordered w-full" translate="no" aria-describedby="domain-embeddings-help">
+                                                <option value="off">off</option>
+                                                <option value="on">on</option>
+                                            </select>
+                                            <label class="label">
+                                                <span class="label-text-alt" id="domain-embeddings-help">Adds a domain embedding leg for document types with an active binding. Needs embedding profiles on.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label" for="RAG_DOMAIN_EMBEDDING_MAX_LEGS">
+                                                <span class="label-text">Domain embedding legs per query</span>
+                                            </label>
+                                            <input type="number" id="RAG_DOMAIN_EMBEDDING_MAX_LEGS" name="RAG_DOMAIN_EMBEDDING_MAX_LEGS" class="input input-bordered w-full" min="0" max="5" step="1" inputmode="numeric" autocomplete="off" placeholder="2…" aria-describedby="domain-embedding-max-legs-help">
+                                            <label class="label">
+                                                <span class="label-text-alt" id="domain-embedding-max-legs-help">0 to 5. 0 keeps bindings without extra search legs.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label" for="RAG_DOMAIN_EMBEDDING_TIMEOUT_MS">
+                                                <span class="label-text">Domain embedding leg timeout (ms)</span>
+                                            </label>
+                                            <input type="number" id="RAG_DOMAIN_EMBEDDING_TIMEOUT_MS" name="RAG_DOMAIN_EMBEDDING_TIMEOUT_MS" class="input input-bordered w-full" min="100" max="5000" step="1" inputmode="numeric" autocomplete="off" placeholder="800…" aria-describedby="domain-embedding-timeout-help">
+                                            <label class="label">
+                                                <span class="label-text-alt" id="domain-embedding-timeout-help">100 to 5000&nbsp;ms. A leg that runs longer is skipped.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
                                             <label class="label">
                                                 <span class="label-text">Qwen embedding fallback host</span>
                                             </label>
@@ -9149,6 +9182,246 @@
 
                                             </div>
                                             <!-- rag-ingestion-settings:end -->
+                                            <!-- rag-phase032-settings:start -->
+                                            <div id="rag-phase032-settings" class="hidden">
+                                                <div data-rag-settings-group="languages">
+                                                    <div class="form-control mb-4">
+                                                        <input type="hidden" id="RAG_SUPPORTED_LANGUAGES" name="RAG_SUPPORTED_LANGUAGES" value="">
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-supported-languages-help"><span data-rag-i18n="settings.affectsStored">Changing this affects documents already stored; saving shows how many.</span></span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_SUPPORTED_LANGUAGES</code>
+                                                        </div>
+                                                    </div>
+                                                    <div class="form-control mb-4">
+                                                        <input type="hidden" id="RAG_PRIMARY_LANGUAGE" name="RAG_PRIMARY_LANGUAGE" value="">
+                                                        <div class="label">
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_PRIMARY_LANGUAGE</code>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div data-rag-settings-group="ingest">
+                                                    <div class="form-control mb-4">
+                                                        <label class="label" for="RAG_LANGUAGE_AWARE_INGEST">
+                                                            <span class="label-text" data-rag-i18n="RAG_LANGUAGE_AWARE_INGEST.label">Language-aware processing</span>
+                                                        </label>
+                                                        <select id="RAG_LANGUAGE_AWARE_INGEST" name="RAG_LANGUAGE_AWARE_INGEST" autocomplete="off" aria-describedby="rag-language-aware-ingest-help" class="select select-bordered select-sm w-full">
+                                                            <option value="off" data-rag-i18n="RAG_LANGUAGE_AWARE_INGEST.opt.off">Off, as today</option>
+                                                            <option value="on" data-rag-i18n="RAG_LANGUAGE_AWARE_INGEST.opt.on">On</option>
+                                                        </select>
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-language-aware-ingest-help"><span data-rag-i18n="RAG_LANGUAGE_AWARE_INGEST.help">Detects the language of each chunk, splits sentences by that language and reads scans with the supported languages.</span> <span data-rag-i18n="settings.affectsStored">Changing this affects documents already stored; saving shows how many.</span></span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_LANGUAGE_AWARE_INGEST</code>
+                                                        </div>
+                                                    </div>
+                                                    <div class="form-control mb-4">
+                                                        <label class="label" for="RAG_TABLE_HEADER_REPEAT">
+                                                            <span class="label-text" data-rag-i18n="RAG_TABLE_HEADER_REPEAT.label">Table header repetition</span>
+                                                        </label>
+                                                        <select id="RAG_TABLE_HEADER_REPEAT" name="RAG_TABLE_HEADER_REPEAT" autocomplete="off" aria-describedby="rag-table-header-repeat-help" class="select select-bordered select-sm w-full">
+                                                            <option value="profile" data-rag-i18n="RAG_TABLE_HEADER_REPEAT.opt.profile">Follow the document type</option>
+                                                            <option value="always" data-rag-i18n="RAG_TABLE_HEADER_REPEAT.opt.always">Always</option>
+                                                        </select>
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-table-header-repeat-help"><span data-rag-i18n="RAG_TABLE_HEADER_REPEAT.help">Repeats the header row in every chunk of a split table and carries it to a table continued on the next page.</span> <span data-rag-i18n="settings.affectsStored">Changing this affects documents already stored; saving shows how many.</span></span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_TABLE_HEADER_REPEAT</code>
+                                                        </div>
+                                                    </div>
+                                                    <div class="form-control mb-4">
+                                                        <label class="label" for="RAG_TABLE_ROW_SERIALIZATION">
+                                                            <span class="label-text" data-rag-i18n="RAG_TABLE_ROW_SERIALIZATION.label">Table rows as “column = value” for search</span>
+                                                        </label>
+                                                        <select id="RAG_TABLE_ROW_SERIALIZATION" name="RAG_TABLE_ROW_SERIALIZATION" autocomplete="off" aria-describedby="rag-table-row-serialization-help" class="select select-bordered select-sm w-full">
+                                                            <option value="false" data-rag-i18n="RAG_TABLE_ROW_SERIALIZATION.opt.false">Off</option>
+                                                            <option value="true" data-rag-i18n="RAG_TABLE_ROW_SERIALIZATION.opt.true">On</option>
+                                                        </select>
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-table-row-serialization-help"><span data-rag-i18n="RAG_TABLE_ROW_SERIALIZATION.help">Adds one “column = value” line per row to the search text. The answer still reads the table itself.</span> <span data-rag-i18n="settings.affectsStored">Changing this affects documents already stored; saving shows how many.</span></span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_TABLE_ROW_SERIALIZATION</code>
+                                                        </div>
+                                                    </div>
+                                                    <div class="form-control mb-4">
+                                                        <label class="label" for="RAG_CAPTION_LANGUAGE">
+                                                            <span class="label-text" data-rag-i18n="RAG_CAPTION_LANGUAGE.label">Image caption language</span>
+                                                        </label>
+                                                        <select id="RAG_CAPTION_LANGUAGE" name="RAG_CAPTION_LANGUAGE" autocomplete="off" aria-describedby="rag-caption-language-help" class="select select-bordered select-sm w-full">
+                                                            <option value="en" data-rag-i18n="RAG_CAPTION_LANGUAGE.opt.en">English, as today</option>
+                                                            <option value="document" data-rag-i18n="RAG_CAPTION_LANGUAGE.opt.document">The document’s language</option>
+                                                        </select>
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-caption-language-help"><span data-rag-i18n="RAG_CAPTION_LANGUAGE.help">Captions of images are written in English or in the language of their document.</span> <span data-rag-i18n="settings.affectsStored">Changing this affects documents already stored; saving shows how many.</span></span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_CAPTION_LANGUAGE</code>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div data-rag-settings-group="security">
+                                                    <div class="form-control mb-4">
+                                                        <label class="label" for="RAG_HIDDEN_TEXT_CHECK">
+                                                            <span class="label-text" data-rag-i18n="check.name.hidden">Hidden text</span>
+                                                        </label>
+                                                        <select id="RAG_HIDDEN_TEXT_CHECK" name="RAG_HIDDEN_TEXT_CHECK" autocomplete="off" aria-describedby="rag-hidden-text-check-help" class="select select-bordered select-sm w-full">
+                                                            <option value="off" data-rag-i18n="RAG_HIDDEN_TEXT_CHECK.opt.off">Off</option>
+                                                            <option value="flag" data-rag-i18n="RAG_HIDDEN_TEXT_CHECK.opt.flag">Record only</option>
+                                                            <option value="quarantine" data-rag-i18n="RAG_HIDDEN_TEXT_CHECK.opt.quarantine">Remove and quarantine</option>
+                                                        </select>
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-hidden-text-check-help"><span data-rag-i18n="check.hidden.off">Documents are not checked for hidden text.</span> <span data-rag-i18n="settings.affectsStored">Changing this affects documents already stored; saving shows how many.</span></span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_HIDDEN_TEXT_CHECK</code>
+                                                        </div>
+                                                    </div>
+                                                    <div class="form-control mb-4">
+                                                        <label class="label" for="RAG_INGEST_LINK_CHECK">
+                                                            <span class="label-text" data-rag-i18n="check.name.links">Links</span>
+                                                        </label>
+                                                        <select id="RAG_INGEST_LINK_CHECK" name="RAG_INGEST_LINK_CHECK" autocomplete="off" aria-describedby="rag-ingest-link-check-help" class="select select-bordered select-sm w-full">
+                                                            <option value="off" data-rag-i18n="RAG_INGEST_LINK_CHECK.opt.off">Off</option>
+                                                            <option value="flag" data-rag-i18n="RAG_INGEST_LINK_CHECK.opt.flag">Record only</option>
+                                                            <option value="quarantine" data-rag-i18n="RAG_INGEST_LINK_CHECK.opt.quarantine">Quarantine</option>
+                                                        </select>
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-ingest-link-check-help"><span data-rag-i18n="check.links.off">Links in documents are not checked.</span> <span data-rag-i18n="settings.affectsStored">Changing this affects documents already stored; saving shows how many.</span></span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_INGEST_LINK_CHECK</code>
+                                                        </div>
+                                                    </div>
+                                                    <div class="form-control mb-4">
+                                                        <label class="label" for="RAG_OUTPUT_LINK_ALLOWLIST">
+                                                            <span class="label-text" data-rag-i18n="allowlist.label">Allowed link domains</span>
+                                                        </label>
+                                                        <textarea id="RAG_OUTPUT_LINK_ALLOWLIST" name="RAG_OUTPUT_LINK_ALLOWLIST" rows="3" autocomplete="off" spellcheck="false" translate="no" aria-describedby="rag-output-link-allowlist-help"
+                                                            class="textarea textarea-bordered textarea-sm w-full font-mono"></textarea>
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-output-link-allowlist-help"><span data-rag-i18n="allowlist.help">One domain per line, without <span translate="no">https://</span> and without a path. Subdomains are included.</span> <span data-rag-i18n="settings.affectsStored">Changing this affects documents already stored; saving shows how many.</span></span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_OUTPUT_LINK_ALLOWLIST</code>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div data-rag-settings-group="approval">
+                                                    <div class="form-control mb-4">
+                                                        <label class="label" for="RAG_UPLOAD_APPROVAL">
+                                                            <span class="label-text" data-rag-i18n="RAG_UPLOAD_APPROVAL.label">Uploads that need approval</span>
+                                                        </label>
+                                                        <select id="RAG_UPLOAD_APPROVAL" name="RAG_UPLOAD_APPROVAL" autocomplete="off" aria-describedby="rag-upload-approval-help" class="select select-bordered select-sm w-full">
+                                                            <option value="off" data-rag-i18n="RAG_UPLOAD_APPROVAL.opt.off">None</option>
+                                                            <option value="members" data-rag-i18n="RAG_UPLOAD_APPROVAL.opt.members">Uploads by members</option>
+                                                            <option value="all" data-rag-i18n="RAG_UPLOAD_APPROVAL.opt.all">Every upload</option>
+                                                        </select>
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-upload-approval-help"><span data-rag-i18n="RAG_UPLOAD_APPROVAL.help">Admins’ own uploads and exempt connectors or uploaders never wait.</span></span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_UPLOAD_APPROVAL</code>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div data-rag-settings-group="scopes">
+                                                    <div class="form-control mb-4">
+                                                        <label class="label" for="RAG_SCOPE_TAGS">
+                                                            <span class="label-text" data-rag-i18n="RAG_SCOPE_TAGS.label">Document tags</span>
+                                                        </label>
+                                                        <select id="RAG_SCOPE_TAGS" name="RAG_SCOPE_TAGS" autocomplete="off" aria-describedby="rag-scope-tags-help" class="select select-bordered select-sm w-full">
+                                                            <option value="false" data-rag-i18n="onOff.opt.off">Off</option>
+                                                            <option value="true" data-rag-i18n="onOff.opt.on">On</option>
+                                                        </select>
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-scope-tags-help"><span data-rag-i18n="RAG_SCOPE_TAGS.help">Shows the tag pickers at upload and lets retrieval be limited to tagged documents.</span></span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_SCOPE_TAGS</code>
+                                                        </div>
+                                                    </div>
+                                                    <div class="form-control mb-4">
+                                                        <label class="label" for="RAG_SCOPE_TAG_SUGGEST">
+                                                            <span class="label-text" data-rag-i18n="RAG_SCOPE_TAG_SUGGEST.label">Tag suggestions</span>
+                                                        </label>
+                                                        <select id="RAG_SCOPE_TAG_SUGGEST" name="RAG_SCOPE_TAG_SUGGEST" autocomplete="off" aria-describedby="rag-scope-tag-suggest-help" class="select select-bordered select-sm w-full">
+                                                            <option value="false" data-rag-i18n="onOff.opt.off">Off</option>
+                                                            <option value="true" data-rag-i18n="onOff.opt.on">On</option>
+                                                        </select>
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-scope-tag-suggest-help"><span data-rag-i18n="RAG_SCOPE_TAG_SUGGEST.help">Suggests tags from the title and first page of new documents. A suggestion is applied only when an admin adds it.</span></span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_SCOPE_TAG_SUGGEST</code>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div data-rag-settings-group="versions">
+                                                    <div class="form-control mb-4">
+                                                        <label class="label" for="RAG_SUPERSESSION_DETECT">
+                                                            <span class="label-text" data-rag-i18n="RAG_SUPERSESSION_DETECT.label">Detect possible older versions</span>
+                                                        </label>
+                                                        <select id="RAG_SUPERSESSION_DETECT" name="RAG_SUPERSESSION_DETECT" autocomplete="off" aria-describedby="rag-supersession-detect-help" class="select select-bordered select-sm w-full">
+                                                            <option value="off" data-rag-i18n="onOff.opt.off">Off</option>
+                                                            <option value="on" data-rag-i18n="onOff.opt.on">On</option>
+                                                        </select>
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-supersession-detect-help"><span data-rag-i18n="RAG_SUPERSESSION_DETECT.help">Compares each new document with documents of the same type and lists likely pairs for an admin. Nothing is replaced without confirmation.</span></span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_SUPERSESSION_DETECT</code>
+                                                        </div>
+                                                    </div>
+                                                    <div class="form-control mb-4">
+                                                        <label class="label" for="RAG_EFFECTIVE_DATES">
+                                                            <span class="label-text" data-rag-i18n="RAG_EFFECTIVE_DATES.label">Use effective dates in answers</span>
+                                                        </label>
+                                                        <select id="RAG_EFFECTIVE_DATES" name="RAG_EFFECTIVE_DATES" autocomplete="off" aria-describedby="rag-effective-dates-help" class="select select-bordered select-sm w-full">
+                                                            <option value="false" data-rag-i18n="onOff.opt.off">Off</option>
+                                                            <option value="true" data-rag-i18n="onOff.opt.on">On</option>
+                                                        </select>
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-effective-dates-help"><span data-rag-i18n="RAG_EFFECTIVE_DATES.help">A document that has not started yet, or has ended, is not used for answers.</span></span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_EFFECTIVE_DATES</code>
+                                                        </div>
+                                                    </div>
+                                                    <div class="form-control mb-4">
+                                                        <label class="label" for="RAG_EFFECTIVE_DATE_LLM_EXTRACT">
+                                                            <span class="label-text" data-rag-i18n="RAG_EFFECTIVE_DATE_LLM_EXTRACT.label">Read dates with a model</span>
+                                                        </label>
+                                                        <select id="RAG_EFFECTIVE_DATE_LLM_EXTRACT" name="RAG_EFFECTIVE_DATE_LLM_EXTRACT" autocomplete="off" aria-describedby="rag-effective-date-llm-extract-help" class="select select-bordered select-sm w-full">
+                                                            <option value="false" data-rag-i18n="onOff.opt.off">Off</option>
+                                                            <option value="true" data-rag-i18n="onOff.opt.on">On</option>
+                                                        </select>
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-effective-date-llm-extract-help"><span data-rag-i18n="RAG_EFFECTIVE_DATE_LLM_EXTRACT.help">Adds a small-model call when the rules find no date. A date is kept only when its quote is found word for word in the document.</span></span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_EFFECTIVE_DATE_LLM_EXTRACT</code>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div data-rag-settings-group="translation">
+                                                    <div class="form-control mb-4">
+                                                        <label class="label" for="RAG_DOC_TRANSLATION">
+                                                            <span class="label-text" data-rag-i18n="RAG_DOC_TRANSLATION.label">Document translation</span>
+                                                        </label>
+                                                        <select id="RAG_DOC_TRANSLATION" name="RAG_DOC_TRANSLATION" autocomplete="off" aria-describedby="rag-doc-translation-help" class="select select-bordered select-sm w-full">
+                                                            <option value="off" data-rag-i18n="onOff.opt.off">Off</option>
+                                                            <option value="on" data-rag-i18n="onOff.opt.on">On</option>
+                                                        </select>
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-doc-translation-help"><span data-rag-i18n="RAG_DOC_TRANSLATION.help">Allows workspaces to store search-only translations of their chunks.</span> <span data-rag-i18n="settings.affectsStored">Changing this affects documents already stored; saving shows how many.</span></span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_DOC_TRANSLATION</code>
+                                                        </div>
+                                                    </div>
+                                                    <div class="form-control mb-4">
+                                                        <label class="label" for="RAG_DOC_TRANSLATION_MODEL">
+                                                            <span class="label-text" data-rag-i18n="RAG_DOC_TRANSLATION_MODEL.label">Translation model</span>
+                                                        </label>
+                                                        <input type="text" id="RAG_DOC_TRANSLATION_MODEL" name="RAG_DOC_TRANSLATION_MODEL" autocomplete="off" spellcheck="false" translate="no" aria-describedby="rag-doc-translation-model-help"
+                                                            class="input input-bordered input-sm w-full">
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-doc-translation-model-help"><span data-rag-i18n="RAG_DOC_TRANSLATION_MODEL.help">Empty uses the query model.</span> <span data-rag-i18n="settings.affectsStored">Changing this affects documents already stored; saving shows how many.</span></span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_DOC_TRANSLATION_MODEL</code>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                                <div data-rag-settings-group="bge">
+                                                    <div class="form-control mb-4">
+                                                        <label class="label" for="RAG_BGE_M3_SERVING">
+                                                            <span class="label-text" data-rag-i18n="serving.title"><span translate="no">BGE-M3</span> serving</span>
+                                                        </label>
+                                                        <select id="RAG_BGE_M3_SERVING" name="RAG_BGE_M3_SERVING" autocomplete="off" aria-describedby="rag-bge-m3-serving-help" class="select select-bordered select-sm w-full">
+                                                            <option value="hosted" data-rag-i18n="RAG_BGE_M3_SERVING.opt.hosted">Hosted API</option>
+                                                            <option value="sidecar" data-rag-i18n="RAG_BGE_M3_SERVING.opt.sidecar">Sidecar, in-house</option>
+                                                        </select>
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-bge-m3-serving-help"><span data-rag-i18n="serving.help">Both modes return the same vectors, so switching needs no re-embedding. With the sidecar, document text does not leave your servers.</span></span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_BGE_M3_SERVING</code>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <!-- rag-phase032-settings:end -->
                                         </div>
                                     </section>
 
