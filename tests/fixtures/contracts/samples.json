@@ -500,7 +500,9 @@
       "profile_id": "voyage-law-2-1024",
       "recommended": true,
       "refusal_regressions": [],
-      "report_path": "eval/out/binding-compare/voyage-law-2-1024/report.json"
+      "report_path": "eval/out/binding-compare/voyage-law-2-1024/report.json",
+      "supported_languages": [],
+      "undeclared_languages": []
     },
     "BindingComparison": {
       "baseline": {
@@ -702,7 +704,9 @@
           "profile_id": "voyage-law-2-1024",
           "recommended": true,
           "refusal_regressions": [],
-          "report_path": "eval/out/binding-compare/voyage-law-2-1024/report.json"
+          "report_path": "eval/out/binding-compare/voyage-law-2-1024/report.json",
+          "supported_languages": [],
+          "undeclared_languages": []
         }
       ],
       "control": {
