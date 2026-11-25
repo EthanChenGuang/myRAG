@@ -34,7 +34,15 @@ import { assembleVoiceResults, enrichVoiceCandidates, voiceContext, type VoiceRe
 import { getRagDeps, type RagDeps } from './deps';
 import { getEmbeddingProfileById } from './embeddings/active-profile';
 import { classifyProfileFailure, embedQuery, embedQueryForEvalProfile, withStaleProfileRetry } from './embeddings/query-embedding';
-import { legacyAnalyze, legacyRank, legacySearch, scaleThreshold, searchThresholdsFor } from './legacy/enhanced-retrieval';
+import {
+  LEGACY_VOICE_DEFAULT_MATCH_COUNT,
+  legacyAnalyze,
+  legacyRank,
+  legacySearch,
+  legacyVoicePoolRule,
+  scaleThreshold,
+  searchThresholdsFor,
+} from './legacy/enhanced-retrieval';
 import { defaultQueryContext } from './query/temporal-query-detector';
 import { renderReferencedSection, resolveDocumentRefs } from './refs/resolve';
 import type { SecurityConfig } from './security/config';
@@ -1099,9 +1107,6 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
   };
 }
 
-const VOICE_SEARCH_MULTIPLIER = 5;
-const VOICE_SEARCH_THRESHOLD = 0.15;
-const VOICE_DEFAULT_MATCH_COUNT = 5;
 
 function toVoiceChunk(row: RawChunk, scope: NonNullable<RunRetrievalInput['scope']>): VoiceChunk {
   // Workspace rows have always carried an id; single-tenant rows have not, and the keyword stage dedupes on id.
@@ -1116,7 +1121,7 @@ async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollec
   const { signal, profile, query } = input;
   const config = loadRagConfig(deps.ragEnv());
   const spec = (name: StageName, onFail: StageSpec['onFail']) => stageSpec(config, profile, name, onFail, input.stageOverrides);
-  const matchCount = validResultCount(input.options?.maxResults) ?? VOICE_DEFAULT_MATCH_COUNT;
+  const matchCount = validResultCount(input.options?.maxResults) ?? LEGACY_VOICE_DEFAULT_MATCH_COUNT;
   const requireAdmin = () => {
     const admin = deps.adminClient();
     if (!admin) throw new Error('[RAG Voice] admin client unavailable');
@@ -1142,15 +1147,13 @@ async function runVoicePipeline(input: RunRetrievalInput, collector: TraceCollec
         spec('search', 'throw'),
         signal,
         async (stageSignal) => {
-          const rows = await withStaleProfileRetry(query, embedding, stageSignal, (current) =>
-            searchByEmbedding(
-              scope,
-              current,
-              matchCount * VOICE_SEARCH_MULTIPLIER,
-              scaleThreshold(searchThresholdsFor(current.profile), VOICE_SEARCH_THRESHOLD),
-              { client: requireAdmin() as unknown as RpcClient, signal: stageSignal },
-            ),
-          );
+          const rows = await withStaleProfileRetry(query, embedding, stageSignal, (current) => {
+            const { primary } = legacyVoicePoolRule(searchThresholdsFor(current.profile), matchCount);
+            return searchByEmbedding(scope, current, primary.matchCount, primary.threshold, {
+              client: requireAdmin() as unknown as RpcClient,
+              signal: stageSignal,
+            });
+          });
           return rows.map((row) => toVoiceChunk(row, scope));
         },
         collector,

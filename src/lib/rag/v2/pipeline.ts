@@ -188,6 +188,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
       stageOverrides: input.stageOverrides,
       variants: query.variants,
       dedupeCounts: search.dedupeCounts,
+      queryContext: query.queryContext,
     });
     refusal = rank.decision;
 
