@@ -59,6 +59,7 @@ interface ResolvedBinding extends BindingRow {
 interface Snapshot {
   at: number;
   bindings: ResolvedBinding[];
+  byDocType: Map<string, ResolvedBinding[]>;
 }
 
 const READ_TIMEOUT_MS = 5_000;
@@ -84,6 +85,15 @@ function nullableString(value: unknown): string | null {
   return typeof value === 'string' ? value : null;
 }
 
+function isKnownDocType(value: unknown): value is string {
+  return typeof value === 'string' && DOC_TYPES.includes(value);
+}
+
+/** The D-07 key of a binding: one doc type for one tenant, or deployment-wide. */
+export function bindingKey(row: Pick<BindingRow, 'docType' | 'tenantKey'>): string {
+  return JSON.stringify([row.docType, row.tenantKey]);
+}
+
 function docTypeList(value: unknown): string[] | null {
   if (!Array.isArray(value)) return null;
   const out = value.filter((entry): entry is string => typeof entry === 'string' && DOC_TYPES.includes(entry));
@@ -95,7 +105,7 @@ export function parseBindingRow(raw: unknown): BindingRow | null {
   if (!row) return null;
   const { id, doc_type: docType, tenant_key: tenantKey, profile_id: profileId, status } = row;
   if (typeof id !== 'string' || id === '' || typeof profileId !== 'string' || profileId === '') return null;
-  if (typeof docType !== 'string' || !DOC_TYPES.includes(docType)) return null;
+  if (!isKnownDocType(docType)) return null;
   if (tenantKey !== null && (typeof tenantKey !== 'string' || tenantKey === '')) return null;
   if (typeof status !== 'string' || !STATUSES.includes(status)) return null;
   return {
@@ -186,7 +196,9 @@ function startRead(): Promise<Snapshot> {
   const at = getRagDeps().now();
   const run = readSnapshot()
     .then((bindings) => {
-      const snapshot: Snapshot = { at, bindings };
+      const byDocType = new Map<string, ResolvedBinding[]>();
+      for (const row of bindings) byDocType.set(row.docType, [...(byDocType.get(row.docType) ?? []), row]);
+      const snapshot: Snapshot = { at, bindings, byDocType };
       if (startedGeneration === generation) cache = snapshot;
       return snapshot;
     })
@@ -248,10 +260,10 @@ export async function getEffectiveBindings(tenantKey: string): Promise<Effective
  */
 export async function getBindingTargets(docType: string, tenantKey: string): Promise<BindingTarget[]> {
   if (!isDomainEmbeddingsEnabled()) return [];
-  const { bindings } = await snapshot();
+  const forDocType = (await snapshot()).byDocType.get(docType) ?? [];
   const rank = (row: BindingRow): number => (row.status === 'active' ? 0 : 2) + (row.tenantKey === null ? 1 : 0);
-  const candidates = bindings
-    .filter((row) => row.docType === docType && (row.status === 'active' || row.status === 'backfilling') && appliesTo(row, tenantKey))
+  const candidates = forDocType
+    .filter((row) => (row.status === 'active' || row.status === 'backfilling') && appliesTo(row, tenantKey))
     .sort((left, right) => rank(left) - rank(right) || left.profileId.localeCompare(right.profileId));
   const seen = new Set<string>();
   const targets: BindingTarget[] = [];

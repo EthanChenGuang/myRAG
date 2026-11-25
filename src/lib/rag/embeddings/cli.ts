@@ -52,7 +52,7 @@ type DocTypeAndTenant = { ok: true; docType: string; tenantKey: string | null } 
 /** `<docType> [--tenant <key>]`: the tenant flag is the only option, and its key must be a tenant key of either deployment mode. */
 function parseDocTypeAndTenant(command: string, args: string[]): DocTypeAndTenant {
   const [docType, ...options] = args;
-  if (docType === undefined || docType.startsWith('--')) return { ok: false, error: `${command} needs a doc type` };
+  if (!docType || docType.startsWith('--')) return { ok: false, error: `${command} needs a doc type` };
   if (!DOC_TYPES.includes(docType)) return { ok: false, error: `unknown doc type: ${docType}` };
   if (options.length === 0) return { ok: true, docType, tenantKey: null };
   if (options.length !== 2 || options[0] !== '--tenant') return { ok: false, error: `${command} takes only --tenant <key> after the doc type` };
@@ -95,7 +95,7 @@ export function parseEmbeddingArgs(argv: string[]): ParsedEmbeddingArgs {
       return rest.length === 0 ? { ok: true, command: 'bindings' } : { ok: false, error: 'bindings takes no arguments' };
     case 'bind': {
       const [docType, profile, ...options] = rest;
-      if (docType === undefined || profile === undefined) return { ok: false, error: 'bind needs <docType> <profileId> [--tenant <key>]' };
+      if (!docType || !profile) return { ok: false, error: 'bind needs <docType> <profileId> [--tenant <key>]' };
       const scope = parseDocTypeAndTenant('bind', [docType, ...options]);
       if (!scope.ok) return scope;
       const profileId = profileArgument(profile);

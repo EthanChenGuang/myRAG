@@ -5,7 +5,7 @@ import {
   type BindingComparison,
 } from '@/lib/rag-eval/contracts.generated';
 import { ProfileUnavailableError, listEmbeddingProfiles } from './active-profile';
-import { listBindingRows, refreshBindingsAfterOperation, type BindingRow } from './bindings';
+import { bindingKey, listBindingRows, refreshBindingsAfterOperation, type BindingRow } from './bindings';
 import { callGate, type ProfileRefusal } from './profile-ops';
 
 /** Every refusal of the 0441 gate functions reads `binding_refused: <code>`; it comes back as data, never as success. */
@@ -121,9 +121,8 @@ export async function recordBindingEvidence(bindingId: string, input: unknown, a
     const rows = await listBindingRows();
     const binding = rows.find((row) => row.id === bindingId);
     if (!binding) return UNKNOWN_BINDING;
-    const active = rows.find(
-      (row) => row.status === 'active' && row.id !== binding.id && row.docType === binding.docType && row.tenantKey === binding.tenantKey,
-    );
+    const key = bindingKey(binding);
+    const active = rows.find((row) => row.status === 'active' && row.id !== binding.id && bindingKey(row) === key);
     evidence = deriveBindingEvidence(comparison.data, binding, active?.profileId ?? null, new Date().toISOString());
   } else {
     const raw = BindingActivationEvidenceSchema.safeParse(input);
