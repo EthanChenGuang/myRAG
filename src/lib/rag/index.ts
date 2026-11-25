@@ -127,6 +127,7 @@ export { deriveVoiceKeywords } from './voice/keyword-fallback';
 export { createEnhancedRAGPrompt } from './generation/prompt';
 export { knowledgeBaseUnavailableMessage } from './generation/messages';
 export { readGenerationConfig } from './generation/config';
+export { detectLanguage } from './lang/detect';
 export type { GenerationConfig } from './generation/config';
 export { createCitationSession } from './generation/citations/session';
 export type {

@@ -8,6 +8,7 @@ import {
   countTokens,
   createCitationSession,
   createTraceCollector,
+  detectLanguage,
   evalScope,
   finishTrace,
   groundednessEligibility,
@@ -39,7 +40,6 @@ import {
   type EvalConversationTurn,
 } from '@/lib/rag-eval/answer';
 import type { CitationRecord } from '@/lib/rag-eval/contracts.generated';
-import { detectLanguage } from '@/lib/rag/lang/detect';
 
 export const runtime = 'nodejs';
 
