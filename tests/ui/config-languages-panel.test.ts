@@ -414,7 +414,10 @@ describe('Languages panel states (UI-SPEC 6.2.2, 7.2)', () => {
   });
 
   it('profile check not run against the active profile: warn.notVerified in the findings area, never a pass mark', async () => {
-    const page = await mounted({ get: { status: 200, body: languagesAnswer({ verifiedAgainstActiveProfile: false }) } });
+    const page = await mounted({
+      get: { status: 200, body: languagesAnswer({ verifiedAgainstActiveProfile: false }) },
+      post: (body) => ({ status: 200, body: { success: true, ...(body as Json), warnings: [], verifiedAgainstActiveProfile: false } }),
+    });
     const findings = findingsHost(page);
     expect(findings.textContent).toContain('The embedding profile could not be read from the database, so the languages were not verified against the active profile.');
     expect(findings.querySelector('.alert')!.className).toContain('alert-warning');
@@ -542,18 +545,29 @@ describe('Languages panel states (UI-SPEC 6.2.2, 7.2)', () => {
     expect(page.content.getAttribute('aria-busy')).toBeNull();
   });
 
-  it('a running save shows the spinner and Saving… on its button and disables Reset selection', async () => {
-    const page = await mounted();
+  it('a running save shows the spinner and Saving… on its button and disables Reset selection and the rows', async () => {
+    const page = await mounted({
+      get: {
+        status: 200,
+        body: languagesAnswer({ configured: true, languages: ['en'], primary: 'en', variablesSet: { RAG_SUPPORTED_LANGUAGES: true, RAG_PRIMARY_LANGUAGE: true } }),
+      },
+    });
+    toggle(useBox(page.content, 'zh'), true);
+    expect(buttonByText(page.content, 'Reset selection').disabled).toBe(false);
     page.holdPosts();
     const save = buttonByText(page.content, 'Save languages');
     save.click();
     await flush();
     expect(save.textContent).toContain('Saving…');
     expect(save.querySelector('.loading')).toBeTruthy();
+    expect(save.disabled).toBe(true);
     expect(buttonByText(page.content, 'Reset selection').disabled).toBe(true);
-    page.releasePost({ status: 200, body: { success: true, languages: ['zh', 'en'], primary: 'zh', warnings: [], verifiedAgainstActiveProfile: true } });
+    expect(useBox(page.content, 'it').disabled).toBe(true);
+    page.releasePost({ status: 400, body: { success: false, error: 'Invalid language settings', details: [{ code: 'empty_set' }] } });
     await flush();
+    expect(buttonByText(page.content, 'Save languages').disabled).toBe(false);
     expect(buttonByText(page.content, 'Reset selection').disabled).toBe(false);
+    expect(useBox(page.content, 'it').disabled).toBe(false);
   });
 
   it('Reset selection restores the saved values', async () => {

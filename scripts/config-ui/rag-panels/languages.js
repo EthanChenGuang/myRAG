@@ -265,6 +265,93 @@ function languagesSaveBody(rows, checked, primary) {
   return { languages: rows.filter((r) => set.has(r.code)).map((r) => r.code), primary: primary || null };
 }
 
+/**
+ * The selection the panel starts from: the saved values; on a first run with counts, every selectable language that has
+ * documents, with the one that has the most as primary (D-08). Without counts nothing is pre-checked.
+ */
+function languagesInitialSelection(view) {
+  if (view.firstRun) {
+    if (!view.countsAvailable) return { checked: [], primary: null };
+    const found = view.rows.filter((r) => r.selectable && r.count > 0);
+    let primary = null;
+    let most = 0;
+    for (const row of found) {
+      if (row.count > most) {
+        most = row.count;
+        primary = row.code;
+      }
+    }
+    return { checked: found.map((r) => r.code), primary };
+  }
+  return { checked: [...view.saved.languages], primary: view.saved.primary };
+}
+
+/** After a change: the primary stays if its row is checked, else it moves to the first checked row in registry order. */
+function languagesNextPrimary(rows, checked, primary) {
+  const set = new Set(checked);
+  if (primary && set.has(primary)) return { primary, moved: false };
+  const first = rows.find((r) => set.has(r.code));
+  const next = first ? first.code : null;
+  return { primary: next, moved: Boolean(primary && next && next !== primary) };
+}
+
+function languagesSameSet(a, b) {
+  const left = new Set(a);
+  const right = new Set(b);
+  return left.size === right.size && [...left].every((code) => right.has(code));
+}
+
+function languagesNameOf(rows, code) {
+  const row = rows.find((r) => r.code === code);
+  return row ? row.nativeName : languagesString(code);
+}
+
+/** The notes under the table, recomputed on every change (UI-SPEC 6.2.2). */
+function languagesNotes(view, checked) {
+  const set = new Set(checked);
+  const notes = [];
+  if (set.size === 1) notes.push({ key: 'note.monolingual', icon: 'info-circle', tone: 'info', vars: {} });
+  for (const row of view.rows) {
+    if (set.has(row.code) && row.groundedness === 'none') {
+      notes.push({ key: 'note.groundedness', icon: 'exclamation-triangle', tone: 'warning', vars: { language: row.nativeName } });
+    }
+  }
+  if (view.configured) {
+    for (const code of view.saved.languages) {
+      if (!set.has(code)) notes.push({ key: 'note.removed', icon: 'info-circle', tone: 'info', vars: { language: languagesNameOf(view.rows, code) } });
+    }
+  }
+  if (!view.countsAvailable) notes.push({ key: 'docs.unavailable', icon: null, tone: 'muted', vars: {} });
+  return notes;
+}
+
+const LANGUAGES_SAVE_ERRORS = new Set(['empty_set', 'primary_not_in_set', 'incomplete_pack', 'embedding_profile_unsupported', 'reranker_unsupported']);
+
+/** One sentence per D-07 error of a refused save: { key, vars, codeVars } for known codes, { unknown: code } otherwise. */
+function languagesErrorItems(details, rows) {
+  return (Array.isArray(details) ? details : [])
+    .filter((d) => d && typeof d === 'object' && typeof d.code === 'string')
+    .map((d) => {
+      if (!LANGUAGES_SAVE_ERRORS.has(d.code)) return { unknown: d.code };
+      const vars = {};
+      if (d.language !== undefined) vars.language = languagesNameOf(rows, d.language);
+      if (d.code === 'embedding_profile_unsupported') vars.profile = languagesString(d.id);
+      if (d.code === 'reranker_unsupported') vars.reranker = languagesString(d.id);
+      return { key: 'error.' + d.code, vars, codeVars: ['profile', 'reranker'] };
+    });
+}
+
+/** Warnings of a successful save: groundedness_not_checked becomes note.groundedness; anything else its code. */
+function languagesWarningItems(warnings, rows) {
+  return (Array.isArray(warnings) ? warnings : [])
+    .filter((w) => w && typeof w === 'object' && typeof w.code === 'string')
+    .map((w) =>
+      w.code === 'groundedness_not_checked'
+        ? { key: 'note.groundedness', vars: { language: languagesNameOf(rows, w.language) }, codeVars: [] }
+        : { unknown: w.code },
+    );
+}
+
 function languagesBannerHost() {
   return typeof document !== 'undefined' ? document.getElementById('rag-language-banner') : null;
 }
@@ -335,6 +422,9 @@ class LanguagesPanel {
     this.checked = new Set();
     this.primary = null;
     this.saving = false;
+    this.loading = null;
+    this.verified = true;
+    this.findings = [];
     this.hosts = {
       title: root.querySelector('[data-languages-title]'),
       description: root.querySelector('[data-languages-description]'),
@@ -353,34 +443,65 @@ class LanguagesPanel {
     return languagesUiLib().ragUiEl(this.doc, tag, options, children);
   }
 
+  sentence(key, vars, codeVars) {
+    return languagesUiLib().ragUiTemplateNodes(this.doc, this.t(key), vars || {}, codeVars || []);
+  }
+
   mount() {
     if (this.mounted) return this.refresh();
     this.mounted = true;
     this.root.setAttribute('lang', this.locale);
     if (this.hosts.title) this.hosts.title.textContent = this.t('panel.title');
     if (this.hosts.description) this.hosts.description.textContent = this.t('panel.description');
+    if (this.hosts.status) this.hosts.status.setAttribute('tabindex', '-1');
     const group = document.querySelector('[data-rag-settings-group="languages"]');
     if (group && this.hosts.mirrors && !this.hosts.mirrors.contains(group)) this.hosts.mirrors.appendChild(group);
     return this.refresh();
   }
 
-  async refresh() {
+  refresh() {
+    if (this.loading) return this.loading;
+    this.loading = this.load().finally(() => {
+      this.loading = null;
+    });
+    return this.loading;
+  }
+
+  async load() {
+    const ui = languagesUiLib();
     const content = this.hosts.content;
-    if (content && !this.view) {
-      content.replaceChildren(languagesUiLib().ragUiSpinner(this.doc, this.t('list.loading')));
-    }
-    const [settings, counts] = await Promise.all([languagesFetchSettings(), languagesUiLib().ragUiRagRequest(LANGUAGES_COUNTS_PATH, { method: 'GET' })]);
-    if (!settings.ok || !settings.body || typeof settings.body !== 'object') {
+    if (this.view) ui.ragUiListBusy(content, true);
+    else ui.ragUiListLoading(this.doc, content, this.t('list.loading'));
+    const [settings, counts] = await Promise.all([
+      languagesFetchSettings(),
+      ui.ragUiRagRequest(LANGUAGES_COUNTS_PATH, { method: 'GET' }),
+    ]);
+    if (!settings.ok || !settings.body || typeof settings.body !== 'object' || !Array.isArray(settings.body.packs)) {
       languagesRenderBanner(null, this.locale);
-      if (content) content.replaceChildren(this.el('p', { className: 'text-sm text-error', text: this.t('list.unavailable') }));
+      this.showUnavailable();
       return;
     }
+    if (this.hosts.alert) this.hosts.alert.replaceChildren();
+    ui.ragUiListBusy(content, false);
     const countList = counts && counts.ok && counts.body && Array.isArray(counts.body.counts) ? counts.body.counts : null;
     this.view = languagesBuildView(settings.body, { locale: this.locale, counts: countList });
-    this.checked = new Set(this.view.saved.languages);
-    this.primary = this.view.saved.primary;
+    const initial = languagesInitialSelection(this.view);
+    this.checked = new Set(initial.checked);
+    this.primary = languagesNextPrimary(this.view.rows, initial.checked, initial.primary).primary;
+    this.verified = this.view.verified;
+    this.findings = [];
     languagesRenderBanner(this.view.banner, this.locale);
     this.render();
+  }
+
+  showUnavailable() {
+    const ui = languagesUiLib();
+    const content = this.hosts.content;
+    if (this.view) ui.ragUiListBusy(content, true, true);
+    else if (content) content.replaceChildren();
+    if (this.hosts.alert) {
+      this.hosts.alert.replaceChildren(ui.ragUiUnavailableAlert(this.doc, this.locale, this.t('list.unavailable'), () => this.refresh()));
+    }
   }
 
   render() {
@@ -397,44 +518,57 @@ class LanguagesPanel {
       );
     }
     nodes.push(this.renderTable());
+    this.notesHost = this.el('div', { className: 'mt-4 flex flex-col gap-2 max-w-prose empty:hidden', attrs: { 'data-languages-notes': '' } });
+    this.findingsHost = this.el('div', { className: 'mt-4 flex flex-col gap-2 empty:hidden', attrs: { 'data-languages-findings': '' } });
+    nodes.push(this.notesHost, this.findingsHost);
+    const reasonId = 'languages-save-reason';
+    this.saveReason = this.el('p', { className: 'text-xs text-base-content/70 mt-2', id: reasonId });
     this.saveButton = this.el('button', { className: 'btn btn-primary btn-sm', text: this.t('action.save'), attrs: { type: 'button' } });
     this.saveButton.addEventListener('click', () => this.save());
-    nodes.push(this.el('div', { className: 'flex flex-wrap gap-2 mt-4' }, [this.saveButton]));
-    this.restartHost = this.el('p', { className: 'text-xs text-base-content/70 mt-2' });
+    this.resetButton = this.el('button', { className: 'btn btn-ghost btn-sm', text: this.t('action.reset'), attrs: { type: 'button' } });
+    this.resetButton.addEventListener('click', () => this.reset());
+    nodes.push(this.el('div', { className: 'flex flex-wrap gap-2 mt-4' }, [this.saveButton, this.resetButton]));
+    nodes.push(this.saveReason);
+    this.restartHost = this.el('p', { className: 'text-xs text-base-content/70 mt-2 empty:hidden' });
     nodes.push(this.restartHost);
     content.replaceChildren(...nodes);
     this.updateControls();
+    this.renderFindings();
   }
 
   renderTable() {
-    const rows = this.view.rows.map((row) => this.renderRow(row));
+    const th = (key, extra) =>
+      this.el('th', { className: 'text-xs font-semibold' + (extra ? ' ' + extra : ''), text: this.t(key), attrs: { scope: 'col' } });
     const table = this.el('table', { className: 'table table-sm' }, [
       this.el('caption', { className: 'sr-only', text: this.t('panel.title') }),
       this.el('thead', {}, [
         this.el('tr', {}, [
-          this.el('th', { className: 'text-xs font-semibold', text: this.t('col.use'), attrs: { scope: 'col' } }),
-          this.el('th', { className: 'text-xs font-semibold', text: this.t('col.language'), attrs: { scope: 'col' } }),
-          this.el('th', { className: 'text-xs font-semibold hidden md:table-cell', text: this.t('col.code'), attrs: { scope: 'col' } }),
-          this.el('th', { className: 'text-xs font-semibold text-right hidden md:table-cell', text: this.t('col.documents'), attrs: { scope: 'col' } }),
-          this.el('th', { className: 'text-xs font-semibold', text: this.t('col.primary'), attrs: { scope: 'col' } }),
+          th('col.use'),
+          th('col.language'),
+          th('col.code', 'hidden md:table-cell'),
+          th('col.documents', 'text-right hidden md:table-cell'),
+          th('col.primary'),
         ]),
       ]),
-      this.el('tbody', {}, rows),
+      this.el('tbody', {}, this.view.rows.map((row) => this.renderRow(row))),
     ]);
     return this.el(
       'div',
-      { className: 'overflow-x-auto max-w-full', attrs: { tabindex: '0', role: 'region', 'aria-label': this.t('panel.title') } },
+      {
+        className: 'overflow-x-auto max-w-full rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2',
+        attrs: { tabindex: '0', role: 'region', 'aria-label': this.t('panel.title') },
+      },
       [table],
     );
   }
 
   renderRow(row) {
+    const ui = languagesUiLib();
     const nameVars = { language: row.nativeName };
     const box = this.el('input', {
       className: 'checkbox checkbox-sm',
       attrs: { type: 'checkbox', 'aria-label': this.t('col.useAria', nameVars) },
     });
-    box.checked = this.checked.has(row.code);
     box.disabled = !row.selectable;
     box.addEventListener('change', () => this.onUse(row.code, box.checked));
     const radio = this.el('input', {
@@ -444,7 +578,7 @@ class LanguagesPanel {
     radio.addEventListener('change', () => {
       if (radio.checked) this.onPrimary(row.code);
     });
-    const nameCell = this.el('th', { className: 'min-w-0 font-normal', attrs: { scope: 'row' } }, [
+    const nameCell = this.el('th', { className: 'min-w-0 font-normal text-left', attrs: { scope: 'row' } }, [
       this.el('span', { className: 'text-sm break-words', text: row.nativeName, attrs: { lang: row.code } }),
     ]);
     if (row.uiName) nameCell.appendChild(this.el('p', { className: 'text-xs text-base-content/70 break-words', text: row.uiName }));
@@ -452,11 +586,10 @@ class LanguagesPanel {
     row.blocked.forEach((reason, index) => {
       const id = 'languages-blocked-' + row.code + '-' + index;
       blockedIds.push(id);
-      const codeVars = reason.key === 'error.invalid' ? ['detail'] : Object.keys(reason.vars);
-      const template = this.t(reason.key);
-      nameCell.appendChild(
-        this.el('p', { className: 'text-xs text-warning mt-1 break-words', id }, languagesUiLib().ragUiTemplateNodes(this.doc, template, reason.vars, codeVars)),
-      );
+      const line = this.el('p', { className: 'text-xs text-warning mt-1 break-words', id });
+      if (reason.key === 'error.invalid') line.appendChild(ui.ragUiCodeSentence(this.doc, this.locale, reason.vars.detail));
+      else line.append(...this.sentence(reason.key, reason.vars, Object.keys(reason.vars)));
+      nameCell.appendChild(line);
     });
     if (blockedIds.length) box.setAttribute('aria-describedby', blockedIds.join(' '));
     const countCell = this.el('td', { className: 'text-right tabular-nums hidden md:table-cell' });
@@ -464,14 +597,12 @@ class LanguagesPanel {
       countCell.appendChild(this.el('span', { text: '—', attrs: { 'aria-hidden': 'true' } }));
       countCell.appendChild(this.el('span', { className: 'sr-only', text: this.t('docs.noCount') }));
     } else {
-      countCell.textContent = languagesUiLib().ragUiFormatNumber(row.count, this.locale);
-    }
-    if (row.count !== null) {
+      countCell.textContent = ui.ragUiFormatNumber(row.count, this.locale);
       nameCell.appendChild(
-        this.el('p', { className: 'text-xs text-base-content/70 tabular-nums md:hidden', text: languagesUiLib().ragUiCount(this.t('col.documents'), row.count, this.locale) }),
+        this.el('p', { className: 'text-xs text-base-content/70 tabular-nums md:hidden', text: ui.ragUiCount(this.t('col.documents'), row.count, this.locale) }),
       );
     }
-    const tr = this.el('tr', { attrs: { 'data-language': row.code } }, [
+    return this.el('tr', { attrs: { 'data-language': row.code } }, [
       this.el('td', {}, [box]),
       nameCell,
       this.el('td', { className: 'hidden md:table-cell' }, [
@@ -480,7 +611,6 @@ class LanguagesPanel {
       countCell,
       this.el('td', {}, [radio]),
     ]);
-    return tr;
   }
 
   rowElements() {
@@ -489,19 +619,40 @@ class LanguagesPanel {
   }
 
   onUse(code, checked) {
+    if (this.saving) return;
     if (checked) this.checked.add(code);
     else this.checked.delete(code);
-    if (!this.primary || !this.checked.has(this.primary)) {
-      const first = this.view.rows.find((r) => this.checked.has(r.code));
-      this.primary = first ? first.code : null;
-    }
+    const next = languagesNextPrimary(this.view.rows, [...this.checked], this.primary);
+    this.primary = next.primary;
     this.updateControls();
+    if (next.moved) this.announce(this.t('primary.moved', { language: languagesNameOf(this.view.rows, next.primary) }));
   }
 
   onPrimary(code) {
-    if (!this.checked.has(code)) return;
+    if (this.saving || !this.checked.has(code)) return;
     this.primary = code;
     this.updateControls();
+  }
+
+  reset() {
+    if (this.saving || !this.view) return;
+    this.checked = new Set(this.view.saved.languages);
+    this.primary = languagesNextPrimary(this.view.rows, this.view.saved.languages, this.view.saved.primary).primary;
+    this.updateControls();
+  }
+
+  isChanged() {
+    const saved = this.view.saved;
+    return !languagesSameSet(saved.languages, [...this.checked]) || saved.primary !== this.primary;
+  }
+
+  announce(text, isError) {
+    const status = this.hosts.status;
+    if (!status) return;
+    status.classList.toggle('text-error', Boolean(isError));
+    status.replaceChildren();
+    if (isError) status.appendChild(languagesUiLib().ragUiIcon(this.doc, 'exclamation-circle', 'mr-1'));
+    status.appendChild(this.doc.createTextNode(text));
   }
 
   updateControls() {
@@ -511,35 +662,124 @@ class LanguagesPanel {
       const radio = tr.querySelector('input[type="radio"]');
       if (box) box.checked = this.checked.has(code);
       if (radio) {
-        radio.disabled = !this.checked.has(code) || this.saving;
+        radio.disabled = !this.checked.has(code);
         radio.checked = this.primary === code;
       }
     }
-    if (this.saveButton) this.saveButton.disabled = this.saving || this.checked.size === 0;
+    this.renderNotes();
+    if (!this.saveButton || this.saving) return;
+    const none = this.checked.size === 0;
+    const unchanged = this.view.configured && !this.isChanged();
+    this.saveButton.disabled = none || unchanged;
+    if (this.resetButton) this.resetButton.disabled = !this.view.configured || !this.isChanged();
+    if (this.saveReason) this.saveReason.textContent = none ? this.t('save.needOne') : '';
+    if (none) this.saveButton.setAttribute('aria-describedby', this.saveReason.id);
+    else this.saveButton.removeAttribute('aria-describedby');
+  }
+
+  renderNotes() {
+    if (!this.notesHost || !this.view) return;
+    const ui = languagesUiLib();
+    const items = languagesNotes(this.view, [...this.checked]).map((note) => {
+      const tone = note.tone === 'warning' ? 'text-warning' : note.tone === 'muted' ? 'text-xs text-base-content/70' : '';
+      return this.el('p', { className: 'flex items-start gap-2 ' + (note.tone === 'muted' ? '' : 'text-sm ') + tone }, [
+        note.icon ? ui.ragUiIcon(this.doc, note.icon, 'mt-0.5') : null,
+        this.el('span', { className: 'min-w-0 break-words', text: this.t(note.key, note.vars) }),
+      ]);
+    });
+    this.notesHost.replaceChildren(...items);
+  }
+
+  itemNode(item) {
+    if (item.unknown !== undefined) return languagesUiLib().ragUiCodeSentence(this.doc, this.locale, item.unknown);
+    return this.el('span', {}, this.sentence(item.key, item.vars, item.codeVars));
+  }
+
+  /** Findings: the refused-save alert, the warnings of the last save and the "not verified" line (never a pass mark). */
+  renderFindings() {
+    if (!this.findingsHost) return;
+    const ui = languagesUiLib();
+    const nodes = [];
+    for (const finding of this.findings) {
+      const list = this.el('ul', { className: 'list-disc pl-4 text-sm flex flex-col gap-1' }, finding.items.map((item) => this.el('li', {}, [this.itemNode(item)])));
+      const alert = ui.ragUiAlert(this.doc, {
+        tone: finding.tone,
+        icon: finding.tone === 'error' ? 'exclamation-circle' : 'exclamation-triangle',
+        body: [list],
+        role: finding.tone === 'error' ? 'alert' : null,
+      });
+      if (finding.tone === 'error') alert.setAttribute('tabindex', '-1');
+      nodes.push(alert);
+    }
+    if (!this.verified) {
+      nodes.push(ui.ragUiAlert(this.doc, { tone: 'warning', icon: 'exclamation-triangle', body: [this.t('warn.notVerified')] }));
+    }
+    this.findingsHost.replaceChildren(...nodes);
+    return nodes;
+  }
+
+  async askGuard(body) {
+    const guard = typeof window !== 'undefined' ? window.ragIngestImpactGuard : null;
+    if (typeof guard !== 'function' || !this.view.configured) return true;
+    if (languagesSameSet(this.view.saved.languages, body.languages)) return true;
+    const next = { RAG_SUPPORTED_LANGUAGES: body.languages.join(','), RAG_PRIMARY_LANGUAGE: body.primary || '' };
+    const saved = { RAG_SUPPORTED_LANGUAGES: this.view.saved.languages.join(','), RAG_PRIMARY_LANGUAGE: this.view.saved.primary || '' };
+    try {
+      const answer = await guard(next, saved);
+      if (answer === true) return true;
+      return Boolean(answer && typeof answer === 'object' && answer.RAG_SUPPORTED_LANGUAGES === next.RAG_SUPPORTED_LANGUAGES);
+    } catch {
+      return true;
+    }
   }
 
   async save() {
-    if (this.saving || !this.view) return;
+    if (this.saving || !this.view || this.checked.size === 0) return;
+    const ui = languagesUiLib();
     const body = languagesSaveBody(this.view.rows, [...this.checked], this.primary);
     this.saving = true;
-    this.updateControls();
-    const result = await languagesUiLib().ragUiFetchJson(LANGUAGES_ENDPOINT, { method: 'POST', body: JSON.stringify(body) });
-    this.saving = false;
+    const restore = ui.ragUiButtonBusy(this.doc, this.saveButton, this.t('save.running'), [this.resetButton]);
+    const boxes = this.rowElements().map((tr) => tr.querySelectorAll('input'));
+    const inputs = boxes.flatMap((list) => Array.from(list)).map((input) => [input, input.disabled]);
+    for (const [input] of inputs) input.disabled = true;
+    let result = null;
+    let proceed = false;
+    try {
+      proceed = await this.askGuard(body);
+      if (proceed) result = await ui.ragUiFetchJson(LANGUAGES_ENDPOINT, { method: 'POST', body: JSON.stringify(body) });
+    } finally {
+      this.saving = false;
+      restore();
+      for (const [input, disabled] of inputs) input.disabled = disabled;
+    }
+    if (!proceed) {
+      this.updateControls();
+      return;
+    }
     if (result.ok && result.body && result.body.success === true) {
       this.applySaved(result.body);
-    } else if (this.hosts.status) {
-      this.hosts.status.textContent = languagesUiLib().ragUiSharedLabel('error.generic', this.locale, { status: result.status || '?' });
+      return;
+    }
+    const details = result.body && Array.isArray(result.body.details) ? result.body.details : [];
+    const items = result.status === 400 ? languagesErrorItems(details, this.view.rows) : [];
+    if (items.length) {
+      this.findings = [{ tone: 'error', items }];
+      this.updateControls();
+      const nodes = this.renderFindings();
+      if (nodes[0]) nodes[0].focus();
+      this.announce('');
+      return;
     }
     this.updateControls();
+    this.announce(ui.ragUiMapError(result, this.locale, { unavailable: this.t('list.unavailable') }).message, true);
   }
 
   applySaved(answer) {
     const codes = new Set(this.view.rows.map((r) => r.code));
     const languages = (Array.isArray(answer.languages) ? answer.languages : []).filter((c) => codes.has(c));
-    const primary = typeof answer.primary === 'string' ? answer.primary : null;
-    const supported = languages.join(',');
-    const mirrors = { RAG_SUPPORTED_LANGUAGES: supported, RAG_PRIMARY_LANGUAGE: primary || '' };
-    for (const [id, value] of Object.entries(mirrors)) {
+    const primary = typeof answer.primary === 'string' && codes.has(answer.primary) ? answer.primary : null;
+    const values = { RAG_SUPPORTED_LANGUAGES: languages.join(','), RAG_PRIMARY_LANGUAGE: primary || '' };
+    for (const [id, value] of Object.entries(values)) {
       const input = document.getElementById(id);
       if (input) input.value = value;
       if (typeof window !== 'undefined' && window.configManager && window.configManager.config) {
@@ -549,9 +789,13 @@ class LanguagesPanel {
     this.view = { ...this.view, configured: true, firstRun: false, banner: null, saved: { languages, primary } };
     this.checked = new Set(languages);
     this.primary = primary;
+    this.verified = answer.verifiedAgainstActiveProfile === true;
+    const warnings = languagesWarningItems(answer.warnings, this.view.rows);
+    this.findings = warnings.length ? [{ tone: 'warning', items: warnings }] : [];
     languagesClearBanner();
-    if (this.hosts.status) this.hosts.status.textContent = this.t('save.done');
+    this.render();
     if (this.restartHost) this.restartHost.textContent = this.t('save.restart');
+    this.announce(this.t('save.done'));
   }
 }
 
@@ -598,6 +842,11 @@ if (typeof module !== 'undefined' && module.exports) {
     languagesBuildView,
     languagesBannerForm,
     languagesSaveBody,
+    languagesInitialSelection,
+    languagesNextPrimary,
+    languagesNotes,
+    languagesErrorItems,
+    languagesWarningItems,
     LanguagesPanel,
     initLanguagesPanel,
   };
