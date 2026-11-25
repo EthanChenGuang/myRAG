@@ -10,6 +10,7 @@ from rag_sidecar.contracts.latency import LatencyBudgets, StageLatency
 from rag_sidecar.contracts.report import (
     EvalReport,
     GroundednessLabelCounts,
+    InjectionReport,
     ItemResult,
     MetricValue,
     SliceMetrics,
@@ -186,6 +187,14 @@ def compute_strategy_slices(
             **metrics,
         )
     return slices
+
+
+def injection_config_label(traces: list[RagTrace]) -> str:
+    return "other"
+
+
+def build_injection_report(golden: list[GoldenItem], traces: list[RagTrace]) -> InjectionReport | None:
+    return None
 
 
 def load_latency_budgets(path: Path | None = None) -> LatencyBudgets:

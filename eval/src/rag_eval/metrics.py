@@ -294,3 +294,11 @@ def aggregate(
         "by_provenance_category": _group(gated, lambda r: f"{r.provenance}/{r.category}"),
         "gate_population": "production" if production else "all",
     }
+
+
+def injection_metrics(
+    golden: list[GoldenItem],
+    traces: list[RagTrace],
+    answers: Mapping[str, str | None] | None = None,
+) -> dict[str, object] | None:
+    return None
