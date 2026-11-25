@@ -17,6 +17,47 @@ const FOLDED_SETUP: Record<DeploymentMode, string> = {
   'multi-tenant': 'supabase/multi-tenant-setup.sql',
 };
 
+/**
+ * Migrations whose final shape is folded into both setup files: Phase 3 (0301-0320, plans 03-47 and later) and Phase 4 (0401-0413, plan 04-42).
+ * Phase 3.1 (0351-0358 and the queue hardening 0420-0423, plan 03.1-52), 0424 and Phase 6 (plan 06-45) are not folded yet, so a fresh install from a
+ * setup file is completed by those migrations alone.
+ */
+const FOLDED_MIGRATION = /^supabase\/migrations\/(030[1-9]|031\d|0320|040[1-9]|041[0-3])_[a-z0-9_]+(\.(single|multi)-tenant)?\.sql$/;
+const PHASE4_MIGRATION = /^supabase\/migrations\/04(0[1-9]|1\d)_/;
+const unfoldedMigrationFiles = (mode: DeploymentMode): string[] => migrationFiles(mode).filter((file) => !FOLDED_MIGRATION.test(file));
+
+/** Every function the Phase 4 migrations create; each one is service-role only (RET-04, D-04). */
+const PHASE4_FUNCTIONS = [
+  'hybrid_search_chunks',
+  'rag_fetch_parents',
+  'rag_assert_tenant_key',
+  'rag_relex_candidates',
+  'rag_relex_batch',
+  'rag_lexical_tsvector',
+  'rag_lexical_tsquery',
+  'rag_chunks_lexical_tsv',
+  'rag_chunks_profile_status',
+  'rag_write_profile_chunks',
+  'rag_list_chunking_profiles',
+  'rag_rechunk_missing',
+  'rag_rechunk_documents',
+  'rag_rechunk_get_run',
+  'rag_rechunk_start_run',
+  'rag_rechunk_resume_run',
+  'rag_rechunk_advance',
+  'rag_rechunk_record_gap',
+  'rag_rechunk_finish_run',
+  'rag_rechunk_gaps',
+  'rag_parent_currency_from_document',
+  'rag_sync_parent_currency',
+  'rag_create_chunking_profile',
+  'rag_record_chunking_decision',
+  'rag_activate_chunking_profile',
+  'rag_rollback_chunking_profile',
+  'rag_chunking_coverage',
+  'rag_chunking_profile_state',
+] as const;
+
 async function reapplyFoldedSetup(db: PGlite, mode: DeploymentMode): Promise<void> {
   await db.exec(fs.readFileSync(path.join(REPO_ROOT, FOLDED_SETUP[mode]), 'utf8'));
 }
@@ -113,7 +154,7 @@ function differences(left: CatalogDump, right: CatalogDump): string[] {
 
 async function build(
   mode: DeploymentMode,
-  options: { setupSqlPath?: string; apply: 'none' | 'all' | 'twice' | 'all-but-last' },
+  options: { setupSqlPath?: string; apply: 'none' | 'unfolded' | 'all' | 'twice' | 'all-but-last' },
 ): Promise<{ fixture: FixtureDatabase; dump: CatalogDump }> {
   const empty = await createEmptyFixtureDatabase({
     deploymentMode: mode,
@@ -129,7 +170,8 @@ async function build(
   try {
     if (options.apply === 'none') {
       // folded setup file alone
-    } else if (options.apply === 'all-but-last') await applyMigrationFiles(fixture.db, migrationFiles(mode).slice(0, -1));
+    } else if (options.apply === 'unfolded') await applyMigrationFiles(fixture.db, unfoldedMigrationFiles(mode));
+    else if (options.apply === 'all-but-last') await applyMigrationFiles(fixture.db, migrationFiles(mode).slice(0, -1));
     else await applyMigrations(fixture.db, mode);
     if (options.apply === 'twice') await applyMigrations(fixture.db, mode);
     return { fixture, dump: await catalogDump(fixture.db) };
@@ -142,6 +184,41 @@ async function build(
 async function assertRagFunctionsNotCallableByClients(db: PGlite): Promise<void> {
   await assertNoClientCallableRagFunctions(db, 'rag_* and match_chunks_by_profile must not be executable by anon or authenticated');
 }
+
+async function assertPhase4FunctionsServiceRoleOnly(db: PGlite): Promise<void> {
+  const result = await db.query<{ proname: string; signature: string; trigger: boolean; anon: boolean; authenticated: boolean; service_role: boolean }>(
+    `SELECT p.proname, p.oid::regprocedure::text AS signature, p.prorettype = 'trigger'::regtype AS trigger,
+            has_function_privilege('anon', p.oid, 'EXECUTE') AS anon,
+            has_function_privilege('authenticated', p.oid, 'EXECUTE') AS authenticated,
+            has_function_privilege('service_role', p.oid, 'EXECUTE') AS service_role
+     FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.proname = ANY($1::text[])`,
+    [[...PHASE4_FUNCTIONS]],
+  );
+  const present = new Set(result.rows.map((row) => row.proname));
+  assert.deepEqual(PHASE4_FUNCTIONS.filter((name) => !present.has(name)), [], 'every Phase 4 function is defined by the setup file');
+  assert.deepEqual(
+    result.rows.filter((row) => row.anon || row.authenticated).map((row) => row.signature),
+    [],
+    'anon and authenticated have no EXECUTE on a Phase 4 function',
+  );
+  // Trigger functions run without an EXECUTE check, so some are revoked from every role; every callable function is granted to service_role.
+  assert.deepEqual(
+    result.rows.filter((row) => !row.trigger && !row.service_role).map((row) => row.signature),
+    [],
+    'service_role can execute every callable Phase 4 function',
+  );
+}
+
+async function tenantKeyGuardError(db: PGlite, tenantKey: string): Promise<string | null> {
+  try {
+    await db.query('SELECT public.rag_assert_tenant_key($1)', [tenantKey]);
+    return null;
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+}
+
+const SAMPLE_UUID = '00000000-0000-4000-8000-000000000001';
 
 for (const mode of MODES) {
   describe(`schema equality (${mode})`, () => {
@@ -190,22 +267,47 @@ for (const mode of MODES) {
   });
 }
 
+describe('folded migration set', () => {
+  for (const mode of MODES) {
+    test(`every Phase 4 migration of ${mode} is folded into the setup file`, () => {
+      const phase4 = migrationFiles(mode).filter((file) => PHASE4_MIGRATION.test(file));
+      assert.ok(phase4.length >= 13);
+      assert.deepEqual(phase4.filter((file) => !FOLDED_MIGRATION.test(file)), []);
+    });
+  }
+});
+
 for (const mode of MODES) {
   describe(`${mode} setup`, () => {
     test(`${mode} setup applies cleanly on fresh PGlite`, async () => {
       const fixture = await createEmptyFixtureDatabase({ deploymentMode: mode, supabaseGrants: true, migrations: false });
       try {
+        assert.deepEqual(Object.keys(fixture.sqlSha256), [FOLDED_SETUP[mode]], 'the setup file alone was loaded, no migration');
         await assertRagFunctionsNotCallableByClients(fixture.db);
+        await assertPhase4FunctionsServiceRoleOnly(fixture.db);
+        const tables = await fixture.db.query<{ name: string }>(
+          `SELECT c.relname AS name FROM pg_class c WHERE c.relnamespace = 'public'::regnamespace AND c.relkind = 'r'
+             AND c.relname IN ('document_parents', 'chunking_profiles', 'chunking_build_runs', 'chunking_build_gaps') ORDER BY 1`,
+        );
+        assert.deepEqual(tables.rows.map((row) => row.name), ['chunking_build_gaps', 'chunking_build_runs', 'chunking_profiles', 'document_parents']);
+        const ownKeys = mode === 'single-tenant' ? ['s:default'] : [`u:${SAMPLE_UUID}`, `o:${SAMPLE_UUID}`];
+        const foreignKeys = mode === 'single-tenant' ? [`u:${SAMPLE_UUID}`, `o:${SAMPLE_UUID}`] : ['s:default'];
+        for (const key of ownKeys) assert.equal(await tenantKeyGuardError(fixture.db, key), null, `${key} is a ${mode} tenant key`);
+        for (const key of foreignKeys) assert.match(String(await tenantKeyGuardError(fixture.db, key)), /not valid for this deployment mode/);
+        assert.match(String(await tenantKeyGuardError(fixture.db, 'x:bad')), /malformed tenant key/);
       } finally {
         await fixture.db.close();
       }
     });
 
     test(`${mode} setup equals the migrated schema`, async () => {
-      const folded = await build(mode, { apply: 'all' });
+      const folded = await build(mode, { apply: 'unfolded' });
       const migrated = await build(mode, { setupSqlPath: frozenSetup(mode), apply: 'all' });
       try {
         assert.deepEqual(differences(folded.dump, migrated.dump), []);
+        const legacyGrants = (dump: CatalogDump) => dump.grants.filter((row) => row.includes('"signature":"match_'));
+        assert.ok(legacyGrants(migrated.dump).length > 0, 'the legacy match_* RPCs are part of the comparison');
+        assert.deepEqual(legacyGrants(folded.dump), legacyGrants(migrated.dump), 'legacy match_* grants are unchanged');
       } finally {
         await folded.fixture.db.close();
         await migrated.fixture.db.close();
@@ -213,8 +315,8 @@ for (const mode of MODES) {
     });
 
     test(`${mode} setup is unchanged by re-applying migrations`, async () => {
-      const once = await build(mode, { apply: 'all' });
-      const twice = await build(mode, { apply: 'twice' });
+      const once = await build(mode, { apply: 'unfolded' });
+      const twice = await build(mode, { apply: 'all' });
       try {
         assert.deepEqual(differences(once.dump, twice.dump), []);
       } finally {

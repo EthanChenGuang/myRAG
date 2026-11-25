@@ -74,6 +74,9 @@
     <script src="rag-panels/quarantine.js"></script>
     <script src="rag-panels/embedding-profiles.js"></script>
     <script src="rag-panels/ingestion.js"></script>
+    <script src="rag-panels/chunking-validate.js"></script>
+    <script src="rag-panels/chunking-profiles.js"></script>
+    <script src="rag-panels/refusal-calibration.js"></script>
 
     <style>
         /* Tab content visibility */
@@ -6521,10 +6524,16 @@
                                                 </div>
                                             </div>
                                             <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-                                                <label class="flex items-center gap-2 cursor-pointer">
-                                                    <input type="checkbox" id="RAG_REFUSAL_THRESHOLD" class="checkbox checkbox-primary">
-                                                    <span class="label-text">Threshold refusal</span>
-                                                </label>
+                                                <div class="flex flex-col gap-1">
+                                                    <label class="flex items-center gap-2 cursor-pointer">
+                                                        <input type="checkbox" id="RAG_REFUSAL_THRESHOLD" class="checkbox checkbox-primary">
+                                                        <span class="label-text">Threshold refusal</span>
+                                                    </label>
+                                                    <div class="flex flex-wrap items-center gap-x-2 pl-8">
+                                                        <span class="label-text-alt text-base-content/70" data-refusal-pointer-text>Calibration status and warnings are under RAG administration, Refusal calibration.</span>
+                                                        <button type="button" class="btn btn-link btn-xs px-0" data-refusal-pointer>Open refusal calibration</button>
+                                                    </div>
+                                                </div>
                                                 <label class="flex items-center gap-2 cursor-pointer">
                                                     <input type="checkbox" id="RAG_CONTEXT_EDGE_ORDER" class="checkbox checkbox-primary">
                                                     <span class="label-text">Context edge order</span>
@@ -8518,7 +8527,7 @@
                         <div class="card bg-base-100 shadow-lg">
                             <div class="card-body p-4 lg:p-6">
                                 <h2 class="card-title text-xl lg:text-2xl text-myrag-primary mb-2">🛡️ RAG Administration</h2>
-                                <p class="text-base-content/70 mb-6">Manage document-type defaults, ingestion jobs, quarantined uploads, and embedding profiles using your existing admin session.</p>
+                                <p class="text-base-content/70 mb-6">Manage document-type defaults, ingestion jobs, quarantined uploads, embedding and chunking profiles, and check refusal calibration, using your existing admin session.</p>
 
                                 <div class="grid gap-6">
                                     <section id="rag-administration-doc-types" class="card bg-base-200 shadow-md">
@@ -8765,6 +8774,26 @@
                                                 <button type="button" class="btn btn-outline btn-sm" data-rag-profiles-rollback>Rollback active profile</button>
                                             </div>
                                             <div data-rag-profiles-list></div>
+                                        </div>
+                                    </section>
+
+                                    <section id="rag-administration-chunking" class="card bg-base-200 shadow-md min-w-0" aria-labelledby="rag-chunking-title">
+                                        <div class="card-body">
+                                            <h3 id="rag-chunking-title" class="text-lg font-semibold mb-2" data-chunking-title>Chunking profiles</h3>
+                                            <p class="text-sm text-base-content/70 mb-4 max-w-prose" data-chunking-description>Chunk sizes per document type. Build a new profile next to the current one, compare it in the sweep report, then activate it. Applies to every workspace in this deployment.</p>
+                                            <div data-chunking-alert class="mb-4 empty:mb-0"></div>
+                                            <div data-chunking-content></div>
+                                            <div data-chunking-status class="text-sm mt-4" role="status" aria-live="polite"></div>
+                                        </div>
+                                    </section>
+
+                                    <section id="rag-administration-refusal" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-refusal-title">
+                                        <div class="card-body">
+                                            <h3 id="rag-refusal-title" class="text-lg font-semibold mb-2 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" tabindex="-1" data-refusal-title>Refusal calibration</h3>
+                                            <p class="text-sm text-base-content/70 mb-4 max-w-prose" data-refusal-description>Read-only. Shows which refusal thresholds the app can use and how they scored when they were calibrated. Thresholds change only through the calibration tool and a pull request. Applies to every workspace in this deployment.</p>
+                                            <div data-refusal-alert class="mb-4 empty:mb-0"></div>
+                                            <div data-refusal-content></div>
+                                            <div data-refusal-status class="text-sm mt-4" role="status" aria-live="polite"></div>
                                         </div>
                                     </section>
                                 </div>
