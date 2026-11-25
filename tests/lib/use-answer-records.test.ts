@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   POLL_SCHEDULE_MS,
+  canSaveMessages,
   createAnswerRecordsController,
   loadChatAnswerRecords,
   pollAnswerRecord,
@@ -232,5 +233,13 @@ describe('createAnswerRecordsController', () => {
     release();
     await flush();
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('canSaveMessages', () => {
+  it('refuses a snapshot that still holds a streaming or thinking placeholder', () => {
+    expect(canSaveMessages([assistant('a-1', { answerId: ANSWER_ID })])).toBe(true);
+    expect(canSaveMessages([assistant('a-1'), assistant('streaming')])).toBe(false);
+    expect(canSaveMessages([assistant('a-1'), assistant('thinking')])).toBe(false);
   });
 });

@@ -144,6 +144,13 @@ export function reconcileAnswerRecords(
   return next;
 }
 
+const TRANSIENT_MESSAGE_IDS = new Set(['streaming', 'thinking']);
+
+/** False while a stream placeholder is in the list; the page saves once the stream finishes. */
+export function canSaveMessages(messages: ExtendedMessage[]): boolean {
+  return !messages.some((message) => TRANSIENT_MESSAGE_IDS.has(message.id));
+}
+
 export interface AnswerRecordsControllerDeps {
   fetch?: FetchLike;
   sleep?: SleepLike;
@@ -246,6 +253,6 @@ export function useAnswerRecords({ chatId, messages, setMessages, save }: UseAns
     const next = reconcileAnswerRecords(messages, records, chatId);
     if (next === messages) return;
     setMessages((previous) => reconcileAnswerRecords(previous, records, chatId));
-    if (save && isPersistedChatId(chatId)) save(chatId, next);
+    if (save && isPersistedChatId(chatId) && canSaveMessages(next)) save(chatId, next);
   }, [records, messages, chatId, enabled, save, setMessages]);
 }
