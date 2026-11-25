@@ -67,6 +67,11 @@ import { useModel } from '@/components/providers/model-provider'
 import { ImageModal } from './image-modal'
 import { SourceImagesGrid } from './source-images-grid'
 import type { SourceImageData } from '@/types/chat'
+import { CitationChip } from './citation-chip'
+import { citationSourcesFor } from '@/components/providers/sources-provider'
+import { citeAliasFromHref, isCitationAware, renderCitationMarkers, type CitationMarkerTarget, type CitationRenderPhase } from '@/lib/chat/citation-markers'
+import { pickAnswerMetadata } from '@/lib/chat/answer-metadata'
+import { useAnswerRecordsStore } from '@/lib/stores/answer-records-store'
 
 // Define DocumentContent type that was missing
 type DocumentContent = {
@@ -2573,7 +2578,9 @@ const TextPartRenderer = React.memo(({
   isLastMessage,
   textSizeClasses,
   fontClasses,
-  cleanToolCallMetadata
+  cleanToolCallMetadata,
+  markerCitations,
+  markerPhase = 'final'
 }: {
   part: ContentPart & { type: 'text' };
   index: number;
@@ -2586,13 +2593,18 @@ const TextPartRenderer = React.memo(({
   textSizeClasses: any;
   fontClasses: any;
   cleanToolCallMetadata: (text: string) => string;
+  markerCitations?: readonly CitationMarkerTarget[];
+  markerPhase?: CitationRenderPhase;
 }) => {
   const rawTrim = part.text.trim();
   // Skip if original text is just JSON braces/brackets or whitespace
   if (/^[\{\}\[\]\s]+$/.test(rawTrim)) {
     return null;
   }
-  const cleanedText = cleanToolCallMetadata(part.text);
+  const toolCleanedText = cleanToolCallMetadata(part.text);
+  const cleanedText = markerCitations
+    ? renderCitationMarkers(toolCleanedText, { citations: markerCitations, phase: markerPhase })
+    : toolCleanedText;
   const trimmed = cleanedText.trim();
 
   // Use useMemo to ensure proper re-rendering when toggle changes
@@ -2686,6 +2698,24 @@ ChatMessage = function ({
   const contentRef = useRef<HTMLDivElement>(null);
   const messageContainerRef = useRef<HTMLDivElement>(null);
   const [citationSources, setCitationSources] = useState<Source[]>([]);
+  const messageMetadata = (message as { metadata?: unknown }).metadata;
+  const citationAware = isAI && isCitationAware(messageMetadata);
+  const answerMetadataKey = citationAware ? JSON.stringify(messageMetadata) : '';
+  const answerMetadata = useMemo(
+    () => (answerMetadataKey ? pickAnswerMetadata(JSON.parse(answerMetadataKey)) : null),
+    [answerMetadataKey]
+  );
+  const markerCitations = useMemo<CitationMarkerTarget[] | undefined>(
+    () => (answerMetadata ? (answerMetadata.citations ?? []).map(({ n, alias }) => ({ n, alias })) : undefined),
+    [answerMetadata]
+  );
+  const citationNumbers = useMemo(
+    () => new Map((markerCitations ?? []).map(({ alias, n }) => [alias, n] as const)),
+    [markerCitations]
+  );
+  const answerId = answerMetadata?.answerId;
+  const answerDocuments = useAnswerRecordsStore((s) => (answerId ? s.records[answerId]?.documents : undefined));
+  const citationMessageId = answerMetadata ? message.id : undefined;
   const [isContentChanging, setIsContentChanging] = useState(false);
   const prevContentRef = useRef(message.content);
   // Document sources state removed - no longer needed
@@ -2929,14 +2959,18 @@ ChatMessage = function ({
       }));
       allSources.push(...webSources);
 
+      const withCitations = answerMetadata
+        ? citationSourcesFor(answerMetadata, answerDocuments, allSources, message.id)
+        : allSources;
+
       // Set all sources
-      if (allSources.length > 0) {
-        setSources(allSources);
+      if (withCitations.length > 0) {
+        setSources(withCitations);
       } else {
         setSources([]);
       }
     }
-  }, [message.id, message.role, citationSources, trackedSetIsSourcesOpen, isLastMessage]); // Keep stable dependencies
+  }, [message.id, message.role, citationSources, trackedSetIsSourcesOpen, isLastMessage, answerMetadata, answerDocuments]); // Keep stable dependencies
 
 
   // Detect content changes and manage transitions
@@ -3899,9 +3933,20 @@ ChatMessage = function ({
       }));
 
       console.log('[ChatMessage] Setting web sources in provider:', webSources.length);
-      setSources(webSources);
+      setSources(answerMetadata ? citationSourcesFor(answerMetadata, answerDocuments, webSources, citationMessageId) : webSources);
     }
-  }, [isAI, citationSources, isLastMessage, setSources]); // Simplified dependencies
+  }, [isAI, citationSources, isLastMessage, setSources, answerMetadata, answerDocuments, citationMessageId]); // Simplified dependencies
+
+  const buildCitationSourcesRef = useRef<() => Source[]>(() => []);
+  buildCitationSourcesRef.current = () => {
+    const base: Source[] = [];
+    if (Array.isArray(message.content) && !isToolOnlyMessage(message.content)) {
+      base.push(...extractDocumentSources(message.content), ...extractToolLinks(message.content));
+    }
+    base.push(...citationSources.map(source => ({ ...source, type: 'web' as const })));
+    return citationSourcesFor(answerMetadata, answerDocuments, base, message.id);
+  };
+  const buildCitationSources = useCallback(() => buildCitationSourcesRef.current(), []);
 
   const copyToClipboard = (code: string) => {
     navigator.clipboard.writeText(code);
@@ -3948,16 +3993,25 @@ ChatMessage = function ({
       // Otherwise use normal paragraph rendering
       return <p className="break-words text-gray-700 dark:text-gray-300 mb-4 last:mb-0">{children}</p>;
     },
-    a: ({ href, children }) => (
-      <a
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="text-[#FF6417] dark:text-[#FF8A4D] hover:underline font-medium"
-      >
-        {children}
-      </a>
-    ),
+    a: ({ href, children }) => {
+      const citeAlias = markerCitations ? citeAliasFromHref(href) : null;
+      if (citeAlias && citationMessageId) {
+        const n = citationNumbers.get(citeAlias);
+        return n === undefined
+          ? <span>{children}</span>
+          : <CitationChip n={n} messageId={citationMessageId} buildSources={buildCitationSources} />;
+      }
+      return (
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[#FF6417] dark:text-[#FF8A4D] hover:underline font-medium"
+        >
+          {children}
+        </a>
+      );
+    },
     code: ({ node, inline, className, children, ...props }: any) => {
       const match = /language-(\w+)/.exec(className || '');
       const value = String(children).replace(/\n$/, '');
@@ -4052,7 +4106,7 @@ ChatMessage = function ({
         </div>
       );
     }
-  }), [isCodeCopied]);
+  }), [isCodeCopied, markerCitations, citationNumbers, citationMessageId, buildCitationSources]);
 
   // Set up layout stabilization on initial render
   useEffect(() => {
@@ -4463,6 +4517,8 @@ ChatMessage = function ({
                             textSizeClasses={textSizeClasses}
                             fontClasses={fontClasses}
                             cleanToolCallMetadata={cleanToolCallMetadata}
+                            markerCitations={markerCitations}
+                            markerPhase={isStreamingMessage || isStreaming ? 'streaming' : 'final'}
                           />
                         );
                       }
