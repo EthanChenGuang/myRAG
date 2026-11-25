@@ -13722,7 +13722,7 @@
                             const logQueued = typeof ingestLabel === 'function'
                                 ? ingestLabel('monitor.log.queued', locale, { file: fileItem.name })
                                 : `${fileItem.name} queued`;
-                            this.logActivity(this.escapeHtml(logQueued));
+                            this.logActivity(logQueued);
                             fileItem.status = 'completed';
                             fileItem.progress = 100;
                             this.beginQueuedUploadMonitor(resultEntry, locale);
@@ -13979,7 +13979,7 @@
                     const logLine = typeof ingestLabel === 'function'
                         ? ingestLabel(logKey, locale, { file: resultEntry.name, reason })
                         : `${resultEntry.name}: ${status}`;
-                    this.logActivity(this.escapeHtml(logLine));
+                    this.logActivity(logLine);
                 }
                 const announce = typeof ingestLabel === 'function'
                     ? ingestLabel('monitor.announce', locale, { file: resultEntry.name, status: view.label })
@@ -14099,7 +14099,7 @@
                 const timestamp = new Date().toLocaleTimeString();
                 const logEntry = document.createElement('div');
                 logEntry.className = 'text-sm mb-1';
-                logEntry.innerHTML = `<span class="text-base-content/60">[${timestamp}]</span> ${message}`;
+                logEntry.append(cuiEl('span', { className: 'text-base-content/60', text: `[${timestamp}]` }), ` ${message}`);
 
                 if (activityLog.children.length > 0 && activityLog.children[0].textContent.includes('No activity yet')) {
                     activityLog.innerHTML = '';
