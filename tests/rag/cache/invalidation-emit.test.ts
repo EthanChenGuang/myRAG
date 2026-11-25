@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { loadIngestConfig } from '@/lib/rag/ingest/config';
+import { getProcessingProfile } from '@/lib/rag/ingest/profiles/load';
 import { publishStage } from '@/lib/rag/ingest/stages/publish';
 import { softDeleteLineage } from '@/lib/rag/ingest/soft-delete';
 import type { StageContext } from '@/lib/rag/ingest/types';
@@ -51,7 +53,11 @@ function publishContext(
 ): StageContext {
   return {
     input: { scope } as StageContext['input'],
+    config: loadIngestConfig({}),
+    identity: { tenantKey: 's:default', filename: 'notes.md', fileSha256: 'a'.repeat(64), docType: 'general', docTypeOrigin: 'picked', profile: getProcessingProfile('general'), bytes: null },
     writer: {
+      // D-10: publish writes the ingestion fingerprint first; this test follows the publish call and the invalidation only.
+      setFields: async () => undefined,
       publish: async () => {
         const result = await publish();
         events.push('publish');
@@ -61,7 +67,7 @@ function publishContext(
     document: { id: DOC_NEW, version: 2, lineageId: LINEAGE, resumed: false },
     parserUsed: 'text',
     work: { chunksWritten: 3 } as StageContext['work'],
-    state: {},
+    state: { embeddingTargets: [] },
     warnings: [],
   } as unknown as StageContext;
 }

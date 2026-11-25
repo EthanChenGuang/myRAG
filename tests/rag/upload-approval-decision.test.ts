@@ -5,6 +5,7 @@ import { loadIngestConfig } from '@/lib/rag/ingest/config';
 import { getIngestDeps } from '@/lib/rag/ingest/deps';
 import { resolveUploadApproval } from '@/lib/rag/ingest/approval/resolve';
 import { afterPublish, registerPostPublishHook, resetPostPublishHooksForTests } from '@/lib/rag/ingest/post-publish';
+import { getProcessingProfile } from '@/lib/rag/ingest/profiles/load';
 import { identifyStage } from '@/lib/rag/ingest/stages/identify';
 import { publishStage } from '@/lib/rag/ingest/stages/publish';
 import { emptyIngestState, type IngestResult, type StageContext } from '@/lib/rag/ingest/types';
@@ -157,6 +158,14 @@ function fakeWriter(options: FakeWriterOptions = {}) {
   return { writer: writer as unknown as IngestWriter, calls };
 }
 
+/** The identity a run has by the publish stage; publish names its profile in the ingestion fingerprint (D-10). */
+function withIdentity(ctx: StageContext): StageContext {
+  ctx.identity = { tenantKey: 's:default', filename: 'notes.md', fileSha256: 'a'.repeat(64), docType: 'general', docTypeOrigin: 'picked', profile: getProcessingProfile('general'), bytes: null };
+  return ctx;
+}
+
+const FINGERPRINT_CALL = `setFields:${DOC}:{"ingest_fingerprint":"`;
+
 function ctxFor(scope: TenantScope, writer: IngestWriter, overrides: { mode?: 'off' | 'members' | 'all'; uploaderId?: string | null; options?: Record<string, unknown> } = {}): StageContext {
   const deps = getIngestDeps();
   return {
@@ -259,11 +268,13 @@ describe('publish stage with an approval decision', () => {
 
   async function publishWith(options: FakeWriterOptions, state: Partial<StageContext['state']> = {}) {
     const { writer, calls } = fakeWriter(options);
-    const ctx = ctxFor(mintScope('single', null, null), writer);
+    const ctx = withIdentity(ctxFor(mintScope('single', null, null), writer));
     Object.assign(ctx.state, state);
     const outcome = await publishStage.run(ctx);
     expect(outcome.kind).toBe('done');
-    return { result: (outcome as { result: IngestResult }).result, calls };
+    // D-10: the fingerprint is written first, before any publish or hold call.
+    expect(calls[0]?.startsWith(FINGERPRINT_CALL)).toBe(true);
+    return { result: (outcome as { result: IngestResult }).result, calls: calls.slice(1) };
   }
 
   test('approval required: the version is held for review and the publish function is not called', async () => {
@@ -323,7 +334,7 @@ describe('afterPublish', () => {
 
   async function runPublish(outcome: PublishOutcome, state: Partial<StageContext['state']> = {}) {
     const { writer } = fakeWriter({ publishOutcome: outcome });
-    const ctx = ctxFor(mintScope('single', null, null), writer);
+    const ctx = withIdentity(ctxFor(mintScope('single', null, null), writer));
     Object.assign(ctx.state, state);
     const result = await publishStage.run(ctx);
     await flush();
@@ -348,7 +359,7 @@ describe('afterPublish', () => {
     await runPublish('held', { publishHold: { batchId: 'b' } });
     await runPublish('quarantined');
     const { writer } = fakeWriter();
-    const ctx = ctxFor(mintScope('single', null, null), writer);
+    const ctx = withIdentity(ctxFor(mintScope('single', null, null), writer));
     ctx.state.approval = { mode: 'all', required: true, reason: 'all_uploads', uploader_id: null, decided_at: AT };
     await publishStage.run(ctx);
     await flush();

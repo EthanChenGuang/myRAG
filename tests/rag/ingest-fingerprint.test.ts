@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { IngestFingerprintPartsSchema, type IngestFingerprintParts } from '@/lib/rag-eval/contracts.generated';
 import { loadIngestConfig } from '@/lib/rag/ingest/config';
@@ -265,5 +267,25 @@ describe('expectedFingerprintFor', () => {
   test('scope tags and effective dates in the proposal change nothing', () => {
     const parts = baseParts();
     expect(expectedFingerprintFor(parts, { RAG_SCOPE_TAGS: 'true', RAG_EFFECTIVE_DATES: 'true' }).fingerprint).toBe(buildIngestFingerprint(parts));
+  });
+});
+
+describe('legacy ingest pipeline', () => {
+  function sourceFiles(dir: string): string[] {
+    return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) return sourceFiles(full);
+      return /\.(ts|tsx)$/.test(entry.name) ? [full] : [];
+    });
+  }
+
+  test('only the unified pipeline writes the fingerprint: no legacy writer outside src/lib/rag/ingest names the column', () => {
+    const root = path.join(process.cwd(), 'src');
+    const writers = sourceFiles(root)
+      .filter((file) => !file.endsWith('contracts.generated.ts'))
+      .filter((file) => fs.readFileSync(file, 'utf8').includes('ingest_fingerprint'))
+      .map((file) => path.relative(root, file).split(path.sep).join('/'));
+    expect(writers.length).toBeGreaterThan(0);
+    expect(writers.filter((file) => !file.startsWith('lib/rag/ingest/'))).toEqual([]);
   });
 });
