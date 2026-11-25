@@ -578,3 +578,83 @@ test('zod-v4: zod/v4 and zod/mini fail in app code, zod and zod/v3 pass', () => 
   assert.deepEqual(onlyRule({ 'src/lib/e.ts': "import { z } from 'zod/v3';\nimport { z as z2 } from 'zod';\n" }, 'zod-v4'), []);
   assert.deepEqual(onlyRule({ 'src/lib/f.ts': "import { z } from 'zod-v4-compat';\n" }, 'zod-v4'), []);
 });
+
+test('exports the query-llm-call rule and the query-LLM allow-lists', () => {
+  assert.ok(RULES.some((r) => r.id === 'query-llm-call'));
+  assert.ok(Array.isArray(boundary.QUERY_LLM_IMPORTERS) && boundary.QUERY_LLM_IMPORTERS.length > 0);
+  assert.ok(Array.isArray(boundary.CACHE_RPC_HOMES) && boundary.CACHE_RPC_HOMES.length >= 2);
+});
+
+test('query-llm-call: the query-LLM client imported outside src/lib/rag/query/ and deps.ts fails', () => {
+  const files = {
+    'src/lib/rag/v2/x.ts': "import { createQueryLlm } from '../query/llm';\n",
+    'src/app/x.ts': "import { createQueryLlm } from '@/lib/rag/query/llm';\n",
+    'src/lib/rag/y.ts': "export async function f() { return import('./query/llm.ts'); }\n",
+    'scripts/z.cjs': "const { createQueryLlm } = require('../src/lib/rag/query/llm');\n",
+  };
+  assert.deepEqual(onlyRule(files, 'query-llm-call'), [
+    'scripts/z.cjs:query-llm-call',
+    'src/app/x.ts:query-llm-call',
+    'src/lib/rag/v2/x.ts:query-llm-call',
+    'src/lib/rag/y.ts:query-llm-call',
+  ]);
+});
+
+test('query-llm-call: query modules and deps.ts may import the client, and look-alike paths pass', () => {
+  assert.deepEqual(onlyRule({ 'src/lib/rag/query/run-layer.ts': "import { createQueryLlm } from './llm';\n" }, 'query-llm-call'), []);
+  assert.deepEqual(onlyRule({ 'src/lib/rag/deps.ts': "import { createQueryLlm } from './query/llm';\n" }, 'query-llm-call'), []);
+  assert.deepEqual(onlyRule({ 'src/lib/rag/v2/a.ts': "import { x } from '../query/llm-types';\nimport { y } from '../query/language';\n" }, 'query-llm-call'), []);
+  assert.deepEqual(onlyRule({ 'src/lib/b.ts': "import { x } from './query/llm';\n" }, 'query-llm-call'), []);
+});
+
+test('query-llm-call: generate/stream calls from ai fail in src/lib/rag/query/ except llm.ts', () => {
+  const files = {
+    'src/lib/rag/query/plan.ts': "import { generateText } from 'ai';\n",
+    'src/lib/rag/query/sub/x.ts': "import { streamObject, Output } from 'ai';\n",
+    'src/lib/rag/query/c.ts': "import { generateObject as g } from 'ai';\n",
+    'src/lib/rag/query/d.ts': "import * as ai from 'ai';\n",
+    'src/lib/rag/query/e.ts': "export async function f() { const { streamText } = await import('ai'); return streamText; }\n",
+  };
+  assert.deepEqual(onlyRule(files, 'query-llm-call'), [
+    'src/lib/rag/query/c.ts:query-llm-call',
+    'src/lib/rag/query/d.ts:query-llm-call',
+    'src/lib/rag/query/e.ts:query-llm-call',
+    'src/lib/rag/query/plan.ts:query-llm-call',
+    'src/lib/rag/query/sub/x.ts:query-llm-call',
+  ]);
+  assert.deepEqual(onlyRule({ 'src/lib/rag/query/llm.ts': "import { generateText, Output } from 'ai';\n" }, 'query-llm-call'), []);
+  assert.deepEqual(onlyRule({ 'src/lib/rag/query/f.ts': "import type { LanguageModel } from 'ai';\nimport { Output } from 'ai';\n" }, 'query-llm-call'), []);
+  assert.deepEqual(onlyRule({ 'src/lib/rag/v2/g.ts': "import { generateText } from 'ai';\n" }, 'query-llm-call'), []);
+});
+
+test('cache-rpc: semantic-cache RPCs fail outside src/lib/rag/cache/ and pass inside', () => {
+  assert.deepEqual(onlyRule({ 'src/lib/rag/v2/x.ts': "await db.rpc('rag_cache_check', args);\n" }, 'cache-rpc'), [
+    'src/lib/rag/v2/x.ts:cache-rpc',
+  ]);
+  assert.deepEqual(onlyRule({ 'scripts/y.mjs': 'await db.rpc(\n  "rag_cache_store",\n  args,\n);\n' }, 'cache-rpc'), [
+    'scripts/y.mjs:cache-rpc',
+  ]);
+  assert.deepEqual(onlyRule({ 'src/lib/rag/ingest/parse-cache.ts': "await db.rpc('rag_cache_invalidate', args);\n" }, 'cache-rpc'), [
+    'src/lib/rag/ingest/parse-cache.ts:cache-rpc',
+  ]);
+  assert.deepEqual(onlyRule({ 'src/lib/rag/cache/pgvector.ts': "await db.rpc('rag_cache_check', args);\n" }, 'cache-rpc'), []);
+  assert.deepEqual(onlyRule({ 'src/lib/rag/cache/sub/x.ts': 'await db.rpc(`rag_cache_store`, args);\n' }, 'cache-rpc'), []);
+});
+
+test('cache-rpc: rag_tenant_language_shares fails outside src/lib/rag/query/ and passes inside', () => {
+  assert.deepEqual(onlyRule({ 'src/lib/rag/cache/x.ts': "await db.rpc('rag_tenant_language_shares', args);\n" }, 'cache-rpc'), [
+    'src/lib/rag/cache/x.ts:cache-rpc',
+  ]);
+  assert.deepEqual(onlyRule({ 'src/app/api/x/route.ts': "await db.rpc('rag_tenant_language_shares', args);\n" }, 'cache-rpc'), [
+    'src/app/api/x/route.ts:cache-rpc',
+  ]);
+  assert.deepEqual(onlyRule({ 'src/lib/rag/query/kb-languages.ts': "await db.rpc('rag_tenant_language_shares', args);\n" }, 'cache-rpc'), []);
+  assert.deepEqual(onlyRule({ 'src/lib/rag/v2/z.ts': "await db.rpc('rag_tenant_languages', args);\n" }, 'cache-rpc'), []);
+});
+
+test('cache-rpc: the Phase 3.1 parse-cache home is unchanged', () => {
+  assert.deepEqual(onlyRule({ 'src/lib/rag/ingest/parse-cache.ts': "await db.rpc('rag_parse_cache_put', args);\n" }, 'cache-rpc'), []);
+  assert.deepEqual(onlyRule({ 'src/lib/rag/cache/x.ts': "await db.rpc('rag_parse_cache_put', args);\n" }, 'cache-rpc'), [
+    'src/lib/rag/cache/x.ts:cache-rpc',
+  ]);
+});
