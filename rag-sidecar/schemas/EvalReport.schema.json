@@ -305,6 +305,11 @@
           "title": "Refused",
           "type": "boolean"
         },
+        "report_only_reason": {
+          "const": "native_review_pending",
+          "title": "Report Only Reason",
+          "type": "string"
+        },
         "rerank_status": {
           "anyOf": [
             {
@@ -381,6 +386,40 @@
         "n"
       ],
       "title": "MetricValue",
+      "type": "object"
+    },
+    "NativeReviewBacklogEntry": {
+      "additionalProperties": false,
+      "description": "One item a native speaker still has to read (D-45, XLG-02 delta).",
+      "properties": {
+        "item_id": {
+          "title": "Item Id",
+          "type": "string"
+        },
+        "language": {
+          "enum": [
+            "zh",
+            "en",
+            "it"
+          ],
+          "title": "Language",
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "pending",
+            "existing_unreviewed"
+          ],
+          "title": "State",
+          "type": "string"
+        }
+      },
+      "required": [
+        "item_id",
+        "language",
+        "state"
+      ],
+      "title": "NativeReviewBacklogEntry",
       "type": "object"
     },
     "QueryBudgetMsOverride": {
@@ -1896,6 +1935,13 @@
         }
       ],
       "default": null
+    },
+    "native_review_backlog": {
+      "items": {
+        "$ref": "#/$defs/NativeReviewBacklogEntry"
+      },
+      "title": "Native Review Backlog",
+      "type": "array"
     },
     "notes": {
       "items": {

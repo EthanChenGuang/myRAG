@@ -24,8 +24,11 @@ from rag_eval.metrics import (
     citation_run,
     groundedness_label_counts,
     injection_metrics,
+    language_pair_key,
+    slices_by,
     strategy_key,
 )
+from rag_eval.native_review import MIN_GATED_ITEMS, REVIEWED_LANGUAGES, counts_in_gated_slices, review_backlog
 from rag_eval.paths import REPO_ROOT
 
 K_VALUES = [5, 10]
@@ -347,6 +350,7 @@ def build_report(
         items=list(results),
         latency=compute_latency(traces) if traces else None,
         notes=notes,
+        native_review_backlog=review_backlog(golden),
         **aggregated,
         **answer_fields,
     )
@@ -548,6 +552,91 @@ def _injection_section(report: EvalReport) -> list[str]:
     return lines
 
 
+REPORT_ONLY_TITLE = "Report-only items (native review pending)"
+REPORT_ONLY_NOTE = (
+    "zh and it items that were machine-translated or LLM-drafted count in gated slices only after a native speaker "
+    "approved them (D-45). Until then they are scored here and never enter a gated mean, a paired difference or a "
+    f"denominator. A gated slice with fewer than {MIN_GATED_ITEMS} counting item(s) has no value and is report-only."
+)
+
+
+def _gated_slice_keys(item: ItemResult) -> list[str]:
+    keys = ["overall", f"language:{item.language}"]
+    if item.category == CROSS_LINGUAL_CATEGORY and item.evidence_language is not None:
+        keys.append(f"category:{CROSS_LINGUAL_CATEGORY}")
+        keys.append(f"pair:{language_pair_key(item.language, item.evidence_language)}")
+    return keys
+
+
+def _report_only_section(report: EvalReport) -> list[str]:
+    gated = [item for item in report.items if item.split == report.golden_filter.gate_split]
+    held = [item for item in gated if not counts_in_gated_slices(item)]
+    if not held:
+        return []
+    counting: dict[str, int] = {}
+    pending: dict[str, int] = {}
+    for item in gated:
+        target = counting if counts_in_gated_slices(item) else pending
+        for key in _gated_slice_keys(item):
+            target[key] = target.get(key, 0) + 1
+    lines = [
+        f"## {REPORT_ONLY_TITLE}",
+        "",
+        REPORT_ONLY_NOTE,
+        "",
+        "| Gated slice | Counting items | Report-only items | Status |",
+        "|---|---|---|---|",
+    ]
+    for key in sorted(pending):
+        n = counting.get(key, 0)
+        status = "gated" if n >= MIN_GATED_ITEMS else f"report-only (n below {MIN_GATED_ITEMS})"
+        lines.append(f"| {key} | {n} | {pending[key]} | {status} |")
+    lines.extend(["", *_table("Language", slices_by(held, lambda r: r.language)), ""])
+    lines.extend(["| Item | Language | Evidence language | Category |", "|---|---|---|---|"])
+    for item in sorted(held, key=lambda r: (r.language, r.item_id)):
+        lines.append(f"| {item.item_id} | {item.language} | {item.evidence_language or '-'} | {item.category} |")
+    lines.append("")
+    return lines
+
+
+BACKLOG_TITLE = "Native review backlog"
+BACKLOG_NOTE = (
+    "Informational for the owner (D-45): zh and it items no native speaker has approved yet. Pending items are "
+    "machine-translated or LLM-drafted and report-only until a named reviewer approves them; existing "
+    "synthetic_fixture items keep counting so no baseline moves. Only a human reviewer records an approval."
+)
+BACKLOG_LABELS = {
+    "pending": "pending, report-only until approved",
+    "existing_unreviewed": "existing, not yet reviewed, still counting",
+}
+
+
+def _backlog_section(report: EvalReport) -> list[str]:
+    backlog = report.native_review_backlog
+    if backlog is None:
+        return []
+    lines = [
+        f"## {BACKLOG_TITLE}",
+        "",
+        BACKLOG_NOTE,
+        "",
+        f"- Items: {len(backlog)}",
+        "",
+        "| Language | Pending (report-only) | Existing (still counting) | Total |",
+        "|---|---|---|---|",
+    ]
+    for language in sorted(REVIEWED_LANGUAGES | {entry.language for entry in backlog}):
+        pending = sum(1 for entry in backlog if entry.language == language and entry.state == "pending")
+        existing = sum(1 for entry in backlog if entry.language == language and entry.state == "existing_unreviewed")
+        lines.append(f"| {language} | {pending} | {existing} | {pending + existing} |")
+    lines.append("")
+    if backlog:
+        lines.extend(["| Item | Language | State |", "|---|---|---|"])
+        lines.extend(f"| {entry.item_id} | {entry.language} | {BACKLOG_LABELS[entry.state]} |" for entry in backlog)
+        lines.append("")
+    return lines
+
+
 def _render_markdown(report: EvalReport, budgets: LatencyBudgets | None = None) -> str:
     lines = [
         f"# Eval report: {report.run_id}",
@@ -605,6 +694,7 @@ def _render_markdown(report: EvalReport, budgets: LatencyBudgets | None = None) 
         "",
         BOUND_NOTE,
         "",
+        *_report_only_section(report),
     ]
     if budgets is None and (report.latency or report.groundedness_latency):
         budgets = load_latency_budgets()
@@ -614,6 +704,7 @@ def _render_markdown(report: EvalReport, budgets: LatencyBudgets | None = None) 
     lines.extend(_strategy_section(report))
     lines.extend(_groundedness_section(report, budgets))
     lines.extend(_injection_section(report))
+    lines.extend(_backlog_section(report))
     if report.notes:
         lines.extend(["## Notes", ""])
         lines.extend(f"- {note}" for note in report.notes)
