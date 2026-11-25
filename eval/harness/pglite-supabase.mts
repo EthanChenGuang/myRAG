@@ -162,6 +162,8 @@ export async function createFixtureDatabase(options: {
   fixtureMode?: FixtureMode;
   /** Variables the run reads from the app environment; the ingest mode sets them before it imports the app, which is earlier than the caller can. */
   processEnv?: Record<string, string>;
+  /** Ingest mode only: fill the database through the queue (D-40). */
+  ingestRouting?: import('./ingest-mode.mts').IngestRoutingOptions;
   supabaseGrants?: boolean;
   migrations?: boolean;
   setupSqlPath?: string;
@@ -186,8 +188,10 @@ export async function createFixtureDatabase(options: {
       supabaseGrants: options.supabaseGrants,
       migrations: options.migrations,
       setupSqlPath: options.setupSqlPath,
+      ...(options.ingestRouting ? { routing: options.ingestRouting } : {}),
     });
   }
+  if (options.ingestRouting) throw new Error('[Fixture DB] routing and forced tiers need the ingest fixture mode');
 
   const corpus = loadCorpus(corpusDir);
   const { db, sqlSha256 } = await createEmptyFixtureDatabase(options);

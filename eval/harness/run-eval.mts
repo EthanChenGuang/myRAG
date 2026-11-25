@@ -71,6 +71,8 @@ export interface RunEvalOptions {
   embeddingProfileId?: string;
   /** Reuse an ingest-mode fixture database instead of building a new one. */
   ingestFixture?: import('./pglite-supabase.mts').FixtureDatabase;
+  /** Ingest mode only: fill the database through the queue per routing mode or forced tier (D-40). */
+  ingestRouting?: import('./ingest-mode.mts').IngestRoutingOptions;
   /** Reuse a prepared in-process eval session (the harness keeps the edge open). */
   retainInProcess?: InProcessEval;
   /** Named configuration: an env overlay (in-process only) and eval overrides sent with every request. */
@@ -151,11 +153,13 @@ export async function prepareInProcessEval(options: {
   allowedScopes?: string[];
   embeddingProfileId?: string;
   ingestFixture?: import('./pglite-supabase.mts').FixtureDatabase;
+  ingestRouting?: import('./ingest-mode.mts').IngestRoutingOptions;
   /** Applied after the pinned eval env, before the eval route is imported. */
   envOverrides?: Record<string, string>;
 }): Promise<InProcessEval> {
-  const { corpusDir, deploymentMode, fixtureMode, allowedScopes = [], embeddingProfileId, ingestFixture, envOverrides } =
+  const { corpusDir, deploymentMode, fixtureMode, allowedScopes = [], embeddingProfileId, ingestFixture, envOverrides, ingestRouting } =
     options;
+  if (ingestRouting && fixtureMode !== 'ingest') throw new Error('[Eval Harness] routing and forced tiers need --fixture-mode ingest');
   const existingSecret = process.env.RAG_EVAL_SECRET ?? '';
   const secret = existingSecret.length >= 32 ? existingSecret : crypto.randomBytes(24).toString('hex');
   const evalEnv = {
@@ -165,7 +169,7 @@ export async function prepareInProcessEval(options: {
   };
   const fixture =
     ingestFixture ??
-    (await createFixtureDatabase({ deploymentMode, corpusDir, fixtureMode, processEnv: evalEnv }));
+    (await createFixtureDatabase({ deploymentMode, corpusDir, fixtureMode, processEnv: evalEnv, ...(ingestRouting ? { ingestRouting } : {}) }));
   let edge: FakeEdge | undefined;
   try {
     // The ingest mode ingests the corpus through its own edge and hands it over: a second edge would have another URL than the
@@ -309,6 +313,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     includeDrafts = false,
     embeddingProfileId,
     ingestFixture,
+    ingestRouting,
     retainInProcess,
     runConfig,
   } = options;
@@ -393,6 +398,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
           allowedScopes: requestedScope ? [requestedScope] : [],
           embeddingProfileId,
           ingestFixture,
+          ...(ingestRouting ? { ingestRouting } : {}),
           ...(runConfig && Object.keys(runConfig.env).length > 0 ? { envOverrides: runConfig.env } : {}),
         });
         inProcess = prepared;

@@ -457,6 +457,40 @@ describe('parse-external premium mode', () => {
     expect(calls.some((call) => call.fn === 'rag_settle_parse_budget')).toBe(true);
   });
 
+  test('keeps every paragraph of a page and the page each one came from', async () => {
+    fake.enqueue({
+      pages: [
+        { page_number: 1, success: true, markdown: '# Notice\n\nFirst paragraph of page one.\n\nSecond paragraph of page one.' },
+        { page_number: 2, success: false, error: 'page failed' },
+        { page_number: 3, success: true, markdown: 'Only paragraph of page three.' },
+      ],
+    });
+    installHarness();
+    const subpdf = `s:default/_parse-cache/${FILE_SHA}/work/range.pdf`;
+    await seedPremiumSubpdf(subpdf);
+    const result = await handleParseExternal(
+      JOB_ID,
+      {
+        worker_id: WORKER,
+        attempt_no: 1,
+        mode: 'premium',
+        continuation: null,
+        cursor: JSON.stringify({ original_pages: [4, 9, 12], reserve_pages: 6 }),
+        pages: { start: 4, end: 12 },
+        subpdf_ref: subpdf,
+        options_hash: 'd'.repeat(64),
+      },
+      { signal: new AbortController().signal },
+    );
+    expect(result.body).toMatchObject({ status: 'done' });
+    const pages = (result.body as { pages: Array<{ page: number; text: string }> }).pages;
+    expect(pages).toEqual([
+      { page: 4, text: '# Notice\n\nFirst paragraph of page one.\n\nSecond paragraph of page one.', has_table: false },
+      { page: 9, text: '', has_table: false },
+      { page: 12, text: 'Only paragraph of page three.', has_table: false },
+    ]);
+  });
+
   test('rejects subpdf_ref outside the cache prefix', async () => {
     installHarness();
     await seedQueuedUpload(`s:default/${LINEAGE}/1/`, new Uint8Array(), 'doc.pdf', 'application/pdf');

@@ -1,0 +1,41 @@
+{
+  "artifacts": [
+    "docling.json"
+  ],
+  "chunks": [
+    {
+      "contextualized_text": "Avviso di collaudo dell'attrezzatura\nSi comunica che la seconda fornitura di strumenti di controllo è stata collaudata in sede il 15 marzo 2025. Tutte le unità hanno superato la verifica funzionale.",
+      "headings": [
+        "Avviso di collaudo dell'attrezzatura"
+      ],
+      "is_table": false,
+      "pages": [
+        1
+      ],
+      "table_header": null,
+      "text": "Si comunica che la seconda fornitura di strumenti di controllo è stata collaudata in sede il 15 marzo 2025. Tutte le unità hanno superato la verifica funzionale."
+    },
+    {
+      "contextualized_text": "Avviso di collaudo dell'attrezzatura\nConclusione\nRiferimento di collaudo AC-2025-0233. L'attrezzatura è autorizzata all'uso da parte del reparto manutenzione di esempio.",
+      "headings": [
+        "Avviso di collaudo dell'attrezzatura",
+        "Conclusione"
+      ],
+      "is_table": false,
+      "pages": [
+        1
+      ],
+      "table_header": null,
+      "text": "Riferimento di collaudo AC-2025-0233. L'attrezzatura è autorizzata all'uso da parte del reparto manutenzione di esempio."
+    }
+  ],
+  "language": "it",
+  "markdown": "## Avviso di collaudo dell'attrezzatura\n\nSi comunica che la seconda fornitura di strumenti di controllo è stata collaudata in sede il 15 marzo 2025. Tutte le unità hanno superato la verifica funzionale.\n\n### Conclusione\n\nRiferimento di collaudo AC-2025-0233. L'attrezzatura è autorizzata all'uso da parte del reparto manutenzione di esempio.",
+  "page_count": 1,
+  "parser": "docling",
+  "parser_version": "docling-2.107.1",
+  "partial": false,
+  "pictures": [],
+  "text_layer_page_share": 0.0,
+  "warnings": []
+}

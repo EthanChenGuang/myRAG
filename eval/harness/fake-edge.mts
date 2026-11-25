@@ -87,6 +87,8 @@ const TABLE_COLUMNS: Record<string, string[]> = {
   document_chunks: ['id', 'document_id', 'content', 'metadata', 'created_at', 'organization_id', 'chunk_index', 'is_current', 'status', 'tenant_key', 'version', 'doc_type'],
   organization_members: ['id', 'organization_id', 'user_id', 'role', 'created_at'],
   organizations: ['id', 'name', 'slug', 'owner_id', 'is_personal', 'subscription_tier', 'created_at'],
+  // Read by effectiveTierBounds when a job is enqueued (D-13); the ingest mode's --force-tier writes it in the database directly.
+  rag_parse_tier_overrides: ['doc_type', 'min_tier', 'max_tier'],
 };
 
 type FilterOperator = 'eq' | 'in' | 'is.null';
@@ -106,6 +108,7 @@ const TABLE_FILTERS: Record<string, Record<string, FilterOperator[]>> = {
   document_chunks: { id: ['eq', 'in'], document_id: ['eq', 'in'], is_current: ['eq'], status: ['eq'], tenant_key: ['eq'], version: ['eq'], doc_type: ['eq'] },
   organization_members: { id: ['eq'], organization_id: ['eq'], user_id: ['eq'] },
   organizations: { id: ['eq'] },
+  rag_parse_tier_overrides: { doc_type: ['eq'] },
 };
 
 /** Value type of a filtered column; a column that is not listed holds a uuid. */
@@ -658,7 +661,8 @@ function createHandlers(
     }
 
     calls.push({ method: 'GET', path: `/rest/v1/${table}` });
-    const sql = `SELECT ${columns.map((column) => `"${column}"`).join(', ')} FROM ${table}${where.length ? ` WHERE ${where.join(' AND ')}` : ''} ORDER BY id${limitSql}`;
+    const orderColumn = allowedColumns.includes('id') ? 'id' : allowedColumns[0];
+    const sql = `SELECT ${columns.map((column) => `"${column}"`).join(', ')} FROM ${table}${where.length ? ` WHERE ${where.join(' AND ')}` : ''} ORDER BY "${orderColumn}"${limitSql}`;
     let rows: unknown[];
     try {
       rows = (await db.query(sql, values)).rows as unknown[];

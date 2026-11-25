@@ -1,4 +1,4 @@
-import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -40,7 +40,7 @@ function resolvePythonLaunch(): { command: string; argsPrefix: string[]; cwd: st
   return { command: 'python3', argsPrefix: [], cwd: RAG_SIDECAR_ROOT };
 }
 
-function killTree(child: ChildProcessWithoutNullStreams): void {
+function killTree(child: ChildProcess): void {
   const pid = child.pid;
   if (pid === undefined) return;
   try {
@@ -67,7 +67,7 @@ export function spawnSidecarModule(
   }
   const child = spawn(launch.command, [...launch.argsPrefix, '-m', moduleName, ...args], {
     cwd: launch.cwd,
-    env: childEnv,
+    env: childEnv as NodeJS.ProcessEnv,
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: true,
   });

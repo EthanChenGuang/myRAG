@@ -20,6 +20,7 @@ from test_ingest_tiered import (
     _advance_ready,
     _job,
     _merged_entries,
+    _page_text,
     _settings,
 )
 
@@ -38,7 +39,7 @@ _PRESET = {"fast": "fast", "structured": "structured_full"}
 
 
 def _preflight(pages: list[tuple[str, bool]]) -> PreflightResult:
-    """One (tier, text_layer) per page; one range per page."""
+    """One (tier, text_layer) per page; one range per page; the signals match the synthetic pages so no page escalates."""
     counts = {"native": 0, "fast": 0, "structured": 0, "premium": 0}
     for tier, _layer in pages:
         counts[tier] += 1
@@ -50,16 +51,16 @@ def _preflight(pages: list[tuple[str, bool]]) -> PreflightResult:
         pages=[
             PageSignals(
                 page=index,
-                chars=100 if layer else 0,
+                chars=len(_page_text(index)) if layer else 0,
                 text_layer=layer,
                 image_area_ratio=0 if layer else 1,
-                ruled_tables=1 if tier == "structured" else 0,
+                ruled_tables=0,
                 aligned_number_rows=0,
                 multi_column=False,
                 has_figure=False,
-                scanned=not layer,
+                scanned=False,
                 garbled_ratio=0,
-                signals=["tables"] if tier == "structured" else [],
+                signals=[],
                 layer="L1",
                 tier=tier,
                 preset=_PRESET[tier],
@@ -232,3 +233,24 @@ def test_progressive_off_or_a_backfill_job_publishes_once(tmp_path, settings):
     assert env.run() == JobOutcome(status="ready")
     assert [call["provisional"] for call in env.advance_calls()] == [False]
     assert all(a.reason == "initial" for a in env.job.attempts)
+
+
+def test_the_routed_run_after_a_provisional_one_still_escalates_failing_pages(tmp_path):
+    rows = list(_MIXED.pages)
+    rows[0] = rows[0].model_copy(update={"ruled_tables": 1})
+    preflight = _MIXED.model_copy(update={"pages": rows})
+    env = _env(
+        tmp_path,
+        preflight,
+        advance=[_provisional_done(), _advance_ready()],
+        progressive=True,
+        cloud_allowed=False,
+    )
+
+    assert env.run() == JobOutcome(status="ready")
+    assert [call["provisional"] for call in env.advance_calls()] == [True, False]
+    attempts = env.job.attempts
+    assert attempts[0].reason == "progressive_fast"
+    escalated = [a for a in attempts if a.reason == "escalation"]
+    assert escalated and all((a.pages.start, a.pages.end) == (1, 1) for a in escalated)
+    assert all(a.reason != "progressive_fast" for a in attempts[1:])

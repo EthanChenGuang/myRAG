@@ -63,13 +63,22 @@ function refused(workerId: string, reason: CloudRefusal): CallbackResult<ParseEx
   return { status: 200, body: { worker_id: workerId, status: 'refused', reason } as ParseExternalResponse };
 }
 
-function pageTexts(result: ParseResult, pageMapBySub: Map<number, number>): ParseExternalResponse['pages'] {
+/**
+ * The text of each sub-PDF page under its original page number. A page-aware parser reports its pages; otherwise the markdown is
+ * split on blank lines, one section per page, which only holds for pages of a single paragraph.
+ */
+function pageTexts(
+  result: ParseResult,
+  pageMapBySub: Map<number, number>,
+  parsedPages?: Array<{ page: number; text: string }>,
+): ParseExternalResponse['pages'] {
+  const bySub = parsedPages ? new Map(parsedPages.map((page) => [page.page, page.text])) : null;
   const sections = result.markdown.split(/\n\n+/).filter((part) => part.trim() !== '');
   const pages: NonNullable<ParseExternalResponse['pages']> = [];
   for (let sub = 1; sub <= pageMapBySub.size; sub += 1) {
     const original = pageMapBySub.get(sub);
     if (original === undefined) continue;
-    const text = (sections[sub - 1] ?? sections[0] ?? '').trim();
+    const text = bySub ? (bySub.get(sub) ?? '').trim() : (sections[sub - 1] ?? sections[0] ?? '').trim();
     pages.push({ page: original, text, has_table: /\|.+\|/.test(text) && text.includes('| ---') });
   }
   return pages;
@@ -207,7 +216,7 @@ export async function handlePremiumMode(
     };
     return {
       status: 200,
-      body: { worker_id: body.worker_id, status: 'done', cache_id: entry.id, pages: pageTexts(result, pageMapBySub) } as ParseExternalResponse,
+      body: { worker_id: body.worker_id, status: 'done', cache_id: entry.id, pages: pageTexts(result, pageMapBySub, attempt.pages) } as ParseExternalResponse,
     };
   } catch (error) {
     await releaseOpen(reservation, signal);
