@@ -295,4 +295,11 @@ describe('publish stage with an approval decision', () => {
   test('not_holdable on a version that is neither pending nor quarantined fails the stage', async () => {
     await expect(publishWith({ holdError: new IngestWriterError('rag_hold_document_for_review', 'P0001', 'not_holdable'), rowStatus: 'ready' }, { approval: required })).rejects.toThrow();
   });
+
+  test('the guard outcomes of the publish function map to pending_review and to a batch hold', async () => {
+    expect((await publishWith({ publishOutcome: 'pending_review' })).result.status).toBe('pending_review');
+    const held = await publishWith({ publishOutcome: 'held' }, { publishHold: { batchId: 'batch-1' } });
+    expect(held.result).toMatchObject({ status: 'ready', reason: 'publish_held' });
+    expect(held.calls).toEqual([`setFields:${DOC}:${JSON.stringify({ metadata: { publish_hold: { batch_id: 'batch-1' } } })}`, `publish:${DOC}`]);
+  });
 });
