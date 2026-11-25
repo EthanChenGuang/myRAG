@@ -35,7 +35,7 @@ import {
   type BindingEmbed,
   type BindingLegsPlan,
 } from './stages/binding-legs';
-import { buildV2Result, fusedHitsToVoiceChunks } from './result';
+import { buildSmallTalkResult, buildV2Result, fusedHitsToVoiceChunks } from './result';
 
 export const V2_PROFILES = ['chat', 'embed', 'eval', 'voice'] as const;
 
@@ -117,6 +117,11 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
     queryContext = query.queryContext;
     queryLanguage = query.queryLanguage;
     queryPlan = query.queryLayer?.plan ?? null;
+
+    // D-10: small talk under the layer skips the search, rank and context groups; the model answers without KB context.
+    if (query.queryLayer?.shortCircuit?.kind === 'small_talk') {
+      return buildSmallTalkResult({ collector, profile, queryContext, queryLanguage, queryPlan });
+    }
 
     // D-18: planned before the embed stage, so the binding map is known before anything reads the config hash.
     bindingPlan = await planBindingLegs({ profile, config, scope, filters: query.filters, options: input.options });
