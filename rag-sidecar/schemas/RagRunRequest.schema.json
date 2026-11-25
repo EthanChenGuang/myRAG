@@ -82,6 +82,11 @@
     "RagRunOptions": {
       "additionalProperties": false,
       "properties": {
+        "citations": {
+          "default": false,
+          "title": "Citations",
+          "type": "boolean"
+        },
         "degrade": {
           "anyOf": [
             {
@@ -145,6 +150,11 @@
           ],
           "default": null,
           "title": "Generator Model"
+        },
+        "groundedness": {
+          "default": false,
+          "title": "Groundedness",
+          "type": "boolean"
         },
         "max_results": {
           "anyOf": [
