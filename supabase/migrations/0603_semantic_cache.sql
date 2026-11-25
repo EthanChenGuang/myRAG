@@ -31,8 +31,47 @@ ALTER TABLE public.rag_semantic_cache ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.rag_semantic_cache FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT, DELETE ON TABLE public.rag_semantic_cache TO service_role;
 
+-- True when every {document_id, version} in p_source_versions is the current, ready version of a document of the tenant (vacuously true
+-- for an empty list). Used by rag_cache_check on every hit, by rag_cache_store, and by the app to re-validate a RedisVL hit (D-35).
+CREATE OR REPLACE FUNCTION public.rag_cache_sources_current(p_tenant_key text, p_source_versions jsonb)
+RETURNS boolean
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  IF p_source_versions IS NULL OR pg_catalog.jsonb_typeof(p_source_versions) <> 'array' THEN
+    RAISE EXCEPTION 'source_versions must be a json array' USING ERRCODE = '22023';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM pg_catalog.jsonb_array_elements(p_source_versions) AS e(v)
+    WHERE pg_catalog.jsonb_typeof(e.v) <> 'object'
+       OR pg_catalog.jsonb_typeof(e.v -> 'document_id') IS DISTINCT FROM 'string'
+       OR (e.v ->> 'document_id') !~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+       OR pg_catalog.jsonb_typeof(e.v -> 'version') IS DISTINCT FROM 'number'
+  ) THEN
+    RAISE EXCEPTION 'each source must be {document_id, version}' USING ERRCODE = '22023';
+  END IF;
+
+  RETURN NOT EXISTS (
+    SELECT 1 FROM pg_catalog.jsonb_to_recordset(p_source_versions) AS s(document_id uuid, version integer)
+    WHERE NOT EXISTS (
+      SELECT 1 FROM public.documents d
+      WHERE d.id = s.document_id
+        AND d.tenant_key = p_tenant_key
+        AND d.version = s.version
+        AND d.is_current
+        AND d.status = 'ready'
+    )
+  );
+END
+$fn$;
+
 -- Nearest entry for (tenant, key, profile) among unexpired rows. Returns exactly one row: the nearest distance is reported even on a miss
--- (NULL when no candidate exists); answer, entry_id and is_refusal are set only on a hit (distance <= p_max_distance).
+-- (NULL when no candidate exists); answer, entry_id and is_refusal are set only on a hit (distance <= p_max_distance). A hit whose sources are
+-- no longer current and ready is a miss, and that row is deleted.
 CREATE OR REPLACE FUNCTION public.rag_cache_check(
   p_tenant_key text,
   p_key_hash text,
@@ -51,6 +90,7 @@ DECLARE
   v_distance double precision;
   v_answer jsonb;
   v_is_refusal boolean;
+  v_sources jsonb;
 BEGIN
   PERFORM public.rag_assert_tenant_key(p_tenant_key);
   IF p_key_hash IS NULL OR p_key_hash !~ '^[0-9a-f]{64}$' THEN
@@ -67,7 +107,7 @@ BEGIN
   END IF;
 
   WITH candidates AS MATERIALIZED (
-    SELECT c.id, c.embedding, c.answer, c.is_refusal
+    SELECT c.id, c.embedding, c.answer, c.is_refusal, c.source_versions
     FROM public.rag_semantic_cache c
     WHERE c.tenant_key = p_tenant_key
       AND c.key_hash = p_key_hash
@@ -75,8 +115,8 @@ BEGIN
       AND c.expires_at > pg_catalog.now()
       AND public.vector_dims(c.embedding) = public.vector_dims(p_embedding)
   )
-  SELECT k.id, (k.embedding OPERATOR(public.<=>) p_embedding)::double precision, k.answer, k.is_refusal
-  INTO v_id, v_distance, v_answer, v_is_refusal
+  SELECT k.id, (k.embedding OPERATOR(public.<=>) p_embedding)::double precision, k.answer, k.is_refusal, k.source_versions
+  INTO v_id, v_distance, v_answer, v_is_refusal, v_sources
   FROM candidates k
   ORDER BY 2, k.id
   LIMIT 1;
@@ -86,6 +126,12 @@ BEGIN
     RETURN;
   END IF;
   IF v_distance > p_max_distance THEN
+    RETURN QUERY SELECT false, NULL::uuid, v_distance, NULL::jsonb, NULL::boolean;
+    RETURN;
+  END IF;
+
+  IF NOT public.rag_cache_sources_current(p_tenant_key, v_sources) THEN
+    DELETE FROM public.rag_semantic_cache c WHERE c.id = v_id AND c.tenant_key = p_tenant_key;
     RETURN QUERY SELECT false, NULL::uuid, v_distance, NULL::jsonb, NULL::boolean;
     RETURN;
   END IF;
@@ -139,16 +185,8 @@ BEGIN
   IF p_ttl_seconds IS NULL OR p_ttl_seconds < 1 OR p_ttl_seconds > 86400 THEN
     RAISE EXCEPTION 'ttl must be within 1..86400 seconds' USING ERRCODE = '22023';
   END IF;
-  IF p_source_versions IS NULL OR pg_catalog.jsonb_typeof(p_source_versions) <> 'array' THEN
-    RAISE EXCEPTION 'source_versions must be a json array' USING ERRCODE = '22023';
-  END IF;
-  IF EXISTS (
-    SELECT 1 FROM pg_catalog.jsonb_array_elements(p_source_versions) AS e(v)
-    WHERE pg_catalog.jsonb_typeof(e.v) <> 'object'
-       OR pg_catalog.jsonb_typeof(e.v -> 'document_id') IS DISTINCT FROM 'string'
-       OR pg_catalog.jsonb_typeof(e.v -> 'version') IS DISTINCT FROM 'number'
-  ) THEN
-    RAISE EXCEPTION 'each source must be {document_id, version}' USING ERRCODE = '22023';
+  IF NOT public.rag_cache_sources_current(p_tenant_key, p_source_versions) THEN
+    RAISE EXCEPTION 'cache_sources_not_current' USING DETAIL = 'every source must be a current, ready document of the tenant';
   END IF;
 
   SELECT coalesce(
@@ -157,20 +195,6 @@ BEGIN
   INTO v_sources
   FROM (SELECT DISTINCT r.document_id, r.version
         FROM pg_catalog.jsonb_to_recordset(p_source_versions) AS r(document_id uuid, version integer)) s;
-
-  IF EXISTS (
-    SELECT 1 FROM pg_catalog.jsonb_to_recordset(v_sources) AS s(document_id uuid, version integer)
-    WHERE NOT EXISTS (
-      SELECT 1 FROM public.documents d
-      WHERE d.id = s.document_id
-        AND d.tenant_key = p_tenant_key
-        AND d.version = s.version
-        AND d.is_current
-        AND d.status = 'ready'
-    )
-  ) THEN
-    RAISE EXCEPTION 'cache_sources_not_current' USING DETAIL = 'every source must be a current, ready document of the tenant';
-  END IF;
 
   DELETE FROM public.rag_semantic_cache c
   WHERE c.id IN (
@@ -192,10 +216,68 @@ BEGIN
 END
 $fn$;
 
+-- Deletes the tenant's entries and returns how many: all of them when p_document_ids is NULL, otherwise only entries whose source_versions
+-- reference one of the ids.
+CREATE OR REPLACE FUNCTION public.rag_cache_invalidate(p_tenant_key text, p_document_ids uuid[] DEFAULT NULL)
+RETURNS integer
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_deleted integer;
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+
+  IF p_document_ids IS NULL THEN
+    DELETE FROM public.rag_semantic_cache c WHERE c.tenant_key = p_tenant_key;
+  ELSE
+    DELETE FROM public.rag_semantic_cache c
+    WHERE c.tenant_key = p_tenant_key
+      AND EXISTS (
+        SELECT 1 FROM pg_catalog.jsonb_array_elements(c.source_versions) AS e(v)
+        WHERE (e.v ->> 'document_id') IN (SELECT u.id::text FROM pg_catalog.unnest(p_document_ids) AS u(id))
+      );
+  END IF;
+  GET DIAGNOSTICS v_deleted = ROW_COUNT;
+  RETURN v_deleted;
+END
+$fn$;
+
+-- The current name and version of the tenant's current, ready documents among p_document_ids, so a cache hit can write its answer record
+-- with citations re-resolved against the current sources (plan-check W6).
+CREATE OR REPLACE FUNCTION public.rag_cache_resolve_sources(p_tenant_key text, p_document_ids uuid[])
+RETURNS TABLE (document_id uuid, name text, version integer)
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+
+  RETURN QUERY
+  SELECT d.id, d.filename, d.version
+  FROM public.documents d
+  WHERE d.tenant_key = p_tenant_key
+    AND d.id = ANY (coalesce(p_document_ids, '{}'::uuid[]))
+    AND d.is_current
+    AND d.status = 'ready'
+  ORDER BY d.id;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_cache_sources_current(text, jsonb) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.rag_cache_check(text, text, text, public.halfvec, double precision) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.rag_cache_store(text, text, text, public.halfvec, text, jsonb, jsonb, boolean, integer) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_cache_invalidate(text, uuid[]) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_cache_resolve_sources(text, uuid[]) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_cache_sources_current(text, jsonb) TO service_role;
 GRANT EXECUTE ON FUNCTION public.rag_cache_check(text, text, text, public.halfvec, double precision) TO service_role;
 GRANT EXECUTE ON FUNCTION public.rag_cache_store(text, text, text, public.halfvec, text, jsonb, jsonb, boolean, integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_cache_invalidate(text, uuid[]) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_cache_resolve_sources(text, uuid[]) TO service_role;
 
 NOTIFY pgrst, 'reload schema';
 
