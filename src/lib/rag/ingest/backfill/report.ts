@@ -114,7 +114,9 @@ function usable(job: SampleJob): boolean {
 function embeddingTokens(ext: string, size: number, docClass: string | null, pages: number): number {
   const lower = ext.toLowerCase();
   if (TEXT_EXTS.has(lower)) return Math.ceil(size / TEXT_BYTES_PER_TOKEN);
-  if (docClass === 'image' || IMAGE_EXTS.has(lower)) return IMAGE_TOKENS;
+  if (docClass === 'image') return IMAGE_TOKENS;
+  // The worker lets a text MIME win over the name, so an image-named file it parsed as native is a text upload.
+  if (IMAGE_EXTS.has(lower)) return docClass === 'native' ? Math.ceil(size / TEXT_BYTES_PER_TOKEN) : IMAGE_TOKENS;
   return pages * TOKENS_PER_PAGE;
 }
 
