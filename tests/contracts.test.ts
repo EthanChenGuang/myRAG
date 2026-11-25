@@ -175,3 +175,27 @@ describe('Phase 3.2 model-output and embed contracts (plan 03.2-06)', () => {
     );
   });
 });
+
+describe('Phase 3.2 golden additions (plan 03.2-06, D-45)', () => {
+  it('the generated GoldenItem schema accepts the table_split sample with table_answer and native_review', () => {
+    const variant = fixture.variants['GoldenItem:table_split'];
+    expect(variant?.model).toBe('GoldenItem');
+    const result = schemaFor('GoldenItem').safeParse(variant?.value);
+    expect(result.success).toBe(true);
+    expect(result.data.table_answer.column).toBeTruthy();
+    expect(result.data.native_review.status).toBe('pending');
+  });
+
+  it('an existing GoldenItem parses without adding the new keys', () => {
+    const result = schemaFor('GoldenItem').safeParse(fixture.samples.GoldenItem);
+    expect(result.success).toBe(true);
+    expect(result.data).not.toHaveProperty('table_answer');
+    expect(result.data).not.toHaveProperty('native_review');
+  });
+
+  it('rejects an unknown native_review origin', () => {
+    const value = fixture.variants['GoldenItem:table_split']?.value ?? {};
+    const review = { origin: 'human', status: 'pending', reviewer: null, reviewed_at: null };
+    expect(schemaFor('GoldenItem').safeParse({ ...value, native_review: review }).success).toBe(false);
+  });
+});
