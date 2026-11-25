@@ -98,7 +98,7 @@ Plans:
 ### Phase 3: Unified Ingestion & Embedding Profiles
 **Goal**: Every document enters the knowledge base through one path (typed, deduplicated, versioned and carrying the same metadata), and its chunks are embedded under a switchable embedding profile that can be rolled back
 **Depends on**: Phase 2
-**Requirements**: DATA-01, DATA-02, DATA-03, DATA-04, DATA-05, DATA-06, DATA-07, EMB-01, EMB-02, EMB-03, EMB-04, CHK-01, CHK-02, SEC-01, XLG-02, DATA-09, DATA-10, DATA-11, SEC-07, SEC-08, SEC-09
+**Requirements**: DATA-01, DATA-02, DATA-03, DATA-04, DATA-05, DATA-06, DATA-07, EMB-01, EMB-02, EMB-03, EMB-04, CHK-01, CHK-02, SEC-01, XLG-02, DATA-09, DATA-10, DATA-11, SEC-07, SEC-08, SEC-09, XLG-04, XLG-06
 **Success Criteria** (what must be TRUE):
   1. User can pick a document type for each file at upload (financial/accounting report, contract/legal, invoice/receipt, product/technical, scanned/image), starting from a default set by the admin (fixed type or auto-detect, per tenant and per source) that they can change, and untyped files become `general`; each type applies its processing profile (parser options, chunk size and boundaries, OCR, metadata extraction), which is defined as data, as shown by ingesting a fixture file of every type.
   2. A fixture ingested through chat/Config UI upload, Nango sync, a scraper and image upload produces chunks with the same metadata fields on every path: tenant, document ID, version, `is_current`, source, type, date, language, page or section, content hash, `parser_used` and the URL metadata.
@@ -112,6 +112,8 @@ Plans:
   10. Fixture PDF and Word files with white-on-white text, tiny fonts, off-page text, zero-width characters and hidden Word runs are quarantined with the hidden spans shown to the admin, and none of that text reaches embeddings, `lexical_text` or the LLM; a parser path that cannot report styles records `not_checked`.
   11. A reworded injection that the SEC-01 rules miss is caught by the ingestion classifier (stubbed in CI) and its score is stored on the chunk; a document containing a link outside the allowlist is quarantined for review.
   12. With `RAG_UPLOAD_APPROVAL` on, a member's upload on each ingestion path stays out of retrieval and the cache until an admin approves it; exempted connectors index directly; uploader and approver are stored; with the switch off, ingestion behaves as before.
+  13. With `RAG_DOC_TRANSLATION` on for a fixture tenant, Chinese chunks also get English and Italian retrieval-only translations; an Italian question hits a translation but the answer cites the original Chinese chunk; replacing or deleting the document rebuilds or removes its translations; with the switch off, ingestion and retrieval match the baseline, and the eval report shows the cross-lingual Recall gain next to storage, cost and ingestion time.
+  14. Fixture images in Chinese and Italian documents get captions written in that language, with in-image text quoted verbatim, and the caption chunk's `language` matches; the re-embedding job regenerates existing English captions without re-parsing.
 **Live verification**: Parse real documents with the LlamaCloud key, and run Docling OCR on real scanned Chinese and Italian files; call Voyage, DeepInfra and OpenRouter with real keys (check Qwen3 dimension parameter, instruction prefix, MRL truncation); run the re-embed job and the `halfvec` HNSW index build on the real Supabase project; compare each embedding profile with the baseline on the real golden set; sync a real Nango connection.
 **Plans**: TBD
 **UI hint**: yes
@@ -166,7 +168,7 @@ Plans:
 ### Phase 6: Query Layer (LlamaIndex & LangChain)
 **Goal**: Follow-up, vague and compound questions retrieve as well as standalone ones under either query framework, within their latency budgets, and voice stays fast
 **Depends on**: Phase 4
-**Requirements**: QRY-01, QRY-02, QRY-03, QRY-04, QRY-05, QRY-06, QRY-07, QRY-08, LAT-03, XLG-01, CACHE-01, LAT-06, LAT-07
+**Requirements**: QRY-01, QRY-02, QRY-03, QRY-04, QRY-05, QRY-06, QRY-07, QRY-08, LAT-03, XLG-01, CACHE-01, LAT-06, LAT-07, XLG-05, XLG-07
 **Success Criteria** (what must be TRUE):
   1. Under the default `RAG_QUERY_FRAMEWORK=llamaindex`, native TypeScript ports make no framework call at query time and do four things: rewrite follow-ups into standalone queries in the user's language with numbers, names and IDs verbatim (standalone questions pass through unchanged); fuse multi-query variants with RRF; run HyDE only when switched on; and decompose compound questions into at most four sub-questions with no synthesized answer. Outputs validate against the Pydantic-generated Zod schemas (fake LLM, fixture multi-turn and compound items).
   2. The router reuses the existing query classifier to choose transforms per query. Each transform has its own switch, timeout and latency budget, and is skipped without failing the request when it overruns (injected delays). The original query is always retrieved. Voice runs only history rewrite, hybrid retrieval and an optional fast reranker within its latency budget, never HyDE, multi-query or decomposition.
@@ -177,6 +179,8 @@ Plans:
   7. With the semantic cache on, cache hits have much lower p95 latency than misses, any document change in the tenant invalidates affected entries, and the cross-tenant canary suite includes the cache.
   8. With `RAG_MODEL_ROUTING=auto` and the "Auto" model selected, simple fixture lookups go to the fast model and comparison, compound and cross-language items go to the quality model, with the rule on the trace; an explicitly chosen model is never replaced, and with the switch off nothing changes. The eval against the fixed quality model shows correctness and refusal rates within the noise band per language and category and a lower generation p95.
   9. With injected transform delays, original-query retrieval starts before the transforms finish, late variants still join the fusion, an overrunning transform is dropped without failing the request, and a semantic-cache hit cancels in-flight retrieval; the pre-retrieval p95 is close to the slowest single path, not the sum.
+  10. An admin-entered glossary term ("ferie" → "年假") is used by query translation, document translation and rewriting; a fake translator that ignores it has its output corrected or discarded; the `glossary` fixture items pass in zh, en and it.
+  11. The `cross_lingual` slice runs through the voice entry point and is reported per language pair; voice adds query translation only if the eval shows it fits the voice budget and improves the slice, and the slice is gated either way.
 **Live verification**: Run both frameworks with real LLM keys; measure p50/p95 latency of each transform and of the whole pre-retrieval stage for chat (starting budget about 2 s before first token) and voice (about 800 ms), and replace the starting budgets with the measured ones; compare LlamaIndex and LangChain on the real golden set.
 **Plans**: TBD
 **UI hint**: yes
