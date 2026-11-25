@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { listReviewItems, ReviewListQuerySchema } from '@/lib/rag/feedback-loop/review-access';
-import { openReviewSession, REVIEW_NO_STORE, reviewUnavailable } from '@/lib/rag/feedback-loop/review-route';
+import { listReviewItems, openReviewSession, REVIEW_NO_STORE, ReviewListQuerySchema, reviewUnavailable } from '@/lib/rag';
 
 export const runtime = 'nodejs';
 

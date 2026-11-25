@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { getReviewItem, isReviewItemId } from '@/lib/rag/feedback-loop/review-access';
-import { openReviewSession, REVIEW_NO_STORE, reviewNotFound, reviewUnavailable } from '@/lib/rag/feedback-loop/review-route';
+import { getReviewItem, isReviewItemId, openReviewSession, REVIEW_NO_STORE, reviewNotFound, reviewUnavailable } from '@/lib/rag';
 
 export const runtime = 'nodejs';
 

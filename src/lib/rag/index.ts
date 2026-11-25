@@ -298,3 +298,17 @@ export { readSecurityConfig } from './security/config';
 export { injectionTraceVersions } from './security/injection-check';
 export type { ToolResultGuardMode } from './security/config';
 export { escapeToolOutput, scanToolOutput, wrapToolResultsForPrompt } from './security/tool-results';
+export {
+  getReviewItem,
+  getReviewItemChunks,
+  grantDomainExpert,
+  isReviewItemId,
+  listDomainExperts,
+  listReviewItems,
+  REVIEW_PAGE_SIZE,
+  ReviewListQuerySchema,
+  revokeDomainExpert,
+  validateGrantTenantKey,
+} from './feedback-loop/review-access';
+export type { DomainExpertGrant, ReviewChunk, ReviewListQuery } from './feedback-loop/review-access';
+export { openReviewSession, REVIEW_NO_STORE, reviewNotFound, reviewUnavailable } from './feedback-loop/review-route';

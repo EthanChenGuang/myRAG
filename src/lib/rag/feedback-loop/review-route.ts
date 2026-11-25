@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { createClient } from '@/lib/supabase/server';
 import { readFeedbackLoopConfig } from './config';
 
 export const REVIEW_NO_STORE = { 'Cache-Control': 'no-store' };
@@ -26,6 +25,7 @@ export async function openReviewSession(): Promise<ReviewSession> {
     return { ok: false, response: NextResponse.json({ error: 'Not found' }, { status: 404, headers: REVIEW_NO_STORE }) };
   }
   try {
+    const { createClient } = await import('@/lib/supabase/server');
     const ssr = await createClient();
     const { data } = await ssr.auth.getUser();
     const userId = data?.user?.id ?? null;

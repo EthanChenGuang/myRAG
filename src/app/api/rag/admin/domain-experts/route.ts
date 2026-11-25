@@ -8,7 +8,7 @@ import {
   listDomainExperts,
   revokeDomainExpert,
   validateGrantTenantKey,
-} from '@/lib/rag/feedback-loop/review-access';
+} from '@/lib/rag';
 
 export const runtime = 'nodejs';
 
