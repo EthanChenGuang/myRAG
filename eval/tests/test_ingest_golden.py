@@ -211,3 +211,133 @@ def test_new_items_take_their_split_from_the_rule_and_the_manifest_keeps_the_old
             assert item.id not in manifest, f"{item.id} keeps the split it was written with"
     golden_ids = {item.id for item in load_golden(REPO / "eval/fixtures/golden.jsonl")}
     assert set(manifest) == golden_ids | parse_ids | table_ids
+
+
+# table_split (03.2-30, D-45, EVAL-18): long-table items answered from the isolated table tenants of the ingest fixture mode.
+TABLE_SPLIT_ID_RE = r"^ingest-table-split-(zh|en|it)-\d{2}$"
+TABLE_LANGUAGES = ("zh", "en", "it")
+MIN_TABLE_ROW = 30
+
+
+def _long_table_entries() -> dict[str, dict]:
+    manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
+    return {entry["id"]: entry for entry in manifest.get("long_table_fixtures", [])}
+
+
+def _table_items() -> list:
+    return [item for item in load_golden(GOLDEN) if item.category == TABLE_SPLIT]
+
+
+def _long_table_rows(language: str):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("ingest_specs", INGEST_ROOT / "specs.py")
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    import sys
+
+    sys.modules.setdefault("ingest_specs", module)
+    spec.loader.exec_module(module)
+    return module.long_table_rows(language)
+
+
+def _fixture_of(item) -> dict:
+    fixture_id = _tag(item, "long_table_fixture")
+    entries = _long_table_entries()
+    assert fixture_id in entries, item.id
+    return entries[fixture_id]
+
+
+def _row_of(item) -> int:
+    return int(_tag(item, "table_row") or "-1")
+
+
+def test_each_language_has_at_least_four_table_split_items():
+    items = _table_items()
+    for language in TABLE_LANGUAGES:
+        assert len([item for item in items if item.language == language]) >= 4, language
+
+
+def test_table_split_items_follow_the_id_pattern_and_keep_synthetic_provenance():
+    import re
+
+    for item in _table_items():
+        assert re.match(TABLE_SPLIT_ID_RE, item.id), item.id
+        assert item.id.split("-")[3] == item.language, item.id
+        assert item.provenance == "synthetic_fixture", item.id
+        assert item.review_status == "approved" and item.answerable, item.id
+        assert item.evidence_language is None, item.id
+
+
+def test_each_language_asks_on_its_target_row_varies_the_column_and_uses_the_continued_variant():
+    items = _table_items()
+    for language in TABLE_LANGUAGES:
+        own = [item for item in items if item.language == language]
+        target = _long_table_entries()[f"long-table-{language}"]["expected"]["long_table"]["target_row"]
+        assert any(_row_of(item) == target for item in own), language
+        assert {_tag(item, "table_column") for item in own} >= {"value_1", "value_2", "category"}, language
+        assert any(_tag(item, "long_table_fixture") == f"long-table-{language}-continued" for item in own), language
+        assert any(_row_of(item) == 59 for item in own), f"{language}: no item on the last row"
+
+
+def test_every_table_split_answer_row_lies_late_in_the_table():
+    for item in _table_items():
+        assert _row_of(item) >= MIN_TABLE_ROW, item.id
+
+
+def test_table_split_evidence_is_the_row_and_the_header_each_once_in_the_fixture_text(manifest_documents):
+    from rag_eval.matching import normalize_text
+
+    for item in _table_items():
+        entry = _fixture_of(item)
+        document = Path(entry["path"]).name
+        assert item.language == entry["language"], item.id
+        header, body = _long_table_rows(item.language)
+        assert [span.quote for span in item.gold_evidence] == [" | ".join(body[_row_of(item)]), " | ".join(header)], item.id
+        text = (INGEST_ROOT / entry["text"]["path"]).read_text(encoding="utf-8")
+        for span in item.gold_evidence:
+            assert span.document == document, item.id
+            assert text.count(span.quote) == 1, f"{item.id}: {span.quote!r}"
+            assert normalize_text(text).count(normalize_text(span.quote)) == 1, f"{item.id}: {span.quote!r}"
+
+
+def test_table_split_quotes_match_a_chunk_of_the_recorded_parse():
+    from rag_eval.matching import chunk_matches_span
+
+    for item in _table_items():
+        entry = _fixture_of(item)
+        document = Path(entry["path"]).name
+        chunks = json.loads((INGEST_ROOT / entry["recorded"]["parse_result"]).read_text(encoding="utf-8"))["chunks"]
+        for span in item.gold_evidence:
+            assert any(chunk_matches_span(document, chunk["text"], span) for chunk in chunks), f"{item.id}: {span.quote!r}"
+
+
+def test_table_answer_is_the_asked_cell_and_a_distractor_is_another_cell_of_the_row():
+    columns = {"value_1": 2, "value_2": 3, "category": 4}
+    for item in _table_items():
+        header, body = _long_table_rows(item.language)
+        row = body[_row_of(item)]
+        column = columns[_tag(item, "table_column")]
+        answer = item.table_answer
+        assert answer is not None, item.id
+        assert answer.column == header[column], item.id
+        assert answer.value == row[column], item.id
+        assert answer.value in (item.expected_answer or ""), item.id
+        others = {cell for index, cell in enumerate(row) if index in (2, 3, 4) and index != column}
+        assert set(answer.distractor_values) & others, item.id
+        if column in (2, 3):
+            assert row[5 - column] in answer.distractor_values, f"{item.id}: the other value column of the row"
+        assert all(row[index] not in item.question for index in (2, 3, 4)), f"{item.id}: the question gives a value away"
+        question = item.question.casefold()
+        assert row[0].casefold() in question and row[1].casefold() in question, f"{item.id}: the question names the row by its keys"
+
+
+def test_zh_and_it_table_items_are_llm_drafted_pending_review_and_en_items_have_no_review():
+    for item in _table_items():
+        if item.language == "en":
+            assert item.native_review is None, item.id
+        else:
+            assert item.native_review is not None, item.id
+            assert item.native_review.origin == "llm_drafted", item.id
+            assert item.native_review.status == "pending", item.id
+            assert item.native_review.reviewer is None and item.native_review.reviewed_at is None, item.id
