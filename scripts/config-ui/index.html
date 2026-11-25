@@ -7213,6 +7213,93 @@
                                     </div>
                                 </div>
 
+                                <!-- Retrieval log and feedback -->
+                                <div id="rag-feedback-loop-settings" class="card bg-base-200 shadow-md mt-6">
+                                    <div class="card-body">
+                                        <h3 class="text-lg font-semibold mb-2 text-balance">Retrieval log and feedback</h3>
+                                        <p class="text-base-content/70 mb-4">Records each knowledge-base retrieval for review, collects feedback on refusals and embedded answers, and opens the expert review queue. All off by default; with every switch off, chat, embed and voice responses are unchanged.</p>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label" for="RAG_RETRIEVAL_LOG">
+                                                <span class="label-text">Retrieval log</span>
+                                            </label>
+                                            <select id="RAG_RETRIEVAL_LOG" name="RAG_RETRIEVAL_LOG" autocomplete="off" class="select select-bordered w-full">
+                                                <option value="off">Off: record nothing</option>
+                                                <option value="ids">IDs and scores only</option>
+                                                <option value="masked_query">IDs, scores and the masked question</option>
+                                            </select>
+                                            <label class="label">
+                                                <span class="label-text-alt min-w-0 text-base-content/70">One row per chat, embed and voice retrieval, written after the response. Never stores answers, passage text or document names. Weekly mining needs the masked question. A workspace can lower its own level under RAG administration, Feedback loop. <code translate="no">RAG_RETRIEVAL_LOG</code></span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label" for="RAG_RETRIEVAL_LOG_RETENTION_DAYS">
+                                                <span class="label-text">Log retention (days)</span>
+                                            </label>
+                                            <input type="number" id="RAG_RETRIEVAL_LOG_RETENTION_DAYS" name="RAG_RETRIEVAL_LOG_RETENTION_DAYS" min="1" max="365" step="1" placeholder="30" inputmode="numeric" autocomplete="off"
+                                                class="input input-bordered w-full">
+                                            <label class="label">
+                                                <span class="label-text-alt min-w-0 text-base-content/70">Rows older than this are deleted by mining, by Purge expired data and by the optional schedule. 1 to 365; any other value is read as 30. <code translate="no">RAG_RETRIEVAL_LOG_RETENTION_DAYS</code></span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-2">
+                                            <label class="label cursor-pointer justify-start gap-3">
+                                                <input type="checkbox" id="RAG_REFUSAL_FEEDBACK" name="RAG_REFUSAL_FEEDBACK" class="toggle toggle-primary">
+                                                <span class="label-text">Refusal feedback in web chat</span>
+                                            </label>
+                                            <label class="label pl-8">
+                                                <span class="label-text-alt min-w-0 text-base-content/70">Under an “information not available” or “knowledge base unavailable” message, the user can say whether an answer was expected. Needs the retrieval log on. <code translate="no">RAG_REFUSAL_FEEDBACK</code></span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-2">
+                                            <label class="label cursor-pointer justify-start gap-3">
+                                                <input type="checkbox" id="RAG_SOURCE_OPEN_SIGNAL" name="RAG_SOURCE_OPEN_SIGNAL" class="toggle toggle-primary">
+                                                <span class="label-text">Count opened sources</span>
+                                            </label>
+                                            <label class="label pl-8">
+                                                <span class="label-text-alt min-w-0 text-base-content/70">Counts when a user opens a source or citation of their own answer. A weak signal: mining uses it only together with another one. Needs the retrieval log on. <code translate="no">RAG_SOURCE_OPEN_SIGNAL</code></span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-2">
+                                            <label class="label cursor-pointer justify-start gap-3">
+                                                <input type="checkbox" id="RAG_EMBED_FEEDBACK" name="RAG_EMBED_FEEDBACK" class="toggle toggle-primary">
+                                                <span class="label-text">Answer rating in the embed widget and window</span>
+                                            </label>
+                                            <label class="label pl-8">
+                                                <span class="label-text-alt min-w-0 text-base-content/70">Visitors rate an answer as helpful or not helpful through a signed token that is valid for one answer. Needs the secret below and the retrieval log on. <code translate="no">RAG_EMBED_FEEDBACK</code></span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label" for="RAG_EMBED_FEEDBACK_SECRET">
+                                                <span class="label-text">Embed feedback secret</span>
+                                            </label>
+                                            <div class="flex gap-2">
+                                                <input type="password" id="RAG_EMBED_FEEDBACK_SECRET" name="RAG_EMBED_FEEDBACK_SECRET" placeholder="Empty until configured" autocomplete="off" spellcheck="false"
+                                                    class="input input-bordered flex-1 w-full">
+                                                <button type="button" class="btn btn-square btn-outline" data-for="RAG_EMBED_FEEDBACK_SECRET" aria-label="Show or hide the embed feedback secret">👁️</button>
+                                            </div>
+                                            <label class="label">
+                                                <span class="label-text-alt min-w-0 text-base-content/70">At least 32 characters; with a shorter value the rating stays off. Stays on the server; only its presence is reported. Generate one with <code translate="no">openssl rand -hex 32</code>. <code translate="no">RAG_EMBED_FEEDBACK_SECRET</code></span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-2">
+                                            <label class="label cursor-pointer justify-start gap-3">
+                                                <input type="checkbox" id="RAG_DOMAIN_EXPERT_REVIEW" name="RAG_DOMAIN_EXPERT_REVIEW" class="toggle toggle-primary">
+                                                <span class="label-text">Expert review queue and weekly mining</span>
+                                            </label>
+                                            <label class="label pl-8">
+                                                <span class="label-text-alt min-w-0 text-base-content/70">Opens the Review queue under RAG administration to granted experts and allows mining. Mining also needs the retrieval log at “IDs, scores and the masked question”. <code translate="no">RAG_DOMAIN_EXPERT_REVIEW</code></span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <!-- Prompt-injection defense -->
                                 <div class="card bg-base-200 shadow-md mt-6">
                                     <div class="card-body">

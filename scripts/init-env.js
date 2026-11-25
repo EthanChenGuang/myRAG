@@ -425,6 +425,24 @@ RAG_ANSWER_FEEDBACK=false
 RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK=false
 
 # -----------------------------
+# RETRIEVAL LOG AND FEEDBACK
+# -----------------------------
+# Retrieval log: off | ids | masked_query (masked_query is needed for weekly mining)
+RAG_RETRIEVAL_LOG=off
+# Days a retrieval log row is kept, 1 to 365 (other values are read as 30)
+RAG_RETRIEVAL_LOG_RETENTION_DAYS=30
+# Feedback control under refusals in web chat (needs the retrieval log)
+RAG_REFUSAL_FEEDBACK=false
+# Answer rating in the embed widget and window (needs the secret below and the retrieval log)
+RAG_EMBED_FEEDBACK=false
+# Signing secret for embed feedback tokens, at least 32 characters (never logged)
+RAG_EMBED_FEEDBACK_SECRET=
+# Count opened sources and citations as a weak signal (needs the retrieval log)
+RAG_SOURCE_OPEN_SIGNAL=false
+# Expert review queue and weekly mining (off answers 404)
+RAG_DOMAIN_EXPERT_REVIEW=false
+
+# -----------------------------
 # PROMPT-INJECTION DEFENSE
 # -----------------------------
 # Wrap retrieved chunks in tagged <doc> blocks with an untrusted-content notice

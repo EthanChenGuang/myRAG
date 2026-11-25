@@ -68,6 +68,23 @@ describe('pinned eval env', () => {
     expect(derived).toMatchObject(expected);
   });
 
+  test('pins the seven Phase 5.1.1 feedback-loop variables off, with the embed secret empty (D-26)', () => {
+    const expected = {
+      RAG_RETRIEVAL_LOG: 'off',
+      RAG_RETRIEVAL_LOG_RETENTION_DAYS: '30',
+      RAG_REFUSAL_FEEDBACK: 'false',
+      RAG_EMBED_FEEDBACK: 'false',
+      RAG_EMBED_FEEDBACK_SECRET: '',
+      RAG_SOURCE_OPEN_SIGNAL: 'false',
+      RAG_DOMAIN_EXPERT_REVIEW: 'false',
+    };
+    const pinned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'eval/config/rag-eval-env.json'), 'utf8'));
+    for (const [name, value] of Object.entries(expected)) {
+      expect(pinned, `${name} is pinned`).toHaveProperty(name);
+      expect(pinned[name], name).toBe(value);
+    }
+  });
+
   test('eval-env --check exits 0', () => {
     const result = spawnSync('npx', ['tsx', 'eval/harness/eval-env.mts', '--check'], { cwd: REPO_ROOT, encoding: 'utf8' });
     expect(result.status).toBe(0);
