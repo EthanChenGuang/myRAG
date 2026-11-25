@@ -8700,154 +8700,154 @@
                                             </div>
                                             <!-- rag-ingestion-settings:start -->
                                             <div id="rag-ingestion-settings" class="hidden">
-                                        <h4 class="text-md font-semibold mt-6 mb-2">Ingestion</h4>
+                                        <h4 class="text-md font-semibold mt-6 mb-2 text-balance">Ingestion</h4>
                                         <p class="text-base-content/70 mb-4 text-sm">Phase 3.1 queue, tiered parsing and async ingest switches. Defaults keep Phase 3 behaviour.</p>
 
                                         <div class="form-control mb-4">
-                                            <label class="label">
+                                            <label class="label" for="RAG_PARSE_ROUTING">
                                                 <span class="label-text">Parse routing</span>
                                             </label>
-                                            <select id="RAG_PARSE_ROUTING" class="select select-bordered w-full">
+                                            <select id="RAG_PARSE_ROUTING" name="RAG_PARSE_ROUTING" translate="no" aria-describedby="RAG_PARSE_ROUTING_help" class="select select-bordered w-full">
                                                 <option value="fixed">fixed</option>
                                                 <option value="tiered">tiered</option>
                                             </select>
                                             <label class="label">
-                                                <span class="label-text-alt">tiered needs unified pipeline and async ingest.</span>
+                                                <span class="label-text-alt" id="RAG_PARSE_ROUTING_help"><span translate="no">tiered</span> needs the unified pipeline and async ingest.</span>
                                             </label>
                                         </div>
 
                                         <div class="form-control mb-4">
-                                            <label class="label">
+                                            <label class="label" for="RAG_PARSER_ALLOW_CLOUD">
                                                 <span class="label-text">Allow cloud parsers</span>
                                             </label>
-                                            <select id="RAG_PARSER_ALLOW_CLOUD" class="select select-bordered w-full">
+                                            <select id="RAG_PARSER_ALLOW_CLOUD" name="RAG_PARSER_ALLOW_CLOUD" translate="no" class="select select-bordered w-full">
                                                 <option value="true">true</option>
                                                 <option value="false">false</option>
                                             </select>
                                         </div>
 
                                         <div class="form-control mb-4">
-                                            <label class="label">
+                                            <label class="label" for="RAG_PARSE_PREMIUM_PAGE_BUDGET">
                                                 <span class="label-text">Premium page budget (month)</span>
                                             </label>
-                                            <input type="number" min="0" step="1" placeholder="0" id="RAG_PARSE_PREMIUM_PAGE_BUDGET"
+                                            <input type="number" min="0" step="1" placeholder="0" id="RAG_PARSE_PREMIUM_PAGE_BUDGET" name="RAG_PARSE_PREMIUM_PAGE_BUDGET" inputmode="numeric" autocomplete="off"
                                                 class="input input-bordered w-full">
                                         </div>
 
                                         <div class="form-control mb-4">
-                                            <label class="label">
+                                            <label class="label" for="RAG_PARSE_PREMIUM_MAX_PAGES_PER_DOC">
                                                 <span class="label-text">Premium pages per document cap</span>
                                             </label>
-                                            <input type="number" min="1" step="1" placeholder="200" id="RAG_PARSE_PREMIUM_MAX_PAGES_PER_DOC"
+                                            <input type="number" min="1" step="1" placeholder="200" id="RAG_PARSE_PREMIUM_MAX_PAGES_PER_DOC" name="RAG_PARSE_PREMIUM_MAX_PAGES_PER_DOC" inputmode="numeric" autocomplete="off"
                                                 class="input input-bordered w-full">
                                         </div>
 
                                         <div class="form-control mb-4">
-                                            <label class="label">
+                                            <label class="label" for="RAG_PARSE_ESCALATION">
                                                 <span class="label-text">Parse escalation</span>
                                             </label>
-                                            <select id="RAG_PARSE_ESCALATION" class="select select-bordered w-full">
+                                            <select id="RAG_PARSE_ESCALATION" name="RAG_PARSE_ESCALATION" translate="no" class="select select-bordered w-full">
                                                 <option value="on">on</option>
                                                 <option value="off">off</option>
                                             </select>
                                         </div>
 
                                         <div class="form-control mb-4">
-                                            <label class="label">
+                                            <label class="label" for="RAG_PARSE_VLM_DETECT">
                                                 <span class="label-text">VLM page detection</span>
                                             </label>
-                                            <select id="RAG_PARSE_VLM_DETECT" class="select select-bordered w-full">
+                                            <select id="RAG_PARSE_VLM_DETECT" name="RAG_PARSE_VLM_DETECT" translate="no" aria-describedby="RAG_PARSE_VLM_DETECT_help" class="select select-bordered w-full">
                                                 <option value="false">false</option>
                                                 <option value="true">true</option>
                                             </select>
                                             <label class="label">
-                                                <span class="label-text-alt">Active only under tiered routing.</span>
+                                                <span class="label-text-alt" id="RAG_PARSE_VLM_DETECT_help">Active only under <span translate="no">tiered</span> routing.</span>
                                             </label>
                                         </div>
 
                                         <div class="form-control mb-4">
-                                            <label class="label">
+                                            <label class="label" for="RAG_PARSE_VLM_MODEL">
                                                 <span class="label-text">VLM model override</span>
                                             </label>
-                                            <input type="text" placeholder="" id="RAG_PARSE_VLM_MODEL"
+                                            <input type="text" id="RAG_PARSE_VLM_MODEL" name="RAG_PARSE_VLM_MODEL" autocomplete="off" spellcheck="false" translate="no" aria-describedby="RAG_PARSE_VLM_MODEL_help"
                                                 class="input input-bordered w-full">
                                             <label class="label">
-                                                <span class="label-text-alt">empty = image captioning model</span>
+                                                <span class="label-text-alt" id="RAG_PARSE_VLM_MODEL_help">Empty uses the image captioning model.</span>
                                             </label>
                                         </div>
 
                                         <div class="form-control mb-4">
-                                            <label class="label">
+                                            <label class="label" for="RAG_INGEST_ASYNC">
                                                 <span class="label-text">Async ingest queue</span>
                                             </label>
-                                            <select id="RAG_INGEST_ASYNC" class="select select-bordered w-full">
+                                            <select id="RAG_INGEST_ASYNC" name="RAG_INGEST_ASYNC" translate="no" aria-describedby="RAG_INGEST_ASYNC_help" class="select select-bordered w-full">
                                                 <option value="off">off</option>
                                                 <option value="on">on</option>
                                             </select>
                                             <label class="label">
-                                                <span class="label-text-alt">on needs unified pipeline.</span>
+                                                <span class="label-text-alt" id="RAG_INGEST_ASYNC_help"><span translate="no">on</span> needs the unified pipeline.</span>
                                             </label>
                                         </div>
 
                                         <div class="form-control mb-4">
-                                            <label class="label">
+                                            <label class="label" for="RAG_INGEST_WORKER_CONCURRENCY">
                                                 <span class="label-text">Worker concurrency</span>
                                             </label>
-                                            <input type="number" min="1" step="1" placeholder="2" id="RAG_INGEST_WORKER_CONCURRENCY"
+                                            <input type="number" min="1" step="1" placeholder="2" id="RAG_INGEST_WORKER_CONCURRENCY" name="RAG_INGEST_WORKER_CONCURRENCY" inputmode="numeric" autocomplete="off"
                                                 class="input input-bordered w-full">
                                         </div>
 
                                         <div class="form-control mb-4">
-                                            <label class="label">
+                                            <label class="label" for="RAG_INGEST_JOB_RETENTION_DAYS">
                                                 <span class="label-text">Job retention (days)</span>
                                             </label>
-                                            <input type="number" min="1" step="1" placeholder="90" id="RAG_INGEST_JOB_RETENTION_DAYS"
+                                            <input type="number" min="1" step="1" placeholder="90" id="RAG_INGEST_JOB_RETENTION_DAYS" name="RAG_INGEST_JOB_RETENTION_DAYS" inputmode="numeric" autocomplete="off"
                                                 class="input input-bordered w-full">
                                         </div>
 
                                         <div class="form-control mb-4">
-                                            <label class="label">
+                                            <label class="label" for="RAG_INGEST_MAINTENANCE">
                                                 <span class="label-text">Maintenance loop</span>
                                             </label>
-                                            <select id="RAG_INGEST_MAINTENANCE" class="select select-bordered w-full">
+                                            <select id="RAG_INGEST_MAINTENANCE" name="RAG_INGEST_MAINTENANCE" translate="no" class="select select-bordered w-full">
                                                 <option value="on">on</option>
                                                 <option value="off">off</option>
                                             </select>
                                         </div>
 
                                         <div class="form-control mb-4">
-                                            <label class="label">
+                                            <label class="label" for="RAG_INGEST_MAINTENANCE_INTERVAL_SECONDS">
                                                 <span class="label-text">Maintenance interval (seconds)</span>
                                             </label>
-                                            <input type="number" min="60" step="60" placeholder="3600" id="RAG_INGEST_MAINTENANCE_INTERVAL_SECONDS"
+                                            <input type="number" min="60" step="60" placeholder="3600" id="RAG_INGEST_MAINTENANCE_INTERVAL_SECONDS" name="RAG_INGEST_MAINTENANCE_INTERVAL_SECONDS" inputmode="numeric" autocomplete="off"
                                                 class="input input-bordered w-full">
                                         </div>
 
                                         <div class="form-control mb-4">
-                                            <label class="label">
+                                            <label class="label" for="RAG_PARSE_PROGRESSIVE">
                                                 <span class="label-text">Progressive publish</span>
                                             </label>
-                                            <select id="RAG_PARSE_PROGRESSIVE" class="select select-bordered w-full">
+                                            <select id="RAG_PARSE_PROGRESSIVE" name="RAG_PARSE_PROGRESSIVE" translate="no" class="select select-bordered w-full">
                                                 <option value="false">false</option>
                                                 <option value="true">true</option>
                                             </select>
                                         </div>
 
                                         <div class="form-control mb-4">
-                                            <label class="label">
+                                            <label class="label" for="RAG_EMBED_BATCH_MODE">
                                                 <span class="label-text">Embed batch mode</span>
                                             </label>
-                                            <select id="RAG_EMBED_BATCH_MODE" class="select select-bordered w-full">
+                                            <select id="RAG_EMBED_BATCH_MODE" name="RAG_EMBED_BATCH_MODE" translate="no" class="select select-bordered w-full">
                                                 <option value="sync">sync</option>
                                                 <option value="batch_api">batch_api</option>
                                             </select>
                                         </div>
 
                                         <div class="form-control mb-4">
-                                            <label class="label">
+                                            <label class="label" for="NEXT_PUBLIC_RAG_INGEST_REALTIME">
                                                 <span class="label-text">Ingest realtime UI</span>
                                             </label>
-                                            <select id="NEXT_PUBLIC_RAG_INGEST_REALTIME" class="select select-bordered w-full">
+                                            <select id="NEXT_PUBLIC_RAG_INGEST_REALTIME" name="NEXT_PUBLIC_RAG_INGEST_REALTIME" translate="no" class="select select-bordered w-full">
                                                 <option value="false">false</option>
                                                 <option value="true">true</option>
                                             </select>
