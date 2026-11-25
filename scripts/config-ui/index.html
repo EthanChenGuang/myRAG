@@ -74,6 +74,7 @@
     <script src="rag-panels/doc-types.js"></script>
     <script src="rag-panels/quarantine.js"></script>
     <script src="rag-panels/embedding-profiles.js"></script>
+    <script src="rag-panels/embedding-bindings.js"></script>
     <script src="rag-panels/ingestion.js"></script>
     <script src="rag-panels/chunking-validate.js"></script>
     <script src="rag-panels/chunking-profiles.js"></script>
@@ -8965,7 +8966,7 @@
                         <div class="card bg-base-100 shadow-lg">
                             <div class="card-body p-4 lg:p-6">
                                 <h2 class="card-title text-xl lg:text-2xl text-myrag-primary mb-2">🛡️ RAG Administration</h2>
-                                <p class="text-base-content/70 mb-6">Manage document-type defaults, ingestion jobs, quarantined uploads, embedding and chunking profiles, and check refusal calibration, using your existing admin session.</p>
+                                <p class="text-base-content/70 mb-6">Manage document-type defaults, ingestion jobs, quarantined uploads, embedding profiles and bindings, chunking profiles, and check refusal calibration, using your existing admin session.</p>
 
                                 <div class="grid gap-6">
                                     <section id="rag-administration-doc-types" class="card bg-base-200 shadow-md">
@@ -9452,6 +9453,25 @@
                                                 <button type="button" class="btn btn-outline btn-sm" data-rag-profiles-rollback>Rollback active profile</button>
                                             </div>
                                             <div data-rag-profiles-list></div>
+                                        </div>
+                                    </section>
+
+                                    <section id="rag-administration-bindings" class="card bg-base-200 shadow-md min-w-0" aria-labelledby="rag-bindings-title">
+                                        <div class="card-body">
+                                            <h3 id="rag-bindings-title" class="text-lg font-semibold mb-2">Embedding bindings</h3>
+                                            <p class="text-sm text-base-content/70 mb-4 max-w-prose">Bind a document type to a second embedding profile, for the whole deployment or for one tenant. An active binding adds a search with that profile next to the global profile and never replaces it. A tenant’s active binding takes precedence over the deployment-wide one. The steps are: create a binding, stage it for backfill, record evidence with the CLI, then activate it.</p>
+                                            <div data-rag-bindings-alert class="mb-4 empty:mb-0"></div>
+                                            <div data-rag-bindings-status class="text-sm mb-2 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" role="status" aria-live="polite" tabindex="-1"></div>
+                                            <div data-rag-bindings-content>
+                                                <div class="flex flex-wrap items-center gap-2 mb-4">
+                                                    <button type="button" class="btn btn-outline btn-sm" data-rag-bindings-refresh>Refresh</button>
+                                                    <button type="button" class="btn btn-outline btn-sm" data-rag-bindings-new aria-expanded="false" aria-controls="rag-bindings-form">New binding</button>
+                                                    <span data-rag-bindings-updated class="text-xs text-base-content/70 ml-auto"></span>
+                                                </div>
+                                                <div data-rag-bindings-state class="mb-4 empty:mb-0"></div>
+                                                <div data-rag-bindings-form-host></div>
+                                                <div data-rag-bindings-list></div>
+                                            </div>
                                         </div>
                                     </section>
 
