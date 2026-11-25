@@ -248,6 +248,8 @@ export interface InjectionStageInput<C extends ItemCandidate> {
   referenced: ReferencedState | null;
   /** Released rule ids from document rows already loaded under the caller's scope. */
   released?: ReleasedRules;
+  /** Document filenames from the same rows, recorded on the summary's item records. */
+  documentNames?: ReadonlyMap<string, string>;
 }
 
 export interface InjectionStageRun<C extends ItemCandidate> {
@@ -275,6 +277,7 @@ export async function runInjectionStage<C extends ItemCandidate>(input: Injectio
         verdicts,
         mode,
         renderSection: renderReferencedSection,
+        ...(input.documentNames ? { documentNames: input.documentNames } : {}),
       });
       held = applied;
       return afterRules(applied);
@@ -292,6 +295,13 @@ export async function runInjectionStage<C extends ItemCandidate>(input: Injectio
   const stalled = checked.skipped && applied !== null;
   if (applied) logInjectionSummary(applied.summary, applied.counts, { traceId: input.collector.traceId, stalled });
   return { applied, stalled };
+}
+
+/** Document id to filename from rows read under the caller's scope; ids without a filename are left out. */
+export function documentNamesFromRows(rows: ReadonlyMap<string, { filename?: string | null }> | null | undefined): Map<string, string> {
+  const names = new Map<string, string>();
+  for (const [id, row] of rows ?? []) if (row.filename) names.set(id, row.filename);
+  return names;
 }
 
 export function injectionDropped(summary: InjectionSummary): boolean {
@@ -599,6 +609,7 @@ async function runOverviewPipeline(
         candidates: rawChunks,
         referenced,
         released: releasedRulesFromRows(documentRows),
+        documentNames: documentNamesFromRows(documentRows),
       });
       injectionStalled = run.stalled;
       if (run.applied) {
@@ -854,6 +865,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
           candidates,
           referenced,
           released: releasedRulesFromRows(loadedRows?.documents),
+          documentNames: documentNamesFromRows(loadedRows?.documents),
         });
         injectionStalled = run.stalled;
         if (run.applied) {

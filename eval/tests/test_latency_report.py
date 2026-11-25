@@ -150,6 +150,7 @@ V2_CHAT_STAGES = {
     "expand_parents": 100,
     "assemble": 100,
     "compress": 50,
+    "injection_check": 400,
 }
 V2_VOICE_STAGES = {
     "translate": 5,
@@ -160,6 +161,7 @@ V2_VOICE_STAGES = {
     "rerank": 250,
     "refusal": 1,
     "assemble": 50,
+    "injection_check": 10,
 }
 
 

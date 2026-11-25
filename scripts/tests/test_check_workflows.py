@@ -136,6 +136,94 @@ class EvalSmokeJobTest(unittest.TestCase):
         self.assertEqual(self.errors_for(None), [])
 
 
+class SecSmokeStepTest(unittest.TestCase):
+    """D-14, T-05.1-59: the recommended SEC configuration is gated at absolute zero on every pull request."""
+
+    def job(self) -> dict:
+        return check_workflows.load(check_workflows.PR)[0]["jobs"]["eval-smoke"]
+
+    def errors_for(self, job: dict) -> list[str]:
+        errors: list[str] = []
+        check_workflows.check_eval_smoke(job, errors)
+        return errors
+
+    def sec_step(self, job: dict) -> dict:
+        return next(step for step in job["steps"] if "sec-recommended.json" in str(step.get("run", "")))
+
+    def test_missing_sec_step_is_reported(self):
+        job = self.job()
+        job["steps"] = [step for step in job["steps"] if "sec-recommended.json" not in str(step.get("run", ""))]
+        self.assertTrue(any("sec-recommended.json" in e for e in self.errors_for(job)))
+
+    def test_an_ungated_sec_step_is_reported(self):
+        for suffix in (" --no-gate", " || true"):
+            job = self.job()
+            self.sec_step(job)["run"] += suffix
+            self.assertTrue(any("fail the job" in e for e in self.errors_for(job)), suffix)
+
+    def test_continue_on_error_is_reported(self):
+        job = self.job()
+        self.sec_step(job)["continue-on-error"] = True
+        self.assertTrue(any("fail the job" in e for e in self.errors_for(job)))
+
+    def test_the_sec_output_must_be_uploaded(self):
+        job = self.job()
+        for step in job["steps"]:
+            if str(step.get("uses", "")).startswith("actions/upload-artifact@"):
+                step["with"]["path"] = "eval/out/smoke\neval/out/smoke-ingest"
+        self.assertTrue(any("must upload eval/out/smoke-sec" in e for e in self.errors_for(job)))
+
+    def test_the_all_off_smoke_step_stays(self):
+        job = self.job()
+        job["steps"] = [step for step in job["steps"] if "npm run test-rag -- --out eval/out/smoke" not in str(step.get("run", ""))]
+        self.assertTrue(any("after the all-off smoke step" in e for e in self.errors_for(job)))
+
+
+class InjectionSecJobTest(unittest.TestCase):
+    """D-14, A-13, T-05.1-60: the live SEC matrix runs nightly; the Lakera key is reachable from nightly.yml only."""
+
+    def nightly(self) -> dict:
+        return check_workflows.load(check_workflows.NIGHTLY)[0]
+
+    def errors_for(self, data: dict) -> list[str]:
+        errors: list[str] = []
+        check_workflows.check_injection_sec(data, errors)
+        return errors
+
+    def runner(self, data: dict) -> dict:
+        steps = data["jobs"]["injection-sec"]["steps"]
+        return next(step for step in steps if check_workflows.SEC_NIGHTLY_STEP in str(step.get("run", "")))
+
+    def test_repository_nightly_has_a_valid_injection_job(self):
+        self.assertEqual(self.errors_for(self.nightly()), [])
+
+    def test_missing_job_is_reported(self):
+        data = self.nightly()
+        del data["jobs"]["injection-sec"]
+        self.assertTrue(any("'injection-sec' missing" in e for e in self.errors_for(data)))
+
+    def test_the_lakera_key_must_come_from_secrets_by_name(self):
+        data = self.nightly()
+        del self.runner(data)["env"]["LAKERA_GUARD_API_KEY"]
+        self.assertTrue(any("LAKERA_GUARD_API_KEY" in e for e in self.errors_for(data)))
+
+    def test_a_secret_inside_run_is_reported(self):
+        data = self.nightly()
+        self.runner(data)["run"] += " ${{ secrets.LAKERA_GUARD_API_KEY }}"
+        self.assertTrue(any("not interpolated into run" in e for e in self.errors_for(data)))
+
+    def test_an_ungated_step_is_reported(self):
+        data = self.nightly()
+        del self.runner(data)["if"]
+        self.assertTrue(any("skip-notice step of injection-sec" in e for e in self.errors_for(data)))
+
+    def test_the_repository_keeps_the_lakera_key_out_of_other_workflows(self):
+        errors: list[str] = []
+        check_workflows.check_lakera_secret_scope(errors)
+        self.assertEqual(errors, [])
+        self.assertNotIn("LAKERA_GUARD_API_KEY", check_workflows.PR.read_text(encoding="utf-8"))
+
+
 class RealDoclingJobTest(unittest.TestCase):
     def nightly(self) -> dict:
         return check_workflows.load(check_workflows.NIGHTLY)[0]

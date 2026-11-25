@@ -199,6 +199,19 @@ export interface RunRetrievalInput {
 }
 
 /** What the injection_check stage found and did for one request (ids and rule ids only, never text). */
+/** One checked item (a chunk or a referenced section): ids, document and rule ids only, never text. */
+export interface InjectionItemRecord {
+  kind: 'chunk' | 'reference';
+  chunkIds: string[];
+  documentId: string;
+  /** The document's filename when the graph had the scoped document rows loaded. */
+  documentName?: string;
+  flagged: boolean;
+  /** Detectors that flagged the item; empty when it was not flagged. */
+  detectors: string[];
+  ruleIds: string[];
+}
+
 export interface InjectionSummary {
   mode: Exclude<InjectionCheckMode, 'off'>;
   checkedCount: number;
@@ -212,6 +225,8 @@ export interface InjectionSummary {
   ruleIds: string[];
   detectorsUnavailable: string[];
   flagged: boolean;
+  /** Every checked item in check order; the eval trace's injection record is built from it. */
+  items?: InjectionItemRecord[];
 }
 
 export interface RetrievalResult {

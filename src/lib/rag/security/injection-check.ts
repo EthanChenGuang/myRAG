@@ -1,7 +1,7 @@
 import { readSecurityConfig, type InjectionCheckMode, type SecurityConfig } from './config';
 import { detectorsConfigVersion } from './detectors';
 import { injectionRulesVersion, scanText } from './injection-rules';
-import type { InjectionSummary, Profile, ReferencedSection, ReferencedState } from '../types';
+import type { InjectionItemRecord, InjectionSummary, Profile, ReferencedSection, ReferencedState } from '../types';
 
 export type ActiveInjectionMode = Exclude<InjectionCheckMode, 'off'>;
 
@@ -189,6 +189,8 @@ export function applyInjectionAction<C extends ItemCandidate>(input: {
   verdicts: InjectionVerdicts;
   mode: ActiveInjectionMode;
   renderSection: (section: ReferencedSection) => string;
+  /** Document id to filename, from document rows already read under the caller's scope. */
+  documentNames?: ReadonlyMap<string, string>;
 }): InjectionApplied<C> {
   const { items, verdicts, mode } = input;
   const flaggedChunks = new Set<string>();
@@ -205,6 +207,20 @@ export function applyInjectionAction<C extends ItemCandidate>(input: {
       flaggedReferenceDocs.add(item.documentId);
     }
   }
+  const records: InjectionItemRecord[] = items.map((item) => {
+    const verdict = verdicts.get(item.key);
+    const flaggedItem = verdict?.flagged === true;
+    const documentName = input.documentNames?.get(item.documentId);
+    return {
+      kind: item.kind,
+      chunkIds: [...item.chunkIds],
+      documentId: item.documentId,
+      ...(documentName ? { documentName } : {}),
+      flagged: flaggedItem,
+      detectors: flaggedItem ? ['rules'] : [],
+      ruleIds: flaggedItem ? unique(verdict.ruleIds) : [],
+    };
+  });
   const sectionChunkIds = [...flaggedSections].flatMap((index) => input.referenced?.sections?.[index]?.chunkIds ?? []);
   const flagged = flaggedChunks.size > 0 || flaggedSections.size > 0;
 
@@ -251,6 +267,7 @@ export function applyInjectionAction<C extends ItemCandidate>(input: {
       ruleIds: unique(ruleIds),
       detectorsUnavailable: [],
       flagged,
+      items: records,
     },
   };
 }

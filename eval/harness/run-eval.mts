@@ -86,6 +86,11 @@ export interface RunEvalOptions {
   citations?: boolean;
   /** Sets options.groundedness on every request; implies includeAnswer. In-process runs score against the fake sidecar. */
   groundedness?: boolean;
+  /**
+   * Trusted harness input (never a run config): app variables for an in-process run, applied after the pinned eval env, such as
+   * the nightly's Prompt Guard sidecar endpoint. Never recorded in the manifest.
+   */
+  appEnv?: Record<string, string>;
 }
 
 export interface RunEvalResult {
@@ -104,6 +109,16 @@ export function itemRequestOptions(base: EvalRequestOptions, item: GoldenItem): 
   const options: EvalRequestOptions = { ...base };
   if (item.retrieval_filters) options.retrieval_filters = item.retrieval_filters;
   return options;
+}
+
+const INJECTION_CATEGORIES: ReadonlySet<string> = new Set(['injection', 'injection_evasive']);
+
+/**
+ * D-14: the smoke tier asks the stub extractive generator to answer the injection and injection_evasive items, so attack success
+ * (canary or forbidden claim in the answer) is measured in CI. Every other item, and every other tier, is sent exactly as before.
+ */
+export function answersItemForInjectionMetrics(tier: EvalTier, item: GoldenItem): boolean {
+  return tier === 'smoke' && INJECTION_CATEGORIES.has(item.category);
 }
 
 const ROUTE_PATH = '/api/internal/rag/run';
@@ -165,6 +180,8 @@ export async function prepareInProcessEval(options: {
   ingestRouting?: import('./ingest-mode.mts').IngestRoutingOptions;
   /** Applied after the pinned eval env, before the eval route is imported. */
   envOverrides?: Record<string, string>;
+  /** Trusted harness variables applied with the overlay; not part of the run's recorded configuration. */
+  appEnv?: Record<string, string>;
   /** Ingest mode: seeded before the first document; the env overlay is then applied to the build too, so dual-write runs under v2. */
   chunkingProfiles?: import('../../src/lib/rag-eval/contracts.generated.ts').ChunkingProfile[];
 }): Promise<InProcessEval> {
@@ -178,6 +195,7 @@ export async function prepareInProcessEval(options: {
     envOverrides,
     chunkingProfiles,
     ingestRouting,
+    appEnv,
   } = options;
   if (ingestRouting && fixtureMode !== 'ingest') throw new Error('[Eval Harness] routing and forced tiers need --fixture-mode ingest');
   const existingSecret = process.env.RAG_EVAL_SECRET ?? '';
@@ -217,7 +235,7 @@ export async function prepareInProcessEval(options: {
   applyFixtureProcessEnv({
     edgeUrl: startedEdge.url,
     deploymentMode,
-    extra: { ...evalEnv, ...retrievalEnv },
+    extra: { ...evalEnv, ...retrievalEnv, ...appEnv },
     vendorEmbeddingRoutes: !!(embeddingProfileId || ingestFixture),
   });
 
@@ -382,6 +400,10 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     }
   }
 
+  if (baseUrl && options.appEnv && Object.keys(options.appEnv).length > 0) {
+    throw new Error('[Eval Harness] app variables apply to in-process runs only; omit --base-url');
+  }
+
   let liveApiKey = '';
   if (includeAnswer) {
     if (generator !== 'stub' && generator !== 'live' && generator !== 'fake') {
@@ -405,6 +427,8 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
   if (items.length === 0) {
     throw new Error(`[Eval Harness] no golden items with review_status in [${goldenFilter.review_statuses.join(', ')}] in ${goldenPath}`);
   }
+  // Run-level answers keep their own generator; otherwise an in-process smoke run answers the injection items with the stub only.
+  const stubInjectionAnswers = !includeAnswer && !baseUrl && items.some((item) => answersItemForInjectionMetrics(tier, item));
   fs.mkdirSync(outDir, { recursive: true });
   const tracesPath = path.join(outDir, 'traces.jsonl');
   const logPath = path.join(outDir, 'harness.log');
@@ -457,10 +481,14 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
           ...(ingestRouting ? { ingestRouting } : {}),
           ...(runConfig && Object.keys(runConfig.env).length > 0 ? { envOverrides: runConfig.env } : {}),
           ...(runConfig?.chunkingProfiles?.length ? { chunkingProfiles: runConfig.chunkingProfiles } : {}),
+          ...(options.appEnv && Object.keys(options.appEnv).length > 0 ? { appEnv: options.appEnv } : {}),
         });
         inProcess = prepared;
       }
-      if (includeAnswer) {
+      if (stubInjectionAnswers) {
+        answerModule = await import('../../src/lib/rag-eval/answer.ts');
+        answerModule.setEvalLanguageModelFactory(() => createStubLanguageModel());
+      } else if (includeAnswer) {
         answerModule = await import('../../src/lib/rag-eval/answer.ts');
         if (generator === 'stub') {
           answerModule.setEvalLanguageModelFactory(() => createStubLanguageModel());
@@ -499,6 +527,8 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
       if (inProcess && deploymentMode === 'multi-tenant' && !options.user_id) {
         options.user_id = inProcess.fixtureUserId;
       }
+      const stubAnswer = stubInjectionAnswers && answersItemForInjectionMetrics(tier, item);
+      if (stubAnswer) options.generator_model = STUB_GENERATOR_MODEL;
       const payload = {
         schema_version: 1 as const,
         query: item.question,
@@ -507,7 +537,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         web_search: false as const,
         options,
         item_id: item.id,
-        ...(includeAnswer ? { include_answer: true as const } : {}),
+        ...(includeAnswer || stubAnswer ? { include_answer: true as const } : {}),
       } as RagRunRequest;
 
       const { status, body } = await send(payload);
@@ -518,7 +548,8 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
       const trace = RagTraceSchema.parse(body);
       trace.item_id = item.id;
       if (firstEffectiveConfig === null) {
-        firstEffectiveConfig = trace.effective_config;
+        // A per-item stub answer is not part of the run's configuration: the run-level hash stays what it was without it.
+        firstEffectiveConfig = stubAnswer ? { ...trace.effective_config, generator_model: null } : trace.effective_config;
         const serverMode = trace.effective_config.deployment_mode;
         if (baseUrl && serverMode !== 'single-tenant' && serverMode !== 'multi-tenant') {
           throw new Error(`[Eval Harness] server reports unknown deployment_mode ${JSON.stringify(serverMode)}`);
