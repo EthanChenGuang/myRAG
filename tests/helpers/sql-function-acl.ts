@@ -188,10 +188,13 @@ export interface SimulationOptions {
  * Replays CREATE/DROP FUNCTION, GRANT and REVOKE statements in order and returns the final EXECUTE
  * privileges per function signature. CREATE OR REPLACE keeps the existing ACL (as PostgreSQL does);
  * a function the files never created is treated as new, i.e. fully exposed, which is how an upgraded
- * database that only runs the migrations sees a function a migration replaces.
+ * database that only runs the migrations sees a function a migration replaces. The exception is a function
+ * a DO block first requires to exist (to_regprocedure on its signature, then RAISE EXCEPTION, as 0425 does):
+ * the file cannot create it, so its CREATE OR REPLACE keeps an ACL these files do not show and it is not tracked.
  */
 export function simulateFunctionAcls(files: string[], options: SimulationOptions = {}): Map<string, FunctionAcl> {
   const functions = new Map<string, FunctionAcl>();
+  const required = new Set<string>();
 
   const applyAcl = (statement: string, guarded: boolean): void => {
     const match = ACL_STATEMENT.exec(statement.replace(/\s+/g, ' ').trim());
@@ -228,6 +231,7 @@ export function simulateFunctionAcls(files: string[], options: SimulationOptions
         const key = signatureKey(name, args);
         const existing = functions.get(key);
         if (existing) existing.definer = definer;
+        else if (required.has(key)) continue;
         else functions.set(key, { name, args, definer, exec: new Set(ALL_ROLES), guarded: false });
         continue;
       }
@@ -241,6 +245,11 @@ export function simulateFunctionAcls(files: string[], options: SimulationOptions
         continue;
       }
       if (/^DO\b/i.test(flat)) {
+        if (/\bto_regprocedure\s*\(/i.test(statement) && /\bRAISE\s+EXCEPTION\b/i.test(statement)) {
+          for (const literal of statement.match(/'(?:public\.)?[A-Za-z0-9_]+\([^')]*\)'/g) ?? []) {
+            for (const ref of parseFunctionRefs(literal.slice(1, -1))) required.add(signatureKey(ref.name, ref.args));
+          }
+        }
         for (const inner of statement.match(/\b(?:GRANT|REVOKE)\s+(?:EXECUTE|ALL)[^;]*/gi) ?? []) applyAcl(inner, true);
       }
     }

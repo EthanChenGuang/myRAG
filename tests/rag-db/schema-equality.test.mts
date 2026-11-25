@@ -27,10 +27,10 @@ const FOLDED_SETUP: Record<DeploymentMode, string> = {
 
 /**
  * Migrations whose final shape is folded into both setup files: Phase 3 (0301-0320, plans 03-47 and later), Phase 3.1 (0351-0359, and the queue
- * hardening and chunk writer fix 0420-0424 after Phase 4, plan 03.1-52) and Phase 4 (0401-0413, plan 04-42). Phase 6 (plan 06-45) is not folded
- * yet, so a fresh install from a setup file is completed by those migrations alone.
+ * hardening and chunk writer fix 0420-0424 after Phase 4, plan 03.1-52), Phase 4 (0401-0413, plan 04-42) and the empty search_path rewrite 0425
+ * after 0424 (plan 04-47). Phase 6 (plan 06-45) is not folded yet, so a fresh install from a setup file is completed by those migrations alone.
  */
-const FOLDED_MIGRATION = /^supabase\/migrations\/(030[1-9]|031\d|0320|035[1-9]|040[1-9]|041[0-3]|042[0-4])_[a-z0-9_]+(\.(single|multi)-tenant)?\.sql$/;
+const FOLDED_MIGRATION = /^supabase\/migrations\/(030[1-9]|031\d|0320|035[1-9]|040[1-9]|041[0-3]|042[0-5])_[a-z0-9_]+(\.(single|multi)-tenant)?\.sql$/;
 const PHASE4_MIGRATION = /^supabase\/migrations\/04(0[1-9]|1\d)_/;
 const PHASE31_MIGRATION = /^supabase\/migrations\/(035[1-9]|042[0-4])_/;
 const unfoldedMigrationFiles = (mode: DeploymentMode): string[] => migrationFiles(mode).filter((file) => !FOLDED_MIGRATION.test(file));
@@ -365,31 +365,43 @@ const PHASE_31_SECTIONS = [
   },
 ] as const;
 const PHASE_4_HEADER = `${BAR}\n-- Phase 4: Hybrid retrieval`;
+// The empty search_path rewrite (0425, plan 04-47) runs after 0424, so its section follows the 0420-0424 section and closes the file.
+const SEARCH_PATH_SECTION = {
+  header: `${BAR}\n-- Phase 4 gap closure: empty search_path for SECURITY DEFINER, trigger and post-Phase-3 functions (migration 0425, plan 04-47, after 0424)\n${BAR}`,
+  files: /^supabase\/migrations\/0425_/,
+} as const;
 const OTHER_MODE: Record<DeploymentMode, DeploymentMode> = { 'single-tenant': 'multi-tenant', 'multi-tenant': 'single-tenant' };
 
 const phase31Files = (mode: DeploymentMode): string[] => migrationFiles(mode).filter((file) => PHASE31_MIGRATION.test(file));
 
 /** The Phase 3.1 sections as the fold writes them: a header, then each migration file under a `-- >>> path` line. */
 export function phase31Sections(mode: DeploymentMode): string[] {
-  return PHASE_31_SECTIONS.map(({ header, files }) => {
-    const blocks = migrationFiles(mode)
-      .filter((file) => files.test(file))
-      .map((relpath) => {
-        const content = fs.readFileSync(path.join(REPO_ROOT, relpath), 'utf8');
-        return `-- >>> ${relpath}\n${content}${content.endsWith('\n') ? '' : '\n'}`;
-      });
-    return `${header}\n\n${blocks.join('\n')}`;
-  });
+  return PHASE_31_SECTIONS.map((section) => foldedSection(mode, section));
 }
 
-/** The folded setup file with both Phase 3.1 sections cut out: what the setup was before this fold. */
+/** A fold section as written to the setup file: a header, then each migration file under a `-- >>> path` line. */
+function foldedSection(mode: DeploymentMode, { header, files }: { header: string; files: RegExp }): string {
+  const blocks = migrationFiles(mode)
+    .filter((file) => files.test(file))
+    .map((relpath) => {
+      const content = fs.readFileSync(path.join(REPO_ROOT, relpath), 'utf8');
+      return `-- >>> ${relpath}\n${content}${content.endsWith('\n') ? '' : '\n'}`;
+    });
+  return `${header}\n\n${blocks.join('\n')}`;
+}
+
+const searchPathFiles = (mode: DeploymentMode): string[] => migrationFiles(mode).filter((file) => SEARCH_PATH_SECTION.files.test(file));
+
+/** The folded setup file with both Phase 3.1 sections and the later 0425 section cut out: what the setup was before the Phase 3.1 fold. */
 function setupWithoutPhase31(mode: DeploymentMode): string {
   let text = fs.readFileSync(path.join(REPO_ROOT, FOLDED_SETUP[mode]), 'utf8');
   for (const section of phase31Sections(mode)) {
     assert.ok(text.includes(section), `${FOLDED_SETUP[mode]} lacks a Phase 3.1 section`);
     text = text.replace(section, '');
   }
-  return text;
+  const searchPath = foldedSection(mode, SEARCH_PATH_SECTION);
+  assert.ok(text.includes(searchPath), `${FOLDED_SETUP[mode]} lacks the 0425 section`);
+  return text.replace(searchPath, '');
 }
 
 /** Supabase Realtime as far as 0353 needs it: realtime.messages with RLS, realtime.topic() and realtime.send(). */
@@ -439,13 +451,13 @@ for (const mode of MODES) {
       const text = readRepo(FOLDED_SETUP[mode]);
       const [early, late] = phase31Sections(mode) as [string, string];
       assert.ok(text.includes(`${early}\n${PHASE_4_HEADER}`), 'the 0351-0359 section sits right before the Phase 4 section');
-      assert.ok(text.endsWith(late), 'the 0420-0424 section closes the file, after Phase 4');
+      assert.ok(text.endsWith(`${late}\n${foldedSection(mode, SEARCH_PATH_SECTION)}`), 'after Phase 4 come the 0420-0424 section and then the 0425 section, which closes the file');
       assert.ok(text.indexOf(late) > text.indexOf(PHASE_4_HEADER));
     });
 
     test(`${mode} setup alone equals the setup without its Phase 3.1 sections plus the Phase 3.1 migrations`, async () => {
       const folded = await freshDatabase([readRepo(FOLDED_SETUP[mode])]);
-      const migrated = await freshDatabase([setupWithoutPhase31(mode), ...phase31Files(mode).map(readRepo)]);
+      const migrated = await freshDatabase([setupWithoutPhase31(mode), ...phase31Files(mode).map(readRepo), ...searchPathFiles(mode).map(readRepo)]);
       try {
         const foldedDump = await catalogDump(folded);
         assert.ok(foldedDump.columns.some((row) => row.includes('"table":"ingestion_jobs"')), 'ingestion_jobs is in the setup file');

@@ -120,6 +120,19 @@ describe('every SECURITY DEFINER function is service_role only unless allow-list
     }
   });
 
+  test('a CREATE OR REPLACE that a DO block first requires to exist keeps an ACL the files do not show', () => {
+    const replaced = `
+      DO $check$ BEGIN
+        IF pg_catalog.to_regprocedure('public.legacy_definer(uuid)') IS NULL THEN RAISE EXCEPTION 'missing'; END IF;
+      END $check$;
+      CREATE OR REPLACE FUNCTION public.legacy_definer(p uuid) RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path = '' AS $$ SELECT true $$;
+      CREATE OR REPLACE FUNCTION public.unguarded_definer(p uuid) RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path = '' AS $$ SELECT true $$;
+    `;
+    const acls = simulateFunctionAcls([replaced]);
+    expect(acls.has('legacy_definer(uuid)')).toBe(false);
+    expect([...(acls.get('unguarded_definer(uuid)')?.exec ?? [])]).toContain('PUBLIC');
+  });
+
   test('a new overload that shares an allow-listed name is not approved', () => {
     const overloads = `
       CREATE FUNCTION public.delete_folder(folder_uuid uuid) RETURNS boolean LANGUAGE sql SECURITY DEFINER SET search_path = pg_catalog, public AS $$ SELECT true $$;
