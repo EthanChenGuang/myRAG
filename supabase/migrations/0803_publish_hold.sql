@@ -2,10 +2,14 @@
 -- One hold mechanism, enforced in rag_publish_document_version (body from 0425, signature and grants unchanged): a pending_review document
 -- returns outcome pending_review and a document whose metadata carries publish_hold returns outcome held, both before any lineage lock or
 -- version swap, so a held document supersedes nothing, swaps no version and invalidates no cache entry. The quarantined branch stays first
--- (quarantine wins over pending).
+-- (quarantine wins over pending and held).
 -- rag_hold_document_for_review moves a processing document and its chunks to pending_review (the publish stage calls it, plan 14).
--- rag_approve_upload is modelled on rag_release_quarantine: access from rag_admin_tenant_keys (the Quarantine panel rule), FOR UPDATE, the
--- status checked after the lock, approver stamps, publish through the one function, one rag_admin_audit row.
+-- rag_approve_upload and rag_reject_upload are modelled on rag_release_quarantine: access from rag_admin_tenant_keys (the Quarantine panel
+-- rule, through rag_upload_approval_keys so a non-admin gets not_found), FOR UPDATE with the status checked after the lock, publish or soft
+-- delete through the existing functions, one rag_admin_audit row. An approval older than the lineage's current version is refused with
+-- superseded_by_newer. rag_list_pending_uploads lists the actor's pending uploads oldest first.
+-- rag_upload_approval_exemptions (RLS on, no policies) with actor-scoped add, remove and list, the pipeline read rag_upload_exemptions_for,
+-- rag_is_tenant_admin, rag_release_publish_hold and ingestion_batches.hold_publish (D-12).
 -- Every function here is service_role only: REVOKE ALL FROM PUBLIC, anon, authenticated and GRANT EXECUTE TO service_role per signature.
 -- Not folded into the setup files. Idempotent: CREATE OR REPLACE, IF NOT EXISTS, constraints rebuilt by name. Re-running 0425 puts back the
 -- old publish body: re-run this file after it (research Pitfall 9).
@@ -24,6 +28,31 @@ ALTER TABLE public.rag_admin_audit ADD CONSTRAINT rag_admin_audit_action_check C
     'reject_upload'
   )
 );
+
+-- Batch-held publishing (D-12, research F-1): a batch with hold_publish writes its versions with metadata.publish_hold, so the publish
+-- function returns held until rag_release_publish_hold clears it at activation.
+ALTER TABLE public.ingestion_batches ADD COLUMN IF NOT EXISTS hold_publish boolean NOT NULL DEFAULT false;
+
+-- Upload-approval exemptions (D-37). Server role only: RLS on without policies, nothing granted to anon or authenticated, and service_role
+-- reads only; every write goes through the actor-scoped functions below.
+CREATE TABLE IF NOT EXISTS public.rag_upload_approval_exemptions (
+  id uuid PRIMARY KEY DEFAULT pg_catalog.gen_random_uuid(),
+  tenant_key text NOT NULL,
+  kind text NOT NULL,
+  ref text NOT NULL,
+  created_by uuid NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT pg_catalog.now(),
+  CONSTRAINT rag_upload_approval_exemptions_tenant_key_check CHECK (
+    tenant_key ~ '^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$'
+  ),
+  CONSTRAINT rag_upload_approval_exemptions_kind_check CHECK (kind IN ('connector', 'uploader')),
+  CONSTRAINT rag_upload_approval_exemptions_ref_check CHECK (pg_catalog.btrim(ref) <> '' AND pg_catalog.length(ref) <= 512),
+  CONSTRAINT rag_upload_approval_exemptions_unique UNIQUE (tenant_key, kind, ref)
+);
+
+ALTER TABLE public.rag_upload_approval_exemptions ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.rag_upload_approval_exemptions FROM PUBLIC, anon, authenticated, service_role;
+GRANT SELECT ON TABLE public.rag_upload_approval_exemptions TO service_role;
 
 CREATE OR REPLACE FUNCTION public.rag_publish_document_version(p_document_id uuid, p_tenant_key text)
  RETURNS TABLE(outcome text, document_id uuid, version integer, superseded_document_id uuid)
@@ -268,6 +297,142 @@ BEGIN
 END
 $function$;
 
+-- Whether p_user may approve uploads of p_tenant_key: the Quarantine panel access rule (rag_admin_tenant_keys); the pipeline asks it in
+-- identify (plan 14). The tenant key is asserted first.
+CREATE OR REPLACE FUNCTION public.rag_is_tenant_admin(p_user uuid, p_tenant_key text)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ STABLE SECURITY INVOKER
+ SET search_path TO ''
+AS $function$
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  RETURN p_user IS NOT NULL AND p_tenant_key = ANY (public.rag_upload_approval_keys(p_user));
+END
+$function$;
+
+-- Clears the batch publish hold of one document of the caller's tenant; publishing stays a separate call to the publish function.
+CREATE OR REPLACE FUNCTION public.rag_release_publish_hold(p_document_id uuid, p_tenant_key text)
+ RETURNS TABLE(outcome text, document_id uuid)
+ LANGUAGE plpgsql
+ SECURITY INVOKER
+ SET search_path TO ''
+AS $function$
+#variable_conflict use_column
+DECLARE
+  doc public.documents%ROWTYPE;
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  SELECT * INTO doc FROM public.documents d WHERE d.id = p_document_id AND d.tenant_key = p_tenant_key FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'tenant_mismatch' USING DETAIL = 'document not found in tenant';
+  END IF;
+  IF doc.metadata IS NULL OR NOT (doc.metadata ? 'publish_hold') THEN
+    RETURN QUERY SELECT 'not_held'::text, doc.id;
+    RETURN;
+  END IF;
+  UPDATE public.documents d SET metadata = d.metadata - 'publish_hold' WHERE d.id = doc.id;
+  RETURN QUERY SELECT 'released'::text, doc.id;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION public.rag_upload_exemption_add(p_actor uuid, p_tenant_key text, p_kind text, p_ref text)
+ RETURNS TABLE(outcome text, id uuid, tenant_key text, kind text, ref text, created_by uuid, created_at timestamp with time zone)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+#variable_conflict use_column
+DECLARE
+  clean_ref text := pg_catalog.btrim(COALESCE(p_ref, ''));
+  entry public.rag_upload_approval_exemptions%ROWTYPE;
+  result text := 'added';
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  IF NOT (p_tenant_key = ANY (public.rag_upload_approval_keys(p_actor))) THEN
+    RAISE EXCEPTION 'not_found';
+  END IF;
+  IF p_kind IS NULL OR p_kind NOT IN ('connector', 'uploader') THEN
+    RAISE EXCEPTION 'invalid_kind' USING ERRCODE = '22023';
+  END IF;
+  IF clean_ref = '' OR pg_catalog.length(clean_ref) > 512 THEN
+    RAISE EXCEPTION 'invalid_ref' USING ERRCODE = '22023';
+  END IF;
+
+  INSERT INTO public.rag_upload_approval_exemptions AS e (tenant_key, kind, ref, created_by)
+  VALUES (p_tenant_key, p_kind, clean_ref, p_actor)
+  ON CONFLICT ON CONSTRAINT rag_upload_approval_exemptions_unique DO NOTHING
+  RETURNING e.* INTO entry;
+  IF entry.id IS NULL THEN
+    result := 'exists';
+    SELECT e.* INTO entry FROM public.rag_upload_approval_exemptions e
+    WHERE e.tenant_key = p_tenant_key AND e.kind = p_kind AND e.ref = clean_ref;
+  END IF;
+
+  RETURN QUERY SELECT result, entry.id, entry.tenant_key, entry.kind, entry.ref, entry.created_by, entry.created_at;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION public.rag_upload_exemption_remove(p_actor uuid, p_exemption_id uuid)
+ RETURNS TABLE(outcome text, id uuid)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+#variable_conflict use_column
+DECLARE
+  removed uuid;
+BEGIN
+  DELETE FROM public.rag_upload_approval_exemptions e
+  WHERE e.id = p_exemption_id AND e.tenant_key = ANY (public.rag_upload_approval_keys(p_actor))
+  RETURNING e.id INTO removed;
+  IF removed IS NULL THEN
+    RAISE EXCEPTION 'not_found';
+  END IF;
+  RETURN QUERY SELECT 'removed'::text, removed;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION public.rag_upload_exemption_list(p_actor uuid, p_tenant_key text DEFAULT NULL, p_limit integer DEFAULT 50, p_offset integer DEFAULT 0)
+ RETURNS TABLE(id uuid, tenant_key text, kind text, ref text, created_by uuid, created_at timestamp with time zone, total_count bigint)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+#variable_conflict use_column
+DECLARE
+  keys text[];
+  page_size integer := LEAST(GREATEST(COALESCE(p_limit, 50), 1), 100);
+  skip integer := GREATEST(COALESCE(p_offset, 0), 0);
+BEGIN
+  keys := public.rag_upload_approval_keys(p_actor);
+  IF p_tenant_key IS NOT NULL THEN
+    keys := CASE WHEN p_tenant_key = ANY (keys) THEN ARRAY[p_tenant_key] ELSE '{}'::text[] END;
+  END IF;
+  RETURN QUERY
+  SELECT e.id, e.tenant_key, e.kind, e.ref, e.created_by, e.created_at, count(*) OVER ()
+  FROM public.rag_upload_approval_exemptions e
+  WHERE e.tenant_key = ANY (keys)
+  ORDER BY e.created_at, e.id
+  LIMIT page_size OFFSET skip;
+END
+$function$;
+
+-- The pipeline's read of a tenant's exemptions (plan 14), on the service-role client with the tenant key as the only input.
+CREATE OR REPLACE FUNCTION public.rag_upload_exemptions_for(p_tenant_key text)
+ RETURNS TABLE(kind text, ref text)
+ LANGUAGE plpgsql
+ STABLE SECURITY INVOKER
+ SET search_path TO ''
+AS $function$
+#variable_conflict use_column
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  RETURN QUERY
+  SELECT e.kind, e.ref FROM public.rag_upload_approval_exemptions e WHERE e.tenant_key = p_tenant_key ORDER BY e.kind, e.ref;
+END
+$function$;
+
 REVOKE ALL ON FUNCTION public.rag_publish_document_version(uuid, text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rag_publish_document_version(uuid, text) TO service_role;
 REVOKE ALL ON FUNCTION public.rag_hold_document_for_review(uuid, text) FROM PUBLIC, anon, authenticated;
@@ -281,6 +446,19 @@ REVOKE ALL ON FUNCTION public.rag_reject_upload(uuid, uuid) FROM PUBLIC, anon, a
 GRANT EXECUTE ON FUNCTION public.rag_reject_upload(uuid, uuid) TO service_role;
 REVOKE ALL ON FUNCTION public.rag_list_pending_uploads(uuid, text, integer, integer) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rag_list_pending_uploads(uuid, text, integer, integer) TO service_role;
+
+REVOKE ALL ON FUNCTION public.rag_is_tenant_admin(uuid, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_is_tenant_admin(uuid, text) TO service_role;
+REVOKE ALL ON FUNCTION public.rag_release_publish_hold(uuid, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_release_publish_hold(uuid, text) TO service_role;
+REVOKE ALL ON FUNCTION public.rag_upload_exemption_add(uuid, text, text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_upload_exemption_add(uuid, text, text, text) TO service_role;
+REVOKE ALL ON FUNCTION public.rag_upload_exemption_remove(uuid, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_upload_exemption_remove(uuid, uuid) TO service_role;
+REVOKE ALL ON FUNCTION public.rag_upload_exemption_list(uuid, text, integer, integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_upload_exemption_list(uuid, text, integer, integer) TO service_role;
+REVOKE ALL ON FUNCTION public.rag_upload_exemptions_for(text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_upload_exemptions_for(text) TO service_role;
 
 COMMIT;
 
