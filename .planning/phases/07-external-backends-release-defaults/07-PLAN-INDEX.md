@@ -1,10 +1,12 @@
 # Phase 7 Plan Index
 
+> **2026-11-24 — four plans RETIRED (Phase 5.1.1 integration):** EVAL-17 and D-21 to D-23 moved to Phase 5.1.1 (05.1.1-CONTEXT.md D-02). 07-22 (replaced by 05.1.1-19), 07-23 (05.1.1-12), 07-26 (05.1.1-20 and 05.1.1-21) and 07-29 (05.1.1-17 and 05.1.1-18) are retired: their files are kept for history with a RETIRED header and must not be executed. 07-17 is trimmed to the release, regression and vendor contracts; 07-27 depends on 05.1.1-22 instead of 07-26 and 07-29; 07-30 takes the Phase 4.1 decision (`eval/decisions/04.1-retrieval-defaults.json`) as its starting point. 30 active plans remain; the counts below are the original planning counts. See "Revision 3".
+
 34 plans in 13 waves, 86 tasks. Plans in the same wave share no file in `files_modified`, every file touched by two Phase 7 plans is ordered by a `depends_on` path, every plan's wave comes after the waves of its Phase 7 dependencies, and the graph is acyclic (checked by script, see "Checks run"). The phase tracer is 07-06 Task 1 (a chunk written through the Phase 3 writer reaches the outbox, one drain slice puts it in the fake store with the D-03 payload only, an external backend returns it to its own tenant hydrated from Supabase through `rag_validate_chunks`, the other tenant gets nothing, and a delete removes it). Plans 07-01, 07-32 and 07-33 are not autonomous: 07-01 Task 1 is the package-legitimacy checkpoint for @weaviate/node 3.15.5 (with @weaviate/core) and @qdrant/js-client-rest 1.20.0 (blocking-human, never auto-approvable), after which the orchestrator, never an executor, runs `npm install --save-exact @weaviate/node@3.15.5 @qdrant/js-client-rest@1.20.0` and commits the lock itself (Task 2 only verifies the exact pins and edits the boundary script); 07-32 holds the Vercel-plan and scheduler decision, the hosting, region and read-only-key decision, and the backend-canary branch-protection action; 07-33 is the final live-verification plan. Everything else is automated (see `07-VALIDATION.md`).
 
 ## Execution order and cross-phase dependencies
 
-- The backend half (07-01 to 07-16, 07-28, 07-34) functionally needs only Phases 3, 3.1 and 4 (CONTEXT "Dependencies"); the closeout half (07-17 to 07-27, 07-29 to 07-33) needs Phases 5, 5.1 and 6, and each of those plans depends on 05-25, 05.1-22 and 06-45 (the closing automated plans of Phases 5, 5.1 and 6) and keeps, as a second check, a precondition that halts before any edit unless `05-VERIFICATION.md`, `05.1-VERIFICATION.md` and `06-VERIFICATION.md` say `passed` or `human_needed`.
+- The backend half (07-01 to 07-16, 07-28, 07-34) functionally needs only Phases 3, 3.1 and 4 (CONTEXT "Dependencies"); the closeout half (07-17 to 07-27, 07-29 to 07-33; 07-22, 07-23, 07-26 and 07-29 retired 2026-11-24) needs Phases 5, 5.1 and 6, and each of those plans depends on 05-25, 05.1-22 and 06-45 (the closing automated plans of Phases 5, 5.1 and 6) and keeps, as a second check, a precondition that halts before any edit unless `05-VERIFICATION.md`, `05.1-VERIFICATION.md` and `06-VERIFICATION.md` say `passed` or `human_needed`.
 - Cross-phase ids name the plan that last edits a shared file (for example 04-42 for the boundary check and Phase 4 close, 05-05 and 06-22 for package.json, 05-10 and 06-40 for the five config locations, 05-07 and 06-34 for the contract registry, 05-04 and 06-32 for the search stage and pipeline, 05-21 and 06-40 for `src/lib/rag/index.ts`, 06-43 for pr-smoke.yml) or the closing automated plan of a phase (05-25, 06-45). They are file-order constraints and do not change wave numbers. Phases 1 and 2 are executed, so their ids appear only where a draft cites the owner of a module.
 - Phase 5.1 edges are real `depends_on` ids since revision 2: 05.1-22 (the 5.1 close, which depends on 05.1-01 to 05.1-21) on 16 plans, and 05.1-08 on 07-01; see "Phase 5.1 edges" below. 05.1-23 (the 5.1 live checks) shares no file with Phase 7 and is not a dependency.
 - Migrations 0701 to 0707 are common files (no mode variants): 0701 to 0703 in 07-02, 0704 and 0705 in 07-06, 0706 in 07-10, 0707 in 07-11; folded into both setup files by 07-31. `supabase/optional/vector-sync-schedule.sql` (07-13) is an operator recipe, never a migration.
@@ -27,13 +29,13 @@ Added in revision 2, from the coordinator's final 5.1 ids and a grep of the 5.1 
 | 07-19 | 05.1-22 | rag-sidecar/src/rag_sidecar/main.py (05.1-07) |
 | 07-20 | 05.1-22 | scripts/config-server.js, scripts/config-ui/index.html (05.1-04, 05.1-12) |
 | 07-21 | 05.1-22 | .github/workflows/pr-smoke.yml (05.1-19) |
-| 07-22 | 05.1-22 | none (phase edge for the 5.1 attack-success result it reads) |
-| 07-23 | 05.1-22 | none (phase edge) |
+| 07-22 (RETIRED) | 05.1-22 | none (phase edge for the 5.1 attack-success result it reads) |
+| 07-23 (RETIRED) | 05.1-22 | none (phase edge) |
 | 07-24 | 05.1-22 | none (phase edge for the 5.1 switches in the ablation) |
 | 07-25 | 05.1-22 | eval/harness/run-eval.mts (05.1-19) |
-| 07-26 | 05.1-22 | .github/workflows/nightly.yml, scripts/ci/check-workflows.py (05.1-19) |
+| 07-26 (RETIRED) | 05.1-22 | .github/workflows/nightly.yml, scripts/ci/check-workflows.py (05.1-19) |
 | 07-27 | 05.1-22 | scripts/init-env.js (05.1-04); AGENTS.md, tests/rag/agents-guide.test.ts (05.1-22) |
-| 07-29 | 05.1-22 | scripts/config-server.js, scripts/config-ui/index.html (05.1-04, 05.1-12) |
+| 07-29 (RETIRED) | 05.1-22 | scripts/config-server.js, scripts/config-ui/index.html (05.1-04, 05.1-12) |
 | 07-30 | 05.1-22 | .github/workflows/pr-smoke.yml (05.1-19) |
 
 Covered without a new edge (through a Phase 7 ancestor that has the 05.1-22 edge): 07-16 shares pr-smoke.yml and check-workflows.py with 05.1-19 (through 07-14, which depends on 07-12); 07-33 shares the config locations with 05.1-04 and 05.1-12 (through 07-32 and 07-31). 07-28, 07-31, 07-32 and 07-34 share no file with 5.1.
@@ -48,9 +50,9 @@ Covered without a new edge (through a Phase 7 ancestor that has the 05.1-22 edge
 | 4 | 07-10, 07-11, 07-12 | Activation gate for enabled backends (after 07-07 and 07-08); reconcile with bucketed checksums, index state and outbox pruning; readiness, the backend factory with fallback, timeout and race, span fields and the config hash |
 | 5 | 07-13, 07-14 | Drain route (POST and GET), after() kick, CLI and the pg_cron recipe; the cross-tenant canary suite with the planted foreign point |
 | 6 | 07-15, 07-16, 07-34 | Index-compat and sync-target admin routes; the backend-canary CI job and real-store drift; voice-scope (with RAG_RETRIEVAL_BACKEND_VOICE) and embed-scope canaries on every backend with filter-ignoring negative controls |
-| 7 | 07-17, 07-18, 07-19, 07-28 | Closeout contracts (DefaultsDecision, RegressionPlan, VendorDataFlow, ReviewPromotion, FailureReport); manifest metadata and check-config rules; Test-connection probes and the sidecar probe (no key, URL or host in any response); the semantic-cache canary for chat, embed and voice on every backend |
-| 8 | 07-20, 07-21, 07-22, 07-23, 07-24, 07-26 | Generated Config UI section with masked secrets; vendor data-flow inventory; promotion with near-duplicate confirm; retrieved ids in traces and the review-chunks route; regression statistics and protocol; failure report and the nightly job |
-| 9 | 07-25, 07-29 | External backends in the eval harness and the fixture regression with the provisional record; the review-queue panel with execFile promotion |
+| 7 | 07-17, 07-18, 07-19, 07-28 | Closeout contracts (DefaultsDecision, RegressionPlan, VendorDataFlow; review and failure-report contracts moved to 05.1.1-01); manifest metadata and check-config rules; Test-connection probes and the sidecar probe (no key, URL or host in any response); the semantic-cache canary for chat, embed and voice on every backend |
+| 8 | 07-20, 07-21, 07-24 (07-22, 07-23, 07-26 RETIRED) | Generated Config UI section with masked secrets; vendor data-flow inventory; regression statistics and protocol (promotion, review chunks and the failure report moved to Phase 5.1.1) |
+| 9 | 07-25 (07-29 RETIRED) | External backends in the eval harness and the fixture regression with the provisional record (the review-queue panel moved to Phase 5.1.1) |
 | 10 | 07-27, 07-30 | README_RAG_PIPELINE.md, the `.env` template groups and AGENTS.md; the shipped-defaults check in CI |
 | 11 | 07-31 | Fold 0701 to 0707 into both setup files, off-state parity, full gates with the defaults |
 | 12 | 07-32 | Human decisions and action: scheduler from the Vercel plan, hosting, region and read-only keys, backend-canary branch protection (autonomous: false) |
@@ -72,7 +74,7 @@ Covered without a new edge (through a Phase 7 ancestor that has the 05.1-22 edge
 | 10 Test-connection and index-compat | 07-15, 07-19, 07-20 |
 | 11 vendor inventory and its check | 07-17, 07-21 |
 | 12 docs | 07-27 |
-| 13 review-queue panel, promote, failure report | 07-22, 07-23, 07-26, 07-29 |
+| 13 review-queue panel, promote, failure report | moved to Phase 5.1.1 (05.1.1-12, 05.1.1-17 to 05.1.1-21); 07-22, 07-23, 07-26, 07-29 retired |
 | 14 regression runner and the fixture defaults record | 07-17, 07-24, 07-25, 07-30 |
 | 15 live defaults checkpoint | 07-32, 07-33 |
 
@@ -91,8 +93,9 @@ Deviations from the literal order, all from interface-first dependencies: the D-
 | ADM-02 | 07-17, 07-24, 07-25, 07-30, 07-33 |
 | ADM-03 | 07-27 |
 | ADM-04 | 07-17, 07-21, 07-27, 07-32, 07-33 |
-| EVAL-17 | 07-17, 07-22, 07-23, 07-26, 07-29 |
 | RET-01, RET-02, RET-03, RET-10 (every-backend clauses, verified here) | 07-07, 07-08, 07-12, 07-16 |
+
+EVAL-17 left Phase 7 on 2026-11-24 and is covered by Phase 5.1.1.
 
 ## Decision coverage (07-CONTEXT.md, adjustments A-1 to A-12 applied)
 
@@ -105,9 +108,9 @@ Deviations from the literal order, all from interface-first dependencies: the D-
 | D-05 | 07-05, 07-11, 07-13, 07-16 | D-18 | 07-17, 07-18, 07-24, 07-25, 07-30, 07-33 |
 | D-06 | 07-03, 07-07, 07-08, 07-10 | D-19 | 07-27 |
 | D-07 | 07-03, 07-08, 07-09 | D-20 | 07-17, 07-21, 07-33 |
-| D-08 | 07-03, 07-07 | D-21 | 07-17, 07-22, 07-23, 07-29 |
-| D-09 | 07-01, 07-07, 07-08, 07-32 | D-22 | 07-17, 07-22, 07-29 |
-| D-10 | 07-06, 07-14, 07-28, 07-31, 07-34 | D-23 | 07-17, 07-26 |
+| D-08 | 07-03, 07-07 | D-21 | Moved to Phase 5.1.1 |
+| D-09 | 07-01, 07-07, 07-08, 07-32 | D-22 | Moved to Phase 5.1.1 |
+| D-10 | 07-06, 07-14, 07-28, 07-31, 07-34 | D-23 | Moved to Phase 5.1.1 |
 | D-11 | 07-02, 07-04, 07-05, 07-11, 07-12, 07-34 | D-24 | 07-04, 07-12, 07-13, 07-15, 07-31 |
 | D-12 | 07-14, 07-16, 07-28, 07-32, 07-33, 07-34 | D-25 | 07-05, 07-09, 07-12 |
 | D-13 | 07-07, 07-08 | D-26 | rollout order across all plans (each objective names its step) |
@@ -132,7 +135,7 @@ Deferred ideas (legacy path removal, per-tenant vendor opt-out, native backend f
 | 3 | 07-07, 07-08 and 07-16 (Phase 4 conformance unchanged on both, zh exact term included), 07-12 (not ready or failing falls back to pgvector with `degraded`) |
 | 4 | 07-04, 07-18 and 07-20 (every provider and switch, masked secrets), 07-19 (Test-connection), 07-15 and 07-20 (index-compatibility warning) |
 | 5 | 07-24 and 07-25 (regression on backend, profile and reranker combinations with a fixture decision record), 07-30 (shipped defaults follow the record), 07-27 (AGENTS.md, `.env` template, README_RAG_PIPELINE.md), 07-21 (vendor data-flow inventory); 07-33 Tasks 3 and 4 live |
-| 6 | 07-29 (panel: open a case, write the answer and spans, promote), 07-22 (provenance production, frozen split, next eval run includes it), 07-23 (retrieved chunks for review), 07-26 (failure report by layer and category) |
+| 6 | Removed 2026-11-24: the criterion moved to Phase 5.1.1 with EVAL-17 (05.1.1-12, 05.1.1-17 to 05.1.1-21) |
 
 ## Revision 1 (plan-check pass 1)
 
@@ -159,6 +162,16 @@ Deferred ideas (legacy path removal, per-tenant vendor opt-out, native backend f
 | 07-10 | `depends_on` + 07-07 and 07-08 (real edge replacing the execution-note ordering); wave 3 to 4; `coupling_justified` now names 07-11 and 07-12; execution note updated |
 | 07-07, 07-08 | execution note about 07-10 replaced by an ordering note (07-10 now depends on them) |
 | 07-11, 07-12 | execution notes updated for 07-10 in wave 4 |
+
+## Revision 3 (2026-11-24, cross-phase integration)
+
+| Plan | Change |
+|------|--------|
+| 07-22, 07-23, 07-26, 07-29 | RETIRED: superseded by 05.1.1-19, 05.1.1-12, 05.1.1-20/05.1.1-21 and 05.1.1-17/05.1.1-18 (EVAL-17 and D-21 to D-23 moved to Phase 5.1.1). Files kept with a RETIRED header; not executed |
+| 07-17 | Trimmed: `ReviewPromotion`, `ReviewEvidenceSpan`, `ReviewRetrievedChunk`, `FailureReport`, `FailureEntry`, the ReviewQueueItem additions and their schema outputs removed; EVAL-17 dropped from requirements; `DefaultsDecision` gains an optional `ship_check_ref` (ShipCheckResult, 05.1.1-01); `depends_on` + 05.1.1-22 |
+| 07-27 | `depends_on`: 07-26 and 07-29 replaced by 05.1.1-22; the 5.1.1 CLIs and panels documented by reference |
+| 07-30 | Phase 4.1 amendment (04.1-CONTEXT D-20): while the Phase 7 record is provisional, the expected map for the five DFLT variables comes from `eval/decisions/04.1-retrieval-defaults.json`; `depends_on` + 04.1-09 |
+| ROADMAP | Phase 7 Requirements no longer list EVAL-17; success criterion 6 removed (moved to Phase 5.1.1) |
 
 ## Threat register
 
