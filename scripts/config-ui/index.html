@@ -16971,7 +16971,8 @@ When messaging:
                 remove.type = 'button';
                 remove.className = 'btn btn-sm btn-error btn-outline';
                 remove.textContent = 'Remove';
-                remove.addEventListener('click', () => removeModel(index));
+                remove.setAttribute('aria-label', `Remove ${String(model.displayName || model.id || 'model')}`);
+                remove.addEventListener('click', () => confirmRemoveModel(index, remove));
                 actions.appendChild(remove);
 
                 modelDiv.append(handle, info, actions);
@@ -17411,6 +17412,63 @@ When messaging:
                 ? ` with 🧠 ${newModel.reasoningMethod} reasoning`
                 : '';
             showToast(`Model '${displayName}' added successfully${reasoningStatus}!`, 'success');
+        }
+
+        function confirmRemoveModel(index, opener) {
+            const models = modelConfig.provider === 'openai'
+                ? modelConfig.openaiModels
+                : modelConfig.provider === 'groq' ? modelConfig.groqModels : modelConfig.openrouterModels;
+            const model = models[index];
+            if (!model) return;
+            const label = String(model.displayName || model.id || 'this model');
+
+            const dialog = document.createElement('dialog');
+            dialog.className = 'modal';
+            dialog.setAttribute('aria-labelledby', 'remove-model-dialog-title');
+            const box = document.createElement('div');
+            box.className = 'modal-box';
+            const title = document.createElement('h3');
+            title.id = 'remove-model-dialog-title';
+            title.className = 'text-base font-semibold';
+            title.textContent = 'Remove model?';
+            const body = document.createElement('p');
+            body.className = 'text-sm mt-2';
+            body.textContent = `“${label}” will be removed from the list. Click “Save Model Configuration” to make this permanent.`;
+            const actions = document.createElement('div');
+            actions.className = 'modal-action';
+            const cancel = document.createElement('button');
+            cancel.type = 'button';
+            cancel.className = 'btn';
+            cancel.textContent = 'Cancel';
+            cancel.setAttribute('autofocus', '');
+            cancel.addEventListener('click', () => dialog.close('cancel'));
+            const confirm = document.createElement('button');
+            confirm.type = 'button';
+            confirm.className = 'btn btn-error';
+            confirm.textContent = 'Remove';
+            confirm.addEventListener('click', () => dialog.close('confirm'));
+            actions.append(cancel, confirm);
+            box.append(title, body, actions);
+            dialog.appendChild(box);
+            const backdrop = document.createElement('form');
+            backdrop.method = 'dialog';
+            backdrop.className = 'modal-backdrop';
+            const backdropButton = document.createElement('button');
+            backdropButton.type = 'submit';
+            backdropButton.textContent = 'close';
+            backdrop.appendChild(backdropButton);
+            dialog.appendChild(backdrop);
+            dialog.addEventListener('close', () => {
+                dialog.remove();
+                if (dialog.returnValue === 'confirm') {
+                    removeModel(index);
+                } else if (opener && opener.isConnected && typeof opener.focus === 'function') {
+                    opener.focus();
+                }
+            }, { once: true });
+            document.body.appendChild(dialog);
+            dialog.showModal();
+            cancel.focus();
         }
 
         function removeModel(index) {
