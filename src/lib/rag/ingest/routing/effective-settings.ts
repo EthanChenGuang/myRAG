@@ -1,5 +1,5 @@
 import { getLanguagePack, registryOrder } from '../../lang/registry';
-import { getLanguageSettings } from '../../lang/settings';
+import { getLanguageSettings, languageVariablesUnset } from '../../lang/settings';
 import type { IngestConfig } from '../config';
 import type { ProcessingProfile } from '../profiles/load';
 import type { JobSettingsSnapshotWire } from '../wire-defaults';
@@ -54,6 +54,30 @@ function ocrCapable(settings: EffectiveLanguageInput): string[] {
   });
 }
 
+/** The OCR-capable configured codes and the primary they are built around; primary is null when the settings do not apply. */
+function ocrSelection(settings: EffectiveLanguageInput): { codes: string[]; primary: string | null } {
+  const codes = ocrCapable(settings);
+  const primary = settings.primary !== null && codes.includes(settings.primary) ? settings.primary : null;
+  return { codes, primary: codes.length > 0 ? primary : null };
+}
+
+/** LlamaParse codes of the configured languages, primary first (research F-3); empty when the languages are unset. */
+function llamaparseCodes(settings: EffectiveLanguageInput): string[] {
+  const { codes, primary } = ocrSelection(settings);
+  if (primary === null) return [];
+  const ordered = [primary, ...codes.filter((code) => code !== primary)];
+  return [...new Set(ordered.map((code) => getLanguagePack(code)?.ocr_codes.llamaparse as string))];
+}
+
+/**
+ * D-16: the LlamaParse codes for the two legacy call sites, which run under either ingest pipeline. With both language variables blank it
+ * returns [] without reading the settings (D-02), and the caller sends today's request byte for byte.
+ */
+export function legacyLlamaparseLanguages(): string[] {
+  if (languageVariablesUnset()) return [];
+  return llamaparseCodes(getLanguageSettings());
+}
+
 /**
  * D-17, D-19, D-22: the one place the effective ingestion settings are decided. Docling and the snapshot get language codes in registry
  * order, never in the typed order, so parse-cache keys do not depend on it (research Pitfall 3); LlamaParse gets its own codes with the
@@ -61,19 +85,15 @@ function ocrCapable(settings: EffectiveLanguageInput): string[] {
  */
 export function effectiveIngestSettings(input: EffectiveIngestSettingsInput): EffectiveIngestSettings {
   const { ingestConfig, profile, languageSettings } = input;
-  const codes = ocrCapable(languageSettings);
-  const primary = languageSettings.primary !== null && codes.includes(languageSettings.primary) ? languageSettings.primary : null;
-  const fromSettings = codes.length > 0 && primary !== null;
-  const llamaparse = fromSettings
-    ? [primary, ...codes.filter((code) => code !== primary)].map((code) => getLanguagePack(code)?.ocr_codes.llamaparse as string)
-    : [];
+  const { codes, primary } = ocrSelection(languageSettings);
+  const fromSettings = primary !== null;
   const languageAware = ingestConfig.languageAwareIngest === 'on';
   const aware = languageAware && languageSettings.configured ? registryOrder(languageSettings.languages) : [];
   const forced = ingestConfig.tableHeaderRepeat === 'always';
   return {
     ocrLanguages: fromSettings ? codes : [...profile.parser.ocr_languages],
     ocrPrimaryLanguage: fromSettings ? primary : null,
-    llamaparseLanguages: [...new Set(llamaparse)],
+    llamaparseLanguages: llamaparseCodes(languageSettings),
     languageAware,
     languages: aware,
     primaryLanguage: languageSettings.primary !== null && aware.includes(languageSettings.primary) ? languageSettings.primary : null,

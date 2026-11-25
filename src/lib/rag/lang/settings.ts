@@ -33,6 +33,15 @@ export function getLanguageSettings(): LanguageSettings {
   return cached;
 }
 
+/**
+ * D-02: true when both language variables are blank. It looks at presence only and never runs the reader, so a legacy caller can skip
+ * getLanguageSettings() entirely while the languages are unset.
+ */
+export function languageVariablesUnset(): boolean {
+  const { supported, primary } = rawEnv();
+  return (supported ?? '').trim() === '' && (primary ?? '').trim() === '';
+}
+
 /** The reranker RAG_RERANKER selects with its declared languages; null for none (no reranker rule). */
 export function activeRerankerDeclaration(): LanguageDeclaration | null {
   const id = parseRerankProviderId(process.env.RAG_RERANKER);

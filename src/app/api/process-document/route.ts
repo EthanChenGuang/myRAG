@@ -12,6 +12,7 @@ import {
   unifiedIngestRefusal,
   legacyApprovalRefusal,
   legacyWriteRefused,
+  legacyLlamaparseLanguages,
   embedText,
   ingest,
   submitIngest,
@@ -215,13 +216,21 @@ async function uploadToLlamaCloud(buffer: Buffer, filename: string): Promise<Lla
     // balanced mode is default, no additional flag needed
   };
 
-  const output_config = {
-    result_type: "markdown",
-    language: "en"
-  };
+  // D-16: with configured languages LlamaParse takes the top-level language field (registry codes, primary first).
+  const llamaparseLanguages = legacyLlamaparseLanguages();
+  if (llamaparseLanguages.length === 0) {
+    const output_config = {
+      result_type: "markdown",
+      language: "en"
+    };
 
-  formData.append('parsing_config', JSON.stringify(parsing_config));
-  formData.append('output_config', JSON.stringify(output_config));
+    formData.append('parsing_config', JSON.stringify(parsing_config));
+    formData.append('output_config', JSON.stringify(output_config));
+  } else {
+    formData.append('parsing_config', JSON.stringify(parsing_config));
+    formData.append('output_config', JSON.stringify({ result_type: "markdown" }));
+    formData.append('language', llamaparseLanguages.join(','));
+  }
   formData.append('auto_mode', 'true');
   formData.append('auto_mode_trigger_on_table', 'true');
   formData.append('auto_mode_trigger_on_image', 'true');

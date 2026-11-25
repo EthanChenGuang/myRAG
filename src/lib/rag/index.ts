@@ -203,6 +203,7 @@ export {
   legacyWriteRefused,
 } from './ingest/approval/legacy-refusal';
 export { assertCloudAllowed, CloudRefused } from './ingest/guard/cloud-budget';
+export { legacyLlamaparseLanguages } from './ingest/routing/effective-settings';
 export { findInvoices } from './retrieval/invoices';
 export type { FindInvoicesDeps, InvoiceFilters, InvoiceHit } from './retrieval/invoices';
 export { runChunkingBuildStep } from './ingest/rechunk/build-step';
