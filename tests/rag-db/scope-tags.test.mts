@@ -265,6 +265,116 @@ describe('scope tags across two tenants (multi-tenant)', () => {
   });
 });
 
+describe('scope vocabulary rules and canonical tag lists (multi-tenant)', () => {
+  let db: PGlite;
+  let doc: string;
+
+  const messageFor = async (params: unknown[]) => (await failure(db, CREATE_SQL, params)) ?? '';
+  const entryId = async (dimension: string, value: string) =>
+    String((await rows(db, LIST_SQL, [O_ADMIN, KEY_O])).find((row) => row.dimension === dimension && row.value === value)?.id);
+
+  before(async () => {
+    db = (await createTwoTenantDatabase()).db;
+    await db.query('INSERT INTO auth.users (id, email) VALUES ($1, $2)', [O_ADMIN, 'o-admin@example.invalid']);
+    await db.query("INSERT INTO organization_members (organization_id, user_id, role) VALUES ($1, $2, 'admin')", [ORG_O, O_ADMIN]);
+    doc = await publishedDocument(db, WORKSPACE_O, 'rules');
+    await create(db, O_ADMIN, KEY_O, 'region', 'b-2', 'Area two', ['Second area']);
+    await create(db, O_ADMIN, KEY_O, 'region', 'c3', 'Area three');
+    await create(db, O_ADMIN, KEY_O, 'department', 'd1', 'Unit one');
+  });
+
+  after(async () => {
+    await db?.close();
+  });
+
+  test('a value equal after slug normalization (case, spaces, repeated hyphens) is refused with tag_exists', async () => {
+    for (const value of ['B-2', ' b 2 ', 'b--2', 'B__2', '-b-2-']) {
+      assert.match(await messageFor([O_ADMIN, KEY_O, 'region', value, `Other ${next('label')}`, []]), /^tag_exists/, value);
+    }
+    const normalized = await create(db, O_ADMIN, KEY_O, 'region', '  New  Value ', 'Area new');
+    assert.equal(normalized.value, 'new-value');
+    assert.match(await messageFor([O_ADMIN, KEY_O, 'region', '中文', 'Area x', []]), /^invalid_value/);
+  });
+
+  test("a label or alias equal to another active entry's label in the dimension is refused with tag_exists", async () => {
+    assert.match(await messageFor([O_ADMIN, KEY_O, 'region', 'x1', 'area TWO', []]), /^tag_exists/);
+    assert.match(await messageFor([O_ADMIN, KEY_O, 'region', 'x2', 'Area x2', ['  Area   two ']]), /^tag_exists/);
+    assert.match(await messageFor([O_ADMIN, KEY_O, 'region', 'x3', 'second area', []]), /^tag_exists/);
+  });
+
+  test('the same value in two dimensions is two distinct tags', async () => {
+    const other = await create(db, O_ADMIN, KEY_O, 'legal_entity', 'b-2', 'Area two');
+    assert.equal(other.dimension, 'legal_entity');
+    assert.equal(other.value, 'b-2');
+  });
+
+  test('an update changes label, aliases and active, and refuses a changed value or dimension with value_immutable', async () => {
+    const id = await entryId('region', 'c3');
+    const updated = (await rows(db, UPDATE_SQL, [O_ADMIN, KEY_O, id, 'Area three renamed', ['Third'], null, 'region', 'c3']))[0] as Row;
+    assert.equal(updated.label, 'Area three renamed');
+    assert.deepEqual(updated.aliases, ['Third']);
+    assert.equal(updated.value, 'c3');
+    assert.match((await failure(db, UPDATE_SQL, [O_ADMIN, KEY_O, id, null, null, null, null, 'c4'])) ?? '', /^value_immutable/);
+    assert.match((await failure(db, UPDATE_SQL, [O_ADMIN, KEY_O, id, null, null, null, 'department', null])) ?? '', /^value_immutable/);
+    assert.match((await failure(db, UPDATE_SQL, [O_ADMIN, KEY_O, id, 'Area two', null, null, null, null])) ?? '', /^tag_exists/);
+  });
+
+  test('tag lists are stored sorted and de-duplicated whatever the input order', async () => {
+    const first = (await rows(db, SET_SQL, [doc, KEY_O, ['region:c3', 'department:d1', 'region:b-2', 'region:c3'], O_ADMIN]))[0] as Row;
+    const firstStored = await documentScopes(db, doc);
+    const second = (await rows(db, SET_SQL, [doc, KEY_O, ['department:d1', 'region:b-2', 'region:c3'], O_ADMIN]))[0] as Row;
+    assert.deepEqual(first.scopes, ['department:d1', 'region:b-2', 'region:c3']);
+    assert.deepEqual(second.scopes, first.scopes);
+    assert.deepEqual(await documentScopes(db, doc), firstStored);
+    assert.deepEqual(firstStored.chunks, [first.scopes, first.scopes]);
+  });
+
+  test('a retired value stays on tagged documents, is refused for new tagging, and can be restored', async () => {
+    const id = await entryId('region', 'c3');
+    const retired = (await rows(db, UPDATE_SQL, [O_ADMIN, KEY_O, id, null, null, false, null, null]))[0] as Row;
+    assert.equal(retired.active, false);
+    assert.ok((await documentScopes(db, doc)).document.includes('region:c3'));
+
+    const kept = (await rows(db, SET_SQL, [doc, KEY_O, ['region:c3', 'region:b-2'], O_ADMIN]))[0] as Row;
+    assert.deepEqual(kept.scopes, ['region:b-2', 'region:c3']);
+    const other = await publishedDocument(db, WORKSPACE_O, 'rules-other');
+    assert.match((await failure(db, SET_SQL, [other, KEY_O, ['region:c3'], O_ADMIN])) ?? '', /^unknown_scope_value/);
+
+    assert.equal(((await rows(db, UPDATE_SQL, [O_ADMIN, KEY_O, id, null, null, true, null, null]))[0] as Row).active, true);
+    assert.deepEqual(((await rows(db, SET_SQL, [other, KEY_O, ['region:c3'], O_ADMIN]))[0] as Row).scopes, ['region:c3']);
+  });
+
+  test("restoring a value whose label now equals another active entry's label is refused with tag_exists", async () => {
+    const id = await entryId('department', 'd1');
+    await rows(db, UPDATE_SQL, [O_ADMIN, KEY_O, id, null, null, false, null, null]);
+    await create(db, O_ADMIN, KEY_O, 'department', 'd9', 'Unit one');
+    assert.match((await failure(db, UPDATE_SQL, [O_ADMIN, KEY_O, id, null, null, true, null, null])) ?? '', /^tag_exists/);
+  });
+
+  test('an empty list clears the tags of the document and its chunks', async () => {
+    const cleared = (await rows(db, SET_SQL, [doc, KEY_O, [], O_ADMIN]))[0] as Row;
+    assert.deepEqual(cleared.scopes, []);
+    assert.deepEqual(await documentScopes(db, doc), { document: [], chunks: [[], []] });
+  });
+
+  test('more than 20 tags on one document is refused with too_many_scopes', async () => {
+    for (let index = 0; index < 21; index += 1) await create(db, O_ADMIN, KEY_O, 'department', `many-${index}`, `Many ${index}`);
+    const tags = Array.from({ length: 21 }, (_, index) => `department:many-${index}`);
+    assert.match((await failure(db, SET_SQL, [doc, KEY_O, tags, O_ADMIN])) ?? '', /^too_many_scopes/);
+    assert.equal(((await rows(db, SET_SQL, [doc, KEY_O, tags.slice(0, 20), O_ADMIN]))[0] as Row).chunks_updated, 2);
+  });
+
+  test('the vocabulary list is ordered by dimension (region, legal entity, department), then label', async () => {
+    const listed = await rows(db, LIST_SQL, [O_ADMIN, KEY_O]);
+    const order = ['region', 'legal_entity', 'department'];
+    const keys = listed.map((row) => [order.indexOf(String(row.dimension)), String(row.label).toLowerCase()] as const);
+    const sorted = [...keys].sort((a, b) => a[0] - b[0] || (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : 0));
+    assert.deepEqual(keys, sorted);
+    assert.equal(listed[0]?.dimension, 'region');
+    assert.equal(listed.at(-1)?.dimension, 'department');
+  });
+});
+
 describe('scope tags (single-tenant)', () => {
   let db: PGlite;
   const ADMIN = '00000000-0000-4000-8000-0000000041a1';

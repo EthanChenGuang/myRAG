@@ -240,3 +240,94 @@ describe('scope tag routes: create and tag', () => {
     expect(scopeCalls()).toEqual([]);
   });
 });
+
+describe('scope tag routes: vocabulary rules', () => {
+  beforeEach(() => {
+    resetState();
+    for (const method of ['warn', 'error', 'log', 'info'] as const) vi.spyOn(console, method).mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.resetModules();
+    delete process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE;
+  });
+
+  const post = (loaded: Loaded, body: unknown) => loaded.vocabulary.POST(req('/api/rag/admin/scope-vocabulary', { method: 'POST', body }));
+  const patch = (loaded: Loaded, body: unknown) => loaded.vocabulary.PATCH(req('/api/rag/admin/scope-vocabulary', { method: 'PATCH', body }));
+
+  it('normalizes the value to a slug (case, spaces, repeated hyphens) before the database call', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    expect((await post(loaded, { dimension: 'region', value: ' Area--A1 ', label: 'Area one' })).status).toBe(201);
+    expect(scopeCalls()[0]?.args.p_value).toBe('area-a1');
+  });
+
+  it('refuses a value with no slug characters with 400 invalid_value and calls nothing', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    const response = await post(loaded, { dimension: 'region', value: '中文', label: 'Area one' });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ success: false, error: 'invalid_value' });
+    expect(scopeCalls()).toEqual([]);
+  });
+
+  it('maps tag_exists to 409 and refuses a fourth dimension or an extra key with 400', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    state.outcomes.rag_scope_vocabulary_create = { data: null, error: { code: 'P0001', message: 'tag_exists' } };
+    const duplicate = await post(loaded, { dimension: 'region', value: 'a1', label: 'Area one' });
+    expect(duplicate.status).toBe(409);
+    expect(await duplicate.json()).toEqual({ success: false, error: 'tag_exists' });
+    expect((await post(loaded, { dimension: 'country', value: 'a1', label: 'Area one' })).status).toBe(400);
+    expect((await post(loaded, { dimension: 'region', value: 'a1', label: 'Area one', active: false, tenantKey: 's:default' })).status).toBe(400);
+  });
+
+  it('edits label, other names and the active flag of an entry; a changed value or dimension answers 400', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    const ok = await patch(loaded, { id: ENTRY_ID, label: 'Area one renamed', aliases: ['First'], active: false });
+    expect(ok.status).toBe(200);
+    expect((await ok.json()).item.label).toBe('Area one renamed');
+    expect(scopeCalls()).toEqual([
+      {
+        fn: 'rag_scope_vocabulary_update',
+        args: {
+          p_actor: ADMIN_ID,
+          p_tenant_key: 's:default',
+          p_id: ENTRY_ID,
+          p_label: 'Area one renamed',
+          p_aliases: ['First'],
+          p_active: false,
+          p_dimension: null,
+          p_value: null,
+        },
+      },
+    ]);
+    state.outcomes.rag_scope_vocabulary_update = { data: null, error: { code: 'P0001', message: 'value_immutable' } };
+    const changed = await patch(loaded, { id: ENTRY_ID, value: 'a2' });
+    expect(changed.status).toBe(400);
+    expect(await changed.json()).toEqual({ success: false, error: 'value_immutable' });
+    state.outcomes.rag_scope_vocabulary_update = { data: null, error: { code: 'P0001', message: 'not_found' } };
+    expect(await (await patch(loaded, { id: ENTRY_ID, active: true })).json()).toEqual({ success: false, error: 'Tag not found' });
+  });
+
+  it('refuses more than 20 tags on a document with 400 too_many_scopes and calls nothing', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    const scopes = Array.from({ length: 21 }, (_, index) => `department:d${index}`);
+    const response = await loaded.scopes.PUT(req(`/api/rag/admin/documents/${DOC_ID}/scopes`, { method: 'PUT', body: { scopes } }), params(DOC_ID));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ success: false, error: 'too_many_scopes' });
+    expect(scopeCalls()).toEqual([]);
+  });
+
+  it('passes an empty list through to clear the tags', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    state.outcomes.rag_set_document_scopes = { data: [{ document_id: DOC_ID, scopes: [], chunks_updated: 2 }], error: null };
+    const response = await loaded.scopes.PUT(req(`/api/rag/admin/documents/${DOC_ID}/scopes`, { method: 'PUT', body: { scopes: [] } }), params(DOC_ID));
+    expect(await response.json()).toEqual({ success: true, id: DOC_ID, scopes: [] });
+    expect(scopeCalls()[0]?.args.p_scopes).toEqual([]);
+  });
+});
