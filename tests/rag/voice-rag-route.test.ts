@@ -6,6 +6,7 @@ import { TWO_TENANT_IDS, createTwoTenantDatabase, type TwoTenantDatabase } from 
 import { mintScope } from '@/lib/rag/tenant/scope';
 import { mintVoiceToken } from '@/lib/rag/tenant/voice-token';
 import { INTERNAL_API_KEY } from '../helpers/route-fixture';
+import { REFERENCE_NOTICE, REFERENCE_REMINDER } from '@/lib/rag/context/wrap';
 
 const SECRET = crypto.randomBytes(24).toString('hex');
 const OTHER_SECRET = crypto.randomBytes(24).toString('hex');
@@ -14,6 +15,7 @@ const QUERY = 'two tenant isolation canary phrase';
 type VoiceBody = {
   results?: Array<{ chunk_id: string; content: string }>;
   source_images?: Array<{ url: string }>;
+  context?: string;
   error?: string;
   reason?: string;
 };
@@ -48,6 +50,7 @@ describe('voice-rag route with signed scope tokens', () => {
 
   beforeEach(() => {
     process.env.RAG_VOICE_TOKEN_SECRET = SECRET;
+    delete process.env.RAG_CONTEXT_TAGGING;
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -189,5 +192,67 @@ describe('voice-rag route with signed scope tokens', () => {
     } finally {
       deps.resetRagDepsForTests();
     }
+  });
+  describe('context tagging (A-1)', () => {
+    const personalA = () => token(mintScope('personal', TWO_TENANT_IDS.userA, null));
+    const personalB = () => token(mintScope('personal', TWO_TENANT_IDS.userB, null));
+
+    it('with tagging off the body has exactly the keys it has today and no context', async () => {
+      const { POST } = await loadRoute();
+      const response = await POST(request(QUERY, personalA()));
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as VoiceBody;
+      expect(Object.keys(body).sort()).toEqual(['results', 'source_images']);
+    });
+
+    it('with tagging on the body gains a tagged context and results and source_images are unchanged', async () => {
+      const { POST } = await loadRoute();
+      const off = (await (await POST(request(QUERY, personalA()))).json()) as VoiceBody;
+      process.env.RAG_CONTEXT_TAGGING = 'true';
+      const response = await POST(request(QUERY, personalA()));
+      expect(response.status).toBe(200);
+      const body = (await response.json()) as VoiceBody;
+      expect(Object.keys(body).sort()).toEqual(['context', 'results', 'source_images']);
+      expect(body.results).toEqual(off.results);
+      expect(body.source_images).toEqual(off.source_images);
+      const context = body.context ?? '';
+      expect(context.startsWith(REFERENCE_NOTICE)).toBe(true);
+      expect(context.endsWith(REFERENCE_REMINDER)).toBe(true);
+      expect(context.match(/<documents>/g)).toHaveLength(1);
+      expect(context).toMatch(/<doc id="c1" source="[^"]+">/);
+      expect(context).toContain('alpha personal notes');
+    });
+
+    it('two tenants with tagging on each get a context built only from their own results', async () => {
+      process.env.RAG_CONTEXT_TAGGING = 'true';
+      const { POST } = await loadRoute();
+      const a = (await (await POST(request(QUERY, personalA(), { userId: TWO_TENANT_IDS.userB }))).json()) as VoiceBody;
+      const b = (await (await POST(request(QUERY, personalB(), { userId: TWO_TENANT_IDS.userA }))).json()) as VoiceBody;
+      expect(chunkIds(a)).toEqual([TWO_TENANT_IDS.chunkA]);
+      expect(chunkIds(b)).toEqual([TWO_TENANT_IDS.chunkB]);
+      expect(a.context).toContain('alpha personal notes');
+      expect(a.context).not.toContain('bravo personal notes');
+      expect(a.context).not.toContain('organization shared handbook');
+      expect(a.context).not.toContain('tenant-b-personal.md');
+      expect(b.context).toContain('bravo personal notes');
+      expect(b.context).not.toContain('alpha personal notes');
+      expect(b.context).not.toContain('organization shared handbook');
+      expect(b.context).not.toContain('tenant-a-personal.md');
+    });
+
+    it('with tagging on a scope with no matching documents still answers an empty result list', async () => {
+      process.env.RAG_CONTEXT_TAGGING = 'true';
+      const { POST } = await loadRoute();
+      const deps = await import('@/lib/rag/deps');
+      deps.setRagDepsForTests({ embedder: async () => new Array(1536).fill(0) });
+      try {
+        const nobody = '00000000-0000-4000-8000-0000000000ff';
+        const response = await POST(request(QUERY, token(mintScope('personal', nobody, null))));
+        expect(response.status).toBe(200);
+        expect(await response.json()).toEqual({ results: [] });
+      } finally {
+        deps.resetRagDepsForTests();
+      }
+    });
   });
 });

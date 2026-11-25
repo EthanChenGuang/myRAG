@@ -236,7 +236,7 @@ export function requireValue<T>(outcome: StageOutcome<T>, stage: string): T {
   return outcome.value;
 }
 
-interface InjectionStageInput<C extends ItemCandidate> {
+export interface InjectionStageInput<C extends ItemCandidate> {
   spec: StageSpec;
   signal: AbortSignal;
   collector: TraceCollector;
@@ -250,16 +250,16 @@ interface InjectionStageInput<C extends ItemCandidate> {
   released?: ReleasedRules;
 }
 
-interface InjectionStageRun<C extends ItemCandidate> {
+export interface InjectionStageRun<C extends ItemCandidate> {
   applied: InjectionApplied<C> | null;
   stalled: boolean;
 }
 
 /**
- * The injection_check stage shared by every legacy graph. The rules run synchronously before any await and their
+ * The injection_check stage shared by every legacy graph and the v2 graph. The rules run synchronously before any await and their
  * result is held outside the stage race, so a stage timeout can never lose it (A-3).
  */
-async function runInjectionStage<C extends ItemCandidate>(input: InjectionStageInput<C>): Promise<InjectionStageRun<C>> {
+export async function runInjectionStage<C extends ItemCandidate>(input: InjectionStageInput<C>): Promise<InjectionStageRun<C>> {
   const { spec, items, mode } = input;
   const versions = injectionVersions(injectionDetectorsFor(input.profile, input.security));
   let held: InjectionApplied<C> | null = null;
@@ -294,23 +294,23 @@ async function runInjectionStage<C extends ItemCandidate>(input: InjectionStageI
   return { applied, stalled };
 }
 
-function injectionDropped(summary: InjectionSummary): boolean {
+export function injectionDropped(summary: InjectionSummary): boolean {
   return summary.droppedChunkIds.length > 0 || summary.droppedReferenceIds.length > 0;
 }
 
 /** Everything that would have reached the model was dropped by the check: `empty` wins over `degraded` (A-3). */
-function injectionFilteredAll(injection: InjectionSummary | undefined, survivors: number, status: RetrievalResult['status']): boolean {
+export function injectionFilteredAll(injection: InjectionSummary | undefined, survivors: number, status: RetrievalResult['status']): boolean {
   if (!injection || status === 'error') return false;
   return injectionDropped(injection) && survivors === 0;
 }
 
-function injectionReason(records: StageRecord[], stalled: boolean): string {
+export function injectionReason(records: StageRecord[], stalled: boolean): string {
   const reason = degradedReason(records);
   return stalled && reason === 'injection_check_timeout' ? 'injection_check_stalled' : reason;
 }
 
 /** Downweight for graphs without a renderer that marks: flagged items move after the unflagged ones, order kept. */
-function downweightOrder<C extends { chunk_id: string }>(candidates: readonly C[], flagged: ReadonlySet<string>): C[] {
+export function downweightOrder<C extends { chunk_id: string }>(candidates: readonly C[], flagged: ReadonlySet<string>): C[] {
   return [...candidates.filter((c) => !flagged.has(c.chunk_id)), ...candidates.filter((c) => flagged.has(c.chunk_id))];
 }
 

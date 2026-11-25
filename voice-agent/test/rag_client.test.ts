@@ -186,3 +186,42 @@ test('neither the token nor the api key is written to the console', async () => 
     assert.equal(lines.some((l) => l.includes('secret-token-placeholder')), false);
     assert.equal(lines.some((l) => l.includes('key-placeholder')), false);
 });
+
+const SERVER_CONTEXT = 'Reference notice line\n<documents>\n<doc id="c1" source="a.pdf">alpha</doc>\n</documents>\nEnd of reference material.';
+
+test('a non-empty server-built context string is used as the context verbatim', async () => {
+    reply(200, {
+        results: [{ document_id: 'doc-12345678-aaaa', content: 'alpha', similarity: 0.9, metadata: { filename: 'a.pdf' } }],
+        source_images: [{ url: 'https://example.test/i.png', name: 'i', type: 'image/png' }],
+        context: SERVER_CONTEXT,
+    });
+    const client = new RAGClient(baseUrl, 'key-placeholder');
+    const result = await client.query('q', 'token-placeholder');
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.context, SERVER_CONTEXT);
+    assert.deepEqual(result.sources, [{ id: 'doc-12345678-aaaa', name: 'a.pdf', similarity: 0.9 }]);
+    assert.deepEqual(result.source_images, [{ url: 'https://example.test/i.png', name: 'i', type: 'image/png' }]);
+});
+
+for (const [label, value] of [
+    ['an empty string', ''],
+    ['a whitespace-only string', '   '],
+    ['a number', 42],
+    ['an object', { text: 'x' }],
+    ['null', null],
+] as const) {
+    test(`a context field that is ${label} falls back to the per-result format`, async () => {
+        reply(200, {
+            results: [{ document_id: 'short', content: 'gamma', similarity: 0.7 }],
+            context: value,
+        });
+        const client = new RAGClient(baseUrl, 'key-placeholder');
+        const result = await client.query('q', 'token-placeholder');
+        assert.equal(result.ok, true);
+        if (!result.ok) return;
+        assert.equal(result.context, '[Context from document short]: gamma');
+        assert.deepEqual(result.sources, [{ id: 'short', name: 'Document short', similarity: 0.7 }]);
+        assert.deepEqual(result.source_images, []);
+    });
+}

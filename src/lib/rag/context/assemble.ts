@@ -349,7 +349,8 @@ export function buildContext<C extends AssemblyCandidate>(
     } else {
       docNameOrder.push(...chunksByDocument.keys());
     }
-    if (marks) {
+    // A caller-supplied group order already places flagged groups (v2 keeps them out of the edge slots).
+    if (marks && !input.groupOrder?.length) {
       const onlyFlagged = (name: string) => chunksByDocument.get(name)!.every((chunk) => marks.chunkIds.has(chunk.chunkId));
       const reordered = [...docNameOrder.filter((name) => !onlyFlagged(name)), ...docNameOrder.filter(onlyFlagged)];
       docNameOrder.splice(0, docNameOrder.length, ...reordered);

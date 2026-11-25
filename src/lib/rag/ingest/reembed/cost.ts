@@ -27,20 +27,22 @@ export const ESTIMATE_NOTE =
   'Token counts are cl100k_base estimates for non-OpenAI models; the vendor bills its own count, so the cost is an estimate.';
 
 /**
- * Prices tokens per tenant with the registry price table (embeddings/prices.ts). OpenAI counts are exact; Voyage and Qwen3 counts come from
- * another tokenizer, so the report says they are estimates.
+ * Prices tokens per tenant with the catalog price of the run's model (embeddings/prices.ts); the provider's
+ * default model when none is given. OpenAI counts are exact; Voyage and Qwen3 counts come from another
+ * tokenizer, so the report says they are estimates.
  */
-export function estimateReembedCost(provider: string, totals: Record<string, TenantTokenTotals>): ReembedCostReport {
+export function estimateReembedCost(provider: string, totals: Record<string, TenantTokenTotals>, model?: string): ReembedCostReport {
   if (!PROVIDERS.includes(provider)) throw new Error(`[Re-embed] no price table for provider "${provider}"`);
   const id = provider as EmbeddingProviderId;
+  const price = (tokens: number) => (model === undefined ? estimateCostUsd(id, tokens) : estimateCostUsd(id, model, tokens));
   const tenants: TenantCost[] = Object.entries(totals)
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
-    .map(([tenantKey, entry]) => ({ tenantKey, chunks: entry.chunks, tokens: entry.tokens, usd: estimateCostUsd(id, entry.tokens).usd }));
+    .map(([tenantKey, entry]) => ({ tenantKey, chunks: entry.chunks, tokens: entry.tokens, usd: price(entry.tokens).usd }));
   const sum = tenants.reduce(
     (acc, tenant) => ({ chunks: acc.chunks + tenant.chunks, tokens: acc.tokens + tenant.tokens, usd: acc.usd + tenant.usd }),
     { chunks: 0, tokens: 0, usd: 0 },
   );
-  const estimated = estimateCostUsd(id, 0).estimated;
+  const estimated = price(0).estimated;
   return { tenants, totals: sum, estimated, note: estimated ? ESTIMATE_NOTE : null };
 }
 
