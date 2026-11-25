@@ -1,0 +1,11 @@
+{
+  "id": "llamaindex.hyde.it",
+  "version": 1,
+  "source": "derived from llama-index-core==0.14.26 llama_index/core/prompts/default_prompts.py DEFAULT_HYDE_PROMPT (HYDE_TMPL), Italian translation",
+  "license": "MIT",
+  "attribution": "Copyright (c) Jerry Liu (LlamaIndex). Prompt text reused under the MIT License; placeholder {context_str} renamed to the {{context_str}} syntax; translated into Italian by myRAG, layout kept.",
+  "template": "Scrivi un passaggio che risponda alla domanda\nCerca di includere il maggior numero possibile di dettagli chiave.\n\n\n{{context_str}}\n\n\nPassaggio:\"\"\"\n",
+  "placeholders": [
+    "context_str"
+  ]
+}
