@@ -29,9 +29,7 @@ function detectionPacks(): DetectionPack[] {
 }
 
 function countMatches(text: string, pattern: RegExp): number {
-  let count = 0;
-  for (const _match of text.matchAll(pattern)) count += 1;
-  return count;
+  return text.match(pattern)?.length ?? 0;
 }
 
 /**
