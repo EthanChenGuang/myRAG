@@ -59,6 +59,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--hashes-json", required=True, type=Path)
     parser.add_argument("--catalog-json", required=True, type=Path, help="profile id → model, price and supported languages")
     parser.add_argument("--fixture-embedder", action="store_true")
+    parser.add_argument("--note", action="append", default=[], help="extra note recorded in the comparison")
     parser.add_argument("--out", required=True, type=Path)
     args = parser.parse_args(argv)
 
@@ -81,6 +82,7 @@ def main(argv: list[str] | None = None) -> int:
             fixture_embedder=args.fixture_embedder,
             golden_doc_types=golden_doc_types_from_tags(load_golden(resolve_cli_path(args.golden))),
             report_paths={"baseline": str(args.baseline), "control": str(args.control), **candidate_paths},
+            extra_notes=args.note,
         )
         BindingComparison.model_validate_json(comparison.model_dump_json())
     except (OSError, KeyError, ValidationError, ValueError, json.JSONDecodeError) as exc:

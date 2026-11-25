@@ -194,6 +194,7 @@ def compare(
     fixture_embedder: bool,
     golden_doc_types: Mapping[str, str] | None = None,
     report_paths: Mapping[str, str] | None = None,
+    extra_notes: list[str] | None = None,
 ) -> BindingComparison:
     if not candidates:
         raise ValueError("at least one candidate arm is required")
@@ -292,6 +293,7 @@ def compare(
     real_n = sum(count for provenance, count in provenance_counts.items() if provenance in REAL_PROVENANCES)
     if fixture_embedder or real_n == 0:
         notes.append(BINDING_FIXTURE_NOTE)
+    notes.extend(note for note in extra_notes or [] if note)
 
     return BindingComparison.model_validate(
         {

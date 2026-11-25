@@ -70,6 +70,9 @@ function freezeEntry(entry: EmbeddingModelEntry): EmbeddingModelEntry {
   return Object.freeze(entry);
 }
 
+/** Bumped whenever a model fact below changes; comparisons record it (D-23). */
+export const EMBEDDING_CATALOG_VERSION = 1;
+
 export const EMBEDDING_MODEL_CATALOG: readonly EmbeddingModelEntry[] = Object.freeze(
   [
     {
