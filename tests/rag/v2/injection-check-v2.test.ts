@@ -448,3 +448,91 @@ describe('v2 injection_check through runRetrieval (status, voice)', () => {
     expect(voice.voice?.context).toBeUndefined();
   });
 });
+
+describe('v2 renderer wraps the final blocks (D-01, D-02, A-5, R1, R7)', () => {
+  const labelled = (query = 'alpha beta gamma delta') => ({
+    input: { scope, query, profile: 'chat' as const, signal: new AbortController().signal, citationLabeler: aliasLabeler },
+  });
+
+  beforeEach(() => {
+    resetRagConfigForTests();
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    resetRagDepsForTests();
+    resetRagConfigForTests();
+  });
+
+  it('tagging on with citations: one <doc id="S<k>"> per merged run, label first, ids in render order', async () => {
+    const out = await run(SIX, { sec: { RAG_CONTEXT_TAGGING: 'true' }, extra: labelled() }).promise;
+    const context = out.assembly!.context;
+    expect(context.match(/<documents>/g)).toHaveLength(1);
+    const ids = [...context.matchAll(/<doc id="([^"]+)"/g)].map((match) => match[1]);
+    const aliases = out.assembly!.blocks.filter((block) => block.alias).map((block) => block.alias);
+    expect(ids).toEqual(aliases);
+    expect(ids).toEqual(ids.map((_, index) => `S${index + 1}`));
+    const alphaBlocks = out.assembly!.blocks.filter((block) => block.documentId === 'doc-a');
+    expect(alphaBlocks).toHaveLength(1);
+    expect(alphaBlocks[0]!.chunkIds).toEqual(['a-3', 'a-4']);
+    const firstDoc = context.slice(context.indexOf('<doc id="S1"'));
+    expect(firstDoc.split('\n')[1]).toBe(`[S1] ${out.assembly!.blocks[0]!.title}`);
+    expect(context).not.toContain('=== RELEVANT INFORMATION FROM DOCUMENTS ===');
+  });
+
+  it('tagging on without citations: c<n> ids in render order, img<n> for captions, a links element last', async () => {
+    const specs = withContent(SIX, {
+      'c-1': { metadata: { image_url: 'https://storage.example.test/one.png', image_context: 'caption text' } },
+      'd-1': { metadata: { urls: [{ url: 'https://docs.example.test/page', context: 'reference page' }] } },
+    });
+    const out = await run(specs, { sec: { RAG_CONTEXT_TAGGING: 'true' } }).promise;
+    const context = out.assembly!.context;
+    const ids = [...context.matchAll(/<doc id="([^"]+)"/g)].map((match) => match[1]);
+    const textIds = ids.filter((id) => id!.startsWith('c'));
+    expect(textIds).toEqual(textIds.map((_, index) => `c${index + 1}`));
+    expect(ids).toContain('img1');
+    expect(context).toContain('<doc id="img1" kind="image"');
+    expect(ids[ids.length - 1]).toBe('links');
+    expect(context).toContain('<doc id="links" kind="links">');
+  });
+
+  it('wraps on every render: with compression and labels the final context holds exactly one documents element with the compressed text', async () => {
+    const long = Array.from({ length: 40 }, (_, index) => `Filler sentence number ${index} about unrelated matters.`).join(' ');
+    const specs = withContent(SIX, { 'b-1': { content: `${long} The beta answer is here.` } });
+    const env = { RAG_CONTEXT_COMPRESSION: 'true' };
+    const plain = await run(specs, { env, extra: labelled('beta answer') }).promise;
+    const { promise, collector } = run(specs, { env, sec: { RAG_CONTEXT_TAGGING: 'true' }, extra: labelled('beta answer') });
+    const tagged = await promise;
+    const context = tagged.assembly!.context;
+    expect(context.match(/<documents>/g)).toHaveLength(1);
+    expect(context.match(/<\/documents>/g)).toHaveLength(1);
+    expect(stage(collector, 'compress')?.status).toBe('ok');
+    for (const block of tagged.assembly!.blocks) expect(context).toContain(block.text);
+    expect(tagged.assembly!.blocks.map((block) => block.text)).toEqual(plain.assembly!.blocks.map((block) => block.text));
+  });
+
+  it('tagging off: the v2 context and the assemble and compress counts are unchanged', async () => {
+    const env = { RAG_CONTEXT_COMPRESSION: 'true', RAG_CONTEXT_EDGE_ORDER: 'true' };
+    const base = run(SIX, { env, extra: labelled() });
+    const baseOut = await base.promise;
+    const off = run(SIX, { env, sec: { RAG_CONTEXT_TAGGING: 'false' }, extra: labelled() });
+    const offOut = await off.promise;
+    expect(offOut.assembly!.context).toBe(baseOut.assembly!.context);
+    expect(offOut.assembly!.context).not.toContain('<documents>');
+    for (const name of ['assemble', 'compress']) {
+      expect(stage(off.collector, name)?.counts).toEqual(stage(base.collector, name)?.counts);
+    }
+  });
+
+  it('downweight with tagging marks the flagged element and keeps it out of the edge slots', async () => {
+    const specs = withContent(SIX, { 'a-3': { content: `alpha clause. ${INJECTED}` }, 'a-4': { content: `alpha more. ${INJECTED}` } });
+    const out = await run(specs, { env: { RAG_CONTEXT_EDGE_ORDER: 'true' }, sec: { RAG_CONTEXT_TAGGING: 'true', RAG_INJECTION_CHECK: 'downweight' } }).promise;
+    const context = out.assembly!.context;
+    const docs = [...context.matchAll(/<doc id="([^"]+)"([^>]*)>/g)].map((match) => ({ id: match[1], flagged: match[2]!.includes('flagged="true"') }));
+    expect(docs.filter((doc) => doc.flagged)).toHaveLength(1);
+    expect(docs[0]!.flagged).toBe(false);
+    expect(docs[docs.length - 1]!.flagged).toBe(false);
+  });
+});
