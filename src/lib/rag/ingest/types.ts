@@ -238,6 +238,8 @@ export interface IngestWork {
   templateRow?: Record<string, string | null> | null;
   chunks: ChunkDraft[];
   chunksWritten: number;
+  /** The document's dominant language as the enrich stage wrote it; absent on a run resumed after enrich. */
+  documentLanguage?: string | null;
   /** RAG_CAPTION_LANGUAGE=document: the caption target language, resolved once per run (null: no target, English prompt). */
   captionTarget?: { language: string | null };
 }
