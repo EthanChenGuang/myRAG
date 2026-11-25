@@ -106,7 +106,7 @@ class EvalReport(_Contract):
     by_split: dict[str, SliceMetrics]
     by_provenance: dict[str, SliceMetrics] = Field(default_factory=dict)
     by_provenance_category: dict[str, SliceMetrics] = Field(default_factory=dict)
-    gate_population: Literal["all", "production"] = "all"
+    gate_population: Literal["all", "production", "real"] = "all"
     rerank_skipped_rate: MetricValue | None = None
     lexical_leg_hit_rate_at_10: MetricValue | None = None
     items: list[ItemResult]

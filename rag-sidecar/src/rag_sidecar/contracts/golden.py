@@ -7,6 +7,7 @@ from rag_sidecar.contracts.eval_run import ConversationTurn
 from rag_sidecar.contracts.retrieval import RetrievalFilters
 
 from .languages import Language
+from .omit import OmitNoneModel, omit_none_schema
 
 Category = Literal[
     "multi_turn",
@@ -31,6 +32,7 @@ INJECTION_CATEGORIES = frozenset({"injection", "injection_evasive"})
 CACHE_PAIR_CATEGORIES = frozenset({"cache_paraphrase", "cache_near_miss"})
 UNANSWERABLE_CATEGORIES = frozenset({"no_answer", "small_talk"})
 ITEM_ID_PATTERN = r"^[a-z0-9][a-z0-9._-]{2,63}$"
+UUID_PATTERN = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
 ReviewStatus = Literal["draft", "approved", "rejected"]
 Provenance = Literal["synthetic_fixture", "claude_draft", "ragas_generated", "human", "production"]
 Split = Literal["dev", "test"]
@@ -40,10 +42,13 @@ class _Contract(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
-class GoldSpan(_Contract):
+class GoldSpan(OmitNoneModel):
+    _omit_when_none = ("document_id",)
+
     document: str
     section: str
     quote: str = Field(min_length=2)
+    document_id: str | None = Field(default=None, pattern=UUID_PATTERN, json_schema_extra=omit_none_schema)
 
 
 def _fold(text: str) -> str:
@@ -131,10 +136,25 @@ class GoldenItem(_Contract):
             raise ValueError("injected documents must not be gold documents")
 
 
-class GoldenSplitManifest(_Contract):
+ITEM_SPLIT_RULE = "sha256-first8hex-mod100-lt70-dev"
+DOCGROUP_SPLIT_RULE = "docgroup-sha256-first8hex-mod100-lt70-dev"
+
+
+class GoldenSplitManifest(OmitNoneModel):
+    _omit_when_none = ("group_assignments",)
+
     schema_version: Literal[1] = 1
-    rule: Literal["sha256-first8hex-mod100-lt70-dev"]
+    rule: Literal["sha256-first8hex-mod100-lt70-dev", "docgroup-sha256-first8hex-mod100-lt70-dev"]
     assignments: dict[str, Split]
+    group_assignments: dict[str, Split] | None = Field(default=None, json_schema_extra=omit_none_schema)
+
+    @model_validator(mode="after")
+    def _groups_only_under_the_docgroup_rule(self) -> "GoldenSplitManifest":
+        if self.rule == DOCGROUP_SPLIT_RULE and self.group_assignments is None:
+            raise ValueError("the docgroup rule needs group_assignments")
+        if self.rule == ITEM_SPLIT_RULE and self.group_assignments is not None:
+            raise ValueError("group_assignments exist only under the docgroup rule")
+        return self
 
 
 class DraftedItemProposal(_Contract):

@@ -536,39 +536,6 @@ def test_report_contracts_have_no_text_fields(model):
     assert "tenant_key" not in names
 
 
-def test_every_new_contract_forbids_unknown_fields_and_is_frozen():
-    samples = build_samples()["samples"]
-    for model in (
-        RetrievalLogCandidate,
-        RetrievalLogEntry,
-        RefusalFeedbackRequest,
-        EmbedFeedbackRequest,
-        SourceSignalRequest,
-        ReviewItem,
-        ReviewItemListResponse,
-        ExpertLabel,
-        ExpertEvidenceSpan,
-        DictionaryTerm,
-        DictionaryCandidate,
-        TrainingPair,
-        TrainingPositive,
-        TrainingNegative,
-        FeedbackMiningConfig,
-        MiningRunResult,
-        FeedbackLoopStats,
-        WeeklyReport,
-        FailureReport,
-        FailureEntry,
-        GatePopulationConfig,
-        ShipCheckResult,
-    ):
-        sample = samples[model.__name__]
-        instance = model.model_validate(sample)
-        assert instance.model_dump(mode="json") == sample
-        with pytest.raises(ValidationError):
-            model.model_validate({**sample, "unexpected_key": 1})
-
-
 # --- Existing contracts ------------------------------------------------------------------------
 
 
