@@ -41,6 +41,7 @@ const CHAT_DEFAULTS = {
   refusal: 1000,
   expand_parents: 3000,
   compress: 1000,
+  injection_check: 400,
 };
 
 describe('stage tables', () => {
@@ -61,6 +62,7 @@ describe('stage tables', () => {
       'refusal',
       'expand_parents',
       'compress',
+      'injection_check',
     ]);
   });
 
@@ -70,6 +72,8 @@ describe('stage tables', () => {
     }
     expect(PROFILE_STAGE_DEFAULTS.eval.rerank).toBe(60000);
     expect(PROFILE_STAGE_DEFAULTS.eval.expand_parents).toBe(10000);
+    expect(PROFILE_STAGE_DEFAULTS.eval.injection_check).toBe(60000);
+    expect(PROFILE_STAGE_DEFAULTS.voice.injection_check).toBe(1000);
     expect(PROFILE_STAGE_DEFAULTS.voice).toMatchObject({
       embed: 5000,
       rerank: 250,
