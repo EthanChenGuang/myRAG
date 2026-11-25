@@ -145,12 +145,160 @@ export function checkConfig(root) {
     }
   }
 
+  violations.push(...checkModelMappings(root, texts));
+
   const effectiveEnv = loadEffectiveEnv(root);
   const ingestion = checkIngestionSwitches(effectiveEnv);
   violations.push(...ingestion.errors);
 
   violations.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : a.location < b.location ? -1 : a.location > b.location ? 1 : 0));
   return { violations, warnings: ingestion.warnings, varCount: vars.length };
+}
+
+const ANTHROPIC_ID_PATTERN = /^claude-[a-z0-9-]+$/;
+const MODEL_LIST_ANCHORS = {
+  'init-env': [/DEFAULT_OPENROUTER_MODELS\s*=\s*'/],
+  'config-server': [/DEFAULT_OPENROUTER_MODELS\s*=\s*'/],
+  'env-ts': [/NEXT_PUBLIC_OPENROUTER_MODELS:\s*process\.env\.NEXT_PUBLIC_OPENROUTER_MODELS\s*\|\|\s*JSON\.stringify\(/],
+  'config-ui': [
+    /defaultOpenRouterModels\s*=[^\n]*?JSON\.stringify\(/,
+    /openrouterModels:\s*safeJsonParse\(\s*defaultOpenRouterModels\s*,\s*/,
+    /openrouterModels:\s*(?=\[\s*\{)/,
+  ],
+};
+
+function matchingClose(text, start, open, close) {
+  let depth = 0;
+  let quote = null;
+  for (let i = start; i < text.length; i += 1) {
+    const ch = text[i];
+    if (quote) {
+      if (ch === '\\') i += 1;
+      else if (ch === quote) quote = null;
+      continue;
+    }
+    if (ch === '"' || ch === "'" || ch === '`') quote = ch;
+    else if (ch === open) depth += 1;
+    else if (ch === close) {
+      depth -= 1;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+function stringField(objectText, key) {
+  const re = new RegExp(`(?:^|[{,\\s])(['"]?)${key}\\1\\s*:\\s*(['"])((?:\\\\.|(?!\\2).)*)\\2`);
+  const match = objectText.match(re);
+  return match ? match[3] : undefined;
+}
+
+function hasField(objectText, key) {
+  return new RegExp(`(?:^|[{,\\s])(['"]?)${key}\\1\\s*:`).test(objectText);
+}
+
+/** Model objects of one array literal (JSON or JS object literals); null when no array starts at `from`. */
+function modelsInArray(text, from) {
+  const start = text.indexOf('[', from);
+  if (start === -1) return null;
+  const end = matchingClose(text, start, '[', ']');
+  if (end === -1) return null;
+  const models = [];
+  let i = start + 1;
+  while (i < end) {
+    const open = text.indexOf('{', i);
+    if (open === -1 || open > end) break;
+    const close = matchingClose(text, open, '{', '}');
+    if (close === -1 || close > end) break;
+    const objectText = text.slice(open, close + 1);
+    const id = stringField(objectText, 'id');
+    if (id !== undefined) {
+      models.push({ id, anthropicId: stringField(objectText, 'anthropicId'), hasAnthropicField: hasField(objectText, 'anthropicId') });
+    }
+    i = close + 1;
+  }
+  return models;
+}
+
+function envLocalModelList(text) {
+  for (const line of text.split('\n')) {
+    const match = line.match(/^\s*(?:export\s+)?NEXT_PUBLIC_OPENROUTER_MODELS\s*=(.*)$/);
+    if (match) return match[1].trim();
+  }
+  return null;
+}
+
+/** D-08: an anthropicId must be well formed and identical in every model location; unmapped ids stay free. */
+export function checkModelMappings(root, texts) {
+  const lists = [];
+  for (const [location, anchors] of Object.entries(MODEL_LIST_ANCHORS)) {
+    const text = texts[location] ?? '';
+    anchors.forEach((anchor, index) => {
+      const label = anchors.length > 1 ? `fallback array ${index + 1} of ${anchors.length}` : 'model list';
+      const match = anchor.exec(text);
+      const models = match ? modelsInArray(text, match.index + match[0].length) : null;
+      lists.push({ location, label, models });
+    });
+  }
+  const envLocalFile = path.join(root, ENV_LOCAL);
+  if (fs.existsSync(envLocalFile)) {
+    const value = envLocalModelList(fs.readFileSync(envLocalFile, 'utf8'));
+    if (value !== null) lists.push({ location: 'env-local', label: 'NEXT_PUBLIC_OPENROUTER_MODELS', models: modelsInArray(value, 0) });
+  }
+
+  const violations = [];
+  const mapped = new Map();
+  for (const list of lists) {
+    for (const model of list.models ?? []) {
+      if (!model.hasAnthropicField) continue;
+      if (!mapped.has(model.id)) mapped.set(model.id, new Set());
+      if (model.anthropicId === undefined) {
+        violations.push({ name: model.id, location: list.location, message: `anthropicId must be a string (${list.label})` });
+        continue;
+      }
+      if (!model.id.startsWith('anthropic/')) {
+        violations.push({ name: model.id, location: list.location, message: `only anthropic/ models may carry an anthropicId (${list.label})` });
+      }
+      if (!ANTHROPIC_ID_PATTERN.test(model.anthropicId)) {
+        violations.push({
+          name: model.id,
+          location: list.location,
+          message: `anthropicId ${JSON.stringify(model.anthropicId)} does not match ${ANTHROPIC_ID_PATTERN} (${list.label})`,
+        });
+      }
+    }
+  }
+
+  for (const id of mapped.keys()) {
+    const seen = lists.map((list) => {
+      const entries = (list.models ?? []).filter((model) => model.id === id);
+      const values = new Set(entries.map((model) => model.anthropicId ?? null));
+      return { list, entries, values };
+    });
+    const summary = seen
+      .map(({ list, entries, values }) => {
+        const where = list.label === 'model list' || list.location === 'env-local' ? list.location : `${list.location}#${list.label.split(' ')[2]}`;
+        if (entries.length === 0) return `${where}=missing`;
+        return `${where}=${[...values].map((value) => value ?? 'none').join('|')}`;
+      })
+      .join(', ');
+    const counts = new Map();
+    for (const { values } of seen) for (const value of values) if (value !== null) counts.set(value, (counts.get(value) ?? 0) + 1);
+    const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+    const agreed = ranked.length > 0 && (ranked.length === 1 || ranked[0][1] > ranked[1][1]) ? ranked[0][0] : null;
+    for (const { list, entries, values } of seen) {
+      if (list.models === null) {
+        violations.push({ name: id, location: list.location, message: `OpenRouter ${list.label} not found, so the mapped model is missing (${summary})` });
+      } else if (entries.length === 0) {
+        violations.push({ name: id, location: list.location, message: `mapped model is missing from this location's ${list.label} (${summary})` });
+      } else if (values.has(null)) {
+        violations.push({ name: id, location: list.location, message: `listed without anthropicId in ${list.label} (${summary})` });
+      } else if (agreed === null || values.size > 1 || !values.has(agreed)) {
+        violations.push({ name: id, location: list.location, message: `anthropicId differs across locations in ${list.label}: ${summary}` });
+      }
+    }
+  }
+  return violations;
 }
 
 function parseEnvAssignments(text) {
