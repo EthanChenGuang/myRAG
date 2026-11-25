@@ -56,6 +56,7 @@ All requirements are written so they can be checked. "Behind a switch" means an 
 - [ ] **EMB-02**: Each embedding profile (model + dimension) is stored side by side (`halfvec` where needed, partial HNSW index per profile), and switching the active profile is a pointer flip that can be rolled back
 - [ ] **EMB-03**: The query-time embedding model is derived from the active index profile, and a model or dimension mismatch fails loudly at startup and per request
 - [ ] **EMB-04**: A re-embedding job reads stored chunk text only (never re-parses), runs in batches, resumes from where it stopped, supports dry-run, and can roll back (extends `scripts/rag/reprocess-documents.js`)
+- [ ] **EMB-05**: BGE-M3 (BAAI, MIT licence, 1024 dimensions, 8192-token input) is an open-source fallback embedding profile next to the EMB-01 profiles, so the knowledge base is not tied to one vendor: by default it runs through a hosted inference API (DeepInfra), and the same profile can instead be served by the Python sidecar on CPU for deployments that must keep text in-house; both serving modes return identical dense vectors for the same input (checked in CI on fixture text), so switching between them needs no re-embedding; only the dense output is used, because the lexical path (RET-03) already covers sparse matching; it is compared with the other profiles on every slice, including `cross_lingual` per language pair, and the report includes ingestion throughput and query latency of both serving modes
 
 ### Retrieval (RET)
 
@@ -180,7 +181,7 @@ All requirements are written so they can be checked. "Behind a switch" means an 
 
 | Feature | Reason |
 |---------|--------|
-| Third-ranked products (Reducto, DSPy, Gemini Embedding, Elasticsearch/OpenSearch, Qwen3-Reranker, Galileo Luna-2) | User chose the top two per layer (Langfuse was later chosen for tracing, see OBS-01) |
+| Third-ranked products (Reducto, DSPy, Gemini Embedding, Elasticsearch/OpenSearch, Qwen3-Reranker, Galileo Luna-2) | User chose the top two per layer; BGE-M3 was added on 2026-11-25 as an open-source embedding fallback (EMB-05), not as a third default candidate (Langfuse was later chosen for tracing, see OBS-01) |
 | Retiring pgvector | User wants it kept permanently |
 | Self-hosted GPU for Qwen3-Embedding-8B | User chose hosted inference |
 | Blocking answers on HHEM scores | This milestone only records and warns |
@@ -232,6 +233,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EMB-02 | Phase 3 | Pending |
 | EMB-03 | Phase 3 | Pending |
 | EMB-04 | Phase 3 | Pending |
+| EMB-05 | Phase 3 | Pending |
 | RET-01 | Phase 4 | Pending |
 | RET-02 | Phase 4 | Pending |
 | RET-03 | Phase 4 | Pending |
@@ -307,8 +309,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LAT-07 | Phase 6 | Pending |
 
 **Coverage:**
-- v1 requirements: 108 total
-- Mapped to phases: 108
+- v1 requirements: 109 total
+- Mapped to phases: 109
 - Unmapped: 0 ✓
 
 **Mapping notes:**
@@ -318,4 +320,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-11-22*
-*Last updated: 2026-11-25 — added XLG-04..07 (ingestion-time document translation, translation glossary, captions in the document's language, cross-language voice); added LAT-04..07 (TTFT gate, output-length cap, automatic model routing, transforms overlapped with original-query retrieval) and widened the rerank pool sweep to 20–100 (RNK-02, LAT-01); added SEC-06 (post-generation link and credential-request guard); added SEC-07..10 (hidden text, ingestion classifier and link check, upload approval, injection monitoring and red-team runs) and extended SEC-01/02/03/06 (captions, per-request random boundary, webSearch and MCP results, blocking credential requests). Earlier: 2026-11-23 — added OBS, LAT, CHK, SEC, XLG and CACHE requirements (chunking, latency, prompt-injection and cross-language additions); RQ-01..04 promoted from v2*
+*Last updated: 2026-11-25 — added EMB-05 (BGE-M3 open-source fallback embedding profile); added XLG-04..07 (ingestion-time document translation, translation glossary, captions in the document's language, cross-language voice); added LAT-04..07 (TTFT gate, output-length cap, automatic model routing, transforms overlapped with original-query retrieval) and widened the rerank pool sweep to 20–100 (RNK-02, LAT-01); added SEC-06 (post-generation link and credential-request guard); added SEC-07..10 (hidden text, ingestion classifier and link check, upload approval, injection monitoring and red-team runs) and extended SEC-01/02/03/06 (captions, per-request random boundary, webSearch and MCP results, blocking credential requests). Earlier: 2026-11-23 — added OBS, LAT, CHK, SEC, XLG and CACHE requirements (chunking, latency, prompt-injection and cross-language additions); RQ-01..04 promoted from v2*
