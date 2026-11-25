@@ -137,6 +137,14 @@ from rag_sidecar.contracts.ingest_security import (
     QuarantineSpan,
     UntrustedLinkQuarantineReason,
 )
+from rag_sidecar.contracts.embed import EmbedRequest, EmbedResponse
+from rag_sidecar.contracts.translation import ChunkTranslation, TranslationSettings
+from rag_sidecar.contracts.versions import (
+    EffectiveDateExtraction,
+    SupersessionCandidate,
+    SupersessionRules,
+    SupersessionSignals,
+)
 from rag_sidecar.contracts.scopes import (
     ScopeFilter,
     ScopeTagSuggestion,
@@ -397,6 +405,14 @@ __all__ = [
     "ScopeTagSuggestion",
     "ScopeTagSuggestionItem",
     "ScopeVocabularyEntry",
+    "ChunkTranslation",
+    "EffectiveDateExtraction",
+    "EmbedRequest",
+    "EmbedResponse",
+    "SupersessionCandidate",
+    "SupersessionRules",
+    "SupersessionSignals",
+    "TranslationSettings",
     "RetrievalOverrides",
     "RetrievalParams",
     "compute_config_hash",

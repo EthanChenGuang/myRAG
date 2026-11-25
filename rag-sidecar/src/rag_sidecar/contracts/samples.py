@@ -209,7 +209,15 @@ from rag_sidecar.contracts.routing import (
     ParseAttemptPages as RoutingParseAttemptPages,
     default_parse_routing_config,
 )
+from rag_sidecar.contracts.embed import EmbedRequest, EmbedResponse
 from rag_sidecar.contracts.retrieval import RetrievalLegWeights
+from rag_sidecar.contracts.translation import ChunkTranslation, TranslationSettings
+from rag_sidecar.contracts.versions import (
+    EffectiveDateExtraction,
+    SupersessionCandidate,
+    SupersessionRules,
+    SupersessionSignals,
+)
 from rag_sidecar.contracts.scopes import ScopeFilter, ScopeTagSuggestion, ScopeTagSuggestionItem, ScopeVocabularyEntry
 
 _HASH_A = "a" * 64
@@ -1720,7 +1728,44 @@ def _phase32_query_contract_samples() -> dict[str, Any]:
                 ScopeTagSuggestionItem(dimension="department", value="unit-b", source="model"),
             ]
         ),
+        "SupersessionCandidate": _supersession_candidate(),
+        "SupersessionRules": SupersessionRules(
+            rules_version="supersession@1",
+            title_similarity_min=0.9,
+            content_overlap_min_percent=70,
+            min_conflicting_numbers=1,
+        ),
+        "EffectiveDateExtraction": EffectiveDateExtraction(
+            effective_from=date(2026, 1, 1),
+            effective_to=None,
+            confidence=0.9,
+            evidence_quote="Valid from 1 January 2026.",
+        ),
+        "ChunkTranslation": ChunkTranslation(content="A neutral translated sentence."),
+        "TranslationSettings": TranslationSettings(
+            target_languages=[LANGUAGE_CODES[0]], enabled=True, updated_by="00000000-0000-4000-8000-0000000000e1"
+        ),
+        "EmbedRequest": EmbedRequest(inputs=["A neutral sentence.", "Another neutral sentence."]),
+        "EmbedResponse": EmbedResponse(revision="rev-0001", vectors=[_unit_vector(0), _unit_vector(1)]),
     }
+
+
+def _unit_vector(position: int) -> list[float]:
+    vector = [0.0] * 1024
+    vector[position] = 1.0
+    return vector
+
+
+def _supersession_candidate(**update: Any) -> SupersessionCandidate:
+    base = SupersessionCandidate(
+        id="00000000-0000-4000-8000-0000000000d1",
+        document_id="00000000-0000-4000-8000-0000000000a1",
+        candidate_document_id="00000000-0000-4000-8000-0000000000b1",
+        signals=SupersessionSignals(title_match=True, content_overlap_percent=82, conflicting_numbers=3),
+        status="pending",
+        origin="detected",
+    )
+    return SupersessionCandidate.model_validate({**base.model_dump(mode="json"), **update})
 
 
 def _phase32_query_contract_variants() -> dict[str, dict[str, Any]]:
@@ -1730,6 +1775,19 @@ def _phase32_query_contract_variants() -> dict[str, dict[str, Any]]:
             "value": RetrievalFilters(
                 scopes=ScopeFilter(region=["north"], legal_entity=["unit-a", "unit-b"]), include_untagged=True
             ).model_dump(mode="json"),
+        },
+        "SupersessionCandidate:confirmed": {
+            "model": "SupersessionCandidate",
+            "value": _supersession_candidate(
+                status="confirmed",
+                direction="document_is_newer",
+                decided_by="00000000-0000-4000-8000-0000000000e1",
+                decided_at="2026-01-02T00:00:00Z",
+            ).model_dump(mode="json"),
+        },
+        "TranslationSettings:unconfigured": {
+            "model": "TranslationSettings",
+            "value": TranslationSettings().model_dump(mode="json"),
         },
         "RetrievalParams:translation_weight": {
             "model": "RetrievalParams",
