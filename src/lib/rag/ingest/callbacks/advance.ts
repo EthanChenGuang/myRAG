@@ -304,8 +304,12 @@ async function startProgressiveFinal(
     return { kind: 'reply', reply: reply(workerId, { stage: ledgerStatus, done: true, status: ledgerStatus }) };
   }
 
+  // The job scope of an organization tenant has no user, and a multi-tenant version needs an owner: the same rule as a backfill begin.
+  const documentScope = await backfillDocumentScope(scope, { signal });
+  if (!documentScope) return { kind: 'reply', reply: await failBegin(job, workerId, 'organization_owner_missing', scope, signal) };
+  const versionWriter = documentScope === scope ? writer : createIngestWriter({ db, scope: documentScope, signal });
   const state = ingestStateFromRecord({ ...record.state, typeChange: record.typeChange });
-  const begun = await writer.begin({
+  const begun = await versionWriter.begin({
     source: record.source,
     sourceKey: record.sourceKey,
     filename: row.filename,
