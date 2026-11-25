@@ -90,3 +90,38 @@ export async function removeArtifacts(ctx: ArtifactContext): Promise<void> {
     }
   }
 }
+
+/**
+ * Removes stored objects of one version by key. Only keys under the version's own prefix are touched, so a key that names another tenant's
+ * or another version's path is ignored. A failure is counted, never thrown.
+ */
+export async function removeVersionObjects(input: {
+  tenantKey: string;
+  lineageId: string;
+  version: number;
+  keys: string[];
+  signal: AbortSignal;
+}): Promise<{ removed: number; failed: number }> {
+  if (input.keys.length === 0) return { removed: 0, failed: 0 };
+  let prefix: string;
+  try {
+    prefix = versionPrefix(input.tenantKey, input.lineageId, input.version);
+  } catch {
+    return { removed: 0, failed: input.keys.length };
+  }
+  const own = input.keys.filter((key) => key.startsWith(prefix));
+  if (own.length === 0) return { removed: 0, failed: 0 };
+  const artifacts: Record<string, string> = {};
+  own.forEach((key, index) => {
+    artifacts[`object-${index}`] = key;
+  });
+  const context: ArtifactContext = {
+    identity: { tenantKey: input.tenantKey },
+    document: { lineageId: input.lineageId, version: input.version },
+    signal: input.signal,
+    state: { artifacts },
+  };
+  await removeArtifacts(context);
+  const failed = Object.keys(context.state.artifacts).length;
+  return { removed: own.length - failed, failed };
+}

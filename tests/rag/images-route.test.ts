@@ -245,6 +245,31 @@ describe('images route', () => {
     );
   });
 
+  it('removes the stored original and parse files of the image from the private bucket (W2)', async () => {
+    state.session = { id: USER_A };
+    const tenant = `u:${USER_A}`;
+    const lineage = '00000000-0000-4000-8000-00000000e101';
+    const own = (name: string) => `${tenant}/${lineage}/1/${name}`;
+    const foreign = `u:${USER_B}/00000000-0000-4000-8000-00000000e102/1/original.png`;
+    Object.assign(state.documents[0] as Row, {
+      tenant_key: tenant,
+      lineage_id: lineage,
+      version: 1,
+      original_path: own('original.png'),
+      processing_state: { artifacts: { 'parse.md': own('parse.md'), 'tampered.png': foreign } },
+    });
+    const route = await loadRoute();
+    const { installFakeObjectStore } = await import('../helpers/fake-object-store');
+    const store = installFakeObjectStore();
+    for (const key of [own('original.png'), own('parse.md'), foreign]) {
+      await store.put(key, new Uint8Array([1]), { contentType: 'application/octet-stream' });
+    }
+    const response = await route.DELETE(req('DELETE', `?id=${IMG_A}`));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ success: true });
+    expect(store.keys()).toEqual([foreign]);
+  });
+
   it('lets an org member delete an org image', async () => {
     state.session = { id: USER_A };
     state.members = [{ organization_id: ORG_X, user_id: USER_A }];

@@ -69,6 +69,8 @@ function dataAdmin() {
         } else if (op === 'update') {
           state.updates.push({ table, payload, filters: [...filters] });
           rows.filter((row) => matches(row, filters)).forEach((row) => Object.assign(row, payload));
+        } else {
+          return { data: rows.filter((row) => matches(row, filters)), error: null };
         }
         return { data: null, error: null };
       };
@@ -456,5 +458,107 @@ describe('documents/[id] route', () => {
     const { DELETE } = await loadRoute();
     await DELETE(...call('DELETE', DOC_A_PERSONAL));
     expect(JSON.stringify([...logs.mock.calls, ...errors.mock.calls])).not.toContain('keep');
+  });
+});
+
+describe('documents/[id] DELETE removes the stored originals (W2)', () => {
+  const LINEAGE = '00000000-0000-4000-8000-00000000e001';
+  const V1 = '00000000-0000-4000-8000-00000000e011';
+  const V2 = '00000000-0000-4000-8000-00000000e012';
+  const FOREIGN_LINEAGE = '00000000-0000-4000-8000-00000000e002';
+  const TENANT_A = `u:${USER_A}`;
+  const TENANT_B = `u:${USER_B}`;
+  const keyOf = (tenant: string, lineage: string, version: number, name: string) => `${tenant}/${lineage}/${version}/${name}`;
+
+  beforeEach(() => {
+    state.mode = 'multi-tenant';
+    state.session = { id: USER_A };
+    state.authThrows = false;
+    state.members = [];
+    state.documents = [
+      {
+        id: V1,
+        lineage_id: LINEAGE,
+        version: 1,
+        user_id: USER_A,
+        organization_id: null,
+        original_path: keyOf(TENANT_A, LINEAGE, 1, 'original.pdf'),
+        processing_state: { artifacts: { 'parse.md': keyOf(TENANT_A, LINEAGE, 1, 'parse.md'), 'docling.json': keyOf(TENANT_A, LINEAGE, 1, 'docling.json') } },
+      },
+      {
+        id: V2,
+        lineage_id: LINEAGE,
+        version: 2,
+        user_id: USER_A,
+        organization_id: null,
+        original_path: keyOf(TENANT_B, FOREIGN_LINEAGE, 1, 'original.pdf'),
+        processing_state: { artifacts: { 'parse.md': keyOf(TENANT_A, LINEAGE, 2, 'parse.md') } },
+      },
+      { id: DOC_B_PERSONAL, lineage_id: FOREIGN_LINEAGE, version: 1, user_id: USER_B, organization_id: null, original_path: keyOf(TENANT_B, FOREIGN_LINEAGE, 1, 'original.pdf') },
+    ];
+    state.chunks = [];
+    state.deletes = [];
+    state.updates = [];
+    state.admins = [];
+    state.readOnly = false;
+    state.settingsFail = false;
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.resetModules();
+    vi.doUnmock('@/lib/supabase');
+    vi.doUnmock('@/lib/supabase/server');
+    vi.doUnmock('@/lib/deployment-mode');
+    vi.doUnmock('@/lib/auth/organization-handler');
+  });
+
+  async function seededStore() {
+    const route = await loadRoute();
+    const { installFakeObjectStore } = await import('../helpers/fake-object-store');
+    const store = installFakeObjectStore();
+    const bytes = new Uint8Array([1]);
+    for (const key of [
+      keyOf(TENANT_A, LINEAGE, 1, 'original.pdf'),
+      keyOf(TENANT_A, LINEAGE, 1, 'parse.md'),
+      keyOf(TENANT_A, LINEAGE, 1, 'docling.json'),
+      keyOf(TENANT_A, LINEAGE, 2, 'parse.md'),
+      keyOf(TENANT_B, FOREIGN_LINEAGE, 1, 'original.pdf'),
+    ]) {
+      await store.put(key, bytes, { contentType: 'application/octet-stream' });
+    }
+    store.calls.length = 0;
+    return { route, store };
+  }
+
+  it('removes the original and parse files of every version, and never a path of another tenant', async () => {
+    const { route, store } = await seededStore();
+    const response = await route.DELETE(...call('DELETE', V1));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ success: true });
+    expect(ids(state.documents)).toEqual([DOC_B_PERSONAL]);
+    expect(store.keys()).toEqual([keyOf(TENANT_B, FOREIGN_LINEAGE, 1, 'original.pdf')]);
+    expect(store.calls.every((entry) => entry.op === 'remove' && entry.key.startsWith(`${TENANT_A}/${LINEAGE}/`))).toBe(true);
+  });
+
+  it('still deletes the rows and reports artifacts_failed when the storage removal fails', async () => {
+    const { route, store } = await seededStore();
+    store.failOn('remove');
+    const response = await route.DELETE(...call('DELETE', V1));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ success: true, artifacts_failed: 4 });
+    expect(ids(state.documents)).toEqual([DOC_B_PERSONAL]);
+    expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toContain(TENANT_A);
+  });
+
+  it('touches no stored object when the document belongs to another tenant', async () => {
+    const { route, store } = await seededStore();
+    const response = await route.DELETE(...call('DELETE', DOC_B_PERSONAL));
+    expect(response.status).toBe(404);
+    expect(store.calls).toEqual([]);
+    expect(store.keys()).toHaveLength(5);
   });
 });
