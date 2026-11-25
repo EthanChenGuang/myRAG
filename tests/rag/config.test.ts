@@ -8,11 +8,13 @@ import {
   resolveFinalResultCount,
   warnInjectionCheckDisabled,
 } from '@/lib/rag/config';
+import { loadIngestConfig, resetIngestConfigForTests } from '@/lib/rag/ingest/config';
 
 let warn: MockInstance<(...args: unknown[]) => void>;
 
 beforeEach(() => {
   resetRagConfigForTests();
+  resetIngestConfigForTests();
   warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 });
 
@@ -254,5 +256,227 @@ describe('resolveFinalResultCount', () => {
     resolveFinalResultCount(undefined, 'abc');
     resolveFinalResultCount(undefined, 'abc');
     expect(configWarnings()).toHaveLength(1);
+  });
+});
+function ingestConfigWarnings(): string[] {
+  return warn.mock.calls
+    .filter((call) => String(call[0]).includes('[Ingest Config]'))
+    .map((call) => call.map((part) => (typeof part === 'string' ? part : JSON.stringify(part))).join(' '));
+}
+
+describe('Phase 3.2 ingestion switches (D-47)', () => {
+  test('RAG_LANGUAGE_AWARE_INGEST defaults to off, accepts on, and falls back to off with one warning', () => {
+    expect(loadIngestConfig({}).languageAwareIngest).toBe('off');
+    expect(loadIngestConfig({ RAG_LANGUAGE_AWARE_INGEST: 'on' }).languageAwareIngest).toBe('on');
+    expect(loadIngestConfig({ RAG_LANGUAGE_AWARE_INGEST: 'off' }).languageAwareIngest).toBe('off');
+    expect(ingestConfigWarnings()).toEqual([]);
+    expect(loadIngestConfig({ RAG_LANGUAGE_AWARE_INGEST: 'yes' }).languageAwareIngest).toBe('off');
+    loadIngestConfig({ RAG_LANGUAGE_AWARE_INGEST: 'yes' });
+    expect(ingestConfigWarnings()).toHaveLength(1);
+    expect(ingestConfigWarnings()[0]).toContain('RAG_LANGUAGE_AWARE_INGEST');
+  });
+});
+
+describe('Phase 3.2 typed switches (D-47)', () => {
+  test('ingestion-side fields default to D-47 with an empty environment', () => {
+    const config = loadIngestConfig({});
+    expect({
+      tableHeaderRepeat: config.tableHeaderRepeat,
+      tableRowSerialization: config.tableRowSerialization,
+      captionLanguage: config.captionLanguage,
+      docTranslation: config.docTranslation,
+      docTranslationModel: config.docTranslationModel,
+      hiddenTextCheck: config.hiddenTextCheck,
+      ingestLinkCheck: config.ingestLinkCheck,
+      outputLinkAllowlist: config.outputLinkAllowlist,
+      uploadApproval: config.uploadApproval,
+      scopeTags: config.scopeTags,
+      scopeTagSuggest: config.scopeTagSuggest,
+      supersessionDetect: config.supersessionDetect,
+      effectiveDateLlmExtract: config.effectiveDateLlmExtract,
+    }).toEqual({
+      tableHeaderRepeat: 'profile',
+      tableRowSerialization: false,
+      captionLanguage: 'en',
+      docTranslation: 'off',
+      docTranslationModel: '',
+      hiddenTextCheck: 'off',
+      ingestLinkCheck: 'off',
+      outputLinkAllowlist: '',
+      uploadApproval: 'off',
+      scopeTags: false,
+      scopeTagSuggest: false,
+      supersessionDetect: 'off',
+      effectiveDateLlmExtract: false,
+    });
+    expect(config.warnings).toEqual([]);
+  });
+
+  test('ingestion-side fields accept every D-47 value', () => {
+    const config = loadIngestConfig({
+      RAG_TABLE_HEADER_REPEAT: 'always',
+      RAG_TABLE_ROW_SERIALIZATION: 'true',
+      RAG_CAPTION_LANGUAGE: 'document',
+      RAG_DOC_TRANSLATION: 'on',
+      RAG_DOC_TRANSLATION_MODEL: 'vendor/model-a',
+      RAG_HIDDEN_TEXT_CHECK: 'quarantine',
+      RAG_INGEST_LINK_CHECK: 'flag',
+      RAG_OUTPUT_LINK_ALLOWLIST: 'example.com,example.org',
+      RAG_UPLOAD_APPROVAL: 'members',
+      RAG_SCOPE_TAGS: 'true',
+      RAG_SCOPE_TAG_SUGGEST: 'true',
+      RAG_SUPERSESSION_DETECT: 'on',
+      RAG_EFFECTIVE_DATE_LLM_EXTRACT: 'true',
+    });
+    expect(config.tableHeaderRepeat).toBe('always');
+    expect(config.tableRowSerialization).toBe(true);
+    expect(config.captionLanguage).toBe('document');
+    expect(config.docTranslation).toBe('on');
+    expect(config.docTranslationModel).toBe('vendor/model-a');
+    expect(config.hiddenTextCheck).toBe('quarantine');
+    expect(config.ingestLinkCheck).toBe('flag');
+    expect(config.outputLinkAllowlist).toBe('example.com,example.org');
+    expect(config.uploadApproval).toBe('members');
+    expect(config.scopeTags).toBe(true);
+    expect(config.scopeTagSuggest).toBe(true);
+    expect(config.supersessionDetect).toBe('on');
+    expect(config.effectiveDateLlmExtract).toBe(true);
+    expect(loadIngestConfig({ RAG_HIDDEN_TEXT_CHECK: 'flag', RAG_INGEST_LINK_CHECK: 'quarantine', RAG_UPLOAD_APPROVAL: 'all' })).toMatchObject({
+      hiddenTextCheck: 'flag',
+      ingestLinkCheck: 'quarantine',
+      uploadApproval: 'all',
+    });
+    expect(ingestConfigWarnings()).toEqual([]);
+  });
+
+  test.each([
+    ['RAG_TABLE_HEADER_REPEAT', 'tableHeaderRepeat', 'sometimes', 'profile'],
+    ['RAG_TABLE_ROW_SERIALIZATION', 'tableRowSerialization', 'yes', false],
+    ['RAG_TABLE_ROW_SERIALIZATION', 'tableRowSerialization', '1', false],
+    ['RAG_CAPTION_LANGUAGE', 'captionLanguage', 'fr', 'en'],
+    ['RAG_DOC_TRANSLATION', 'docTranslation', 'true', 'off'],
+    ['RAG_HIDDEN_TEXT_CHECK', 'hiddenTextCheck', 'block', 'off'],
+    ['RAG_INGEST_LINK_CHECK', 'ingestLinkCheck', 'on', 'off'],
+    ['RAG_UPLOAD_APPROVAL', 'uploadApproval', 'admins', 'off'],
+    ['RAG_SCOPE_TAGS', 'scopeTags', 'on', false],
+    ['RAG_SCOPE_TAG_SUGGEST', 'scopeTagSuggest', 'on', false],
+    ['RAG_SUPERSESSION_DETECT', 'supersessionDetect', 'true', 'off'],
+    ['RAG_EFFECTIVE_DATE_LLM_EXTRACT', 'effectiveDateLlmExtract', 'on', false],
+  ] as const)('ingest %s=%s falls back to the default with one [Ingest Config] warning', (name, field, raw, fallback) => {
+    const config = loadIngestConfig({ [name]: raw });
+    expect((config as unknown as Record<string, unknown>)[field]).toBe(fallback);
+    loadIngestConfig({ [name]: raw });
+    const warnings = ingestConfigWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain(name);
+  });
+
+  test('query-side fields default to D-47 with an empty environment', () => {
+    const config = loadRagConfig({});
+    expect({
+      effectiveDates: config.effectiveDates,
+      scopeTags: config.scopeTags,
+      docTranslation: config.docTranslation,
+      bgeM3Serving: config.bgeM3Serving,
+      outputLinkAllowlist: config.outputLinkAllowlist,
+    }).toEqual({ effectiveDates: false, scopeTags: false, docTranslation: 'off', bgeM3Serving: 'hosted', outputLinkAllowlist: '' });
+  });
+
+  test('query-side fields accept every D-47 value', () => {
+    const config = loadRagConfig({
+      RAG_EFFECTIVE_DATES: 'true',
+      RAG_SCOPE_TAGS: 'true',
+      RAG_DOC_TRANSLATION: 'on',
+      RAG_BGE_M3_SERVING: 'sidecar',
+      RAG_OUTPUT_LINK_ALLOWLIST: 'example.com',
+    });
+    expect(config).toMatchObject({ effectiveDates: true, scopeTags: true, docTranslation: 'on', bgeM3Serving: 'sidecar', outputLinkAllowlist: 'example.com' });
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test.each([
+    ['RAG_EFFECTIVE_DATES', 'effectiveDates', 'yes', false],
+    ['RAG_SCOPE_TAGS', 'scopeTags', 'on', false],
+    ['RAG_DOC_TRANSLATION', 'docTranslation', 'enabled', 'off'],
+    ['RAG_BGE_M3_SERVING', 'bgeM3Serving', 'local', 'hosted'],
+  ] as const)('rag %s=%s falls back to the default with one [RAG Config] warning', (name, field, raw, fallback) => {
+    const config = loadRagConfig({ [name]: raw });
+    expect((config as unknown as Record<string, unknown>)[field]).toBe(fallback);
+    loadRagConfig({ [name]: raw });
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain(name);
+  });
+
+  test('the language variables are not parsed config (D-01)', () => {
+    const env = { RAG_SUPPORTED_LANGUAGES: 'zh,en,it', RAG_PRIMARY_LANGUAGE: 'en' } as Record<string, string>;
+    const ingest = loadIngestConfig(env) as unknown as Record<string, unknown>;
+    const rag = loadRagConfig(env) as unknown as Record<string, unknown>;
+    for (const config of [ingest, rag]) {
+      expect(JSON.stringify(config)).not.toContain('zh,en,it');
+      expect(Object.keys(config).some((key) => /language/i.test(key) && key !== 'languageAwareIngest' && key !== 'captionLanguage')).toBe(false);
+    }
+  });
+
+  test('all-off parity: pre-existing fields equal the snapshot from before Phase 3.2 (D-46)', () => {
+    const ingest = loadIngestConfig({});
+    expect({
+      pipeline: ingest.pipeline,
+      parser: ingest.parser,
+      parsePollBudgetMs: ingest.parsePollBudgetMs,
+      docTypeLlmDetect: ingest.docTypeLlmDetect,
+      invoiceLlmExtract: ingest.invoiceLlmExtract,
+      exactIdLookup: ingest.exactIdLookup,
+      pdfImageChunks: ingest.pdfImageChunks,
+      injectionScan: ingest.injectionScan,
+      embeddingProfiles: ingest.embeddingProfiles,
+      qwenFallback: ingest.qwenFallback,
+      warnings: ingest.warnings,
+    }).toEqual({
+      pipeline: 'legacy',
+      parser: 'llamaparse',
+      parsePollBudgetMs: 45000,
+      docTypeLlmDetect: false,
+      invoiceLlmExtract: false,
+      exactIdLookup: false,
+      pdfImageChunks: false,
+      injectionScan: 'off',
+      embeddingProfiles: 'off',
+      qwenFallback: 'openrouter',
+      warnings: [],
+    });
+
+    const rag = loadRagConfig({});
+    expect({
+      pipeline: rag.pipeline,
+      disabledStages: [...rag.disabledStages].sort(),
+      timeouts: rag.timeouts,
+      exactIdLookup: rag.exactIdLookup,
+      v2: rag.v2,
+      warnings: rag.warnings,
+    }).toEqual({
+      pipeline: 'legacy',
+      disabledStages: ['compress', 'expand_parents', 'rerank', 'translate'],
+      timeouts: PROFILE_STAGE_DEFAULTS,
+      exactIdLookup: false,
+      v2: {
+        lexicalSearch: false,
+        reranker: 'none',
+        rerankTier: { chat: 'quality', voice: 'fast' },
+        voyageModelByLang: {},
+        refusalThreshold: false,
+        edgeOrder: false,
+        compression: false,
+        tokenBudget: 6000,
+        parentChild: false,
+        iterativeScan: 'off',
+        exactScanCutoff: 0,
+        lexicalTranslation: false,
+        paramsOverride: {},
+        hasCohereKey: false,
+        hasVoyageKey: false,
+      },
+      warnings: [],
+    });
   });
 });
