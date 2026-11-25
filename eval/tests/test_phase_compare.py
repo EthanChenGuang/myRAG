@@ -13,8 +13,11 @@ from test_report_runner import QUOTE, _manifest, _trace
 from rag_eval.calibrate.refusal import CalibrationResult, CrossComparison
 from rag_eval.gate import evaluate_gate
 from rag_eval.metrics import score_items
+from rag_eval.golden_io import write_golden
 from rag_eval.phase_compare import (
     ComparisonSpec,
+    RunRequest,
+    default_runner,
     PhaseComparison,
     RunOutput,
     compression_rule,
@@ -474,3 +477,25 @@ def test_cli_exit_code_follows_the_verdict(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(module, "default_command_runner", commands)
     assert main(["--spec", str(spec_path), "--out", str(tmp_path / "cli")]) == 0
     assert main(["--spec", str(tmp_path / "missing.json"), "--out", str(tmp_path / "cli2")]) == 2
+
+
+def test_default_runner_reads_the_golden_file_named_by_the_run_manifest(tmp_path: Path):
+    golden_path = tmp_path / "golden.jsonl"
+    write_golden(golden_path, GOLDEN)
+    output = _output()
+    seen: list[list[str]] = []
+
+    def spawner(argv, cwd):
+        seen.append(argv)
+        out = Path(argv[argv.index("--out") + 1])
+        (out / "report.json").write_text(output.report.model_dump_json(), encoding="utf-8")
+        (out / "traces.jsonl").write_text("\n".join(t.model_dump_json() for t in output.traces) + "\n", encoding="utf-8")
+        manifest = _manifest().model_copy(update={"golden_path": str(golden_path)})
+        (out / "run.json").write_text(manifest.model_dump_json(), encoding="utf-8")
+        return type("Done", (), {"returncode": 0, "stdout": "", "stderr": ""})()
+
+    request = RunRequest(name="legacy", run_config={"name": "legacy", "env": {}, "overrides": None}, fixture_mode="ingest", out_dir=tmp_path / "run")
+    result = default_runner(request, spawner=spawner)
+    assert sorted(item.id for item in result.golden) == sorted(item.id for item in GOLDEN)
+    assert seen[0][seen[0].index("--fixture-mode") + 1] == "ingest" and "--no-gate" in seen[0]
+    assert json.loads((tmp_path / "run" / "inputs" / "run-config.json").read_text(encoding="utf-8"))["name"] == "legacy"

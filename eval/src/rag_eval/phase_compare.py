@@ -22,12 +22,12 @@ from rag_sidecar.contracts.retrieval import ChunkingDecision, ChunkingSweepRepor
 from rag_eval.calibrate.refusal import CalibrationResult, CrossComparison
 from rag_eval.gate import evaluate_gate
 from rag_eval.golden_io import load_golden
-from rag_eval.harness_runner import HARNESS_SCRIPT, TAIL_LINES, HarnessError, _tail, default_spawner
+from rag_eval.harness_runner import HARNESS_SCRIPT, TAIL_LINES, HarnessError, Spawner, _tail, default_spawner
 from rag_eval.metrics import CLAUSE_TAG, CROSS_LINGUAL
 from rag_eval.paths import REPO_ROOT, repo_relative, resolve_cli_path
 from rag_eval.profile_compare import baseline_from_report
 from rag_eval.sweep.chunking import CLAUSE_SLICE, GENERAL_DOC_TYPE, LEGACY_ID, _profiles_for, ingest_doc_types, parse_presets
-from rag_eval.traces import load_traces
+from rag_eval.traces import load_manifest, load_traces
 
 FixtureMode = Literal["prechunked", "ingest"]
 
@@ -693,7 +693,7 @@ def materialise_run_config(run: RunSpec, profiles: list[dict[str, Any]]) -> dict
     return config
 
 
-def default_runner(request: RunRequest) -> RunOutput:
+def default_runner(request: RunRequest, spawner: Spawner | None = None) -> RunOutput:
     """One in-process smoke run over the default golden files of its fixture mode; scoring only, the gate runs here."""
     out_dir = Path(request.out_dir)
     inputs = out_dir / "inputs"
@@ -712,7 +712,7 @@ def default_runner(request: RunRequest) -> RunOutput:
         "--out",
         str(out_dir),
     ]
-    result = default_spawner(argv, REPO_ROOT)
+    result = (spawner or default_spawner)(argv, REPO_ROOT)
     if result.returncode != 0:
         tail = _tail(result.stderr) or _tail(result.stdout)
         raise HarnessError(
@@ -722,7 +722,7 @@ def default_runner(request: RunRequest) -> RunOutput:
     try:
         report = EvalReport.model_validate_json((out_dir / "report.json").read_text(encoding="utf-8"))
         traces = load_traces(out_dir / "traces.jsonl")
-        golden = load_golden(out_dir / "golden.merged.jsonl")
+        golden = load_golden(resolve_cli_path(load_manifest(out_dir / "run.json").golden_path))
     except (OSError, ValidationError, ValueError) as exc:
         raise HarnessError(f"run {request.name}: harness output in {out_dir} is unreadable: {exc}", exit_code=0) from exc
     return RunOutput(report=report, traces=traces, golden=golden)
