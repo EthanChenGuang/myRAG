@@ -18,6 +18,8 @@ import {
   knowledgeBaseUnavailableLanguage,
   knowledgeBaseUnavailableMessage,
   parseRetrievalFilters,
+  resolveScopesFilter,
+  ScopeFilterError,
   readFeedbackLoopConfig,
   resolveEmbedScope,
   runRetrieval,
@@ -239,6 +241,19 @@ export async function POST(request: NextRequest) {
     if (!embedScope.ok) {
       console.error('[Document Search] Embed knowledge base unavailable:', { status: embedScope.status, reason: embedScope.reason });
       return knowledgeBaseUnavailableResponse(request);
+    }
+
+    // D-39: a scopes filter narrows only the configured embed tenant, and only with values of its vocabulary
+    if (retrievalFilters?.scopes) {
+      try {
+        retrievalFilters = await resolveScopesFilter(retrievalFilters, { scope: embedScope.scope, signal: request.signal });
+      } catch (error) {
+        if (!(error instanceof ScopeFilterError)) throw error;
+        return NextResponse.json(
+          { success: false, error: error.code, details: error.details },
+          { status: error.status, headers: CORS_HEADERS }
+        );
+      }
     }
 
     const parsed = embedChatSchema.parse(body);

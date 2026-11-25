@@ -27,6 +27,8 @@ import {
   noKnowledgeBaseResponseLanguage,
   mintAnswerId,
   parseRetrievalFilters,
+  resolveScopesFilter,
+  ScopeFilterError,
   readFeedbackLoopConfig,
   readGenerationConfig,
   repairOwnerMembership,
@@ -1326,6 +1328,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ error }, { status: tenant.status });
     }
     const scope: TenantScope | null = tenant.scope;
+
+    // D-39: a scopes filter narrows only the verified tenant, and only with values of that tenant's vocabulary
+    if (retrievalFilters?.scopes) {
+      try {
+        retrievalFilters = await resolveScopesFilter(retrievalFilters, { scope, signal: req.signal });
+      } catch (error) {
+        if (!(error instanceof ScopeFilterError)) throw error;
+        return NextResponse.json({ success: false, error: error.code, details: error.details }, { status: error.status });
+      }
+    }
 
     // Extract WhatsApp-specific overrides
     const systemPromptOverride = data?.systemPromptOverride;

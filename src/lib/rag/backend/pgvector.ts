@@ -97,6 +97,15 @@ function splitLegs(rows: HybridRow[]): BackendLegs {
   return { dense, lexical, meta: denseMode ? { denseMode } : undefined };
 }
 
+/** D-39: spread in only for a non-empty filter, so a filter-free request body is unchanged. */
+function scopeArgs(filters: BackendSearchRequest['filters']): Record<string, unknown> {
+  if (!filters.scopes || filters.scopes.length === 0) return {};
+  return {
+    p_scopes: [...filters.scopes],
+    ...(filters.scopesIncludeUntagged === true ? { p_scopes_include_untagged: true } : {}),
+  };
+}
+
 function buildRpcArgs(req: BackendSearchRequest, config: RagConfig): Record<string, unknown> {
   const filters = req.filters;
   return {
@@ -121,6 +130,8 @@ function buildRpcArgs(req: BackendSearchRequest, config: RagConfig): Record<stri
     p_currency: filters.invoice?.currency ?? null,
     p_chunking_override: req.chunkingProfileOverride ?? null,
     ...(filters.dateRange?.includeUndated === true ? { p_include_undated: true } : {}),
+    ...scopeArgs(filters),
+    ...(filters.effectiveOn ? { p_effective_on: filters.effectiveOn } : {}),
   };
 }
 

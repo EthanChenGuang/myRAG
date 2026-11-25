@@ -17,6 +17,8 @@ import {
   LEXICAL_VERSION,
   OPTIONAL_STAGES,
   parseRetrievalFilters,
+  resolveScopesFilter,
+  ScopeFilterError,
   readGenerationConfig,
   injectionTraceVersions,
   RERANK_TEXT_VERSION,
@@ -83,6 +85,8 @@ function toFilterBody(input: NonNullable<RetrievalFiltersInput>): Record<string,
       currency: input.invoice.currency,
     };
   }
+  if (input.scopes != null) body.scopes = input.scopes;
+  if (input.include_untagged === true) body.includeUntagged = true;
   return body;
 }
 
@@ -403,6 +407,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Invalid request data', details: filtersParsed.details }, { status: 400 });
     }
     retrievalFilters = filtersParsed.filters;
+    if (retrievalFilters?.scopes) {
+      try {
+        retrievalFilters = await resolveScopesFilter(retrievalFilters, { scope, signal: req.signal });
+      } catch (error) {
+        if (!(error instanceof ScopeFilterError)) throw error;
+        return NextResponse.json({ success: false, error: error.code, details: error.details }, { status: error.status });
+      }
+    }
   }
 
   const bindingOverrides = toBindingOverrides(options);

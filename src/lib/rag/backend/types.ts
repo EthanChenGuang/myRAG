@@ -18,9 +18,15 @@ export interface RetrievalFilters {
     amountMax?: number;
     currency?: string;
   };
+  /** D-39: sorted dimension:value tags, set only after the tenant vocabulary check (resolveScopesFilter). */
+  scopes?: string[];
+  /** D-39: also admit documents with no tag in a filtered dimension; present only when true. */
+  scopesIncludeUntagged?: true;
+  /** D-44: today's UTC date (YYYY-MM-DD) while RAG_EFFECTIVE_DATES is on; never taken from a request. */
+  effectiveOn?: string;
 }
 
-export type RetrievalFilterInput = Omit<RetrievalFilters, 'currentOnly'>;
+export type RetrievalFilterInput = Omit<RetrievalFilters, 'currentOnly' | 'effectiveOn'>;
 
 export interface RankedHitDocument {
   filename: string;
