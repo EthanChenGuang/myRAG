@@ -5,6 +5,7 @@ import { env } from '@/lib/env';
 import { validateRequest } from '@/lib/api-middleware';
 import { classifyQuery } from '@/lib/query-classifier';
 import {
+  BINDING_DOC_TYPES,
   CORE_STAGES,
   countTokens,
   createCitationSession,
@@ -26,6 +27,7 @@ import {
   type CitationSession,
   type ClaudeTurnFacts,
   type RetrievalFilterInput,
+  type RetrievalOptions,
   type RetrievalResult,
   type StageName,
   type StageOverrides,
@@ -88,6 +90,30 @@ const REGISTERED_STAGES: ReadonlySet<string> = new Set<string>([...CORE_STAGES, 
 
 function isRegisteredStage(name: string): name is StageName {
   return REGISTERED_STAGES.has(name);
+}
+
+type BindingOverrides = Pick<RetrievalOptions, 'embeddingBindings' | 'domainControlLeg'>;
+type BindingOverridesResult = { ok: true; value: BindingOverrides } | { ok: false; details: Array<{ path: string; message: string }> };
+
+const BINDING_DOC_TYPE_SET: ReadonlySet<string> = new Set(BINDING_DOC_TYPES);
+
+/** D-22: the generated schema keeps the map's value pattern but not its doc-type keys, so the keys are checked here. */
+function toBindingOverrides(options: RagRunRequest['options']): BindingOverridesResult {
+  const value: BindingOverrides = {};
+  const bindings = options?.embedding_bindings;
+  if (bindings) {
+    const entries = Object.entries(bindings);
+    const details = entries
+      .filter(([docType]) => !BINDING_DOC_TYPE_SET.has(docType))
+      .map(([docType]) => ({ path: `options.embedding_bindings.${docType.slice(0, 64)}`, message: 'Unknown doc type' }));
+    if (entries.length > BINDING_DOC_TYPE_SET.size) {
+      details.unshift({ path: 'options.embedding_bindings', message: `At most ${BINDING_DOC_TYPE_SET.size} entries` });
+    }
+    if (details.length > 0) return { ok: false, details };
+    if (entries.length > 0) value.embeddingBindings = Object.fromEntries(entries) as NonNullable<BindingOverrides['embeddingBindings']>;
+  }
+  if (options?.domain_control_leg) value.domainControlLeg = options.domain_control_leg;
+  return { ok: true, value };
 }
 
 function toStageOverrides(options: RagRunRequest['options']): StageOverrides | undefined {
@@ -286,6 +312,11 @@ export async function POST(req: NextRequest) {
     retrievalFilters = filtersParsed.filters;
   }
 
+  const bindingOverrides = toBindingOverrides(options);
+  if (!bindingOverrides.ok) {
+    return NextResponse.json({ success: false, error: 'Invalid request data', details: bindingOverrides.details }, { status: 400 });
+  }
+
   const stageOverrides = toStageOverrides(options);
   const collector = createTraceCollector({ profile: 'eval', tenantKey: scopeKey(scope) });
   // D-16: the request conversation is the history; D-09: classified once at entry, and only while the query layer is on.
@@ -320,6 +351,7 @@ export async function POST(req: NextRequest) {
         webSearchEnabled: false,
         ...(options?.degrade ? { degrade: options.degrade } : {}),
         ...(options?.embedding_profile ? { embeddingProfile: options.embedding_profile } : {}),
+        ...bindingOverrides.value,
       },
       signal: req.signal,
       trace: collector,

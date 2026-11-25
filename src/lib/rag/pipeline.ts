@@ -70,6 +70,7 @@ import type {
   InjectionSummary,
   Profile,
   ReferencedState,
+  RetrievalOptions,
   RetrievalResult,
   RunRetrievalInput,
   StageFailureReason,
@@ -815,11 +816,24 @@ function bufferedCollector(parent: TraceCollector): TraceCollector & { commit():
   };
 }
 
+/** 03.1.1-10: an eval binding override is refused where no binding leg can run, so an eval arm never silently measures the global profile. */
+const DOMAIN_EMBEDDINGS_DISABLED = 'domain_embeddings_disabled';
+
+function hasEvalBindingOverride(options: RetrievalOptions | undefined): boolean {
+  const bindings = options?.embeddingBindings;
+  return (bindings !== undefined && Object.keys(bindings).length > 0) || options?.domainControlLeg !== undefined;
+}
+
 async function dispatchRetrieval(input: RunRetrievalInput, collector: TraceCollector): Promise<RetrievalResult> {
+  const evalBindingOverride = input.profile === 'eval' && hasEvalBindingOverride(input.options);
   const eligible = !input.options?.generalOverview && V2_PROFILES.includes(input.profile);
+  if (evalBindingOverride && (!eligible || !loadRagConfig(getRagDeps().ragEnv()).v2.domainEmbeddings.enabled)) {
+    return failure(collector, 'error', DOMAIN_EMBEDDINGS_DISABLED, null);
+  }
   if (!eligible) return runLegacyPipeline(input, collector);
 
   const effective = resolveEffectivePipeline();
+  if (evalBindingOverride && effective.pipeline === 'legacy') return failure(collector, 'error', DOMAIN_EMBEDDINGS_DISABLED, null);
   if (effective.pipeline === 'legacy') {
     if (effective.fallback !== 'none') recordPipelineFallback(collector, effective.fallback);
     return runLegacyPipeline(input, collector);
@@ -832,6 +846,10 @@ async function dispatchRetrieval(input: RunRetrievalInput, collector: TraceColle
   const attempt = bufferedCollector(collector);
   const result = await runV2Pipeline(input, attempt);
   if (result.status === 'error' && result.reason === V2_UNAVAILABLE) {
+    if (evalBindingOverride) {
+      attempt.commit();
+      return failure(collector, 'error', DOMAIN_EMBEDDINGS_DISABLED, null);
+    }
     recordPipelineFallback(collector, V2_UNAVAILABLE);
     return runLegacyPipeline(input, collector);
   }

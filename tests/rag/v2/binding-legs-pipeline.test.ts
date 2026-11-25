@@ -216,6 +216,45 @@ describe('v2 pipeline binding legs', () => {
     expect(requests[1]).toMatchObject({ embeddingProfileId: GLOBAL_PROFILE.id, lexicalLimit: 0, filters: { docTypes: ['contract_legal'] } });
   });
 
+  it('an eval binding override naming an unknown profile is an error, never a run on the global profile (03.1.1-10)', async () => {
+    const requests = install();
+    const result = await retrieve('eval', { embeddingBindings: { contract_legal: 'no-such-profile-1024' } });
+
+    expect(result.status).toBe('error');
+    expect(result.reason).toBe('embedding_profile_mismatch');
+    expect(result.candidates).toEqual([]);
+    expect(requests).toHaveLength(0);
+    const record = result.stages.find((stage) => stage.name === 'embed');
+    expect(record?.status).toBe('error');
+    expect(record?.reason).toBe('failed');
+    expect(record?.detail).toBe('unknown_profile:contract_legal');
+  });
+
+  it('a chat request ignores the eval override fields and runs the global profile', async () => {
+    const requests = install();
+    const result = await retrieve('chat', { embeddingBindings: { contract_legal: 'no-such-profile-1024' }, domainControlLeg: 'contract_legal' });
+
+    expect(result.status).not.toBe('error');
+    expect(requests).toHaveLength(1);
+  });
+
+  it('with the domain switch off an eval binding override or control leg is refused before any search', async () => {
+    for (const options of [{ embeddingBindings: { contract_legal: LAW_PROFILE.id } }, { domainControlLeg: 'contract_legal' }]) {
+      const requests = install({ RAG_DOMAIN_EMBEDDINGS: 'off' });
+      const result = await retrieve('eval', options);
+      expect(result.status).toBe('error');
+      expect(result.reason).toBe('domain_embeddings_disabled');
+      expect(requests).toHaveLength(0);
+    }
+  });
+
+  it('on the legacy pipeline an eval binding override is refused, never ignored', async () => {
+    install({ RAG_PIPELINE: 'legacy' });
+    const result = await retrieve('eval', { embeddingBindings: { contract_legal: LAW_PROFILE.id } });
+    expect(result.status).toBe('error');
+    expect(result.reason).toBe('domain_embeddings_disabled');
+  });
+
   it('voice runs no binding leg and reads no binding', async () => {
     effective = [lawBinding()];
     const requests = install();
