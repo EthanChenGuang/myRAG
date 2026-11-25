@@ -2,28 +2,17 @@
 
 import * as React from 'react';
 import { useState, useEffect, useRef } from 'react';
-import { X, ExternalLink, FileText, Compass } from 'lucide-react';
+import { X, ExternalLink, FileText, Compass, Info } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/components/theme-provider';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useSources } from '../providers/sources-provider';
-
-interface Source {
-  title: string;
-  url?: string;
-  content?: string;
-  snippet?: string;
-  date?: string;
-  favicon?: string;
-  provider?: string;
-  type: 'web' | 'document' | 'tool_link';
-  uploadedAt?: string;
-  documentId?: string;
-  explicitly_referenced?: boolean;
-  toolName?: string;
-  toolResultId?: string;
-}
+import { useSources, type Source } from '../providers/sources-provider';
+import { answerQualityStrings } from '@/translations/answer-quality';
+import { useShallow } from 'zustand/react/shallow';
+import { useLanguage } from '../providers/language-provider';
+import { useChatStore } from '@/lib/chat-store';
+import { useCitationFocusStore } from '@/lib/stores/citation-focus-store';
 
 export interface CitationSourceEntryProps {
   source: Source;
@@ -31,8 +20,54 @@ export interface CitationSourceEntryProps {
   focused?: boolean;
 }
 
-export function CitationSourceEntry(_props: CitationSourceEntryProps) {
-  return null;
+/** One citation in the sources panel, rendered from its snapshot as plain text nodes. */
+export function CitationSourceEntry({ source, language, focused = false }: CitationSourceEntryProps) {
+  const citation = source.citation;
+  if (!citation) return null;
+  const strings = answerQualityStrings(language);
+  const location = [
+    citation.page !== null ? strings.pageLabel(citation.page) : null,
+    citation.sectionPath && citation.sectionPath.length > 0 ? citation.sectionPath.join(' › ') : null,
+  ].filter((part): part is string => Boolean(part));
+
+  return (
+    <div
+      data-citation-n={citation.n}
+      data-message-id={citation.messageId}
+      data-document-id={source.documentId}
+      data-focused={focused ? 'true' : undefined}
+      className={cn(
+        'scroll-mt-4 rounded-2xl bg-white/25 dark:bg-black/20 backdrop-blur-sm border p-5 transition-[box-shadow,border-color] duration-300',
+        focused
+          ? 'border-[#FF6417]/70 dark:border-[#FF8A4D]/70 ring-2 ring-[#FF6417]/30 dark:ring-[#FF8A4D]/30'
+          : 'border-[#FFE0D0]/60 dark:border-white/10',
+      )}
+    >
+      <div className="flex items-start gap-3">
+        <span
+          aria-hidden="true"
+          className="mt-0.5 flex h-5 min-w-5 flex-shrink-0 items-center justify-center rounded-full bg-[#FF6417]/15 px-1.5 text-xs font-semibold tabular-nums text-[#C24A0C] dark:bg-[#FF8A4D]/20 dark:text-[#FFB48A]"
+        >
+          {citation.n}
+        </span>
+        <div className="min-w-0 flex-1">
+          <h4 className="break-words text-sm font-medium text-gray-900 dark:text-gray-100">{source.title}</h4>
+          {location.length > 0 && (
+            <p className="mt-1 break-words text-xs text-gray-500 dark:text-gray-400">{location.join(' · ')}</p>
+          )}
+          <blockquote className="mt-3 whitespace-pre-wrap break-words border-l-2 border-[#FF6417]/40 pl-3 text-sm leading-relaxed text-gray-700 dark:border-[#FF8A4D]/40 dark:text-gray-300">
+            {citation.quote}
+          </blockquote>
+          {citation.unavailable && (
+            <p className="mt-3 flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-300">
+              <Info aria-hidden="true" className="mt-px h-3.5 w-3.5 flex-shrink-0" />
+              <span>{strings.documentUpdatedOrRemoved}</span>
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 interface SourcesSidebarProps {
@@ -70,6 +105,29 @@ export function SourcesSidebar({
   const { isSourcesOpen, trackedSetIsSourcesOpen } = useSources();
   const [width, setWidth] = useState(400);
   const sidebarRef = useRef<HTMLDivElement>(null);
+  const { language } = useLanguage();
+  const currentChatId = useChatStore((s) => s.currentChatId);
+  const { focus, syncChat } = useCitationFocusStore(useShallow((s) => ({ focus: s.focus, syncChat: s.syncChat })));
+  const citationEntries = Array.isArray(sources) ? sources.filter((s) => s.type === 'document' && s.citation) : [];
+  const listedSources = citationEntries.length > 0 ? sources.filter((s) => !s.citation) : sources;
+  const qualityStrings = answerQualityStrings(language);
+  const isFocused = (source: Source) =>
+    Boolean(focus && source.citation && focus.n === source.citation.n && focus.messageId === source.citation.messageId);
+
+  useEffect(() => {
+    syncChat(currentChatId);
+  }, [currentChatId, syncChat]);
+
+  useEffect(() => {
+    if (!isSourcesOpen || !focus) return;
+    const timer = setTimeout(() => {
+      const target = sidebarRef.current?.querySelector<HTMLElement>(
+        `[data-citation-n="${focus.n}"][data-message-id="${CSS.escape(focus.messageId)}"]`,
+      );
+      target?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }, 120);
+    return () => clearTimeout(timer);
+  }, [isSourcesOpen, focus, sources]);
   
   // Debug: Track isSourcesOpen state changes
   useEffect(() => {
@@ -282,9 +340,24 @@ export function SourcesSidebar({
 
               {/* Sources List - Modern scrollable design */}
               <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3 custom-scrollbar">
+                {citationEntries.length > 0 && (
+                  <section aria-label={qualityStrings.citationsHeading} className="space-y-3">
+                    <h3 className="text-xs font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                      {qualityStrings.citationsHeading}
+                    </h3>
+                    {citationEntries.map((source) => (
+                      <CitationSourceEntry
+                        key={`citation-${source.citation?.messageId ?? ''}-${source.citation?.n}`}
+                        source={source}
+                        language={language}
+                        focused={isFocused(source)}
+                      />
+                    ))}
+                  </section>
+                )}
                 {sources && Array.isArray(sources) && sources.length > 0 ? (
                   /* We have sources to display */
-                  sources.filter(s => s.type === 'document' || s.type === 'web' || s.type === 'tool_link').map((source, index) => {
+                  listedSources.filter(s => s.type === 'document' || s.type === 'web' || s.type === 'tool_link').map((source, index) => {
                     // Debug: Rendering source item
                     
                     // Determine if this source has a clickable URL
@@ -309,6 +382,11 @@ export function SourcesSidebar({
                               {source.explicitly_referenced && (
                                 <span className="ml-1 px-1 py-0.5 text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 rounded-sm">
                                   Referenced
+                                </span>
+                              )}
+                              {source.cited && (
+                                <span className="ml-1 px-1 py-0.5 text-xs bg-[#FF6417]/15 dark:bg-[#FF8A4D]/20 text-[#C24A0C] dark:text-[#FFB48A] rounded-sm">
+                                  {qualityStrings.citedLabel}
                                 </span>
                               )}
                             </h3>

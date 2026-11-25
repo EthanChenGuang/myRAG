@@ -1,6 +1,8 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import { pickAnswerMetadata } from '@/lib/chat/answer-metadata';
+import { citationDisplayEntries } from '@/lib/citations/display';
 
 export interface SourceCitation {
   n: number;
@@ -34,13 +36,50 @@ export interface Source {
 
 export type AnswerDocumentStatus = Readonly<Record<string, 'current' | 'unavailable'>>;
 
+/**
+ * Sources-panel entries for a message's citations, built only from the metadata snapshots (no chunk is read).
+ * `documents` is the answer record's availability map; without a record the snapshot shows without link or note.
+ * Existing entries are kept (earlier citation entries are rebuilt); documents that were cited are flagged.
+ */
 export function citationSourcesFor(
-  _metadata: unknown,
-  _documents: AnswerDocumentStatus | undefined,
+  metadata: unknown,
+  documents: AnswerDocumentStatus | undefined,
   existing: Source[] = [],
-  _messageId?: string,
+  messageId?: string,
 ): Source[] {
-  return existing;
+  const citations = pickAnswerMetadata(metadata).citations;
+  if (!citations || citations.length === 0) return existing;
+  const sorted = [...citations].sort((a, b) => a.n - b.n);
+  const entries = citationDisplayEntries(sorted, documents ?? {});
+  const citationEntries: Source[] = entries.map((entry, index) => {
+    const unavailable = documents ? entry.unavailable : false;
+    const source: Source = {
+      title: entry.documentName,
+      type: 'document',
+      provider: 'Document Database',
+      cited: true,
+      citation: {
+        n: entry.n,
+        alias: sorted[index].alias,
+        quote: entry.quote,
+        page: entry.page,
+        sectionPath: entry.sectionPath,
+        unavailable,
+        ...(messageId ? { messageId } : {}),
+      },
+    };
+    if (documents && entry.linkDocumentId) source.documentId = entry.linkDocumentId;
+    return source;
+  });
+  const citedIds = new Set(sorted.map((citation) => citation.documentId));
+  const kept = existing
+    .filter((source) => !source.citation)
+    .map((source) =>
+      source.type === 'document' && source.documentId && citedIds.has(source.documentId) && !source.cited
+        ? { ...source, cited: true }
+        : source,
+    );
+  return [...citationEntries, ...kept];
 }
 
 interface SourcesContextType {
