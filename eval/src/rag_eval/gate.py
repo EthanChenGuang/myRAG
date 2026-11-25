@@ -27,8 +27,13 @@ def _report_slices(report: EvalReport) -> dict[str, SliceMetrics]:
     return slices
 
 
+# Answer-only options: the gated metrics are retrieval and refusal metrics, decided before any answer is generated (D-25 b).
+ANSWER_ONLY_OPTIONS = frozenset({"generator_model", "citations", "groundedness"})
+SCOPE_LABEL = "request_options (excluding max_results, degrade and the answer-only generator_model, citations, groundedness)"
+
+
 def _scope(options: RagRunOptions) -> dict[str, object]:
-    return options.model_dump(exclude={"max_results", "degrade"})
+    return options.model_dump(exclude={"max_results", "degrade", *ANSWER_ONLY_OPTIONS})
 
 
 def _mismatches(report: EvalReport, baseline: Baseline) -> list[str]:
@@ -42,7 +47,7 @@ def _mismatches(report: EvalReport, baseline: Baseline) -> list[str]:
         ("gate_population", report.gate_population, baseline.gate_population),
         ("tier", report.tier, baseline.tier),
         ("deployment_mode", report.deployment_mode, baseline.deployment_mode),
-        ("request_options (excluding max_results and degrade)", _scope(report.request_options), _scope(baseline.request_options)),
+        (SCOPE_LABEL, _scope(report.request_options), _scope(baseline.request_options)),
     )
     if report.golden_filter != baseline.golden_filter:
         problems.append(

@@ -7,6 +7,7 @@ import {
   loadRagConfig,
   resolveFinalResultCount,
   validResultCount,
+  warnInjectionCheckDisabled,
   type RagConfig,
   type StageName,
 } from './config';
@@ -33,7 +34,17 @@ import { getEmbeddingProfileById } from './embeddings/active-profile';
 import { classifyProfileFailure, embedQuery, embedQueryForEvalProfile, withStaleProfileRetry } from './embeddings/query-embedding';
 import { legacyAnalyze, legacyRank, legacySearch, scaleThreshold, searchThresholdsFor } from './legacy/enhanced-retrieval';
 import { defaultQueryContext } from './query/temporal-query-detector';
-import { resolveDocumentRefs } from './refs/resolve';
+import { renderReferencedSection, resolveDocumentRefs } from './refs/resolve';
+import {
+  INJECTION_STAGE_GUARD_MS,
+  afterRules,
+  applyInjectionAction,
+  injectionItems,
+  logInjectionSummary,
+  runInjectionCheck,
+  type InjectionApplied,
+  type InjectionMarks,
+} from './security/injection-check';
 import { exactIdStage, mergeExactCandidates } from './retrieval/exact-id';
 import { hybridRerank } from './rerank/local-hybrid';
 import { assertTenantScope, scopeKey } from './tenant/scope';
@@ -42,6 +53,7 @@ import { finishTrace } from './trace/finish';
 import { voiceKeywordFallback, type VoiceChunk } from './voice/keyword-fallback';
 import type {
   Candidate,
+  InjectionSummary,
   Profile,
   ReferencedState,
   RetrievalResult,
@@ -66,6 +78,7 @@ export interface StageRunOptions<T> {
   candidatesIn?: number | null;
   candidatesOut?: (value: T) => number | null;
   counts?: (value: T) => Record<string, number>;
+  rules?: (value: T) => string[];
   detail?: (value: T) => string | undefined;
 }
 
@@ -144,6 +157,7 @@ export async function runStage<T>(
       candidatesIn,
       candidatesOut: options.candidatesOut ? options.candidatesOut(value) : null,
       ...(counts !== undefined ? { counts } : {}),
+      ...(options.rules ? { rules: options.rules(value) } : {}),
       detail: options.detail ? options.detail(value) : undefined,
     });
     return { skipped: false, value };
@@ -533,6 +547,10 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
   let candidates: Candidate[] = [];
   let assembly: AssembleOutput<Candidate> | null = null;
   let referenced: ReferencedState | null = null;
+  let injection: InjectionSummary | undefined;
+  let injectionStalled = false;
+  let injectionMarks: InjectionMarks | null = null;
+  const security = deps.securityConfig();
 
   try {
     referenced = await runRefsStage(input, scope, spec('refs', 'skip'), collector);
@@ -613,6 +631,8 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
         webSearchEnabled: input.options?.webSearchEnabled ?? false,
         applyRelevanceFilter,
         citationLabeler: input.citationLabeler,
+        ...(security.contextTagging ? { contextTagging: true } : {}),
+        ...(injectionMarks ? { injectionMarks } : {}),
       });
 
       let rows: AssemblyRows | null = null;
@@ -632,6 +652,45 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
         { candidatesIn: candidates.length, candidatesOut: (value) => value.relevantChunks.length },
       );
 
+      if (security.injectionCheck !== 'off') {
+        const mode = security.injectionCheck;
+        warnInjectionCheckDisabled(config, mode);
+        const loadedRows = rows as AssemblyRows | null;
+        const current = filtered as FilteredCandidates<Candidate> | null;
+        const items = injectionItems(current ? current.relevantChunks : candidates, loadedRows?.chunkMetadata ?? null, referenced);
+        const checkSpec = spec('injection_check', 'skip');
+        let held: InjectionApplied<Candidate> | null = null;
+        const checked = await runStage(
+          { ...checkSpec, timeoutMs: checkSpec.timeoutMs + INJECTION_STAGE_GUARD_MS },
+          signal,
+          () => {
+            const verdicts = runInjectionCheck({ items, mode });
+            const applied = applyInjectionAction({ candidates, referenced, items, verdicts, mode, renderSection: renderReferencedSection });
+            held = applied;
+            return afterRules(applied);
+          },
+          collector,
+          {
+            candidatesIn: items.length,
+            candidatesOut: (value) => value.counts.checked - value.counts.dropped,
+            counts: (value) => value.counts,
+            rules: (value) => value.summary.ruleIds,
+          },
+        );
+        const applied: InjectionApplied<Candidate> | null = checked.skipped ? held : checked.value;
+        injectionStalled = checked.skipped && applied !== null;
+        if (applied) {
+          injection = applied.summary;
+          injectionMarks = applied.marks;
+          logInjectionSummary(applied.summary, applied.counts, { traceId: collector.traceId, stalled: injectionStalled });
+          if (applied.summary.droppedChunkIds.length > 0 || applied.summary.droppedReferenceIds.length > 0) {
+            candidates = applied.candidates;
+            referenced = applied.referenced;
+            if (loadedRows && current) filtered = filterCandidates(assemblyInput(loadedRows, true));
+          }
+        }
+      }
+
       const assembled = await runStage(
         spec('assemble', 'skip'),
         signal,
@@ -643,7 +702,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
         },
         collector,
         {
-          candidatesIn: postFilter.skipped ? candidates.length : postFilter.value.relevantChunks.length,
+          candidatesIn: (filtered as FilteredCandidates<Candidate> | null)?.relevantChunks.length ?? candidates.length,
           candidatesOut: (value) => value.usedDocuments.length,
         },
       );
@@ -666,21 +725,26 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
   }
 
   const records = collector.stages();
-  const status = assembleDisabledStatus(
+  const derived = assembleDisabledStatus(
     records,
     deriveStatus(records, assembly ? survivorCount(assembly) : candidates.length),
     assembly ? 0 : candidates.length,
   );
-  const reason =
-    status === 'ok'
+  const injectionFiltered = injectionRemovedEverything(injection, assembly, derived);
+  const status = injectionFiltered ? 'empty' : derived;
+  const reason = injectionFiltered
+    ? 'injection_filtered'
+    : status === 'ok'
       ? 'ok'
       : status === 'empty'
         ? candidates.length === 0
           ? 'no_candidates'
           : 'no_relevant_context'
-        : degradedReason(records);
+        : injectionStalled && degradedReason(records) === 'injection_check_timeout'
+          ? 'injection_check_stalled'
+          : degradedReason(records);
 
-  const base = failure(collector, status, reason, queryContext);
+  const base = { ...failure(collector, status, reason, queryContext), ...(injection ? { injection } : {}) };
   if (!assembly) return { ...base, candidates };
 
   return {
@@ -696,6 +760,17 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
     refusalCandidate: assembly.refusalCandidate,
     blocks: assembly.blocks,
   };
+}
+
+/** Everything that would have reached the model was dropped by the check: `empty` wins over `degraded` (A-3). */
+function injectionRemovedEverything(
+  injection: InjectionSummary | undefined,
+  assembly: AssembleOutput<Candidate> | null,
+  status: RetrievalResult['status'],
+): boolean {
+  if (!injection || !assembly || status === 'error') return false;
+  const dropped = injection.droppedChunkIds.length + injection.droppedReferenceIds.length;
+  return dropped > 0 && survivorCount(assembly) === 0;
 }
 
 const VOICE_SEARCH_MULTIPLIER = 5;

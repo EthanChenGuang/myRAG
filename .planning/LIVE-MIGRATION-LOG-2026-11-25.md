@@ -129,3 +129,18 @@ Body check: after each apply, an aggregate md5 over `proname=md5(prosrc)` of eve
 
 - Applied `0427_parse_attempt_cost_key` to `<live-project-ref>` after train 10 (PR #36) merged into trunk with all 8 pr-smoke checks green. Only the file's top-level `BEGIN;` and `COMMIT;` were left out.
 - Check: the live `public.rag_record_parse_attempt` body md5 equals the repo file's body md5 (2334fc23d88d057214cdee4394f5b971, 1195 characters). One overload, SECURITY DEFINER, `search_path=""`; EXECUTE for service_role only (anon and authenticated refused).
+
+## 03.1-53 live checks (2026-11-25, through the database)
+
+- Realtime: `realtime.messages` has RLS on and one read policy, `rag_ingest_broadcast_read`, that allows only broadcast messages on topics `rag_ingest_realtime_topic_allowed` accepts. That function runs for `authenticated` only (anon refused).
+- Backups: `archive_mode` is on (WAL archiving). The backup list itself was not read: the Management API token was not provided, so it needs the dashboard (Database → Backups).
+- Security advisor: no errors. `auth_leaked_password_protection` still reports the protection is off; the Realtime "Allow public access" project setting is not visible through SQL. Both are dashboard settings for the owner.
+
+## 03.1-53 project settings (2026-11-25, Management API, owner-authorized)
+
+- Realtime: `private_only` set to true (was unset, so public channels were allowed). The app's only Realtime channel (`use-ingest-job-status`) already subscribes with `private: true`, so nothing breaks. Verified by reading the config back.
+- Leaked password protection: not enabled. The API answered 402 `entitlement_required`: HaveIBeenPwned checks need the Pro plan. `password_min_length` stays 6. Owner decision pending: upgrade, or raise the minimum length and required characters as a substitute.
+- Backups: the project lists 0 scheduled backups and point-in-time recovery is off (WAL-G is enabled internally, but no downloadable backup exists). So there was no backup before the 2026-11-25 migrations. The live data is small (1 document, 1 chunk, 1 organization). Owner decision pending: upgrade to get daily backups or PITR, or take a manual `pg_dump` with the database connection string.
+- Free substitute for leaked-password protection (owner: avoid paid plans): `password_min_length` 6 → 10 and `password_required_characters` = letters (lower and upper) plus digits, set through the Management API and read back. Applies to new sign-ups and password changes only. The app has no client-side length rule, so Supabase's own error message is shown.
+- Backup: direct Postgres connections are refused from the cloud session, so `pg_dump` cannot run here. Free path: the owner takes a local `pg_dump` (schema, data and roles) and keeps the files off the repository.
+- Owner decision (2026-11-25): no backup for now, because the project is not in production yet. Revisit before going live.

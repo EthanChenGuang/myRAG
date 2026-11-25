@@ -10,8 +10,11 @@ import { formatErrorSSE } from '@/lib/error-stream';
 import { ContentPart, APIMessage, ExtendedMessage, fromAPIMessages, toMessage } from '@/types/chat';
 import { ReasoningConfig, REASONING_MODELS } from '@/lib/types';
 import {
+  CLAUDE_FIRST_TOKEN_TIMEOUT_MS,
   createCitationSession,
   createEnhancedRAGPrompt,
+  errorStatusOf,
+  firstTokenGate,
   createTraceCollector,
   finishTrace,
   isV2Pipeline,
@@ -545,6 +548,20 @@ const normalize = (input: unknown): string => {
   // Return empty string for null/undefined/objects we can't lowercase
   return '';
 };
+
+const TOOL_CALL_PART_TYPES = new Set(['tool_call', 'tool-call', 'tool_calls']);
+
+/** True when the latest assistant turn carries a tool call, which may still await approval. */
+const lastAssistantHasToolCall = (messages: APIMessage[]): boolean => {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (message.role !== 'assistant') continue;
+    return Array.isArray(message.content) && message.content.some(part => TOOL_CALL_PART_TYPES.has(part.type));
+  }
+  return false;
+};
+
+const CLAUDE_STREAM_ERROR_TEXT = 'The answer was interrupted by an error. Please try again.';
 
 const getLastUserText = (messages: APIMessage[]): string => {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -1882,12 +1899,23 @@ IMPORTANT:
     const parsedCapabilities = ChatCapabilitiesSchema.safeParse(data?.capabilities);
     const citationCapabilities = parsedCapabilities.success ? { citations: parsedCapabilities.data.citations === true } : null;
     const generationConfig = readGenerationConfig();
+    const reasoningRequested =
+      env.NEXT_PUBLIC_REASONING_ENABLED === 'true' &&
+      reasoningSettings?.enabled !== false &&
+      Boolean(reasoningSettings?.enabled || reasoningSettings?.effort || reasoningSettings?.maxOutputTokens);
     const citationSession = createCitationSession({
       capabilities: citationCapabilities,
       ragMode,
       modelId: model,
       language: userLanguage,
       config: generationConfig,
+      facts: {
+        mcp: useMcpForRequest || lastAssistantHasToolCall(rawMessages),
+        multiStep: isHandlingMultiStep,
+        webSearch: webSearchEnabled,
+        reasoning: reasoningRequested,
+        attachments: hasAttachedImage,
+      },
     });
 
     // Only web-chat answers of a signed-in user outside ghost chats get an answerId and a record
@@ -2341,6 +2369,7 @@ Context:
 
     // Replace the {{context}} placeholder with the actual context
     let systemPrompt;
+    let claudeSystemText: string | null = null;
 
     // Use optimized system prompt with RAG context
     console.log('[RAG SYSTEM DEBUG] ========== System Prompt Selection ==========');
@@ -2352,6 +2381,13 @@ Context:
       console.log('[RAG SYSTEM] Creating enhanced prompt with context length:', context.length);
       console.log('[RAG SYSTEM] Using RAG mode:', ragMode);
       systemPrompt = citationSession.decorateSystemPrompt(createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode));
+      if (citationSession.strategy === 'claude-citations') {
+        claudeSystemText = [
+          citationSession.claudeSystemPrompt(ragSystemPrompt),
+          String(formattingSystemMessage.content),
+          String(ctaSystemMessage.content),
+        ].join('\n\n');
+      }
     } else {
       console.log('[RAG SYSTEM] ❌ Using standard system prompt without context');
       console.log('[RAG SYSTEM] Reason: No context/documents found');
@@ -3599,12 +3635,15 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       };
 
       // First streamText call with merged tools and reasoning
-      const citationTransforms = citationSession.transforms();
-      if (citationTransforms.length > 0) streamParams.experimental_transform = citationTransforms;
       let answerToolOutputUsed = false;
+      const citationTransformParams = () => {
+        const citationTransforms = citationSession.transforms();
+        return citationTransforms.length > 0 ? { experimental_transform: citationTransforms } : {};
+      };
 
-      const result = await streamText({
+      const startOpenRouterStream = () => streamText({
         ...streamParams,
+        ...citationTransformParams(),
         onStepFinish: async (params: { text?: string; toolCalls?: StepToolCall[]; toolResults?: StepToolResult[] }) => {
           let { text, toolCalls = [] as StepToolCall[], toolResults = [] as StepToolResult[] } = params;
           if (Array.isArray(toolResults) && toolResults.some((item) => typeof item?.toolName === 'string' && !ANSWER_EVIDENCE_TOOLS.has(item.toolName))) {
@@ -3953,6 +3992,32 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
         }
       });
 
+      // D-10: an eligible turn runs the direct Claude call; OpenRouter starts only on its one fallback
+      let claudeError: unknown = null;
+      const claudeAbort = new AbortController();
+      let claudeStream: ReturnType<typeof citationSession.startClaude> | null = null;
+      if (citationSession.strategy === 'claude-citations' && claudeSystemText !== null) {
+        try {
+          const history = modelMessages.filter((message) => message.role !== 'system');
+          if (history.at(-1)?.role === 'user') history.pop();
+          claudeStream = citationSession.startClaude({
+            system: claudeSystemText,
+            history,
+            question: getLastUserText(rawMessages),
+            reasoning: reasoningRequested,
+            abortSignal: AbortSignal.any([req.signal, claudeAbort.signal]),
+            onError: (error) => {
+              claudeError = error;
+            },
+          });
+        } catch {
+          citationSession.fallback('error');
+        }
+      } else if (citationSession.strategy === 'claude-citations') {
+        citationSession.fallback('error');
+      }
+      let result = claudeStream ? null : await startOpenRouterStream();
+
       const ragTraceId = ragTrace?.collector.traceId;
       let generationFailed = false;
 
@@ -4054,29 +4119,64 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
               }))
             });
           }
+          const messageMetadata = ({ part }: { part: { type: string; providerMetadata?: Record<string, any> } }) => {
+            if (part.type === 'start') {
+              if (!ragTraceId && !answerId) return undefined;
+              return { ...(ragTraceId ? { ragTraceId } : {}), ...(answerId ? { answerId } : {}) };
+            }
+            if (part.type === 'finish-step') {
+              captureReasoningDetails(part.providerMetadata?.openrouter);
+              return undefined;
+            }
+            if (part.type !== 'finish') return undefined;
+            const finishMetadata = { ...buildFinishMetadata(), ...citationSession.finishMetadata() };
+            if (!ragTraceId && !answerId && Object.keys(finishMetadata).length === 0) return undefined;
+            return { ...(ragTraceId ? { ragTraceId } : {}), ...(answerId ? { answerId } : {}), ...finishMetadata };
+          };
+          if (claudeStream) {
+            const gate = await firstTokenGate(
+              claudeStream.result.toUIMessageStream({
+                sendStart: precomputedSourceImages.length === 0,
+                messageMetadata,
+                onError: () => CLAUDE_STREAM_ERROR_TEXT,
+              }),
+              {
+                timeoutMs: CLAUDE_FIRST_TOKEN_TIMEOUT_MS,
+                errorStatus: () => errorStatusOf(claudeError),
+                abort: () => claudeAbort.abort(),
+              },
+            );
+            if (gate.kind === 'ok') {
+              writer.merge(gate.stream);
+              return;
+            }
+            citationSession.fallback(gate.reason);
+            claudeStream = null;
+            console.warn('[Citations] Claude Citations call failed before the first token; retrying on OpenRouter:', { reason: gate.reason });
+            result = await startOpenRouterStream();
+          }
+          if (!result) return;
           // Merge AI stream
           writer.merge(result.toUIMessageStream({
             sendStart: precomputedSourceImages.length === 0,
-            messageMetadata: ({ part }) => {
-              if (part.type === 'start') {
-                if (!ragTraceId && !answerId) return undefined;
-                return { ...(ragTraceId ? { ragTraceId } : {}), ...(answerId ? { answerId } : {}) };
-              }
-              if (part.type === 'finish-step') {
-                captureReasoningDetails(part.providerMetadata?.openrouter);
-                return undefined;
-              }
-              if (part.type !== 'finish') return undefined;
-              const finishMetadata = { ...buildFinishMetadata(), ...citationSession.finishMetadata() };
-              if (!ragTraceId && !answerId && Object.keys(finishMetadata).length === 0) return undefined;
-              return { ...(ragTraceId ? { ragTraceId } : {}), ...(answerId ? { answerId } : {}), ...finishMetadata };
-            },
+            messageMetadata,
           }));
         },
         onFinish: ({ isAborted, finishReason, responseMessage }) => {
+          if (claudeStream) {
+            const directText = responseMessage.parts.map((part) => (part.type === 'text' ? part.text : '')).join('');
+            ragTrace?.collector.setReviewContent({ answer: directText, context, model: safeModelId });
+          }
           if (ragTrace) {
             const status = isAborted ? 'aborted' : generationFailed || finishReason === 'error' ? 'error' : 'ok';
-            ragTrace.collector.record({ name: 'generation', status, startedAt: aiStartTime, endedAt: ragTrace.collector.now() });
+            const fallbackReason = citationSession.fallbackReason;
+            ragTrace.collector.record({
+              name: 'generation',
+              status,
+              startedAt: aiStartTime,
+              endedAt: ragTrace.collector.now(),
+              ...(fallbackReason ? { rules: [`citation_strategy_fallback:${fallbackReason}`] } : {}),
+            });
           }
           finishRagTrace();
           if (answerRecordPending) {

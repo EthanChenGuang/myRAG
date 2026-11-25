@@ -16,6 +16,7 @@ export const OPTIONAL_STAGES = [
   'refusal',
   'expand_parents',
   'compress',
+  'injection_check',
 ] as const;
 
 export type CoreStageName = (typeof CORE_STAGES)[number];
@@ -60,15 +61,32 @@ const V2_EVAL: StageTimeouts = {
   expand_parents: 10000,
 };
 
+/** The injection_check stage budget per profile; eval uses the registry maximum as a safety ceiling (Phase 4 F-16). */
+const INJECTION_CHECK_TIMEOUTS: Record<Profile, number> = {
+  chat: 400,
+  embed: 400,
+  media: 400,
+  voice: 1000,
+  eval: 60000,
+};
+
 function mergeProfileDefaults(legacy: StageTimeouts, v2: StageTimeouts, extra?: StageTimeouts): StageTimeouts {
   return { ...legacy, ...v2, ...extra };
 }
 
 export const PROFILE_STAGE_DEFAULTS: Record<Profile, StageTimeouts> = {
-  chat: mergeProfileDefaults(LEGACY_STANDARD, V2_STANDARD),
-  embed: mergeProfileDefaults(LEGACY_STANDARD, V2_STANDARD),
-  eval: mergeProfileDefaults(LEGACY_STANDARD, V2_STANDARD, { ...V2_EVAL, translate: 1000, fuse: 1000, dedupe: 1000, refusal: 1000, compress: 1000 }),
-  media: mergeProfileDefaults(LEGACY_STANDARD, V2_STANDARD),
+  chat: mergeProfileDefaults(LEGACY_STANDARD, V2_STANDARD, { injection_check: INJECTION_CHECK_TIMEOUTS.chat }),
+  embed: mergeProfileDefaults(LEGACY_STANDARD, V2_STANDARD, { injection_check: INJECTION_CHECK_TIMEOUTS.embed }),
+  eval: mergeProfileDefaults(LEGACY_STANDARD, V2_STANDARD, {
+    ...V2_EVAL,
+    translate: 1000,
+    fuse: 1000,
+    dedupe: 1000,
+    refusal: 1000,
+    compress: 1000,
+    injection_check: INJECTION_CHECK_TIMEOUTS.eval,
+  }),
+  media: mergeProfileDefaults(LEGACY_STANDARD, V2_STANDARD, { injection_check: INJECTION_CHECK_TIMEOUTS.media }),
   voice: {
     ...mergeProfileDefaults(
       {
@@ -83,6 +101,7 @@ export const PROFILE_STAGE_DEFAULTS: Record<Profile, StageTimeouts> = {
         exact_id_lookup: 500,
       },
       V2_VOICE,
+      { injection_check: INJECTION_CHECK_TIMEOUTS.voice },
     ),
   },
 };
@@ -470,6 +489,18 @@ export function resolveFinalResultCount(requested: unknown, envValue: string | u
     problem([], 'result-count', 'Invalid RAG_FINAL_RESULT_COUNT, using the default', { default: DEFAULT_FINAL_RESULT_COUNT });
   }
   return fromEnv ?? DEFAULT_FINAL_RESULT_COUNT;
+}
+
+/**
+ * Listing injection_check in RAG_DISABLED_STAGES while RAG_INJECTION_CHECK is on silently turns off a security
+ * control, so it is allowed with one warning per process.
+ */
+export function warnInjectionCheckDisabled(config: RagConfig, injectionCheck: string): boolean {
+  if (injectionCheck === 'off' || !config.disabledStages.has('injection_check')) return false;
+  problem([], 'injection-check-disabled', 'injection_check is listed in RAG_DISABLED_STAGES while RAG_INJECTION_CHECK is on; the check is disabled', {
+    mode: injectionCheck,
+  });
+  return true;
 }
 
 export function resetRagConfigForTests(): void {

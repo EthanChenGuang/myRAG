@@ -4,7 +4,7 @@ milestone: v5.0
 current_phase: "05"
 current_phase_name: Verified Citations & Groundedness (Phases 5, 5.1, 6, 7 in parallel)
 status: executing
-stopped_at: "Merge trains 1-6 merged (PRs #23-#28); train 7 building; blocked on human checkpoints 03.1-53/54, 04-43, 05-05"
+stopped_at: "Merge trains 1-11 merged; main synced via PR; 05-22 and 05.1-06 executing; 03.1-53/54 deferred to pre-production; 04-43 partly live"
 last_updated: "2026-11-25T07:35:00.000Z"
 state_head: 01b43787
 package_legitimacy_03_1_04:
@@ -43,10 +43,11 @@ See: .planning/PROJECT.md (updated 2026-11-22)
 
 Trunk: `claude/ecstatic-hamilton-86gtwv` @ `01b43787` (2026-11-25). Merge trains 1–6 merged via PRs #23–#28, each with all 8 pr-smoke checks green.
 
-- **Phase 3.1:** code complete through 03.1-52 (setup fold). Live checkpoints 03.1-53 and 03.1-54 open (human).
+- **Phase 3.1:** code complete through 03.1-52 plus gap fixes (verification gaps 1-5 closed; 0426 and 0427 live). Live checkpoints 03.1-53 and 03.1-54 DEFERRED to pre-production by the owner (2026-11-25): no free always-on host with ~4 GB for the sidecar exists (Oracle free tier not approved; Hugging Face Docker Spaces need PRO). Until then the app uses the synchronous ingest path (RAG_INGEST_ASYNC=off). Draft HF Space files kept on branch exec/sidecar-hf-deploy. Before go-live: pick the host (owner machine + Cloudflare Tunnel, or a paid host after asking), take a backup, then run 03.1-53/54.
 - **Phase 4:** code complete through 04-47 (gap closures 04-46 refusal criterion, 04-47 search_path hardening, migration 0425). 04-VERIFICATION gaps closed; 04-43 live calibration open (human).
 - **Phases 5, 5.1, 6, 7:** executing in parallel cloud sessions. On trunk: 05-01..09, 05-12..14, 05-19, 05.1-01..03, 05.1-05, 05.1-24, 06-01, 06-03..09, 06-11, 06-12, 07-02, 07-03. Finished, awaiting train 7: 05-15, 05-18, 05-20, 06-17. Running: 05-10 (option-a decided), 05-21.
-- **Blocked on humans:** 05-05 (packages APPROVED 2026-11-25, "approved, no sentencepiece"; still waits for precondition 03.1-54 + 04-43), 03.1-53/54, 04-43. Most remaining Phase 5–7 plans depend on these.
+- **Blocked on humans:** 04-43 (Cohere and Voyage keys saved; latency and DB checks running; calibration needs a real golden set and a v2 test deployment). 03.1-53/54 deferred to pre-production. 05-05 done (precondition waived: 03.1-54 and 04-43 modify no files). 05.1-18 and 05.1-25 skipped (Prompt Guard 2 declined).
+- **Owner rules (2026-11-25):** free options first, ask before paying; give a direct link whenever a key or dashboard setting is needed; merge trains go to main through PRs and merge automatically when the 8 checks pass; phases 3.1.1, 3.2, 4.1, 4.1.1, 4.2, 4.3, 5.1.1, 5.2, 5.3, 6.1 and 6.2 are held until the planning session releases them.
 - **Live DB order for operators:** migrations through 0425 (pgvector must be in `public`; run 0425's header dry-run query first), then 0501–0502, 0601–0603 (re-run 0410 after 0603), 0701–0703.
 
 ## Performance Metrics
