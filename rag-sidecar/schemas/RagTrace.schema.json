@@ -241,6 +241,276 @@
       "title": "CitationRecord",
       "type": "object"
     },
+    "DateRange": {
+      "additionalProperties": false,
+      "properties": {
+        "from_date": {
+          "format": "date",
+          "title": "From Date",
+          "type": "string"
+        },
+        "include_undated": {
+          "default": false,
+          "title": "Include Undated",
+          "type": "boolean"
+        },
+        "time_zone": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Time Zone",
+          "type": "string"
+        },
+        "to_date": {
+          "format": "date",
+          "title": "To Date",
+          "type": "string"
+        }
+      },
+      "required": [
+        "from_date",
+        "to_date",
+        "time_zone"
+      ],
+      "title": "DateRange",
+      "type": "object"
+    },
+    "QueryPlan": {
+      "additionalProperties": false,
+      "properties": {
+        "date_range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DateRange"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "framework": {
+          "enum": [
+            "llamaindex",
+            "langchain"
+          ],
+          "title": "Framework",
+          "type": "string"
+        },
+        "gate": {
+          "$ref": "#/$defs/RewriteGateResult"
+        },
+        "language": {
+          "enum": [
+            "zh",
+            "en",
+            "it"
+          ],
+          "title": "Language",
+          "type": "string"
+        },
+        "original": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "title": "Original",
+          "type": "string"
+        },
+        "skipped": {
+          "items": {
+            "$ref": "#/$defs/SkippedTransform"
+          },
+          "title": "Skipped",
+          "type": "array"
+        },
+        "standalone": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "title": "Standalone",
+          "type": "string"
+        },
+        "sub_questions": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 4,
+          "title": "Sub Questions",
+          "type": "array"
+        },
+        "variants": {
+          "items": {
+            "$ref": "#/$defs/QueryVariantOut"
+          },
+          "maxItems": 8,
+          "title": "Variants",
+          "type": "array"
+        }
+      },
+      "required": [
+        "original",
+        "standalone",
+        "language",
+        "gate",
+        "framework"
+      ],
+      "title": "QueryPlan",
+      "type": "object"
+    },
+    "QueryVariantOut": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "original",
+            "condensed",
+            "expanded",
+            "hyde",
+            "sub_question",
+            "translated"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "language": {
+          "enum": [
+            "zh",
+            "en",
+            "it"
+          ],
+          "title": "Language",
+          "type": "string"
+        },
+        "protected_ok": {
+          "title": "Protected Ok",
+          "type": "boolean"
+        },
+        "sub_question_index": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 4,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sub Question Index"
+        },
+        "text": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text",
+        "language",
+        "kind",
+        "protected_ok"
+      ],
+      "title": "QueryVariantOut",
+      "type": "object"
+    },
+    "RewriteGateResult": {
+      "additionalProperties": false,
+      "properties": {
+        "lang": {
+          "enum": [
+            "zh",
+            "en",
+            "it"
+          ],
+          "title": "Lang",
+          "type": "string"
+        },
+        "protected_tokens": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 64,
+          "title": "Protected Tokens",
+          "type": "array"
+        },
+        "reasons": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 32,
+          "title": "Reasons",
+          "type": "array"
+        },
+        "rewrite": {
+          "title": "Rewrite",
+          "type": "boolean"
+        },
+        "skip_retrieval": {
+          "default": false,
+          "title": "Skip Retrieval",
+          "type": "boolean"
+        },
+        "transforms": {
+          "items": {
+            "enum": [
+              "condense_history",
+              "normalize_dates",
+              "decompose",
+              "expand",
+              "translate"
+            ],
+            "type": "string"
+          },
+          "maxItems": 5,
+          "title": "Transforms",
+          "type": "array"
+        }
+      },
+      "required": [
+        "rewrite",
+        "transforms",
+        "reasons",
+        "lang",
+        "protected_tokens"
+      ],
+      "title": "RewriteGateResult",
+      "type": "object"
+    },
+    "SkippedTransform": {
+      "additionalProperties": false,
+      "properties": {
+        "reason": {
+          "enum": [
+            "timeout",
+            "error",
+            "aborted",
+            "protected_token_lost",
+            "length",
+            "cap",
+            "disabled_for_profile"
+          ],
+          "title": "Reason",
+          "type": "string"
+        },
+        "transform": {
+          "enum": [
+            "condense_history",
+            "normalize_dates",
+            "decompose",
+            "expand",
+            "hyde",
+            "translate"
+          ],
+          "title": "Transform",
+          "type": "string"
+        }
+      },
+      "required": [
+        "transform",
+        "reason"
+      ],
+      "title": "SkippedTransform",
+      "type": "object"
+    },
     "TraceCandidate": {
       "additionalProperties": false,
       "properties": {
@@ -934,6 +1204,17 @@
       ],
       "default": null,
       "title": "Query Language"
+    },
+    "query_plan": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/QueryPlan"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "query_transforms": {
       "items": {

@@ -1,6 +1,6 @@
 {
   "candidate_pool_size": 75,
-  "config_hash": "ffd5b1d0c5cf0422a5a53f7cab907976d7a402bc5131431db1ad0ad52114021a",
+  "config_hash": "a808a46f380d35f92c15bd2fb19d37a13b02c7827372c73e4dd76480714433f7",
   "final_top_k": 8,
   "leg_weights": {
     "dense": 1.0,
@@ -12,5 +12,6 @@
   },
   "rerank_input_cap": 75,
   "rrf_k": 60,
-  "schema_version": 1
+  "schema_version": 1,
+  "sub_question_coverage": true
 }

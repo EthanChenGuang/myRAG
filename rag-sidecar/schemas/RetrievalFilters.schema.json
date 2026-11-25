@@ -8,6 +8,11 @@
           "title": "From",
           "type": "string"
         },
+        "include_undated": {
+          "default": false,
+          "title": "Include Undated",
+          "type": "boolean"
+        },
         "to": {
           "format": "date",
           "title": "To",
