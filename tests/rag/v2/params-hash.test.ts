@@ -444,3 +444,25 @@ describe('securityHashComponent (D-18, plan-check W2)', () => {
     expect(component?.detectorsVersion).toMatch(/\S/);
   });
 });
+
+describe('computeRetrievalConfigHash binding legs (03.1.1-09)', () => {
+  beforeEach(() => {
+    resetRagConfigForTests();
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    resetRagConfigForTests();
+  });
+
+  it('is unchanged without a planned leg and changes with the binding map or the control leg', () => {
+    const base = computeRetrievalConfigHash(baseHashInput());
+    expect(computeRetrievalConfigHash({ ...baseHashInput(), embeddingBindings: {} })).toBe(base);
+    expect(computeRetrievalConfigHash({ ...baseHashInput(), embeddingBindings: null, domainControlLeg: null })).toBe(base);
+    const law = computeRetrievalConfigHash({ ...baseHashInput(), embeddingBindings: { contract_legal: 'voyage-law-2-1024' } });
+    const domain = computeRetrievalConfigHash({ ...baseHashInput(), embeddingBindings: { contract_legal: 'voyage-4-large-1024-domain' } });
+    const control = computeRetrievalConfigHash({ ...baseHashInput(), domainControlLeg: 'contract_legal' });
+    expect(new Set([base, law, domain, control]).size).toBe(4);
+  });
+});

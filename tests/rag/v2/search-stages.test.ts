@@ -420,7 +420,7 @@ describe('runSearchStages binding legs', () => {
       status: row.status,
       counts: row.counts,
       detail: row.detail,
-      candidatesOut: row.candidatesOut,
+      candidatesOut: row.candidates_out,
     }));
     const fused = output.fusedHits.map((row) => ({ id: row.hit.chunkId, score: row.score, similarity: row.hit.similarity, ranks: row.ranks }));
     return { calls: calls.map(({ tenant: _tenant, ...rest }) => rest), tenants: calls.map((call) => call.tenant), fused, stages };
@@ -480,7 +480,7 @@ describe('runSearchStages binding legs', () => {
         ],
         "stages": [
           {
-            "candidatesOut": undefined,
+            "candidatesOut": 5,
             "counts": {
               "dense": 3,
               "lexical": 2,
@@ -490,14 +490,14 @@ describe('runSearchStages binding legs', () => {
             "status": "ok",
           },
           {
-            "candidatesOut": undefined,
+            "candidatesOut": 4,
             "counts": undefined,
             "detail": undefined,
             "name": "fuse",
             "status": "ok",
           },
           {
-            "candidatesOut": undefined,
+            "candidatesOut": 4,
             "counts": {
               "candidates_in": 4,
               "capped_from": 4,
