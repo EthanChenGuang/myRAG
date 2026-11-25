@@ -341,5 +341,281 @@ for (const mode of MODES) {
       const asService = await asRole(db, 'service_role', async () => (await db.query('SELECT * FROM public.rag_list_embedding_profile_scopes()')).rows.length);
       assert.ok(asService > 0);
     });
+
+    const activate = (bindingId: string, actor = 'operator-test'): Promise<string> =>
+      outcome(db, 'SELECT * FROM public.rag_activate_embedding_binding($1, $2)', [bindingId, actor]);
+    const rollback = (docType: string, tenantKey: string | null, actor = 'operator-test'): Promise<string> =>
+      outcome(db, 'SELECT * FROM public.rag_rollback_embedding_binding($1, $2, $3)', [docType, tenantKey, actor]);
+    const deactivate = (docType: string, tenantKey: string | null, actor = 'operator-test'): Promise<string> =>
+      outcome(db, 'SELECT * FROM public.rag_deactivate_embedding_binding($1, $2, $3)', [docType, tenantKey, actor]);
+
+    async function inSavepoint(body: () => Promise<void>): Promise<void> {
+      await db.exec('SAVEPOINT gate_case');
+      try {
+        await body();
+      } finally {
+        await db.exec('ROLLBACK TO SAVEPOINT gate_case');
+        await db.exec('RELEASE SAVEPOINT gate_case');
+      }
+    }
+
+    async function writeEvidence(bindingId: string, evidence: unknown): Promise<void> {
+      await db.query('UPDATE public.embedding_profile_bindings SET eval_evidence = $2::jsonb WHERE id = $1', [bindingId, JSON.stringify(evidence)]);
+    }
+
+    interface Staged {
+      binding: string;
+      contractChunks: string[];
+      generalChunks: string[];
+      runId: string;
+      evidence: Evidence;
+    }
+
+    /** A complete, proven binding of LAW for contract chunks: the chunks, their vectors, a completed run and passing evidence. */
+    async function stage(options: { tenantKey: string | null; owner?: string; profileId?: string; model?: string; baselineBinding?: string | null; seedChunks?: boolean; runTenant?: string | null } = { tenantKey: tenantA }): Promise<Staged> {
+      const profileId = options.profileId ?? LAW;
+      const model = options.model ?? LAW_MODEL;
+      const contractChunks = options.seedChunks === false ? [] : await insertDocument(CONTRACT, 3, options.owner ?? ownerA);
+      const generalChunks = options.seedChunks === false ? [] : await insertDocument(GENERAL, 2, options.owner ?? ownerA);
+      const inScope = (
+        await db.query<{ id: string }>(
+          `SELECT c.id FROM public.document_chunks c JOIN public.documents d ON d.id = c.document_id
+            WHERE c.is_current AND c.status = 'ready' AND COALESCE(c.doc_type, d.doc_type) = $1 AND ($2::text IS NULL OR c.tenant_key = $2)
+              AND NOT EXISTS (SELECT 1 FROM public.chunk_embeddings e WHERE e.chunk_id = c.id AND e.profile_id = $3)`,
+          [CONTRACT, options.tenantKey, profileId],
+        )
+      ).rows.map((r) => r.id);
+      await insertVectors(inScope, profileId, model);
+      const { binding_id: binding } = await createBinding(CONTRACT, options.tenantKey, profileId);
+      assert.equal(await setStatus(binding, 'backfilling'), 'accepted');
+      const runId = await completedRun(profileId, options.runTenant === undefined ? options.tenantKey : options.runTenant);
+      const evidence = evidenceFor(binding, profileId, CONTRACT, options.tenantKey, runId, { baseline_binding_profile: options.baselineBinding ?? null });
+      assert.equal(await record(binding, evidence), 'accepted');
+      return { binding, contractChunks, generalChunks, runId, evidence };
+    }
+
+    test('a complete binding with real evidence activates; out-of-scope chunks never refuse', async () => {
+      await inTransaction(db, async () => {
+        const staged = await stage({ tenantKey: tenantA });
+        assert.ok(staged.generalChunks.length > 0);
+        const result = await db.query<{ activated_binding: string; previous_binding: string | null }>('SELECT * FROM public.rag_activate_embedding_binding($1, $2)', [
+          staged.binding,
+          'operator-test',
+        ]);
+        assert.deepEqual(result.rows[0], { activated_binding: staged.binding, previous_binding: null });
+        const row = await bindingRow(staged.binding);
+        assert.equal(row.status, 'active');
+        assert.equal(row.activated_by, 'operator-test');
+        assert.equal(row.previous_binding_id, null);
+        assert.match(await activate(staged.binding), /^binding_refused: already_active/);
+        assert.equal((await db.query<{ id: string }>("SELECT id FROM public.embedding_profiles WHERE status = 'active'")).rows[0]!.id, globalProfile);
+      });
+    });
+
+    test('a deployment-wide binding activates only with a deployment-wide run', async () => {
+      await inTransaction(db, async () => {
+        const tenantRun = await stage({ tenantKey: null, runTenant: tenantA });
+        assert.match(await activate(tenantRun.binding), /^binding_refused: eval_run_mismatch/);
+        const wideRun = await completedRun(LAW, null);
+        await writeEvidence(tenantRun.binding, { ...tenantRun.evidence, backfill_run_id: wideRun });
+        assert.equal(await activate(tenantRun.binding), 'accepted');
+        assert.equal((await bindingRow(tenantRun.binding)).status, 'active');
+      });
+    });
+
+    test('every gate refusal has its own code', async () => {
+      await inTransaction(db, async () => {
+        const staged = await stage({ tenantKey: tenantA });
+        const { binding, contractChunks, evidence } = staged;
+        const cases: Array<[string, RegExp, () => Promise<void>]> = [
+          ['actor', /^binding_refused: actor_required/, async () => {}],
+          ['incomplete', /^binding_refused: incomplete/, async () => {
+            await db.query('DELETE FROM public.chunk_embeddings WHERE chunk_id = $1 AND profile_id = $2', [contractChunks[0], LAW]);
+          }],
+          ['model_mismatch', /^binding_refused: model_mismatch/, async () => {
+            await db.query("UPDATE public.chunk_embeddings SET embedding_model = 'voyage-4-large' WHERE chunk_id = $1 AND profile_id = $2", [contractChunks[1], LAW]);
+          }],
+          ['eval_missing', /^binding_refused: eval_missing/, async () => {
+            await db.query('UPDATE public.embedding_profile_bindings SET eval_evidence = NULL WHERE id = $1', [binding]);
+          }],
+          ['evidence_mismatch', /^binding_refused: evidence_mismatch/, async () => writeEvidence(binding, { ...evidence, binding_id: crypto.randomUUID() })],
+          ['eval_baseline_mismatch', /^binding_refused: eval_baseline_mismatch/, async () => {
+            await db.query("UPDATE public.embedding_profiles SET status = 'available' WHERE status = 'active'");
+            await db.query("UPDATE public.embedding_profiles SET status = 'active' WHERE id = $1", [UNSCOPED]);
+          }],
+          ['eval_binding_baseline_mismatch', /^binding_refused: eval_binding_baseline_mismatch/, async () => writeEvidence(binding, { ...evidence, baseline_binding_profile: DOMAIN })],
+          ['eval_failed (gate)', /^binding_refused: eval_failed/, async () => writeEvidence(binding, { ...evidence, gate_passed: false })],
+          ['eval_failed (slice)', /^binding_refused: eval_failed/, async () => writeEvidence(binding, { ...evidence, doc_type_slice: { ...evidence.doc_type_slice, passed: false } })],
+          ['eval_insufficient_real_items (29)', /^binding_refused: eval_insufficient_real_items/, async () =>
+            writeEvidence(binding, { ...evidence, doc_type_slice: { ...evidence.doc_type_slice, real_n: 29 } })],
+          ['eval_insufficient_real_items (fixture-like 3 of 40)', /^binding_refused: eval_insufficient_real_items/, async () =>
+            writeEvidence(binding, { ...evidence, doc_type_slice: { ...evidence.doc_type_slice, real_n: 3 } })],
+          ['eval_insufficient_real_items (not a number)', /^binding_refused: eval_insufficient_real_items/, async () =>
+            writeEvidence(binding, { ...evidence, doc_type_slice: { ...evidence.doc_type_slice, real_n: '30' } })],
+          ['eval_insufficient_real_items (real above total)', /^binding_refused: eval_insufficient_real_items/, async () =>
+            writeEvidence(binding, { ...evidence, doc_type_slice: { ...evidence.doc_type_slice, n: 20, real_n: 30 } })],
+          ['eval_language_regression', /^binding_refused: eval_language_regression/, async () =>
+            writeEvidence(binding, { ...evidence, doc_type_slice: { ...evidence.doc_type_slice, by_language: { zh: true, en: true, it: false } } })],
+          ['eval_language_regression (no sub-slice)', /^binding_refused: eval_language_regression/, async () =>
+            writeEvidence(binding, { ...evidence, doc_type_slice: { ...evidence.doc_type_slice, by_language: {} } })],
+          ['eval_language_regression (non-boolean)', /^binding_refused: eval_language_regression/, async () =>
+            writeEvidence(binding, { ...evidence, doc_type_slice: { ...evidence.doc_type_slice, by_language: { xx: 'true' } } })],
+          ['eval_other_slices', /^binding_refused: eval_other_slices/, async () => writeEvidence(binding, { ...evidence, other_slices_passed: false })],
+          ['eval_run_mismatch (running)', /^binding_refused: eval_run_mismatch/, async () => {
+            await db.query("UPDATE public.embedding_backfill_runs SET status = 'running' WHERE id = $1", [staged.runId]);
+          }],
+          ['eval_run_mismatch (other profile)', /^binding_refused: eval_run_mismatch/, async () =>
+            writeEvidence(binding, { ...evidence, backfill_run_id: await completedRun(DOMAIN, tenantA) })],
+          ['eval_run_mismatch (unknown run)', /^binding_refused: eval_run_mismatch/, async () => writeEvidence(binding, { ...evidence, backfill_run_id: crypto.randomUUID() })],
+          ['eval_stale', /^binding_refused: eval_stale/, async () => {
+            await db.query("UPDATE public.chunk_embeddings SET embedded_at = now() + interval '1 hour' WHERE chunk_id = $1 AND profile_id = $2", [contractChunks[2], LAW]);
+          }],
+          ['eval_stale (unparseable)', /^binding_refused: eval_stale/, async () => writeEvidence(binding, { ...evidence, recorded_at: 'not a time' })],
+          ['binding_retired', /^binding_refused: binding_retired/, async () => {
+            assert.equal(await setStatus(binding, 'retired'), 'accepted');
+          }],
+        ];
+        for (const [name, pattern, mutate] of cases) {
+          await inSavepoint(async () => {
+            await mutate();
+            const result = name === 'actor' ? await activate(binding, ' ') : await activate(binding);
+            assert.match(result, pattern, `${name}: ${result}`);
+            assert.notEqual((await bindingRow(binding)).status, 'active', name);
+          });
+        }
+        assert.match(await activate(crypto.randomUUID()), /^binding_refused: unknown_binding/);
+
+        assert.equal(await activate(binding), 'accepted', 'the staged binding activates once every mutation is undone');
+      });
+    });
+
+    test('a tenant binding accepts a deployment-wide run of its profile', async () => {
+      await inTransaction(db, async () => {
+        const staged = await stage({ tenantKey: tenantA, runTenant: null });
+        assert.equal(await activate(staged.binding), 'accepted');
+      });
+    });
+
+    test('a second binding for the same key replaces the first, rollback restores it, deactivate leaves global only', async () => {
+      await inTransaction(db, async () => {
+        const law = await stage({ tenantKey: tenantA });
+        assert.equal(await activate(law.binding), 'accepted');
+
+        assert.match(await rollback(CONTRACT, tenantA), /^binding_refused: no_previous/);
+
+        const domain = await stage({ tenantKey: tenantA, profileId: DOMAIN, model: DOMAIN_MODEL, seedChunks: false });
+        assert.match(await activate(domain.binding), /^binding_refused: eval_binding_baseline_mismatch/, 'evidence proven against no binding is stale once law-2 is active');
+        await writeEvidence(domain.binding, { ...domain.evidence, baseline_binding_profile: LAW });
+        const result = await db.query<{ activated_binding: string; previous_binding: string | null }>('SELECT * FROM public.rag_activate_embedding_binding($1, $2)', [
+          domain.binding,
+          'operator-test',
+        ]);
+        assert.deepEqual(result.rows[0], { activated_binding: domain.binding, previous_binding: law.binding });
+        assert.equal((await bindingRow(law.binding)).status, 'available');
+        assert.equal((await bindingRow(domain.binding)).status, 'active');
+        assert.equal((await bindingRow(domain.binding)).previous_binding_id, law.binding);
+        const active = await db.query<{ n: number }>("SELECT count(*)::int AS n FROM public.embedding_profile_bindings WHERE status = 'active' AND doc_type = $1 AND COALESCE(tenant_key, '') = $2", [
+          CONTRACT,
+          tenantA,
+        ]);
+        assert.equal(active.rows[0]!.n, 1);
+
+        await inSavepoint(async () => {
+          await db.query('DELETE FROM public.chunk_embeddings WHERE chunk_id = $1 AND profile_id = $2', [law.contractChunks[0], LAW]);
+          assert.match(await rollback(CONTRACT, tenantA), /^binding_refused: previous_incomplete/);
+          assert.equal((await bindingRow(domain.binding)).status, 'active');
+        });
+        await inSavepoint(async () => {
+          await db.query("UPDATE public.chunk_embeddings SET embedding_model = 'voyage-4-large' WHERE chunk_id = $1 AND profile_id = $2", [law.contractChunks[0], LAW]);
+          assert.match(await rollback(CONTRACT, tenantA), /^binding_refused: previous_incomplete/);
+        });
+        assert.match(await rollback(CONTRACT, tenantA, ''), /^binding_refused: actor_required/);
+
+        const vectorsBefore = (await db.query<{ n: number }>('SELECT count(*)::int AS n FROM public.chunk_embeddings')).rows[0]!.n;
+        const restored = await db.query<{ restored_binding: string; rolled_back_binding: string }>('SELECT * FROM public.rag_rollback_embedding_binding($1, $2, $3)', [
+          CONTRACT,
+          tenantA,
+          'operator-test',
+        ]);
+        assert.deepEqual(restored.rows[0], { restored_binding: law.binding, rolled_back_binding: domain.binding });
+        assert.equal((await bindingRow(law.binding)).status, 'active');
+        assert.equal((await bindingRow(domain.binding)).status, 'available');
+        assert.equal((await db.query<{ n: number }>('SELECT count(*)::int AS n FROM public.chunk_embeddings')).rows[0]!.n, vectorsBefore, 'rollback deletes no vector');
+
+        assert.match(await deactivate(CONTRACT, tenantA, ''), /^binding_refused: actor_required/);
+        const off = await db.query<{ deactivated_binding: string }>('SELECT * FROM public.rag_deactivate_embedding_binding($1, $2, $3)', [CONTRACT, tenantA, 'operator-test']);
+        assert.deepEqual(off.rows[0], { deactivated_binding: law.binding });
+        const remaining = await db.query<{ n: number }>("SELECT count(*)::int AS n FROM public.embedding_profile_bindings WHERE status = 'active'");
+        assert.equal(remaining.rows[0]!.n, 0);
+        assert.equal((await db.query<{ n: number }>('SELECT count(*)::int AS n FROM public.chunk_embeddings')).rows[0]!.n, vectorsBefore, 'deactivate deletes no vector');
+        assert.match(await deactivate(CONTRACT, tenantA), /^binding_refused: no_active/);
+        assert.match(await rollback(CONTRACT, tenantA), /^binding_refused: no_active/);
+        assert.match(await deactivate(CONTRACT, null), /^binding_refused: no_active/);
+      });
+    });
+
+    test('activate and rollback lock the bindings table, cap their run time and keep the real-items threshold in one constant', async () => {
+      const rows = (
+        await db.query<{ name: string; source: string; config: string[] | null }>(
+          `SELECT p.proname AS name, p.prosrc AS source, p.proconfig AS config FROM pg_proc p
+            WHERE p.pronamespace = 'public'::regnamespace AND p.proname = ANY ($1::text[])`,
+          [['rag_create_embedding_binding', 'rag_set_embedding_binding_status', 'rag_record_binding_evidence', 'rag_activate_embedding_binding', 'rag_rollback_embedding_binding', 'rag_deactivate_embedding_binding']],
+        )
+      ).rows;
+      assert.equal(rows.length, 6);
+      for (const row of rows) {
+        assert.match(row.source, /LOCK TABLE public\.embedding_profile_bindings IN SHARE ROW EXCLUSIVE MODE/, `${row.name} takes no table lock`);
+        if (row.name === 'rag_activate_embedding_binding' || row.name === 'rag_rollback_embedding_binding') {
+          assert.ok(row.config?.includes('statement_timeout=120s'), `${row.name} has no statement_timeout`);
+        }
+      }
+      const gate = rows.find((r) => r.name === 'rag_activate_embedding_binding')!.source;
+      assert.match(gate, /c_min_real_items\s+CONSTANT\s+integer\s*:=\s*30/);
+      assert.doesNotMatch(gate, /'(zh|en|it)'/, 'the gate names no language code');
+    });
+
+    if (mode === 'multi-tenant') {
+      test('two tenants: a tenant binding counts only its own chunks and never changes another tenant or the deployment-wide row', async () => {
+        await inTransaction(db, async () => {
+          const tenantB = `u:${SECOND_USER}`;
+          const bChunks = await insertDocument(CONTRACT, 2, SECOND_USER);
+          const { binding_id: bBinding } = await createBinding(CONTRACT, tenantB, LAW);
+          assert.equal(await setStatus(bBinding, 'backfilling'), 'accepted');
+
+          const a = await stage({ tenantKey: tenantA });
+          const { binding_id: wide } = await createBinding(CONTRACT, null, LAW);
+
+          await insertVectors([bChunks[0]!], LAW, 'voyage-4-large', "now() + interval '1 hour'");
+          assert.equal(await activate(a.binding), 'accepted', 'o:B missing and mismatched vectors never refuse A');
+          assert.equal((await bindingRow(a.binding)).status, 'active');
+          assert.equal((await bindingRow(bBinding)).status, 'backfilling');
+          assert.equal((await bindingRow(wide)).status, 'available');
+
+          const wideRun = await completedRun(LAW, null);
+          assert.equal(await record(wide, evidenceFor(wide, LAW, CONTRACT, null, wideRun)), 'accepted');
+          assert.match(await activate(wide), /^binding_refused: incomplete/, 'a deployment-wide binding counts every tenant');
+
+          const bRun = await completedRun(LAW, tenantB);
+          const bEvidence = evidenceFor(bBinding, LAW, CONTRACT, tenantB, bRun);
+          assert.equal(await record(bBinding, bEvidence), 'accepted');
+          assert.match(await activate(bBinding), /^binding_refused: incomplete/);
+          await insertVectors([bChunks[1]!], LAW, LAW_MODEL);
+          assert.match(await activate(bBinding), /^binding_refused: model_mismatch/);
+          await db.query('UPDATE public.chunk_embeddings SET embedding_model = $3 WHERE chunk_id = $1 AND profile_id = $2', [bChunks[0], LAW, LAW_MODEL]);
+          assert.match(await activate(bBinding), /^binding_refused: eval_stale/, "B's own newer vector makes B's evidence stale");
+          await writeEvidence(bBinding, { ...bEvidence, backfill_run_id: a.runId });
+          await db.query("UPDATE public.chunk_embeddings SET embedded_at = now() - interval '2 hours' WHERE chunk_id = $1 AND profile_id = $2", [bChunks[0], LAW]);
+          assert.match(await activate(bBinding), /^binding_refused: eval_run_mismatch/, "A's run does not cover B");
+          await writeEvidence(bBinding, bEvidence);
+          assert.equal(await activate(bBinding), 'accepted');
+          assert.equal((await bindingRow(a.binding)).status, 'active', "B's activation leaves A's binding active");
+          assert.equal((await bindingRow(bBinding)).previous_binding_id, null);
+
+          assert.equal(await deactivate(CONTRACT, tenantA), 'accepted');
+          assert.equal((await bindingRow(bBinding)).status, 'active', "deactivating A leaves B's binding active");
+          assert.notEqual(await rollback(CONTRACT, 's:default'), 'accepted');
+        });
+      });
+    }
   });
 }
