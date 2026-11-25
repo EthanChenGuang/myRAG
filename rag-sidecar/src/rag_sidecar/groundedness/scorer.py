@@ -66,6 +66,11 @@ def build_scorers(settings: "SidecarSettings") -> dict[str, Scorer]:
         from rag_sidecar.groundedness.vectara import VectaraScorer
 
         scorers[VECTARA_SCORER] = VectaraScorer(settings)
+    from rag_sidecar.groundedness.local_hhem import LocalHhemScorer
+
+    local = LocalHhemScorer(settings)
+    if local.available():
+        scorers[LOCAL_SCORER] = local
     return scorers
 
 
