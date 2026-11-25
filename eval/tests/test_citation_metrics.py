@@ -6,8 +6,8 @@ from rag_sidecar.contracts.report import GroundednessLabelCounts
 
 from rag_eval.metrics import citation_metrics, groundedness_label_counts
 
-DOC = "refund-policy.en.md"
-GOLD_QUOTE = "Refunds are issued within 14 days."
+DOC = "sample-notes.en.md"
+GOLD_QUOTE = "The alpha marker follows the second heading."
 
 
 def _item(item_id: str, *, language: str = "en", answerable: bool = True) -> GoldenItem:
