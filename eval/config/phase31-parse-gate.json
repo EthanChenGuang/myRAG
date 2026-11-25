@@ -3,7 +3,47 @@
   "runs": 3,
   "noise": "eval/config/noise.json",
   "routing_config": "config/rag/parse-routing.json",
-  "recall_metrics": ["recall_at_5", "recall_at_10"],
-  "refusal_metrics": ["correct_refusal_rate"],
-  "run_root": "eval/out/parse-gate"
+  "recall_metrics": [
+    "recall_at_5",
+    "recall_at_10"
+  ],
+  "refusal_metrics": [
+    "correct_refusal_rate"
+  ],
+  "run_root": "eval/out/parse-gate",
+  "sweep": {
+    "fixtures": "eval/fixtures/parse",
+    "combo": "L1+L2",
+    "metric": "recall_at_5",
+    "grid": {
+      "garbled_ratio": [
+        0.03,
+        0.04,
+        0.05,
+        0.06,
+        0.07,
+        0.08
+      ],
+      "min_ruling_paths": [
+        2,
+        3,
+        4,
+        5,
+        6
+      ],
+      "scanned_max_chars": [
+        20,
+        30,
+        40,
+        50,
+        60
+      ]
+    },
+    "forced_runs": {
+      "fast": "eval/out/parse-gate/tier-fast",
+      "structured": "eval/out/parse-gate/tier-structured",
+      "premium": "eval/out/parse-gate/tier-premium"
+    },
+    "report": "eval/reports/phase-03.1/threshold-sweep.json"
+  }
 }

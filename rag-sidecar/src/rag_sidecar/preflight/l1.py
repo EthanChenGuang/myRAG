@@ -16,7 +16,6 @@ if TYPE_CHECKING:
 MIN_TEXT_CHARS = 10
 MULTI_COL_MIN_CHARS = 20
 MULTI_COL_GAP_RATIO = 0.15
-SCANNED_MAX_CHARS = 30
 SCANNED_IMAGE_RATIO = 0.5
 FIGURE_IMAGE_RATIO = 0.05
 UNCERTAIN_IMAGE_LOW = 0.05
@@ -372,7 +371,7 @@ def l1_signals(path: Path | str, cfg: ParseRoutingConfig) -> L1Result:
     pages: list[PageL1] = []
     for index, draft in enumerate(drafts):
         garbled = garbled_ratio(draft.text)
-        scanned = draft.chars < SCANNED_MAX_CHARS and draft.image_area_ratio > SCANNED_IMAGE_RATIO
+        scanned = draft.chars < cfg.l1.scanned_max_chars and draft.image_area_ratio > SCANNED_IMAGE_RATIO
         has_figure = not scanned and draft.image_area_ratio > FIGURE_IMAGE_RATIO
         has_table_signal = draft.ruled_tables > 0 or draft.aligned_number_rows >= 2
         uncertain = _page_is_uncertain(draft, scanned=scanned, has_table_signal=has_table_signal)

@@ -204,13 +204,14 @@ def build_routing_report(
     combos: Sequence[LayerCombo] = ALL_COMBOS,
     routing_config: Path | None = None,
     profiles: Path | None = None,
+    cfg: ParseRoutingConfig | None = None,
 ) -> RoutingReport:
-    """Route the selected fixtures (all of them by default) once per layer combination."""
+    """Route the selected fixtures (all of them by default) once per layer combination; ``cfg`` overrides the routing file."""
     from rag_sidecar.ingest.converters import RecordedRangeConverter
     from rag_sidecar.preflight.config import load_routing_config
     from rag_sidecar.preflight.run import PROBE_VERSION
 
-    cfg = load_routing_config(routing_config)
+    cfg = cfg or load_routing_config(routing_config)
     profiles_path = profiles or _DEFAULT_PROFILES
     recorded_root = fixtures_dir / "recorded"
     converter = RecordedRangeConverter(recorded_root)

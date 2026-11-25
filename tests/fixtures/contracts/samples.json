@@ -1818,6 +1818,7 @@
       "l1": {
         "garbled_ratio": 0.05,
         "min_ruling_paths": 4,
+        "scanned_max_chars": 30,
         "thin_path_pt": 2.0
       },
       "l2": {
