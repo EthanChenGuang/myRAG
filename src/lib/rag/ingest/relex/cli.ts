@@ -82,6 +82,8 @@ export async function main(argv: string[] = process.argv.slice(2), io: CliIo = c
 
   const run = await import('./run');
   const { getIngestDeps } = await import('../deps');
+  const { currentIngestConfig } = await import('../current-config');
+  const tableRowSerialization = currentIngestConfig().tableRowSerialization;
   const db = getIngestDeps().db();
   if (!db) {
     io.err('[RAG Relex] admin client unavailable: set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY');
@@ -95,12 +97,14 @@ export async function main(argv: string[] = process.argv.slice(2), io: CliIo = c
         tenantKey: parsed.tenantKey,
         batchSize: parsed.batchSize,
         resumeAfter: parsed.resumeAfter,
+        tableRowSerialization,
         ...(signal ? { signal } : {}),
       });
       io.out('[RAG Relex] dry run, nothing written');
       for (const [tenant, count] of Object.entries(report.tenants).sort(([a], [b]) => (a < b ? -1 : 1))) {
         io.out(`[RAG Relex] ${tenant}: would update ${count}`);
       }
+      io.out(`[RAG Relex] table chunks (RAG_TABLE_ROW_SERIALIZATION=${tableRowSerialization}): would update ${report.tables ?? 0}`);
       io.out(`[RAG Relex] total: would update ${report.total}`);
       return 0;
     }
@@ -111,6 +115,7 @@ export async function main(argv: string[] = process.argv.slice(2), io: CliIo = c
       batchSize: parsed.batchSize,
       resumeAfter: parsed.resumeAfter,
       onProgress: (line) => io.out(`[RAG Relex] ${line}`),
+      tableRowSerialization,
       ...(signal ? { signal } : {}),
     });
     for (const [tenant, count] of Object.entries(report.tenants).sort(([a], [b]) => (a < b ? -1 : 1))) {

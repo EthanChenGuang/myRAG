@@ -169,6 +169,11 @@ export interface ChunkDraft {
    */
   language?: string;
   language_confidence?: number;
+  /**
+   * Set by the enrich stage for a table chunk while RAG_TABLE_ROW_SERIALIZATION is on: the list separator of the block's language (D-21).
+   * In memory only; the embed stage appends the row lines with it, and it is never written as a column.
+   */
+  table_row_separator?: string;
 }
 
 /** What a chunker returns: the drafts plus stable warning codes for the stage to report. */

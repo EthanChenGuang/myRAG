@@ -15,6 +15,7 @@ import { getLanguageSettings, type LanguageSettings } from '../lang/settings';
 import { loadIngestConfig, type IngestConfig } from './config';
 import { loadProcessingProfiles } from './profiles/load';
 import { EMBEDDING_TEXT_VERSION } from './text/embedding-text';
+import { ROW_SERIALIZATION_VERSION_SUFFIX, effectiveEmbeddingTextVersion } from './text/table-rows';
 import { requireIdentity, type StageContext } from './types';
 
 /** The chunks of document_chunks are always the legacy chunker's; other chunking profiles are rebuilt from parse.md (Phase 4 D-21). */
@@ -137,7 +138,7 @@ export function collectFingerprintParts(ctx: StageContext): IngestFingerprintPar
     ocr_engine_codes: ocrEngineCodes(parserUsed, ocrLanguages),
     chunking_profile_id: FINGERPRINT_CHUNKING_PROFILE_ID,
     lexical_version: LEXICAL_VERSION,
-    embedding_text_version: EMBEDDING_TEXT_VERSION,
+    embedding_text_version: effectiveEmbeddingTextVersion(EMBEDDING_TEXT_VERSION, ctx.config.tableRowSerialization),
     embedding_profile_id: partText(ctx.state.embeddingTargets[0] ?? LEGACY_PROFILE.id),
     embedding_profile_version: EMBEDDING_PROFILE_VERSION,
     language_pack_versions: languagePackVersions(used, settings, switches.language_aware_ingest),
@@ -147,6 +148,13 @@ export function collectFingerprintParts(ctx: StageContext): IngestFingerprintPar
 
 const SWITCH_VARIABLES = ['RAG_LANGUAGE_AWARE_INGEST', 'RAG_TABLE_HEADER_REPEAT', 'RAG_TABLE_ROW_SERIALIZATION', 'RAG_CAPTION_LANGUAGE'] as const;
 const LANGUAGE_VARIABLES = ['RAG_SUPPORTED_LANGUAGES', 'RAG_PRIMARY_LANGUAGE'] as const;
+
+/** D-21: the stored version without the row-serialization suffix, then the suffix of the proposed switch state. */
+function embeddingTextVersionFor(stored: IngestFingerprintParts, switches: Switches): number {
+  const wasOn = stored.switches.table_row_serialization === 'true' && stored.embedding_text_version >= ROW_SERIALIZATION_VERSION_SUFFIX;
+  const base = wasOn ? stored.embedding_text_version - ROW_SERIALIZATION_VERSION_SUFFIX : stored.embedding_text_version;
+  return effectiveEmbeddingTextVersion(base, switches.table_row_serialization === 'true');
+}
 
 function has(proposed: Record<string, string | undefined>, name: string): boolean {
   return Object.prototype.hasOwnProperty.call(proposed, name) && proposed[name] !== undefined;
@@ -194,7 +202,13 @@ export function expectedFingerprintFor(
     }
   }
 
-  const next = IngestFingerprintPartsSchema.parse({ ...stored, ocr_engine_codes: ocrCodes, language_pack_versions: packs, switches });
+  const next = IngestFingerprintPartsSchema.parse({
+    ...stored,
+    embedding_text_version: embeddingTextVersionFor(stored, switches),
+    ocr_engine_codes: ocrCodes,
+    language_pack_versions: packs,
+    switches,
+  });
   return { parts: next, fingerprint: buildIngestFingerprint(next) };
 }
 
