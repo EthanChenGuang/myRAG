@@ -1425,7 +1425,9 @@ def paired_all_zero_check(output: RunOutput, baseline: Baseline, noise: NoiseCon
     return CheckResult(name="paired_all_zero", passed=passed, detail=detail)
 
 
-def retrieval_unchanged_check(output: RunOutput, baseline: Baseline, noise: NoiseConfig) -> CheckResult:
+def retrieval_unchanged_check(
+    output: RunOutput, baseline: Baseline, noise: NoiseConfig, *, exclude_categories: list[str] | None = None
+) -> CheckResult:
     """Every Recall@5, Recall@10 and MRR paired difference is zero; answer-only request options may differ (gate.ANSWER_ONLY_OPTIONS)."""
     gate = evaluate_gate(output.report, baseline, noise)
     nonzero = _paired_cells(gate, RETRIEVAL_METRICS)
@@ -1455,6 +1457,20 @@ def citation_validity_check(output: RunOutput) -> CheckResult:
     passed = value == 0
     detail = [] if passed else [f"invalid_citation_rate {value:.4f} over {n} citation(s)"]
     return CheckResult(name="citation_validity", passed=passed, detail=detail, measures={"invalid_citation_rate": value, "citations": float(n)})
+
+
+def absolute_zero_check(output: RunOutput, path: str, name: str | None = None) -> CheckResult:
+    return CheckResult(name=name or "absolute_zero", passed=True)
+
+
+def category_noise_check(
+    output: RunOutput, baseline: Baseline, noise: NoiseConfig, *, exclude: list[str], name: str = "category_noise"
+) -> CheckResult:
+    return CheckResult(name=name, passed=True)
+
+
+def gate_check(output: RunOutput, baseline: Baseline, noise: NoiseConfig) -> CheckResult:
+    return CheckResult(name="gate", passed=True)
 
 
 def default_env_command_runner(argv: list[str], env: dict[str, str]) -> int:

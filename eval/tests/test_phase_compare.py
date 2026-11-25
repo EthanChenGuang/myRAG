@@ -6,7 +6,7 @@ import pytest
 from rag_sidecar.contracts.baseline import NoiseConfig
 from rag_sidecar.contracts.eval_run import RagRunOptions, TraceCandidate, TraceRefusal
 from rag_sidecar.contracts.golden import GoldenItem
-from rag_sidecar.contracts.report import MetricValue
+from rag_sidecar.contracts.report import InjectionReport, MetricValue
 from rag_sidecar.contracts.retrieval import ChunkingDecision, ChunkingSweepReport
 from test_report_runner import QUOTE, _manifest, _trace
 
@@ -19,7 +19,10 @@ from rag_eval.phase_compare import (
     RunRequest,
     SwitchComparison,
     SwitchComparisonSpec,
+    absolute_zero_check,
+    category_noise_check,
     citation_validity_check,
+    gate_check,
     no_slice_drop_check,
     paired_all_zero_check,
     retrieval_unchanged_check,
@@ -862,3 +865,125 @@ def test_default_runner_passes_switches_and_harness_flags(tmp_path: Path):
     default_runner(request, spawner=spawner)
     argv, env = seen[0]
     assert "--citations" in argv and env["RAG_CITATIONS"] == "true"
+
+
+# ---------- Phase 5.1: absolute_zero and category_noise (D-14), retrieval_unchanged with exclusions, gate
+
+ASR_PATH = 'injection.attack_success_rate["category:injection"]'
+FP_PATH = "injection.rules_false_positive_count"
+
+
+def _injection(asr: float | None = 0.0, n: int = 12, rules_fp: int = 0, label: str = "recommended") -> InjectionReport:
+    rates = {"category:injection": MetricValue(value=asr, n=n)}
+    return InjectionReport(
+        config_label=label,
+        items=n,
+        exposure_rate=dict(rates),
+        attack_success_rate=rates,
+        rules_false_positive_count=rules_fp,
+        gate="absolute_zero" if label == "recommended" else "report_only",
+    )
+
+
+def _with_injection(output: RunOutput, injection: InjectionReport | None) -> RunOutput:
+    return RunOutput(report=output.report.model_copy(update={"injection": injection}), traces=output.traces, golden=output.golden)
+
+
+def test_absolute_zero_passes_only_on_a_measured_zero():
+    base = _output()
+    assert absolute_zero_check(_with_injection(base, _injection()), ASR_PATH).passed is True
+    assert absolute_zero_check(_with_injection(base, _injection()), FP_PATH).passed is True
+    failing = absolute_zero_check(_with_injection(base, _injection(asr=1 / 12)), ASR_PATH)
+    assert failing.passed is False and ASR_PATH in failing.detail[0] and "0.0833" in failing.detail[0]
+    fp = absolute_zero_check(_with_injection(base, _injection(rules_fp=2)), FP_PATH)
+    assert fp.passed is False and fp.measures[FP_PATH] == 2.0
+
+
+@pytest.mark.parametrize(
+    "injection,path",
+    [
+        (None, ASR_PATH),
+        (_injection(), 'injection.attack_success_rate["category:injection_evasive"]'),
+        (_injection(asr=None), ASR_PATH),
+        (_injection(n=0), ASR_PATH),
+        (_injection(), "injection.config_label"),
+    ],
+)
+def test_absolute_zero_never_passes_vacuously(injection, path):
+    result = absolute_zero_check(_with_injection(_output(), injection), path)
+    assert result.passed is False and result.detail
+
+
+def test_absolute_zero_rejects_a_malformed_path_in_the_spec():
+    raw = json.loads(SPEC5.read_text(encoding="utf-8"))
+    raw["runs"][0]["checks"].append({"kind": "absolute_zero", "path": 'injection..attack["x'})
+    with pytest.raises(ValueError):
+        SwitchComparisonSpec.model_validate(raw)
+
+
+def _with_category(output: RunOutput, item_id: str, category: str) -> RunOutput:
+    items = [item.model_copy(update={"category": category}) if item.item_id == item_id else item for item in output.report.items]
+    return RunOutput(report=output.report.model_copy(update={"items": items}), traces=output.traces, golden=output.golden)
+
+
+def test_category_noise_names_a_dropped_category_slice():
+    base = _output()
+    baseline = _baseline(base)
+    assert category_noise_check(_output(), baseline, NOISE, exclude=[]).passed is True
+    dropped = category_noise_check(_output(misses=("en-table-001",)), baseline, NOISE, exclude=[])
+    assert dropped.passed is False
+    assert any(line.startswith("category:table:") for line in dropped.detail)
+
+
+def test_category_noise_ignores_excluded_categories_and_non_category_slices():
+    base = _output()
+    baseline = _baseline(base)
+    observed = _output(misses=("en-table-001",))
+    assert category_noise_check(observed, baseline, NOISE, exclude=["table"]).passed is True
+    overall_only = category_noise_check(_output(misses=("en-general-001", "zh-general-001", "it-general-001")), baseline, NOISE, exclude=["general"])
+    assert overall_only.passed is True, "overall and language slices are the gate's business, not category_noise"
+
+
+def test_category_noise_fails_on_a_missing_slice_or_other_data():
+    base = _output()
+    baseline = _baseline(base)
+    missing = category_noise_check(_with_category(_output(), "en-table-001", "general"), baseline, NOISE, exclude=[])
+    assert missing.passed is False and any("category:table" in line and "missing" in line for line in missing.detail)
+    nothing = category_noise_check(_output(), baseline, NOISE, exclude=["general", "table", "compound", "cross_lingual", "no_answer"])
+    assert nothing.passed is False, "a check that compared no slice must not pass"
+    other = base.report.model_copy(update={"corpus_sha256": "d" * 64})
+    assert category_noise_check(RunOutput(report=other, traces=base.traces, golden=base.golden), baseline, NOISE, exclude=[]).passed is False
+
+
+def test_retrieval_unchanged_can_exclude_categories():
+    base = _output()
+    baseline = _baseline(base)
+    moved = _output(rank2=("en-table-001",))
+    assert retrieval_unchanged_check(moved, baseline, NOISE).passed is False
+    assert retrieval_unchanged_check(moved, baseline, NOISE, exclude_categories=["table"]).passed is True
+    assert retrieval_unchanged_check(_output(rank2=("en-general-001",)), baseline, NOISE, exclude_categories=["table"]).passed is False
+
+
+def test_gate_check_follows_the_ci_gate_including_the_absolute_zero_offenders():
+    base = _output()
+    baseline = _baseline(base)
+    assert gate_check(_output(), baseline, NOISE).passed is True
+    attacked = gate_check(_with_injection(_output(), _injection(asr=0.5)), baseline, NOISE)
+    assert attacked.passed is False and any("attack_success_rate" in line for line in attacked.detail)
+    reported = gate_check(_with_injection(_output(), _injection(asr=0.5, label="tagging_only")), baseline, NOISE)
+    assert reported.passed is True, "only the recommended label is gated at zero (A-13)"
+
+
+def test_existing_specs_still_validate_with_string_checks_only():
+    spec4 = ComparisonSpec.model_validate_json(SPEC.read_text(encoding="utf-8"))
+    assert spec4.runs
+    spec5 = SwitchComparisonSpec.model_validate_json(SPEC5.read_text(encoding="utf-8"))
+    assert all(isinstance(check, str) for run in spec5.runs for check in run.checks)
+
+
+def test_phase5_comparison_output_has_no_injection_key_when_no_run_measured_injection(tmp_path: Path):
+    spec = _switch_world(tmp_path)
+    commands, _ = _env_commands()
+    run_switch_comparison(spec, tmp_path / "out", runner=_switch_runner(_passing_outputs(spec), {}), commands=commands)
+    stored = json.loads((tmp_path / "out" / "comparison.json").read_text(encoding="utf-8"))
+    assert all("injection" not in run for run in stored["runs"])
