@@ -34,12 +34,14 @@ function joinedForm(code: string): string {
   return code.replace(JOINED_SEP, '');
 }
 
+const ELISION_PATTERNS = ELISION_PREFIXES.map((prefix) => {
+  const escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|[^\\p{L}\\p{N}])${escaped}`, 'giu');
+});
+
 function stripElisions(text: string): string {
   let out = text.replace(ENGLISH_POSSESSIVE, ' ');
-  for (const prefix of ELISION_PREFIXES) {
-    const escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    out = out.replace(new RegExp(`(^|[^\\p{L}\\p{N}])${escaped}`, 'giu'), '$1');
-  }
+  for (const pattern of ELISION_PATTERNS) out = out.replace(pattern, '$1');
   return out;
 }
 
@@ -79,13 +81,15 @@ function emitHanBigrams(seg: string, out: string[]): void {
   for (let i = 0; i < chars.length - 1; i += 1) pushToken(chars[i]! + chars[i + 1]!, out);
 }
 
+const LATIN_WORD = /[\p{L}\p{N}]+(?:'[\p{L}\p{N}]+)?/gu;
+
 function foldLatinRun(run: string): string[] {
   const out: string[] = [];
   const folded = stripElisions(foldLatin(run));
-  for (const part of folded.matchAll(/[\p{L}\p{N}]+(?:'[\p{L}\p{N}]+)?/gu)) {
+  for (const part of folded.matchAll(LATIN_WORD)) {
     const raw = part[0] ?? '';
   const token = stripElisions(raw);
-    const pieces = token.split(/'/u).map((slice) => slice.trim()).filter(Boolean);
+    const pieces = token.split("'").map((slice) => slice.trim()).filter(Boolean);
     for (const piece of pieces) pushToken(piece, out);
   }
   return out;
@@ -119,11 +123,12 @@ function segmentNonCode(text: string): string[] {
 function pushToken(token: string, out: string[]): void {
   if (token === '' || token.length > MAX_TOKEN_CHARS || FORBIDDEN.test(token)) return;
   if (STOPWORDS.has(token)) return;
-  if (/^[a-z]$/u.test(token)) return;
+  if (SINGLE_LATIN_LETTER.test(token)) return;
   out.push(token);
 }
 
 const FORBIDDEN = /['\\\s]/;
+const SINGLE_LATIN_LETTER = /^[a-z]$/u;
 
 function tokenizeNormalized(text: string): string[] {
   const out: string[] = [];
