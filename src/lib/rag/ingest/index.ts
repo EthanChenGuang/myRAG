@@ -13,7 +13,7 @@ import { createIngestWriter } from './writer';
 
 export { getIngestStatus, resumeIngest } from './status';
 export type { IngestStatusView, ResumeIngestOptions } from './status';
-export { currentIngestConfig } from './current-config';
+export { currentIngestConfig, unifiedIngestRefusal } from './current-config';
 export { buildSourceKey } from './identity';
 export type {
   IngestInput,
@@ -28,8 +28,16 @@ export type {
  * The one entry point of the unified ingestion pipeline: turns an upload into a ready, current version of
  * its document, scoped to the tenant that minted `scope`.
  */
+/** D-02: the unified pipeline asked for explicitly without chosen languages writes nothing. */
+export function blockedIngestResult(reason: string): IngestResult {
+  console.warn('[Ingest] unified ingestion refused: supported languages are not configured', { reason });
+  return { status: 'failed', documentId: null, version: null, parserUsed: null, chunkCount: 0, warnings: [], reason };
+}
+
 export async function ingest(input: IngestInput): Promise<IngestResult> {
   const deps = getIngestDeps();
+  const config = loadIngestConfig(deps.ingestEnv());
+  if (config.pipelineBlocked) return blockedIngestResult(config.pipelineBlocked);
   const db = deps.db();
   if (!db) {
     console.error('[Ingest] admin client unavailable');
@@ -40,7 +48,7 @@ export async function ingest(input: IngestInput): Promise<IngestResult> {
     input,
     deps,
     writer: createIngestWriter({ db, scope: input.scope, signal: input.signal }),
-    config: loadIngestConfig(deps.ingestEnv()),
+    config,
     signal: input.signal,
     deadline: deps.now() + (input.deadlineMs ?? DEFAULT_INGEST_DEADLINE_MS),
     state: emptyIngestState(),

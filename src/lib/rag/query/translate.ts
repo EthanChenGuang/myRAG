@@ -17,10 +17,11 @@ export interface TranslationTable {
 
 export const NONE_TRANSLATOR_NAME = 'none';
 
-const noneTranslator: Translator = Object.freeze({
+export const NONE_TRANSLATOR: Translator = Object.freeze({
   name: NONE_TRANSLATOR_NAME,
   translate: async () => [],
 });
+const noneTranslator = NONE_TRANSLATOR;
 
 let current: Translator = noneTranslator;
 

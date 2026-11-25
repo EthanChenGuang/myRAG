@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { env } from '@/lib/env';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import type { RagEnvInput } from './config';
+import type { RawPipelineEnv } from './lang/resolve';
 import type { EmbeddingProfile } from './embeddings/active-profile';
 import { EmbeddingProfileMismatch } from './embeddings/mrl';
 import { embedText } from './embeddings/openai';
@@ -40,6 +41,8 @@ export interface RagDeps {
   /** The sidecar Prompt Guard client; answers not_configured without RAG_SIDECAR_URL and RAG_SIDECAR_SECRET. */
   promptGuardClassifier: PromptGuardClassifier;
   fetch: typeof fetch;
+  /** The two pipeline variables exactly as the process has them (undefined when unset), for the D-02 startup check. */
+  rawPipelineEnv: () => RawPipelineEnv;
 }
 
 function readRagEnvInput(): RagEnvInput {
@@ -106,6 +109,7 @@ const defaults: RagDeps = {
     }),
   promptGuardClassifier: (items, opts) => classifyWithPromptGuard(items, { ...opts, fetch: getRagDeps().fetch }),
   fetch: globalThis.fetch.bind(globalThis),
+  rawPipelineEnv: () => ({ RAG_PIPELINE: process.env.RAG_PIPELINE, RAG_INGEST_PIPELINE: process.env.RAG_INGEST_PIPELINE }),
 };
 
 let overrides: Partial<RagDeps> = {};

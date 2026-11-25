@@ -200,4 +200,62 @@ describe('defaults equal Phase 3: every write path with all Phase 3.1 switches a
     const documents = (await db.query<{ n: number }>('SELECT count(*)::int AS n FROM documents')).rows[0]?.n;
     assert.equal(documents, reference.runs.length);
   });
+  test('with every pipeline and language variable unset, the default upload and retrieval never call the language settings (D-02)', async () => {
+    const settings = await import('@/lib/rag/lang/settings');
+    const ingestDeps = await import('@/lib/rag/ingest/deps');
+    const ragConfig = await import('@/lib/rag/config');
+    const ingestConfig = await import('@/lib/rag/ingest/config');
+    const names = ['RAG_PIPELINE', 'RAG_INGEST_PIPELINE', 'RAG_SUPPORTED_LANGUAGES', 'RAG_PRIMARY_LANGUAGE'];
+    const before = new Map(names.map((name) => [name, process.env[name]]));
+    const previousEnv = ingestDeps.getIngestDeps().ingestEnv;
+    for (const name of names) delete process.env[name];
+    let trapped = 0;
+    settings.resetLanguageSettingsForTests();
+    settings.setLanguageSettingsTrapForTests(() => {
+      trapped += 1;
+      throw new Error('[Defaults Test] the language settings were read on the legacy path');
+    });
+    ingestDeps.setIngestDepsForTests({ ingestEnv: () => ({ ...previousEnv(), RAG_INGEST_PIPELINE: undefined }) });
+    ragConfig.resetRagConfigForTests();
+    ingestConfig.resetIngestConfigForTests();
+    try {
+      assert.equal(rag.currentIngestConfig().pipeline, 'legacy');
+      assert.equal(rag.loadRagConfig({}).pipeline, 'legacy');
+      const run = reference.runs.find((candidate) => candidate.text !== undefined) ?? reference.runs[0];
+      const input: Record<string, unknown> = {
+        scope,
+        source: run.source,
+        sourceKey: `${run.sourceKey}-defaults-unset`,
+        filename: run.filename,
+        mimeType: run.mimeType,
+        signal: new AbortController().signal,
+        ...(run.docType ? { docType: run.docType } : {}),
+        ...(run.options ? { options: run.options } : {}),
+      };
+      if (run.text !== undefined) input.text = run.text;
+      else input.file = new Uint8Array(fs.readFileSync(path.join(process.cwd(), String(run.file))));
+      const result = await rag.submitIngest(input as unknown as Parameters<typeof rag.submitIngest>[0]);
+      assert.notEqual(result.status, 'failed');
+
+      const retrieved = await rag.runRetrieval({
+        scope,
+        query: 'placeholder question for the defaults check',
+        profile: 'eval',
+        options: { maxResults: 5, fallbackToLowerThreshold: true },
+        signal: new AbortController().signal,
+      });
+      assert.notEqual(retrieved.reason, 'languages_not_configured');
+      assert.equal(trapped, 0);
+    } finally {
+      settings.setLanguageSettingsTrapForTests(null);
+      ingestDeps.setIngestDepsForTests({ ingestEnv: previousEnv });
+      for (const [name, value] of before) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+      settings.resetLanguageSettingsForTests();
+      ragConfig.resetRagConfigForTests();
+      ingestConfig.resetIngestConfigForTests();
+    }
+  });
 });

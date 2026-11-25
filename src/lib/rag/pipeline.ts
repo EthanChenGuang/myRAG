@@ -755,6 +755,12 @@ export async function runRetrieval(input: RunRetrievalInput): Promise<RetrievalR
 
   const deps = getRagDeps();
   const config = loadRagConfig(deps.ragEnv());
+  if (config.pipelineBlocked) {
+    // D-02: an explicit RAG_PIPELINE=v2 without chosen languages is a knowledge-base outage, never a refusal.
+    const blocked = failure(collector, 'error', config.pipelineBlocked, null);
+    if (ownsTrace) finishTrace(collector, blocked, { query: input.query });
+    return blocked;
+  }
   const useV2 =
     config.pipeline === 'v2' &&
     !input.options?.generalOverview &&

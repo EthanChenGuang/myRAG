@@ -19,6 +19,8 @@ export interface RetrievalConfigHashSwitches {
   exactIdLookup: boolean;
   rerankTierChat: RerankTier;
   rerankTierVoice: RerankTier;
+  /** D-03: present only for a single-language deployment, so a multilingual hash is unchanged. */
+  monolingual?: true;
 }
 
 /** The prompt-injection defense configuration a result was built under (D-18). */
