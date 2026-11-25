@@ -1,4 +1,4 @@
-"""Structural check of the Phase 1 GitHub Actions workflows.
+"""Structural check of the GitHub Actions workflows (pr-smoke, nightly, ray-optional).
 
 Run locally with: python3 -I scripts/ci/check-workflows.py
 Requires PyYAML. Exits 1 and lists every failed assertion.
@@ -15,6 +15,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 PR = ROOT / ".github" / "workflows" / "pr-smoke.yml"
 NIGHTLY = ROOT / ".github" / "workflows" / "nightly.yml"
+RAY_OPTIONAL = ROOT / ".github" / "workflows" / "ray-optional.yml"
 DOCKERFILE = ROOT / "rag-sidecar" / "Dockerfile"
 
 TESTS_DIR = ROOT / "tests"
@@ -30,6 +31,8 @@ SKIP_NOTICE = "::notice::judge key not configured, skipping"
 ONLINE_SKIP_NOTICE = "::notice::langfuse keys not configured, skipping online judge"
 DOCLING_SKIP_NOTICE = "::notice::docling extra not installable, skipping"
 DOCLING_READY = "steps.docling.outputs.ready == 'true'"
+RAY_SYNC = "uv sync --directory rag-sidecar --locked --extra ray --extra chunking --extra preflight"
+RAY_EQUALITY_TEST = "tests/rag-e2e/backfill-ray-equality.test.mts"
 TELEMETRY = {
     "DEEPEVAL_TELEMETRY_OPT_OUT": "1",
     "DEEPEVAL_UPDATE_WARNING_OPT_IN": "0",
@@ -447,6 +450,42 @@ def check_nightly(errors: list[str]) -> None:
             errors.append("nightly: a step appears to echo a key")
 
 
+def check_ray_optional(data: dict, text: str, errors: list[str]) -> None:
+    """The optional Ray job (D-37): scheduled or manual only, no secrets, the ray extra synced from the lock, both Ray tests run."""
+    name = "ray-optional"
+    check_common(name, data, text, errors)
+    trig = triggers(data)
+    for t in ("schedule", "workflow_dispatch"):
+        if t not in trig:
+            errors.append(f"{name}: trigger '{t}' missing")
+    for forbidden in ("pull_request", "push"):
+        if forbidden in trig:
+            errors.append(f"{name}: trigger '{forbidden}' must not be used (the PR pipeline never installs the ray extra)")
+    if "secrets." in text:
+        errors.append(f"{name}: must not reference secrets.")
+    jobs = data.get("jobs") or {}
+    if not jobs:
+        errors.append(f"{name}: no job")
+        return
+    body = "\n".join(step_text(job) for job in jobs.values())
+    for needle in (RAY_SYNC, "npm ci", "-m ray", "tests/test_ingest_ray_runner.py", RAY_EQUALITY_TEST):
+        if needle not in body:
+            errors.append(f"{name}: missing '{needle}'")
+    if "--extra docling" in body:
+        errors.append(f"{name}: must not install the heavy docling extra")
+    for job in jobs.values():
+        for step in all_steps(job):
+            if RAY_EQUALITY_TEST in str(step.get("run", "")):
+                step_env = {**(job.get("env") or {}), **(step.get("env") or {})}
+                if str(step_env.get("RAG_TEST_RAY")) != "1":
+                    errors.append(f"{name}: the equality step must set RAG_TEST_RAY to '1', or the test skips")
+
+
+def check_no_ray_extra(name: str, text: str, errors: list[str]) -> None:
+    if "--extra ray" in text:
+        errors.append(f"{name}: must not install the ray extra (it runs only in ray-optional.yml)")
+
+
 def main() -> int:
     errors: list[str] = []
     if not PR.exists():
@@ -455,8 +494,15 @@ def main() -> int:
         check_pr(errors)
     if NIGHTLY.exists():
         check_nightly(errors)
+        check_no_ray_extra("nightly", NIGHTLY.read_text(encoding="utf-8"), errors)
     else:
         print("check-workflows: nightly.yml does not exist yet, skipping nightly assertions")
+    if PR.exists():
+        check_no_ray_extra("pr-smoke", PR.read_text(encoding="utf-8"), errors)
+    if RAY_OPTIONAL.exists():
+        check_ray_optional(*load(RAY_OPTIONAL), errors)
+    else:
+        errors.append(f"missing {RAY_OPTIONAL.relative_to(ROOT)}")
     workflows = [load(path)[0] for path in (PR, NIGHTLY) if path.exists()]
     check_tsx_tests_covered(workflows, TESTS_DIR, errors)
     if errors:
