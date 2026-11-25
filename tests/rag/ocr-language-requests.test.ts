@@ -191,3 +191,83 @@ describe('inline ingest() reads the language settings into the Docling request',
     expect(fake.uploads[0]?.request.ocr_languages).toEqual(['zh', 'it']);
   });
 });
+
+describe('table and language-aware switches in the snapshot and the inline request (D-19, D-22)', () => {
+  const DOC_TYPES = ['general', 'financial_report', 'contract_legal', 'invoice_receipt', 'product_technical', 'scanned_image'] as const;
+  const ALWAYS = { ...DEFAULTS, tableHeaderRepeat: 'always' } as const;
+  const recordedSnapshotKeys = Object.keys(JSON.parse(recordedSnapshot())).sort();
+  const recordedRequestKeys = Object.keys(JSON.parse(RECORDED_DOCLING_GENERAL)).sort();
+
+  test.each(DOC_TYPES)('profile mode: %s keeps its own flag and gains no key', async (docType) => {
+    const profile = getProcessingProfile(docType);
+    const body = JSON.parse(await doclingBody(profile, effective(profile, UNSET)));
+    expect(body.repeat_table_header).toBe(profile.chunker.repeat_table_header);
+    expect(Object.keys(body).sort()).toEqual(recordedRequestKeys);
+    const built = snapshot({ profile, ingestConfig: DEFAULTS, languageSettings: UNSET });
+    expect(Object.keys(built).sort()).toEqual(recordedSnapshotKeys);
+  });
+
+  test.each(DOC_TYPES)('always: %s repeats and carries the header in the inline request and the snapshot', async (docType) => {
+    const profile = getProcessingProfile(docType);
+    const body = JSON.parse(await doclingBody(profile, effective(profile, UNSET, ALWAYS)));
+    expect(body.repeat_table_header).toBe(true);
+    expect(body.carry_table_header).toBe(true);
+    const built = snapshot({ profile, ingestConfig: ALWAYS, languageSettings: UNSET });
+    expect(built.repeat_table_header_effective).toBe(true);
+    expect(built.carry_table_header).toBe(true);
+    expect(JobSettingsSnapshotSchema.safeParse(built).success).toBe(true);
+    expect(effectiveIngestSettingsFromSnapshot(built, profile)).toMatchObject({ repeatTableHeader: true, carryTableHeader: true });
+  });
+
+  test('language-aware on adds language_aware, languages and primary_language to both payloads', async () => {
+    const general = getProcessingProfile('general');
+    const on = { ...DEFAULTS, languageAwareIngest: 'on' } as const;
+    const body = JSON.parse(await doclingBody(general, effective(general, ZH_IT, on)));
+    expect(body).toMatchObject({ language_aware: true, languages: ['zh', 'it'], primary_language: 'it' });
+    const built = snapshot({ ingestConfig: on, languageSettings: ZH_IT });
+    expect(built).toMatchObject({ language_aware: true, languages: ['zh', 'it'], primary_language: 'it' });
+    expect(JobSettingsSnapshotSchema.safeParse(built).success).toBe(true);
+    expect(effectiveIngestSettingsFromSnapshot(built, general)).toMatchObject({ languageAware: true, languages: ['zh', 'it'], primaryLanguage: 'it' });
+  });
+
+  test('row serialization adds row_serialization to the snapshot only', async () => {
+    const general = getProcessingProfile('general');
+    const rows = { ...DEFAULTS, tableRowSerialization: true };
+    expect(snapshot({ ingestConfig: rows, languageSettings: UNSET }).row_serialization).toBe(true);
+    expect(await doclingBody(general, effective(general, UNSET, rows))).toBe(RECORDED_DOCLING_GENERAL);
+  });
+
+  test('all three switches at their defaults with the CI language pin: the inline request is the recorded body', async () => {
+    const general = getProcessingProfile('general');
+    const pin: EffectiveLanguageInput = { configured: true, languages: ['zh', 'en', 'it'], primary: 'en' };
+    expect(await doclingBody(general, effective(general, pin))).toBe(RECORDED_DOCLING_GENERAL);
+  });
+
+  test('inline ingest() with RAG_TABLE_HEADER_REPEAT=always sends the forced flag for a profile whose own flag is false', async () => {
+    const fake = await (async () => {
+      vi.unstubAllGlobals();
+      return startFakeSidecar();
+    })();
+    try {
+      const db = fakeIngestDb();
+      installIngestDeps({ db: db.db, env: { RAG_INGEST_PIPELINE: 'unified', RAG_PARSER: 'docling', RAG_TABLE_HEADER_REPEAT: 'always' } });
+      setSidecarParserForTests(createSidecarParser({ baseUrl: fake.url, secret: fake.secret, sleep: async () => undefined }));
+      await ingest({
+        scope,
+        source: 'config_upload',
+        sourceKey: 'root/report-zh-table.pdf',
+        file: fixtureBytes('report-zh-table'),
+        filename: 'report-zh-table.pdf',
+        mimeType: 'application/pdf',
+        docType: 'general',
+        signal: new AbortController().signal,
+      });
+      expect(getProcessingProfile('general').chunker.repeat_table_header).toBe(false);
+      expect(fake.uploads[0]?.request).toMatchObject({ repeat_table_header: true, carry_table_header: true });
+    } finally {
+      await fake.close();
+      resetSidecarParserForTests();
+      uninstallIngestDeps();
+    }
+  });
+});
