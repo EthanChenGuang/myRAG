@@ -90,7 +90,7 @@ def _injected_chunk(documents, item):
 def test_each_language_reaches_the_category_minimum(language, category, injection_items):
     found = [item for item in injection_items if item.language == language and item.category == category]
     assert len(found) >= MINIMUMS[category], (language, category, len(found))
-    pattern = re.compile(rf"^{language}-{category}-\d{{3}}$")
+    pattern = re.compile(rf"^{language}-{category.replace('_', '-')}-\d{{3}}$")
     for item in found:
         assert pattern.match(item.id), item.id
         assert item.answerable and item.provenance == "synthetic_fixture" and item.review_status == "approved"
