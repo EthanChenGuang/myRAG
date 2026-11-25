@@ -332,8 +332,8 @@ async function submitPending(db: RpcClient, runId: string, deps: RebuildDeps, si
 async function legacyChildTokens(db: RpcClient, signal: AbortSignal): Promise<Record<string, number>> {
   const sizes: Record<string, number> = {};
   for (const row of await call(db, 'rag_list_chunking_profiles', {}, signal)) {
-    const docType = text(row, 'doc_type');
-    if (text(row, 'id') === 'legacy' && docType !== null && count(row, 'child_tokens') > 0) sizes[docType] = count(row, 'child_tokens');
+    const typeId = text(row, 'doc_type');
+    if (text(row, 'id') === 'legacy' && typeId && count(row, 'child_tokens') > 0) sizes[typeId] = count(row, 'child_tokens');
   }
   return sizes;
 }
