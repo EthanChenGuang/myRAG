@@ -124,6 +124,10 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_clear_provisional(uuid) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_clear_provisional(uuid) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_confirm_supersession(uuid, uuid, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_confirm_supersession(uuid, uuid, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_confirm_supersession(uuid, uuid, uuid) TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_create_ingestion_batch(text, text, text, numeric, integer, text, text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_create_ingestion_batch(text, text, text, numeric, integer, text, text) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_create_ingestion_batch(text, text, text, numeric, integer, text, text) TO service_role;
@@ -139,6 +143,10 @@ BEGIN
   IF to_regprocedure('public.rag_delete_quarantined(uuid, uuid)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_delete_quarantined(uuid, uuid) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_delete_quarantined(uuid, uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_dismiss_supersession(uuid, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_dismiss_supersession(uuid, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_dismiss_supersession(uuid, uuid) TO service_role;
   END IF;
   IF to_regprocedure('public.rag_embedding_bindings_guard()') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_embedding_bindings_guard() FROM PUBLIC, anon, authenticated;
@@ -163,6 +171,14 @@ BEGIN
   IF to_regprocedure('public.rag_list_embedding_profile_scopes()') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_list_embedding_profile_scopes() FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_list_embedding_profile_scopes() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_list_supersession(uuid, text, integer, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_list_supersession(uuid, text, integer, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_list_supersession(uuid, text, integer, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_purge_hook_supersession(text, uuid, uuid[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_hook_supersession(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_hook_supersession(text, uuid, uuid[]) TO service_role;
   END IF;
   IF to_regprocedure('public.rag_record_binding_evidence(uuid, jsonb, text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_record_binding_evidence(uuid, jsonb, text) FROM PUBLIC, anon, authenticated;
@@ -507,6 +523,14 @@ BEGIN
   IF to_regprocedure('public.rag_soft_delete_document(text, uuid, text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_soft_delete_document(text, uuid, text) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_soft_delete_document(text, uuid, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_supersession_raise(text, uuid, uuid, jsonb, text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_supersession_raise(text, uuid, uuid, jsonb, text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_supersession_raise(text, uuid, uuid, jsonb, text, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_undo_supersession(uuid, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_undo_supersession(uuid, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_undo_supersession(uuid, uuid) TO service_role;
   END IF;
   IF to_regprocedure('public.rag_update_embed_batch(uuid, text, text, text, text, text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_update_embed_batch(uuid, text, text, text, text, text) FROM PUBLIC, anon, authenticated;
