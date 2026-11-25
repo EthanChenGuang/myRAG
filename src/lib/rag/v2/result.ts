@@ -101,6 +101,11 @@ export function buildSmallTalkResult(ctx: {
   };
 }
 
+/** D-10: true only for the query layer's small-talk short-circuit, never for an ordinary ok result. */
+export function isSmallTalkResult(result: Pick<RetrievalResult, 'status' | 'reason' | 'queryPlan'> | null | undefined): boolean {
+  return result?.status === 'ok' && result.reason === 'small_talk' && result.queryPlan?.gate.skip_retrieval === true;
+}
+
 function survivorCount(assembly: AssembleOutput<Candidate>): number {
   return assembly.usedDocuments.length + assembly.relevantChunks.length;
 }
