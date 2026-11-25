@@ -35,6 +35,10 @@ import {
 } from '@/lib/rag';
 // Import URL extraction utilities
 import { formatURLsForContext, type ExtractedURL } from '@/lib/url-extractor';
+import type { JSONValue } from '@ai-sdk/provider';
+import { REFERENCE_NOTICE, TOOL_RESULT_NOTICE, TOOL_RESULT_SENTENCE } from '@/lib/rag/context/wrap';
+import { readSecurityConfig, type ToolResultGuardMode } from '@/lib/rag/security/config';
+import { escapeToolOutput, scanToolOutput } from '@/lib/rag/security/tool-results';
 // Keep custom tool definitions if needed
 
 import { ReadableStream } from 'stream/web';
@@ -81,6 +85,38 @@ const describeArgs = (input: unknown): { keys: string[]; bytes: number } => ({
 });
 
 // Define document reference tool for function calling using the 'tool' helper
+/** D-10/A-7: only the model's copy of a tool result is escaped; execute and its raw output stay unchanged. */
+function withToolResultGuard(
+  definition: Record<string, any>,
+  toolName: string,
+  guard: ToolResultGuardMode,
+  onFlag: (toolName: string, ruleIds: string[]) => void,
+): Record<string, any> {
+  if (guard === 'off') return definition;
+  return {
+    ...definition,
+    toModelOutput: ({ output }: { output: unknown }) => {
+      if (guard === 'tag_and_flag') {
+        let ruleIds: string[] = [];
+        try {
+          ruleIds = scanToolOutput(output);
+        } catch {
+          console.warn('[RAG Security] Tool result rules failed; the result is passed on escaped', { tool: toolName });
+        }
+        if (ruleIds.length > 0) onFlag(toolName, ruleIds);
+      }
+      return { type: 'json' as const, value: (escapeToolOutput(output) ?? null) as JSONValue };
+    },
+  };
+}
+
+/** D-10: tool results are data; the sentence joins the reference notice when the context is tagged. */
+function withToolResultNotice(prompt: string): string {
+  const tagged = `${REFERENCE_NOTICE}\n<documents>`;
+  if (prompt.includes(tagged)) return prompt.replace(tagged, () => `${REFERENCE_NOTICE}\n${TOOL_RESULT_SENTENCE}\n<documents>`);
+  return `${prompt}\n\n${TOOL_RESULT_NOTICE}`;
+}
+
 const documentReferenceTool = tool({
   description: 'IMPORTANT: This is a FUNCTION TOOL to track document usage internally. Call this tool when you use information from documents. DO NOT write "useDocument" as text in your response. This tool tracks which documents you referenced to answer the query.',
   inputSchema: z.object({
@@ -3330,6 +3366,22 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
         }
       }
 
+      const toolResultGuard = readSecurityConfig().toolResultGuard;
+      if (toolResultGuard !== 'off') {
+        const recordToolResultFlag = (toolName: string, ruleIds: string[]) => {
+          const collector = ragTrace?.collector;
+          if (collector) {
+            const at = collector.now();
+            collector.record({ name: 'tool_result_check', status: 'ok', startedAt: at, endedAt: at, rules: ruleIds, detail: toolName });
+          }
+          console.warn('[RAG Security] Tool result flagged; passed on escaped', { tool: toolName, ruleIds, traceId: collector?.traceId ?? null });
+        };
+        for (const toolName of Object.keys(allTools)) {
+          if (toolName === 'useDocument') continue;
+          allTools[toolName] = withToolResultGuard(allTools[toolName], toolName, toolResultGuard, recordToolResultFlag);
+        }
+      }
+
       // 🚨 CRITICAL: Log detailed tool information for AI model debugging (MOVED HERE)
       console.log(`[PARAM DEBUG] Available tools being sent to AI:`, Object.keys(allTools));
       console.log('🔍 [AI TOOL DEBUG] ===== DETAILED TOOL ANALYSIS =====');
@@ -3518,6 +3570,14 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       const isClaudeSonnet4 = safeModelId.includes('claude-sonnet-4') ||
         safeModelId.includes('claude-4-sonnet') ||
         safeModelId.includes('anthropic/claude-sonnet-4');
+
+      const resultToolsReachModel = SUPPORTS_TOOLS && !isClaudeSonnet4 && Object.keys(allTools).some((toolName) => toolName !== 'useDocument');
+      if (toolResultGuard !== 'off' && resultToolsReachModel) {
+        const contextIndex = messagesForModel.findIndex((message) => message.id === systemContextMessage.id);
+        if (contextIndex >= 0) {
+          messagesForModel[contextIndex] = toMessage({ ...systemContextMessage, content: withToolResultNotice(enhancedSystemPrompt) });
+        }
+      }
 
       // Convert UI messages to model messages required by streamText
       const modelMessages = await convertToModelMessages(messagesForModel);
