@@ -183,10 +183,26 @@ describe('the three checks', () => {
     expect(fieldsOf(calls)).toEqual([{ hidden_text_check: 'not_checked' }]);
   });
 
-  test('the link switch alone runs no check yet (plan 39 registers it) and writes nothing', async () => {
+  test('the link switch alone runs only the link check: a text with no link writes nothing', async () => {
     const { ctx, calls } = setup({ RAG_INGEST_LINK_CHECK: 'quarantine' }, RULE_HIT);
-    expect(await scanInjectionStage.run(ctx)).toEqual({ kind: 'next', disabled: true, outcome: 'scan_off' });
+    expect(await scanInjectionStage.run(ctx)).toEqual({ kind: 'next', outcome: 'links:clean' });
     expect(callsOf(calls, 'rag_set_document_fields')).toHaveLength(0);
+  });
+
+  test('link rules that cannot be loaded fail the run closed under quarantine and do not under flag', async () => {
+    const links = await import('@/lib/rag/security/link-check');
+    const spy = vi.spyOn(links, 'loadLinkRules').mockImplementation(() => {
+      throw new Error('link_rules_invalid');
+    });
+    try {
+      const closed = setup({ RAG_INGEST_LINK_CHECK: 'quarantine' }, CLEAN);
+      expect(await scanInjectionStage.run(closed.ctx)).toEqual({ kind: 'fail', reason: 'link_rules_unavailable' });
+      uninstallIngestDeps();
+      const open = setup({ RAG_INGEST_LINK_CHECK: 'flag' }, CLEAN);
+      expect(await scanInjectionStage.run(open.ctx)).toEqual({ kind: 'next', outcome: 'links:rules_unavailable' });
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   test('hidden-text rules that cannot be loaded fail the run closed under quarantine and do not under flag', async () => {
@@ -400,5 +416,36 @@ describe('the sidecar hidden-text report (plan 03.2-37)', () => {
     const logged = JSON.stringify(warn.mock.calls);
     expect(logged).not.toMatch(/grey|lever|notes\.pdf/i);
     expect(logged).toContain('hidden_text');
+  });
+});
+
+describe('the link check (plan 39, D-35)', () => {
+  const LINKED = '# Notes\n\nThe blue module joins the second relay; steps at https://phish.example.net/login and docs.example.com.\n';
+  const linkEnv = { RAG_INGEST_LINK_CHECK: 'quarantine', RAG_OUTPUT_LINK_ALLOWLIST: 'example.com' };
+
+  test('quarantine: one untrusted_link reason with the target outside the allowlist; a first version reads no released targets', async () => {
+    const { ctx, calls } = setup(linkEnv, LINKED);
+    expect(await scanInjectionStage.run(ctx)).toEqual({ kind: 'next', outcome: 'links:quarantined' });
+    expect(callsOf(calls, 'rag_released_link_targets')).toHaveLength(0);
+    const quarantine = fieldsOf(calls).find((fields) => fields.status === 'quarantined')?.metadata as Record<string, unknown>;
+    const reasons = ((quarantine.quarantine as Record<string, unknown>).reasons as unknown[]).map((reason) => QuarantineReasonSchema.parse(reason));
+    expect(reasons).toEqual([
+      expect.objectContaining({ kind: 'untrusted_link', targets: ['https://phish.example.net/login'], unlocated: 0 }),
+    ]);
+    expect(ctx.work.parseText).toBe(LINKED);
+  });
+
+  test('flag on a later version: released targets are read for that document and skipped; nothing is quarantined', async () => {
+    const { ctx, calls } = setup({ ...linkEnv, RAG_INGEST_LINK_CHECK: 'flag' }, LINKED, (context) => {
+      context.document = { id: FAKE_DOCUMENT_ID, lineageId: FAKE_LINEAGE_ID, version: 2, resumed: false };
+    });
+    expect(await scanInjectionStage.run(ctx)).toEqual({ kind: 'next', outcome: 'links:flagged' });
+    expect(callsOf(calls, 'rag_released_link_targets')).toEqual([
+      expect.objectContaining({ args: { p_document_id: FAKE_DOCUMENT_ID, p_tenant_key: expect.any(String) } }),
+    ]);
+    const writes = fieldsOf(calls);
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).not.toHaveProperty('status');
+    expect((writes[0]?.metadata as Record<string, unknown>).link_check).toMatchObject({ status: 'untrusted_found', dropped: 0 });
   });
 });

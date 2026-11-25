@@ -250,6 +250,11 @@ export interface IngestWriter {
   /** Records chunks that have no vector for a profile; returns how many rows were written. */
   recordBackfillGap(args: BackfillGapArgs): Promise<number>;
   markFailed(documentId: string, reason: string): Promise<void>;
+  /**
+   * The link targets an admin reviewed when releasing an earlier version of this document's lineage (metadata.quarantine.released_targets,
+   * D-35), sorted; empty for a first version. Never another lineage's or another tenant's.
+   */
+  releasedLinkTargets?(documentId: string): Promise<string[]>;
   /** The scope tenant's language shares over its current ready documents (rag_tenant_language_shares), largest first. */
   tenantLanguageShares?(): Promise<Array<{ language: string; share: number }>>;
   /** RAG_CAPTION_LANGUAGE=document: the language detected on each written picture caption, by image URL, onto this version's image chunks. */
@@ -428,6 +433,17 @@ export function createIngestWriter(input: CreateIngestWriterInput): IngestWriter
         parserUsed: text(row, 'parser_used'),
         createdAt: text(row, 'created_at') ?? '',
       };
+    },
+
+    async releasedLinkTargets(documentId) {
+      const rows = await call('rag_released_link_targets', {
+        p_document_id: documentId,
+        p_tenant_key: identity().tenantKey,
+      });
+      return rows
+        .map((row) => text(row, 'target'))
+        .filter((target): target is string => target !== null)
+        .sort();
     },
 
     async getOrigin(documentId) {

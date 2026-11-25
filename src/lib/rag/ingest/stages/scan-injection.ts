@@ -1,6 +1,8 @@
 import { HiddenTextReportSchema, type HiddenTextReport } from '@/lib/rag-eval/contracts.generated';
 import { hiddenTextMimeType, removeHiddenSpans, requestHiddenTextReport, type HiddenTextSpan, type SpanRemoval } from '../../security/hidden-text';
 import { scanText, type InjectionScanResult } from '../../security/injection-scan';
+import { parseLinkAllowlist } from '../../security/link-allowlist';
+import { checkLinks, loadLinkRules, type LinkCheckOutcome, type LinkRules } from '../../security/link-check';
 import {
   injectionRuleReason,
   mergeQuarantineMetadata,
@@ -341,8 +343,76 @@ const hiddenTextCheck: ScanCheck = {
   },
 };
 
-/** The checks of the stage in run order. The link check (D-35) is registered here by plan 39. */
-export const SCAN_CHECKS: readonly ScanCheck[] = [injectionRulesCheck, hiddenTextCheck];
+/** One untrusted_link reason listing the targets outside the allowlist; the detail names the count per kind and any targets left out. */
+function untrustedLinkReason(result: LinkCheckOutcome): QuarantineReason | null {
+  const targets = result.targets ?? [];
+  if (targets.length === 0) return null;
+  const counts = new Map<string, number>();
+  for (const target of targets) counts.set(target.kind, (counts.get(target.kind) ?? 0) + 1);
+  const kinds = [...counts.entries()].map(([kind, count]) => `${kind}: ${count}`).join(', ');
+  const more = result.dropped > 0 ? `; ${result.dropped} more not listed` : '';
+  return {
+    kind: 'untrusted_link',
+    detail: `${targets.length + result.dropped} link targets outside the allowlist (${kinds})${more}`,
+    targets: targets.map((target) => target.target),
+    checker_version: result.checker_version,
+    unlocated: 0,
+  };
+}
+
+/** The targets reviewed when an earlier version of the lineage was released; a first version has none. A failed read skips nothing. */
+async function releasedTargets(ctx: StageContext): Promise<string[]> {
+  const document = requireDocument(ctx, 'scan_injection');
+  if (document.version <= 1 || !ctx.writer.releasedLinkTargets) return [];
+  try {
+    return await ctx.writer.releasedLinkTargets(document.id);
+  } catch (error) {
+    if (ctx.signal.aborted) throw error;
+    console.warn('[RAG Security] released link targets unavailable');
+    return [];
+  }
+}
+
+/**
+ * Links (RAG_INGEST_LINK_CHECK, D-35). Every URL, bare domain and e-mail address of the parse text, plus the PDF link annotation targets
+ * of this version's hidden-text report when that check made one, is checked against RAG_OUTPUT_LINK_ALLOWLIST and the app's own host.
+ * flag records metadata.link_check; quarantine also quarantines the document with one untrusted_link reason. Targets an admin reviewed on
+ * an earlier version of the lineage are skipped; the allowlist itself never changes. No target is fetched, resolved or opened.
+ */
+const linksCheck: ScanCheck = {
+  name: 'links',
+  enabled: (config) => config.ingestLinkCheck !== 'off',
+  async run(ctx) {
+    const mode = ctx.config.ingestLinkCheck;
+    let rules: LinkRules;
+    try {
+      rules = loadLinkRules();
+    } catch {
+      console.error('[RAG Security] link rules unavailable');
+      return mode === 'quarantine' ? { fail: 'link_rules_unavailable' } : { outcome: 'rules_unavailable' };
+    }
+    const identity = requireIdentity(ctx, 'scan_injection');
+    const hiddenText = ctx.state.hiddenText;
+    const annotationTargets = hiddenText && hiddenText.fileSha256 === identity.fileSha256 ? (hiddenText.report?.link_targets ?? []) : [];
+    const released = await releasedTargets(ctx);
+    const result = checkLinks(ctx.work.parseText ?? '', {
+      allowlist: parseLinkAllowlist(ctx.config.outputLinkAllowlist, ctx.config.siteUrl),
+      annotationTargets,
+      releasedTargets: released,
+      rules,
+    });
+    const found = result.targets?.length ?? 0;
+    const metadata = { link_check: result };
+    if (found === 0) return { outcome: 'clean', ...(mode === 'flag' ? { metadata } : {}) };
+    console.warn('[RAG Security] link targets outside the allowlist', { mode, targets: found + result.dropped, released: released.length });
+    if (mode === 'flag') return { outcome: 'flagged', metadata };
+    const reason = untrustedLinkReason(result);
+    return { outcome: 'quarantined', reasons: reason ? [reason] : [], metadata };
+  },
+};
+
+/** The checks of the stage in run order (D-32): injection rules, hidden text, links. */
+export const SCAN_CHECKS: readonly ScanCheck[] = [injectionRulesCheck, hiddenTextCheck, linksCheck];
 
 /**
  * scan_injection runs independent checks, each with its own switch and outcome (D-32). A check that quarantines adds its reasons; the
