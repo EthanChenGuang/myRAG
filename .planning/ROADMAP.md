@@ -475,7 +475,7 @@ Plans:
   7. The refusal calibration report lists every candidate threshold with its false-answer and false-refusal rates; strict mode takes the threshold that keeps false answers at or below 5% and balanced keeps today's false-refusal target, each cell records its mode, and with the per-mode targets unset the chosen thresholds equal the Phase 4 result.
   8. With `RAG_IDENTIFIER_INDEX` and `RAG_IDENTIFIER_FILTER` on, the synthetic `identifier_near_miss` questions in every spelling retrieve and cite only the asked identifier, near-miss identifiers never reach the context, an identifier the tenant does not have gets the refusal with suggestions, admin-defined identifier patterns are honoured, and the descriptive-question slice does not drop.
 **Live verification**: Re-run the pool sweep with real rerankers including the 25 pool; measure real TTFT against the budget.
-**Plans**: 38 plans in 11 waves (see `phases/04.2-retrieval-tuning-additions/04.2-PLAN-INDEX.md`); migrations 0851–0862 and 0864 (purge hooks, plan 38) (0863 only when the Phase 5.1.1 retrieval log exists); `hybrid_search_chunks` is redefined by Phase 3.2's 0802 first and then by 0856; human steps in plans 23, 25, 26 (design reviews) and 33 (live pool sweep and TTFT)
+**Plans**: 39 plans in 11 waves (see `phases/04.2-retrieval-tuning-additions/04.2-PLAN-INDEX.md`; 04.2-39 adds `RAG_EMBED_VERSION_SCOPE`, owner decision 2026-11-25); migrations 0851–0862 and 0864 (purge hooks, plan 38) (0863 only when the Phase 5.1.1 retrieval log exists); `hybrid_search_chunks` is redefined by Phase 3.2's 0802 first and then by 0856; human steps in plans 23, 25, 26 (design reviews) and 33 (live pool sweep and TTFT)
 
 ### Phase 4.3: Document Access Groups (INSERTED)
 **Goal**: Inside one tenant, a member can only retrieve, be answered from, or see cached or logged content of documents their access groups allow, and this is enforced in code before ranking, never by the prompt
@@ -780,7 +780,7 @@ Plans:
   4. With the SharePoint switch on, a fixture drive (recorded Graph delta responses) syncs added, changed and deleted items with stored delta tokens and maps item permissions to access groups; with it off nothing changes.
   5. The deletion canaries pass in CI for `soft` and `purge`; with every new switch off and connections in the default deletion mode, behaviour matches the Phase 6.2 baseline.
 **Live verification**: Connect a real SharePoint test site, delete and restore a file, and confirm the answer stops and resumes; purge a document and run the verification query against the live database.
-**Plans**: 27 plans in 10 waves (see `phases/06.3-source-deletion-sync-and-purge/06.3-PLAN-INDEX.md`); migrations 0720–0728; human steps in plans 24 (live migration push), 25 (live SharePoint and purge checks) and 26 (live permission mapping); 06.3-14 waits for Phase 7 plan 07-37, 06.3-26 for Phase 4.3
+**Plans**: 29 plans in 11 waves (see `phases/06.3-source-deletion-sync-and-purge/06.3-PLAN-INDEX.md`); migrations 0720–0729; 06.3-28 (orphan guard for every connector) and 06.3-29 (`RAG_SOURCE_PURGE_DAILY_CAP`) added 2026-11-25 from owner decisions; human steps in plans 24 (live migration push), 25 (live SharePoint and purge checks) and 26 (live permission mapping); 06.3-14 waits for Phase 7 plan 07-37, 06.3-26 for Phase 4.3
 **UI hint**: yes
 
 ### Phase 7: External Backends & Release Defaults
@@ -853,7 +853,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 3.1.1 → 3.2 → 3.2
 | 4. Hybrid Retrieval, Reranking & Calibrated Refusal | 46/47 | In Progress (04-43 live calibration) | - |
 | 4.1. Hybrid Retrieval & Rerank On by Default (INSERTED) | 0/13 | Planned (plan-check PASS, revised 2026-11-25) | - |
 | 4.1.1. Domain Terminology Dictionary (INSERTED) | 0/18 | Planned (plan-check PASS, revised 2026-11-25) | - |
-| 4.2. Retrieval Tuning Additions (INSERTED) | 0/38 | Planned (plan-check PASS) | - |
+| 4.2. Retrieval Tuning Additions (INSERTED) | 0/39 | Planned (plan-check PASS) | - |
 | 4.3. Document Access Groups (INSERTED) | 0/38 | Planned (plan-check PASS) | - |
 | 5. Verified Citations & Groundedness | 18/26 | In Progress | - |
 | 5.1. Prompt Injection Defense (INSERTED) | 10/25 | In Progress | - |
@@ -864,5 +864,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 3.1.1 → 3.2 → 3.2
 | 6. Query Layer (LlamaIndex & LangChain) | 12/46 | In Progress | - |
 | 6.1. Embedding Fine-tuning Pipeline (INSERTED) | 0/20 | Planned (plan-check PASS) | - |
 | 6.2. Query Layer Additions (INSERTED) | 0/40 | Planned (plan-check PASS) | - |
-| 6.3. Source Deletion Sync & Purge (INSERTED) | 0/27 | Planned (plan-check PASS) | - |
+| 6.3. Source Deletion Sync & Purge (INSERTED) | 0/29 | Planned (plan-check PASS) | - |
 | 7. External Backends & Release Defaults | 2/52 | In Progress (revision 4 planned 2026-11-25; UI-SPEC pending for 07-48, 07-49, 07-52) | - |
