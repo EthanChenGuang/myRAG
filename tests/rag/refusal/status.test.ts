@@ -136,7 +136,7 @@ describe('refusalCalibrationStatus', () => {
     const status = refusalCalibrationStatus(thresholds(cells), config(COHERE_ON));
     expect(codes(status)).toEqual(['refusal_on_without_calibrated_cell', 'stale_cells']);
     expect(status.warnings.find((entry) => entry.code === 'stale_cells')?.keys).toEqual(['cohere|rerank-v5.0-pro|zh|same']);
-    expect(status.warnings[0]?.languages).toEqual(['zh']);
+    expect(status.warnings.find((entry) => entry.code === 'refusal_on_without_calibrated_cell')?.languages).toEqual(['zh']);
   });
 
   it('warns fixture_cells_only when every cell comes from the fixture run', () => {
