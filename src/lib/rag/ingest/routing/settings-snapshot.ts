@@ -4,6 +4,7 @@ import { imageCaptionModelId } from '../captioner';
 import type { QueueConfig } from '../queue-config';
 import type { ProcessingProfile } from '../profiles/load';
 import type { ParseRoutingConfig } from './config';
+import type { EffectiveIngestSettingsInput, EffectiveLanguageInput } from './effective-settings';
 import type { EffectiveTierBounds } from './tier-bounds';
 
 export interface BuildJobSettingsInput {
@@ -19,6 +20,10 @@ export interface BuildJobSettingsInput {
   approval?: UploadApproval | null;
   /** A job of a batch whose versions publish only at activation (D-12); written only for a backfill job. */
   holdPublish?: boolean;
+  /** The ingestion switches; absent, every switch is at its default. */
+  ingestConfig?: EffectiveIngestSettingsInput['ingestConfig'];
+  /** The language settings (lang/settings.ts) at enqueue; absent, the languages are unset and the profile's ocr_languages apply. */
+  languageSettings?: EffectiveLanguageInput;
 }
 
 export function buildJobSettings(input: BuildJobSettingsInput): JobSettingsSnapshotWire {
