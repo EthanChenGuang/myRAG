@@ -1,12 +1,18 @@
 import rawThresholds from '../../../../eval/config/groundedness-thresholds.json';
 import { stripCitationMarkers } from '@/lib/citations/marker-grammar';
-import { GroundednessThresholdsSchema, type GroundednessResult } from '@/lib/rag-eval/contracts.generated';
+import {
+  GroundednessThresholdsSchema,
+  type AnswerRecord,
+  type GroundednessRequest,
+  type GroundednessResult,
+} from '@/lib/rag-eval/contracts.generated';
 import { countTokens as cl100kCountTokens } from '../ingest/text/tokens';
 import { detectLanguage } from '../lang/detect';
 import { chineseScript } from '../lang/script';
 import type { RetrievalStatus } from '../types';
 import type { AliasedBlock } from './citations/blocks';
 import type { GenerationConfig } from './config';
+import { requestGroundedness, type GroundednessClientOptions } from './groundedness-client';
 
 export interface GroundednessEligibilityInput {
   /** RAG_GROUNDEDNESS. */
@@ -48,7 +54,7 @@ export function groundednessEligibility(input: GroundednessEligibilityInput): Gr
 
 export interface PremiseInput {
   /** The alias blocks in the order they were sent. */
-  blocks: readonly AliasedBlock[];
+  blocks: ReadonlyArray<Pick<AliasedBlock, 'alias' | 'text'>>;
   citedAliases: Iterable<string>;
   /** webSearch result texts, only when that tool ran. */
   webSearchTexts: readonly string[];
@@ -228,4 +234,35 @@ export function labelGroundedness(
     threshold: cell.threshold,
     thresholdSource: cell.source,
   };
+}
+
+/** The stored groundedness of one answer (the AnswerRecord contract shape). */
+export type AnswerGroundedness = AnswerRecord['groundedness'];
+
+export interface ScoreAnswerGroundednessInput {
+  /** Sent as the sidecar request_id. */
+  answerId: string;
+  /** The streamed answer, markers included. */
+  answerText: string;
+  blocks: ReadonlyArray<Pick<AliasedBlock, 'alias' | 'text'>>;
+  citedAliases: Iterable<string>;
+  webSearchTexts: readonly string[];
+  eligibility: GroundednessEligibility;
+  multiTenant: boolean;
+  config: Pick<GenerationConfig, 'vectaraOptIn' | 'vectaraMultiTenantAck' | 'maxPremiseTokens' | 'groundednessTimeoutMs'>;
+}
+
+export interface ScoreAnswerGroundednessDeps {
+  request?: (request: GroundednessRequest, options?: GroundednessClientOptions) => Promise<GroundednessResult>;
+  countTokens?: (text: string) => number;
+  cells?: GroundednessThresholdCells;
+  now?: () => Date;
+}
+
+export async function scoreAnswerGroundedness(
+  _input: ScoreAnswerGroundednessInput,
+  _deps: ScoreAnswerGroundednessDeps = {},
+): Promise<AnswerGroundedness> {
+  void requestGroundedness;
+  return { status: 'pending' } as AnswerGroundedness;
 }
