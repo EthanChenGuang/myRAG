@@ -190,3 +190,22 @@ describe('fake groundedness sidecar', () => {
     }
   });
 });
+
+describe('fake citation generator on ingested chunk text', () => {
+  it('skips the chunk metadata prefix and headings and quotes the first content sentence', () => {
+    const system = [
+      '=== RELEVANT INFORMATION FROM DOCUMENTS ===',
+      '--- Document: shipping.md (1 relevant chunks) ---',
+      '',
+      '[S1] shipping.md',
+      'Document: shipping.md. Chunk 1 of 6. Content: ## Carrier cut-off times',
+      '',
+      'Orders paid before 14:00 leave the same day. Later orders leave the next day.',
+      '',
+      '=== END OF RELEVANT INFORMATION ===',
+    ].join('\n');
+    const answer = fakeCitationAnswer({ system, question: 'When do orders ship?' });
+    expect(answer.startsWith('Orders paid before 14:00 leave the same day. [S1]')).toBe(true);
+    expect(answer).not.toContain('Document:');
+  });
+});
