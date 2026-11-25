@@ -1,0 +1,36 @@
+From e8d6a073fee35169e8486e7a7c21b058f81320ed Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 22:26:13 +0000
+Subject: [PATCH 3/5] test(05-04): re-pin assemble function bodies after
+ buildContext builds blocks
+
+buildContext now collects the block list while rendering and returns it as a new
+field, so the pinned region and its end literal changed. The removed lines are the
+chunk render step and the return line only; the relevance filters, the refusal
+decision and the context wrapper literals are untouched, and the differential,
+oracle and characterization suites pass unchanged.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+---
+ tests/legacy-post-filter-sentinel.test.ts | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/tests/legacy-post-filter-sentinel.test.ts b/tests/legacy-post-filter-sentinel.test.ts
+index 2104dec..a0f2d0d 100644
+--- a/tests/legacy-post-filter-sentinel.test.ts
++++ b/tests/legacy-post-filter-sentinel.test.ts
+@@ -62,8 +62,8 @@ const PINNED_REGIONS: PinnedRegion[] = [
+     label: 'assemble function bodies (filterCandidates, buildContext)',
+     file: 'assemble',
+     start: 'export function filterCandidates<C extends AssemblyCandidate>(',
+-    end: 'return { context, usedDocuments, relevantChunks, kept, queryTerms, sourceImages, links, refusalCandidate };\n}',
+-    sha256: '1f9390ab31d184f4e27ee986494233bd859dc939f4f2047e71d4dc9ad7661c73',
++    end: 'return { context, usedDocuments, relevantChunks, kept, blocks, queryTerms, sourceImages, links, refusalCandidate };\n}',
++    sha256: 'ebb2e9def1530d0f3d3e7658ebb5911fb503be8d571cea4bfae45fcd94d031d5',
+   },
+ ];
+ 
+-- 
+2.43.0
+

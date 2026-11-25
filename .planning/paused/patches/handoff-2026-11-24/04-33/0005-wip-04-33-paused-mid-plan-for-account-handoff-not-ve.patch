@@ -1,0 +1,73 @@
+From d45fa1ea95b091ccf733074750e0174521d946d5 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 22:36:28 +0000
+Subject: [PATCH 5/5] wip(04-33): paused mid-plan for account handoff (not
+ verified)
+
+---
+ supabase/migrations/0413_chunking_activation.sql | 12 +++++++++---
+ tests/rag-db/chunking-activation.test.mts        |  4 +++-
+ 2 files changed, 12 insertions(+), 4 deletions(-)
+
+diff --git a/supabase/migrations/0413_chunking_activation.sql b/supabase/migrations/0413_chunking_activation.sql
+index e23a2e7..09fdf44 100644
+--- a/supabase/migrations/0413_chunking_activation.sql
++++ b/supabase/migrations/0413_chunking_activation.sql
+@@ -10,7 +10,8 @@
+ --                                    eval_failed, stale_evidence. Activating legacy needs no evidence.
+ --   rag_rollback_chunking_profile    restores previous_active_id (legacy when null or retired), keeps every row, and raises
+ --                                    `chunking_rollback_refused:no_previous` only when legacy is already active.
+---   rag_chunking_coverage            per doc type and profile: current ready documents, those with current chunks in the profile, those missing. Counts only.
++--   rag_chunking_coverage            per doc type and profile: current ready documents, those with current chunks in the profile, those missing, whether the
++--                                    recorded decision passed (null: none) and how many gaps the latest build run recorded. Counts only.
+ -- Legacy-only chunk kinds: picture captions (`image`, which carry metadata.image_url and feed source_images) and `invoice_header` rows are written by the
+ -- legacy path and never copied into profile children. chunking_profiles.legacy_kinds_kept names the kinds a profile leaves to the legacy rows;
+ -- hybrid_search_chunks serves a document's legacy rows of those kinds next to the profile's children, and the activation gate refuses a profile that
+@@ -272,7 +273,9 @@ RETURNS TABLE (
+   is_active boolean,
+   current_ready_documents integer,
+   documents_with_children integer,
+-  missing_documents integer
++  missing_documents integer,
++  decision_passed boolean,
++  open_gaps integer
+ )
+ LANGUAGE sql
+ STABLE
+@@ -285,7 +288,10 @@ AS $$
+     (p.status = 'active'),
+     t.total::integer,
+     (t.total - t.missing)::integer,
+-    t.missing::integer
++    t.missing::integer,
++    CASE WHEN jsonb_typeof(p.eval_evidence -> 'gate_passed') = 'boolean' THEN (p.eval_evidence ->> 'gate_passed')::boolean END,
++    (SELECT count(*) FROM chunking_build_gaps g
++     WHERE g.run_id = (SELECT r.id FROM chunking_build_runs r WHERE r.profile_id = p.id AND r.doc_type = p.doc_type ORDER BY r.started_at DESC, r.id DESC LIMIT 1))::integer
+   FROM chunking_profiles p
+   CROSS JOIN LATERAL (
+     SELECT
+diff --git a/tests/rag-db/chunking-activation.test.mts b/tests/rag-db/chunking-activation.test.mts
+index ddcd9c4..838d0b7 100644
+--- a/tests/rag-db/chunking-activation.test.mts
++++ b/tests/rag-db/chunking-activation.test.mts
+@@ -402,14 +402,16 @@ for (const mode of MODES) {
+       const coverage = await query(`SELECT * FROM rag_chunking_coverage() WHERE doc_type = 'contract_legal' ORDER BY profile_id`);
+       assert.deepEqual(
+         Object.keys(coverage[0] as Row).sort(),
+-        ['current_ready_documents', 'doc_type', 'documents_with_children', 'is_active', 'missing_documents', 'profile_id'],
++        ['current_ready_documents', 'decision_passed', 'doc_type', 'documents_with_children', 'is_active', 'missing_documents', 'open_gaps', 'profile_id'],
+       );
+       const p256 = coverage.find((row) => row.profile_id === P256) as Row;
+       assert.deepEqual(
+         [p256.is_active, p256.current_ready_documents, p256.documents_with_children, p256.missing_documents],
+         [false, 3, 2, 1],
+       );
++      assert.deepEqual([p256.decision_passed, p256.open_gaps], [true, 0]);
+       const legacy = coverage.find((row) => row.profile_id === 'legacy') as Row;
++      assert.deepEqual([legacy.decision_passed, legacy.open_gaps], [null, 0]);
+       assert.deepEqual([legacy.is_active, legacy.current_ready_documents, legacy.documents_with_children, legacy.missing_documents], [true, 3, 3, 0]);
+ 
+       const general = await query(`SELECT * FROM rag_chunking_coverage() WHERE doc_type = 'general' AND profile_id = 'legacy'`);
+-- 
+2.43.0
+

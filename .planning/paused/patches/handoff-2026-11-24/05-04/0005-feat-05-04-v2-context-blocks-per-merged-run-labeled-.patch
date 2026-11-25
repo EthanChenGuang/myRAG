@@ -1,0 +1,171 @@
+From 745a5e4438639f7d8f4b954bdd68d8ebdf476d4e Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 22:31:02 +0000
+Subject: [PATCH 5/5] feat(05-04): v2 context blocks per merged run, labeled as
+ the last context step
+
+- the assemble render plans runs from mergeAdjacent and the chunks a parent block covers
+- the labeler is applied once after compression in a final render, so aliases follow the
+  order the model reads; selection, ordering, merge, compression and budget are unchanged
+- blocks are copied into the v2 RetrievalResult; a failing labeler leaves the context unlabelled
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+---
+ src/lib/rag/v2/result.ts         |  1 +
+ src/lib/rag/v2/stages/context.ts | 65 +++++++++++++++++++++++++++-----
+ 2 files changed, 57 insertions(+), 9 deletions(-)
+
+diff --git a/src/lib/rag/v2/result.ts b/src/lib/rag/v2/result.ts
+index 0f397cf..776bffc 100644
+--- a/src/lib/rag/v2/result.ts
++++ b/src/lib/rag/v2/result.ts
+@@ -165,6 +165,7 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
+     links: assembly.links,
+     relevantChunks: assembly.relevantChunks,
+     kept: assembly.kept,
++    blocks: assembly.blocks,
+     queryTerms: assembly.queryTerms,
+     refusalCandidate: assembly.refusalCandidate,
+     retrievalConfigHash,
+diff --git a/src/lib/rag/v2/stages/context.ts b/src/lib/rag/v2/stages/context.ts
+index a3bc7a4..336f2d9 100644
+--- a/src/lib/rag/v2/stages/context.ts
++++ b/src/lib/rag/v2/stages/context.ts
+@@ -20,7 +20,7 @@ import type { FusedHit } from '../../fusion/rrf';
+ import type { RagConfig, StageName } from '../../config';
+ import { runStage, stageSpec, type StageSpec } from '../../pipeline';
+ import type { TraceCollector } from '../../trace/collector';
+-import type { Candidate, KeptBy, Profile, ReferencedState, RunRetrievalInput, StageOverrides } from '../../types';
++import type { Candidate, CitationLabeler, ContextBlock, KeptBy, Profile, ReferencedState, RunRetrievalInput, StageOverrides } from '../../types';
+ import { v2ProfileSettings } from '../profiles';
+ import type { RetrievalParams } from '@/lib/rag-eval/contracts.generated';
+ 
+@@ -105,9 +105,15 @@ interface ExpandStageValue {
+   fetched: number;
+ }
+ 
++interface BlockPlan {
++  runs: string[][];
++  covered: Map<string, string[]>;
++}
++
+ interface AssembleStageValue {
+   output: AssembleOutput<Candidate>;
+   selected: Candidate[];
++  plan: BlockPlan;
+   parentChunkIds: Set<string>;
+   groupOrder: string[];
+   budgetTokens: number;
+@@ -117,10 +123,27 @@ interface AssembleStageValue {
+ 
+ interface CompressStageValue {
+   context: string;
++  rewritten: Candidate[];
+   compressed: number;
+   savedTokens: number;
+ }
+ 
++/** A parent block stands for every top candidate that points at that parent, in rank order. */
++function coveredChunkIds(selected: Candidate[], candidates: Candidate[], parentChunkIds: Set<string> | undefined): Map<string, string[]> {
++  const covered = new Map<string, string[]>();
++  if (!parentChunkIds?.size) return covered;
++  for (const chosen of selected) {
++    if (!parentChunkIds.has(chosen.chunk_id) || !chosen.parent_id) continue;
++    covered.set(
++      chosen.chunk_id,
++      candidates
++        .filter((candidate) => candidate.parent_id === chosen.parent_id && candidate.document_id === chosen.document_id)
++        .map((candidate) => candidate.chunk_id),
++    );
++  }
++  return covered;
++}
++
+ export async function runContextStages(ctx: ContextStagesInput): Promise<ContextStagesOutput> {
+   const { input, config, profile, params, fusedHits, referenced, signal, collector, stageOverrides, rerank } = ctx;
+   const spec = (name: StageName, onFail: StageSpec['onFail']) => stageSpec(config, profile, name, onFail, stageOverrides);
+@@ -133,7 +156,7 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
+   const keptBy: KeptBy = rerank?.ran ? 'rerank' : 'fused';
+   const isGPTModel = input.options?.isGPTModel ?? false;
+ 
+-  const assemblyInput = (list: Candidate[], groupOrder: string[]): AssembleInput<Candidate> => ({
++  const assemblyInput = (list: Candidate[], groupOrder: string[], plan?: BlockPlan, labeler?: CitationLabeler): AssembleInput<Candidate> => ({
+     queryText: input.query,
+     candidates: list,
+     documents: rows.documents,
+@@ -145,10 +168,12 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
+     applyRelevanceFilter: false,
+     groupOrder,
+     keptByOverride: keptBy,
++    ...(plan ? { runs: plan.runs, coveredChunkIds: plan.covered } : {}),
++    ...(labeler ? { citationLabeler: labeler } : {}),
+   });
+ 
+-  const render = (list: Candidate[], groupOrder: string[]): AssembleOutput<Candidate> => {
+-    const rendered = assemblyInput(list, groupOrder);
++  const render = (list: Candidate[], groupOrder: string[], plan?: BlockPlan, labeler?: CitationLabeler): AssembleOutput<Candidate> => {
++    const rendered = assemblyInput(list, groupOrder, plan, labeler);
+     return buildContext(filterCandidates(rendered), rendered);
+   };
+ 
+@@ -222,14 +247,20 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
+             rank,
+           };
+         });
+-      const groupIds = mergeAdjacent(adjacent).map((group) => group.documentId);
++      const groups = mergeAdjacent(adjacent);
++      const groupIds = groups.map((group) => group.documentId);
+       const groupOrder = config.v2.edgeOrder ? edgeOrder(groupIds) : groupIds;
+ 
+-      const output = render(selected, groupOrder);
++      const plan: BlockPlan = {
++        runs: groups.flatMap((group) => group.runs.map((run) => run.map((chunk) => chunk.chunk_id))),
++        covered: coveredChunkIds(selected, candidates, parentSelection?.parentChunkIds),
++      };
++      const output = render(selected, groupOrder, plan);
+       const kept = output.kept.map((row) => ({ ...row, rank: rankById.get(row.chunk_id) ?? row.rank }));
+       return {
+         output: { ...output, kept },
+         selected,
++        plan,
+         parentChunkIds: parentSelection?.parentChunkIds ?? new Set<string>(),
+         groupOrder,
+         budgetTokens: settings.tokenBudget,
+@@ -284,7 +315,7 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
+         savedTokens += Math.max(countTokens(candidate.content) - countTokens(next), 0);
+         return { ...candidate, content: next };
+       });
+-      return { context: render(rewritten, base.groupOrder).context, compressed: changed, savedTokens };
++      return { context: render(rewritten, base.groupOrder).context, rewritten, compressed: changed, savedTokens };
+     },
+     collector,
+     {
+@@ -293,6 +324,22 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
+     },
+   );
+ 
+-  const assembly = compressed.skipped ? base.output : { ...base.output, context: compressed.value.context };
+-  return { assembly, candidates };
++  const finalList = compressed.skipped ? base.selected : compressed.value.rewritten;
++  const finalContext = compressed.skipped ? base.output.context : compressed.value.context;
++  const labeler = input.citationLabeler;
++
++  // The labeler runs once, here, after the last context step, so the alias order is the order the model reads.
++  if (labeler) {
++    try {
++      const labelled = render(finalList, base.groupOrder, base.plan, labeler);
++      return { assembly: { ...base.output, context: labelled.context, blocks: labelled.blocks }, candidates };
++    } catch (error) {
++      console.warn('[RAG Context] citation labeler failed, context left unlabelled', {
++        error: error instanceof Error ? error.name : 'unknown',
++      });
++    }
++  }
++
++  const blocks = compressed.skipped ? base.output.blocks : render(finalList, base.groupOrder, base.plan).blocks;
++  return { assembly: { ...base.output, context: finalContext, blocks }, candidates };
+ }
+-- 
+2.43.0
+

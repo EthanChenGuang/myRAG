@@ -1,11 +1,14 @@
 {
   "version": "1.0",
-  "timestamp": "2026-11-24T19:10:00Z",
+  "timestamp": "2026-11-25T00:25:00Z",
   "phase": "03.1",
   "phase_name": "Tiered Parsing, Incremental Queue & Bulk Backfill",
   "phase_dir": ".planning/phases/03.1-tiered-parsing-incremental-queue-bulk-backfill",
   "status": "paused",
   "trunk": "claude/ecstatic-hamilton-86gtwv",
-  "trunk_sha": "56b0349d6307b757e4df1eab897878f11e4b8d81",
+  "trunk_base_sha": "21f611b",
+  "merge_train": {"branch": "ci/merge-train", "pr": 23, "chain_base_sha": "045ae01", "remote_head_at_pause": "3f3ed77", "remaining_prs": [13, 18, 21, 17, 16, 20, 19, 22], "ci_job_failing": "ts (tsx DB tests)"},
+  "patches_dir": ".planning/paused/patches/handoff-2026-11-24",
+  "planning_branch": {"name": "planning/recall-layer", "tip": "30c1d55", "pushed": false, "patch_dir": "planning-recall-layer", "base": "bbad74e"},
   "resume": ".planning/phases/03.1-tiered-parsing-incremental-queue-bulk-backfill/.continue-here.md"
 }

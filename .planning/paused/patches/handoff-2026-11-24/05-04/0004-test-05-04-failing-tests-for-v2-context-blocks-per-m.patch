@@ -1,0 +1,297 @@
+From 2115199f94d00a3ebfe57bae8805c8200451f817 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 22:27:07 +0000
+Subject: [PATCH 4/5] test(05-04): failing tests for v2 context blocks per
+ merged run and the last-step labeler
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+---
+ tests/rag/v2/context-blocks-v2.test.ts | 275 +++++++++++++++++++++++++
+ 1 file changed, 275 insertions(+)
+ create mode 100644 tests/rag/v2/context-blocks-v2.test.ts
+
+diff --git a/tests/rag/v2/context-blocks-v2.test.ts b/tests/rag/v2/context-blocks-v2.test.ts
+new file mode 100644
+index 0000000..7e6034a
+--- /dev/null
++++ b/tests/rag/v2/context-blocks-v2.test.ts
+@@ -0,0 +1,275 @@
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
++import { loadRagConfig, resetRagConfigForTests, type RagConfig } from '@/lib/rag/config';
++import type { RpcClient, RpcRequest, RpcResponse } from '@/lib/rag/backend/supabase-rpc';
++import { resetRagDepsForTests, setRagDepsForTests } from '@/lib/rag/deps';
++import type { FusedHit } from '@/lib/rag/fusion/rrf';
++import type { RerankSpan } from '@/lib/rag/rerank/types';
++import { createTraceCollector } from '@/lib/rag/trace/collector';
++import { mintScope } from '@/lib/rag/tenant/scope';
++import type { CitationLabeler, ContextBlock, ReferencedState } from '@/lib/rag/types';
++import { effectiveRetrievalParams } from '@/lib/rag/v2/retrieval-params';
++import { runContextStages, type ContextStagesInput } from '@/lib/rag/v2/stages/context';
++import { hit } from '../fusion/helpers';
++
++const scope = mintScope('single', null, null);
++const SINGLE_KEY = 's:default';
++
++function config(over: Record<string, string> = {}): RagConfig {
++  resetRagConfigForTests();
++  return loadRagConfig({ RAG_PIPELINE: 'v2', ...over });
++}
++
++interface Spec {
++  chunkId: string;
++  documentId: string;
++  filename: string;
++  chunkIndex: number;
++  content?: string;
++  metadata?: Record<string, unknown>;
++  parentId?: string | null;
++}
++
++function fusedList(specs: Spec[]): FusedHit[] {
++  return specs.map((spec, index) => {
++    const rank = index + 1;
++    return {
++      hit: hit(spec.chunkId, {
++        rank,
++        documentId: spec.documentId,
++        parentId: spec.parentId ?? null,
++        chunkIndex: spec.chunkIndex,
++        content: spec.content ?? `body of ${spec.chunkId}`,
++        similarity: 0.9 - rank * 0.01,
++        metadata: spec.metadata ?? {},
++        document: { filename: spec.filename, createdAt: null, metadata: {}, contentPreview: '' },
++      }),
++      score: 1 / (60 + rank),
++      ranks: { 'dense:0': rank },
++    };
++  });
++}
++
++const SIX: Spec[] = [
++  { chunkId: 'a-3', documentId: 'doc-a', filename: 'alpha.pdf', chunkIndex: 3 },
++  { chunkId: 'b-1', documentId: 'doc-b', filename: 'beta.pdf', chunkIndex: 1 },
++  { chunkId: 'a-4', documentId: 'doc-a', filename: 'alpha.pdf', chunkIndex: 4 },
++  { chunkId: 'c-1', documentId: 'doc-c', filename: 'gamma.pdf', chunkIndex: 1 },
++  { chunkId: 'b-7', documentId: 'doc-b', filename: 'beta.pdf', chunkIndex: 7 },
++  { chunkId: 'd-1', documentId: 'doc-d', filename: 'delta.pdf', chunkIndex: 1 },
++];
++
++function upperLabeler(seen: Array<Omit<ContextBlock, 'alias'>> = []): CitationLabeler {
++  return (block, ordinal) => {
++    seen.push(block);
++    return { alias: `S${ordinal}`, header: `[S${ordinal}] ${block.title}`, text: block.text.toUpperCase() };
++  };
++}
++
++function run(specs: Spec[], over: Record<string, string> = {}, extra: Partial<ContextStagesInput> = {}, labeler?: CitationLabeler) {
++  const cfg = config(over);
++  const collector = createTraceCollector({ profile: 'chat', tenantKey: SINGLE_KEY });
++  const params = { ...effectiveRetrievalParams('chat', cfg, null), final_top_k: 20 };
++  const promise = runContextStages({
++    input: {
++      scope,
++      query: 'alpha beta gamma delta',
++      profile: 'chat',
++      signal: new AbortController().signal,
++      ...(labeler ? { citationLabeler: labeler } : {}),
++    },
++    config: cfg,
++    profile: 'chat',
++    params,
++    fusedHits: fusedList(specs),
++    referenced: null,
++    signal: new AbortController().signal,
++    collector,
++    ...extra,
++  });
++  return { promise, collector };
++}
++
++function parentsAdmin(parents: Array<{ id: string; documentId: string; content: string }>) {
++  const client: RpcClient = {
++    rpc(_fn: string, args: Record<string, unknown>): RpcRequest {
++      const asked = new Set((args.p_parent_ids as string[] | undefined) ?? []);
++      const request: RpcRequest = {
++        abortSignal: () => request,
++        then(onFulfilled, onRejected) {
++          const response: RpcResponse = {
++            data: parents
++              .filter((parent) => asked.has(parent.id))
++              .map((parent) => ({
++                id: parent.id,
++                document_id: parent.documentId,
++                tenant_key: SINGLE_KEY,
++                version: 1,
++                is_current: true,
++                chunking_profile_id: 'legacy',
++                section_path: ['Section'],
++                content: parent.content,
++                token_count: 20,
++                parent_index: 0,
++                parent_chunk_index: 0,
++              })),
++            error: null,
++          };
++          return Promise.resolve(response).then(onFulfilled, onRejected);
++        },
++      };
++      return request;
++    },
++  };
++  return client;
++}
++
++function sentenceBlock(label: string, count: number): string {
++  return Array.from(
++    { length: count },
++    (_, index) => `${label} sentence ${index + 1} explains the quarterly widget pricing policy in some detail.`,
++  ).join(' ');
++}
++
++function stage(collector: ReturnType<typeof createTraceCollector>, name: string) {
++  return collector.stages().find((row) => row.name === name);
++}
++
++describe('runContextStages blocks (D-02)', () => {
++  beforeEach(() => {
++    resetRagConfigForTests();
++    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
++  });
++
++  afterEach(() => {
++    vi.restoreAllMocks();
++    resetRagDepsForTests();
++    resetRagConfigForTests();
++  });
++
++  it('follows the edge-ordered group order of the rendered context, not rank order', async () => {
++    const { assembly } = await run(SIX, { RAG_CONTEXT_EDGE_ORDER: 'true' }).promise;
++    const blocks = assembly!.blocks;
++    expect(blocks.map((block) => block.documentName)).toEqual(['alpha.pdf', 'gamma.pdf', 'delta.pdf', 'beta.pdf', 'beta.pdf']);
++    const positions = blocks.map((block) => assembly!.context.indexOf(block.text));
++    expect(positions.every((at) => at >= 0)).toBe(true);
++    expect([...positions].sort((x, y) => x - y)).toEqual(positions);
++  });
++
++  it('gives two adjacent chunks merged into one run one block with both chunk ids', async () => {
++    const { assembly } = await run(SIX).promise;
++    const alpha = assembly!.blocks.filter((block) => block.documentName === 'alpha.pdf');
++    expect(alpha).toHaveLength(1);
++    expect(alpha[0]).toMatchObject({ chunkIds: ['a-3', 'a-4'], text: 'body of a-3\n\nbody of a-4', alias: null, isImage: false });
++    const beta = assembly!.blocks.filter((block) => block.documentName === 'beta.pdf');
++    expect(beta.map((block) => block.chunkIds)).toEqual([['b-1'], ['b-7']]);
++  });
++
++  it('lists the child chunk ids of a parent-expanded block', async () => {
++    const parentContent = 'ALPHA PARENT: the full alpha section with its surrounding detail.';
++    setRagDepsForTests({
++      adminClient: () => parentsAdmin([{ id: 'parent-alpha', documentId: 'doc-a', content: parentContent }]) as never,
++    });
++    const specs: Spec[] = [
++      { chunkId: 'a-3', documentId: 'doc-a', filename: 'alpha.pdf', chunkIndex: 3, parentId: 'parent-alpha' },
++      { chunkId: 'b-1', documentId: 'doc-b', filename: 'beta.pdf', chunkIndex: 1 },
++      { chunkId: 'a-9', documentId: 'doc-a', filename: 'alpha.pdf', chunkIndex: 9, parentId: 'parent-alpha' },
++    ];
++    const { assembly } = await run(specs, { RAG_PARENT_CHILD: 'true' }).promise;
++    const alpha = assembly!.blocks.filter((block) => block.documentName === 'alpha.pdf');
++    expect(alpha).toHaveLength(1);
++    expect(alpha[0]).toMatchObject({ chunkIds: ['a-3', 'a-9'], text: parentContent });
++    expect(assembly!.context).toContain(parentContent);
++  });
++
++  it('snapshots the compressed text when compression is on', async () => {
++    const long = sentenceBlock('First', 40);
++    const needle = 'First sentence 7 explains the quarterly widget pricing policy in some detail.';
++    const start = [...long].length - [...long.slice(long.indexOf(needle))].length;
++    const spans: RerankSpan[] = [{ start, end: start + [...needle].length, score: 0.9 }];
++    const specs: Spec[] = [
++      { chunkId: 'a-1', documentId: 'doc-a', filename: 'alpha.pdf', chunkIndex: 1, content: long },
++      { chunkId: 'b-1', documentId: 'doc-b', filename: 'beta.pdf', chunkIndex: 1, content: 'short body' },
++    ];
++    const rerank = { ran: true, spansByChunk: new Map([['a-1', spans]]), prefixLengthByChunk: new Map([['a-1', 0]]) };
++    const { assembly } = await run(specs, { RAG_CONTEXT_COMPRESSION: 'true' }, { rerank }).promise;
++    const alpha = assembly!.blocks.find((block) => block.documentName === 'alpha.pdf')!;
++    expect(alpha.text).toContain(needle);
++    expect(alpha.text).not.toContain('First sentence 8 explains');
++    expect(assembly!.context).toContain(alpha.text);
++  });
++
++  it('leaves the context and every stage count unchanged by the labeler, which only adds headers', async () => {
++    const plain = run(SIX, { RAG_CONTEXT_EDGE_ORDER: 'true' });
++    const plainOut = await plain.promise;
++    const seen: Array<Omit<ContextBlock, 'alias'>> = [];
++    const labelled = run(SIX, { RAG_CONTEXT_EDGE_ORDER: 'true' }, {}, upperLabeler(seen));
++    const labelledOut = await labelled.promise;
++
++    for (const name of ['expand_parents', 'assemble', 'compress']) {
++      expect(stage(labelled.collector, name)?.status).toBe(stage(plain.collector, name)?.status);
++      expect(stage(labelled.collector, name)?.counts).toEqual(stage(plain.collector, name)?.counts);
++    }
++    expect(labelledOut.assembly!.kept).toEqual(plainOut.assembly!.kept);
++    expect(labelledOut.assembly!.usedDocuments).toEqual(plainOut.assembly!.usedDocuments);
++    expect(labelledOut.assembly!.sourceImages).toEqual(plainOut.assembly!.sourceImages);
++    expect(labelledOut.assembly!.links).toEqual(plainOut.assembly!.links);
++    expect(plainOut.assembly!.blocks.every((block) => block.alias === null)).toBe(true);
++
++    expect(seen).toHaveLength(plainOut.assembly!.blocks.length);
++    const stripped = labelledOut
++      .assembly!.blocks.reduce((text, block) => text.replace(`[${block.alias}] ${block.title}\n`, '').replace(block.text, block.text.toLowerCase()), labelledOut.assembly!.context);
++    expect(stripped).toBe(plainOut.assembly!.context);
++  });
++
++  it('numbers the blocks in the final render order, after compression, and labels last', async () => {
++    const long = sentenceBlock('First', 40);
++    const needle = 'First sentence 7 explains the quarterly widget pricing policy in some detail.';
++    const start = [...long].length - [...long.slice(long.indexOf(needle))].length;
++    const spans: RerankSpan[] = [{ start, end: start + [...needle].length, score: 0.9 }];
++    const specs: Spec[] = [
++      { chunkId: 'a-1', documentId: 'doc-a', filename: 'alpha.pdf', chunkIndex: 1, content: long },
++      { chunkId: 'b-1', documentId: 'doc-b', filename: 'beta.pdf', chunkIndex: 1, content: 'short body' },
++      { chunkId: 'c-1', documentId: 'doc-c', filename: 'gamma.pdf', chunkIndex: 1, content: 'gamma body' },
++    ];
++    const rerank = { ran: true, spansByChunk: new Map([['a-1', spans]]), prefixLengthByChunk: new Map([['a-1', 0]]) };
++    const seen: Array<Omit<ContextBlock, 'alias'>> = [];
++    const { assembly } = await run(specs, { RAG_CONTEXT_COMPRESSION: 'true', RAG_CONTEXT_EDGE_ORDER: 'true' }, { rerank }, upperLabeler(seen)).promise;
++
++    expect(seen.map((block) => block.documentName)).toEqual(['alpha.pdf', 'gamma.pdf', 'beta.pdf']);
++    expect(seen[0]?.text).toContain(needle);
++    expect(seen[0]?.text).not.toContain('First sentence 8 explains');
++    expect(assembly!.blocks.map((block) => block.alias)).toEqual(['S1', 'S2', 'S3']);
++    const headerAt = ['[S1] alpha.pdf', '[S2] gamma.pdf', '[S3] beta.pdf'].map((header) => assembly!.context.indexOf(header));
++    expect(headerAt.every((at) => at >= 0)).toBe(true);
++    expect([...headerAt].sort((x, y) => x - y)).toEqual(headerAt);
++    expect(assembly!.context).toContain('GAMMA BODY');
++  });
++
++  it('never labels an image chunk and keeps numbering over the text blocks only', async () => {
++    const specs: Spec[] = [
++      { chunkId: 'a-1', documentId: 'doc-a', filename: 'alpha.pdf', chunkIndex: 1 },
++      { chunkId: 'a-5', documentId: 'doc-a', filename: 'alpha.pdf', chunkIndex: 5, content: 'figure caption', metadata: { image_url: 'https://example.invalid/f.png' } },
++      { chunkId: 'a-9', documentId: 'doc-a', filename: 'alpha.pdf', chunkIndex: 9 },
++    ];
++    const seen: Array<Omit<ContextBlock, 'alias'>> = [];
++    const { assembly } = await run(specs, {}, {}, upperLabeler(seen)).promise;
++    expect(seen.map((block) => block.chunkIds)).toEqual([['a-1'], ['a-9']]);
++    expect(assembly!.blocks.map((block) => [block.chunkIds[0], block.isImage, block.alias])).toEqual([
++      ['a-1', false, 'S1'],
++      ['a-5', true, null],
++      ['a-9', false, 'S2'],
++    ]);
++    expect(assembly!.context).toContain('figure caption');
++  });
++
++  it('continues the ordinals after referenced documents', async () => {
++    const referenced: ReferencedState = {
++      usedDocuments: [{ id: 'doc-r', name: 'Ref.md', filename: 'Ref.md', explicitly_referenced: true }],
++      context: '\n\n=== DOCUMENT: "Ref.md" ===\nref body\n=== END OF DOCUMENT ===\n',
++      sections: [{ documentId: 'doc-r', documentName: 'Ref.md', chunkIds: [], text: 'ref body' }],
++    };
++    const { assembly } = await run(SIX.slice(0, 2), {}, { referenced }, upperLabeler()).promise;
++    expect(assembly!.blocks.map((block) => block.alias)).toEqual(['S1', 'S2', 'S3']);
++    expect(assembly!.blocks[0]).toMatchObject({ documentName: 'Ref.md', chunkIds: [], text: 'REF BODY' });
++  });
++});
+-- 
+2.43.0
+

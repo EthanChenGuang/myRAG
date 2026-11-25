@@ -1,7 +1,7 @@
 # HANDOFF — Trunk merge train pause (Claude Code takeover)
 
 **Branch:** `claude/ecstatic-hamilton-86gtwv` (push only; no PR)  
-**Trunk HEAD:** `56b0349d6307b757e4df1eab897878f11e4b8d81` (2026-11-24)  
+**Trunk HEAD:** see git log (paused 2026-11-25, handoff in .planning/phases/03.1-tiered-parsing-incremental-queue-bulk-backfill/.continue-here.md)  
 **Resume:** `/gsd-resume-work` + `.planning/phases/03.1-tiered-parsing-incremental-queue-bulk-backfill/.continue-here.md`
 
 ## Merge train status (stopped)

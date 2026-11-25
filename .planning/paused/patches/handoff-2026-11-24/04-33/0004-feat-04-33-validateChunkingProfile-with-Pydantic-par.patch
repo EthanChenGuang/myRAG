@@ -1,0 +1,131 @@
+From 500ab51eef2f62212f6d08cb58b289c9c095e37f Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 22:35:06 +0000
+Subject: [PATCH 4/5] feat(04-33): validateChunkingProfile with Pydantic parity
+ and maxInputTokensFor
+
+- the validator repeats chunking_profile_findings and takes the child limit from the active embedding profile's provider
+- maxInputTokensFor reads each provider's documented input limit from the registry
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+---
+ src/lib/rag/chunking/validate.ts   | 76 ++++++++++++++++++++++++++++--
+ src/lib/rag/embeddings/registry.ts |  7 ++-
+ 2 files changed, 78 insertions(+), 5 deletions(-)
+
+diff --git a/src/lib/rag/chunking/validate.ts b/src/lib/rag/chunking/validate.ts
+index 273f7ff..706e7cb 100644
+--- a/src/lib/rag/chunking/validate.ts
++++ b/src/lib/rag/chunking/validate.ts
+@@ -1,11 +1,29 @@
++import { ChunkingProfileSchema } from '@/lib/rag-eval/contracts.generated';
++import { loadRagConfig } from '../config';
++import { getRagDeps } from '../deps';
++import { getActiveProfile } from '../embeddings/active-profile';
++import { maxInputTokensFor } from '../embeddings/registry';
++import { effectiveRetrievalParams } from '../v2/retrieval-params';
++
++export type ChunkingFindingCode =
++  | 'invalid_shape'
++  | 'parent_tokens_required'
++  | 'child_exceeds_embedding_input'
++  | 'parent_below_twice_child'
++  | 'ratio_outside_4_8'
++  | 'top_k_parent_over_budget';
++
+ export interface ChunkingFinding {
+-  code: string;
++  code: ChunkingFindingCode;
+   message: string;
+ }
+ 
+ export interface ChunkingValidationContext {
++  /** Largest child the active embedding model accepts. Defaults to the input limit of the active embedding profile's provider. */
+   maxChildTokens?: number;
++  /** Parents the context holds. Defaults to the effective final_top_k. */
+   topK?: number;
++  /** Token budget of the assembled context. Defaults to RAG_CONTEXT_TOKEN_BUDGET. */
+   contextBudget?: number;
+ }
+ 
+@@ -14,6 +32,58 @@ export interface ChunkingValidation {
+   warnings: ChunkingFinding[];
+ }
+ 
+-export async function validateChunkingProfile(_input: unknown, _context: ChunkingValidationContext = {}): Promise<ChunkingValidation> {
+-  return { errors: [], warnings: [] };
++async function resolveContext(context: ChunkingValidationContext): Promise<Required<ChunkingValidationContext>> {
++  const needsConfig = context.topK === undefined || context.contextBudget === undefined;
++  const config = needsConfig ? loadRagConfig(getRagDeps().ragEnv()) : null;
++  return {
++    maxChildTokens: context.maxChildTokens ?? maxInputTokensFor((await getActiveProfile()).provider),
++    topK: context.topK ?? (config ? effectiveRetrievalParams('chat', config).final_top_k : 0),
++    contextBudget: context.contextBudget ?? (config ? config.v2.tokenBudget : 0),
++  };
++}
++
++/**
++ * The same rules as chunking_profile_findings in rag-sidecar (rag_sidecar/contracts/retrieval.py), parity-tested against
++ * rag-sidecar/schemas/chunking-profile-cases.json. Errors block creation; warnings are for the operator. A profile that does not parse is
++ * one `invalid_shape` error.
++ */
++export async function validateChunkingProfile(input: unknown, context: ChunkingValidationContext = {}): Promise<ChunkingValidation> {
++  const parsed = ChunkingProfileSchema.safeParse(input);
++  if (!parsed.success) {
++    const fields = [...new Set(parsed.error.issues.map((issue) => issue.path.join('.') || 'profile'))].join(', ');
++    return { errors: [{ code: 'invalid_shape', message: `The chunking profile is malformed (${fields}).` }], warnings: [] };
++  }
++  const profile = parsed.data;
++  const { maxChildTokens, topK, contextBudget } = await resolveContext(context);
++  const errors: ChunkingFinding[] = [];
++  const warnings: ChunkingFinding[] = [];
++  const child = profile.child_tokens;
++  const parent = profile.parent_tokens;
++
++  if (profile.parent_mode === 'fixed' && parent === null) {
++    errors.push({ code: 'parent_tokens_required', message: 'A fixed parent mode needs parent_tokens.' });
++  }
++  if (child > maxChildTokens) {
++    errors.push({
++      code: 'child_exceeds_embedding_input',
++      message: `A child of ${child} tokens exceeds the ${maxChildTokens} tokens the active embedding model accepts.`,
++    });
++  }
++  const parentTooSmall = parent !== null && parent < child * 2;
++  if (parentTooSmall) {
++    errors.push({ code: 'parent_below_twice_child', message: `A parent of ${parent} tokens is smaller than twice the child (${child * 2}).` });
++  }
++  if (parent !== null && !parentTooSmall) {
++    const ratio = parent / child;
++    if (ratio < 4 || ratio > 8) {
++      warnings.push({ code: 'ratio_outside_4_8', message: `The parent is ${ratio.toFixed(1)} times the child; 4 to 8 times is the usual range.` });
++    }
++  }
++  if (parent !== null && topK * parent > contextBudget) {
++    warnings.push({
++      code: 'top_k_parent_over_budget',
++      message: `${topK} parents of ${parent} tokens (${topK * parent}) exceed the ${contextBudget} token context budget.`,
++    });
++  }
++  return { errors, warnings };
+ }
+diff --git a/src/lib/rag/embeddings/registry.ts b/src/lib/rag/embeddings/registry.ts
+index d955d1e..b007e9d 100644
+--- a/src/lib/rag/embeddings/registry.ts
++++ b/src/lib/rag/embeddings/registry.ts
+@@ -78,6 +78,9 @@ export function resetEmbeddingProvidersForTests(): void {
+   defaults = null;
+ }
+ 
+-export function maxInputTokensFor(_providerId: string): number {
+-  return 0;
++/** The documented input limit of a provider's embedding model, in tokens. Unknown ids throw. */
++export function maxInputTokensFor(providerId: string): number {
++  const provider = findProvider(providerId);
++  if (!provider) throw new Error(`[Embedding Profile] unknown provider ${providerId}`);
++  return provider.maxInputTokens;
+ }
+-- 
+2.43.0
+

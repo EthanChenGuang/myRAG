@@ -1,0 +1,60 @@
+From 145920718e98444b59205fd2024b1c3e796dc06f Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 22:35:10 +0000
+Subject: [PATCH 4/5] test(03.1-40): recorded and joined range documents must
+ keep valid page numbers and refs
+
+- joined parts of a range that does not start at page 1 fail a JSON round trip (duplicate refs)
+- recorded bench-100 pages are one-page documents numbered 1
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+---
+ rag-sidecar/tests/test_ingest_converters.py | 10 +++++++++-
+ rag-sidecar/tests/test_ingest_merge.py      | 13 ++++++++++++-
+ 2 files changed, 21 insertions(+), 2 deletions(-)
+
+diff --git a/rag-sidecar/tests/test_ingest_converters.py b/rag-sidecar/tests/test_ingest_converters.py
+index a129da0..6b84db6 100644
+--- a/rag-sidecar/tests/test_ingest_converters.py
++++ b/rag-sidecar/tests/test_ingest_converters.py
+@@ -111,4 +111,12 @@ def test_select_range_converter_by_name():
+     recorded = converters.select_range_converter("recorded", recorded_root=RECORDED)
+     assert isinstance(recorded, converters.RecordedRangeConverter)
+     docling = converters.select_range_converter("docling")
+-    assert isinstance(docling, converters.DoclingRangeConverter)
+\ No newline at end of file
++    assert isinstance(docling, converters.DoclingRangeConverter)
++
++def test_a_recorded_bench_page_comes_back_under_its_own_page_number():
++    converter = converters.RecordedRangeConverter(RECORDED)
++    doc, _meta = converter.convert(Path("ignored.pdf"), BENCH_SHA, "fast", 12, 13, priority=100)
++    assert sorted(doc.pages) == [12, 13]
++    assert sorted({prov.page_no for text in doc.texts for prov in text.prov}) == [12, 13]
++    reloaded = DoclingDocument.model_validate(json.loads(json.dumps(doc.export_to_dict())))
++    assert sorted(reloaded.pages) == [12, 13]
+diff --git a/rag-sidecar/tests/test_ingest_merge.py b/rag-sidecar/tests/test_ingest_merge.py
+index 3edfacd..8430b2e 100644
+--- a/rag-sidecar/tests/test_ingest_merge.py
++++ b/rag-sidecar/tests/test_ingest_merge.py
+@@ -121,4 +121,15 @@ def test_slice_pages_drops_only_excluded_pages_and_merge_recovers_full_range():
+     assert all(item.prov[0].page_no != 4 for item in kept.texts)
+     middle = _structured_part([4, 5], [], [(4, "four"), (5, "five")])
+     merged = merge([kept, middle], n_pages=10)
+-    assert sorted(merged.pages) == list(range(1, 11))
+\ No newline at end of file
++    assert sorted(merged.pages) == list(range(1, 11))
++
++def test_joined_parts_of_a_range_not_starting_at_page_one_survive_a_json_round_trip():
++    from rag_sidecar.ingest.merge import join_page_parts
++
++    first = _structured_part([7], [], [(7, "Seventh page text.")])
++    second = _structured_part([8], [], [(8, "Eighth page text.")])
++    joined = join_page_parts([first, second])
++    assert sorted(joined.pages) == [7, 8]
++    reloaded = DoclingDocument.model_validate(json.loads(json.dumps(joined.export_to_dict())))
++    assert sorted(reloaded.pages) == [7, 8]
++    assert [prov.page_no for text in reloaded.texts for prov in text.prov] == [7, 8]
+-- 
+2.43.0
+

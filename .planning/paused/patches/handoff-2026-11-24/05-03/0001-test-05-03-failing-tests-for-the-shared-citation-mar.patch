@@ -1,0 +1,161 @@
+From c22486b20dafcf643a0c6353b97ea5be113dd8b4 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 22:21:56 +0000
+Subject: [PATCH 1/6] test(05-03): failing tests for the shared citation marker
+ grammar
+
+Stub module returns no markers so the new tests fail on assertions.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+---
+ src/lib/citations/marker-grammar.ts |  19 +++++
+ tests/lib/marker-grammar.test.ts    | 110 ++++++++++++++++++++++++++++
+ 2 files changed, 129 insertions(+)
+ create mode 100644 src/lib/citations/marker-grammar.ts
+ create mode 100644 tests/lib/marker-grammar.test.ts
+
+diff --git a/src/lib/citations/marker-grammar.ts b/src/lib/citations/marker-grammar.ts
+new file mode 100644
+index 0000000..41e3560
+--- /dev/null
++++ b/src/lib/citations/marker-grammar.ts
+@@ -0,0 +1,19 @@
++export const MAX_MARKER_HOLD_CHARS = 16;
++
++export interface CitationMarker {
++  start: number;
++  end: number;
++  aliases: string[];
++}
++
++export function findCitationMarkers(_text: string): CitationMarker[] {
++  return [];
++}
++
++export function stripCitationMarkers(text: string): string {
++  return text;
++}
++
++export function neutralizeCitationMarkers(text: string): string {
++  return text;
++}
+diff --git a/tests/lib/marker-grammar.test.ts b/tests/lib/marker-grammar.test.ts
+new file mode 100644
+index 0000000..d9ad319
+--- /dev/null
++++ b/tests/lib/marker-grammar.test.ts
+@@ -0,0 +1,110 @@
++import { describe, expect, it } from 'vitest';
++import {
++  MAX_MARKER_HOLD_CHARS,
++  findCitationMarkers,
++  neutralizeCitationMarkers,
++  stripCitationMarkers,
++} from '@/lib/citations/marker-grammar';
++
++const aliasesOf = (text: string) => findCitationMarkers(text).map((m) => m.aliases);
++
++describe('findCitationMarkers', () => {
++  it('finds a single bracket marker with offsets', () => {
++    const text = 'a [S3] b';
++    expect(findCitationMarkers(text)).toEqual([{ start: 2, end: 6, aliases: ['S3'] }]);
++    expect(text.slice(2, 6)).toBe('[S3]');
++  });
++
++  it('finds multi-alias markers with ASCII, full-width comma and enumeration comma separators', () => {
++    expect(aliasesOf('[S3, S5]')).toEqual([['S3', 'S5']]);
++    expect(aliasesOf('[S3,S5]')).toEqual([['S3', 'S5']]);
++    expect(aliasesOf('[S3，S5]')).toEqual([['S3', 'S5']]);
++    expect(aliasesOf('[S3、S5]')).toEqual([['S3', 'S5']]);
++    expect(aliasesOf('[S3 , S5]')).toEqual([['S3', 'S5']]);
++  });
++
++  it('finds adjacent markers separately', () => {
++    expect(aliasesOf('[S3][S5]')).toEqual([['S3'], ['S5']]);
++  });
++
++  it('accepts full-width brackets and mixed opener and closer', () => {
++    expect(aliasesOf('【S3】')).toEqual([['S3']]);
++    expect(aliasesOf('［S3］')).toEqual([['S3']]);
++    expect(aliasesOf('[S3】')).toEqual([['S3']]);
++    expect(aliasesOf('［S12, S4］')).toEqual([['S12', 'S4']]);
++  });
++
++  it.each(['[S0]', '[S03]', '[s3]', '[S 3]', '[S3', '[Source 3]', '[S3 and S5]', '[S3,]', '[,S3]', '[ S3]', '[S3 ]', '[]', '[S]'])(
++    'rejects %s',
++    (text) => {
++      expect(findCitationMarkers(text)).toEqual([]);
++    },
++  );
++
++  it('accepts multi-digit aliases and ids ending in zero', () => {
++    expect(aliasesOf('[S10]')).toEqual([['S10']]);
++    expect(aliasesOf('[S120]')).toEqual([['S120']]);
++  });
++
++  it('only accepts a marker whose inner text is at most MAX_MARKER_HOLD_CHARS long', () => {
++    expect(MAX_MARKER_HOLD_CHARS).toBe(16);
++    expect(aliasesOf('[S1, S2, S3, S4]')).toEqual([['S1', 'S2', 'S3', 'S4']]);
++    expect(aliasesOf('[S10,S20,S30,S400]')).toEqual([['S10', 'S20', 'S30', 'S400']]);
++    expect(aliasesOf('[S10,S20,S30,S4000]')).toEqual([]);
++    expect(aliasesOf('[S1, S2, S3, S4, S5, S6]')).toEqual([]);
++  });
++
++  it('finds a valid marker after a rejected opener', () => {
++    expect(aliasesOf('[[S3]')).toEqual([['S3']]);
++    expect(aliasesOf('[S1 [S2]')).toEqual([['S2']]);
++  });
++});
++
++describe('stripCitationMarkers', () => {
++  it('removes every marker form, collapses the space before it and keeps punctuation', () => {
++    expect(stripCitationMarkers('Paris [S1] is big【S2】.')).toBe('Paris is big.');
++  });
++
++  it('removes markers that name unknown or large aliases', () => {
++    expect(stripCitationMarkers('x [S999] y［S2，S3］.')).toBe('x y.');
++  });
++
++  it('leaves newlines and unrelated bracket text alone', () => {
++    expect(stripCitationMarkers('a [S1]\nb [link] c [S0]')).toBe('a\nb [link] c [S0]');
++  });
++
++  it('returns text without markers unchanged', () => {
++    const text = 'nothing to see [here] 【x】';
++    expect(stripCitationMarkers(text)).toBe(text);
++  });
++});
++
++describe('neutralizeCitationMarkers', () => {
++  it('breaks every marker so the grammar no longer finds it', () => {
++    const text = 'see [S1] and 【S12】, also [S3, S4].';
++    const out = neutralizeCitationMarkers(text);
++    expect(findCitationMarkers(out)).toEqual([]);
++    expect(out).not.toBe(text);
++  });
++
++  it('only inserts zero-width spaces', () => {
++    const text = 'see [S1] and 【S12】.';
++    const out = neutralizeCitationMarkers(text);
++    expect(out.replace(/​/g, '')).toBe(text);
++    expect(out.match(/​/g)?.length).toBe(2);
++  });
++
++  it('inserts the space between S and its digits', () => {
++    expect(neutralizeCitationMarkers('[S1]')).toBe('[S​1]');
++  });
++
++  it('returns the identical string when there is no marker', () => {
++    const text = 'plain [text] with S1 and [S0]';
++    expect(neutralizeCitationMarkers(text)).toBe(text);
++  });
++
++  it('is idempotent', () => {
++    const once = neutralizeCitationMarkers('[S1][S2]');
++    expect(neutralizeCitationMarkers(once)).toBe(once);
++  });
++});
+-- 
+2.43.0
+

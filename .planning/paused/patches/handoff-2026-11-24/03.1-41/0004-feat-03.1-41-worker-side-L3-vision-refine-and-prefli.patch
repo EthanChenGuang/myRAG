@@ -1,0 +1,365 @@
+From ff9272bf4a731bd107e84185a896ac410dcfbe39 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 22:29:51 +0000
+Subject: [PATCH 4/5] feat(03.1-41): worker-side L3 vision refine and preflight
+ hook
+
+- l3_refine renders disagreement pages (max 20, page order) and calls detect-vlm only with vlm_detect and cloud on
+- a verdict replaces the page signals and sets layer L3; refused or failed pages keep the D-49 rule
+- run_preflight counts L3 pages examined and derives tiers from verdicts
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+---
+ rag-sidecar/src/rag_sidecar/preflight/l2.py  |   4 +-
+ rag-sidecar/src/rag_sidecar/preflight/l3.py  | 155 ++++++++++++++++++-
+ rag-sidecar/src/rag_sidecar/preflight/run.py |  45 +++++-
+ rag-sidecar/tests/test_preflight_l3.py       |   6 +-
+ 4 files changed, 192 insertions(+), 18 deletions(-)
+
+diff --git a/rag-sidecar/src/rag_sidecar/preflight/l2.py b/rag-sidecar/src/rag_sidecar/preflight/l2.py
+index 0b49709..6e44e3b 100644
+--- a/rag-sidecar/src/rag_sidecar/preflight/l2.py
++++ b/rag-sidecar/src/rag_sidecar/preflight/l2.py
+@@ -9,7 +9,7 @@ from typing import Any
+ 
+ from docling_core.types.doc import DocItemLabel, DoclingDocument
+ 
+-from rag_sidecar.contracts.routing import Layer, ParseRoutingConfig
++from rag_sidecar.contracts.routing import Layer, PageStructureVerdict, ParseRoutingConfig
+ from rag_sidecar.ingest.converters import RangeConverter
+ from rag_sidecar.ingest.pool import UPLOAD_PRIORITY
+ from rag_sidecar.ingest.quality import page_has_table
+@@ -26,6 +26,8 @@ class L2Page:
+     has_structure: bool = False
+     uncertain: bool | None = None
+     layer: Layer = "L1"
++    verdict: PageStructureVerdict | None = None
++    l3_inspected: bool = False
+ 
+     @property
+     def page(self) -> int:
+diff --git a/rag-sidecar/src/rag_sidecar/preflight/l3.py b/rag-sidecar/src/rag_sidecar/preflight/l3.py
+index ade0b51..7676150 100644
+--- a/rag-sidecar/src/rag_sidecar/preflight/l3.py
++++ b/rag-sidecar/src/rag_sidecar/preflight/l3.py
+@@ -1,16 +1,37 @@
+-"""L3 preflight: vision-model verdicts for pages where L1 and L2 disagree (D-49, D-50)."""
++"""L3 preflight: vision-model verdicts for pages where L1 and L2 disagree (D-49, D-50).
++
++The worker renders the pages with pypdfium2 and hands the PNG bytes to the app's detect-vlm route, which owns the cloud switch, the
++page budget and the model call. L3 never blocks a job: a refused, failed or missing answer leaves the page on the D-49 higher-tier
++rule. Page images are passed only to the app client and are never logged.
++"""
+ 
+ from __future__ import annotations
+ 
+ import asyncio
+-from collections.abc import Callable
++import base64
++import concurrent.futures
++import io
++import logging
++from collections.abc import Callable, Coroutine
++from dataclasses import replace
+ from pathlib import Path
+-from typing import Protocol
++from typing import Any, Protocol
+ 
+-from rag_sidecar.contracts.queue import DetectVlmRequest, DetectVlmResponse, JobSettingsSnapshot
+-from rag_sidecar.contracts.routing import ParseRoutingConfig
++from rag_sidecar.contracts.queue import (
++    DetectVlmPageImage,
++    DetectVlmRequest,
++    DetectVlmResponse,
++    JobSettingsSnapshot,
++)
++from rag_sidecar.contracts.routing import PageStructureVerdict, ParseRoutingConfig
+ from rag_sidecar.preflight.l2 import L2Page
+ 
++logger = logging.getLogger(__name__)
++
++MAX_IMAGE_BYTES = 400_000
++# One request carries every page: keep the whole body well under common 4.5 MB request limits.
++MAX_REQUEST_IMAGE_BYTES = 3_000_000
++RENDER_SCALES = (1.4, 1.0, 0.7, 0.5)
+ DEFAULT_TIMEOUT_S = 60.0
+ 
+ 
+@@ -18,6 +39,65 @@ class L3AppClient(Protocol):
+     async def detect_vlm(self, job_id: str, request: DetectVlmRequest) -> DetectVlmResponse: ...
+ 
+ 
++def _png_bytes(image: Any) -> bytes:
++    buffer = io.BytesIO()
++    image.save(buffer, format="PNG", optimize=True)
++    return buffer.getvalue()
++
++
++def render_page_png(path: Path | str, page_no: int, max_bytes: int = MAX_IMAGE_BYTES) -> bytes | None:
++    """Render one 1-based page to a PNG within max_bytes, or None when it cannot be made small enough."""
++    import pypdfium2 as pdfium
++
++    document = pdfium.PdfDocument(str(path))
++    try:
++        page = document[page_no - 1]
++        try:
++            for grayscale in (False, True):
++                for scale in RENDER_SCALES:
++                    if grayscale and scale > RENDER_SCALES[-1]:
++                        continue
++                    bitmap = page.render(scale=scale)
++                    image = bitmap.to_pil()
++                    if grayscale:
++                        image = image.convert("L")
++                    data = _png_bytes(image)
++                    if len(data) <= max_bytes:
++                        return data
++        finally:
++            page.close()
++    finally:
++        document.close()
++    return None
++
++
++def select_pages(disagreements: list[int], cfg: ParseRoutingConfig) -> list[int]:
++    """The disagreement pages L3 may look at: unique, in page order, at most l3.max_pages_per_doc."""
++    return sorted(set(disagreements))[: cfg.l3.max_pages_per_doc]
++
++
++def _run_coroutine[T](
++    factory: Callable[[], Coroutine[Any, Any, T]],
++    loop: asyncio.AbstractEventLoop | None,
++    timeout_s: float,
++) -> T:
++    async def bounded() -> T:
++        return await asyncio.wait_for(factory(), timeout=timeout_s)
++
++    if loop is not None and loop.is_running():
++        return asyncio.run_coroutine_threadsafe(bounded(), loop).result(timeout=timeout_s + 5)
++    try:
++        asyncio.get_running_loop()
++    except RuntimeError:
++        return asyncio.run(bounded())
++    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
++        return pool.submit(lambda: asyncio.run(bounded())).result(timeout=timeout_s + 5)
++
++
++def _apply_verdict(page: L2Page, verdict: PageStructureVerdict) -> L2Page:
++    return replace(page, verdict=verdict, l3_inspected=True, uncertain=False, layer="L3")
++
++
+ def l3_refine(
+     pages: list[L2Page],
+     disagreements: list[int],
+@@ -32,7 +112,53 @@ def l3_refine(
+     loop: asyncio.AbstractEventLoop | None = None,
+     timeout_s: float = DEFAULT_TIMEOUT_S,
+ ) -> list[L2Page]:
+-    return pages
++    """Ask the app for vision verdicts on the disagreement pages and attach them to those pages.
++
++    Runs only when the job snapshot has vlm_detect on and cloud allowed. A refusal, a failure or a page without a verdict leaves the
++    page as it was, so the D-49 higher-tier rule applies; nothing here raises into the job.
++    """
++    if snapshot is None or not snapshot.vlm_detect or not snapshot.cloud_allowed:
++        return pages
++    by_page = {page.page: page for page in pages}
++    wanted = [number for number in select_pages(disagreements, cfg) if number in by_page]
++    if not wanted:
++        return pages
++
++    budget = min(MAX_IMAGE_BYTES, MAX_REQUEST_IMAGE_BYTES // len(wanted))
++    images: list[DetectVlmPageImage] = []
++    for number in wanted:
++        try:
++            png = render_page_png(path, number, budget)
++        except Exception as error:  # noqa: BLE001 - a page that cannot render is simply not refined
++            logger.warning("[Preflight] L3 render failed page=%s error=%s", number, type(error).__name__)
++            continue
++        if png is None:
++            logger.warning("[Preflight] L3 page too large to send page=%s", number)
++            continue
++        images.append(DetectVlmPageImage(page=number, png_base64=base64.b64encode(png).decode("ascii")))
++    if not images:
++        return pages
++
++    request = DetectVlmRequest(worker_id=worker_id, attempt_no=attempt_no, pages=images)
++    try:
++        response = _run_coroutine(lambda: app_client.detect_vlm(job_id, request), loop, timeout_s)
++    except Exception as error:  # noqa: BLE001 - L3 never fails the job (D-50)
++        logger.warning("[Preflight] L3 call failed error=%s", type(error).__name__)
++        return pages
++
++    sent = {image.page for image in images}
++    verdicts: dict[int, PageStructureVerdict] = {}
++    refused = 0
++    for result in response.pages:
++        if result.page not in sent:
++            continue
++        if result.verdict is not None:
++            verdicts[result.page] = result.verdict
++        elif result.refused is not None:
++            refused += 1
++    if refused:
++        logger.info("[Preflight] L3 refused pages=%s", refused)
++    return [_apply_verdict(page, verdicts[page.page]) if page.page in verdicts else page for page in pages]
+ 
+ 
+ def make_l3_hook(
+@@ -44,6 +170,8 @@ def make_l3_hook(
+     loop: asyncio.AbstractEventLoop | None = None,
+     timeout_s: float = DEFAULT_TIMEOUT_S,
+ ) -> Callable[[list[L2Page], list[int], Path, JobSettingsSnapshot | None, ParseRoutingConfig], list[L2Page]]:
++    """Bind the app client and job identity into the hook run_preflight calls between L2 and the page tiers."""
++
+     def hook(
+         pages: list[L2Page],
+         disagreements: list[int],
+@@ -51,7 +179,18 @@ def make_l3_hook(
+         snapshot: JobSettingsSnapshot | None,
+         cfg: ParseRoutingConfig,
+     ) -> list[L2Page]:
+-        del disagreements, path, snapshot, cfg
+-        return pages
++        return l3_refine(
++            pages,
++            disagreements,
++            path,
++            snapshot,
++            app_client,
++            cfg,
++            job_id=job_id,
++            worker_id=worker_id,
++            attempt_no=attempt_no,
++            loop=loop,
++            timeout_s=timeout_s,
++        )
+ 
+     return hook
+diff --git a/rag-sidecar/src/rag_sidecar/preflight/run.py b/rag-sidecar/src/rag_sidecar/preflight/run.py
+index 84aeba9..e34296a 100644
+--- a/rag-sidecar/src/rag_sidecar/preflight/run.py
++++ b/rag-sidecar/src/rag_sidecar/preflight/run.py
+@@ -17,6 +17,7 @@ from rag_sidecar.contracts.routing import (
+     PageRange,
+     PageSignal,
+     PageSignals,
++    PageStructureVerdict,
+     ParseRoutingConfig,
+     ParseTier,
+     PreflightResult,
+@@ -47,7 +48,22 @@ def _default_bounds(
+     return settings.min_tier, settings.max_tier
+ 
+ 
++def _verdict_signals(verdict: PageStructureVerdict) -> list[PageSignal]:
++    signals: list[PageSignal] = []
++    if verdict.has_table:
++        signals.append("tables")
++    if verdict.has_multi_column:
++        signals.append("multi_col")
++    if verdict.has_chart:
++        signals.append("has_figure")
++    if verdict.is_scanned:
++        signals.append("scanned")
++    return signals
++
++
+ def _signals_for_page(page: L2Page) -> list[PageSignal]:
++    if page.verdict is not None:
++        return _verdict_signals(page.verdict)
+     signals = list(page.l1.signals)
+     if not page.uncertain and "uncertain" in signals:
+         signals = [signal for signal in signals if signal != "uncertain"]
+@@ -56,6 +72,18 @@ def _signals_for_page(page: L2Page) -> list[PageSignal]:
+     return signals
+ 
+ 
++def _multi_column(page: L2Page) -> bool:
++    return page.verdict.has_multi_column if page.verdict is not None else page.l1.multi_column
++
++
++def _has_figure(page: L2Page) -> bool:
++    return page.verdict.has_chart if page.verdict is not None else page.l1.has_figure
++
++
++def _scanned(page: L2Page) -> bool:
++    return page.verdict.is_scanned if page.verdict is not None else page.l1.scanned
++
++
+ def _l1_has_table(page: L2Page) -> bool:
+     return page.l1.ruled_tables > 0 or page.l1.aligned_number_rows >= 2 or "tables" in page.l1.signals
+ 
+@@ -75,9 +103,9 @@ def _to_tiered_pages(
+             image_area_ratio=page.l1.image_area_ratio,
+             ruled_tables=page.l1.ruled_tables,
+             aligned_number_rows=page.l1.aligned_number_rows,
+-            multi_column=page.l1.multi_column,
+-            has_figure=page.l1.has_figure,
+-            scanned=page.l1.scanned,
++            multi_column=_multi_column(page),
++            has_figure=_has_figure(page),
++            scanned=_scanned(page),
+             garbled_ratio=page.l1.garbled_ratio,
+             signals=signal_list,
+             layer=page.layer,
+@@ -88,6 +116,7 @@ def _to_tiered_pages(
+         layers = LayerResults(
+             l1_has_table=_l1_has_table(page),
+             l2_has_table=page.l2_has_table,
++            verdict=page.verdict,
+         )
+         tier, preset = page_tier(probe, layers, min_tier, max_tier)
+         tiered.append(
+@@ -116,7 +145,7 @@ def _finalize_page_signals(
+     out: list[PageSignals] = []
+     for page in pages:
+         tier_row = by_page[page.l1.page]
+-        layer = range_layer.get(page.l1.page, page.layer)
++        layer: Layer = "L3" if page.l3_inspected else range_layer.get(page.l1.page, page.layer)
+         out.append(
+             PageSignals(
+                 page=page.l1.page,
+@@ -125,9 +154,9 @@ def _finalize_page_signals(
+                 image_area_ratio=page.l1.image_area_ratio,
+                 ruled_tables=page.l1.ruled_tables,
+                 aligned_number_rows=page.l1.aligned_number_rows,
+-                multi_column=page.l1.multi_column,
+-                has_figure=page.l1.has_figure,
+-                scanned=page.l1.scanned,
++                multi_column=_multi_column(page),
++                has_figure=_has_figure(page),
++                scanned=_scanned(page),
+                 garbled_ratio=page.l1.garbled_ratio,
+                 signals=_signals_for_page(page),
+                 layer=layer,
+@@ -203,7 +232,7 @@ def run_preflight(
+         detect_counts=DetectCounts(
+             L1=len(l1.pages),
+             L2=l2_count,
+-            L3=0,
++            L3=sum(1 for page in l2_pages if page.l3_inspected),
+             gated_share=l1.gated_share,
+         ),
+         timings_ms={
+diff --git a/rag-sidecar/tests/test_preflight_l3.py b/rag-sidecar/tests/test_preflight_l3.py
+index f35278d..290bf5e 100644
+--- a/rag-sidecar/tests/test_preflight_l3.py
++++ b/rag-sidecar/tests/test_preflight_l3.py
+@@ -13,7 +13,11 @@ from typing import Any
+ import pytest
+ from ingest_fakes import FakeApp
+ 
+-from rag_sidecar.contracts.queue import DetectVlmRequest, DetectVlmResponse, JobSettingsSnapshot
++from rag_sidecar.contracts.queue import (
++    DetectVlmRequest,
++    DetectVlmResponse,
++    JobSettingsSnapshot,
++)
+ from rag_sidecar.ingest import converters
+ from rag_sidecar.preflight.config import load_routing_config
+ from rag_sidecar.preflight.l1 import l1_signals
+-- 
+2.43.0
+

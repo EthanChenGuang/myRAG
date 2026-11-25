@@ -1,0 +1,151 @@
+From 44753faaa66d105e21a1448b91b71e3bc9814dfb Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 24 Nov 2026 22:22:28 +0000
+Subject: [PATCH 2/6] feat(05-03): shared citation marker grammar
+
+- bracket, full-width bracket and mixed-bracket markers with ASCII, full-width and enumeration separators
+- hand-written bounded scanner (no regex backtracking) with a partial state for the stream parser
+- stripCitationMarkers and neutralizeCitationMarkers (zero-width space between S and the digits)
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01X342shLsAZx6PYph2vA7hc
+---
+ src/lib/citations/marker-grammar.ts | 118 +++++++++++++++++++++++++++-
+ 1 file changed, 114 insertions(+), 4 deletions(-)
+
+diff --git a/src/lib/citations/marker-grammar.ts b/src/lib/citations/marker-grammar.ts
+index 41e3560..93859b6 100644
+--- a/src/lib/citations/marker-grammar.ts
++++ b/src/lib/citations/marker-grammar.ts
+@@ -6,14 +6,124 @@ export interface CitationMarker {
+   aliases: string[];
+ }
+ 
+-export function findCitationMarkers(_text: string): CitationMarker[] {
+-  return [];
++export type MarkerMatch =
++  | { kind: 'match'; end: number; aliases: string[] }
++  | { kind: 'partial' }
++  | { kind: 'none' };
++
++const OPENERS = '[【［';
++const CLOSERS = ']】］';
++const SEPARATORS = ',，、';
++const ZERO_WIDTH_SPACE = '​';
++
++type ScanState = 'expect-s' | 'expect-first-digit' | 'in-digits' | 'space-before-separator' | 'space-after-separator';
++
++export function isMarkerOpener(ch: string | undefined): boolean {
++  return ch !== undefined && ch !== '' && OPENERS.includes(ch);
++}
++
++function isDigit(ch: string): boolean {
++  return ch >= '0' && ch <= '9';
++}
++
++/**
++ * Hand-written scanner, not a regex: it reads at most MAX_MARKER_HOLD_CHARS + 2
++ * characters per opener, so cost is linear in the input whatever the content.
++ * `partial` means the text so far is a valid marker prefix that more input could complete.
++ */
++export function matchMarkerAt(text: string, start: number): MarkerMatch {
++  if (!isMarkerOpener(text[start])) return { kind: 'none' };
++  const aliases: string[] = [];
++  let state: ScanState = 'expect-s';
++  let aliasStart = -1;
++  let innerLength = 0;
++
++  for (let i = start + 1; i < text.length; i++) {
++    const ch = text[i];
++    if (CLOSERS.includes(ch)) {
++      if (state !== 'in-digits') return { kind: 'none' };
++      aliases.push(text.slice(aliasStart, i));
++      return { kind: 'match', end: i + 1, aliases };
++    }
++    innerLength++;
++    if (innerLength > MAX_MARKER_HOLD_CHARS) return { kind: 'none' };
++
++    switch (state) {
++      case 'expect-s':
++        if (ch !== 'S') return { kind: 'none' };
++        aliasStart = i;
++        state = 'expect-first-digit';
++        break;
++      case 'expect-first-digit':
++        if (!(ch >= '1' && ch <= '9')) return { kind: 'none' };
++        state = 'in-digits';
++        break;
++      case 'in-digits':
++        if (isDigit(ch)) break;
++        if (ch === ' ' || SEPARATORS.includes(ch)) {
++          aliases.push(text.slice(aliasStart, i));
++          state = ch === ' ' ? 'space-before-separator' : 'space-after-separator';
++          break;
++        }
++        return { kind: 'none' };
++      case 'space-before-separator':
++        if (ch === ' ') break;
++        if (!SEPARATORS.includes(ch)) return { kind: 'none' };
++        state = 'space-after-separator';
++        break;
++      case 'space-after-separator':
++        if (ch === ' ') break;
++        if (ch !== 'S') return { kind: 'none' };
++        aliasStart = i;
++        state = 'expect-first-digit';
++        break;
++    }
++  }
++  return { kind: 'partial' };
++}
++
++export function findCitationMarkers(text: string): CitationMarker[] {
++  const markers: CitationMarker[] = [];
++  let i = 0;
++  while (i < text.length) {
++    if (!isMarkerOpener(text[i])) {
++      i++;
++      continue;
++    }
++    const m = matchMarkerAt(text, i);
++    if (m.kind === 'match') {
++      markers.push({ start: i, end: m.end, aliases: m.aliases });
++      i = m.end;
++    } else {
++      i++;
++    }
++  }
++  return markers;
+ }
+ 
+ export function stripCitationMarkers(text: string): string {
+-  return text;
++  const markers = findCitationMarkers(text);
++  if (markers.length === 0) return text;
++  let out = '';
++  let cursor = 0;
++  for (const marker of markers) {
++    let keep = marker.start;
++    while (keep > cursor && (text[keep - 1] === ' ' || text[keep - 1] === '\t')) keep--;
++    out += text.slice(cursor, keep);
++    cursor = marker.end;
++  }
++  return out + text.slice(cursor);
+ }
+ 
+ export function neutralizeCitationMarkers(text: string): string {
+-  return text;
++  const markers = findCitationMarkers(text);
++  if (markers.length === 0) return text;
++  let out = '';
++  let cursor = 0;
++  for (const marker of markers) {
++    out += text.slice(cursor, marker.start);
++    out += text.slice(marker.start, marker.end).replace(/S(?=[1-9])/g, `S${ZERO_WIDTH_SPACE}`);
++    cursor = marker.end;
++  }
++  return out + text.slice(cursor);
+ }
+-- 
+2.43.0
+
