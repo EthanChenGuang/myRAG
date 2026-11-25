@@ -39,12 +39,18 @@ async function run(ctx: StageContext): Promise<StageOutcome> {
   const document = requireDocument(ctx, 'publish');
   if (ctx.state.approval?.required === true && !quarantinedByScan(ctx)) return holdForReview(ctx, document.id, document.version);
 
+  const batchHold = ctx.state.publishHold;
+  if (batchHold) await ctx.writer.setFields(document.id, { metadata: { publish_hold: { batch_id: batchHold.batchId } } });
+
   const published = await ctx.writer.publish(document.id);
   switch (published.outcome) {
     case 'quarantined':
       return result(ctx, 'quarantined', published.documentId, published.version);
     case 'pending_review':
       return result(ctx, 'pending_review', published.documentId, published.version);
+    case 'held':
+      // D-12: the batch's hold keeps the version out of retrieval until activation; for the ledger the job's work is done.
+      return result(ctx, 'ready', published.documentId, published.version, 'publish_held');
     default:
       return result(ctx, 'ready', published.documentId, published.version);
   }

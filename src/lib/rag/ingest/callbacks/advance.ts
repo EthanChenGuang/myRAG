@@ -152,9 +152,25 @@ async function defersEmbedding(job: IngestionJob): Promise<boolean> {
   }
 }
 
-function terminalStatusOf(result: IngestResult): 'ready' | 'quarantined' | 'skipped_duplicate' | null {
-  if (result.status === 'ready' || result.status === 'quarantined' || result.status === 'skipped_duplicate') return result.status;
+type TerminalStatus = 'ready' | 'quarantined' | 'skipped_duplicate' | 'pending_review';
+
+function terminalStatusOf(result: IngestResult): TerminalStatus | null {
+  if (result.status === 'ready' || result.status === 'quarantined' || result.status === 'skipped_duplicate' || result.status === 'pending_review') {
+    return result.status;
+  }
   return null;
+}
+
+/**
+ * The decisions a queued job carries in its snapshot, laid over the run state: the approval made at enqueue (D-56; not the current
+ * mode, so a later change of RAG_UPLOAD_APPROVAL does not re-decide a job) and the batch publish hold (D-12).
+ */
+export function applySnapshotDecisions(ctx: StageContext, job: IngestionJob): void {
+  const approval = job.settings.approval ?? null;
+  if (approval) ctx.state.approval = approval;
+  else delete ctx.state.approval;
+  if (job.settings.hold_publish === true && job.batch_id) ctx.state.publishHold = { batchId: job.batch_id };
+  else delete ctx.state.publishHold;
 }
 
 function parseHasText(ctx: StageContext): boolean {
@@ -167,7 +183,7 @@ async function finish(
   workerId: string,
   ctx: StageContext,
   scope: Awaited<ReturnType<typeof scopeFromIngestionJob>>,
-  status: 'ready' | 'quarantined' | 'skipped_duplicate',
+  status: TerminalStatus,
   signal: AbortSignal,
 ): Promise<Reply> {
   const fields: Record<string, unknown> = {};
@@ -474,8 +490,10 @@ export async function handleAdvance(jobId: string, body: AdvanceBody, options: {
     if (position === 'publish') {
       const row = job.document_id ? await createIngestWriter({ db, scope, signal }).getDocument(job.document_id) : null;
       if (provisionalRun && row?.status === 'ready') return await completeProvisional(jobId, body.worker_id, signal);
-      if (row && (row.status === 'ready' || row.status === 'quarantined')) {
-        const ledgerStatus = job.needs_review_reason ? 'needs_review' : row.status;
+      const batchHeld = row?.status === 'processing' && job.settings.hold_publish === true && Boolean(job.batch_id);
+      if (row && (row.status === 'ready' || row.status === 'quarantined' || row.status === 'pending_review' || batchHeld)) {
+        const settled = batchHeld ? 'ready' : (row.status as 'ready' | 'quarantined' | 'pending_review');
+        const ledgerStatus = job.needs_review_reason && settled !== 'pending_review' ? 'needs_review' : settled;
         await advanceJob({
           jobId,
           worker: body.worker_id,
@@ -504,6 +522,7 @@ export async function handleAdvance(jobId: string, body: AdvanceBody, options: {
     });
     if (!built.ok) return refuse(built.reason === 'document_not_processing' ? 409 : 404, built.reason);
     const { ctx } = built;
+    applySnapshotDecisions(ctx, job);
 
     if (position === null) {
       const cached = await readParseResultForJob(job, body.parse_cache_id, signal);

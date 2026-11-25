@@ -1,4 +1,4 @@
-import { JobSettingsSnapshotSchema } from '@/lib/rag-eval/contracts.generated';
+import { JobSettingsSnapshotSchema, type UploadApproval } from '@/lib/rag-eval/contracts.generated';
 import { JOB_SETTINGS_PHASE32_DEFAULTS, omitDefaultFields, type JobSettingsSnapshotWire } from '../wire-defaults';
 import { imageCaptionModelId } from '../captioner';
 import type { QueueConfig } from '../queue-config';
@@ -15,6 +15,10 @@ export interface BuildJobSettingsInput {
   isBackfill?: boolean;
   /** Active embedding profile provider; defaults to openai (legacy). */
   embedProfileProvider?: string;
+  /** The identify stage's approval decision; written only when it requires approval (D-56, research Pitfall 17). */
+  approval?: UploadApproval | null;
+  /** A job of a batch whose versions publish only at activation (D-12); written only for a backfill job. */
+  holdPublish?: boolean;
 }
 
 export function buildJobSettings(input: BuildJobSettingsInput): JobSettingsSnapshotWire {
@@ -25,6 +29,8 @@ export function buildJobSettings(input: BuildJobSettingsInput): JobSettingsSnaps
     routingConfig,
     isBackfill = false,
     embedProfileProvider = 'openai',
+    approval = null,
+    holdPublish = false,
   } = input;
 
   const progressive = isBackfill ? false : queueConfig.parseProgressive;
@@ -48,6 +54,8 @@ export function buildJobSettings(input: BuildJobSettingsInput): JobSettingsSnaps
     routing_config_version: routingConfig.version,
     vlm_detect: queueConfig.vlmDetect,
     vlm_model: queueConfig.vlmModel ?? imageCaptionModelId(),
+    ...(approval?.required === true ? { approval } : {}),
+    ...(holdPublish && isBackfill ? { hold_publish: true } : {}),
   };
 
   return omitDefaultFields(JobSettingsSnapshotSchema.parse(snapshot), JOB_SETTINGS_PHASE32_DEFAULTS);
