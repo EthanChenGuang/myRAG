@@ -311,5 +311,43 @@ class RayOptionalJobTest(unittest.TestCase):
         self.assertEqual(len(errors), 1)
 
 
+class NextBuildJobTest(unittest.TestCase):
+    def job(self) -> dict:
+        return check_workflows.load(check_workflows.PR)[0]["jobs"]["next-build"]
+
+    def errors_for(self, job: dict | None) -> list[str]:
+        errors: list[str] = []
+        check_workflows.check_next_build(job, errors)
+        return errors
+
+    def test_repository_workflow_runs_next_build(self):
+        self.assertIn("next-build", check_workflows.PR_JOBS)
+        self.assertEqual(self.errors_for(self.job()), [])
+
+    def test_missing_build_step_is_reported(self):
+        job = self.job()
+        job["steps"] = [step for step in job["steps"] if "next build" not in str(step.get("run", ""))]
+        self.assertTrue(any("must run 'npx next build'" in e for e in self.errors_for(job)))
+
+    def test_missing_install_is_reported(self):
+        job = self.job()
+        job["steps"] = [step for step in job["steps"] if "npm ci" not in str(step.get("run", ""))]
+        self.assertTrue(any("npm ci" in e for e in self.errors_for(job)))
+
+    def test_missing_placeholder_env_is_reported(self):
+        job = self.job()
+        del job["env"]["SUPABASE_SERVICE_ROLE_KEY"]
+        self.assertTrue(any("SUPABASE_SERVICE_ROLE_KEY" in e for e in self.errors_for(job)))
+
+    def test_a_secret_is_reported(self):
+        job = self.job()
+        job["env"]["SUPABASE_SERVICE_ROLE_KEY"] = "${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}"
+        errors = self.errors_for(job)
+        self.assertTrue(any("must not reference secrets" in e for e in errors), errors)
+
+    def test_a_workflow_without_the_job_has_nothing_to_check(self):
+        self.assertEqual(self.errors_for(None), [])
+
+
 if __name__ == "__main__":
     unittest.main()
