@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 const html = fs.readFileSync('scripts/config-ui/index.html', 'utf8');
 
-const SELECTS = ['RAG_PIPELINE', 'RAG_RERANKER', 'RAG_RERANK_TIER_CHAT', 'RAG_RERANK_TIER_VOICE', 'RAG_HNSW_ITERATIVE_SCAN'];
+const SELECTS = ['RAG_PIPELINE', 'RAG_RERANKER', 'RAG_REFUSAL_FLOOR', 'RAG_RERANK_TIER_CHAT', 'RAG_RERANK_TIER_VOICE', 'RAG_HNSW_ITERATIVE_SCAN'];
 const TEXT_INPUTS = ['RAG_RERANK_VOYAGE_MODEL_BY_LANG', 'COHERE_API_KEY', 'COHERE_BASE_URL', 'RAG_RETRIEVAL_PARAMS_OVERRIDE'];
 const NUMBER_INPUTS = ['RAG_CONTEXT_TOKEN_BUDGET', 'RAG_EXACT_SCAN_CUTOFF'];
 const CHECKBOXES = ['RAG_LEXICAL_SEARCH', 'RAG_REFUSAL_THRESHOLD', 'RAG_CONTEXT_EDGE_ORDER', 'RAG_CONTEXT_COMPRESSION', 'RAG_PARENT_CHILD', 'RAG_LEXICAL_TRANSLATION'];
@@ -53,7 +53,7 @@ describe('Phase 4 retrieval switches in the Config UI (web-design-guidelines, pl
   });
 
   it('help text is tied to its control and code tokens are not machine-translated', () => {
-    for (const id of ['RAG_PIPELINE', 'RAG_RERANK_VOYAGE_MODEL_BY_LANG']) {
+    for (const id of ['RAG_PIPELINE', 'RAG_RERANK_VOYAGE_MODEL_BY_LANG', 'RAG_REFUSAL_FLOOR']) {
       const describedBy = attr(openingTag(id), 'aria-describedby');
       expect(describedBy, id).toBeTruthy();
       expect(html).toContain(`id="${describedBy}"`);
@@ -63,6 +63,19 @@ describe('Phase 4 retrieval switches in the Config UI (web-design-guidelines, pl
     expect(legacyNotes.length).toBeGreaterThanOrEqual(4);
     for (const note of legacyNotes) expect(note[1], note[0]).toBeDefined();
     expect(html).toMatch(/Lexical search leg \(<span translate="no">RAG_LEXICAL_SEARCH<\/span>\)/);
+  });
+
+  it('the reranker offers auto and the refusal floor offers similarity and legacy_rule, with today\'s defaults selected', () => {
+    const options = (id: string) => {
+      const block = new RegExp(`<select\\b[^>]*\\bid="${id}"[^>]*>([\\s\\S]*?)</select>`).exec(html)?.[1] ?? '';
+      return [...block.matchAll(/<option value="([^"]*)"( selected)?>/g)].map((m) => ({ value: m[1], selected: Boolean(m[2]) }));
+    };
+    const reranker = options('RAG_RERANKER');
+    expect(reranker.map((o) => o.value)).toEqual(['none', 'auto', 'cohere', 'voyage', 'local_bm25']);
+    expect(reranker.filter((o) => o.selected).map((o) => o.value)).toEqual(['none']);
+    const floor = options('RAG_REFUSAL_FLOOR');
+    expect(floor.map((o) => o.value)).toEqual(['similarity', 'legacy_rule']);
+    expect(floor.filter((o) => o.selected).map((o) => o.value)).toEqual(['similarity']);
   });
 
   it('the switch group heading wraps evenly', () => {
