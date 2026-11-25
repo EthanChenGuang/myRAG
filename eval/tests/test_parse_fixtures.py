@@ -257,7 +257,11 @@ def test_scan_zh_it_pdf_is_image_only():
     assert path.is_file(), f"missing {path.name}"
     data = path.read_bytes()
     assert b"/Subtype /Image" in data
-    assert b"BT" not in data.replace(b"/BitsPerComponent", b""), "the page has a text layer; OCR must be the only source"
+    contents = re.search(rb"/Contents (\d+) 0 R", data)
+    assert contents is not None
+    stream = re.search(rb"\n" + contents.group(1) + rb" 0 obj\n.*?stream\r?\n(.*?)endstream", data, re.S)
+    assert stream is not None and b"Do" in stream.group(1), "the page content does not draw the scan image"
+    assert not re.search(rb"(Tj|TJ|'|\")\s", stream.group(1)), "the page has a text layer; OCR must be the only source"
 
 
 @requires_reportlab

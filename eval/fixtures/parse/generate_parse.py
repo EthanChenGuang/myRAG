@@ -253,6 +253,8 @@ def generate(font_path: Path | None, font_index: int = 0, out_dir: Path | None =
         (pdf_dir / f"{spec_id}.pdf").write_bytes(data)
         expected = expected_mod.parser_expected(expected_spec, ingest)
         (expected_dir / f"{spec_id}.json").write_text(json.dumps(expected, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        if getattr(expected_spec, "facts", {}).get("exact_text"):
+            (expected_dir / f"{spec_id}.txt").write_text(expected_mod.exact_text(expected_spec, ingest), encoding="utf-8")
         entries.append(
             {
                 "id": spec_id,

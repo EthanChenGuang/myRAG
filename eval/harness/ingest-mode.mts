@@ -16,7 +16,8 @@ const MANIFEST_PATH = path.join('eval/fixtures/ingest/manifest.json');
 const PARSE_MANIFEST_PATH = path.join('eval/fixtures/parse/manifest.json');
 const PARSE_RECORDED_DIR = path.join('eval/fixtures/parse/recorded');
 /** The latency fixture is routed and timed, not retrieved from: 100 near-identical pages would only crowd the corpus. */
-const EXCLUDED_PARSE_CLASSES = new Set(['bench']);
+/** bench is the latency fixture; scan_zh_it (03.2-25) is a character-exact transport fixture, not part of the retrieval corpus. */
+const EXCLUDED_PARSE_CLASSES = new Set(['bench', 'scan_zh_it']);
 const RECORDED_PRESETS = ['fast', 'structured_layout', 'structured_full', 'structured_ocr'] as const;
 const QUEUE_SIDECAR_SECRET = 'ingest-mode-queue-sidecar-secret-0000';
 /** Large enough for every fixture page under --force-tier premium (D-40); the parse fixtures have 26 pages, the typed ones 14. */
