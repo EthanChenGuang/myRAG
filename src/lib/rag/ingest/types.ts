@@ -161,6 +161,9 @@ export interface ChunkDraft {
   /** Set by the enrich stage. */
   content_hash?: string;
   lexical_text?: string;
+  /** Set by the enrich stage only with RAG_LANGUAGE_AWARE_INGEST=on: the chunk's own language (or `und`) and its confidence. */
+  language?: string;
+  language_confidence?: number;
 }
 
 /** What a chunker returns: the drafts plus stable warning codes for the stage to report. */
