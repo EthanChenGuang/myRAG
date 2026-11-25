@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { ingestModeGoldenPaths, mergeGoldenFiles, parseIngestRoutingFlags } from './ingest-mode.mts';
+import { dropTableSplitItems } from './table-split.mts';
 import { runEval, type EvalRequestOptions } from './run-eval.mts';
 import { CHUNKING_PROFILES_NEED_INGEST, loadRunConfig, RunConfigError } from './run-config.mts';
 import type { DeploymentMode, FixtureMode } from './pglite-supabase.mts';
@@ -128,7 +129,10 @@ async function main(): Promise<number> {
   // Ingest mode scores the golden files it names itself unless --golden says otherwise, so its ingest-only items need no change here.
   const defaultGolden = fixtureMode === 'ingest' ? ingestModeGoldenPaths() : [DEFAULT_GOLDEN];
   const goldenFiles = values.golden !== undefined ? [path.resolve(values.golden)] : defaultGolden.map((file) => path.resolve(REPO_ROOT, file));
-  const goldenPath = mergeGoldenFiles(goldenFiles, path.join(outDir, 'golden.merged.jsonl'));
+  const mergedGolden = mergeGoldenFiles(goldenFiles, path.join(outDir, 'golden.merged.jsonl'));
+  // table_split items run only against the isolated tenants of the inline ingest mode; other runs score without them.
+  const goldenPath =
+    fixtureMode === 'ingest' && !ingestRouting ? mergedGolden : dropTableSplitItems(mergedGolden, path.join(outDir, 'golden.no-table-split.jsonl'));
   if (runPython('rag_sidecar.contracts.validate', ['--model', 'GoldenItem', '--jsonl', goldenPath]) !== 0) {
     console.error('[Eval Harness] golden file failed Pydantic validation; nothing was run');
     return 2;

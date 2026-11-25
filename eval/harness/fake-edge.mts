@@ -24,6 +24,11 @@ export interface FakeEdge {
   url: string;
   errors: FakeEdgeError[];
   calls: FakeEdgeCall[];
+  /**
+   * Serves REST and RPC requests from another fixture database from now on (storage and embeddings are unchanged). The eval
+   * harness uses it for the isolated table_split tenants: the app modules keep the edge URL they saw at import time.
+   */
+  useDatabase(db: PGlite): void;
   close(): Promise<void>;
 }
 
@@ -704,11 +709,12 @@ export async function startFakeEdge(options: FakeEdgeOptions): Promise<FakeEdge>
   const calls: FakeEdgeCall[] = [];
   const serviceKeys = options.serviceKeys ?? defaultServiceKeys();
   const anonKey = options.anonKey ?? DEFAULT_ANON_KEY;
-  const handlers = createHandlers(options.db, calls, {
+  const handlerExtras = {
     documentFilenameFilter: options.documentFilenameFilter === true,
     serviceKeys,
     anonKey,
-  });
+  };
+  let handlers = createHandlers(options.db, calls, handlerExtras);
   const storageObjects = new Map<string, Buffer>();
 
   const sendBytes = (res: http.ServerResponse, status: number, body: Buffer, extraHeaders?: Record<string, string>) => {
@@ -869,6 +875,9 @@ export async function startFakeEdge(options: FakeEdgeOptions): Promise<FakeEdge>
     url: `http://127.0.0.1:${port}`,
     errors,
     calls,
+    useDatabase: (db: PGlite) => {
+      handlers = createHandlers(db, calls, handlerExtras);
+    },
     close: () =>
       new Promise<void>((resolve) => {
         server.close(() => resolve());
