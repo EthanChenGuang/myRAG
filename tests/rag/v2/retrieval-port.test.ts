@@ -7,6 +7,13 @@ import type { QueryVariant } from '@/lib/rag/types';
 import { effectiveRetrievalParams } from '@/lib/rag/v2/retrieval-params';
 import { createRetrievalPort, type RetrievalPortContext } from '@/lib/rag/v2/port';
 import { hit } from '../fusion/helpers';
+import { resetRetrievalBackendForTests, setRetrievalBackendForTests } from '@/lib/rag/backend/registry';
+import { deriveStatus, StageError } from '@/lib/rag/pipeline';
+import type { RetrievalPort, SearchDelegate } from '@/lib/rag/query/port-types';
+import { createTraceCollector, type TraceCollector } from '@/lib/rag/trace/collector';
+import { runSearchStages } from '@/lib/rag/v2/stages/search';
+import { resetV2StartupForTests, verifyV2Startup } from '@/lib/rag/v2/startup';
+import { installDeps, uninstallDeps } from '../helpers/pipeline-fakes';
 
 const TENANT_A = mintScope('personal', '00000000-0000-4000-8000-00000000000a', null);
 const TENANT_B = mintScope('personal', '00000000-0000-4000-8000-00000000000b', null);
@@ -243,5 +250,144 @@ describe('createRetrievalPort (D-18, A-4)', () => {
     const fused = handle.fusedHits(['c3', 'c1']);
     expect(fused.map((row) => row.hit.chunkId)).toEqual(['c3', 'c1']);
     expect(fused[1]!.ranks).toEqual({ 'dense:0': 1, 'lexical:0': 2 });
+  });
+});
+
+/** Tie-free under RRF k=60 with equal weights: every chunk's score is distinct (asserted below). */
+const TIE_FREE: Record<number, { dense: string[]; lexical: string[] }> = {
+  0: { dense: ['ca', 'cb', 'cc', 'cd'], lexical: ['ce', 'ca'] },
+  1: { dense: ['cb'], lexical: ['ca', 'cc'] },
+  2: { dense: ['cc', 'ch', 'ci'], lexical: [] },
+};
+
+function tieFreeBackend(rec: Recorder): RetrievalBackend {
+  return {
+    id: 'pgvector',
+    async search(req) {
+      rec.calls.push(req);
+      rec.scopes.push(scopeKey(req.scope));
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      const lists = TIE_FREE[variantIndexOf(req)]!;
+      const ranked = (ids: string[]) => ids.map((id, index) => hit(id, { rank: index + 1, similarity: 0.9 - index / 10 }));
+      return {
+        dense: ranked(lists.dense),
+        lexical: req.lexicalTokens.length > 0 ? ranked(lists.lexical) : [],
+      } satisfies BackendLegs;
+    },
+    health: async () => ({ ok: true }),
+    isReady: async () => true,
+  };
+}
+
+/** A pure TypeScript stand-in for a framework ensemble: one retriever per variant and leg, RRF with equal weights. */
+function rrfDelegate(k: number, calls: { count: number }): SearchDelegate {
+  return async (port: RetrievalPort) => {
+    calls.count += 1;
+    const retrievers = port.variants.flatMap((variant) => [
+      async () => (await port.searchVariant(variant.index)).dense,
+      async () => (await port.searchVariant(variant.index)).lexical,
+    ]);
+    const lists = await Promise.all(retrievers.map((retriever) => retriever()));
+    const scores = new Map<string, number>();
+    for (const ids of lists) {
+      ids.forEach((id, index) => scores.set(id, (scores.get(id) ?? 0) + 1 / (k + index + 1)));
+    }
+    return [...scores.entries()].sort((a, b) => b[1] - a[1]).map(([id]) => id);
+  };
+}
+
+async function runSearch(rec: Recorder, options: { searchDelegate?: SearchDelegate; collector?: TraceCollector; icu?: boolean } = {}) {
+  setRetrievalBackendForTests(tieFreeBackend(rec));
+  installDeps({ ragEnv: () => ({ RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'true' }) });
+  await verifyV2Startup(options.icu === false ? { icuSegmentsChinese: () => false } : undefined);
+  resetRagConfigForTests();
+  const config = loadRagConfig({ RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'true' });
+  const signal = new AbortController().signal;
+  return runSearchStages({
+    input: { scope: TENANT_A, query: VARIANTS[0]!.text, profile: 'eval', signal },
+    scope: TENANT_A,
+    config,
+    profile: 'eval',
+    params: effectiveRetrievalParams('eval', config, null),
+    embedding: { vector: vectorFor(0), profile: null },
+    variantEmbeddings: VARIANTS.map((_variant, index) => ({ vector: vectorFor(index), profile: null })),
+    variants: VARIANTS,
+    signal,
+    collector: options.collector ?? createTraceCollector({ profile: 'eval', tenantKey: scopeKey(TENANT_A) }),
+    trackStandalone: true,
+    ...(options.searchDelegate ? { searchDelegate: options.searchDelegate } : {}),
+  });
+}
+
+describe('runSearchStages with a search delegate (D-02, D-18, A-4)', () => {
+  beforeEach(() => {
+    uninstallDeps();
+    resetRetrievalBackendForTests();
+    resetV2StartupForTests();
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    uninstallDeps();
+    resetRetrievalBackendForTests();
+    resetV2StartupForTests();
+    resetRagConfigForTests();
+    vi.restoreAllMocks();
+  });
+
+  it('a delegate applying RRF over the port lists gives the native order and the same capped candidates', async () => {
+    const native = await runSearch(recorder());
+    const scores = native.fusedHits.map((row) => row.score);
+    expect(new Set(scores).size).toBe(scores.length);
+
+    const rec = recorder();
+    const calls = { count: 0 };
+    const delegated = await runSearch(rec, { searchDelegate: rrfDelegate(params().rrf_k, calls) });
+    expect(calls.count).toBe(1);
+    expect(rec.calls).toHaveLength(3);
+    expect(rec.scopes.every((key) => key === scopeKey(TENANT_A))).toBe(true);
+    expect(delegated.fusedHits.map((row) => row.hit.chunkId)).toEqual(native.fusedHits.map((row) => row.hit.chunkId));
+    expect(delegated).toEqual(native);
+  });
+
+  it('follows the delegate order and drops ids the port never collected', async () => {
+    const delegate: SearchDelegate = async (port) => {
+      await port.searchVariant(0);
+      return ['cd', 'unknown', 'ca', 'ce'];
+    };
+    const rec = recorder();
+    const out = await runSearch(rec, { searchDelegate: delegate });
+    expect(out.fusedHits.map((row) => row.hit.chunkId)).toEqual(['cd', 'ca', 'ce']);
+    expect(out.fusedHits[1]!.ranks).toEqual({ 'dense:0': 1, 'lexical:0': 2 });
+    expect(rec.calls).toHaveLength(1);
+  });
+
+  it('a delegate that throws fails the search stage with search_delegate_error and an error status, never empty', async () => {
+    const collector = createTraceCollector({ profile: 'eval', tenantKey: scopeKey(TENANT_A) });
+    const delegate: SearchDelegate = async () => {
+      throw new Error('synthetic delegate failure');
+    };
+    await expect(runSearch(recorder(), { searchDelegate: delegate, collector })).rejects.toBeInstanceOf(StageError);
+    const search = collector.stages().find((record) => record.name === 'search');
+    expect(search).toMatchObject({ status: 'error', reason: 'failed', detail: 'search_delegate_error' });
+    expect(deriveStatus(collector.stages(), 0)).toBe('error');
+  });
+
+  it('a delegate that returns something other than a list of ids fails the same way', async () => {
+    const collector = createTraceCollector({ profile: 'eval', tenantKey: scopeKey(TENANT_A) });
+    const delegate = (async () => ({ ids: ['ca'] })) as unknown as SearchDelegate;
+    await expect(runSearch(recorder(), { searchDelegate: delegate, collector })).rejects.toMatchObject({ stage: 'search', reason: 'failed' });
+    expect(collector.stages().find((record) => record.name === 'search')).toMatchObject({ status: 'error', detail: 'search_delegate_error' });
+  });
+
+  it('with ICU unavailable a throwing delegate still fails the search stage with search_delegate_error', async () => {
+    const collector = createTraceCollector({ profile: 'eval', tenantKey: scopeKey(TENANT_A) });
+    const delegate: SearchDelegate = async () => {
+      throw new Error('synthetic delegate failure');
+    };
+    await expect(runSearch(recorder(), { searchDelegate: delegate, collector, icu: false })).rejects.toBeInstanceOf(StageError);
+    expect(collector.stages().find((record) => record.name === 'search')).toMatchObject({ status: 'error', detail: 'search_delegate_error' });
+    expect(deriveStatus(collector.stages(), 0)).toBe('error');
   });
 });

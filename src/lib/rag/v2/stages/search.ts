@@ -18,6 +18,7 @@ import { evalChunkingOverride } from '../overrides';
 import { listsFromLegs, variantSearchRequest } from '../port';
 import { bindingFailureDetail, hasBindingWork, runBindingLegs, type BindingEmbed, type BindingLegsOutput, type BindingLegsPlan } from './binding-legs';
 import type { RetrievalParams } from '@/lib/rag-eval/contracts.generated';
+import type { SearchDelegate } from '../../query/port-types';
 
 export interface SearchStagesInput {
   input: RunRetrievalInput;
@@ -37,6 +38,8 @@ export interface SearchStagesInput {
   trackStandalone?: boolean;
   /** Planned binding legs and their embeds, started before the global embed stage (D-18). */
   bindings?: { plan: BindingLegsPlan; embeds: readonly Promise<BindingEmbed>[] };
+  /** A query framework fusing the variant lists through a scope-bound port (D-18); absent means native RRF. */
+  searchDelegate?: SearchDelegate;
 }
 
 /** Keeps a binding leg's backend call inside the search stage budget so a slow leg can never time the stage out. */
