@@ -27,7 +27,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 4: Hybrid Retrieval, Reranking & Calibrated Refusal** - Filtered hybrid search on pgvector, switchable rerankers, edge-ordered context and refusal from calibrated rerank scores
 - [ ] **Phase 04.1: Hybrid retrieval and rerank on by default, proven by eval** (INSERTED) - v2 with hybrid search, `RAG_RERANKER=auto` and threshold refusal become the defaults after a pre-registered eval gate passes; `RAG_PIPELINE=legacy` restores today exactly
 - [ ] **Phase 04.1.1: Domain terminology dictionary: expert-maintained synonyms, query expansion, index-time synonyms, log mining** (INSERTED) - Versioned, audited shared and per-tenant dictionary, down-weighted query-time expansion, CSV import/export, mined candidates for expert review; index-time synonyms recorded as not built
-- [ ] **Phase 4.2: Retrieval Tuning Additions** (INSERTED) - Rerank pool floor 25 and nDCG, tenant tokenizer dictionary and eval-gated Italian stemming, version-aware retrieval, structured table lookup, TTFT tracing and CI gate
+- [ ] **Phase 4.2: Retrieval Tuning Additions** (INSERTED) - Rerank pool floor 25 and nDCG, tenant tokenizer dictionary and eval-gated Italian stemming, version-aware retrieval, structured table lookup, near-duplicate clusters and result diversity, TTFT tracing and CI gate
 - [ ] **Phase 5: Verified Citations & Groundedness** - Claude Citations, validated chunk-ID citations for other models, one persisted citation record and a post-stream groundedness badge
 - [ ] **Phase 5.1: Prompt Injection Defense** (INSERTED) - Tagged, instruction-free context, runtime injection detection and an injection eval gated at 0
 - [ ] **Phase 05.1.1: Feedback Loop & Real Domain Test Set** (INSERTED) - Tenant-safe retrieval log, refusal and embed feedback, weekly failure mining into an expert-labelled queue, dictionary and training exports, and a real domain test set that gates releases
@@ -437,13 +437,14 @@ Plans:
 ### Phase 4.2: Retrieval Tuning Additions (INSERTED)
 **Goal**: Retrieval keeps the smallest rerank pool that works, matches company terms as single words, can answer questions about earlier policy versions, and its time to first token is gated
 **Depends on**: Phase 4, Phase 4.1, Phase 4.1.1 (TERM dictionary for LANG-07 and XLG-05), Phase 3.2
-**Requirements**: LAT-04, LANG-07, RET-11, RET-12 (plus the RNK-02 and LAT-01 deltas)
+**Requirements**: LAT-04, LANG-07, RET-11, RET-12, DATA-21, RET-13, EVAL-20 (plus the RNK-02 and LAT-01 deltas)
 **Success Criteria** (what must be TRUE):
   1. The sweep grid includes a pool of 25, the rerank input cap accepts 25, and the sweep report adds nDCG@k with k equal to the chunks sent to the LLM.
   2. A tenant dictionary term such as 年假 matches as one lexical term after `rag:relex`; Italian stemming makes dipendente and dipendenti match and is turned on only if the it slice gains Recall with no other slice dropping.
   3. With `versions: all` or a period range, a fixture question comparing two versions of one policy retrieves chunks of both, superseded chunks carry their version and dates, and the default still returns current versions only; the semantic cache bypasses these queries.
   4. TTFT p50/p95 is on the trace for text, embed and voice, cache hits and misses are reported separately, and an injected pre-generation delay makes the CI latency gate fail.
   5. With `RAG_TABLE_LOOKUP` on, a question naming a city and a grade retrieves the matching table row through the lookup leg as an extra RRF list within the verified tenant, the row reaches the context with its header, no LLM-written SQL exists anywhere, and the cross-tenant canary includes the row store.
+  6. With `RAG_DUP_CLUSTERS` on, a fixture FAQ pasted into 30 documents forms one duplicate cluster per tenant (never across tenants), and deleting one source document updates the cluster; with `RAG_RESULT_DIVERSITY=collapse` (or `mmr`), the question "VPN 连不上，而且密码也忘了怎么办？" and its en/it versions get the password answer once, with all its sources listed, plus the VPN troubleshooting chunk in the top-k; the `duplicate_flood` slice gates top-k redundancy and per-intent evidence, and no other slice drops beyond the noise band.
 **Live verification**: Re-run the pool sweep with real rerankers including the 25 pool; measure real TTFT against the budget.
 **Plans**: TBD
 
