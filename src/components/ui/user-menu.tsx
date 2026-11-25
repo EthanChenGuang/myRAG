@@ -14,6 +14,8 @@ import { useTheme } from '@/components/theme-provider';
 import { useState, useRef, useEffect } from 'react';
 import { SettingsModal } from './settings/SettingsModal';
 import { useLanguage } from '@/components/providers/language-provider';
+import { useAuth } from '@/components/providers/auth-provider';
+import { getUserAvatar } from '@/lib/user-avatar';
 
 interface UserMenuProps {
   email?: string;
@@ -36,10 +38,9 @@ export function UserMenu({ email, onSignOut }: UserMenuProps) {
   const hoverColor = isDarkMode ? '#424242' : '#E5D6C9';
   const textColor = isDarkMode ? '#E6E6E6' : '#444';
 
-  // Get first two letters of email if available
-  const initials = email
-    ? email.split('@')[0].slice(0, 2).toUpperCase()
-    : null;
+  const { user } = useAuth();
+  const { imageUrl: avatarUrl, initials } = getUserAvatar(user ?? (email ? { email } : null));
+  const [avatarFailed, setAvatarFailed] = useState(false);
 
   // Handle clicks outside the dropdown
   useEffect(() => {
@@ -109,9 +110,17 @@ export function UserMenu({ email, onSignOut }: UserMenuProps) {
         <DropdownMenuTrigger asChild>
           <button
             ref={triggerRef}
-            className="dropdown-trigger inline-flex items-center justify-center w-10 h-10 rounded-full bg-transparent dark:bg-transparent border border-[#FFE0D0] dark:border-[#2F2F2F] hover:bg-[#FFE0D0] dark:hover:bg-[#424242] transition-colors backdrop-blur-md"
+            className="dropdown-trigger inline-flex items-center justify-center w-10 h-10 overflow-hidden rounded-full bg-transparent dark:bg-transparent border border-[#FFE0D0] dark:border-[#2F2F2F] hover:bg-[#FFE0D0] dark:hover:bg-[#424242] transition-colors backdrop-blur-md"
           >
-            {initials ? (
+            {avatarUrl && !avatarFailed ? (
+              <img
+                src={avatarUrl}
+                alt=""
+                referrerPolicy="no-referrer"
+                className="w-full h-full rounded-full object-cover"
+                onError={() => setAvatarFailed(true)}
+              />
+            ) : initials ? (
               <span className="text-xs font-medium text-gray-800 dark:text-gray-200 leading-none">{initials}</span>
             ) : (
               <User className="h-5 w-5 text-gray-800 dark:text-gray-200" />
