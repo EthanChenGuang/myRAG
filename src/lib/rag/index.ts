@@ -251,6 +251,8 @@ export type {
 } from './ingest/approval/admin';
 export {
   createVocabularyEntry,
+  DOCUMENT_VIEWS,
+  listDocumentsWithScopes,
   listVocabulary,
   MAX_DOCUMENT_SCOPES,
   normalizeScopeValue,
@@ -260,8 +262,12 @@ export {
   updateVocabularyEntry,
 } from './ingest/scopes/admin';
 export type {
+  DocumentView,
+  ListDocumentsWithScopesResult,
   ListVocabularyResult,
   ScopeDimension,
+  ScopeSuggestionItem,
+  TaggedDocument,
   ScopeFailure,
   SetDocumentScopesResult,
   VocabularyEntry,

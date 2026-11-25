@@ -344,6 +344,81 @@ BEGIN
 END
 $function$;
 
+-- The admin's Documents view (UI-SPEC 6.7): current documents of one workspace with id, file name, document type, status, version, tags,
+-- stored suggestions (metadata.scope_suggestions, written by plan 47) and upload time; never any document or chunk text. p_scopes filters
+-- with the retrieval semantics (OR within a dimension, AND across dimensions); p_filter is all, suggested (has suggestions) or untagged;
+-- p_query matches file names, case-insensitive, with % and _ taken literally. total_count counts the filtered set, suggested_count the
+-- workspace's documents with suggestions. A non-admin actor or another tenant's key gives no rows.
+CREATE OR REPLACE FUNCTION public.rag_list_documents_with_scopes(
+  p_actor uuid, p_tenant_key text, p_scopes text[] DEFAULT NULL, p_query text DEFAULT NULL, p_limit integer DEFAULT 50,
+  p_offset integer DEFAULT 0, p_filter text DEFAULT 'all'
+)
+ RETURNS TABLE(
+   id uuid, filename text, doc_type text, status text, version integer, scopes text[], suggestions jsonb,
+   uploaded_at timestamp with time zone, total_count bigint, suggested_count bigint
+ )
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+#variable_conflict use_column
+DECLARE
+  page_size integer := LEAST(GREATEST(COALESCE(p_limit, 50), 1), 100);
+  skip integer := LEAST(GREATEST(COALESCE(p_offset, 0), 0), 1000000);
+  v_filter text := COALESCE(p_filter, 'all');
+  v_pattern text;
+BEGIN
+  IF v_filter NOT IN ('all', 'suggested', 'untagged') THEN
+    RAISE EXCEPTION 'invalid_argument';
+  END IF;
+  IF NOT public.rag_scope_admin(p_actor, p_tenant_key) THEN
+    RETURN;
+  END IF;
+  IF p_query IS NOT NULL AND pg_catalog.btrim(p_query) <> '' THEN
+    v_pattern := '%' || pg_catalog.replace(pg_catalog.replace(pg_catalog.replace(pg_catalog.btrim(p_query), '\', '\\'), '%', '\%'), '_', '\_') || '%';
+  END IF;
+
+  RETURN QUERY
+  WITH docs AS (
+    SELECT d.id, d.filename, d.doc_type, d.status, d.version, d.scopes, d.created_at,
+           CASE pg_catalog.jsonb_typeof(d.metadata -> 'scope_suggestions')
+             WHEN 'array' THEN d.metadata -> 'scope_suggestions'
+             WHEN 'object' THEN CASE WHEN pg_catalog.jsonb_typeof(d.metadata -> 'scope_suggestions' -> 'suggestions') = 'array'
+                                     THEN d.metadata -> 'scope_suggestions' -> 'suggestions' ELSE '[]'::jsonb END
+             ELSE '[]'::jsonb
+           END AS suggestions
+    FROM public.documents d
+    WHERE d.tenant_key = p_tenant_key AND d.is_current AND d.status <> 'deleted'
+  ),
+  counted AS (
+    SELECT pg_catalog.count(*) FILTER (WHERE pg_catalog.jsonb_array_length(x.suggestions) > 0) AS n FROM docs x
+  ),
+  filtered AS (
+    SELECT x.*
+    FROM docs x
+    WHERE (v_pattern IS NULL OR x.filename ILIKE v_pattern ESCAPE '\')
+      AND (v_filter <> 'suggested' OR pg_catalog.jsonb_array_length(x.suggestions) > 0)
+      AND (v_filter <> 'untagged' OR pg_catalog.cardinality(x.scopes) = 0)
+      AND (
+        p_scopes IS NULL OR pg_catalog.cardinality(p_scopes) = 0 OR NOT EXISTS (
+          SELECT 1
+          FROM (
+            SELECT pg_catalog.split_part(t.tag, ':', 1) AS dimension, pg_catalog.array_agg(t.tag) AS tags
+            FROM pg_catalog.unnest(p_scopes) AS t(tag)
+            GROUP BY 1
+          ) wanted
+          WHERE NOT (x.scopes && wanted.tags)
+        )
+      )
+  )
+  SELECT f.id, f.filename, f.doc_type, f.status, f.version, f.scopes, f.suggestions, f.created_at,
+         pg_catalog.count(*) OVER (), (SELECT c.n FROM counted c)
+  FROM filtered f
+  ORDER BY f.created_at DESC, f.id
+  LIMIT page_size OFFSET skip;
+END
+$function$;
+
 -- Purge hook (phase rule: every new 3.2 store): clears the tags of a purged lineage's documents, or of the listed documents in that
 -- tenant, and of their chunks. Returns the number of rows changed.
 CREATE OR REPLACE FUNCTION public.rag_purge_hook_scope_tags(p_tenant_key text, p_lineage_id uuid, p_document_ids uuid[])
@@ -391,6 +466,8 @@ REVOKE ALL ON FUNCTION public.rag_scope_vocabulary_update(uuid, text, uuid, text
 GRANT EXECUTE ON FUNCTION public.rag_scope_vocabulary_update(uuid, text, uuid, text, text[], boolean, text, text) TO service_role;
 REVOKE ALL ON FUNCTION public.rag_set_document_scopes(uuid, text, text[], uuid) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rag_set_document_scopes(uuid, text, text[], uuid) TO service_role;
+REVOKE ALL ON FUNCTION public.rag_list_documents_with_scopes(uuid, text, text[], text, integer, integer, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_list_documents_with_scopes(uuid, text, text[], text, integer, integer, text) TO service_role;
 REVOKE ALL ON FUNCTION public.rag_purge_hook_scope_tags(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rag_purge_hook_scope_tags(text, uuid, uuid[]) TO service_role;
 

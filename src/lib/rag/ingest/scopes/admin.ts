@@ -247,3 +247,114 @@ export async function setDocumentScopes(input: SetDocumentScopesInput): Promise<
   if (documentId === null || scopes === null || typeof chunksUpdated !== 'number') return { ok: false, reason: 'unavailable' };
   return { ok: true, documentId, scopes, chunksUpdated };
 }
+
+export const DOCUMENT_VIEWS = ['all', 'suggested', 'untagged'] as const;
+export type DocumentView = (typeof DOCUMENT_VIEWS)[number];
+
+export interface ScopeSuggestionItem {
+  dimension: ScopeDimension;
+  value: string;
+  source: 'rule' | 'model';
+}
+
+export interface TaggedDocument {
+  documentId: string;
+  filename: string;
+  docType: string | null;
+  status: string;
+  version: number;
+  scopes: string[];
+  suggestions: ScopeSuggestionItem[];
+  uploadedAt: string;
+}
+
+export type ListDocumentsWithScopesResult =
+  | { ok: true; items: TaggedDocument[]; total: number; suggestedTotal: number; limit: number; offset: number }
+  | ScopeError;
+
+export interface ListDocumentsWithScopesInput extends ScopeAdminInput {
+  /** dimension:value tags; OR within a dimension, AND across dimensions. Null or empty: no tag filter. */
+  scopes: string[] | null;
+  /** File-name search; % and _ are literal. */
+  query: string | null;
+  view: DocumentView;
+  limit?: number;
+  offset?: number;
+}
+
+const DEFAULT_DOCUMENT_PAGE = 50;
+const MAX_DOCUMENT_PAGE = 100;
+const MAX_SUGGESTIONS = 30;
+
+function clamp(value: number | undefined, fallback: number, min: number, max: number): number {
+  return typeof value === 'number' && Number.isInteger(value) ? Math.min(Math.max(value, min), max) : fallback;
+}
+
+/** Only the three named fields of a well-formed suggestion item (ScopeTagSuggestionItem); anything else is dropped. */
+function suggestionsOf(value: unknown): ScopeSuggestionItem[] {
+  if (!Array.isArray(value)) return [];
+  const items: ScopeSuggestionItem[] = [];
+  for (const item of value) {
+    if (item === null || typeof item !== 'object') continue;
+    const { dimension, value: slug, source } = item as Row;
+    if (!isDimension(dimension) || typeof slug !== 'string' || !SLUG.test(slug) || (source !== 'rule' && source !== 'model')) continue;
+    items.push({ dimension, value: slug, source });
+    if (items.length === MAX_SUGGESTIONS) break;
+  }
+  return items;
+}
+
+function taggedDocumentOf(row: Row): TaggedDocument | null {
+  const documentId = text(row, 'id');
+  const scopes = strings(row, 'scopes');
+  const uploadedAt = timeOf(row, 'uploaded_at');
+  const version = row.version;
+  if (documentId === null || scopes === null || uploadedAt === null || typeof version !== 'number') return null;
+  return {
+    documentId,
+    filename: text(row, 'filename') ?? '',
+    docType: text(row, 'doc_type'),
+    status: text(row, 'status') ?? '',
+    version,
+    scopes,
+    suggestions: suggestionsOf(row.suggestions),
+    uploadedAt,
+  };
+}
+
+/** Current documents of the workspace with their tags and stored suggestions, newest first, one page; never any document text. */
+export async function listDocumentsWithScopes(input: ListDocumentsWithScopesInput): Promise<ListDocumentsWithScopesResult> {
+  if (!validScope(input) || !(DOCUMENT_VIEWS as readonly string[]).includes(input.view)) return { ok: false, reason: 'invalid_argument' };
+  const limit = clamp(input.limit, DEFAULT_DOCUMENT_PAGE, 1, MAX_DOCUMENT_PAGE);
+  const offset = clamp(input.offset, 0, 0, 1_000_000);
+  const scopes = input.scopes && input.scopes.length > 0 ? [...new Set(input.scopes)].sort() : null;
+  const query = input.query?.trim() ? input.query.trim() : null;
+  const args = (pageLimit: number, pageOffset: number) => ({
+    p_actor: input.actorUserId.toLowerCase(),
+    p_tenant_key: input.tenantKey,
+    p_scopes: scopes,
+    p_query: query,
+    p_limit: pageLimit,
+    p_offset: pageOffset,
+    p_filter: input.view,
+  });
+
+  const page = await call('rag_list_documents_with_scopes', args(limit, offset), input.signal);
+  if (!page.ok) return page;
+  let counts: Row | undefined = page.rows[0];
+  if (counts === undefined && offset > 0) {
+    const first = await call('rag_list_documents_with_scopes', args(1, 0), input.signal);
+    if (!first.ok) return first;
+    counts = first.rows[0];
+  }
+  const total = counts === undefined ? 0 : Number(counts.total_count);
+  const suggestedTotal = counts === undefined ? 0 : Number(counts.suggested_count);
+  if (!Number.isFinite(total) || !Number.isFinite(suggestedTotal)) return { ok: false, reason: 'unavailable' };
+  const items: TaggedDocument[] = [];
+  for (const row of page.rows) {
+    const item = taggedDocumentOf(row);
+    if (item === null) return { ok: false, reason: 'unavailable' };
+    items.push(item);
+  }
+  return { ok: true, items, total, suggestedTotal, limit, offset };
+}
