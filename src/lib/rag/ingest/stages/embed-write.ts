@@ -349,11 +349,27 @@ async function runDeferredEmbed(ctx: StageContext): Promise<StageOutcome> {
   return { kind: 'next', outcome: 'deferred' };
 }
 
+/**
+ * RAG_CAPTION_LANGUAGE=document (D-23): a picture caption inside a document keeps the language detected on the caption as written, not the
+ * document's. Only drafts the images stage marked carry a language, so with the switch at en nothing is called. A picture document needs
+ * no call: its document language is the caption's.
+ */
+async function writeCaptionLanguages(ctx: StageContext, documentId: string): Promise<void> {
+  if (ctx.work.captionOnly || !ctx.writer.setImageChunkLanguages) return;
+  const items: Array<{ imageUrl: string; language: string }> = [];
+  for (const draft of ctx.work.chunks) {
+    const imageUrl = draft.metadata.image_url;
+    if (draft.chunk_kind === 'image' && draft.language && typeof imageUrl === 'string') items.push({ imageUrl, language: draft.language });
+  }
+  if (items.length > 0) await ctx.writer.setImageChunkLanguages(documentId, items);
+}
+
 async function runWrite(ctx: StageContext): Promise<StageOutcome> {
   if (ctx.work.chunksWritten !== ctx.work.chunks.length) return { kind: 'fail', reason: 'write_incomplete' };
   // The text the chunker consumed (after the injection scan, which never changes it), stored once per version for the readers of documents.content.
   const document = requireDocument(ctx, 'write');
   if (ctx.work.parseText) await ctx.writer.setFields(document.id, { content: ctx.work.parseText });
+  await writeCaptionLanguages(ctx, document.id);
   return { kind: 'next' };
 }
 

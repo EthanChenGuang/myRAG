@@ -1,5 +1,6 @@
 import { ParseResultSchema, type ParseExternalRequest, type ParseExternalResponse, type ParseResult } from '@/lib/rag-eval/contracts.generated';
 import { extensionOf, mediaTypeOf } from '../parsers/shared';
+import { captionTargetForRun } from '../caption-language';
 import { captionImage } from '../captioner';
 import { isTextLike, parsePlainText } from '../parsers/plain-text';
 import { PARSE_RESULT_OBJECT, lookupParseCache, putParseResult, type ParseCacheRow } from '../parse-cache';
@@ -37,7 +38,8 @@ async function nativeParseResult(ctx: StageContext): Promise<ParseResult> {
   }
   if (isUnsupportedNative(filename, mimeType)) throw new UnsupportedNativeMode('unsupported_mode');
   if (imageMime(filename, mimeType)) {
-    const caption = await captionImage(bytes, mimeType, { signal: ctx.signal });
+    const target = await captionTargetForRun(ctx, null);
+    const caption = await captionImage(bytes, mimeType, target === null ? { signal: ctx.signal } : { signal: ctx.signal, targetLanguage: target });
     return {
       markdown: caption,
       chunks: [],

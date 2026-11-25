@@ -6,6 +6,7 @@ import { loadRoutingConfig } from '@/lib/rag/ingest/routing/config';
 import { getProcessingProfile } from '@/lib/rag/ingest/profiles/load';
 import { setLedgerDepsForTests, resetLedgerDepsForTests } from '@/lib/rag/ingest/ledger';
 import { resetIngestDepsForTests, setIngestDepsForTests } from '@/lib/rag/ingest/deps';
+import { resetIngestConfigForTests } from '@/lib/rag/ingest/config';
 import { getObjectStore, resetObjectStoreForTests } from '@/lib/rag/ingest/object-store';
 import { installFakeObjectStore } from '../../helpers/fake-object-store';
 import { encodeQueuedInput, QUEUED_INPUT_ARTIFACT } from '@/lib/rag/ingest/queued-context';
@@ -304,6 +305,42 @@ describe('parse-external native mode', () => {
     );
     expect(result.body).toMatchObject({ status: 'done', pages: [{ page: 1, text: 'A chart with blue bars.' }] });
     expect(captionCalls).toHaveLength(1);
+  });
+
+  test('native png under RAG_CAPTION_LANGUAGE=document asks for the language with the largest tenant share (D-23)', async () => {
+    const targets: Array<string | null | undefined> = [];
+    setCaptionerForTests(async (_bytes, _mime, options) => {
+      targets.push(options.targetLanguage);
+      return 'Una tabella con tre colonne e una riga di intestazione.';
+    });
+    const file = new Uint8Array([137, 80, 78, 71, 1, 2, 3]);
+    const { calls } = installHarness(
+      {
+        rag_tenant_language_shares: [
+          { language: 'it', share: 0.6, docs: 3 },
+          { language: 'en', share: 0.4, docs: 2 },
+        ],
+      },
+      {
+        filename: 'slide.png',
+        mime_type: 'image/png',
+        original_ref: { bucket: 'rag-originals', path: `s:default/${LINEAGE}/1/original.png` },
+      },
+    );
+    setIngestDepsForTests({ ingestEnv: () => ({ RAG_CAPTION_LANGUAGE: 'document' }) });
+    resetIngestConfigForTests();
+    await seedQueuedUpload(`s:default/${LINEAGE}/1/`, file, 'slide.png', 'image/png', 'original.png');
+    const result = await handleParseExternal(
+      JOB_ID,
+      { worker_id: WORKER, attempt_no: 1, mode: 'native', continuation: null, cursor: null, pages: null, subpdf_ref: null, options_hash: OPTIONS_HASH },
+      { signal: new AbortController().signal },
+    );
+    expect(result.body).toMatchObject({ status: 'done' });
+    expect(targets).toEqual(['it']);
+    expect(calls.filter((call) => call.fn === 'rag_tenant_language_shares')).toEqual([
+      { fn: 'rag_tenant_language_shares', args: { p_tenant_key: 's:default' } },
+    ]);
+    resetIngestConfigForTests();
   });
 
   test('a text upload named like an image is its text, as in the Phase 3 chain, and is not captioned', async () => {
