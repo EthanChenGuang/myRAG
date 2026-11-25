@@ -361,7 +361,17 @@ class _Runner:
         )
 
 
+def _empty_thresholds(tmp_path: Path) -> Path:
+    path = tmp_path / "empty-thresholds.json"
+    if not path.is_file():
+        write_config_atomically(path, finalize_config(RefusalThresholds(cells=[]), provenance_source="calibration"))
+    return path
+
+
 def _calibrate(tmp_path: Path, runner, golden: Path, **kwargs):
+    if "thresholds_path" not in kwargs:
+        kwargs["thresholds_path"] = _empty_thresholds(tmp_path)
+    kwargs.setdefault("floor_path", tmp_path / "fixture-score-calibration.json")
     return run_refusal_calibration(
         V2_RECOMMENDED, tmp_path / "out", golden=golden, runner=runner, now=DAY, **kwargs
     )
@@ -426,8 +436,9 @@ def test_collect_rows_drops_items_whose_split_field_disagrees_with_the_rule():
 def test_run_writes_result_and_report_and_leaves_the_committed_thresholds_alone(tmp_path):
     golden, _, scores = _world(tmp_path)
     before = COMMITTED_THRESHOLDS.read_bytes()
+    committed = {c.key: c.holdout_evaluations for c in RefusalThresholds.model_validate_json(before).cells}
     runner = _Runner(scores)
-    result = _calibrate(tmp_path, runner, golden)
+    result = _calibrate(tmp_path, runner, golden, thresholds_path=None)
     out = tmp_path / "out"
     assert (out / "refusal-calibration-result.json").is_file()
     assert (out / "report.md").is_file()
@@ -437,7 +448,7 @@ def test_run_writes_result_and_report_and_leaves_the_committed_thresholds_alone(
     assert record.cell.key == KEY_ZH_SAME
     assert record.cell.status == "calibrated"
     assert record.cell.source == "fixture"
-    assert record.cell.holdout_evaluations == 1
+    assert record.cell.holdout_evaluations == committed.get(KEY_ZH_SAME, 0) + 1
     on_disk = json.loads((out / "refusal-calibration-result.json").read_text(encoding="utf-8"))
     assert on_disk["dev_only_fit"] is True
     assert on_disk["cells"][0]["cell"]["threshold"] == pytest.approx(0.525)
@@ -473,6 +484,26 @@ def test_run_refuses_traces_that_were_produced_with_refusal_on(tmp_path):
         _calibrate(tmp_path, _Runner(scores, refusal=refused), golden)
 
 
+def test_run_refuses_traces_where_the_threshold_gate_answered(tmp_path):
+    golden, _, scores = _world(tmp_path)
+    answered = TraceRefusal(decision="answer", basis="none", reason="above_threshold", top_score=0.9, threshold=0.5, cell_key=KEY_ZH_SAME)
+    with pytest.raises(CalibrationError, match="refusal"):
+        _calibrate(tmp_path, _Runner(scores, refusal=answered), golden)
+
+
+@pytest.mark.parametrize(
+    "floor",
+    [
+        TraceRefusal(decision="refuse", basis="similarity_floor", reason="below_similarity_floor", top_score=0.3, threshold=0.65, cell_key=None),
+        TraceRefusal(decision="answer", basis="none", reason="above_similarity_floor", top_score=0.7, threshold=0.65, cell_key=None),
+    ],
+)
+def test_run_accepts_traces_decided_by_the_fallback_similarity_floor(tmp_path, floor):
+    golden, _, scores = _world(tmp_path)
+    result = _calibrate(tmp_path, _Runner(scores, refusal=floor), golden)
+    assert [r.cell.status for r in result.cells] == ["calibrated"]
+
+
 def test_run_accepts_traces_where_the_gate_recorded_not_applied(tmp_path):
     golden, _, scores = _world(tmp_path)
     off = TraceRefusal(decision="not_applied", basis="none", reason="switch_off", top_score=None, threshold=None, cell_key=None)
@@ -491,7 +522,9 @@ def test_run_twice_with_unchanged_inputs_is_a_byte_identical_no_op(tmp_path):
     out = tmp_path / "out"
     _calibrate(tmp_path, _Runner(scores), golden)
     first = {n: (out / n).read_bytes() for n in ("refusal-calibration-result.json", "report.md")}
-    again = run_refusal_calibration(V2_RECOMMENDED, out, golden=golden, runner=_Runner(scores), now="2027-02-02")
+    again = run_refusal_calibration(
+        V2_RECOMMENDED, out, golden=golden, runner=_Runner(scores), now="2027-02-02", thresholds_path=_empty_thresholds(tmp_path)
+    )
     second = {n: (out / n).read_bytes() for n in ("refusal-calibration-result.json", "report.md")}
     assert first == second
     assert again.cells[0].cell.holdout_evaluations == 1
@@ -663,6 +696,7 @@ def test_harness_runner_hands_over_both_splits_only_when_asked(tmp_path):
 def _patch_cli(monkeypatch, tmp_path: Path, scores, *, thresholds: Path | None = None):
     runner = _Runner(scores)
     monkeypatch.setattr(refusal_module, "_default_runner", runner)
+    monkeypatch.setattr(refusal_module, "FLOOR_PATH", tmp_path / "fixture-score-calibration.json")
     if thresholds is not None:
         monkeypatch.setattr(refusal_module, "THRESHOLDS_PATH", thresholds)
     return runner
@@ -701,3 +735,15 @@ def test_cli_usage_and_harness_errors_have_distinct_exit_codes(tmp_path, monkeyp
     monkeypatch.setattr(refusal_module, "_default_runner", failing)
     assert cli_main(["refusal", "--run-config", str(V2_RECOMMENDED), "--out", str(tmp_path / "d2"), "--golden", str(golden)]) == 3
     assert "harness" in capsys.readouterr().err
+
+
+def test_run_records_the_thresholds_path_relative_to_the_repo_root(tmp_path, monkeypatch):
+    import rag_eval.paths as paths
+
+    golden, _, scores = _world(tmp_path)
+    target = _existing_thresholds(tmp_path)
+    monkeypatch.setattr(paths, "REPO_ROOT", tmp_path)
+    result = _calibrate(tmp_path, _Runner(scores), golden, write=True, thresholds_path=target)
+    assert result.thresholds_path == "thresholds.json"
+    written = (tmp_path / "out" / "refusal-calibration-result.json").read_text(encoding="utf-8")
+    assert str(tmp_path) not in written

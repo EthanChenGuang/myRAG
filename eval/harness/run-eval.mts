@@ -15,7 +15,7 @@ import { ingestModeRetrievalEnv } from './ingest-mode.mts';
 import { createFixtureDatabase, FIXTURE_USER_ID, type DeploymentMode, type FixtureMode } from './pglite-supabase.mts';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from './fake-edge.mts';
 import { applyFixtureProcessEnv } from './process-env.mts';
-import { RunConfigError, type RunConfig } from './run-config.mts';
+import { CHUNKING_PROFILES_NEED_INGEST, RunConfigError, type RunConfig } from './run-config.mts';
 
 export type EvalTier = 'smoke' | 'nightly' | 'live';
 
@@ -153,8 +153,10 @@ export async function prepareInProcessEval(options: {
   ingestFixture?: import('./pglite-supabase.mts').FixtureDatabase;
   /** Applied after the pinned eval env, before the eval route is imported. */
   envOverrides?: Record<string, string>;
+  /** Ingest mode: seeded before the first document; the env overlay is then applied to the build too, so dual-write runs under v2. */
+  chunkingProfiles?: import('../../src/lib/rag-eval/contracts.generated.ts').ChunkingProfile[];
 }): Promise<InProcessEval> {
-  const { corpusDir, deploymentMode, fixtureMode, allowedScopes = [], embeddingProfileId, ingestFixture, envOverrides } =
+  const { corpusDir, deploymentMode, fixtureMode, allowedScopes = [], embeddingProfileId, ingestFixture, envOverrides, chunkingProfiles } =
     options;
   const existingSecret = process.env.RAG_EVAL_SECRET ?? '';
   const secret = existingSecret.length >= 32 ? existingSecret : crypto.randomBytes(24).toString('hex');
@@ -163,9 +165,16 @@ export async function prepareInProcessEval(options: {
     RAG_EVAL_ALLOWED_SCOPES: [`user:${FIXTURE_USER_ID}`, ...allowedScopes].join(','),
     ...(embeddingProfileId ? { RAG_EMBEDDING_PROFILES: 'on' } : {}),
   };
+  const seeding = !ingestFixture && (chunkingProfiles?.length ?? 0) > 0;
   const fixture =
     ingestFixture ??
-    (await createFixtureDatabase({ deploymentMode, corpusDir, fixtureMode, processEnv: evalEnv }));
+    (await createFixtureDatabase({
+      deploymentMode,
+      corpusDir,
+      fixtureMode,
+      processEnv: seeding ? { ...evalEnv, ...envOverrides } : evalEnv,
+      ...(seeding ? { chunkingProfiles } : {}),
+    }));
   let edge: FakeEdge | undefined;
   try {
     // The ingest mode ingests the corpus through its own edge and hands it over: a second edge would have another URL than the
@@ -207,6 +216,10 @@ export async function prepareInProcessEval(options: {
     translatorModule.setTranslatorForTests(translatorModule.createFixtureTranslator(table));
   }
 
+  const floorModule = await import('../../src/lib/rag/refusal/floor.ts');
+  const { loadFixtureScoreCalibration } = await import('./fixture-floor.mts');
+  floorModule.setEvalScoreCalibration(loadFixtureScoreCalibration(fixtureMode === 'ingest' ? 'ingest' : 'prechunked'));
+
   return {
     POST: route.POST as unknown as InProcessEval['POST'],
     secret,
@@ -216,6 +229,7 @@ export async function prepareInProcessEval(options: {
     sqlSha256: fixture.sqlSha256,
     close: async () => {
       translatorModule?.resetTranslatorForTests();
+      floorModule.resetEvalScoreCalibration();
       if (ownsEdge) await startedEdge.close();
       if (ownsDb) await fixture.db.close().catch(() => undefined);
     },
@@ -321,6 +335,17 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
       throw new RunConfigError('[Eval Harness] a run-config env overlay must be applied when the in-process session is prepared');
     }
     if (runConfig.overrides) requestOptions.retrieval_overrides = runConfig.overrides;
+    if (runConfig.chunkingProfiles?.length) {
+      if (baseUrl) throw new RunConfigError('[Eval Harness] chunking_profiles seed the fixture database only; a --base-url run cannot use them');
+      if (fixtureMode !== 'ingest') throw new RunConfigError(CHUNKING_PROFILES_NEED_INGEST);
+      if (ingestFixture) {
+        const built = new Set(ingestFixture.seededChunkingProfiles ?? []);
+        const missing = runConfig.chunkingProfiles.filter((profile) => !built.has(profile.id)).map((profile) => profile.id);
+        if (missing.length > 0) {
+          throw new RunConfigError(`[Eval Harness] the ingest fixture was not built with chunking profile(s) ${missing.join(', ')}`);
+        }
+      }
+    }
   }
 
   let liveApiKey = '';
@@ -394,6 +419,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
           embeddingProfileId,
           ingestFixture,
           ...(runConfig && Object.keys(runConfig.env).length > 0 ? { envOverrides: runConfig.env } : {}),
+          ...(runConfig?.chunkingProfiles?.length ? { chunkingProfiles: runConfig.chunkingProfiles } : {}),
         });
         inProcess = prepared;
       }
@@ -493,7 +519,14 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     ? null
     : { id: EMBEDDER_ID, version: String(EMBEDDER_VERSION), source_sha256: embedderSourceSha256() };
   const goldenSha256 = sha256File(goldenPath);
-  const runConfigRecord = runConfig ? { name: runConfig.name, env: runConfig.env, overrides: runConfig.overrides } : null;
+  const runConfigRecord = runConfig
+    ? {
+        name: runConfig.name,
+        env: runConfig.env,
+        overrides: runConfig.overrides,
+        ...(runConfig.chunkingProfiles?.length ? { chunking_profiles: runConfig.chunkingProfiles } : {}),
+      }
+    : null;
   const effectiveConfigHash = configHash(firstEffectiveConfig);
   const runConfigHash = crypto
     .createHash('sha256')

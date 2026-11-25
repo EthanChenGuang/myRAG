@@ -1,0 +1,89 @@
+{
+  "schema_version": 1,
+  "noise": "eval/config/noise.json",
+  "baselines": {
+    "prechunked": "eval/baselines/fixture-baseline.json",
+    "ingest": "eval/baselines/fixture-ingest-baseline.json"
+  },
+  "calibration_result": "eval/reports/refusal-calibration-fixture/refusal-calibration-result.json",
+  "calibration_outcome": "eval/reports/refusal-calibration-fixture/outcome.json",
+  "chunking_decision": "eval/decisions/chunking/contract_legal.json",
+  "chunking_sweep": "eval/reports/chunking-sweep.json",
+  "runs": [
+    {
+      "name": "legacy-prechunked",
+      "base": "eval/config/runs/v2-all-off.json",
+      "fixture_mode": "prechunked",
+      "env": {"RAG_PIPELINE": "legacy"}
+    },
+    {
+      "name": "legacy-ingest",
+      "base": "eval/config/runs/v2-all-off.json",
+      "fixture_mode": "ingest",
+      "env": {"RAG_PIPELINE": "legacy"}
+    },
+    {
+      "name": "v2-all-off",
+      "base": "eval/config/runs/v2-all-off.json",
+      "fixture_mode": "prechunked"
+    },
+    {
+      "name": "v2-recommended",
+      "base": "eval/config/runs/v2-recommended.json",
+      "fixture_mode": "prechunked"
+    },
+    {
+      "name": "parent-child-off",
+      "base": "eval/config/runs/v2-recommended.json",
+      "fixture_mode": "ingest",
+      "chunking_profile": "recorded"
+    },
+    {
+      "name": "parent-child-on",
+      "base": "eval/config/runs/v2-recommended.json",
+      "fixture_mode": "ingest",
+      "env": {"RAG_PARENT_CHILD": "true"},
+      "chunking_profile": "recorded"
+    },
+    {
+      "name": "compression-on",
+      "base": "eval/config/runs/v2-recommended.json",
+      "fixture_mode": "prechunked",
+      "env": {"RAG_CONTEXT_COMPRESSION": "true"}
+    },
+    {
+      "name": "local-bm25",
+      "base": "eval/config/runs/v2-recommended.json",
+      "fixture_mode": "prechunked",
+      "env": {"RAG_RERANKER": "local_bm25"},
+      "drop_overrides": ["rerank_model"]
+    },
+    {
+      "name": "translation-on",
+      "base": "eval/config/runs/v2-recommended.json",
+      "fixture_mode": "prechunked",
+      "env": {"RAG_RERANKER": "local_bm25", "RAG_LEXICAL_TRANSLATION": "true"},
+      "drop_overrides": ["rerank_model"]
+    },
+    {
+      "name": "iterative-scan-relaxed",
+      "base": "eval/config/runs/v2-recommended.json",
+      "fixture_mode": "prechunked",
+      "env": {"RAG_HNSW_ITERATIVE_SCAN": "relaxed_order"}
+    }
+  ],
+  "rules": {
+    "legacy_parity": ["legacy-prechunked", "legacy-ingest"],
+    "recommended": {"run": "v2-recommended", "reference": "v2-all-off"},
+    "parent_child": {"on": "parent-child-on", "off": "parent-child-off"},
+    "compression": {"on": "compression-on", "off": "v2-recommended"},
+    "translation": {"on": "translation-on", "off": "local-bm25"},
+    "iterative_scan": {"on": "iterative-scan-relaxed", "off": "v2-recommended", "fixture_slice": "category:selective_filter"},
+    "local_bm25_refusal": "local-bm25"
+  },
+  "commands": {
+    "selective_filter": ["node", "--import", "tsx", "eval/harness/selective-filter.mts", "--report", "{out}"],
+    "conformance": ["npx", "vitest", "run", "tests/rag/backend-conformance"],
+    "voice_budget": ["npx", "vitest", "run", "tests/rag/v2/voice-budget.test.ts"]
+  }
+}

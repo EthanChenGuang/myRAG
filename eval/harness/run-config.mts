@@ -1,5 +1,10 @@
 import fs from 'node:fs';
-import { RetrievalOverridesSchema, type RetrievalOverrides } from '../../src/lib/rag-eval/contracts.generated.ts';
+import {
+  ChunkingProfileSchema,
+  RetrievalOverridesSchema,
+  type ChunkingProfile,
+  type RetrievalOverrides,
+} from '../../src/lib/rag-eval/contracts.generated.ts';
 
 export class RunConfigError extends Error {
   readonly names: readonly string[];
@@ -15,6 +20,8 @@ export interface RunConfig {
   name: string;
   env: Record<string, string>;
   overrides: RetrievalOverrides | null;
+  /** Candidate chunking profiles the ingest-mode builder seeds as building before the first document (D-21); absent when the key is. */
+  chunkingProfiles?: ChunkingProfile[];
 }
 
 /** RAG_PIPELINE plus the Phase 4 D-23 switch names. Keys, base URLs and every other variable stay out of reach of a run config. */
@@ -37,9 +44,14 @@ export const RUN_CONFIG_ENV_ALLOWLIST: readonly string[] = [
 
 export const RUN_CONFIG_REJECT_MESSAGE = '[Eval Harness] run-config may only set RAG_PIPELINE and Phase 4 RAG_* switches';
 
-const TOP_LEVEL_KEYS = new Set(['name', 'env', 'overrides']);
+const TOP_LEVEL_KEYS = new Set(['name', 'env', 'overrides', 'chunking_profiles']);
 const NAME_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const PIPELINE_VALUES = new Set(['legacy', 'v2']);
+const DOC_TYPES = new Set<string>(ChunkingProfileSchema.shape.doc_type.options);
+const LEGACY_CHUNKING_PROFILE = 'legacy';
+
+export const CHUNKING_PROFILES_NEED_V2 = '[Eval Harness] chunking_profiles needs RAG_PIPELINE=v2';
+export const CHUNKING_PROFILES_NEED_INGEST = '[Eval Harness] chunking_profiles needs --fixture-mode ingest';
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -52,7 +64,7 @@ export function parseRunConfig(raw: unknown, source: string): RunConfig {
     throw new RunConfigError(`[Eval Harness] run-config ${source} has unknown field(s): ${unknownKeys.join(', ')}`);
   }
 
-  const { name, env: rawEnv = {}, overrides: rawOverrides = null } = raw;
+  const { name, env: rawEnv = {}, overrides: rawOverrides = null, chunking_profiles: rawProfiles } = raw;
   if (typeof name !== 'string' || !NAME_RE.test(name)) {
     throw new RunConfigError(`[Eval Harness] run-config ${source} needs a name of lowercase letters, digits, dot, dash or underscore`);
   }
@@ -81,7 +93,53 @@ export function parseRunConfig(raw: unknown, source: string): RunConfig {
     overrides = checked.data;
   }
 
-  return { name, env, overrides };
+  const chunkingProfiles = rawProfiles === undefined ? undefined : parseChunkingProfiles(rawProfiles, source);
+  if (chunkingProfiles && env.RAG_PIPELINE !== 'v2') throw new RunConfigError(CHUNKING_PROFILES_NEED_V2);
+  checkChunkingOverride(overrides, chunkingProfiles);
+
+  return { name, env, overrides, ...(chunkingProfiles ? { chunkingProfiles } : {}) };
+}
+
+/**
+ * The schema and the context-free hard rules of ChunkingProfile (parent_tokens required for fixed, parent at least twice the child).
+ * The embedding-input limit needs the active embedding profile, so the ingest-mode builder checks it before the first document.
+ */
+function parseChunkingProfiles(raw: unknown, source: string): ChunkingProfile[] {
+  const prefix = `[Eval Harness] run-config chunking_profiles`;
+  if (!Array.isArray(raw) || raw.length === 0) throw new RunConfigError(`${prefix} in ${source} must be a non-empty list`);
+  const seen = new Set<string>();
+  return raw.map((entry, index) => {
+    const checked = ChunkingProfileSchema.safeParse(entry);
+    if (!checked.success) {
+      const detail = checked.error.issues.map((issue) => `${issue.path.join('.') || 'entry'}: ${issue.message}`).join('; ');
+      throw new RunConfigError(`${prefix}[${index}] is invalid: ${detail}`);
+    }
+    const profile = checked.data;
+    if (profile.id === LEGACY_CHUNKING_PROFILE) throw new RunConfigError(`${prefix}[${index}] may not reuse the legacy profile id`);
+    if (profile.status !== 'building') throw new RunConfigError(`${prefix}[${index}] must have status building (it is seeded before ingestion)`);
+    if (profile.parent_mode === 'fixed' && profile.parent_tokens === null) {
+      throw new RunConfigError(`${prefix}[${index}] is invalid: parent_tokens_required`);
+    }
+    if (profile.parent_tokens !== null && profile.parent_tokens < profile.child_tokens * 2) {
+      throw new RunConfigError(`${prefix}[${index}] is invalid: parent_below_twice_child`);
+    }
+    if (seen.has(profile.id)) throw new RunConfigError(`${prefix}[${index}] repeats id ${profile.id}`);
+    seen.add(profile.id);
+    return profile;
+  });
+}
+
+function checkChunkingOverride(overrides: RetrievalOverrides | null, profiles: ChunkingProfile[] | undefined): void {
+  const map = overrides?.chunking_profile_by_doc_type;
+  if (!map) return;
+  const prefix = '[Eval Harness] run-config overrides.chunking_profile_by_doc_type';
+  for (const [docType, profileId] of Object.entries(map)) {
+    if (!DOC_TYPES.has(docType)) throw new RunConfigError(`${prefix} names unknown doc type ${docType}`);
+    if (!profiles || profileId === LEGACY_CHUNKING_PROFILE) continue;
+    if (!profiles.some((profile) => profile.id === profileId && profile.doc_type === docType)) {
+      throw new RunConfigError(`${prefix} ${docType}: ${profileId} is not a seeded ${docType} profile`);
+    }
+  }
 }
 
 export function loadRunConfig(file: string): RunConfig {

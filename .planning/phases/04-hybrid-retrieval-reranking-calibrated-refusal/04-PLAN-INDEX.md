@@ -19,7 +19,7 @@ Execution note for wave 1: 04-05, 04-06 and 04-07 share no file, but each runs t
 | 9 | 04-33, 04-39 | Chunking activation and rollback gates, validator parity, `rag:chunking`; fixture sweep and calibration runs |
 | 10 | 04-35 | Chunking sweep, decide command, fixture report and decision |
 | 11 | 04-34, 04-40 | Admin routes (chunking profiles, report, refusal status); final D-28 comparison tool and run |
-| 12 | 04-36 | Config UI panels (chunking profiles, refusal calibration) |
+| 12 | 04-36, 04-46 | Config UI panels (chunking profiles, refusal calibration); gap closure for 04-40 rule (b) (refusal at matched false refusal, paired category rule) |
 | 13 | 04-42 | Fold migrations into setup files, full gates with defaults, AGENTS.md |
 | 14 | 04-43 | Live verification checkpoints (autonomous: false) |
 
@@ -37,14 +37,14 @@ Execution note for wave 1: 04-05, 04-06 and 04-07 share no file, but each runs t
 | RNK-02 | 04-04, 04-21, 04-25, 04-39, 04-42, 04-43, 04-44 |
 | RNK-03 | 04-12, 04-22, 04-40, 04-42 |
 | RNK-04 | 04-12, 04-22, 04-40, 04-42 |
-| RNK-05 | 04-04, 04-08, 04-13, 04-20, 04-21, 04-26, 04-30, 04-34, 04-36, 04-38, 04-39, 04-40, 04-42, 04-43 |
+| RNK-05 | 04-04, 04-08, 04-13, 04-20, 04-21, 04-26, 04-30, 04-34, 04-36, 04-38, 04-39, 04-40, 04-42, 04-43, 04-46 |
 | RNK-06 | 04-02, 04-09, 04-13, 04-23, 04-26, 04-42 |
 | CHK-03 | 04-07, 04-27, 04-31, 04-33, 04-35, 04-38, 04-40, 04-41, 04-42 |
 | CHK-04 | 04-04, 04-07, 04-31, 04-32, 04-33, 04-34, 04-35, 04-36, 04-42, 04-43 |
 | CHK-05 | 04-04, 04-26, 04-34, 04-35, 04-36, 04-42, 04-43 |
 | LAT-01 | 04-08, 04-11, 04-19, 04-24, 04-25, 04-28, 04-39, 04-42, 04-44 |
 | LAT-02 | 04-02, 04-23, 04-26, 04-28, 04-40, 04-42, 04-43, 04-44, 04-45 |
-| XLG-03 | 04-10, 04-13, 04-14, 04-20, 04-23, 04-24, 04-30, 04-38, 04-39, 04-40, 04-41, 04-42, 04-43, 04-45 |
+| XLG-03 | 04-10, 04-13, 04-14, 04-20, 04-23, 04-24, 04-30, 04-38, 04-39, 04-40, 04-41, 04-42, 04-43, 04-45, 04-46 |
 
 ## Decision coverage (04-CONTEXT.md)
 
@@ -60,7 +60,7 @@ Execution note for wave 1: 04-05, 04-06 and 04-07 share no file, but each runs t
 | D-08 | 04-03, 04-06, 04-16 | D-25 | 04-19, 04-26, 04-28, 04-44 |
 | D-09 | 04-01, 04-09, 04-10, 04-23, 04-45 | D-26 | 04-04, 04-26, 04-37, 04-38 |
 | D-10 | 04-02, 04-23, 04-45 | D-27 | 04-09, 04-10 |
-| D-11 | 04-09, 04-13, 04-23 | D-28 | 04-21, 04-39, 04-40, 04-42 |
+| D-11 | 04-09, 04-13, 04-23 | D-28 | 04-21, 04-39, 04-40, 04-42, 04-46 |
 | D-12 | 04-02, 04-04, 04-19, 04-25, 04-39, 04-44 | D-29 | rollout order across all plans |
 | D-13 | 04-08, 04-11, 04-19, 04-24 | D-30 | 04-13, 04-20, 04-23, 04-34, 04-42 |
 | D-14 | 04-04, 04-21, 04-25, 04-39 | D-31 | 04-20, 04-41 |
@@ -113,3 +113,7 @@ Deferred ideas (filter UI, stemming, MMR, removing legacy voice heuristics, per-
   - Repair: `rag:rechunk` on an active profile keeps it active and processes only documents missing from it (04-32 Task 1, `rechunk repairs an active profile in place`).
   - The exact sequence is the named test `legacy-mode upload under an active profile stays retrievable and is counted missing` in 04-33 Task 3 (tests/rag-db/chunking-cli.test.mts): the document stays retrievable for its tenant only, is counted missing, and is filled by rag:rechunk.
   - 04-31 and the 04-42 AGENTS.md step mention the fallback and the repair command. Waves unchanged; no new same-wave overlap; every file shared across waves is ordered by a depends_on path.
+
+## Gap closure
+
+- 04-46 (2026-11-25, `gap_closure: true`, depends on 04-40): 04-40 rule (b) failed on measurement, not on production logic (`.planning/debug/04-40-rule-b.md`). Correct refusal is compared at matched false refusal (research D-28 row), category slices count as drops only with paired support, and the strict refusal gain stays open for 04-43. Touches only the eval comparison tool, its tests, the regenerated report and 04-CONTEXT.md; shares no file with 04-36.

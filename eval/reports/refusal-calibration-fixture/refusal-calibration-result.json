@@ -1,0 +1,307 @@
+{
+  "cells": [
+    {
+      "cell": {
+        "config_hash": "d345c405bc7df23561571c14f44e14f357afc55cfa6011a99577b9410bdd5076",
+        "dev": {
+          "answerable_count": 2,
+          "correct_refusal_rate": 0.0,
+          "false_refusal_rate": 0.0,
+          "false_refusal_rate_upper_bound": 0.7763932022500211,
+          "no_answer_count": 1
+        },
+        "holdout": {
+          "answerable_count": 0,
+          "correct_refusal_rate": 0.0,
+          "false_refusal_rate": 0.0,
+          "false_refusal_rate_upper_bound": 1.0,
+          "no_answer_count": 0
+        },
+        "holdout_evaluations": 0,
+        "key": "cohere|fake-quality-v1|en|cross",
+        "model": "fake-quality-v1",
+        "pairing": "cross",
+        "provider": "cohere",
+        "query_language": "en",
+        "recorded_at": "2026-11-25",
+        "rerank_text_version": 1,
+        "source": "fixture",
+        "status": "insufficient_data",
+        "threshold": null,
+        "tokenizer_version": 2
+      },
+      "fit_status": "insufficient_data",
+      "holdout_false_refusal_p_value": null,
+      "holdout_pass_limit": null,
+      "input_hash": "e642e706392e9047d09cdd2709a369469f338f567f4ba46da4955e2db676c10f"
+    },
+    {
+      "cell": {
+        "config_hash": "d345c405bc7df23561571c14f44e14f357afc55cfa6011a99577b9410bdd5076",
+        "dev": {
+          "answerable_count": 27,
+          "correct_refusal_rate": 0.42857142857142855,
+          "false_refusal_rate": 0.0,
+          "false_refusal_rate_upper_bound": 0.10501923017634435,
+          "no_answer_count": 7
+        },
+        "holdout": {
+          "answerable_count": 7,
+          "correct_refusal_rate": 0.0,
+          "false_refusal_rate": 0.14285714285714285,
+          "false_refusal_rate_upper_bound": 0.5207029735913071,
+          "no_answer_count": 1
+        },
+        "holdout_evaluations": 1,
+        "key": "cohere|fake-quality-v1|en|same",
+        "model": "fake-quality-v1",
+        "pairing": "same",
+        "provider": "cohere",
+        "query_language": "en",
+        "recorded_at": "2026-11-25",
+        "rerank_text_version": 1,
+        "source": "fixture",
+        "status": "calibrated",
+        "threshold": 0.14972065823582034,
+        "tokenizer_version": 2
+      },
+      "fit_status": "fitted",
+      "holdout_false_refusal_p_value": 0.3016627039062503,
+      "holdout_pass_limit": 0.19285714285714284,
+      "input_hash": "5417fcb55f78dc2c09c5301260f68b6ac21f8d93f97bf5fe2842cd3503c92c43"
+    },
+    {
+      "cell": {
+        "config_hash": "d345c405bc7df23561571c14f44e14f357afc55cfa6011a99577b9410bdd5076",
+        "dev": {
+          "answerable_count": 4,
+          "correct_refusal_rate": 0.0,
+          "false_refusal_rate": 0.0,
+          "false_refusal_rate_upper_bound": 0.5271291954984121,
+          "no_answer_count": 1
+        },
+        "holdout": {
+          "answerable_count": 0,
+          "correct_refusal_rate": 0.0,
+          "false_refusal_rate": 0.0,
+          "false_refusal_rate_upper_bound": 1.0,
+          "no_answer_count": 0
+        },
+        "holdout_evaluations": 0,
+        "key": "cohere|fake-quality-v1|it|cross",
+        "model": "fake-quality-v1",
+        "pairing": "cross",
+        "provider": "cohere",
+        "query_language": "it",
+        "recorded_at": "2026-11-25",
+        "rerank_text_version": 1,
+        "source": "fixture",
+        "status": "insufficient_data",
+        "threshold": null,
+        "tokenizer_version": 2
+      },
+      "fit_status": "insufficient_data",
+      "holdout_false_refusal_p_value": null,
+      "holdout_pass_limit": null,
+      "input_hash": "801ea5ccca6c476612e3fa65e274291210d5beacc946ff20bd96d29f0f8618ba"
+    },
+    {
+      "cell": {
+        "config_hash": "d345c405bc7df23561571c14f44e14f357afc55cfa6011a99577b9410bdd5076",
+        "dev": {
+          "answerable_count": 18,
+          "correct_refusal_rate": 0.2,
+          "false_refusal_rate": 0.0,
+          "false_refusal_rate_upper_bound": 0.15331755395727828,
+          "no_answer_count": 5
+        },
+        "holdout": {
+          "answerable_count": 10,
+          "correct_refusal_rate": 0.0,
+          "false_refusal_rate": 0.1,
+          "false_refusal_rate_upper_bound": 0.3941633024365049,
+          "no_answer_count": 4
+        },
+        "holdout_evaluations": 1,
+        "key": "cohere|fake-quality-v1|it|same",
+        "model": "fake-quality-v1",
+        "pairing": "same",
+        "provider": "cohere",
+        "query_language": "it",
+        "recorded_at": "2026-11-25",
+        "rerank_text_version": 1,
+        "source": "fixture",
+        "status": "calibrated",
+        "threshold": 0.0785353225402049,
+        "tokenizer_version": 2
+      },
+      "fit_status": "fitted",
+      "holdout_false_refusal_p_value": 0.4012630607616213,
+      "holdout_pass_limit": 0.15000000000000002,
+      "input_hash": "d7a6b0586e55b97843f609fd762cbc6481ebd35e973e70adc363263a068340a9"
+    },
+    {
+      "cell": {
+        "config_hash": "d345c405bc7df23561571c14f44e14f357afc55cfa6011a99577b9410bdd5076",
+        "dev": {
+          "answerable_count": 3,
+          "correct_refusal_rate": 0.0,
+          "false_refusal_rate": 0.0,
+          "false_refusal_rate_upper_bound": 0.6315968501359613,
+          "no_answer_count": 3
+        },
+        "holdout": {
+          "answerable_count": 0,
+          "correct_refusal_rate": 0.0,
+          "false_refusal_rate": 0.0,
+          "false_refusal_rate_upper_bound": 1.0,
+          "no_answer_count": 0
+        },
+        "holdout_evaluations": 0,
+        "key": "cohere|fake-quality-v1|zh|cross",
+        "model": "fake-quality-v1",
+        "pairing": "cross",
+        "provider": "cohere",
+        "query_language": "zh",
+        "recorded_at": "2026-11-25",
+        "rerank_text_version": 1,
+        "source": "fixture",
+        "status": "insufficient_data",
+        "threshold": null,
+        "tokenizer_version": 2
+      },
+      "fit_status": "insufficient_data",
+      "holdout_false_refusal_p_value": null,
+      "holdout_pass_limit": null,
+      "input_hash": "6f38359c2ace99cd6ec6fe83f76b954884b2fbd8396b9ad9fd56aee939f81086"
+    },
+    {
+      "cell": {
+        "config_hash": "d345c405bc7df23561571c14f44e14f357afc55cfa6011a99577b9410bdd5076",
+        "dev": {
+          "answerable_count": 28,
+          "correct_refusal_rate": 0.25,
+          "false_refusal_rate": 0.0,
+          "false_refusal_rate_upper_bound": 0.10146573557272472,
+          "no_answer_count": 4
+        },
+        "holdout": {
+          "answerable_count": 9,
+          "correct_refusal_rate": 0.3333333333333333,
+          "false_refusal_rate": 0.0,
+          "false_refusal_rate_upper_bound": 0.2831288355631136,
+          "no_answer_count": 3
+        },
+        "holdout_evaluations": 1,
+        "key": "cohere|fake-quality-v1|zh|same",
+        "model": "fake-quality-v1",
+        "pairing": "same",
+        "provider": "cohere",
+        "query_language": "zh",
+        "recorded_at": "2026-11-25",
+        "rerank_text_version": 1,
+        "source": "fixture",
+        "status": "calibrated",
+        "threshold": 0.04455691316323019,
+        "tokenizer_version": 2
+      },
+      "fit_status": "fitted",
+      "holdout_false_refusal_p_value": 1.0,
+      "holdout_pass_limit": 0.1611111111111111,
+      "input_hash": "26af6ab247923bba6cacda4e7609c20726ad867c56e80d98e1e6299582c2b54c"
+    }
+  ],
+  "cross_vs_same": [
+    {
+      "basis": null,
+      "comparable": false,
+      "cross_answerable": null,
+      "cross_false_refusal": null,
+      "cross_key": "cohere|fake-quality-v1|en|cross",
+      "cross_upper_95": null,
+      "exceeds_noise_band": null,
+      "gap": null,
+      "model": "fake-quality-v1",
+      "noise_band": 0.02,
+      "note": "a cell without a threshold has no false-refusal rate to compare",
+      "provider": "cohere",
+      "query_language": "en",
+      "same_answerable": null,
+      "same_false_refusal": null,
+      "same_key": "cohere|fake-quality-v1|en|same",
+      "same_upper_95": null
+    },
+    {
+      "basis": null,
+      "comparable": false,
+      "cross_answerable": null,
+      "cross_false_refusal": null,
+      "cross_key": "cohere|fake-quality-v1|it|cross",
+      "cross_upper_95": null,
+      "exceeds_noise_band": null,
+      "gap": null,
+      "model": "fake-quality-v1",
+      "noise_band": 0.02,
+      "note": "a cell without a threshold has no false-refusal rate to compare",
+      "provider": "cohere",
+      "query_language": "it",
+      "same_answerable": null,
+      "same_false_refusal": null,
+      "same_key": "cohere|fake-quality-v1|it|same",
+      "same_upper_95": null
+    },
+    {
+      "basis": null,
+      "comparable": false,
+      "cross_answerable": null,
+      "cross_false_refusal": null,
+      "cross_key": "cohere|fake-quality-v1|zh|cross",
+      "cross_upper_95": null,
+      "exceeds_noise_band": null,
+      "gap": null,
+      "model": "fake-quality-v1",
+      "noise_band": 0.02,
+      "note": "a cell without a threshold has no false-refusal rate to compare",
+      "provider": "cohere",
+      "query_language": "zh",
+      "same_answerable": null,
+      "same_false_refusal": null,
+      "same_key": "cohere|fake-quality-v1|zh|same",
+      "same_upper_95": null
+    }
+  ],
+  "dev_only_fit": true,
+  "excluded": {
+    "no_query_language": 5
+  },
+  "floor_path": "eval/config/fixture-score-calibration.json",
+  "floor_written": true,
+  "golden_sha256": "425aa830422844d8a4856775c8ec50f4be73f090ed7097b9d9dec2d85a12fa67",
+  "noise_floor": 0.02,
+  "notes": [],
+  "pass_rule": "false_refusal_test <= target + max(noise_floor, 1 / n_test_answerable)",
+  "rerank_text_version": 1,
+  "reranker": "cohere / fake-quality-v1",
+  "run_config_name": "v2-recommended",
+  "run_config_sha256": "88e4adb4d749e82ba13e65a702c1d4cfbb49590cac9012f6874cdd741153a3d4",
+  "schema_version": 1,
+  "similarity_floor": {
+    "context_threshold": 0.11585847749171707,
+    "dev": {
+      "answerable_count": 86,
+      "correct_refusal_rate": 0.3333333333333333,
+      "false_refusal_rate": 0.046511627906976744,
+      "false_refusal_rate_upper_bound": 0.10327809264274575,
+      "no_answer_count": 21
+    },
+    "excluded_no_similarity": 0,
+    "status": "calibrated",
+    "target_false_refusal": 0.05
+  },
+  "source": "fixture",
+  "stale_cells": [],
+  "target_false_refusal": 0.05,
+  "thresholds_path": "eval/config/refusal-thresholds.json",
+  "thresholds_written": true,
+  "tokenizer_version": 2
+}

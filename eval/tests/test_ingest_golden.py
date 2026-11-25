@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 
@@ -49,3 +50,39 @@ def test_golden_ingest_items_validate_and_quotes_live_in_fixture_text(manifest_d
         for span in item.gold_evidence:
             haystack = manifest_documents.get(span.document, "")
             assert span.quote in haystack, f"{item.id}: quote missing from {span.document}"
+
+PRE_CLAUSE_COUNT = 12
+PRE_CLAUSE_SHA256 = "8ca6eb7929e73453b9dfdfb986759f31687f1292981c55c0355aca4562e57011"
+CONTRACT_DOCUMENT = "contract-zh.pdf"
+
+
+def _clause_bodies(text: str) -> list[str]:
+    parts = text.split("\n### ")[1:]
+    return [part.split("\n", 1)[1] for part in parts]
+
+
+def test_clause_items_cover_zh_en_it_with_quotes_inside_one_clause(manifest_documents: dict[str, str]):
+    clause_items = [item for item in load_golden(GOLDEN) if "clause" in item.tags]
+    assert len(clause_items) >= 4
+    assert len([item for item in clause_items if item.language == "zh"]) >= 2
+    assert len([item for item in clause_items if item.language == "en"]) >= 1
+    assert len([item for item in clause_items if item.language == "it"]) >= 1
+    bodies = _clause_bodies(manifest_documents[CONTRACT_DOCUMENT])
+    assert len(bodies) == 3
+    for item in clause_items:
+        assert item.answerable and item.review_status == "approved" and item.provenance == "synthetic_fixture", item.id
+        if item.language != "zh":
+            assert item.category == "cross_lingual" and item.evidence_language == "zh", item.id
+        for span in item.gold_evidence:
+            assert span.document == CONTRACT_DOCUMENT, item.id
+            holders = [body for body in bodies if span.quote in body]
+            assert len(holders) == 1, f"{item.id}: quote must lie inside exactly one clause"
+
+
+def test_existing_ingest_golden_items_are_unchanged():
+    lines = [line for line in GOLDEN.read_text(encoding="utf-8").split("\n") if line.strip()]
+    rows = [json.loads(line) for line in lines]
+    old = sorted((row for row in rows if "clause" not in row.get("tags", [])), key=lambda row: row["id"])
+    assert len(old) == PRE_CLAUSE_COUNT
+    payload = "\n".join(json.dumps(row, sort_keys=True, ensure_ascii=False) for row in old)
+    assert hashlib.sha256(payload.encode("utf-8")).hexdigest() == PRE_CLAUSE_SHA256

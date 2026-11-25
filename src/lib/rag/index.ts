@@ -52,6 +52,25 @@ export type {
   RollbackResult,
   SetStatusResult,
 } from './embeddings/profile-ops';
+export {
+  listChunkingProfiles,
+  getChunkingCoverage,
+  getChunkingProfileState,
+  createChunkingProfile,
+  recordChunkingDecision,
+  activateChunkingProfile,
+  rollbackChunkingProfile,
+  ChunkingActivationRefused,
+  ChunkingInputError,
+} from './chunking/profile-ops';
+export type {
+  ChunkingCoverageRow,
+  ChunkingProfileRecord,
+  ChunkingProfileState,
+  CreateChunkingProfileInput,
+} from './chunking/profile-ops';
+export { validateChunkingProfile } from './chunking/validate';
+export type { ChunkingFinding, ChunkingValidationContext, ChunkingValidationResult } from './chunking/validate';
 export type {
   Candidate,
   Profile,

@@ -229,6 +229,7 @@
     },
     "ChunkingSweepReport": {
       "config_hash": null,
+      "notes": [],
       "profiles": [],
       "provenance": {
         "source": "defaults"
@@ -2472,6 +2473,7 @@
     },
     "RetrievalOverrides": {
       "candidate_pool_size": null,
+      "chunking_profile_by_doc_type": {},
       "final_top_k": 10,
       "leg_weights": null,
       "rerank_input_cap": null,

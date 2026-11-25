@@ -66,7 +66,7 @@ function buildPayload(input: RetrievalConfigHashInput): Record<string, unknown> 
     rerank_text_version: input.rerankTextVersion,
     reranker: input.reranker,
     switches: input.switches,
-    thresholds_config_hash: input.thresholdsConfigHash,
+    thresholds_config_hash: input.switches.refusalThreshold ? input.thresholdsConfigHash : null,
   };
 }
 

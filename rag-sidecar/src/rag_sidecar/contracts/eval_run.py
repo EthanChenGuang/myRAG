@@ -2,7 +2,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from rag_sidecar.contracts.retrieval import RetrievalFilters, RetrievalOverrides
+from rag_sidecar.contracts.retrieval import ChunkingProfile, RetrievalFilters, RetrievalOverrides
 
 
 class _Contract(BaseModel):
@@ -181,6 +181,7 @@ class RunConfigRecord(_Contract):
     name: str = Field(min_length=1)
     env: dict[str, str] = Field(default_factory=dict)
     overrides: RetrievalOverrides | None = None
+    chunking_profiles: list[ChunkingProfile] = Field(default_factory=list)
 
 
 class RunManifest(_Contract):

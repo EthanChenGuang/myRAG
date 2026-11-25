@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { ingestModeGoldenPaths, mergeGoldenFiles } from './ingest-mode.mts';
 import { runEval, type EvalRequestOptions } from './run-eval.mts';
-import { loadRunConfig, RunConfigError } from './run-config.mts';
+import { CHUNKING_PROFILES_NEED_INGEST, loadRunConfig, RunConfigError } from './run-config.mts';
 import type { DeploymentMode, FixtureMode } from './pglite-supabase.mts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -83,6 +83,7 @@ async function main(): Promise<number> {
   if (runConfig && baseUrl && Object.keys(runConfig.env).length > 0) {
     throw new RunConfigError('[Eval Harness] a run-config env overlay applies to in-process runs only; omit --base-url or drop its env');
   }
+  if (runConfig?.chunkingProfiles?.length && fixtureMode !== 'ingest') throw new RunConfigError(CHUNKING_PROFILES_NEED_INGEST);
 
   const requestOptions: EvalRequestOptions = {};
   if (maxResults !== undefined) requestOptions.max_results = maxResults;

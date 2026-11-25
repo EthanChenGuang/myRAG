@@ -216,6 +216,24 @@
           "text": "Se lo strumento viene sostituito, come si calcola la scadenza della garanzia del nuovo strumento?"
         }
       ]
+    },
+    {
+      "question": "Does the warranty lapse if the seals on the casing are broken?",
+      "translations": [
+        {
+          "language": "it",
+          "text": "La garanzia decade se i sigilli dell'involucro sono rotti?"
+        }
+      ]
+    },
+    {
+      "question": "Entro quanti giorni dalla consegna va segnalato un pacco danneggiato?",
+      "translations": [
+        {
+          "language": "en",
+          "text": "Within how many days of delivery must a damaged parcel be reported?"
+        }
+      ]
     }
   ]
 }

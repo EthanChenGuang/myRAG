@@ -7,7 +7,7 @@ import { LEXICAL_VERSION } from '../../lexical/chunk-text';
 import { runStage, stageSpec, type StageSpec } from '../../pipeline';
 import type { DedupeCounts } from '../../fusion/dedupe';
 import { decideRefusal, type GateCandidate, type GateInput, type QueryLanguage } from '../../refusal/gate';
-import { floorsFromCalibration, similarityFloor } from '../../refusal/floor';
+import { evalFloorCalibration, floorsFromCalibration, similarityFloor } from '../../refusal/floor';
 import { loadThresholds } from '../../refusal/thresholds';
 import type { RefusalRecord } from '../../refusal/types';
 import { resolveReranker } from '../../rerank/select';
@@ -98,7 +98,8 @@ function applyRefusal(
   });
   if (gate.decision !== 'not_applied') return { record: gate, gate };
 
-  const calibration = embedding.profile?.scoreCalibration ?? LEGACY_PROFILE.scoreCalibration;
+  const calibration =
+    evalFloorCalibration(profile) ?? embedding.profile?.scoreCalibration ?? LEGACY_PROFILE.scoreCalibration;
   const floors = floorsFromCalibration(calibration as Record<string, unknown>);
   const record = similarityFloor({
     floors,
