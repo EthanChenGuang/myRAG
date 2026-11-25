@@ -21,6 +21,7 @@ docling = [
   "torch==2.15.0", "torchvision==0.29.2",
 ]
 ray = ["ray[data]==2.60.1"]
+hhem = ["torch==2.15.0", "transformers==5.23.0"]
 
 [dependency-groups]
 dev = [
