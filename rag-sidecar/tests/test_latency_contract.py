@@ -262,6 +262,7 @@ class TestEvalReportQuerySections:
 
     def test_samples_carry_both_sections_and_the_query_group(self):
         samples = build_samples()["samples"]
-        assert samples["EvalReport"].query_layer is not None
-        assert samples["EvalReport"].semantic_cache is not None
-        assert samples["LatencyBudgets"].profiles["chat"].groups["query"].p95_ms == 1200
+        report = EvalReport.model_validate(samples["EvalReport"])
+        budgets = LatencyBudgets.model_validate(samples["LatencyBudgets"])
+        assert report.query_layer is not None and report.semantic_cache is not None
+        assert budgets.profiles["chat"].groups["query"].p95_ms == 1200

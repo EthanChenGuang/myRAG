@@ -4185,6 +4185,74 @@
           "value": 0.5
         }
       },
+      "query_layer": {
+        "budget_profile": "chat",
+        "gate_rules": {
+          "R1_PRONOUN": 3,
+          "R9_KEYWORDS": 1
+        },
+        "items": 4,
+        "items_with_plan": 4,
+        "llm_transform_share": {
+          "n": 4,
+          "value": 0.5
+        },
+        "protected_token_losses": 1,
+        "query_budget": {
+          "p50_ms": 600.0,
+          "p95_ms": 1200.0
+        },
+        "query_latency": {
+          "latency": {
+            "n": 4,
+            "p50_ms": 300.0,
+            "p95_ms": 900.0
+          },
+          "status": "within"
+        },
+        "query_latency_by_category": {
+          "multi_turn": {
+            "latency": {
+              "n": 2,
+              "p50_ms": 700.0,
+              "p95_ms": 1300.0
+            },
+            "status": "over"
+          }
+        },
+        "query_latency_by_language": {
+          "en": {
+            "latency": {
+              "n": 4,
+              "p50_ms": 300.0,
+              "p95_ms": 900.0
+            },
+            "status": "within"
+          }
+        },
+        "transforms": {
+          "condense": {
+            "disabled": 0,
+            "run": 3,
+            "skip_reasons": {},
+            "skipped": 0
+          },
+          "expand": {
+            "disabled": 0,
+            "run": 0,
+            "skip_reasons": {
+              "timeout": 1
+            },
+            "skipped": 1
+          },
+          "hyde": {
+            "disabled": 4,
+            "run": 0,
+            "skip_reasons": {},
+            "skipped": 0
+          }
+        }
+      },
       "raw_invalid_markers": 1,
       "request_options": {
         "cache_seed_answer": null,
@@ -4215,6 +4283,35 @@
       "run_config_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "run_id": "run-001",
       "schema_version": 1,
+      "semantic_cache": {
+        "bypasses": {
+          "protected_tokens": 2
+        },
+        "checks": 4,
+        "failures": 1,
+        "hit_latency": {
+          "n": 1,
+          "p50_ms": 20.0,
+          "p95_ms": 20.0
+        },
+        "hit_rate": {
+          "n": 4,
+          "value": 0.25
+        },
+        "hits": 1,
+        "miss_latency": {
+          "n": 3,
+          "p50_ms": 400.0,
+          "p95_ms": 800.0
+        },
+        "misses": 3,
+        "near_miss_checks": 2,
+        "near_miss_wrong_hit_rate": {
+          "n": 2,
+          "value": 0.0
+        },
+        "near_miss_wrong_hits": 0
+      },
       "tier": "smoke"
     },
     "ExpertEvidenceSpan": {
@@ -5489,8 +5586,15 @@
       },
       "profiles": {
         "chat": {
+          "groups": {
+            "query": {
+              "p50_ms": 600.0,
+              "p95_ms": 1200.0
+            }
+          },
           "stages": {
             "assemble": 100.0,
+            "condense": 600.0,
             "embed": 200.0,
             "search": 400.0
           },
@@ -5498,6 +5602,12 @@
           "total_p95_ms": 2000.0
         },
         "voice": {
+          "groups": {
+            "query": {
+              "p50_ms": null,
+              "p95_ms": 300.0
+            }
+          },
           "stages": {},
           "total_p50_ms": 400.0,
           "total_p95_ms": 800.0
@@ -7756,6 +7866,74 @@
             "value": 0.5
           }
         },
+        "query_layer": {
+          "budget_profile": "chat",
+          "gate_rules": {
+            "R1_PRONOUN": 3,
+            "R9_KEYWORDS": 1
+          },
+          "items": 4,
+          "items_with_plan": 4,
+          "llm_transform_share": {
+            "n": 4,
+            "value": 0.5
+          },
+          "protected_token_losses": 1,
+          "query_budget": {
+            "p50_ms": 600.0,
+            "p95_ms": 1200.0
+          },
+          "query_latency": {
+            "latency": {
+              "n": 4,
+              "p50_ms": 300.0,
+              "p95_ms": 900.0
+            },
+            "status": "within"
+          },
+          "query_latency_by_category": {
+            "multi_turn": {
+              "latency": {
+                "n": 2,
+                "p50_ms": 700.0,
+                "p95_ms": 1300.0
+              },
+              "status": "over"
+            }
+          },
+          "query_latency_by_language": {
+            "en": {
+              "latency": {
+                "n": 4,
+                "p50_ms": 300.0,
+                "p95_ms": 900.0
+              },
+              "status": "within"
+            }
+          },
+          "transforms": {
+            "condense": {
+              "disabled": 0,
+              "run": 3,
+              "skip_reasons": {},
+              "skipped": 0
+            },
+            "expand": {
+              "disabled": 0,
+              "run": 0,
+              "skip_reasons": {
+                "timeout": 1
+              },
+              "skipped": 1
+            },
+            "hyde": {
+              "disabled": 4,
+              "run": 0,
+              "skip_reasons": {},
+              "skipped": 0
+            }
+          }
+        },
         "raw_invalid_markers": 1,
         "request_options": {
           "cache_seed_answer": null,
@@ -7786,6 +7964,35 @@
         "run_config_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "run_id": "run-001",
         "schema_version": 1,
+        "semantic_cache": {
+          "bypasses": {
+            "protected_tokens": 2
+          },
+          "checks": 4,
+          "failures": 1,
+          "hit_latency": {
+            "n": 1,
+            "p50_ms": 20.0,
+            "p95_ms": 20.0
+          },
+          "hit_rate": {
+            "n": 4,
+            "value": 0.25
+          },
+          "hits": 1,
+          "miss_latency": {
+            "n": 3,
+            "p50_ms": 400.0,
+            "p95_ms": 800.0
+          },
+          "misses": 3,
+          "near_miss_checks": 2,
+          "near_miss_wrong_hit_rate": {
+            "n": 2,
+            "value": 0.0
+          },
+          "near_miss_wrong_hits": 0
+        },
         "tier": "smoke"
       }
     },
