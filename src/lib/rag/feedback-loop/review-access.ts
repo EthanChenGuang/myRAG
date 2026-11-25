@@ -285,11 +285,62 @@ export async function getReviewItemChunks(
   id: string,
   expertId: string,
 ): Promise<GetReviewItemChunksResult> {
-  void ssr;
-  void admin;
-  void id;
-  void expertId;
-  return { ok: false, reason: 'not_found' };
+  const item = await readVisibleItem(ssr, id);
+  if (!item) return { ok: false, reason: 'not_found' };
+  const tenantKey = item.tenant_key;
+  if (typeof tenantKey !== 'string' || !parseTenantKey(tenantKey)) return { ok: false, reason: 'not_found' };
+
+  const refs = snapshotRefs(item.candidates);
+  const chunkIds = [...new Set(refs.map((ref) => ref.chunkId.toLowerCase()).filter((chunkId) => UUID_RE.test(chunkId)))];
+  const chunks = new Map<string, Row>();
+  const documents = new Map<string, Row>();
+  if (chunkIds.length > 0) {
+    const { data, error } = await admin
+      .from('document_chunks')
+      .select('id,document_id,content,section_path,tenant_key,is_current,status')
+      .in('id', chunkIds)
+      .eq('tenant_key', tenantKey)
+      .eq('is_current', true)
+      .eq('status', 'ready');
+    if (error) throw new Error('review_chunks_read_failed');
+    for (const row of (data ?? []) as unknown as Row[]) {
+      if (row.tenant_key === tenantKey && row.is_current === true && row.status === 'ready') chunks.set(String(row.id).toLowerCase(), row);
+    }
+    const documentIds = [...new Set([...chunks.values()].map((row) => String(row.document_id).toLowerCase()))];
+    if (documentIds.length > 0) {
+      const { data: docs, error: docError } = await admin
+        .from('documents')
+        .select('id,filename,tenant_key,is_current,status')
+        .in('id', documentIds)
+        .eq('tenant_key', tenantKey)
+        .eq('is_current', true)
+        .eq('status', 'ready');
+      if (docError) throw new Error('review_documents_read_failed');
+      for (const row of (docs ?? []) as unknown as Row[]) {
+        if (row.tenant_key === tenantKey && row.is_current === true && row.status === 'ready') documents.set(String(row.id).toLowerCase(), row);
+      }
+    }
+  }
+
+  const result: ReviewChunk[] = refs.map((ref) => {
+    const chunk = chunks.get(ref.chunkId.toLowerCase());
+    const documentId = chunk ? String(chunk.document_id).toLowerCase() : null;
+    const document = documentId ? documents.get(documentId) : undefined;
+    if (!chunk || !document || documentId !== ref.documentId.toLowerCase() || typeof chunk.content !== 'string') {
+      return { chunk_id: ref.chunkId, document_id: ref.documentId, available: false };
+    }
+    return {
+      chunk_id: ref.chunkId,
+      document_id: ref.documentId,
+      available: true,
+      document_name: typeof document.filename === 'string' ? document.filename : '',
+      section: stringArray(chunk.section_path).join(' > '),
+      text: chunk.content,
+    };
+  });
+  const count = result.filter((entry) => entry.available).length;
+  console.log('[Review] chunks', { expert: expertId, item: hashForLog(String(item.id)), count });
+  return { ok: true, item_id: String(item.id), chunks: result };
 }
 
 // --- Domain-expert grants (operator admins only, admin client) ---
