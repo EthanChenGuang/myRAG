@@ -683,12 +683,13 @@ Plans:
 ### Phase 6.2: Query Layer Additions (INSERTED)
 **Goal**: Questions that bundle several periods, places or topics retrieve evidence for every part and get a structured comparison, cross-language queries use company terms, and the optional latency switches pay off only when the eval says so
 **Depends on**: Phase 6, Phase 6.1, Phase 3.2, Phase 4.2, Phase 5.2
-**Requirements**: QRY-09, QRY-10, QRY-11, GEN-13, XLG-05, XLG-07, LANG-08, LAT-06, LAT-07
+**Requirements**: QRY-09, QRY-10, QRY-11, GEN-13, XLG-05, XLG-07, LANG-08, LAT-06, LAT-07, QRY-12, QRY-13
 **Success Criteria** (what must be TRUE):
   1. For "2024 年和 2025 年的差旅政策有什么变化？对意大利分公司有什么影响？" and its en/it versions, decomposition yields sub-questions covering both years and the Italian branch (a fake decomposer that drops one is corrected or discarded); with `RAG_QUERY_SUBQ_FILTERS` on, each sub-question is filtered by period, version scope or scope tag within the verified tenant, an empty filtered result falls back, and the answer has one cited part per sub-question plus the differences.
   2. The `version_compare` and `scoped_compound` slices report all-evidence recall and sub-question coverage above single-pass retrieval, and no other slice drops beyond the noise band.
   3. Glossary terms are enforced in translation, document translation and rewriting; short and mixed-script queries get the right language through the confidence fallback chain; the cross_lingual slice runs through the voice entry point and is gated.
   4. With `RAG_SPECULATIVE_RETRIEVAL` on, original-query retrieval starts before the transforms finish and a cache hit cancels it; with `RAG_MODEL_ROUTING=auto` and the Auto model selected, simple lookups go to the fast model; with both off, the Phase 6 order and model choice are unchanged.
+  5. With `condense` forced to time out, the follow-up "那海外出差呢？" (and its en/it versions) is still retrieved through the previous-standalone-query variant and answered with the overseas limit; with `RAG_WHATSAPP_HISTORY` on, the same two-turn conversation over WhatsApp is condensed and answered correctly, history never crosses senders, and the reset command clears it.
 **Live verification**: Run the multi-part fixtures and real comparison questions with real LLM keys; measure the speculative-retrieval and routing latency gains.
 **Plans**: TBD
 

@@ -137,6 +137,8 @@ All requirements are written so they can be checked. "Behind a switch" means an 
 - [ ] **QRY-09**: Decomposition completeness: every protected token and every named entity, year and scope term (from the rewrite-gate lexicon and the DATA-18 vocabulary) in the original question must appear in at least one sub-question; when one is missing, a sub-question for it is added (within the limit of four) or the decomposition is discarded and the original query is used, and the trace records the check
 - [ ] **QRY-10**: Per-sub-question filters (`RAG_QUERY_SUBQ_FILTERS`, off by default): the decomposer may attach a filter to each sub-question, chosen only from allowlisted fields (date range, RET-11 version scope, DATA-18 scope tags, document type, language) and validated by Zod; such filters can only narrow the server-verified `TenantScope`, never widen it or change the RAG mode or tool use; a filtered sub-question that returns nothing falls back to the same sub-question without its filter; this is the only exception to the Phase 6 rule that query rewriting never changes filters other than the R2 date range, and it applies only while the switch is on
 - [ ] **QRY-11**: The fixture golden set gains `version_compare` (the same policy in two periods) and `scoped_compound` (a question that also names a region or branch) categories in zh/en/it with gold evidence per sub-question; the eval reports all-evidence recall (the share of items where the gold span of every sub-question is retrieved) and sub-question coverage, the switches ship only if these improve over single-pass retrieval, and no other slice drops beyond the noise band
+- [ ] **QRY-12**: Follow-up fallback without an LLM: every turn stores its standalone query (the condensed query, or the original when no condensing was needed) in the message metadata; when the rewrite gate asks for `condense_history` but `condense` is skipped (timeout, error, protected token lost; Phase 6 D-28), retrieval adds a deterministic variant made of the previous turn's standalone query plus the current follow-up (e.g. "差旅报销的上限是多少？ 那海外出差呢？"), fused with RRF next to the original, so a skipped condense never leaves only the bare follow-up; the variant is traced and does not count against the LLM variant limit
+- [ ] **QRY-13**: The WhatsApp channel passes conversation history to the chat pipeline: today `src/lib/whatsapp/webhook-handler.ts` sends only the current message ("Always fresh context, no history"), so a follow-up such as "那海外出差呢？" is retrieved without context; behind `RAG_WHATSAPP_HISTORY` (off by default) the handler sends the last turns of that WhatsApp conversation (the Phase 6 D-16 window: 6 turns, each truncated to 1,000 characters, assistant turns stripped of sources), scoped to the same sender and session, the existing reset command clears it, and the fixture `multi_turn` items also run through the WhatsApp entry point
 
 ### Terminology (TERM)
 
@@ -499,10 +501,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DATA-21 | Phase 4.2 | Pending |
 | RET-13 | Phase 4.2 | Pending |
 | EVAL-20 | Phase 4.2 | Pending |
+| QRY-12 | Phase 6.2 | Pending |
+| QRY-13 | Phase 6.2 | Pending |
 
 **Coverage:**
-- v1 requirements: 194 total
-- Mapped to phases: 194
+- v1 requirements: 196 total
+- Mapped to phases: 196
 - Unmapped: 0 ✓
 
 **Mapping notes:**
@@ -517,6 +521,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 - FT-01..FT-10 were added 2026-11-24 as inserted Phase 6.1. EMB-05 is reused unchanged by Phase 6.1 (it adds triggers, not new gate logic).
 - 2026-11-25: requirements from the quiz-driven gap reviews (Q4 latency, Q5 prompt injection, Q6 cross-language and language support, Q7 partial answers) were ported from `main` and reconciled with the decisions already taken on this branch: BGE-M3 is EMB-11 (EMB-05 is the activation gate and EMB-06..EMB-10 are reserved by the paused Phase 3.1.1 plans, as decided when trunk was merged into `main` on 2026-11-25), mapped to Phase 3.2, SEC-08 stays rules-only at ingestion (05.1 Deferred, A-12), the fixed `<documents>` tag is kept (05.1 D-02), speculative retrieval is a switch that keeps the Phase 6 D-05 order when off, LANG-07 builds on the Phase 4 D-07 tokenizer, LANG-06 keeps `cl100k_base` (03 D-22), and the rerank pool floor is 25 (04 D-12/D-14). They are delivered by inserted Phases 3.2, 4.2, 5.2 and 6.2 and by Phase 7, so no plan of a phase already executing changes. Phase numbers 3.1.1, 4.1, 4.1.1, 5.1.1 and 6.1 and the IDs EMB-06..EMB-10, DFLT-*, TERM-*, FBK-* and FT-* belong to the recall-layer planning (applied to trunk on 2026-11-25), so these additions use 3.2, 4.2, 5.2 and 6.2; EMB-11 joins the Phase 3.1.1 EMB-06 model catalog as one of its models. The Q8 additions (scope tags, version-aware retrieval, decomposition completeness, per-sub-question filters, comparison synthesis and their eval categories) build on Phase 6 D-07 (sub-question coverage in the final top-k); QRY-10 is a switch-gated exception to the Phase 6 rule that rewrites never change filters. The Q9 additions (CHK-06, CHK-07, RET-12, EVAL-18) build on the existing table-aware chunking (header rows repeated, rows never split, tables as parents) and extend header repetition to every processing profile. The Q10 additions (DATA-19, DATA-20, GEN-14, EVAL-19) cover an old version uploaded as a separate document, which DATA-07 identity-based versioning cannot supersede.
 - 2026-11-25 (quiz round 4, Q1): DATA-21, RET-13 and EVAL-20 cover near-duplicate chunks across documents crowding out other intents. Phase 3 deduplicates whole documents only (`content_hash_dedup`), and MMR diversity was a Phase 4 backlog item; both land in Phase 4.2, which is not yet planned.
+- 2026-11-25 (quiz round 4, Q2): follow-up condensing is already planned (QRY-01, LAT-03 gate, Phase 6 D-16 history window, D-28 skip handling); QRY-12 adds a no-LLM fallback when `condense` is skipped and QRY-13 makes the WhatsApp channel send history, which it does not today. Topic-slot tracking was considered and not added (condensing covers it).
 
 ---
 *Requirements defined: 2026-11-22*
