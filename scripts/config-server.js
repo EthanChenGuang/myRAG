@@ -2881,6 +2881,102 @@ app.get('/api/config/injection-defense', (req, res) => {
   }
 });
 
+const languageSettings = require('./rag/language-settings-context');
+
+const MAX_LANGUAGE_ENTRIES = 64;
+
+/** D-07 for the config-server entry point; the POST handler and the entry-point parity test call it. */
+function validateLanguagesRequest(body, { root = REPO_ROOT, env, registry, rerankerOverrides } = {}) {
+  const values = env || languageSettings.readEnvFileValues(path.join(root, '.env.local'));
+  const context = languageSettings.buildValidationContext({ root, env: values, registry, rerankerOverrides });
+  const input = body && typeof body === 'object' ? body : {};
+  return languageSettings.validateForScript({ supported: input.languages, primary: input.primary }, context);
+}
+
+/** UI-SPEC 8.1: what the banner and the Languages panel need, read from .env.local and the registry on every call. */
+function describeLanguageSettings(root = REPO_ROOT) {
+  const values = languageSettings.readEnvFileValues(path.join(root, '.env.local'));
+  const context = languageSettings.buildValidationContext({ root, env: values });
+  const saved = languageSettings.normalizeLanguageSettings(
+    values.RAG_SUPPORTED_LANGUAGES,
+    values.RAG_PRIMARY_LANGUAGE,
+    context.registry,
+  );
+  const pipelines = {};
+  for (const name of languageSettings.PIPELINE_VARIABLES) {
+    const explicit = languageSettings.isSet(values[name]);
+    pipelines[name] = { value: explicit ? values[name].trim() : null, explicit };
+  }
+  const packs = languageSettings.completePacks(context.registry).map((pack) => {
+    const reasons = languageSettings.packBlockingReasons(pack.code, context);
+    return {
+      code: pack.code,
+      nativeName: pack.native_name,
+      englishName: pack.name,
+      groundedness: pack.groundedness,
+      selectable: reasons.length === 0,
+      reasons,
+    };
+  });
+  return {
+    configured: saved.configured,
+    languages: saved.languages,
+    primary: saved.primary,
+    variablesSet: Object.fromEntries(
+      languageSettings.LANGUAGE_VARIABLES.map((name) => [name, languageSettings.isSet(values[name])]),
+    ),
+    pipelines,
+    reranker: context.reranker ? { id: context.reranker.id } : null,
+    embeddingProfile: context.embeddingProfile ? { id: context.embeddingProfile.id } : null,
+    verifiedAgainstActiveProfile: false,
+    packs,
+  };
+}
+
+app.get('/api/config/languages', (req, res) => {
+  try {
+    return res.json(describeLanguageSettings());
+  } catch (error) {
+    console.error('[RAG Languages] settings unavailable:', { message: error instanceof Error ? error.message : String(error) });
+    return res.status(500).json({ success: false, error: 'Language settings unavailable' });
+  }
+});
+
+app.post('/api/config/languages', (req, res) => {
+  const body = req.body && typeof req.body === 'object' && !Array.isArray(req.body) ? req.body : null;
+  if (
+    !body ||
+    !Array.isArray(body.languages) ||
+    body.languages.length > MAX_LANGUAGE_ENTRIES ||
+    !body.languages.every((code) => typeof code === 'string') ||
+    (body.primary !== undefined && typeof body.primary !== 'string')
+  ) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid request body',
+      details: [{ path: 'languages', message: 'languages must be a list of language codes and primary a code' }],
+    });
+  }
+  try {
+    const result = validateLanguagesRequest({ languages: body.languages, primary: body.primary });
+    if (!result.ok) {
+      return res.status(400).json({ success: false, error: 'Invalid language settings', details: result.errors });
+    }
+    languageSettings.writeLanguageVariables(path.join(REPO_ROOT, '.env.local'), result.normalized);
+    console.log('[RAG Languages] saved', { languages: result.normalized.languages, primary: result.normalized.primary });
+    return res.json({
+      success: true,
+      languages: result.normalized.languages,
+      primary: result.normalized.primary,
+      warnings: result.warnings,
+      verifiedAgainstActiveProfile: result.verifiedAgainstActiveProfile,
+    });
+  } catch (error) {
+    console.error('[RAG Languages] save failed:', { message: error instanceof Error ? error.message : String(error) });
+    return res.status(500).json({ success: false, error: 'Language settings could not be saved' });
+  }
+});
+
 // API endpoint to get logo settings
 app.get('/api/config/get-logo', (req, res) => {
   try {
@@ -4239,4 +4335,4 @@ if (require.main === module) {
   start();
 }
 
-module.exports = { app, server, start, HOST, PORT };
+module.exports = { app, server, start, HOST, PORT, validateLanguagesRequest, describeLanguageSettings };
