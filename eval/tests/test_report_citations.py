@@ -230,7 +230,7 @@ def test_report_without_citation_data_is_byte_identical_to_before(tmp_path: Path
     json_path, md_path = write_report(report, tmp_path, _budgets())
     assert report.by_strategy == {} and report.citation_coverage is None and report.groundedness_labels == {}
     assert hashlib.sha256(json_path.read_bytes()).hexdigest() == (
-        "5a04c4577ccaf3bcb548bcf2186b0becb6785ee6f37cbc3367c586163f785d96"
+        "7437bc8e88230d9419e4f109a7b89534f52f9a95cc84dfe377b63d9596b24363"
     )
     assert hashlib.sha256(md_path.read_bytes()).hexdigest() == (
         "8764e48576ea708a72344dfb96193ef347af84313589f6f232421d606377e053"

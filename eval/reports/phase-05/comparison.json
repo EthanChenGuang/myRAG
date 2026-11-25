@@ -1,0 +1,265 @@
+{
+  "noise_floor": 0.02,
+  "noise_k": 3.0,
+  "notes": [
+    "Fixture corpus only: answers come from the deterministic fake citation generator and groundedness from the fake sidecar; the live Anthropic, Vectara and HHEM checks are operator actions.",
+    "Every switch compared here defaults to off in src/lib/env.ts; the on runs set them for the app under test only."
+  ],
+  "passed": true,
+  "phase": "05",
+  "runs": [
+    {
+      "checks": [
+        {
+          "detail": [],
+          "measures": {},
+          "name": "paired_all_zero",
+          "passed": true
+        },
+        {
+          "detail": [],
+          "measures": {},
+          "name": "characterization",
+          "passed": true
+        }
+      ],
+      "citation_coverage": null,
+      "fixture_mode": "prechunked",
+      "harness_flags": [],
+      "invalid_citation_rate": null,
+      "name": "off-prechunked",
+      "overall": {
+        "correct_refusal_rate": {
+          "n": 21,
+          "value": 0.6666666666666666
+        },
+        "false_refusal_rate": {
+          "n": 86,
+          "value": 0.3953488372093023
+        },
+        "false_refusal_upper_95": 0.4896129848026024,
+        "mrr": {
+          "n": 86,
+          "value": 0.5174418604651163
+        },
+        "recall_at_10": {
+          "n": 86,
+          "value": 0.5116279069767442
+        },
+        "recall_at_5": {
+          "n": 86,
+          "value": 0.5116279069767442
+        }
+      },
+      "passed": true,
+      "run_config_hash": "5ef78fa56033f6d3a74b832bea13c8b5babb47bef74933b959803eec5bc7a664",
+      "switches": {
+        "RAG_ANSWER_FEEDBACK": "false",
+        "RAG_CITATIONS": "false",
+        "RAG_CLAUDE_CITATIONS": "false",
+        "RAG_GROUNDEDNESS": "false",
+        "RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK": "false",
+        "RAG_GROUNDEDNESS_VECTARA_OPT_IN": "false"
+      }
+    },
+    {
+      "checks": [
+        {
+          "detail": [],
+          "measures": {},
+          "name": "paired_all_zero",
+          "passed": true
+        },
+        {
+          "detail": [],
+          "measures": {},
+          "name": "characterization",
+          "passed": true
+        }
+      ],
+      "citation_coverage": null,
+      "fixture_mode": "ingest",
+      "harness_flags": [],
+      "invalid_citation_rate": null,
+      "name": "off-ingest",
+      "overall": {
+        "correct_refusal_rate": {
+          "n": 26,
+          "value": 0.5
+        },
+        "false_refusal_rate": {
+          "n": 117,
+          "value": 0.2222222222222222
+        },
+        "false_refusal_upper_95": 0.2947068264406666,
+        "mrr": {
+          "n": 117,
+          "value": 0.6609686609686609
+        },
+        "recall_at_10": {
+          "n": 117,
+          "value": 0.7094017094017094
+        },
+        "recall_at_5": {
+          "n": 117,
+          "value": 0.7094017094017094
+        }
+      },
+      "passed": true,
+      "run_config_hash": "b6356e196a2b3211fda8b93fa0b1675f09dc74fc8e8a6aa46bacdd6ce4b3bb7e",
+      "switches": {
+        "RAG_ANSWER_FEEDBACK": "false",
+        "RAG_CITATIONS": "false",
+        "RAG_CLAUDE_CITATIONS": "false",
+        "RAG_GROUNDEDNESS": "false",
+        "RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK": "false",
+        "RAG_GROUNDEDNESS_VECTARA_OPT_IN": "false"
+      }
+    },
+    {
+      "checks": [
+        {
+          "detail": [],
+          "measures": {},
+          "name": "retrieval_unchanged",
+          "passed": true
+        },
+        {
+          "detail": [],
+          "measures": {},
+          "name": "no_slice_drop",
+          "passed": true
+        },
+        {
+          "detail": [],
+          "measures": {
+            "citations": 92.0,
+            "invalid_citation_rate": 0.0
+          },
+          "name": "citation_validity",
+          "passed": true
+        },
+        {
+          "detail": [],
+          "measures": {},
+          "name": "strict_refusal",
+          "passed": true
+        }
+      ],
+      "citation_coverage": 0.974025974025974,
+      "fixture_mode": "prechunked",
+      "harness_flags": [
+        "--citations",
+        "--groundedness"
+      ],
+      "invalid_citation_rate": 0.0,
+      "name": "on-prechunked",
+      "overall": {
+        "correct_refusal_rate": {
+          "n": 21,
+          "value": 0.6666666666666666
+        },
+        "false_refusal_rate": {
+          "n": 86,
+          "value": 0.3953488372093023
+        },
+        "false_refusal_upper_95": 0.4896129848026024,
+        "mrr": {
+          "n": 86,
+          "value": 0.5174418604651163
+        },
+        "recall_at_10": {
+          "n": 86,
+          "value": 0.5116279069767442
+        },
+        "recall_at_5": {
+          "n": 86,
+          "value": 0.5116279069767442
+        }
+      },
+      "passed": true,
+      "run_config_hash": "655c6982b95f37d7f5b79ff0c05d1cb75baca6fd8e6c5c39368675c0622a3279",
+      "switches": {
+        "RAG_ANSWER_FEEDBACK": "false",
+        "RAG_CITATIONS": "true",
+        "RAG_CLAUDE_CITATIONS": "false",
+        "RAG_GROUNDEDNESS": "true",
+        "RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK": "false",
+        "RAG_GROUNDEDNESS_VECTARA_OPT_IN": "false"
+      }
+    },
+    {
+      "checks": [
+        {
+          "detail": [],
+          "measures": {},
+          "name": "retrieval_unchanged",
+          "passed": true
+        },
+        {
+          "detail": [],
+          "measures": {},
+          "name": "no_slice_drop",
+          "passed": true
+        },
+        {
+          "detail": [],
+          "measures": {
+            "citations": 171.0,
+            "invalid_citation_rate": 0.0
+          },
+          "name": "citation_validity",
+          "passed": true
+        },
+        {
+          "detail": [],
+          "measures": {},
+          "name": "strict_refusal",
+          "passed": true
+        }
+      ],
+      "citation_coverage": 0.9850746268656716,
+      "fixture_mode": "ingest",
+      "harness_flags": [
+        "--citations",
+        "--groundedness"
+      ],
+      "invalid_citation_rate": 0.0,
+      "name": "on-ingest",
+      "overall": {
+        "correct_refusal_rate": {
+          "n": 26,
+          "value": 0.5
+        },
+        "false_refusal_rate": {
+          "n": 117,
+          "value": 0.2222222222222222
+        },
+        "false_refusal_upper_95": 0.2947068264406666,
+        "mrr": {
+          "n": 117,
+          "value": 0.6609686609686609
+        },
+        "recall_at_10": {
+          "n": 117,
+          "value": 0.7094017094017094
+        },
+        "recall_at_5": {
+          "n": 117,
+          "value": 0.7094017094017094
+        }
+      },
+      "passed": true,
+      "run_config_hash": "12890496b592c5deee4c086051d31771eb1b44d817afb415ce99f39148731de6",
+      "switches": {
+        "RAG_ANSWER_FEEDBACK": "false",
+        "RAG_CITATIONS": "true",
+        "RAG_CLAUDE_CITATIONS": "false",
+        "RAG_GROUNDEDNESS": "true",
+        "RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK": "false",
+        "RAG_GROUNDEDNESS_VECTARA_OPT_IN": "false"
+      }
+    }
+  ],
+  "schema_version": 2
+}

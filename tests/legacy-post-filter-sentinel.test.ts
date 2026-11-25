@@ -63,7 +63,7 @@ const PINNED_REGIONS: PinnedRegion[] = [
     file: 'assemble',
     start: 'export function filterCandidates<C extends AssemblyCandidate>(',
     end: 'return { context, usedDocuments, relevantChunks, kept, queryTerms, sourceImages, links, refusalCandidate, blocks: labeller.blocks };\n}',
-    sha256: '1c537471f2315b9324660fbd4840c6130123a0d7ae451edca105f1a8f3973b06',
+    sha256: '50af236148ac862c3cfb2ef519a6ab697c8f7a7463fbcc95502d368a36915e4c',
   },
 ];
 

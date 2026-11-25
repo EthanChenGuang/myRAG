@@ -30,6 +30,11 @@
           "title": "Dense",
           "type": "number"
         },
+        "domain": {
+          "exclusiveMinimum": 0,
+          "title": "Domain",
+          "type": "number"
+        },
         "exact_id": {
           "default": 1.0,
           "exclusiveMinimum": 0,
