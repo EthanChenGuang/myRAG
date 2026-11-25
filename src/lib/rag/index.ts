@@ -374,7 +374,6 @@ export type { ToolResultGuardMode } from './security/config';
 export { escapeToolOutput, scanToolOutput, wrapToolResultsForPrompt } from './security/tool-results';
 export { FingerprintImpactError, computeFingerprintCoverage, computeFingerprintImpact, isSettingName } from './ingest/fingerprint/impact';
 export type { FingerprintCoverage, PendingRebuild, RebuildStart } from './ingest/fingerprint/impact';
-export { readFeedbackLoopConfig } from './feedback-loop/config';
 export {
   effectiveLogMode,
   readTenantFeedbackSettings,
