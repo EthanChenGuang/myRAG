@@ -767,9 +767,9 @@ Plans:
   2. Purging a document leaves no chunk, parent, vector in any profile, table row, cluster membership, translation, parse-cache entry, original, external-backend vector or cache entry of its lineage; past citations show the withdrawn marker; the audit row names actor and reason; golden items on it are stale.
   3. With `RAG_SOURCE_RECHECK` on, a chunk whose document was deleted directly in the index is dropped before rerank and counted on the trace; on Weaviate and Qdrant the recheck is always on.
   4. With the SharePoint switch on, a fixture drive (recorded Graph delta responses) syncs added, changed and deleted items with stored delta tokens and maps item permissions to access groups; with it off nothing changes.
-  5. The deletion canaries pass in CI for `soft` and `purge`; with every new switch off and connections in `soft` mode, behaviour matches the Phase 6.2 baseline.
+  5. The deletion canaries pass in CI for `soft` and `purge`; with every new switch off and connections in the default deletion mode, behaviour matches the Phase 6.2 baseline.
 **Live verification**: Connect a real SharePoint test site, delete and restore a file, and confirm the answer stops and resumes; purge a document and run the verification query against the live database.
-**Plans**: TBD
+**Plans**: 27 plans in 10 waves (see `phases/06.3-source-deletion-sync-and-purge/06.3-PLAN-INDEX.md`); migrations 0720–0728; human steps in plans 24 (live migration push), 25 (live SharePoint and purge checks) and 26 (live permission mapping); 06.3-14 waits for Phase 7 plan 07-37, 06.3-26 for Phase 4.3
 **UI hint**: yes
 
 ### Phase 7: External Backends & Release Defaults
@@ -852,5 +852,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 3.1.1 → 3.2 → 3.2
 | 6. Query Layer (LlamaIndex & LangChain) | 12/46 | In Progress | - |
 | 6.1. Embedding Fine-tuning Pipeline (INSERTED) | 0/20 | Planned (plan-check PASS) | - |
 | 6.2. Query Layer Additions (INSERTED) | 0/TBD | Not planned | - |
-| 6.3. Source Deletion Sync & Purge (INSERTED) | 0/TBD | Not planned | - |
+| 6.3. Source Deletion Sync & Purge (INSERTED) | 0/27 | Planned (plan-check PASS) | - |
 | 7. External Backends & Release Defaults | 2/52 | In Progress (revision 4 planned 2026-11-25; UI-SPEC pending for 07-48, 07-49, 07-52) | - |
