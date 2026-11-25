@@ -372,6 +372,25 @@
           "default": null,
           "title": "Candidate Pool Size"
         },
+        "chunking_profile_by_doc_type": {
+          "additionalProperties": {
+            "maxLength": 128,
+            "minLength": 1,
+            "type": "string"
+          },
+          "propertyNames": {
+            "enum": [
+              "general",
+              "financial_report",
+              "contract_legal",
+              "invoice_receipt",
+              "product_technical",
+              "scanned_image"
+            ]
+          },
+          "title": "Chunking Profile By Doc Type",
+          "type": "object"
+        },
         "final_top_k": {
           "anyOf": [
             {
