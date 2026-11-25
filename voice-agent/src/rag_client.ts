@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { createHash } from 'node:crypto';
 
 export interface RAGResult {
     content: string;
@@ -22,6 +23,16 @@ export interface RAGResponse {
         similarity: number;
     }>;
     source_images: SourceImage[];
+}
+
+export interface HistoryTurn {
+    role: 'user' | 'assistant';
+    content: string;
+    binding: string;
+}
+
+export function scopeTokenBinding(_token: string): string {
+    return '';
 }
 
 export type RAGFailureReason = 'unauthorized' | 'unavailable' | 'error';
