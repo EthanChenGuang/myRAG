@@ -303,7 +303,7 @@ Plans:
   8. In every processing profile, a 60-row fixture table cut into several chunks repeats its header in each chunk and a page-continued table carries the header forward; the synthetic `table_split` items in zh/en/it are answered from the asked column of the right row, not a neighbouring column; with `RAG_TABLE_ROW_SERIALIZATION` on, table chunks embed "column = value" lines while the LLM still sees the Markdown table.
   9. An older version uploaded as a separate file next to its newer version is flagged as a possible older version, and after admin confirmation only the newer version is current; with `RAG_EFFECTIVE_DATES` on, a policy whose effective date is next month is not used yet and an expired one is treated as historical.
 **Live verification**: Run OCR on real scanned Chinese and Italian documents; review a sample of quarantined real documents.
-**Plans**: TBD
+**Plans**: 65 plans in 15 waves (see `phases/03.2-language-support-ingestion-hardening/03.2-PLAN-INDEX.md`); human steps in plans 36 (package check), 65 (live migration push 0801–0810) and 53 (live verification and native-speaker review). Line hints in plan reading lists are advisory: executors locate code by symbol name
 **UI hint**: yes
 
 ### Phase 3.2.1: BGE-M3 Open-Source Fallback Embedding (INSERTED)
@@ -314,7 +314,7 @@ Plans:
   1. BGE-M3 runs as an embedding profile through the hosted API and the sidecar with identical vectors (within a recorded tolerance), joins the Phase 3.1.1 catalog with its supported languages, and the language validator checks it.
   2. It passes the EMB-05 activation gate before it can serve, and it is compared with the active profile on every slice, language and cost; with the profile inactive, results match the Phase 3.2 baseline.
 **Live verification**: Call the hosted BGE-M3 API, confirm the weights revision, compare hosted and sidecar vectors, and push migration 0811 live.
-**Plans**: TBD
+**Plans**: 5 plans in 4 waves (see `phases/03.2.1-bge-m3-open-source-fallback-embedding/03.2.1-PLAN-INDEX.md`); human steps in plans 02 (weights revision, hosted vectors) and 05 (live checks, migration 0811 push)
 
 ### Phase 4: Hybrid Retrieval, Reranking & Calibrated Refusal
 **Goal**: On pgvector, questions in Chinese, English and Italian find the right chunks through filtered hybrid search and reranking, and the system refuses when the best reranked evidence is too weak
@@ -537,7 +537,7 @@ Plans:
 **Depends on**: Phase 5.1 (and Phase 5: builds on `rag_answer_records`, the web answer vote and the review reasons; Phase 4.1.1 for plan 05.1.1-24 only)
 **Requirements**: FBK-01, FBK-02, FBK-03, FBK-04, FBK-05, FBK-06, FBK-07, FBK-08, FBK-09, FBK-10, EVAL-16 (embed and refusal extension), EVAL-17 (moved from Phase 7)
 **Success Criteria** (what must be TRUE):
-  1. With `RAG_RETRIEVAL_LOG` on, every chat, embed and voice retrieval writes one `rag_retrieval_log` row after the response (query masked or omitted, tenant, chunk ids, ranks and scores, config hash, refusal decision and outcome, latency), never answer or chunk text; eval, media and ghost chats are never logged; rows are service-role only, deleted with their user, organization or chat, purged after the retention window, and a tenant can lower or switch off logging; with every switch off the chat, embed and voice responses are byte-identical (characterization) and no row is written.
+  1. With `RAG_RETRIEVAL_LOG` on, every chat, embed and voice retrieval writes one `rag_retrieval_log` row after the response (query masked or omitted, tenant, chunk ids, ranks and scores, config hash, refusal decision and outcome, latency, and the language codes of the query, the kept chunks and the answer), never answer or chunk text; eval, media and ghost chats are never logged; rows are service-role only, deleted with their user, organization or chat, purged after the retention window, and a tenant can lower or switch off logging; with every switch off the chat, embed and voice responses are byte-identical (characterization) and no row is written.
   2. Users can mark a strict refusal as "I expected an answer", embed visitors can rate answers through a signed per-answer token, opening a source is counted, and Phase 5's web answer votes reach the same table; votes on another user's or another tenant's retrieval are impossible (404 tests).
   3. Weekly mining turns thumbs-down, disputed refusals, refusals with high scores, zero-result and low-score retrievals and flagged groundedness into a capped, deduplicated review queue per tenant; database RLS ensures an expert of tenant A never sees tenant B's cases, shown by two-tenant tests at the SQL and API levels, and operator admins see a tenant only after an explicit grant in multi-tenant mode.
   4. In the Config UI an expert labels a case (correct documents and exact evidence spans, expected answer, PII check) and triages it into dictionary candidates (for Phase 4.1.1), training pairs with hard negatives and document groups (for Phase 6.1) and golden candidates; no training pair uses a document of the domain test split.
@@ -545,7 +545,7 @@ Plans:
   6. The phase comparison against the Phase 5.1 closing report shows retrieval paired differences of exactly zero with the switches off and on, and request latency within the OBS-02 budgets.
 **Live verification**: Apply 0531 to 0535 to the real project and check two-tenant RLS; confirm after()-written rows and latency on real streams, embed and voice; collect and label 100–300 real user questions with domain experts, PII-review and promote them; switch the gate to real items, record a three-run real baseline and set improvement targets for Phases 6 and 6.1 (plan 05.1.1-23).
 **UI**: `/gsd-ui-phase 05.1.1` must produce `05.1.1-UI-SPEC.md` before execution (surfaces: Config UI switches, web chat refusal control and source-open signal, embed widget and window rating, Config UI expert labelling panel, Config UI feedback loop admin card).
-**Ordering note**: Phase 6 plans that edit `src/app/api/chat/route.ts`, `src/app/api/embed/chat/route.ts`, `src/lib/rag/trace/finish.ts`, `src/lib/rag/pipeline.ts`, `src/lib/rag/index.ts`, the five config files, `AGENTS.md` or the setup files depend on 05.1.1-22.
+**Ordering note**: Phase 6 plans that edit `src/app/api/chat/route.ts`, `src/app/api/embed/chat/route.ts`, `src/lib/rag/trace/finish.ts`, `src/lib/rag/pipeline.ts`, `src/lib/rag/index.ts`, `src/lib/rag/generation/messages.ts`, the five config files, `AGENTS.md` or the setup files depend on 05.1.1-22.
 **Plans**: 25 plans in 8 waves (05.1.1-01..05.1.1-25); closing plan 05.1.1-22 — plan index `phases/05.1.1-feedback-loop-and-real-domain-test-set-thumbs-failed-query-m/05.1.1-PLAN-INDEX.md`
 
 Plans:
@@ -641,7 +641,7 @@ Plans:
   7. With the semantic cache on, cache hits have much lower p95 latency than misses, any document change in the tenant invalidates affected entries, and the cross-tenant canary suite includes the cache.
 **Live verification**: Run both frameworks with real LLM keys; measure p50/p95 latency of each transform and of the whole pre-retrieval stage for chat (starting budget about 2 s before first token) and voice (about 800 ms), and replace the starting budgets with the measured ones; compare LlamaIndex and LangChain on the real golden set.
 **Plans**: 46 plans in 13 waves (06-01..06-46) — see `phases/06-query-layer-llamaindex-langchain/06-PLAN-INDEX.md`
-**Ordering note (2026-11-24, Phase 5.1.1)**: Phase 6 plans that edit `src/app/api/chat/route.ts`, `src/app/api/embed/chat/route.ts`, `src/lib/rag/trace/finish.ts`, `src/lib/rag/pipeline.ts`, `src/lib/rag/index.ts`, the five config files, `AGENTS.md` or the setup files depend on 05.1.1-22 (the Phase 5.1.1 close). The Phase 6 plans themselves are not yet rewritten for this edge; the executor adds it before running such a plan.
+**Ordering note (2026-11-24, Phase 5.1.1)**: Phase 6 plans that edit `src/app/api/chat/route.ts`, `src/app/api/embed/chat/route.ts`, `src/lib/rag/trace/finish.ts`, `src/lib/rag/pipeline.ts`, `src/lib/rag/index.ts`, `src/lib/rag/generation/messages.ts`, the five config files, `AGENTS.md` or the setup files depend on 05.1.1-22 (the Phase 5.1.1 close). The Phase 6 plans themselves are not yet rewritten for this edge; the executor adds it before running such a plan.
 **Defaults note (2026-11-24, Phase 4.1 D-21)**: Phase 6 was planned while legacy was the default. Once Phase 4.1 flips the defaults (04.1-09), route-fixture tests that assert legacy output must pin `env: { RAG_PIPELINE: 'legacy' }`, and comparisons "against Phase 4" use the post-flip baselines.
 
 Plans:
@@ -825,8 +825,8 @@ Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 3.1.1 → 3.2 → 3.2
 | 3. Unified Ingestion & Embedding Profiles | 53/53 (55 summaries incl. gap plans) | Executed (verification pending) | - |
 | 3.1. Tiered Parsing, Incremental Queue & Bulk Backfill (INSERTED) | 54/55 | In Progress (live checks) | - |
 | 3.1.1. Domain Embedding Model Candidates & Per-Doc-Type Selection (INSERTED) | 0/16 | Planned (plan-check PASS) | - |
-| 3.2. Language Support & Ingestion Hardening (INSERTED) | 0/TBD | Not planned | - |
-| 3.2.1. BGE-M3 Open-Source Fallback Embedding (INSERTED) | 0/TBD | Not planned | - |
+| 3.2. Language Support & Ingestion Hardening (INSERTED) | 0/65 | Planned | - |
+| 3.2.1. BGE-M3 Open-Source Fallback Embedding (INSERTED) | 0/5 | Planned (needs 3.1.1) | - |
 | 4. Hybrid Retrieval, Reranking & Calibrated Refusal | 46/47 | In Progress (04-43 live calibration) | - |
 | 4.1. Hybrid Retrieval & Rerank On by Default (INSERTED) | 0/12 | Planned (plan-check PASS) | - |
 | 4.1.1. Domain Terminology Dictionary (INSERTED) | 0/16 | Planned (plan-check PASS) | - |

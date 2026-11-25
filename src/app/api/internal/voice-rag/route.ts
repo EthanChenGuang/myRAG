@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod/v3';
 import { env } from '@/lib/env';
-import { deriveVoiceKeywords, resolveVoiceScope, runRetrieval } from '@/lib/rag';
+import { deriveVoiceKeywords, readSecurityConfig, resolveVoiceScope, runRetrieval } from '@/lib/rag';
 import { internalApiKeyMatches } from '@/lib/internal-api-key';
 
 export const runtime = 'nodejs';
@@ -79,7 +79,10 @@ export async function POST(req: NextRequest) {
                 cleanQuery: keywords.cleanQuery,
                 keywords: keywords.keywords,
                 searchKeywords: keywords.searchKeywords
-            } : undefined
+            } : undefined,
+            ...(readSecurityConfig().contextTagging && typeof voice.context === 'string' && voice.context.trim() !== ''
+                ? { context: voice.context }
+                : {}),
         });
 
     } catch (error: unknown) {

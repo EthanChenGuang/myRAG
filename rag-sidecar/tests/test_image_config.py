@@ -16,7 +16,10 @@ import pytest
 
 SIDECAR_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = SIDECAR_DIR.parent
-CONFIG_FILES = ("parse-routing.json", "processing-profiles.json")
+SHIPPED_CONFIG_DIR = SIDECAR_DIR / "config" / "rag"
+# Every JSON the sidecar reads at run time; each plan that adds one asserts its presence here.
+REQUIRED_CONFIG_FILES = ("parse-routing.json", "processing-profiles.json", "language-packs.json")
+CONFIG_FILES = tuple(sorted(path.name for path in SHIPPED_CONFIG_DIR.glob("*.json")))
 
 _PROBE = """
 import sys
@@ -28,6 +31,8 @@ print("routing", cfg.version, config.default_routing_config_path())
 from rag_sidecar.preflight.config import load_processing_profiles
 profiles = load_processing_profiles()
 print("profiles", len(profiles.profiles), config.default_processing_profiles_path())
+from rag_sidecar.contracts import languages
+print("languages", [pack.code for pack in languages.load_language_registry().packs], languages.default_language_packs_path())
 """
 
 _PROFILE_PROBE = """
@@ -46,7 +51,7 @@ def _image_layout(root: Path, *, with_config: bool) -> Path:
     if with_config:
         (app / "config" / "rag").mkdir(parents=True)
         for name in CONFIG_FILES:
-            shutil.copyfile(REPO_ROOT / "config" / "rag" / name, app / "config" / "rag" / name)
+            shutil.copyfile(SHIPPED_CONFIG_DIR / name, app / "config" / "rag" / name)
     return app
 
 
@@ -70,6 +75,7 @@ def test_routing_data_and_profiles_resolve_from_an_image_like_layout(tmp_path):
     assert done.returncode == 0, done.stderr[-2000:]
     assert f"{app / 'config' / 'rag' / 'parse-routing.json'}" in done.stdout
     assert f"{app / 'config' / 'rag' / 'processing-profiles.json'}" in done.stdout
+    assert f"languages ['zh', 'en', 'it'] {app / 'config' / 'rag' / 'language-packs.json'}" in done.stdout
 
 
 def test_the_worker_loads_a_profile_from_an_image_like_layout(tmp_path):
@@ -98,6 +104,11 @@ def test_a_checkout_still_reads_the_repo_root_config():
     assert config.default_routing_config_path() == REPO_ROOT / "config" / "rag" / "parse-routing.json"
     assert hasattr(config, "default_processing_profiles_path"), "the profiles path has no resolver"
     assert config.default_processing_profiles_path() == REPO_ROOT / "config" / "rag" / "processing-profiles.json"
+
+
+@pytest.mark.parametrize("name", REQUIRED_CONFIG_FILES)
+def test_the_image_ships_every_config_file_the_sidecar_reads(name):
+    assert name in CONFIG_FILES, f"rag-sidecar/config/rag/{name} is missing; copy config/rag/{name} there"
 
 
 @pytest.mark.parametrize("name", CONFIG_FILES)

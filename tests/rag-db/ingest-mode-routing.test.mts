@@ -267,11 +267,19 @@ describe('the re-recorded ingest baseline (T-03.1-104)', () => {
       .filter((line) => line.trim() !== '')
       .map((line) => JSON.parse(line) as { id: string; tags?: string[] })
       .filter((item) => item.tags?.includes('parse_fixtures'))
-      .map((item) => item.id)
-      .sort();
+      .map((item) => item.id);
+    // Plan 05.1-17 later added the injection categories to golden.jsonl, which ingest mode also scores.
+    const injectionIds = fs
+      .readFileSync(path.join(ROOT, 'eval/fixtures/golden.jsonl'), 'utf8')
+      .split('\n')
+      .filter((line) => line.trim() !== '')
+      .map((line) => JSON.parse(line) as { id: string; category: string })
+      .filter((item) => item.category === 'injection' || item.category === 'injection_evasive')
+      .map((item) => item.id);
     const added = Object.keys(current.items).filter((id) => !(id in previous.items)).sort();
     assert.ok(parseIds.length >= 30);
-    assert.deepEqual(added, parseIds);
+    assert.equal(injectionIds.length, 18);
+    assert.deepEqual(added, [...parseIds, ...injectionIds].sort());
     assert.notEqual(current.corpus_sha256, previous.corpus_sha256, 'the parse fixtures are part of the ingest corpus hash');
   });
 });

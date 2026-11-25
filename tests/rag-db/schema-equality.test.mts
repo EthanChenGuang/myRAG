@@ -28,11 +28,13 @@ const FOLDED_SETUP: Record<DeploymentMode, string> = {
 /**
  * Migrations whose final shape is folded into both setup files: Phase 3 (0301-0320, plans 03-47 and later), Phase 3.1 (0351-0359, and the queue
  * hardening and chunk writer fix 0420-0424 after Phase 4, plan 03.1-52), Phase 4 (0401-0413, plan 04-42) and the empty search_path rewrite 0425
- * after 0424 (plan 04-47). Phase 6 (plan 06-45) is not folded yet, so a fresh install from a setup file is completed by those migrations alone.
+ * after 0424 (plan 04-47), and Phase 5 (0501-0502, plan 05-25). 0426, 0427 and Phase 6 (plan 06-45) are not folded yet, so a fresh install from
+ * a setup file is completed by those migrations alone.
  */
-const FOLDED_MIGRATION = /^supabase\/migrations\/(030[1-9]|031\d|0320|035[1-9]|040[1-9]|041[0-3]|042[0-5])_[a-z0-9_]+(\.(single|multi)-tenant)?\.sql$/;
+const FOLDED_MIGRATION = /^supabase\/migrations\/(030[1-9]|031\d|0320|035[1-9]|040[1-9]|041[0-3]|042[0-5]|050[12])_[a-z0-9_]+(\.(single|multi)-tenant)?\.sql$/;
 const PHASE4_MIGRATION = /^supabase\/migrations\/04(0[1-9]|1\d)_/;
 const PHASE31_MIGRATION = /^supabase\/migrations\/(035[1-9]|042[0-4])_/;
+const PHASE5_MIGRATION = /^supabase\/migrations\/05\d\d_/;
 const unfoldedMigrationFiles = (mode: DeploymentMode): string[] => migrationFiles(mode).filter((file) => !FOLDED_MIGRATION.test(file));
 
 /** Every function the Phase 4 migrations create; each one is service-role only (RET-04, D-04). */
@@ -289,8 +291,46 @@ describe('folded migration set', () => {
       assert.ok(phase31.length >= 15);
       assert.deepEqual(phase31.filter((file) => !FOLDED_MIGRATION.test(file)), []);
     });
+
+    test(`every Phase 5 migration of ${mode} is folded into the setup file`, () => {
+      const phase5 = migrationFiles(mode).filter((file) => PHASE5_MIGRATION.test(file));
+      assert.deepEqual(phase5, ['supabase/migrations/0501_rag_answer_records.sql', `supabase/migrations/0502_rag_answer_records_tenant.${mode}.sql`]);
+      assert.deepEqual(phase5.filter((file) => !FOLDED_MIGRATION.test(file)), []);
+    });
   }
 });
+
+const ANSWER_RECORD_TENANT_KEY: Record<DeploymentMode, RegExp> = {
+  'single-tenant': /^'s:default'::text$/,
+  'multi-tenant': /^CASE WHEN \(organization_id IS NOT NULL\) THEN \('o:'::text \|\| \(organization_id\)::text\) ELSE \('u:'::text \|\| \(user_id\)::text\) END$/,
+};
+
+/** rag_answer_records as a fresh install gets it: RLS on, the select-own policy, the mode's tenant key, no anon privilege, SELECT only for clients. */
+async function assertAnswerRecordsSecured(db: PGlite, mode: DeploymentMode): Promise<void> {
+  const table = await db.query<{ rls: boolean }>("SELECT relrowsecurity AS rls FROM pg_class WHERE oid = to_regclass('public.rag_answer_records')");
+  assert.equal(table.rows[0]?.rls, true, 'rag_answer_records exists with row level security enabled');
+  const tenantKey = await db.query<{ generated: string; expr: string }>(
+    `SELECT a.attgenerated AS generated, pg_get_expr(d.adbin, d.adrelid) AS expr FROM pg_attribute a
+     JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+     WHERE a.attrelid = 'public.rag_answer_records'::regclass AND a.attname = 'tenant_key'`,
+  );
+  assert.equal(tenantKey.rows[0]?.generated, 's', 'tenant_key is a stored generated column');
+  assert.match(String(tenantKey.rows[0]?.expr).replace(/\s+/g, ' ').trim(), ANSWER_RECORD_TENANT_KEY[mode], `tenant_key uses the ${mode} expression`);
+  const privileges = ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER'];
+  const held = await db.query<{ role: string; privilege: string }>(
+    `SELECT r.role, p.privilege FROM unnest(ARRAY['anon', 'authenticated', 'service_role']) AS r(role), unnest($1::text[]) AS p(privilege)
+     WHERE has_table_privilege(r.role, 'public.rag_answer_records', p.privilege) ORDER BY 1, 2`,
+    [privileges],
+  );
+  const byRole = (role: string) => held.rows.filter((row) => row.role === role).map((row) => row.privilege);
+  assert.deepEqual(byRole('anon'), [], 'anon has no privilege on rag_answer_records');
+  assert.deepEqual(byRole('authenticated'), ['SELECT'], 'authenticated may only read rag_answer_records');
+  assert.deepEqual(byRole('service_role'), [...privileges].sort(), 'service_role writes rag_answer_records');
+  const policies = await db.query<{ name: string; cmd: string; roles: string; qual: string }>(
+    "SELECT policyname AS name, cmd, roles::text AS roles, qual FROM pg_policies WHERE schemaname = 'public' AND tablename = 'rag_answer_records'",
+  );
+  assert.deepEqual(policies.rows, [{ name: 'rag_answer_records_select_own', cmd: 'SELECT', roles: '{authenticated}', qual: '(user_id = auth.uid())' }]);
+}
 
 for (const mode of MODES) {
   describe(`${mode} setup`, () => {
@@ -300,6 +340,7 @@ for (const mode of MODES) {
         assert.deepEqual(Object.keys(fixture.sqlSha256), [FOLDED_SETUP[mode]], 'the setup file alone was loaded, no migration');
         await assertRagFunctionsNotCallableByClients(fixture.db);
         await assertPhase4FunctionsServiceRoleOnly(fixture.db);
+        await assertAnswerRecordsSecured(fixture.db, mode);
         const tables = await fixture.db.query<{ name: string }>(
           `SELECT c.relname AS name FROM pg_class c WHERE c.relnamespace = 'public'::regnamespace AND c.relkind = 'r'
              AND c.relname IN ('document_parents', 'chunking_profiles', 'chunking_build_runs', 'chunking_build_gaps') ORDER BY 1`,
@@ -365,10 +406,15 @@ const PHASE_31_SECTIONS = [
   },
 ] as const;
 const PHASE_4_HEADER = `${BAR}\n-- Phase 4: Hybrid retrieval`;
-// The empty search_path rewrite (0425, plan 04-47) runs after 0424, so its section follows the 0420-0424 section and closes the file.
+// The empty search_path rewrite (0425, plan 04-47) runs after 0424, so its section follows the 0420-0424 section; the Phase 5 section (0501-0502,
+// plan 05-25) follows it and closes the file.
 const SEARCH_PATH_SECTION = {
   header: `${BAR}\n-- Phase 4 gap closure: empty search_path for SECURITY DEFINER, trigger and post-Phase-3 functions (migration 0425, plan 04-47, after 0424)\n${BAR}`,
   files: /^supabase\/migrations\/0425_/,
+} as const;
+const PHASE_5_SECTION = {
+  header: `${BAR}\n-- Phase 5: Answer records (migrations 0501-0502, plan 05-25, after 0425 in migration order)\n${BAR}`,
+  files: /^supabase\/migrations\/050[12]_/,
 } as const;
 const OTHER_MODE: Record<DeploymentMode, DeploymentMode> = { 'single-tenant': 'multi-tenant', 'multi-tenant': 'single-tenant' };
 
@@ -451,7 +497,10 @@ for (const mode of MODES) {
       const text = readRepo(FOLDED_SETUP[mode]);
       const [early, late] = phase31Sections(mode) as [string, string];
       assert.ok(text.includes(`${early}\n${PHASE_4_HEADER}`), 'the 0351-0359 section sits right before the Phase 4 section');
-      assert.ok(text.endsWith(`${late}\n${foldedSection(mode, SEARCH_PATH_SECTION)}`), 'after Phase 4 come the 0420-0424 section and then the 0425 section, which closes the file');
+      assert.ok(
+        text.endsWith(`${late}\n${foldedSection(mode, SEARCH_PATH_SECTION)}\n${foldedSection(mode, PHASE_5_SECTION)}`),
+        'after Phase 4 come the 0420-0424 section, the 0425 section and then the Phase 5 section, which closes the file',
+      );
       assert.ok(text.indexOf(late) > text.indexOf(PHASE_4_HEADER));
     });
 
