@@ -153,3 +153,66 @@ def test_a_request_whose_digest_does_not_match_the_file_is_refused(client):
     response = post(client, data, request=meta)
     assert response.status_code == 422
     assert response.json()["error"] == "hidden_text_mismatch"
+
+
+HIDDEN_CASES = [
+    ("white-on-white.pdf", "color_near_background"),
+    ("tiny-font.pdf", "font_too_small"),
+    ("off-page.pdf", "outside_page"),
+    ("invisible-render.pdf", "invisible_render_mode"),
+    ("covered-text.pdf", "covered_by_object"),
+]
+VISIBLE_LINES = {
+    "white-on-white.pdf": "VISIBLE_EN",
+    "tiny-font.pdf": "VISIBLE_ZH",
+    "off-page.pdf": "VISIBLE_IT",
+    "invisible-render.pdf": "VISIBLE_EN",
+    "covered-text.pdf": "VISIBLE_IT",
+}
+CLEAN_CASES = [
+    "clean-plain.pdf",
+    "clean-dark-header.pdf",
+    "clean-footnotes.pdf",
+    "clean-crop-marks.pdf",
+    "clean-scan.pdf",
+    "clean-ocr-layer.pdf",
+    "link-annotation.pdf",
+    "zero-pages.pdf",
+]
+
+
+@pytest.mark.parametrize(("name", "reason"), HIDDEN_CASES)
+def test_each_hiding_technique_is_found_with_its_reason(client, name, reason):
+    generator = _generator()
+    report = report_for(client, name)
+
+    assert report.status == "hidden_found"
+    assert [span.reason for span in report.spans] == [reason]
+    assert report.spans[0].text == generator.HIDDEN_SENTENCE[name.removesuffix(".pdf")]
+    reported = " ".join(span.text for span in report.spans)
+    for line in getattr(generator, VISIBLE_LINES[name]):
+        assert line not in reported
+
+
+@pytest.mark.parametrize("name", CLEAN_CASES)
+def test_clean_fixtures_are_not_flagged(client, name):
+    report = report_for(client, name)
+
+    assert report.status == "clean", [(span.reason, span.text) for span in report.spans]
+    assert report.spans == []
+
+
+def test_the_corpus_manifest_matches_every_fixture():
+    generator = _generator()
+    manifest = json.loads((FIXTURE_DIR / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest == generator.manifest(generator.build_fixtures())
+    assert {name for name in manifest["fixtures"]} == {path.name for path in FIXTURE_DIR.glob("*.pdf")}
+
+
+def test_link_annotation_targets_are_returned(client):
+    report = report_for(client, "link-annotation.pdf")
+    assert report.link_targets == [_generator().LINK_TARGET]
+
+
+def test_a_hidden_fixture_without_links_returns_no_target(client):
+    assert report_for(client, "white-on-white.pdf").link_targets == []
