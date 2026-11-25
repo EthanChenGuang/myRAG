@@ -72,7 +72,7 @@ class SidecarSettings(BaseModel):
 
     @property
     def vectara_configured(self) -> bool:
-        return False
+        return self.vectara_api_key is not None and len(self.vectara_api_key.get_secret_value().strip()) > 0
 
     @property
     def max_upload_bytes(self) -> int:
@@ -173,4 +173,10 @@ def load_settings() -> SidecarSettings:
     values["service_role_key"] = SecretStr(service) if service else None
     app_url = (os.environ.get(APP_INTERNAL_URL_ENV_VAR) or "").strip()
     values["app_internal_url"] = app_url.rstrip("/") or None
+    vectara_key = (os.environ.get(VECTARA_API_KEY_ENV_VAR) or "").strip()
+    values["vectara_api_key"] = SecretStr(vectara_key) if vectara_key else None
+    vectara_base = (os.environ.get(VECTARA_BASE_URL_ENV_VAR) or "").strip().rstrip("/")
+    values["vectara_base_url"] = vectara_base or DEFAULT_VECTARA_BASE_URL
+    revision = (os.environ.get(HHEM_MODEL_REVISION_ENV_VAR) or "").strip()
+    values["hhem_model_revision"] = revision or DEFAULT_HHEM_MODEL_REVISION
     return SidecarSettings(**values)

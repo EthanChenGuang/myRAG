@@ -62,6 +62,10 @@ def available_scorer_names(scorers: Mapping[str, Scorer]) -> list[str]:
 
 def build_scorers(settings: "SidecarSettings") -> dict[str, Scorer]:
     scorers: dict[str, Scorer] = {}
+    if settings.vectara_configured:
+        from rag_sidecar.groundedness.vectara import VectaraScorer
+
+        scorers[VECTARA_SCORER] = VectaraScorer(settings)
     return scorers
 
 
