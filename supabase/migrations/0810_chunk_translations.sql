@@ -497,6 +497,216 @@ GRANT EXECUTE ON FUNCTION public.hybrid_search_translations(
   text, numeric, numeric, text, jsonb, boolean, text[], boolean, date
 ) TO service_role;
 
+-- Tenant settings (D-31). Targets are validated as registry-shaped codes here; the app validates them as a subset of the supported set.
+
+CREATE TABLE IF NOT EXISTS public.rag_translation_settings (
+  tenant_key text PRIMARY KEY CONSTRAINT rag_translation_settings_tenant_key_check
+    CHECK (tenant_key ~ '^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$'),
+  target_languages text[] NOT NULL DEFAULT '{}'::text[],
+  enabled boolean NOT NULL DEFAULT false,
+  updated_by uuid,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+ALTER TABLE public.rag_translation_settings ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.rag_translation_settings FROM PUBLIC, anon, authenticated;
+GRANT ALL ON TABLE public.rag_translation_settings TO service_role;
+
+CREATE OR REPLACE FUNCTION public.rag_translation_settings_get(p_tenant_key text)
+RETURNS TABLE (tenant_key text, target_languages text[], enabled boolean, updated_by uuid, updated_at timestamptz)
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  RETURN QUERY
+  SELECT p_tenant_key, COALESCE(s.target_languages, '{}'::text[]), COALESCE(s.enabled, false), s.updated_by, s.updated_at
+  FROM (SELECT 1) AS one
+  LEFT JOIN public.rag_translation_settings s ON s.tenant_key = p_tenant_key;
+END
+$fn$;
+
+CREATE OR REPLACE FUNCTION public.rag_translation_settings_set(p_actor uuid, p_tenant_key text, p_targets text[], p_enabled boolean)
+RETURNS TABLE (tenant_key text, target_languages text[], enabled boolean, updated_by uuid, updated_at timestamptz)
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_targets text[];
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  IF NOT (p_tenant_key = ANY (public.rag_admin_tenant_keys(p_actor))) THEN
+    RAISE EXCEPTION 'not_admin' USING ERRCODE = '42501';
+  END IF;
+  IF p_enabled IS NULL OR p_targets IS NULL OR cardinality(p_targets) > 16 OR EXISTS (
+    SELECT 1 FROM unnest(p_targets) AS u(code) WHERE u.code IS NULL OR u.code !~ '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$'
+  ) THEN
+    RAISE EXCEPTION 'translation_settings_refused: invalid_targets' USING ERRCODE = '22023';
+  END IF;
+  SELECT COALESCE(array_agg(x.code ORDER BY x.first), '{}'::text[]) INTO v_targets
+  FROM (SELECT u.code, min(u.ord) AS first FROM unnest(p_targets) WITH ORDINALITY AS u(code, ord) GROUP BY u.code) AS x;
+
+  INSERT INTO public.rag_translation_settings AS s (tenant_key, target_languages, enabled, updated_by, updated_at)
+  VALUES (p_tenant_key, v_targets, p_enabled, p_actor, now())
+  ON CONFLICT ON CONSTRAINT rag_translation_settings_pkey DO UPDATE
+    SET target_languages = EXCLUDED.target_languages, enabled = EXCLUDED.enabled, updated_by = EXCLUDED.updated_by, updated_at = now();
+
+  RETURN QUERY SELECT * FROM public.rag_translation_settings_get(p_tenant_key);
+END
+$fn$;
+
+-- Eligible chunks for one target language: current text and table chunks of a current ready document, in the chunking profile the
+-- search reads (the hybrid_search_chunks rule without an override), with a known language other than the target (image captions and
+-- 'und' chunks are skipped, D-29). source_content_hash is the chunk's content_hash, or the sha256 of its content when it has none; the
+-- producer stores it back so a later page can tell an up-to-date translation from a stale one.
+CREATE OR REPLACE FUNCTION public.rag_translation_eligible_chunks(p_tenant_key text, p_language text)
+RETURNS TABLE (chunk_id uuid, document_id uuid, language text, source_content_hash text)
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+  WITH eff AS (
+    SELECT dt.doc_type,
+           COALESCE(
+             (SELECT cp.id FROM public.chunking_profiles cp WHERE cp.doc_type = dt.doc_type AND cp.status = 'active' ORDER BY cp.id LIMIT 1),
+             'legacy'
+           ) AS profile_id
+    FROM unnest(ARRAY['financial_report', 'contract_legal', 'invoice_receipt', 'product_technical', 'scanned_image', 'general']) AS dt(doc_type)
+  )
+  SELECT c.id, c.document_id, c.language,
+         COALESCE(NULLIF(c.content_hash, ''), pg_catalog.encode(pg_catalog.sha256(pg_catalog.convert_to(c.content, 'UTF8')), 'hex'))
+  FROM public.document_chunks c
+  JOIN public.documents d ON d.id = c.document_id
+  JOIN eff ep ON ep.doc_type = c.doc_type
+  WHERE c.tenant_key = p_tenant_key AND d.tenant_key = p_tenant_key
+    AND c.is_current AND c.status IN ('ready', 'variant') AND d.is_current AND d.status = 'ready'
+    AND c.chunk_kind IN ('text', 'table')
+    AND c.language IS NOT NULL AND c.language <> 'und' AND c.language <> p_language
+    AND (
+      c.chunking_profile_id = ep.profile_id
+      OR (
+        ep.profile_id <> 'legacy' AND c.chunking_profile_id = 'legacy'
+        AND NOT EXISTS (
+          SELECT 1 FROM public.document_chunks c2
+          WHERE c2.document_id = c.document_id AND c2.tenant_key = p_tenant_key AND c2.is_current AND c2.chunking_profile_id = ep.profile_id
+        )
+      )
+    )
+$fn$;
+
+CREATE OR REPLACE FUNCTION public.rag_translation_coverage(p_tenant_key text)
+RETURNS TABLE (language text, translated bigint, eligible bigint)
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  RETURN QUERY
+  SELECT tl.code,
+         count(t.id) FILTER (WHERE t.source_content_hash = e.source_content_hash),
+         count(e.chunk_id)
+  FROM public.rag_translation_settings s
+  CROSS JOIN LATERAL unnest(s.target_languages) WITH ORDINALITY AS tl(code, ord)
+  LEFT JOIN LATERAL public.rag_translation_eligible_chunks(p_tenant_key, tl.code) e ON true
+  LEFT JOIN public.chunk_translations t ON t.chunk_id = e.chunk_id AND t.language = tl.code AND t.tenant_key = p_tenant_key
+  WHERE s.tenant_key = p_tenant_key
+  GROUP BY tl.code, tl.ord
+  ORDER BY tl.ord;
+END
+$fn$;
+
+CREATE OR REPLACE FUNCTION public.rag_translation_pending_page(p_tenant_key text, p_language text, p_limit integer)
+RETURNS TABLE (chunk_id uuid, document_id uuid, language text, source_content_hash text, content text, chunk_kind text)
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  IF p_language IS NULL OR p_language !~ '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$' THEN
+    RAISE EXCEPTION 'translation_refused: invalid_language' USING ERRCODE = '22023';
+  END IF;
+  IF p_limit IS NULL OR p_limit NOT BETWEEN 0 AND 1000 THEN
+    RAISE EXCEPTION 'translation_refused: limit out of range' USING ERRCODE = '22023';
+  END IF;
+  RETURN QUERY
+  SELECT e.chunk_id, e.document_id, e.language, e.source_content_hash, c.content, c.chunk_kind
+  FROM public.rag_translation_eligible_chunks(p_tenant_key, p_language) e
+  JOIN public.document_chunks c ON c.id = e.chunk_id
+  WHERE NOT EXISTS (
+    SELECT 1 FROM public.chunk_translations t
+    WHERE t.chunk_id = e.chunk_id AND t.language = p_language AND t.tenant_key = p_tenant_key AND t.source_content_hash = e.source_content_hash
+  )
+  ORDER BY e.document_id, c.chunk_index NULLS LAST, e.chunk_id
+  LIMIT p_limit;
+END
+$fn$;
+
+-- Deployment-wide number of current ready documents per language, aggregates only, for the Languages picker (D-08).
+CREATE OR REPLACE FUNCTION public.rag_language_document_counts()
+RETURNS TABLE (language text, documents bigint)
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+  SELECT d.language, count(*)
+  FROM public.documents d
+  WHERE d.is_current AND d.status = 'ready' AND d.language IS NOT NULL AND d.language <> ''
+  GROUP BY d.language
+  ORDER BY d.language
+$fn$;
+
+-- Purge hook for the translation store (the rag_purge_hook_<name> seam of the purge work): removes the tenant's translations of the
+-- given documents and of every version of the given lineage; their vectors go by cascade. Returns the number of translations removed.
+CREATE OR REPLACE FUNCTION public.rag_purge_hook_chunk_translations(p_tenant_key text, p_lineage_id uuid, p_document_ids uuid[])
+RETURNS integer
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_n integer;
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  DELETE FROM public.chunk_translations t
+  WHERE t.tenant_key = p_tenant_key
+    AND (
+      t.document_id = ANY (COALESCE(p_document_ids, '{}'::uuid[]))
+      OR (
+        p_lineage_id IS NOT NULL
+        AND t.document_id IN (SELECT d.id FROM public.documents d WHERE d.lineage_id = p_lineage_id AND d.tenant_key = p_tenant_key)
+      )
+    );
+  GET DIAGNOSTICS v_n = ROW_COUNT;
+  RETURN v_n;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_translation_settings_get(text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_translation_settings_set(uuid, text, text[], boolean) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_translation_eligible_chunks(text, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_translation_coverage(text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_translation_pending_page(text, text, integer) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_language_document_counts() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_purge_hook_chunk_translations(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_translation_settings_get(text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_translation_settings_set(uuid, text, text[], boolean) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_translation_eligible_chunks(text, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_translation_coverage(text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_translation_pending_page(text, text, integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_language_document_counts() TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_purge_hook_chunk_translations(text, uuid, uuid[]) TO service_role;
+
 NOTIFY pgrst, 'reload schema';
 
 COMMIT;
