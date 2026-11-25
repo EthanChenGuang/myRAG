@@ -243,7 +243,7 @@ describe('relex batch functions (0402, multi-tenant)', () => {
     return (await fixture.db.query<T>(sql, params)).rows;
   }
 
-  async function writeChunk(tenant: typeof A, label: string, lexicalVersion: number | null, lexicalText: string | null): Promise<string> {
+  async function writeChunk(tenant: { key: string; userId: string }, label: string, lexicalVersion: number | null, lexicalText: string | null): Promise<string> {
     const docId = crypto.randomUUID();
     const chunkId = crypto.randomUUID();
     const sourceKey = `relex-${++sequence}.md`;

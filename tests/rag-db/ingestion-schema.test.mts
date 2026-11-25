@@ -255,7 +255,7 @@ for (const mode of MODES) {
           [id, `del/${id}`],
         );
       }
-      assert.equal((await db.query('SELECT status FROM documents WHERE id = $1', [id])).rows[0]?.status, 'deleted');
+      assert.equal((await db.query<{ status: string }>('SELECT status FROM documents WHERE id = $1', [id])).rows[0]?.status, 'deleted');
     });
 
     test('applying 0351 twice leaves the catalog unchanged', async () => {
