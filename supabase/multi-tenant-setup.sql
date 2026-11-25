@@ -4246,7 +4246,7 @@ BEGIN
       ELSE
         vectors := payload;
       END IF;
-      IF COALESCE(CASE WHEN jsonb_typeof(vectors) = 'array' THEN jsonb_array_length(vectors) END, -1) <> chunk_count THEN
+      IF vectors IS NULL OR jsonb_typeof(vectors) <> 'array' OR jsonb_array_length(vectors) <> chunk_count THEN
         RAISE EXCEPTION 'embedding_count_mismatch: expected % vectors', chunk_count;
       END IF;
       IF EXISTS (SELECT 1 FROM jsonb_array_elements(vectors) AS v(value) WHERE jsonb_typeof(v.value) NOT IN ('array', 'null')) THEN
@@ -4254,7 +4254,7 @@ BEGIN
       END IF;
       IF EXISTS (
         SELECT 1 FROM jsonb_array_elements(vectors) AS v(value)
-        WHERE CASE WHEN jsonb_typeof(v.value) = 'array' THEN jsonb_array_length(v.value) END <> profile_row.dims
+        WHERE jsonb_typeof(v.value) = 'array' AND jsonb_array_length(v.value) <> profile_row.dims
       ) THEN
         RAISE EXCEPTION 'embedding_profile_mismatch: dims' USING ERRCODE = '22000';
       END IF;
@@ -9431,3 +9431,3558 @@ GRANT EXECUTE ON FUNCTION rag_batch_progress(uuid) TO service_role;
 COMMIT;
 
 NOTIFY pgrst, 'reload schema';
+
+------------------------------------------
+-- Phase 4: Hybrid retrieval, reranking and calibrated refusal (migrations 0401-0413)
+------------------------------------------
+
+-- >>> supabase/migrations/0401_lexical_index.sql
+-- 0401: Lexical index over application tokenizer output (Phase 4, D-08, RET-03).
+-- Plain nullable lexical_tsv and lexical_version columns with a trigger (not a stored generated column) so the HNSW index is not rewritten.
+-- Verbatim tsvector/tsquery builders avoid the Postgres text parser (F-1). No row backfill here; rag:relex fills batches (0402).
+-- Idempotent: ADD COLUMN IF NOT EXISTS, CREATE OR REPLACE, CREATE INDEX IF NOT EXISTS, DROP TRIGGER IF EXISTS.
+
+BEGIN;
+
+ALTER TABLE document_chunks
+  ADD COLUMN IF NOT EXISTS lexical_tsv tsvector,
+  ADD COLUMN IF NOT EXISTS lexical_version integer;
+
+CREATE OR REPLACE FUNCTION public.rag_lexical_tsvector(p_lexical_text text) RETURNS tsvector
+LANGUAGE sql
+IMMUTABLE
+PARALLEL SAFE
+SET search_path = pg_catalog
+AS $fn$
+  SELECT coalesce(string_agg(quote_literal(t.tok) || ':' || least(t.ord, 16383)::text, ' ' ORDER BY t.ord), '')::tsvector
+  FROM unnest(string_to_array(coalesce(p_lexical_text, ''), ' ')) WITH ORDINALITY AS t(tok, ord)
+  WHERE t.tok <> '' AND octet_length(t.tok) <= 255 AND t.tok !~ '[''\\[:space:]]'
+$fn$;
+
+CREATE OR REPLACE FUNCTION public.rag_lexical_tsquery(p_tokens text[]) RETURNS tsquery
+LANGUAGE sql
+IMMUTABLE
+PARALLEL SAFE
+SET search_path = pg_catalog
+AS $fn$
+  SELECT NULLIF(string_agg(quote_literal(t.tok), ' | '), '')::tsquery
+  FROM (
+    SELECT DISTINCT tok
+    FROM unnest(coalesce(p_tokens, '{}'::text[])) AS u(tok)
+    WHERE tok <> '' AND octet_length(tok) <= 255 AND tok !~ '[''\\[:space:]]'
+    LIMIT 64
+  ) AS t
+$fn$;
+
+CREATE OR REPLACE FUNCTION public.rag_chunks_lexical_tsv() RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $fn$
+DECLARE
+  v_meta_version text;
+BEGIN
+  IF TG_OP = 'INSERT' OR NEW.lexical_text IS DISTINCT FROM OLD.lexical_text THEN
+    NEW.lexical_tsv := public.rag_lexical_tsvector(NEW.lexical_text);
+    v_meta_version := NEW.metadata ->> 'lexical_version';
+    IF v_meta_version ~ '^[1-9][0-9]*$' THEN
+      NEW.lexical_version := v_meta_version::integer;
+    ELSE
+      NEW.lexical_version := NULL;
+    END IF;
+  ELSIF TG_OP = 'UPDATE' AND NEW.metadata IS DISTINCT FROM OLD.metadata THEN
+    v_meta_version := NEW.metadata ->> 'lexical_version';
+    IF v_meta_version ~ '^[1-9][0-9]*$' THEN
+      NEW.lexical_version := v_meta_version::integer;
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$fn$;
+
+DROP TRIGGER IF EXISTS trg_document_chunks_lexical_tsv ON document_chunks;
+CREATE TRIGGER trg_document_chunks_lexical_tsv
+  BEFORE INSERT OR UPDATE ON document_chunks
+  FOR EACH ROW EXECUTE FUNCTION public.rag_chunks_lexical_tsv();
+
+CREATE INDEX IF NOT EXISTS idx_document_chunks_lexical_tsv ON document_chunks USING gin (lexical_tsv);
+CREATE INDEX IF NOT EXISTS idx_document_chunks_lexical_version ON document_chunks (lexical_version);
+
+REVOKE ALL ON FUNCTION public.rag_lexical_tsvector(text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_lexical_tsquery(text[]) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_chunks_lexical_tsv() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_chunks_lexical_tsv() TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_lexical_tsvector(text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_lexical_tsquery(text[]) TO service_role;
+
+COMMIT;
+-- >>> supabase/migrations/0402_relex_batch.sql
+-- 0402: Service-role batch helpers for npm run rag:relex (Phase 4, D-08).
+-- Candidates page by chunk id where lexical_version differs from the target version; the batch rewrites lexical_text and version only.
+-- Idempotent: CREATE OR REPLACE with fixed signatures, then REVOKE and GRANT.
+
+BEGIN;
+
+CREATE OR REPLACE FUNCTION public.rag_relex_candidates(
+  p_after uuid,
+  p_version integer,
+  p_limit integer,
+  p_tenant_key text DEFAULT NULL
+)
+RETURNS TABLE (
+  id uuid,
+  tenant_key text,
+  content text,
+  section_path text[],
+  chunk_kind text,
+  metadata jsonb,
+  language text,
+  document_filename text
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = pg_catalog, public
+AS $fn$
+BEGIN
+  IF p_limit IS NULL OR p_limit < 1 OR p_limit > 1000 THEN
+    RAISE EXCEPTION 'relex_refused: invalid_limit' USING ERRCODE = '22023';
+  END IF;
+  RETURN QUERY
+  SELECT c.id,
+         c.tenant_key,
+         c.content,
+         c.section_path,
+         c.chunk_kind,
+         c.metadata,
+         c.language,
+         d.filename AS document_filename
+  FROM document_chunks c
+  JOIN documents d ON d.id = c.document_id
+  WHERE c.is_current
+    AND c.status = 'ready'
+    AND c.lexical_version IS DISTINCT FROM p_version
+    AND (p_after IS NULL OR c.id > p_after)
+    AND (p_tenant_key IS NULL OR c.tenant_key = p_tenant_key)
+  ORDER BY c.id
+  LIMIT p_limit;
+END;
+$fn$;
+
+CREATE OR REPLACE FUNCTION public.rag_relex_batch(p_rows jsonb, p_version integer)
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = pg_catalog, public
+AS $fn$
+DECLARE
+  v_row jsonb;
+  v_count integer := 0;
+BEGIN
+  IF p_version IS NULL OR p_version < 1 THEN
+    RAISE EXCEPTION 'relex_refused: invalid_version' USING ERRCODE = '22023';
+  END IF;
+  IF p_rows IS NULL OR jsonb_typeof(p_rows) <> 'array' THEN
+    RETURN 0;
+  END IF;
+  FOR v_row IN SELECT value FROM jsonb_array_elements(p_rows) AS e(value) LOOP
+    IF jsonb_typeof(v_row) <> 'object' OR NOT (v_row ? 'id') OR jsonb_typeof(v_row -> 'id') IS DISTINCT FROM 'string' THEN
+      CONTINUE;
+    END IF;
+    UPDATE document_chunks c
+    SET lexical_text = v_row ->> 'lexical_text',
+        lexical_version = p_version,
+        metadata = jsonb_set(coalesce(c.metadata, '{}'::jsonb), '{lexical_version}', to_jsonb(p_version), true),
+        language = CASE
+          WHEN c.language IS NULL AND v_row ? 'language' THEN NULLIF(v_row ->> 'language', '')
+          ELSE c.language
+        END
+    WHERE c.id = (v_row ->> 'id')::uuid
+      AND c.is_current
+      AND c.status = 'ready';
+    IF FOUND THEN
+      v_count := v_count + 1;
+    END IF;
+  END LOOP;
+  RETURN v_count;
+END;
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_relex_candidates(uuid, integer, integer, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_relex_batch(jsonb, integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_relex_candidates(uuid, integer, integer, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_relex_batch(jsonb, integer) TO service_role;
+
+COMMIT;
+-- >>> supabase/migrations/0403_tenant_key_guard.multi-tenant.sql
+-- 0403 (multi-tenant): central tenant-key guard for Phase 4 service-role functions (D-04, F-12).
+
+BEGIN;
+
+CREATE OR REPLACE FUNCTION public.rag_assert_tenant_key(p_tenant_key text)
+RETURNS void
+LANGUAGE plpgsql
+VOLATILE
+SET search_path = pg_catalog
+AS $$
+BEGIN
+  IF p_tenant_key IS NULL OR p_tenant_key !~ '^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$' THEN
+    RAISE EXCEPTION 'malformed tenant key' USING ERRCODE = '22023';
+  END IF;
+  IF p_tenant_key = 's:default' THEN
+    RAISE EXCEPTION 'tenant key not valid for this deployment mode' USING ERRCODE = '22023';
+  END IF;
+END
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_assert_tenant_key(text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_assert_tenant_key(text) TO service_role;
+
+COMMIT;
+-- >>> supabase/migrations/0404_document_parents.sql
+-- 0404: parent storage, child profile columns, variant-status invariant, rag_fetch_parents (D-20, D-21).
+
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS document_parents (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  document_id uuid NOT NULL REFERENCES documents (id) ON DELETE CASCADE,
+  tenant_key text NOT NULL,
+  organization_id uuid,
+  version integer,
+  is_current boolean NOT NULL DEFAULT true,
+  chunking_profile_id text NOT NULL,
+  section_path text[] NOT NULL DEFAULT '{}',
+  content text NOT NULL,
+  token_count integer NOT NULL CONSTRAINT document_parents_token_count_check CHECK (token_count >= 0),
+  parent_index integer NOT NULL CONSTRAINT document_parents_parent_index_check CHECK (parent_index >= 0)
+);
+
+CREATE INDEX IF NOT EXISTS idx_document_parents_tenant_id ON document_parents (tenant_key, id);
+CREATE INDEX IF NOT EXISTS idx_document_parents_document_profile ON document_parents (document_id, chunking_profile_id);
+
+ALTER TABLE document_parents ENABLE ROW LEVEL SECURITY;
+REVOKE INSERT, UPDATE, DELETE ON TABLE document_parents FROM anon, authenticated;
+
+ALTER TABLE document_chunks
+  ADD COLUMN IF NOT EXISTS parent_id uuid REFERENCES document_parents (id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS chunking_profile_id text NOT NULL DEFAULT 'legacy';
+
+CREATE INDEX IF NOT EXISTS idx_document_chunks_parent_id ON document_chunks (parent_id);
+
+DO $$
+DECLARE
+  status_attnum smallint;
+  check_name text;
+BEGIN
+  SELECT attnum INTO status_attnum
+  FROM pg_attribute
+  WHERE attrelid = to_regclass('public.document_chunks') AND attname = 'status' AND NOT attisdropped;
+  FOR check_name IN
+    SELECT conname FROM pg_constraint
+    WHERE conrelid = to_regclass('public.document_chunks') AND contype = 'c' AND conkey @> ARRAY[status_attnum]
+  LOOP
+    EXECUTE format('ALTER TABLE public.document_chunks DROP CONSTRAINT %I', check_name);
+  END LOOP;
+END $$;
+
+ALTER TABLE document_chunks
+  ADD CONSTRAINT document_chunks_status_check
+  CHECK (status IN ('processing', 'ready', 'variant', 'quarantined', 'failed', 'deleted'));
+
+CREATE OR REPLACE FUNCTION public.rag_chunks_profile_status()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF NEW.chunking_profile_id IS DISTINCT FROM 'legacy' AND NEW.status = 'ready' THEN
+    NEW.status := 'variant';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS rag_chunks_profile_status ON document_chunks;
+CREATE TRIGGER rag_chunks_profile_status
+  BEFORE INSERT OR UPDATE OF status, chunking_profile_id ON document_chunks
+  FOR EACH ROW EXECUTE FUNCTION public.rag_chunks_profile_status();
+
+REVOKE ALL ON FUNCTION public.rag_chunks_profile_status() FROM PUBLIC, anon, authenticated;
+
+CREATE OR REPLACE FUNCTION public.rag_fetch_parents(p_tenant_key text, p_parent_ids uuid[])
+RETURNS TABLE (
+  id uuid,
+  document_id uuid,
+  tenant_key text,
+  version integer,
+  is_current boolean,
+  chunking_profile_id text,
+  section_path text[],
+  content text,
+  token_count integer,
+  parent_index integer
+)
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  IF coalesce(cardinality(p_parent_ids), 0) > 200 THEN
+    RAISE EXCEPTION 'too many parent ids' USING ERRCODE = '22023';
+  END IF;
+  RETURN QUERY
+  SELECT
+    p.id,
+    p.document_id,
+    p.tenant_key,
+    p.version,
+    p.is_current,
+    p.chunking_profile_id,
+    p.section_path,
+    p.content,
+    p.token_count,
+    p.parent_index
+  FROM document_parents p
+  WHERE p.tenant_key = p_tenant_key
+    AND p.is_current
+    AND p.id = ANY(p_parent_ids);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_fetch_parents(text, uuid[]) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_fetch_parents(text, uuid[]) TO service_role;
+
+COMMIT;
+-- >>> supabase/migrations/0405_document_parents_rls.multi-tenant.sql
+-- 0405 (multi-tenant): document_parents SELECT policy mirrors document_chunks.
+
+BEGIN;
+
+DROP POLICY IF EXISTS "Users can view document_parents" ON document_parents;
+CREATE POLICY "Users can view document_parents" ON document_parents
+  FOR SELECT USING (
+    is_current
+    AND EXISTS (
+      SELECT 1 FROM documents d
+      WHERE d.id = document_parents.document_id AND d.is_current AND d.status = 'ready'
+    )
+    AND (
+      document_id IN (
+        SELECT doc.id FROM documents doc
+        WHERE doc.user_id = auth.uid() AND doc.organization_id IS NULL
+      )
+      OR (organization_id IS NOT NULL AND is_org_member(organization_id, auth.uid()))
+    )
+  );
+
+COMMIT;
+-- >>> supabase/migrations/0406_chunking_profiles.sql
+-- 0406: chunking profile registry with one active legacy row per doc type (D-21).
+
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS chunking_profiles (
+  id text NOT NULL,
+  doc_type text NOT NULL,
+  child_tokens integer NOT NULL CONSTRAINT chunking_profiles_child_tokens_check CHECK (child_tokens > 0),
+  parent_mode text NOT NULL CONSTRAINT chunking_profiles_parent_mode_check CHECK (parent_mode IN ('none', 'structure', 'fixed')),
+  parent_tokens integer,
+  status text NOT NULL CONSTRAINT chunking_profiles_status_check CHECK (status IN ('building', 'ready', 'active', 'retired')),
+  preset text NOT NULL CONSTRAINT chunking_profiles_preset_check CHECK (preset IN ('128/512', '256/1024', '256/2048', 'custom')),
+  previous_active_id text,
+  eval_evidence jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  activated_at timestamptz,
+  activated_by text,
+  PRIMARY KEY (id, doc_type),
+  CONSTRAINT chunking_profiles_doc_type_check CHECK (
+    doc_type IN ('financial_report', 'contract_legal', 'invoice_receipt', 'product_technical', 'scanned_image', 'general')
+  ),
+  CONSTRAINT chunking_profiles_parent_tokens_required CHECK (parent_mode = 'none' OR parent_tokens IS NOT NULL),
+  CONSTRAINT chunking_profiles_parent_ratio CHECK (parent_tokens IS NULL OR parent_tokens >= child_tokens * 2)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS chunking_profiles_single_active ON chunking_profiles (doc_type) WHERE status = 'active';
+
+INSERT INTO chunking_profiles (id, doc_type, child_tokens, parent_mode, parent_tokens, status, preset, activated_at, activated_by)
+VALUES
+  ('legacy', 'financial_report', 512, 'none', NULL, 'active', '256/1024', now(), 'migration'),
+  ('legacy', 'contract_legal', 768, 'none', NULL, 'active', '256/1024', now(), 'migration'),
+  ('legacy', 'invoice_receipt', 512, 'none', NULL, 'active', '256/1024', now(), 'migration'),
+  ('legacy', 'product_technical', 512, 'none', NULL, 'active', '256/1024', now(), 'migration'),
+  ('legacy', 'scanned_image', 512, 'none', NULL, 'active', '256/1024', now(), 'migration'),
+  ('legacy', 'general', 512, 'none', NULL, 'active', '256/1024', now(), 'migration')
+ON CONFLICT (id, doc_type) DO NOTHING;
+
+ALTER TABLE chunking_profiles ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE chunking_profiles FROM PUBLIC, anon, authenticated;
+GRANT ALL ON TABLE chunking_profiles TO service_role;
+
+CREATE OR REPLACE FUNCTION rag_list_chunking_profiles()
+RETURNS TABLE (
+  id text,
+  doc_type text,
+  child_tokens integer,
+  parent_mode text,
+  parent_tokens integer,
+  status text,
+  preset text,
+  previous_active_id text,
+  is_active boolean,
+  created_at timestamptz,
+  activated_at timestamptz,
+  activated_by text
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+  SELECT
+    p.id,
+    p.doc_type,
+    p.child_tokens,
+    p.parent_mode,
+    p.parent_tokens,
+    p.status,
+    p.preset,
+    p.previous_active_id,
+  (p.status = 'active') AS is_active,
+    p.created_at,
+    p.activated_at,
+    p.activated_by
+  FROM chunking_profiles p
+  ORDER BY p.doc_type, p.id
+$$;
+
+REVOKE ALL ON FUNCTION rag_list_chunking_profiles() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION rag_list_chunking_profiles() TO service_role;
+
+COMMIT;
+-- >>> supabase/migrations/0407_hybrid_search_chunks.sql
+-- 0407: hybrid_search_chunks — filtered dense + lexical legs, service_role only (D-04, D-05, D-06).
+
+BEGIN;
+
+CREATE INDEX IF NOT EXISTS idx_document_chunks_tenant_key ON document_chunks USING btree (tenant_key);
+CREATE INDEX IF NOT EXISTS idx_document_chunks_document_profile ON document_chunks (document_id, chunking_profile_id)
+  WHERE chunking_profile_id <> 'legacy';
+
+CREATE OR REPLACE FUNCTION public.hybrid_search_chunks(
+  p_tenant_key text,
+  p_profile_id text,
+  p_query_embedding vector,
+  p_lexical_tokens text[],
+  p_dense_limit integer,
+  p_lexical_limit integer,
+  p_date_from date DEFAULT NULL,
+  p_date_to date DEFAULT NULL,
+  p_sources text[] DEFAULT NULL,
+  p_document_ids uuid[] DEFAULT NULL,
+  p_doc_types text[] DEFAULT NULL,
+  p_languages text[] DEFAULT NULL,
+  p_iterative_scan text DEFAULT 'off',
+  p_exact_scan_cutoff integer DEFAULT 0,
+  p_lexical_languages text[] DEFAULT NULL,
+  p_supplier text DEFAULT NULL,
+  p_amount_min numeric DEFAULT NULL,
+  p_amount_max numeric DEFAULT NULL,
+  p_currency text DEFAULT NULL,
+  p_chunking_override jsonb DEFAULT NULL
+)
+RETURNS TABLE (
+  leg text,
+  rank integer,
+  chunk_id uuid,
+  document_id uuid,
+  content text,
+  metadata jsonb,
+  chunk_index integer,
+  similarity double precision,
+  lexical_score real,
+  doc_type text,
+  language text,
+  parent_id uuid,
+  section_path text[],
+  chunk_kind text,
+  document_filename text,
+  document_created_at timestamptz,
+  document_metadata jsonb,
+  document_content_preview text,
+  dense_mode text
+)
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = pg_catalog, public
+AS $fn$
+DECLARE
+  v_dims integer;
+  v_storage text;
+  v_tsq tsquery;
+  v_n integer;
+  v_mode text := 'ann';
+  v_filter text;
+  v_from text;
+  v_vec text;
+  v_sel text;
+  v_pgvector text;
+  v_key text;
+  v_val text;
+  v_doc_types text[] := ARRAY[
+    'financial_report', 'contract_legal', 'invoice_receipt',
+    'product_technical', 'scanned_image', 'general'
+  ];
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+
+  IF p_dense_limit NOT BETWEEN 0 AND 200 OR p_lexical_limit NOT BETWEEN 0 AND 200 OR p_exact_scan_cutoff NOT BETWEEN 0 AND 100000 THEN
+    RAISE EXCEPTION 'hybrid_search_chunks: limit out of range' USING ERRCODE = '22023';
+  END IF;
+  IF p_iterative_scan NOT IN ('off', 'relaxed_order', 'strict_order') THEN
+    RAISE EXCEPTION 'hybrid_search_chunks: invalid iterative scan mode' USING ERRCODE = '22023';
+  END IF;
+
+  IF p_chunking_override IS NOT NULL AND jsonb_typeof(p_chunking_override) <> 'object' THEN
+    RAISE EXCEPTION 'hybrid_search_chunks: invalid chunking override' USING ERRCODE = '22023';
+  END IF;
+  IF p_chunking_override IS NOT NULL THEN
+    FOR v_key, v_val IN SELECT key, value FROM jsonb_each_text(p_chunking_override) LOOP
+      IF NOT EXISTS (SELECT 1 FROM chunking_profiles cp WHERE cp.doc_type = v_key AND cp.id = v_val) THEN
+        RAISE EXCEPTION 'hybrid_search_chunks: unknown chunking profile in override' USING ERRCODE = '22023';
+      END IF;
+    END LOOP;
+  END IF;
+
+  SELECT e.dims, e.storage INTO v_dims, v_storage FROM embedding_profiles e WHERE e.id = p_profile_id;
+  IF v_dims IS NULL OR v_storage NOT IN ('legacy_column', 'halfvec') THEN
+    RAISE EXCEPTION 'embedding_profile_mismatch: unknown profile' USING ERRCODE = '22023';
+  END IF;
+  IF p_dense_limit > 0 AND (p_query_embedding IS NULL OR vector_dims(p_query_embedding) <> v_dims) THEN
+    RAISE EXCEPTION 'embedding_profile_mismatch: dims' USING ERRCODE = '22000';
+  END IF;
+
+  CREATE TEMP TABLE _hybrid_eff_profile (doc_type text PRIMARY KEY, profile_id text) ON COMMIT DROP;
+  INSERT INTO _hybrid_eff_profile (doc_type, profile_id)
+  SELECT dt.doc_type,
+         COALESCE(
+           NULLIF(trim(both FROM p_chunking_override ->> dt.doc_type), ''),
+           (SELECT cp.id FROM chunking_profiles cp WHERE cp.doc_type = dt.doc_type AND cp.status = 'active' ORDER BY cp.id LIMIT 1),
+           'legacy'
+         )
+  FROM unnest(v_doc_types) AS dt(doc_type);
+
+  v_filter :=
+    ' c.tenant_key = $2 AND c.is_current AND c.status IN (''ready'', ''variant'')'
+    || ' AND EXISTS (SELECT 1 FROM _hybrid_eff_profile ep WHERE ep.doc_type = c.doc_type AND ('
+    || '   c.chunking_profile_id = ep.profile_id'
+    || '   OR (ep.profile_id <> ''legacy'' AND c.chunking_profile_id = ''legacy'''
+    || '       AND NOT EXISTS (SELECT 1 FROM document_chunks c2 WHERE c2.document_id = c.document_id'
+    || '         AND c2.tenant_key = $2 AND c2.is_current AND c2.chunking_profile_id = ep.profile_id))'
+    || ' ))'
+    || ' AND ($3::date IS NULL OR c.doc_date >= $3)'
+    || ' AND ($4::date IS NULL OR c.doc_date <= $4)'
+    || ' AND ($5::text[] IS NULL OR (cardinality($5) > 0 AND c.source = ANY($5)))'
+    || ' AND ($6::uuid[] IS NULL OR c.document_id = ANY($6))'
+    || ' AND ($7::text[] IS NULL OR c.doc_type = ANY($7))'
+    || ' AND ($8::text[] IS NULL OR c.language = ANY($8))'
+    || ' AND ($9::text IS NULL OR strpos(lower(d.supplier_name), lower($9)) > 0 OR d.supplier_tax_id = $9)'
+    || ' AND ($10::numeric IS NULL OR d.gross_total >= $10)'
+    || ' AND ($11::numeric IS NULL OR d.gross_total <= $11)'
+    || ' AND ($12::text IS NULL OR d.currency = $12) ';
+
+  v_sel :=
+    ' c.id, c.document_id, c.content, c.metadata, c.chunk_index, %s, %s, c.doc_type, c.language,'
+    || ' c.parent_id, c.section_path, c.chunk_kind,'
+    || ' d.filename, d.created_at, d.metadata, left(d.content, 200), %L::text ';
+
+  IF p_dense_limit > 0 THEN
+    IF v_storage = 'legacy_column' THEN
+      v_from := ' document_chunks c JOIN documents d ON d.id = c.document_id ';
+      v_vec := format('c.embedding <=> $1::vector(%s)', v_dims);
+      v_filter := v_filter || ' AND c.embedding IS NOT NULL ';
+    ELSE
+      v_from := format(
+        ' chunk_embeddings e JOIN document_chunks c ON c.id = e.chunk_id AND e.profile_id = %L'
+        || ' JOIN documents d ON d.id = c.document_id ',
+        p_profile_id
+      );
+      v_vec := format('(e.embedding::halfvec(%1$s)) <=> $1::halfvec(%1$s)', v_dims);
+    END IF;
+
+    IF p_exact_scan_cutoff > 0 THEN
+      EXECUTE 'SELECT count(*)::int FROM (SELECT 1 FROM ' || v_from || ' WHERE ' || v_filter || ' LIMIT $13) s'
+        INTO v_n
+        USING p_query_embedding, p_tenant_key, p_date_from, p_date_to, p_sources, p_document_ids, p_doc_types, p_languages,
+          p_supplier, p_amount_min, p_amount_max, p_currency, p_exact_scan_cutoff + 1;
+      IF v_n <= p_exact_scan_cutoff THEN v_mode := 'exact'; END IF;
+    END IF;
+
+    IF v_mode = 'ann' THEN
+      PERFORM set_config('hnsw.ef_search', least(greatest(p_dense_limit * 2, 100), 1000)::text, true);
+      IF p_iterative_scan <> 'off' THEN
+        SELECT extversion INTO v_pgvector FROM pg_extension WHERE extname = 'vector';
+        IF v_pgvector IS NULL OR (string_to_array(v_pgvector, '.'))[1:2]::int[] < ARRAY[0, 8] THEN
+          RAISE EXCEPTION 'iterative_scan_unsupported' USING ERRCODE = '22023';
+        END IF;
+        PERFORM set_config('hnsw.iterative_scan', p_iterative_scan, true);
+      END IF;
+    END IF;
+
+    RETURN QUERY EXECUTE
+      'WITH hits AS MATERIALIZED (SELECT c.id AS hid, ' || v_vec || ' AS dist FROM ' || v_from || ' WHERE ' || v_filter
+      || CASE WHEN v_mode = 'exact' THEN ') ' ELSE ' ORDER BY ' || v_vec || ' LIMIT $13) ' END
+      || ', top AS (SELECT hid, dist, (row_number() OVER (ORDER BY dist + 0, hid))::integer AS rnk FROM hits ORDER BY dist + 0, hid LIMIT $13) '
+      || 'SELECT ''dense''::text, t.rnk, ' || format(v_sel, '(1 - t.dist)::double precision', 'NULL::real', v_mode)
+      || ' FROM top t JOIN document_chunks c ON c.id = t.hid JOIN documents d ON d.id = c.document_id ORDER BY t.rnk'
+      USING p_query_embedding, p_tenant_key, p_date_from, p_date_to, p_sources, p_document_ids, p_doc_types, p_languages,
+        p_supplier, p_amount_min, p_amount_max, p_currency, p_dense_limit;
+  END IF;
+
+  v_tsq := public.rag_lexical_tsquery(p_lexical_tokens);
+  IF p_lexical_limit > 0 AND v_tsq IS NOT NULL THEN
+  v_filter := replace(v_filter, ' AND c.embedding IS NOT NULL ', '');
+    RETURN QUERY EXECUTE
+      'WITH hits AS MATERIALIZED (SELECT c.id AS hid, ts_rank_cd(c.lexical_tsv, $1, 1) AS score'
+      || ' FROM document_chunks c JOIN documents d ON d.id = c.document_id WHERE ' || v_filter
+      || ' AND ($14::text[] IS NULL OR (cardinality($14) > 0 AND c.language = ANY($14)))'
+      || ' AND c.lexical_tsv @@ $1 ORDER BY score DESC, c.id LIMIT $13) '
+      || 'SELECT ''lexical''::text, (row_number() OVER (ORDER BY t.score DESC, t.hid))::integer, '
+      || format(
+        v_sel,
+        CASE WHEN v_storage = 'legacy_column' AND p_query_embedding IS NOT NULL
+          THEN format('(1 - (c.embedding <=> $15::vector(%s)))::double precision', v_dims)
+          ELSE 'NULL::double precision' END,
+        't.score::real',
+        'n/a'
+      )
+      || ' FROM hits t JOIN document_chunks c ON c.id = t.hid JOIN documents d ON d.id = c.document_id ORDER BY t.score DESC, t.hid'
+      USING v_tsq, p_tenant_key, p_date_from, p_date_to, p_sources, p_document_ids, p_doc_types, p_languages,
+        p_supplier, p_amount_min, p_amount_max, p_currency, p_lexical_limit, p_lexical_languages, p_query_embedding;
+  END IF;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.hybrid_search_chunks(
+  text, text, vector, text[], integer, integer, date, date, text[], uuid[], text[], text[], text, integer,
+  text[], text, numeric, numeric, text, jsonb
+) FROM PUBLIC, anon, authenticated;
+
+GRANT EXECUTE ON FUNCTION public.hybrid_search_chunks(
+  text, text, vector, text[], integer, integer, date, date, text[], uuid[], text[], text[], text, integer,
+  text[], text, numeric, numeric, text, jsonb
+) TO service_role;
+
+NOTIFY pgrst, 'reload schema';
+
+COMMIT;
+-- >>> supabase/migrations/0408_profile_chunk_writer.sql
+-- 0408: profile chunk writer and re-chunk build-run tables (Phase 4, D-20, D-21, CHK-03, CHK-04).
+-- rag_write_profile_chunks stores the parents and children of one chunking profile for one document version in one transaction. Parents go to
+-- document_parents, children to document_chunks with parent_id and chunking_profile_id. Row ids are the first 16 bytes of
+-- sha256(document id : profile id : parent|child : index), so a rewrite lands on the same rows and cannot collide with the legacy ids of
+-- rag_write_chunks (document id : index). The document must belong to p_tenant_key (tenant_mismatch otherwise); the tenant key, organization,
+-- version, currency, doc type, language and source of every row are copied from the document row, never from the payload. The 0404 trigger keeps
+-- every child of a non-legacy profile at status variant once its document is ready, so legacy readers never see them.
+-- p_embeddings has the shape of rag_write_chunks: an object keyed by embedding profile id whose value lines up with p_children (a null entry means
+-- no vector), or {"vectors": [...], "host": "..."}; the legacy-storage profile fills document_chunks.embedding, a halfvec profile upserts one
+-- chunk_embeddings row per child. Only children carry lexical text and vectors; parents carry neither. A child whose text changed drops its old
+-- vectors. With p_final (the default) children from index p_total on (default: the number sent) and parents no child points to any more are removed,
+-- so a smaller rewrite leaves nothing behind; a caller that splits a large profile across calls sends all parents in the first call and p_final on the last.
+-- chunking_build_runs and chunking_build_gaps record re-chunk progress and documents that have no stored parse output (plan 04-32 writes them).
+-- rag_write_chunks is replaced once more so its final cleanup removes legacy rows only (profile children share the document).
+-- Server role only. Idempotent: CREATE ... IF NOT EXISTS, CREATE OR REPLACE with a fixed signature, then guarded REVOKE and GRANT.
+
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS chunking_build_runs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  profile_id text NOT NULL,
+  doc_type text NOT NULL,
+  tenant_key text,
+  cursor_document_id uuid,
+  docs_total integer NOT NULL DEFAULT 0 CONSTRAINT chunking_build_runs_docs_total_check CHECK (docs_total >= 0),
+  docs_done integer NOT NULL DEFAULT 0 CONSTRAINT chunking_build_runs_docs_done_check CHECK (docs_done >= 0),
+  status text NOT NULL DEFAULT 'running'
+    CONSTRAINT chunking_build_runs_status_check CHECK (status IN ('running', 'completed', 'incomplete', 'failed', 'cancelled')),
+  started_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT chunking_build_runs_profile_fk FOREIGN KEY (profile_id, doc_type) REFERENCES chunking_profiles (id, doc_type)
+);
+
+CREATE INDEX IF NOT EXISTS chunking_build_runs_profile_idx ON chunking_build_runs (profile_id, doc_type, started_at DESC);
+
+CREATE TABLE IF NOT EXISTS chunking_build_gaps (
+  run_id uuid NOT NULL REFERENCES chunking_build_runs (id) ON DELETE CASCADE,
+  document_id uuid NOT NULL REFERENCES documents (id) ON DELETE CASCADE,
+  reason text NOT NULL CONSTRAINT chunking_build_gaps_reason_check CHECK (reason IN ('no_parse_output', 'failed')),
+  detail text,
+  recorded_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (run_id, document_id)
+);
+
+CREATE INDEX IF NOT EXISTS chunking_build_gaps_document_idx ON chunking_build_gaps (document_id);
+
+ALTER TABLE chunking_build_runs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE chunking_build_gaps ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL ON TABLE chunking_build_runs FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON TABLE chunking_build_gaps FROM PUBLIC, anon, authenticated;
+GRANT ALL ON TABLE chunking_build_runs TO service_role;
+GRANT ALL ON TABLE chunking_build_gaps TO service_role;
+
+-- The legacy writer's final cleanup ("chunk_index >= p_total") must only remove legacy rows: the children of a chunking profile share the
+-- document and have their own index range. Body as in 0313 except for that one predicate.
+CREATE OR REPLACE FUNCTION rag_write_chunks(
+  p_document_id uuid,
+  p_tenant_key text,
+  p_chunks jsonb,
+  p_embeddings jsonb,
+  p_final boolean,
+  p_total integer
+)
+RETURNS TABLE (chunks_written integer, chunks_deleted integer)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+#variable_conflict use_column
+DECLARE
+  legacy_profile constant text := 'openai-3-small-1536';
+  doc documents%ROWTYPE;
+  profile_key text;
+  profile_row embedding_profiles%ROWTYPE;
+  payload jsonb;
+  vectors jsonb;
+  host_name text;
+  chunk_count integer;
+  legacy_vectors jsonb;
+  written integer := 0;
+  deleted integer := 0;
+BEGIN
+  SELECT * INTO doc FROM documents d WHERE d.id = p_document_id AND d.tenant_key = p_tenant_key FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'tenant_mismatch' USING DETAIL = 'document not found in tenant';
+  END IF;
+  IF doc.status IN ('failed', 'deleted') THEN
+    RAISE EXCEPTION 'document_not_writable' USING DETAIL = 'status is ' || doc.status;
+  END IF;
+  IF p_chunks IS NULL OR jsonb_typeof(p_chunks) <> 'array' THEN
+    RAISE EXCEPTION 'invalid_chunks: p_chunks must be a JSON array';
+  END IF;
+  chunk_count := jsonb_array_length(p_chunks);
+  IF EXISTS (
+    SELECT 1 FROM jsonb_array_elements(p_chunks) AS e(value)
+    WHERE jsonb_typeof(e.value) <> 'object'
+       OR jsonb_typeof(e.value -> 'content') IS DISTINCT FROM 'string'
+       OR (e.value ? 'chunk_index' AND jsonb_typeof(e.value -> 'chunk_index') <> 'number')
+  ) THEN
+    RAISE EXCEPTION 'invalid_chunk: every chunk needs a string content and a numeric chunk_index when it has one';
+  END IF;
+  IF (SELECT count(DISTINCT COALESCE((e.value ->> 'chunk_index')::integer, (e.ord - 1)::integer))
+      FROM jsonb_array_elements(p_chunks) WITH ORDINALITY AS e(value, ord)) <> chunk_count THEN
+    RAISE EXCEPTION 'invalid_chunk: chunk_index values must be distinct';
+  END IF;
+  IF p_final AND (p_total IS NULL OR p_total < 0) THEN
+    RAISE EXCEPTION 'invalid_total: p_total is required with p_final';
+  END IF;
+
+  IF p_embeddings IS NOT NULL AND jsonb_typeof(p_embeddings) NOT IN ('object', 'null') THEN
+    RAISE EXCEPTION 'invalid_embeddings: p_embeddings must be a JSON object keyed by profile id';
+  END IF;
+  IF p_embeddings IS NOT NULL AND jsonb_typeof(p_embeddings) = 'object' THEN
+    FOR profile_key IN SELECT jsonb_object_keys(p_embeddings) LOOP
+      SELECT * INTO profile_row FROM embedding_profiles p WHERE p.id = profile_key;
+      IF NOT FOUND OR (profile_row.storage = 'legacy_column' AND profile_row.id <> legacy_profile) THEN
+        RAISE EXCEPTION 'embedding_profile_unsupported: %', profile_key;
+      END IF;
+      payload := p_embeddings -> profile_key;
+      IF jsonb_typeof(payload) = 'object' THEN
+        vectors := payload -> 'vectors';
+        IF jsonb_typeof(payload -> 'host') NOT IN ('string', 'null') THEN
+          RAISE EXCEPTION 'invalid_embeddings: host must be a string';
+        END IF;
+      ELSE
+        vectors := payload;
+      END IF;
+      IF vectors IS NULL OR jsonb_typeof(vectors) <> 'array' OR jsonb_array_length(vectors) <> chunk_count THEN
+        RAISE EXCEPTION 'embedding_count_mismatch: expected % vectors', chunk_count;
+      END IF;
+      IF EXISTS (SELECT 1 FROM jsonb_array_elements(vectors) AS v(value) WHERE jsonb_typeof(v.value) NOT IN ('array', 'null')) THEN
+        RAISE EXCEPTION 'invalid_embeddings: every vector must be a JSON array or null';
+      END IF;
+      IF EXISTS (
+        SELECT 1 FROM jsonb_array_elements(vectors) AS v(value)
+        WHERE jsonb_typeof(v.value) = 'array' AND jsonb_array_length(v.value) <> profile_row.dims
+      ) THEN
+        RAISE EXCEPTION 'embedding_profile_mismatch: dims' USING ERRCODE = '22000';
+      END IF;
+      IF profile_row.id = legacy_profile THEN
+        legacy_vectors := vectors;
+      END IF;
+    END LOOP;
+  END IF;
+
+  -- A chunk whose text changed must not keep a vector made from the old text.
+  DELETE FROM chunk_embeddings ce
+  USING document_chunks c, jsonb_array_elements(p_chunks) WITH ORDINALITY AS e(value, ord)
+  WHERE ce.chunk_id = c.id
+    AND c.document_id = p_document_id
+    AND c.id = substr(encode(sha256(convert_to(
+          p_document_id::text || ':' || COALESCE((e.value ->> 'chunk_index')::integer, (e.ord - 1)::integer)::text, 'UTF8')), 'hex'), 1, 32)::uuid
+    AND c.content IS DISTINCT FROM (e.value ->> 'content');
+
+  WITH prepared AS (
+    SELECT
+      e.value AS spec,
+      (e.ord - 1)::integer AS position,
+      COALESCE((e.value ->> 'chunk_index')::integer, (e.ord - 1)::integer) AS chunk_index,
+      CASE WHEN legacy_vectors IS NOT NULL AND jsonb_typeof(legacy_vectors -> (e.ord - 1)::integer) = 'array'
+           THEN ((legacy_vectors -> (e.ord - 1)::integer)::text)::vector END AS embedding,
+      CASE WHEN jsonb_typeof(e.value -> 'section_path') = 'array'
+           THEN ARRAY(SELECT jsonb_array_elements_text(e.value -> 'section_path')) ELSE '{}'::text[] END AS section_path,
+      COALESCE(e.value ->> 'chunk_kind', 'text') AS chunk_kind,
+      COALESCE((e.value ->> 'embedding_text_version')::integer, 0) AS embedding_text_version,
+      (e.value ->> 'page_start')::integer AS page_start,
+      (e.value ->> 'page_end')::integer AS page_end,
+      e.value ->> 'content_hash' AS content_hash,
+      e.value ->> 'lexical_text' AS lexical_text
+    FROM jsonb_array_elements(p_chunks) WITH ORDINALITY AS e(value, ord)
+  )
+  INSERT INTO document_chunks AS dc (
+    id, document_id, content, embedding, chunk_index, metadata, organization_id, tenant_key, version, is_current, status,
+    doc_type, doc_date, language, source, page_start, page_end, section_path, content_hash, chunk_kind, parser_used,
+    embedding_text_version, lexical_text
+  )
+  SELECT
+    substr(encode(sha256(convert_to(p_document_id::text || ':' || p.chunk_index::text, 'UTF8')), 'hex'), 1, 32)::uuid,
+    p_document_id,
+    p.spec ->> 'content',
+    p.embedding,
+    p.chunk_index,
+    (CASE WHEN jsonb_typeof(p.spec -> 'metadata') = 'object' THEN p.spec -> 'metadata' ELSE '{}'::jsonb END)
+      || jsonb_build_object(
+        'chunk_index', p.chunk_index,
+        'section_path', to_jsonb(p.section_path),
+        'doc_type', doc.doc_type,
+        'language', doc.language,
+        'content_hash', p.content_hash,
+        'chunk_kind', p.chunk_kind,
+        'parser_used', doc.parser_used,
+        'embedding_text_version', p.embedding_text_version)
+      || CASE WHEN p.embedding IS NOT NULL
+              THEN jsonb_build_object('embedding_model', 'text-embedding-3-small', 'embedding_dims', 1536) ELSE '{}'::jsonb END
+      || jsonb_strip_nulls(jsonb_build_object('doc_date', doc.doc_date, 'source', doc.source, 'page_start', p.page_start, 'page_end', p.page_end)),
+    doc.organization_id,
+    doc.tenant_key,
+    doc.version,
+    doc.is_current,
+    doc.status,
+    doc.doc_type,
+    doc.doc_date,
+    doc.language,
+    doc.source,
+    p.page_start,
+    p.page_end,
+    p.section_path,
+    p.content_hash,
+    p.chunk_kind,
+    doc.parser_used,
+    p.embedding_text_version,
+    p.lexical_text
+  FROM prepared p
+  ON CONFLICT (id) DO UPDATE SET
+    content = EXCLUDED.content,
+    embedding = EXCLUDED.embedding,
+    chunk_index = EXCLUDED.chunk_index,
+    metadata = EXCLUDED.metadata,
+    organization_id = EXCLUDED.organization_id,
+    tenant_key = EXCLUDED.tenant_key,
+    version = EXCLUDED.version,
+    is_current = EXCLUDED.is_current,
+    status = EXCLUDED.status,
+    doc_type = EXCLUDED.doc_type,
+    doc_date = EXCLUDED.doc_date,
+    language = EXCLUDED.language,
+    source = EXCLUDED.source,
+    page_start = EXCLUDED.page_start,
+    page_end = EXCLUDED.page_end,
+    section_path = EXCLUDED.section_path,
+    content_hash = EXCLUDED.content_hash,
+    chunk_kind = EXCLUDED.chunk_kind,
+    parser_used = EXCLUDED.parser_used,
+    embedding_text_version = EXCLUDED.embedding_text_version,
+    lexical_text = EXCLUDED.lexical_text
+  WHERE dc.document_id = EXCLUDED.document_id;
+  GET DIAGNOSTICS written = ROW_COUNT;
+
+  IF p_embeddings IS NOT NULL AND jsonb_typeof(p_embeddings) = 'object' THEN
+    FOR profile_key IN SELECT jsonb_object_keys(p_embeddings) LOOP
+      SELECT * INTO profile_row FROM embedding_profiles p WHERE p.id = profile_key;
+      payload := p_embeddings -> profile_key;
+      IF jsonb_typeof(payload) = 'object' THEN
+        vectors := payload -> 'vectors';
+        host_name := payload ->> 'host';
+      ELSE
+        vectors := payload;
+        host_name := NULL;
+      END IF;
+
+      IF profile_row.storage <> 'legacy_column' THEN
+        INSERT INTO chunk_embeddings AS ce (chunk_id, profile_id, tenant_key, embedding, embedding_model, dims, embedding_host)
+        SELECT
+          substr(encode(sha256(convert_to(
+            p_document_id::text || ':' || COALESCE((e.value ->> 'chunk_index')::integer, (e.ord - 1)::integer)::text, 'UTF8')), 'hex'), 1, 32)::uuid,
+          profile_row.id,
+          doc.tenant_key,
+          (v.value::text)::halfvec,
+          profile_row.model,
+          profile_row.dims,
+          host_name
+        FROM jsonb_array_elements(p_chunks) WITH ORDINALITY AS e(value, ord)
+        JOIN jsonb_array_elements(vectors) WITH ORDINALITY AS v(value, ord) ON v.ord = e.ord
+        WHERE jsonb_typeof(v.value) = 'array'
+        ON CONFLICT (chunk_id, profile_id) DO UPDATE SET
+          embedding = EXCLUDED.embedding,
+          embedding_model = EXCLUDED.embedding_model,
+          dims = EXCLUDED.dims,
+          embedding_host = EXCLUDED.embedding_host,
+          embedded_at = now();
+      END IF;
+
+      DELETE FROM embedding_backfill_gaps g
+      USING jsonb_array_elements(p_chunks) WITH ORDINALITY AS e(value, ord),
+            jsonb_array_elements(vectors) WITH ORDINALITY AS v(value, ord)
+      WHERE v.ord = e.ord
+        AND jsonb_typeof(v.value) = 'array'
+        AND g.profile_id = profile_row.id
+        AND g.chunk_id = substr(encode(sha256(convert_to(
+              p_document_id::text || ':' || COALESCE((e.value ->> 'chunk_index')::integer, (e.ord - 1)::integer)::text, 'UTF8')), 'hex'), 1, 32)::uuid;
+    END LOOP;
+  END IF;
+
+  IF p_final THEN
+    DELETE FROM document_chunks c WHERE c.document_id = p_document_id AND c.chunking_profile_id = 'legacy' AND c.chunk_index >= p_total;
+    GET DIAGNOSTICS deleted = ROW_COUNT;
+  END IF;
+
+  RETURN QUERY SELECT written, deleted;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION rag_write_profile_chunks(
+  p_document_id uuid,
+  p_tenant_key text,
+  p_profile_id text,
+  p_parents jsonb,
+  p_children jsonb,
+  p_embeddings jsonb,
+  p_final boolean DEFAULT true,
+  p_total integer DEFAULT NULL
+)
+RETURNS TABLE (parents_written integer, children_written integer, parents_deleted integer, children_deleted integer)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+#variable_conflict use_column
+DECLARE
+  legacy_profile constant text := 'openai-3-small-1536';
+  doc documents%ROWTYPE;
+  chunking chunking_profiles%ROWTYPE;
+  parents jsonb := COALESCE(p_parents, '[]'::jsonb);
+  profile_key text;
+  profile_row embedding_profiles%ROWTYPE;
+  payload jsonb;
+  vectors jsonb;
+  host_name text;
+  parent_count integer;
+  child_count integer;
+  legacy_vectors jsonb;
+  total integer;
+  parents_in integer := 0;
+  children_in integer := 0;
+  parents_out integer := 0;
+  children_out integer := 0;
+BEGIN
+  SELECT * INTO doc FROM documents d WHERE d.id = p_document_id AND d.tenant_key = p_tenant_key FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'tenant_mismatch' USING DETAIL = 'document not found in tenant';
+  END IF;
+  IF doc.status IN ('failed', 'deleted') THEN
+    RAISE EXCEPTION 'document_not_writable' USING DETAIL = 'status is ' || doc.status;
+  END IF;
+  IF p_profile_id IS NULL OR p_profile_id = 'legacy' THEN
+    RAISE EXCEPTION 'invalid_profile' USING DETAIL = 'legacy chunks are written by rag_write_chunks';
+  END IF;
+  SELECT * INTO chunking FROM chunking_profiles cp WHERE cp.id = p_profile_id AND cp.doc_type = doc.doc_type AND cp.status <> 'retired';
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'chunking_profile_unsupported' USING DETAIL = 'no live profile of this id for the document type';
+  END IF;
+
+  IF jsonb_typeof(parents) <> 'array' THEN
+    RAISE EXCEPTION 'invalid_parents: p_parents must be a JSON array';
+  END IF;
+  IF p_children IS NULL OR jsonb_typeof(p_children) <> 'array' THEN
+    RAISE EXCEPTION 'invalid_chunks: p_children must be a JSON array';
+  END IF;
+  parent_count := jsonb_array_length(parents);
+  child_count := jsonb_array_length(p_children);
+  IF EXISTS (
+    SELECT 1 FROM jsonb_array_elements(parents) AS e(value)
+    WHERE jsonb_typeof(e.value) <> 'object'
+       OR jsonb_typeof(e.value -> 'content') IS DISTINCT FROM 'string'
+       OR jsonb_typeof(e.value -> 'parent_index') IS DISTINCT FROM 'number'
+       OR jsonb_typeof(e.value -> 'token_count') IS DISTINCT FROM 'number'
+       OR (e.value ? 'section_path' AND jsonb_typeof(e.value -> 'section_path') <> 'array')
+  ) THEN
+    RAISE EXCEPTION 'invalid_parents: every parent needs a string content, a numeric parent_index and a numeric token_count';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM jsonb_array_elements(parents) AS e(value)
+    WHERE (e.value ->> 'parent_index') !~ '^[0-9]{1,9}$' OR (e.value ->> 'token_count') !~ '^[0-9]{1,9}$'
+  ) OR (SELECT count(DISTINCT (e.value ->> 'parent_index')::integer) FROM jsonb_array_elements(parents) AS e(value)) <> parent_count THEN
+    RAISE EXCEPTION 'invalid_parents: parent_index values must be distinct non-negative integers and token_count a non-negative integer';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM jsonb_array_elements(p_children) AS e(value)
+    WHERE jsonb_typeof(e.value) <> 'object'
+       OR jsonb_typeof(e.value -> 'content') IS DISTINCT FROM 'string'
+       OR (e.value ? 'chunk_index' AND jsonb_typeof(e.value -> 'chunk_index') <> 'number')
+       OR (e.value ? 'parent_index' AND jsonb_typeof(e.value -> 'parent_index') NOT IN ('number', 'null'))
+  ) THEN
+    RAISE EXCEPTION 'invalid_chunk: every child needs a string content, and a numeric chunk_index and parent_index when it has them';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM jsonb_array_elements(p_children) WITH ORDINALITY AS e(value, ord)
+    WHERE COALESCE(e.value ->> 'chunk_index', (e.ord - 1)::text) !~ '^[0-9]{1,9}$'
+       OR (jsonb_typeof(e.value -> 'parent_index') = 'number' AND (e.value ->> 'parent_index') !~ '^[0-9]{1,9}$')
+  ) OR (SELECT count(DISTINCT COALESCE((e.value ->> 'chunk_index')::integer, (e.ord - 1)::integer))
+        FROM jsonb_array_elements(p_children) WITH ORDINALITY AS e(value, ord)) <> child_count THEN
+    RAISE EXCEPTION 'invalid_chunk: chunk_index values must be distinct non-negative integers';
+  END IF;
+  IF p_final AND p_total IS NOT NULL AND p_total < 0 THEN
+    RAISE EXCEPTION 'invalid_total: p_total must not be negative';
+  END IF;
+
+  IF p_embeddings IS NOT NULL AND jsonb_typeof(p_embeddings) NOT IN ('object', 'null') THEN
+    RAISE EXCEPTION 'invalid_embeddings: p_embeddings must be a JSON object keyed by profile id';
+  END IF;
+  IF p_embeddings IS NOT NULL AND jsonb_typeof(p_embeddings) = 'object' THEN
+    FOR profile_key IN SELECT jsonb_object_keys(p_embeddings) LOOP
+      SELECT * INTO profile_row FROM embedding_profiles p WHERE p.id = profile_key;
+      IF NOT FOUND OR (profile_row.storage = 'legacy_column' AND profile_row.id <> legacy_profile) THEN
+        RAISE EXCEPTION 'embedding_profile_unsupported: %', profile_key;
+      END IF;
+      payload := p_embeddings -> profile_key;
+      IF jsonb_typeof(payload) = 'object' THEN
+        vectors := payload -> 'vectors';
+        IF jsonb_typeof(payload -> 'host') NOT IN ('string', 'null') THEN
+          RAISE EXCEPTION 'invalid_embeddings: host must be a string';
+        END IF;
+      ELSE
+        vectors := payload;
+      END IF;
+      IF vectors IS NULL OR jsonb_typeof(vectors) <> 'array' OR jsonb_array_length(vectors) <> child_count THEN
+        RAISE EXCEPTION 'embedding_count_mismatch: expected % vectors', child_count;
+      END IF;
+      IF EXISTS (SELECT 1 FROM jsonb_array_elements(vectors) AS v(value) WHERE jsonb_typeof(v.value) NOT IN ('array', 'null')) THEN
+        RAISE EXCEPTION 'invalid_embeddings: every vector must be a JSON array or null';
+      END IF;
+      IF EXISTS (
+        SELECT 1 FROM jsonb_array_elements(vectors) AS v(value)
+        WHERE jsonb_typeof(v.value) = 'array' AND jsonb_array_length(v.value) <> profile_row.dims
+      ) THEN
+        RAISE EXCEPTION 'embedding_profile_mismatch: dims' USING ERRCODE = '22000';
+      END IF;
+      IF profile_row.id = legacy_profile THEN
+        legacy_vectors := vectors;
+      END IF;
+    END LOOP;
+  END IF;
+
+  INSERT INTO document_parents AS dp (
+    id, document_id, tenant_key, organization_id, version, is_current, chunking_profile_id, section_path, content, token_count, parent_index
+  )
+  SELECT
+    substr(encode(sha256(convert_to(p_document_id::text || ':' || p_profile_id || ':parent:' || (e.value ->> 'parent_index'), 'UTF8')), 'hex'), 1, 32)::uuid,
+    p_document_id,
+    doc.tenant_key,
+    doc.organization_id,
+    doc.version,
+    true,
+    p_profile_id,
+    CASE WHEN jsonb_typeof(e.value -> 'section_path') = 'array'
+         THEN ARRAY(SELECT jsonb_array_elements_text(e.value -> 'section_path')) ELSE '{}'::text[] END,
+    e.value ->> 'content',
+    (e.value ->> 'token_count')::integer,
+    (e.value ->> 'parent_index')::integer
+  FROM jsonb_array_elements(parents) AS e(value)
+  ON CONFLICT (id) DO UPDATE SET
+    tenant_key = EXCLUDED.tenant_key,
+    organization_id = EXCLUDED.organization_id,
+    version = EXCLUDED.version,
+    is_current = EXCLUDED.is_current,
+    chunking_profile_id = EXCLUDED.chunking_profile_id,
+    section_path = EXCLUDED.section_path,
+    content = EXCLUDED.content,
+    token_count = EXCLUDED.token_count,
+    parent_index = EXCLUDED.parent_index
+  WHERE dp.document_id = EXCLUDED.document_id;
+  GET DIAGNOSTICS parents_in = ROW_COUNT;
+
+  IF EXISTS (
+    SELECT 1 FROM jsonb_array_elements(p_children) AS e(value)
+    WHERE jsonb_typeof(e.value -> 'parent_index') = 'number'
+      AND NOT EXISTS (
+        SELECT 1 FROM document_parents dp
+        WHERE dp.id = substr(encode(sha256(convert_to(p_document_id::text || ':' || p_profile_id || ':parent:' || (e.value ->> 'parent_index'), 'UTF8')), 'hex'), 1, 32)::uuid
+          AND dp.document_id = p_document_id
+          AND dp.chunking_profile_id = p_profile_id
+      )
+  ) THEN
+    RAISE EXCEPTION 'invalid_chunk: parent_index names a parent that was not written';
+  END IF;
+
+  -- A child whose text changed must not keep a vector made from the old text.
+  DELETE FROM chunk_embeddings ce
+  USING document_chunks c, jsonb_array_elements(p_children) WITH ORDINALITY AS e(value, ord)
+  WHERE ce.chunk_id = c.id
+    AND c.document_id = p_document_id
+    AND c.chunking_profile_id = p_profile_id
+    AND c.id = substr(encode(sha256(convert_to(
+          p_document_id::text || ':' || p_profile_id || ':child:' || COALESCE((e.value ->> 'chunk_index')::integer, (e.ord - 1)::integer)::text, 'UTF8')), 'hex'), 1, 32)::uuid
+    AND c.content IS DISTINCT FROM (e.value ->> 'content');
+
+  WITH prepared AS (
+    SELECT
+      e.value AS spec,
+      COALESCE((e.value ->> 'chunk_index')::integer, (e.ord - 1)::integer) AS chunk_index,
+      CASE WHEN jsonb_typeof(e.value -> 'parent_index') = 'number'
+           THEN substr(encode(sha256(convert_to(p_document_id::text || ':' || p_profile_id || ':parent:' || (e.value ->> 'parent_index'), 'UTF8')), 'hex'), 1, 32)::uuid
+      END AS parent_id,
+      CASE WHEN legacy_vectors IS NOT NULL AND jsonb_typeof(legacy_vectors -> (e.ord - 1)::integer) = 'array'
+           THEN ((legacy_vectors -> (e.ord - 1)::integer)::text)::vector END AS embedding,
+      CASE WHEN jsonb_typeof(e.value -> 'section_path') = 'array'
+           THEN ARRAY(SELECT jsonb_array_elements_text(e.value -> 'section_path')) ELSE '{}'::text[] END AS section_path,
+      COALESCE(e.value ->> 'chunk_kind', 'text') AS chunk_kind,
+      COALESCE((e.value ->> 'embedding_text_version')::integer, 0) AS embedding_text_version,
+      (e.value ->> 'page_start')::integer AS page_start,
+      (e.value ->> 'page_end')::integer AS page_end,
+      e.value ->> 'content_hash' AS content_hash,
+      e.value ->> 'lexical_text' AS lexical_text
+    FROM jsonb_array_elements(p_children) WITH ORDINALITY AS e(value, ord)
+  )
+  INSERT INTO document_chunks AS dc (
+    id, document_id, content, embedding, chunk_index, metadata, organization_id, tenant_key, version, is_current, status,
+    doc_type, doc_date, language, source, page_start, page_end, section_path, content_hash, chunk_kind, parser_used,
+    embedding_text_version, lexical_text, parent_id, chunking_profile_id
+  )
+  SELECT
+    substr(encode(sha256(convert_to(p_document_id::text || ':' || p_profile_id || ':child:' || p.chunk_index::text, 'UTF8')), 'hex'), 1, 32)::uuid,
+    p_document_id,
+    p.spec ->> 'content',
+    p.embedding,
+    p.chunk_index,
+    (CASE WHEN jsonb_typeof(p.spec -> 'metadata') = 'object' THEN p.spec -> 'metadata' ELSE '{}'::jsonb END)
+      || jsonb_build_object(
+        'chunk_index', p.chunk_index,
+        'section_path', to_jsonb(p.section_path),
+        'doc_type', doc.doc_type,
+        'language', doc.language,
+        'content_hash', p.content_hash,
+        'chunk_kind', p.chunk_kind,
+        'parser_used', doc.parser_used,
+        'embedding_text_version', p.embedding_text_version,
+        'chunking_profile_id', p_profile_id)
+      || CASE WHEN p.embedding IS NOT NULL
+              THEN jsonb_build_object('embedding_model', 'text-embedding-3-small', 'embedding_dims', 1536) ELSE '{}'::jsonb END
+      || jsonb_strip_nulls(jsonb_build_object('doc_date', doc.doc_date, 'source', doc.source, 'page_start', p.page_start, 'page_end', p.page_end)),
+    doc.organization_id,
+    doc.tenant_key,
+    doc.version,
+    doc.is_current,
+    doc.status,
+    doc.doc_type,
+    doc.doc_date,
+    doc.language,
+    doc.source,
+    p.page_start,
+    p.page_end,
+    p.section_path,
+    p.content_hash,
+    p.chunk_kind,
+    doc.parser_used,
+    p.embedding_text_version,
+    p.lexical_text,
+    p.parent_id,
+    p_profile_id
+  FROM prepared p
+  ON CONFLICT (id) DO UPDATE SET
+    content = EXCLUDED.content,
+    embedding = EXCLUDED.embedding,
+    chunk_index = EXCLUDED.chunk_index,
+    metadata = EXCLUDED.metadata,
+    organization_id = EXCLUDED.organization_id,
+    tenant_key = EXCLUDED.tenant_key,
+    version = EXCLUDED.version,
+    is_current = EXCLUDED.is_current,
+    status = EXCLUDED.status,
+    doc_type = EXCLUDED.doc_type,
+    doc_date = EXCLUDED.doc_date,
+    language = EXCLUDED.language,
+    source = EXCLUDED.source,
+    page_start = EXCLUDED.page_start,
+    page_end = EXCLUDED.page_end,
+    section_path = EXCLUDED.section_path,
+    content_hash = EXCLUDED.content_hash,
+    chunk_kind = EXCLUDED.chunk_kind,
+    parser_used = EXCLUDED.parser_used,
+    embedding_text_version = EXCLUDED.embedding_text_version,
+    lexical_text = EXCLUDED.lexical_text,
+    parent_id = EXCLUDED.parent_id,
+    chunking_profile_id = EXCLUDED.chunking_profile_id
+  WHERE dc.document_id = EXCLUDED.document_id;
+  GET DIAGNOSTICS children_in = ROW_COUNT;
+
+  IF p_embeddings IS NOT NULL AND jsonb_typeof(p_embeddings) = 'object' THEN
+    FOR profile_key IN SELECT jsonb_object_keys(p_embeddings) LOOP
+      SELECT * INTO profile_row FROM embedding_profiles p WHERE p.id = profile_key;
+      payload := p_embeddings -> profile_key;
+      IF jsonb_typeof(payload) = 'object' THEN
+        vectors := payload -> 'vectors';
+        host_name := payload ->> 'host';
+      ELSE
+        vectors := payload;
+        host_name := NULL;
+      END IF;
+
+      IF profile_row.storage <> 'legacy_column' THEN
+        INSERT INTO chunk_embeddings AS ce (chunk_id, profile_id, tenant_key, embedding, embedding_model, dims, embedding_host)
+        SELECT
+          substr(encode(sha256(convert_to(
+            p_document_id::text || ':' || p_profile_id || ':child:' || COALESCE((e.value ->> 'chunk_index')::integer, (e.ord - 1)::integer)::text, 'UTF8')), 'hex'), 1, 32)::uuid,
+          profile_row.id,
+          doc.tenant_key,
+          (v.value::text)::halfvec,
+          profile_row.model,
+          profile_row.dims,
+          host_name
+        FROM jsonb_array_elements(p_children) WITH ORDINALITY AS e(value, ord)
+        JOIN jsonb_array_elements(vectors) WITH ORDINALITY AS v(value, ord) ON v.ord = e.ord
+        WHERE jsonb_typeof(v.value) = 'array'
+        ON CONFLICT (chunk_id, profile_id) DO UPDATE SET
+          embedding = EXCLUDED.embedding,
+          embedding_model = EXCLUDED.embedding_model,
+          dims = EXCLUDED.dims,
+          embedding_host = EXCLUDED.embedding_host,
+          embedded_at = now();
+      END IF;
+
+      DELETE FROM embedding_backfill_gaps g
+      USING jsonb_array_elements(p_children) WITH ORDINALITY AS e(value, ord),
+            jsonb_array_elements(vectors) WITH ORDINALITY AS v(value, ord)
+      WHERE v.ord = e.ord
+        AND jsonb_typeof(v.value) = 'array'
+        AND g.profile_id = profile_row.id
+        AND g.chunk_id = substr(encode(sha256(convert_to(
+              p_document_id::text || ':' || p_profile_id || ':child:' || COALESCE((e.value ->> 'chunk_index')::integer, (e.ord - 1)::integer)::text, 'UTF8')), 'hex'), 1, 32)::uuid;
+    END LOOP;
+  END IF;
+
+  IF p_final THEN
+    total := COALESCE(p_total, child_count);
+    DELETE FROM document_chunks c
+    WHERE c.document_id = p_document_id AND c.chunking_profile_id = p_profile_id AND c.chunk_index >= total;
+    GET DIAGNOSTICS children_out = ROW_COUNT;
+    DELETE FROM document_parents dp
+    WHERE dp.document_id = p_document_id
+      AND dp.chunking_profile_id = p_profile_id
+      AND NOT EXISTS (SELECT 1 FROM document_chunks c WHERE c.parent_id = dp.id);
+    GET DIAGNOSTICS parents_out = ROW_COUNT;
+  END IF;
+
+  RETURN QUERY SELECT parents_in, children_in, parents_out, children_out;
+END
+$$;
+
+DO $profile_writer_acl$
+BEGIN
+  IF to_regprocedure('public.rag_write_profile_chunks(uuid, text, text, jsonb, jsonb, jsonb, boolean, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_write_profile_chunks(uuid, text, text, jsonb, jsonb, jsonb, boolean, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_write_profile_chunks(uuid, text, text, jsonb, jsonb, jsonb, boolean, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_write_chunks(uuid, text, jsonb, jsonb, boolean, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_write_chunks(uuid, text, jsonb, jsonb, boolean, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_write_chunks(uuid, text, jsonb, jsonb, boolean, integer) TO service_role;
+  END IF;
+END
+$profile_writer_acl$;
+
+COMMIT;
+
+-- >>> supabase/migrations/0409_search_rpc_revoke.sql
+-- 0409 (03-48 follow-up, D-08): the REVOKE from PUBLIC, anon and authenticated and the GRANT to service_role of the tenant search RPCs are
+-- already part of each function's definition above, so this file adds nothing to a fresh install. Upgrades run the migration.
+
+-- >>> supabase/migrations/0410_security_definer_rpc_grants.sql
+-- 0410 (03-48 follow-up 2, D-08): every public SECURITY DEFINER function is service_role only unless it is an authenticated-callable RPC or an RLS helper.
+-- A fresh install already gets that from the 03-48 follow-up 2 block before 0320 and from the REVOKE and GRANT next to each function; the Phase 3.1
+-- queue and budget clauses cover functions that the Phase 3.1 migrations create with the same grants. What is left for a fresh install is the
+-- service_role grant on three Phase 3 functions, below. Upgrades run the migration itself.
+
+BEGIN;
+
+REVOKE ALL ON FUNCTION public.rag_chunk_embeddings_guard() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_chunk_embeddings_guard() TO service_role;
+REVOKE ALL ON FUNCTION public.rag_chunks_legacy_defaults() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_chunks_legacy_defaults() TO service_role;
+REVOKE ALL ON FUNCTION public.rag_reembed_pick(text, text, uuid, integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_reembed_pick(text, text, uuid, integer) TO service_role;
+
+COMMIT;
+
+-- >>> supabase/migrations/0411_security_definer_search_path.sql
+-- 0411: Every public SECURITY DEFINER function has a fixed search_path (03-48 follow-up 3, MEDIUM-3; Supabase linter 0011 function_search_path_mutable).
+-- Thirteen multi-tenant definer functions were created without one: they resolve unqualified table names (folders, chats, organizations,
+-- admin_users, organization_members, user_preferences) through the caller's search_path, where pg_temp is searched first for relations, so a role that
+-- can run its own SQL could shadow them with a temporary table while the function runs as its owner. The single-tenant setup already uses
+-- SET search_path = pg_catalog, public on its versions; the multi-tenant setup now does too and this migration repairs databases created earlier.
+--
+-- Only the function configuration changes: no body, signature or grant is touched (ALTER FUNCTION ... SET keeps the ACL).
+-- Each function is guarded with to_regprocedure, so the file is safe on single-tenant and multi-tenant databases.
+-- tests/rag/security-definer-search-path.test.ts fails when a SECURITY DEFINER function in the setup files, migrations or patches has no search_path.
+-- Idempotent: safe to run more than once.
+
+BEGIN;
+
+DO $definer_search_path$
+BEGIN
+  IF to_regprocedure('public.can_view_org_member(uuid, uuid)') IS NOT NULL THEN
+    ALTER FUNCTION public.can_view_org_member(uuid, uuid) SET search_path = pg_catalog, public;
+  END IF;
+  IF to_regprocedure('public.check_admin_status()') IS NOT NULL THEN
+    ALTER FUNCTION public.check_admin_status() SET search_path = pg_catalog, public;
+  END IF;
+  IF to_regprocedure('public.delete_folder(uuid, boolean)') IS NOT NULL THEN
+    ALTER FUNCTION public.delete_folder(uuid, boolean) SET search_path = pg_catalog, public;
+  END IF;
+  IF to_regprocedure('public.get_admin_organization_id()') IS NOT NULL THEN
+    ALTER FUNCTION public.get_admin_organization_id() SET search_path = pg_catalog, public;
+  END IF;
+  IF to_regprocedure('public.get_folder_stats(uuid)') IS NOT NULL THEN
+    ALTER FUNCTION public.get_folder_stats(uuid) SET search_path = pg_catalog, public;
+  END IF;
+  IF to_regprocedure('public.get_user_current_org()') IS NOT NULL THEN
+    ALTER FUNCTION public.get_user_current_org() SET search_path = pg_catalog, public;
+  END IF;
+  IF to_regprocedure('public.get_user_org_ids(uuid)') IS NOT NULL THEN
+    ALTER FUNCTION public.get_user_org_ids(uuid) SET search_path = pg_catalog, public;
+  END IF;
+  IF to_regprocedure('public.get_user_role_in_org(uuid)') IS NOT NULL THEN
+    ALTER FUNCTION public.get_user_role_in_org(uuid) SET search_path = pg_catalog, public;
+  END IF;
+  IF to_regprocedure('public.is_admin(uuid)') IS NOT NULL THEN
+    ALTER FUNCTION public.is_admin(uuid) SET search_path = pg_catalog, public;
+  END IF;
+  IF to_regprocedure('public.move_chats_to_folder(uuid[], uuid)') IS NOT NULL THEN
+    ALTER FUNCTION public.move_chats_to_folder(uuid[], uuid) SET search_path = pg_catalog, public;
+  END IF;
+  IF to_regprocedure('public.share_chat(uuid, jsonb)') IS NOT NULL THEN
+    ALTER FUNCTION public.share_chat(uuid, jsonb) SET search_path = pg_catalog, public;
+  END IF;
+  IF to_regprocedure('public.share_personal_organization(uuid)') IS NOT NULL THEN
+    ALTER FUNCTION public.share_personal_organization(uuid) SET search_path = pg_catalog, public;
+  END IF;
+  IF to_regprocedure('public.unshare_chat(uuid)') IS NOT NULL THEN
+    ALTER FUNCTION public.unshare_chat(uuid) SET search_path = pg_catalog, public;
+  END IF;
+END
+$definer_search_path$;
+
+COMMIT;
+
+-- >>> supabase/migrations/0412_rechunk_functions.sql
+-- 0412: server functions of the rechunk job (Phase 4, plan 04-32, D-21, CHK-04).
+-- The job builds one chunking profile for the current ready documents of the profile's doc type from stored parse output. These functions are
+-- its only door to the database besides rag_write_profile_chunks (0408), which writes the parents, children and vectors of one document under
+-- that document's own tenant key. Here: the document selection, the build run (chunking_build_runs) with its cursor, and the documents that
+-- cannot be built (chunking_build_gaps).
+--   Selection: current, ready documents of the profile's doc type (optionally one tenant) that have no current chunk in the profile, in id order.
+--              The same predicate serves a first build, a resume, and the repair of an active profile (nothing already complete is selected).
+--   Status:    a run never moves an active or ready profile. A building profile becomes ready when the run finishes and no current ready document
+--              of the type, in any tenant, is missing children. The pointer flip to active is the activation function's job, not this file's.
+-- Refusals raise 'rechunk_refused: <reason>' and carry no row content. Server role only (SECURITY DEFINER, fixed search_path).
+-- Idempotent: CREATE OR REPLACE with fixed signatures, then guarded REVOKE and GRANT.
+
+BEGIN;
+
+-- Current ready documents of the type that have no current chunk in the profile. Internal count used by the start and finish functions.
+CREATE OR REPLACE FUNCTION rag_rechunk_missing(p_profile_id text, p_doc_type text, p_tenant_key text)
+RETURNS integer
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+  SELECT count(*)::integer
+  FROM chunking_profiles p
+  JOIN documents d ON d.doc_type = p.doc_type AND d.is_current AND d.status = 'ready'
+  WHERE p.id = p_profile_id
+    AND p.doc_type = p_doc_type
+    AND (p_tenant_key IS NULL OR d.tenant_key = p_tenant_key)
+    AND NOT EXISTS (
+      SELECT 1 FROM document_chunks c
+      WHERE c.document_id = d.id AND c.chunking_profile_id = p.id AND c.is_current)
+$$;
+
+-- The documents a run still has to build, after the cursor, in id order. lineage_id and version locate the stored parse output.
+CREATE OR REPLACE FUNCTION rag_rechunk_documents(p_profile_id text, p_doc_type text, p_tenant_key text, p_after uuid, p_limit integer)
+RETURNS TABLE (
+  document_id uuid,
+  tenant_key text,
+  lineage_id uuid,
+  version integer,
+  filename text,
+  doc_type text,
+  source text,
+  template_row jsonb
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+#variable_conflict use_column
+BEGIN
+  IF p_limit IS NULL OR p_limit < 1 OR p_limit > 1000 THEN
+    RAISE EXCEPTION 'rechunk_refused: invalid_limit' USING ERRCODE = '22023';
+  END IF;
+  RETURN QUERY
+    SELECT d.id, d.tenant_key, d.lineage_id, d.version, d.filename, d.doc_type, d.source,
+           jsonb_build_object(
+             'invoice_number', d.invoice_number,
+             'supplier_name', d.supplier_name,
+             'supplier_tax_id', d.supplier_tax_id,
+             'issue_date', d.issue_date::text,
+             'gross_total', d.gross_total::text,
+             'currency', d.currency)
+    FROM chunking_profiles p
+    JOIN documents d ON d.doc_type = p.doc_type AND d.is_current AND d.status = 'ready'
+    WHERE p.id = p_profile_id
+      AND p.doc_type = p_doc_type
+      AND p.id <> 'legacy'
+      AND p.status IN ('building', 'ready', 'active')
+      AND (p_tenant_key IS NULL OR d.tenant_key = p_tenant_key)
+      AND (p_after IS NULL OR d.id > p_after)
+      AND NOT EXISTS (
+        SELECT 1 FROM document_chunks c
+        WHERE c.document_id = d.id AND c.chunking_profile_id = p.id AND c.is_current)
+    ORDER BY d.id
+    LIMIT p_limit;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION rag_rechunk_get_run(p_run_id uuid)
+RETURNS TABLE (
+  run_id uuid,
+  profile_id text,
+  doc_type text,
+  tenant_key text,
+  cursor_document_id uuid,
+  docs_total integer,
+  docs_done integer,
+  status text,
+  profile_status text,
+  child_tokens integer,
+  parent_mode text,
+  parent_tokens integer
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+  SELECT r.id, r.profile_id, r.doc_type, r.tenant_key, r.cursor_document_id, r.docs_total, r.docs_done, r.status,
+         p.status, p.child_tokens, p.parent_mode, p.parent_tokens
+  FROM chunking_build_runs r
+  JOIN chunking_profiles p ON p.id = r.profile_id AND p.doc_type = r.doc_type
+  WHERE r.id = p_run_id
+$$;
+
+-- Opens a run. With p_resume_open the newest running run of the same profile and tenant scope is returned instead of a new one, so bounded
+-- calls (an admin route inside its function limit) continue one run. The profile keeps its status: a run only reads and writes children.
+CREATE OR REPLACE FUNCTION rag_rechunk_start_run(
+  p_profile_id text,
+  p_doc_type text DEFAULT NULL,
+  p_tenant_key text DEFAULT NULL,
+  p_resume_open boolean DEFAULT false
+)
+RETURNS TABLE (
+  run_id uuid,
+  profile_id text,
+  doc_type text,
+  tenant_key text,
+  cursor_document_id uuid,
+  docs_total integer,
+  docs_done integer,
+  status text,
+  profile_status text,
+  child_tokens integer,
+  parent_mode text,
+  parent_tokens integer
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+#variable_conflict use_column
+DECLARE
+  matches integer;
+  chosen chunking_profiles%ROWTYPE;
+  opened uuid;
+BEGIN
+  IF p_profile_id IS NULL OR btrim(p_profile_id) = '' THEN
+    RAISE EXCEPTION 'rechunk_refused: profile_required' USING ERRCODE = '22023';
+  END IF;
+  IF p_profile_id = 'legacy' THEN
+    RAISE EXCEPTION 'rechunk_refused: profile_is_legacy' USING ERRCODE = '55000';
+  END IF;
+  IF p_tenant_key IS NOT NULL
+     AND p_tenant_key !~ '^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$' THEN
+    RAISE EXCEPTION 'rechunk_refused: invalid_tenant_key' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT count(*) INTO matches FROM chunking_profiles p WHERE p.id = p_profile_id AND (p_doc_type IS NULL OR p.doc_type = p_doc_type);
+  IF matches = 0 THEN
+    RAISE EXCEPTION 'rechunk_refused: unknown_profile' USING ERRCODE = '22023';
+  END IF;
+  IF matches > 1 THEN
+    RAISE EXCEPTION 'rechunk_refused: profile_ambiguous' USING ERRCODE = '22023';
+  END IF;
+  SELECT * INTO chosen FROM chunking_profiles p WHERE p.id = p_profile_id AND (p_doc_type IS NULL OR p.doc_type = p_doc_type);
+  IF chosen.status = 'retired' THEN
+    RAISE EXCEPTION 'rechunk_refused: profile_retired' USING ERRCODE = '55000';
+  END IF;
+
+  IF p_resume_open THEN
+    SELECT r.id INTO opened
+    FROM chunking_build_runs r
+    WHERE r.profile_id = chosen.id AND r.doc_type = chosen.doc_type AND r.tenant_key IS NOT DISTINCT FROM p_tenant_key AND r.status = 'running'
+    ORDER BY r.started_at DESC
+    LIMIT 1;
+  END IF;
+  IF opened IS NULL THEN
+    INSERT INTO chunking_build_runs (profile_id, doc_type, tenant_key, docs_total)
+    VALUES (chosen.id, chosen.doc_type, p_tenant_key, rag_rechunk_missing(chosen.id, chosen.doc_type, p_tenant_key))
+    RETURNING id INTO opened;
+  END IF;
+  RETURN QUERY SELECT * FROM rag_rechunk_get_run(opened);
+END
+$$;
+
+-- Continues a run that was killed (running) or stopped by a failure (failed) from its cursor.
+CREATE OR REPLACE FUNCTION rag_rechunk_resume_run(p_run_id uuid)
+RETURNS TABLE (
+  run_id uuid,
+  profile_id text,
+  doc_type text,
+  tenant_key text,
+  cursor_document_id uuid,
+  docs_total integer,
+  docs_done integer,
+  status text,
+  profile_status text,
+  child_tokens integer,
+  parent_mode text,
+  parent_tokens integer
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+#variable_conflict use_column
+DECLARE
+  existing chunking_build_runs%ROWTYPE;
+  profile_state text;
+BEGIN
+  SELECT * INTO existing FROM chunking_build_runs r WHERE r.id = p_run_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'rechunk_refused: run_not_found' USING ERRCODE = '22023';
+  END IF;
+  IF existing.status NOT IN ('running', 'failed') THEN
+    RAISE EXCEPTION 'rechunk_refused: run_not_resumable' USING ERRCODE = '55000';
+  END IF;
+  SELECT p.status INTO profile_state FROM chunking_profiles p WHERE p.id = existing.profile_id AND p.doc_type = existing.doc_type;
+  IF profile_state = 'retired' THEN
+    RAISE EXCEPTION 'rechunk_refused: profile_retired' USING ERRCODE = '55000';
+  END IF;
+  UPDATE chunking_build_runs r SET status = 'running', updated_at = now() WHERE r.id = p_run_id;
+  RETURN QUERY SELECT * FROM rag_rechunk_get_run(p_run_id);
+END
+$$;
+
+-- Moves the cursor to the document just handled (built or recorded as a gap) and counts it.
+CREATE OR REPLACE FUNCTION rag_rechunk_advance(p_run_id uuid, p_document_id uuid)
+RETURNS TABLE (docs_done integer)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+#variable_conflict use_column
+DECLARE
+  handled integer;
+BEGIN
+  UPDATE chunking_build_runs r
+  SET cursor_document_id = p_document_id, docs_done = r.docs_done + 1, updated_at = now()
+  WHERE r.id = p_run_id AND r.status = 'running'
+  RETURNING r.docs_done INTO handled;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'rechunk_refused: run_not_running' USING ERRCODE = '55000';
+  END IF;
+  RETURN QUERY SELECT handled;
+END
+$$;
+
+-- Records a document the run could not build. The document must be of the run's doc type and tenant scope.
+CREATE OR REPLACE FUNCTION rag_rechunk_record_gap(p_run_id uuid, p_document_id uuid, p_reason text, p_detail text DEFAULT NULL)
+RETURNS TABLE (recorded integer)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+#variable_conflict use_column
+DECLARE
+  existing chunking_build_runs%ROWTYPE;
+BEGIN
+  SELECT * INTO existing FROM chunking_build_runs r WHERE r.id = p_run_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'rechunk_refused: run_not_found' USING ERRCODE = '22023';
+  END IF;
+  IF existing.status <> 'running' THEN
+    RAISE EXCEPTION 'rechunk_refused: run_not_running' USING ERRCODE = '55000';
+  END IF;
+  IF p_reason IS NULL OR p_reason NOT IN ('no_parse_output', 'failed') THEN
+    RAISE EXCEPTION 'rechunk_refused: invalid_gap' USING ERRCODE = '22023';
+  END IF;
+  PERFORM 1 FROM documents d
+  WHERE d.id = p_document_id AND d.doc_type = existing.doc_type AND (existing.tenant_key IS NULL OR d.tenant_key = existing.tenant_key);
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'rechunk_refused: document_out_of_scope' USING ERRCODE = '22023';
+  END IF;
+  INSERT INTO chunking_build_gaps (run_id, document_id, reason, detail)
+  VALUES (p_run_id, p_document_id, p_reason, left(p_detail, 200))
+  ON CONFLICT (run_id, document_id) DO UPDATE SET reason = EXCLUDED.reason, detail = EXCLUDED.detail, recorded_at = now();
+  RETURN QUERY SELECT 1;
+END
+$$;
+
+-- Ends a run. 'completed' becomes 'incomplete' while a document in the run's scope still lacks children; a building profile becomes ready only
+-- when no current ready document of the type, in any tenant, lacks children. 'failed' only marks the run.
+CREATE OR REPLACE FUNCTION rag_rechunk_finish_run(p_run_id uuid, p_status text DEFAULT 'completed')
+RETURNS TABLE (
+  status text,
+  docs_missing integer,
+  docs_missing_total integer,
+  gaps integer,
+  profile_status text
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+#variable_conflict use_column
+DECLARE
+  existing chunking_build_runs%ROWTYPE;
+  scope_missing integer;
+  total_missing integer;
+  final_status text;
+  gap_count integer;
+  profile_state text;
+BEGIN
+  IF p_status IS NULL OR p_status NOT IN ('completed', 'failed') THEN
+    RAISE EXCEPTION 'rechunk_refused: invalid_status' USING ERRCODE = '22023';
+  END IF;
+  SELECT * INTO existing FROM chunking_build_runs r WHERE r.id = p_run_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'rechunk_refused: run_not_found' USING ERRCODE = '22023';
+  END IF;
+  IF existing.status <> 'running' THEN
+    RAISE EXCEPTION 'rechunk_refused: run_not_running' USING ERRCODE = '55000';
+  END IF;
+
+  scope_missing := rag_rechunk_missing(existing.profile_id, existing.doc_type, existing.tenant_key);
+  total_missing := rag_rechunk_missing(existing.profile_id, existing.doc_type, NULL);
+  IF p_status = 'failed' THEN
+    final_status := 'failed';
+  ELSIF scope_missing = 0 THEN
+    final_status := 'completed';
+  ELSE
+    final_status := 'incomplete';
+  END IF;
+  UPDATE chunking_build_runs r SET status = final_status, updated_at = now() WHERE r.id = p_run_id;
+
+  IF final_status = 'completed' AND total_missing = 0 THEN
+    UPDATE chunking_profiles p SET status = 'ready'
+    WHERE p.id = existing.profile_id AND p.doc_type = existing.doc_type AND p.status = 'building';
+  END IF;
+  SELECT count(*)::integer INTO gap_count FROM chunking_build_gaps g WHERE g.run_id = p_run_id;
+  SELECT p.status INTO profile_state FROM chunking_profiles p WHERE p.id = existing.profile_id AND p.doc_type = existing.doc_type;
+  RETURN QUERY SELECT final_status, scope_missing, total_missing, gap_count, profile_state;
+END
+$$;
+
+-- The documents a run recorded as gaps, with the tenant each belongs to.
+CREATE OR REPLACE FUNCTION rag_rechunk_gaps(p_run_id uuid)
+RETURNS TABLE (
+  document_id uuid,
+  tenant_key text,
+  reason text,
+  detail text
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+  SELECT g.document_id, d.tenant_key, g.reason, g.detail
+  FROM chunking_build_gaps g
+  JOIN documents d ON d.id = g.document_id
+  WHERE g.run_id = p_run_id
+  ORDER BY g.document_id
+$$;
+
+DO $rechunk_acl$
+BEGIN
+  IF to_regprocedure('public.rag_rechunk_missing(text, text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_rechunk_missing(text, text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_rechunk_missing(text, text, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_rechunk_documents(text, text, text, uuid, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_rechunk_documents(text, text, text, uuid, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_rechunk_documents(text, text, text, uuid, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_rechunk_get_run(uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_rechunk_get_run(uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_rechunk_get_run(uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_rechunk_start_run(text, text, text, boolean)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_rechunk_start_run(text, text, text, boolean) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_rechunk_start_run(text, text, text, boolean) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_rechunk_resume_run(uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_rechunk_resume_run(uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_rechunk_resume_run(uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_rechunk_advance(uuid, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_rechunk_advance(uuid, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_rechunk_advance(uuid, uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_rechunk_record_gap(uuid, uuid, text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_rechunk_record_gap(uuid, uuid, text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_rechunk_record_gap(uuid, uuid, text, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_rechunk_finish_run(uuid, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_rechunk_finish_run(uuid, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_rechunk_finish_run(uuid, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_rechunk_gaps(uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_rechunk_gaps(uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_rechunk_gaps(uuid) TO service_role;
+  END IF;
+END
+$rechunk_acl$;
+
+COMMIT;
+
+-- >>> supabase/migrations/0413_chunking_activation.sql
+-- 0413: chunking profile activation, rollback and coverage; parent currency; image and invoice-header chunks under an active profile
+-- (Phase 4, plan 04-33, D-21, CHK-03, CHK-04). The plan named 0409; that number is taken, 0413 is the number reserved for this plan.
+--
+-- Activation (D-21). One chunking profile per doc type is active at deployment level. rag_create_chunking_profile inserts a building profile
+-- (lower-case slug, `legacy` reserved, one of the six doc types, parent at least twice the child; the full rule set, including the embedding
+-- input limit, lives in Pydantic and src/lib/rag/chunking/validate.ts). rag_record_chunking_decision stores a ChunkingDecision as the profile's
+-- eval evidence after checking that its doc_type and profile id match the row. rag_activate_chunking_profile flips the pointer in one
+-- transaction under a row lock on the doc type's profiles and otherwise raises `chunking_activation_refused:<reason>` with the reason one of
+-- unknown_profile, ambiguous_profile, not_ready, incomplete, open_gaps, no_evidence, eval_failed, stale_evidence, checked in that order. A profile id is only
+-- unique per doc type, so p_doc_type names the type when the id exists for more than one (and is required for `legacy`). Activating the active
+-- profile changes nothing; activating `legacy` needs no evidence. rag_rollback_chunking_profile restores previous_active_id (legacy when null or
+-- retired), returns the rolled-back profile to ready with every row kept, and refuses `no_previous` only when legacy is already active.
+-- rag_chunking_coverage counts, per doc type and profile, the current ready documents, those with current chunks in the profile and those
+-- missing (counts only: no ids, names or tenant keys). rag_chunking_profile_state adds, per profile, the open gaps of its latest build run and
+-- whether the recorded decision passed (for rag:chunking status). Pointer flips never touch chunk rows, so legacy readers are unaffected.
+-- These six functions are SECURITY INVOKER with an empty search_path and schema-qualified names; only service_role may execute them.
+--
+-- Parent currency (round G MEDIUM-3). document_parents.is_current was written true and never updated, so a superseded, unpublished or
+-- quarantined version kept current parents. It now follows the document row: a BEFORE trigger keeps a parent non-current while its document
+-- is, an AFTER trigger on documents carries every is_current flip to the parents, existing rows are corrected, and rag_fetch_parents also joins the document
+-- (current and ready, same tenant).
+--
+-- Image and invoice-header chunks (round G MEDIUM-5, round F deferred item). Profile children are cut from the parse text only, so the legacy
+-- chunk_kind 'image' and 'invoice_header' rows have no counterpart in a profile; hybrid_search_chunks used a document's legacy rows only when it
+-- had no rows of the effective profile, which hid them (and source_images) as soon as a profile was active. They now stay searchable
+-- whatever profile is effective. The function is replaced from 0407 with that one added predicate.
+-- Idempotent: CREATE OR REPLACE, DROP TRIGGER IF EXISTS, then REVOKE and GRANT.
+
+BEGIN;
+
+CREATE OR REPLACE FUNCTION public.rag_parent_currency_from_document()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+DECLARE
+  v_current boolean;
+BEGIN
+  SELECT d.is_current INTO v_current FROM public.documents d WHERE d.id = NEW.document_id;
+  IF FOUND THEN
+    NEW.is_current := NEW.is_current AND v_current;
+  END IF;
+  RETURN NEW;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_sync_parent_currency()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  UPDATE public.document_parents p
+  SET is_current = NEW.is_current
+  WHERE p.document_id = NEW.id AND p.is_current IS DISTINCT FROM NEW.is_current;
+  RETURN NULL;
+END
+$$;
+
+DROP TRIGGER IF EXISTS rag_document_parents_currency ON public.document_parents;
+CREATE TRIGGER rag_document_parents_currency
+  BEFORE INSERT OR UPDATE OF is_current ON public.document_parents
+  FOR EACH ROW EXECUTE FUNCTION public.rag_parent_currency_from_document();
+
+DROP TRIGGER IF EXISTS rag_documents_sync_parent_currency ON public.documents;
+CREATE TRIGGER rag_documents_sync_parent_currency
+  AFTER UPDATE OF is_current ON public.documents
+  FOR EACH ROW
+  WHEN (OLD.is_current IS DISTINCT FROM NEW.is_current)
+  EXECUTE FUNCTION public.rag_sync_parent_currency();
+
+UPDATE public.document_parents p
+SET is_current = d.is_current
+FROM public.documents d
+WHERE d.id = p.document_id AND p.is_current IS DISTINCT FROM d.is_current;
+
+CREATE OR REPLACE FUNCTION public.rag_fetch_parents(p_tenant_key text, p_parent_ids uuid[])
+RETURNS TABLE (
+  id uuid,
+  document_id uuid,
+  tenant_key text,
+  version integer,
+  is_current boolean,
+  chunking_profile_id text,
+  section_path text[],
+  content text,
+  token_count integer,
+  parent_index integer
+)
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  IF coalesce(cardinality(p_parent_ids), 0) > 200 THEN
+    RAISE EXCEPTION 'too many parent ids' USING ERRCODE = '22023';
+  END IF;
+  RETURN QUERY
+  SELECT
+    p.id,
+    p.document_id,
+    p.tenant_key,
+    p.version,
+    p.is_current,
+    p.chunking_profile_id,
+    p.section_path,
+    p.content,
+    p.token_count,
+    p.parent_index
+  FROM public.document_parents p
+  JOIN public.documents d
+    ON d.id = p.document_id AND d.tenant_key = p_tenant_key AND d.is_current AND d.status = 'ready'
+  WHERE p.tenant_key = p_tenant_key
+    AND p.is_current
+    AND p.id = ANY(p_parent_ids);
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.hybrid_search_chunks(
+  p_tenant_key text,
+  p_profile_id text,
+  p_query_embedding vector,
+  p_lexical_tokens text[],
+  p_dense_limit integer,
+  p_lexical_limit integer,
+  p_date_from date DEFAULT NULL,
+  p_date_to date DEFAULT NULL,
+  p_sources text[] DEFAULT NULL,
+  p_document_ids uuid[] DEFAULT NULL,
+  p_doc_types text[] DEFAULT NULL,
+  p_languages text[] DEFAULT NULL,
+  p_iterative_scan text DEFAULT 'off',
+  p_exact_scan_cutoff integer DEFAULT 0,
+  p_lexical_languages text[] DEFAULT NULL,
+  p_supplier text DEFAULT NULL,
+  p_amount_min numeric DEFAULT NULL,
+  p_amount_max numeric DEFAULT NULL,
+  p_currency text DEFAULT NULL,
+  p_chunking_override jsonb DEFAULT NULL
+)
+RETURNS TABLE (
+  leg text,
+  rank integer,
+  chunk_id uuid,
+  document_id uuid,
+  content text,
+  metadata jsonb,
+  chunk_index integer,
+  similarity double precision,
+  lexical_score real,
+  doc_type text,
+  language text,
+  parent_id uuid,
+  section_path text[],
+  chunk_kind text,
+  document_filename text,
+  document_created_at timestamptz,
+  document_metadata jsonb,
+  document_content_preview text,
+  dense_mode text
+)
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = pg_catalog, public
+AS $fn$
+DECLARE
+  v_dims integer;
+  v_storage text;
+  v_tsq tsquery;
+  v_n integer;
+  v_mode text := 'ann';
+  v_filter text;
+  v_from text;
+  v_vec text;
+  v_sel text;
+  v_pgvector text;
+  v_key text;
+  v_val text;
+  v_doc_types text[] := ARRAY[
+    'financial_report', 'contract_legal', 'invoice_receipt',
+    'product_technical', 'scanned_image', 'general'
+  ];
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+
+  IF p_dense_limit NOT BETWEEN 0 AND 200 OR p_lexical_limit NOT BETWEEN 0 AND 200 OR p_exact_scan_cutoff NOT BETWEEN 0 AND 100000 THEN
+    RAISE EXCEPTION 'hybrid_search_chunks: limit out of range' USING ERRCODE = '22023';
+  END IF;
+  IF p_iterative_scan NOT IN ('off', 'relaxed_order', 'strict_order') THEN
+    RAISE EXCEPTION 'hybrid_search_chunks: invalid iterative scan mode' USING ERRCODE = '22023';
+  END IF;
+
+  IF p_chunking_override IS NOT NULL AND jsonb_typeof(p_chunking_override) <> 'object' THEN
+    RAISE EXCEPTION 'hybrid_search_chunks: invalid chunking override' USING ERRCODE = '22023';
+  END IF;
+  IF p_chunking_override IS NOT NULL THEN
+    FOR v_key, v_val IN SELECT key, value FROM jsonb_each_text(p_chunking_override) LOOP
+      IF NOT EXISTS (SELECT 1 FROM chunking_profiles cp WHERE cp.doc_type = v_key AND cp.id = v_val) THEN
+        RAISE EXCEPTION 'hybrid_search_chunks: unknown chunking profile in override' USING ERRCODE = '22023';
+      END IF;
+    END LOOP;
+  END IF;
+
+  SELECT e.dims, e.storage INTO v_dims, v_storage FROM embedding_profiles e WHERE e.id = p_profile_id;
+  IF v_dims IS NULL OR v_storage NOT IN ('legacy_column', 'halfvec') THEN
+    RAISE EXCEPTION 'embedding_profile_mismatch: unknown profile' USING ERRCODE = '22023';
+  END IF;
+  IF p_dense_limit > 0 AND (p_query_embedding IS NULL OR vector_dims(p_query_embedding) <> v_dims) THEN
+    RAISE EXCEPTION 'embedding_profile_mismatch: dims' USING ERRCODE = '22000';
+  END IF;
+
+  CREATE TEMP TABLE _hybrid_eff_profile (doc_type text PRIMARY KEY, profile_id text) ON COMMIT DROP;
+  INSERT INTO _hybrid_eff_profile (doc_type, profile_id)
+  SELECT dt.doc_type,
+         COALESCE(
+           NULLIF(trim(both FROM p_chunking_override ->> dt.doc_type), ''),
+           (SELECT cp.id FROM chunking_profiles cp WHERE cp.doc_type = dt.doc_type AND cp.status = 'active' ORDER BY cp.id LIMIT 1),
+           'legacy'
+         )
+  FROM unnest(v_doc_types) AS dt(doc_type);
+
+  v_filter :=
+    ' c.tenant_key = $2 AND c.is_current AND c.status IN (''ready'', ''variant'')'
+    || ' AND EXISTS (SELECT 1 FROM _hybrid_eff_profile ep WHERE ep.doc_type = c.doc_type AND ('
+    || '   c.chunking_profile_id = ep.profile_id'
+    || '   OR (ep.profile_id <> ''legacy'' AND c.chunking_profile_id = ''legacy'' AND c.chunk_kind IN (''image'', ''invoice_header''))'
+    || '   OR (ep.profile_id <> ''legacy'' AND c.chunking_profile_id = ''legacy'''
+    || '       AND NOT EXISTS (SELECT 1 FROM document_chunks c2 WHERE c2.document_id = c.document_id'
+    || '         AND c2.tenant_key = $2 AND c2.is_current AND c2.chunking_profile_id = ep.profile_id))'
+    || ' ))'
+    || ' AND ($3::date IS NULL OR c.doc_date >= $3)'
+    || ' AND ($4::date IS NULL OR c.doc_date <= $4)'
+    || ' AND ($5::text[] IS NULL OR (cardinality($5) > 0 AND c.source = ANY($5)))'
+    || ' AND ($6::uuid[] IS NULL OR c.document_id = ANY($6))'
+    || ' AND ($7::text[] IS NULL OR c.doc_type = ANY($7))'
+    || ' AND ($8::text[] IS NULL OR c.language = ANY($8))'
+    || ' AND ($9::text IS NULL OR strpos(lower(d.supplier_name), lower($9)) > 0 OR d.supplier_tax_id = $9)'
+    || ' AND ($10::numeric IS NULL OR d.gross_total >= $10)'
+    || ' AND ($11::numeric IS NULL OR d.gross_total <= $11)'
+    || ' AND ($12::text IS NULL OR d.currency = $12) ';
+
+  v_sel :=
+    ' c.id, c.document_id, c.content, c.metadata, c.chunk_index, %s, %s, c.doc_type, c.language,'
+    || ' c.parent_id, c.section_path, c.chunk_kind,'
+    || ' d.filename, d.created_at, d.metadata, left(d.content, 200), %L::text ';
+
+  IF p_dense_limit > 0 THEN
+    IF v_storage = 'legacy_column' THEN
+      v_from := ' document_chunks c JOIN documents d ON d.id = c.document_id ';
+      v_vec := format('c.embedding <=> $1::vector(%s)', v_dims);
+      v_filter := v_filter || ' AND c.embedding IS NOT NULL ';
+    ELSE
+      v_from := format(
+        ' chunk_embeddings e JOIN document_chunks c ON c.id = e.chunk_id AND e.profile_id = %L'
+        || ' JOIN documents d ON d.id = c.document_id ',
+        p_profile_id
+      );
+      v_vec := format('(e.embedding::halfvec(%1$s)) <=> $1::halfvec(%1$s)', v_dims);
+    END IF;
+
+    IF p_exact_scan_cutoff > 0 THEN
+      EXECUTE 'SELECT count(*)::int FROM (SELECT 1 FROM ' || v_from || ' WHERE ' || v_filter || ' LIMIT $13) s'
+        INTO v_n
+        USING p_query_embedding, p_tenant_key, p_date_from, p_date_to, p_sources, p_document_ids, p_doc_types, p_languages,
+          p_supplier, p_amount_min, p_amount_max, p_currency, p_exact_scan_cutoff + 1;
+      IF v_n <= p_exact_scan_cutoff THEN v_mode := 'exact'; END IF;
+    END IF;
+
+    IF v_mode = 'ann' THEN
+      PERFORM set_config('hnsw.ef_search', least(greatest(p_dense_limit * 2, 100), 1000)::text, true);
+      IF p_iterative_scan <> 'off' THEN
+        SELECT extversion INTO v_pgvector FROM pg_extension WHERE extname = 'vector';
+        IF v_pgvector IS NULL OR (string_to_array(v_pgvector, '.'))[1:2]::int[] < ARRAY[0, 8] THEN
+          RAISE EXCEPTION 'iterative_scan_unsupported' USING ERRCODE = '22023';
+        END IF;
+        PERFORM set_config('hnsw.iterative_scan', p_iterative_scan, true);
+      END IF;
+    END IF;
+
+    RETURN QUERY EXECUTE
+      'WITH hits AS MATERIALIZED (SELECT c.id AS hid, ' || v_vec || ' AS dist FROM ' || v_from || ' WHERE ' || v_filter
+      || CASE WHEN v_mode = 'exact' THEN ') ' ELSE ' ORDER BY ' || v_vec || ' LIMIT $13) ' END
+      || ', top AS (SELECT hid, dist, (row_number() OVER (ORDER BY dist + 0, hid))::integer AS rnk FROM hits ORDER BY dist + 0, hid LIMIT $13) '
+      || 'SELECT ''dense''::text, t.rnk, ' || format(v_sel, '(1 - t.dist)::double precision', 'NULL::real', v_mode)
+      || ' FROM top t JOIN document_chunks c ON c.id = t.hid JOIN documents d ON d.id = c.document_id ORDER BY t.rnk'
+      USING p_query_embedding, p_tenant_key, p_date_from, p_date_to, p_sources, p_document_ids, p_doc_types, p_languages,
+        p_supplier, p_amount_min, p_amount_max, p_currency, p_dense_limit;
+  END IF;
+
+  v_tsq := public.rag_lexical_tsquery(p_lexical_tokens);
+  IF p_lexical_limit > 0 AND v_tsq IS NOT NULL THEN
+  v_filter := replace(v_filter, ' AND c.embedding IS NOT NULL ', '');
+    RETURN QUERY EXECUTE
+      'WITH hits AS MATERIALIZED (SELECT c.id AS hid, ts_rank_cd(c.lexical_tsv, $1, 1) AS score'
+      || ' FROM document_chunks c JOIN documents d ON d.id = c.document_id WHERE ' || v_filter
+      || ' AND ($14::text[] IS NULL OR (cardinality($14) > 0 AND c.language = ANY($14)))'
+      || ' AND c.lexical_tsv @@ $1 ORDER BY score DESC, c.id LIMIT $13) '
+      || 'SELECT ''lexical''::text, (row_number() OVER (ORDER BY t.score DESC, t.hid))::integer, '
+      || format(
+        v_sel,
+        CASE WHEN v_storage = 'legacy_column' AND p_query_embedding IS NOT NULL
+          THEN format('(1 - (c.embedding <=> $15::vector(%s)))::double precision', v_dims)
+          ELSE 'NULL::double precision' END,
+        't.score::real',
+        'n/a'
+      )
+      || ' FROM hits t JOIN document_chunks c ON c.id = t.hid JOIN documents d ON d.id = c.document_id ORDER BY t.score DESC, t.hid'
+      USING v_tsq, p_tenant_key, p_date_from, p_date_to, p_sources, p_document_ids, p_doc_types, p_languages,
+        p_supplier, p_amount_min, p_amount_max, p_currency, p_lexical_limit, p_lexical_languages, p_query_embedding;
+  END IF;
+END
+$fn$;
+
+CREATE OR REPLACE FUNCTION public.rag_create_chunking_profile(
+  p_id text,
+  p_doc_type text,
+  p_child_tokens integer,
+  p_parent_mode text,
+  p_parent_tokens integer,
+  p_preset text
+)
+RETURNS TABLE (profile_id text, doc_type text, status text)
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+#variable_conflict use_column
+BEGIN
+  IF p_id IS NULL OR p_id !~ '^[a-z0-9][a-z0-9._-]{0,63}$' THEN
+    RAISE EXCEPTION 'invalid_profile: the id must be a lower-case slug' USING ERRCODE = '22023';
+  END IF;
+  IF p_id = 'legacy' THEN
+    RAISE EXCEPTION 'invalid_profile: legacy is reserved' USING ERRCODE = '22023';
+  END IF;
+  IF p_doc_type IS NULL OR p_doc_type NOT IN ('financial_report', 'contract_legal', 'invoice_receipt', 'product_technical', 'scanned_image', 'general') THEN
+    RAISE EXCEPTION 'invalid_profile: unknown doc type' USING ERRCODE = '22023';
+  END IF;
+  IF p_child_tokens IS NULL OR p_child_tokens < 1 OR p_child_tokens > 32768 THEN
+    RAISE EXCEPTION 'invalid_profile: child_tokens must be between 1 and 32768' USING ERRCODE = '22023';
+  END IF;
+  IF p_parent_mode IS NULL OR p_parent_mode NOT IN ('none', 'structure', 'fixed') THEN
+    RAISE EXCEPTION 'invalid_profile: unknown parent mode' USING ERRCODE = '22023';
+  END IF;
+  IF p_parent_mode <> 'none' AND p_parent_tokens IS NULL THEN
+    RAISE EXCEPTION 'invalid_profile: parent_tokens is required unless the parent mode is none' USING ERRCODE = '22023';
+  END IF;
+  IF p_parent_tokens IS NOT NULL AND p_parent_tokens < p_child_tokens * 2 THEN
+    RAISE EXCEPTION 'invalid_profile: a parent must hold at least twice the child tokens' USING ERRCODE = '22023';
+  END IF;
+  IF p_preset IS NULL OR p_preset NOT IN ('128/512', '256/1024', '256/2048', 'custom') THEN
+    RAISE EXCEPTION 'invalid_profile: unknown preset' USING ERRCODE = '22023';
+  END IF;
+
+  INSERT INTO public.chunking_profiles (id, doc_type, child_tokens, parent_mode, parent_tokens, status, preset)
+  VALUES (p_id, p_doc_type, p_child_tokens, p_parent_mode, p_parent_tokens, 'building', p_preset);
+
+  RETURN QUERY SELECT p_id, p_doc_type, 'building'::text;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_record_chunking_decision(p_profile_id text, p_decision jsonb)
+RETURNS TABLE (profile_id text, doc_type text)
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+#variable_conflict use_column
+DECLARE
+  v_doc_type text;
+  v_row public.chunking_profiles%ROWTYPE;
+BEGIN
+  IF p_decision IS NULL OR jsonb_typeof(p_decision) <> 'object' THEN
+    RAISE EXCEPTION 'invalid_decision: a decision must be a JSON object' USING ERRCODE = '22023';
+  END IF;
+  IF jsonb_typeof(p_decision -> 'gate_passed') IS DISTINCT FROM 'boolean' THEN
+    RAISE EXCEPTION 'invalid_decision: gate_passed must be a boolean' USING ERRCODE = '22023';
+  END IF;
+  IF jsonb_typeof(p_decision -> 'doc_type') IS DISTINCT FROM 'string' OR jsonb_typeof(p_decision -> 'profile_id') IS DISTINCT FROM 'string' THEN
+    RAISE EXCEPTION 'invalid_decision: doc_type and profile_id must be strings' USING ERRCODE = '22023';
+  END IF;
+  IF jsonb_typeof(p_decision -> 'build_run_id') NOT IN ('string', 'null') THEN
+    RAISE EXCEPTION 'invalid_decision: build_run_id must be a string or null' USING ERRCODE = '22023';
+  END IF;
+  IF (p_decision ->> 'profile_id') IS DISTINCT FROM p_profile_id THEN
+    RAISE EXCEPTION 'invalid_decision: the decision names another profile' USING ERRCODE = '22023';
+  END IF;
+  IF p_profile_id = 'legacy' THEN
+    RAISE EXCEPTION 'invalid_decision: legacy needs no evidence' USING ERRCODE = '22023';
+  END IF;
+  v_doc_type := p_decision ->> 'doc_type';
+
+  SELECT * INTO v_row FROM public.chunking_profiles cp WHERE cp.id = p_profile_id AND cp.doc_type = v_doc_type FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'invalid_decision: no profile of that id for that doc type' USING ERRCODE = '22023';
+  END IF;
+  IF v_row.status = 'retired' THEN
+    RAISE EXCEPTION 'invalid_decision: the profile is retired' USING ERRCODE = '22023';
+  END IF;
+
+  UPDATE public.chunking_profiles cp SET eval_evidence = p_decision WHERE cp.id = p_profile_id AND cp.doc_type = v_doc_type;
+  RETURN QUERY SELECT p_profile_id, v_doc_type;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_activate_chunking_profile(p_profile_id text, p_actor text, p_doc_type text DEFAULT NULL)
+RETURNS TABLE (activated_profile text, previous_profile text, doc_type text, changed boolean)
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = ''
+SET statement_timeout = '120s'
+AS $$
+#variable_conflict use_column
+DECLARE
+  v_actor text;
+  v_doc_type text;
+  v_count integer;
+  v_target public.chunking_profiles%ROWTYPE;
+  v_active public.chunking_profiles%ROWTYPE;
+  v_missing integer;
+  v_run uuid;
+  v_evidence jsonb;
+BEGIN
+  IF p_actor IS NOT NULL AND p_actor !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+    RAISE EXCEPTION 'invalid_actor: the actor must be a uuid' USING ERRCODE = '22023';
+  END IF;
+  v_actor := COALESCE(p_actor, 'cli');
+
+  IF p_profile_id IS NULL THEN
+    RAISE EXCEPTION 'chunking_activation_refused:unknown_profile' USING ERRCODE = '55000';
+  END IF;
+  IF p_doc_type IS NOT NULL THEN
+    v_doc_type := p_doc_type;
+  ELSE
+    SELECT count(*)::integer, min(cp.doc_type) INTO v_count, v_doc_type FROM public.chunking_profiles cp WHERE cp.id = p_profile_id;
+    IF v_count = 0 THEN
+      RAISE EXCEPTION 'chunking_activation_refused:unknown_profile' USING ERRCODE = '55000';
+    END IF;
+    IF v_count > 1 THEN
+      RAISE EXCEPTION 'chunking_activation_refused:ambiguous_profile (the id exists for % doc types; name the doc type)', v_count USING ERRCODE = '55000';
+    END IF;
+  END IF;
+
+  PERFORM 1 FROM public.chunking_profiles cp WHERE cp.doc_type = v_doc_type ORDER BY cp.id FOR UPDATE;
+
+  SELECT * INTO v_target FROM public.chunking_profiles cp WHERE cp.id = p_profile_id AND cp.doc_type = v_doc_type;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'chunking_activation_refused:unknown_profile' USING ERRCODE = '55000';
+  END IF;
+  SELECT * INTO v_active FROM public.chunking_profiles cp WHERE cp.doc_type = v_doc_type AND cp.status = 'active' ORDER BY cp.id LIMIT 1;
+
+  IF v_target.status = 'active' THEN
+    RETURN QUERY SELECT v_target.id, v_target.previous_active_id, v_doc_type, false;
+    RETURN;
+  END IF;
+  IF v_target.status <> 'ready' THEN
+    RAISE EXCEPTION 'chunking_activation_refused:not_ready (status %)', v_target.status USING ERRCODE = '55000';
+  END IF;
+
+  IF v_target.id <> 'legacy' THEN
+    SELECT count(*)::integer INTO v_missing
+    FROM public.documents d
+    WHERE d.doc_type = v_doc_type AND d.is_current AND d.status = 'ready'
+      AND NOT EXISTS (
+        SELECT 1 FROM public.document_chunks c
+        WHERE c.document_id = d.id AND c.chunking_profile_id = v_target.id AND c.is_current);
+    IF v_missing > 0 THEN
+      RAISE EXCEPTION 'chunking_activation_refused:incomplete (% current ready documents have no children in profile %)', v_missing, v_target.id
+        USING ERRCODE = '55000';
+    END IF;
+
+    SELECT r.id INTO v_run
+    FROM public.chunking_build_runs r
+    WHERE r.profile_id = v_target.id AND r.doc_type = v_doc_type
+    ORDER BY r.started_at DESC, r.id DESC
+    LIMIT 1;
+    IF v_run IS NOT NULL AND EXISTS (
+      SELECT 1 FROM public.chunking_build_gaps g
+      JOIN public.documents d ON d.id = g.document_id AND d.is_current AND d.status = 'ready'
+      WHERE g.run_id = v_run
+    ) THEN
+      RAISE EXCEPTION 'chunking_activation_refused:open_gaps (the latest build run of profile % recorded gaps)', v_target.id USING ERRCODE = '55000';
+    END IF;
+
+    v_evidence := v_target.eval_evidence;
+    IF v_evidence IS NULL OR jsonb_typeof(v_evidence) <> 'object'
+       OR (v_evidence ->> 'profile_id') IS DISTINCT FROM v_target.id
+       OR (v_evidence ->> 'doc_type') IS DISTINCT FROM v_doc_type THEN
+      RAISE EXCEPTION 'chunking_activation_refused:no_evidence' USING ERRCODE = '55000';
+    END IF;
+    IF (v_evidence -> 'gate_passed') IS DISTINCT FROM 'true'::jsonb THEN
+      RAISE EXCEPTION 'chunking_activation_refused:eval_failed' USING ERRCODE = '55000';
+    END IF;
+
+    SELECT r.id INTO v_run
+    FROM public.chunking_build_runs r
+    WHERE r.profile_id = v_target.id AND r.doc_type = v_doc_type AND r.status = 'completed'
+    ORDER BY r.started_at DESC, r.id DESC
+    LIMIT 1;
+    IF (v_evidence ->> 'build_run_id') IS DISTINCT FROM v_run::text THEN
+      RAISE EXCEPTION 'chunking_activation_refused:stale_evidence (the decision is not for the latest completed build run)' USING ERRCODE = '55000';
+    END IF;
+  END IF;
+
+  UPDATE public.chunking_profiles cp SET status = 'ready' WHERE cp.doc_type = v_doc_type AND cp.status = 'active';
+  UPDATE public.chunking_profiles cp
+  SET status = 'active', previous_active_id = v_active.id, activated_at = now(), activated_by = v_actor
+  WHERE cp.id = v_target.id AND cp.doc_type = v_doc_type;
+
+  RETURN QUERY SELECT v_target.id, v_active.id, v_doc_type, true;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_rollback_chunking_profile(p_doc_type text, p_actor text)
+RETURNS TABLE (restored_profile text, rolled_back_profile text, doc_type text)
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = ''
+SET statement_timeout = '120s'
+AS $$
+#variable_conflict use_column
+DECLARE
+  v_actor text;
+  v_active public.chunking_profiles%ROWTYPE;
+  v_restore public.chunking_profiles%ROWTYPE;
+BEGIN
+  IF p_actor IS NOT NULL AND p_actor !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+    RAISE EXCEPTION 'invalid_actor: the actor must be a uuid' USING ERRCODE = '22023';
+  END IF;
+  v_actor := COALESCE(p_actor, 'cli');
+  IF p_doc_type IS NULL OR p_doc_type NOT IN ('financial_report', 'contract_legal', 'invoice_receipt', 'product_technical', 'scanned_image', 'general') THEN
+    RAISE EXCEPTION 'invalid_doc_type: unknown doc type' USING ERRCODE = '22023';
+  END IF;
+
+  PERFORM 1 FROM public.chunking_profiles cp WHERE cp.doc_type = p_doc_type ORDER BY cp.id FOR UPDATE;
+
+  SELECT * INTO v_active FROM public.chunking_profiles cp WHERE cp.doc_type = p_doc_type AND cp.status = 'active' ORDER BY cp.id LIMIT 1;
+  IF NOT FOUND OR v_active.id = 'legacy' THEN
+    RAISE EXCEPTION 'chunking_activation_refused:no_previous' USING ERRCODE = '55000';
+  END IF;
+
+  SELECT * INTO v_restore FROM public.chunking_profiles cp
+  WHERE cp.doc_type = p_doc_type AND cp.id = COALESCE(v_active.previous_active_id, 'legacy') AND cp.status <> 'retired';
+  IF NOT FOUND THEN
+    SELECT * INTO v_restore FROM public.chunking_profiles cp WHERE cp.doc_type = p_doc_type AND cp.id = 'legacy';
+  END IF;
+
+  UPDATE public.chunking_profiles cp SET status = 'ready' WHERE cp.doc_type = p_doc_type AND cp.id = v_active.id;
+  UPDATE public.chunking_profiles cp
+  SET status = 'active', previous_active_id = NULL, activated_at = now(), activated_by = v_actor
+  WHERE cp.doc_type = p_doc_type AND cp.id = v_restore.id;
+
+  RETURN QUERY SELECT v_restore.id, v_active.id, p_doc_type;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_chunking_coverage()
+RETURNS TABLE (
+  doc_type text,
+  profile_id text,
+  is_active boolean,
+  current_ready_documents integer,
+  documents_with_children integer,
+  missing_documents integer
+)
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+  WITH ready AS (
+    SELECT d.id, d.doc_type FROM public.documents d WHERE d.is_current AND d.status = 'ready'
+  ),
+  totals AS (
+    SELECT r.doc_type, count(*)::integer AS n FROM ready r GROUP BY r.doc_type
+  ),
+  covered AS (
+    SELECT p.doc_type, p.id AS profile_id, count(*)::integer AS n
+    FROM public.chunking_profiles p
+    JOIN ready r ON r.doc_type = p.doc_type
+    WHERE EXISTS (
+      SELECT 1 FROM public.document_chunks c
+      WHERE c.document_id = r.id AND c.chunking_profile_id = p.id AND c.is_current)
+    GROUP BY p.doc_type, p.id
+  )
+  SELECT
+    p.doc_type,
+    p.id,
+    (p.status = 'active'),
+    COALESCE(t.n, 0),
+    COALESCE(c.n, 0),
+    COALESCE(t.n, 0) - COALESCE(c.n, 0)
+  FROM public.chunking_profiles p
+  LEFT JOIN totals t ON t.doc_type = p.doc_type
+  LEFT JOIN covered c ON c.doc_type = p.doc_type AND c.profile_id = p.id
+  ORDER BY p.doc_type, p.id
+$$;
+
+-- Per profile: the gaps of the latest build run that still matter (their document is current and ready) and whether the recorded decision
+-- passed. Counts and words only; rag:chunking status prints it.
+CREATE OR REPLACE FUNCTION public.rag_chunking_profile_state()
+RETURNS TABLE (doc_type text, profile_id text, open_gaps integer, evidence text)
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+  SELECT
+    p.doc_type,
+    p.id,
+    COALESCE((
+      SELECT count(*)::integer
+      FROM public.chunking_build_gaps g
+      JOIN public.documents d ON d.id = g.document_id AND d.is_current AND d.status = 'ready'
+      WHERE g.run_id = (
+        SELECT r.id FROM public.chunking_build_runs r
+        WHERE r.profile_id = p.id AND r.doc_type = p.doc_type
+        ORDER BY r.started_at DESC, r.id DESC
+        LIMIT 1)
+    ), 0),
+    CASE
+      WHEN p.eval_evidence IS NULL OR jsonb_typeof(p.eval_evidence) <> 'object' THEN 'none'
+      WHEN (p.eval_evidence -> 'gate_passed') = 'true'::jsonb THEN 'passed'
+      ELSE 'failed'
+    END
+  FROM public.chunking_profiles p
+  ORDER BY p.doc_type, p.id
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_parent_currency_from_document() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_sync_parent_currency() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_sync_parent_currency() TO service_role;
+
+REVOKE ALL ON FUNCTION public.rag_fetch_parents(text, uuid[]) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_fetch_parents(text, uuid[]) TO service_role;
+
+REVOKE ALL ON FUNCTION public.hybrid_search_chunks(
+  text, text, vector, text[], integer, integer, date, date, text[], uuid[], text[], text[], text, integer,
+  text[], text, numeric, numeric, text, jsonb
+) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.hybrid_search_chunks(
+  text, text, vector, text[], integer, integer, date, date, text[], uuid[], text[], text[], text, integer,
+  text[], text, numeric, numeric, text, jsonb
+) TO service_role;
+
+REVOKE ALL ON FUNCTION public.rag_create_chunking_profile(text, text, integer, text, integer, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_record_chunking_decision(text, jsonb) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_activate_chunking_profile(text, text, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_rollback_chunking_profile(text, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_chunking_coverage() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_chunking_profile_state() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_create_chunking_profile(text, text, integer, text, integer, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_record_chunking_decision(text, jsonb) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_activate_chunking_profile(text, text, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_rollback_chunking_profile(text, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_chunking_coverage() TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_chunking_profile_state() TO service_role;
+
+NOTIFY pgrst, 'reload schema';
+
+COMMIT;
+
+------------------------------------------
+-- Phase 3.1: Ingestion queue hardening and chunk writer fix (migrations 0420-0424, after Phase 4 in migration order)
+------------------------------------------
+
+-- >>> supabase/migrations/0420_ingestion_queue_retention.sql
+-- 0420: Archive and purge terminal ingestion jobs past a retention window (queue hardening).
+-- Slim archive rows keep idempotency and citation seams; heavy jsonb is dropped. Service role only.
+
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS public.ingestion_jobs_archive (
+  id uuid PRIMARY KEY,
+  tenant_key text NOT NULL,
+  kind text NOT NULL,
+  source text,
+  source_key text NOT NULL,
+  batch_id uuid,
+  document_id uuid,
+  lineage_id uuid,
+  version integer,
+  file_sha256 text,
+  status text NOT NULL,
+  error_class text,
+  last_error text,
+  trace_id uuid,
+  retries integer NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL,
+  updated_at timestamptz NOT NULL,
+  archived_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT ingestion_jobs_archive_tenant_key_check CHECK (
+    tenant_key ~ '^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$'
+  )
+);
+
+CREATE INDEX IF NOT EXISTS ingestion_jobs_archive_archived_at_idx
+  ON public.ingestion_jobs_archive (archived_at DESC);
+
+ALTER TABLE public.ingestion_jobs_archive ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.ingestion_jobs_archive FROM PUBLIC, anon, authenticated;
+GRANT ALL ON TABLE public.ingestion_jobs_archive TO service_role;
+
+CREATE OR REPLACE FUNCTION public.rag_purge_stale_ingestion_jobs(
+  p_retention_days integer DEFAULT 90,
+  p_batch_size integer DEFAULT 500
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_days integer;
+  v_limit integer;
+  v_cutoff timestamptz;
+  v_archived integer := 0;
+  v_purged integer := 0;
+  rec record;
+BEGIN
+  v_days := GREATEST(COALESCE(p_retention_days, 90), 1);
+  v_limit := GREATEST(LEAST(COALESCE(p_batch_size, 500), 5000), 1);
+  v_cutoff := now() - (v_days || ' days')::interval;
+
+  FOR rec IN
+    SELECT j.id
+      FROM public.ingestion_jobs j
+     WHERE j.deleted_at IS NULL
+       AND j.updated_at < v_cutoff
+       AND (
+         j.status IN ('ready', 'failed', 'quarantined', 'needs_review', 'skipped_duplicate')
+         OR j.kind = 'delete'
+       )
+     ORDER BY j.updated_at
+     LIMIT v_limit
+     FOR UPDATE SKIP LOCKED
+  LOOP
+    INSERT INTO public.ingestion_jobs_archive (
+      id, tenant_key, kind, source, source_key, batch_id, document_id, lineage_id, version,
+      file_sha256, status, error_class, last_error, trace_id, retries,
+      created_at, updated_at, archived_at
+    )
+    SELECT
+      j.id, j.tenant_key, j.kind, j.source, j.source_key, j.batch_id, j.document_id, j.lineage_id, j.version,
+      j.file_sha256, j.status, j.error_class, j.error, j.trace_id, j.retries,
+      j.created_at, j.updated_at, now()
+      FROM public.ingestion_jobs j
+     WHERE j.id = rec.id
+    ON CONFLICT (id) DO UPDATE SET
+      archived_at = EXCLUDED.archived_at,
+      status = EXCLUDED.status,
+      error_class = EXCLUDED.error_class,
+      last_error = EXCLUDED.last_error;
+
+    DELETE FROM public.ingestion_jobs j WHERE j.id = rec.id;
+    v_archived := v_archived + 1;
+    v_purged := v_purged + 1;
+  END LOOP;
+
+  FOR rec IN
+    SELECT j.id
+      FROM public.ingestion_jobs j
+     WHERE j.deleted_at IS NOT NULL
+       AND j.deleted_at < v_cutoff
+     ORDER BY j.deleted_at
+     LIMIT v_limit
+     FOR UPDATE SKIP LOCKED
+  LOOP
+    INSERT INTO public.ingestion_jobs_archive (
+      id, tenant_key, kind, source, source_key, batch_id, document_id, lineage_id, version,
+      file_sha256, status, error_class, last_error, trace_id, retries,
+      created_at, updated_at, archived_at
+    )
+    SELECT
+      j.id, j.tenant_key, j.kind, j.source, j.source_key, j.batch_id, j.document_id, j.lineage_id, j.version,
+      j.file_sha256, j.status, j.error_class, j.error, j.trace_id, j.retries,
+      j.created_at, j.updated_at, now()
+      FROM public.ingestion_jobs j
+     WHERE j.id = rec.id
+    ON CONFLICT (id) DO UPDATE SET archived_at = EXCLUDED.archived_at;
+
+    DELETE FROM public.ingestion_jobs j WHERE j.id = rec.id;
+    v_archived := v_archived + 1;
+    v_purged := v_purged + 1;
+  END LOOP;
+
+  RETURN jsonb_build_object('archived', v_archived, 'purged', v_purged, 'retention_days', v_days);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_purge_stale_ingestion_jobs(integer, integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_purge_stale_ingestion_jobs(integer, integer) TO service_role;
+
+COMMIT;
+
+NOTIFY pgrst, 'reload schema';
+
+-- >>> supabase/migrations/0421_ingestion_queue_indexes.sql
+-- 0421: Partial indexes for ingestion job claim, lease reclaim, and operator listing.
+
+BEGIN;
+
+DROP INDEX IF EXISTS public.ingestion_jobs_queued_claim_idx;
+DROP INDEX IF EXISTS public.ingestion_jobs_active_lease_idx;
+
+CREATE INDEX IF NOT EXISTS ingestion_jobs_claim_queued_idx
+  ON public.ingestion_jobs (priority DESC, created_at ASC, id)
+  WHERE deleted_at IS NULL
+    AND kind IN ('ingest', 'dry_run')
+    AND status = 'queued';
+
+CREATE INDEX IF NOT EXISTS ingestion_jobs_claim_active_lease_idx
+  ON public.ingestion_jobs (lease_until ASC, priority DESC, created_at ASC)
+  WHERE deleted_at IS NULL
+    AND kind IN ('ingest', 'dry_run')
+    AND status IN ('preflight', 'parsing', 'checking', 'chunking', 'embedding');
+
+CREATE INDEX IF NOT EXISTS ingestion_jobs_list_created_idx
+  ON public.ingestion_jobs (created_at DESC, id DESC)
+  WHERE deleted_at IS NULL;
+
+COMMIT;
+
+NOTIFY pgrst, 'reload schema';
+
+-- >>> supabase/migrations/0422_ingestion_dead_letter.sql
+-- 0422: Dead-letter tracking for exhausted ingestion retries (status stays failed).
+
+BEGIN;
+
+DROP FUNCTION IF EXISTS public.rag_fail_ingestion_job(uuid, text, text, boolean);
+
+ALTER TABLE public.ingestion_jobs
+  ADD COLUMN IF NOT EXISTS dead_letter_at timestamptz;
+
+ALTER TABLE public.ingestion_jobs_archive
+  ADD COLUMN IF NOT EXISTS dead_letter_at timestamptz;
+
+CREATE INDEX IF NOT EXISTS ingestion_jobs_dead_letter_idx
+  ON public.ingestion_jobs (dead_letter_at DESC)
+  WHERE deleted_at IS NULL AND dead_letter_at IS NOT NULL;
+
+CREATE OR REPLACE FUNCTION public.rag_fail_ingestion_job(
+  p_job_id uuid,
+  p_worker text,
+  p_error_class text,
+  p_retryable boolean,
+  p_last_error text DEFAULT NULL
+)
+RETURNS public.ingestion_jobs
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_job public.ingestion_jobs%ROWTYPE;
+  v_new_retries integer;
+  v_terminal boolean;
+  v_last text;
+BEGIN
+  IF p_error_class IS NULL OR btrim(p_error_class) = '' THEN
+    RAISE EXCEPTION 'ingest_refused: invalid_error_class' USING ERRCODE = '22023';
+  END IF;
+  SELECT * INTO v_job FROM public.ingestion_jobs WHERE id = p_job_id AND deleted_at IS NULL FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'ingest_refused: job_not_found' USING ERRCODE = '22023';
+  END IF;
+  PERFORM public.rag_ingest_assert_job_lease(v_job, p_worker);
+
+  v_new_retries := v_job.retries + 1;
+  v_terminal := (NOT p_retryable) OR v_new_retries > v_job.max_retries;
+  v_last := COALESCE(NULLIF(btrim(p_last_error), ''), p_error_class);
+
+  IF v_terminal THEN
+    PERFORM public.rag_release_job_reservations(p_job_id);
+    UPDATE public.ingestion_jobs j
+       SET status = 'failed',
+           error_class = p_error_class,
+           error = v_last,
+           dead_letter_at = CASE
+             WHEN p_retryable AND v_new_retries > j.max_retries THEN now()
+             ELSE NULL
+           END,
+           retries = v_new_retries,
+           locked_by = NULL,
+           lease_until = NULL,
+           runner = NULL,
+           run_after = NULL,
+           updated_at = now()
+     WHERE j.id = p_job_id
+     RETURNING j.* INTO v_job;
+    IF v_job.document_id IS NOT NULL THEN
+      UPDATE public.documents d
+         SET status = 'failed', processing_status = 'failed'
+       WHERE d.id = v_job.document_id AND d.tenant_key = v_job.tenant_key AND NOT d.is_current;
+    END IF;
+  ELSE
+    PERFORM public.rag_release_job_reservations(p_job_id);
+    UPDATE public.ingestion_jobs j
+       SET status = 'queued',
+           error_class = p_error_class,
+           error = v_last,
+           retries = v_new_retries,
+           run_after = now() + (30 * power(2::numeric, j.retries)) * interval '1 second',
+           locked_by = NULL,
+           lease_until = NULL,
+           runner = NULL,
+           updated_at = now()
+     WHERE j.id = p_job_id
+     RETURNING j.* INTO v_job;
+  END IF;
+
+  PERFORM public.rag_ingest_broadcast_job(v_job);
+  RETURN v_job;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_count_ingestion_dead_letters(p_tenant_key text DEFAULT NULL)
+RETURNS bigint
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  SELECT count(*)::bigint
+    FROM public.ingestion_jobs j
+   WHERE j.deleted_at IS NULL
+     AND j.status = 'failed'
+     AND j.dead_letter_at IS NOT NULL
+     AND (p_tenant_key IS NULL OR j.tenant_key = p_tenant_key);
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_fail_ingestion_job(uuid, text, text, boolean, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_fail_ingestion_job(uuid, text, text, boolean, text) TO service_role;
+
+REVOKE ALL ON FUNCTION public.rag_count_ingestion_dead_letters(text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_count_ingestion_dead_letters(text) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.rag_retry_ingestion_job(p_job_id uuid, p_actor uuid)
+RETURNS public.ingestion_jobs
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_keys text[];
+  v_job public.ingestion_jobs%ROWTYPE;
+BEGIN
+  v_keys := public.rag_admin_tenant_keys(p_actor);
+  SELECT * INTO v_job FROM public.ingestion_jobs j
+   WHERE j.id = p_job_id AND j.deleted_at IS NULL AND j.tenant_key = ANY (v_keys)
+   FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'ingest_refused: job_not_found' USING ERRCODE = '22023';
+  END IF;
+  IF v_job.status NOT IN ('failed', 'needs_review') THEN
+    RAISE EXCEPTION 'ingest_refused: invalid_status_for_retry' USING ERRCODE = '22023';
+  END IF;
+
+  UPDATE public.ingestion_jobs j
+     SET status = 'queued',
+         retries = 0,
+         run_after = NULL,
+         error_class = NULL,
+         error = NULL,
+         dead_letter_at = NULL,
+         locked_by = NULL,
+         lease_until = NULL,
+         runner = NULL,
+         updated_at = now()
+   WHERE j.id = p_job_id
+   RETURNING j.* INTO v_job;
+
+  INSERT INTO public.rag_admin_audit (action, document_id, lineage_id, tenant_key, version, actor, rule_ids)
+  VALUES (
+    'retry_ingestion_job',
+    COALESCE(v_job.document_id, v_job.id),
+    v_job.lineage_id,
+    v_job.tenant_key,
+    v_job.version,
+    p_actor,
+    ARRAY[]::text[]
+  );
+
+  RETURN v_job;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_retry_ingestion_job(uuid, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_retry_ingestion_job(uuid, uuid) TO service_role;
+
+COMMIT;
+
+NOTIFY pgrst, 'reload schema';
+
+-- >>> supabase/migrations/0423_ingestion_claim_lease_dead_letter.sql
+-- 0423: Dead-letter exhausted jobs when claim reclaims an expired lease.
+
+BEGIN;
+
+CREATE OR REPLACE FUNCTION public.rag_claim_ingestion_jobs(
+  p_worker text,
+  p_limit integer,
+  p_allow_batch boolean,
+  p_runner text DEFAULT 'worker'
+)
+RETURNS SETOF public.ingestion_jobs
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_claimed integer := 0;
+  v_job public.ingestion_jobs%ROWTYPE;
+  v_new_retries integer;
+  v_limit integer;
+BEGIN
+  v_limit := GREATEST(COALESCE(p_limit, 0), 0);
+  IF v_limit < 1 THEN
+    RETURN;
+  END IF;
+
+  WHILE v_claimed < v_limit LOOP
+    SELECT j.* INTO v_job
+      FROM ingestion_jobs j
+     WHERE j.deleted_at IS NULL
+       AND j.kind IN ('ingest', 'dry_run')
+       AND j.status NOT IN ('ready', 'failed', 'quarantined', 'needs_review', 'skipped_duplicate')
+       AND (p_allow_batch OR j.batch_id IS NULL)
+       AND (
+         (j.status = 'queued' AND (j.run_after IS NULL OR j.run_after <= now()))
+         OR (
+           j.status IN ('preflight', 'parsing', 'checking', 'chunking', 'embedding')
+           AND j.lease_until IS NOT NULL
+           AND j.lease_until < now()
+         )
+       )
+       AND (j.batch_id IS NULL OR rag_batch_has_room(j.batch_id))
+     ORDER BY j.priority DESC, j.created_at
+     FOR UPDATE OF j SKIP LOCKED
+     LIMIT 1;
+
+    IF NOT FOUND THEN
+      EXIT;
+    END IF;
+
+    IF v_job.batch_id IS NOT NULL AND NOT rag_batch_has_room(v_job.batch_id) THEN
+      CONTINUE;
+    END IF;
+
+    IF v_job.status <> 'queued' AND v_job.lease_until IS NOT NULL AND v_job.lease_until < now() THEN
+      v_new_retries := v_job.retries + 1;
+      IF v_new_retries > v_job.max_retries THEN
+        PERFORM rag_release_job_reservations(v_job.id);
+        UPDATE ingestion_jobs
+           SET status = 'failed',
+               error_class = 'lease_expired',
+               error = 'lease expired',
+               dead_letter_at = now(),
+               retries = v_new_retries,
+               locked_by = NULL,
+               lease_until = NULL,
+               runner = NULL,
+               updated_at = now()
+         WHERE id = v_job.id;
+        CONTINUE;
+      END IF;
+      PERFORM rag_release_job_reservations(v_job.id);
+    END IF;
+
+    UPDATE ingestion_jobs j
+       SET status = CASE
+             WHEN j.status = 'queued' THEN COALESCE(NULLIF(j.stage, ''), 'preflight')
+             ELSE j.status
+           END,
+           retries = CASE
+             WHEN j.status = 'queued' THEN j.retries
+             ELSE j.retries + 1
+           END,
+           locked_by = p_worker,
+           runner = p_runner,
+           lease_until = now() + interval '120 seconds',
+           updated_at = now()
+     WHERE j.id = v_job.id
+     RETURNING j.* INTO v_job;
+
+    v_claimed := v_claimed + 1;
+    RETURN NEXT v_job;
+  END LOOP;
+
+  RETURN;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_claim_ingestion_job(
+  p_job_id uuid,
+  p_worker text,
+  p_runner text DEFAULT 'worker'
+)
+RETURNS public.ingestion_jobs
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_job public.ingestion_jobs%ROWTYPE;
+  v_new_retries integer;
+BEGIN
+  SELECT j.* INTO v_job
+    FROM ingestion_jobs j
+   WHERE j.id = p_job_id
+     AND j.deleted_at IS NULL
+     AND j.kind IN ('ingest', 'dry_run')
+     AND j.status NOT IN ('ready', 'failed', 'quarantined', 'needs_review', 'skipped_duplicate')
+     AND (
+       (j.status = 'queued' AND (j.run_after IS NULL OR j.run_after <= now()))
+       OR (
+         j.status IN ('preflight', 'parsing', 'checking', 'chunking', 'embedding')
+         AND j.lease_until IS NOT NULL
+         AND j.lease_until < now()
+       )
+     )
+   FOR UPDATE OF j SKIP LOCKED;
+
+  IF NOT FOUND THEN
+    RETURN NULL;
+  END IF;
+
+  IF v_job.batch_id IS NOT NULL AND NOT rag_batch_has_room(v_job.batch_id) THEN
+    RETURN NULL;
+  END IF;
+
+  IF v_job.locked_by IS NOT NULL AND v_job.lease_until IS NOT NULL AND v_job.lease_until > now() THEN
+    RETURN NULL;
+  END IF;
+
+  IF v_job.status <> 'queued' AND v_job.lease_until IS NOT NULL AND v_job.lease_until < now() THEN
+    v_new_retries := v_job.retries + 1;
+    IF v_new_retries > v_job.max_retries THEN
+      PERFORM rag_release_job_reservations(v_job.id);
+      UPDATE ingestion_jobs
+         SET status = 'failed',
+             error_class = 'lease_expired',
+             error = 'lease expired',
+             dead_letter_at = now(),
+             retries = v_new_retries,
+             locked_by = NULL,
+             lease_until = NULL,
+             runner = NULL,
+             updated_at = now()
+       WHERE id = v_job.id;
+      RETURN NULL;
+    END IF;
+    PERFORM rag_release_job_reservations(v_job.id);
+  END IF;
+
+  UPDATE ingestion_jobs j
+     SET status = CASE
+           WHEN j.status = 'queued' THEN COALESCE(NULLIF(j.stage, ''), 'preflight')
+           ELSE j.status
+         END,
+         retries = CASE
+           WHEN j.status = 'queued' THEN j.retries
+           ELSE j.retries + 1
+         END,
+         locked_by = p_worker,
+         runner = p_runner,
+         lease_until = now() + interval '120 seconds',
+         updated_at = now()
+   WHERE j.id = v_job.id
+   RETURNING j.* INTO v_job;
+
+  RETURN v_job;
+END;
+$$;
+
+COMMIT;
+
+-- >>> supabase/migrations/0424_write_chunks_null_vector.sql
+-- 0424: rag_write_chunks and rag_write_profile_chunks accept a null vector entry again (reported by 03.1-49).
+-- p_embeddings maps a profile id to a list that lines up with the chunks, and a null entry means "no vector for this chunk". The 0408 dims check
+-- read "jsonb_typeof(v.value) = 'array' AND jsonb_array_length(v.value) <> dims", but PostgreSQL does not promise to evaluate AND left to
+-- right, so a null entry reached jsonb_array_length and the whole write failed with "cannot get array length of a scalar". The length is now
+-- taken inside CASE WHEN jsonb_typeof(...) = 'array', which is evaluated in order; the vector-count check uses the same guard.
+-- Behaviour is otherwise that of 0408: a null entry writes the chunk without a vector, any other non-array entry raises invalid_embeddings,
+-- a vector of the wrong length raises embedding_profile_mismatch, and every refusal rolls the whole call back.
+-- Both functions stay SECURITY DEFINER and now run with an empty search_path and schema-qualified names. Server role only.
+-- Idempotent: CREATE OR REPLACE with the 0408 signatures, then guarded REVOKE and GRANT.
+
+BEGIN;
+
+CREATE OR REPLACE FUNCTION public.rag_write_chunks(
+  p_document_id uuid,
+  p_tenant_key text,
+  p_chunks jsonb,
+  p_embeddings jsonb,
+  p_final boolean,
+  p_total integer
+)
+RETURNS TABLE (chunks_written integer, chunks_deleted integer)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+#variable_conflict use_column
+DECLARE
+  legacy_profile constant text := 'openai-3-small-1536';
+  doc public.documents%ROWTYPE;
+  profile_key text;
+  profile_row public.embedding_profiles%ROWTYPE;
+  payload jsonb;
+  vectors jsonb;
+  host_name text;
+  chunk_count integer;
+  legacy_vectors jsonb;
+  written integer := 0;
+  deleted integer := 0;
+BEGIN
+  SELECT * INTO doc FROM public.documents d WHERE d.id = p_document_id AND d.tenant_key = p_tenant_key FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'tenant_mismatch' USING DETAIL = 'document not found in tenant';
+  END IF;
+  IF doc.status IN ('failed', 'deleted') THEN
+    RAISE EXCEPTION 'document_not_writable' USING DETAIL = 'status is ' || doc.status;
+  END IF;
+  IF p_chunks IS NULL OR jsonb_typeof(p_chunks) <> 'array' THEN
+    RAISE EXCEPTION 'invalid_chunks: p_chunks must be a JSON array';
+  END IF;
+  chunk_count := jsonb_array_length(p_chunks);
+  IF EXISTS (
+    SELECT 1 FROM jsonb_array_elements(p_chunks) AS e(value)
+    WHERE jsonb_typeof(e.value) <> 'object'
+       OR jsonb_typeof(e.value -> 'content') IS DISTINCT FROM 'string'
+       OR (e.value ? 'chunk_index' AND jsonb_typeof(e.value -> 'chunk_index') <> 'number')
+  ) THEN
+    RAISE EXCEPTION 'invalid_chunk: every chunk needs a string content and a numeric chunk_index when it has one';
+  END IF;
+  IF (SELECT count(DISTINCT COALESCE((e.value ->> 'chunk_index')::integer, (e.ord - 1)::integer))
+      FROM jsonb_array_elements(p_chunks) WITH ORDINALITY AS e(value, ord)) <> chunk_count THEN
+    RAISE EXCEPTION 'invalid_chunk: chunk_index values must be distinct';
+  END IF;
+  IF p_final AND (p_total IS NULL OR p_total < 0) THEN
+    RAISE EXCEPTION 'invalid_total: p_total is required with p_final';
+  END IF;
+
+  IF p_embeddings IS NOT NULL AND jsonb_typeof(p_embeddings) NOT IN ('object', 'null') THEN
+    RAISE EXCEPTION 'invalid_embeddings: p_embeddings must be a JSON object keyed by profile id';
+  END IF;
+  IF p_embeddings IS NOT NULL AND jsonb_typeof(p_embeddings) = 'object' THEN
+    FOR profile_key IN SELECT jsonb_object_keys(p_embeddings) LOOP
+      SELECT * INTO profile_row FROM public.embedding_profiles p WHERE p.id = profile_key;
+      IF NOT FOUND OR (profile_row.storage = 'legacy_column' AND profile_row.id <> legacy_profile) THEN
+        RAISE EXCEPTION 'embedding_profile_unsupported: %', profile_key;
+      END IF;
+      payload := p_embeddings -> profile_key;
+      IF jsonb_typeof(payload) = 'object' THEN
+        vectors := payload -> 'vectors';
+        IF jsonb_typeof(payload -> 'host') NOT IN ('string', 'null') THEN
+          RAISE EXCEPTION 'invalid_embeddings: host must be a string';
+        END IF;
+      ELSE
+        vectors := payload;
+      END IF;
+      IF COALESCE(CASE WHEN jsonb_typeof(vectors) = 'array' THEN jsonb_array_length(vectors) END, -1) <> chunk_count THEN
+        RAISE EXCEPTION 'embedding_count_mismatch: expected % vectors', chunk_count;
+      END IF;
+      IF EXISTS (SELECT 1 FROM jsonb_array_elements(vectors) AS v(value) WHERE jsonb_typeof(v.value) NOT IN ('array', 'null')) THEN
+        RAISE EXCEPTION 'invalid_embeddings: every vector must be a JSON array or null';
+      END IF;
+      IF EXISTS (
+        SELECT 1 FROM jsonb_array_elements(vectors) AS v(value)
+        WHERE CASE WHEN jsonb_typeof(v.value) = 'array' THEN jsonb_array_length(v.value) END <> profile_row.dims
+      ) THEN
+        RAISE EXCEPTION 'embedding_profile_mismatch: dims' USING ERRCODE = '22000';
+      END IF;
+      IF profile_row.id = legacy_profile THEN
+        legacy_vectors := vectors;
+      END IF;
+    END LOOP;
+  END IF;
+
+  -- A chunk whose text changed must not keep a vector made from the old text.
+  DELETE FROM public.chunk_embeddings ce
+  USING public.document_chunks c, jsonb_array_elements(p_chunks) WITH ORDINALITY AS e(value, ord)
+  WHERE ce.chunk_id = c.id
+    AND c.document_id = p_document_id
+    AND c.id = substr(encode(sha256(convert_to(
+          p_document_id::text || ':' || COALESCE((e.value ->> 'chunk_index')::integer, (e.ord - 1)::integer)::text, 'UTF8')), 'hex'), 1, 32)::uuid
+    AND c.content IS DISTINCT FROM (e.value ->> 'content');
+
+  WITH prepared AS (
+    SELECT
+      e.value AS spec,
+      (e.ord - 1)::integer AS position,
+      COALESCE((e.value ->> 'chunk_index')::integer, (e.ord - 1)::integer) AS chunk_index,
+      CASE WHEN legacy_vectors IS NOT NULL AND jsonb_typeof(legacy_vectors -> (e.ord - 1)::integer) = 'array'
+           THEN ((legacy_vectors -> (e.ord - 1)::integer)::text)::public.vector END AS embedding,
+      CASE WHEN jsonb_typeof(e.value -> 'section_path') = 'array'
+           THEN ARRAY(SELECT jsonb_array_elements_text(e.value -> 'section_path')) ELSE '{}'::text[] END AS section_path,
+      COALESCE(e.value ->> 'chunk_kind', 'text') AS chunk_kind,
+      COALESCE((e.value ->> 'embedding_text_version')::integer, 0) AS embedding_text_version,
+      (e.value ->> 'page_start')::integer AS page_start,
+      (e.value ->> 'page_end')::integer AS page_end,
+      e.value ->> 'content_hash' AS content_hash,
+      e.value ->> 'lexical_text' AS lexical_text
+    FROM jsonb_array_elements(p_chunks) WITH ORDINALITY AS e(value, ord)
+  )
+  INSERT INTO public.document_chunks AS dc (
+    id, document_id, content, embedding, chunk_index, metadata, organization_id, tenant_key, version, is_current, status,
+    doc_type, doc_date, language, source, page_start, page_end, section_path, content_hash, chunk_kind, parser_used,
+    embedding_text_version, lexical_text
+  )
+  SELECT
+    substr(encode(sha256(convert_to(p_document_id::text || ':' || p.chunk_index::text, 'UTF8')), 'hex'), 1, 32)::uuid,
+    p_document_id,
+    p.spec ->> 'content',
+    p.embedding,
+    p.chunk_index,
+    (CASE WHEN jsonb_typeof(p.spec -> 'metadata') = 'object' THEN p.spec -> 'metadata' ELSE '{}'::jsonb END)
+      || jsonb_build_object(
+        'chunk_index', p.chunk_index,
+        'section_path', to_jsonb(p.section_path),
+        'doc_type', doc.doc_type,
+        'language', doc.language,
+        'content_hash', p.content_hash,
+        'chunk_kind', p.chunk_kind,
+        'parser_used', doc.parser_used,
+        'embedding_text_version', p.embedding_text_version)
+      || CASE WHEN p.embedding IS NOT NULL
+              THEN jsonb_build_object('embedding_model', 'text-embedding-3-small', 'embedding_dims', 1536) ELSE '{}'::jsonb END
+      || jsonb_strip_nulls(jsonb_build_object('doc_date', doc.doc_date, 'source', doc.source, 'page_start', p.page_start, 'page_end', p.page_end)),
+    doc.organization_id,
+    doc.tenant_key,
+    doc.version,
+    doc.is_current,
+    doc.status,
+    doc.doc_type,
+    doc.doc_date,
+    doc.language,
+    doc.source,
+    p.page_start,
+    p.page_end,
+    p.section_path,
+    p.content_hash,
+    p.chunk_kind,
+    doc.parser_used,
+    p.embedding_text_version,
+    p.lexical_text
+  FROM prepared p
+  ON CONFLICT (id) DO UPDATE SET
+    content = EXCLUDED.content,
+    embedding = EXCLUDED.embedding,
+    chunk_index = EXCLUDED.chunk_index,
+    metadata = EXCLUDED.metadata,
+    organization_id = EXCLUDED.organization_id,
+    tenant_key = EXCLUDED.tenant_key,
+    version = EXCLUDED.version,
+    is_current = EXCLUDED.is_current,
+    status = EXCLUDED.status,
+    doc_type = EXCLUDED.doc_type,
+    doc_date = EXCLUDED.doc_date,
+    language = EXCLUDED.language,
+    source = EXCLUDED.source,
+    page_start = EXCLUDED.page_start,
+    page_end = EXCLUDED.page_end,
+    section_path = EXCLUDED.section_path,
+    content_hash = EXCLUDED.content_hash,
+    chunk_kind = EXCLUDED.chunk_kind,
+    parser_used = EXCLUDED.parser_used,
+    embedding_text_version = EXCLUDED.embedding_text_version,
+    lexical_text = EXCLUDED.lexical_text
+  WHERE dc.document_id = EXCLUDED.document_id;
+  GET DIAGNOSTICS written = ROW_COUNT;
+
+  IF p_embeddings IS NOT NULL AND jsonb_typeof(p_embeddings) = 'object' THEN
+    FOR profile_key IN SELECT jsonb_object_keys(p_embeddings) LOOP
+      SELECT * INTO profile_row FROM public.embedding_profiles p WHERE p.id = profile_key;
+      payload := p_embeddings -> profile_key;
+      IF jsonb_typeof(payload) = 'object' THEN
+        vectors := payload -> 'vectors';
+        host_name := payload ->> 'host';
+      ELSE
+        vectors := payload;
+        host_name := NULL;
+      END IF;
+
+      IF profile_row.storage <> 'legacy_column' THEN
+        INSERT INTO public.chunk_embeddings AS ce (chunk_id, profile_id, tenant_key, embedding, embedding_model, dims, embedding_host)
+        SELECT
+          substr(encode(sha256(convert_to(
+            p_document_id::text || ':' || COALESCE((e.value ->> 'chunk_index')::integer, (e.ord - 1)::integer)::text, 'UTF8')), 'hex'), 1, 32)::uuid,
+          profile_row.id,
+          doc.tenant_key,
+          (v.value::text)::public.halfvec,
+          profile_row.model,
+          profile_row.dims,
+          host_name
+        FROM jsonb_array_elements(p_chunks) WITH ORDINALITY AS e(value, ord)
+        JOIN jsonb_array_elements(vectors) WITH ORDINALITY AS v(value, ord) ON v.ord = e.ord
+        WHERE jsonb_typeof(v.value) = 'array'
+        ON CONFLICT (chunk_id, profile_id) DO UPDATE SET
+          embedding = EXCLUDED.embedding,
+          embedding_model = EXCLUDED.embedding_model,
+          dims = EXCLUDED.dims,
+          embedding_host = EXCLUDED.embedding_host,
+          embedded_at = now();
+      END IF;
+
+      DELETE FROM public.embedding_backfill_gaps g
+      USING jsonb_array_elements(p_chunks) WITH ORDINALITY AS e(value, ord),
+            jsonb_array_elements(vectors) WITH ORDINALITY AS v(value, ord)
+      WHERE v.ord = e.ord
+        AND jsonb_typeof(v.value) = 'array'
+        AND g.profile_id = profile_row.id
+        AND g.chunk_id = substr(encode(sha256(convert_to(
+              p_document_id::text || ':' || COALESCE((e.value ->> 'chunk_index')::integer, (e.ord - 1)::integer)::text, 'UTF8')), 'hex'), 1, 32)::uuid;
+    END LOOP;
+  END IF;
+
+  IF p_final THEN
+    DELETE FROM public.document_chunks c WHERE c.document_id = p_document_id AND c.chunking_profile_id = 'legacy' AND c.chunk_index >= p_total;
+    GET DIAGNOSTICS deleted = ROW_COUNT;
+  END IF;
+
+  RETURN QUERY SELECT written, deleted;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_write_profile_chunks(
+  p_document_id uuid,
+  p_tenant_key text,
+  p_profile_id text,
+  p_parents jsonb,
+  p_children jsonb,
+  p_embeddings jsonb,
+  p_final boolean DEFAULT true,
+  p_total integer DEFAULT NULL
+)
+RETURNS TABLE (parents_written integer, children_written integer, parents_deleted integer, children_deleted integer)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+#variable_conflict use_column
+DECLARE
+  legacy_profile constant text := 'openai-3-small-1536';
+  doc public.documents%ROWTYPE;
+  chunking public.chunking_profiles%ROWTYPE;
+  parents jsonb := COALESCE(p_parents, '[]'::jsonb);
+  profile_key text;
+  profile_row public.embedding_profiles%ROWTYPE;
+  payload jsonb;
+  vectors jsonb;
+  host_name text;
+  parent_count integer;
+  child_count integer;
+  legacy_vectors jsonb;
+  total integer;
+  parents_in integer := 0;
+  children_in integer := 0;
+  parents_out integer := 0;
+  children_out integer := 0;
+BEGIN
+  SELECT * INTO doc FROM public.documents d WHERE d.id = p_document_id AND d.tenant_key = p_tenant_key FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'tenant_mismatch' USING DETAIL = 'document not found in tenant';
+  END IF;
+  IF doc.status IN ('failed', 'deleted') THEN
+    RAISE EXCEPTION 'document_not_writable' USING DETAIL = 'status is ' || doc.status;
+  END IF;
+  IF p_profile_id IS NULL OR p_profile_id = 'legacy' THEN
+    RAISE EXCEPTION 'invalid_profile' USING DETAIL = 'legacy chunks are written by rag_write_chunks';
+  END IF;
+  SELECT * INTO chunking FROM public.chunking_profiles cp WHERE cp.id = p_profile_id AND cp.doc_type = doc.doc_type AND cp.status <> 'retired';
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'chunking_profile_unsupported' USING DETAIL = 'no live profile of this id for the document type';
+  END IF;
+
+  IF jsonb_typeof(parents) <> 'array' THEN
+    RAISE EXCEPTION 'invalid_parents: p_parents must be a JSON array';
+  END IF;
+  IF p_children IS NULL OR jsonb_typeof(p_children) <> 'array' THEN
+    RAISE EXCEPTION 'invalid_chunks: p_children must be a JSON array';
+  END IF;
+  parent_count := jsonb_array_length(parents);
+  child_count := jsonb_array_length(p_children);
+  IF EXISTS (
+    SELECT 1 FROM jsonb_array_elements(parents) AS e(value)
+    WHERE jsonb_typeof(e.value) <> 'object'
+       OR jsonb_typeof(e.value -> 'content') IS DISTINCT FROM 'string'
+       OR jsonb_typeof(e.value -> 'parent_index') IS DISTINCT FROM 'number'
+       OR jsonb_typeof(e.value -> 'token_count') IS DISTINCT FROM 'number'
+       OR (e.value ? 'section_path' AND jsonb_typeof(e.value -> 'section_path') <> 'array')
+  ) THEN
+    RAISE EXCEPTION 'invalid_parents: every parent needs a string content, a numeric parent_index and a numeric token_count';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM jsonb_array_elements(parents) AS e(value)
+    WHERE (e.value ->> 'parent_index') !~ '^[0-9]{1,9}$' OR (e.value ->> 'token_count') !~ '^[0-9]{1,9}$'
+  ) OR (SELECT count(DISTINCT (e.value ->> 'parent_index')::integer) FROM jsonb_array_elements(parents) AS e(value)) <> parent_count THEN
+    RAISE EXCEPTION 'invalid_parents: parent_index values must be distinct non-negative integers and token_count a non-negative integer';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM jsonb_array_elements(p_children) AS e(value)
+    WHERE jsonb_typeof(e.value) <> 'object'
+       OR jsonb_typeof(e.value -> 'content') IS DISTINCT FROM 'string'
+       OR (e.value ? 'chunk_index' AND jsonb_typeof(e.value -> 'chunk_index') <> 'number')
+       OR (e.value ? 'parent_index' AND jsonb_typeof(e.value -> 'parent_index') NOT IN ('number', 'null'))
+  ) THEN
+    RAISE EXCEPTION 'invalid_chunk: every child needs a string content, and a numeric chunk_index and parent_index when it has them';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM jsonb_array_elements(p_children) WITH ORDINALITY AS e(value, ord)
+    WHERE COALESCE(e.value ->> 'chunk_index', (e.ord - 1)::text) !~ '^[0-9]{1,9}$'
+       OR (jsonb_typeof(e.value -> 'parent_index') = 'number' AND (e.value ->> 'parent_index') !~ '^[0-9]{1,9}$')
+  ) OR (SELECT count(DISTINCT COALESCE((e.value ->> 'chunk_index')::integer, (e.ord - 1)::integer))
+        FROM jsonb_array_elements(p_children) WITH ORDINALITY AS e(value, ord)) <> child_count THEN
+    RAISE EXCEPTION 'invalid_chunk: chunk_index values must be distinct non-negative integers';
+  END IF;
+  IF p_final AND p_total IS NOT NULL AND p_total < 0 THEN
+    RAISE EXCEPTION 'invalid_total: p_total must not be negative';
+  END IF;
+
+  IF p_embeddings IS NOT NULL AND jsonb_typeof(p_embeddings) NOT IN ('object', 'null') THEN
+    RAISE EXCEPTION 'invalid_embeddings: p_embeddings must be a JSON object keyed by profile id';
+  END IF;
+  IF p_embeddings IS NOT NULL AND jsonb_typeof(p_embeddings) = 'object' THEN
+    FOR profile_key IN SELECT jsonb_object_keys(p_embeddings) LOOP
+      SELECT * INTO profile_row FROM public.embedding_profiles p WHERE p.id = profile_key;
+      IF NOT FOUND OR (profile_row.storage = 'legacy_column' AND profile_row.id <> legacy_profile) THEN
+        RAISE EXCEPTION 'embedding_profile_unsupported: %', profile_key;
+      END IF;
+      payload := p_embeddings -> profile_key;
+      IF jsonb_typeof(payload) = 'object' THEN
+        vectors := payload -> 'vectors';
+        IF jsonb_typeof(payload -> 'host') NOT IN ('string', 'null') THEN
+          RAISE EXCEPTION 'invalid_embeddings: host must be a string';
+        END IF;
+      ELSE
+        vectors := payload;
+      END IF;
+      IF COALESCE(CASE WHEN jsonb_typeof(vectors) = 'array' THEN jsonb_array_length(vectors) END, -1) <> child_count THEN
+        RAISE EXCEPTION 'embedding_count_mismatch: expected % vectors', child_count;
+      END IF;
+      IF EXISTS (SELECT 1 FROM jsonb_array_elements(vectors) AS v(value) WHERE jsonb_typeof(v.value) NOT IN ('array', 'null')) THEN
+        RAISE EXCEPTION 'invalid_embeddings: every vector must be a JSON array or null';
+      END IF;
+      IF EXISTS (
+        SELECT 1 FROM jsonb_array_elements(vectors) AS v(value)
+        WHERE CASE WHEN jsonb_typeof(v.value) = 'array' THEN jsonb_array_length(v.value) END <> profile_row.dims
+      ) THEN
+        RAISE EXCEPTION 'embedding_profile_mismatch: dims' USING ERRCODE = '22000';
+      END IF;
+      IF profile_row.id = legacy_profile THEN
+        legacy_vectors := vectors;
+      END IF;
+    END LOOP;
+  END IF;
+
+  INSERT INTO public.document_parents AS dp (
+    id, document_id, tenant_key, organization_id, version, is_current, chunking_profile_id, section_path, content, token_count, parent_index
+  )
+  SELECT
+    substr(encode(sha256(convert_to(p_document_id::text || ':' || p_profile_id || ':parent:' || (e.value ->> 'parent_index'), 'UTF8')), 'hex'), 1, 32)::uuid,
+    p_document_id,
+    doc.tenant_key,
+    doc.organization_id,
+    doc.version,
+    true,
+    p_profile_id,
+    CASE WHEN jsonb_typeof(e.value -> 'section_path') = 'array'
+         THEN ARRAY(SELECT jsonb_array_elements_text(e.value -> 'section_path')) ELSE '{}'::text[] END,
+    e.value ->> 'content',
+    (e.value ->> 'token_count')::integer,
+    (e.value ->> 'parent_index')::integer
+  FROM jsonb_array_elements(parents) AS e(value)
+  ON CONFLICT (id) DO UPDATE SET
+    tenant_key = EXCLUDED.tenant_key,
+    organization_id = EXCLUDED.organization_id,
+    version = EXCLUDED.version,
+    is_current = EXCLUDED.is_current,
+    chunking_profile_id = EXCLUDED.chunking_profile_id,
+    section_path = EXCLUDED.section_path,
+    content = EXCLUDED.content,
+    token_count = EXCLUDED.token_count,
+    parent_index = EXCLUDED.parent_index
+  WHERE dp.document_id = EXCLUDED.document_id;
+  GET DIAGNOSTICS parents_in = ROW_COUNT;
+
+  IF EXISTS (
+    SELECT 1 FROM jsonb_array_elements(p_children) AS e(value)
+    WHERE jsonb_typeof(e.value -> 'parent_index') = 'number'
+      AND NOT EXISTS (
+        SELECT 1 FROM public.document_parents dp
+        WHERE dp.id = substr(encode(sha256(convert_to(p_document_id::text || ':' || p_profile_id || ':parent:' || (e.value ->> 'parent_index'), 'UTF8')), 'hex'), 1, 32)::uuid
+          AND dp.document_id = p_document_id
+          AND dp.chunking_profile_id = p_profile_id
+      )
+  ) THEN
+    RAISE EXCEPTION 'invalid_chunk: parent_index names a parent that was not written';
+  END IF;
+
+  -- A child whose text changed must not keep a vector made from the old text.
+  DELETE FROM public.chunk_embeddings ce
+  USING public.document_chunks c, jsonb_array_elements(p_children) WITH ORDINALITY AS e(value, ord)
+  WHERE ce.chunk_id = c.id
+    AND c.document_id = p_document_id
+    AND c.chunking_profile_id = p_profile_id
+    AND c.id = substr(encode(sha256(convert_to(
+          p_document_id::text || ':' || p_profile_id || ':child:' || COALESCE((e.value ->> 'chunk_index')::integer, (e.ord - 1)::integer)::text, 'UTF8')), 'hex'), 1, 32)::uuid
+    AND c.content IS DISTINCT FROM (e.value ->> 'content');
+
+  WITH prepared AS (
+    SELECT
+      e.value AS spec,
+      COALESCE((e.value ->> 'chunk_index')::integer, (e.ord - 1)::integer) AS chunk_index,
+      CASE WHEN jsonb_typeof(e.value -> 'parent_index') = 'number'
+           THEN substr(encode(sha256(convert_to(p_document_id::text || ':' || p_profile_id || ':parent:' || (e.value ->> 'parent_index'), 'UTF8')), 'hex'), 1, 32)::uuid
+      END AS parent_id,
+      CASE WHEN legacy_vectors IS NOT NULL AND jsonb_typeof(legacy_vectors -> (e.ord - 1)::integer) = 'array'
+           THEN ((legacy_vectors -> (e.ord - 1)::integer)::text)::public.vector END AS embedding,
+      CASE WHEN jsonb_typeof(e.value -> 'section_path') = 'array'
+           THEN ARRAY(SELECT jsonb_array_elements_text(e.value -> 'section_path')) ELSE '{}'::text[] END AS section_path,
+      COALESCE(e.value ->> 'chunk_kind', 'text') AS chunk_kind,
+      COALESCE((e.value ->> 'embedding_text_version')::integer, 0) AS embedding_text_version,
+      (e.value ->> 'page_start')::integer AS page_start,
+      (e.value ->> 'page_end')::integer AS page_end,
+      e.value ->> 'content_hash' AS content_hash,
+      e.value ->> 'lexical_text' AS lexical_text
+    FROM jsonb_array_elements(p_children) WITH ORDINALITY AS e(value, ord)
+  )
+  INSERT INTO public.document_chunks AS dc (
+    id, document_id, content, embedding, chunk_index, metadata, organization_id, tenant_key, version, is_current, status,
+    doc_type, doc_date, language, source, page_start, page_end, section_path, content_hash, chunk_kind, parser_used,
+    embedding_text_version, lexical_text, parent_id, chunking_profile_id
+  )
+  SELECT
+    substr(encode(sha256(convert_to(p_document_id::text || ':' || p_profile_id || ':child:' || p.chunk_index::text, 'UTF8')), 'hex'), 1, 32)::uuid,
+    p_document_id,
+    p.spec ->> 'content',
+    p.embedding,
+    p.chunk_index,
+    (CASE WHEN jsonb_typeof(p.spec -> 'metadata') = 'object' THEN p.spec -> 'metadata' ELSE '{}'::jsonb END)
+      || jsonb_build_object(
+        'chunk_index', p.chunk_index,
+        'section_path', to_jsonb(p.section_path),
+        'doc_type', doc.doc_type,
+        'language', doc.language,
+        'content_hash', p.content_hash,
+        'chunk_kind', p.chunk_kind,
+        'parser_used', doc.parser_used,
+        'embedding_text_version', p.embedding_text_version,
+        'chunking_profile_id', p_profile_id)
+      || CASE WHEN p.embedding IS NOT NULL
+              THEN jsonb_build_object('embedding_model', 'text-embedding-3-small', 'embedding_dims', 1536) ELSE '{}'::jsonb END
+      || jsonb_strip_nulls(jsonb_build_object('doc_date', doc.doc_date, 'source', doc.source, 'page_start', p.page_start, 'page_end', p.page_end)),
+    doc.organization_id,
+    doc.tenant_key,
+    doc.version,
+    doc.is_current,
+    doc.status,
+    doc.doc_type,
+    doc.doc_date,
+    doc.language,
+    doc.source,
+    p.page_start,
+    p.page_end,
+    p.section_path,
+    p.content_hash,
+    p.chunk_kind,
+    doc.parser_used,
+    p.embedding_text_version,
+    p.lexical_text,
+    p.parent_id,
+    p_profile_id
+  FROM prepared p
+  ON CONFLICT (id) DO UPDATE SET
+    content = EXCLUDED.content,
+    embedding = EXCLUDED.embedding,
+    chunk_index = EXCLUDED.chunk_index,
+    metadata = EXCLUDED.metadata,
+    organization_id = EXCLUDED.organization_id,
+    tenant_key = EXCLUDED.tenant_key,
+    version = EXCLUDED.version,
+    is_current = EXCLUDED.is_current,
+    status = EXCLUDED.status,
+    doc_type = EXCLUDED.doc_type,
+    doc_date = EXCLUDED.doc_date,
+    language = EXCLUDED.language,
+    source = EXCLUDED.source,
+    page_start = EXCLUDED.page_start,
+    page_end = EXCLUDED.page_end,
+    section_path = EXCLUDED.section_path,
+    content_hash = EXCLUDED.content_hash,
+    chunk_kind = EXCLUDED.chunk_kind,
+    parser_used = EXCLUDED.parser_used,
+    embedding_text_version = EXCLUDED.embedding_text_version,
+    lexical_text = EXCLUDED.lexical_text,
+    parent_id = EXCLUDED.parent_id,
+    chunking_profile_id = EXCLUDED.chunking_profile_id
+  WHERE dc.document_id = EXCLUDED.document_id;
+  GET DIAGNOSTICS children_in = ROW_COUNT;
+
+  IF p_embeddings IS NOT NULL AND jsonb_typeof(p_embeddings) = 'object' THEN
+    FOR profile_key IN SELECT jsonb_object_keys(p_embeddings) LOOP
+      SELECT * INTO profile_row FROM public.embedding_profiles p WHERE p.id = profile_key;
+      payload := p_embeddings -> profile_key;
+      IF jsonb_typeof(payload) = 'object' THEN
+        vectors := payload -> 'vectors';
+        host_name := payload ->> 'host';
+      ELSE
+        vectors := payload;
+        host_name := NULL;
+      END IF;
+
+      IF profile_row.storage <> 'legacy_column' THEN
+        INSERT INTO public.chunk_embeddings AS ce (chunk_id, profile_id, tenant_key, embedding, embedding_model, dims, embedding_host)
+        SELECT
+          substr(encode(sha256(convert_to(
+            p_document_id::text || ':' || p_profile_id || ':child:' || COALESCE((e.value ->> 'chunk_index')::integer, (e.ord - 1)::integer)::text, 'UTF8')), 'hex'), 1, 32)::uuid,
+          profile_row.id,
+          doc.tenant_key,
+          (v.value::text)::public.halfvec,
+          profile_row.model,
+          profile_row.dims,
+          host_name
+        FROM jsonb_array_elements(p_children) WITH ORDINALITY AS e(value, ord)
+        JOIN jsonb_array_elements(vectors) WITH ORDINALITY AS v(value, ord) ON v.ord = e.ord
+        WHERE jsonb_typeof(v.value) = 'array'
+        ON CONFLICT (chunk_id, profile_id) DO UPDATE SET
+          embedding = EXCLUDED.embedding,
+          embedding_model = EXCLUDED.embedding_model,
+          dims = EXCLUDED.dims,
+          embedding_host = EXCLUDED.embedding_host,
+          embedded_at = now();
+      END IF;
+
+      DELETE FROM public.embedding_backfill_gaps g
+      USING jsonb_array_elements(p_children) WITH ORDINALITY AS e(value, ord),
+            jsonb_array_elements(vectors) WITH ORDINALITY AS v(value, ord)
+      WHERE v.ord = e.ord
+        AND jsonb_typeof(v.value) = 'array'
+        AND g.profile_id = profile_row.id
+        AND g.chunk_id = substr(encode(sha256(convert_to(
+              p_document_id::text || ':' || p_profile_id || ':child:' || COALESCE((e.value ->> 'chunk_index')::integer, (e.ord - 1)::integer)::text, 'UTF8')), 'hex'), 1, 32)::uuid;
+    END LOOP;
+  END IF;
+
+  IF p_final THEN
+    total := COALESCE(p_total, child_count);
+    DELETE FROM public.document_chunks c
+    WHERE c.document_id = p_document_id AND c.chunking_profile_id = p_profile_id AND c.chunk_index >= total;
+    GET DIAGNOSTICS children_out = ROW_COUNT;
+    DELETE FROM public.document_parents dp
+    WHERE dp.document_id = p_document_id
+      AND dp.chunking_profile_id = p_profile_id
+      AND NOT EXISTS (SELECT 1 FROM public.document_chunks c WHERE c.parent_id = dp.id);
+    GET DIAGNOSTICS parents_out = ROW_COUNT;
+  END IF;
+
+  RETURN QUERY SELECT parents_in, children_in, parents_out, children_out;
+END
+$$;
+
+DO $write_chunks_null_acl$
+BEGIN
+  IF to_regprocedure('public.rag_write_chunks(uuid, text, jsonb, jsonb, boolean, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_write_chunks(uuid, text, jsonb, jsonb, boolean, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_write_chunks(uuid, text, jsonb, jsonb, boolean, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_write_profile_chunks(uuid, text, text, jsonb, jsonb, jsonb, boolean, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_write_profile_chunks(uuid, text, text, jsonb, jsonb, jsonb, boolean, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_write_profile_chunks(uuid, text, text, jsonb, jsonb, jsonb, boolean, integer) TO service_role;
+  END IF;
+END
+$write_chunks_null_acl$;
+
+COMMIT;
