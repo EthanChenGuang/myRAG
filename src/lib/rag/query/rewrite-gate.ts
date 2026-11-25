@@ -1,8 +1,9 @@
 import lexicon from './rewrite-gate.lexicon.json';
-import { countCjkChars, detectGateLanguage, type GateLang } from './gate-language';
+import type { Language } from '@/lib/rag/lang/registry';
+import { countCjkChars, detectGateLanguage } from './gate-language';
 import { scanProtected } from './protected';
 
-export type Lang = GateLang;
+export type Lang = Language;
 export type Transform = 'condense_history' | 'normalize_dates' | 'decompose' | 'expand' | 'translate';
 
 export const GATE_RULE_IDS = [
@@ -143,7 +144,7 @@ type FixedEntry = { term: string; unit: string; offset: number | null };
 const FIXED_RELATIVE = new Map<string, FixedEntry>();
 const N_RELATIVE: { regex: RegExp; entry: { term: string; unit: string } }[] = [];
 
-for (const lang of ['zh', 'en', 'it'] as const) {
+for (const lang of Object.keys(lexicon.relative_time) as (keyof typeof lexicon.relative_time)[]) {
   for (const entry of lexicon.relative_time[lang] as readonly RelativeEntry[]) {
     if ('n_placeholder' in entry && entry.n_placeholder) continue;
     const offset = 'offset' in entry ? (entry.offset ?? null) : null;

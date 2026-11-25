@@ -1,6 +1,6 @@
 import type { Profile } from './types';
 import { getLanguageSettings } from './lang/settings';
-import { LANGUAGES_NOT_CONFIGURED, resolvePipelines, type LanguagesNotConfigured } from './lang/resolve';
+import { LANGUAGES_NOT_CONFIGURED, resolvePipelines, type LanguagesNotConfigured, type PipelineSource } from './lang/resolve';
 
 export const CORE_STAGES = ['embed', 'search', 'fuse'] as const;
 export const OPTIONAL_STAGES = [
@@ -233,7 +233,8 @@ export interface QueryLayerConfig {
   framework: QueryFramework;
   model: string;
   transforms: QueryTransformSwitches;
-  translateDisabledProfiles: Profile[];
+  /** Embedding-profile ids (D-24), not pipeline profiles. */
+  translateDisabledProfiles: string[];
   voiceTransforms: VoiceTransform[];
 }
 
@@ -251,6 +252,11 @@ export const MAX_SEMANTIC_CACHE_DISTANCE = 0.2;
 
 export interface RagEnvInput {
   RAG_PIPELINE?: string;
+  /**
+   * D-07: whether RAG_PIPELINE is set and non-empty in the process environment. The deps reader fills it from the raw process value,
+   * because RAG_PIPELINE above may carry the env.ts fallback; absent, the source follows RAG_PIPELINE itself.
+   */
+  pipelineSourceHint?: PipelineSource;
   RAG_DISABLED_STAGES?: string;
   RAG_STAGE_TIMEOUTS?: string;
   RAG_EXACT_ID_LOOKUP?: string;
@@ -302,6 +308,10 @@ export interface RagEnvInput {
 
 export interface RagConfig {
   pipeline: 'legacy' | 'v2';
+  /** D-07: 'explicit' when RAG_PIPELINE is set and non-empty, 'default' when the shipped default applies. */
+  pipelineSource: PipelineSource;
+  /** D-02/D-24: a defaulted v2 that the language gate turned into legacy (the languages are not chosen). */
+  pipelineServedLegacy: boolean;
   /** D-02: an explicit RAG_PIPELINE=v2 without chosen languages; retrieval answers status error with this reason. */
   pipelineBlocked: LanguagesNotConfigured | null;
   /** D-03: exactly one supported language; the translate stage and lexical translation are then no-ops. */
@@ -351,9 +361,36 @@ function parseList(value: string | undefined): string[] {
 /** The pipeline an unset RAG_PIPELINE runs (the shipped default). */
 export const DEFAULT_PIPELINE: 'legacy' | 'v2' = 'legacy';
 
+let defaultPipelineOverride: 'legacy' | 'v2' | null = null;
+
+/** The shipped default in force: DEFAULT_PIPELINE, or the test setter's value. */
+export function shippedDefaultPipeline(): 'legacy' | 'v2' {
+  return defaultPipelineOverride ?? DEFAULT_PIPELINE;
+}
+
+/** Test-only: change the shipped default; null restores DEFAULT_PIPELINE. */
+export function setDefaultPipelineForTests(next: 'legacy' | 'v2' | null): void {
+  defaultPipelineOverride = next;
+  memo.clear();
+}
+
+/** D-07: an empty or whitespace-only value counts as unset. */
+export function pipelineSourceOf(raw: string | undefined): PipelineSource {
+  return (raw ?? '').trim() === '' ? 'default' : 'explicit';
+}
+
+function pipelineSource(env: RagEnvInput): PipelineSource {
+  return env.pipelineSourceHint ?? pipelineSourceOf(env.RAG_PIPELINE);
+}
+
+/** The value the pipeline parsers read: empty when the source is default, so the env.ts fallback never counts as a choice. */
+function rawPipeline(env: RagEnvInput): string {
+  return pipelineSource(env) === 'default' ? '' : (env.RAG_PIPELINE ?? '');
+}
+
 function parsePipeline(raw: string | undefined, warnings: string[]): 'legacy' | 'v2' {
   const value = (raw ?? '').trim();
-  if (value === '') return DEFAULT_PIPELINE;
+  if (value === '') return shippedDefaultPipeline();
   if (value === 'legacy') return 'legacy';
   if (value === 'v2') return 'v2';
   problem(warnings, `pipeline:${value}`, 'Unsupported RAG_PIPELINE value, running legacy', { value });
@@ -654,19 +691,21 @@ function parseVoiceTransforms(raw: string | undefined, warnings: string[]): Voic
   return kept;
 }
 
-function parseTranslateDisabledProfiles(raw: string | undefined, warnings: string[]): Profile[] {
-  const out: Profile[] = [];
-  let unknown = 0;
+const EMBEDDING_PROFILE_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
+
+/** Embedding-profile ids (D-24) whose multilingual embedding makes query translation unnecessary. */
+function parseTranslateDisabledProfiles(raw: string | undefined, warnings: string[]): string[] {
+  const out: string[] = [];
+  let invalid = 0;
   for (const name of parseList(raw)) {
-    const normalised = name.toLowerCase();
-    if (isProfile(normalised)) {
-      if (!out.includes(normalised)) out.push(normalised);
+    if (EMBEDDING_PROFILE_ID_PATTERN.test(name)) {
+      if (!out.includes(name)) out.push(name);
     } else {
-      unknown += 1;
+      invalid += 1;
     }
   }
-  if (unknown > 0) {
-    problem(warnings, `translate-disabled-profiles:${raw}`, 'Unknown profile in RAG_QUERY_TRANSLATE_DISABLED_PROFILES, entry ignored', { unknown }, '[Query Layer]');
+  if (invalid > 0) {
+    problem(warnings, `translate-disabled-profiles:${raw}`, 'Malformed embedding-profile id in RAG_QUERY_TRANSLATE_DISABLED_PROFILES, entry ignored', { invalid }, '[Query Layer]');
   }
   return out;
 }
@@ -779,6 +818,8 @@ function applyV2DisabledStages(v2: V2Config, disabled: Set<StageName>): void {
 function memoKey(env: RagEnvInput): string {
   return JSON.stringify([
     env.RAG_PIPELINE ?? '',
+    pipelineSource(env),
+    shippedDefaultPipeline(),
     env.RAG_DISABLED_STAGES ?? '',
     env.RAG_STAGE_TIMEOUTS ?? '',
     env.RAG_EXACT_ID_LOOKUP ?? '',
@@ -837,13 +878,14 @@ interface LanguageGate {
 }
 
 const NO_LANGUAGE_GATE: LanguageGate = { blocked: null, servedLegacy: false, monolingual: false };
-const SHIPPED_DEFAULTS = { retrieval: DEFAULT_PIPELINE, ingest: 'legacy' } as const;
 
 /** D-02: a legacy pipeline (set or defaulted) keeps today's path and never reads the language settings. */
 function languageGate(env: RagEnvInput): LanguageGate {
-  const value = (env.RAG_PIPELINE ?? '').trim();
-  if (value === 'legacy' || (value === '' && DEFAULT_PIPELINE === 'legacy')) return NO_LANGUAGE_GATE;
-  const resolved = resolvePipelines({ RAG_PIPELINE: env.RAG_PIPELINE, RAG_INGEST_PIPELINE: 'legacy' }, SHIPPED_DEFAULTS, getLanguageSettings);
+  const raw = rawPipeline(env);
+  const value = raw.trim();
+  const shipped = shippedDefaultPipeline();
+  if (value === 'legacy' || (value === '' && shipped === 'legacy')) return NO_LANGUAGE_GATE;
+  const resolved = resolvePipelines({ RAG_PIPELINE: raw, RAG_INGEST_PIPELINE: 'legacy' }, { retrieval: shipped, ingest: 'legacy' }, getLanguageSettings);
   if (!resolved.languagesRead) return NO_LANGUAGE_GATE;
   return {
     blocked: resolved.retrieval.pipeline === LANGUAGES_NOT_CONFIGURED ? LANGUAGES_NOT_CONFIGURED : null,
@@ -859,7 +901,7 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
   if (cached) return cached;
 
   const warnings: string[] = [];
-  const pipeline = gate.servedLegacy ? 'legacy' : parsePipeline(env.RAG_PIPELINE, warnings);
+  const pipeline = gate.servedLegacy ? 'legacy' : parsePipeline(rawPipeline(env), warnings);
   const disabledStages = parseDisabled(env.RAG_DISABLED_STAGES, warnings);
   const overrideByProfile = parseTimeouts(env.RAG_STAGE_TIMEOUTS, warnings);
   const queryLayer = parseQueryLayer(env, pipeline, warnings);
@@ -905,6 +947,8 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
 
   const config: RagConfig = {
     pipeline,
+    pipelineSource: pipelineSource(env),
+    pipelineServedLegacy: gate.servedLegacy,
     pipelineBlocked: gate.blocked,
     monolingual: gate.monolingual,
     disabledStages,

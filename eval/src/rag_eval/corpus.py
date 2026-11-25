@@ -5,9 +5,11 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from rag_sidecar.contracts.languages import LANGUAGE_CODES
+
 from rag_eval.paths import resolve_cli_path
 
-CORPUS_LANGUAGES = ("zh", "en", "it")
+CORPUS_LANGUAGES: tuple[str, ...] = LANGUAGE_CODES
 DEFAULT_CREATED_AT = "2025-01-15T00:00:00.000Z"
 CHUNK_MARKER = "<!-- chunk -->"
 CORPUS_DOC_TYPES = frozenset(

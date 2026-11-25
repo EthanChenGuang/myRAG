@@ -1,0 +1,39 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "reasons": {
+      "items": {
+        "enum": [
+          "wrong",
+          "incomplete",
+          "not_relevant"
+        ],
+        "type": "string"
+      },
+      "maxItems": 3,
+      "title": "Reasons",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "token": {
+      "maxLength": 4096,
+      "minLength": 1,
+      "title": "Token",
+      "type": "string"
+    },
+    "vote": {
+      "enum": [
+        "helpful",
+        "not_helpful"
+      ],
+      "title": "Vote",
+      "type": "string"
+    }
+  },
+  "required": [
+    "token",
+    "vote"
+  ],
+  "title": "EmbedFeedbackRequest",
+  "type": "object"
+}

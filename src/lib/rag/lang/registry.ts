@@ -1,9 +1,11 @@
 import type { z } from 'zod/v3';
-import { LanguageRegistrySchema } from '@/lib/rag-eval/contracts.generated';
+import { LanguageRegistrySchema, type LanguageSettings } from '@/lib/rag-eval/contracts.generated';
 import rawRegistry from '../../../../config/rag/language-packs.json';
 
 export type LanguageRegistry = z.infer<typeof LanguageRegistrySchema>;
 export type LanguagePack = LanguageRegistry['packs'][number];
+/** The generated language code type (D-06): the registry codes as exported into the contracts. */
+export type Language = NonNullable<LanguageSettings['languages']>[number];
 
 /** D-04 completeness parts, in the order rag_sidecar.contracts.languages.COMPLETENESS_PARTS lists them. */
 export const COMPLETENESS_PARTS = [

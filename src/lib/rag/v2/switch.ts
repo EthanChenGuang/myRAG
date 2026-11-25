@@ -1,6 +1,6 @@
-import { loadRagConfig } from '../config';
-import { getRagDeps } from '../deps';
+import { resolveEffectivePipeline } from './readiness';
 
+/** Whether requests are served by v2 now: false after either fallback of a defaulted v2 (D-07, D-24). */
 export function isV2Pipeline(): boolean {
-  return loadRagConfig(getRagDeps().ragEnv()).pipeline === 'v2';
+  return resolveEffectivePipeline().pipeline !== 'legacy';
 }

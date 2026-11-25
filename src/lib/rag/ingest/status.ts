@@ -1,3 +1,4 @@
+import { UploadApprovalSchema } from '@/lib/rag-eval/contracts.generated';
 import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
 import { isTerminal } from './callbacks/common';
 import { loadIngestConfig } from './config';
@@ -227,6 +228,15 @@ export function ingestStateFromRecord(raw: Record<string, unknown>): IngestState
   if (typeChange) state.typeChange = typeChange;
   if (Array.isArray(raw.embeddingTargets)) state.embeddingTargets = raw.embeddingTargets.filter((id): id is string => typeof id === 'string');
   if (Array.isArray(raw.embeddingGaps)) state.embeddingGaps = raw.embeddingGaps as IngestState['embeddingGaps'];
+  if (raw.approval !== undefined && raw.approval !== null) {
+    const approval = UploadApprovalSchema.safeParse(raw.approval);
+    // A stored decision that does not validate is kept as "approval required": a resumed run can only hold, never skip the gate.
+    state.approval = approval.success
+      ? approval.data
+      : { mode: 'all', required: true, reason: 'unknown_uploader', uploader_id: null, decided_at: new Date(0).toISOString() };
+  }
+  const hold = objectOf<{ batchId?: unknown }>(raw.publishHold);
+  if (hold && typeof hold.batchId === 'string' && hold.batchId !== '') state.publishHold = { batchId: hold.batchId };
   return state;
 }
 
@@ -235,7 +245,7 @@ function stateOf(row: IngestDocumentRow): IngestState {
 }
 
 function settledResult(row: IngestDocumentRow, state: IngestState, documentId: string): IngestResult | null {
-  if (row.status === 'ready' || row.status === 'quarantined') {
+  if (row.status === 'ready' || row.status === 'quarantined' || row.status === 'pending_review') {
     return {
       status: row.status,
       documentId,

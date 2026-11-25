@@ -1,0 +1,139 @@
+{
+  "$defs": {
+    "TrainingNegative": {
+      "additionalProperties": false,
+      "properties": {
+        "chunk_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Chunk Id",
+          "type": "string"
+        },
+        "confirmed": {
+          "description": "true only when the domain expert marked this candidate not relevant; Phase 6.1 uses confirmed negatives first",
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "document_id": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "title": "Document Id",
+          "type": "string"
+        },
+        "rank": {
+          "minimum": 1,
+          "title": "Rank",
+          "type": "integer"
+        },
+        "score": {
+          "title": "Score",
+          "type": "number"
+        }
+      },
+      "required": [
+        "chunk_id",
+        "document_id",
+        "rank",
+        "score",
+        "confirmed"
+      ],
+      "title": "TrainingNegative",
+      "type": "object"
+    },
+    "TrainingPositive": {
+      "additionalProperties": false,
+      "properties": {
+        "chunk_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Chunk Id",
+          "type": "string"
+        },
+        "document_id": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "title": "Document Id",
+          "type": "string"
+        },
+        "quote": {
+          "maxLength": 2000,
+          "minLength": 2,
+          "title": "Quote",
+          "type": "string"
+        }
+      },
+      "required": [
+        "chunk_id",
+        "document_id",
+        "quote"
+      ],
+      "title": "TrainingPositive",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "D-17 hand-off to Phase 6.1: ids only, no chunk text; held_out pairs must never be trained on.",
+  "properties": {
+    "document_group": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Document Group",
+      "type": "string"
+    },
+    "hard_negatives": {
+      "items": {
+        "$ref": "#/$defs/TrainingNegative"
+      },
+      "maxItems": 10,
+      "title": "Hard Negatives",
+      "type": "array"
+    },
+    "language": {
+      "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$",
+      "title": "Language",
+      "type": "string"
+    },
+    "positive": {
+      "$ref": "#/$defs/TrainingPositive"
+    },
+    "query_masked": {
+      "maxLength": 2000,
+      "minLength": 1,
+      "title": "Query Masked",
+      "type": "string"
+    },
+    "review_item_id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "title": "Review Item Id",
+      "type": "string"
+    },
+    "source": {
+      "const": "production_feedback",
+      "title": "Source",
+      "type": "string"
+    },
+    "split": {
+      "enum": [
+        "train",
+        "held_out"
+      ],
+      "title": "Split",
+      "type": "string"
+    },
+    "tenant_key": {
+      "pattern": "^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
+      "title": "Tenant Key",
+      "type": "string"
+    }
+  },
+  "required": [
+    "tenant_key",
+    "query_masked",
+    "language",
+    "positive",
+    "document_group",
+    "split",
+    "source",
+    "review_item_id"
+  ],
+  "title": "TrainingPair",
+  "type": "object"
+}

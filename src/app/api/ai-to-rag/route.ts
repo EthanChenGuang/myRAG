@@ -230,6 +230,7 @@ async function saveThroughIngest(input: {
   content: string;
   body: Record<string, unknown>;
   scope: TenantScope;
+  uploaderId: string;
   signal: AbortSignal;
 }): Promise<NextResponse> {
   const parsed = unifiedSaveSchema.safeParse({
@@ -257,6 +258,7 @@ async function saveThroughIngest(input: {
     scope: input.scope,
     source: 'ai_to_rag' as const,
     sourceKey: `chat:${chatId ?? 'none'}/message:${messageId}`,
+    uploaderId: input.uploaderId,
     text: input.content,
     filename,
     mimeType: 'text/markdown',
@@ -405,7 +407,7 @@ export async function POST(req: Request) {
     const ingestConfig = loadIngestConfig({ RAG_INGEST_PIPELINE: env.RAG_INGEST_PIPELINE });
     if (ingestConfig.pipeline === 'unified') {
       if (ingestConfig.pipelineBlocked) return NextResponse.json({ error: ingestConfig.pipelineBlocked }, { status: 503 });
-      return await saveThroughIngest({ content, body, scope: tenant.scope, signal: req.signal });
+      return await saveThroughIngest({ content, body, scope: tenant.scope, uploaderId: sessionUser.id, signal: req.signal });
     }
 
     const owner = {

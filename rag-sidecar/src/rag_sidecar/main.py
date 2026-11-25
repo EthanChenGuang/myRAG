@@ -36,6 +36,7 @@ from rag_sidecar.ingest.worker import IngestWorker, RealClock
 from rag_sidecar.parse.converter import Converter, default_converter
 from rag_sidecar.parse.jobs import JobRunner, QueueFull
 from rag_sidecar.parse.upload import BODY_ALLOWANCE_BYTES, MalformedUpload, UploadTooLarge, read_upload
+from rag_sidecar.security.router import build_hidden_text_router
 from rag_sidecar.settings import SidecarSettings, load_settings
 
 CONTRACTS_SCHEMA_VERSION = 2
@@ -349,6 +350,7 @@ def create_app(
 
     v1.include_router(build_groundedness_router(resolved, active_scorers))
     v1.include_router(build_injection_router(active_injection_scorer, prompt_guard_config))
+    v1.include_router(build_hidden_text_router(resolved))
     app.include_router(v1)
     return app
 

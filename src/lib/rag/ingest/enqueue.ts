@@ -30,6 +30,8 @@ export interface EnqueueIngestOptions {
   /** Defaults to 100, the incremental upload priority (D-23). */
   priority?: number;
   batchId?: string | null;
+  /** The batch publishes its versions only at activation (ingestion_batches.hold_publish, D-12); needs batchId. */
+  holdPublish?: boolean;
   /** The queue switches the job snapshot is built from. Defaults to the process environment. */
   queueConfig?: () => QueueConfig;
 }
@@ -132,6 +134,8 @@ export async function enqueueIngest(input: IngestInput, options: EnqueueIngestOp
       routingConfig: loadRoutingConfig(),
       isBackfill,
       ...(isBackfill ? { embedProfileProvider: await backfillEmbedProvider() } : {}),
+      approval: ctx.state.approval ?? null,
+      ...(isBackfill && options.holdPublish === true ? { holdPublish: true } : {}),
     });
     const base = {
       source: input.source,

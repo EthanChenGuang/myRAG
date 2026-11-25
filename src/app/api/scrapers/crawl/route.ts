@@ -152,7 +152,7 @@ export async function POST(request: NextRequest) {
         // Crawl and process the website
         const result = await crawlAndProcess(
             scope
-                ? { url: normalizedUrl, scope, signal: request.signal, maxPages: validatedMaxPages, outputFormat: outputFormat || 'html' }
+                ? { url: normalizedUrl, scope, signal: request.signal, uploaderId: userId, maxPages: validatedMaxPages, outputFormat: outputFormat || 'html' }
                 : { url: normalizedUrl, userId, organizationId, maxPages: validatedMaxPages, outputFormat: outputFormat || 'html' }
         );
 

@@ -1,0 +1,39 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "chunk_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Chunk Id",
+      "type": "string"
+    },
+    "confirmed": {
+      "description": "true only when the domain expert marked this candidate not relevant; Phase 6.1 uses confirmed negatives first",
+      "title": "Confirmed",
+      "type": "boolean"
+    },
+    "document_id": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "title": "Document Id",
+      "type": "string"
+    },
+    "rank": {
+      "minimum": 1,
+      "title": "Rank",
+      "type": "integer"
+    },
+    "score": {
+      "title": "Score",
+      "type": "number"
+    }
+  },
+  "required": [
+    "chunk_id",
+    "document_id",
+    "rank",
+    "score",
+    "confirmed"
+  ],
+  "title": "TrainingNegative",
+  "type": "object"
+}

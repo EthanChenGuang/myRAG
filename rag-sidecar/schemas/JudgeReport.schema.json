@@ -21,7 +21,8 @@
             "injection_evasive",
             "cache_paraphrase",
             "cache_near_miss",
-            "small_talk"
+            "small_talk",
+            "table_split"
           ],
           "title": "Category",
           "type": "string"

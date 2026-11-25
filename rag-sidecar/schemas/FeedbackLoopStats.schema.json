@@ -1,0 +1,317 @@
+{
+  "$defs": {
+    "ChannelCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "chat": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Chat",
+          "type": "integer"
+        },
+        "embed": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Embed",
+          "type": "integer"
+        },
+        "voice": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Voice",
+          "type": "integer"
+        }
+      },
+      "title": "ChannelCounts",
+      "type": "object"
+    },
+    "OutcomeCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "answered": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Answered",
+          "type": "integer"
+        },
+        "degraded_answer": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Degraded Answer",
+          "type": "integer"
+        },
+        "kb_unavailable": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Kb Unavailable",
+          "type": "integer"
+        },
+        "refused_no_context": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Refused No Context",
+          "type": "integer"
+        },
+        "unknown": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Unknown",
+          "type": "integer"
+        }
+      },
+      "title": "OutcomeCounts",
+      "type": "object"
+    },
+    "TenantLoopStats": {
+      "additionalProperties": false,
+      "properties": {
+        "items_exported": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Items Exported",
+          "type": "integer"
+        },
+        "items_labelled": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Items Labelled",
+          "type": "integer"
+        },
+        "items_mined": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Items Mined",
+          "type": "integer"
+        },
+        "items_skipped": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Items Skipped",
+          "type": "integer"
+        },
+        "low_score_rate": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Low Score Rate"
+        },
+        "outcomes": {
+          "$ref": "#/$defs/OutcomeCounts"
+        },
+        "refusal_disputes": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Refusal Disputes",
+          "type": "integer"
+        },
+        "refusal_rate": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Refusal Rate"
+        },
+        "retrievals": {
+          "minimum": 0,
+          "title": "Retrievals",
+          "type": "integer"
+        },
+        "retrievals_by_channel": {
+          "$ref": "#/$defs/ChannelCounts"
+        },
+        "source_open_rate": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Open Rate"
+        },
+        "tenant_hash": {
+          "pattern": "^[a-f0-9]{8,64}$",
+          "title": "Tenant Hash",
+          "type": "string"
+        },
+        "thumbs_down_rate": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Thumbs Down Rate"
+        },
+        "triage": {
+          "$ref": "#/$defs/TriageCounts"
+        },
+        "votes": {
+          "$ref": "#/$defs/VoteCounts"
+        },
+        "zero_result_rate": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Zero Result Rate"
+        }
+      },
+      "required": [
+        "tenant_hash",
+        "retrievals",
+        "retrievals_by_channel",
+        "outcomes",
+        "votes",
+        "triage"
+      ],
+      "title": "TenantLoopStats",
+      "type": "object"
+    },
+    "TriageCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "dictionary": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Dictionary",
+          "type": "integer"
+        },
+        "golden": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Golden",
+          "type": "integer"
+        },
+        "kb_gap": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Kb Gap",
+          "type": "integer"
+        },
+        "not_a_failure": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Not A Failure",
+          "type": "integer"
+        },
+        "training": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Training",
+          "type": "integer"
+        }
+      },
+      "title": "TriageCounts",
+      "type": "object"
+    },
+    "VoteCounts": {
+      "additionalProperties": false,
+      "properties": {
+        "answer_down": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Answer Down",
+          "type": "integer"
+        },
+        "answer_up": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Answer Up",
+          "type": "integer"
+        },
+        "embed_down": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Embed Down",
+          "type": "integer"
+        },
+        "embed_up": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Embed Up",
+          "type": "integer"
+        },
+        "refusal_down": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Refusal Down",
+          "type": "integer"
+        },
+        "refusal_up": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Refusal Up",
+          "type": "integer"
+        }
+      },
+      "title": "VoteCounts",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "since": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Since",
+      "type": "string"
+    },
+    "tenants": {
+      "items": {
+        "$ref": "#/$defs/TenantLoopStats"
+      },
+      "title": "Tenants",
+      "type": "array"
+    },
+    "until": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Until",
+      "type": "string"
+    }
+  },
+  "required": [
+    "since",
+    "until"
+  ],
+  "title": "FeedbackLoopStats",
+  "type": "object"
+}

@@ -9,7 +9,16 @@ class _Contract(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
-ReviewReason = Literal["sampled", "feedback_negative", "groundedness_flagged"]
+ReviewReason = Literal[
+    "sampled",
+    "feedback_negative",
+    "groundedness_flagged",
+    "refusal_disputed",
+    "refused_high_score",
+    "zero_results",
+    "low_score",
+    "no_source_opened",
+]
 
 
 class ReviewQueueItem(_Contract):

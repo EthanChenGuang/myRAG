@@ -1,4 +1,6 @@
 import type { RpcClient } from '../backend/supabase-rpc';
+import { redisvlInvalidationTarget } from '../cache/emit';
+import { scheduleAfterResponse } from '../trace/schedule';
 import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
 import { getIngestDeps } from './deps';
 import type { IngestSource } from './types';
@@ -79,6 +81,13 @@ export async function softDeleteLineage(
   const returnedLineage = text(row, 'lineage_id');
   if (returnedLineage !== lineageId) return { ok: false, reason: 'unavailable' };
   const jobId = text(row, 'job_id');
+  const cache = redisvlInvalidationTarget();
+  if (cache) {
+    // The lineage is not a document id: the whole tenant is invalidated.
+    scheduleAfterResponse(async () => {
+      await cache.invalidateTenant(scope);
+    });
+  }
   return {
     ok: true,
     outcome,

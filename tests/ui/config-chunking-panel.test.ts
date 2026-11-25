@@ -447,7 +447,13 @@ function loadChunkingPanel() {
     coverageWarning: (group: ProfileGroup, locale: Locale) => (Message & { count: number | null; showBuild: boolean }) | null;
     refusalMessage: (reason: string, locale: Locale, vars?: Record<string, unknown>) => Message;
     reportRows: (report: Record<string, unknown>, slice?: string) => Array<Record<string, any>>;
-    chunkingReportSlices: (report: Record<string, unknown>) => Array<{ value: string; group: string | null; key: string | null }>;
+    chunkingReportSlices: (
+      report: Record<string, unknown>,
+      languages?: string[],
+    ) => Array<{ value: string; group: string | null; key: string | null }>;
+    chunkingLanguageCodesFrom: (body: unknown) => string[] | null;
+    loadChunkingLanguages: (fetchImpl: (path: string, init?: Record<string, unknown>) => Promise<unknown>) => Promise<string[] | null>;
+    resetChunkingLanguagesForTests: () => void;
     chunkingDecisionRows: (decisions: Array<Record<string, unknown>>) => Array<{ docType: string; decision: Record<string, unknown> | null }>;
     chunkingFormFindings: (fields: Record<string, unknown>) => {
       body: Record<string, unknown> | null;
@@ -715,12 +721,20 @@ describe('reportRows and the sweep decisions', () => {
     expect(reportRows(REPORT, 'language:xx')[0].recall).toBeNull();
   });
 
-  it('offers overall, six doc types, three languages and the question kinds present', () => {
-    const slices = chunkingReportSlices(REPORT).map((s) => s.value);
+  it('offers overall, six doc types, the configured languages and the question kinds present', () => {
+    const slices = chunkingReportSlices(REPORT, ['zh', 'en', 'it']).map((s) => s.value);
     expect(slices[0]).toBe('overall');
     expect(slices).toContain('doc_type:scanned_image');
-    expect(slices).toContain('language:zh');
+    expect(slices.filter((v) => v.startsWith('language:'))).toEqual(['language:zh', 'language:en', 'language:it']);
     expect(slices).toContain('kind:clause');
+  });
+
+  it('offers no language slice before the languages answer has arrived', () => {
+    const { resetChunkingLanguagesForTests } = loadChunkingPanel();
+    resetChunkingLanguagesForTests();
+    const slices = chunkingReportSlices(REPORT).map((s) => s.value);
+    expect(slices.some((v) => v.startsWith('language:'))).toBe(false);
+    expect(slices).toContain('doc_type:scanned_image');
   });
 
   it('one decision row per doc type, in the fixed order', () => {
@@ -730,6 +744,48 @@ describe('reportRows and the sweep decisions', () => {
     expect(rows.find((r) => r.docType === 'general')?.decision).toBeNull();
     expect(JSON.stringify(rows)).not.toContain('report_hash');
     expect(JSON.stringify(rows)).not.toContain('fixture-demo');
+  });
+});
+
+describe('language codes from the config server (D-06)', () => {
+  const { chunkingLanguageCodesFrom, loadChunkingLanguages, resetChunkingLanguagesForTests, chunkingReportSlices } = loadChunkingPanel();
+  const answer = { packs: [{ code: 'zh' }, { code: 'en' }, { code: 'it' }, { code: 'en' }, { code: '<b>' }, null] };
+
+  it('reads the pack codes in order, dropping duplicates and malformed codes', () => {
+    expect(chunkingLanguageCodesFrom(answer)).toEqual(['zh', 'en', 'it']);
+    expect(chunkingLanguageCodesFrom({})).toBeNull();
+    expect(chunkingLanguageCodesFrom({ packs: [] })).toBeNull();
+  });
+
+  it('fetches GET /api/config/languages once and caches the codes', async () => {
+    resetChunkingLanguagesForTests();
+    const calls: string[] = [];
+    const fetchImpl = async (path: string) => {
+      calls.push(path);
+      return { ok: true, json: async () => answer };
+    };
+    const [a, b] = await Promise.all([loadChunkingLanguages(fetchImpl), loadChunkingLanguages(fetchImpl)]);
+    expect(a).toEqual(['zh', 'en', 'it']);
+    expect(b).toEqual(['zh', 'en', 'it']);
+    await loadChunkingLanguages(fetchImpl);
+    expect(calls).toEqual(['/api/config/languages']);
+    expect(chunkingReportSlices(REPORT).filter((s) => s.group === 'language').map((s) => s.key)).toEqual(['zh', 'en', 'it']);
+    resetChunkingLanguagesForTests();
+  });
+
+  it('a failed request leaves the codes unset and the next call tries again', async () => {
+    resetChunkingLanguagesForTests();
+    let attempts = 0;
+    const failing = async () => {
+      attempts += 1;
+      throw new Error('offline');
+    };
+    expect(await loadChunkingLanguages(failing)).toBeNull();
+    expect(await loadChunkingLanguages(async () => ({ ok: false, json: async () => ({}) }))).toBeNull();
+    expect(attempts).toBe(1);
+    expect(chunkingReportSlices(REPORT).some((s) => s.group === 'language')).toBe(false);
+    expect(await loadChunkingLanguages(async () => ({ ok: true, json: async () => answer }))).toEqual(['zh', 'en', 'it']);
+    resetChunkingLanguagesForTests();
   });
 });
 
@@ -875,12 +931,16 @@ describe('mapChunkingError (UI-SPEC section 8)', () => {
 describe('chunking-profiles.js request and storage rules (T-04-77, T-04-78)', () => {
   const code = fs.readFileSync(path.join(panelDir, 'chunking-profiles.js'), 'utf8');
 
-  it('calls only /api/rag/admin/chunking-profiles through ragFetch', () => {
+  it('calls /api/rag/admin/chunking-profiles through ragFetch and only the config languages answer with fetch', () => {
     expect(code).toContain('/api/rag/admin/chunking-profiles');
-    expect(code).not.toMatch(/\bfetch\(/);
+    const bareFetches = [...code.matchAll(/\bfetch\(/g)];
+    expect(bareFetches.length).toBe(1);
+    expect(code).toMatch(/this\.languagesFetcher = d\.languagesFetcher \|\| \(\(apiPath, init\) => fetch\(apiPath, init\)\);/);
     const paths = [...code.matchAll(/['`](\/api\/[^'`$]*)/g)].map((m) => m[1]);
     expect(paths.length).toBeGreaterThan(0);
-    for (const p of paths) expect(p.startsWith('/api/rag/admin/chunking-profiles')).toBe(true);
+    for (const p of paths) {
+      expect(p.startsWith('/api/rag/admin/chunking-profiles') || p === '/api/config/languages').toBe(true);
+    }
   });
 
   it('never parses markup, stores tokens or sends Authorization', () => {
@@ -936,6 +996,53 @@ describe('ChunkingProfilesPanel renders server strings as text only', () => {
       expect(all).not.toContain('fixture-demo');
       expect(all).not.toContain(DECISIONS[0].report_hash);
       for (const call of calls) expect(call.path.startsWith('/api/rag/admin/chunking-profiles')).toBe(true);
+    });
+  });
+
+  it('shows the language slices only once the config languages answer has arrived', async () => {
+    await withFakeDocument(async (doc) => {
+      const { ChunkingProfilesPanel, resetChunkingLanguagesForTests } = loadChunkingPanel() as ReturnType<typeof loadChunkingPanel> & {
+        ChunkingProfilesPanel: new (root: unknown, deps: Record<string, unknown>) => { mount: () => Promise<void>; selectTab: (name: string) => void };
+      };
+      resetChunkingLanguagesForTests();
+      const { fetcher } = fakeFetcher({
+        'GET /api/rag/admin/chunking-profiles': { ok: true, status: 200, body: listBody() },
+        'GET /api/rag/admin/chunking-profiles/report': { ok: true, status: 200, body: { success: true, report: REPORT, decisions: DECISIONS } },
+      });
+      let release: (value: unknown) => void = () => {};
+      const pending = new Promise((resolve) => {
+        release = resolve;
+      });
+      const languageCalls: string[] = [];
+      const languagesFetcher = async (apiPath: string) => {
+        languageCalls.push(apiPath);
+        await pending;
+        return { ok: true, json: async () => ({ packs: [{ code: 'zh' }, { code: 'en' }, { code: 'it' }] }) };
+      };
+      const root = doc.createElement('section');
+      for (const attr of ['data-chunking-title', 'data-chunking-description', 'data-chunking-alert', 'data-chunking-content', 'data-chunking-status']) {
+        const el = doc.createElement(attr === 'data-chunking-title' ? 'h3' : 'div');
+        el.setAttribute(attr, '');
+        root.appendChild(el);
+      }
+      doc.body.appendChild(root);
+      const panel = new ChunkingProfilesPanel(root, { fetcher, languagesFetcher, locale: 'en' });
+      const mounted = panel.mount();
+      await flush();
+      panel.selectTab('report');
+      await flush();
+      const before = textNodes(root);
+      expect(before).not.toContain('Italian');
+      expect(before).not.toContain('Chinese');
+      release(null);
+      await mounted;
+      await flush();
+      const after = textNodes(root);
+      expect(after).toContain('Chinese');
+      expect(after).toContain('English');
+      expect(after).toContain('Italian');
+      expect(languageCalls).toEqual(['/api/config/languages']);
+      resetChunkingLanguagesForTests();
     });
   });
 
