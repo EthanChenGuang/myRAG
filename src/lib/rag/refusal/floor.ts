@@ -1,3 +1,4 @@
+import type { LegacyKeepCandidate } from '../context/relevance';
 import type { RefusalRecord } from './types';
 
 export const LEGACY_TEXT_FLOOR = 0.65;
@@ -89,4 +90,12 @@ export function resetEvalScoreCalibration(): void {
 
 export function evalFloorCalibration(profile: string): Record<string, number> | null {
   return profile === 'eval' ? evalScoreCalibration : null;
+}
+
+export function legacyRuleFloor(_input: {
+  candidates: LegacyKeepCandidate[];
+  terms: readonly string[];
+  floors: SimilarityFloors;
+}): RefusalRecord {
+  return notApplied('no_candidates');
 }
