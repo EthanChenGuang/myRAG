@@ -3667,7 +3667,7 @@ BEGIN
       ELSE
         vectors := payload;
       END IF;
-      IF COALESCE(CASE WHEN jsonb_typeof(vectors) = 'array' THEN jsonb_array_length(vectors) END, -1) <> chunk_count THEN
+      IF vectors IS NULL OR jsonb_typeof(vectors) <> 'array' OR jsonb_array_length(vectors) <> chunk_count THEN
         RAISE EXCEPTION 'embedding_count_mismatch: expected % vectors', chunk_count;
       END IF;
       IF EXISTS (SELECT 1 FROM jsonb_array_elements(vectors) AS v(value) WHERE jsonb_typeof(v.value) NOT IN ('array', 'null')) THEN
@@ -3675,7 +3675,7 @@ BEGIN
       END IF;
       IF EXISTS (
         SELECT 1 FROM jsonb_array_elements(vectors) AS v(value)
-        WHERE CASE WHEN jsonb_typeof(v.value) = 'array' THEN jsonb_array_length(v.value) END <> profile_row.dims
+        WHERE jsonb_typeof(v.value) = 'array' AND jsonb_array_length(v.value) <> profile_row.dims
       ) THEN
         RAISE EXCEPTION 'embedding_profile_mismatch: dims' USING ERRCODE = '22000';
       END IF;
@@ -5775,6 +5775,3070 @@ CREATE TRIGGER rag_guard_ingest_state
   );
 
 COMMIT;
+
+------------------------------------------
+-- Phase 3.1: Tiered parsing, ingestion queue and bulk backfill (migrations 0351-0359)
+------------------------------------------
+
+-- >>> supabase/migrations/0351_ingestion_schema.sql
+-- 0351: Phase 3.1 ingestion ledger, batches, parse cache, budget counters, tier overrides and embed batch tracking.
+-- Additive and idempotent. Server role only on new tables (RLS enabled, no policies).
+-- Document and chunk columns for needs_review and progressive publishing.
+
+BEGIN;
+
+-- ---------------------------------------------------------------------------
+-- Helpers
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION rag_parse_tier_rank(p_tier text)
+RETURNS integer
+LANGUAGE sql
+IMMUTABLE
+SET search_path = pg_catalog, public
+AS $$
+  SELECT CASE p_tier
+    WHEN 'native' THEN 0
+    WHEN 'fast' THEN 1
+    WHEN 'structured' THEN 2
+    WHEN 'premium' THEN 3
+    ELSE NULL
+  END;
+$$;
+
+CREATE OR REPLACE FUNCTION rag_ingest_assert_tenant_key(p_tenant_key text)
+RETURNS void
+LANGUAGE plpgsql
+STABLE
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  multi_tenant boolean;
+BEGIN
+  IF p_tenant_key IS NULL OR btrim(p_tenant_key) = '' THEN
+    RAISE EXCEPTION 'ingest_refused: invalid_tenant_key' USING ERRCODE = '22023';
+  END IF;
+  IF p_tenant_key ~ '[A-Z]' OR position('=' IN p_tenant_key) > 0 OR position('''' IN p_tenant_key) > 0 THEN
+    RAISE EXCEPTION 'ingest_refused: invalid_tenant_key' USING ERRCODE = '22023';
+  END IF;
+  multi_tenant := EXISTS (
+    SELECT 1 FROM pg_attribute
+    WHERE attrelid = 'public.documents'::regclass AND attname = 'user_id' AND attnotnull AND NOT attisdropped
+  );
+  IF multi_tenant THEN
+    IF p_tenant_key !~ '^[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN
+      RAISE EXCEPTION 'ingest_refused: invalid_tenant_key' USING ERRCODE = '22023';
+    END IF;
+  ELSIF p_tenant_key <> 's:default' THEN
+    RAISE EXCEPTION 'ingest_refused: invalid_tenant_key' USING ERRCODE = '22023';
+  END IF;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION rag_release_job_reservations(p_job_id uuid)
+RETURNS integer
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  released integer := 0;
+  rec record;
+BEGIN
+  FOR rec IN
+    SELECT r.id, r.tenant_key, r.month, r.pages, r.kind
+    FROM rag_parse_budget_reservations r
+    WHERE r.job_id = p_job_id AND r.state = 'open'
+    FOR UPDATE
+  LOOP
+    UPDATE rag_parse_budget_reservations SET state = 'released' WHERE id = rec.id;
+  -- Per kind, decrement pages_reserved on the usage row (parse and vlm share the same counter).
+    UPDATE rag_parse_budget_usage u
+       SET pages_reserved = GREATEST(0, u.pages_reserved - rec.pages)
+     WHERE u.tenant_key = rec.tenant_key AND u.month = rec.month;
+    released := released + 1;
+  END LOOP;
+  RETURN released;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION rag_parse_tier_rank(text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION rag_ingest_assert_tenant_key(text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION rag_release_job_reservations(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION rag_parse_tier_rank(text) TO service_role;
+GRANT EXECUTE ON FUNCTION rag_ingest_assert_tenant_key(text) TO service_role;
+GRANT EXECUTE ON FUNCTION rag_release_job_reservations(uuid) TO service_role;
+
+-- ---------------------------------------------------------------------------
+-- Tables
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS ingestion_batches (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_key text NOT NULL,
+  source_kind text NOT NULL,
+  source_ref text NOT NULL,
+  budget_usd numeric(12, 6),
+  spent_usd numeric(12, 6) NOT NULL DEFAULT 0,
+  concurrency integer NOT NULL DEFAULT 1,
+  runner text NOT NULL DEFAULT 'worker',
+  status text NOT NULL DEFAULT 'pending',
+  dry_run_report jsonb NOT NULL DEFAULT '{}'::jsonb,
+  totals jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_by text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT ingestion_batches_tenant_key_check CHECK (
+    tenant_key ~ '^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$'
+  ),
+  CONSTRAINT ingestion_batches_source_kind_check CHECK (source_kind IN ('folder', 'bucket', 'manifest')),
+  CONSTRAINT ingestion_batches_runner_check CHECK (runner IN ('worker', 'ray')),
+  CONSTRAINT ingestion_batches_status_check CHECK (
+    status IN ('pending', 'sampling', 'running', 'completed', 'failed', 'cancelled')
+  ),
+  CONSTRAINT ingestion_batches_concurrency_check CHECK (concurrency > 0)
+);
+
+CREATE TABLE IF NOT EXISTS rag_parse_budget_usage (
+  tenant_key text NOT NULL,
+  month date NOT NULL,
+  pages_reserved integer NOT NULL DEFAULT 0,
+  pages_used integer NOT NULL DEFAULT 0,
+  vlm_pages_used integer NOT NULL DEFAULT 0,
+  PRIMARY KEY (tenant_key, month),
+  CONSTRAINT rag_parse_budget_usage_tenant_key_check CHECK (
+    tenant_key ~ '^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$'
+  ),
+  CONSTRAINT rag_parse_budget_usage_nonnegative CHECK (
+    pages_reserved >= 0 AND pages_used >= 0 AND vlm_pages_used >= 0
+  )
+);
+
+CREATE TABLE IF NOT EXISTS rag_parse_cache (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_key text NOT NULL,
+  file_sha256 text NOT NULL,
+  parser text NOT NULL,
+  parser_version text NOT NULL,
+  options_hash text NOT NULL,
+  object_prefix text NOT NULL,
+  result jsonb NOT NULL DEFAULT '{}'::jsonb,
+  byte_size bigint,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT rag_parse_cache_tenant_key_check CHECK (
+    tenant_key ~ '^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$'
+  ),
+  CONSTRAINT rag_parse_cache_options_hash_check CHECK (options_hash ~ '^[0-9a-f]{64}$')
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS rag_parse_cache_key_ux
+  ON rag_parse_cache (tenant_key, file_sha256, parser, parser_version, options_hash);
+
+CREATE INDEX IF NOT EXISTS rag_parse_cache_tenant_file_sha256_idx ON rag_parse_cache (tenant_key, file_sha256);
+
+CREATE TABLE IF NOT EXISTS ingestion_jobs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  kind text NOT NULL DEFAULT 'ingest',
+  status text NOT NULL DEFAULT 'queued',
+  stage text,
+  tenant_key text NOT NULL,
+  document_id uuid REFERENCES documents (id) ON DELETE SET NULL,
+  lineage_id uuid,
+  version integer,
+  batch_id uuid REFERENCES ingestion_batches (id) ON DELETE SET NULL,
+  source text,
+  source_key text NOT NULL,
+  file_sha256 text,
+  filename text,
+  mime_type text,
+  original_ref jsonb,
+  priority integer NOT NULL DEFAULT 100,
+  retries integer NOT NULL DEFAULT 0,
+  max_retries integer NOT NULL DEFAULT 3,
+  run_after timestamptz,
+  lease_until timestamptz,
+  locked_by text,
+  runner text,
+  settings jsonb NOT NULL DEFAULT '{}'::jsonb,
+  stage_state jsonb NOT NULL DEFAULT '{}'::jsonb,
+  doc_class text,
+  tier text,
+  parser_used text,
+  parser_version text,
+  attempts jsonb NOT NULL DEFAULT '[]'::jsonb,
+  escalations integer NOT NULL DEFAULT 0,
+  pages integer,
+  page_ranges jsonb NOT NULL DEFAULT '[]'::jsonb,
+  tier_page_counts jsonb NOT NULL DEFAULT '{}'::jsonb,
+  detect_counts jsonb NOT NULL DEFAULT '{}'::jsonb,
+  preflight_ref text,
+  est_cost_usd numeric(12, 6),
+  embedding_profile text,
+  error_class text,
+  error text,
+  needs_review_reason text,
+  routing_note text,
+  provisional_published_at timestamptz,
+  trace_id uuid,
+  timings jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  deleted_at timestamptz,
+  CONSTRAINT ingestion_jobs_tenant_key_check CHECK (
+    tenant_key ~ '^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$'
+  ),
+  CONSTRAINT ingestion_jobs_kind_check CHECK (kind IN ('ingest', 'dry_run', 'delete')),
+  CONSTRAINT ingestion_jobs_status_check CHECK (
+    status IN (
+      'queued', 'preflight', 'parsing', 'checking', 'chunking', 'embedding',
+      'ready', 'failed', 'quarantined', 'needs_review', 'skipped_duplicate'
+    )
+  ),
+  CONSTRAINT ingestion_jobs_runner_check CHECK (runner IS NULL OR runner IN ('worker', 'ray')),
+  CONSTRAINT ingestion_jobs_source_check CHECK (
+    source IS NULL OR source IN ('chat_upload', 'config_upload', 'nango', 'scraper', 'image_upload', 'ai_to_rag')
+  ),
+  CONSTRAINT ingestion_jobs_tier_check CHECK (
+    tier IS NULL OR tier IN ('native', 'fast', 'structured', 'premium')
+  )
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ingestion_jobs_batch_kind_source_key_ux
+  ON ingestion_jobs (batch_id, kind, source_key)
+  WHERE batch_id IS NOT NULL;
+
+-- Superseded by 0421_ingestion_queue_indexes.sql; drop on re-apply so the catalog stays idempotent.
+DROP INDEX IF EXISTS public.ingestion_jobs_queued_claim_idx;
+DROP INDEX IF EXISTS public.ingestion_jobs_active_lease_idx;
+
+CREATE INDEX IF NOT EXISTS ingestion_jobs_document_id_idx ON ingestion_jobs (document_id);
+
+CREATE TABLE IF NOT EXISTS rag_parse_budget_reservations (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  job_id uuid NOT NULL REFERENCES ingestion_jobs (id) ON DELETE CASCADE,
+  attempt_no integer NOT NULL,
+  tenant_key text NOT NULL,
+  month date NOT NULL,
+  pages integer NOT NULL,
+  kind text NOT NULL,
+  state text NOT NULL DEFAULT 'open',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT rag_parse_budget_reservations_tenant_key_check CHECK (
+    tenant_key ~ '^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$'
+  ),
+  CONSTRAINT rag_parse_budget_reservations_kind_check CHECK (kind IN ('parse', 'vlm')),
+  CONSTRAINT rag_parse_budget_reservations_state_check CHECK (state IN ('open', 'settled', 'released')),
+  CONSTRAINT rag_parse_budget_reservations_pages_check CHECK (pages > 0),
+  UNIQUE (job_id, attempt_no, kind)
+);
+
+CREATE TABLE IF NOT EXISTS rag_parse_tier_overrides (
+  doc_type text PRIMARY KEY,
+  min_tier text NOT NULL,
+  max_tier text NOT NULL,
+  updated_by text,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT rag_parse_tier_overrides_min_tier_check CHECK (min_tier IN ('native', 'fast', 'structured', 'premium')),
+  CONSTRAINT rag_parse_tier_overrides_max_tier_check CHECK (max_tier IN ('native', 'fast', 'structured', 'premium')),
+  CONSTRAINT rag_parse_tier_overrides_order_check CHECK (rag_parse_tier_rank(min_tier) <= rag_parse_tier_rank(max_tier))
+);
+
+CREATE TABLE IF NOT EXISTS rag_embed_batches (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  batch_id uuid REFERENCES ingestion_batches (id) ON DELETE SET NULL,
+  profile_id text NOT NULL REFERENCES embedding_profiles (id),
+  provider text NOT NULL,
+  provider_batch_id text,
+  input_file_id text,
+  output_file_id text,
+  error_file_id text,
+  input_count integer NOT NULL DEFAULT 0,
+  status text NOT NULL DEFAULT 'pending',
+  error text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT rag_embed_batches_status_check CHECK (
+    status IN (
+      'pending', 'validating', 'failed', 'in_progress', 'finalizing', 'completed',
+      'expired', 'cancelling', 'cancelled'
+    )
+  )
+);
+
+-- ---------------------------------------------------------------------------
+-- documents / document_chunks
+-- ---------------------------------------------------------------------------
+
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS needs_review boolean NOT NULL DEFAULT false;
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS needs_review_reason text;
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS provisional boolean NOT NULL DEFAULT false;
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS parse_cache_id uuid;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conrelid = 'public.documents'::regclass AND conname = 'documents_parse_cache_id_fkey'
+  ) THEN
+    ALTER TABLE documents
+      ADD CONSTRAINT documents_parse_cache_id_fkey
+      FOREIGN KEY (parse_cache_id) REFERENCES rag_parse_cache (id) ON DELETE SET NULL;
+  END IF;
+END $$;
+
+ALTER TABLE document_chunks ADD COLUMN IF NOT EXISTS provisional boolean NOT NULL DEFAULT false;
+
+-- status 'deleted' is already in documents_status_check from 0301; ensure constraint exists for older trees.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.documents'::regclass AND conname = 'documents_status_check') THEN
+    ALTER TABLE documents ADD CONSTRAINT documents_status_check
+      CHECK (status IN ('processing', 'ready', 'quarantined', 'failed', 'deleted'));
+  END IF;
+END $$;
+
+-- ---------------------------------------------------------------------------
+-- RLS and grants (seven new tables)
+-- ---------------------------------------------------------------------------
+
+ALTER TABLE ingestion_batches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ingestion_jobs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE rag_parse_budget_usage ENABLE ROW LEVEL SECURITY;
+ALTER TABLE rag_parse_budget_reservations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE rag_parse_tier_overrides ENABLE ROW LEVEL SECURITY;
+ALTER TABLE rag_parse_cache ENABLE ROW LEVEL SECURITY;
+ALTER TABLE rag_embed_batches ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL ON TABLE ingestion_batches FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON TABLE ingestion_jobs FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON TABLE rag_parse_budget_usage FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON TABLE rag_parse_budget_reservations FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON TABLE rag_parse_tier_overrides FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON TABLE rag_parse_cache FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON TABLE rag_embed_batches FROM PUBLIC, anon, authenticated;
+
+GRANT ALL ON TABLE ingestion_batches TO service_role;
+GRANT ALL ON TABLE ingestion_jobs TO service_role;
+GRANT ALL ON TABLE rag_parse_budget_usage TO service_role;
+GRANT ALL ON TABLE rag_parse_budget_reservations TO service_role;
+GRANT ALL ON TABLE rag_parse_tier_overrides TO service_role;
+GRANT ALL ON TABLE rag_parse_cache TO service_role;
+GRANT ALL ON TABLE rag_embed_batches TO service_role;
+
+COMMIT;
+
+NOTIFY pgrst, 'reload schema';
+
+-- >>> supabase/migrations/0352_ingestion_claim.sql
+-- 0352: Ingestion ledger enqueue, claim, heartbeat and release (Phase 3.1 plan 07).
+
+BEGIN;
+
+-- ---------------------------------------------------------------------------
+-- Batch concurrency (F-11): lock batch row, count live leases against concurrency
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.rag_batch_has_room(p_batch_id uuid)
+RETURNS boolean
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_concurrency integer;
+  v_leased integer;
+BEGIN
+  IF p_batch_id IS NULL THEN
+    RETURN true;
+  END IF;
+  SELECT b.concurrency INTO v_concurrency
+    FROM ingestion_batches b
+   WHERE b.id = p_batch_id
+   FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN false;
+  END IF;
+  SELECT count(*)::integer INTO v_leased
+    FROM ingestion_jobs j
+   WHERE j.batch_id = p_batch_id
+     AND j.deleted_at IS NULL
+     AND j.status IN ('preflight', 'parsing', 'checking', 'chunking', 'embedding')
+     AND j.lease_until IS NOT NULL
+     AND j.lease_until > now();
+  RETURN v_leased < v_concurrency;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_batch_has_room(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_batch_has_room(uuid) TO service_role;
+
+-- ---------------------------------------------------------------------------
+-- Enqueue one ledger row (validated tenant, optional document and batch)
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.rag_enqueue_ingestion_job(
+  p_tenant_key text,
+  p_kind text DEFAULT 'ingest',
+  p_source text DEFAULT NULL,
+  p_source_key text DEFAULT NULL,
+  p_file_sha256 text DEFAULT NULL,
+  p_filename text DEFAULT NULL,
+  p_mime_type text DEFAULT NULL,
+  p_original_ref jsonb DEFAULT NULL,
+  p_settings jsonb DEFAULT '{}'::jsonb,
+  p_priority integer DEFAULT 100,
+  p_document_id uuid DEFAULT NULL,
+  p_batch_id uuid DEFAULT NULL,
+  p_status text DEFAULT 'queued'
+)
+RETURNS public.ingestion_jobs
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_doc_tenant text;
+  v_batch_tenant text;
+  v_row public.ingestion_jobs%ROWTYPE;
+BEGIN
+  PERFORM rag_ingest_assert_tenant_key(p_tenant_key);
+
+  IF p_kind IS NULL OR p_kind NOT IN ('ingest', 'dry_run', 'delete') THEN
+    RAISE EXCEPTION 'ingest_refused: invalid_kind' USING ERRCODE = '22023';
+  END IF;
+  IF p_source_key IS NULL OR btrim(p_source_key) = '' THEN
+    RAISE EXCEPTION 'ingest_refused: invalid_source_key' USING ERRCODE = '22023';
+  END IF;
+  IF p_status IS NULL OR p_status NOT IN (
+    'queued', 'preflight', 'parsing', 'checking', 'chunking', 'embedding',
+    'ready', 'failed', 'quarantined', 'needs_review', 'skipped_duplicate'
+  ) THEN
+    RAISE EXCEPTION 'ingest_refused: invalid_status' USING ERRCODE = '22023';
+  END IF;
+
+  IF p_document_id IS NOT NULL THEN
+    SELECT d.tenant_key INTO v_doc_tenant FROM documents d WHERE d.id = p_document_id;
+    IF NOT FOUND OR v_doc_tenant IS DISTINCT FROM p_tenant_key THEN
+      RAISE EXCEPTION 'ingest_refused: document_tenant_mismatch' USING ERRCODE = '22023';
+    END IF;
+  END IF;
+
+  IF p_batch_id IS NOT NULL THEN
+    SELECT b.tenant_key INTO v_batch_tenant FROM ingestion_batches b WHERE b.id = p_batch_id;
+    IF NOT FOUND OR v_batch_tenant IS DISTINCT FROM p_tenant_key THEN
+      RAISE EXCEPTION 'ingest_refused: batch_tenant_mismatch' USING ERRCODE = '22023';
+    END IF;
+  END IF;
+
+  INSERT INTO ingestion_jobs (
+    tenant_key, kind, status, source, source_key, file_sha256, filename, mime_type,
+    original_ref, settings, priority, document_id, batch_id
+  ) VALUES (
+    p_tenant_key, p_kind, p_status, p_source, p_source_key, p_file_sha256, p_filename, p_mime_type,
+    p_original_ref, COALESCE(p_settings, '{}'::jsonb), COALESCE(p_priority, 100), p_document_id, p_batch_id
+  )
+  RETURNING * INTO v_row;
+
+  RETURN v_row;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_enqueue_ingestion_job(
+  text, text, text, text, text, text, text, jsonb, jsonb, integer, uuid, uuid, text
+) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_enqueue_ingestion_job(
+  text, text, text, text, text, text, text, jsonb, jsonb, integer, uuid, uuid, text
+) TO service_role;
+
+-- ---------------------------------------------------------------------------
+-- Claim up to p_limit jobs (priority, SKIP LOCKED, lease, batch slot, reclaim)
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.rag_claim_ingestion_jobs(
+  p_worker text,
+  p_limit integer,
+  p_allow_batch boolean,
+  p_runner text DEFAULT 'worker'
+)
+RETURNS SETOF public.ingestion_jobs
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_claimed integer := 0;
+  v_job public.ingestion_jobs%ROWTYPE;
+  v_new_retries integer;
+  v_limit integer;
+BEGIN
+  v_limit := GREATEST(COALESCE(p_limit, 0), 0);
+  IF v_limit < 1 THEN
+    RETURN;
+  END IF;
+
+  WHILE v_claimed < v_limit LOOP
+    SELECT j.* INTO v_job
+      FROM ingestion_jobs j
+     WHERE j.deleted_at IS NULL
+       AND j.kind IN ('ingest', 'dry_run')
+       AND j.status NOT IN ('ready', 'failed', 'quarantined', 'needs_review', 'skipped_duplicate')
+       AND (p_allow_batch OR j.batch_id IS NULL)
+       AND (
+         (j.status = 'queued' AND (j.run_after IS NULL OR j.run_after <= now()))
+         OR (
+           j.status IN ('preflight', 'parsing', 'checking', 'chunking', 'embedding')
+           AND j.lease_until IS NOT NULL
+           AND j.lease_until < now()
+         )
+       )
+       AND (j.batch_id IS NULL OR rag_batch_has_room(j.batch_id))
+     ORDER BY j.priority DESC, j.created_at
+     FOR UPDATE OF j SKIP LOCKED
+     LIMIT 1;
+
+    IF NOT FOUND THEN
+      EXIT;
+    END IF;
+
+    IF v_job.batch_id IS NOT NULL AND NOT rag_batch_has_room(v_job.batch_id) THEN
+      CONTINUE;
+    END IF;
+
+    IF v_job.status <> 'queued' AND v_job.lease_until IS NOT NULL AND v_job.lease_until < now() THEN
+      v_new_retries := v_job.retries + 1;
+      IF v_new_retries > v_job.max_retries THEN
+        PERFORM rag_release_job_reservations(v_job.id);
+        UPDATE ingestion_jobs
+           SET status = 'failed',
+               error_class = 'lease_expired',
+               retries = v_new_retries,
+               locked_by = NULL,
+               lease_until = NULL,
+               runner = NULL,
+               updated_at = now()
+         WHERE id = v_job.id;
+        CONTINUE;
+      END IF;
+      PERFORM rag_release_job_reservations(v_job.id);
+    END IF;
+
+    UPDATE ingestion_jobs j
+       SET status = CASE
+             WHEN j.status = 'queued' THEN COALESCE(NULLIF(j.stage, ''), 'preflight')
+             ELSE j.status
+           END,
+           retries = CASE
+             WHEN j.status = 'queued' THEN j.retries
+             ELSE j.retries + 1
+           END,
+           locked_by = p_worker,
+           runner = p_runner,
+           lease_until = now() + interval '120 seconds',
+           updated_at = now()
+     WHERE j.id = v_job.id
+     RETURNING j.* INTO v_job;
+
+    v_claimed := v_claimed + 1;
+    RETURN NEXT v_job;
+  END LOOP;
+
+  RETURN;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_claim_ingestion_jobs(text, integer, boolean, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_claim_ingestion_jobs(text, integer, boolean, text) TO service_role;
+
+-- ---------------------------------------------------------------------------
+-- Claim one named job (Ray run_once)
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.rag_claim_ingestion_job(
+  p_job_id uuid,
+  p_worker text,
+  p_runner text DEFAULT 'worker'
+)
+RETURNS public.ingestion_jobs
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_job public.ingestion_jobs%ROWTYPE;
+  v_new_retries integer;
+BEGIN
+  SELECT j.* INTO v_job
+    FROM ingestion_jobs j
+   WHERE j.id = p_job_id
+     AND j.deleted_at IS NULL
+     AND j.kind IN ('ingest', 'dry_run')
+     AND j.status NOT IN ('ready', 'failed', 'quarantined', 'needs_review', 'skipped_duplicate')
+     AND (
+       (j.status = 'queued' AND (j.run_after IS NULL OR j.run_after <= now()))
+       OR (
+         j.status IN ('preflight', 'parsing', 'checking', 'chunking', 'embedding')
+         AND j.lease_until IS NOT NULL
+         AND j.lease_until < now()
+       )
+     )
+   FOR UPDATE OF j SKIP LOCKED;
+
+  IF NOT FOUND THEN
+    RETURN NULL;
+  END IF;
+
+  IF v_job.batch_id IS NOT NULL AND NOT rag_batch_has_room(v_job.batch_id) THEN
+    RETURN NULL;
+  END IF;
+
+  IF v_job.locked_by IS NOT NULL AND v_job.lease_until IS NOT NULL AND v_job.lease_until > now() THEN
+    RETURN NULL;
+  END IF;
+
+  IF v_job.status <> 'queued' AND v_job.lease_until IS NOT NULL AND v_job.lease_until < now() THEN
+    v_new_retries := v_job.retries + 1;
+    IF v_new_retries > v_job.max_retries THEN
+      PERFORM rag_release_job_reservations(v_job.id);
+      UPDATE ingestion_jobs
+         SET status = 'failed',
+             error_class = 'lease_expired',
+             retries = v_new_retries,
+             locked_by = NULL,
+             lease_until = NULL,
+             runner = NULL,
+             updated_at = now()
+       WHERE id = v_job.id;
+      RETURN NULL;
+    END IF;
+    PERFORM rag_release_job_reservations(v_job.id);
+  END IF;
+
+  UPDATE ingestion_jobs j
+     SET status = CASE
+           WHEN j.status = 'queued' THEN COALESCE(NULLIF(j.stage, ''), 'preflight')
+           ELSE j.status
+         END,
+         retries = CASE
+           WHEN j.status = 'queued' THEN j.retries
+           ELSE j.retries + 1
+         END,
+         locked_by = p_worker,
+         runner = p_runner,
+         lease_until = now() + interval '120 seconds',
+         updated_at = now()
+   WHERE j.id = v_job.id
+   RETURNING j.* INTO v_job;
+
+  RETURN v_job;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_claim_ingestion_job(uuid, text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_claim_ingestion_job(uuid, text, text) TO service_role;
+
+-- ---------------------------------------------------------------------------
+-- Heartbeat and release (owner + live lease only)
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.rag_heartbeat_ingestion_job(
+  p_job_id uuid,
+  p_worker text
+)
+RETURNS boolean
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_ok boolean;
+BEGIN
+  UPDATE ingestion_jobs j
+     SET lease_until = now() + interval '120 seconds',
+         updated_at = now()
+   WHERE j.id = p_job_id
+     AND j.locked_by = p_worker
+     AND j.lease_until IS NOT NULL
+     AND j.lease_until > now()
+   RETURNING true INTO v_ok;
+  RETURN COALESCE(v_ok, false);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_heartbeat_ingestion_job(uuid, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_heartbeat_ingestion_job(uuid, text) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.rag_release_ingestion_job(
+  p_job_id uuid,
+  p_worker text
+)
+RETURNS boolean
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_ok boolean;
+BEGIN
+  UPDATE ingestion_jobs j
+     SET status = 'queued',
+         locked_by = NULL,
+         lease_until = NULL,
+         runner = NULL,
+         updated_at = now()
+   WHERE j.id = p_job_id
+     AND j.locked_by = p_worker
+     AND j.lease_until IS NOT NULL
+     AND j.lease_until > now()
+   RETURNING true INTO v_ok;
+  RETURN COALESCE(v_ok, false);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION rag_release_ingestion_job(uuid, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION rag_release_ingestion_job(uuid, text) TO service_role;
+
+COMMIT;
+
+NOTIFY pgrst, 'reload schema';
+
+-- >>> supabase/migrations/0353_ingestion_transitions.sql
+-- 0353: Ingestion ledger transitions, parse attempts, fail/retry/delete, reads and guarded Realtime broadcast.
+
+BEGIN;
+
+ALTER TABLE rag_admin_audit DROP CONSTRAINT IF EXISTS rag_admin_audit_action_check;
+ALTER TABLE rag_admin_audit ADD CONSTRAINT rag_admin_audit_action_check CHECK (
+  action IN (
+    'release_quarantine',
+    'delete_quarantined',
+    'retry_ingestion_job',
+    'delete_ingestion_job'
+  )
+);
+
+-- ---------------------------------------------------------------------------
+-- Helpers
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION rag_ingest_job_status_for_stage(p_stage text)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+SET search_path = pg_catalog, public
+AS $$
+  SELECT CASE p_stage
+    WHEN 'begin' THEN 'queued'
+    WHEN 'preflight' THEN 'preflight'
+    WHEN 'parse' THEN 'parsing'
+    WHEN 'check' THEN 'checking'
+    WHEN 'content_hash_dedup' THEN 'chunking'
+    WHEN 'scan_injection' THEN 'chunking'
+    WHEN 'chunk' THEN 'chunking'
+    WHEN 'enrich' THEN 'chunking'
+    WHEN 'extract' THEN 'chunking'
+    WHEN 'images' THEN 'chunking'
+    WHEN 'embed' THEN 'embedding'
+    WHEN 'write' THEN 'embedding'
+    WHEN 'publish' THEN 'embedding'
+    WHEN 'ready' THEN 'ready'
+    WHEN 'failed' THEN 'failed'
+    WHEN 'quarantined' THEN 'quarantined'
+    WHEN 'needs_review' THEN 'needs_review'
+    WHEN 'skipped_duplicate' THEN 'skipped_duplicate'
+    ELSE NULL
+  END;
+$$;
+
+CREATE OR REPLACE FUNCTION rag_ingest_mirror_processing_status(p_ledger_status text)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+SET search_path = pg_catalog, public
+AS $$
+  SELECT CASE p_ledger_status
+    WHEN 'queued' THEN 'queued'
+    WHEN 'preflight' THEN 'parsing'
+    WHEN 'parsing' THEN 'parsing'
+    WHEN 'checking' THEN 'parsing'
+    WHEN 'chunking' THEN 'chunking'
+    WHEN 'embedding' THEN 'embedding'
+    WHEN 'ready' THEN 'ready'
+    WHEN 'needs_review' THEN 'ready'
+    WHEN 'failed' THEN 'failed'
+    WHEN 'quarantined' THEN 'failed'
+    WHEN 'skipped_duplicate' THEN 'ready'
+    ELSE NULL
+  END;
+$$;
+
+CREATE OR REPLACE FUNCTION rag_ingest_assert_job_lease(p_job public.ingestion_jobs, p_worker text)
+RETURNS void
+LANGUAGE plpgsql
+STABLE
+SET search_path = public
+AS $$
+BEGIN
+  IF p_job.locked_by IS DISTINCT FROM p_worker
+     OR p_job.lease_until IS NULL
+     OR p_job.lease_until <= now() THEN
+    RAISE EXCEPTION 'lease_lost' USING ERRCODE = '55000';
+  END IF;
+END;
+$$;
+
+-- Pitfall 4: every mutating path raises lease_lost when the worker does not own a live lease.
+
+CREATE OR REPLACE FUNCTION rag_ingest_broadcast_job(p_job public.ingestion_jobs)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_payload jsonb;
+BEGIN
+  IF to_regprocedure('realtime.send(jsonb,text,text,boolean)') IS NULL THEN
+    RETURN;
+  END IF;
+  v_payload := jsonb_build_object(
+    'job_id', p_job.id,
+    'document_id', p_job.document_id,
+    'status', p_job.status,
+    'stage', p_job.stage,
+    'provisional', p_job.provisional_published_at IS NOT NULL
+  );
+  PERFORM realtime.send(v_payload, 'ingest_status', 'rag-ingest:' || p_job.tenant_key, true);
+END;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Advance and parse attempts
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.rag_advance_ingestion_job(
+  p_job_id uuid,
+  p_worker text,
+  p_stage text,
+  p_status text,
+  p_stage_state jsonb DEFAULT NULL,
+  p_timing_ms integer DEFAULT NULL,
+  p_fields jsonb DEFAULT '{}'::jsonb
+)
+RETURNS public.ingestion_jobs
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_job public.ingestion_jobs%ROWTYPE;
+  v_expected text;
+  v_timings jsonb;
+  v_key text;
+  v_value jsonb;
+  v_whitelist text[] := ARRAY[
+    'doc_class', 'tier', 'parser_used', 'parser_version', 'pages', 'page_ranges',
+    'tier_page_counts', 'detect_counts', 'preflight_ref', 'est_cost_usd', 'embedding_profile',
+    'document_id', 'needs_review_reason', 'routing_note', 'provisional_published_at', 'trace_id'
+  ];
+  v_terminal boolean;
+  v_mirror text;
+BEGIN
+  IF p_stage IS NULL OR btrim(p_stage) = '' THEN
+    RAISE EXCEPTION 'ingest_refused: invalid_stage' USING ERRCODE = '22023';
+  END IF;
+  v_expected := rag_ingest_job_status_for_stage(p_stage);
+  IF v_expected IS NULL THEN
+    RAISE EXCEPTION 'ingest_refused: invalid_stage' USING ERRCODE = '22023';
+  END IF;
+  IF p_status IS NULL OR p_status <> v_expected THEN
+    RAISE EXCEPTION 'ingest_refused: invalid_status_for_stage' USING ERRCODE = '22023';
+  END IF;
+  IF p_fields IS NOT NULL AND jsonb_typeof(p_fields) = 'object' THEN
+    FOR v_key IN SELECT jsonb_object_keys(p_fields)
+    LOOP
+      IF NOT (v_key = ANY (v_whitelist)) THEN
+        RAISE EXCEPTION 'ingest_refused: field_not_allowed' USING ERRCODE = '22023';
+      END IF;
+    END LOOP;
+  END IF;
+
+  SELECT * INTO v_job FROM ingestion_jobs WHERE id = p_job_id AND deleted_at IS NULL FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'ingest_refused: job_not_found' USING ERRCODE = '22023';
+  END IF;
+  PERFORM rag_ingest_assert_job_lease(v_job, p_worker);
+
+  v_timings := COALESCE(v_job.timings, '{}'::jsonb);
+  IF p_timing_ms IS NOT NULL AND p_stage IS NOT NULL THEN
+    v_timings := v_timings || jsonb_build_object(
+      p_stage,
+      COALESCE((v_timings ->> p_stage)::bigint, 0) + p_timing_ms
+    );
+  END IF;
+
+  UPDATE ingestion_jobs j
+     SET status = p_status,
+         stage = p_stage,
+         timings = v_timings,
+         stage_state = CASE WHEN p_stage_state IS NOT NULL THEN p_stage_state ELSE j.stage_state END,
+         doc_class = COALESCE(p_fields ->> 'doc_class', j.doc_class),
+         tier = COALESCE(p_fields ->> 'tier', j.tier),
+         parser_used = COALESCE(p_fields ->> 'parser_used', j.parser_used),
+         parser_version = COALESCE(p_fields ->> 'parser_version', j.parser_version),
+         pages = COALESCE((p_fields ->> 'pages')::integer, j.pages),
+         page_ranges = CASE WHEN p_fields ? 'page_ranges' THEN p_fields -> 'page_ranges' ELSE j.page_ranges END,
+         tier_page_counts = CASE WHEN p_fields ? 'tier_page_counts' THEN p_fields -> 'tier_page_counts' ELSE j.tier_page_counts END,
+         detect_counts = CASE WHEN p_fields ? 'detect_counts' THEN p_fields -> 'detect_counts' ELSE j.detect_counts END,
+         preflight_ref = COALESCE(p_fields ->> 'preflight_ref', j.preflight_ref),
+         est_cost_usd = COALESCE((p_fields ->> 'est_cost_usd')::numeric, j.est_cost_usd),
+         embedding_profile = COALESCE(p_fields ->> 'embedding_profile', j.embedding_profile),
+         document_id = CASE
+           WHEN j.document_id IS NULL AND p_fields ? 'document_id'
+           THEN (p_fields ->> 'document_id')::uuid
+           ELSE j.document_id
+         END,
+         needs_review_reason = COALESCE(p_fields ->> 'needs_review_reason', j.needs_review_reason),
+         routing_note = COALESCE(p_fields ->> 'routing_note', j.routing_note),
+         provisional_published_at = CASE
+           WHEN p_fields ? 'provisional_published_at'
+           THEN (p_fields ->> 'provisional_published_at')::timestamptz
+           ELSE j.provisional_published_at
+         END,
+         trace_id = CASE WHEN p_fields ? 'trace_id' THEN (p_fields ->> 'trace_id')::uuid ELSE j.trace_id END,
+         updated_at = now()
+   WHERE j.id = p_job_id
+   RETURNING j.* INTO v_job;
+
+  v_terminal := p_status IN ('ready', 'failed', 'quarantined', 'needs_review', 'skipped_duplicate');
+  IF v_terminal THEN
+    PERFORM rag_release_job_reservations(p_job_id);
+    UPDATE ingestion_jobs
+       SET locked_by = NULL, lease_until = NULL, runner = NULL
+     WHERE id = p_job_id
+     RETURNING * INTO v_job;
+  END IF;
+
+  IF v_job.document_id IS NOT NULL THEN
+    v_mirror := rag_ingest_mirror_processing_status(v_job.status);
+    IF v_mirror IS NOT NULL THEN
+      UPDATE documents d
+         SET processing_status = v_mirror
+       WHERE d.id = v_job.document_id
+         AND d.tenant_key = v_job.tenant_key;
+    END IF;
+    IF p_status = 'ready' THEN
+      UPDATE documents d SET status = 'ready' WHERE d.id = v_job.document_id AND d.tenant_key = v_job.tenant_key;
+    ELSIF p_status IN ('failed', 'quarantined') THEN
+      UPDATE documents d
+         SET status = 'failed', processing_status = 'failed'
+       WHERE d.id = v_job.document_id AND d.tenant_key = v_job.tenant_key AND NOT d.is_current;
+    ELSIF p_status = 'needs_review' THEN
+      UPDATE documents d
+         SET status = 'ready',
+             needs_review = true,
+             needs_review_reason = COALESCE(v_job.needs_review_reason, d.needs_review_reason)
+       WHERE d.id = v_job.document_id AND d.tenant_key = v_job.tenant_key;
+    END IF;
+  END IF;
+
+  PERFORM rag_ingest_broadcast_job(v_job);
+  RETURN v_job;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_record_parse_attempt(
+  p_job_id uuid,
+  p_worker text,
+  p_attempt jsonb
+)
+RETURNS integer
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_job public.ingestion_jobs%ROWTYPE;
+  v_attempts jsonb;
+  v_no integer;
+  v_reason text;
+  v_cost numeric;
+BEGIN
+  IF p_attempt IS NULL OR jsonb_typeof(p_attempt) <> 'object' THEN
+    RAISE EXCEPTION 'ingest_refused: invalid_attempt' USING ERRCODE = '22023';
+  END IF;
+  SELECT * INTO v_job FROM ingestion_jobs WHERE id = p_job_id AND deleted_at IS NULL FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'ingest_refused: job_not_found' USING ERRCODE = '22023';
+  END IF;
+  PERFORM rag_ingest_assert_job_lease(v_job, p_worker);
+
+  v_attempts := COALESCE(v_job.attempts, '[]'::jsonb);
+  v_no := jsonb_array_length(v_attempts) + 1;
+  v_attempts := v_attempts || jsonb_build_array(p_attempt || jsonb_build_object('attempt_no', v_no));
+  v_reason := p_attempt ->> 'reason';
+  v_cost := COALESCE((p_attempt ->> 'est_cost')::numeric, 0);
+
+  UPDATE ingestion_jobs j
+     SET attempts = v_attempts,
+         escalations = j.escalations + CASE WHEN v_reason = 'escalation' THEN 1 ELSE 0 END,
+         est_cost_usd = COALESCE(j.est_cost_usd, 0) + v_cost,
+         updated_at = now()
+   WHERE j.id = p_job_id;
+
+  RETURN v_no;
+END;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Fail, admin retry/delete, reads
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.rag_fail_ingestion_job(
+  p_job_id uuid,
+  p_worker text,
+  p_error_class text,
+  p_retryable boolean
+)
+RETURNS public.ingestion_jobs
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_job public.ingestion_jobs%ROWTYPE;
+  v_new_retries integer;
+  v_terminal boolean;
+BEGIN
+  IF p_error_class IS NULL OR btrim(p_error_class) = '' THEN
+    RAISE EXCEPTION 'ingest_refused: invalid_error_class' USING ERRCODE = '22023';
+  END IF;
+  SELECT * INTO v_job FROM ingestion_jobs WHERE id = p_job_id AND deleted_at IS NULL FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'ingest_refused: job_not_found' USING ERRCODE = '22023';
+  END IF;
+  PERFORM rag_ingest_assert_job_lease(v_job, p_worker);
+
+  v_new_retries := v_job.retries + 1;
+  v_terminal := (NOT p_retryable) OR v_new_retries > v_job.max_retries;
+
+  IF v_terminal THEN
+    PERFORM rag_release_job_reservations(p_job_id);
+    UPDATE ingestion_jobs j
+       SET status = 'failed',
+           error_class = p_error_class,
+           retries = v_new_retries,
+           locked_by = NULL,
+           lease_until = NULL,
+           runner = NULL,
+           run_after = NULL,
+           updated_at = now()
+     WHERE j.id = p_job_id
+     RETURNING j.* INTO v_job;
+    IF v_job.document_id IS NOT NULL THEN
+      UPDATE documents d
+         SET status = 'failed', processing_status = 'failed'
+       WHERE d.id = v_job.document_id AND d.tenant_key = v_job.tenant_key AND NOT d.is_current;
+    END IF;
+  ELSE
+    PERFORM rag_release_job_reservations(p_job_id);
+    UPDATE ingestion_jobs j
+       SET status = 'queued',
+           error_class = p_error_class,
+           retries = v_new_retries,
+           run_after = now() + (30 * power(2::numeric, j.retries)) * interval '1 second',
+           locked_by = NULL,
+           lease_until = NULL,
+           runner = NULL,
+           updated_at = now()
+     WHERE j.id = p_job_id
+     RETURNING j.* INTO v_job;
+  END IF;
+
+  PERFORM rag_ingest_broadcast_job(v_job);
+  RETURN v_job;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_retry_ingestion_job(p_job_id uuid, p_actor uuid)
+RETURNS public.ingestion_jobs
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_keys text[];
+  v_job public.ingestion_jobs%ROWTYPE;
+BEGIN
+  v_keys := rag_admin_tenant_keys(p_actor);
+  SELECT * INTO v_job FROM ingestion_jobs j
+   WHERE j.id = p_job_id AND j.deleted_at IS NULL AND j.tenant_key = ANY (v_keys)
+   FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'ingest_refused: job_not_found' USING ERRCODE = '22023';
+  END IF;
+  IF v_job.status NOT IN ('failed', 'needs_review') THEN
+    RAISE EXCEPTION 'ingest_refused: invalid_status_for_retry' USING ERRCODE = '22023';
+  END IF;
+
+  UPDATE ingestion_jobs j
+     SET status = 'queued',
+         retries = 0,
+         run_after = NULL,
+         error_class = NULL,
+         locked_by = NULL,
+         lease_until = NULL,
+         runner = NULL,
+         updated_at = now()
+   WHERE j.id = p_job_id
+   RETURNING j.* INTO v_job;
+
+  INSERT INTO rag_admin_audit (action, document_id, lineage_id, tenant_key, version, actor, rule_ids)
+  VALUES (
+    'retry_ingestion_job',
+    COALESCE(v_job.document_id, v_job.id),
+    v_job.lineage_id,
+    v_job.tenant_key,
+    v_job.version,
+    p_actor,
+    ARRAY[]::text[]
+  );
+
+  RETURN v_job;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_delete_ingestion_job(p_job_id uuid, p_actor uuid)
+RETURNS public.ingestion_jobs
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_keys text[];
+  v_job public.ingestion_jobs%ROWTYPE;
+  v_doc documents%ROWTYPE;
+BEGIN
+  v_keys := rag_admin_tenant_keys(p_actor);
+  SELECT * INTO v_job FROM ingestion_jobs j
+   WHERE j.id = p_job_id AND j.deleted_at IS NULL AND j.tenant_key = ANY (v_keys)
+   FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'ingest_refused: job_not_found' USING ERRCODE = '22023';
+  END IF;
+
+  IF v_job.document_id IS NOT NULL THEN
+    SELECT * INTO v_doc FROM documents d WHERE d.id = v_job.document_id FOR UPDATE;
+    IF FOUND AND v_doc.is_current THEN
+      RAISE EXCEPTION 'ingest_refused: document_is_current' USING ERRCODE = '22023';
+    END IF;
+    IF FOUND AND NOT v_doc.is_current THEN
+      UPDATE documents d SET superseded_by = NULL WHERE d.superseded_by = v_doc.id;
+      DELETE FROM document_chunks c WHERE c.document_id = v_doc.id;
+      DELETE FROM documents d WHERE d.id = v_doc.id;
+    END IF;
+  END IF;
+
+  UPDATE ingestion_jobs j
+     SET deleted_at = now(),
+         locked_by = NULL,
+         lease_until = NULL,
+         runner = NULL,
+         updated_at = now()
+   WHERE j.id = p_job_id
+   RETURNING j.* INTO v_job;
+
+  INSERT INTO rag_admin_audit (action, document_id, lineage_id, tenant_key, version, actor, rule_ids)
+  VALUES (
+    'delete_ingestion_job',
+    COALESCE(v_job.document_id, COALESCE(v_doc.id, v_job.id)),
+    v_job.lineage_id,
+    v_job.tenant_key,
+    v_job.version,
+    p_actor,
+    ARRAY[]::text[]
+  );
+
+  RETURN v_job;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_get_ingestion_job(p_job_id uuid, p_tenant_key text)
+RETURNS public.ingestion_jobs
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT j.*
+    FROM ingestion_jobs j
+   WHERE j.id = p_job_id
+     AND j.tenant_key = p_tenant_key
+     AND j.deleted_at IS NULL
+   LIMIT 1;
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_get_job_for_document(p_document_id uuid, p_tenant_key text)
+RETURNS public.ingestion_jobs
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT j.*
+    FROM ingestion_jobs j
+   WHERE j.document_id = p_document_id
+     AND j.tenant_key = p_tenant_key
+     AND j.deleted_at IS NULL
+   ORDER BY j.created_at DESC
+   LIMIT 1;
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_get_ingestion_job_internal(p_job_id uuid)
+RETURNS public.ingestion_jobs
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT j.* FROM ingestion_jobs j WHERE j.id = p_job_id AND j.deleted_at IS NULL LIMIT 1;
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_list_ingestion_jobs(
+  p_tenant_key text DEFAULT NULL,
+  p_statuses text[] DEFAULT NULL,
+  p_kind text DEFAULT NULL,
+  p_limit integer DEFAULT 50,
+  p_offset integer DEFAULT 0
+)
+RETURNS SETOF public.ingestion_jobs
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT j.*
+    FROM ingestion_jobs j
+   WHERE j.deleted_at IS NULL
+     AND (p_tenant_key IS NULL OR j.tenant_key = p_tenant_key)
+     AND (p_kind IS NULL OR j.kind = p_kind)
+     AND (p_statuses IS NULL OR j.status = ANY (p_statuses))
+   ORDER BY j.created_at DESC, j.id DESC
+   LIMIT GREATEST(COALESCE(p_limit, 50), 0)
+   OFFSET GREATEST(COALESCE(p_offset, 0), 0);
+$$;
+
+-- The Realtime read policy (rag_ingest_broadcast_read) is created by the mode file, right after the topic rule it calls.
+
+REVOKE ALL ON FUNCTION rag_ingest_job_status_for_stage(text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION rag_ingest_mirror_processing_status(text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION rag_ingest_assert_job_lease(public.ingestion_jobs, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION rag_ingest_broadcast_job(public.ingestion_jobs) FROM PUBLIC, anon, authenticated;
+
+GRANT EXECUTE ON FUNCTION rag_ingest_job_status_for_stage(text) TO service_role;
+GRANT EXECUTE ON FUNCTION rag_ingest_mirror_processing_status(text) TO service_role;
+GRANT EXECUTE ON FUNCTION rag_ingest_assert_job_lease(public.ingestion_jobs, text) TO service_role;
+GRANT EXECUTE ON FUNCTION rag_ingest_broadcast_job(public.ingestion_jobs) TO service_role;
+
+REVOKE ALL ON FUNCTION public.rag_advance_ingestion_job(uuid, text, text, text, jsonb, integer, jsonb) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION rag_record_parse_attempt(uuid, text, jsonb) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION rag_fail_ingestion_job(uuid, text, text, boolean) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_retry_ingestion_job(uuid, uuid) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_delete_ingestion_job(uuid, uuid) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_get_ingestion_job(uuid, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_get_job_for_document(uuid, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_get_ingestion_job_internal(uuid) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_list_ingestion_jobs(text, text[], text, integer, integer) FROM PUBLIC, anon, authenticated;
+
+GRANT EXECUTE ON FUNCTION public.rag_advance_ingestion_job(uuid, text, text, text, jsonb, integer, jsonb) TO service_role;
+GRANT EXECUTE ON FUNCTION rag_record_parse_attempt(uuid, text, jsonb) TO service_role;
+GRANT EXECUTE ON FUNCTION rag_fail_ingestion_job(uuid, text, text, boolean) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_retry_ingestion_job(uuid, uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_delete_ingestion_job(uuid, uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_get_ingestion_job(uuid, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_get_job_for_document(uuid, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_get_ingestion_job_internal(uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_list_ingestion_jobs(text, text[], text, integer, integer) TO service_role;
+
+COMMIT;
+
+NOTIFY pgrst, 'reload schema';
+
+-- >>> supabase/migrations/0353_ingestion_transitions.single-tenant.sql
+-- 0353 (single-tenant): Realtime topic allow-list for the shared tenant channel only.
+
+BEGIN;
+
+CREATE OR REPLACE FUNCTION public.rag_ingest_realtime_topic_allowed(p_topic text)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT
+    auth.uid() IS NOT NULL
+    AND p_topic IS NOT NULL
+    AND p_topic = 'rag-ingest:s:default';
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_ingest_realtime_topic_allowed(text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_ingest_realtime_topic_allowed(text) TO authenticated, service_role;
+
+-- Realtime read policy (no-op when realtime.messages is absent). It calls the topic rule above, so it is created here, after it.
+DO $policy$
+BEGIN
+  IF to_regclass('realtime.messages') IS NULL THEN
+    RETURN;
+  END IF;
+  DROP POLICY IF EXISTS rag_ingest_broadcast_read ON realtime.messages;
+  CREATE POLICY rag_ingest_broadcast_read ON realtime.messages
+    FOR SELECT TO authenticated
+    USING (
+      extension = 'broadcast'
+      AND public.rag_ingest_realtime_topic_allowed((SELECT realtime.topic()))
+    );
+END
+$policy$;
+
+COMMIT;
+
+-- >>> supabase/migrations/0354_parse_budget.sql
+-- 0354: Atomic premium-page budget (reserve, settle, release), batch USD budget, monthly usage read, and deployment tier overrides.
+
+BEGIN;
+
+ALTER TABLE rag_admin_audit DROP CONSTRAINT IF EXISTS rag_admin_audit_action_check;
+ALTER TABLE rag_admin_audit ADD CONSTRAINT rag_admin_audit_action_check CHECK (
+  action IN (
+    'release_quarantine',
+    'delete_quarantined',
+    'retry_ingestion_job',
+    'delete_ingestion_job',
+    'set_parse_tier_override'
+  )
+);
+
+-- ---------------------------------------------------------------------------
+-- Parse budget (D-17, D-19, D-32, A-6)
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.rag_reserve_parse_budget(
+  p_job_id uuid,
+  p_attempt_no integer,
+  p_pages integer,
+  p_kind text,
+  p_limit integer
+)
+RETURNS boolean
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_tenant text;
+  v_month date;
+  v_reserved integer;
+  v_row public.rag_parse_budget_usage%ROWTYPE;
+BEGIN
+  IF p_pages IS NULL OR p_pages <= 0 THEN
+    RETURN false;
+  END IF;
+  IF p_kind IS NULL OR p_kind NOT IN ('parse', 'vlm') THEN
+    RAISE EXCEPTION 'parse_budget_refused: invalid_kind' USING ERRCODE = '22023';
+  END IF;
+  IF p_limit IS NULL OR p_limit < 0 OR p_pages > p_limit THEN
+    RETURN false;
+  END IF;
+
+  SELECT j.tenant_key INTO v_tenant FROM ingestion_jobs j WHERE j.id = p_job_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'parse_budget_refused: job_not_found' USING ERRCODE = '22023';
+  END IF;
+  PERFORM rag_ingest_assert_tenant_key(v_tenant);
+
+  v_month := date_trunc('month', now() AT TIME ZONE 'UTC')::date;
+
+  IF EXISTS (
+    SELECT 1 FROM rag_parse_budget_reservations r
+    WHERE r.job_id = p_job_id AND r.attempt_no = p_attempt_no AND r.kind = p_kind AND r.state = 'open'
+  ) THEN
+    RETURN false;
+  END IF;
+
+  INSERT INTO rag_parse_budget_usage AS u (tenant_key, month, pages_reserved)
+  VALUES (v_tenant, v_month, p_pages)
+  ON CONFLICT (tenant_key, month) DO UPDATE
+     SET pages_reserved = u.pages_reserved + EXCLUDED.pages_reserved
+   WHERE u.pages_reserved + u.pages_used + u.vlm_pages_used + EXCLUDED.pages_reserved <= p_limit
+  RETURNING u.* INTO v_row;
+
+  IF NOT FOUND THEN
+    RETURN false;
+  END IF;
+
+  INSERT INTO rag_parse_budget_reservations (job_id, attempt_no, tenant_key, month, pages, kind, state)
+  VALUES (p_job_id, p_attempt_no, v_tenant, v_month, p_pages, p_kind, 'open');
+
+  RETURN true;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_settle_parse_budget(
+  p_job_id uuid,
+  p_attempt_no integer,
+  p_kind text,
+  p_pages_used integer
+)
+RETURNS boolean
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  rec public.rag_parse_budget_reservations%ROWTYPE;
+  v_used integer;
+BEGIN
+  IF p_pages_used IS NULL OR p_pages_used < 0 THEN
+    RAISE EXCEPTION 'parse_budget_refused: invalid_pages' USING ERRCODE = '22023';
+  END IF;
+  IF p_kind IS NULL OR p_kind NOT IN ('parse', 'vlm') THEN
+    RAISE EXCEPTION 'parse_budget_refused: invalid_kind' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT * INTO rec
+    FROM rag_parse_budget_reservations r
+   WHERE r.job_id = p_job_id AND r.attempt_no = p_attempt_no AND r.kind = p_kind
+   FOR UPDATE;
+
+  IF NOT FOUND OR rec.state = 'released' THEN
+    RETURN false;
+  END IF;
+  IF rec.state = 'settled' THEN
+    RETURN true;
+  END IF;
+
+  v_used := GREATEST(0, LEAST(p_pages_used, rec.pages));
+
+  UPDATE rag_parse_budget_reservations SET state = 'settled' WHERE id = rec.id;
+
+  UPDATE rag_parse_budget_usage u
+     SET pages_reserved = GREATEST(0, u.pages_reserved - rec.pages),
+         pages_used = u.pages_used + CASE WHEN p_kind = 'parse' THEN v_used ELSE 0 END,
+         vlm_pages_used = u.vlm_pages_used + CASE WHEN p_kind = 'vlm' THEN v_used ELSE 0 END
+   WHERE u.tenant_key = rec.tenant_key AND u.month = rec.month;
+
+  RETURN true;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_release_parse_budget(
+  p_job_id uuid,
+  p_attempt_no integer,
+  p_kind text
+)
+RETURNS boolean
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  rec public.rag_parse_budget_reservations%ROWTYPE;
+BEGIN
+  IF p_kind IS NULL OR p_kind NOT IN ('parse', 'vlm') THEN
+    RAISE EXCEPTION 'parse_budget_refused: invalid_kind' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT * INTO rec
+    FROM rag_parse_budget_reservations r
+   WHERE r.job_id = p_job_id AND r.attempt_no = p_attempt_no AND r.kind = p_kind
+   FOR UPDATE;
+
+  IF NOT FOUND OR rec.state = 'released' THEN
+    RETURN false;
+  END IF;
+  IF rec.state = 'settled' THEN
+    RETURN true;
+  END IF;
+
+  UPDATE rag_parse_budget_reservations SET state = 'released' WHERE id = rec.id;
+
+  UPDATE rag_parse_budget_usage u
+     SET pages_reserved = GREATEST(0, u.pages_reserved - rec.pages)
+   WHERE u.tenant_key = rec.tenant_key AND u.month = rec.month;
+
+  RETURN true;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_reserve_batch_budget(p_job_id uuid, p_usd numeric)
+RETURNS boolean
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_batch uuid;
+  v_updated uuid;
+BEGIN
+  IF p_usd IS NULL OR p_usd < 0 THEN
+    RAISE EXCEPTION 'parse_budget_refused: invalid_usd' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT j.batch_id INTO v_batch FROM ingestion_jobs j WHERE j.id = p_job_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'parse_budget_refused: job_not_found' USING ERRCODE = '22023';
+  END IF;
+  IF v_batch IS NULL THEN
+    RETURN true;
+  END IF;
+
+  UPDATE ingestion_batches b
+     SET spent_usd = b.spent_usd + p_usd,
+         updated_at = now()
+   WHERE b.id = v_batch
+     AND b.budget_usd IS NOT NULL
+     AND b.spent_usd + p_usd <= b.budget_usd
+  RETURNING b.id INTO v_updated;
+
+  RETURN v_updated IS NOT NULL;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_parse_budget_month(p_tenant_key text DEFAULT NULL)
+RETURNS TABLE (
+  tenant_key text,
+  month date,
+  pages_reserved integer,
+  pages_used integer,
+  vlm_pages_used integer
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT u.tenant_key, u.month, u.pages_reserved, u.pages_used, u.vlm_pages_used
+    FROM rag_parse_budget_usage u
+   WHERE u.month = date_trunc('month', now() AT TIME ZONE 'UTC')::date
+     AND (p_tenant_key IS NULL OR u.tenant_key = p_tenant_key)
+   ORDER BY u.tenant_key;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- Tier overrides (D-13)
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.rag_parse_doc_type_ok(p_doc_type text)
+RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+SET search_path = pg_catalog, public
+AS $$
+  SELECT p_doc_type = ANY (ARRAY[
+    'general',
+    'financial_report',
+    'contract_legal',
+    'invoice_receipt',
+    'product_technical',
+    'scanned_image'
+  ]::text[]);
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_get_parse_tier_overrides()
+RETURNS TABLE (
+  doc_type text,
+  min_tier text,
+  max_tier text,
+  updated_by text,
+  updated_at timestamptz
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT o.doc_type, o.min_tier, o.max_tier, o.updated_by, o.updated_at
+    FROM rag_parse_tier_overrides o
+   ORDER BY o.doc_type;
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_set_parse_tier_override(
+  p_doc_type text,
+  p_min_tier text,
+  p_max_tier text,
+  p_actor uuid
+)
+RETURNS public.rag_parse_tier_overrides
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_row public.rag_parse_tier_overrides%ROWTYPE;
+BEGIN
+  IF p_actor IS NULL THEN
+    RAISE EXCEPTION 'parse_tier_refused: actor_required' USING ERRCODE = '22023';
+  END IF;
+
+  IF NOT rag_parse_doc_type_ok(p_doc_type) THEN
+    RAISE EXCEPTION 'parse_tier_refused: invalid_doc_type' USING ERRCODE = '22023';
+  END IF;
+
+  IF p_min_tier IS NULL AND p_max_tier IS NULL THEN
+    DELETE FROM rag_parse_tier_overrides WHERE doc_type = p_doc_type;
+    INSERT INTO rag_admin_audit (action, document_id, lineage_id, tenant_key, version, actor, rule_ids)
+    VALUES (
+      'set_parse_tier_override',
+      '00000000-0000-4000-8000-000000000000',
+      NULL,
+      's:default',
+      NULL,
+      p_actor,
+      ARRAY[p_doc_type, 'deleted']
+    );
+    RETURN NULL;
+  END IF;
+
+  IF p_min_tier IS NULL OR p_max_tier IS NULL
+     OR p_min_tier NOT IN ('native', 'fast', 'structured', 'premium')
+     OR p_max_tier NOT IN ('native', 'fast', 'structured', 'premium')
+     OR rag_parse_tier_rank(p_min_tier) > rag_parse_tier_rank(p_max_tier) THEN
+    RAISE EXCEPTION 'parse_tier_refused: invalid_bounds' USING ERRCODE = '22023';
+  END IF;
+
+  INSERT INTO rag_parse_tier_overrides AS o (doc_type, min_tier, max_tier, updated_by, updated_at)
+  VALUES (p_doc_type, p_min_tier, p_max_tier, p_actor::text, now())
+  ON CONFLICT (doc_type) DO UPDATE
+     SET min_tier = EXCLUDED.min_tier,
+         max_tier = EXCLUDED.max_tier,
+         updated_by = EXCLUDED.updated_by,
+         updated_at = EXCLUDED.updated_at
+  RETURNING o.* INTO v_row;
+
+  INSERT INTO rag_admin_audit (action, document_id, lineage_id, tenant_key, version, actor, rule_ids)
+  VALUES (
+    'set_parse_tier_override',
+    '00000000-0000-4000-8000-000000000000',
+    NULL,
+    's:default',
+    NULL,
+    p_actor,
+    ARRAY[p_doc_type, p_min_tier, p_max_tier]
+  );
+
+  RETURN v_row;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_reserve_parse_budget(uuid, integer, integer, text, integer) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_settle_parse_budget(uuid, integer, text, integer) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_release_parse_budget(uuid, integer, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION rag_reserve_batch_budget(uuid, numeric) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_parse_budget_month(text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_parse_doc_type_ok(text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_get_parse_tier_overrides() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION rag_set_parse_tier_override(text, text, text, uuid) FROM PUBLIC, anon, authenticated;
+
+GRANT EXECUTE ON FUNCTION public.rag_reserve_parse_budget(uuid, integer, integer, text, integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_settle_parse_budget(uuid, integer, text, integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_release_parse_budget(uuid, integer, text) TO service_role;
+GRANT EXECUTE ON FUNCTION rag_reserve_batch_budget(uuid, numeric) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_parse_budget_month(text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_parse_doc_type_ok(text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_get_parse_tier_overrides() TO service_role;
+GRANT EXECUTE ON FUNCTION rag_set_parse_tier_override(text, text, text, uuid) TO service_role;
+
+NOTIFY pgrst, 'reload schema';
+
+COMMIT;
+
+-- >>> supabase/migrations/0355_parse_cache.sql
+-- 0355: tenant-scoped parse cache RPCs keyed through ingestion_jobs (D-20, F-12, A-6).
+
+BEGIN;
+
+CREATE OR REPLACE FUNCTION rag_parse_cache_version_segment(p_parser_version text)
+RETURNS text
+LANGUAGE sql
+IMMUTABLE
+SET search_path = pg_catalog, public
+AS $$
+  SELECT left(encode(sha256(convert_to(p_parser_version, 'UTF8')), 'hex'), 16);
+$$;
+
+CREATE OR REPLACE FUNCTION rag_parse_cache_assert_key_parts(p_parser text, p_options_hash text)
+RETURNS void
+LANGUAGE plpgsql
+IMMUTABLE
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF p_parser IS NULL OR p_parser !~ '^[a-z0-9_]+$' THEN
+    RAISE EXCEPTION 'parse_cache_refused: invalid_parser' USING ERRCODE = '22023';
+  END IF;
+  IF p_options_hash IS NULL OR p_options_hash !~ '^[0-9a-f]{64}$' THEN
+    RAISE EXCEPTION 'parse_cache_refused: invalid_options_hash' USING ERRCODE = '22023';
+  END IF;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_parse_cache_prefix(
+  p_job_id uuid,
+  p_parser text,
+  p_parser_version text,
+  p_options_hash text
+)
+RETURNS text
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_job record;
+  v_segment text;
+BEGIN
+  PERFORM rag_parse_cache_assert_key_parts(p_parser, p_options_hash);
+  SELECT j.tenant_key, j.file_sha256 INTO v_job
+    FROM ingestion_jobs j
+   WHERE j.id = p_job_id AND j.deleted_at IS NULL;
+  IF NOT FOUND THEN
+  RETURN NULL;
+  END IF;
+  IF v_job.file_sha256 IS NULL OR btrim(v_job.file_sha256) = '' THEN
+    RAISE EXCEPTION 'parse_cache_refused: missing_file_sha256' USING ERRCODE = '22023';
+  END IF;
+  v_segment := rag_parse_cache_version_segment(p_parser_version);
+  RETURN v_job.tenant_key
+    || '/_parse-cache/'
+    || v_job.file_sha256
+    || '/'
+    || p_parser
+    || '-'
+    || v_segment
+    || '-'
+    || p_options_hash
+    || '/';
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_parse_cache_lookup(
+  p_job_id uuid,
+  p_parser text,
+  p_parser_version text,
+  p_options_hash text
+)
+RETURNS SETOF public.rag_parse_cache
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_job record;
+BEGIN
+  PERFORM rag_parse_cache_assert_key_parts(p_parser, p_options_hash);
+  SELECT j.tenant_key, j.file_sha256 INTO v_job
+    FROM ingestion_jobs j
+   WHERE j.id = p_job_id AND j.deleted_at IS NULL;
+  IF NOT FOUND THEN
+    RETURN;
+  END IF;
+  IF v_job.file_sha256 IS NULL OR btrim(v_job.file_sha256) = '' THEN
+    RETURN;
+  END IF;
+  RETURN QUERY
+  SELECT c.*
+    FROM rag_parse_cache c
+   WHERE c.tenant_key = v_job.tenant_key
+     AND c.file_sha256 = v_job.file_sha256
+     AND c.parser = p_parser
+     AND c.parser_version = p_parser_version
+     AND c.options_hash = p_options_hash;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_parse_cache_put(
+  p_job_id uuid,
+  p_parser text,
+  p_parser_version text,
+  p_options_hash text,
+  p_object_prefix text,
+  p_result jsonb DEFAULT '{}'::jsonb,
+  p_byte_size bigint DEFAULT NULL
+)
+RETURNS public.rag_parse_cache
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_job record;
+  v_expected text;
+  v_row public.rag_parse_cache%ROWTYPE;
+BEGIN
+  PERFORM rag_parse_cache_assert_key_parts(p_parser, p_options_hash);
+  SELECT j.tenant_key, j.file_sha256 INTO v_job
+    FROM ingestion_jobs j
+   WHERE j.id = p_job_id AND j.deleted_at IS NULL;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'parse_cache_refused: job_not_found' USING ERRCODE = '22023';
+  END IF;
+  IF v_job.file_sha256 IS NULL OR btrim(v_job.file_sha256) = '' THEN
+    RAISE EXCEPTION 'parse_cache_refused: missing_file_sha256' USING ERRCODE = '22023';
+  END IF;
+  v_expected := rag_parse_cache_prefix(p_job_id, p_parser, p_parser_version, p_options_hash);
+  IF p_object_prefix IS DISTINCT FROM v_expected THEN
+    RAISE EXCEPTION 'parse_cache_refused: prefix_mismatch' USING ERRCODE = '22023';
+  END IF;
+  INSERT INTO rag_parse_cache (
+    tenant_key, file_sha256, parser, parser_version, options_hash, object_prefix, result, byte_size
+  )
+  VALUES (
+    v_job.tenant_key, v_job.file_sha256, p_parser, p_parser_version, p_options_hash, p_object_prefix,
+    COALESCE(p_result, '{}'::jsonb), p_byte_size
+  )
+  ON CONFLICT (tenant_key, file_sha256, parser, parser_version, options_hash) DO NOTHING
+  RETURNING * INTO v_row;
+  IF FOUND THEN
+    RETURN v_row;
+  END IF;
+  SELECT c.* INTO v_row
+    FROM rag_parse_cache c
+   WHERE c.tenant_key = v_job.tenant_key
+     AND c.file_sha256 = v_job.file_sha256
+     AND c.parser = p_parser
+     AND c.parser_version = p_parser_version
+     AND c.options_hash = p_options_hash;
+  RETURN v_row;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_set_document_parse_cache(
+  p_job_id uuid,
+  p_cache_id uuid
+)
+RETURNS void
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+DECLARE
+  v_job record;
+  v_cache record;
+  v_doc_tenant text;
+BEGIN
+  SELECT j.tenant_key, j.document_id INTO v_job
+    FROM ingestion_jobs j
+   WHERE j.id = p_job_id AND j.deleted_at IS NULL;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'parse_cache_refused: job_not_found' USING ERRCODE = '22023';
+  END IF;
+  IF v_job.document_id IS NULL THEN
+    RAISE EXCEPTION 'parse_cache_refused: document_not_linked' USING ERRCODE = '22023';
+  END IF;
+  SELECT c.id, c.tenant_key INTO v_cache FROM rag_parse_cache c WHERE c.id = p_cache_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'parse_cache_refused: cache_not_found' USING ERRCODE = '22023';
+  END IF;
+  IF v_cache.tenant_key IS DISTINCT FROM v_job.tenant_key THEN
+    RAISE EXCEPTION 'parse_cache_refused: cache_tenant_mismatch' USING ERRCODE = '22023';
+  END IF;
+  SELECT d.tenant_key INTO v_doc_tenant FROM documents d WHERE d.id = v_job.document_id;
+  IF v_doc_tenant IS DISTINCT FROM v_job.tenant_key THEN
+    RAISE EXCEPTION 'parse_cache_refused: document_tenant_mismatch' USING ERRCODE = '22023';
+  END IF;
+  UPDATE documents d SET parse_cache_id = p_cache_id
+   WHERE d.id = v_job.document_id AND d.tenant_key = v_job.tenant_key;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_parse_cache_for_document(
+  p_tenant_key text,
+  p_document_id uuid
+)
+RETURNS SETOF public.rag_parse_cache
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  PERFORM rag_ingest_assert_tenant_key(p_tenant_key);
+  RETURN QUERY
+  SELECT c.*
+    FROM documents d
+    JOIN rag_parse_cache c ON c.id = d.parse_cache_id
+   WHERE d.id = p_document_id
+     AND d.tenant_key = p_tenant_key
+     AND c.tenant_key = p_tenant_key;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION rag_parse_cache_version_segment(text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION rag_parse_cache_assert_key_parts(text, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_parse_cache_prefix(uuid, text, text, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_parse_cache_lookup(uuid, text, text, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_parse_cache_put(uuid, text, text, text, text, jsonb, bigint) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_set_document_parse_cache(uuid, uuid) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_parse_cache_for_document(text, uuid) FROM PUBLIC, anon, authenticated;
+
+GRANT EXECUTE ON FUNCTION rag_parse_cache_version_segment(text) TO service_role;
+GRANT EXECUTE ON FUNCTION rag_parse_cache_assert_key_parts(text, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_parse_cache_prefix(uuid, text, text, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_parse_cache_lookup(uuid, text, text, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_parse_cache_put(uuid, text, text, text, text, jsonb, bigint) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_set_document_parse_cache(uuid, uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_parse_cache_for_document(text, uuid) TO service_role;
+
+NOTIFY pgrst, 'reload schema';
+
+COMMIT;
+
+-- >>> supabase/migrations/0356_backfill.sql
+-- 0356: Backfill batch helpers — create batch, bulk enqueue, dedupe lookup, monitor and embed-batch tracking (Phase 3.1 plan 20).
+
+BEGIN;
+
+-- ---------------------------------------------------------------------------
+-- Create a backfill batch row (validated tenant)
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.rag_create_ingestion_batch(
+  p_tenant_key text,
+  p_source_kind text,
+  p_source_ref text,
+  p_budget_usd numeric DEFAULT NULL,
+  p_concurrency integer DEFAULT 1,
+  p_runner text DEFAULT 'worker',
+  p_created_by text DEFAULT NULL
+)
+RETURNS public.ingestion_batches
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_row public.ingestion_batches%ROWTYPE;
+BEGIN
+  PERFORM rag_ingest_assert_tenant_key(p_tenant_key);
+
+  IF p_source_kind IS NULL OR p_source_kind NOT IN ('folder', 'bucket', 'manifest') THEN
+    RAISE EXCEPTION 'backfill_refused: invalid_source_kind' USING ERRCODE = '22023';
+  END IF;
+  IF p_source_ref IS NULL OR btrim(p_source_ref) = '' THEN
+    RAISE EXCEPTION 'backfill_refused: invalid_source_ref' USING ERRCODE = '22023';
+  END IF;
+  IF p_concurrency IS NULL OR p_concurrency < 1 THEN
+    RAISE EXCEPTION 'backfill_refused: invalid_concurrency' USING ERRCODE = '22023';
+  END IF;
+  IF p_runner IS NULL OR p_runner NOT IN ('worker', 'ray') THEN
+    RAISE EXCEPTION 'backfill_refused: invalid_runner' USING ERRCODE = '22023';
+  END IF;
+  IF p_budget_usd IS NOT NULL AND p_budget_usd < 0 THEN
+    RAISE EXCEPTION 'backfill_refused: invalid_budget' USING ERRCODE = '22023';
+  END IF;
+
+  INSERT INTO ingestion_batches (
+    tenant_key, source_kind, source_ref, budget_usd, concurrency, runner, created_by, status
+  ) VALUES (
+    p_tenant_key, p_source_kind, p_source_ref, p_budget_usd, p_concurrency, p_runner, p_created_by, 'pending'
+  )
+  RETURNING * INTO v_row;
+
+  RETURN v_row;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_create_ingestion_batch(text, text, text, numeric, integer, text, text)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_create_ingestion_batch(text, text, text, numeric, integer, text, text)
+  TO service_role;
+
+-- ---------------------------------------------------------------------------
+-- Bulk enqueue backfill jobs (re-entrant; inherits batch tenant; priority 10)
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.rag_enqueue_backfill_jobs(p_batch_id uuid, p_jobs jsonb)
+RETURNS integer
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_tenant text;
+  v_job jsonb;
+  v_kind text;
+  v_status text;
+  v_inserted integer := 0;
+BEGIN
+  IF p_batch_id IS NULL THEN
+    RAISE EXCEPTION 'backfill_refused: invalid_batch' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT b.tenant_key INTO v_tenant FROM ingestion_batches b WHERE b.id = p_batch_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'backfill_refused: batch_not_found' USING ERRCODE = '22023';
+  END IF;
+
+  IF p_jobs IS NULL OR jsonb_typeof(p_jobs) <> 'array' THEN
+  RAISE EXCEPTION 'backfill_refused: jobs_must_be_array' USING ERRCODE = '22023';
+  END IF;
+
+  FOR v_job IN SELECT value FROM jsonb_array_elements(p_jobs) AS e(value) LOOP
+    IF jsonb_typeof(v_job) <> 'object' THEN
+      RAISE EXCEPTION 'backfill_refused: invalid_job_object' USING ERRCODE = '22023';
+    END IF;
+
+    v_kind := v_job ->> 'kind';
+    IF v_kind IS NULL OR v_kind NOT IN ('ingest', 'dry_run') THEN
+      RAISE EXCEPTION 'backfill_refused: invalid_kind' USING ERRCODE = '22023';
+    END IF;
+    IF v_job ->> 'source_key' IS NULL OR btrim(v_job ->> 'source_key') = '' THEN
+      RAISE EXCEPTION 'backfill_refused: invalid_source_key' USING ERRCODE = '22023';
+    END IF;
+
+    v_status := COALESCE(v_job ->> 'status', 'queued');
+    IF v_status NOT IN (
+      'queued', 'preflight', 'parsing', 'checking', 'chunking', 'embedding',
+      'ready', 'failed', 'quarantined', 'needs_review', 'skipped_duplicate'
+    ) THEN
+      RAISE EXCEPTION 'backfill_refused: invalid_status' USING ERRCODE = '22023';
+    END IF;
+
+    INSERT INTO ingestion_jobs (
+      tenant_key, kind, status, source, source_key, file_sha256, filename, mime_type,
+      original_ref, settings, priority, batch_id, document_id
+    ) VALUES (
+      v_tenant,
+      v_kind,
+      v_status,
+      NULLIF(v_job ->> 'source', ''),
+      v_job ->> 'source_key',
+      NULLIF(v_job ->> 'file_sha256', ''),
+      NULLIF(v_job ->> 'filename', ''),
+      NULLIF(v_job ->> 'mime_type', ''),
+      CASE WHEN v_job ? 'original_ref' THEN v_job -> 'original_ref' ELSE NULL END,
+      COALESCE(v_job -> 'settings', '{}'::jsonb),
+      10,
+      p_batch_id,
+      NULL
+    )
+    ON CONFLICT (batch_id, kind, source_key) WHERE batch_id IS NOT NULL DO NOTHING;
+
+    IF FOUND THEN
+      v_inserted := v_inserted + 1;
+    END IF;
+  END LOOP;
+
+  RETURN v_inserted;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_enqueue_backfill_jobs(uuid, jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_enqueue_backfill_jobs(uuid, jsonb) TO service_role;
+
+-- ---------------------------------------------------------------------------
+-- Tenant-scoped hash dedupe lookup (at most 1,000 hashes per call)
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.rag_existing_file_hashes(
+  p_tenant_key text,
+  p_hashes text[]
+)
+RETURNS TABLE (id uuid, file_sha256 text, tenant_key text, source_key text)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  PERFORM rag_ingest_assert_tenant_key(p_tenant_key);
+
+  IF p_hashes IS NULL OR array_length(p_hashes, 1) IS NULL THEN
+    RETURN;
+  END IF;
+  IF array_length(p_hashes, 1) > 1000 THEN
+    RAISE EXCEPTION 'backfill_refused: too_many_hashes' USING ERRCODE = '22023';
+  END IF;
+
+  RETURN QUERY
+  SELECT d.id, d.file_sha256, d.tenant_key, d.source_key
+    FROM documents d
+   WHERE d.tenant_key = p_tenant_key
+     AND d.is_current
+     AND d.status = 'ready'
+     AND d.file_sha256 IS NOT NULL
+     AND d.file_sha256 = ANY (p_hashes)
+   ORDER BY d.created_at, d.id;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_existing_file_hashes(text, text[]) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_existing_file_hashes(text, text[]) TO service_role;
+
+-- ---------------------------------------------------------------------------
+-- Batch progress (counts by kind and status, leased jobs, spent USD)
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.rag_batch_progress(p_batch_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_spent numeric;
+  v_leased integer;
+  v_counts jsonb := '{}'::jsonb;
+  rec record;
+BEGIN
+  IF p_batch_id IS NULL THEN
+    RAISE EXCEPTION 'backfill_refused: invalid_batch' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT b.spent_usd INTO v_spent FROM ingestion_batches b WHERE b.id = p_batch_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'backfill_refused: batch_not_found' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT count(*)::integer INTO v_leased
+    FROM ingestion_jobs j
+   WHERE j.batch_id = p_batch_id
+     AND j.deleted_at IS NULL
+     AND j.status IN ('preflight', 'parsing', 'checking', 'chunking', 'embedding')
+     AND j.lease_until IS NOT NULL
+     AND j.lease_until > now();
+
+  FOR rec IN
+    SELECT j.kind, j.status, count(*)::integer AS n
+      FROM ingestion_jobs j
+     WHERE j.batch_id = p_batch_id AND j.deleted_at IS NULL
+     GROUP BY j.kind, j.status
+     ORDER BY j.kind, j.status
+  LOOP
+    IF NOT v_counts ? rec.kind THEN
+      v_counts := jsonb_set(v_counts, ARRAY[rec.kind], '{}'::jsonb, true);
+    END IF;
+    v_counts := jsonb_set(v_counts, ARRAY[rec.kind, rec.status], to_jsonb(rec.n), true);
+  END LOOP;
+
+  RETURN jsonb_build_object(
+    'spent_usd', COALESCE(v_spent, 0),
+    'leased', COALESCE(v_leased, 0),
+    'counts', v_counts
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_batch_progress(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_batch_progress(uuid) TO service_role;
+
+-- ---------------------------------------------------------------------------
+-- Update batch status / dry-run report / totals
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.rag_update_ingestion_batch(
+  p_batch_id uuid,
+  p_status text DEFAULT NULL,
+  p_dry_run_report jsonb DEFAULT NULL,
+  p_totals jsonb DEFAULT NULL
+)
+RETURNS public.ingestion_batches
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_row public.ingestion_batches%ROWTYPE;
+BEGIN
+  IF p_batch_id IS NULL THEN
+    RAISE EXCEPTION 'backfill_refused: invalid_batch' USING ERRCODE = '22023';
+  END IF;
+
+  IF p_status IS NOT NULL AND p_status NOT IN (
+    'pending', 'sampling', 'running', 'completed', 'failed', 'cancelled'
+  ) THEN
+    RAISE EXCEPTION 'backfill_refused: invalid_status' USING ERRCODE = '22023';
+  END IF;
+
+  UPDATE ingestion_batches b
+     SET status = COALESCE(p_status, b.status),
+         dry_run_report = COALESCE(p_dry_run_report, b.dry_run_report),
+         totals = COALESCE(p_totals, b.totals),
+         updated_at = now()
+   WHERE b.id = p_batch_id
+  RETURNING * INTO v_row;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'backfill_refused: batch_not_found' USING ERRCODE = '22023';
+  END IF;
+
+  RETURN v_row;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_update_ingestion_batch(uuid, text, jsonb, jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_update_ingestion_batch(uuid, text, jsonb, jsonb) TO service_role;
+
+-- ---------------------------------------------------------------------------
+-- Page batch jobs for monitor / Ray runner (status filter, keyset on id)
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.rag_list_batch_jobs(
+  p_batch_id uuid,
+  p_status text DEFAULT NULL,
+  p_after_id uuid DEFAULT NULL,
+  p_limit integer DEFAULT 100
+)
+RETURNS SETOF public.ingestion_jobs
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_after_created_at timestamptz;
+  v_after_id uuid;
+  v_limit integer;
+BEGIN
+  IF p_batch_id IS NULL THEN
+    RAISE EXCEPTION 'backfill_refused: invalid_batch' USING ERRCODE = '22023';
+  END IF;
+
+  v_limit := GREATEST(LEAST(COALESCE(p_limit, 100), 1000), 1);
+
+  IF p_status IS NOT NULL AND p_status NOT IN (
+    'queued', 'preflight', 'parsing', 'checking', 'chunking', 'embedding',
+    'ready', 'failed', 'quarantined', 'needs_review', 'skipped_duplicate'
+  ) THEN
+    RAISE EXCEPTION 'backfill_refused: invalid_status' USING ERRCODE = '22023';
+  END IF;
+
+  IF p_after_id IS NOT NULL THEN
+    SELECT j.created_at, j.id INTO v_after_created_at, v_after_id
+      FROM ingestion_jobs j
+     WHERE j.id = p_after_id AND j.batch_id = p_batch_id;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'backfill_refused: invalid_cursor' USING ERRCODE = '22023';
+    END IF;
+  END IF;
+
+  RETURN QUERY
+  SELECT j.*
+    FROM ingestion_jobs j
+   WHERE j.batch_id = p_batch_id
+     AND j.deleted_at IS NULL
+     AND (p_status IS NULL OR j.status = p_status)
+     AND (
+       p_after_id IS NULL
+       OR j.created_at > v_after_created_at
+       OR (j.created_at = v_after_created_at AND j.id > v_after_id)
+     )
+   ORDER BY j.created_at, j.id
+   LIMIT v_limit;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_list_batch_jobs(uuid, text, uuid, integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_list_batch_jobs(uuid, text, uuid, integer) TO service_role;
+
+-- ---------------------------------------------------------------------------
+-- OpenAI embed-batch tracking (D-35)
+-- ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.rag_record_embed_batch(
+  p_batch_id uuid,
+  p_profile_id text,
+  p_provider text,
+  p_provider_batch_id text DEFAULT NULL,
+  p_input_file_id text DEFAULT NULL,
+  p_input_count integer DEFAULT 0,
+  p_status text DEFAULT 'pending'
+)
+RETURNS public.rag_embed_batches
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_row public.rag_embed_batches%ROWTYPE;
+BEGIN
+  IF p_batch_id IS NULL THEN
+    RAISE EXCEPTION 'backfill_refused: invalid_batch' USING ERRCODE = '22023';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM ingestion_batches b WHERE b.id = p_batch_id) THEN
+    RAISE EXCEPTION 'backfill_refused: batch_not_found' USING ERRCODE = '22023';
+  END IF;
+  IF p_profile_id IS NULL OR NOT EXISTS (SELECT 1 FROM embedding_profiles ep WHERE ep.id = p_profile_id) THEN
+    RAISE EXCEPTION 'backfill_refused: invalid_profile' USING ERRCODE = '22023';
+  END IF;
+  IF p_provider IS NULL OR btrim(p_provider) = '' THEN
+    RAISE EXCEPTION 'backfill_refused: invalid_provider' USING ERRCODE = '22023';
+  END IF;
+  IF p_status IS NULL OR p_status NOT IN (
+    'pending', 'validating', 'failed', 'in_progress', 'finalizing', 'completed',
+    'expired', 'cancelling', 'cancelled'
+  ) THEN
+    RAISE EXCEPTION 'backfill_refused: invalid_status' USING ERRCODE = '22023';
+  END IF;
+  IF p_input_count IS NULL OR p_input_count < 0 THEN
+    RAISE EXCEPTION 'backfill_refused: invalid_input_count' USING ERRCODE = '22023';
+  END IF;
+
+  INSERT INTO rag_embed_batches (
+    batch_id, profile_id, provider, provider_batch_id, input_file_id, input_count, status
+  ) VALUES (
+    p_batch_id, p_profile_id, p_provider, p_provider_batch_id, p_input_file_id, COALESCE(p_input_count, 0), p_status
+  )
+  RETURNING * INTO v_row;
+
+  RETURN v_row;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_record_embed_batch(uuid, text, text, text, text, integer, text)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_record_embed_batch(uuid, text, text, text, text, integer, text)
+  TO service_role;
+
+CREATE OR REPLACE FUNCTION public.rag_update_embed_batch(
+  p_embed_batch_id uuid,
+  p_status text,
+  p_provider_batch_id text DEFAULT NULL,
+  p_output_file_id text DEFAULT NULL,
+  p_error_file_id text DEFAULT NULL,
+  p_error text DEFAULT NULL
+)
+RETURNS public.rag_embed_batches
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_row public.rag_embed_batches%ROWTYPE;
+BEGIN
+  IF p_embed_batch_id IS NULL THEN
+    RAISE EXCEPTION 'backfill_refused: invalid_embed_batch' USING ERRCODE = '22023';
+  END IF;
+  IF p_status IS NULL OR p_status NOT IN (
+    'pending', 'validating', 'failed', 'in_progress', 'finalizing', 'completed',
+    'expired', 'cancelling', 'cancelled'
+  ) THEN
+    RAISE EXCEPTION 'backfill_refused: invalid_status' USING ERRCODE = '22023';
+  END IF;
+
+  UPDATE rag_embed_batches e
+     SET status = p_status,
+         provider_batch_id = COALESCE(p_provider_batch_id, e.provider_batch_id),
+         output_file_id = COALESCE(p_output_file_id, e.output_file_id),
+         error_file_id = COALESCE(p_error_file_id, e.error_file_id),
+         error = COALESCE(p_error, e.error),
+         updated_at = now()
+   WHERE e.id = p_embed_batch_id
+  RETURNING * INTO v_row;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'backfill_refused: embed_batch_not_found' USING ERRCODE = '22023';
+  END IF;
+
+  RETURN v_row;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_update_embed_batch(uuid, text, text, text, text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_update_embed_batch(uuid, text, text, text, text, text) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.rag_open_embed_batches(p_batch_id uuid)
+RETURNS SETOF public.rag_embed_batches
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT e.*
+    FROM rag_embed_batches e
+   WHERE e.batch_id = p_batch_id
+     AND e.status NOT IN ('completed', 'cancelled')
+   ORDER BY e.created_at, e.id;
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_open_embed_batches(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_open_embed_batches(uuid) TO service_role;
+
+COMMIT;
+
+NOTIFY pgrst, 'reload schema';
+
+-- >>> supabase/migrations/0357_soft_delete.sql
+-- 0357: Soft-delete a document lineage at the source (D-27). Rows are kept for citations; retrieval drops them via is_current/status.
+-- The RET-05 outbox and semantic-cache invalidation read this function later; neither is wired here.
+
+BEGIN;
+
+CREATE OR REPLACE FUNCTION public.rag_soft_delete_document(
+  p_tenant_key text,
+  p_lineage_id uuid,
+  p_source text
+)
+RETURNS TABLE (outcome text, lineage_id uuid, job_id uuid)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+#variable_conflict use_column
+DECLARE
+  v_count integer;
+  v_has_current boolean;
+  v_source_key text;
+  v_doc_id uuid;
+  v_job_id uuid;
+BEGIN
+  PERFORM public.rag_ingest_assert_tenant_key(p_tenant_key);
+
+  IF p_lineage_id IS NULL THEN
+    RAISE EXCEPTION 'invalid_argument' USING ERRCODE = '22023';
+  END IF;
+  IF p_source IS NULL OR p_source NOT IN (
+    'chat_upload', 'config_upload', 'nango', 'scraper', 'image_upload', 'ai_to_rag'
+  ) THEN
+    RAISE EXCEPTION 'invalid_source' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT count(*) INTO v_count
+    FROM public.documents d
+   WHERE d.lineage_id = p_lineage_id
+     AND d.tenant_key = p_tenant_key
+     AND d.source = p_source;
+  IF v_count = 0 THEN
+    RAISE EXCEPTION 'tenant_mismatch' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT EXISTS (
+    SELECT 1 FROM public.documents d
+     WHERE d.lineage_id = p_lineage_id
+       AND d.tenant_key = p_tenant_key
+       AND d.source = p_source
+       AND (d.is_current OR d.status <> 'deleted')
+  ) INTO v_has_current;
+
+  IF NOT v_has_current THEN
+    RETURN QUERY SELECT 'already_deleted'::text, p_lineage_id, NULL::uuid;
+    RETURN;
+  END IF;
+
+  SELECT d.id, d.source_key INTO v_doc_id, v_source_key
+    FROM public.documents d
+   WHERE d.lineage_id = p_lineage_id
+     AND d.tenant_key = p_tenant_key
+     AND d.source = p_source
+   ORDER BY d.is_current DESC, d.version DESC NULLS LAST
+   LIMIT 1;
+
+  UPDATE public.documents d
+     SET is_current = false,
+         status = 'deleted'
+   WHERE d.lineage_id = p_lineage_id
+     AND d.tenant_key = p_tenant_key
+     AND d.source = p_source;
+
+  UPDATE public.document_chunks c
+     SET is_current = false,
+         status = 'deleted',
+         embedding = NULL
+    FROM public.documents d
+   WHERE c.document_id = d.id
+     AND d.lineage_id = p_lineage_id
+     AND d.tenant_key = p_tenant_key
+     AND d.source = p_source;
+
+  INSERT INTO public.ingestion_jobs (
+    tenant_key, kind, status, source, source_key, lineage_id, document_id
+  ) VALUES (
+    p_tenant_key, 'delete', 'ready', p_source, COALESCE(v_source_key, p_lineage_id::text), p_lineage_id, v_doc_id
+  )
+  RETURNING id INTO v_job_id;
+
+  RETURN QUERY SELECT 'deleted'::text, p_lineage_id, v_job_id;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_soft_delete_document(text, uuid, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_soft_delete_document(text, uuid, text) TO service_role;
+
+COMMIT;
+
+-- >>> supabase/migrations/0358_progressive.sql
+-- 0358: Progressive mode (D-30, A-9, F-10). A progressive job publishes the whole document parsed with the fast preset as a normal
+-- version flagged provisional, then publishes the routed result as the next version through the Phase 3 swap. Three functions, each
+-- resolving the tenant from the job row (A-6), SECURITY DEFINER with an empty search_path, executable by service_role only:
+--   rag_mark_provisional: after the fast version was published, flags it and its chunks provisional, sets provisional_published_at
+--     and puts the job back at parse for the routed run. Only an incremental ingest job whose snapshot has progressive on qualifies.
+--   rag_begin_progressive_final: points the job at the processing version the routed run writes (same lineage, newer, not current).
+--   rag_clear_provisional: the routed text equals the provisional text (a duplicate of the same lineage counts as unchanged): clears
+--     the flags of the lineage's current version and its chunks in place and points the job back at that version. No new version.
+
+BEGIN;
+
+CREATE OR REPLACE FUNCTION public.rag_mark_provisional(p_job_id uuid, p_worker text)
+RETURNS public.ingestion_jobs
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_job public.ingestion_jobs%ROWTYPE;
+  v_doc public.documents%ROWTYPE;
+BEGIN
+  SELECT * INTO v_job FROM public.ingestion_jobs j WHERE j.id = p_job_id AND j.deleted_at IS NULL FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'ingest_refused: job_not_found' USING ERRCODE = '22023';
+  END IF;
+  PERFORM public.rag_ingest_assert_job_lease(v_job, p_worker);
+  IF v_job.provisional_published_at IS NOT NULL THEN
+    RETURN v_job;
+  END IF;
+  IF v_job.kind <> 'ingest' OR v_job.batch_id IS NOT NULL
+     OR COALESCE((v_job.settings ->> 'progressive')::boolean, false) IS NOT TRUE THEN
+    RAISE EXCEPTION 'ingest_refused: provisional_not_allowed' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT * INTO v_doc FROM public.documents d
+   WHERE d.id = v_job.document_id AND d.tenant_key = v_job.tenant_key
+   FOR UPDATE;
+  IF NOT FOUND OR NOT v_doc.is_current OR v_doc.status <> 'ready' THEN
+    RAISE EXCEPTION 'ingest_refused: version_not_published' USING ERRCODE = '22023';
+  END IF;
+
+  UPDATE public.documents d SET provisional = true, processing_status = 'ready' WHERE d.id = v_doc.id;
+  UPDATE public.document_chunks c SET provisional = true WHERE c.document_id = v_doc.id;
+
+  UPDATE public.ingestion_jobs j
+     SET provisional_published_at = now(),
+         stage = 'parse',
+         status = 'parsing',
+         stage_state = '{}'::jsonb,
+         updated_at = now()
+   WHERE j.id = v_job.id
+   RETURNING j.* INTO v_job;
+
+  PERFORM public.rag_ingest_broadcast_job(v_job);
+  RETURN v_job;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_begin_progressive_final(p_job_id uuid, p_worker text, p_document_id uuid)
+RETURNS public.ingestion_jobs
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_job public.ingestion_jobs%ROWTYPE;
+  v_current public.documents%ROWTYPE;
+  v_next public.documents%ROWTYPE;
+BEGIN
+  SELECT * INTO v_job FROM public.ingestion_jobs j WHERE j.id = p_job_id AND j.deleted_at IS NULL FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'ingest_refused: job_not_found' USING ERRCODE = '22023';
+  END IF;
+  PERFORM public.rag_ingest_assert_job_lease(v_job, p_worker);
+  IF v_job.provisional_published_at IS NULL THEN
+    RAISE EXCEPTION 'ingest_refused: not_provisional' USING ERRCODE = '22023';
+  END IF;
+  IF v_job.document_id = p_document_id THEN
+    RETURN v_job;
+  END IF;
+
+  SELECT * INTO v_current FROM public.documents d WHERE d.id = v_job.document_id AND d.tenant_key = v_job.tenant_key;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'tenant_mismatch' USING ERRCODE = '22023';
+  END IF;
+  SELECT * INTO v_next FROM public.documents d
+   WHERE d.id = p_document_id
+     AND d.tenant_key = v_job.tenant_key
+     AND d.lineage_id = v_current.lineage_id
+     AND d.version > v_current.version
+     AND d.status = 'processing'
+     AND NOT d.is_current;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'ingest_refused: version_not_allowed' USING ERRCODE = '22023';
+  END IF;
+
+  UPDATE public.ingestion_jobs j SET document_id = v_next.id, updated_at = now() WHERE j.id = v_job.id RETURNING j.* INTO v_job;
+  UPDATE public.documents d SET processing_status = public.rag_ingest_mirror_processing_status(v_job.status) WHERE d.id = v_next.id;
+  RETURN v_job;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_clear_provisional(p_job_id uuid)
+RETURNS TABLE (document_id uuid, version integer)
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+#variable_conflict use_column
+DECLARE
+  v_job public.ingestion_jobs%ROWTYPE;
+  v_lineage uuid;
+  v_current public.documents%ROWTYPE;
+BEGIN
+  SELECT * INTO v_job FROM public.ingestion_jobs j WHERE j.id = p_job_id AND j.deleted_at IS NULL FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'ingest_refused: job_not_found' USING ERRCODE = '22023';
+  END IF;
+  IF v_job.provisional_published_at IS NULL THEN
+    RAISE EXCEPTION 'ingest_refused: not_provisional' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT d.lineage_id INTO v_lineage FROM public.documents d WHERE d.id = v_job.document_id AND d.tenant_key = v_job.tenant_key;
+  IF v_lineage IS NULL THEN
+    RAISE EXCEPTION 'tenant_mismatch' USING ERRCODE = '22023';
+  END IF;
+  SELECT * INTO v_current FROM public.documents d
+   WHERE d.tenant_key = v_job.tenant_key AND d.lineage_id = v_lineage AND d.is_current
+   FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'ingest_refused: no_current_version' USING ERRCODE = '22023';
+  END IF;
+
+  UPDATE public.documents d SET provisional = false WHERE d.id = v_current.id;
+  UPDATE public.document_chunks c SET provisional = false WHERE c.document_id = v_current.id;
+  UPDATE public.ingestion_jobs j SET document_id = v_current.id, updated_at = now() WHERE j.id = v_job.id;
+
+  RETURN QUERY SELECT v_current.id, v_current.version;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION rag_mark_provisional(uuid, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION rag_begin_progressive_final(uuid, text, uuid) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION rag_clear_provisional(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION rag_mark_provisional(uuid, text) TO service_role;
+GRANT EXECUTE ON FUNCTION rag_begin_progressive_final(uuid, text, uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION rag_clear_provisional(uuid) TO service_role;
+
+COMMIT;
+
+-- >>> supabase/migrations/0359_vectors_complete.sql
+-- 0359: Batch API embeddings for backfill jobs (D-35, D-36). With RAG_EMBED_BATCH_MODE=batch_api a backfill job on an OpenAI profile writes
+-- its chunks without vectors and stops before publish (stage embed_deferred, lease released); the rag:backfill process embeds the chunks
+-- through the OpenAI Batch API, writes the vectors and publishes the job. Publish refuses while a chunk lacks its active-profile vector.
+--   rag_vectors_complete: true when every chunk of the version has a vector of the profile (tenant-checked).
+--   rag_defer_ingestion_embed: the worker holding the lease parks a batch_api backfill job at embed_deferred and releases the lease.
+--   rag_deferred_embed_chunks: the chunks of the batch's deferred jobs that lack a vector of a profile, keyset by chunk id.
+--   rag_write_deferred_vectors: upserts vectors by chunk id, only for chunks of the batch's deferred jobs, only at the text version sent.
+--   rag_publish_deferred_ingestion_job: vectors_incomplete unless complete, then the Phase 3 swap and the terminal ledger status.
+--   rag_batch_progress: deferred jobs are counted under embed_deferred, so the monitor does not wait for them.
+-- The tenant always comes from the job or batch row. SECURITY INVOKER (service_role bypasses RLS), empty search_path, service_role only.
+-- Idempotent: CREATE OR REPLACE with fixed signatures, then REVOKE and GRANT.
+
+BEGIN;
+
+CREATE OR REPLACE FUNCTION public.rag_vectors_complete(p_document_id uuid, p_profile_id text, p_tenant_key text)
+RETURNS boolean
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+DECLARE
+  v_profile public.embedding_profiles%ROWTYPE;
+BEGIN
+  IF p_document_id IS NULL OR p_tenant_key IS NULL
+     OR NOT EXISTS (SELECT 1 FROM public.documents d WHERE d.id = p_document_id AND d.tenant_key = p_tenant_key) THEN
+    RAISE EXCEPTION 'tenant_mismatch' USING ERRCODE = '22023', DETAIL = 'document not found in tenant';
+  END IF;
+  SELECT * INTO v_profile FROM public.embedding_profiles p WHERE p.id = p_profile_id;
+  IF NOT FOUND OR (v_profile.storage = 'legacy_column' AND v_profile.id <> 'openai-3-small-1536') THEN
+    RAISE EXCEPTION 'embedding_profile_unsupported: %', p_profile_id USING ERRCODE = '22023';
+  END IF;
+  IF v_profile.storage = 'legacy_column' THEN
+    RETURN NOT EXISTS (
+      SELECT 1 FROM public.document_chunks c WHERE c.document_id = p_document_id AND c.embedding IS NULL
+    );
+  END IF;
+  RETURN NOT EXISTS (
+    SELECT 1 FROM public.document_chunks c
+     WHERE c.document_id = p_document_id
+       AND NOT EXISTS (
+         SELECT 1 FROM public.chunk_embeddings e
+          WHERE e.chunk_id = c.id AND e.profile_id = v_profile.id AND e.embedding_model = v_profile.model AND e.dims = v_profile.dims
+       )
+  );
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_defer_ingestion_embed(p_job_id uuid, p_worker text)
+RETURNS public.ingestion_jobs
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+DECLARE
+  v_job public.ingestion_jobs%ROWTYPE;
+  v_doc public.documents%ROWTYPE;
+BEGIN
+  SELECT * INTO v_job FROM public.ingestion_jobs j WHERE j.id = p_job_id AND j.deleted_at IS NULL FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'ingest_refused: job_not_found' USING ERRCODE = '22023';
+  END IF;
+  PERFORM public.rag_ingest_assert_job_lease(v_job, p_worker);
+  IF v_job.kind <> 'ingest' OR v_job.batch_id IS NULL OR v_job.document_id IS NULL
+     OR (v_job.settings ->> 'embed_mode') IS DISTINCT FROM 'batch_api' THEN
+    RAISE EXCEPTION 'ingest_refused: defer_not_allowed' USING ERRCODE = '22023';
+  END IF;
+  SELECT * INTO v_doc FROM public.documents d WHERE d.id = v_job.document_id AND d.tenant_key = v_job.tenant_key FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'tenant_mismatch' USING ERRCODE = '22023';
+  END IF;
+  IF v_doc.is_current OR v_doc.status NOT IN ('processing', 'quarantined') THEN
+    RAISE EXCEPTION 'ingest_refused: version_not_processing' USING ERRCODE = '22023';
+  END IF;
+
+  PERFORM public.rag_release_job_reservations(v_job.id);
+  UPDATE public.ingestion_jobs j
+     SET status = 'embedding',
+         stage = 'embed_deferred',
+         locked_by = NULL,
+         lease_until = NULL,
+         runner = NULL,
+         updated_at = now()
+   WHERE j.id = v_job.id
+   RETURNING j.* INTO v_job;
+  UPDATE public.documents d SET processing_status = 'embedding' WHERE d.id = v_doc.id;
+
+  PERFORM public.rag_ingest_broadcast_job(v_job);
+  RETURN v_job;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_deferred_embed_chunks(p_batch_id uuid, p_profile_id text, p_after uuid, p_limit integer)
+RETURNS TABLE (
+  id uuid,
+  document_id uuid,
+  job_id uuid,
+  tenant_key text,
+  embedding_text_version integer,
+  content text,
+  section_path text[],
+  chunk_kind text,
+  doc_type text,
+  template_row jsonb
+)
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+#variable_conflict use_column
+DECLARE
+  v_tenant text;
+  v_profile public.embedding_profiles%ROWTYPE;
+BEGIN
+  SELECT b.tenant_key INTO v_tenant FROM public.ingestion_batches b WHERE b.id = p_batch_id;
+  IF v_tenant IS NULL THEN
+    RAISE EXCEPTION 'backfill_refused: batch_not_found' USING ERRCODE = '22023';
+  END IF;
+  SELECT * INTO v_profile FROM public.embedding_profiles p WHERE p.id = p_profile_id;
+  IF NOT FOUND OR (v_profile.storage = 'legacy_column' AND v_profile.id <> 'openai-3-small-1536') THEN
+    RAISE EXCEPTION 'embedding_profile_unsupported: %', p_profile_id USING ERRCODE = '22023';
+  END IF;
+
+  RETURN QUERY
+  SELECT c.id, c.document_id, j.id, c.tenant_key, c.embedding_text_version, c.content, c.section_path, c.chunk_kind,
+         COALESCE(c.doc_type, d.doc_type),
+         jsonb_build_object(
+           'invoice_number', d.invoice_number,
+           'supplier_name', d.supplier_name,
+           'supplier_tax_id', d.supplier_tax_id,
+           'issue_date', d.issue_date::text,
+           'gross_total', d.gross_total::text,
+           'currency', d.currency)
+    FROM public.ingestion_jobs j
+    JOIN public.documents d ON d.id = j.document_id AND d.tenant_key = j.tenant_key
+    JOIN public.document_chunks c ON c.document_id = d.id AND c.tenant_key = d.tenant_key
+   WHERE j.batch_id = p_batch_id
+     AND j.tenant_key = v_tenant
+     AND j.deleted_at IS NULL
+     AND j.kind = 'ingest'
+     AND j.status = 'embedding'
+     AND j.stage = 'embed_deferred'
+     AND (p_after IS NULL OR c.id > p_after)
+     AND CASE
+           WHEN v_profile.storage = 'legacy_column' THEN c.embedding IS NULL
+           ELSE NOT EXISTS (
+             SELECT 1 FROM public.chunk_embeddings e
+              WHERE e.chunk_id = c.id AND e.profile_id = v_profile.id AND e.embedding_model = v_profile.model AND e.dims = v_profile.dims
+           )
+         END
+   ORDER BY c.id
+   LIMIT LEAST(GREATEST(COALESCE(p_limit, 1000), 1), 5000);
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_write_deferred_vectors(p_batch_id uuid, p_profile_id text, p_rows jsonb)
+RETURNS TABLE (written integer, skipped integer)
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+#variable_conflict use_column
+DECLARE
+  v_tenant text;
+  v_profile public.embedding_profiles%ROWTYPE;
+  v_total integer;
+  v_written integer := 0;
+  v_ids uuid[];
+BEGIN
+  SELECT b.tenant_key INTO v_tenant FROM public.ingestion_batches b WHERE b.id = p_batch_id;
+  IF v_tenant IS NULL THEN
+    RAISE EXCEPTION 'backfill_refused: batch_not_found' USING ERRCODE = '22023';
+  END IF;
+  SELECT * INTO v_profile FROM public.embedding_profiles p WHERE p.id = p_profile_id;
+  IF NOT FOUND OR (v_profile.storage = 'legacy_column' AND v_profile.id <> 'openai-3-small-1536') THEN
+    RAISE EXCEPTION 'embedding_profile_unsupported: %', p_profile_id USING ERRCODE = '22023';
+  END IF;
+  IF p_rows IS NULL OR jsonb_typeof(p_rows) <> 'array' THEN
+    RAISE EXCEPTION 'invalid_rows: p_rows must be a JSON array' USING ERRCODE = '22023';
+  END IF;
+  v_total := jsonb_array_length(p_rows);
+  IF EXISTS (
+    SELECT 1 FROM jsonb_array_elements(p_rows) AS r(value)
+     WHERE jsonb_typeof(r.value) <> 'object'
+        OR jsonb_typeof(r.value -> 'chunk_id') IS DISTINCT FROM 'string'
+        OR (r.value ->> 'chunk_id') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+        OR jsonb_typeof(r.value -> 'embedding_text_version') IS DISTINCT FROM 'number'
+        OR jsonb_typeof(r.value -> 'embedding') IS DISTINCT FROM 'array'
+        OR (r.value ? 'host' AND jsonb_typeof(r.value -> 'host') NOT IN ('string', 'null'))
+  ) THEN
+    RAISE EXCEPTION 'invalid_rows: every row needs chunk_id, embedding_text_version and embedding' USING ERRCODE = '22023';
+  END IF;
+  IF EXISTS (SELECT 1 FROM jsonb_array_elements(p_rows) AS r(value) WHERE jsonb_array_length(r.value -> 'embedding') <> v_profile.dims) THEN
+    RAISE EXCEPTION 'embedding_profile_mismatch: dims' USING ERRCODE = '22000';
+  END IF;
+
+  IF v_profile.storage = 'legacy_column' THEN
+    WITH targets AS (
+      SELECT DISTINCT ON (c.id) c.id AS chunk_id, r.value -> 'embedding' AS embedding
+        FROM jsonb_array_elements(p_rows) AS r(value)
+        JOIN public.document_chunks c ON c.id = (r.value ->> 'chunk_id')::uuid
+        JOIN public.ingestion_jobs j ON j.document_id = c.document_id AND j.tenant_key = c.tenant_key
+       WHERE j.batch_id = p_batch_id AND j.tenant_key = v_tenant AND j.deleted_at IS NULL AND j.kind = 'ingest'
+         AND j.status = 'embedding' AND j.stage = 'embed_deferred'
+         AND c.embedding_text_version = (r.value ->> 'embedding_text_version')::integer
+       ORDER BY c.id
+    ), updated AS (
+      UPDATE public.document_chunks c
+         SET embedding = (t.embedding::text)::public.vector,
+             metadata = COALESCE(c.metadata, '{}'::jsonb)
+               || jsonb_build_object('embedding_model', v_profile.model, 'embedding_dims', v_profile.dims)
+        FROM targets t
+       WHERE c.id = t.chunk_id
+      RETURNING c.id
+    )
+    SELECT array_agg(u.id) INTO v_ids FROM updated u;
+  ELSE
+    WITH targets AS (
+      SELECT DISTINCT ON (c.id) c.id AS chunk_id, r.value -> 'embedding' AS embedding, r.value ->> 'host' AS host
+        FROM jsonb_array_elements(p_rows) AS r(value)
+        JOIN public.document_chunks c ON c.id = (r.value ->> 'chunk_id')::uuid
+        JOIN public.ingestion_jobs j ON j.document_id = c.document_id AND j.tenant_key = c.tenant_key
+       WHERE j.batch_id = p_batch_id AND j.tenant_key = v_tenant AND j.deleted_at IS NULL AND j.kind = 'ingest'
+         AND j.status = 'embedding' AND j.stage = 'embed_deferred'
+         AND c.embedding_text_version = (r.value ->> 'embedding_text_version')::integer
+       ORDER BY c.id
+    ), inserted AS (
+      INSERT INTO public.chunk_embeddings AS ce (chunk_id, profile_id, tenant_key, embedding, embedding_model, dims, embedding_host)
+      SELECT t.chunk_id, v_profile.id, v_tenant, (t.embedding::text)::public.halfvec, v_profile.model, v_profile.dims, t.host
+        FROM targets t
+      ON CONFLICT (chunk_id, profile_id) DO UPDATE SET
+        embedding = EXCLUDED.embedding,
+        embedding_model = EXCLUDED.embedding_model,
+        dims = EXCLUDED.dims,
+        embedding_host = EXCLUDED.embedding_host,
+        embedded_at = now()
+      RETURNING ce.chunk_id
+    )
+    SELECT array_agg(i.chunk_id) INTO v_ids FROM inserted i;
+  END IF;
+  v_written := COALESCE(array_length(v_ids, 1), 0);
+
+  IF v_written > 0 THEN
+    DELETE FROM public.embedding_backfill_gaps g WHERE g.profile_id = v_profile.id AND g.chunk_id = ANY (v_ids);
+  END IF;
+
+  RETURN QUERY SELECT v_written, v_total - v_written;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_publish_deferred_ingestion_job(p_job_id uuid, p_profile_id text)
+RETURNS public.ingestion_jobs
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $$
+DECLARE
+  v_job public.ingestion_jobs%ROWTYPE;
+  v_doc public.documents%ROWTYPE;
+  v_profile public.embedding_profiles%ROWTYPE;
+  v_outcome text;
+  v_status text;
+BEGIN
+  SELECT * INTO v_job FROM public.ingestion_jobs j WHERE j.id = p_job_id AND j.deleted_at IS NULL FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'ingest_refused: job_not_found' USING ERRCODE = '22023';
+  END IF;
+  IF v_job.status IN ('ready', 'quarantined', 'needs_review') AND v_job.kind = 'ingest' AND v_job.batch_id IS NOT NULL THEN
+    RETURN v_job;
+  END IF;
+  IF v_job.kind <> 'ingest' OR v_job.batch_id IS NULL OR v_job.status <> 'embedding' OR v_job.stage IS DISTINCT FROM 'embed_deferred'
+     OR v_job.document_id IS NULL THEN
+    RAISE EXCEPTION 'ingest_refused: not_deferred' USING ERRCODE = '22023';
+  END IF;
+  SELECT * INTO v_profile FROM public.embedding_profiles p WHERE p.id = p_profile_id;
+  IF NOT FOUND OR NOT (v_profile.status = 'active' OR v_profile.id = 'openai-3-small-1536') THEN
+    RAISE EXCEPTION 'ingest_refused: profile_not_active' USING ERRCODE = '22023';
+  END IF;
+  SELECT * INTO v_doc FROM public.documents d WHERE d.id = v_job.document_id AND d.tenant_key = v_job.tenant_key FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'tenant_mismatch' USING ERRCODE = '22023';
+  END IF;
+  IF v_doc.status <> 'quarantined' AND NOT public.rag_vectors_complete(v_doc.id, v_profile.id, v_job.tenant_key) THEN
+    RAISE EXCEPTION 'vectors_incomplete' USING ERRCODE = '22023', DETAIL = 'a chunk lacks its active-profile vector';
+  END IF;
+
+  SELECT r.outcome INTO v_outcome FROM public.rag_publish_document_version(v_doc.id, v_job.tenant_key) AS r;
+  v_status := CASE
+    WHEN v_outcome = 'quarantined' THEN 'quarantined'
+    WHEN v_job.needs_review_reason IS NOT NULL THEN 'needs_review'
+    ELSE 'ready'
+  END;
+
+  PERFORM public.rag_release_job_reservations(v_job.id);
+  UPDATE public.ingestion_jobs j
+     SET status = v_status,
+         stage = v_status,
+         locked_by = NULL,
+         lease_until = NULL,
+         runner = NULL,
+         updated_at = now()
+   WHERE j.id = v_job.id
+   RETURNING j.* INTO v_job;
+
+  UPDATE public.documents d
+     SET processing_status = public.rag_ingest_mirror_processing_status(v_status)
+   WHERE d.id = v_doc.id;
+  IF v_status = 'needs_review' THEN
+    UPDATE public.documents d
+       SET status = 'ready', needs_review = true, needs_review_reason = COALESCE(v_job.needs_review_reason, d.needs_review_reason)
+     WHERE d.id = v_doc.id;
+  ELSIF v_status = 'quarantined' THEN
+    UPDATE public.documents d SET status = 'failed', processing_status = 'failed' WHERE d.id = v_doc.id AND NOT d.is_current;
+  END IF;
+
+  PERFORM public.rag_ingest_broadcast_job(v_job);
+  RETURN v_job;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_batch_progress(p_batch_id uuid)
+RETURNS jsonb
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_spent numeric;
+  v_leased integer;
+  v_counts jsonb := '{}'::jsonb;
+  rec record;
+BEGIN
+  IF p_batch_id IS NULL THEN
+    RAISE EXCEPTION 'backfill_refused: invalid_batch' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT b.spent_usd INTO v_spent FROM ingestion_batches b WHERE b.id = p_batch_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'backfill_refused: batch_not_found' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT count(*)::integer INTO v_leased
+    FROM ingestion_jobs j
+   WHERE j.batch_id = p_batch_id
+     AND j.deleted_at IS NULL
+     AND j.status IN ('preflight', 'parsing', 'checking', 'chunking', 'embedding')
+     AND j.lease_until IS NOT NULL
+     AND j.lease_until > now();
+
+  FOR rec IN
+    SELECT j.kind,
+           CASE WHEN j.status = 'embedding' AND j.stage = 'embed_deferred' THEN 'embed_deferred' ELSE j.status END AS status,
+           count(*)::integer AS n
+      FROM ingestion_jobs j
+     WHERE j.batch_id = p_batch_id AND j.deleted_at IS NULL
+     GROUP BY 1, 2
+     ORDER BY 1, 2
+  LOOP
+    IF NOT v_counts ? rec.kind THEN
+      v_counts := jsonb_set(v_counts, ARRAY[rec.kind], '{}'::jsonb, true);
+    END IF;
+    v_counts := jsonb_set(v_counts, ARRAY[rec.kind, rec.status], to_jsonb(rec.n), true);
+  END LOOP;
+
+  RETURN jsonb_build_object(
+    'spent_usd', COALESCE(v_spent, 0),
+    'leased', COALESCE(v_leased, 0),
+    'counts', v_counts
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION rag_vectors_complete(uuid, text, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION rag_defer_ingestion_embed(uuid, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION rag_deferred_embed_chunks(uuid, text, uuid, integer) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION rag_write_deferred_vectors(uuid, text, jsonb) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION rag_publish_deferred_ingestion_job(uuid, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION rag_batch_progress(uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION rag_vectors_complete(uuid, text, text) TO service_role;
+GRANT EXECUTE ON FUNCTION rag_defer_ingestion_embed(uuid, text) TO service_role;
+GRANT EXECUTE ON FUNCTION rag_deferred_embed_chunks(uuid, text, uuid, integer) TO service_role;
+GRANT EXECUTE ON FUNCTION rag_write_deferred_vectors(uuid, text, jsonb) TO service_role;
+GRANT EXECUTE ON FUNCTION rag_publish_deferred_ingestion_job(uuid, text) TO service_role;
+GRANT EXECUTE ON FUNCTION rag_batch_progress(uuid) TO service_role;
+
+COMMIT;
+
+NOTIFY pgrst, 'reload schema';
 
 ------------------------------------------
 -- Phase 4: Hybrid retrieval, reranking and calibrated refusal (migrations 0401-0413)
@@ -8198,5 +11262,1127 @@ GRANT EXECUTE ON FUNCTION public.rag_chunking_coverage() TO service_role;
 GRANT EXECUTE ON FUNCTION public.rag_chunking_profile_state() TO service_role;
 
 NOTIFY pgrst, 'reload schema';
+
+COMMIT;
+
+------------------------------------------
+-- Phase 3.1: Ingestion queue hardening and chunk writer fix (migrations 0420-0424, after Phase 4 in migration order)
+------------------------------------------
+
+-- >>> supabase/migrations/0420_ingestion_queue_retention.sql
+-- 0420: Archive and purge terminal ingestion jobs past a retention window (queue hardening).
+-- Slim archive rows keep idempotency and citation seams; heavy jsonb is dropped. Service role only.
+
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS public.ingestion_jobs_archive (
+  id uuid PRIMARY KEY,
+  tenant_key text NOT NULL,
+  kind text NOT NULL,
+  source text,
+  source_key text NOT NULL,
+  batch_id uuid,
+  document_id uuid,
+  lineage_id uuid,
+  version integer,
+  file_sha256 text,
+  status text NOT NULL,
+  error_class text,
+  last_error text,
+  trace_id uuid,
+  retries integer NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL,
+  updated_at timestamptz NOT NULL,
+  archived_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT ingestion_jobs_archive_tenant_key_check CHECK (
+    tenant_key ~ '^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$'
+  )
+);
+
+CREATE INDEX IF NOT EXISTS ingestion_jobs_archive_archived_at_idx
+  ON public.ingestion_jobs_archive (archived_at DESC);
+
+ALTER TABLE public.ingestion_jobs_archive ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.ingestion_jobs_archive FROM PUBLIC, anon, authenticated;
+GRANT ALL ON TABLE public.ingestion_jobs_archive TO service_role;
+
+CREATE OR REPLACE FUNCTION public.rag_purge_stale_ingestion_jobs(
+  p_retention_days integer DEFAULT 90,
+  p_batch_size integer DEFAULT 500
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_days integer;
+  v_limit integer;
+  v_cutoff timestamptz;
+  v_archived integer := 0;
+  v_purged integer := 0;
+  rec record;
+BEGIN
+  v_days := GREATEST(COALESCE(p_retention_days, 90), 1);
+  v_limit := GREATEST(LEAST(COALESCE(p_batch_size, 500), 5000), 1);
+  v_cutoff := now() - (v_days || ' days')::interval;
+
+  FOR rec IN
+    SELECT j.id
+      FROM public.ingestion_jobs j
+     WHERE j.deleted_at IS NULL
+       AND j.updated_at < v_cutoff
+       AND (
+         j.status IN ('ready', 'failed', 'quarantined', 'needs_review', 'skipped_duplicate')
+         OR j.kind = 'delete'
+       )
+     ORDER BY j.updated_at
+     LIMIT v_limit
+     FOR UPDATE SKIP LOCKED
+  LOOP
+    INSERT INTO public.ingestion_jobs_archive (
+      id, tenant_key, kind, source, source_key, batch_id, document_id, lineage_id, version,
+      file_sha256, status, error_class, last_error, trace_id, retries,
+      created_at, updated_at, archived_at
+    )
+    SELECT
+      j.id, j.tenant_key, j.kind, j.source, j.source_key, j.batch_id, j.document_id, j.lineage_id, j.version,
+      j.file_sha256, j.status, j.error_class, j.error, j.trace_id, j.retries,
+      j.created_at, j.updated_at, now()
+      FROM public.ingestion_jobs j
+     WHERE j.id = rec.id
+    ON CONFLICT (id) DO UPDATE SET
+      archived_at = EXCLUDED.archived_at,
+      status = EXCLUDED.status,
+      error_class = EXCLUDED.error_class,
+      last_error = EXCLUDED.last_error;
+
+    DELETE FROM public.ingestion_jobs j WHERE j.id = rec.id;
+    v_archived := v_archived + 1;
+    v_purged := v_purged + 1;
+  END LOOP;
+
+  FOR rec IN
+    SELECT j.id
+      FROM public.ingestion_jobs j
+     WHERE j.deleted_at IS NOT NULL
+       AND j.deleted_at < v_cutoff
+     ORDER BY j.deleted_at
+     LIMIT v_limit
+     FOR UPDATE SKIP LOCKED
+  LOOP
+    INSERT INTO public.ingestion_jobs_archive (
+      id, tenant_key, kind, source, source_key, batch_id, document_id, lineage_id, version,
+      file_sha256, status, error_class, last_error, trace_id, retries,
+      created_at, updated_at, archived_at
+    )
+    SELECT
+      j.id, j.tenant_key, j.kind, j.source, j.source_key, j.batch_id, j.document_id, j.lineage_id, j.version,
+      j.file_sha256, j.status, j.error_class, j.error, j.trace_id, j.retries,
+      j.created_at, j.updated_at, now()
+      FROM public.ingestion_jobs j
+     WHERE j.id = rec.id
+    ON CONFLICT (id) DO UPDATE SET archived_at = EXCLUDED.archived_at;
+
+    DELETE FROM public.ingestion_jobs j WHERE j.id = rec.id;
+    v_archived := v_archived + 1;
+    v_purged := v_purged + 1;
+  END LOOP;
+
+  RETURN jsonb_build_object('archived', v_archived, 'purged', v_purged, 'retention_days', v_days);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_purge_stale_ingestion_jobs(integer, integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_purge_stale_ingestion_jobs(integer, integer) TO service_role;
+
+COMMIT;
+
+NOTIFY pgrst, 'reload schema';
+
+-- >>> supabase/migrations/0421_ingestion_queue_indexes.sql
+-- 0421: Partial indexes for ingestion job claim, lease reclaim, and operator listing.
+
+BEGIN;
+
+DROP INDEX IF EXISTS public.ingestion_jobs_queued_claim_idx;
+DROP INDEX IF EXISTS public.ingestion_jobs_active_lease_idx;
+
+CREATE INDEX IF NOT EXISTS ingestion_jobs_claim_queued_idx
+  ON public.ingestion_jobs (priority DESC, created_at ASC, id)
+  WHERE deleted_at IS NULL
+    AND kind IN ('ingest', 'dry_run')
+    AND status = 'queued';
+
+CREATE INDEX IF NOT EXISTS ingestion_jobs_claim_active_lease_idx
+  ON public.ingestion_jobs (lease_until ASC, priority DESC, created_at ASC)
+  WHERE deleted_at IS NULL
+    AND kind IN ('ingest', 'dry_run')
+    AND status IN ('preflight', 'parsing', 'checking', 'chunking', 'embedding');
+
+CREATE INDEX IF NOT EXISTS ingestion_jobs_list_created_idx
+  ON public.ingestion_jobs (created_at DESC, id DESC)
+  WHERE deleted_at IS NULL;
+
+COMMIT;
+
+NOTIFY pgrst, 'reload schema';
+
+-- >>> supabase/migrations/0422_ingestion_dead_letter.sql
+-- 0422: Dead-letter tracking for exhausted ingestion retries (status stays failed).
+
+BEGIN;
+
+DROP FUNCTION IF EXISTS public.rag_fail_ingestion_job(uuid, text, text, boolean);
+
+ALTER TABLE public.ingestion_jobs
+  ADD COLUMN IF NOT EXISTS dead_letter_at timestamptz;
+
+ALTER TABLE public.ingestion_jobs_archive
+  ADD COLUMN IF NOT EXISTS dead_letter_at timestamptz;
+
+CREATE INDEX IF NOT EXISTS ingestion_jobs_dead_letter_idx
+  ON public.ingestion_jobs (dead_letter_at DESC)
+  WHERE deleted_at IS NULL AND dead_letter_at IS NOT NULL;
+
+CREATE OR REPLACE FUNCTION public.rag_fail_ingestion_job(
+  p_job_id uuid,
+  p_worker text,
+  p_error_class text,
+  p_retryable boolean,
+  p_last_error text DEFAULT NULL
+)
+RETURNS public.ingestion_jobs
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_job public.ingestion_jobs%ROWTYPE;
+  v_new_retries integer;
+  v_terminal boolean;
+  v_last text;
+BEGIN
+  IF p_error_class IS NULL OR btrim(p_error_class) = '' THEN
+    RAISE EXCEPTION 'ingest_refused: invalid_error_class' USING ERRCODE = '22023';
+  END IF;
+  SELECT * INTO v_job FROM public.ingestion_jobs WHERE id = p_job_id AND deleted_at IS NULL FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'ingest_refused: job_not_found' USING ERRCODE = '22023';
+  END IF;
+  PERFORM public.rag_ingest_assert_job_lease(v_job, p_worker);
+
+  v_new_retries := v_job.retries + 1;
+  v_terminal := (NOT p_retryable) OR v_new_retries > v_job.max_retries;
+  v_last := COALESCE(NULLIF(btrim(p_last_error), ''), p_error_class);
+
+  IF v_terminal THEN
+    PERFORM public.rag_release_job_reservations(p_job_id);
+    UPDATE public.ingestion_jobs j
+       SET status = 'failed',
+           error_class = p_error_class,
+           error = v_last,
+           dead_letter_at = CASE
+             WHEN p_retryable AND v_new_retries > j.max_retries THEN now()
+             ELSE NULL
+           END,
+           retries = v_new_retries,
+           locked_by = NULL,
+           lease_until = NULL,
+           runner = NULL,
+           run_after = NULL,
+           updated_at = now()
+     WHERE j.id = p_job_id
+     RETURNING j.* INTO v_job;
+    IF v_job.document_id IS NOT NULL THEN
+      UPDATE public.documents d
+         SET status = 'failed', processing_status = 'failed'
+       WHERE d.id = v_job.document_id AND d.tenant_key = v_job.tenant_key AND NOT d.is_current;
+    END IF;
+  ELSE
+    PERFORM public.rag_release_job_reservations(p_job_id);
+    UPDATE public.ingestion_jobs j
+       SET status = 'queued',
+           error_class = p_error_class,
+           error = v_last,
+           retries = v_new_retries,
+           run_after = now() + (30 * power(2::numeric, j.retries)) * interval '1 second',
+           locked_by = NULL,
+           lease_until = NULL,
+           runner = NULL,
+           updated_at = now()
+     WHERE j.id = p_job_id
+     RETURNING j.* INTO v_job;
+  END IF;
+
+  PERFORM public.rag_ingest_broadcast_job(v_job);
+  RETURN v_job;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_count_ingestion_dead_letters(p_tenant_key text DEFAULT NULL)
+RETURNS bigint
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  SELECT count(*)::bigint
+    FROM public.ingestion_jobs j
+   WHERE j.deleted_at IS NULL
+     AND j.status = 'failed'
+     AND j.dead_letter_at IS NOT NULL
+     AND (p_tenant_key IS NULL OR j.tenant_key = p_tenant_key);
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_fail_ingestion_job(uuid, text, text, boolean, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_fail_ingestion_job(uuid, text, text, boolean, text) TO service_role;
+
+REVOKE ALL ON FUNCTION public.rag_count_ingestion_dead_letters(text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_count_ingestion_dead_letters(text) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.rag_retry_ingestion_job(p_job_id uuid, p_actor uuid)
+RETURNS public.ingestion_jobs
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_keys text[];
+  v_job public.ingestion_jobs%ROWTYPE;
+BEGIN
+  v_keys := public.rag_admin_tenant_keys(p_actor);
+  SELECT * INTO v_job FROM public.ingestion_jobs j
+   WHERE j.id = p_job_id AND j.deleted_at IS NULL AND j.tenant_key = ANY (v_keys)
+   FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'ingest_refused: job_not_found' USING ERRCODE = '22023';
+  END IF;
+  IF v_job.status NOT IN ('failed', 'needs_review') THEN
+    RAISE EXCEPTION 'ingest_refused: invalid_status_for_retry' USING ERRCODE = '22023';
+  END IF;
+
+  UPDATE public.ingestion_jobs j
+     SET status = 'queued',
+         retries = 0,
+         run_after = NULL,
+         error_class = NULL,
+         error = NULL,
+         dead_letter_at = NULL,
+         locked_by = NULL,
+         lease_until = NULL,
+         runner = NULL,
+         updated_at = now()
+   WHERE j.id = p_job_id
+   RETURNING j.* INTO v_job;
+
+  INSERT INTO public.rag_admin_audit (action, document_id, lineage_id, tenant_key, version, actor, rule_ids)
+  VALUES (
+    'retry_ingestion_job',
+    COALESCE(v_job.document_id, v_job.id),
+    v_job.lineage_id,
+    v_job.tenant_key,
+    v_job.version,
+    p_actor,
+    ARRAY[]::text[]
+  );
+
+  RETURN v_job;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_retry_ingestion_job(uuid, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_retry_ingestion_job(uuid, uuid) TO service_role;
+
+COMMIT;
+
+NOTIFY pgrst, 'reload schema';
+
+-- >>> supabase/migrations/0423_ingestion_claim_lease_dead_letter.sql
+-- 0423: Dead-letter exhausted jobs when claim reclaims an expired lease.
+
+BEGIN;
+
+CREATE OR REPLACE FUNCTION public.rag_claim_ingestion_jobs(
+  p_worker text,
+  p_limit integer,
+  p_allow_batch boolean,
+  p_runner text DEFAULT 'worker'
+)
+RETURNS SETOF public.ingestion_jobs
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_claimed integer := 0;
+  v_job public.ingestion_jobs%ROWTYPE;
+  v_new_retries integer;
+  v_limit integer;
+BEGIN
+  v_limit := GREATEST(COALESCE(p_limit, 0), 0);
+  IF v_limit < 1 THEN
+    RETURN;
+  END IF;
+
+  WHILE v_claimed < v_limit LOOP
+    SELECT j.* INTO v_job
+      FROM ingestion_jobs j
+     WHERE j.deleted_at IS NULL
+       AND j.kind IN ('ingest', 'dry_run')
+       AND j.status NOT IN ('ready', 'failed', 'quarantined', 'needs_review', 'skipped_duplicate')
+       AND (p_allow_batch OR j.batch_id IS NULL)
+       AND (
+         (j.status = 'queued' AND (j.run_after IS NULL OR j.run_after <= now()))
+         OR (
+           j.status IN ('preflight', 'parsing', 'checking', 'chunking', 'embedding')
+           AND j.lease_until IS NOT NULL
+           AND j.lease_until < now()
+         )
+       )
+       AND (j.batch_id IS NULL OR rag_batch_has_room(j.batch_id))
+     ORDER BY j.priority DESC, j.created_at
+     FOR UPDATE OF j SKIP LOCKED
+     LIMIT 1;
+
+    IF NOT FOUND THEN
+      EXIT;
+    END IF;
+
+    IF v_job.batch_id IS NOT NULL AND NOT rag_batch_has_room(v_job.batch_id) THEN
+      CONTINUE;
+    END IF;
+
+    IF v_job.status <> 'queued' AND v_job.lease_until IS NOT NULL AND v_job.lease_until < now() THEN
+      v_new_retries := v_job.retries + 1;
+      IF v_new_retries > v_job.max_retries THEN
+        PERFORM rag_release_job_reservations(v_job.id);
+        UPDATE ingestion_jobs
+           SET status = 'failed',
+               error_class = 'lease_expired',
+               error = 'lease expired',
+               dead_letter_at = now(),
+               retries = v_new_retries,
+               locked_by = NULL,
+               lease_until = NULL,
+               runner = NULL,
+               updated_at = now()
+         WHERE id = v_job.id;
+        CONTINUE;
+      END IF;
+      PERFORM rag_release_job_reservations(v_job.id);
+    END IF;
+
+    UPDATE ingestion_jobs j
+       SET status = CASE
+             WHEN j.status = 'queued' THEN COALESCE(NULLIF(j.stage, ''), 'preflight')
+             ELSE j.status
+           END,
+           retries = CASE
+             WHEN j.status = 'queued' THEN j.retries
+             ELSE j.retries + 1
+           END,
+           locked_by = p_worker,
+           runner = p_runner,
+           lease_until = now() + interval '120 seconds',
+           updated_at = now()
+     WHERE j.id = v_job.id
+     RETURNING j.* INTO v_job;
+
+    v_claimed := v_claimed + 1;
+    RETURN NEXT v_job;
+  END LOOP;
+
+  RETURN;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_claim_ingestion_job(
+  p_job_id uuid,
+  p_worker text,
+  p_runner text DEFAULT 'worker'
+)
+RETURNS public.ingestion_jobs
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_job public.ingestion_jobs%ROWTYPE;
+  v_new_retries integer;
+BEGIN
+  SELECT j.* INTO v_job
+    FROM ingestion_jobs j
+   WHERE j.id = p_job_id
+     AND j.deleted_at IS NULL
+     AND j.kind IN ('ingest', 'dry_run')
+     AND j.status NOT IN ('ready', 'failed', 'quarantined', 'needs_review', 'skipped_duplicate')
+     AND (
+       (j.status = 'queued' AND (j.run_after IS NULL OR j.run_after <= now()))
+       OR (
+         j.status IN ('preflight', 'parsing', 'checking', 'chunking', 'embedding')
+         AND j.lease_until IS NOT NULL
+         AND j.lease_until < now()
+       )
+     )
+   FOR UPDATE OF j SKIP LOCKED;
+
+  IF NOT FOUND THEN
+    RETURN NULL;
+  END IF;
+
+  IF v_job.batch_id IS NOT NULL AND NOT rag_batch_has_room(v_job.batch_id) THEN
+    RETURN NULL;
+  END IF;
+
+  IF v_job.locked_by IS NOT NULL AND v_job.lease_until IS NOT NULL AND v_job.lease_until > now() THEN
+    RETURN NULL;
+  END IF;
+
+  IF v_job.status <> 'queued' AND v_job.lease_until IS NOT NULL AND v_job.lease_until < now() THEN
+    v_new_retries := v_job.retries + 1;
+    IF v_new_retries > v_job.max_retries THEN
+      PERFORM rag_release_job_reservations(v_job.id);
+      UPDATE ingestion_jobs
+         SET status = 'failed',
+             error_class = 'lease_expired',
+             error = 'lease expired',
+             dead_letter_at = now(),
+             retries = v_new_retries,
+             locked_by = NULL,
+             lease_until = NULL,
+             runner = NULL,
+             updated_at = now()
+       WHERE id = v_job.id;
+      RETURN NULL;
+    END IF;
+    PERFORM rag_release_job_reservations(v_job.id);
+  END IF;
+
+  UPDATE ingestion_jobs j
+     SET status = CASE
+           WHEN j.status = 'queued' THEN COALESCE(NULLIF(j.stage, ''), 'preflight')
+           ELSE j.status
+         END,
+         retries = CASE
+           WHEN j.status = 'queued' THEN j.retries
+           ELSE j.retries + 1
+         END,
+         locked_by = p_worker,
+         runner = p_runner,
+         lease_until = now() + interval '120 seconds',
+         updated_at = now()
+   WHERE j.id = v_job.id
+   RETURNING j.* INTO v_job;
+
+  RETURN v_job;
+END;
+$$;
+
+COMMIT;
+
+-- >>> supabase/migrations/0424_write_chunks_null_vector.sql
+-- 0424: rag_write_chunks and rag_write_profile_chunks accept a null vector entry again (reported by 03.1-49).
+-- p_embeddings maps a profile id to a list that lines up with the chunks, and a null entry means "no vector for this chunk". The 0408 dims check
+-- read "jsonb_typeof(v.value) = 'array' AND jsonb_array_length(v.value) <> dims", but PostgreSQL does not promise to evaluate AND left to
+-- right, so a null entry reached jsonb_array_length and the whole write failed with "cannot get array length of a scalar". The length is now
+-- taken inside CASE WHEN jsonb_typeof(...) = 'array', which is evaluated in order; the vector-count check uses the same guard.
+-- Behaviour is otherwise that of 0408: a null entry writes the chunk without a vector, any other non-array entry raises invalid_embeddings,
+-- a vector of the wrong length raises embedding_profile_mismatch, and every refusal rolls the whole call back.
+-- Both functions stay SECURITY DEFINER and now run with an empty search_path and schema-qualified names. Server role only.
+-- Idempotent: CREATE OR REPLACE with the 0408 signatures, then guarded REVOKE and GRANT.
+
+BEGIN;
+
+CREATE OR REPLACE FUNCTION public.rag_write_chunks(
+  p_document_id uuid,
+  p_tenant_key text,
+  p_chunks jsonb,
+  p_embeddings jsonb,
+  p_final boolean,
+  p_total integer
+)
+RETURNS TABLE (chunks_written integer, chunks_deleted integer)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+#variable_conflict use_column
+DECLARE
+  legacy_profile constant text := 'openai-3-small-1536';
+  doc public.documents%ROWTYPE;
+  profile_key text;
+  profile_row public.embedding_profiles%ROWTYPE;
+  payload jsonb;
+  vectors jsonb;
+  host_name text;
+  chunk_count integer;
+  legacy_vectors jsonb;
+  written integer := 0;
+  deleted integer := 0;
+BEGIN
+  SELECT * INTO doc FROM public.documents d WHERE d.id = p_document_id AND d.tenant_key = p_tenant_key FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'tenant_mismatch' USING DETAIL = 'document not found in tenant';
+  END IF;
+  IF doc.status IN ('failed', 'deleted') THEN
+    RAISE EXCEPTION 'document_not_writable' USING DETAIL = 'status is ' || doc.status;
+  END IF;
+  IF p_chunks IS NULL OR jsonb_typeof(p_chunks) <> 'array' THEN
+    RAISE EXCEPTION 'invalid_chunks: p_chunks must be a JSON array';
+  END IF;
+  chunk_count := jsonb_array_length(p_chunks);
+  IF EXISTS (
+    SELECT 1 FROM jsonb_array_elements(p_chunks) AS e(value)
+    WHERE jsonb_typeof(e.value) <> 'object'
+       OR jsonb_typeof(e.value -> 'content') IS DISTINCT FROM 'string'
+       OR (e.value ? 'chunk_index' AND jsonb_typeof(e.value -> 'chunk_index') <> 'number')
+  ) THEN
+    RAISE EXCEPTION 'invalid_chunk: every chunk needs a string content and a numeric chunk_index when it has one';
+  END IF;
+  IF (SELECT count(DISTINCT COALESCE((e.value ->> 'chunk_index')::integer, (e.ord - 1)::integer))
+      FROM jsonb_array_elements(p_chunks) WITH ORDINALITY AS e(value, ord)) <> chunk_count THEN
+    RAISE EXCEPTION 'invalid_chunk: chunk_index values must be distinct';
+  END IF;
+  IF p_final AND (p_total IS NULL OR p_total < 0) THEN
+    RAISE EXCEPTION 'invalid_total: p_total is required with p_final';
+  END IF;
+
+  IF p_embeddings IS NOT NULL AND jsonb_typeof(p_embeddings) NOT IN ('object', 'null') THEN
+    RAISE EXCEPTION 'invalid_embeddings: p_embeddings must be a JSON object keyed by profile id';
+  END IF;
+  IF p_embeddings IS NOT NULL AND jsonb_typeof(p_embeddings) = 'object' THEN
+    FOR profile_key IN SELECT jsonb_object_keys(p_embeddings) LOOP
+      SELECT * INTO profile_row FROM public.embedding_profiles p WHERE p.id = profile_key;
+      IF NOT FOUND OR (profile_row.storage = 'legacy_column' AND profile_row.id <> legacy_profile) THEN
+        RAISE EXCEPTION 'embedding_profile_unsupported: %', profile_key;
+      END IF;
+      payload := p_embeddings -> profile_key;
+      IF jsonb_typeof(payload) = 'object' THEN
+        vectors := payload -> 'vectors';
+        IF jsonb_typeof(payload -> 'host') NOT IN ('string', 'null') THEN
+          RAISE EXCEPTION 'invalid_embeddings: host must be a string';
+        END IF;
+      ELSE
+        vectors := payload;
+      END IF;
+      IF COALESCE(CASE WHEN jsonb_typeof(vectors) = 'array' THEN jsonb_array_length(vectors) END, -1) <> chunk_count THEN
+        RAISE EXCEPTION 'embedding_count_mismatch: expected % vectors', chunk_count;
+      END IF;
+      IF EXISTS (SELECT 1 FROM jsonb_array_elements(vectors) AS v(value) WHERE jsonb_typeof(v.value) NOT IN ('array', 'null')) THEN
+        RAISE EXCEPTION 'invalid_embeddings: every vector must be a JSON array or null';
+      END IF;
+      IF EXISTS (
+        SELECT 1 FROM jsonb_array_elements(vectors) AS v(value)
+        WHERE CASE WHEN jsonb_typeof(v.value) = 'array' THEN jsonb_array_length(v.value) END <> profile_row.dims
+      ) THEN
+        RAISE EXCEPTION 'embedding_profile_mismatch: dims' USING ERRCODE = '22000';
+      END IF;
+      IF profile_row.id = legacy_profile THEN
+        legacy_vectors := vectors;
+      END IF;
+    END LOOP;
+  END IF;
+
+  -- A chunk whose text changed must not keep a vector made from the old text.
+  DELETE FROM public.chunk_embeddings ce
+  USING public.document_chunks c, jsonb_array_elements(p_chunks) WITH ORDINALITY AS e(value, ord)
+  WHERE ce.chunk_id = c.id
+    AND c.document_id = p_document_id
+    AND c.id = substr(encode(sha256(convert_to(
+          p_document_id::text || ':' || COALESCE((e.value ->> 'chunk_index')::integer, (e.ord - 1)::integer)::text, 'UTF8')), 'hex'), 1, 32)::uuid
+    AND c.content IS DISTINCT FROM (e.value ->> 'content');
+
+  WITH prepared AS (
+    SELECT
+      e.value AS spec,
+      (e.ord - 1)::integer AS position,
+      COALESCE((e.value ->> 'chunk_index')::integer, (e.ord - 1)::integer) AS chunk_index,
+      CASE WHEN legacy_vectors IS NOT NULL AND jsonb_typeof(legacy_vectors -> (e.ord - 1)::integer) = 'array'
+           THEN ((legacy_vectors -> (e.ord - 1)::integer)::text)::public.vector END AS embedding,
+      CASE WHEN jsonb_typeof(e.value -> 'section_path') = 'array'
+           THEN ARRAY(SELECT jsonb_array_elements_text(e.value -> 'section_path')) ELSE '{}'::text[] END AS section_path,
+      COALESCE(e.value ->> 'chunk_kind', 'text') AS chunk_kind,
+      COALESCE((e.value ->> 'embedding_text_version')::integer, 0) AS embedding_text_version,
+      (e.value ->> 'page_start')::integer AS page_start,
+      (e.value ->> 'page_end')::integer AS page_end,
+      e.value ->> 'content_hash' AS content_hash,
+      e.value ->> 'lexical_text' AS lexical_text
+    FROM jsonb_array_elements(p_chunks) WITH ORDINALITY AS e(value, ord)
+  )
+  INSERT INTO public.document_chunks AS dc (
+    id, document_id, content, embedding, chunk_index, metadata, organization_id, tenant_key, version, is_current, status,
+    doc_type, doc_date, language, source, page_start, page_end, section_path, content_hash, chunk_kind, parser_used,
+    embedding_text_version, lexical_text
+  )
+  SELECT
+    substr(encode(sha256(convert_to(p_document_id::text || ':' || p.chunk_index::text, 'UTF8')), 'hex'), 1, 32)::uuid,
+    p_document_id,
+    p.spec ->> 'content',
+    p.embedding,
+    p.chunk_index,
+    (CASE WHEN jsonb_typeof(p.spec -> 'metadata') = 'object' THEN p.spec -> 'metadata' ELSE '{}'::jsonb END)
+      || jsonb_build_object(
+        'chunk_index', p.chunk_index,
+        'section_path', to_jsonb(p.section_path),
+        'doc_type', doc.doc_type,
+        'language', doc.language,
+        'content_hash', p.content_hash,
+        'chunk_kind', p.chunk_kind,
+        'parser_used', doc.parser_used,
+        'embedding_text_version', p.embedding_text_version)
+      || CASE WHEN p.embedding IS NOT NULL
+              THEN jsonb_build_object('embedding_model', 'text-embedding-3-small', 'embedding_dims', 1536) ELSE '{}'::jsonb END
+      || jsonb_strip_nulls(jsonb_build_object('doc_date', doc.doc_date, 'source', doc.source, 'page_start', p.page_start, 'page_end', p.page_end)),
+    doc.organization_id,
+    doc.tenant_key,
+    doc.version,
+    doc.is_current,
+    doc.status,
+    doc.doc_type,
+    doc.doc_date,
+    doc.language,
+    doc.source,
+    p.page_start,
+    p.page_end,
+    p.section_path,
+    p.content_hash,
+    p.chunk_kind,
+    doc.parser_used,
+    p.embedding_text_version,
+    p.lexical_text
+  FROM prepared p
+  ON CONFLICT (id) DO UPDATE SET
+    content = EXCLUDED.content,
+    embedding = EXCLUDED.embedding,
+    chunk_index = EXCLUDED.chunk_index,
+    metadata = EXCLUDED.metadata,
+    organization_id = EXCLUDED.organization_id,
+    tenant_key = EXCLUDED.tenant_key,
+    version = EXCLUDED.version,
+    is_current = EXCLUDED.is_current,
+    status = EXCLUDED.status,
+    doc_type = EXCLUDED.doc_type,
+    doc_date = EXCLUDED.doc_date,
+    language = EXCLUDED.language,
+    source = EXCLUDED.source,
+    page_start = EXCLUDED.page_start,
+    page_end = EXCLUDED.page_end,
+    section_path = EXCLUDED.section_path,
+    content_hash = EXCLUDED.content_hash,
+    chunk_kind = EXCLUDED.chunk_kind,
+    parser_used = EXCLUDED.parser_used,
+    embedding_text_version = EXCLUDED.embedding_text_version,
+    lexical_text = EXCLUDED.lexical_text
+  WHERE dc.document_id = EXCLUDED.document_id;
+  GET DIAGNOSTICS written = ROW_COUNT;
+
+  IF p_embeddings IS NOT NULL AND jsonb_typeof(p_embeddings) = 'object' THEN
+    FOR profile_key IN SELECT jsonb_object_keys(p_embeddings) LOOP
+      SELECT * INTO profile_row FROM public.embedding_profiles p WHERE p.id = profile_key;
+      payload := p_embeddings -> profile_key;
+      IF jsonb_typeof(payload) = 'object' THEN
+        vectors := payload -> 'vectors';
+        host_name := payload ->> 'host';
+      ELSE
+        vectors := payload;
+        host_name := NULL;
+      END IF;
+
+      IF profile_row.storage <> 'legacy_column' THEN
+        INSERT INTO public.chunk_embeddings AS ce (chunk_id, profile_id, tenant_key, embedding, embedding_model, dims, embedding_host)
+        SELECT
+          substr(encode(sha256(convert_to(
+            p_document_id::text || ':' || COALESCE((e.value ->> 'chunk_index')::integer, (e.ord - 1)::integer)::text, 'UTF8')), 'hex'), 1, 32)::uuid,
+          profile_row.id,
+          doc.tenant_key,
+          (v.value::text)::public.halfvec,
+          profile_row.model,
+          profile_row.dims,
+          host_name
+        FROM jsonb_array_elements(p_chunks) WITH ORDINALITY AS e(value, ord)
+        JOIN jsonb_array_elements(vectors) WITH ORDINALITY AS v(value, ord) ON v.ord = e.ord
+        WHERE jsonb_typeof(v.value) = 'array'
+        ON CONFLICT (chunk_id, profile_id) DO UPDATE SET
+          embedding = EXCLUDED.embedding,
+          embedding_model = EXCLUDED.embedding_model,
+          dims = EXCLUDED.dims,
+          embedding_host = EXCLUDED.embedding_host,
+          embedded_at = now();
+      END IF;
+
+      DELETE FROM public.embedding_backfill_gaps g
+      USING jsonb_array_elements(p_chunks) WITH ORDINALITY AS e(value, ord),
+            jsonb_array_elements(vectors) WITH ORDINALITY AS v(value, ord)
+      WHERE v.ord = e.ord
+        AND jsonb_typeof(v.value) = 'array'
+        AND g.profile_id = profile_row.id
+        AND g.chunk_id = substr(encode(sha256(convert_to(
+              p_document_id::text || ':' || COALESCE((e.value ->> 'chunk_index')::integer, (e.ord - 1)::integer)::text, 'UTF8')), 'hex'), 1, 32)::uuid;
+    END LOOP;
+  END IF;
+
+  IF p_final THEN
+    DELETE FROM public.document_chunks c WHERE c.document_id = p_document_id AND c.chunking_profile_id = 'legacy' AND c.chunk_index >= p_total;
+    GET DIAGNOSTICS deleted = ROW_COUNT;
+  END IF;
+
+  RETURN QUERY SELECT written, deleted;
+END
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_write_profile_chunks(
+  p_document_id uuid,
+  p_tenant_key text,
+  p_profile_id text,
+  p_parents jsonb,
+  p_children jsonb,
+  p_embeddings jsonb,
+  p_final boolean DEFAULT true,
+  p_total integer DEFAULT NULL
+)
+RETURNS TABLE (parents_written integer, children_written integer, parents_deleted integer, children_deleted integer)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+#variable_conflict use_column
+DECLARE
+  legacy_profile constant text := 'openai-3-small-1536';
+  doc public.documents%ROWTYPE;
+  chunking public.chunking_profiles%ROWTYPE;
+  parents jsonb := COALESCE(p_parents, '[]'::jsonb);
+  profile_key text;
+  profile_row public.embedding_profiles%ROWTYPE;
+  payload jsonb;
+  vectors jsonb;
+  host_name text;
+  parent_count integer;
+  child_count integer;
+  legacy_vectors jsonb;
+  total integer;
+  parents_in integer := 0;
+  children_in integer := 0;
+  parents_out integer := 0;
+  children_out integer := 0;
+BEGIN
+  SELECT * INTO doc FROM public.documents d WHERE d.id = p_document_id AND d.tenant_key = p_tenant_key FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'tenant_mismatch' USING DETAIL = 'document not found in tenant';
+  END IF;
+  IF doc.status IN ('failed', 'deleted') THEN
+    RAISE EXCEPTION 'document_not_writable' USING DETAIL = 'status is ' || doc.status;
+  END IF;
+  IF p_profile_id IS NULL OR p_profile_id = 'legacy' THEN
+    RAISE EXCEPTION 'invalid_profile' USING DETAIL = 'legacy chunks are written by rag_write_chunks';
+  END IF;
+  SELECT * INTO chunking FROM public.chunking_profiles cp WHERE cp.id = p_profile_id AND cp.doc_type = doc.doc_type AND cp.status <> 'retired';
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'chunking_profile_unsupported' USING DETAIL = 'no live profile of this id for the document type';
+  END IF;
+
+  IF jsonb_typeof(parents) <> 'array' THEN
+    RAISE EXCEPTION 'invalid_parents: p_parents must be a JSON array';
+  END IF;
+  IF p_children IS NULL OR jsonb_typeof(p_children) <> 'array' THEN
+    RAISE EXCEPTION 'invalid_chunks: p_children must be a JSON array';
+  END IF;
+  parent_count := jsonb_array_length(parents);
+  child_count := jsonb_array_length(p_children);
+  IF EXISTS (
+    SELECT 1 FROM jsonb_array_elements(parents) AS e(value)
+    WHERE jsonb_typeof(e.value) <> 'object'
+       OR jsonb_typeof(e.value -> 'content') IS DISTINCT FROM 'string'
+       OR jsonb_typeof(e.value -> 'parent_index') IS DISTINCT FROM 'number'
+       OR jsonb_typeof(e.value -> 'token_count') IS DISTINCT FROM 'number'
+       OR (e.value ? 'section_path' AND jsonb_typeof(e.value -> 'section_path') <> 'array')
+  ) THEN
+    RAISE EXCEPTION 'invalid_parents: every parent needs a string content, a numeric parent_index and a numeric token_count';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM jsonb_array_elements(parents) AS e(value)
+    WHERE (e.value ->> 'parent_index') !~ '^[0-9]{1,9}$' OR (e.value ->> 'token_count') !~ '^[0-9]{1,9}$'
+  ) OR (SELECT count(DISTINCT (e.value ->> 'parent_index')::integer) FROM jsonb_array_elements(parents) AS e(value)) <> parent_count THEN
+    RAISE EXCEPTION 'invalid_parents: parent_index values must be distinct non-negative integers and token_count a non-negative integer';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM jsonb_array_elements(p_children) AS e(value)
+    WHERE jsonb_typeof(e.value) <> 'object'
+       OR jsonb_typeof(e.value -> 'content') IS DISTINCT FROM 'string'
+       OR (e.value ? 'chunk_index' AND jsonb_typeof(e.value -> 'chunk_index') <> 'number')
+       OR (e.value ? 'parent_index' AND jsonb_typeof(e.value -> 'parent_index') NOT IN ('number', 'null'))
+  ) THEN
+    RAISE EXCEPTION 'invalid_chunk: every child needs a string content, and a numeric chunk_index and parent_index when it has them';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM jsonb_array_elements(p_children) WITH ORDINALITY AS e(value, ord)
+    WHERE COALESCE(e.value ->> 'chunk_index', (e.ord - 1)::text) !~ '^[0-9]{1,9}$'
+       OR (jsonb_typeof(e.value -> 'parent_index') = 'number' AND (e.value ->> 'parent_index') !~ '^[0-9]{1,9}$')
+  ) OR (SELECT count(DISTINCT COALESCE((e.value ->> 'chunk_index')::integer, (e.ord - 1)::integer))
+        FROM jsonb_array_elements(p_children) WITH ORDINALITY AS e(value, ord)) <> child_count THEN
+    RAISE EXCEPTION 'invalid_chunk: chunk_index values must be distinct non-negative integers';
+  END IF;
+  IF p_final AND p_total IS NOT NULL AND p_total < 0 THEN
+    RAISE EXCEPTION 'invalid_total: p_total must not be negative';
+  END IF;
+
+  IF p_embeddings IS NOT NULL AND jsonb_typeof(p_embeddings) NOT IN ('object', 'null') THEN
+    RAISE EXCEPTION 'invalid_embeddings: p_embeddings must be a JSON object keyed by profile id';
+  END IF;
+  IF p_embeddings IS NOT NULL AND jsonb_typeof(p_embeddings) = 'object' THEN
+    FOR profile_key IN SELECT jsonb_object_keys(p_embeddings) LOOP
+      SELECT * INTO profile_row FROM public.embedding_profiles p WHERE p.id = profile_key;
+      IF NOT FOUND OR (profile_row.storage = 'legacy_column' AND profile_row.id <> legacy_profile) THEN
+        RAISE EXCEPTION 'embedding_profile_unsupported: %', profile_key;
+      END IF;
+      payload := p_embeddings -> profile_key;
+      IF jsonb_typeof(payload) = 'object' THEN
+        vectors := payload -> 'vectors';
+        IF jsonb_typeof(payload -> 'host') NOT IN ('string', 'null') THEN
+          RAISE EXCEPTION 'invalid_embeddings: host must be a string';
+        END IF;
+      ELSE
+        vectors := payload;
+      END IF;
+      IF COALESCE(CASE WHEN jsonb_typeof(vectors) = 'array' THEN jsonb_array_length(vectors) END, -1) <> child_count THEN
+        RAISE EXCEPTION 'embedding_count_mismatch: expected % vectors', child_count;
+      END IF;
+      IF EXISTS (SELECT 1 FROM jsonb_array_elements(vectors) AS v(value) WHERE jsonb_typeof(v.value) NOT IN ('array', 'null')) THEN
+        RAISE EXCEPTION 'invalid_embeddings: every vector must be a JSON array or null';
+      END IF;
+      IF EXISTS (
+        SELECT 1 FROM jsonb_array_elements(vectors) AS v(value)
+        WHERE CASE WHEN jsonb_typeof(v.value) = 'array' THEN jsonb_array_length(v.value) END <> profile_row.dims
+      ) THEN
+        RAISE EXCEPTION 'embedding_profile_mismatch: dims' USING ERRCODE = '22000';
+      END IF;
+      IF profile_row.id = legacy_profile THEN
+        legacy_vectors := vectors;
+      END IF;
+    END LOOP;
+  END IF;
+
+  INSERT INTO public.document_parents AS dp (
+    id, document_id, tenant_key, organization_id, version, is_current, chunking_profile_id, section_path, content, token_count, parent_index
+  )
+  SELECT
+    substr(encode(sha256(convert_to(p_document_id::text || ':' || p_profile_id || ':parent:' || (e.value ->> 'parent_index'), 'UTF8')), 'hex'), 1, 32)::uuid,
+    p_document_id,
+    doc.tenant_key,
+    doc.organization_id,
+    doc.version,
+    true,
+    p_profile_id,
+    CASE WHEN jsonb_typeof(e.value -> 'section_path') = 'array'
+         THEN ARRAY(SELECT jsonb_array_elements_text(e.value -> 'section_path')) ELSE '{}'::text[] END,
+    e.value ->> 'content',
+    (e.value ->> 'token_count')::integer,
+    (e.value ->> 'parent_index')::integer
+  FROM jsonb_array_elements(parents) AS e(value)
+  ON CONFLICT (id) DO UPDATE SET
+    tenant_key = EXCLUDED.tenant_key,
+    organization_id = EXCLUDED.organization_id,
+    version = EXCLUDED.version,
+    is_current = EXCLUDED.is_current,
+    chunking_profile_id = EXCLUDED.chunking_profile_id,
+    section_path = EXCLUDED.section_path,
+    content = EXCLUDED.content,
+    token_count = EXCLUDED.token_count,
+    parent_index = EXCLUDED.parent_index
+  WHERE dp.document_id = EXCLUDED.document_id;
+  GET DIAGNOSTICS parents_in = ROW_COUNT;
+
+  IF EXISTS (
+    SELECT 1 FROM jsonb_array_elements(p_children) AS e(value)
+    WHERE jsonb_typeof(e.value -> 'parent_index') = 'number'
+      AND NOT EXISTS (
+        SELECT 1 FROM public.document_parents dp
+        WHERE dp.id = substr(encode(sha256(convert_to(p_document_id::text || ':' || p_profile_id || ':parent:' || (e.value ->> 'parent_index'), 'UTF8')), 'hex'), 1, 32)::uuid
+          AND dp.document_id = p_document_id
+          AND dp.chunking_profile_id = p_profile_id
+      )
+  ) THEN
+    RAISE EXCEPTION 'invalid_chunk: parent_index names a parent that was not written';
+  END IF;
+
+  -- A child whose text changed must not keep a vector made from the old text.
+  DELETE FROM public.chunk_embeddings ce
+  USING public.document_chunks c, jsonb_array_elements(p_children) WITH ORDINALITY AS e(value, ord)
+  WHERE ce.chunk_id = c.id
+    AND c.document_id = p_document_id
+    AND c.chunking_profile_id = p_profile_id
+    AND c.id = substr(encode(sha256(convert_to(
+          p_document_id::text || ':' || p_profile_id || ':child:' || COALESCE((e.value ->> 'chunk_index')::integer, (e.ord - 1)::integer)::text, 'UTF8')), 'hex'), 1, 32)::uuid
+    AND c.content IS DISTINCT FROM (e.value ->> 'content');
+
+  WITH prepared AS (
+    SELECT
+      e.value AS spec,
+      COALESCE((e.value ->> 'chunk_index')::integer, (e.ord - 1)::integer) AS chunk_index,
+      CASE WHEN jsonb_typeof(e.value -> 'parent_index') = 'number'
+           THEN substr(encode(sha256(convert_to(p_document_id::text || ':' || p_profile_id || ':parent:' || (e.value ->> 'parent_index'), 'UTF8')), 'hex'), 1, 32)::uuid
+      END AS parent_id,
+      CASE WHEN legacy_vectors IS NOT NULL AND jsonb_typeof(legacy_vectors -> (e.ord - 1)::integer) = 'array'
+           THEN ((legacy_vectors -> (e.ord - 1)::integer)::text)::public.vector END AS embedding,
+      CASE WHEN jsonb_typeof(e.value -> 'section_path') = 'array'
+           THEN ARRAY(SELECT jsonb_array_elements_text(e.value -> 'section_path')) ELSE '{}'::text[] END AS section_path,
+      COALESCE(e.value ->> 'chunk_kind', 'text') AS chunk_kind,
+      COALESCE((e.value ->> 'embedding_text_version')::integer, 0) AS embedding_text_version,
+      (e.value ->> 'page_start')::integer AS page_start,
+      (e.value ->> 'page_end')::integer AS page_end,
+      e.value ->> 'content_hash' AS content_hash,
+      e.value ->> 'lexical_text' AS lexical_text
+    FROM jsonb_array_elements(p_children) WITH ORDINALITY AS e(value, ord)
+  )
+  INSERT INTO public.document_chunks AS dc (
+    id, document_id, content, embedding, chunk_index, metadata, organization_id, tenant_key, version, is_current, status,
+    doc_type, doc_date, language, source, page_start, page_end, section_path, content_hash, chunk_kind, parser_used,
+    embedding_text_version, lexical_text, parent_id, chunking_profile_id
+  )
+  SELECT
+    substr(encode(sha256(convert_to(p_document_id::text || ':' || p_profile_id || ':child:' || p.chunk_index::text, 'UTF8')), 'hex'), 1, 32)::uuid,
+    p_document_id,
+    p.spec ->> 'content',
+    p.embedding,
+    p.chunk_index,
+    (CASE WHEN jsonb_typeof(p.spec -> 'metadata') = 'object' THEN p.spec -> 'metadata' ELSE '{}'::jsonb END)
+      || jsonb_build_object(
+        'chunk_index', p.chunk_index,
+        'section_path', to_jsonb(p.section_path),
+        'doc_type', doc.doc_type,
+        'language', doc.language,
+        'content_hash', p.content_hash,
+        'chunk_kind', p.chunk_kind,
+        'parser_used', doc.parser_used,
+        'embedding_text_version', p.embedding_text_version,
+        'chunking_profile_id', p_profile_id)
+      || CASE WHEN p.embedding IS NOT NULL
+              THEN jsonb_build_object('embedding_model', 'text-embedding-3-small', 'embedding_dims', 1536) ELSE '{}'::jsonb END
+      || jsonb_strip_nulls(jsonb_build_object('doc_date', doc.doc_date, 'source', doc.source, 'page_start', p.page_start, 'page_end', p.page_end)),
+    doc.organization_id,
+    doc.tenant_key,
+    doc.version,
+    doc.is_current,
+    doc.status,
+    doc.doc_type,
+    doc.doc_date,
+    doc.language,
+    doc.source,
+    p.page_start,
+    p.page_end,
+    p.section_path,
+    p.content_hash,
+    p.chunk_kind,
+    doc.parser_used,
+    p.embedding_text_version,
+    p.lexical_text,
+    p.parent_id,
+    p_profile_id
+  FROM prepared p
+  ON CONFLICT (id) DO UPDATE SET
+    content = EXCLUDED.content,
+    embedding = EXCLUDED.embedding,
+    chunk_index = EXCLUDED.chunk_index,
+    metadata = EXCLUDED.metadata,
+    organization_id = EXCLUDED.organization_id,
+    tenant_key = EXCLUDED.tenant_key,
+    version = EXCLUDED.version,
+    is_current = EXCLUDED.is_current,
+    status = EXCLUDED.status,
+    doc_type = EXCLUDED.doc_type,
+    doc_date = EXCLUDED.doc_date,
+    language = EXCLUDED.language,
+    source = EXCLUDED.source,
+    page_start = EXCLUDED.page_start,
+    page_end = EXCLUDED.page_end,
+    section_path = EXCLUDED.section_path,
+    content_hash = EXCLUDED.content_hash,
+    chunk_kind = EXCLUDED.chunk_kind,
+    parser_used = EXCLUDED.parser_used,
+    embedding_text_version = EXCLUDED.embedding_text_version,
+    lexical_text = EXCLUDED.lexical_text,
+    parent_id = EXCLUDED.parent_id,
+    chunking_profile_id = EXCLUDED.chunking_profile_id
+  WHERE dc.document_id = EXCLUDED.document_id;
+  GET DIAGNOSTICS children_in = ROW_COUNT;
+
+  IF p_embeddings IS NOT NULL AND jsonb_typeof(p_embeddings) = 'object' THEN
+    FOR profile_key IN SELECT jsonb_object_keys(p_embeddings) LOOP
+      SELECT * INTO profile_row FROM public.embedding_profiles p WHERE p.id = profile_key;
+      payload := p_embeddings -> profile_key;
+      IF jsonb_typeof(payload) = 'object' THEN
+        vectors := payload -> 'vectors';
+        host_name := payload ->> 'host';
+      ELSE
+        vectors := payload;
+        host_name := NULL;
+      END IF;
+
+      IF profile_row.storage <> 'legacy_column' THEN
+        INSERT INTO public.chunk_embeddings AS ce (chunk_id, profile_id, tenant_key, embedding, embedding_model, dims, embedding_host)
+        SELECT
+          substr(encode(sha256(convert_to(
+            p_document_id::text || ':' || p_profile_id || ':child:' || COALESCE((e.value ->> 'chunk_index')::integer, (e.ord - 1)::integer)::text, 'UTF8')), 'hex'), 1, 32)::uuid,
+          profile_row.id,
+          doc.tenant_key,
+          (v.value::text)::public.halfvec,
+          profile_row.model,
+          profile_row.dims,
+          host_name
+        FROM jsonb_array_elements(p_children) WITH ORDINALITY AS e(value, ord)
+        JOIN jsonb_array_elements(vectors) WITH ORDINALITY AS v(value, ord) ON v.ord = e.ord
+        WHERE jsonb_typeof(v.value) = 'array'
+        ON CONFLICT (chunk_id, profile_id) DO UPDATE SET
+          embedding = EXCLUDED.embedding,
+          embedding_model = EXCLUDED.embedding_model,
+          dims = EXCLUDED.dims,
+          embedding_host = EXCLUDED.embedding_host,
+          embedded_at = now();
+      END IF;
+
+      DELETE FROM public.embedding_backfill_gaps g
+      USING jsonb_array_elements(p_children) WITH ORDINALITY AS e(value, ord),
+            jsonb_array_elements(vectors) WITH ORDINALITY AS v(value, ord)
+      WHERE v.ord = e.ord
+        AND jsonb_typeof(v.value) = 'array'
+        AND g.profile_id = profile_row.id
+        AND g.chunk_id = substr(encode(sha256(convert_to(
+              p_document_id::text || ':' || p_profile_id || ':child:' || COALESCE((e.value ->> 'chunk_index')::integer, (e.ord - 1)::integer)::text, 'UTF8')), 'hex'), 1, 32)::uuid;
+    END LOOP;
+  END IF;
+
+  IF p_final THEN
+    total := COALESCE(p_total, child_count);
+    DELETE FROM public.document_chunks c
+    WHERE c.document_id = p_document_id AND c.chunking_profile_id = p_profile_id AND c.chunk_index >= total;
+    GET DIAGNOSTICS children_out = ROW_COUNT;
+    DELETE FROM public.document_parents dp
+    WHERE dp.document_id = p_document_id
+      AND dp.chunking_profile_id = p_profile_id
+      AND NOT EXISTS (SELECT 1 FROM public.document_chunks c WHERE c.parent_id = dp.id);
+    GET DIAGNOSTICS parents_out = ROW_COUNT;
+  END IF;
+
+  RETURN QUERY SELECT parents_in, children_in, parents_out, children_out;
+END
+$$;
+
+DO $write_chunks_null_acl$
+BEGIN
+  IF to_regprocedure('public.rag_write_chunks(uuid, text, jsonb, jsonb, boolean, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_write_chunks(uuid, text, jsonb, jsonb, boolean, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_write_chunks(uuid, text, jsonb, jsonb, boolean, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_write_profile_chunks(uuid, text, text, jsonb, jsonb, jsonb, boolean, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_write_profile_chunks(uuid, text, text, jsonb, jsonb, jsonb, boolean, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_write_profile_chunks(uuid, text, text, jsonb, jsonb, jsonb, boolean, integer) TO service_role;
+  END IF;
+END
+$write_chunks_null_acl$;
 
 COMMIT;

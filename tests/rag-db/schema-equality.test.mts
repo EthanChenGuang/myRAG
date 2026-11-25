@@ -4,8 +4,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import type { PGlite } from '@electric-sql/pglite';
-import { createEmptyFixtureDatabase, type DeploymentMode, type FixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
+import { PGlite } from '@electric-sql/pglite';
+import { pg_trgm } from '@electric-sql/pglite/contrib/pg_trgm';
+import { vector } from '@electric-sql/pglite-pgvector';
+import {
+  createEmptyFixtureDatabase,
+  SUPABASE_GRANTS_SQL,
+  SUPABASE_SHIM_SQL,
+  type DeploymentMode,
+  type FixtureDatabase,
+} from '../../eval/harness/pglite-supabase.mts';
 import { applyMigrationFiles, applyMigrations, migrationFiles } from '../../eval/harness/migrations.mts';
 import { assertNoClientCallableRagFunctions } from '../helpers/rag-client-grants.ts';
 
@@ -18,12 +26,13 @@ const FOLDED_SETUP: Record<DeploymentMode, string> = {
 };
 
 /**
- * Migrations whose final shape is folded into both setup files: Phase 3 (0301-0320, plans 03-47 and later) and Phase 4 (0401-0413, plan 04-42).
- * Phase 3.1 (0351-0358 and the queue hardening 0420-0423, plan 03.1-52), 0424 and Phase 6 (plan 06-45) are not folded yet, so a fresh install from a
- * setup file is completed by those migrations alone.
+ * Migrations whose final shape is folded into both setup files: Phase 3 (0301-0320, plans 03-47 and later), Phase 3.1 (0351-0359, and the queue
+ * hardening and chunk writer fix 0420-0424 after Phase 4, plan 03.1-52) and Phase 4 (0401-0413, plan 04-42). Phase 6 (plan 06-45) is not folded
+ * yet, so a fresh install from a setup file is completed by those migrations alone.
  */
-const FOLDED_MIGRATION = /^supabase\/migrations\/(030[1-9]|031\d|0320|040[1-9]|041[0-3])_[a-z0-9_]+(\.(single|multi)-tenant)?\.sql$/;
+const FOLDED_MIGRATION = /^supabase\/migrations\/(030[1-9]|031\d|0320|035[1-9]|040[1-9]|041[0-3]|042[0-4])_[a-z0-9_]+(\.(single|multi)-tenant)?\.sql$/;
 const PHASE4_MIGRATION = /^supabase\/migrations\/04(0[1-9]|1\d)_/;
+const PHASE31_MIGRATION = /^supabase\/migrations\/(035[1-9]|042[0-4])_/;
 const unfoldedMigrationFiles = (mode: DeploymentMode): string[] => migrationFiles(mode).filter((file) => !FOLDED_MIGRATION.test(file));
 
 /** Every function the Phase 4 migrations create; each one is service-role only (RET-04, D-04). */
@@ -136,7 +145,7 @@ export async function catalogDump(db: PGlite): Promise<CatalogDump> {
     policies: await rows(
       db,
       `SELECT schemaname AS schema, tablename AS "table", policyname AS name, cmd, roles::text AS roles, qual, with_check
-       FROM pg_policies WHERE schemaname = 'public'`,
+       FROM pg_policies WHERE schemaname IN ('public', 'realtime')`,
     ),
   };
 }
@@ -274,6 +283,12 @@ describe('folded migration set', () => {
       assert.ok(phase4.length >= 13);
       assert.deepEqual(phase4.filter((file) => !FOLDED_MIGRATION.test(file)), []);
     });
+
+    test(`every Phase 3.1 migration of ${mode} is folded into the setup file`, () => {
+      const phase31 = migrationFiles(mode).filter((file) => PHASE31_MIGRATION.test(file));
+      assert.ok(phase31.length >= 15);
+      assert.deepEqual(phase31.filter((file) => !FOLDED_MIGRATION.test(file)), []);
+    });
   }
 });
 
@@ -334,6 +349,152 @@ for (const mode of MODES) {
         assert.deepEqual(differences(dumpBefore, dumpAfter), []);
       } finally {
         await empty.db.close();
+      }
+    });
+  });
+}
+
+// Phase 3.1 fold (plan 03.1-52): 0351-0359 of the mode sit between the Phase 3 and Phase 4 sections, 0420-0424 after Phase 4 (migration order),
+// each appended verbatim in loader order.
+const BAR = '------------------------------------------';
+const PHASE_31_SECTIONS = [
+  { header: `${BAR}\n-- Phase 3.1: Tiered parsing, ingestion queue and bulk backfill (migrations 0351-0359)\n${BAR}`, files: /^supabase\/migrations\/035[1-9]_/ },
+  {
+    header: `${BAR}\n-- Phase 3.1: Ingestion queue hardening and chunk writer fix (migrations 0420-0424, after Phase 4 in migration order)\n${BAR}`,
+    files: /^supabase\/migrations\/042[0-4]_/,
+  },
+] as const;
+const PHASE_4_HEADER = `${BAR}\n-- Phase 4: Hybrid retrieval`;
+const OTHER_MODE: Record<DeploymentMode, DeploymentMode> = { 'single-tenant': 'multi-tenant', 'multi-tenant': 'single-tenant' };
+
+const phase31Files = (mode: DeploymentMode): string[] => migrationFiles(mode).filter((file) => PHASE31_MIGRATION.test(file));
+
+/** The Phase 3.1 sections as the fold writes them: a header, then each migration file under a `-- >>> path` line. */
+export function phase31Sections(mode: DeploymentMode): string[] {
+  return PHASE_31_SECTIONS.map(({ header, files }) => {
+    const blocks = migrationFiles(mode)
+      .filter((file) => files.test(file))
+      .map((relpath) => {
+        const content = fs.readFileSync(path.join(REPO_ROOT, relpath), 'utf8');
+        return `-- >>> ${relpath}\n${content}${content.endsWith('\n') ? '' : '\n'}`;
+      });
+    return `${header}\n\n${blocks.join('\n')}`;
+  });
+}
+
+/** The folded setup file with both Phase 3.1 sections cut out: what the setup was before this fold. */
+function setupWithoutPhase31(mode: DeploymentMode): string {
+  let text = fs.readFileSync(path.join(REPO_ROOT, FOLDED_SETUP[mode]), 'utf8');
+  for (const section of phase31Sections(mode)) {
+    assert.ok(text.includes(section), `${FOLDED_SETUP[mode]} lacks a Phase 3.1 section`);
+    text = text.replace(section, '');
+  }
+  return text;
+}
+
+/** Supabase Realtime as far as 0353 needs it: realtime.messages with RLS, realtime.topic() and realtime.send(). */
+const REALTIME_STUB_SQL = `
+CREATE SCHEMA IF NOT EXISTS realtime;
+CREATE TABLE IF NOT EXISTS realtime.messages (id bigserial PRIMARY KEY, topic text NOT NULL, extension text NOT NULL, payload jsonb, event text, private boolean);
+ALTER TABLE realtime.messages ENABLE ROW LEVEL SECURITY;
+CREATE OR REPLACE FUNCTION realtime.topic() RETURNS text LANGUAGE sql STABLE AS $$ SELECT NULLIF(current_setting('realtime.topic', true), '') $$;
+CREATE OR REPLACE FUNCTION realtime.send(payload jsonb, event text, topic text, private boolean) RETURNS void LANGUAGE sql AS $$ SELECT $$;`;
+
+/** A fresh database with the Supabase shim, optionally Realtime, then the given SQL texts in order. */
+async function freshDatabase(sqlTexts: string[], options: { realtime?: boolean } = {}): Promise<PGlite> {
+  const db = new PGlite({ extensions: { vector, pg_trgm } });
+  try {
+    await db.waitReady;
+    await db.exec(SUPABASE_SHIM_SQL);
+    await db.exec(SUPABASE_GRANTS_SQL);
+    if (options.realtime) await db.exec(REALTIME_STUB_SQL);
+    for (const sql of sqlTexts) await db.exec(sql);
+    return db;
+  } catch (error) {
+    await db.close().catch(() => undefined);
+    throw error;
+  }
+}
+
+const readRepo = (relpath: string): string => fs.readFileSync(path.join(REPO_ROOT, relpath), 'utf8');
+
+async function functionSource(db: PGlite, signature: string): Promise<string | null> {
+  const result = await db.query<{ definition: string | null }>('SELECT pg_get_functiondef(to_regprocedure($1)) AS definition', [signature]);
+  return result.rows[0]?.definition ?? null;
+}
+
+async function realtimePolicies(db: PGlite): Promise<string[]> {
+  return rows(db, "SELECT policyname AS name, cmd, roles::text AS roles, qual FROM pg_policies WHERE schemaname = 'realtime'");
+}
+
+const TOPIC_RULE = 'rag_ingest_realtime_topic_allowed(text)';
+
+for (const mode of MODES) {
+  describe(`${mode} setup: Phase 3.1 fold`, () => {
+    test(`${mode} setup carries migrations 0351 to 0359 before Phase 4 and 0420 to 0424 after it, verbatim and in loader order`, () => {
+      const files = phase31Files(mode);
+      assert.ok(files.length >= 15, `expected the 0351-0359 and 0420-0424 files of ${mode}, saw ${files.length}`);
+      assert.ok(files.includes(`supabase/migrations/0353_ingestion_transitions.${mode}.sql`));
+      assert.ok(!files.includes(`supabase/migrations/0353_ingestion_transitions.${OTHER_MODE[mode]}.sql`));
+      const text = readRepo(FOLDED_SETUP[mode]);
+      const [early, late] = phase31Sections(mode) as [string, string];
+      assert.ok(text.includes(`${early}\n${PHASE_4_HEADER}`), 'the 0351-0359 section sits right before the Phase 4 section');
+      assert.ok(text.endsWith(late), 'the 0420-0424 section closes the file, after Phase 4');
+      assert.ok(text.indexOf(late) > text.indexOf(PHASE_4_HEADER));
+    });
+
+    test(`${mode} setup alone equals the setup without its Phase 3.1 sections plus the Phase 3.1 migrations`, async () => {
+      const folded = await freshDatabase([readRepo(FOLDED_SETUP[mode])]);
+      const migrated = await freshDatabase([setupWithoutPhase31(mode), ...phase31Files(mode).map(readRepo)]);
+      try {
+        const foldedDump = await catalogDump(folded);
+        assert.ok(foldedDump.columns.some((row) => row.includes('"table":"ingestion_jobs"')), 'ingestion_jobs is in the setup file');
+        assert.deepEqual(differences(foldedDump, await catalogDump(migrated)), []);
+      } finally {
+        await folded.close();
+        await migrated.close();
+      }
+    });
+
+    test(`${mode} setup alone carries this mode's Realtime topic rule and not the other mode's`, async () => {
+      const folded = await freshDatabase([readRepo(FOLDED_SETUP[mode])]);
+      const own = await freshDatabase([readRepo(frozenSetup(mode)), ...migrationFiles(mode).map(readRepo)]);
+      const other = await freshDatabase([readRepo(frozenSetup(mode)), ...migrationFiles(mode).map(readRepo)]);
+      try {
+        await other.exec(readRepo(`supabase/migrations/0353_ingestion_transitions.${OTHER_MODE[mode]}.sql`));
+        const source = await functionSource(folded, TOPIC_RULE);
+        assert.ok(source, `${TOPIC_RULE} is in ${FOLDED_SETUP[mode]}`);
+        assert.equal(source, await functionSource(own, TOPIC_RULE));
+        assert.notEqual(source, await functionSource(other, TOPIC_RULE));
+      } finally {
+        await folded.close();
+        await own.close();
+        await other.close();
+      }
+      const code = readRepo(FOLDED_SETUP[mode])
+        .split('\n')
+        .filter((line) => !/^\s*--/.test(line))
+        .join('\n');
+      if (mode === 'multi-tenant') assert.ok(!code.includes('rag-ingest:s:default'), 'the multi-tenant setup carries the single-tenant topic');
+      else assert.ok(!code.includes("'rag-ingest:u:'"), 'the single-tenant setup carries the multi-tenant topic');
+    });
+
+    test(`${mode} with Supabase Realtime: every migration applies in loader order and the folded setup alone has the same broadcast policy`, async () => {
+      const migrated = await freshDatabase([readRepo(frozenSetup(mode)), ...migrationFiles(mode).map(readRepo)], { realtime: true });
+      const folded = await freshDatabase([readRepo(FOLDED_SETUP[mode])], { realtime: true });
+      const foldedThenMigrated = await freshDatabase([readRepo(FOLDED_SETUP[mode]), ...migrationFiles(mode).map(readRepo)], { realtime: true });
+      try {
+        const policies = await realtimePolicies(migrated);
+        assert.equal(policies.length, 1, 'rag_ingest_broadcast_read exists on realtime.messages');
+        assert.match(policies[0] as string, /rag_ingest_broadcast_read/);
+        assert.match(policies[0] as string, /rag_ingest_realtime_topic_allowed/);
+        assert.deepEqual(await realtimePolicies(folded), policies);
+        assert.equal(await functionSource(folded, TOPIC_RULE), await functionSource(migrated, TOPIC_RULE));
+        assert.deepEqual(differences(await catalogDump(foldedThenMigrated), await catalogDump(migrated)), []);
+      } finally {
+        await migrated.close();
+        await folded.close();
+        await foldedThenMigrated.close();
       }
     });
   });

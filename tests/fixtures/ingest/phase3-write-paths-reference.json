@@ -1,0 +1,660 @@
+{
+  "recorded_from": "84753a33 (Phase 3 tip: plan 03-47, migrations 0301-0319)",
+  "recorded_with": "inline ingest() on a single-tenant PGlite database behind the fake edge, installIngestFakes with INGEST_MODE_ENV, no Phase 3.1 switch set",
+  "runs": [
+    {
+      "id": "chat_upload",
+      "source": "chat_upload",
+      "sourceKey": "chat_upload:defaults-chat.md",
+      "filename": "defaults-chat.md",
+      "mimeType": "text/markdown",
+      "docType": "general",
+      "text": "# Warehouse Handbook\n\nForklift batteries rotate every shift under the zebra quartz seventeen policy.\n\n## Receiving Dock\n\nPallets arriving at the receiving dock are scanned by the night crew and staged beside bay four.\n\n| Bay | Owner |\n| --- | --- |\n| 4 | Night crew |\n| 5 | Day crew |\n",
+      "expected": {
+        "status": "ready",
+        "chunkCount": 2,
+        "doc": {
+          "parser_used": "text",
+          "doc_type": "general",
+          "doc_type_origin": "picked",
+          "status": "ready",
+          "is_current": true,
+          "source": "chat_upload"
+        },
+        "chunks": [
+          {
+            "content_hash": "e3339151e6a01d3165fd2d983eccc28125f1ab8380ea87b0138079a602e0ca06",
+            "section_path": [
+              "Warehouse Handbook"
+            ],
+            "page_start": null,
+            "page_end": null,
+            "chunk_kind": "text",
+            "metadata_keys": [
+              "chunk_index",
+              "chunk_kind",
+              "chunk_position",
+              "chunk_semantic_type",
+              "content_hash",
+              "doc_type",
+              "document_title",
+              "embedding_dims",
+              "embedding_model",
+              "embedding_text_version",
+              "has_temporal_data",
+              "has_urls",
+              "key_terms",
+              "language",
+              "parser_used",
+              "section_path",
+              "section_type",
+              "source",
+              "temporal_density",
+              "temporal_entities",
+              "total_chunks",
+              "url_categories",
+              "url_count",
+              "urls"
+            ],
+            "parser_used": "text"
+          },
+          {
+            "content_hash": "20b32aa88c23df44ca14f6a03ee6f6cf03e4126e2c9d4e5078787b81992b79f6",
+            "section_path": [
+              "Warehouse Handbook",
+              "Receiving Dock"
+            ],
+            "page_start": null,
+            "page_end": null,
+            "chunk_kind": "text",
+            "metadata_keys": [
+              "chunk_index",
+              "chunk_kind",
+              "chunk_position",
+              "chunk_semantic_type",
+              "content_hash",
+              "doc_type",
+              "document_title",
+              "embedding_dims",
+              "embedding_model",
+              "embedding_text_version",
+              "has_temporal_data",
+              "has_urls",
+              "key_terms",
+              "language",
+              "parser_used",
+              "section_path",
+              "section_type",
+              "source",
+              "temporal_density",
+              "temporal_entities",
+              "total_chunks",
+              "url_categories",
+              "url_count",
+              "urls"
+            ],
+            "parser_used": "text"
+          }
+        ]
+      }
+    },
+    {
+      "id": "config_upload",
+      "source": "config_upload",
+      "sourceKey": "config_upload:defaults-notes.txt",
+      "filename": "defaults-notes.txt",
+      "mimeType": "text/plain",
+      "text": "Delivery notes\n\nThe copper tally sheet is filed by the dispatch clerk each evening.\n\nA second paragraph closes the sheet with https://example.invalid/tally for reference.\n",
+      "expected": {
+        "status": "ready",
+        "chunkCount": 1,
+        "doc": {
+          "parser_used": "text",
+          "doc_type": "general",
+          "doc_type_origin": "fallback",
+          "status": "ready",
+          "is_current": true,
+          "source": "config_upload"
+        },
+        "chunks": [
+          {
+            "content_hash": "c2f65578347f80f77e3f166e6e425dabecdb1eed7958d047fa05fdc1dd5f139f",
+            "section_path": [],
+            "page_start": null,
+            "page_end": null,
+            "chunk_kind": "text",
+            "metadata_keys": [
+              "chunk_index",
+              "chunk_kind",
+              "chunk_position",
+              "chunk_semantic_type",
+              "content_hash",
+              "doc_type",
+              "document_title",
+              "embedding_dims",
+              "embedding_model",
+              "embedding_text_version",
+              "has_temporal_data",
+              "has_urls",
+              "key_terms",
+              "language",
+              "parser_used",
+              "section_path",
+              "section_type",
+              "source",
+              "temporal_density",
+              "temporal_entities",
+              "total_chunks",
+              "url_categories",
+              "url_count",
+              "urls"
+            ],
+            "parser_used": "text"
+          }
+        ]
+      }
+    },
+    {
+      "id": "config_upload_pdf",
+      "source": "config_upload",
+      "sourceKey": "config_upload:report-zh-table.pdf",
+      "filename": "report-zh-table.pdf",
+      "mimeType": "application/pdf",
+      "docType": "financial_report",
+      "file": "eval/fixtures/ingest/pdf/report-zh-table.pdf",
+      "expected": {
+        "status": "ready",
+        "chunkCount": 5,
+        "doc": {
+          "parser_used": "docling",
+          "doc_type": "financial_report",
+          "doc_type_origin": "picked",
+          "status": "ready",
+          "is_current": true,
+          "source": "config_upload"
+        },
+        "chunks": [
+          {
+            "content_hash": "d63aad6c7839c1c6f6361de3c1ad0790a7390cea5355125b403bc52170e654d2",
+            "section_path": [
+              "示例股份有限公司 2025 年度财务报告",
+              "第一章 经营概况"
+            ],
+            "page_start": 1,
+            "page_end": 1,
+            "chunk_kind": "text",
+            "metadata_keys": [
+              "chunk_index",
+              "chunk_kind",
+              "chunk_position",
+              "chunk_semantic_type",
+              "content_hash",
+              "doc_type",
+              "document_title",
+              "embedding_dims",
+              "embedding_model",
+              "embedding_text_version",
+              "financial_entities",
+              "has_financial_data",
+              "has_temporal_data",
+              "has_urls",
+              "is_high_value_chunk",
+              "key_terms",
+              "language",
+              "numerical_density",
+              "page_end",
+              "page_start",
+              "parser_used",
+              "section_path",
+              "section_type",
+              "source",
+              "temporal_density",
+              "temporal_entities",
+              "total_chunks",
+              "url_categories",
+              "url_count",
+              "urls"
+            ],
+            "parser_used": "docling"
+          },
+          {
+            "content_hash": "a0335fd4079462b4344de3ba4b8e91b679cba68a7de6aab0a003fcc5a7af0dd4",
+            "section_path": [
+              "示例股份有限公司 2025 年度财务报告",
+              "第二章 费用明细"
+            ],
+            "page_start": 1,
+            "page_end": 1,
+            "chunk_kind": "text",
+            "metadata_keys": [
+              "chunk_index",
+              "chunk_kind",
+              "chunk_position",
+              "chunk_semantic_type",
+              "content_hash",
+              "doc_type",
+              "document_title",
+              "embedding_dims",
+              "embedding_model",
+              "embedding_text_version",
+              "financial_entities",
+              "has_financial_data",
+              "has_temporal_data",
+              "has_urls",
+              "is_high_value_chunk",
+              "key_terms",
+              "language",
+              "numerical_density",
+              "page_end",
+              "page_start",
+              "parser_used",
+              "section_path",
+              "section_type",
+              "source",
+              "temporal_density",
+              "temporal_entities",
+              "total_chunks",
+              "url_categories",
+              "url_count",
+              "urls"
+            ],
+            "parser_used": "docling"
+          },
+          {
+            "content_hash": "64b27f0ae042ae1626ce03a0f51179ba06761044a2b53b4aeab17497924dbf57",
+            "section_path": [
+              "示例股份有限公司 2025 年度财务报告",
+              "第二章 费用明细",
+              "2.1 费用科目表"
+            ],
+            "page_start": 2,
+            "page_end": 2,
+            "chunk_kind": "table",
+            "metadata_keys": [
+              "chunk_index",
+              "chunk_kind",
+              "chunk_position",
+              "chunk_semantic_type",
+              "content_hash",
+              "doc_type",
+              "document_title",
+              "embedding_dims",
+              "embedding_model",
+              "embedding_text_version",
+              "financial_entities",
+              "has_financial_data",
+              "has_temporal_data",
+              "has_urls",
+              "is_high_value_chunk",
+              "key_terms",
+              "language",
+              "numerical_density",
+              "page_end",
+              "page_start",
+              "parser_used",
+              "section_path",
+              "section_type",
+              "source",
+              "temporal_density",
+              "temporal_entities",
+              "total_chunks",
+              "url_categories",
+              "url_count",
+              "urls"
+            ],
+            "parser_used": "docling"
+          },
+          {
+            "content_hash": "6f2130e9d20901b333b5076c1bc2b0e9b711347628802462a568420ff222a24e",
+            "section_path": [
+              "示例股份有限公司 2025 年度财务报告",
+              "第二章 费用明细",
+              "2.1 费用科目表"
+            ],
+            "page_start": 2,
+            "page_end": 2,
+            "chunk_kind": "table",
+            "metadata_keys": [
+              "chunk_index",
+              "chunk_kind",
+              "chunk_position",
+              "chunk_semantic_type",
+              "content_hash",
+              "doc_type",
+              "document_title",
+              "embedding_dims",
+              "embedding_model",
+              "embedding_text_version",
+              "financial_entities",
+              "has_financial_data",
+              "has_temporal_data",
+              "has_urls",
+              "is_high_value_chunk",
+              "key_terms",
+              "language",
+              "numerical_density",
+              "page_end",
+              "page_start",
+              "parser_used",
+              "section_path",
+              "section_type",
+              "source",
+              "temporal_density",
+              "temporal_entities",
+              "total_chunks",
+              "url_categories",
+              "url_count",
+              "urls"
+            ],
+            "parser_used": "docling"
+          },
+          {
+            "content_hash": "110dfd17a1a6f8c2c949be6cc151211bd0c3bcb6bd8330ab58593eab94f5f9b0",
+            "section_path": [
+              "示例股份有限公司 2025 年度财务报告",
+              "第二章 费用明细",
+              "2.1 费用科目表"
+            ],
+            "page_start": 2,
+            "page_end": 2,
+            "chunk_kind": "table",
+            "metadata_keys": [
+              "chunk_index",
+              "chunk_kind",
+              "chunk_position",
+              "chunk_semantic_type",
+              "content_hash",
+              "doc_type",
+              "document_title",
+              "embedding_dims",
+              "embedding_model",
+              "embedding_text_version",
+              "financial_entities",
+              "has_financial_data",
+              "has_temporal_data",
+              "has_urls",
+              "is_high_value_chunk",
+              "key_terms",
+              "language",
+              "numerical_density",
+              "page_end",
+              "page_start",
+              "parser_used",
+              "section_path",
+              "section_type",
+              "source",
+              "temporal_density",
+              "temporal_entities",
+              "total_chunks",
+              "url_categories",
+              "url_count",
+              "urls"
+            ],
+            "parser_used": "docling"
+          }
+        ]
+      }
+    },
+    {
+      "id": "image_upload",
+      "source": "image_upload",
+      "sourceKey": "image_upload:user-defaults/pic_1_defaults.png",
+      "filename": "defaults-diagram.png",
+      "mimeType": "image/png",
+      "docType": "general",
+      "file": "eval/fixtures/ingest/recorded/images-en.picture-1.png",
+      "options": {
+        "imageUrl": "https://project.example.test/storage/v1/object/public/chat-images/user-defaults/pic_1_defaults.png?download",
+        "imageContext": "Defaults diagram for aisle seven."
+      },
+      "expected": {
+        "status": "ready",
+        "chunkCount": 1,
+        "doc": {
+          "parser_used": "text",
+          "doc_type": "general",
+          "doc_type_origin": "picked",
+          "status": "ready",
+          "is_current": true,
+          "source": "image_upload"
+        },
+        "chunks": [
+          {
+            "content_hash": "cdf5b13cd5692bac108cbaaa4081e56d0e8135685b277fb748678e2ba4b2ce9b",
+            "section_path": [],
+            "page_start": 1,
+            "page_end": 1,
+            "chunk_kind": "image",
+            "metadata_keys": [
+              "chunk_index",
+              "chunk_kind",
+              "chunk_position",
+              "content_hash",
+              "doc_type",
+              "document_title",
+              "embedding_dims",
+              "embedding_model",
+              "embedding_text_version",
+              "has_urls",
+              "image_context",
+              "image_type",
+              "image_url",
+              "language",
+              "page_end",
+              "page_start",
+              "parser_used",
+              "section_path",
+              "source",
+              "total_chunks",
+              "url_categories",
+              "url_count",
+              "urls"
+            ],
+            "parser_used": "text"
+          }
+        ]
+      }
+    },
+    {
+      "id": "ai_to_rag",
+      "source": "ai_to_rag",
+      "sourceKey": "chat:00000000-0000-4000-8000-00000000c001/message:defaults-message",
+      "filename": "shipping-cage-summary.md",
+      "mimeType": "text/markdown",
+      "text": "## Shipping Cage\n\nOutbound pallets leave through the shipping cage after the supervisor signs the manifest.\n\nThe manifest copy stays in the cage drawer for thirty days.\n",
+      "options": {
+        "documentMetadata": {
+          "source": "ai_response",
+          "messageId": "defaults-message",
+          "chatId": "00000000-0000-4000-8000-00000000c001",
+          "generatedAt": "2026-01-01T00:00:00.000Z"
+        }
+      },
+      "expected": {
+        "status": "ready",
+        "chunkCount": 1,
+        "doc": {
+          "parser_used": "text",
+          "doc_type": "general",
+          "doc_type_origin": "fallback",
+          "status": "ready",
+          "is_current": true,
+          "source": "ai_to_rag"
+        },
+        "chunks": [
+          {
+            "content_hash": "311865b12a25d6865f91d4bc31d463f5108dd52692350f106f172536f382887f",
+            "section_path": [
+              "Shipping Cage"
+            ],
+            "page_start": null,
+            "page_end": null,
+            "chunk_kind": "text",
+            "metadata_keys": [
+              "chunk_index",
+              "chunk_kind",
+              "chunk_position",
+              "chunk_semantic_type",
+              "content_hash",
+              "doc_type",
+              "document_title",
+              "embedding_dims",
+              "embedding_model",
+              "embedding_text_version",
+              "has_temporal_data",
+              "has_urls",
+              "key_terms",
+              "language",
+              "parser_used",
+              "section_path",
+              "section_type",
+              "source",
+              "temporal_density",
+              "temporal_entities",
+              "total_chunks",
+              "url_categories",
+              "url_count",
+              "urls"
+            ],
+            "parser_used": "text"
+          }
+        ]
+      }
+    },
+    {
+      "id": "scraper",
+      "source": "scraper",
+      "sourceKey": "scraper:https://example.invalid/defaults-page",
+      "filename": "defaults-page.md",
+      "mimeType": "text/markdown",
+      "docType": "general",
+      "text": "# Night shift rota\n\nThe night shift rota is posted at the loading gate every Sunday.\n\nSwaps are approved by the shift lead before Friday noon.\n",
+      "options": {
+        "origin": {
+          "sourceProvider": "firecrawl",
+          "sourceFileId": "https://example.invalid/defaults-page",
+          "sourceConnectionId": "firecrawl-single",
+          "externalUrl": "https://example.invalid/defaults-page"
+        }
+      },
+      "expected": {
+        "status": "ready",
+        "chunkCount": 1,
+        "doc": {
+          "parser_used": "text",
+          "doc_type": "general",
+          "doc_type_origin": "picked",
+          "status": "ready",
+          "is_current": true,
+          "source": "scraper"
+        },
+        "chunks": [
+          {
+            "content_hash": "18f298c883800f47de72941090d38167ce985891b290c8658948c4606f21e3a9",
+            "section_path": [
+              "Night shift rota"
+            ],
+            "page_start": null,
+            "page_end": null,
+            "chunk_kind": "text",
+            "metadata_keys": [
+              "chunk_index",
+              "chunk_kind",
+              "chunk_position",
+              "chunk_semantic_type",
+              "content_hash",
+              "doc_type",
+              "document_title",
+              "embedding_dims",
+              "embedding_model",
+              "embedding_text_version",
+              "has_temporal_data",
+              "has_urls",
+              "key_terms",
+              "language",
+              "parser_used",
+              "section_path",
+              "section_type",
+              "source",
+              "temporal_density",
+              "temporal_entities",
+              "total_chunks",
+              "url_categories",
+              "url_count",
+              "urls"
+            ],
+            "parser_used": "text"
+          }
+        ]
+      }
+    },
+    {
+      "id": "nango",
+      "source": "nango",
+      "sourceKey": "nango:drive-file-defaults",
+      "filename": "defaults-drive.md",
+      "mimeType": "text/markdown",
+      "docType": "general",
+      "text": "# Cold room log\n\nThe cold room thermometer is read at six and eighteen hundred hours.\n\nReadings above four degrees are reported to the quality desk.\n",
+      "options": {
+        "origin": {
+          "sourceProvider": "google-drive",
+          "sourceFileId": "drive-file-defaults",
+          "sourceConnectionId": "conn-defaults"
+        },
+        "nangoConnectionId": "conn-defaults",
+        "nangoFolderId": "folder-defaults"
+      },
+      "expected": {
+        "status": "ready",
+        "chunkCount": 1,
+        "doc": {
+          "parser_used": "text",
+          "doc_type": "general",
+          "doc_type_origin": "picked",
+          "status": "ready",
+          "is_current": true,
+          "source": "nango"
+        },
+        "chunks": [
+          {
+            "content_hash": "116affa268a4cbbc8d4969e0896e05d0fddf6bf86c1f161b5b0fd13359b685eb",
+            "section_path": [
+              "Cold room log"
+            ],
+            "page_start": null,
+            "page_end": null,
+            "chunk_kind": "text",
+            "metadata_keys": [
+              "chunk_index",
+              "chunk_kind",
+              "chunk_position",
+              "chunk_semantic_type",
+              "content_hash",
+              "doc_type",
+              "document_title",
+              "embedding_dims",
+              "embedding_model",
+              "embedding_text_version",
+              "has_temporal_data",
+              "has_urls",
+              "key_terms",
+              "language",
+              "parser_used",
+              "section_path",
+              "section_type",
+              "source",
+              "temporal_density",
+              "temporal_entities",
+              "total_chunks",
+              "url_categories",
+              "url_count",
+              "urls"
+            ],
+            "parser_used": "text"
+          }
+        ]
+      }
+    }
+  ]
+}
