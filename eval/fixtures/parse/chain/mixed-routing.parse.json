@@ -1,0 +1,144 @@
+{
+  "artifacts": [
+    "docling.json"
+  ],
+  "chunks": [
+    {
+      "contextualized_text": "Section 1\nDigital narrative on page 1 for mixed routing coverage.",
+      "headings": [
+        "Section 1"
+      ],
+      "is_table": false,
+      "pages": [
+        1
+      ],
+      "table_header": null,
+      "text": "Digital narrative on page 1 for mixed routing coverage."
+    },
+    {
+      "contextualized_text": "Section 1\nSection 2\nDigital narrative on page 2 for mixed routing coverage.",
+      "headings": [
+        "Section 1",
+        "Section 2"
+      ],
+      "is_table": false,
+      "pages": [
+        2
+      ],
+      "table_header": null,
+      "text": "Digital narrative on page 2 for mixed routing coverage."
+    },
+    {
+      "contextualized_text": "Section 1\nSection 3\nDigital narrative on page 3 for mixed routing coverage.",
+      "headings": [
+        "Section 1",
+        "Section 3"
+      ],
+      "is_table": false,
+      "pages": [
+        3
+      ],
+      "table_header": null,
+      "text": "Digital narrative on page 3 for mixed routing coverage."
+    },
+    {
+      "contextualized_text": "Section 1\nSection 4\nDigital narrative on page 4 for mixed routing coverage.",
+      "headings": [
+        "Section 1",
+        "Section 4"
+      ],
+      "is_table": false,
+      "pages": [
+        4
+      ],
+      "table_header": null,
+      "text": "Digital narrative on page 4 for mixed routing coverage."
+    },
+    {
+      "contextualized_text": "Section 1\nSection 5\nDigital narrative on page 5 for mixed routing coverage.",
+      "headings": [
+        "Section 1",
+        "Section 5"
+      ],
+      "is_table": false,
+      "pages": [
+        5
+      ],
+      "table_header": null,
+      "text": "Digital narrative on page 5 for mixed routing coverage."
+    },
+    {
+      "contextualized_text": "Section 1\nSection 6\nDigital narrative on page 6 for mixed routing coverage.",
+      "headings": [
+        "Section 1",
+        "Section 6"
+      ],
+      "is_table": false,
+      "pages": [
+        6
+      ],
+      "table_header": null,
+      "text": "Digital narrative on page 6 for mixed routing coverage."
+    },
+    {
+      "contextualized_text": "Section 1\nTable block 7\n| Lane   |   Value | Status   |\n|--------|---------|----------|\n| A      |      10 | ok       |\n| B      |      20 | ok       |\n| C      |      30 | hold     |",
+      "headings": [
+        "Section 1",
+        "Table block 7"
+      ],
+      "is_table": true,
+      "pages": [
+        7
+      ],
+      "table_header": "| Lane   |   Value | Status   |\n|--------|---------|----------|",
+      "text": "| Lane   |   Value | Status   |\n|--------|---------|----------|\n| A      |      10 | ok       |\n| B      |      20 | ok       |\n| C      |      30 | hold     |"
+    },
+    {
+      "contextualized_text": "Section 1\nTable block 8\n| Lane   |   Value | Status   |\n|--------|---------|----------|\n| A      |      10 | ok       |\n| B      |      20 | ok       |\n| C      |      30 | hold     |",
+      "headings": [
+        "Section 1",
+        "Table block 8"
+      ],
+      "is_table": true,
+      "pages": [
+        8
+      ],
+      "table_header": "| Lane   |   Value | Status   |\n|--------|---------|----------|",
+      "text": "| Lane   |   Value | Status   |\n|--------|---------|----------|\n| A      |      10 | ok       |\n| B      |      20 | ok       |\n| C      |      30 | hold     |"
+    },
+    {
+      "contextualized_text": "Embedded scan slip\nThis image-only page should route to structured_ocr in the mixed document.",
+      "headings": [
+        "Embedded scan slip"
+      ],
+      "is_table": false,
+      "pages": [
+        9
+      ],
+      "table_header": null,
+      "text": "This image-only page should route to structured_ocr in the mixed document."
+    },
+    {
+      "contextualized_text": "Embedded scan slip\nClosing note\nFinal digital page after the scanned page.",
+      "headings": [
+        "Embedded scan slip",
+        "Closing note"
+      ],
+      "is_table": false,
+      "pages": [
+        10
+      ],
+      "table_header": null,
+      "text": "Final digital page after the scanned page."
+    }
+  ],
+  "language": "en",
+  "markdown": "## Section 1\n\nDigital narrative on page 1 for mixed routing coverage.\n\n### Section 2\n\nDigital narrative on page 2 for mixed routing coverage.\n\n### Section 3\n\nDigital narrative on page 3 for mixed routing coverage.\n\n### Section 4\n\nDigital narrative on page 4 for mixed routing coverage.\n\n### Section 5\n\nDigital narrative on page 5 for mixed routing coverage.\n\n### Section 6\n\nDigital narrative on page 6 for mixed routing coverage.\n\n### Table block 7\n\n| Lane   |   Value | Status   |\n|--------|---------|----------|\n| A      |      10 | ok       |\n| B      |      20 | ok       |\n| C      |      30 | hold     |\n\n### Table block 8\n\n| Lane   |   Value | Status   |\n|--------|---------|----------|\n| A      |      10 | ok       |\n| B      |      20 | ok       |\n| C      |      30 | hold     |\n\n## Embedded scan slip\n\nThis image-only page should route to structured\\_ocr in the mixed document.\n\n### Closing note\n\nFinal digital page after the scanned page.",
+  "page_count": 10,
+  "parser": "docling",
+  "parser_version": "docling-2.107.1",
+  "partial": false,
+  "pictures": [],
+  "text_layer_page_share": 0.9,
+  "warnings": []
+}

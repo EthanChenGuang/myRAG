@@ -117,7 +117,14 @@ function fakeDb(answers: Record<string, unknown>): { client: RpcClient; calls: A
   return { client, calls };
 }
 
-async function seedQueuedUpload(scopePath: string, file: Uint8Array, filename: string, mimeType: string, originalObject = 'original.md') {
+async function seedQueuedUpload(
+  scopePath: string,
+  file: Uint8Array,
+  filename: string,
+  mimeType: string,
+  originalObject = 'original.md',
+  kind: 'file' | 'text' = 'file',
+) {
   const store = installFakeObjectStore();
   const queued = encodeQueuedInput({
     v: 1,
@@ -125,7 +132,7 @@ async function seedQueuedUpload(scopePath: string, file: Uint8Array, filename: s
     sourceKey: 'notes.md',
     filename,
     mimeType,
-    kind: 'file',
+    kind,
     state: {},
   });
   await store.put(`${scopePath}${QUEUED_INPUT_ARTIFACT}`, queued, { contentType: 'application/json' });
@@ -299,6 +306,44 @@ describe('parse-external native mode', () => {
     expect(captionCalls).toHaveLength(1);
   });
 
+  test('a text upload named like an image is its text, as in the Phase 3 chain, and is not captioned', async () => {
+    const captionCalls: number[] = [];
+    setCaptionerForTests(async () => {
+      captionCalls.push(1);
+      return 'A caption of something else.';
+    });
+    const text = '# Floor plan\n\nAisle A holding thermal probes and spare cables.';
+    installHarness(
+      {
+        rag_get_ingest_document: [
+          {
+            status: 'processing',
+            version: 1,
+            processing_status: 'parse',
+            processing_state: {},
+            filename: 'floorplan.png',
+            doc_type: 'general',
+            parser_used: null,
+            created_at: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      },
+      {
+        filename: 'floorplan.png',
+        mime_type: 'text/markdown',
+        original_ref: { bucket: 'rag-originals', path: `s:default/${LINEAGE}/1/original.png` },
+      },
+    );
+    await seedQueuedUpload(`s:default/${LINEAGE}/1/`, new TextEncoder().encode(text), 'floorplan.png', 'text/markdown', 'original.png', 'text');
+    const result = await handleParseExternal(
+      JOB_ID,
+      { worker_id: WORKER, attempt_no: 1, mode: 'native', continuation: null, cursor: null, pages: null, subpdf_ref: null, options_hash: OPTIONS_HASH },
+      { signal: new AbortController().signal },
+    );
+    expect(result.body).toMatchObject({ status: 'done', pages: [{ page: 1, text }] });
+    expect(captionCalls).toHaveLength(0);
+  });
+
   test('docx and html return failed unsupported_mode', async () => {
     for (const [filename, mimeType, originalName] of [
       ['brief.docx', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'original.docx'],
@@ -455,6 +500,40 @@ describe('parse-external premium mode', () => {
     expect(pages.map((page) => page.page)).toEqual([4, 9, 12]);
     expect(fake.uploads).toHaveLength(1);
     expect(calls.some((call) => call.fn === 'rag_settle_parse_budget')).toBe(true);
+  });
+
+  test('keeps every paragraph of a page and the page each one came from', async () => {
+    fake.enqueue({
+      pages: [
+        { page_number: 1, success: true, markdown: '# Notice\n\nFirst paragraph of page one.\n\nSecond paragraph of page one.' },
+        { page_number: 2, success: false, error: 'page failed' },
+        { page_number: 3, success: true, markdown: 'Only paragraph of page three.' },
+      ],
+    });
+    installHarness();
+    const subpdf = `s:default/_parse-cache/${FILE_SHA}/work/range.pdf`;
+    await seedPremiumSubpdf(subpdf);
+    const result = await handleParseExternal(
+      JOB_ID,
+      {
+        worker_id: WORKER,
+        attempt_no: 1,
+        mode: 'premium',
+        continuation: null,
+        cursor: JSON.stringify({ original_pages: [4, 9, 12], reserve_pages: 6 }),
+        pages: { start: 4, end: 12 },
+        subpdf_ref: subpdf,
+        options_hash: 'd'.repeat(64),
+      },
+      { signal: new AbortController().signal },
+    );
+    expect(result.body).toMatchObject({ status: 'done' });
+    const pages = (result.body as { pages: Array<{ page: number; text: string }> }).pages;
+    expect(pages).toEqual([
+      { page: 4, text: '# Notice\n\nFirst paragraph of page one.\n\nSecond paragraph of page one.', has_table: false },
+      { page: 9, text: '', has_table: false },
+      { page: 12, text: 'Only paragraph of page three.', has_table: false },
+    ]);
   });
 
   test('rejects subpdf_ref outside the cache prefix', async () => {

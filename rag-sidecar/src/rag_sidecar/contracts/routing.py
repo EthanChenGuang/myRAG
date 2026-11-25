@@ -166,6 +166,7 @@ class L1Config(_Contract):
     garbled_ratio: float = Field(ge=0, le=1)
     min_ruling_paths: int = Field(ge=0)
     thin_path_pt: float = Field(gt=0)
+    scanned_max_chars: int = Field(default=30, ge=0)
 
 
 class L2Config(_Contract):
