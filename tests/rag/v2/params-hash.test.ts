@@ -295,3 +295,81 @@ describe('eval chunking override in the retrieval config hash', () => {
     expect(withOverride).not.toBe(without);
   });
 });
+
+/** A hash input built only from literals, so the pinned value does not move with the committed params file. */
+function literalHashInput(): RetrievalConfigHashInput {
+  return {
+    backendId: 'pgvector',
+    embeddingProfileId: 'openai-3-small-1536',
+    lexicalVersion: 1,
+    rerankTextVersion: 1,
+    params: {
+      candidate_pool_size: 75,
+      config_hash: 'a808a46f380d35f92c15bd2fb19d37a13b02c7827372c73e4dd76480714433f7',
+      final_top_k: 8,
+      leg_weights: { dense: 1, exact_id: 1, lexical: 1 },
+      provenance: { source: 'defaults' },
+      rerank_input_cap: 75,
+      rrf_k: 60,
+      schema_version: 1,
+      sub_question_coverage: true,
+    } as RetrievalParams,
+    reranker: { id: 'none', model: 'none' },
+    thresholdsConfigHash: null,
+    activeChunkingProfiles: { general: 'legacy' },
+    switches: {
+      lexicalSearch: false,
+      refusalThreshold: false,
+      edgeOrder: false,
+      compression: false,
+      tokenBudget: 6000,
+      parentChild: false,
+      iterativeScan: 'off',
+      exactScanCutoff: 0,
+      lexicalTranslation: false,
+      exactIdLookup: false,
+      rerankTierChat: 'quality',
+      rerankTierVoice: 'fast',
+    },
+  };
+}
+
+/** The hash of literalHashInput() before the security component existed (05.1-14 base). */
+const PINNED_DEFAULT_HASH = 'f0bbcf06e9a792e368b2bcf880adf10f17336aa167a2c9fe5597198df3fc4fac';
+
+const SECURITY_DEFAULT = {
+  contextTagging: false,
+  injectionCheck: 'off',
+  promptGuard: false,
+  lakera: false,
+  lakeraMultiTenantAck: false,
+  lakeraEffective: false,
+  toolResultGuard: 'off',
+  rulesVersion: 'rules-v1',
+  detectorsVersion: 'detectors-v1',
+} as const;
+
+describe('computeRetrievalConfigHash security component (D-18)', () => {
+  it('with no security component the hash equals the pinned pre-5.1 value', () => {
+    expect(computeRetrievalConfigHash(literalHashInput())).toBe(PINNED_DEFAULT_HASH);
+    expect(computeRetrievalConfigHash({ ...literalHashInput(), security: null })).toBe(PINNED_DEFAULT_HASH);
+  });
+
+  it('a security component changes the hash, and each single change gives a distinct hash', () => {
+    const variants = [
+      { ...SECURITY_DEFAULT, contextTagging: true },
+      { ...SECURITY_DEFAULT, injectionCheck: 'flag' },
+      { ...SECURITY_DEFAULT, injectionCheck: 'drop' },
+      { ...SECURITY_DEFAULT, injectionCheck: 'downweight' },
+      { ...SECURITY_DEFAULT, promptGuard: true },
+      { ...SECURITY_DEFAULT, lakera: true },
+      { ...SECURITY_DEFAULT, lakeraMultiTenantAck: true },
+      { ...SECURITY_DEFAULT, lakeraEffective: true },
+      { ...SECURITY_DEFAULT, toolResultGuard: 'tag' },
+      { ...SECURITY_DEFAULT, rulesVersion: 'rules-v2' },
+      { ...SECURITY_DEFAULT, detectorsVersion: 'detectors-v2' },
+    ] as const;
+    const hashes = variants.map((security) => computeRetrievalConfigHash({ ...literalHashInput(), security }));
+    expect(new Set([...hashes, PINNED_DEFAULT_HASH]).size).toBe(variants.length + 1);
+  });
+});
