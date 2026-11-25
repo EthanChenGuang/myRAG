@@ -1,18 +1,27 @@
+import crypto from 'node:crypto';
+import type { ModelMessage } from 'ai';
 import { NextRequest, NextResponse } from 'next/server';
 import { env } from '@/lib/env';
 import { validateRequest } from '@/lib/api-middleware';
 import {
   CORE_STAGES,
   countTokens,
+  createCitationSession,
   createTraceCollector,
   evalScope,
   finishTrace,
+  groundednessEligibility,
   LEXICAL_VERSION,
   OPTIONAL_STAGES,
   parseRetrievalFilters,
+  readGenerationConfig,
   RERANK_TEXT_VERSION,
   runRetrieval,
   scopeKey,
+  scoreAnswerGroundedness,
+  type AnswerGroundedness,
+  type CitationSession,
+  type ClaudeTurnFacts,
   type RetrievalFilterInput,
   type RetrievalResult,
   type StageName,
@@ -21,7 +30,16 @@ import {
 import { RagRunRequestSchema, RagTraceSchema, type RagRunRequest } from '@/lib/rag-eval/contracts.generated';
 import { checkEvalAccess } from '@/lib/rag-eval/auth';
 import { buildEffectiveConfig, configHash } from '@/lib/rag-eval/trace';
-import { generateEvalAnswer, isGPTGeneratorModel, resolveGeneratorModel } from '@/lib/rag-eval/answer';
+import {
+  evalGroundednessRequest,
+  generateEvalAnswer,
+  isGPTGeneratorModel,
+  resolveEvalPromptTemplate,
+  resolveGeneratorModel,
+  type EvalConversationTurn,
+} from '@/lib/rag-eval/answer';
+import type { CitationRecord } from '@/lib/rag-eval/contracts.generated';
+import { detectLanguage } from '@/lib/rag/lang/detect';
 
 export const runtime = 'nodejs';
 
@@ -128,6 +146,64 @@ function v2TraceFields(result: RetrievalResult) {
   };
 }
 
+
+/** An eval turn is a single question with no tools, MCP or attachments; reasoning is not requested. */
+const EVAL_CLAUDE_FACTS: ClaudeTurnFacts = { mcp: false, multiStep: false, webSearch: false, reasoning: false, attachments: false };
+
+const NO_CITATIONS: CitationRecord[] = [];
+
+interface CitationTraceFields {
+  citations: CitationRecord[];
+  citation_strategy: NonNullable<CitationSession['strategy']>;
+  invalid_citations: number;
+}
+
+function citationTraceFields(session: CitationSession | null): CitationTraceFields | null {
+  if (!session?.strategy) return null;
+  const records = session.fullRecords();
+  if (!records) return null;
+  return { citations: records.citations, citation_strategy: session.strategy, invalid_citations: records.invalidCitations };
+}
+
+function errorDetail(error: unknown): string {
+  const name = error instanceof Error ? error.name : 'Error';
+  const status = (error as { statusCode?: unknown } | null)?.statusCode;
+  return typeof status === 'number' ? `${name} (HTTP ${status})` : name;
+}
+
+/** D-09 and D-10 in the eval: the direct Claude call; a failure before any text falls back to chunk-alias once. */
+async function generateClaudeAnswer(input: {
+  session: CitationSession;
+  query: string;
+  conversation: EvalConversationTurn[];
+  signal: AbortSignal;
+}): Promise<string | null> {
+  const { session } = input;
+  let streamError: unknown = null;
+  try {
+    const history: ModelMessage[] = session.stripHistory(
+      input.conversation.map((turn) => ({ role: turn.role, content: turn.content })),
+    ) as ModelMessage[];
+    const stream = session.startClaude({
+      system: session.claudeSystemPrompt(resolveEvalPromptTemplate()),
+      history,
+      question: input.query,
+      reasoning: false,
+      abortSignal: input.signal,
+      onError(error) {
+        streamError = error;
+      },
+    });
+    const text = await stream.result.text;
+    if (text.length > 0) return text;
+  } catch (error: unknown) {
+    streamError = error;
+  }
+  console.warn('[RAG Eval] Claude citations call failed, falling back to chunk-alias:', streamError ? errorDetail(streamError) : 'empty');
+  session.fallback('error');
+  return null;
+}
+
 export async function POST(req: NextRequest) {
   const access = checkEvalAccess(req.headers, {
     nodeEnv: process.env.NODE_ENV,
@@ -169,6 +245,19 @@ export async function POST(req: NextRequest) {
   try {
     const generatorModel = includeAnswer ? resolveGeneratorModel(options?.generator_model) : null;
     const isGPTModel = generatorModel !== null && isGPTGeneratorModel(generatorModel);
+    // D-05: an eval run has the citations capability only when it asks for it, and only when an answer is generated.
+    const generationConfig = readGenerationConfig();
+    const citationSession =
+      generatorModel !== null && options?.citations === true
+        ? createCitationSession({
+            capabilities: { citations: true },
+            ragMode,
+            modelId: generatorModel,
+            language: detectLanguage(query) ?? 'en',
+            config: { ...generationConfig, citations: true },
+            facts: EVAL_CLAUDE_FACTS,
+          })
+        : null;
 
     const result = await runRetrieval({
       scope,
@@ -186,6 +275,7 @@ export async function POST(req: NextRequest) {
       trace: collector,
       ...(stageOverrides ? { stageOverrides } : {}),
       ...(retrievalFilters ? { retrievalFilters } : {}),
+      ...(citationSession?.labeler ? { citationLabeler: citationSession.labeler } : {}),
     });
 
     try {
@@ -208,16 +298,61 @@ export async function POST(req: NextRequest) {
       const refused = result.refusalCandidate || result.refusal?.decision === 'refuse';
       if (generatorModel !== null && !refused) {
         const generationStart = collector.now();
+        citationSession?.attach(result);
         try {
-          answer = await generateEvalAnswer({ query, conversation, context: result.context, ragMode, generatorModel });
+          if (citationSession?.strategy === 'claude-citations') {
+            answer = await generateClaudeAnswer({ session: citationSession, query, conversation: conversation ?? [], signal: req.signal });
+          }
+          if (answer === null) {
+            answer = await generateEvalAnswer({
+              query,
+              conversation,
+              context: result.context,
+              ragMode,
+              generatorModel,
+              ...(citationSession ? { decorateSystemPrompt: (prompt: string) => citationSession.decorateSystemPrompt(prompt) } : {}),
+            });
+            citationSession?.ingestFullText(answer);
+          }
         } catch (error: unknown) {
-          const name = error instanceof Error ? error.name : 'Error';
-          const status = (error as { statusCode?: unknown } | null)?.statusCode;
-          const detail = typeof status === 'number' ? `${name} (HTTP ${status})` : name;
+          const detail = errorDetail(error);
           console.error('[RAG Eval] generation failed:', detail);
           return NextResponse.json({ error: `generation failed: ${detail}` }, { status: 500 });
         }
         collector.record({ name: 'generation', status: 'ok', startedAt: generationStart, endedAt: collector.now() });
+      }
+      const citationFields = citationTraceFields(citationSession);
+
+      let groundedness: AnswerGroundedness | null = null;
+      if (generatorModel !== null && options?.groundedness === true) {
+        // D-14 on the eval route: the run's ragMode and retrieval result decide; the premise is the blocks sent to the model.
+        const premiseBlocks = (result.blocks ?? [])
+          .filter((block) => !block.isImage)
+          .map((block) => ({ alias: block.alias ?? '', text: block.text }));
+        const eligibility = groundednessEligibility({
+          enabled: true,
+          webChatWithCitations: true,
+          ragMode,
+          retrievalStatus: result.status,
+          blockCount: premiseBlocks.length,
+          isRefusal: refused || answer === null,
+          ghostChat: false,
+          toolOutputUsed: false,
+        });
+        const request = evalGroundednessRequest();
+        groundedness = await scoreAnswerGroundedness(
+          {
+            answerId: crypto.randomUUID(),
+            answerText: answer ?? '',
+            blocks: premiseBlocks,
+            citedAliases: (citationFields?.citations ?? NO_CITATIONS).map((record) => record.alias),
+            webSearchTexts: [],
+            eligibility,
+            multiTenant: deploymentMode === 'multi-tenant',
+            config: generationConfig,
+          },
+          request ? { request } : {},
+        );
       }
 
       const retrievalStrategy = result.stages.find((stage) => stage.name === 'search')?.detail ?? 'unknown';
@@ -267,7 +402,11 @@ export async function POST(req: NextRequest) {
         ...(v2Result ? v2TraceFields(result) : {}),
         ...(Object.keys(stageCounts).length > 0 ? { stage_counts: stageCounts } : {}),
         answer,
-        citations: [],
+        citations: citationFields?.citations ?? NO_CITATIONS,
+        ...(citationFields
+          ? { citation_strategy: citationFields.citation_strategy, invalid_citations: citationFields.invalid_citations }
+          : {}),
+        ...(groundedness ? { groundedness } : {}),
         stage_latency_ms: collector.toStageLatency(),
         stage_status: collector.toStageStatus(),
         effective_config: effectiveConfig,

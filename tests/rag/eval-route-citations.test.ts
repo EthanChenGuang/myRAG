@@ -9,6 +9,7 @@ import { createCitationSession, type ContextBlock } from '@/lib/rag';
 import { RagTraceSchema } from '@/lib/rag-eval/contracts.generated';
 import { citationInstruction } from '@/lib/rag/generation/citations/instructions';
 import { installChatPipeline, retrievalWith } from '../helpers/chat-route-fakes';
+import { FAKE_ANTHROPIC_KEY, readAnthropicFixture } from '../helpers/fake-anthropic';
 
 const SECRET = 'a'.repeat(48);
 const SIDECAR_SECRET = 'sidecar-secret-placeholder-0123456789';
@@ -21,7 +22,10 @@ const ENV_NAMES = [
   'RAG_CITATIONS',
   'RAG_CLAUDE_CITATIONS',
   'ANTHROPIC_API_KEY',
+  'ANTHROPIC_BASE_URL',
+  'NEXT_PUBLIC_OPENROUTER_MODELS',
 ] as const;
+const CLAUDE_MODEL = 'anthropic/claude-sonnet-5.5';
 const env = process.env as Record<string, string | undefined>;
 
 const USAGE = {
@@ -104,6 +108,46 @@ async function startSidecar(result: Record<string, unknown>): Promise<FakeSideca
     secrets,
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
   };
+}
+
+interface FakeAnthropic {
+  baseUrl: string;
+  requests: Array<Record<string, unknown>>;
+  close(): Promise<void>;
+}
+
+async function startAnthropic(mode: { sse: string } | { status: number }): Promise<FakeAnthropic> {
+  const requests: Array<Record<string, unknown>> = [];
+  const server = http.createServer((req, res) => {
+    let raw = '';
+    req.on('data', (chunk) => {
+      raw += chunk;
+    });
+    req.on('end', () => {
+      requests.push(raw ? (JSON.parse(raw) as Record<string, unknown>) : {});
+      if ('sse' in mode) {
+        res.writeHead(200, { 'content-type': 'text/event-stream' });
+        res.end(mode.sse);
+        return;
+      }
+      res.writeHead(mode.status, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({ type: 'error', error: { type: 'api_error', message: 'fixture failure' } }));
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const { port } = server.address() as AddressInfo;
+  return {
+    baseUrl: `http://127.0.0.1:${port}/v1`,
+    requests,
+    close: () => new Promise<void>((resolve) => server.close(() => resolve())),
+  };
+}
+
+function useClaude(baseUrl: string) {
+  env.RAG_CLAUDE_CITATIONS = 'true';
+  env.ANTHROPIC_API_KEY = FAKE_ANTHROPIC_KEY;
+  env.ANTHROPIC_BASE_URL = baseUrl;
+  env.NEXT_PUBLIC_OPENROUTER_MODELS = JSON.stringify([{ id: CLAUDE_MODEL, displayName: 'Claude', anthropicId: 'claude-sonnet-5-5' }]);
 }
 
 async function loadRoute(answerText: string, prompts: CapturedPrompt[]) {
@@ -269,6 +313,63 @@ describe('eval route citations and groundedness', () => {
     expect(trace.groundedness?.status).toBe('not_checked');
     expect(trace.groundedness?.label).toBe('not_checked');
     expect(trace.groundedness?.reason).toBe('scorer_unavailable');
+  });
+
+  it('takes the direct Claude path only with RAG_CLAUDE_CITATIONS and a key, and records claude-citations', async () => {
+    const anthropic = await startAnthropic({ sse: readAnthropicFixture('citations.sse') });
+    try {
+      useClaude(anthropic.baseUrl);
+      const prompts: CapturedPrompt[] = [];
+      const { route } = await loadRoute('unused [S1]', prompts);
+      const { status, trace } = await post(route, evalRequest({ citations: true, generator_model: CLAUDE_MODEL }));
+
+      expect(status).toBe(200);
+      expect(anthropic.requests).toHaveLength(1);
+      expect(prompts).toHaveLength(0);
+      expect(trace.citation_strategy).toBe('claude-citations');
+      expect(trace.answer).toContain('the blue lantern festival moved to May.');
+      expect(trace.citations.length).toBeGreaterThan(0);
+      for (const record of trace.citations) expect(record.strategy).toBe('claude-citations');
+      expect(trace.citations[0].quote).toBe('The blue lantern festival moved to May this year.');
+      expect(RagTraceSchema.safeParse(trace).success).toBe(true);
+    } finally {
+      await anthropic.close();
+    }
+  });
+
+  it('falls back once to chunk-alias when the direct call fails before any text', async () => {
+    const anthropic = await startAnthropic({ status: 500 });
+    try {
+      useClaude(anthropic.baseUrl);
+      const prompts: CapturedPrompt[] = [];
+      const { route } = await loadRoute('Fallback [S1].', prompts);
+      const { status, trace } = await post(route, evalRequest({ citations: true, generator_model: CLAUDE_MODEL }));
+
+      expect(status).toBe(200);
+      expect(anthropic.requests.length).toBeGreaterThanOrEqual(1);
+      expect(prompts).toHaveLength(1);
+      expect(prompts[0].system.endsWith(`\n\n${citationInstruction('en')}`)).toBe(true);
+      expect(trace.citation_strategy).toBe('chunk-alias');
+      expect(trace.citations.map((record) => record.alias)).toEqual(['S1']);
+    } finally {
+      await anthropic.close();
+    }
+  });
+
+  it('keeps chunk-alias for a Claude model while RAG_CLAUDE_CITATIONS is off', async () => {
+    const anthropic = await startAnthropic({ sse: readAnthropicFixture('citations.sse') });
+    try {
+      useClaude(anthropic.baseUrl);
+      delete env.RAG_CLAUDE_CITATIONS;
+      const prompts: CapturedPrompt[] = [];
+      const { route } = await loadRoute('Plain [S2].', prompts);
+      const { trace } = await post(route, evalRequest({ citations: true, generator_model: CLAUDE_MODEL }));
+      expect(anthropic.requests).toHaveLength(0);
+      expect(trace.citation_strategy).toBe('chunk-alias');
+      expect(trace.citations.map((record) => record.alias)).toEqual(['S2']);
+    } finally {
+      await anthropic.close();
+    }
   });
 
   it('calls no sidecar without the groundedness option', async () => {

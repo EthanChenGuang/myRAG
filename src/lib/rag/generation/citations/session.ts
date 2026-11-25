@@ -78,6 +78,8 @@ export interface CitationSession {
   /** Removes markers from earlier assistant turns; aliases belong to the request that made them. */
   stripHistory<T extends HistoryMessage>(messages: T[]): T[];
   transforms(): Array<StreamTextTransform<ToolSet>>;
+  /** A non-streamed chunk-alias answer: parses the whole text once, as the stream transform would. */
+  ingestFullText(text: string): void;
   finishMetadata(): CitationFinishMetadata;
   /** The validated records with full quotes, for the answer record; null when no strategy is active. */
   fullRecords(): { citations: CitationRecord[]; invalidCitations: number } | null;
@@ -261,6 +263,19 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
           fail,
         }),
       ];
+    },
+    ingestFullText(text) {
+      if (strategy !== 'chunk-alias' || !parser || finished) return;
+      answer += text;
+      if (!failed) {
+        try {
+          parser.feed('full', text);
+          parser.end('full');
+        } catch {
+          fail('parser_error');
+        }
+      }
+      finalize();
     },
     finishMetadata() {
       if (!strategy) return {};
