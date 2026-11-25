@@ -1,4 +1,4 @@
-import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -18,8 +18,10 @@ export interface SpawnSidecarHandle {
   kill(): void;
 }
 
-function buildChildEnv(explicit: Record<string, string>): Record<string, string> {
-  const env: Record<string, string> = { ...explicit };
+type SidecarChildEnv = Record<string, string> & { NODE_ENV: 'test' };
+
+function buildChildEnv(explicit: Record<string, string>): SidecarChildEnv {
+  const env: SidecarChildEnv = { ...explicit, NODE_ENV: 'test' };
   env.RAG_SIDECAR_ENV = 'test';
   if (process.env.PATH) env.PATH = process.env.PATH;
   if (process.env.HOME) env.HOME = process.env.HOME;
@@ -40,7 +42,7 @@ function resolvePythonLaunch(): { command: string; argsPrefix: string[]; cwd: st
   return { command: 'python3', argsPrefix: [], cwd: RAG_SIDECAR_ROOT };
 }
 
-function killTree(child: ChildProcessWithoutNullStreams): void {
+function killTree(child: ChildProcess): void {
   const pid = child.pid;
   if (pid === undefined) return;
   try {
