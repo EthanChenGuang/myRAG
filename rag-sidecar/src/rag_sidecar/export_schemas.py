@@ -9,6 +9,13 @@ from pydantic import BaseModel
 from rag_sidecar.contracts import (
     AnswerFeedbackRequest,
     AnswerRecord,
+    CacheCheckRequest,
+    CacheCheckResponse,
+    CachedAnswer,
+    CacheInvalidateRequest,
+    CacheInvalidateResponse,
+    CacheStoreRequest,
+    SemanticCacheCalibration,
     CitationRecord,
     GroundednessRequest,
     GroundednessResult,
@@ -163,6 +170,13 @@ CONTRACTS: list[tuple[type[BaseModel], Mode]] = [
     (SubQuestions, "validation"),
     (QueryTranslation, "validation"),
     (QueryParams, "validation"),
+    (CachedAnswer, "serialization"),
+    (CacheCheckRequest, "validation"),
+    (CacheCheckResponse, "serialization"),
+    (CacheStoreRequest, "validation"),
+    (CacheInvalidateRequest, "validation"),
+    (CacheInvalidateResponse, "serialization"),
+    (SemanticCacheCalibration, "serialization"),
 ]
 
 
