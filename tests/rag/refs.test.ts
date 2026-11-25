@@ -1,7 +1,9 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runRetrieval } from '@/lib/rag';
+import * as refsModule from '@/lib/rag/refs/resolve';
 import { resolveDocumentRefs } from '@/lib/rag/refs/resolve';
+import type { CitationLabeler, ReferencedSection } from '@/lib/rag/types';
 import { mintScope, type TenantScope } from '@/lib/rag/tenant/scope';
 import { SEMANTIC_QUERY, fakeEmbedder, fakeRpcClient, installDeps, rows, uninstallDeps } from './helpers/pipeline-fakes';
 
@@ -359,6 +361,62 @@ describe('resolveDocumentRefs', () => {
     expect(result.usedDocuments).toHaveLength(1);
   });
 
+  it('returns the referenced sections in render order and they re-render to the same context', async () => {
+    const tables = seed();
+    tables.documents[1].organization_id = null;
+    const { admin } = filteringAdmin(tables);
+
+    const result = await resolveDocumentRefs({
+      scope: single,
+      mentions: [],
+      documentParts: [
+        { id: DOC_A, name: 'Alpha Handbook' },
+        { id: DOC_B, name: 'Bravo' },
+      ],
+      admin,
+      signal,
+    });
+
+    const sections = (result as { sections?: ReferencedSection[] }).sections;
+    expect(sections).toEqual([
+      { documentId: DOC_A, documentName: 'Alpha Handbook', chunkIds: ['chunk-a1', 'chunk-a2'], text: 'alpha chunk one\n\nalpha chunk two' },
+      { documentId: DOC_B, documentName: 'Bravo', chunkIds: ['chunk-b1'], text: 'bravo chunk one' },
+    ]);
+    const render = (refsModule as Record<string, unknown>).renderReferencedSection as
+      | ((section: ReferencedSection, header?: string) => string)
+      | undefined;
+    expect(typeof render).toBe('function');
+    expect(sections!.map((section) => render!(section)).join('')).toBe(result.context);
+  });
+
+  it('gives a full-text section empty chunk ids and a missing document a note that is not a block', async () => {
+    const tables = seed();
+    tables.document_chunks = [];
+    tables.documents[0].text = 'Alpha full text column';
+    const fullText = await resolveDocumentRefs({
+      scope: personalA,
+      mentions: [],
+      documentParts: [{ id: DOC_A, name: 'alpha' }],
+      admin: filteringAdmin(tables).admin,
+      signal,
+    });
+    expect((fullText as { sections?: ReferencedSection[] }).sections).toEqual([
+      { documentId: DOC_A, documentName: 'alpha', chunkIds: [], text: 'Alpha full text column' },
+    ]);
+
+    const missing = await resolveDocumentRefs({
+      scope: personalA,
+      mentions: [],
+      documentParts: [{ id: DOC_A, name: 'alpha' }],
+      admin: filteringAdmin({ ...seed(), document_chunks: [] }, { documents: ['text'] }).admin,
+      signal,
+    });
+    const sections = (missing as { sections?: ReferencedSection[] }).sections;
+    expect(sections).toEqual([{ documentId: DOC_A, documentName: 'alpha', chunkIds: [], text: '', missing: true }]);
+    const render = (refsModule as Record<string, unknown>).renderReferencedSection as (section: ReferencedSection) => string;
+    expect(sections!.map((section) => render(section)).join('')).toBe(missing.context);
+  });
+
   it('passes the abort signal to every query', async () => {
     const controller = new AbortController();
     const { admin, calls } = filteringAdmin(seed());
@@ -438,6 +496,36 @@ describe('refs stage in runRetrieval', () => {
     expect(result.usedDocuments.map((doc) => doc.id)).toEqual([DOC_A]);
     expect(result.context).toBe('\n\n=== DOCUMENT: "alpha-handbook.md" ===\nalpha chunk one\n\nalpha chunk two\n=== END OF DOCUMENT ===\n');
     expect(result.refusalCandidate).toBe(false);
+  });
+
+  it('labels the referenced section first and continues the ordinals into the retrieved chunks', async () => {
+    install(filteringAdmin(pipelineTables()).admin);
+    const plain = await run({ mentions: [], documentParts: [{ id: DOC_A, name: 'alpha-handbook.md' }] });
+
+    install(filteringAdmin(pipelineTables()).admin);
+    const labeler: CitationLabeler = (block, ordinal) => ({ alias: `S${ordinal}`, header: `[S${ordinal}] ${block.title}`, text: block.text });
+    const labelled = await runRetrieval({
+      scope: single,
+      query: SEMANTIC_QUERY,
+      profile: 'chat',
+      documentRefs: { mentions: [], documentParts: [{ id: DOC_A, name: 'alpha-handbook.md' }] },
+      signal: new AbortController().signal,
+      citationLabeler: labeler,
+    } as Parameters<typeof runRetrieval>[0]);
+
+    expect(plain.context).not.toContain('[S1]');
+    expect(plain.blocks?.map((block) => [block.documentId, block.chunkIds, block.alias])).toEqual([
+      [DOC_A, ['chunk-a1', 'chunk-a2'], null],
+      ['doc-1', ['chunk-1'], null],
+    ]);
+    expect(labelled.blocks?.map((block) => [block.documentId, block.alias])).toEqual([
+      [DOC_A, 'S1'],
+      ['doc-1', 'S2'],
+    ]);
+    expect(labelled.context.startsWith('\n\n=== DOCUMENT: "alpha-handbook.md" ===\n[S1] alpha-handbook.md\nalpha chunk one\n\nalpha chunk two\n=== END OF DOCUMENT ===\n')).toBe(true);
+    expect(labelled.context).toContain('[S2] doc-1.md\n');
+    expect(labelled.usedDocuments).toEqual(plain.usedDocuments);
+    expect(labelled.kept).toEqual(plain.kept);
   });
 
   it('adds no refs stage when no references are given', async () => {

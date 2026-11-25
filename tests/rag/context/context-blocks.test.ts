@@ -184,3 +184,46 @@ describe('legacy context blocks with a labeler', () => {
     expect(labelled.context).not.toBe(plain.context);
   });
 });
+
+describe('referenced documents as blocks', () => {
+  const docs = [row('doc-A', 'alpha.pdf')];
+  const candidates = [candidate('a1', 'doc-A', 0.9, 'alpha first')];
+  const refContext = '\n\n=== DOCUMENT: "Ref Doc" ===\nref one\n\nref two\n=== END OF DOCUMENT ===\n\n\nDocument "Gone" was referenced but no content could be retrieved.\n';
+  const referenced = {
+    usedDocuments: [{ id: 'doc-R', name: 'Ref Doc', filename: 'ref.md', explicitly_referenced: true }],
+    context: refContext,
+    sections: [
+      { documentId: 'doc-R', documentName: 'Ref Doc', chunkIds: ['r1', 'r2'], text: 'ref one\n\nref two' },
+      { documentId: 'doc-G', documentName: 'Gone', chunkIds: [], text: '', missing: true },
+    ],
+  };
+
+  it('puts referenced blocks first without a labeler and keeps the referenced context string', () => {
+    const out = assembleContext(input(candidates, docs, { referenced }));
+    expect(out.context.startsWith(refContext)).toBe(true);
+    expect(blocksOf(out).map((block) => [block.documentId, block.chunkIds, block.alias, block.title])).toEqual([
+      ['doc-R', ['r1', 'r2'], null, 'Ref Doc'],
+      ['doc-A', ['a1'], null, 'alpha.pdf'],
+    ]);
+  });
+
+  it('labels referenced sections first and continues the ordinals into the retrieved chunks', () => {
+    const out = assembleContext(input(candidates, docs, { referenced, citationLabeler: upperLabeler }));
+    expect(blocksOf(out).map((block) => [block.documentId, block.alias])).toEqual([
+      ['doc-R', 'S1'],
+      ['doc-A', 'S2'],
+    ]);
+    expect(
+      out.context.startsWith(
+        '\n\n=== DOCUMENT: "Ref Doc" ===\n[S1] Ref Doc\nREF ONE\n\nREF TWO\n=== END OF DOCUMENT ===\n\n\nDocument "Gone" was referenced but no content could be retrieved.\n',
+      ),
+    ).toBe(true);
+    expect(out.context).toContain('[S2] alpha.pdf\nALPHA FIRST');
+  });
+
+  it('labels referenced sections even when no chunk was retrieved', () => {
+    const out = assembleContext(input([], docs, { referenced, citationLabeler: upperLabeler }));
+    expect(blocksOf(out).map((block) => block.alias)).toEqual(['S1']);
+    expect(out.context).toContain('[S1] Ref Doc\nREF ONE');
+  });
+});
