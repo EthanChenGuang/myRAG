@@ -58,6 +58,7 @@ class BatchJobRef(BaseModel):
     id: str
     kind: str
     status: str
+    stage: str | None = None
     run_after: datetime | None = None
     lease_until: datetime | None = None
 

@@ -59,6 +59,7 @@ EXIT_TERMINATED = 143
 CLAIMABLE_KINDS = frozenset({"ingest", "dry_run"})
 TERMINAL = frozenset({"ready", "failed", "quarantined", "needs_review", "skipped_duplicate"})
 WORKING = frozenset({"preflight", "parsing", "checking", "chunking", "embedding"})
+EMBED_DEFERRED_STAGE = "embed_deferred"
 
 _UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
@@ -127,9 +128,14 @@ def parse_args(argv: list[str] | None = None) -> RunnerOptions:
 JobRef = BatchJobRef | IngestionJob
 
 
+def _parked(job: JobRef) -> bool:
+    """A Batch API backfill job parked at embed_deferred (03.1-49): the rag:backfill process embeds and publishes it, not a runner."""
+    return job.status == "embedding" and job.stage == EMBED_DEFERRED_STAGE and job.lease_until is None
+
+
 def open_jobs(jobs: Iterable[JobRef]) -> list[JobRef]:
-    """Jobs a runner can still finish: claimable kinds that are not terminal."""
-    return [job for job in jobs if job.kind in CLAIMABLE_KINDS and job.status not in TERMINAL]
+    """Jobs a runner can still finish: claimable kinds that are not terminal and not parked for deferred embedding."""
+    return [job for job in jobs if job.kind in CLAIMABLE_KINDS and job.status not in TERMINAL and not _parked(job)]
 
 
 def claimable(jobs: Iterable[JobRef], now: datetime) -> list[str]:

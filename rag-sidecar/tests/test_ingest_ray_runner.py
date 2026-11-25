@@ -26,6 +26,7 @@ from ingest_fakes import AppScript, FakeApp, FakeLedger
 from rag_sidecar.contracts.queue import IngestionJob
 from rag_sidecar.ingest import ray_runner
 from rag_sidecar.ingest.app_client import AppClient
+from rag_sidecar.ingest.ledger_client import BatchJobRef
 from pydantic import SecretStr
 
 
@@ -334,6 +335,23 @@ def test_the_driver_ends_at_once_for_a_batch_with_no_open_job():
 
     summary = asyncio.run(ray_runner.drive_batch(_BATCH, ledger=ledger, run_pass=run_pass, clock=lambda: _NOW))
     assert summary.processed == 0 and ledger.lists == 1
+
+
+def test_the_driver_ends_when_the_only_open_jobs_are_parked_at_embed_deferred():
+    # 03.1-49 parks a batch_api backfill job at status embedding, stage embed_deferred, lease released; the rag:backfill
+    # process embeds and publishes it after the runner, so the runner must not wait for it.
+    parked = _job(2, status="embedding", stage="embed_deferred")
+    ledger = _ListingLedger([_job(1, status="ready"), parked])
+
+    async def run_pass(job_ids):  # pragma: no cover - must not run
+        raise AssertionError(job_ids)
+
+    async def sleep(_: float) -> None:
+        raise AssertionError("a parked job is not waited for")
+
+    summary = asyncio.run(ray_runner.drive_batch(_BATCH, ledger=ledger, run_pass=run_pass, sleep=sleep, clock=lambda: _NOW))
+    assert summary.processed == 0 and ledger.lists == 1
+    assert ray_runner.open_jobs([BatchJobRef(id=parked.id, kind="ingest", status="embedding", stage="embed_deferred")]) == []
 
 
 # --- the shared token bucket ---------------------------------------------------------------------------------------
