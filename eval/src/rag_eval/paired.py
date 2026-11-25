@@ -6,10 +6,10 @@ from pathlib import Path
 
 from pydantic import ValidationError
 from rag_sidecar.contracts.baseline import Baseline, NoiseConfig, PairedReport, PairedStat
+from rag_sidecar.contracts.feedback_loop import GatePopulationConfig
 from rag_sidecar.contracts.report import EvalReport, ItemResult
 
-from rag_eval.metrics import CROSS_LINGUAL, language_pair_key
-from rag_eval.native_review import counts_in_gated_slices
+from rag_eval.metrics import CROSS_LINGUAL, language_pair_key, report_gate_items
 from rag_eval.paths import resolve_cli_path
 
 SEED = 20261123
@@ -86,16 +86,12 @@ def _slice_members(items: list[ItemResult]) -> dict[str, list[ItemResult]]:
     return members
 
 
-def paired_report(report: EvalReport, baseline: Baseline, noise: NoiseConfig) -> PairedReport | None:
+def paired_report(
+    report: EvalReport, baseline: Baseline, noise: NoiseConfig, population: GatePopulationConfig | None = None
+) -> PairedReport | None:
     if baseline.items is None:
         return None
-    gated_items = [
-        item
-        for item in report.items
-        if item.split == report.golden_filter.gate_split and counts_in_gated_slices(item)
-    ]
-    if report.gate_population == "production":
-        gated_items = [item for item in gated_items if item.provenance == "production"]
+    gated_items = report_gate_items(report.items, report.golden_filter.gate_split, report.gate_population, population)
     slices: dict[str, dict[str, PairedStat]] = {}
     for slice_name, members in sorted(_slice_members(gated_items).items()):
         if not is_gated_slice(slice_name, noise):

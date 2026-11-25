@@ -2,9 +2,11 @@ import json
 import math
 import os
 from pathlib import Path
+from typing import get_args
 
 from rag_sidecar.contracts.eval_run import RagTrace, RunManifest
-from rag_sidecar.contracts.golden import GoldenItem
+from rag_sidecar.contracts.feedback_loop import GatePopulationConfig
+from rag_sidecar.contracts.golden import GoldenItem, Provenance
 from rag_sidecar.contracts.judge import JudgeReport
 from rag_sidecar.contracts.latency import LatencyBudgets, StageLatency
 from rag_sidecar.contracts.report import (
@@ -25,6 +27,7 @@ from rag_eval.metrics import (
     groundedness_label_counts,
     injection_metrics,
     language_pair_key,
+    select_gate_population,
     slices_by,
     strategy_key,
 )
@@ -65,6 +68,38 @@ PRODUCTION_GATE_NOTE = (
     "Gate population is production: overall, language and category tables cover the approved production items "
     "of the gated split only; every other provenance is report-only under By provenance and By provenance and category."
 )
+
+
+
+def _join(names: list[str]) -> str:
+    return names[0] if len(names) == 1 else f"{', '.join(names[:-1])} and {names[-1]}"
+
+
+def real_gate_note(members: list[ItemResult], gate_split: str, population: GatePopulationConfig) -> str:
+    """D-23: which items gated a real run; the provenances come from the loaded config only (D-29)."""
+    per_language: dict[str, int] = {}
+    for item in members:
+        per_language[item.language] = per_language.get(item.language, 0) + 1
+    counts = ", ".join(f"{code} {count}" for code, count in sorted(per_language.items()))
+    report_only = [name for name in get_args(Provenance) if name not in population.provenances]
+    tail = (
+        f"; {_join(report_only)} items are report-only under By provenance and By provenance and category."
+        if report_only
+        else "."
+    )
+    return (
+        f"Gate population is real: overall, language, language pair, category, document type and question kind "
+        f"tables cover the {len(members)} approved item(s) of the {gate_split} split with provenances "
+        f"{', '.join(population.provenances)} (per language: {counts}; min_items {population.min_items}){tail}"
+    )
+
+
+def gate_population_config_note(population: GatePopulationConfig, sha256: str) -> str:
+    return (
+        f"Gate population config: mode {population.mode}, provenances {', '.join(population.provenances)}, "
+        f"min_items {population.min_items}, sha256 {sha256}."
+    )
+
 
 _METRIC_COLUMNS = (
     ("Recall@5", "recall_at_5"),
@@ -309,19 +344,29 @@ def build_report(
     *,
     judge: JudgeReport | None = None,
     supported_languages: tuple[str, ...] | None = None,
+    gate_population_config: tuple[GatePopulationConfig, str] | None = None,
 ) -> EvalReport:
     notes: list[str] = []
     if any(item.language == "zh" for item in golden):
         notes.append(ZH_QUIRK_NOTE)
     embedder = manifest.embedder
+    population = gate_population_config[0] if gate_population_config is not None else None
+    approved_ids = frozenset(item.id for item in golden if item.review_status == "approved")
     aggregated = aggregate(
         results,
         tuple(K_VALUES),
         gate_split=manifest.golden_filter.gate_split,
-        approved_ids=frozenset(item.id for item in golden if item.review_status == "approved"),
+        approved_ids=approved_ids,
+        population=population,
     )
     if aggregated["gate_population"] == "production":
         notes.append(PRODUCTION_GATE_NOTE)
+    elif aggregated["gate_population"] == "real" and population is not None:
+        gated = [r for r in results if r.split == manifest.golden_filter.gate_split and counts_in_gated_slices(r)]
+        members, _ = select_gate_population(gated, approved_ids, population)
+        notes.append(real_gate_note(members, manifest.golden_filter.gate_split, population))
+    if gate_population_config is not None:
+        notes.append(gate_population_config_note(*gate_population_config))
     languages = run_supported_languages(manifest) if supported_languages is None else supported_languages
     skipped_note = skip_monolingual_slices(aggregated, languages)
     if skipped_note is not None:

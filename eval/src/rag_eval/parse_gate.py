@@ -34,6 +34,7 @@ from rag_sidecar.contracts.routing import ParseRoutingConfig
 from rag_sidecar.preflight.config import load_routing_config
 
 from rag_eval.gate import _report_slices
+from rag_eval.metrics import report_gate_items
 from rag_eval.paired import _slice_members, _stat, is_gated_slice, item_metrics
 from rag_eval.parser_eval import LINK_TAG, _scored_fixtures, load_fixture_outputs, normalize_text
 from rag_eval.paths import REPO_ROOT, resolve_cli_path
@@ -236,10 +237,7 @@ def _check_runs(fixed: Sequence[ModeRun], tiered: Sequence[ModeRun]) -> None:
 
 
 def _gated_items(report: EvalReport) -> list[ItemResult]:
-    items = [item for item in report.items if item.split == report.golden_filter.gate_split]
-    if report.gate_population == "production":
-        items = [item for item in items if item.provenance == "production"]
-    return items
+    return report_gate_items(report.items, report.golden_filter.gate_split, report.gate_population)
 
 
 def _item_means(runs: Sequence[ModeRun]) -> tuple[dict[str, dict[str, float | None]], dict[str, ItemResult]]:
