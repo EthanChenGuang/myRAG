@@ -34,6 +34,9 @@ export interface QwenHostConfig {
 export interface QwenConfig {
   deepinfra: QwenHostConfig;
   openrouter: QwenHostConfig;
+  /** Host tried first; `undefined` means DeepInfra. The other host is the fallback. */
+  primary?: 'deepinfra' | 'openrouter';
+  /** `none` disables the fallback to the non-primary host. */
   fallback: 'openrouter' | 'none';
   retries?: number;
   backoffMs?: number;
@@ -45,11 +48,37 @@ export interface QwenProviderOptions {
 }
 
 function defaultConfig(): QwenConfig {
+  const ingest = loadIngestConfig({
+    RAG_QWEN_EMBED_FALLBACK: env.RAG_QWEN_EMBED_FALLBACK,
+    RAG_QWEN_EMBED_PRIMARY: env.RAG_QWEN_EMBED_PRIMARY,
+  });
   return {
     deepinfra: { apiKey: env.DEEPINFRA_API_KEY, baseUrl: env.DEEPINFRA_BASE_URL },
     openrouter: { apiKey: env.OPENROUTER_API_KEY || '', baseUrl: OPENROUTER_BASE_URL },
-    fallback: loadIngestConfig({ RAG_QWEN_EMBED_FALLBACK: env.RAG_QWEN_EMBED_FALLBACK }).qwenFallback,
+    primary: ingest.qwenPrimary,
+    fallback: ingest.qwenFallback,
   };
+}
+
+interface QwenHost {
+  name: string;
+  keyName: string;
+  model: string;
+  config: QwenHostConfig;
+}
+
+/** Orders the two hosts by the configured primary; both serve the same model under different ids. */
+function hostsFor(config: QwenConfig): { primary: QwenHost; secondary: QwenHost } {
+  const deepinfra: QwenHost = { name: DEEPINFRA, keyName: 'DEEPINFRA_API_KEY', model: QWEN_MODEL_ID, config: config.deepinfra };
+  const openrouter: QwenHost = {
+    name: OPENROUTER,
+    keyName: 'OPENROUTER_API_KEY',
+    model: OPENROUTER_MODEL_ID,
+    config: config.openrouter,
+  };
+  return config.primary === OPENROUTER
+    ? { primary: openrouter, secondary: deepinfra }
+    : { primary: deepinfra, secondary: openrouter };
 }
 
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
@@ -115,13 +144,18 @@ async function requestHost(
 export function createQwenProvider(options: QwenProviderOptions = {}): EmbeddingProvider {
   const getConfig = options.config ?? defaultConfig;
 
-  async function primaryWithRetries(inputs: string[], opts: EmbedOptions, config: QwenConfig): Promise<HostResult> {
+  async function primaryWithRetries(
+    primary: QwenHost,
+    inputs: string[],
+    opts: EmbedOptions,
+    config: QwenConfig,
+  ): Promise<HostResult> {
     const retries = config.retries ?? DEFAULT_RETRIES;
     const backoffMs = config.backoffMs ?? DEFAULT_BACKOFF_MS;
     let last: unknown;
     for (let attempt = 0; attempt <= retries; attempt += 1) {
       try {
-        return await requestHost(DEEPINFRA, config.deepinfra, QWEN_MODEL_ID, inputs, opts, config);
+        return await requestHost(primary.name, primary.config, primary.model, inputs, opts, config);
       } catch (error) {
         if (isAbortError(error, opts.signal) || !isFallbackTrigger(error)) throw error;
         last = error;
@@ -133,7 +167,8 @@ export function createQwenProvider(options: QwenProviderOptions = {}): Embedding
 
   async function embed(texts: string[], opts: EmbedOptions): Promise<EmbedOutput> {
     const config = getConfig();
-    if (!config.deepinfra.apiKey) throw new Error('[Embedding Profile] DEEPINFRA_API_KEY not configured');
+    const { primary, secondary } = hostsFor(config);
+    if (!primary.config.apiKey) throw new Error(`[Embedding Profile] ${primary.keyName} not configured`);
 
     const vectors: number[][] = [];
     const models = new Set<string>();
@@ -146,21 +181,21 @@ export function createQwenProvider(options: QwenProviderOptions = {}): Embedding
       let result: HostResult | undefined;
       if (!primaryDown) {
         try {
-          result = await primaryWithRetries(inputs, opts, config);
+          result = await primaryWithRetries(primary, inputs, opts, config);
         } catch (error) {
-          const canFallBack = config.fallback === 'openrouter' && Boolean(config.openrouter.apiKey);
+          const canFallBack = config.fallback !== 'none' && Boolean(secondary.config.apiKey);
           if (isAbortError(error, opts.signal) || !isFallbackTrigger(error) || !canFallBack) throw error;
           primaryDown = true;
           console.warn('[Embedding Profile] primary host failed, falling back', {
-            from: DEEPINFRA,
-            to: OPENROUTER,
+            from: primary.name,
+            to: secondary.name,
             status: error.status ?? 'no response',
           });
         }
       }
       if (!result) {
         usedFallback = true;
-        result = await requestHost(OPENROUTER, config.openrouter, OPENROUTER_MODEL_ID, inputs, opts, config);
+        result = await requestHost(secondary.name, secondary.config, secondary.model, inputs, opts, config);
       }
 
       if (result.rows.length !== inputs.length) throw new Error('[Embedding Profile] qwen3 returned a malformed response');
@@ -176,7 +211,7 @@ export function createQwenProvider(options: QwenProviderOptions = {}): Embedding
     }
 
     const model = [...models].find((id) => id !== QWEN_MODEL_ID) ?? QWEN_MODEL_ID;
-    return { vectors, model, host: usedFallback ? OPENROUTER : DEEPINFRA, usage: { tokens } };
+    return { vectors, model, host: usedFallback ? secondary.name : primary.name, usage: { tokens } };
   }
 
   return {

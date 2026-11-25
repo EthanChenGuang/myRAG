@@ -408,6 +408,96 @@ describe('Qwen3 provider', () => {
     }
   });
 
+  it('defaults to DeepInfra as the primary host when no primary is given', async () => {
+    const out = await qwen({ primary: undefined }).embedQuery('q', { dims: 1024, signal: signal() });
+    expect(fake.callsFor('deepinfra')).toHaveLength(1);
+    expect(fake.callsFor('openrouter')).toHaveLength(0);
+    expect(out.host).toBe('deepinfra');
+  });
+
+  it('with the default primary still requires the DeepInfra key', async () => {
+    await expect(
+      qwen({ primary: 'deepinfra' }, { deepinfra: '' }).embedQuery('q', { dims: 1024, signal: signal() }),
+    ).rejects.toThrow('[Embedding Profile] DEEPINFRA_API_KEY not configured');
+    expect(fake.calls).toHaveLength(0);
+  });
+
+  describe('with OpenRouter as the primary host', () => {
+    it('embeds through OpenRouter without a DeepInfra key', async () => {
+      const out = await qwen({ primary: 'openrouter' }, { deepinfra: '' }).embedQuery('notice period', {
+        dims: 1024,
+        signal: signal(),
+      });
+      expect(fake.callsFor('deepinfra')).toHaveLength(0);
+      expect(fake.callsFor('openrouter')).toHaveLength(1);
+      const [call] = fake.callsFor('openrouter');
+      expect(call.body.model).toBe('qwen/qwen3-embedding-8b');
+      expect(call.body.input).toEqual([`${QWEN_QUERY}notice period`]);
+      expect(call.body.encoding_format).toBe('float');
+      expect(Object.keys(call.body)).not.toContain('dimensions');
+      expect(call.headers.authorization).toBe(`Bearer ${OPENROUTER_KEY}`);
+      expect(out.host).toBe('openrouter');
+      expect(out.model).toBe('Qwen/Qwen3-Embedding-8B');
+      expect(out.vectors[0]).toHaveLength(1024);
+      const norm = Math.sqrt(out.vectors[0].reduce((sum, value) => sum + value * value, 0));
+      expect(norm).toBeCloseTo(1, 6);
+      expect(out.usage.tokens).toBeGreaterThan(0);
+    });
+
+    it('throws a configuration error before any request when the OpenRouter key is missing', async () => {
+      await expect(
+        qwen({ primary: 'openrouter' }, { openrouter: '' }).embedQuery('q', { dims: 1024, signal: signal() }),
+      ).rejects.toThrow('[Embedding Profile] OPENROUTER_API_KEY not configured');
+      expect(fake.calls).toHaveLength(0);
+    });
+
+    it('retries OpenRouter after two 500s and stays on OpenRouter', async () => {
+      fake.failNext('openrouter', 500, 500);
+      const out = await qwen({ primary: 'openrouter' }).embedQuery('q', { dims: 1024, signal: signal() });
+      expect(fake.callsFor('openrouter')).toHaveLength(3);
+      expect(fake.callsFor('deepinfra')).toHaveLength(0);
+      expect(out.host).toBe('openrouter');
+    });
+
+    it('falls back to DeepInfra on 5xx when the fallback is allowed and a DeepInfra key exists', async () => {
+      fake.failNext('openrouter', 503, 503, 503);
+      const out = await qwen({ primary: 'openrouter' }).embedQuery('notice period', { dims: 1024, signal: signal() });
+      expect(fake.callsFor('openrouter')).toHaveLength(3);
+      expect(fake.callsFor('deepinfra')).toHaveLength(1);
+      const [fallback] = fake.callsFor('deepinfra');
+      expect(fallback.body.model).toBe('Qwen/Qwen3-Embedding-8B');
+      expect(fallback.body.input).toEqual([`${QWEN_QUERY}notice period`]);
+      expect(fallback.headers.authorization).toBe(`Bearer ${DEEPINFRA_KEY}`);
+      expect(out.host).toBe('deepinfra');
+      expect(out.model).toBe('Qwen/Qwen3-Embedding-8B');
+    });
+
+    it('does not fall back when the fallback switch is none', async () => {
+      fake.failNext('openrouter', 503, 503, 503);
+      await expect(
+        qwen({ primary: 'openrouter', fallback: 'none' }).embedQuery('q', { dims: 1024, signal: signal() }),
+      ).rejects.toMatchObject({ name: 'EmbeddingProviderError', host: 'openrouter', status: 503 });
+      expect(fake.callsFor('deepinfra')).toHaveLength(0);
+    });
+
+    it('does not fall back when no DeepInfra key is configured', async () => {
+      fake.failNext('openrouter', 500, 500, 500);
+      await expect(
+        qwen({ primary: 'openrouter' }, { deepinfra: '' }).embedQuery('q', { dims: 1024, signal: signal() }),
+      ).rejects.toMatchObject({ name: 'EmbeddingProviderError', host: 'openrouter', status: 500 });
+      expect(fake.callsFor('deepinfra')).toHaveLength(0);
+    });
+
+    it('does not retry or fall back on a client error', async () => {
+      fake.failNext('openrouter', 400);
+      await expect(qwen({ primary: 'openrouter' }).embedQuery('q', { dims: 1024, signal: signal() })).rejects.toMatchObject({
+        status: 400,
+      });
+      expect(fake.callsFor('openrouter')).toHaveLength(1);
+      expect(fake.callsFor('deepinfra')).toHaveLength(0);
+    });
+  });
+
   it('stops without retrying when the signal aborts', async () => {
     fake.setDelay('deepinfra', 3000);
     const controller = new AbortController();

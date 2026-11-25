@@ -6971,6 +6971,19 @@
                                         </div>
 
                                         <div class="form-control mb-4">
+                                            <label class="label" for="RAG_QWEN_EMBED_PRIMARY">
+                                                <span class="label-text">Qwen embedding primary host</span>
+                                            </label>
+                                            <select id="RAG_QWEN_EMBED_PRIMARY" class="select select-bordered w-full" aria-describedby="qwen-embed-primary-help">
+                                                <option value="deepinfra">deepinfra</option>
+                                                <option value="openrouter">openrouter</option>
+                                            </select>
+                                            <label class="label">
+                                                <span class="label-text-alt" id="qwen-embed-primary-help">deepinfra needs the DeepInfra API key; openrouter needs only the OpenRouter API key.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
                                             <label class="label">
                                                 <span class="label-text">Qwen embedding fallback host</span>
                                             </label>
@@ -6979,7 +6992,7 @@
                                                 <option value="none">none</option>
                                             </select>
                                             <label class="label">
-                                                <span class="label-text-alt">Used when the DeepInfra host is unavailable.</span>
+                                                <span class="label-text-alt">Used when the primary host is unavailable: openrouter tries the other host (DeepInfra when OpenRouter is primary and a DeepInfra key is set); none disables it.</span>
                                             </label>
                                         </div>
 

@@ -31,6 +31,7 @@ const DEFAULTS: IngestConfig = {
   injectionScan: 'off',
   embeddingProfiles: 'off',
   qwenFallback: 'openrouter',
+  qwenPrimary: 'deepinfra',
   languageAwareIngest: 'off',
   tableHeaderRepeat: 'profile',
   tableRowSerialization: false,
@@ -67,6 +68,7 @@ describe('defaults', () => {
       RAG_INJECTION_SCAN: 'off',
       RAG_EMBEDDING_PROFILES: 'off',
       RAG_QWEN_EMBED_FALLBACK: 'openrouter',
+      RAG_QWEN_EMBED_PRIMARY: 'deepinfra',
     });
     expect(config).toEqual(DEFAULTS);
     expect(ingestWarnings()).toEqual([]);
@@ -184,6 +186,30 @@ describe('Qwen embedding fallback', () => {
 
   test('anything else falls back to openrouter with a warning', () => {
     expect(loadIngestConfig({ RAG_QWEN_EMBED_FALLBACK: 'deepinfra' }).qwenFallback).toBe('openrouter');
+    expect(ingestWarnings()).toHaveLength(1);
+  });
+});
+
+describe('Qwen embedding primary host', () => {
+  test('defaults to deepinfra', () => {
+    expect(loadIngestConfig({}).qwenPrimary).toBe('deepinfra');
+    expect(ingestWarnings()).toEqual([]);
+  });
+
+  test('deepinfra and openrouter are accepted', () => {
+    expect(loadIngestConfig({ RAG_QWEN_EMBED_PRIMARY: 'deepinfra' }).qwenPrimary).toBe('deepinfra');
+    expect(loadIngestConfig({ RAG_QWEN_EMBED_PRIMARY: 'openrouter' }).qwenPrimary).toBe('openrouter');
+    expect(loadIngestConfig({ RAG_QWEN_EMBED_PRIMARY: ' OpenRouter ' }).qwenPrimary).toBe('openrouter');
+    expect(ingestWarnings()).toEqual([]);
+  });
+
+  test('anything else falls back to deepinfra with one warning', () => {
+    const config = loadIngestConfig({ RAG_QWEN_EMBED_PRIMARY: 'voyage' });
+    expect(config.qwenPrimary).toBe('deepinfra');
+    expect(config.warnings).toHaveLength(1);
+    expect(config.warnings[0]).toContain('RAG_QWEN_EMBED_PRIMARY');
+    expect(ingestWarnings()).toHaveLength(1);
+    loadIngestConfig({ RAG_QWEN_EMBED_PRIMARY: 'voyage', RAG_PARSER: 'llamaparse' });
     expect(ingestWarnings()).toHaveLength(1);
   });
 });
