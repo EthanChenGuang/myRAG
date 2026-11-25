@@ -78,10 +78,18 @@ myrag/
 
 ### Unified ingestion
 - Unified path entry point: `ingest()` and `resumeIngest()` in `src/lib/rag/ingest/` (13 stages: identify → file_hash_dedup → store_original → parse → content_hash_dedup → scan_injection → chunk → enrich → extract → images → embed → write → publish).
-- Fresh projects run `supabase/single-tenant-setup.sql` or `supabase/multi-tenant-setup.sql`, then apply ordered files under `supabase/migrations/` (common file first, then `.single-tenant.sql` / `.multi-tenant.sql` for that mode). Folded setup files already include Phase 3 (0301–0319); migrations remain the upgrade path and must be idempotent on top.
+- Fresh projects run `supabase/single-tenant-setup.sql` or `supabase/multi-tenant-setup.sql`, then apply ordered files under `supabase/migrations/` (common file first, then `.single-tenant.sql` / `.multi-tenant.sql` for that mode). Folded setup files already include Phase 3 (0301–0320) and Phase 3.1 (0351–0359); migrations remain the upgrade path and must be idempotent on top.
 - Switches (defaults in `src/lib/env.ts`): `RAG_INGEST_PIPELINE=legacy` (legacy writers vs unified pipeline), `RAG_EMBEDDING_PROFILES=off`, `RAG_INJECTION_SCAN=off`, `RAG_EXACT_ID_LOOKUP=false`, `RAG_PDF_IMAGE_CHUNKS=false`.
 - Originals land in the private **`rag-originals`** storage bucket; quarantined documents stay out of retrieval (D-08 filter on current, ready rows—no env switch).
 - Writer and search RPCs (`rag_*`, `match_chunks_by_profile`) are **service_role** only; tests assert anon/authenticated cannot execute them.
+
+### Ingestion queue (Phase 3.1)
+- Write paths call `submitIngest()`: inline `ingest()` with `RAG_INGEST_ASYNC=off`, the `ingestion_jobs` ledger with it on (unified pipeline only). Defaults reproduce Phase 3 and write no ledger, cache or budget row (`tests/rag-e2e/defaults-equal-phase3.test.mts`).
+- Switches (defaults in `src/lib/env.ts`, read by `src/lib/rag/ingest/queue-config.ts`): `RAG_PARSE_ROUTING=fixed`, `RAG_PARSER_ALLOW_CLOUD=true`, `RAG_PARSE_PREMIUM_PAGE_BUDGET=0`, `RAG_PARSE_PREMIUM_MAX_PAGES_PER_DOC=200`, `RAG_PARSE_ESCALATION=on`, `RAG_PARSE_VLM_DETECT=false`, `RAG_PARSE_VLM_MODEL=` (empty: the captioning model), `RAG_INGEST_ASYNC=off`, `RAG_INGEST_WORKER_CONCURRENCY=2`, `RAG_PARSE_PROGRESSIVE=false`, `RAG_EMBED_BATCH_MODE=sync`, `NEXT_PUBLIC_RAG_INGEST_REALTIME=false`. `tiered` routing needs `RAG_INGEST_PIPELINE=unified` and `RAG_INGEST_ASYNC=on`; an invalid combination falls back to Phase 3 behaviour with a warning.
+- The worker runs in the sidecar: `RAG_INGEST_WORKER=on` (default off: the sidecar starts no worker) with `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `RAG_APP_INTERNAL_URL` and `RAG_SIDECAR_SECRET`; it calls back into `/api/internal/rag/ingest/jobs/[id]/*`.
+- Bulk import: `npm run rag:backfill -- --tenant <key> --source <folder|bucket|manifest>:<ref> --budget <USD>`. The sample dry run always runs first; without `--budget`, or with `--dry-run`, the command stops after the report (exit 2). `--resume <batch_id>` continues a batch.
+- `RAG_PARSER_ALLOW_CLOUD=false` applies in every pipeline: no request reaches LlamaParse or the vision model; the legacy knowledge-base PDF upload answers 503 `cloud_parsing_disabled`, the unified chain parses locally.
+- Tier routing thresholds and presets live in `config/rag/parse-routing.json` (read by the app and the sidecar).
 
 ---
 
