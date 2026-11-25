@@ -206,3 +206,11 @@ Sources: https://pypi.org/pypi/sentencepiece/0.2.3/json and https://pypi.org/pro
 ## Recommendation
 
 Approve with `approved, no sentencepiece` (torch stays 2.15.0, the version already locked; no different torch version is needed), and state in the same reply whether the `eventsource-parser` 3.0.6 → 3.1.1 bump and the nested `undici` 6.29.1 that come with the provider are accepted, because Task 2 stops on them otherwise.
+
+## Human approval (2026-11-25)
+
+The user replied "approved, no sentencepiece" to the checkpoint, which was presented with the recommendation to accept both lockfile side effects. Recorded as:
+- Approved: @ai-sdk/anthropic 3.0.143 (exact), torch 2.15.0(+cpu) as already locked, transformers 5.23.0 as already locked, HHEM vectara/hallucination_evaluation_model@de9a5e6ba9ba49531a022dba17e35ffeb2a6fad8, google/flan-t5-base@7bcac572ce56db69c1ea7c8af255c5d7c9672fc2 (the five tokenizer and config files only).
+- Rejected: sentencepiece 0.2.3.
+- Accepted as part of the recommended approval: eventsource-parser 3.0.6 → 3.1.1 (hoisted) and nested undici 6.29.1, which the @ai-sdk/anthropic install brings.
+- Task 1 is resolved. Tasks 2 and 3 still wait for the plan precondition (03.1-54 and 04-43 SUMMARYs).
