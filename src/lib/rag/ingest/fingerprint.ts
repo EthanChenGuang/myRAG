@@ -1,6 +1,12 @@
 import { createHash } from 'node:crypto';
-import { IngestFingerprintPartsSchema, type IngestFingerprintParts } from '@/lib/rag-eval/contracts.generated';
+import {
+  IngestFingerprintPartsSchema,
+  SettingsClassificationSchema,
+  type IngestFingerprintParts,
+  type SettingsClassification,
+} from '@/lib/rag-eval/contracts.generated';
 import { canonicalJson } from '@/lib/rag-eval/trace';
+import rawClassification from '../../../../config/rag/settings-classification.json';
 import { normalizeLanguageSettings } from '../../../../config/rag/validate-language-settings.cjs';
 import { LEXICAL_VERSION } from '../lexical/chunk-text';
 import { LEGACY_PROFILE } from '../embeddings/active-profile';
@@ -192,10 +198,23 @@ export function expectedFingerprintFor(
   return { parts: next, fingerprint: buildIngestFingerprint(next) };
 }
 
-export function getSettingsClassification(): never {
-  throw new Error('not implemented');
+export type RebuildMechanism = Extract<SettingsClassification['entries'][number], { mechanism: string }>['mechanism'];
+
+let classification: SettingsClassification | null = null;
+
+/** D-09: config/rag/settings-classification.json, validated once with the generated schema. */
+export function getSettingsClassification(): SettingsClassification {
+  if (!classification) classification = SettingsClassificationSchema.parse(rawClassification);
+  return classification;
 }
 
-export function ingestionKeysOf(_proposed: Record<string, unknown>): Array<{ name: string; mechanism: string }> {
-  return [];
+/** The proposed keys that are ingestion-side (or both), with their rebuild mechanism, sorted by name; query-side and unknown keys are left out. */
+export function ingestionKeysOf(proposed: Record<string, unknown>): Array<{ name: string; mechanism: RebuildMechanism }> {
+  const byName = new Map(getSettingsClassification().entries.map((entry) => [entry.name, entry]));
+  const keys: Array<{ name: string; mechanism: RebuildMechanism }> = [];
+  for (const name of Object.keys(proposed).sort()) {
+    const entry = byName.get(name);
+    if (entry && 'mechanism' in entry) keys.push({ name, mechanism: entry.mechanism });
+  }
+  return keys;
 }
