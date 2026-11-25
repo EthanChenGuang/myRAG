@@ -130,7 +130,9 @@ export interface DomainEmbeddingsConfig {
   timeoutMs: number;
 }
 
-export type RefusalFloorPolicy = 'similarity' | 'legacy_rule';
+export const REFUSAL_FLOOR_POLICIES = ['similarity', 'legacy_rule'] as const;
+
+export type RefusalFloorPolicy = (typeof REFUSAL_FLOOR_POLICIES)[number];
 
 export interface V2Config {
   lexicalSearch: boolean;
@@ -511,6 +513,7 @@ function memoKey(env: RagEnvInput): string {
     (env.COHERE_API_KEY ?? '').trim() !== '',
     env.COHERE_BASE_URL ?? '',
     env.RAG_REFUSAL_THRESHOLD ?? '',
+    env.RAG_REFUSAL_FLOOR ?? '',
     env.RAG_CONTEXT_EDGE_ORDER ?? '',
     env.RAG_CONTEXT_COMPRESSION ?? '',
     env.RAG_CONTEXT_TOKEN_BUDGET ?? '',
@@ -559,7 +562,7 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
     },
     voyageModelByLang: parseVoyageModelByLang(env.RAG_RERANK_VOYAGE_MODEL_BY_LANG, warnings),
     refusalThreshold: parseBooleanSwitch(env.RAG_REFUSAL_THRESHOLD, false, 'refusal-threshold', warnings),
-    refusalFloor: 'similarity',
+    refusalFloor: parseNamedChoice('RAG_REFUSAL_FLOOR', env.RAG_REFUSAL_FLOOR, REFUSAL_FLOOR_POLICIES, 'similarity', warnings),
     edgeOrder: parseBooleanSwitch(env.RAG_CONTEXT_EDGE_ORDER, false, 'edge-order', warnings),
     compression: parseBooleanSwitch(env.RAG_CONTEXT_COMPRESSION, false, 'compression', warnings),
     tokenBudget: parseNonNegativeInt(env.RAG_CONTEXT_TOKEN_BUDGET, 6000, 1_000_000, 'token-budget', warnings),

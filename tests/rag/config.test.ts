@@ -465,6 +465,7 @@ describe('Phase 3.2 typed switches (D-47)', () => {
         rerankTier: { chat: 'quality', voice: 'fast' },
         voyageModelByLang: {},
         refusalThreshold: false,
+        refusalFloor: 'similarity',
         edgeOrder: false,
         compression: false,
         tokenBudget: 6000,
