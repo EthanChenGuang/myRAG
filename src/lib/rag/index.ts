@@ -90,6 +90,8 @@ export type {
 export { resolveTenantScope } from './tenant/resolve-chat';
 export type { ResolveTenantScopeInput, TenantResolveFailure, TenantResolveResult } from './tenant/resolve-chat';
 export { isOrganizationMember } from './tenant/membership';
+export { submitAnswerFeedback } from './generation/feedback';
+export type { SubmitAnswerFeedbackDeps, SubmitAnswerFeedbackInput, SubmitAnswerFeedbackResult } from './generation/feedback';
 export { resolveAdminWorkspaceScope, nangoOwnerScope } from './tenant/ingest-scope';
 export type {
   IngestScopeResult,
