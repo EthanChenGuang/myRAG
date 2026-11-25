@@ -283,7 +283,7 @@ describe('scoped builders', () => {
     expect(() => scopedDeleteIds(scopeA, ['not-a-uuid'])).toThrow(SECURITY);
   });
 
-  const samples: { [K in keyof typeof SCOPED_BUILDERS]: () => unknown } = {
+  const samples: Record<keyof typeof SCOPED_BUILDERS, () => unknown> = {
     qdrantScopedRequest: () =>
       qdrantScopedRequest(scopeA, {
         query: { fusion: 'rrf' },
