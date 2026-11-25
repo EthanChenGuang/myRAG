@@ -2,8 +2,13 @@ import crypto from 'node:crypto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AnswerRecordSchema } from '@/lib/rag-eval/contracts.generated';
 import { submitAnswerFeedback, type SubmitAnswerFeedbackDeps } from '@/lib/rag/generation/feedback';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { GroundednessResult } from '@/lib/rag-eval/contracts.generated';
+import { createGroundednessStep, mintAnswerId, scheduleAnswerFinish, type AnswerFinishInput, type GroundednessStepDeps } from '@/lib/rag/generation/answer-finish';
+import { mintScope } from '@/lib/rag/tenant/scope';
 import type { LangfuseConfig } from '@/lib/rag/trace/config';
-import type { ReviewCandidateInput } from '@/lib/rag/trace/review-export';
+import type { CollectedTrace } from '@/lib/rag/trace/langfuse';
+import { exportReviewCandidate, type ReviewCandidateInput } from '@/lib/rag/trace/review-export';
 import { postLangfuseScores, scoreId, type LangfuseScoreInput } from '@/lib/rag/trace/scores';
 import { adminClient, newAnswerDb, sessionClient, type AnswerDbState, type Row } from '../../helpers/answer-db-fake';
 
@@ -329,5 +334,149 @@ describe('submitAnswerFeedback', () => {
     captureConsole();
     expect(await submit(h, String(row.id), { vote: 'helpful' })).toEqual({ ok: false, reason: 'unavailable' });
     expect(h.tasks).toHaveLength(0);
+  });
+});
+
+describe('exportReviewCandidate', () => {
+  const input: ReviewCandidateInput = {
+    traceId: TRACE,
+    tenantKey: 'u:00000000-0000-4000-8000-0000000021a1',
+    reason: 'groundedness_flagged',
+    query: `${QUESTION} mail jane.doe@example.com`,
+    answer: ANSWER,
+    citedQuotes: [QUOTE, 'Call +39 333 123 4567 for details.'],
+    model: 'placeholder/model',
+  };
+
+  it('exports one trace on the same traceId tagged review:<reason> with masked review content, whatever the sample rates', async () => {
+    const traces: CollectedTrace[] = [];
+    const status = await exportReviewCandidate(input, {
+      config: langfuse({ sampleRate: 0, reviewSampleRate: 0 }),
+      exportTrace: async (trace) => {
+        traces.push(trace);
+      },
+    });
+    expect(status).toBe('exported');
+    expect(traces).toHaveLength(1);
+    const [trace] = traces;
+    expect(trace.traceId).toBe(TRACE);
+    expect(trace.tenantKey).toBe(input.tenantKey);
+    expect(trace.tags).toEqual(expect.arrayContaining(['rag-pipeline', `tenant:${input.tenantKey}`, 'review:groundedness_flagged']));
+    expect(trace.review).toBeDefined();
+    expect(trace.review?.query).toContain('[EMAIL]');
+    expect(trace.review?.answer).toBe(ANSWER);
+    expect(trace.review?.context).toContain(QUOTE);
+    expect(trace.review?.context).toContain('[PHONE]');
+    expect(trace.review?.model).toBe('placeholder/model');
+    expect(JSON.stringify(trace)).not.toContain('jane.doe');
+  });
+
+  it('with Langfuse off exports nothing and raises nothing; an export failure gives failed', async () => {
+    const exportTrace = vi.fn(async () => undefined);
+    expect(await exportReviewCandidate(input, { config: langfuse({ enabled: false }), exportTrace })).toBe('skipped');
+    expect(exportTrace).not.toHaveBeenCalled();
+    const failing = vi.fn(async () => {
+      throw new Error('down');
+    });
+    await expect(exportReviewCandidate(input, { config: langfuse(), exportTrace: failing })).resolves.toBe('failed');
+    const hanging = vi.fn(() => new Promise<void>(() => undefined));
+    await expect(exportReviewCandidate(input, { config: langfuse(), exportTrace: hanging, timeoutMs: 20 })).resolves.toBe('failed');
+  });
+});
+
+describe('groundedness_flagged after scoring (D-19)', () => {
+  const USER = '00000000-0000-4000-8000-0000000021c1';
+  const BLOCK = 'Refunds are accepted within 30 days of purchase for annual plans.';
+  const FINISH_ANSWER = 'Annual plans can be refunded within 30 days [S1].';
+  const FINISH_QUERY = 'Can I get a refund on an annual plan?';
+
+  function finishInput(): AnswerFinishInput {
+    return {
+      answerId: mintAnswerId(),
+      scope: mintScope('single', null, null),
+      userId: USER,
+      chatId: null,
+      traceId: 'e'.repeat(32),
+      modelId: 'test/model',
+      ragMode: 'strict',
+      queryText: FINISH_QUERY,
+      citations: [
+        { n: 1, alias: 'S1', chunkIds: ['c1'], documentId: 'd1', documentName: 'Refunds.pdf', documentVersion: 1, page: null, sectionPath: null, quote: BLOCK, quoteHash: 'a'.repeat(64), strategy: 'chunk-alias' },
+      ],
+      citationStrategy: 'chunk-alias',
+      invalidCitations: 0,
+      answerText: FINISH_ANSWER,
+      aborted: false,
+      groundednessEligible: true,
+      toolOutputUsed: false,
+      premise: { blocks: [{ alias: 'S1', text: BLOCK }], webSearchTexts: [] },
+      requestLanguage: 'en',
+    };
+  }
+
+  async function runStep(result: Partial<GroundednessResult>, step: Partial<GroundednessStepDeps> = {}) {
+    const appended: Array<{ id: string; reason: string }> = [];
+    const exported: ReviewCandidateInput[] = [];
+    const tasks: Array<() => Promise<void>> = [];
+    const input = finishInput();
+    scheduleAnswerFinish(input, {
+      admin: () => ({}) as SupabaseClient,
+      insert: async () => ({ inserted: true }),
+      schedule: (task) => {
+        tasks.push(task);
+      },
+      readConfig: () => ({ groundedness: true }),
+      onPending: createGroundednessStep({
+        readConfig: () => ({ vectaraOptIn: false, vectaraMultiTenantAck: false, maxPremiseTokens: 2000, groundednessTimeoutMs: 20000 }),
+        multiTenant: () => false,
+        langfuse: () => langfuse({ enabled: false }),
+        update: async () => true,
+        request: async () => ({ status: 'scored', scorer: 'hhem_2_1_open', score: 0.9, reason: null, truncated: false, latency_ms: 5, ...result }) as GroundednessResult,
+        appendReviewReason: async (_admin, entry) => {
+          appended.push(entry);
+          return true;
+        },
+        exportReview: async (entry) => {
+          exported.push(entry);
+          return 'exported';
+        },
+        ...step,
+      }),
+    });
+    for (const task of tasks.splice(0)) await task();
+    return { input, appended, exported };
+  }
+
+  it('a possibly_unreliable label appends groundedness_flagged once and exports the in-memory query and answer', async () => {
+    captureConsole();
+    const { input, appended, exported } = await runStep({ score: 0.1 });
+    expect(appended).toEqual([{ id: input.answerId, reason: 'groundedness_flagged' }]);
+    expect(exported).toEqual([
+      { traceId: input.traceId, tenantKey: 's:default', reason: 'groundedness_flagged', query: FINISH_QUERY, answer: FINISH_ANSWER, citedQuotes: [BLOCK], model: 'test/model' },
+    ]);
+  });
+
+  it('verified and not_checked labels add no reason and export nothing', async () => {
+    captureConsole();
+    for (const result of [{ score: 0.9 }, { status: 'not_checked', scorer: 'none', score: null, reason: 'timeout' }] as Array<Partial<GroundednessResult>>) {
+      const { appended, exported } = await runStep(result);
+      expect(appended).toEqual([]);
+      expect(exported).toEqual([]);
+    }
+  });
+
+  it('a failing reason append or export is logged with a code and never throws', async () => {
+    const lines = captureConsole();
+    const { exported } = await runStep(
+      { score: 0.1 },
+      {
+        appendReviewReason: async () => {
+          throw new Error('review reason update failed (contention)');
+        },
+      },
+    );
+    expect(exported).toHaveLength(1);
+    expect(lines.some((line) => line.startsWith('[Answer Record]') && line.includes('contention'))).toBe(true);
+    expect(lines.join('\n')).not.toContain(FINISH_QUERY);
   });
 });
