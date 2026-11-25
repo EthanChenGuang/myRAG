@@ -106,6 +106,11 @@ export function itemRequestOptions(base: EvalRequestOptions, item: GoldenItem): 
   return options;
 }
 
+/** Stub until the smoke tier answers injection items (05.1-19). */
+export function answersItemForInjectionMetrics(_tier: EvalTier, _item: GoldenItem): boolean {
+  return false;
+}
+
 const ROUTE_PATH = '/api/internal/rag/run';
 const FIRST_SENTENCE_RE = /^[\s\S]*?[.!?。！？](?=\s|$)/;
 const NO_CONTEXT_ANSWER = 'No context was provided.';
