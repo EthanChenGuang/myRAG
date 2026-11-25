@@ -1,0 +1,8 @@
+{
+  "id": "shared.suffix",
+  "version": 1,
+  "source": "myRAG",
+  "license": "MIT",
+  "template": "",
+  "placeholders": []
+}
