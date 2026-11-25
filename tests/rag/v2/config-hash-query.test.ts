@@ -1,6 +1,12 @@
+import { readdirSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { loadRagConfig, resetRagConfigForTests } from '@/lib/rag/config';
+import { queryLayerHashComponent, queryPromptVersions } from '@/lib/rag/query/hash-part';
+import { effectiveQueryParams } from '@/lib/rag/query/query-params';
 import type { RetrievalParams } from '@/lib/rag-eval/contracts.generated';
-import { computeRetrievalConfigHash, type RetrievalConfigHashInput } from '@/lib/rag/v2/config-hash';
+import { computeRetrievalConfigHash, type RetrievalConfigHashInput, type RetrievalConfigHashQueryLayer } from '@/lib/rag/v2/config-hash';
+import type { RetrievalCacheContext, RetrievalResult } from '@/lib/rag/types';
 
 /** The literal input of params-hash.test.ts, so the pinned Phase 4 value does not move with committed files. */
 function literalHashInput(): RetrievalConfigHashInput {
@@ -43,7 +49,7 @@ function literalHashInput(): RetrievalConfigHashInput {
 /** Recorded in params-hash.test.ts (PINNED_DEFAULT_HASH): the Phase 4 hash of literalHashInput(). */
 const PINNED_PHASE4_HASH = 'f0bbcf06e9a792e368b2bcf880adf10f17336aa167a2c9fe5597198df3fc4fac';
 
-const LAYER = {
+const LAYER: RetrievalConfigHashQueryLayer = {
   framework: 'llamaindex',
   model: 'provider/query-model-a',
   queryParamsHash: 'c'.repeat(64),
@@ -51,14 +57,14 @@ const LAYER = {
   transforms: { condense: true, decompose: true, expand: true, hyde: false, normalizeDates: true, translate: true },
 };
 
-function withLayer(overrides: Partial<typeof LAYER> = {}): RetrievalConfigHashInput {
-  return { ...literalHashInput(), queryLayer: { ...LAYER, ...overrides } } as RetrievalConfigHashInput;
+function withLayer(overrides: Partial<RetrievalConfigHashQueryLayer> = {}): RetrievalConfigHashInput {
+  return { ...literalHashInput(), queryLayer: { ...LAYER, ...overrides } };
 }
 
 describe('computeRetrievalConfigHash query-layer part (D-04, research A-7)', () => {
   it('layer off: no query-layer part leaves the Phase 4 hash unchanged', () => {
     expect(computeRetrievalConfigHash(literalHashInput())).toBe(PINNED_PHASE4_HASH);
-    expect(computeRetrievalConfigHash({ ...literalHashInput(), queryLayer: null } as RetrievalConfigHashInput)).toBe(PINNED_PHASE4_HASH);
+    expect(computeRetrievalConfigHash({ ...literalHashInput(), queryLayer: null })).toBe(PINNED_PHASE4_HASH);
   });
 
   it('layer on: the query-layer part changes the hash', () => {
@@ -84,5 +90,54 @@ describe('computeRetrievalConfigHash query-layer part (D-04, research A-7)', () 
       prompts: { 'shared.suffix': 1, 'llamaindex.fusion': 1, 'llamaindex.condense': 1 },
     });
     expect(computeRetrievalConfigHash(reordered)).toBe(computeRetrievalConfigHash(withLayer()));
+  });
+});
+
+describe('queryLayerHashComponent', () => {
+  it('lists every prompt file in src/lib/rag/query/prompts with its version', () => {
+    const dir = path.join(process.cwd(), 'src/lib/rag/query/prompts');
+    const files = readdirSync(dir).filter((name) => name.endsWith('.json'));
+    const expected = Object.fromEntries(
+      files.map((name) => {
+        const file = JSON.parse(readFileSync(path.join(dir, name), 'utf8')) as { id: string; version: number };
+        return [file.id, file.version];
+      }),
+    );
+    expect(queryPromptVersions()).toEqual(expected);
+  });
+
+  it('follows the framework, model, transform switches and the effective query params', () => {
+    resetRagConfigForTests();
+    const layer = loadRagConfig({ RAG_PIPELINE: 'v2', RAG_QUERY_LAYER: 'true' }).queryLayer;
+    const params = effectiveQueryParams('chat');
+    const base = queryLayerHashComponent(layer, params);
+    expect(base.framework).toBe(layer.framework);
+    expect(base.model).toBe(layer.model);
+    expect(base.queryParamsHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(queryLayerHashComponent(layer, { ...params, max_searches: params.max_searches + 1 }).queryParamsHash).not.toBe(base.queryParamsHash);
+    expect(queryLayerHashComponent({ ...layer, model: 'provider/other' }, params).model).toBe('provider/other');
+    expect(queryLayerHashComponent({ ...layer, transforms: { ...layer.transforms, hyde: !layer.transforms.hyde } }, params).transforms.hyde).toBe(
+      !layer.transforms.hyde,
+    );
+    resetRagConfigForTests();
+  });
+});
+
+describe('cache inputs on the retrieval contract', () => {
+  it('cacheContext is typed and has no entry-profile field; cacheHit and cacheTicket are optional on the result', () => {
+    const context: RetrievalCacheContext = {
+      generatorModel: 'provider/model-a',
+      systemPromptHash: 'b'.repeat(64),
+      webSearch: false,
+      mcpTools: false,
+      chatId: null,
+    };
+    // @ts-expect-error the entry profile follows RunRetrievalInput.profile and is never caller data
+    const withProfile: RetrievalCacheContext = { ...context, entryProfile: 'eval' };
+    expect(Object.keys(context).sort()).toEqual(['chatId', 'generatorModel', 'mcpTools', 'systemPromptHash', 'webSearch']);
+    expect(withProfile.generatorModel).toBe('provider/model-a');
+    const result: Pick<RetrievalResult, 'cacheHit' | 'cacheTicket'> = {};
+    expect(result.cacheHit).toBeUndefined();
+    expect(result.cacheTicket).toBeUndefined();
   });
 });
