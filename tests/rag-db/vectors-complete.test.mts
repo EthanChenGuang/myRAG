@@ -14,7 +14,7 @@ const A = { key: `u:${TWO_TENANT_IDS.userA}`, userId: TWO_TENANT_IDS.userA };
 const B = { key: `u:${TWO_TENANT_IDS.userB}`, userId: TWO_TENANT_IDS.userB };
 
 type Row = Record<string, unknown>;
-type Tenant = typeof A;
+type Tenant = { key: string; userId: string };
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
