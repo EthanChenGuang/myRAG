@@ -232,15 +232,23 @@ def test_report_without_citation_data_is_byte_identical_to_before(tmp_path: Path
     json_path, md_path = write_report(
         report.model_copy(update={"native_review_backlog": None}), tmp_path / "no-backlog", _budgets()
     )
-    assert hashlib.sha256(json_path.read_bytes()).hexdigest() == (
+    # 06-34: layer-off reports carry the empty query_layer and semantic_cache sections; without them the JSON bytes
+    # are the earlier report's.
+    stripped = json.loads(json_path.read_text(encoding="utf-8"))
+    assert stripped.pop("query_layer")["items_with_plan"] == 0 and stripped.pop("semantic_cache")["checks"] == 0
+    stripped_bytes = (json.dumps(stripped, sort_keys=True, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+    assert hashlib.sha256(stripped_bytes).hexdigest() == (
         "7437bc8e88230d9419e4f109a7b89534f52f9a95cc84dfe377b63d9596b24363"
+    )
+    assert hashlib.sha256(json_path.read_bytes()).hexdigest() == (
+        "32a7ce4be62475bb17902ebf30a9542a3a33caff485739546c7ee5806f9bf644"
     )
     assert hashlib.sha256(md_path.read_bytes()).hexdigest() == (
         "8764e48576ea708a72344dfb96193ef347af84313589f6f232421d606377e053"
     )
     json_path, md_path = write_report(report, tmp_path / "full", _budgets())
     assert hashlib.sha256(json_path.read_bytes()).hexdigest() == (
-        "16479dbefcdf797c1bc6e78dea0eab0ffbff8a9d96275a3a220c82d18c56c3eb"
+        "609a73906a1a40ba980893fea16755169d243dc903f8361e4a418fc96f6a9400"
     )
     assert hashlib.sha256(md_path.read_bytes()).hexdigest() == (
         "e1ed2773449ac301bbcc237d843c2c1b5c3593f39a2f9a92524562ab5309068e"

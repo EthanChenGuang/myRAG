@@ -8,16 +8,21 @@ from rag_sidecar.contracts.eval_run import RagTrace, RunManifest
 from rag_sidecar.contracts.feedback_loop import GatePopulationConfig
 from rag_sidecar.contracts.golden import GoldenItem, Provenance
 from rag_sidecar.contracts.judge import JudgeReport
-from rag_sidecar.contracts.latency import LatencyBudgets, StageLatency
+from rag_sidecar.contracts.latency import GroupBudget, LatencyBudgets, StageLatency
 from rag_sidecar.contracts.report import (
+    BudgetedLatency,
+    BudgetStatus,
     EvalReport,
     GroundednessLabelCounts,
     InjectionConfigLabel,
     InjectionReport,
     ItemResult,
     MetricValue,
+    QueryLayerReport,
+    SemanticCacheReport,
     SliceMetrics,
     StrategySlice,
+    TransformOutcomeCounts,
 )
 
 from rag_eval.metrics import (
@@ -288,6 +293,218 @@ def build_injection_report(golden: list[GoldenItem], traces: list[RagTrace]) -> 
     )
 
 
+QUERY_GROUP = "query"
+QUERY_SEQUENTIAL_STAGES = ("query_gate", "condense", "semantic_cache")
+QUERY_PARALLEL_STAGES = ("normalize_dates", "expand", "hyde", "decompose", "translate")
+LLM_TRANSFORMS = frozenset({"condense", "expand", "hyde", "decompose", "translate"})
+TRANSFORM_RAN = frozenset({"ok", "degraded"})
+TRANSFORM_SKIPPED = frozenset({"skipped", "error", "timeout", "aborted"})
+PROTECTED_TOKEN_LOST = "protected_token_lost"
+CACHE_STAGE = "semantic_cache"
+CACHE_HIT_COUNT = "hit"
+CACHE_BYPASS_PREFIX = "bypass_"
+NEAR_MISS_CATEGORY = "cache_near_miss"
+QUERY_LAYER_NOTE = (
+    "Report-only (D-29, D-38): counts over traces with a query plan. A transform ran when its status is ok or "
+    "degraded; skipped, timeout, error and aborted count as skipped with the plan or stage reason. The LLM-transform "
+    "share is the share of planned items where condense, expand, HyDE, decompose or translate ran. Query-stage "
+    "latency is query_gate + condense + semantic_cache plus the slowest parallel transform (normalize_dates, expand, "
+    "hyde, decompose, translate), compared with the query group of the chat budgets in "
+    "eval/config/latency-budgets.json."
+)
+SEMANTIC_CACHE_NOTE = (
+    "Report-only (D-42 e, spec rule 8): read from the semantic_cache stage of each trace. A check is a hit or a miss; "
+    "a failed or timed-out check is a miss (D-36) and also counted under failures; bypassed turns are never checked. "
+    "Hit and miss latency is the retrieval total. A near-miss wrong hit is a cache_near_miss item whose check hit."
+)
+
+
+def _latency_value(trace: RagTrace, stage: str) -> float | None:
+    value = trace.stage_latency_ms.get(stage)
+    if value is None or not math.isfinite(value) or value < 0:
+        return None
+    return value
+
+
+def query_stage_latency(trace: RagTrace) -> float | None:
+    """D-05 order: gate, condense, the parallel transform group (its slowest member), then the cache check."""
+    sequential = [v for stage in QUERY_SEQUENTIAL_STAGES if (v := _latency_value(trace, stage)) is not None]
+    parallel = [v for stage in QUERY_PARALLEL_STAGES if (v := _latency_value(trace, stage)) is not None]
+    if not sequential and not parallel:
+        return None
+    return math.fsum(sequential) + (max(parallel) if parallel else 0.0)
+
+
+def _budget_status(stat: StageLatency, budget: GroupBudget | None) -> BudgetStatus:
+    if budget is None:
+        return "no_budget"
+    over = stat.p95_ms > budget.p95_ms or (budget.p50_ms is not None and stat.p50_ms > budget.p50_ms)
+    return "over" if over else "within"
+
+
+def _budgeted(values: list[float], budget: GroupBudget | None) -> BudgetedLatency | None:
+    stat = _latency_stat(values)
+    return None if stat is None else BudgetedLatency(latency=stat, status=_budget_status(stat, budget))
+
+
+def _transform_statuses(trace: RagTrace) -> dict[str, tuple[str, str | None]]:
+    """One status per transform and trace: a transform that produced several variants is listed once."""
+    statuses: dict[str, tuple[str, str | None]] = {}
+    for entry in trace.query_transforms:
+        if entry.transform is None or entry.status is None:
+            continue
+        current = statuses.get(entry.transform)
+        if current is None or (entry.status in TRANSFORM_RAN and current[0] not in TRANSFORM_RAN):
+            statuses[entry.transform] = (entry.status, entry.reason)
+    return statuses
+
+
+def build_query_layer_report(
+    traces: list[RagTrace], results: list[ItemResult], budgets: LatencyBudgets | None
+) -> QueryLayerReport:
+    by_item = {result.item_id: result for result in results}
+    planned = [trace for trace in traces if trace.query_plan is not None]
+    rules: dict[str, int] = {}
+    ran: dict[str, int] = {}
+    disabled: dict[str, int] = {}
+    skipped: dict[str, int] = {}
+    skip_reasons: dict[str, dict[str, int]] = {}
+    llm_items = 0
+    losses = 0
+    overall: list[float] = []
+    by_language: dict[str, list[float]] = {}
+    by_category: dict[str, list[float]] = {}
+    for trace in planned:
+        plan = trace.query_plan
+        assert plan is not None
+        for rule in plan.gate.reasons:
+            rules[rule] = rules.get(rule, 0) + 1
+        losses += sum(1 for entry in plan.skipped if entry.reason == PROTECTED_TOKEN_LOST)
+        statuses = _transform_statuses(trace)
+        for name, (status, reason) in statuses.items():
+            target = ran if status in TRANSFORM_RAN else disabled if status == "disabled" else None
+            if target is None and status in TRANSFORM_SKIPPED:
+                target = skipped
+                reasons = skip_reasons.setdefault(name, {})
+                reasons[reason or status] = reasons.get(reason or status, 0) + 1
+            if target is not None:
+                target[name] = target.get(name, 0) + 1
+        if any(name in LLM_TRANSFORMS and status in TRANSFORM_RAN for name, (status, _) in statuses.items()):
+            llm_items += 1
+        latency = query_stage_latency(trace)
+        if latency is None:
+            continue
+        overall.append(latency)
+        result = by_item.get(trace.item_id) if trace.item_id is not None else None
+        if result is not None:
+            by_language.setdefault(result.language, []).append(latency)
+            by_category.setdefault(result.category, []).append(latency)
+    profile = budgets.profiles.get(LATENCY_PROFILE) if budgets is not None else None
+    budget = profile.groups.get(QUERY_GROUP) if profile is not None else None
+    return QueryLayerReport(
+        items=len(traces),
+        items_with_plan=len(planned),
+        gate_rules=dict(sorted(rules.items())),
+        transforms={
+            name: TransformOutcomeCounts(
+                run=ran.get(name, 0),
+                disabled=disabled.get(name, 0),
+                skipped=skipped.get(name, 0),
+                skip_reasons=dict(sorted(skip_reasons.get(name, {}).items())),
+            )
+            for name in sorted(set(ran) | set(disabled) | set(skipped))
+        },
+        llm_transform_share=MetricValue(value=llm_items / len(planned) if planned else None, n=len(planned)),
+        protected_token_losses=losses,
+        budget_profile=LATENCY_PROFILE,
+        query_budget=budget,
+        query_latency=_budgeted(overall, budget),
+        query_latency_by_language={
+            key: stat for key, values in sorted(by_language.items()) if (stat := _budgeted(values, budget))
+        },
+        query_latency_by_category={
+            key: stat for key, values in sorted(by_category.items()) if (stat := _budgeted(values, budget))
+        },
+    )
+
+
+def cache_outcome(trace: RagTrace) -> tuple[str, str | None] | None:
+    """The semantic_cache stage outcome: (hit | miss | failure | bypass, bypass reason), or None when not checked.
+
+    The stage records hit (1 or 0) and distance in its counts, or bypass_<reason> = 1 for a bypassed turn; a failed
+    check (skipped, timeout, error, aborted) is a fail-open miss (D-36)."""
+    status = trace.stage_status.get(CACHE_STAGE)
+    counts = trace.stage_counts.get(CACHE_STAGE, {})
+    if status is None and not counts:
+        return None
+    bypassed = sorted(
+        key[len(CACHE_BYPASS_PREFIX) :]
+        for key, value in counts.items()
+        if key.startswith(CACHE_BYPASS_PREFIX) and value > 0
+    )
+    if bypassed:
+        return ("bypass", bypassed[0])
+    if status == "disabled":
+        return None
+    if status == "ok":
+        return ("hit", None) if counts.get(CACHE_HIT_COUNT, 0) > 0 else ("miss", None)
+    return ("failure", None)
+
+
+def _retrieval_total(trace: RagTrace) -> float | None:
+    values = [
+        value
+        for stage, value in trace.stage_latency_ms.items()
+        if stage != GENERATION_STAGE and math.isfinite(value) and value >= 0
+    ]
+    return math.fsum(values) if values else None
+
+
+def build_semantic_cache_report(traces: list[RagTrace], results: list[ItemResult]) -> SemanticCacheReport:
+    categories = {result.item_id: result.category for result in results}
+    hits = misses = failures = near_checks = near_wrong = 0
+    bypasses: dict[str, int] = {}
+    hit_latency: list[float] = []
+    miss_latency: list[float] = []
+    for trace in traces:
+        outcome = cache_outcome(trace)
+        if outcome is None:
+            continue
+        kind, reason = outcome
+        if kind == "bypass":
+            assert reason is not None
+            bypasses[reason] = bypasses.get(reason, 0) + 1
+            continue
+        near_miss = trace.item_id is not None and categories.get(trace.item_id) == NEAR_MISS_CATEGORY
+        if near_miss:
+            near_checks += 1
+        total = _retrieval_total(trace)
+        if kind == "hit":
+            hits += 1
+            near_wrong += 1 if near_miss else 0
+            if total is not None:
+                hit_latency.append(total)
+            continue
+        misses += 1
+        failures += 1 if kind == "failure" else 0
+        if total is not None:
+            miss_latency.append(total)
+    checks = hits + misses
+    return SemanticCacheReport(
+        checks=checks,
+        hits=hits,
+        misses=misses,
+        failures=failures,
+        bypasses=dict(sorted(bypasses.items())),
+        hit_rate=MetricValue(value=hits / checks if checks else None, n=checks),
+        hit_latency=_latency_stat(hit_latency),
+        miss_latency=_latency_stat(miss_latency),
+        near_miss_checks=near_checks,
+        near_miss_wrong_hits=near_wrong,
+        near_miss_wrong_hit_rate=MetricValue(value=near_wrong / near_checks, n=near_checks) if near_checks else None,
+    )
+
+
 def load_latency_budgets(path: Path | None = None) -> LatencyBudgets:
     source = Path(path) if path is not None else LATENCY_BUDGETS_PATH
     return LatencyBudgets.model_validate_json(source.read_text(encoding="utf-8"))
@@ -345,6 +562,7 @@ def build_report(
     judge: JudgeReport | None = None,
     supported_languages: tuple[str, ...] | None = None,
     gate_population_config: tuple[GatePopulationConfig, str] | None = None,
+    budgets: LatencyBudgets | None = None,
 ) -> EvalReport:
     notes: list[str] = []
     if any(item.language == "zh" for item in golden):
@@ -379,6 +597,10 @@ def build_report(
         answer_fields["groundedness_labels"] = groundedness_label_counts(traces, golden)
         answer_fields["groundedness_latency"] = compute_groundedness_latency(traces)
         answer_fields["injection"] = build_injection_report(golden, traces)
+        if budgets is None and any(trace.query_plan is not None for trace in traces):
+            budgets = load_latency_budgets()
+        answer_fields["query_layer"] = build_query_layer_report(traces, results, budgets)
+        answer_fields["semantic_cache"] = build_semantic_cache_report(traces, results)
     return EvalReport(
         run_id=manifest.run_id,
         tier=manifest.tier,
@@ -597,6 +819,79 @@ def _injection_section(report: EvalReport) -> list[str]:
     return lines
 
 
+def _budgeted_row(name: str, row: BudgetedLatency) -> str:
+    stat = row.latency
+    return f"| {name} | {_ms(stat.p50_ms)} | {_ms(stat.p95_ms)} | {stat.n} | {row.status} |"
+
+
+def _query_layer_section(report: EvalReport) -> list[str]:
+    block = report.query_layer
+    if block is None or block.items_with_plan == 0:
+        return []
+    budget = block.query_budget
+    budget_text = (
+        f"p50 {_ms(budget.p50_ms)} / p95 {_ms(budget.p95_ms)} ms ({block.budget_profile})" if budget else "none"
+    )
+    lines = [
+        "## Query layer (report-only)",
+        "",
+        QUERY_LAYER_NOTE,
+        "",
+        f"- Items with a query plan: {block.items_with_plan} of {block.items}",
+        f"- LLM-transform share: {_cell(block.llm_transform_share)}",
+        f"- Protected-token losses: {block.protected_token_losses}",
+        f"- Query-stage budget: {budget_text}",
+        "",
+        "| Gate rule | Fired |",
+        "|---|---|",
+        *(f"| {rule} | {count} |" for rule, count in block.gate_rules.items()),
+        "",
+    ]
+    if block.transforms:
+        lines.extend(["| Transform | Ran | Disabled | Skipped | Skip reasons |", "|---|---|---|---|---|"])
+        for name, counts in block.transforms.items():
+            reasons = ", ".join(f"{reason} {count}" for reason, count in sorted(counts.skip_reasons.items())) or "-"
+            lines.append(f"| {name} | {counts.run} | {counts.disabled} | {counts.skipped} | {reasons} |")
+        lines.append("")
+    if block.query_latency is not None:
+        lines.extend(["| Query stage | p50 (ms) | p95 (ms) | n | Status |", "|---|---|---|---|---|"])
+        lines.append(_budgeted_row("overall", block.query_latency))
+        lines.extend(_budgeted_row(f"language:{key}", row) for key, row in block.query_latency_by_language.items())
+        lines.extend(_budgeted_row(f"category:{key}", row) for key, row in block.query_latency_by_category.items())
+        lines.append("")
+    return lines
+
+
+def _semantic_cache_section(report: EvalReport) -> list[str]:
+    block = report.semantic_cache
+    if block is None or (block.checks == 0 and not block.bypasses):
+        return []
+    hit, miss = block.hit_latency, block.miss_latency
+    lines = [
+        "## Semantic cache (report-only)",
+        "",
+        SEMANTIC_CACHE_NOTE,
+        "",
+        f"- Checks: {block.checks} (hits {block.hits}, misses {block.misses}, failures {block.failures})",
+        f"- Hit rate: {_cell(block.hit_rate)}",
+        (
+            f"- Near-miss wrong hits: {block.near_miss_wrong_hits} of {block.near_miss_checks} checked near-miss "
+            f"item(s); rate {_cell(block.near_miss_wrong_hit_rate) if block.near_miss_wrong_hit_rate else 'n/a'}"
+        ),
+        "",
+        "| Outcome | p50 (ms) | p95 (ms) | n |",
+        "|---|---|---|---|",
+        f"| hit | {_ms(hit.p50_ms if hit else None)} | {_ms(hit.p95_ms if hit else None)} | {hit.n if hit else 0} |",
+        f"| miss | {_ms(miss.p50_ms if miss else None)} | {_ms(miss.p95_ms if miss else None)} | {miss.n if miss else 0} |",
+        "",
+    ]
+    if block.bypasses:
+        lines.extend(["| Bypass reason | Turns |", "|---|---|"])
+        lines.extend(f"| {reason} | {count} |" for reason, count in block.bypasses.items())
+        lines.append("")
+    return lines
+
+
 REPORT_ONLY_TITLE = "Report-only items (native review pending)"
 REPORT_ONLY_NOTE = (
     "zh and it items that were machine-translated or LLM-drafted count in gated slices only after a native speaker "
@@ -749,6 +1044,8 @@ def _render_markdown(report: EvalReport, budgets: LatencyBudgets | None = None) 
     lines.extend(_strategy_section(report))
     lines.extend(_groundedness_section(report, budgets))
     lines.extend(_injection_section(report))
+    lines.extend(_query_layer_section(report))
+    lines.extend(_semantic_cache_section(report))
     lines.extend(_backlog_section(report))
     if report.notes:
         lines.extend(["## Notes", ""])

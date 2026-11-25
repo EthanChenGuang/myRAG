@@ -5,10 +5,10 @@ import pytest
 from rag_sidecar.contracts.eval_run import RagTrace
 from rag_sidecar.contracts.golden import GoldenItem
 from rag_sidecar.contracts.latency import LatencyBudgets
+from test_report_runner import QUOTE, _item, _manifest, _trace
 
 from rag_eval.metrics import score_items
 from rag_eval.report import build_report, load_latency_budgets, write_report
-from test_report_runner import QUOTE, _item, _manifest, _trace
 
 BUDGETS_PATH = Path(__file__).resolve().parents[2] / "eval" / "config" / "latency-budgets.json"
 PRIVATE_TEXT = "synthetic private wording that must never reach a report"
