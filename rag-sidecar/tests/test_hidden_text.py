@@ -218,3 +218,115 @@ def test_link_annotation_targets_are_returned(client):
 
 def test_a_hidden_fixture_without_links_returns_no_target(client):
     assert report_for(client, "white-on-white.pdf").link_targets == []
+
+
+def _check(data: bytes, mime: str = "application/pdf") -> HiddenTextReport:
+    from rag_sidecar.security import check_hidden_text
+
+    return check_hidden_text(data, mime)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [REPO_ROOT / "config" / "rag" / "hidden-text-rules.json", REPO_ROOT / "rag-sidecar" / "config" / "rag" / "hidden-text-rules.json"],
+)
+def test_the_rules_file_and_its_copy_validate_against_the_model(path):
+    from rag_sidecar.contracts.ingest_security import HiddenTextRules
+
+    rules = HiddenTextRules.model_validate(json.loads(path.read_text(encoding="utf-8")))
+    assert rules.zero_width_threshold >= 1
+    assert rules.pdf.min_span_chars >= 1
+
+
+def test_two_runs_give_equal_reports_ordered_by_page_then_position():
+    data = _generator().many_fragments(120, per_page=50)
+    first, second = _check(data), _check(data)
+
+    assert first == second
+    keys = [(span.page, -span.bbox[3], span.bbox[0]) for span in first.spans]
+    assert keys == sorted(keys)
+    assert [span.page for span in first.spans][:1] == [1] and first.spans[-1].page == 3
+    assert [span.text for span in first.spans[:2]] == ["hidden fragment 0000", "hidden fragment 0001"]
+
+
+def test_a_file_with_500_hidden_fragments_is_bounded_with_a_dropped_count():
+    report = _check(_generator().many_fragments(500))
+
+    assert report.status == "hidden_found"
+    assert len(report.spans) == 200
+    assert report.dropped == 300
+    assert report.spans[-1].text == "hidden fragment 0199"
+
+
+def test_a_10000_character_hidden_span_is_cut_to_2000_characters():
+    report = _check(_generator().long_span(10_000))
+
+    assert len(report.spans) == 1
+    assert len(report.spans[0].text) == 2_000
+    assert report.dropped == 0
+
+
+def test_a_fragment_below_the_minimum_character_count_is_dropped():
+    report = _check(_generator().short_fragment())
+
+    assert report.status == "clean"
+    assert report.spans == [] and report.dropped == 0
+
+
+@pytest.mark.parametrize("mime", ["text/plain", "text/html", "application/vnd.ms-excel", "image/png"])
+def test_an_unsupported_mime_type_is_not_checked(client, mime):
+    data = b"plain synthetic text with nothing hidden"
+    response = post(client, data, mime=mime, filename="doc.bin")
+    assert response.status_code == 200
+    report = HiddenTextReport.model_validate(response.json())
+    assert report.status == "not_checked"
+    assert report.spans == [] and report.link_targets == []
+
+
+def test_an_unreadable_pdf_is_refused_not_reported_clean(client):
+    response = post(client, b"%PDF-1.4\nthis is not a pdf body\n")
+    assert response.status_code == 422
+    assert response.json()["error"] == "unreadable_document"
+
+
+_BLOCKED_IMPORT = """
+import sys
+class _Block:
+    def find_spec(self, name, path=None, target=None):
+        if name.split(".")[0] in {"pypdfium2", "pypdfium2_raw", "pdfplumber", "pdfminer"}:
+            raise ImportError(f"blocked {name}")
+        return None
+sys.meta_path.insert(0, _Block())
+import rag_sidecar.security as security
+import rag_sidecar.main  # noqa: F401
+assert "pypdfium2" not in sys.modules and "pdfplumber" not in sys.modules
+report = security.check_hidden_text(b"plain", "text/plain")
+assert report.status == "not_checked", report
+try:
+    security.check_hidden_text(b"%PDF-1.4", "application/pdf")
+except security.CheckerUnavailable:
+    print("ok")
+"""
+
+
+def test_the_package_imports_without_the_preflight_extra():
+    import subprocess
+
+    done = subprocess.run(
+        [sys.executable, "-I", "-c", _BLOCKED_IMPORT],
+        capture_output=True,
+        text=True,
+        env={"PYTHONPATH": str(REPO_ROOT / "rag-sidecar" / "src"), "RAG_SIDECAR_SECRET": ""},
+        check=False,
+        timeout=120,
+    )
+    assert done.returncode == 0, done.stderr[-2000:]
+    assert done.stdout.strip().endswith("ok")
+
+
+def test_the_route_answers_503_checker_unavailable_without_the_extra(client, monkeypatch):
+    for name in ("pypdfium2", "pypdfium2.raw", "pdfplumber"):
+        monkeypatch.setitem(sys.modules, name, None)
+    response = post(client, (FIXTURE_DIR / "white-on-white.pdf").read_bytes())
+    assert response.status_code == 503
+    assert response.json()["error"] == "checker_unavailable"
