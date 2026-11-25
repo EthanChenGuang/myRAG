@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { RefusalFeedbackRequestSchema } from '@/lib/rag-eval/contracts.generated';
-import { readFeedbackLoopConfig } from '@/lib/rag/feedback-loop/config';
 import {
   openRetrievalRequest,
+  readFeedbackLoopConfig,
   RETRIEVAL_NO_STORE,
   retrievalNotFound,
   retrievalUnavailable,
+  setRefusalVote,
   traceHash,
-} from '@/lib/rag/feedback-loop/retrieval-route';
-import { setRefusalVote } from '@/lib/rag/feedback-loop/votes';
+} from '@/lib/rag';
+import { RefusalFeedbackRequestSchema } from '@/lib/rag-eval/contracts.generated';
 
 export const runtime = 'nodejs';
 

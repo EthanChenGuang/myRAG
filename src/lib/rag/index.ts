@@ -397,3 +397,12 @@ export {
 } from './feedback-loop/review-access';
 export type { DomainExpertGrant, ReviewChunk, ReviewListQuery } from './feedback-loop/review-access';
 export { openReviewSession, REVIEW_NO_STORE, reviewNotFound, reviewUnavailable } from './feedback-loop/review-route';
+export { recordSourceOpened, setRefusalVote, SOURCE_OPENED_CAP } from './feedback-loop/votes';
+export type { RecordSourceOpenedResult, SetRefusalVoteResult } from './feedback-loop/votes';
+export {
+  openRetrievalRequest,
+  RETRIEVAL_NO_STORE,
+  retrievalNotFound,
+  retrievalUnavailable,
+  traceHash,
+} from './feedback-loop/retrieval-route';

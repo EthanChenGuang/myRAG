@@ -1,8 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
+import {
+  openRetrievalRequest,
+  readFeedbackLoopConfig,
+  recordSourceOpened,
+  RETRIEVAL_NO_STORE,
+  retrievalNotFound,
+  retrievalUnavailable,
+} from '@/lib/rag';
 import { SourceSignalRequestSchema } from '@/lib/rag-eval/contracts.generated';
-import { readFeedbackLoopConfig } from '@/lib/rag/feedback-loop/config';
-import { openRetrievalRequest, RETRIEVAL_NO_STORE, retrievalNotFound, retrievalUnavailable } from '@/lib/rag/feedback-loop/retrieval-route';
-import { recordSourceOpened } from '@/lib/rag/feedback-loop/votes';
 
 export const runtime = 'nodejs';
 
