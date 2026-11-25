@@ -643,6 +643,10 @@ test('compares the .env.local model list only when .env.local exists', () => {
     write(root, '.env.local', 'RAG_EVAL_ENDPOINT_ENABLED=false\n');
     ({ out } = run(root));
     assert.doesNotMatch(out, /claude-test-9 \[env-local\]/);
+
+    write(root, '.env.local', 'NEXT_PUBLIC_OPENROUTER_MODELS=\n');
+    ({ out } = run(root));
+    assert.doesNotMatch(out, /claude-test-9 \[env-local\]/);
   } finally {
     cleanup(root);
   }

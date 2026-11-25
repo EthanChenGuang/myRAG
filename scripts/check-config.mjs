@@ -243,7 +243,8 @@ export function checkModelMappings(root, texts) {
   const envLocalFile = path.join(root, ENV_LOCAL);
   if (fs.existsSync(envLocalFile)) {
     const value = envLocalModelList(fs.readFileSync(envLocalFile, 'utf8'));
-    if (value !== null) lists.push({ location: 'env-local', label: 'NEXT_PUBLIC_OPENROUTER_MODELS', models: modelsInArray(value, 0) });
+    const models = value ? modelsInArray(value, 0) : null;
+    if (models !== null) lists.push({ location: 'env-local', label: 'NEXT_PUBLIC_OPENROUTER_MODELS', models });
   }
 
   const violations = [];
