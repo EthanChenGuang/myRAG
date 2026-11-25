@@ -133,7 +133,6 @@ const BUDGET_RPCS = [
   'rag_reserve_batch_budget',
 ];
 const BUDGET_RPC_RE = new RegExp(String.raw`\.rpc\s*\(\s*(['"\`])(?:${BUDGET_RPCS.join('|')})`, 'g');
-const CACHE_RPC_RE = /\.rpc\s*\(\s*(['"`])(?:rag_set_document_parse_cache|rag_parse_cache_)/g;
 const BACKFILL_RPC_TOKENS = ['ingestion_batch', 'rag_enqueue_backfill_jobs', 'rag_existing_file_hashes', 'embed_batch'];
 const BACKFILL_RPC_RE = new RegExp(
   `\\.rpc\\s*\\(\\s*(['"\`])[^'"\`\\$]*(?:${BACKFILL_RPC_TOKENS.join('|')})`,
@@ -143,7 +142,6 @@ const BACKFILL_RPC_RE = new RegExp(
 const inSrc = (rel) => rel.startsWith('src/');
 const outsideLedgerClient = (rel) => inSrc(rel) && rel !== LEDGER_CLIENT;
 const outsideBudgetClient = (rel) => inSrc(rel) && rel !== BUDGET_CLIENT;
-const outsideCacheClient = (rel) => inSrc(rel) && rel !== CACHE_CLIENT;
 const outsideBackfillDir = (rel) => inSrc(rel) && !rel.startsWith(BACKFILL_DIR);
 
 export const LANGCHAIN_ADAPTER_ALLOWED_IMPORTS = [
@@ -155,6 +153,62 @@ export const LANGCHAIN_ADAPTER_ALLOWED_IMPORTS = [
   { kind: 'path', value: 'src/lib/rag-eval/contracts.generated', reason: 'generated zod/v3 contracts' },
   { kind: 'path-prefix', value: 'rag-sidecar/schemas/', suffix: '.schema.json', reason: 'generated JSON Schemas' },
 ];
+
+const QUERY_DIR = 'src/lib/rag/query/';
+const QUERY_LLM_MODULE = 'src/lib/rag/query/llm';
+
+export const QUERY_LLM_IMPORTERS = [
+  { path: QUERY_DIR, reason: 'query transforms call the query LLM (D-13)' },
+  { path: 'src/lib/rag/deps.ts', reason: 'RagDeps builds the default client so a fake can be injected' },
+];
+export const QUERY_LLM_AI_CALLS = ['generateText', 'generateObject', 'streamText', 'streamObject'];
+
+export const CACHE_RPC_HOMES = [
+  { prefix: 'rag_set_document_parse_cache', home: CACHE_CLIENT, srcOnly: true, reason: 'Phase 3.1 parse cache' },
+  { prefix: 'rag_parse_cache_', home: CACHE_CLIENT, srcOnly: true, reason: 'Phase 3.1 parse cache' },
+  { prefix: 'rag_cache_', home: 'src/lib/rag/cache/', reason: 'tenant-keyed semantic cache' },
+  { name: 'rag_tenant_language_shares', home: QUERY_DIR, reason: 'tenant-keyed KB language shares' },
+];
+
+const pathMatches = (rel, p) => (p.endsWith('/') ? rel.startsWith(p) : rel === p);
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const CACHE_RPC_MATCHERS = CACHE_RPC_HOMES.map((entry) => ({
+  ...entry,
+  re: new RegExp(
+    String.raw`\.rpc\s*\(\s*(['"\`])` + (entry.name ? `${escapeRe(entry.name)}(?![\\w])` : escapeRe(entry.prefix)),
+    'g',
+  ),
+}));
+
+function findCacheRpc(text, rel) {
+  const out = [];
+  for (const m of CACHE_RPC_MATCHERS) {
+    if (m.srcOnly && !inSrc(rel)) continue;
+    if (pathMatches(rel, m.home)) continue;
+    out.push(...regexMatches(m.re, text));
+  }
+  return out;
+}
+
+function findQueryLlmCall(text, rel) {
+  const importerAllowed = QUERY_LLM_IMPORTERS.some((a) => pathMatches(rel, a.path));
+  const aiCallsAllowed = !rel.startsWith(QUERY_DIR) || specBase(rel) === QUERY_LLM_MODULE;
+  return importMatches(text, (imp) => {
+    if (!importerAllowed) {
+      const resolved = resolveSpec(rel, imp.spec);
+      const base = resolved === null ? null : specBase(resolved);
+      if (base === QUERY_LLM_MODULE || base === `${QUERY_LLM_MODULE}/index`) return `query LLM client ${imp.spec}`;
+    }
+    if (!aiCallsAllowed && imp.spec === 'ai') {
+      if (imp.kind === 'call') return 'dynamic import of ai';
+      if (imp.kind !== 'from' || imp.typeOnly) return null;
+      const banned = clauseNames(imp.clause).filter((n) => QUERY_LLM_AI_CALLS.includes(n));
+      if (banned.length > 0) return `ai: ${banned.join(', ')}`;
+      if (/\*/.test(imp.clause)) return 'namespace import of ai';
+    }
+    return null;
+  });
+}
 
 const LANGCHAIN_PACKAGE_RE = /^(?:@langchain\/|langchain(?:\/|$))/;
 const ZOD_V4_RE = /^zod\/(?:v4|mini|v4-mini)(?:\/|$)/;
@@ -390,9 +444,10 @@ export const RULES = [
   },
   {
     id: 'cache-rpc',
-    description: 'parse-cache RPC called outside src/lib/rag/ingest/parse-cache.ts',
-    appliesTo: outsideCacheClient,
-    find: (text) => regexMatches(CACHE_RPC_RE, text),
+    description:
+      'cache RPC called outside its home: parse cache in src/lib/rag/ingest/parse-cache.ts, rag_cache_* in src/lib/rag/cache/, rag_tenant_language_shares in src/lib/rag/query/',
+    appliesTo: everywhere,
+    find: findCacheRpc,
   },
   {
     id: 'backfill-rpc',
@@ -434,6 +489,12 @@ export const RULES = [
     description: 'the LangChain adapter imports outside its allow-list (LANGCHAIN_ADAPTER_ALLOWED_IMPORTS, D-18)',
     appliesTo: inLangchainDir,
     find: (text, rel) => importMatches(text, (imp) => (adapterImportAllowed(rel, imp) ? null : imp.spec)),
+  },
+  {
+    id: 'query-llm-call',
+    description: 'query-LLM client imported outside src/lib/rag/query/ and deps.ts, or an ai generate/stream call in src/lib/rag/query/ outside llm.ts (D-13)',
+    appliesTo: everywhere,
+    find: findQueryLlmCall,
   },
   {
     id: 'zod-v4',
