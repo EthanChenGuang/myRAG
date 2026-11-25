@@ -15,7 +15,13 @@ const SUPABASE_PUBLIC_PATH_PREFIX = '/storage/v1/object/public/';
 const SAME_ORIGIN_BASE = 'https://same-origin.invalid';
 const SAME_ORIGIN_HOST = 'same-origin.invalid';
 // Whitespace, control characters and backslashes change how browsers resolve a URL.
-const UNSAFE_URL_CHARS = /[\s\u0000-\u001f\u007f\\]/;
+function hasUnsafeUrlChars(src: string): boolean {
+  for (let i = 0; i < src.length; i += 1) {
+    const code = src.charCodeAt(i);
+    if (code <= 0x20 || code === 0x7f || code === 0x5c || /\s/.test(src[i])) return true;
+  }
+  return false;
+}
 
 function parseHost(url: string | null | undefined): string | null {
   if (!url) return null;
@@ -50,7 +56,7 @@ function deploymentImageHosts(): ImageHostAllowlist {
 }
 
 export function isAllowedImageUrl(src: unknown, hosts: ImageHostAllowlist = deploymentImageHosts()): boolean {
-  if (typeof src !== 'string' || src.length === 0 || UNSAFE_URL_CHARS.test(src)) return false;
+  if (typeof src !== 'string' || src.length === 0 || hasUnsafeUrlChars(src)) return false;
 
   if (src.startsWith('/')) {
     if (src.startsWith('//')) return false;
@@ -76,4 +82,14 @@ export function isAllowedImageUrl(src: unknown, hosts: ImageHostAllowlist = depl
     return true;
   }
   return hosts.logoHosts.includes(host);
+}
+
+export function imageLinkHref(src: unknown): string | null {
+  if (typeof src !== 'string' || src.length === 0 || hasUnsafeUrlChars(src)) return null;
+  try {
+    const url = new URL(src);
+    return url.protocol === 'https:' || url.protocol === 'http:' ? src : null;
+  } catch {
+    return null;
+  }
 }

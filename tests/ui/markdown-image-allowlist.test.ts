@@ -41,7 +41,8 @@ async function loadModules(allowlist: string | undefined) {
     vi.stubEnv('NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST', allowlist);
   }
   const { Markdown } = await import('@/components/ui/markdown');
-  const { ChatMessage } = await import('@/components/ui/chat-message');
+  const { ChatMessage, TOOL_RESULT_MARKDOWN_COMPONENTS } = await import('@/components/ui/chat-message');
+  const { default: ReactMarkdown } = await import('react-markdown');
   const renderMarkdown = (text: string) =>
     renderToStaticMarkup(createElement(Markdown as never, { children: text }) as ReactNode as never);
   const renderChat = (text: string) =>
@@ -51,7 +52,11 @@ async function loadModules(allowlist: string | undefined) {
         isLastMessage: false,
       }) as ReactNode as never,
     );
-  return { renderMarkdown, renderChat };
+  const renderToolResult = (text: string) =>
+    renderToStaticMarkup(
+      createElement(ReactMarkdown as never, { components: TOOL_RESULT_MARKDOWN_COMPONENTS }, text) as ReactNode as never,
+    );
+  return { renderMarkdown, renderChat, renderToolResult };
 }
 
 const escaped = (url: string) => url.replace(/&/g, '&amp;');
@@ -63,8 +68,9 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-describe.each(['chat-message', 'markdown'] as const)('%s renderer', (which) => {
-  const pick = (m: Awaited<ReturnType<typeof loadModules>>) => (which === 'markdown' ? m.renderMarkdown : m.renderChat);
+describe.each(['chat-message', 'markdown', 'tool-result'] as const)('%s renderer', (which) => {
+  const pick = (m: Awaited<ReturnType<typeof loadModules>>) =>
+    which === 'markdown' ? m.renderMarkdown : which === 'tool-result' ? m.renderToolResult : m.renderChat;
 
   test('switch on: an image from an unknown host renders as a link and no img', async () => {
     const render = pick(await loadModules('true'));

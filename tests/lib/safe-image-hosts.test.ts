@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { allowedImageHosts, isAllowedImageUrl } from '@/lib/safe-image-hosts';
+import { allowedImageHosts, imageLinkHref, isAllowedImageUrl } from '@/lib/safe-image-hosts';
 
 const hosts = allowedImageHosts({
   supabaseUrl: 'https://Project-Ref.supabase.example',
@@ -81,4 +81,17 @@ describe('isAllowedImageUrl', () => {
     expect(isAllowedImageUrl('https://project-ref.supabase.example/storage/v1/object/public/b/a.png', none)).toBe(false);
     expect(isAllowedImageUrl('https://replicate.delivery/xezq/a.png', none)).toBe(true);
   });
+});
+
+describe('imageLinkHref', () => {
+  test.each(['https://attacker.example/x.png?q=1', 'http://attacker.example/x.png'])('links %s', (src) => {
+    expect(imageLinkHref(src)).toBe(src);
+  });
+
+  test.each(['data:image/png;base64,AAAA', 'javascript:alert(1)', 'blob:https://a.example/1', '//a.example/x', 'x.png', '', ' https://a.example/x', 'https://a.example/\\x', undefined])(
+    'gives no link for %j',
+    (src) => {
+      expect(imageLinkHref(src)).toBeNull();
+    },
+  );
 });
