@@ -210,3 +210,63 @@ Applied to `<live-project-ref>` from `origin/main` 207ba4b1 (train 14, PR #61), 
 ### Re-run notes
 - Re-running 0425 restores the guard without the scope check, so re-run 0440 after it.
 - Re-running any migration below 0801 that defines one of its 13 functions (0359, 0420, 0424, 0425, 0426) restores that older body, so re-run 0801 after it.
+
+## 0441, 0802, 0803 and 0410 r4 (applied after train 15, 2026-11-25)
+
+Applied to `<live-project-ref>` from `origin/main` 61cf1bcd (train 15). None of the four files has a `.single-tenant`/`.multi-tenant` variant. For each file, only the top-level `BEGIN;` and `COMMIT;` were left out; the rest is the exact file text (0803's trailing `NOTIFY` after `COMMIT` kept). No statement failed and nothing was retried.
+
+### Preconditions
+- 0441: `embedding_profile_bindings` and `rag_embedding_bindings_guard()` exist (0440 live); the file's own precheck passed. None of its eight functions existed before.
+- 0802: no live migration after 0602 (0501_0603) redefines `hybrid_search_chunks`; only 0407, 0413 and 0602 define it, all live and older. Before: one overload, the 0602 signature (21 arguments, ending in `boolean`).
+- 0803: `rag_publish_document_version` was last defined by 0425 (live md5 9f89d02ef0115e7ca5b2f31fab0c3c17); no later live migration touches it. `rag_admin_audit` had 0 rows, so the rebuilt action check could not fail. None of the eleven new functions existed. Dependencies present: `rag_admin_tenant_keys`, `rag_soft_delete_document`, `rag_assert_tenant_key`, `documents.approved_by`/`approved_at` and `document_chunks.approved_by` (0801).
+- 0410: the repo file changed since r3 by +60 lines only, adding guarded REVOKE/GRANT blocks for the 0441 and 0803 definer functions. Grants only (its existing guarded `DROP` of the stale 4-argument `rag_fail_ingestion_job` was a no-op; only the 5-argument overload exists).
+
+### Steps
+| # | Migration name | Result |
+|---|---|---|
+| 1 | 0441_binding_gate | ok |
+| 2 | 0802_hybrid_search_scopes_dates_und | ok |
+| 3 | 0803_publish_hold | ok |
+| 4 | 0410_security_definer_rpc_grants_r4 | ok |
+
+### Verification
+- **Body md5 matches the repo (21/21)**, one overload each, `search_path=""`, EXECUTE for service_role only (anon and authenticated refused):
+  - 0441 (all SECURITY DEFINER; activate and rollback also carry `statement_timeout=120s` as the file defines):
+    - rag_list_embedding_bindings 292a9c9d9596afd8bda94ab75cc91cd9
+    - rag_list_embedding_profile_scopes 137e1974173d792f10ad83ad17049479
+    - rag_create_embedding_binding 266f1b33c52023119442acf650f7105d
+    - rag_set_embedding_binding_status 1d39648f3ae67320b445fdd81ff6dc13
+    - rag_record_binding_evidence 09cb63723155d7e95df4103d10e7df7c
+    - rag_activate_embedding_binding 9a8aae32ba62ef206db9d2a6a7443459
+    - rag_rollback_embedding_binding aa1fd1de6230bf89db8998fcc91df8e2
+    - rag_deactivate_embedding_binding bc94ec6c7d42244ec57f0043eda3563c
+  - 0802: `hybrid_search_chunks` e28a92efe8922689d228bcbdb65d9e4c (10656 characters), SECURITY INVOKER. Exactly one overload, the new 24-argument signature ending in `text[], boolean, date`; the 0407 and 0602 signatures are gone. ACL is postgres and service_role only.
+  - 0803 (definers: publish, approval keys, approve, reject, list pending, exemption add/remove/list; invokers: hold for review, is_tenant_admin, release_publish_hold, exemptions_for, as the file defines):
+    - rag_publish_document_version 8793ead278eb810ba79ae4664969507a (replaces the 0425 body)
+    - rag_hold_document_for_review 376d8ae4370592614d013b8119605236
+    - rag_upload_approval_keys c40d783e590d4e80181f82dcc5b4fc26
+    - rag_approve_upload ea48f0d6c15075430a969e1de9987c1f
+    - rag_reject_upload 1339a066983b64cf5385e0e86a58b219
+    - rag_list_pending_uploads 7b3c5b54d2c52120b072e2a0bcbce004
+    - rag_is_tenant_admin 64a3ad2386a58678cb362308721a966c
+    - rag_release_publish_hold 57327b7877e37e558a907d86c2ba00d5
+    - rag_upload_exemption_add 6cba08b7708586098da5e33bf4000cca
+    - rag_upload_exemption_remove 03b2c82c0e26550b363756437e39dffd
+    - rag_upload_exemption_list 652212b2d18990523816b23795ae4b24
+    - rag_upload_exemptions_for 5d0a2e9fc27f33913e174788da181788
+- **0803 schema:** `ingestion_batches.hold_publish` boolean NOT NULL DEFAULT false. `rag_upload_approval_exemptions` exists with RLS on, no policies, 0 rows; anon and authenticated have no grant, service_role has SELECT only (no INSERT). `rag_admin_audit_action_check` rebuilt with `approve_upload` and `reject_upload`.
+- **0410 r4 grants:** after the re-run, none of the 21 functions above is executable by anon or authenticated. The only `rag_*` function authenticated can execute is `rag_ingest_realtime_topic_allowed`, by design (Realtime policy helper).
+- **Whole database:**
+  - Public functions: 345 → 364 (8 from 0441, 11 from 0803; 0802 replaced one with one).
+  - Public tables with RLS off: 0.
+  - Only one SECURITY DEFINER function lacks `search_path=""`: `rls_auto_enable()`, Supabase's own function, as before.
+- **Security advisors:**
+  - No ERROR.
+  - No new WARN: the same set and counts as before (function_search_path_mutable 4, extension_in_public 2, GraphQL 0026/0027 24/25, anon definers 5, authenticated definers 13, leaked password protection).
+  - The only new item is INFO rls_enabled_no_policy on `rag_upload_approval_exemptions` (22 → 23 server-only tables), as intended.
+- **Data intact:** documents 1, chunks 1, chunk_embeddings 0, ingestion_jobs 0, ingestion_batches 0, vector_sync_outbox 0 and embedding_profile_bindings 0, the same before and after. All document and chunk statuses are `ready`.
+
+### Re-run notes
+- Re-running 0407, 0413 or 0602 (live as `0501_0603_answers_lang_cache`) restores an older `hybrid_search_chunks` signature next to or instead of 0802's, so re-run 0802 after any of them.
+- Re-running 0425 restores the old publish body without the pending and held branches, so re-run 0803 after it (as well as 0426, 0440 and 0801, as noted above).
+- Re-running 0441 or 0803 alone keeps their own REVOKE/GRANT, so 0410 does not need to follow; re-run 0410 after any future migration that adds a definer function it lists.
