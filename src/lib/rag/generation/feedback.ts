@@ -211,3 +211,6 @@ export async function submitAnswerFeedback(input: SubmitAnswerFeedbackInput): Pr
     return { ok: false, reason: 'unavailable' };
   }
 }
+
+/** Stub (RED): replaced by the implementation in the next commit. */
+export async function mirrorVoteToRetrievalLog(..._args: unknown[]): Promise<void> {}
