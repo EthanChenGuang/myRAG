@@ -76,3 +76,15 @@ export function similarityFloor(input: { candidates: FloorCandidate[]; floors: S
     cellKey: null,
   };
 }
+let evalScoreCalibration: Record<string, number> | null = null;
+
+/** Eval harness only: a fixture-fitted score_calibration for the eval profile; every other profile ignores it. */
+export function setEvalScoreCalibration(_calibration: Record<string, number> | null): void {}
+
+export function resetEvalScoreCalibration(): void {
+  evalScoreCalibration = null;
+}
+
+export function evalFloorCalibration(_profile: string): Record<string, number> | null {
+  return evalScoreCalibration;
+}

@@ -1,8 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
+import { afterEach, describe, expect, it } from 'vitest';
+import { LEGACY_PROFILE } from '@/lib/rag/embeddings/active-profile';
 import {
   LEGACY_IMAGE_FLOOR,
   LEGACY_TEXT_FLOOR,
+  evalFloorCalibration,
   floorsFromCalibration,
+  resetEvalScoreCalibration,
+  setEvalScoreCalibration,
   similarityFloor,
 } from '@/lib/rag/refusal/floor';
 
@@ -73,5 +79,40 @@ describe('similarityFloor', () => {
   it('returns no_candidates for an empty list', () => {
     const r = similarityFloor({ floors, candidates: [] });
     expect(r).toMatchObject({ decision: 'not_applied', reason: 'no_candidates' });
+  });
+});
+describe('eval-only fixture score calibration', () => {
+  const root = path.resolve(__dirname, '../../..');
+
+  afterEach(() => resetEvalScoreCalibration());
+
+  it('applies the installed calibration to the eval profile only', () => {
+    setEvalScoreCalibration({ context_threshold: 0.12 });
+    expect(evalFloorCalibration('eval')).toEqual({ context_threshold: 0.12 });
+    for (const profile of ['chat', 'embed', 'voice', 'media']) {
+      expect(evalFloorCalibration(profile)).toBeNull();
+    }
+    expect(floorsFromCalibration(evalFloorCalibration('eval'))).toEqual({ text: 0.12, image: LEGACY_IMAGE_FLOOR });
+  });
+
+  it('is absent until installed and after a reset', () => {
+    expect(evalFloorCalibration('eval')).toBeNull();
+    setEvalScoreCalibration({ context_threshold: 0.12 });
+    resetEvalScoreCalibration();
+    expect(evalFloorCalibration('eval')).toBeNull();
+  });
+
+  it('leaves the production legacy profile at 0.65', () => {
+    setEvalScoreCalibration({ context_threshold: 0.12 });
+    expect(LEGACY_PROFILE.scoreCalibration.context_threshold).toBe(0.65);
+    expect(LEGACY_TEXT_FLOOR).toBe(0.65);
+    for (const file of [
+      'supabase/migrations/0307_embedding_profiles.sql',
+      'supabase/single-tenant-setup.sql',
+      'supabase/multi-tenant-setup.sql',
+    ]) {
+      const sql = fs.readFileSync(path.join(root, file), 'utf8');
+      expect(sql).toContain('"context_threshold": 0.65');
+    }
   });
 });
