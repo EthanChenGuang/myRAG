@@ -71,6 +71,10 @@ export interface ReembedReport {
   /** The share of rows this call wrote per serving host. */
   hosts: Array<{ host: string; chunks: number; share: number }>;
   warnings: string[];
+  /** The profile's doc types; null for an unscoped profile. A scoped run fills only these and leaves the profile status alone. */
+  scope: string[] | null;
+  /** The profile status read after the run ended ('' when it could not be read): 'available' for a scoped profile. */
+  profileStatus: string;
 }
 
 export interface DryRunInput {
@@ -97,6 +101,8 @@ export interface DryRunReport {
   model: string;
   dims: number;
   derived: boolean;
+  /** The profile's doc types; null for an unscoped profile. Counts and cost cover only these. */
+  scope: string[] | null;
   tenants: DryRunTenant[];
   cost: ReembedCostReport;
 }
@@ -195,11 +201,14 @@ export async function runReembed(input: RunReembedInput): Promise<ReembedReport>
     run = await writer.start({ profileId: input.profileId, tenantKey, actor, derivedFrom: deriveFrom });
   }
   await refreshPointer();
+  // A scoped profile is never 'backfilling' (0440), so an unscoped run needs no scope read.
+  const scope = run.profileStatus === 'backfilling' ? null : await writer.profileScope(run.profileId);
+  let profileStatus = run.profileStatus;
 
   const warnings = new Set<string>();
   if (switchIsOff()) {
     warnings.add('profiles_switch_off');
-  } else {
+  } else if (scope === null) {
     // With the switch on, ingestion dual-writes every backfilling profile; confirm this one is in that set so documents added during the run are covered.
     try {
       if (!(await getBackfillingProfiles()).some((profile) => profile.id === run.profileId)) warnings.add('dual_write_not_active');
@@ -214,6 +223,7 @@ export async function runReembed(input: RunReembedInput): Promise<ReembedReport>
   let batches = 0;
   let missing = 0;
   let cursor = run.cursorChunkId;
+  if (scope !== null) input.onProgress?.(`scope: ${scope.join(', ')}`);
   input.onProgress?.(
     `run ${run.runId} ${resumed ? 'resumed' : 'started'}: profile ${run.profileId}, ${run.derivedFrom ? `derived from ${run.derivedFrom}` : `${run.provider} ${run.dims} dims`}, ${
       run.tenantKey ? `tenant ${run.tenantKey}` : 'all tenants'
@@ -238,7 +248,18 @@ export async function runReembed(input: RunReembedInput): Promise<ReembedReport>
       tenants,
       hosts: [...hosts.entries()].map(([host, chunks]) => ({ host, chunks, share: total === 0 ? 0 : chunks / total })),
       warnings: [...warnings].sort(),
+      scope,
+      profileStatus,
     };
+  }
+
+  /** Reads the profile status the SQL left; a scoped profile stays 'available'. */
+  async function readProfileStatus(): Promise<void> {
+    try {
+      profileStatus = (await writer.get(run.runId))?.profileStatus ?? profileStatus;
+    } catch {
+      // The status is informational; the run outcome stands either way.
+    }
   }
 
   async function fail(reason: string): Promise<ReembedReport> {
@@ -248,6 +269,7 @@ export async function runReembed(input: RunReembedInput): Promise<ReembedReport>
       // A run that cannot be marked failed stays running, and a resume works on it either way.
     }
     await refreshPointer();
+    await readProfileStatus();
     return build('failed', reason);
   }
 
@@ -255,6 +277,7 @@ export async function runReembed(input: RunReembedInput): Promise<ReembedReport>
     const done = await writer.finish(run.runId, 'completed');
     missing = done.missing;
     await refreshPointer();
+    await readProfileStatus();
     return build('completed', null);
   }
 
@@ -390,6 +413,8 @@ export async function dryRunReembed(input: DryRunInput): Promise<DryRunReport> {
     if (source.dims <= profile.dims) throw new ReembedInputError('derive_dims_not_smaller');
   }
 
+  const scope = await writer.profileScope(profile.id);
+  if (scope !== null && deriveFrom !== null) throw new ReembedInputError('derive_unsupported');
   const counts = await writer.count(profile.id, tenantKey);
   const totals: Record<string, { chunks: number; tokens: number }> = {};
   for (const row of counts) totals[row.tenantKey] = { chunks: row.chunksMissing, tokens: 0 };
@@ -420,12 +445,16 @@ export async function dryRunReembed(input: DryRunInput): Promise<DryRunReport> {
     model: profile.model,
     dims: profile.dims,
     derived: deriveFrom !== null,
+    scope,
     tenants: counts.map((row) => ({ tenantKey: row.tenantKey, chunksTotal: row.chunks, chunksToEmbed: row.chunksMissing, contentChars: row.contentChars })),
     cost,
   };
 }
 
-/** Deletes the target-profile rows a run wrote. The database refuses it for the active profile and within 10 minutes of a pointer flip. */
+/**
+ * Deletes the target-profile rows a run wrote. The database refuses it for the active profile, within 10 minutes of a pointer flip, and for a
+ * scoped profile while an active binding covers the run's tenant.
+ */
 export async function rollbackReembedRun(input: RollbackInput): Promise<{ rowsDeleted: number; profileStatus: string }> {
   const signal = input.signal ?? new AbortController().signal;
   const result = await createReembedWriter({ db: input.db, signal }).rollback(input.runId, input.actor ?? DEFAULT_ACTOR);

@@ -182,6 +182,7 @@ class EnvironmentConfig {
       COHERE_API_KEY: process.env.COHERE_API_KEY || '',
       COHERE_BASE_URL: process.env.COHERE_BASE_URL || '',
       RAG_REFUSAL_THRESHOLD: process.env.RAG_REFUSAL_THRESHOLD || 'false',
+      RAG_REFUSAL_FLOOR: process.env.RAG_REFUSAL_FLOOR || 'similarity',
       RAG_CONTEXT_EDGE_ORDER: process.env.RAG_CONTEXT_EDGE_ORDER || 'false',
       RAG_CONTEXT_COMPRESSION: process.env.RAG_CONTEXT_COMPRESSION || 'false',
       RAG_CONTEXT_TOKEN_BUDGET: process.env.RAG_CONTEXT_TOKEN_BUDGET || '6000',

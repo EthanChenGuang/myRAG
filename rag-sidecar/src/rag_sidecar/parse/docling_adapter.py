@@ -17,6 +17,7 @@ from docling_core.types.io import DocumentStream
 
 from rag_sidecar.contracts import ParseChunk, ParseJobRequest, ParsePicture, ParseResult
 from rag_sidecar.contracts.ingest import ParserUsed
+from rag_sidecar.contracts.languages import get_language_pack, language_codes, load_language_registry
 from rag_sidecar.parse import probe
 from rag_sidecar.parse.converter import ConfigurationError, ConversionError, PageCapExceeded
 from rag_sidecar.preflight.config import load_routing_config
@@ -28,7 +29,9 @@ _SEPARATOR_ROW = re.compile(r"^\|[\s:|-]+\|$")
 _CJK = re.compile(r"[㐀-䶿一-鿿]")
 _WORD = re.compile(r"[a-zà-ÿ]+")
 _CJK_SHARE_FOR_ZH = 0.3
-_STOPWORDS = {
+_HAN_SCRIPT = "Hani"
+# Detector 3 keeps its own stopword lists and threshold (research F-10); only codes the registry lists are returned.
+_DETECTOR3_STOPWORDS = {
     "en": frozenset(
         "the of and to in is for that with on are be by as at from within this shall which or an not it its".split()
     ),
@@ -37,6 +40,8 @@ _STOPWORDS = {
         "come anche si da in ai agli".split()
     ),
 }
+_STOPWORDS = {code: words for code, words in _DETECTOR3_STOPWORDS.items() if code in language_codes()}
+_HAN_LANGUAGE = next((pack.code for pack in load_language_registry().packs if pack.script == _HAN_SCRIPT), None)
 
 
 class MarkdownTableProvider(ChunkingSerializerProvider):
@@ -51,14 +56,16 @@ def parser_version() -> str:
 
 
 def detect_language(text: str) -> str | None:
-    """Returns zh, en or it when the text gives clear evidence, otherwise None."""
+    """Returns a registry language code when the text gives clear evidence, otherwise None."""
     letters = sum(1 for char in text if char.isalpha())
     if letters == 0:
         return None
-    if len(_CJK.findall(text)) / letters >= _CJK_SHARE_FOR_ZH:
-        return "zh"
+    if _HAN_LANGUAGE is not None and len(_CJK.findall(text)) / letters >= _CJK_SHARE_FOR_ZH:
+        return _HAN_LANGUAGE
     words = _WORD.findall(text.lower())
     scores = {language: sum(1 for word in words if word in stopwords) for language, stopwords in _STOPWORDS.items()}
+    if not scores:
+        return None
     best = max(scores.values())
     if best == 0 or list(scores.values()).count(best) > 1:
         return None
@@ -199,7 +206,6 @@ PP_OCR_V6_CODES: frozenset[str] = frozenset(
     "af az bs ca ch chinese_cht cs cy da de en es et eu fi fr french ga german gl hr hu id is it japan ku la lb lt lv "
     "mi ms mt nl no oc pl pt qu rm ro rs_latin sk sl sq sv sw tl tr uz vi".split()
 )
-_PROFILE_LANGUAGE_TO_PP_OCR = {"zh": "ch"}
 _HEAD_BYTES = 1024
 _IMAGE_EXTENSIONS = (
     (b"\x89PNG\r\n\x1a\n", "png"),
@@ -210,6 +216,14 @@ _IMAGE_EXTENSIONS = (
 _SUCCESS_STATUSES = frozenset({"success", "partial_success"})
 
 
+def _rapidocr_code(language: str) -> str:
+    """The registry's ocr_codes.docling.rapidocr for a language code; other codes pass through unchanged."""
+    pack = get_language_pack(language)
+    if pack is None or pack.ocr_codes.docling is None:
+        return language
+    return pack.ocr_codes.docling.rapidocr
+
+
 def to_ppocr_code(languages: list[str]) -> list[str]:
     """Maps the profile languages to the single PP-OCRv6 code RapidOCR runs with.
 
@@ -217,7 +231,7 @@ def to_ppocr_code(languages: list[str]) -> list[str]:
     language of a list, so the result has one entry. An empty list or a code outside the PP-OCRv6
     set is a configuration error, never a silent fallback.
     """
-    codes = [_PROFILE_LANGUAGE_TO_PP_OCR.get(language, language) for language in languages]
+    codes = [_rapidocr_code(language) for language in languages]
     if not codes or any(code not in PP_OCR_V6_CODES for code in codes):
         raise ConfigurationError()
     return codes[:1]
@@ -440,7 +454,7 @@ def convert_range(
     document_timeout_seconds: float = DEFAULT_DOCUMENT_TIMEOUT_SECONDS,
 ) -> DoclingDocument:
     """Convert one PDF inclusive page range with original page numbers preserved."""
-    languages = ocr_languages or ["zh", "en", "it"]
+    languages = ocr_languages or list(language_codes())
     converter = _preset_document_converter(
         preset,
         languages,
@@ -459,7 +473,7 @@ def convert_whole(
     document_timeout_seconds: float = DEFAULT_DOCUMENT_TIMEOUT_SECONDS,
 ) -> DoclingDocument:
     """Convert an office or HTML file as one document."""
-    languages = ocr_languages or ["zh", "en", "it"]
+    languages = ocr_languages or list(language_codes())
     converter = _preset_document_converter(
         preset,
         languages,

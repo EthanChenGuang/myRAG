@@ -3,7 +3,7 @@ import { getActiveProfile } from '../embeddings/active-profile';
 import { originalName, saveArtifact } from './artifacts';
 import { loadIngestConfig } from './config';
 import { getIngestDeps, type IngestDeps } from './deps';
-import { ingest } from './index';
+import { blockedIngestResult, ingest } from './index';
 import { enqueueJob } from './ledger';
 import { ORIGINALS_BUCKET } from './object-store';
 import { QUEUED_INPUT_ARTIFACT, encodeQueuedInput, type QueuedInputRecord } from './queued-context';
@@ -167,6 +167,8 @@ export async function enqueueIngest(input: IngestInput, options: EnqueueIngestOp
 
 /** The switch of the write paths (D-22): the inline pipeline with RAG_INGEST_ASYNC off, the queue with it on. */
 export async function submitIngest(input: IngestInput, options: EnqueueIngestOptions = {}): Promise<IngestResult | EnqueueResult> {
+  const blocked = loadIngestConfig(getIngestDeps().ingestEnv()).pipelineBlocked;
+  if (blocked) return blockedIngestResult(blocked);
   const config = (options.queueConfig ?? queueConfigFromProcessEnv)();
   return config.ingestAsync ? enqueueIngest(input, options) : ingest(input);
 }

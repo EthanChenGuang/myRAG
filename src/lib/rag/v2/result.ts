@@ -150,6 +150,7 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
       exactIdLookup: config.exactIdLookup,
       rerankTierChat: config.v2.rerankTier.chat,
       rerankTierVoice: config.v2.rerankTier.voice,
+      ...(config.monolingual ? { monolingual: true as const } : {}),
     },
     security: securityHashComponent(security, { multiTenant: isMultiTenant() }),
   });

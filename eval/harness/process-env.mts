@@ -1,6 +1,7 @@
 import type { DeploymentMode } from './pglite-supabase.mts';
 import { loadPinnedEvalEnv } from './eval-env.mts';
 import { fixtureProcessEnv } from './fake-edge.mts';
+import { RUN_CONFIG_FIXTURE_KEY_TOKEN } from './run-config.mts';
 
 type MutableEnv = Record<string, string | undefined>;
 
@@ -20,9 +21,16 @@ export function applyFixtureProcessEnv(options: {
     if (name.startsWith('RAG_') || name.startsWith('NEXT_PUBLIC_RAG_')) delete env[name];
   }
   Object.assign(env, loadPinnedEvalEnv());
-  Object.assign(env, fixtureProcessEnv(options.edgeUrl, { vendorEmbeddingRoutes: options.vendorEmbeddingRoutes === true }));
+  const fixture = fixtureProcessEnv(options.edgeUrl, { vendorEmbeddingRoutes: options.vendorEmbeddingRoutes === true });
+  Object.assign(env, fixture);
   env.NODE_ENV = 'test';
   env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = options.deploymentMode;
   env.OPENAI_EMBEDDING_MODEL = 'text-embedding-3-small';
-  Object.assign(env, options.extra ?? {});
+  const extra = options.extra ?? {};
+  Object.assign(env, extra);
+  for (const name of ['COHERE_API_KEY', 'VOYAGE_API_KEY'] as const) {
+    if (extra[name] === RUN_CONFIG_FIXTURE_KEY_TOKEN) env[name] = fixture[name];
+  }
+  // Phase 4.1 D-12: `auto` is judged keyless unless the run asks for the hosted path, so the fake edge's key must not choose it.
+  if (env.RAG_RERANKER === 'auto' && extra.COHERE_API_KEY === undefined) env.COHERE_API_KEY = '';
 }

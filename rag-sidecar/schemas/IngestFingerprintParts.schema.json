@@ -1,0 +1,164 @@
+{
+  "$defs": {
+    "FingerprintSwitches": {
+      "additionalProperties": false,
+      "description": "State of this phase's ingestion-side switches, as the raw variable values (D-13, D-19, D-21, D-23).",
+      "properties": {
+        "caption_language": {
+          "enum": [
+            "en",
+            "document"
+          ],
+          "title": "Caption Language",
+          "type": "string"
+        },
+        "language_aware_ingest": {
+          "enum": [
+            "off",
+            "on"
+          ],
+          "title": "Language Aware Ingest",
+          "type": "string"
+        },
+        "table_header_repeat": {
+          "enum": [
+            "profile",
+            "always"
+          ],
+          "title": "Table Header Repeat",
+          "type": "string"
+        },
+        "table_row_serialization": {
+          "enum": [
+            "false",
+            "true"
+          ],
+          "title": "Table Row Serialization",
+          "type": "string"
+        }
+      },
+      "required": [
+        "language_aware_ingest",
+        "table_header_repeat",
+        "table_row_serialization",
+        "caption_language"
+      ],
+      "title": "FingerprintSwitches",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Parts hashed into `documents.ingest_fingerprint` (D-10); strings and integers only, so canonical JSON is stable.",
+  "properties": {
+    "assumed_defaults": {
+      "items": {
+        "enum": [
+          "parser_used",
+          "parser_version",
+          "processing_profile_id",
+          "processing_profile_version",
+          "ocr_engine_codes",
+          "chunking_profile_id",
+          "lexical_version",
+          "embedding_text_version",
+          "embedding_profile_id",
+          "embedding_profile_version",
+          "language_pack_versions",
+          "switches"
+        ],
+        "type": "string"
+      },
+      "title": "Assumed Defaults",
+      "type": "array"
+    },
+    "chunking_profile_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Chunking Profile Id",
+      "type": "string"
+    },
+    "embedding_profile_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Embedding Profile Id",
+      "type": "string"
+    },
+    "embedding_profile_version": {
+      "minimum": 1,
+      "title": "Embedding Profile Version",
+      "type": "integer"
+    },
+    "embedding_text_version": {
+      "minimum": 0,
+      "title": "Embedding Text Version",
+      "type": "integer"
+    },
+    "language_pack_versions": {
+      "patternProperties": {
+        "^[a-z]{2,3}$": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "title": "Language Pack Versions",
+      "type": "object"
+    },
+    "lexical_version": {
+      "minimum": 0,
+      "title": "Lexical Version",
+      "type": "integer"
+    },
+    "ocr_engine_codes": {
+      "items": {
+        "maxLength": 128,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 64,
+      "title": "Ocr Engine Codes",
+      "type": "array"
+    },
+    "parser_used": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Parser Used",
+      "type": "string"
+    },
+    "parser_version": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Parser Version",
+      "type": "string"
+    },
+    "processing_profile_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Processing Profile Id",
+      "type": "string"
+    },
+    "processing_profile_version": {
+      "minimum": 1,
+      "title": "Processing Profile Version",
+      "type": "integer"
+    },
+    "switches": {
+      "$ref": "#/$defs/FingerprintSwitches"
+    }
+  },
+  "required": [
+    "parser_used",
+    "parser_version",
+    "processing_profile_id",
+    "processing_profile_version",
+    "ocr_engine_codes",
+    "chunking_profile_id",
+    "lexical_version",
+    "embedding_text_version",
+    "embedding_profile_id",
+    "embedding_profile_version",
+    "language_pack_versions",
+    "switches"
+  ],
+  "title": "IngestFingerprintParts",
+  "type": "object"
+}

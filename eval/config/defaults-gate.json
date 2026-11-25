@@ -1,0 +1,146 @@
+{
+  "schema_version": 1,
+  "description": "Phase 4.1 defaults gate, pre-registered before any gate run (CONTEXT D-12, D-04, D-06, D-13, D-26). Every bound except the one absolute floor is computed when the gate runs from the baselines and noise config named here; the absolute floor is written only by `python -m rag_eval.defaults_gate derive` with the sha256 of the files it was derived from.",
+  "refusal_basis": "single_threshold",
+  "criteria": {
+    "G1": "rag_eval.gate passes in both fixture modes against the baseline of the mode: no gated slice (overall, language:*, category:cross_lingual, pair:*) beyond the noise band max(k * spread, floor) on the gated_metrics. The hosted-fake retrieval overrides (rerank model) are aligned with the baseline request options; every other request option must match.",
+    "G2": "Overall Recall@10 is at least the baseline of the mode minus the band in both modes, and ingest-mode overall Recall@10 is at least absolute.ingest.overall.recall_at_10_min (the ingest baseline mean minus the band, derived by the tool).",
+    "G3": "For each refusal_metrics entry, in both modes: false refusal at most the baseline plus the band, correct refusal at least the baseline minus the band. The 95% Clopper-Pearson upper bound of the false-refusal rate and n are printed next to every estimate. Refusal is the single-threshold behaviour.",
+    "G4": "No category:* slice with n of at least category_min_n drops beyond the band on any category_metrics metric; smaller or new categories are reported, not gated.",
+    "G5": "Fixture latency: the run's p95 of latency.total_key is within the latency.profile total_p95_ms budget and the p95 of latency.stage within that profile's stage budget. Missing latency data is skipped, never a pass.",
+    "G6": "The legacy_run_config run (RAG_PIPELINE=legacy set explicitly) has every paired difference against the baseline of the mode equal to zero, in both modes.",
+    "G7": "Live, capped, report-only (plan 04.1-08); not evaluated by this tool. Plan 04.1-07 fills the result's live slot.",
+    "G8": "Under the D-01 values set explicitly, the CI negative checks (--degrade drop_top_candidate, --max-results 1) still fail and the two-tenant matrix passes in both tenancy modes; given to evaluate as --g8 input. Missing input is skipped, never a pass."
+  },
+  "pass_rule": "The gate passes when the floor selection and the no-key fallback selection both resolve, every configuration of the chosen floor passes G1 to G5 in both modes (for legacy_rule these are configurations_required), the legacy run passes G6 in both modes, and G8 passes. A configuration passes only when every criterion has status pass.",
+  "configurations_required": [
+    "v2-default",
+    "v2-default-no-cells",
+    "v2-default-hosted-fake",
+    "v2-default-hosted-fake-no-cells"
+  ],
+  "candidates": {
+    "floor": {
+      "legacy_rule": [
+        "v2-default",
+        "v2-default-no-cells",
+        "v2-default-hosted-fake",
+        "v2-default-hosted-fake-no-cells"
+      ],
+      "similarity": [
+        "v2-default-similarity-floor",
+        "v2-default-similarity-floor-no-cells",
+        "v2-default-similarity-floor-hosted-fake",
+        "v2-default-similarity-floor-hosted-fake-no-cells"
+      ]
+    },
+    "fallback": {
+      "local_bm25": [
+        "v2-default",
+        "v2-default-no-cells"
+      ],
+      "none": [
+        "v2-default-fallback-none",
+        "v2-default-fallback-none-no-cells"
+      ],
+      "hosted_not_applicable": "The no-key fallback is never used on the hosted path (auto with a Cohere key reranks with Cohere), so hosted variants of the none fallback would be identical to v2-default-hosted-fake and v2-default-hosted-fake-no-cells; the fallback is judged on its two keyless configurations only."
+    }
+  },
+  "selection_rules": {
+    "floor": {
+      "rule": "D-04: a floor qualifies only if all its configurations pass in both modes. If both qualify, the one with the higher overall correct-refusal rate (mean over its configurations and both modes) wins and a tie goes to legacy_rule. If neither qualifies there is no flip (D-13).",
+      "requires_pass_on_all_configurations": true,
+      "prefer": {
+        "slice": "overall",
+        "metric": "correct_refusal_rate",
+        "direction": "higher"
+      },
+      "prefer_aggregate": "mean_over_configurations_and_modes",
+      "tie_goes_to": "legacy_rule"
+    },
+    "fallback": {
+      "rule": "D-06: local_bm25 is chosen only if its configurations pass in both modes and, for each configuration paired by position with the none configuration and in both modes, every within_band_of_none metric is at or above the none run's value minus the band of the mode's baseline slice. Otherwise none, if its configurations pass. If neither qualifies there is no flip (D-13).",
+      "requires_pass_on_all_configurations": true,
+      "prefer": "local_bm25",
+      "within_band_of_none": [
+        {
+          "slice": "overall",
+          "metric": "recall_at_10"
+        },
+        {
+          "slice": "overall",
+          "metric": "mrr"
+        },
+        {
+          "slice": "category:cross_lingual",
+          "metric": "recall_at_10"
+        }
+      ],
+      "otherwise": "none"
+    }
+  },
+  "modes": [
+    "prechunked",
+    "ingest"
+  ],
+  "baselines": {
+    "prechunked": "eval/baselines/fixture-baseline.json",
+    "ingest": "eval/baselines/fixture-ingest-baseline.json"
+  },
+  "noise_path": "eval/config/noise.json",
+  "gated_metrics": {
+    "correct_refusal_rate": "higher",
+    "false_refusal_rate": "lower",
+    "mrr": "higher",
+    "recall_at_10": "higher",
+    "recall_at_5": "higher"
+  },
+  "category_min_n": 8,
+  "category_metrics": [
+    "recall_at_10",
+    "mrr"
+  ],
+  "refusal_metrics": [
+    {
+      "slice": "overall",
+      "metric": "false_refusal_rate",
+      "direction": "lower"
+    },
+    {
+      "slice": "overall",
+      "metric": "correct_refusal_rate",
+      "direction": "higher"
+    },
+    {
+      "slice": "category:no_answer",
+      "metric": "correct_refusal_rate",
+      "direction": "higher"
+    }
+  ],
+  "latency_budgets_path": "eval/config/latency-budgets.json",
+  "latency": {
+    "profile": "chat",
+    "total_key": "retrieval_total",
+    "stage": "rerank"
+  },
+  "legacy_run_config": "legacy",
+  "legacy_requires_all_zero": true,
+  "absolute": {
+    "ingest": {
+      "overall": {
+        "recall_at_10_min": 0.7122834645669291,
+        "derivation": {
+          "rule": "ingest_baseline_overall_recall_at_10_mean_minus_band",
+          "baseline_path": "eval/baselines/fixture-ingest-baseline.json",
+          "baseline_sha256": "aedc5e57c955b1676ee590faa2404cd69df2a2ed8ece98b333e600bd72652ca0",
+          "baseline_mean": 0.7322834645669292,
+          "baseline_spread": 0.0,
+          "noise_k": 3.0,
+          "noise_floor": 0.02,
+          "band": 0.02,
+          "noise_sha256": "959adc75a6d7f06ad6319d5bc179daa692cf067b6a1bc731af1224d3f2d42333"
+        }
+      }
+    }
+  }
+}

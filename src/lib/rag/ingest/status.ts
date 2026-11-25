@@ -320,6 +320,8 @@ export async function resumeIngest(scope: TenantScope, documentId: string, optio
     return failed('invalid_scope');
   }
   if (!UUID.test(documentId)) return failed('document_not_found');
+  const blocked = loadIngestConfig(getIngestDeps().ingestEnv()).pipelineBlocked;
+  if (blocked) return failed(blocked);
   const signal = options.signal ?? AbortSignal.timeout(DEFAULT_INGEST_DEADLINE_MS);
   const writer = writerFor(scope, signal);
   if (!writer) {

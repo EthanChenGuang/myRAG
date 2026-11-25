@@ -268,6 +268,44 @@ def test_to_ppocr_code_gives_the_one_pp_ocr_code_for_the_profile_languages():
     assert docling_adapter.to_ppocr_code(["it"]) == ["it"]
 
 
+def test_to_ppocr_code_keeps_its_outputs_for_every_language_order():
+    assert docling_adapter.to_ppocr_code(["zh"]) == ["ch"]
+    assert docling_adapter.to_ppocr_code(["it", "zh"]) == ["it"]
+    assert docling_adapter.to_ppocr_code(["zh", "it"]) == ["ch"]
+    assert docling_adapter.to_ppocr_code(["de"]) == ["de"]
+
+
+def test_to_ppocr_code_reads_the_rapidocr_code_from_the_registry(monkeypatch):
+    from rag_sidecar.contracts.languages import LanguageRegistry
+
+    raw = json.loads((Path(__file__).resolve().parents[2] / "config" / "rag" / "language-packs.json").read_text())
+    next(pack for pack in raw["packs"] if pack["code"] == "zh")["ocr_codes"]["docling"]["rapidocr"] = "chinese_cht"
+    registry = LanguageRegistry.model_validate(raw)
+    monkeypatch.setattr(
+        docling_adapter,
+        "get_language_pack",
+        lambda code: next((pack for pack in registry.packs if pack.code == code), None),
+        raising=False,
+    )
+    assert docling_adapter.to_ppocr_code(["zh"]) == ["chinese_cht"]
+
+
+def test_the_default_ocr_language_list_is_the_registry_code_list(monkeypatch, tmp_path):
+    from rag_sidecar.contracts.languages import language_codes
+    from rag_sidecar.parse import presets
+
+    assert list(language_codes()) == ["zh", "en", "it"]
+    seen: list[list[str]] = []
+    monkeypatch.setattr(
+        docling_adapter, "_preset_document_converter", lambda _preset, languages, **_kw: seen.append(languages)
+    )
+    monkeypatch.setattr(docling_adapter, "_conversion_document", lambda *_args, **_kw: None)
+    docling_adapter.convert_range(tmp_path / "a.pdf", "fast", 1, 2)
+    docling_adapter.convert_whole(tmp_path / "a.docx", "fast")
+    assert seen == [["zh", "en", "it"], ["zh", "en", "it"]]
+    assert presets.preset_option_dict("fast")["ocr_languages"] == ["ch"]
+
+
 @pytest.mark.parametrize("languages", [["xx"], ["zh", "klingon"], []])
 def test_to_ppocr_code_rejects_a_language_outside_the_pp_ocr_v6_set(languages):
     with pytest.raises(ConfigurationError) as raised:

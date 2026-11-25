@@ -402,7 +402,9 @@ export async function POST(req: Request) {
       }
     }
 
-    if (loadIngestConfig({ RAG_INGEST_PIPELINE: env.RAG_INGEST_PIPELINE }).pipeline === 'unified') {
+    const ingestConfig = loadIngestConfig({ RAG_INGEST_PIPELINE: env.RAG_INGEST_PIPELINE });
+    if (ingestConfig.pipeline === 'unified') {
+      if (ingestConfig.pipelineBlocked) return NextResponse.json({ error: ingestConfig.pipelineBlocked }, { status: 503 });
       return await saveThroughIngest({ content, body, scope: tenant.scope, signal: req.signal });
     }
 

@@ -2,7 +2,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseLanguageRegistry, type LanguageRegistry } from '@/lib/rag/lang/registry';
-import { EN_STOPWORDS, IT_STOPWORDS } from '@/lib/rag/lang/detect';
 import { ENGLISH_POSSESSIVE, LEXICAL_VERSION, lexicalTokens } from '@/lib/rag/lexical/tokenize';
 import lexicalRules from '@/lib/rag/lexical/rules.json';
 import rewriteGateLexicon from '@/lib/rag/query/rewrite-gate.lexicon.json';
@@ -19,16 +18,10 @@ const shippedRaw = (): { packs: Array<Record<string, unknown>> } =>
 
 type Pack = LanguageRegistry['packs'][number];
 
-const DETECT_STOPWORDS: Record<string, ReadonlySet<string>> = { zh: new Set<string>(), en: EN_STOPWORDS, it: IT_STOPWORDS };
 const LEXICAL_STOPWORDS = lexicalRules.stopwords as Record<string, string[]>;
 // Rules the rewrite gate reads per language; elliptical_leading and stopwords exist for en and it only.
 const GATE_RULES = ['pronouns', 'relative_time', 'comparison', 'elliptical', 'compound', 'vague', 'small_talk', 'question_markers', 'first_person'] as const;
 
-const sameSet = (left: Iterable<string>, right: Iterable<string>): boolean => {
-  const a = [...new Set(left)].sort();
-  const b = [...new Set(right)].sort();
-  return a.length === b.length && a.every((value, index) => value === b[index]);
-};
 const canonical = (value: unknown): unknown =>
   value && typeof value === 'object' && !Array.isArray(value)
     ? Object.fromEntries(Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)))
@@ -37,8 +30,6 @@ const same = (left: unknown, right: unknown): boolean => JSON.stringify(canonica
 
 /** One check per consumer; each returns the codes whose pack disagrees with that consumer's current constant. */
 const CONSUMERS: Record<string, (packs: Pack[]) => string[]> = {
-  'detect.ts detection stopwords': (packs) =>
-    packs.filter((pack) => !sameSet(pack.stopwords.detection, DETECT_STOPWORDS[pack.code] ?? [])).map((p) => p.code),
   'tokenizer lexical stopwords': (packs) =>
     packs.filter((pack) => !same(pack.stopwords.lexical, LEXICAL_STOPWORDS[pack.code])).map((p) => p.code),
   'tokenizer folding': (packs) => {
@@ -93,7 +84,7 @@ describe('registry equals the current constants, one check per consumer', () => 
     expect(LEXICAL_VERSION).toBe(2);
   });
 
-  it('changing one detection stopword fails exactly the stopword check', () => {
+  it('changing one detection stopword fails no consumer check: detect.ts reads the registry (03.2-10)', () => {
     const raw = shippedRaw();
     const italian = raw.packs.find((pack) => pack.code === 'it') as { stopwords: { detection: string[] } };
     italian.stopwords.detection = [...italian.stopwords.detection.slice(1), 'parolanuova'];
@@ -101,6 +92,6 @@ describe('registry equals the current constants, one check per consumer', () => 
     const failing = Object.entries(CONSUMERS)
       .filter(([, check]) => check(drifted).length > 0)
       .map(([name]) => name);
-    expect(failing).toEqual(['detect.ts detection stopwords']);
+    expect(failing).toEqual([]);
   });
 });

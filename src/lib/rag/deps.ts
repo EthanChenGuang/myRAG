@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { env } from '@/lib/env';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import type { RagEnvInput } from './config';
+import { loadRagConfig, type RagEnvInput } from './config';
+import type { RawPipelineEnv } from './lang/resolve';
 import type { EmbeddingProfile } from './embeddings/active-profile';
 import { EmbeddingProfileMismatch } from './embeddings/mrl';
 import { embedText } from './embeddings/openai';
@@ -13,6 +14,7 @@ import { loadInjectionDetectorConfig, type Detector } from './security/detectors
 import type { PromptGuardClassifier } from './security/injection-check';
 import { createLakeraDetector, lakeraSettingsFrom } from './security/lakera';
 import { classifyWithPromptGuard } from './security/prompt-guard-client';
+import { createQueryLlm, type QueryLlm } from './query/llm';
 
 export interface ProfileQueryEmbedding {
   vector: number[];
@@ -39,7 +41,11 @@ export interface RagDeps {
   lakeraDetector: () => Detector;
   /** The sidecar Prompt Guard client; answers not_configured without RAG_SIDECAR_URL and RAG_SIDECAR_SECRET. */
   promptGuardClassifier: PromptGuardClassifier;
+  /** The only way pipeline code reaches the query LLM (D-13); tests and eval inject the deterministic fake. */
+  queryLlm: () => QueryLlm;
   fetch: typeof fetch;
+  /** The two pipeline variables exactly as the process has them (undefined when unset), for the D-02 startup check. */
+  rawPipelineEnv: () => RawPipelineEnv;
 }
 
 function readRagEnvInput(): RagEnvInput {
@@ -56,6 +62,7 @@ function readRagEnvInput(): RagEnvInput {
     COHERE_API_KEY: process.env.COHERE_API_KEY ?? env.COHERE_API_KEY,
     COHERE_BASE_URL: process.env.COHERE_BASE_URL ?? env.COHERE_BASE_URL,
     RAG_REFUSAL_THRESHOLD: process.env.RAG_REFUSAL_THRESHOLD ?? env.RAG_REFUSAL_THRESHOLD,
+    RAG_REFUSAL_FLOOR: process.env.RAG_REFUSAL_FLOOR,
     RAG_CONTEXT_EDGE_ORDER: process.env.RAG_CONTEXT_EDGE_ORDER ?? env.RAG_CONTEXT_EDGE_ORDER,
     RAG_CONTEXT_COMPRESSION: process.env.RAG_CONTEXT_COMPRESSION ?? env.RAG_CONTEXT_COMPRESSION,
     RAG_CONTEXT_TOKEN_BUDGET: process.env.RAG_CONTEXT_TOKEN_BUDGET ?? env.RAG_CONTEXT_TOKEN_BUDGET,
@@ -75,7 +82,32 @@ function readRagEnvInput(): RagEnvInput {
     RAG_DOMAIN_EMBEDDINGS: process.env.RAG_DOMAIN_EMBEDDINGS ?? env.RAG_DOMAIN_EMBEDDINGS,
     RAG_DOMAIN_EMBEDDING_MAX_LEGS: process.env.RAG_DOMAIN_EMBEDDING_MAX_LEGS ?? env.RAG_DOMAIN_EMBEDDING_MAX_LEGS,
     RAG_DOMAIN_EMBEDDING_TIMEOUT_MS: process.env.RAG_DOMAIN_EMBEDDING_TIMEOUT_MS ?? env.RAG_DOMAIN_EMBEDDING_TIMEOUT_MS,
+    RAG_QUERY_LAYER: process.env.RAG_QUERY_LAYER ?? env.RAG_QUERY_LAYER,
+    RAG_QUERY_FRAMEWORK: process.env.RAG_QUERY_FRAMEWORK ?? env.RAG_QUERY_FRAMEWORK,
+    RAG_QUERY_LLM_MODEL: process.env.RAG_QUERY_LLM_MODEL ?? env.RAG_QUERY_LLM_MODEL,
+    RAG_QUERY_CONDENSE: process.env.RAG_QUERY_CONDENSE ?? env.RAG_QUERY_CONDENSE,
+    RAG_QUERY_EXPAND: process.env.RAG_QUERY_EXPAND ?? env.RAG_QUERY_EXPAND,
+    RAG_QUERY_DECOMPOSE: process.env.RAG_QUERY_DECOMPOSE ?? env.RAG_QUERY_DECOMPOSE,
+    RAG_QUERY_TRANSLATE: process.env.RAG_QUERY_TRANSLATE ?? env.RAG_QUERY_TRANSLATE,
+    RAG_QUERY_DATE_NORMALIZE: process.env.RAG_QUERY_DATE_NORMALIZE ?? env.RAG_QUERY_DATE_NORMALIZE,
+    RAG_QUERY_HYDE: process.env.RAG_QUERY_HYDE ?? env.RAG_QUERY_HYDE,
+    RAG_QUERY_TRANSLATE_DISABLED_PROFILES: process.env.RAG_QUERY_TRANSLATE_DISABLED_PROFILES ?? env.RAG_QUERY_TRANSLATE_DISABLED_PROFILES,
+    RAG_QUERY_VOICE_TRANSFORMS: process.env.RAG_QUERY_VOICE_TRANSFORMS ?? env.RAG_QUERY_VOICE_TRANSFORMS,
+    RAG_SEMANTIC_CACHE: process.env.RAG_SEMANTIC_CACHE ?? env.RAG_SEMANTIC_CACHE,
+    RAG_SEMANTIC_CACHE_TTL: process.env.RAG_SEMANTIC_CACHE_TTL ?? env.RAG_SEMANTIC_CACHE_TTL,
+    RAG_SEMANTIC_CACHE_REFUSAL_TTL: process.env.RAG_SEMANTIC_CACHE_REFUSAL_TTL ?? env.RAG_SEMANTIC_CACHE_REFUSAL_TTL,
+    RAG_SEMANTIC_CACHE_MAX_DISTANCE: process.env.RAG_SEMANTIC_CACHE_MAX_DISTANCE ?? env.RAG_SEMANTIC_CACHE_MAX_DISTANCE,
+    RAG_SEMANTIC_CACHE_EMBED_STORE: process.env.RAG_SEMANTIC_CACHE_EMBED_STORE ?? env.RAG_SEMANTIC_CACHE_EMBED_STORE,
   };
+}
+
+let defaultQueryLlm: QueryLlm | null = null;
+
+/** Built on first use for the configured RAG_QUERY_LLM_MODEL; the provider module itself loads on the first call. */
+function defaultQueryLlmClient(): QueryLlm {
+  const model = loadRagConfig(getRagDeps().ragEnv()).queryLayer.model;
+  if (!defaultQueryLlm || defaultQueryLlm.model !== model) defaultQueryLlm = createQueryLlm({ model });
+  return defaultQueryLlm;
 }
 
 const defaults: RagDeps = {
@@ -104,7 +136,9 @@ const defaults: RagDeps = {
       gate: () => lakeraSettingsFrom(getRagDeps().securityConfig(), isMultiTenant()),
     }),
   promptGuardClassifier: (items, opts) => classifyWithPromptGuard(items, { ...opts, fetch: getRagDeps().fetch }),
+  queryLlm: defaultQueryLlmClient,
   fetch: globalThis.fetch.bind(globalThis),
+  rawPipelineEnv: () => ({ RAG_PIPELINE: process.env.RAG_PIPELINE, RAG_INGEST_PIPELINE: process.env.RAG_INGEST_PIPELINE }),
 };
 
 let overrides: Partial<RagDeps> = {};
@@ -119,4 +153,5 @@ export function setRagDepsForTests(partial: Partial<RagDeps>): void {
 
 export function resetRagDepsForTests(): void {
   overrides = {};
+  defaultQueryLlm = null;
 }

@@ -60,7 +60,35 @@ describe('buildJobSettings', () => {
     expect(snapshot.vlm_detect).toBe(false);
     expect(snapshot.vlm_model).toBe(imageCaptionModelId());
     expect(snapshot.embed_mode).toBe('sync');
-    expect(JobSettingsSnapshotSchema.parse(snapshot)).toEqual(snapshot);
+    expect(JobSettingsSnapshotSchema.parse(snapshot)).toMatchObject(snapshot);
+  });
+
+  test('the snapshot carries no Phase 3.2 field at its default, so a sidecar deployed before them still reads it', () => {
+    const snapshot = buildJobSettings({
+      queueConfig: loadQueueConfig({}),
+      profile,
+      bounds: { min_tier: 'fast', max_tier: 'premium' },
+      routingConfig,
+    });
+    expect(Object.keys(snapshot).sort()).toEqual([
+      'cloud_allowed',
+      'doc_type',
+      'embed_mode',
+      'escalation',
+      'max_tier',
+      'min_tier',
+      'ocr_languages',
+      'premium_max_pages_per_doc',
+      'premium_page_budget',
+      'profile_id',
+      'profile_version',
+      'progressive',
+      'routing',
+      'routing_config_version',
+      'vlm_detect',
+      'vlm_model',
+    ]);
+    expect(JobSettingsSnapshotSchema.safeParse(snapshot).success).toBe(true);
   });
 
   test('backfill with OpenAI embedding profile forces batch_api and progressive off', () => {
