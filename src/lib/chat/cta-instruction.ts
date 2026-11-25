@@ -1,3 +1,5 @@
+import { buildConciseCtaInstruction, type AnswerStyle } from './answer-style';
+
 export const CTA_INSTRUCTION = `It is absolutely critical that you end EVERY response with a conversational call-to-action that encourages continued dialogue.
       
 Your closing paragraph should:
@@ -12,9 +14,7 @@ For example:
 
 This conversational prompt is essential for keeping the dialogue flowing naturally and encouraging users to continue exploring the topic with you.`;
 
-export const STRICT_CTA_ADDENDUM = `Strict knowledge-base mode: the follow-up questions you suggest must be answerable from the knowledge-base context you were given. Never offer to share general knowledge, typical figures, estimates, market data or anything else from outside the provided documents, and never suggest a question the context cannot answer.`;
-
-/** The closing call-to-action instruction. Strict mode adds a rule that keeps follow-up offers inside the knowledge base; other modes are unchanged. */
-export function buildCtaInstruction(ragMode: string): string {
-  return ragMode === 'strict' ? `${CTA_INSTRUCTION}\n\n${STRICT_CTA_ADDENDUM}` : CTA_INSTRUCTION;
+/** The closing call-to-action instruction. Classic is the original text in every mode; the concise style uses separated follow-up lines and, in strict mode, keeps them inside the knowledge base. */
+export function buildCtaInstruction(ragMode: string, style: AnswerStyle = 'classic'): string {
+  return style === 'concise' ? buildConciseCtaInstruction(ragMode) : CTA_INSTRUCTION;
 }

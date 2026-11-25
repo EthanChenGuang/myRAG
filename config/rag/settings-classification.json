@@ -18,6 +18,10 @@
       "side": "query"
     },
     {
+      "name": "RAG_ANSWER_STYLE",
+      "side": "query"
+    },
+    {
       "name": "RAG_BEHAVIOR_MODE",
       "side": "query"
     },

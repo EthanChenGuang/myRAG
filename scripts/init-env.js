@@ -323,6 +323,11 @@ RAG_SIMILARITY_THRESHOLD=0.45
 # bypass: Ignore knowledge base entirely, pure ChatGPT-like behavior
 RAG_BEHAVIOR_MODE=strict
 
+# Chat answer style
+# classic: headed markdown answer with a closing paragraph of follow-up offers (default)
+# concise: one-line answer, short fact bullets, then --- and up to 3 "↳ " follow-up questions
+RAG_ANSWER_STYLE=classic
+
 # -----------------------------
 # RAG EVALUATION & SIDECAR
 # -----------------------------

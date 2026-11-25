@@ -250,6 +250,11 @@
       "knownGaps": []
     },
     {
+      "name": "RAG_ANSWER_STYLE",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_BEHAVIOR_MODE",
       "status": "legacy",
       "knownGaps": []
