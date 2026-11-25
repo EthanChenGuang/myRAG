@@ -302,7 +302,7 @@ def _answer_record():
         "answerLanguage": "en",
         "invalidCitations": 0,
         "citations": [_citation()],
-        "groundedness": _scored(),
+        "groundedness": {**_scored(), "reason": None, "truncated": False},
         "feedback": {
             "vote": "not_helpful",
             "reasons": ["incomplete"],
