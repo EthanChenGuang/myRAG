@@ -13,7 +13,7 @@ import {
 } from '@/lib/rag/query/variants';
 import { mintScope } from '@/lib/rag/tenant/scope';
 import { createTraceCollector } from '@/lib/rag/trace/collector';
-import type { QueryVariant } from '@/lib/rag/types';
+import type { QueryParamsOverrides, QueryVariant } from '@/lib/rag/types';
 import { runQueryStages } from '@/lib/rag/v2/stages/query';
 import { installDeps, uninstallDeps } from '../helpers/pipeline-fakes';
 
@@ -197,7 +197,7 @@ describe('runQueryStages with the query layer on', () => {
       profile: 'eval',
       signal: new AbortController().signal,
       collector: createTraceCollector({ profile: 'eval', tenantKey: 's:default' }),
-      stageOverrides: { queryLayer: { queryParams: { max_searches: 5 } } },
+      stageOverrides: { queryLayer: { queryParams: { max_searches: 5 } as QueryParamsOverrides } },
     });
     expect(out.variants.map((variant) => variant.kind)).toEqual(['original', 'condensed', 'sub_question', 'sub_question', 'sub_question']);
     expect(out.queryLayer?.plan?.skipped).toEqual([
