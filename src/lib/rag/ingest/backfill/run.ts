@@ -299,13 +299,21 @@ export async function batchProgress(batchId: string, deps: RunDeps): Promise<Bat
   return progressOf(await call(rpcOf(deps), 'rag_batch_progress', { p_batch_id: batchId }, deps.signal));
 }
 
-/** Jobs that are not terminal: queued, leased, or leased by a worker that died and waiting for the lease to expire. */
+/** Deferred jobs wait for the rag:backfill process (Batch API embeddings), not for a worker (D-35). */
+export const EMBED_DEFERRED = 'embed_deferred';
+
+/** Jobs a worker still has to finish: queued, leased, or leased by a worker that died and waiting for the lease to expire. */
 export function openJobs(progress: BatchProgress): number {
   let open = 0;
   for (const byStatus of Object.values(progress.counts)) {
-    for (const [status, n] of Object.entries(byStatus)) if (!TERMINAL.has(status)) open += n;
+    for (const [status, n] of Object.entries(byStatus)) if (!TERMINAL.has(status) && status !== EMBED_DEFERRED) open += n;
   }
   return open;
+}
+
+/** Ingest jobs parked at embed_deferred, waiting for their Batch API vectors. */
+export function deferredJobs(progress: BatchProgress): number {
+  return progress.counts.ingest?.[EMBED_DEFERRED] ?? 0;
 }
 
 function defaultSleep(ms: number, signal: AbortSignal): Promise<void> {
