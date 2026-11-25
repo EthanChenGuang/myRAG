@@ -2,6 +2,16 @@
   "schemaVersion": 1,
   "vars": [
     {
+      "name": "ANTHROPIC_API_KEY",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "ANTHROPIC_BASE_URL",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "COHERE_API_KEY",
       "status": "managed",
       "knownGaps": []
@@ -220,6 +230,11 @@
       ]
     },
     {
+      "name": "RAG_ANSWER_FEEDBACK",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_BEHAVIOR_MODE",
       "status": "legacy",
       "knownGaps": []
@@ -230,6 +245,16 @@
       "knownGaps": [
         "env-ts"
       ]
+    },
+    {
+      "name": "RAG_CITATIONS",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_CLAUDE_CITATIONS",
+      "status": "managed",
+      "knownGaps": []
     },
     {
       "name": "RAG_COMPLETENESS_CONFIDENCE",
@@ -400,6 +425,31 @@
         "config-server",
         "env-ts"
       ]
+    },
+    {
+      "name": "RAG_GROUNDEDNESS",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_GROUNDEDNESS_TIMEOUT_MS",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_GROUNDEDNESS_VECTARA_OPT_IN",
+      "status": "managed",
+      "knownGaps": []
     },
     {
       "name": "RAG_HIGH_THRESHOLD",
