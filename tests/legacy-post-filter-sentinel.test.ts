@@ -7,17 +7,18 @@ import { describe, expect, it } from 'vitest';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ROUTE_PATH = path.join(ROOT, 'src/app/api/chat/route.ts');
 const ASSEMBLE_PATH = path.join(ROOT, 'src/lib/rag/context/assemble.ts');
+const RELEVANCE_PATH = path.join(ROOT, 'src/lib/rag/context/relevance.ts');
 const route = readFileSync(ROUTE_PATH, 'utf8');
 const assemble = readFileSync(ASSEMBLE_PATH, 'utf8');
+const relevance = readFileSync(RELEVANCE_PATH, 'utf8');
 
 const RE_CHECK =
   'Re-check tests/rag-assemble-differential.test.mts, tests/legacy-post-filter.test.ts and the chat snapshots in ' +
   'tests/fixtures/characterization/chat.json (tests/rag/characterize-chat.test.ts) before updating this sentinel.';
 
 const ASSEMBLE_LITERALS: Array<[string, string]> = [
-  ['Filter 1 condition', 'if (!applyRelevanceFilter || chunk.similarity > 0.65 || isRelevantByName || (hasImage && chunk.similarity > 0.25)) {'],
-  ['query term length filter', '.filter((term) => term.length > 3)'],
-  ['query term stripping', ".map((term) => term.replace(/[^a-z0-9]/g, ''))"],
+  ['Filter 1 condition', 'if (!applyRelevanceFilter || reason !== null) {'],
+  ['Filter 1 kept-by label', "const keptBy: KeptBy = reason ?? (hasImage ? 'image' : 'similarity');"],
   ['Filter 2 condition', 'if (doc.similarity && (doc.similarity >= 0.6 || (doc.image_url && doc.similarity > 0.25))) return true;'],
   ['Filter 2 name match', 'term.length > 3 && docName.includes(term)'],
   ['refusal decision', 'const refusalCandidate ='],
@@ -25,6 +26,12 @@ const ASSEMBLE_LITERALS: Array<[string, string]> = [
   ['refusal context check', "context.trim().toLowerCase().startsWith('no relevant context found')"],
   ['context wrapper', '=== RELEVANT INFORMATION FROM DOCUMENTS ==='],
   ['image extensions', "const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg'];"],
+];
+
+const RELEVANCE_LITERALS: Array<[string, string]> = [
+  ['legacy keep floors', 'const LEGACY_KEEP_FLOORS: LegacyKeepFloors = { text: 0.65, image: 0.25 };'],
+  ['query term length filter', '.filter((term) => term.length > 3)'],
+  ['query term stripping', ".map((term) => term.replace(/[^a-z0-9]/g, ''))"],
 ];
 
 const ROUTE_LITERALS: Array<[string, string]> = [
@@ -37,7 +44,7 @@ const ROUTE_LITERALS: Array<[string, string]> = [
 
 interface PinnedRegion {
   label: string;
-  file: 'route' | 'assemble';
+  file: 'route' | 'assemble' | 'relevance';
   start: string;
   end: string;
   sha256: string;
@@ -52,18 +59,18 @@ const PINNED_REGIONS: PinnedRegion[] = [
     sha256: '9dd38a202878ab110bb9a8265dd1cdc21b5a86754152b551c8eca500b375bb10',
   },
   {
-    label: 'assemble query-term helpers (normalizeQueryText, queryTermsOf)',
-    file: 'assemble',
+    label: 'legacy relevance helpers (normalizeQueryText, legacyQueryTerms, legacyKeepReason)',
+    file: 'relevance',
     start: 'export function normalizeQueryText(input: unknown): string {',
-    end: ".map((term) => term.replace(/[^a-z0-9]/g, ''));\n}",
-    sha256: '1b7b86393df4d017c1f37727429ced90f2185ed415465ea9b92b4a98e35205ae',
+    end: "  if (candidate.hasImage && scored && similarity > floors.image) return 'image';\n  return null;\n}",
+    sha256: 'b3e9af6e3946220caf751f6ff7a778e0607db1b4abba854dcdc0dedc56d19c18',
   },
   {
     label: 'assemble function bodies (filterCandidates, buildContext)',
     file: 'assemble',
     start: 'export function filterCandidates<C extends AssemblyCandidate>(',
     end: 'return { context, usedDocuments, relevantChunks, kept, queryTerms, sourceImages, links, refusalCandidate, blocks: labeller.blocks };\n}',
-    sha256: '50af236148ac862c3cfb2ef519a6ab697c8f7a7463fbcc95502d368a36915e4c',
+    sha256: 'aef4dbea3a6459a4056505f84cce778cc65b8ab4ff405638ed48a53b2deef23c',
   },
 ];
 
@@ -81,20 +88,26 @@ describe('shared assembly sentinel', () => {
     expect(assemble.includes(literal), message).toBe(true);
   });
 
+  it.each(RELEVANCE_LITERALS)('relevance.ts still contains the %s literal', (label, literal) => {
+    const message = `src/lib/rag/context/relevance.ts no longer contains the ${label} literal: ${literal}\n${RE_CHECK}`;
+    expect(relevance.includes(literal), message).toBe(true);
+  });
+
   it.each(ROUTE_LITERALS)('the chat route still contains the %s literal', (label, literal) => {
     const message = `src/app/api/chat/route.ts no longer contains the ${label} literal: ${literal}\n${RE_CHECK}`;
     expect(route.includes(literal), message).toBe(true);
   });
 
   it('keeps the term-filter literals in both the chunk filter and the document filter', () => {
-    const occurrences = (needle: string) => assemble.split(needle).length - 1;
-    expect(occurrences('term.length > 3')).toBeGreaterThanOrEqual(2);
-    expect(occurrences(".map((term) => term.replace(/[^a-z0-9]/g, ''))")).toBeGreaterThanOrEqual(1);
+    const occurrences = (text: string, needle: string) => text.split(needle).length - 1;
+    expect(occurrences(assemble, 'term.length > 3')).toBeGreaterThanOrEqual(1);
+    expect(occurrences(relevance, 'term.length > 3')).toBeGreaterThanOrEqual(1);
+    expect(occurrences(relevance, ".map((term) => term.replace(/[^a-z0-9]/g, ''))")).toBeGreaterThanOrEqual(1);
   });
 
   it.each(PINNED_REGIONS)('the $label is byte-identical to the pinned version', ({ label, file, start, end, sha256 }) => {
-    const target = file === 'route' ? 'src/app/api/chat/route.ts' : 'src/lib/rag/context/assemble.ts';
-    const text = region(file === 'route' ? route : assemble, start, end);
+    const target = { route: 'src/app/api/chat/route.ts', assemble: 'src/lib/rag/context/assemble.ts', relevance: 'src/lib/rag/context/relevance.ts' }[file];
+    const text = region({ route, assemble, relevance }[file], start, end);
     expect(text, `could not find a unique ${label} in ${target}`).not.toBeNull();
     const digest = createHash('sha256').update(text as string, 'utf8').digest('hex');
     const message = `${target} changed inside the ${label}. ${RE_CHECK} Then update the pinned sha256 in this test.`;
