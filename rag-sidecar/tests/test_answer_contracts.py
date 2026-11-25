@@ -368,3 +368,249 @@ def test_committed_thresholds_file_holds_the_vendor_default_for_every_scorable_c
         ("hhem_2_1_open", "en"),
     }
     assert all(cell.threshold == 0.5 and cell.source == "default" and cell.fitted_at is None for cell in thresholds.cells)
+
+
+# --- 05-07: Phase 5 extensions of existing contracts (D-05, D-12, D-19, D-22, D-23, D-24)
+
+import json
+from pathlib import Path
+
+from rag_sidecar.contracts import eval_run
+from rag_sidecar.contracts.baseline import Baseline
+from rag_sidecar.contracts.eval_run import RagRunOptions, RagRunRequest, RagTrace
+from rag_sidecar.contracts.latency import LatencyBudgets
+from rag_sidecar.contracts.report import EvalReport
+from rag_sidecar.contracts.review import ReviewQueueItem
+from rag_sidecar.contracts.samples import build_samples
+from rag_sidecar.contracts.sidecar import SidecarReady
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _trace(**overrides):
+    base = dict(build_samples()["samples"]["RagTrace"])
+    for key in ("citation_strategy", "invalid_citations", "groundedness"):
+        base.pop(key, None)
+    base["citations"] = []
+    base.update(overrides)
+    return base
+
+
+def test_rag_trace_without_phase5_fields_validates_with_defaults():
+    trace = RagTrace.model_validate(_trace())
+    assert trace.citations == []
+    assert trace.citation_strategy is None
+    assert trace.invalid_citations == 0
+    assert trace.groundedness is None
+    assert trace.schema_version == 1
+
+
+def test_rag_trace_accepts_chunk_alias_citation_record():
+    trace = RagTrace.model_validate(
+        _trace(citations=[_citation()], citation_strategy="chunk-alias", invalid_citations=1)
+    )
+    assert isinstance(trace.citations[0], CitationRecord)
+    assert trace.citation_strategy == "chunk-alias"
+    assert trace.invalid_citations == 1
+
+
+def test_rag_trace_accepts_groundedness_for_eval_runs():
+    groundedness = {
+        "status": "scored",
+        "scorer": "hhem_2_1_open",
+        "score": 0.8,
+        "label": "verified",
+        "threshold": 0.5,
+        "thresholdSource": "default",
+    }
+    trace = RagTrace.model_validate(_trace(groundedness=groundedness))
+    assert trace.groundedness is not None and trace.groundedness.label == "verified"
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"citations": [{"document_id": "doc-001", "chunk_id": "chunk-001"}]},
+        {"citations": [{"document_id": "doc-001"}]},
+        {"citation_strategy": "inline"},
+        {"invalid_citations": -1},
+    ],
+)
+def test_rag_trace_rejects_old_citation_shape_and_bad_fields(overrides):
+    with pytest.raises(ValidationError):
+        RagTrace.model_validate(_trace(**overrides))
+
+
+def test_trace_citation_is_citation_record():
+    assert eval_run.TraceCitation is CitationRecord
+
+
+def test_rag_run_options_citations_and_groundedness_default_false():
+    options = RagRunOptions()
+    assert options.citations is False
+    assert options.groundedness is False
+    request = RagRunRequest.model_validate(
+        {"query": "q", "options": {"citations": True, "groundedness": True}}
+    )
+    assert request.options.citations is True
+    assert request.options.groundedness is True
+    assert RagRunRequest.model_validate({"query": "q"}).options.citations is False
+
+
+def _review(**overrides):
+    base = {
+        "trace_id": "t-1",
+        "observation_id": "o-1",
+        "captured_at": "2026-01-01T00:00:00Z",
+        "tenant_key": "tenant-a",
+        "query_masked": "q",
+        "answer_masked": "a",
+        "context_masked": "c",
+        "model": "m",
+    }
+    base.update(overrides)
+    return base
+
+
+def test_review_queue_item_reasons():
+    assert ReviewQueueItem.model_validate(_review()).reasons == []
+    item = ReviewQueueItem.model_validate(_review(reasons=["feedback_negative", "groundedness_flagged"]))
+    assert item.reasons == ["feedback_negative", "groundedness_flagged"]
+    assert ReviewQueueItem.model_validate(_review(reasons=["sampled"])).reasons == ["sampled"]
+
+
+@pytest.mark.parametrize("reasons", [["spam"], ["sampled", "sampled"]])
+def test_review_queue_item_rejects_bad_reasons(reasons):
+    with pytest.raises(ValidationError):
+        ReviewQueueItem.model_validate(_review(reasons=reasons))
+
+
+def _budgets(**extra):
+    base = json.loads((REPO_ROOT / "eval" / "config" / "latency-budgets.json").read_text())
+    base.update(extra)
+    return base
+
+
+GROUNDEDNESS_BUDGETS = {
+    "hhem_2_1_open": {"p50_ms": 2500, "p95_ms": 5000},
+    "hhem_2_3_vectara": {"p50_ms": 4000, "p95_ms": 8000},
+    "report_only": True,
+}
+
+
+def test_latency_budgets_groundedness_section_is_optional_and_report_only():
+    assert LatencyBudgets.model_validate(_budgets()).groundedness is None
+    budgets = LatencyBudgets.model_validate(_budgets(groundedness=GROUNDEDNESS_BUDGETS))
+    assert budgets.groundedness is not None
+    assert budgets.groundedness.report_only is True
+    assert budgets.groundedness.hhem_2_1_open is not None
+    assert budgets.groundedness.hhem_2_1_open.p95_ms == 5000
+    assert budgets.profiles["chat"].total_p95_ms == 2000
+
+
+@pytest.mark.parametrize(
+    "section",
+    [
+        {**GROUNDEDNESS_BUDGETS, "report_only": False},
+        {**GROUNDEDNESS_BUDGETS, "hhem_2_1_open": {"p50_ms": 6000, "p95_ms": 5000}},
+        {**GROUNDEDNESS_BUDGETS, "hhem_2_1_open": {"p50_ms": 0, "p95_ms": 5000}},
+        {**GROUNDEDNESS_BUDGETS, "none": {"p50_ms": 1, "p95_ms": 2}},
+    ],
+)
+def test_latency_budgets_groundedness_rejects(section):
+    with pytest.raises(ValidationError):
+        LatencyBudgets.model_validate(_budgets(groundedness=section))
+
+
+def test_sidecar_ready_scorers():
+    assert SidecarReady.model_validate({"status": "ready"}).scorers == []
+    ready = SidecarReady.model_validate({"status": "ready", "scorers": ["hhem_2_1_open"]})
+    assert ready.scorers == ["hhem_2_1_open"]
+
+
+@pytest.mark.parametrize("scorers", [["hhem_9"], ["none"], ["hhem_2_1_open", "hhem_2_1_open"]])
+def test_sidecar_ready_rejects_unknown_or_repeated_scorers(scorers):
+    with pytest.raises(ValidationError):
+        SidecarReady.model_validate({"status": "ready", "scorers": scorers})
+
+
+def _report(**extra):
+    base = dict(build_samples()["samples"]["EvalReport"])
+    for key in (
+        "invalid_citation_rate",
+        "citation_coverage",
+        "cited_gold_hit",
+        "raw_invalid_markers",
+        "groundedness_labels",
+        "groundedness_latency",
+        "by_strategy",
+    ):
+        base.pop(key, None)
+    base.update(extra)
+    return base
+
+
+def test_eval_report_without_citation_fields_validates():
+    report = EvalReport.model_validate(_report())
+    assert report.invalid_citation_rate is None
+    assert report.citation_coverage is None
+    assert report.cited_gold_hit is None
+    assert report.raw_invalid_markers is None
+    assert report.groundedness_labels == {}
+    assert report.groundedness_latency == {}
+    assert report.by_strategy == {}
+
+
+def test_eval_report_accepts_citation_metrics_label_counts_and_strategy_slices():
+    metric = {"value": 0.5, "n": 4}
+    report = EvalReport.model_validate(
+        _report(
+            invalid_citation_rate={"value": 0.0, "n": 4},
+            citation_coverage=metric,
+            cited_gold_hit=metric,
+            raw_invalid_markers=2,
+            groundedness_labels={
+                "hhem_2_1_open": {"en": {"verified": 2, "possibly_unreliable": 1}},
+                "none": {"it": {"not_checked": 1}},
+            },
+            groundedness_latency={"hhem_2_1_open": {"p50_ms": 100, "p95_ms": 200, "n": 3}},
+            by_strategy={
+                "chunk-alias": {
+                    "items": 4,
+                    "invalid_citation_rate": {"value": 0.0, "n": 4},
+                    "citation_coverage": metric,
+                    "cited_gold_hit": metric,
+                    "generation_latency": {"p50_ms": 300, "p95_ms": 900, "n": 4},
+                },
+                "none": {"items": 1},
+            },
+        )
+    )
+    counts = report.groundedness_labels["hhem_2_1_open"]["en"]
+    assert (counts.verified, counts.possibly_unreliable, counts.not_checked) == (2, 1, 0)
+    assert report.by_strategy["chunk-alias"].items == 4
+    assert report.by_strategy["none"].citation_coverage is None
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"groundedness_labels": {"hhem_9": {"en": {"verified": 1}}}},
+        {"groundedness_labels": {"hhem_2_1_open": {"en": {"verified": -1}}}},
+        {"groundedness_labels": {"hhem_2_1_open": {"en": {"unknown": 1}}}},
+        {"by_strategy": {"inline": {"items": 1}}},
+        {"raw_invalid_markers": -1},
+        {"groundedness_latency": {"none": {"p50_ms": 1, "p95_ms": 2, "n": 1}}},
+    ],
+)
+def test_eval_report_rejects_bad_citation_fields(extra):
+    with pytest.raises(ValidationError):
+        EvalReport.model_validate(_report(**extra))
+
+
+def test_committed_configs_and_baselines_still_load():
+    LatencyBudgets.model_validate_json((REPO_ROOT / "eval" / "config" / "latency-budgets.json").read_text())
+    baselines = sorted((REPO_ROOT / "eval" / "baselines").glob("*.json"))
+    assert baselines
+    for path in baselines:
+        Baseline.model_validate_json(path.read_text())
