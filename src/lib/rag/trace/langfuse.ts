@@ -14,6 +14,9 @@ const NOT_APPLICABLE = -1;
 const MAX_REVIEW_CONTEXT_CHARS = 40_000;
 const REVIEW_TAG = 'review_candidate';
 
+/** A stage plus optional scalar span metadata (codes and numbers only, never content). */
+export type TraceStage = StageRecord & { attributes?: Record<string, string | number | boolean> };
+
 export interface CollectedTrace {
   traceId: string;
   tenantKey: string;
@@ -23,7 +26,7 @@ export interface CollectedTrace {
   tags: string[];
   startedAt: number;
   endedAt: number;
-  stages: StageRecord[];
+  stages: TraceStage[];
   review?: { query?: string; answer?: string; context?: string; model?: string };
   content?: { query?: string; chunks?: Array<{ document_name: string; content: string; similarity: number; rank: number }> };
 }
@@ -76,8 +79,9 @@ export async function resetLangfuseForTests(): Promise<void> {
   if (current) await current.provider.shutdown().catch(() => undefined);
 }
 
-function stageMetadata(stage: StageRecord): Record<string, unknown> {
+function stageMetadata(stage: TraceStage): Record<string, unknown> {
   return {
+    ...(stage.attributes ?? {}),
     latency_ms: stage.latency_ms,
     candidates_in: stage.candidates_in ?? NOT_APPLICABLE,
     candidates_out: stage.candidates_out ?? NOT_APPLICABLE,

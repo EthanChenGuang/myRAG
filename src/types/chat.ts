@@ -8,6 +8,7 @@ import {
   isDataUIPart,
   isToolUIPart,
 } from 'ai';
+import { pickAnswerMetadata, type AnswerMessageMetadata } from '@/lib/chat/answer-metadata';
 
 type AppDataTypes = {
   'content-part': ContentPart;
@@ -174,7 +175,7 @@ export interface DBMessage {
   name?: string;
   createdAt?: Date;
   attachments?: Attachment[];
-  metadata?: { ragTraceId: string };
+  metadata?: { ragTraceId?: string } & AnswerMessageMetadata;
 }
 
 interface AppMessageMetadata {
@@ -214,9 +215,16 @@ function ragTraceIdOf(metadata: Record<string, unknown> | undefined): string | u
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
+function persistedMetadataOf(metadata: Record<string, unknown> | undefined): DBMessage['metadata'] | undefined {
+  const ragTraceId = ragTraceIdOf(metadata);
+  const answer = pickAnswerMetadata(metadata);
+  if (!ragTraceId && Object.keys(answer).length === 0) return undefined;
+  return { ...(ragTraceId ? { ragTraceId } : {}), ...answer };
+}
+
 export function toDBMessages(messages: ExtendedMessage[]): DBMessage[] {
   return messages.map((msg) => {
-    const ragTraceId = ragTraceIdOf(msg.metadata);
+    const metadata = persistedMetadataOf(msg.metadata);
     return {
       id: msg.id,
       role: msg.role === 'system' ? 'data' : (msg.role as 'user' | 'assistant' | 'data'),
@@ -226,14 +234,14 @@ export function toDBMessages(messages: ExtendedMessage[]): DBMessage[] {
       ...(msg.attachments && msg.attachments.length > 0
         ? { attachments: msg.attachments }
         : {}),
-      ...(ragTraceId ? { metadata: { ragTraceId } } : {}),
+      ...(metadata ? { metadata } : {}),
     };
   });
 }
 
 export function toExtendedMessage(message: DBMessage): ExtendedMessage {
   const role = message.role === 'data' ? 'system' : (message.role as 'user' | 'assistant' | 'system');
-  const ragTraceId = ragTraceIdOf(message.metadata);
+  const metadata = persistedMetadataOf(message.metadata);
 
   return {
     id: message.id,
@@ -244,7 +252,7 @@ export function toExtendedMessage(message: DBMessage): ExtendedMessage {
     ...(message.attachments && message.attachments.length > 0
       ? { attachments: message.attachments }
       : {}),
-    ...(ragTraceId ? { metadata: { ragTraceId } } : {}),
+    ...(metadata ? { metadata } : {}),
   };
 }
 
