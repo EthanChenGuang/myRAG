@@ -11,13 +11,13 @@ from collections import Counter
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from rag_sidecar.contracts.baseline import Baseline, GateOffender, GateResult, NoiseConfig
 from rag_sidecar.contracts.eval_run import RagTrace
 from rag_sidecar.contracts.golden import GoldenItem
-from rag_sidecar.contracts.report import EvalReport, ItemResult, SliceMetrics
+from rag_sidecar.contracts.report import EvalReport, InjectionReport, ItemResult, SliceMetrics
 from rag_sidecar.contracts.retrieval import ChunkingDecision, ChunkingSweepReport
 
 from rag_eval.calibrate.refusal import IMAGE_FLOOR, CalibrationResult, CrossComparison, _best_dense, _gate_decided, fit_threshold
@@ -1313,8 +1313,10 @@ def render_markdown(c: PhaseComparison) -> str:
 SWITCH_NAME = re.compile(r"^(NEXT_PUBLIC_)?RAG_[A-Z0-9_]+$")
 SECRET_PART = re.compile(r"(KEY|SECRET|TOKEN|PASSWORD|CREDENTIAL)S?(_|$)")
 HarnessFlag = Literal["--citations", "--groundedness"]
-BuiltinCheck = Literal["paired_all_zero", "retrieval_unchanged", "no_slice_drop", "citation_validity"]
-BUILTIN_CHECKS: tuple[str, ...] = ("paired_all_zero", "retrieval_unchanged", "no_slice_drop", "citation_validity")
+BuiltinCheck = Literal["paired_all_zero", "retrieval_unchanged", "no_slice_drop", "citation_validity", "gate", "report_only"]
+BUILTIN_CHECKS: tuple[str, ...] = ("paired_all_zero", "retrieval_unchanged", "no_slice_drop", "citation_validity", "gate", "report_only")
+REPORT_PATH_TOKEN = re.compile(r'(?:^|\.)([A-Za-z_][A-Za-z0-9_]*)|\["([^"\]]+)"\]')
+CATEGORY_NAME = re.compile(r"^[a-z][a-z0-9_]*$")
 COMMAND_NAME = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 SWITCH_DEFAULTS_NOTE = "Every switch compared here defaults to off in src/lib/env.ts; the on runs set them for the app under test only."
 SWITCH_FIXTURE_NOTE = (
@@ -1325,25 +1327,115 @@ SWITCH_FIXTURE_NOTE = (
 EnvCommandRunner = Callable[[list[str], dict[str, str]], int]
 
 
+def parse_report_path(path: str) -> list[str]:
+    """`injection.attack_success_rate["category:injection"]` -> ["injection", "attack_success_rate", "category:injection"]."""
+    keys: list[str] = []
+    position = 0
+    while position < len(path):
+        match = REPORT_PATH_TOKEN.match(path, position)
+        if match is None or match.end() == position or (position == 0 and path.startswith(".")):
+            raise ValueError(f"report path {path!r} is malformed at position {position}")
+        keys.append(match.group(1) or match.group(2))
+        position = match.end()
+    if not keys:
+        raise ValueError("report path is empty")
+    return keys
+
+
+def _categories(values: list[str], what: str) -> list[str]:
+    for value in values:
+        if not CATEGORY_NAME.match(value):
+            raise ValueError(f"{what}: {value!r} is not a category name")
+    if len(set(values)) != len(values):
+        raise ValueError(f"{what}: categories must be unique")
+    return values
+
+
+class AbsoluteZeroSpec(_Model):
+    """D-14: the report value at `path` is measured and exactly 0; a missing or unmeasured value fails."""
+
+    kind: Literal["absolute_zero"]
+    path: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _path(self) -> AbsoluteZeroSpec:
+        parse_report_path(self.path)
+        return self
+
+    @property
+    def name(self) -> str:
+        return f"absolute_zero:{self.path}"
+
+
+class CategoryNoiseSpec(_Model):
+    """D-14: every by_category slice except `exclude` stays within the noise band against the baseline."""
+
+    kind: Literal["category_noise"]
+    exclude: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _exclude(self) -> CategoryNoiseSpec:
+        _categories(self.exclude, "category_noise exclude")
+        return self
+
+    @property
+    def name(self) -> str:
+        return "category_noise"
+
+
+class RetrievalUnchangedSpec(_Model):
+    """retrieval_unchanged over the items outside `exclude_categories`."""
+
+    kind: Literal["retrieval_unchanged"]
+    exclude_categories: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _exclude(self) -> RetrievalUnchangedSpec:
+        _categories(self.exclude_categories, "retrieval_unchanged exclude_categories")
+        return self
+
+    @property
+    def name(self) -> str:
+        return "retrieval_unchanged"
+
+
+CheckSpec = Annotated[AbsoluteZeroSpec | CategoryNoiseSpec | RetrievalUnchangedSpec, Field(discriminator="kind")]
+
+
+def check_name(check: str | AbsoluteZeroSpec | CategoryNoiseSpec | RetrievalUnchangedSpec) -> str:
+    return check if isinstance(check, str) else check.name
+
+
+def _validate_switches(run: str, switches: Mapping[str, str], what: str) -> None:
+    for name in switches:
+        if not SWITCH_NAME.match(name):
+            raise ValueError(f"run {run}: {what} {name} is not a RAG_* switch")
+        if SECRET_PART.search(name):
+            raise ValueError(f"run {run}: {name} looks like a credential; a comparison spec never carries one")
+
+
 class SwitchRun(_Model):
     name: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{0,63}$")
     fixture_mode: FixtureMode
     base: str | None = None
+    env: dict[str, str] = Field(default_factory=dict)
     switches: dict[str, str] = Field(default_factory=dict)
     harness_flags: list[HarnessFlag] = Field(default_factory=list)
-    checks: list[str] = Field(min_length=1)
+    checks: list[str | CheckSpec] = Field(min_length=1)
 
     @model_validator(mode="after")
     def _switch_names(self) -> SwitchRun:
-        for name in self.switches:
-            if not SWITCH_NAME.match(name):
-                raise ValueError(f"run {self.name}: {name} is not a RAG_* switch")
-            if SECRET_PART.search(name):
-                raise ValueError(f"run {self.name}: {name} looks like a credential; a comparison spec never carries one")
+        _validate_switches(self.name, self.switches, "switch")
+        _validate_switches(self.name, self.env, "run-config env")
+        if self.env and self.base is None:
+            raise ValueError(f"run {self.name}: env overlays a base run config; name one")
         if len(set(self.harness_flags)) != len(self.harness_flags):
             raise ValueError(f"run {self.name}: harness flags must be unique")
-        if len(set(self.checks)) != len(self.checks):
+        names = [check_name(check) for check in self.checks]
+        if len(set(names)) != len(names):
             raise ValueError(f"run {self.name}: checks must be unique")
+        if "report_only" in names and len(names) > 1:
+            raise ValueError(f"run {self.name}: report_only is the only check of a reported run")
         return self
 
 
@@ -1354,6 +1446,7 @@ class SwitchComparisonSpec(_Model):
     baselines: dict[FixtureMode, str]
     runs: list[SwitchRun] = Field(min_length=1)
     commands: dict[str, list[str]] = Field(default_factory=dict)
+    notes: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _references(self) -> SwitchComparisonSpec:
@@ -1367,7 +1460,7 @@ class SwitchComparisonSpec(_Model):
                 raise ValueError(f"command {name} is empty")
         known = set(BUILTIN_CHECKS) | set(self.commands)
         for run in self.runs:
-            unknown = sorted(set(run.checks) - known)
+            unknown = sorted({check for check in run.checks if isinstance(check, str)} - known)
             if unknown:
                 raise ValueError(f"run {run.name} names unknown checks: {', '.join(unknown)}")
         if not {run.fixture_mode for run in self.runs} <= set(self.baselines):
@@ -1391,6 +1484,7 @@ class SwitchRunResult(_Model):
     overall: SliceMetrics
     invalid_citation_rate: float | None
     citation_coverage: float | None
+    injection: InjectionReport | None = None
     passed: bool
     checks: list[CheckResult]
 
@@ -1428,8 +1522,14 @@ def paired_all_zero_check(output: RunOutput, baseline: Baseline, noise: NoiseCon
 def retrieval_unchanged_check(
     output: RunOutput, baseline: Baseline, noise: NoiseConfig, *, exclude_categories: list[str] | None = None
 ) -> CheckResult:
-    """Every Recall@5, Recall@10 and MRR paired difference is zero; answer-only request options may differ (gate.ANSWER_ONLY_OPTIONS)."""
-    gate = evaluate_gate(output.report, baseline, noise)
+    """Every Recall@5, Recall@10 and MRR paired difference is zero; answer-only request options may differ (gate.ANSWER_ONLY_OPTIONS).
+
+    exclude_categories leaves those items out of every paired cell (for example injection items whose attack documents a defense drops)."""
+    report = output.report
+    if exclude_categories:
+        excluded = set(exclude_categories)
+        report = report.model_copy(update={"items": [item for item in report.items if item.category not in excluded]})
+    gate = evaluate_gate(report, baseline, noise)
     nonzero = _paired_cells(gate, RETRIEVAL_METRICS)
     passed = gate.paired is not None and not gate.mismatches and not nonzero
     detail = [*gate.mismatches, *nonzero] or ([] if gate.paired is not None else ["no paired comparison"])
@@ -1459,18 +1559,86 @@ def citation_validity_check(output: RunOutput) -> CheckResult:
     return CheckResult(name="citation_validity", passed=passed, detail=detail, measures={"invalid_citation_rate": value, "citations": float(n)})
 
 
+def _report_value(report: EvalReport, path: str) -> tuple[float | None, str | None]:
+    node: Any = report.model_dump(mode="json")
+    walked: list[str] = []
+    for key in parse_report_path(path):
+        walked.append(key)
+        if not isinstance(node, dict) or key not in node or node[key] is None:
+            return None, f"{path}: {'.'.join(walked)} is missing from the report"
+        node = node[key]
+    if isinstance(node, dict) and set(node) == {"value", "n"}:
+        if node["value"] is None or not node["n"]:
+            return None, f"{path} was not measured (n={node['n']})"
+        node = node["value"]
+    if isinstance(node, bool) or not isinstance(node, (int, float)):
+        return None, f"{path} is not a number"
+    return float(node), None
+
+
 def absolute_zero_check(output: RunOutput, path: str, name: str | None = None) -> CheckResult:
-    return CheckResult(name=name or "absolute_zero", passed=True)
+    """D-14: the value at a report path equals 0. A missing path or an unmeasured metric fails; nothing passes vacuously."""
+    label = name or f"absolute_zero:{path}"
+    value, problem = _report_value(output.report, path)
+    if problem is not None:
+        return CheckResult(name=label, passed=False, detail=[problem], measures={path: None})
+    passed = value == 0
+    detail = [] if passed else [f"{path} = {value:.4f}, expected 0"]
+    return CheckResult(name=label, passed=passed, detail=detail, measures={path: value})
 
 
 def category_noise_check(
     output: RunOutput, baseline: Baseline, noise: NoiseConfig, *, exclude: list[str], name: str = "category_noise"
 ) -> CheckResult:
-    return CheckResult(name=name, passed=True)
+    """D-14: no category slice outside `exclude` drops beyond the noise band on Recall@5, Recall@10 or MRR.
+
+    The gate's own band arithmetic (slice_drops), restricted to category slices; overall and language slices stay with the gate check.
+    A category the baseline measured but the run did not is a failure, and so is a check that compared no slice."""
+    excluded = {f"{CATEGORY_PREFIX}{category}" for category in exclude}
+
+    def counted(slice_name: str) -> bool:
+        return slice_name.startswith(CATEGORY_PREFIX) and slice_name not in excluded
+
+    gate = slice_drops(output.report, baseline, noise)
+    if gate.mismatches:
+        return CheckResult(name=name, passed=False, detail=list(gate.mismatches))
+    offenders = [o for o in gate.offenders if o.kind == "noise_band" and counted(o.slice)]
+    observed = {f"{CATEGORY_PREFIX}{category}": metrics for category, metrics in output.report.by_category.items()}
+    compared: set[str] = set()
+    missing: list[str] = []
+    for slice_name in sorted(baseline.slices):
+        if not counted(slice_name):
+            continue
+        for metric in RETRIEVAL_METRICS:
+            stat = baseline.slices[slice_name].get(metric)
+            if stat is None or stat.mean is None:
+                continue
+            metrics = observed.get(slice_name)
+            if metrics is None or getattr(metrics, metric).value is None:
+                missing.append(f"{slice_name}:{metric} missing from the run (baseline {stat.mean:.4f})")
+            else:
+                compared.add(slice_name)
+    detail = [
+        f"{o.slice}:{o.metric} {o.observed:.4f} < {o.threshold:.4f} (baseline {o.baseline_mean:.4f})" for o in offenders
+    ] + missing
+    if not compared:
+        detail.append("no category slice was compared")
+    return CheckResult(
+        name=name,
+        passed=not offenders and not missing and bool(compared),
+        detail=detail,
+        measures={"categories_compared": float(len(compared))},
+    )
 
 
 def gate_check(output: RunOutput, baseline: Baseline, noise: NoiseConfig) -> CheckResult:
-    return CheckResult(name="gate", passed=True)
+    """The CI gate as it runs on this report: the noise band on the gated slices plus the absolute-zero offenders (D-14, A-13)."""
+    gate = evaluate_gate(output.report, baseline, noise)
+    detail = [*gate.mismatches] + [
+        f"{o.slice}:{o.metric} {o.observed:.4f} vs threshold {o.threshold:.4f} ({o.kind}{', ' + o.reason if o.reason else ''})"
+        for o in gate.offenders
+    ]
+    return CheckResult(name="gate", passed=gate.passed, detail=detail)
 
 
 def default_env_command_runner(argv: list[str], env: dict[str, str]) -> int:
@@ -1484,7 +1652,7 @@ def default_env_command_runner(argv: list[str], env: dict[str, str]) -> int:
 def _switch_run_config(run: SwitchRun) -> dict[str, Any]:
     if run.base is None:
         return {"name": run.name, "env": {}, "overrides": None}
-    return materialise_run_config(RunSpec(name=run.name, base=run.base, fixture_mode=run.fixture_mode), [])
+    return materialise_run_config(RunSpec(name=run.name, base=run.base, fixture_mode=run.fixture_mode, env=dict(run.env)), [])
 
 
 def run_switch_comparison(
@@ -1516,7 +1684,17 @@ def run_switch_comparison(
         baseline = baselines[run.fixture_mode]
         checks: list[CheckResult] = []
         for check in run.checks:
-            if check == "paired_all_zero":
+            if isinstance(check, AbsoluteZeroSpec):
+                checks.append(absolute_zero_check(output, check.path))
+            elif isinstance(check, CategoryNoiseSpec):
+                checks.append(category_noise_check(output, baseline, noise, exclude=list(check.exclude)))
+            elif isinstance(check, RetrievalUnchangedSpec):
+                checks.append(retrieval_unchanged_check(output, baseline, noise, exclude_categories=list(check.exclude_categories)))
+            elif check == "gate":
+                checks.append(gate_check(output, baseline, noise))
+            elif check == "report_only":
+                checks.append(CheckResult(name="report_only", passed=True, detail=["reported, not gated"]))
+            elif check == "paired_all_zero":
                 checks.append(paired_all_zero_check(output, baseline, noise))
             elif check == "retrieval_unchanged":
                 checks.append(retrieval_unchanged_check(output, baseline, noise))
@@ -1544,6 +1722,7 @@ def run_switch_comparison(
                 overall=report.overall,
                 invalid_citation_rate=report.invalid_citation_rate.value if report.invalid_citation_rate is not None else None,
                 citation_coverage=report.citation_coverage.value if report.citation_coverage is not None else None,
+                injection=report.injection,
                 passed=all(check.passed for check in checks),
                 checks=checks,
             )
@@ -1554,11 +1733,37 @@ def run_switch_comparison(
         noise_floor=noise.floor,
         noise_k=noise.k,
         runs=results,
-        notes=[SWITCH_FIXTURE_NOTE, SWITCH_DEFAULTS_NOTE],
+        notes=[SWITCH_FIXTURE_NOTE, SWITCH_DEFAULTS_NOTE, *spec.notes],
     )
-    _write_text(out_dir / JSON_NAME, json.dumps(comparison.model_dump(mode="json"), sort_keys=True, indent=2) + "\n")
+    payload = comparison.model_dump(mode="json")
+    for run_payload in payload["runs"]:
+        if run_payload.get("injection") is None:
+            run_payload.pop("injection", None)
+    _write_text(out_dir / JSON_NAME, json.dumps(payload, sort_keys=True, indent=2) + "\n")
     _write_text(out_dir / MARKDOWN_NAME, render_switch_markdown(comparison))
     return comparison
+
+
+def _injection_lines(block: InjectionReport | None) -> list[str]:
+    if block is None:
+        return []
+    lines = [
+        (
+            f"Injection ({block.config_label}, {block.gate}): {block.items} item(s), "
+            f"rules false positives {block.rules_false_positive_count}."
+        ),
+        "",
+        "| Slice | Exposure | Attack success | n |",
+        "|---|---|---|---|",
+    ]
+    for key in sorted(set(block.exposure_rate) | set(block.attack_success_rate)):
+        exposure = block.exposure_rate.get(key)
+        success = block.attack_success_rate.get(key)
+        n = (success or exposure).n if (success or exposure) is not None else 0
+        lines.append(
+            f"| {key} | {_num(exposure.value if exposure else None)} | {_num(success.value if success else None)} | {n} |"
+        )
+    return [*lines, ""]
 
 
 def render_switch_markdown(c: SwitchComparison) -> str:
@@ -1589,6 +1794,7 @@ def render_switch_markdown(c: SwitchComparison) -> str:
             "",
             f"Switches: {switches}. Harness flags: {' '.join(r.harness_flags) or 'none'}.",
             "",
+            *_injection_lines(r.injection),
             (
                 f"Recall@5 {_num(o.recall_at_5.value)}, Recall@10 {_num(o.recall_at_10.value)}, MRR {_num(o.mrr.value)}, "
                 f"correct refusal {_num(o.correct_refusal_rate.value)}, false refusal {_num(o.false_refusal_rate.value)}, "

@@ -921,9 +921,9 @@ def test_absolute_zero_rejects_a_malformed_path_in_the_spec():
         SwitchComparisonSpec.model_validate(raw)
 
 
-def _with_category(output: RunOutput, item_id: str, category: str) -> RunOutput:
-    items = [item.model_copy(update={"category": category}) if item.item_id == item_id else item for item in output.report.items]
-    return RunOutput(report=output.report.model_copy(update={"items": items}), traces=output.traces, golden=output.golden)
+def _without_category(output: RunOutput, category: str) -> RunOutput:
+    by_category = {name: metrics for name, metrics in output.report.by_category.items() if name != category}
+    return RunOutput(report=output.report.model_copy(update={"by_category": by_category}), traces=output.traces, golden=output.golden)
 
 
 def test_category_noise_names_a_dropped_category_slice():
@@ -947,7 +947,7 @@ def test_category_noise_ignores_excluded_categories_and_non_category_slices():
 def test_category_noise_fails_on_a_missing_slice_or_other_data():
     base = _output()
     baseline = _baseline(base)
-    missing = category_noise_check(_with_category(_output(), "en-table-001", "general"), baseline, NOISE, exclude=[])
+    missing = category_noise_check(_without_category(_output(), "table"), baseline, NOISE, exclude=[])
     assert missing.passed is False and any("category:table" in line and "missing" in line for line in missing.detail)
     nothing = category_noise_check(_output(), baseline, NOISE, exclude=["general", "table", "compound", "cross_lingual", "no_answer"])
     assert nothing.passed is False, "a check that compared no slice must not pass"
