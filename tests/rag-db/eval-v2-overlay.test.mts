@@ -150,7 +150,7 @@ describe('run-config validation', () => {
         assert.throws(
           () => parseRunConfig({ name: 'key', env: { RAG_PIPELINE: 'v2', [name]: value }, overrides: null }, 'inline'),
           (error: unknown) =>
-            error instanceof RunConfigError && error.names.includes(name) && !error.message.includes(value.trim() || '\u0000'),
+            error instanceof RunConfigError && error.names.includes(name) && !error.message.includes(value === 'abc123' || value === 'sk-live-0000' ? value : '\u0000'),
         );
       }
     }

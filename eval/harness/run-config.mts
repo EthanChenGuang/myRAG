@@ -24,7 +24,19 @@ export interface RunConfig {
   chunkingProfiles?: ChunkingProfile[];
 }
 
-/** RAG_PIPELINE plus the Phase 4 D-23 switch names. Keys, base URLs and every other variable stay out of reach of a run config. */
+/**
+ * Vendor settings a run config may set, each only to one of the listed values (Phase 4.1 D-22): a key is empty, the proxy
+ * placeholder or the token `fixture` (keep the fake edge's placeholder key); a base URL is empty or the vendor's own host.
+ */
+export const RUN_CONFIG_FIXTURE_KEY_TOKEN = 'fixture';
+export const RUN_CONFIG_CONSTRAINED_VALUES: Readonly<Record<string, readonly string[]>> = {
+  COHERE_API_KEY: ['', 'proxy-injected', RUN_CONFIG_FIXTURE_KEY_TOKEN],
+  VOYAGE_API_KEY: ['', 'proxy-injected', RUN_CONFIG_FIXTURE_KEY_TOKEN],
+  COHERE_BASE_URL: ['', 'https://api.cohere.com'],
+  VOYAGE_BASE_URL: ['', 'https://api.voyageai.com/v1'],
+};
+
+/** RAG_PIPELINE, the Phase 4 D-23 switch names, the Phase 4.1 refusal floor and the value-constrained vendor settings. Every other variable stays out of reach of a run config. */
 export const RUN_CONFIG_ENV_ALLOWLIST: readonly string[] = [
   'RAG_PIPELINE',
   'RAG_LEXICAL_SEARCH',
@@ -40,6 +52,8 @@ export const RUN_CONFIG_ENV_ALLOWLIST: readonly string[] = [
   'RAG_HNSW_ITERATIVE_SCAN',
   'RAG_EXACT_SCAN_CUTOFF',
   'RAG_LEXICAL_TRANSLATION',
+  'RAG_REFUSAL_FLOOR',
+  ...Object.keys(RUN_CONFIG_CONSTRAINED_VALUES),
 ];
 
 export const RUN_CONFIG_REJECT_MESSAGE = '[Eval Harness] run-config may only set RAG_PIPELINE and Phase 4 RAG_* switches';
@@ -77,6 +91,13 @@ export function parseRunConfig(raw: unknown, source: string): RunConfig {
   for (const key of Object.keys(rawEnv).sort()) {
     const value = rawEnv[key];
     if (typeof value !== 'string') throw new RunConfigError(`[Eval Harness] run-config ${source} env ${key} must be a string`);
+    const allowedValues = RUN_CONFIG_CONSTRAINED_VALUES[key];
+    if (allowedValues && !allowedValues.includes(value)) {
+      throw new RunConfigError(
+        `[Eval Harness] run-config ${source} env ${key} may only be ${allowedValues.map((entry) => JSON.stringify(entry)).join(', ')}`,
+        [key],
+      );
+    }
     env[key] = value;
   }
   if (env.RAG_PIPELINE !== undefined && !PIPELINE_VALUES.has(env.RAG_PIPELINE)) {
