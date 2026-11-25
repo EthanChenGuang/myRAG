@@ -485,3 +485,149 @@ describe('chunk translations follow their source chunk (0810, D-28 to D-31)', ()
     assert.deepEqual(await translationsOf(keep.chunkId), { translations: 1, vectors: 1 });
   });
 });
+
+describe('ledger kind translate (0810, D-29, research F-15)', () => {
+  let fixture: TwoTenantDatabase;
+  let db: PGlite;
+  let worker = 0;
+
+  before(async () => {
+    fixture = await createTwoTenantDatabase();
+    db = fixture.db;
+  });
+
+  after(async () => {
+    await db.close();
+  });
+
+  type Job = { id: string; kind: string; status: string; stage: string | null; source_key: string; attempts: unknown; locked_by: string | null };
+
+  async function enqueueTranslate(documentId: string | null, settings: Record<string, unknown>, extra: { tenant?: string; status?: string; batch?: string | null; sourceKey?: string | null } = {}): Promise<Job> {
+    const result = await db.query<Job>(
+      `SELECT * FROM rag_enqueue_ingestion_job(
+         p_tenant_key => $1, p_kind => 'translate', p_source => NULL, p_source_key => $2, p_settings => $3::jsonb,
+         p_document_id => $4, p_batch_id => $5, p_status => $6)`,
+      [extra.tenant ?? TENANT_A, extra.sourceKey ?? null, JSON.stringify(settings), documentId, extra.batch ?? null, extra.status ?? 'queued'],
+    );
+    const row = result.rows[0];
+    assert.ok(row);
+    return row;
+  }
+
+  async function job(id: string): Promise<Job> {
+    const row = (await db.query<Job>('SELECT * FROM ingestion_jobs WHERE id = $1', [id])).rows[0];
+    assert.ok(row);
+    return row;
+  }
+
+  async function documentState(id: string): Promise<Record<string, unknown>> {
+    return (await db.query<Record<string, unknown>>('SELECT status, processing_status, is_current, needs_review FROM documents WHERE id = $1', [id])).rows[0] ?? {};
+  }
+
+  async function claim(id: string): Promise<{ job: Job | null; worker: string }> {
+    worker += 1;
+    const name = `translate-worker-${worker}`;
+    const row = (await db.query<Job>('SELECT * FROM rag_claim_ingestion_job($1, $2)', [id, name])).rows[0];
+    return { job: row && row.id ? row : null, worker: name };
+  }
+
+  test('enqueue accepts kind translate with a document and a target language', async () => {
+    const { docId } = await seedChunk(db, 'fonte coda uno');
+    const queued = await enqueueTranslate(docId, { target_language: 'en' });
+    assert.equal(queued.kind, 'translate');
+    assert.equal(queued.status, 'queued');
+    assert.equal(queued.source_key, `translate:${docId}:en`);
+    assert.deepEqual(queued.attempts, []);
+  });
+
+  test('enqueue refuses an unknown kind as before and a translate job without its inputs', async () => {
+    const { docId } = await seedChunk(db, 'fonte coda rifiuti');
+    const unknown = await failure(db, "SELECT rag_enqueue_ingestion_job($1, 'bogus', 'config_upload', 'k-1')", [TENANT_A]);
+    assert.match(unknown?.message ?? '', /invalid_kind/);
+    const noDocument = await failure(db, "SELECT rag_enqueue_ingestion_job(p_tenant_key => $1, p_kind => 'translate', p_settings => '{\"target_language\":\"en\"}'::jsonb)", [TENANT_A]);
+    assert.match(noDocument?.message ?? '', /document_required/);
+    for (const settings of [{}, { target_language: 'EN!' }, { target_language: '' }]) {
+      const refused = await failure(db, "SELECT rag_enqueue_ingestion_job(p_tenant_key => $1, p_kind => 'translate', p_settings => $2::jsonb, p_document_id => $3)", [
+        TENANT_A,
+        JSON.stringify(settings),
+        docId,
+      ]);
+      assert.match(refused?.message ?? '', /invalid_target_language/, JSON.stringify(settings));
+    }
+    const notQueued = await failure(
+      db,
+      "SELECT rag_enqueue_ingestion_job(p_tenant_key => $1, p_kind => 'translate', p_settings => '{\"target_language\":\"en\"}'::jsonb, p_document_id => $2, p_status => 'ready')",
+      [TENANT_A, docId],
+    );
+    assert.match(notQueued?.message ?? '', /invalid_status/);
+    const otherTenant = await failure(
+      db,
+      "SELECT rag_enqueue_ingestion_job(p_tenant_key => $1, p_kind => 'translate', p_settings => '{\"target_language\":\"en\"}'::jsonb, p_document_id => $2)",
+      [`u:${TWO_TENANT_IDS.userB}`, docId],
+    );
+    assert.match(otherTenant?.message ?? '', /document_tenant_mismatch/);
+  });
+
+  test('a second enqueue for the same document and language returns the active job', async () => {
+    const { docId } = await seedChunk(db, 'fonte coda doppia');
+    const first = await enqueueTranslate(docId, { target_language: 'en' });
+    const second = await enqueueTranslate(docId, { target_language: 'en' });
+    assert.equal(second.id, first.id);
+    const zh = await enqueueTranslate(docId, { target_language: 'zh' });
+    assert.notEqual(zh.id, first.id);
+    assert.equal(await count(db, "SELECT count(*) AS n FROM ingestion_jobs WHERE kind = 'translate' AND document_id = $1", [docId]), 2);
+  });
+
+  test('a translate job is claimed into embedding, advanced to ready, and writes no parse attempt, cache or budget row', async () => {
+    const { docId } = await seedChunk(db, 'fonte coda percorso');
+    const before = await documentState(docId);
+    const cacheBefore = await count(db, 'SELECT count(*) AS n FROM rag_parse_cache');
+    const queued = await enqueueTranslate(docId, { target_language: 'en' });
+    const claimed = await claim(queued.id);
+    assert.equal(claimed.job?.status, 'embedding');
+    assert.equal(claimed.job?.locked_by, claimed.worker);
+    const refused = await failure(db, "SELECT rag_advance_ingestion_job($1, $2, 'parse', 'parsing')", [queued.id, claimed.worker]);
+    assert.match(refused?.message ?? '', /invalid_stage_for_kind/);
+    await db.query("SELECT rag_advance_ingestion_job($1, $2, 'embed', 'embedding')", [queued.id, claimed.worker]);
+    assert.deepEqual(await documentState(docId), before, 'the document is untouched while translating');
+    await db.query("SELECT rag_advance_ingestion_job($1, $2, 'ready', 'ready')", [queued.id, claimed.worker]);
+    const done = await job(queued.id);
+    assert.equal(done.status, 'ready');
+    assert.equal(done.locked_by, null);
+    assert.deepEqual(done.attempts, []);
+    assert.equal(await count(db, 'SELECT count(*) AS n FROM rag_parse_cache'), cacheBefore);
+    assert.equal(await count(db, 'SELECT count(*) AS n FROM rag_parse_budget_reservations WHERE job_id = $1', [queued.id]), 0);
+    assert.deepEqual(await documentState(docId), before);
+    const again = await enqueueTranslate(docId, { target_language: 'en' });
+    assert.notEqual(again.id, queued.id, 'a finished job does not block a new one');
+  });
+
+  test('a translate job reaching ready never releases a quarantined document', async () => {
+    const { docId } = await seedChunk(db, 'fonte coda quarantena');
+    const queued = await enqueueTranslate(docId, { target_language: 'en' });
+    await db.query("UPDATE documents SET status = 'quarantined', processing_status = 'quarantined' WHERE id = $1", [docId]);
+    const before = await documentState(docId);
+    const claimed = await claim(queued.id);
+    await db.query("SELECT rag_advance_ingestion_job($1, $2, 'ready', 'ready')", [queued.id, claimed.worker]);
+    assert.deepEqual(await documentState(docId), before);
+  });
+
+  test('a failed translate job leaves its document unchanged, even a superseded one', async () => {
+    const { docId } = await seedChunk(db, 'fonte coda fallita');
+    const queued = await enqueueTranslate(docId, { target_language: 'en' });
+    await db.query('UPDATE documents SET is_current = false WHERE id = $1', [docId]);
+    const before = await documentState(docId);
+    const claimed = await claim(queued.id);
+    await db.query("SELECT rag_fail_ingestion_job($1, $2, 'translate_error', false)", [queued.id, claimed.worker]);
+    assert.equal((await job(queued.id)).status, 'failed');
+    assert.deepEqual(await documentState(docId), before);
+  });
+
+  test('the batch claim hands translate jobs out next to ingest jobs', async () => {
+    await db.query("UPDATE ingestion_jobs SET status = 'failed', locked_by = NULL, lease_until = NULL WHERE status NOT IN ('ready', 'failed')");
+    const { docId } = await seedChunk(db, 'fonte coda lotto');
+    const queued = await enqueueTranslate(docId, { target_language: 'en' });
+    const claimed = await db.query<Job>("SELECT * FROM rag_claim_ingestion_jobs('translate-batch-worker', 5, false)");
+    assert.deepEqual(claimed.rows.map((row) => [row.id, row.status]), [[queued.id, 'embedding']]);
+  });
+});
