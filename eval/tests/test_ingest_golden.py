@@ -113,7 +113,8 @@ TABLE_SPLIT = "table_split"
 PARSE_ROOT = REPO / "eval/fixtures/parse"
 SPLIT_MANIFEST = REPO / "eval/fixtures/split-manifest.json"
 PARSE_TAG = "parse_fixtures"
-EXCLUDED_PARSE_CLASSES = {"bench"}
+# bench is the latency fixture; scan_zh_it (03.2-25) is a character-exact transport fixture, not a retrieval class.
+EXCLUDED_PARSE_CLASSES = {"bench", "scan_zh_it"}
 
 
 def _parse_rows() -> list[dict]:

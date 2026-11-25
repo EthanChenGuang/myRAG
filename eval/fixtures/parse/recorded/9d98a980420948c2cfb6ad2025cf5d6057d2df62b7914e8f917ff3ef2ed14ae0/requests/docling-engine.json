@@ -1,0 +1,9 @@
+{
+  "ocr_languages": [
+    "zh",
+    "it"
+  ],
+  "ocr_engine_codes": [
+    "ch"
+  ]
+}
