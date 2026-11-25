@@ -22,3 +22,10 @@ export function evalRetrievalOverrides(
   };
   return mapped;
 }
+export function hashedChunkingProfiles(
+  _profile: Profile,
+  active: Record<string, string> | null,
+  _overrides?: StageOverrides['retrievalOverrides'],
+): Record<string, string> | null {
+  return active;
+}

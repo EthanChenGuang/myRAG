@@ -125,6 +125,38 @@ describe('runSearchStages', () => {
     expect(chunkIds(output)).toEqual(['a', 'b', 'c']);
   });
 
+  it('sends the eval chunking override to the backend for the eval profile only', async () => {
+    const cfg = loadRagConfig({ RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'false' });
+    const seen: Array<Record<string, string> | undefined> = [];
+    setRetrievalBackendForTests({
+      id: 'pgvector',
+      search: async (req) => {
+        seen.push(req.chunkingProfileOverride);
+        return denseLexical(['a'], []);
+      },
+      health: async () => ({ ok: true }),
+      isReady: async () => true,
+    });
+    const { embedder } = fakeEmbedder();
+    installDeps({ embedder });
+    const override = { contract_legal: 'p256-1024-contract_legal' };
+    for (const profile of ['eval', 'chat'] as const) {
+      await runSearchStages({
+        input: { scope, query: 'q', profile, signal: new AbortController().signal },
+        scope,
+        config: cfg,
+        profile,
+        params: effectiveRetrievalParams(profile, cfg, null),
+        embedding: { vector: [0.1, 0.2, 0.3], profile: null },
+        signal: new AbortController().signal,
+        collector: createTraceCollector({ profile, tenantKey: 's:default' }),
+        stageOverrides: { retrievalOverrides: { chunkingProfileByDocType: override } },
+      });
+    }
+
+    expect(seen).toEqual([override, undefined]);
+  });
+
   it('issues concurrent backend calls per variant sharing one signal', async () => {
     const cfg = config();
     const params = effectiveRetrievalParams('eval', cfg, null);

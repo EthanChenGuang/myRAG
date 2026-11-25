@@ -280,3 +280,18 @@ describe('getActiveChunkingProfiles', () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 });
+describe('eval chunking override in the retrieval config hash', () => {
+  it('the eval override replaces the active pointer for its doc type and only for the eval profile', async () => {
+    const { hashedChunkingProfiles } = await import('@/lib/rag/v2/overrides');
+    const active = { contract_legal: 'legacy', general: 'legacy' };
+    const override = { chunkingProfileByDocType: { contract_legal: 'p256-1024-contract_legal' } };
+    expect(hashedChunkingProfiles('eval', active, override)).toEqual({ contract_legal: 'p256-1024-contract_legal', general: 'legacy' });
+    expect(hashedChunkingProfiles('chat', active, override)).toBe(active);
+    expect(hashedChunkingProfiles('eval', active, undefined)).toBe(active);
+    expect(hashedChunkingProfiles('eval', null, undefined)).toBeNull();
+    expect(hashedChunkingProfiles('eval', null, override)).toEqual({ contract_legal: 'p256-1024-contract_legal' });
+    const withOverride = computeRetrievalConfigHash({ ...baseHashInput(), activeChunkingProfiles: hashedChunkingProfiles('eval', active, override) });
+    const without = computeRetrievalConfigHash({ ...baseHashInput(), activeChunkingProfiles: hashedChunkingProfiles('eval', active, undefined) });
+    expect(withOverride).not.toBe(without);
+  });
+});

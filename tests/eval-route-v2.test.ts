@@ -185,6 +185,21 @@ describe('eval route v2 overrides, filters and trace fields', () => {
     });
   });
 
+  it('maps chunking_profile_by_doc_type to chunkingProfileByDocType and drops an empty map', async () => {
+    const route = await loadRoute();
+    const response = await route.POST(
+      evalRequest({ retrieval_overrides: { chunking_profile_by_doc_type: { contract_legal: 'p256-1024-contract_legal' } } }),
+    );
+    expect(response.status).toBe(200);
+    expect(h.runSpy.mock.calls[0][0].stageOverrides?.retrievalOverrides).toEqual({
+      chunkingProfileByDocType: { contract_legal: 'p256-1024-contract_legal' },
+    });
+
+    const empty = await route.POST(evalRequest({ retrieval_overrides: { chunking_profile_by_doc_type: {} } }));
+    expect(empty.status).toBe(200);
+    expect(h.runSpy.mock.calls[1][0].stageOverrides).toBeUndefined();
+  });
+
   it('sends no stageOverrides when the request carries no overrides', async () => {
     const route = await loadRoute();
     const response = await route.POST(evalRequest({ max_results: 5 }));
