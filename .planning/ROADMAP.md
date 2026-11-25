@@ -303,7 +303,7 @@ Plans:
   8. In every processing profile, a 60-row fixture table cut into several chunks repeats its header in each chunk and a page-continued table carries the header forward; the synthetic `table_split` items in zh/en/it are answered from the asked column of the right row, not a neighbouring column; with `RAG_TABLE_ROW_SERIALIZATION` on, table chunks embed "column = value" lines while the LLM still sees the Markdown table.
   9. An older version uploaded as a separate file next to its newer version is flagged as a possible older version, and after admin confirmation only the newer version is current; with `RAG_EFFECTIVE_DATES` on, a policy whose effective date is next month is not used yet and an expired one is treated as historical.
 **Live verification**: Run OCR on real scanned Chinese and Italian documents; review a sample of quarantined real documents.
-**Plans**: TBD
+**Plans**: 65 plans in 15 waves (see `phases/03.2-language-support-ingestion-hardening/03.2-PLAN-INDEX.md`); human steps in plans 36 (package check), 65 (live migration push 0801–0810) and 53 (live verification and native-speaker review). Line hints in plan reading lists are advisory: executors locate code by symbol name
 **UI hint**: yes
 
 ### Phase 3.2.1: BGE-M3 Open-Source Fallback Embedding (INSERTED)
@@ -314,7 +314,7 @@ Plans:
   1. BGE-M3 runs as an embedding profile through the hosted API and the sidecar with identical vectors (within a recorded tolerance), joins the Phase 3.1.1 catalog with its supported languages, and the language validator checks it.
   2. It passes the EMB-05 activation gate before it can serve, and it is compared with the active profile on every slice, language and cost; with the profile inactive, results match the Phase 3.2 baseline.
 **Live verification**: Call the hosted BGE-M3 API, confirm the weights revision, compare hosted and sidecar vectors, and push migration 0811 live.
-**Plans**: TBD
+**Plans**: 5 plans in 4 waves (see `phases/03.2.1-bge-m3-open-source-fallback-embedding/03.2.1-PLAN-INDEX.md`); human steps in plans 02 (weights revision, hosted vectors) and 05 (live checks, migration 0811 push)
 
 ### Phase 4: Hybrid Retrieval, Reranking & Calibrated Refusal
 **Goal**: On pgvector, questions in Chinese, English and Italian find the right chunks through filtered hybrid search and reranking, and the system refuses when the best reranked evidence is too weak
@@ -825,8 +825,8 @@ Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 3.1.1 → 3.2 → 3.2
 | 3. Unified Ingestion & Embedding Profiles | 53/53 (55 summaries incl. gap plans) | Executed (verification pending) | - |
 | 3.1. Tiered Parsing, Incremental Queue & Bulk Backfill (INSERTED) | 54/55 | In Progress (live checks) | - |
 | 3.1.1. Domain Embedding Model Candidates & Per-Doc-Type Selection (INSERTED) | 0/16 | Planned (plan-check PASS) | - |
-| 3.2. Language Support & Ingestion Hardening (INSERTED) | 0/TBD | Not planned | - |
-| 3.2.1. BGE-M3 Open-Source Fallback Embedding (INSERTED) | 0/TBD | Not planned | - |
+| 3.2. Language Support & Ingestion Hardening (INSERTED) | 0/65 | Planned | - |
+| 3.2.1. BGE-M3 Open-Source Fallback Embedding (INSERTED) | 0/5 | Planned (needs 3.1.1) | - |
 | 4. Hybrid Retrieval, Reranking & Calibrated Refusal | 46/47 | In Progress (04-43 live calibration) | - |
 | 4.1. Hybrid Retrieval & Rerank On by Default (INSERTED) | 0/12 | Planned (plan-check PASS) | - |
 | 4.1.1. Domain Terminology Dictionary (INSERTED) | 0/16 | Planned (plan-check PASS) | - |
