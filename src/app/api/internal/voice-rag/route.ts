@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod/v3';
 import { env } from '@/lib/env';
-import { deriveVoiceKeywords, readSecurityConfig, resolveVoiceScope, runRetrieval } from '@/lib/rag';
+import { deriveVoiceKeywords, readFeedbackLoopConfig, readSecurityConfig, resolveVoiceScope, runRetrieval } from '@/lib/rag';
 import { internalApiKeyMatches } from '@/lib/internal-api-key';
 
 export const runtime = 'nodejs';
@@ -53,16 +53,22 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ error: scope.status === 503 ? 'Voice scope unavailable' : 'Unauthorized', reason: scope.reason }, { status: scope.status });
         }
 
+        // The answer is produced in the voice agent, so the row carries no answer language (D-03a)
+        const logged = readFeedbackLoopConfig().retrievalLog !== 'off';
         const result = await runRetrieval({
             scope: scope.scope,
             query,
             profile: 'voice',
             options: { maxResults: matchCount },
             signal: req.signal,
+            ...(logged
+                ? { logContext: { channel: 'voice', userId: scope.scope.userId, organizationId: scope.scope.organizationId } as const }
+                : {}),
         });
 
         const voice = result.voice;
         if (result.status === 'error' || (result.status === 'degraded' && (!voice || voice.results.length === 0))) {
+            if (logged && result.logOutcome) result.logOutcome.value = 'kb_unavailable';
             console.error('[Document Search] Voice retrieval unavailable', { status: result.status, reason: result.reason, traceId: result.traceId });
             return NextResponse.json({ error: 'knowledge_base_unavailable', reason: result.reason }, { status: 503 });
         }
@@ -71,6 +77,7 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ results: [] });
         }
 
+        if (logged && result.logOutcome) result.logOutcome.value = 'answered';
         const keywords = deriveVoiceKeywords(query);
         return NextResponse.json({
             results: voice.results,

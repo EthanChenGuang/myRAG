@@ -130,7 +130,13 @@ export type {
 export type { VoiceResult, VoiceResults, VoiceSourceImage } from './context/voice';
 export { deriveVoiceKeywords } from './voice/keyword-fallback';
 export { createEnhancedRAGPrompt } from './generation/prompt';
-export { knowledgeBaseUnavailableMessage, noKnowledgeBaseResponse } from './generation/messages';
+export {
+  knowledgeBaseUnavailableLanguage,
+  knowledgeBaseUnavailableMessage,
+  noKnowledgeBaseResponse,
+  noKnowledgeBaseResponseLanguage,
+} from './generation/messages';
+export { readFeedbackLoopConfig } from './feedback-loop/config';
 export { readGenerationConfig } from './generation/config';
 export { detectLanguage } from './lang/detect';
 export type { Language } from './lang/registry';
