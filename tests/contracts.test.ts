@@ -142,3 +142,36 @@ describe('Phase 3.2 scope filter and translation leg weight (plan 03.2-06)', () 
     expect(fixture.variants['RetrievalFilters:scopes']?.model).toBe('RetrievalFilters');
   });
 });
+
+describe('Phase 3.2 model-output and embed contracts (plan 03.2-06)', () => {
+  it('generates a schema for every remaining D-49 model', () => {
+    for (const model of [
+      'SupersessionCandidate',
+      'SupersessionRules',
+      'EffectiveDateExtraction',
+      'ChunkTranslation',
+      'TranslationSettings',
+      'EmbedRequest',
+      'EmbedResponse',
+    ]) {
+      expect(schemas[`${model}Schema`], model).toBeDefined();
+    }
+  });
+
+  it('EmbedRequest takes 1 to 32 inputs of at most 20,000 characters', () => {
+    const embed = schemas.EmbedRequestSchema;
+    expect(embed?.safeParse({ model: 'BAAI/bge-m3', inputs: ['one'] }).success).toBe(true);
+    expect(embed?.safeParse({ model: 'BAAI/bge-m3', inputs: [] }).success).toBe(false);
+    expect(embed?.safeParse({ model: 'BAAI/bge-m3', inputs: Array(33).fill('x') }).success).toBe(false);
+    expect(embed?.safeParse({ model: 'BAAI/bge-m3', inputs: ['x'.repeat(20_001)] }).success).toBe(false);
+  });
+
+  it('EmbedResponse requires 1024 dimensions per vector', () => {
+    const vector = [...Array(1023).fill(0), 1];
+    const response = schemas.EmbedResponseSchema;
+    expect(response?.safeParse({ model: 'BAAI/bge-m3', revision: 'r1', dims: 1024, vectors: [vector] }).success).toBe(true);
+    expect(response?.safeParse({ model: 'BAAI/bge-m3', revision: 'r1', dims: 1024, vectors: [vector.slice(1)] }).success).toBe(
+      false
+    );
+  });
+});

@@ -121,3 +121,147 @@ def test_scope_samples_are_exported():
     assert "ScopeVocabularyEntry" in samples["samples"]
     assert "ScopeTagSuggestion" in samples["samples"]
     assert "RetrievalFilters:scopes" in samples["variants"]
+
+
+# --- supersession and effective dates (D-41, D-43) ---------------------------------------------------
+
+_DOC_A = "00000000-0000-4000-8000-0000000000a1"
+_DOC_B = "00000000-0000-4000-8000-0000000000b1"
+_CANDIDATE_ID = "00000000-0000-4000-8000-0000000000d1"
+_ADMIN = "00000000-0000-4000-8000-0000000000e1"
+
+
+def _candidate(**overrides: Any) -> dict[str, Any]:
+    value: dict[str, Any] = {
+        "id": _CANDIDATE_ID,
+        "document_id": _DOC_A,
+        "candidate_document_id": _DOC_B,
+        "signals": {"title_match": True, "content_overlap_percent": 82, "conflicting_numbers": 3},
+        "direction": None,
+        "status": "pending",
+        "origin": "detected",
+        "decided_by": None,
+        "decided_at": None,
+    }
+    value.update(overrides)
+    return value
+
+
+def test_supersession_candidate_pending_and_confirmed():
+    model = _model("SupersessionCandidate")
+    assert _accepts(model, _candidate())
+    confirmed = _candidate(
+        status="confirmed", direction="document_is_newer", decided_by=_ADMIN, decided_at="2026-01-02T00:00:00Z"
+    )
+    assert _accepts(model, confirmed)
+    for origin in ("uploader", "answer_conflict"):
+        assert _accepts(model, _candidate(origin=origin))
+
+
+def test_supersession_candidate_rejects_inconsistent_values():
+    model = _model("SupersessionCandidate")
+    assert not _accepts(model, _candidate(candidate_document_id=_DOC_A))
+    assert not _accepts(model, _candidate(status="archived"))
+    assert not _accepts(model, _candidate(origin="manual"))
+    assert not _accepts(model, _candidate(direction="sideways"))
+    assert not _accepts(model, _candidate(signals={"title_match": True, "content_overlap_percent": 101, "conflicting_numbers": 0}))
+    assert not _accepts(model, _candidate(signals={"title_match": True, "content_overlap_percent": 10, "conflicting_numbers": -1}))
+    assert not _accepts(model, _candidate(decided_by=_ADMIN, decided_at="2026-01-02T00:00:00Z"))
+    assert not _accepts(model, _candidate(status="dismissed"))
+    assert not _accepts(
+        model, _candidate(status="confirmed", decided_by=_ADMIN, decided_at="2026-01-02T00:00:00Z")
+    )
+    assert not _accepts(model, _candidate(note="x"))
+
+
+def test_supersession_rules_thresholds():
+    model = _model("SupersessionRules")
+    good = {
+        "schema_version": 1,
+        "rules_version": "supersession@1",
+        "title_similarity_min": 0.9,
+        "content_overlap_min_percent": 70,
+        "min_conflicting_numbers": 1,
+    }
+    assert _accepts(model, good)
+    assert not _accepts(model, {**good, "title_similarity_min": 1.5})
+    assert not _accepts(model, {**good, "content_overlap_min_percent": 0})
+    assert not _accepts(model, {**good, "min_conflicting_numbers": 0})
+    assert not _accepts(model, {**good, "schema_version": 2})
+
+
+def test_effective_date_extraction_order_and_confidence():
+    model = _model("EffectiveDateExtraction")
+    good = {
+        "effective_from": "2026-01-01",
+        "effective_to": "2026-12-31",
+        "confidence": 0.85,
+        "evidence_quote": "Valid from 1 January 2026 until 31 December 2026.",
+    }
+    assert _accepts(model, good)
+    assert _accepts(model, {**good, "effective_to": None})
+    assert _accepts(model, {**good, "effective_from": None})
+    assert not _accepts(model, {**good, "effective_from": "2027-01-01"})
+    assert not _accepts(model, {**good, "effective_from": None, "effective_to": None})
+    assert not _accepts(model, {**good, "confidence": 1.01})
+    assert not _accepts(model, {**good, "evidence_quote": ""})
+    assert not _accepts(model, {**good, "reason": "x"})
+
+
+# --- translation (D-29, D-31) -------------------------------------------------------------------------
+
+
+def test_chunk_translation_needs_content():
+    model = _model("ChunkTranslation")
+    assert _accepts(model, {"content": "A neutral translated sentence."})
+    assert not _accepts(model, {"content": ""})
+    assert not _accepts(model, {"content": "   "})
+    assert not _accepts(model, {"content": "x", "language": "en"})
+
+
+def test_translation_settings_targets():
+    model = _model("TranslationSettings")
+    assert _accepts(model, {"target_languages": ["en", "zh"], "enabled": True, "updated_by": _ADMIN})
+    assert _accepts(model, {"target_languages": [], "enabled": False, "updated_by": None})
+    assert not _accepts(model, {"target_languages": ["en", "en"], "enabled": True, "updated_by": None})
+    assert not _accepts(model, {"target_languages": ["xx"], "enabled": True, "updated_by": None})
+    assert not _accepts(model, {"target_languages": [], "enabled": True, "updated_by": None})
+
+
+# --- BGE-M3 embed (D-26) ------------------------------------------------------------------------------
+
+
+def test_embed_request_limits():
+    model = _model("EmbedRequest")
+    assert _accepts(model, {"model": "BAAI/bge-m3", "inputs": ["one"]})
+    assert _accepts(model, {"model": "BAAI/bge-m3", "inputs": ["x" * 20_000] * 32})
+    assert not _accepts(model, {"model": "BAAI/bge-m3", "inputs": []})
+    assert not _accepts(model, {"model": "BAAI/bge-m3", "inputs": ["x"] * 33})
+    assert not _accepts(model, {"model": "BAAI/bge-m3", "inputs": ["x" * 20_001]})
+    assert not _accepts(model, {"model": "BAAI/bge-m3", "inputs": [""]})
+    assert not _accepts(model, {"model": "other/model", "inputs": ["one"]})
+
+
+def test_embed_response_dims_and_vectors():
+    model = _model("EmbedResponse")
+    vector = [0.0] * 1023 + [1.0]
+    good = {"model": "BAAI/bge-m3", "revision": "rev-0001", "dims": 1024, "vectors": [vector, vector]}
+    assert _accepts(model, good)
+    assert not _accepts(model, {**good, "dims": 768})
+    assert not _accepts(model, {**good, "vectors": [vector[:-1]]})
+    assert not _accepts(model, {**good, "vectors": []})
+    assert not _accepts(model, {**good, "revision": ""})
+
+
+def test_phase32_model_output_samples_are_exported():
+    samples = build_samples()["samples"]
+    for name in (
+        "SupersessionCandidate",
+        "SupersessionRules",
+        "EffectiveDateExtraction",
+        "ChunkTranslation",
+        "TranslationSettings",
+        "EmbedRequest",
+        "EmbedResponse",
+    ):
+        assert name in samples, name
