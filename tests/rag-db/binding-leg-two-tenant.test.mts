@@ -144,7 +144,7 @@ describe('binding legs on the real search function, two tenants (D-27)', () => {
     const recording: RetrievalBackend = {
       id: real.id,
       health: () => real.health(),
-      isReady: () => real.isReady(),
+      isReady: (scope) => real.isReady(scope),
       async search(req: BackendSearchRequest): Promise<BackendLegs> {
         const legs = await real.search(req);
         const rows = [...legs.dense, ...legs.lexical];
