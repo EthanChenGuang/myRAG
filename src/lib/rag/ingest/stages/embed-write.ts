@@ -13,6 +13,7 @@ import {
   type StageOutcome,
   type StageSpec,
 } from '../types';
+import { HiddenSpanWriteError, assertNoHiddenSpans, type SpanCheckedChunk } from '../../security/hidden-text';
 import { IngestWriterError, chunkIdFor, profileRowIdFor, type ChunkWrite, type ProfileVectors } from '../writer';
 
 const MAX_BATCH_BYTES = 1_000_000;
@@ -33,6 +34,22 @@ export function toWrites(ctx: Pick<StageContext, 'work'>): ChunkWrite[] {
     ...(draft.language_confidence !== undefined ? { language_confidence: draft.language_confidence } : {}),
     metadata: draft.metadata,
   }));
+}
+
+/**
+ * The write-time assertion of F-17: a chunk that still holds a hidden span removed by the scan is never written; the stage fails and
+ * nothing of the batch reaches the database. Only the count is logged.
+ */
+export function guardHiddenSpans(ctx: Pick<StageContext, 'state'>, chunks: readonly SpanCheckedChunk[]): void {
+  const spans = ctx.state.hiddenText?.removedSpans ?? [];
+  if (spans.length === 0) return;
+  try {
+    assertNoHiddenSpans(chunks, spans);
+  } catch (error) {
+    if (!(error instanceof HiddenSpanWriteError)) throw error;
+    console.error('[RAG Security] a chunk still holds a removed hidden span; nothing is written', { chunks: error.chunks });
+    throw new IngestStageError('embed', 'hidden_span_in_chunk');
+  }
 }
 
 /** Batches sized by JSON bytes, vectors included, so a call stays near 1 MB whatever the chunk length. */
@@ -176,6 +193,7 @@ async function dualWriteProfiles(ctx: StageContext, documentId: string, targets:
       profile,
     );
     if (built.children.length === 0) continue;
+    guardHiddenSpans(ctx, [...built.parents.map((parent) => ({ content: parent.content })), ...built.children]);
 
     const outcomes = await Promise.all(
       targets.map(async (target) => {
@@ -235,6 +253,9 @@ async function dualWriteProfiles(ctx: StageContext, documentId: string, targets:
  */
 async function runEmbed(ctx: StageContext): Promise<StageOutcome> {
   const document = requireDocument(ctx, 'embed');
+  // Before any embedding call: a chunk that still holds a removed hidden span is neither embedded nor written.
+  const writes = toWrites(ctx);
+  guardHiddenSpans(ctx, writes);
   const identity = requireIdentity(ctx, 'embed');
   const dualWrite = resolveEffectivePipeline().pipeline !== 'legacy';
   let targets: EmbeddingTarget[];
@@ -244,7 +265,6 @@ async function runEmbed(ctx: StageContext): Promise<StageOutcome> {
     if (error instanceof ProfileUnavailableError) throw new IngestStageError('embed', 'embedding_profile_unavailable');
     throw error;
   }
-  const writes = toWrites(ctx);
   const vectorBytes = targets.reduce((sum, target) => sum + target.profile.dims * BYTES_PER_VECTOR_DIM, 0);
   const batches = batchByBytes(writes, vectorBytes);
   const failed = new Map<string, TargetFailure>();
@@ -327,6 +347,9 @@ async function runEmbed(ctx: StageContext): Promise<StageOutcome> {
  */
 async function runDeferredEmbed(ctx: StageContext): Promise<StageOutcome> {
   const document = requireDocument(ctx, 'embed');
+  // Before any embedding call: a chunk that still holds a removed hidden span is neither embedded nor written.
+  const writes = toWrites(ctx);
+  guardHiddenSpans(ctx, writes);
   const dualWrite = resolveEffectivePipeline().pipeline !== 'legacy';
   let targets: EmbeddingTarget[];
   try {
@@ -335,7 +358,6 @@ async function runDeferredEmbed(ctx: StageContext): Promise<StageOutcome> {
     if (error instanceof ProfileUnavailableError) throw new IngestStageError('embed', 'embedding_profile_unavailable');
     throw error;
   }
-  const writes = toWrites(ctx);
   const batches = batchByBytes(writes, 0);
   let written = 0;
   for (const [position, batch] of batches.entries()) {

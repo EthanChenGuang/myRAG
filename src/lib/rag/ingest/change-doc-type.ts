@@ -1,6 +1,6 @@
 import { rpcRows } from '../backend/supabase-rpc';
 import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
-import { isArtifactName, loadArtifact, versionPrefix, type ArtifactContext } from './artifacts';
+import { HIDDEN_TEXT_SANITIZED_KEY, isArtifactName, loadArtifact, versionPrefix, type ArtifactContext } from './artifacts';
 import { getIngestDeps } from './deps';
 import { submitIngest } from './enqueue';
 import { queueConfigFromProcessEnv } from './queue-config';
@@ -71,6 +71,10 @@ function typeChangeOf(row: Row, source: IngestSource, from: DocType, to: DocType
   const stored = profileFor(source, from);
   const parser = REUSABLE_PARSERS.find((name) => name === text(row, 'parser_used'));
   const parserVersion = text(row, 'parser_version');
+  // F-17: a version whose hidden spans were removed is rebuilt from its sanitized parse.md and chunks.json only, never from the original.
+  if (objectOf(row.metadata)?.[HIDDEN_TEXT_SANITIZED_KEY] === true) {
+    return { reuseParseOfVersion: version, reusedParser: { parser: parser ?? 'text', version: parserVersion ?? 'stored' }, sanitizedParse: true };
+  }
   const reusable =
     parser !== undefined && parserVersion !== null && text(row, 'processing_profile_id') === stored.id && storedParseServes(stored, profileFor(source, to));
   return reusable ? { reuseParseOfVersion: version, reusedParser: { parser, version: parserVersion } } : { reuseParseOfVersion: null, reusedParser: null };
