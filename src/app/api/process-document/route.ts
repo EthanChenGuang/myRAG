@@ -10,6 +10,8 @@ import {
   buildSourceKey,
   currentIngestConfig,
   unifiedIngestRefusal,
+  legacyApprovalRefusal,
+  legacyWriteRefused,
   embedText,
   ingest,
   submitIngest,
@@ -939,6 +941,8 @@ export async function POST(req: Request) {
       if (refusal) return NextResponse.json(refusal, { status: 503 });
       return await uploadThroughIngest({ req, formData, file, userId, orgIdFromForm, startedAt });
     }
+    // D-56: the legacy writer below cannot hold a document, so a knowledge-base upload refuses while upload approval is on.
+    if (!isTemporary && legacyWriteRefused()) return legacyApprovalRefusal();
 
     console.log('Processing file', isTemporary ? '(temporary)' : '(permanent)');
     const buffer = Buffer.from(await file.arrayBuffer());

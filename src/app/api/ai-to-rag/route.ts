@@ -3,6 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 import {
   embedText,
   ingest,
+  legacyApprovalRefusal,
+  legacyWriteRefused,
   loadIngestConfig,
   queueConfigFromProcessEnv,
   repairOwnerMembership,
@@ -409,6 +411,8 @@ export async function POST(req: Request) {
       if (ingestConfig.pipelineBlocked) return NextResponse.json({ error: ingestConfig.pipelineBlocked }, { status: 503 });
       return await saveThroughIngest({ content, body, scope: tenant.scope, uploaderId: sessionUser.id, signal: req.signal });
     }
+    // D-56: the legacy writer below cannot hold a document.
+    if (legacyWriteRefused()) return legacyApprovalRefusal();
 
     const owner = {
       userId: sessionUser.id,

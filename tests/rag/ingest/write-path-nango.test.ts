@@ -32,6 +32,11 @@ async function loadAdapter() {
   const ingestScope = await vi.importActual<typeof import('@/lib/rag/tenant/ingest-scope')>('@/lib/rag/tenant/ingest-scope');
   vi.doMock('@/lib/document-processor', () => ({ processDocument }));
   vi.doMock('@/lib/rag', () => ({
+    // Upload approval off (D-56): the legacy writers are not refused.
+    assertLegacyWriteAllowed: () => undefined,
+    legacyWriteRefused: () => false,
+    legacyApprovalRefusal: () => new Response(null, { status: 503 }),
+    UploadApprovalRequiresUnifiedError: class UploadApprovalRequiresUnifiedError extends Error {},
     ingest,
     buildSourceKey: identity.buildSourceKey,
     nangoOwnerScope: (input: { ownerUserId: string | null | undefined }) =>
@@ -388,6 +393,11 @@ async function mockSyncDependencies(memory: { admin: unknown }) {
   vi.doMock('@/lib/nango/file-fetcher', () => ({ fetchFileContent }));
   vi.doMock('@/lib/document-processor', () => ({ processDocument }));
   vi.doMock('@/lib/rag', () => ({
+    // Upload approval off (D-56): the legacy writers are not refused.
+    assertLegacyWriteAllowed: () => undefined,
+    legacyWriteRefused: () => false,
+    legacyApprovalRefusal: () => new Response(null, { status: 503 }),
+    UploadApprovalRequiresUnifiedError: class UploadApprovalRequiresUnifiedError extends Error {},
     ingest,
     buildSourceKey: identity.buildSourceKey,
     scopeKey: scope.scopeKey,

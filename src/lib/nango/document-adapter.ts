@@ -1,6 +1,7 @@
 import { processDocument } from '@/lib/document-processor';
 import { logger } from '@/lib/logger';
 import {
+  assertLegacyWriteAllowed,
   buildSourceKey,
   currentIngestConfig,
   ingest,
@@ -129,6 +130,9 @@ export async function processDocumentWithMetadata(
     return ingestNangoDocument(filename, buffer, options);
   }
 
+  // D-56: the legacy processor cannot hold a document; with upload approval on the sync item fails with that code.
+  assertLegacyWriteAllowed();
+
   // Use the existing document processor with all metadata including user_id
   // Stored sources include 'nango' although the processor's declared union omits it
   const metadata = {
@@ -189,6 +193,10 @@ async function ingestNangoDocument(filename: string, buffer: Buffer, options: Pr
 
   if (result.status === 'quarantined') {
     logger.warn('Nango', 'A synced file was quarantined by the injection scan and is not searchable');
+  }
+  // A held file is finished: it waits for an admin's approval (D-36) and the sync must not retry it.
+  if (result.status === 'pending_review') {
+    logger.info('Nango', 'A synced file is pending review and is not searchable until an admin approves it');
   }
   logger.debug('Nango', `Ingested ${result.status} document ${documentId}`);
   return documentId;

@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { storeDocument } from './supabase';
 import { env } from './env';
-import { embedText, embedBatch, CloudRefused, assertCloudAllowed } from '@/lib/rag';
+import { embedText, embedBatch, CloudRefused, assertCloudAllowed, assertLegacyWriteAllowed } from '@/lib/rag';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -401,6 +401,8 @@ async function processDocument(
   metadata: ProcessDocumentMetadata
 ): Promise<string> {
   console.log('Processing document');
+  // D-56: this legacy writer stores ready rows and cannot hold a document for upload approval.
+  assertLegacyWriteAllowed();
   let tempFilePath: string | null = null;
 
   try {
@@ -469,6 +471,7 @@ async function processImageDocument(
   metadata: ProcessDocumentMetadata
 ): Promise<string> {
   console.log(`Processing image document: ${filename}`);
+  assertLegacyWriteAllowed();
 
   try {
     // Generate description using Vision LLM
