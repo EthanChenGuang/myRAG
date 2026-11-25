@@ -1,3 +1,6 @@
+import { getLanguageSettings } from '../lang/settings';
+import { LANGUAGES_NOT_CONFIGURED, resolvePipelines, type LanguagesNotConfigured } from '../lang/resolve';
+
 export type IngestPipeline = 'legacy' | 'unified';
 export type IngestParser = 'llamaparse' | 'docling';
 export type InjectionScanMode = 'off' | 'quarantine';
@@ -40,6 +43,8 @@ export interface IngestEnvInput {
 
 export interface IngestConfig {
   pipeline: IngestPipeline;
+  /** D-02: an explicit RAG_INGEST_PIPELINE=unified without chosen languages; unified writes answer 503 with this code. */
+  pipelineBlocked: LanguagesNotConfigured | null;
   parser: IngestParser;
   parsePollBudgetMs: number;
   docTypeLlmDetect: boolean;
@@ -165,16 +170,46 @@ function parseDomainEmbeddings(raw: string | undefined, profiles: EmbeddingProfi
   return requested;
 }
 
+/** The pipeline an unset RAG_INGEST_PIPELINE runs (the shipped default). */
+export const DEFAULT_INGEST_PIPELINE: IngestPipeline = 'legacy';
+
+interface IngestLanguageGate {
+  blocked: LanguagesNotConfigured | null;
+  servedLegacy: boolean;
+}
+
+const NO_LANGUAGE_GATE: IngestLanguageGate = { blocked: null, servedLegacy: false };
+
+/** D-02: a legacy ingest pipeline (set or defaulted) keeps today's path and never reads the language settings. */
+function languageGate(env: IngestEnvInput): IngestLanguageGate {
+  const value = (env.RAG_INGEST_PIPELINE ?? '').trim();
+  if (value === '' ? DEFAULT_INGEST_PIPELINE === 'legacy' : value.toLowerCase() !== 'unified') return NO_LANGUAGE_GATE;
+  const resolved = resolvePipelines(
+    { RAG_PIPELINE: 'legacy', RAG_INGEST_PIPELINE: env.RAG_INGEST_PIPELINE },
+    { retrieval: 'legacy', ingest: DEFAULT_INGEST_PIPELINE },
+    getLanguageSettings,
+  );
+  return {
+    blocked: resolved.ingest.pipeline === LANGUAGES_NOT_CONFIGURED ? LANGUAGES_NOT_CONFIGURED : null,
+    servedLegacy: resolved.ingest.servedLegacyBecauseUnset,
+  };
+}
+
 /** Pure function of an env snapshot; any invalid or unknown value resolves to today's behaviour. */
 export function loadIngestConfig(env: IngestEnvInput): IngestConfig {
-  const snapshot = JSON.stringify(ENV_NAMES.map((name) => env[name] ?? ''));
+  const gate = languageGate(env);
+  const base = JSON.stringify(ENV_NAMES.map((name) => env[name] ?? ''));
+  const snapshot = gate === NO_LANGUAGE_GATE ? base : `${base}|${gate.blocked ?? ''}|${gate.servedLegacy}`;
   const cached = memo.get(snapshot);
   if (cached) return cached;
 
   const warnings: string[] = [];
   const embeddingProfiles = parseChoice('RAG_EMBEDDING_PROFILES', env.RAG_EMBEDDING_PROFILES, ['off', 'on'], 'off', warnings);
   const config: IngestConfig = {
-    pipeline: parseChoice('RAG_INGEST_PIPELINE', env.RAG_INGEST_PIPELINE, ['legacy', 'unified'], 'legacy', warnings),
+    pipeline: gate.servedLegacy
+      ? 'legacy'
+      : parseChoice('RAG_INGEST_PIPELINE', env.RAG_INGEST_PIPELINE, ['legacy', 'unified'], DEFAULT_INGEST_PIPELINE, warnings),
+    pipelineBlocked: gate.blocked,
     parser: parseChoice('RAG_PARSER', env.RAG_PARSER, ['llamaparse', 'docling'], 'llamaparse', warnings),
     parsePollBudgetMs: parsePollBudget(env.RAG_PARSE_POLL_BUDGET_MS, warnings),
     docTypeLlmDetect: parseFlag('RAG_DOC_TYPE_LLM_DETECT', env.RAG_DOC_TYPE_LLM_DETECT, warnings),

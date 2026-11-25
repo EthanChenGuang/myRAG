@@ -211,7 +211,20 @@ class DocTypeDetection(_Contract):
 
 
 
+def check_language_selection(languages: list[str], primary: str | None) -> None:
+    """Shared rule of the Phase 3.2 language fields: no repeats, and a primary only from the selected languages."""
+    _require_unique(languages, "languages")
+    if primary is not None and primary not in languages:
+        raise ValueError("primary_language must be one of languages")
+
+
 class ParseJobRequest(_Contract):
+    """Body of `POST /v1/parse/jobs`.
+
+    The Phase 3.2 fields default to today's behaviour and the app sends them only when they differ from it. The
+    model keeps extra="forbid", so an older sidecar rejects a request carrying them: deploy the sidecar first.
+    """
+
     profile_id: str = Field(pattern=r"^[a-z][a-z_]*@[1-9][0-9]*$")
     profile_version: int = Field(ge=1)
     docling: DoclingOptions
@@ -221,11 +234,21 @@ class ParseJobRequest(_Contract):
     repeat_table_header: bool
     input_format: InputFormat | None = None
     page_cap: int | None = Field(default=None, ge=1)
+    # Phase 3.2 (D-13, D-20): defaults reproduce the behaviour before this phase.
+    language_aware: bool = False
+    languages: list[Language] = Field(default_factory=list)
+    primary_language: Language | None = None
+    carry_table_header: bool = False
 
     @field_validator("ocr_languages")
     @classmethod
     def _languages_unique(cls, value: list[str]) -> list[str]:
         return _require_unique(value, "ocr_languages")
+
+    @model_validator(mode="after")
+    def _language_selection(self) -> "ParseJobRequest":
+        check_language_selection(self.languages, self.primary_language)
+        return self
 
 
 class ParseJobAccepted(_Contract):

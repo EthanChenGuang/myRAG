@@ -1,8 +1,10 @@
 const fs = require('fs');
 const path = require('path');
 
-// Resolve project root (one level up from scripts directory)
-const REPO_ROOT = path.resolve(__dirname, '..');
+// Resolve project root (one level up from scripts directory); MYRAG_CONFIG_ROOT points it elsewhere, as for config-server.js
+const REPO_ROOT = process.env.MYRAG_CONFIG_ROOT
+  ? path.resolve(process.env.MYRAG_CONFIG_ROOT)
+  : path.resolve(__dirname, '..');
 const ENV_PATH = path.join(REPO_ROOT, '.env.local');
 
 // Default model configurations
@@ -350,7 +352,8 @@ RAG_STAGE_TIMEOUTS=
 # -----------------------------
 # Lexical hybrid search leg
 RAG_LEXICAL_SEARCH=false
-# Reranker: none | cohere | voyage | local_bm25
+# Reranker: none | auto | cohere | voyage | local_bm25
+# auto uses Cohere when COHERE_API_KEY is set and a local fallback otherwise
 RAG_RERANKER=none
 RAG_RERANK_TIER_CHAT=quality
 RAG_RERANK_TIER_VOICE=fast
@@ -360,6 +363,8 @@ COHERE_API_KEY=
 COHERE_BASE_URL=
 # Refusal and context assembly
 RAG_REFUSAL_THRESHOLD=false
+# Fallback refusal floor when no calibrated rerank cell applies: similarity | legacy_rule
+RAG_REFUSAL_FLOOR=similarity
 RAG_CONTEXT_EDGE_ORDER=false
 RAG_CONTEXT_COMPRESSION=false
 RAG_CONTEXT_TOKEN_BUDGET=6000
@@ -752,8 +757,233 @@ function checkAndCreateEnvFile() {
   }
 }
 
-// Run the checks
-const wasEnvCreated = checkAndCreateEnvFile();
+// -----------------------------
+// D-08 first-run language picker
+// -----------------------------
+const MAX_LANGUAGE_ATTEMPTS = 3;
+const SUGGESTION_TIMEOUT_MS = 3000;
+const SUGGESTION_ROW_LIMIT = 10000;
+
+function languageContext() {
+  return require('./rag/language-settings-context');
+}
+
+function isSetValue(value) {
+  return typeof value === 'string' && value.trim() !== '';
+}
+
+/** D-08: prompt only on an interactive terminal, outside CI, while RAG_SUPPORTED_LANGUAGES has no value. */
+function shouldPromptForLanguages({ input, output, env = {}, envValues = {} } = {}) {
+  if (!input || !output || input.isTTY !== true || output.isTTY !== true) return false;
+  if (isSetValue(env.CI)) return false;
+  return !isSetValue(env.RAG_SUPPORTED_LANGUAGES) && !isSetValue(envValues.RAG_SUPPORTED_LANGUAGES);
+}
+
+/** D-07 for the init-env entry point; the picker and the entry-point parity test call it. */
+function validateLanguageChoice(candidate, { root = REPO_ROOT, env = {}, registry, rerankerOverrides } = {}) {
+  const ctx = languageContext();
+  const context = ctx.buildValidationContext({ root, env, registry, rerankerOverrides });
+  return ctx.validateForScript(candidate, context);
+}
+
+/**
+ * Per-language document counts from one PostgREST request, only when .env.local already holds the Supabase URL and
+ * service-role key. Any failure means no suggestion. The key is sent only to that URL and never printed.
+ */
+async function fetchLanguageSuggestions({ envValues = {}, codes, fetchImpl }) {
+  const url = envValues.NEXT_PUBLIC_SUPABASE_URL;
+  const key = envValues.SUPABASE_SERVICE_ROLE_KEY;
+  if (!isSetValue(url) || !isSetValue(key) || typeof fetchImpl !== 'function' || codes.length === 0) return null;
+  let base;
+  try {
+    base = new URL(url.trim());
+  } catch {
+    return null;
+  }
+  if (base.protocol !== 'https:' && base.protocol !== 'http:') return null;
+  const query = new URLSearchParams({
+    select: 'language',
+    is_current: 'eq.true',
+    status: 'eq.ready',
+    language: `in.(${codes.join(',')})`,
+    limit: String(SUGGESTION_ROW_LIMIT),
+  });
+  const target = `${base.origin}${base.pathname.replace(/\/+$/, '')}/rest/v1/documents?${query.toString()}`;
+  try {
+    const response = await fetchImpl(target, {
+      method: 'GET',
+      headers: { apikey: key.trim(), Authorization: `Bearer ${key.trim()}`, Accept: 'application/json' },
+      signal: typeof AbortSignal !== 'undefined' && AbortSignal.timeout ? AbortSignal.timeout(SUGGESTION_TIMEOUT_MS) : undefined,
+    });
+    if (!response || !response.ok) return null;
+    const rows = await response.json();
+    if (!Array.isArray(rows)) return null;
+    const counts = {};
+    for (const row of rows) {
+      const code = row && typeof row.language === 'string' ? row.language : null;
+      if (code && codes.includes(code)) counts[code] = (counts[code] || 0) + 1;
+    }
+    return counts;
+  } catch {
+    return null;
+  }
+}
+
+function languageErrorText(error) {
+  switch (error.code) {
+    case 'empty_set':
+      return 'Choose at least one language.';
+    case 'unknown_language':
+      return `"${error.language}" is not a language this deployment can support.`;
+    case 'primary_not_in_set':
+      return error.language
+        ? `The primary language "${error.language}" must be one of the chosen languages.`
+        : 'Choose a primary language from the chosen languages.';
+    case 'incomplete_pack':
+      return `${error.language}: its language pack is not complete.`;
+    case 'embedding_profile_unsupported':
+      return `${error.language}: the embedding profile ${error.id} does not declare this language.`;
+    case 'reranker_unsupported':
+      return `${error.language}: the reranker ${error.id} does not declare this language.`;
+    default:
+      return `${error.code}${error.language ? ` (${error.language})` : ''}`;
+  }
+}
+
+function languageWarningText(warning) {
+  if (warning.code === 'groundedness_not_checked') {
+    return `${warning.language}: answers in this language are not checked for groundedness.`;
+  }
+  return `${warning.code}${warning.language ? ` (${warning.language})` : ''}`;
+}
+
+function packLabel(pack) {
+  const native = pack.native_name || pack.code;
+  const english = pack.name || pack.code;
+  return native === english ? `${native} (${pack.code})` : `${native} · ${english} (${pack.code})`;
+}
+
+/** Numbers pick from the listed options, anything else is taken as a code for the validator to judge. */
+function resolveAnswerTokens(answer, options) {
+  return answer
+    .split(',')
+    .map((token) => token.trim())
+    .filter((token) => token !== '')
+    .map((token) => {
+      if (/^\d+$/.test(token)) {
+        const index = Number(token) - 1;
+        return index >= 0 && index < options.length ? options[index] : token;
+      }
+      return token;
+    });
+}
+
+function lineReader(input) {
+  const readline = require('readline');
+  const rl = readline.createInterface({ input, terminal: false, crlfDelay: Infinity });
+  const iterator = rl[Symbol.asyncIterator]();
+  return {
+    async ask(output, question) {
+      output.write(question);
+      const next = await iterator.next();
+      return next.done ? null : String(next.value);
+    },
+    close() {
+      rl.close();
+    },
+  };
+}
+
+/**
+ * D-08 picker for scripts/init-env.js. Asks for the supported languages and the primary language, validates with the
+ * shared D-07 validator and writes both variables only after a valid explicit answer. An empty answer, closed input or
+ * three invalid answers leave both unset.
+ */
+async function runLanguagePicker({
+  input,
+  output,
+  env = {},
+  root = REPO_ROOT,
+  envPath = ENV_PATH,
+  fetchImpl = typeof fetch === 'function' ? fetch : undefined,
+} = {}) {
+  const ctx = languageContext();
+  const envValues = ctx.readEnvFileValues(envPath);
+  if (!shouldPromptForLanguages({ input, output, env, envValues })) return { prompted: false, saved: false, attempts: 0 };
+
+  const registry = ctx.readRegistry(root);
+  const packs = ctx.completePacks(registry);
+  const codes = packs.map((pack) => pack.code);
+  const validationEnv = { RAG_RERANKER: isSetValue(env.RAG_RERANKER) ? env.RAG_RERANKER : envValues.RAG_RERANKER };
+  const suggestions = await fetchLanguageSuggestions({ envValues, codes, fetchImpl });
+
+  output.write('\n[RAG Languages] Choose the languages this deployment supports (RAG_SUPPORTED_LANGUAGES).\n');
+  packs.forEach((pack, index) => {
+    const count = suggestions && suggestions[pack.code] ? suggestions[pack.code] : 0;
+    const suggested = count > 0 ? ` - suggested: ${count} ${count === 1 ? 'document' : 'documents'}` : '';
+    output.write(`  ${index + 1}) ${packLabel(pack)}${suggested}\n`);
+  });
+  output.write('The embedding check is not verified against the active profile here (no database at this step).\n');
+
+  const reader = lineReader(input);
+  let attempts = 0;
+  try {
+    while (attempts < MAX_LANGUAGE_ATTEMPTS) {
+      const answer = await reader.ask(output, 'Languages (numbers or codes, comma-separated; empty to skip): ');
+      if (answer === null || answer.trim() === '') {
+        output.write('No languages chosen; RAG_SUPPORTED_LANGUAGES and RAG_PRIMARY_LANGUAGE stay unset.\n');
+        return { prompted: true, saved: false, attempts };
+      }
+      const chosen = resolveAnswerTokens(answer, codes);
+      const chosenOrdered = codes.filter((code) => chosen.map((token) => token.toLowerCase()).includes(code));
+      let primary = chosen.length === 1 ? chosen[0] : '';
+      if (chosen.length > 1) {
+        const primaryOptions = chosenOrdered.length > 0 ? chosenOrdered : chosen;
+        primaryOptions.forEach((code, index) => {
+          const pack = packs.find((candidate) => candidate.code === code);
+          output.write(`  ${index + 1}) ${pack ? packLabel(pack) : code}\n`);
+        });
+        const primaryAnswer = await reader.ask(output, 'Primary language (number or code): ');
+        if (primaryAnswer === null) {
+          output.write('No primary language chosen; both variables stay unset.\n');
+          return { prompted: true, saved: false, attempts };
+        }
+        primary = resolveAnswerTokens(primaryAnswer, primaryOptions)[0] || '';
+      }
+
+      const result = validateLanguageChoice({ supported: chosen, primary }, { root, env: validationEnv, registry });
+      attempts += 1;
+      if (result.ok) {
+        ctx.writeLanguageVariables(envPath, result.normalized);
+        output.write(
+          `Saved RAG_SUPPORTED_LANGUAGES=${result.normalized.supported} and RAG_PRIMARY_LANGUAGE=${result.normalized.primary}.\n`,
+        );
+        for (const warning of result.warnings) output.write(`Note: ${languageWarningText(warning)}\n`);
+        return { prompted: true, saved: true, attempts, result };
+      }
+      for (const error of result.errors) output.write(`Not saved: ${languageErrorText(error)}\n`);
+    }
+    output.write('Too many invalid answers; RAG_SUPPORTED_LANGUAGES and RAG_PRIMARY_LANGUAGE stay unset.\n');
+    return { prompted: true, saved: false, attempts };
+  } finally {
+    reader.close();
+  }
+}
+
+if (require.main === module) {
+  checkAndCreateEnvFile();
+  runLanguagePicker({ input: process.stdin, output: process.stdout, env: process.env }).catch((error) => {
+    console.error('[RAG Languages] The language picker failed; both variables stay unset:', {
+      message: error instanceof Error ? error.message : String(error),
+    });
+  });
+}
 
 // Export for use in other scripts
-module.exports = { checkAndCreateEnvFile };
+module.exports = {
+  checkAndCreateEnvFile,
+  fetchLanguageSuggestions,
+  runLanguagePicker,
+  shouldPromptForLanguages,
+  validateLanguageChoice,
+};

@@ -1,7 +1,5 @@
-import {
-  JobSettingsSnapshotSchema,
-  type JobSettingsSnapshot,
-} from '@/lib/rag-eval/contracts.generated';
+import { JobSettingsSnapshotSchema } from '@/lib/rag-eval/contracts.generated';
+import { JOB_SETTINGS_PHASE32_DEFAULTS, omitDefaultFields, type JobSettingsSnapshotWire } from '../wire-defaults';
 import { imageCaptionModelId } from '../captioner';
 import type { QueueConfig } from '../queue-config';
 import type { ProcessingProfile } from '../profiles/load';
@@ -19,7 +17,7 @@ export interface BuildJobSettingsInput {
   embedProfileProvider?: string;
 }
 
-export function buildJobSettings(input: BuildJobSettingsInput): JobSettingsSnapshot {
+export function buildJobSettings(input: BuildJobSettingsInput): JobSettingsSnapshotWire {
   const {
     queueConfig,
     profile,
@@ -52,5 +50,5 @@ export function buildJobSettings(input: BuildJobSettingsInput): JobSettingsSnaps
     vlm_model: queueConfig.vlmModel ?? imageCaptionModelId(),
   };
 
-  return JobSettingsSnapshotSchema.parse(snapshot);
+  return omitDefaultFields(JobSettingsSnapshotSchema.parse(snapshot), JOB_SETTINGS_PHASE32_DEFAULTS);
 }

@@ -1,5 +1,6 @@
 import type { RpcClient } from '../backend/supabase-rpc';
-import { IngestionJobSchema, type IngestionJob, type JobSettingsSnapshot } from '@/lib/rag-eval/contracts.generated';
+import { IngestionJobSchema, type IngestionJob } from '@/lib/rag-eval/contracts.generated';
+import type { JobSettingsSnapshotWire } from './wire-defaults';
 import { getIngestDeps } from './deps';
 import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
 
@@ -150,7 +151,7 @@ export interface EnqueueJobArgs {
   filename?: string | null;
   mimeType?: string | null;
   originalRef?: Record<string, unknown> | null;
-  settings: JobSettingsSnapshot;
+  settings: JobSettingsSnapshotWire;
   priority?: number;
   documentId?: string | null;
   batchId?: string | null;

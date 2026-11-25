@@ -1,0 +1,362 @@
+{
+  "version": 1,
+  "description": "Scripted query-LLM outputs for CI and eval (D-39). Key: transform plus the NFC, trimmed, whitespace-collapsed query; translate entries also key on output.target_language. No live model is ever called.",
+  "defaults": {
+    "condense": "input unchanged (unchanged true)",
+    "expand": "empty list",
+    "decompose": "empty list",
+    "hyde": "input as the passage",
+    "translate": "empty text (no variant)"
+  },
+  "entries": [
+    {
+      "transform": "condense",
+      "item_id": "en-multi-turn-001",
+      "query": "What accuracy does it have?",
+      "output": {
+        "standalone": "What accuracy does the XR-5100 reference thermometer have?",
+        "unchanged": false
+      }
+    },
+    {
+      "transform": "condense",
+      "item_id": "en-multi-turn-002",
+      "query": "And what does it cost for an order below 250 dollars?",
+      "output": {
+        "standalone": "What does standard shipping cost for an order below 250 dollars?",
+        "unchanged": false
+      }
+    },
+    {
+      "transform": "condense",
+      "item_id": "en-multi-turn-003",
+      "query": "How many days do I have to ask for it?",
+      "output": {
+        "standalone": "How many days do I have to ask for a refund of a monthly plan?",
+        "unchanged": false
+      }
+    },
+    {
+      "transform": "condense",
+      "item_id": "it-multi-turn-001",
+      "query": "Quanto pesa?",
+      "output": {
+        "standalone": "Quanto pesa il registratore VL-15?",
+        "unchanged": false
+      }
+    },
+    {
+      "transform": "condense",
+      "item_id": "it-multi-turn-002",
+      "query": "Entro quanti giorni devo chiederlo?",
+      "output": {
+        "standalone": "Entro quanti giorni devo chiedere il rimborso di un piano mensile?",
+        "unchanged": false
+      }
+    },
+    {
+      "transform": "condense",
+      "item_id": "it-multi-turn-003",
+      "query": "E chi paga la spedizione di ritorno?",
+      "output": {
+        "standalone": "Chi paga la spedizione di ritorno per un intervento in garanzia?",
+        "unchanged": false
+      }
+    },
+    {
+      "transform": "condense",
+      "item_id": "zh-multi-turn-001",
+      "query": "它的精度是多少？",
+      "output": {
+        "standalone": "GT-500 标准温度计的精度是多少？",
+        "unchanged": false
+      }
+    },
+    {
+      "transform": "condense",
+      "item_id": "zh-multi-turn-002",
+      "query": "那没休完的部分可以顺延到什么时候？",
+      "output": {
+        "standalone": "没休完的年假可以顺延到什么时候？",
+        "unchanged": false
+      }
+    },
+    {
+      "transform": "condense",
+      "item_id": "zh-multi-turn-003",
+      "query": "申请的期限是多久？",
+      "output": {
+        "standalone": "月度方案申请退款的期限是多久？",
+        "unchanged": false
+      }
+    },
+    {
+      "transform": "decompose",
+      "item_id": "en-compound-001",
+      "query": "What are the refund windows for annual plans and for monthly plans?",
+      "output": {
+        "questions": [
+          "What is the refund window for annual plans?",
+          "What is the refund window for monthly plans?"
+        ]
+      }
+    },
+    {
+      "transform": "decompose",
+      "item_id": "en-compound-002",
+      "query": "What is the measurement range of the XR-4420 and what does it cost for 1 to 9 units?",
+      "output": {
+        "questions": [
+          "What is the measurement range of the XR-4420?",
+          "What does the XR-4420 cost for 1 to 9 units?"
+        ]
+      }
+    },
+    {
+      "transform": "decompose",
+      "item_id": "en-compound-003",
+      "query": "When must an order be paid for same-day dispatch with the standard carrier, and how much does express shipping cost?",
+      "output": {
+        "questions": [
+          "When must an order be paid for same-day dispatch with the standard carrier?",
+          "How much does express shipping cost?"
+        ]
+      }
+    },
+    {
+      "transform": "decompose",
+      "item_id": "it-compound-001",
+      "query": "Quali sono i termini per chiedere il rimborso dei piani annuali e di quelli mensili?",
+      "output": {
+        "questions": [
+          "Qual è il termine per chiedere il rimborso dei piani annuali?",
+          "Qual è il termine per chiedere il rimborso dei piani mensili?"
+        ]
+      }
+    },
+    {
+      "transform": "decompose",
+      "item_id": "it-compound-002",
+      "query": "Qual è l'intervallo di misura del VS-220 e quanto costa da 1 a 9 pezzi?",
+      "output": {
+        "questions": [
+          "Qual è l'intervallo di misura del VS-220?",
+          "Quanto costa il VS-220 da 1 a 9 pezzi?"
+        ]
+      }
+    },
+    {
+      "transform": "decompose",
+      "item_id": "it-compound-003",
+      "query": "Per quanti mesi sono coperti gli accessori di consumo e entro quanti giorni dalla consegna si può acquistare l'estensione di garanzia?",
+      "output": {
+        "questions": [
+          "Per quanti mesi sono coperti gli accessori di consumo?",
+          "Entro quanti giorni dalla consegna si può acquistare l'estensione di garanzia?"
+        ]
+      }
+    },
+    {
+      "transform": "decompose",
+      "item_id": "zh-compound-001",
+      "query": "年度方案和月度方案的退款期限分别是多少天？",
+      "output": {
+        "questions": [
+          "年度方案的退款期限是多少天？",
+          "月度方案的退款期限是多少天？"
+        ]
+      }
+    },
+    {
+      "transform": "decompose",
+      "item_id": "zh-compound-002",
+      "query": "GT-310 的测温范围是多少？买 1 至 9 台时单价是多少？",
+      "output": {
+        "questions": [
+          "GT-310 的测温范围是多少？",
+          "买 1 至 9 台 GT-310 时单价是多少？"
+        ]
+      }
+    },
+    {
+      "transform": "decompose",
+      "item_id": "zh-compound-003",
+      "query": "病假期间的工资发放比例是多少，差旅报销要在费用发生后多少天内提交？",
+      "output": {
+        "questions": [
+          "病假期间的工资发放比例是多少？",
+          "差旅报销要在费用发生后多少天内提交？"
+        ]
+      }
+    },
+    {
+      "transform": "expand",
+      "item_id": "en-multi-turn-001",
+      "query": "What accuracy does the XR-5100 reference thermometer have?",
+      "output": {
+        "queries": [
+          "XR-5100 reference thermometer accuracy in degrees Celsius"
+        ]
+      }
+    },
+    {
+      "transform": "expand",
+      "item_id": "it-multi-turn-001",
+      "query": "Quanto pesa il registratore VL-15?",
+      "output": {
+        "queries": [
+          "peso del registratore VL-15 in grammi"
+        ]
+      }
+    },
+    {
+      "transform": "expand",
+      "item_id": "zh-multi-turn-001",
+      "query": "GT-500 标准温度计的精度是多少？",
+      "output": {
+        "queries": [
+          "GT-500 标准温度计 精度 摄氏度"
+        ]
+      }
+    },
+    {
+      "transform": "hyde",
+      "item_id": "en-multi-turn-001",
+      "query": "What accuracy does the XR-5100 reference thermometer have?",
+      "output": {
+        "passage": "The XR-5100 reference thermometer has a stated accuracy in degrees Celsius listed in its specification table."
+      }
+    },
+    {
+      "transform": "hyde",
+      "item_id": "it-multi-turn-001",
+      "query": "Quanto pesa il registratore VL-15?",
+      "output": {
+        "passage": "Il registratore VL-15 ha un peso indicato in grammi nella tabella delle specifiche."
+      }
+    },
+    {
+      "transform": "hyde",
+      "item_id": "zh-multi-turn-001",
+      "query": "GT-500 标准温度计的精度是多少？",
+      "output": {
+        "passage": "GT-500 标准温度计的精度以摄氏度标注在规格对照表中。"
+      }
+    },
+    {
+      "transform": "translate",
+      "item_id": "en-multi-turn-001",
+      "query": "What accuracy does the XR-5100 reference thermometer have?",
+      "output": {
+        "target_language": "it",
+        "text": "Che precisione ha il termometro di riferimento XR-5100?"
+      }
+    },
+    {
+      "transform": "translate",
+      "item_id": "it-multi-turn-001",
+      "query": "Quanto pesa il registratore VL-15?",
+      "output": {
+        "target_language": "en",
+        "text": "How much does the VL-15 recorder weigh?"
+      }
+    },
+    {
+      "transform": "condense",
+      "query": "synthetic condense delay probe",
+      "delay_ms": 2000,
+      "output": {
+        "standalone": "synthetic probe question alpha",
+        "unchanged": true
+      }
+    },
+    {
+      "transform": "condense",
+      "query": "synthetic condense invalid probe",
+      "fail": "invalid"
+    },
+    {
+      "transform": "condense",
+      "query": "synthetic condense error probe",
+      "fail": "error"
+    },
+    {
+      "transform": "expand",
+      "query": "synthetic expand delay probe",
+      "delay_ms": 2000,
+      "output": {
+        "queries": [
+          "synthetic probe variant alpha"
+        ]
+      }
+    },
+    {
+      "transform": "expand",
+      "query": "synthetic expand invalid probe",
+      "fail": "invalid"
+    },
+    {
+      "transform": "expand",
+      "query": "synthetic expand error probe",
+      "fail": "error"
+    },
+    {
+      "transform": "hyde",
+      "query": "synthetic hyde delay probe",
+      "delay_ms": 2000,
+      "output": {
+        "passage": "A synthetic probe passage."
+      }
+    },
+    {
+      "transform": "hyde",
+      "query": "synthetic hyde invalid probe",
+      "fail": "invalid"
+    },
+    {
+      "transform": "hyde",
+      "query": "synthetic hyde error probe",
+      "fail": "error"
+    },
+    {
+      "transform": "decompose",
+      "query": "synthetic decompose delay probe",
+      "delay_ms": 2000,
+      "output": {
+        "questions": [
+          "synthetic probe part one",
+          "synthetic probe part two"
+        ]
+      }
+    },
+    {
+      "transform": "decompose",
+      "query": "synthetic decompose invalid probe",
+      "fail": "invalid"
+    },
+    {
+      "transform": "decompose",
+      "query": "synthetic decompose error probe",
+      "fail": "error"
+    },
+    {
+      "transform": "translate",
+      "query": "synthetic translate delay probe",
+      "delay_ms": 2000,
+      "output": {
+        "target_language": "it",
+        "text": "domanda sonda sintetica alfa"
+      }
+    },
+    {
+      "transform": "translate",
+      "query": "synthetic translate invalid probe",
+      "fail": "invalid"
+    },
+    {
+      "transform": "translate",
+      "query": "synthetic translate error probe",
+      "fail": "error"
+    }
+  ]
+}

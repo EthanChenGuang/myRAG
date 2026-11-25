@@ -109,6 +109,14 @@ myrag/
 - Local HHEM needs the sidecar image built with `docker build --target hhem rag-sidecar` (baked weights, offline); plan about 2 GB of memory for the scorer. The default image scores nothing locally.
 - Fixture proof: `python -m rag_eval.phase_compare --spec eval/config/phase5-comparison.json --out eval/reports/phase-05` (switches off: paired differences zero; on: retrieval unchanged, `invalid_citation_rate` 0).
 
+### Prompt-injection defense (Phase 5.1)
+- Every Phase 5.1 switch defaults to off (`src/lib/env.ts`): `RAG_CONTEXT_TAGGING=false`, `RAG_INJECTION_CHECK=off` (`flag | drop | downweight`), `RAG_INJECTION_PROMPT_GUARD=false`, `RAG_INJECTION_LAKERA=false`, `LAKERA_GUARD_API_KEY=`, `LAKERA_GUARD_BASE_URL=`, `RAG_INJECTION_LAKERA_MULTI_TENANT_ACK=false`, `RAG_TOOL_RESULT_GUARD=off` (`tag | tag_and_flag`), `NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST=false`. Off reproduces the pre-5.1 chat byte for byte.
+- `RAG_CONTEXT_TAGGING=true` wraps each context block in `<doc>` inside `<documents>` with a fixed data-not-instructions notice and escapes look-alike tags in the content; citation quotes and groundedness keep the unescaped text.
+- `injection_check` runs just before assembly in legacy and v2 (after `expand_parents`) on chunks, parents, references and captions. Rules always run when the check is on and share `config/rag/injection-rules.json` and `src/lib/rag/security/injection-scan.ts` with ingestion; `flag` records, `drop` removes, `downweight` moves flagged items last. A detector failure is `degraded/detector_unavailable`, never a refusal; when `drop` removes everything the result is `empty/injection_filtered`, so strict mode answers "information not available".
+- Recommended configuration for the Phase 7 regression: `RAG_CONTEXT_TAGGING=true`, `RAG_INJECTION_CHECK=drop`, rules only (`eval/config/runs/sec-recommended.json`). Proof: `python -m rag_eval.phase_compare --spec eval/config/phase51-comparison.json --out eval/reports/phase-05.1` (all off equals the baseline; recommended holds attack success on `injection` and the rules false-positive count at 0 with no other category beyond the noise band).
+- Listing `injection_check` in `RAG_DISABLED_STAGES` disables the check even while `RAG_INJECTION_CHECK` is on; the app logs one `[RAG Config]` warning.
+- Operations: Lakera sends chunk text to a third party. In multi-tenant mode it runs only with `RAG_INJECTION_LAKERA_MULTI_TENANT_ACK=true` (set it only after the retention terms are recorded); `LAKERA_GUARD_BASE_URL` selects the region (empty: `https://api.lakera.ai`). Prompt Guard is the sidecar `POST /v1/injection/classify` (shared secret, `PROMPT_GUARD_ENABLED`); it covers en and it only (no zh) and is meant for a CPU warm cache or nightly runs. No model image ships yet: the optional `promptguard` target waits on the license and gated-access checkpoint (plans 05.1-18, 05.1-25).
+
 ---
 
 ## 7. AI Model Management
@@ -155,6 +163,7 @@ Key files:
 - `voice-agent/src/agent.ts` – LiveKit, VAD, audio mutex
 - `src/components/voice/voice-mode-overlay.tsx` – Frontend voice UI
 - Each voice session gets its own LiveKit room (`myrag-voice-<random>`), created by `/api/livekit/token` with the signed scope token in the room metadata; the agent watches for these rooms, serves only the identity named there and removes anyone else. Deploy the app and the agent together, and keep `VOICE_MAX_ACTIVE_ROOMS` (app) equal to `VOICE_AGENT_MAX_SESSIONS` (agent).
+- `/api/internal/voice-rag` adds a tagged `context` field only with `RAG_CONTEXT_TAGGING=true`, and the agent uses it when present; the voice profile runs the injection rules only. When turning tagging on, deploy the app first, then the agent.
 
 Running voice agent:
 ```bash
@@ -177,6 +186,8 @@ Unified OAuth for Google Drive, Notion, Dropbox:
 - Approval & execution pipeline: `src/app/api/chat/approve/route.ts` plus the Universal MCP router/client.
 - Cache and approval metadata live on the server—keep tool IDs, schemas, and approval prompts consistent.
 - In multi-tenant mode the operator's MCP account is admin-only; `chat/approve` executes exactly the approved parameters with per-caller state.
+- Tool results (Exa web search, approved MCP results) are data, not instructions: with `RAG_TOOL_RESULT_GUARD=tag` the model's copy is escaped and wrapped under the same notice (`tag_and_flag` also records rule matches); results are never dropped and the UI keeps the raw results.
+- With `NEXT_PUBLIC_MCP_YOLO_MODE_ENABLED=true`, auto-approval is suspended for any turn whose context held flagged content; every MCP tool then needs explicit approval and the turn carries `injectionFlagged`.
 
 ---
 
@@ -205,6 +216,7 @@ Unified OAuth for Google Drive, Notion, Dropbox:
 - When strict RAG returns a verified `empty` retrieval status and web search is disabled, the chat API returns a structured "information not available" response instead of letting the model answer from general knowledge. A knowledge-base failure (`error`, or `degraded` with no documents) is never reported as "information not available": strict mode with web search off streams a localized "knowledge base temporarily unavailable" message; with web search on, or in balanced/flexible mode, the answer continues without knowledge-base context and the trace is flagged `degraded`.
 - Under `RAG_PIPELINE=v2` strict mode still answers "information not available" with the default `RAG_RERANKER=none`: without a calibrated rerank threshold the refusal stage applies the embedding profile's similarity floor (legacy 0.65 when the profile has no calibration).
 - Citations and groundedness are additive: strict refusal and the "knowledge base temporarily unavailable" message are produced before generation and never carry citations; webSearch with Exa, `source_images` and the `{{context}}` placeholder are unchanged with every Phase 5 switch on or off.
+- The prompt-injection defense is additive: with every Phase 5.1 switch on or off, strict "information not available", the webSearch strict path with Exa and `source_images` are unchanged. `NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST=true` renders markdown images in answers only from same-origin, Supabase storage and configured image hosts (others become plain links); it is inlined at build time, so it takes effect only after a rebuild.
 - Source extraction now preserves `webSearch` tool results, document sources, and `source_images` through streaming and final message persistence; keep sidebar toggle click handling intact.
 - Voice work recently focused on UI timing and audio reliability: the overlay keeps the three-dot state until text and word timings are ready, the agent dynamically resamples incoming audio for VAD/STT, and Resemble timestamp failures fall back to estimated timings.
 

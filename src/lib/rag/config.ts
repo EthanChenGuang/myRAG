@@ -1,4 +1,6 @@
 import type { Profile } from './types';
+import { getLanguageSettings } from './lang/settings';
+import { LANGUAGES_NOT_CONFIGURED, resolvePipelines, type LanguagesNotConfigured } from './lang/resolve';
 
 export const CORE_STAGES = ['embed', 'search', 'fuse'] as const;
 export const OPTIONAL_STAGES = [
@@ -17,7 +19,27 @@ export const OPTIONAL_STAGES = [
   'expand_parents',
   'compress',
   'injection_check',
+  'query_gate',
+  'condense',
+  'normalize_dates',
+  'expand',
+  'hyde',
+  'decompose',
+  'semantic_cache',
 ] as const;
+
+/** Phase 6 query-layer stages (D-05); translate is the shared Phase 4 slot and is not listed here. */
+export const QUERY_LAYER_STAGES = [
+  'query_gate',
+  'condense',
+  'normalize_dates',
+  'expand',
+  'hyde',
+  'decompose',
+  'semantic_cache',
+] as const satisfies readonly OptionalStageName[];
+
+export type QueryLayerStageName = (typeof QUERY_LAYER_STAGES)[number];
 
 export type CoreStageName = (typeof CORE_STAGES)[number];
 export type OptionalStageName = (typeof OPTIONAL_STAGES)[number];
@@ -70,13 +92,48 @@ const INJECTION_CHECK_TIMEOUTS: Record<Profile, number> = {
   eval: 60000,
 };
 
+/** D-27 query-layer budgets; query_gate and normalize_dates are pure. Eval has no effective timeout (Phase 4 precedent). */
+const QUERY_STANDARD: StageTimeouts = {
+  query_gate: 50,
+  condense: 600,
+  normalize_dates: 50,
+  expand: 700,
+  hyde: 900,
+  decompose: 800,
+  semantic_cache: 150,
+};
+
+const QUERY_VOICE: StageTimeouts = {
+  query_gate: 50,
+  condense: 300,
+  normalize_dates: 50,
+};
+
+const QUERY_EVAL: StageTimeouts = {
+  query_gate: 60000,
+  condense: 60000,
+  normalize_dates: 60000,
+  expand: 60000,
+  hyde: 60000,
+  decompose: 60000,
+  semantic_cache: 60000,
+};
+
+/** The translate budget while the query layer serves the slot (D-27); with the layer off the Phase 4 value stays. */
+const QUERY_LAYER_TRANSLATE: Partial<Record<Profile, number>> = {
+  chat: 600,
+  embed: 600,
+  media: 600,
+  eval: 60000,
+};
+
 function mergeProfileDefaults(legacy: StageTimeouts, v2: StageTimeouts, extra?: StageTimeouts): StageTimeouts {
   return { ...legacy, ...v2, ...extra };
 }
 
 export const PROFILE_STAGE_DEFAULTS: Record<Profile, StageTimeouts> = {
-  chat: mergeProfileDefaults(LEGACY_STANDARD, V2_STANDARD, { injection_check: INJECTION_CHECK_TIMEOUTS.chat }),
-  embed: mergeProfileDefaults(LEGACY_STANDARD, V2_STANDARD, { injection_check: INJECTION_CHECK_TIMEOUTS.embed }),
+  chat: mergeProfileDefaults(LEGACY_STANDARD, V2_STANDARD, { injection_check: INJECTION_CHECK_TIMEOUTS.chat, ...QUERY_STANDARD }),
+  embed: mergeProfileDefaults(LEGACY_STANDARD, V2_STANDARD, { injection_check: INJECTION_CHECK_TIMEOUTS.embed, ...QUERY_STANDARD }),
   eval: mergeProfileDefaults(LEGACY_STANDARD, V2_STANDARD, {
     ...V2_EVAL,
     translate: 1000,
@@ -85,8 +142,9 @@ export const PROFILE_STAGE_DEFAULTS: Record<Profile, StageTimeouts> = {
     refusal: 1000,
     compress: 1000,
     injection_check: INJECTION_CHECK_TIMEOUTS.eval,
+    ...QUERY_EVAL,
   }),
-  media: mergeProfileDefaults(LEGACY_STANDARD, V2_STANDARD, { injection_check: INJECTION_CHECK_TIMEOUTS.media }),
+  media: mergeProfileDefaults(LEGACY_STANDARD, V2_STANDARD, { injection_check: INJECTION_CHECK_TIMEOUTS.media, ...QUERY_STANDARD }),
   voice: {
     ...mergeProfileDefaults(
       {
@@ -101,7 +159,7 @@ export const PROFILE_STAGE_DEFAULTS: Record<Profile, StageTimeouts> = {
         exact_id_lookup: 500,
       },
       V2_VOICE,
-      { injection_check: INJECTION_CHECK_TIMEOUTS.voice },
+      { injection_check: INJECTION_CHECK_TIMEOUTS.voice, ...QUERY_VOICE },
     ),
   },
 };
@@ -113,6 +171,8 @@ const MAX_TIMEOUT_MS = 60000;
 const PROFILES = Object.keys(PROFILE_STAGE_DEFAULTS) as Profile[];
 
 export type RerankerKind = 'none' | 'cohere' | 'voyage' | 'local_bm25';
+/** RAG_RERANKER as configured; `auto` resolves per request to a RerankerKind (src/lib/rag/rerank/select.ts). */
+export type RerankerSetting = RerankerKind | 'auto';
 export type RerankTier = 'quality' | 'fast';
 export type IterativeScanMode = 'off' | 'relaxed_order' | 'strict_order';
 export type BgeM3Serving = 'hosted' | 'sidecar';
@@ -130,12 +190,17 @@ export interface DomainEmbeddingsConfig {
   timeoutMs: number;
 }
 
+export const REFUSAL_FLOOR_POLICIES = ['similarity', 'legacy_rule'] as const;
+
+export type RefusalFloorPolicy = (typeof REFUSAL_FLOOR_POLICIES)[number];
+
 export interface V2Config {
   lexicalSearch: boolean;
-  reranker: RerankerKind;
+  reranker: RerankerSetting;
   rerankTier: { chat: RerankTier; voice: RerankTier };
   voyageModelByLang: Record<string, string>;
   refusalThreshold: boolean;
+  refusalFloor: RefusalFloorPolicy;
   edgeOrder: boolean;
   compression: boolean;
   tokenBudget: number;
@@ -148,6 +213,41 @@ export interface V2Config {
   hasVoyageKey: boolean;
   domainEmbeddings: DomainEmbeddingsConfig;
 }
+
+export type QueryFramework = 'llamaindex' | 'langchain';
+export type VoiceTransform = 'condense_history' | 'normalize_dates' | 'translate';
+export type SemanticCacheBackend = 'off' | 'pgvector' | 'redisvl';
+
+export interface QueryTransformSwitches {
+  condense: boolean;
+  expand: boolean;
+  decompose: boolean;
+  translate: boolean;
+  normalizeDates: boolean;
+  hyde: boolean;
+}
+
+/** Sub-switches keep their parsed values while the layer is off; only `enabled` and disabledStages gate them. */
+export interface QueryLayerConfig {
+  enabled: boolean;
+  framework: QueryFramework;
+  model: string;
+  transforms: QueryTransformSwitches;
+  translateDisabledProfiles: Profile[];
+  voiceTransforms: VoiceTransform[];
+}
+
+export interface SemanticCacheConfig {
+  backend: SemanticCacheBackend;
+  ttl: number;
+  refusalTtl: number;
+  maxDistance: number;
+  embedStore: boolean;
+}
+
+export const DEFAULT_QUERY_LLM_MODEL = 'openai/gpt-4.1-nano';
+export const DEFAULT_SEMANTIC_CACHE_MAX_DISTANCE = 0.05;
+export const MAX_SEMANTIC_CACHE_DISTANCE = 0.2;
 
 export interface RagEnvInput {
   RAG_PIPELINE?: string;
@@ -162,6 +262,7 @@ export interface RagEnvInput {
   COHERE_API_KEY?: string;
   COHERE_BASE_URL?: string;
   RAG_REFUSAL_THRESHOLD?: string;
+  RAG_REFUSAL_FLOOR?: string;
   RAG_CONTEXT_EDGE_ORDER?: string;
   RAG_CONTEXT_COMPRESSION?: string;
   RAG_CONTEXT_TOKEN_BUDGET?: string;
@@ -181,10 +282,30 @@ export interface RagEnvInput {
   RAG_DOMAIN_EMBEDDINGS?: string;
   RAG_DOMAIN_EMBEDDING_MAX_LEGS?: string;
   RAG_DOMAIN_EMBEDDING_TIMEOUT_MS?: string;
+  RAG_QUERY_LAYER?: string;
+  RAG_QUERY_FRAMEWORK?: string;
+  RAG_QUERY_LLM_MODEL?: string;
+  RAG_QUERY_CONDENSE?: string;
+  RAG_QUERY_EXPAND?: string;
+  RAG_QUERY_DECOMPOSE?: string;
+  RAG_QUERY_TRANSLATE?: string;
+  RAG_QUERY_DATE_NORMALIZE?: string;
+  RAG_QUERY_HYDE?: string;
+  RAG_QUERY_TRANSLATE_DISABLED_PROFILES?: string;
+  RAG_QUERY_VOICE_TRANSFORMS?: string;
+  RAG_SEMANTIC_CACHE?: string;
+  RAG_SEMANTIC_CACHE_TTL?: string;
+  RAG_SEMANTIC_CACHE_REFUSAL_TTL?: string;
+  RAG_SEMANTIC_CACHE_MAX_DISTANCE?: string;
+  RAG_SEMANTIC_CACHE_EMBED_STORE?: string;
 }
 
 export interface RagConfig {
   pipeline: 'legacy' | 'v2';
+  /** D-02: an explicit RAG_PIPELINE=v2 without chosen languages; retrieval answers status error with this reason. */
+  pipelineBlocked: LanguagesNotConfigured | null;
+  /** D-03: exactly one supported language; the translate stage and lexical translation are then no-ops. */
+  monolingual: boolean;
   disabledStages: ReadonlySet<StageName>;
   timeouts: Record<Profile, StageTimeouts>;
   exactIdLookup: boolean;
@@ -195,17 +316,21 @@ export interface RagConfig {
   bgeM3Serving: BgeM3Serving;
   /** Raw comma-separated domains; the output link filter parses it. */
   outputLinkAllowlist: string;
+  queryLayer: QueryLayerConfig;
+  semanticCache: SemanticCacheConfig;
   warnings: string[];
 }
 
 const loggedProblems = new Set<string>();
 const memo = new Map<string, RagConfig>();
 
-function problem(warnings: string[], key: string, message: string, data: Record<string, unknown>): void {
+type LogPrefix = '[RAG Config]' | '[Query Layer]' | '[Semantic Cache]';
+
+function problem(warnings: string[], key: string, message: string, data: Record<string, unknown>, prefix: LogPrefix = '[RAG Config]'): void {
   warnings.push(`${message} (${Object.values(data).join(', ')})`);
   if (loggedProblems.has(key)) return;
   loggedProblems.add(key);
-  console.warn(`[RAG Config] ${message}`, data);
+  console.warn(`${prefix} ${message}`, data);
 }
 
 function isStageName(value: string): value is StageName {
@@ -223,9 +348,13 @@ function parseList(value: string | undefined): string[] {
     .filter((item) => item !== '');
 }
 
+/** The pipeline an unset RAG_PIPELINE runs (the shipped default). */
+export const DEFAULT_PIPELINE: 'legacy' | 'v2' = 'legacy';
+
 function parsePipeline(raw: string | undefined, warnings: string[]): 'legacy' | 'v2' {
   const value = (raw ?? '').trim();
-  if (value === '' || value === 'legacy') return 'legacy';
+  if (value === '') return DEFAULT_PIPELINE;
+  if (value === 'legacy') return 'legacy';
   if (value === 'v2') return 'v2';
   problem(warnings, `pipeline:${value}`, 'Unsupported RAG_PIPELINE value, running legacy', { value });
   return 'legacy';
@@ -270,10 +399,10 @@ function parseExactIdSwitch(raw: string | undefined, warnings: string[]): boolea
   return false;
 }
 
-function parseReranker(raw: string | undefined, warnings: string[]): RerankerKind {
+function parseReranker(raw: string | undefined, warnings: string[]): RerankerSetting {
   const value = (raw ?? '').trim().toLowerCase();
   if (value === '' || value === 'none') return 'none';
-  if (value === 'cohere' || value === 'voyage' || value === 'local_bm25') return value;
+  if (value === 'cohere' || value === 'voyage' || value === 'local_bm25' || value === 'auto') return value;
   problem(warnings, `reranker:${value}`, 'Unsupported RAG_RERANKER value, using none', { value });
   return 'none';
 }
@@ -486,6 +615,160 @@ function parseTimeouts(raw: string | undefined, warnings: string[]): Partial<Rec
   return byProfile;
 }
 
+function parsePrefixedBoolean(name: string, raw: string | undefined, defaultValue: boolean, prefix: LogPrefix, warnings: string[]): boolean {
+  const value = (raw ?? '').trim().toLowerCase();
+  if (value === '') return defaultValue;
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  problem(warnings, `${name}:${value}`, `Unsupported ${name} value, expected true or false, using ${defaultValue}`, { value }, prefix);
+  return defaultValue;
+}
+
+const MODEL_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:\/-]{0,127}$/;
+const VOICE_TRANSFORMS: readonly VoiceTransform[] = ['condense_history', 'normalize_dates', 'translate'];
+const VOICE_FORBIDDEN = new Set(['expand', 'hyde', 'decompose']);
+const DEFAULT_VOICE_TRANSFORMS = 'condense_history,normalize_dates';
+
+function parseVoiceTransforms(raw: string | undefined, warnings: string[]): VoiceTransform[] {
+  const source = (raw ?? '').trim() === '' ? DEFAULT_VOICE_TRANSFORMS : (raw as string);
+  const kept: VoiceTransform[] = [];
+  const dropped: string[] = [];
+  for (const name of parseList(source)) {
+    const normalised = name.toLowerCase();
+    const match = VOICE_TRANSFORMS.find((candidate) => candidate === normalised);
+    if (match) {
+      if (!kept.includes(match)) kept.push(match);
+    } else {
+      dropped.push(VOICE_FORBIDDEN.has(normalised) ? normalised : 'unknown');
+    }
+  }
+  if (dropped.length > 0) {
+    problem(
+      warnings,
+      `voice-transforms:${dropped.join(',')}`,
+      'RAG_QUERY_VOICE_TRANSFORMS lists transforms voice cannot run; entries dropped',
+      { dropped: dropped.join(',') },
+      '[Query Layer]',
+    );
+  }
+  return kept;
+}
+
+function parseTranslateDisabledProfiles(raw: string | undefined, warnings: string[]): Profile[] {
+  const out: Profile[] = [];
+  let unknown = 0;
+  for (const name of parseList(raw)) {
+    const normalised = name.toLowerCase();
+    if (isProfile(normalised)) {
+      if (!out.includes(normalised)) out.push(normalised);
+    } else {
+      unknown += 1;
+    }
+  }
+  if (unknown > 0) {
+    problem(warnings, `translate-disabled-profiles:${raw}`, 'Unknown profile in RAG_QUERY_TRANSLATE_DISABLED_PROFILES, entry ignored', { unknown }, '[Query Layer]');
+  }
+  return out;
+}
+
+function parseQueryLayer(env: RagEnvInput, pipeline: 'legacy' | 'v2', warnings: string[]): QueryLayerConfig {
+  const requested = parsePrefixedBoolean('RAG_QUERY_LAYER', env.RAG_QUERY_LAYER, false, '[Query Layer]', warnings);
+  if (requested && pipeline !== 'v2') {
+    problem(warnings, 'query-layer-legacy', 'RAG_QUERY_LAYER needs RAG_PIPELINE=v2; the query layer stays off', { pipeline }, '[Query Layer]');
+  }
+  const frameworkRaw = (env.RAG_QUERY_FRAMEWORK ?? '').trim().toLowerCase();
+  let framework: QueryFramework = 'llamaindex';
+  if (frameworkRaw === 'langchain') framework = 'langchain';
+  else if (frameworkRaw !== '' && frameworkRaw !== 'llamaindex') {
+    problem(warnings, `query-framework:${frameworkRaw}`, 'Unsupported RAG_QUERY_FRAMEWORK value, using llamaindex', { value: frameworkRaw.slice(0, 32) }, '[Query Layer]');
+  }
+  const modelRaw = (env.RAG_QUERY_LLM_MODEL ?? '').trim();
+  let model = DEFAULT_QUERY_LLM_MODEL;
+  if (MODEL_ID_PATTERN.test(modelRaw)) model = modelRaw;
+  else if (modelRaw !== '') {
+    problem(warnings, 'query-llm-model-invalid', `Invalid RAG_QUERY_LLM_MODEL, using ${DEFAULT_QUERY_LLM_MODEL}`, { length: modelRaw.length }, '[Query Layer]');
+  }
+  const flag = (name: string, raw: string | undefined, defaultValue: boolean) => parsePrefixedBoolean(name, raw, defaultValue, '[Query Layer]', warnings);
+  return {
+    enabled: requested && pipeline === 'v2',
+    framework,
+    model,
+    transforms: {
+      condense: flag('RAG_QUERY_CONDENSE', env.RAG_QUERY_CONDENSE, true),
+      expand: flag('RAG_QUERY_EXPAND', env.RAG_QUERY_EXPAND, true),
+      decompose: flag('RAG_QUERY_DECOMPOSE', env.RAG_QUERY_DECOMPOSE, true),
+      translate: flag('RAG_QUERY_TRANSLATE', env.RAG_QUERY_TRANSLATE, true),
+      normalizeDates: flag('RAG_QUERY_DATE_NORMALIZE', env.RAG_QUERY_DATE_NORMALIZE, true),
+      hyde: flag('RAG_QUERY_HYDE', env.RAG_QUERY_HYDE, false),
+    },
+    translateDisabledProfiles: parseTranslateDisabledProfiles(env.RAG_QUERY_TRANSLATE_DISABLED_PROFILES, warnings),
+    voiceTransforms: parseVoiceTransforms(env.RAG_QUERY_VOICE_TRANSFORMS, warnings),
+  };
+}
+
+function parseCacheDistance(raw: string | undefined, warnings: string[]): number {
+  const value = (raw ?? '').trim();
+  if (value === '') return DEFAULT_SEMANTIC_CACHE_MAX_DISTANCE;
+  const n = /^\d*\.?\d+$/.test(value) ? Number(value) : NaN;
+  if (!Number.isFinite(n) || n <= 0 || n > MAX_SEMANTIC_CACHE_DISTANCE) {
+    problem(
+      warnings,
+      `cache-distance:${value}`,
+      `Invalid RAG_SEMANTIC_CACHE_MAX_DISTANCE, expected a number above 0 and at most ${MAX_SEMANTIC_CACHE_DISTANCE}, using ${DEFAULT_SEMANTIC_CACHE_MAX_DISTANCE}`,
+      { value: value.slice(0, 32) },
+      '[Semantic Cache]',
+    );
+    return DEFAULT_SEMANTIC_CACHE_MAX_DISTANCE;
+  }
+  return n;
+}
+
+function parseCacheTtl(name: string, raw: string | undefined, defaultValue: number, warnings: string[]): number {
+  const value = (raw ?? '').trim();
+  if (value === '') return defaultValue;
+  const n = /^\d+$/.test(value) ? Number(value) : NaN;
+  if (!Number.isInteger(n) || n < 1 || n > 604800) {
+    problem(warnings, `${name}:${value}`, `Invalid ${name}, expected seconds from 1 to 604800, using ${defaultValue}`, { value: value.slice(0, 32) }, '[Semantic Cache]');
+    return defaultValue;
+  }
+  return n;
+}
+
+function parseSemanticCache(env: RagEnvInput, pipeline: 'legacy' | 'v2', warnings: string[]): SemanticCacheConfig {
+  const raw = (env.RAG_SEMANTIC_CACHE ?? '').trim().toLowerCase();
+  let backend: SemanticCacheBackend = 'off';
+  if (raw === 'pgvector' || raw === 'redisvl') backend = raw;
+  else if (raw !== '' && raw !== 'off') {
+    problem(warnings, `cache-backend:${raw}`, 'Unsupported RAG_SEMANTIC_CACHE value, using off', { value: raw.slice(0, 32) }, '[Semantic Cache]');
+  }
+  if (backend !== 'off' && pipeline !== 'v2') {
+    problem(warnings, 'cache-legacy', 'RAG_SEMANTIC_CACHE needs RAG_PIPELINE=v2; the cache stays off', { pipeline, backend }, '[Semantic Cache]');
+    backend = 'off';
+  }
+  return {
+    backend,
+    ttl: parseCacheTtl('RAG_SEMANTIC_CACHE_TTL', env.RAG_SEMANTIC_CACHE_TTL, 3600, warnings),
+    refusalTtl: parseCacheTtl('RAG_SEMANTIC_CACHE_REFUSAL_TTL', env.RAG_SEMANTIC_CACHE_REFUSAL_TTL, 600, warnings),
+    maxDistance: parseCacheDistance(env.RAG_SEMANTIC_CACHE_MAX_DISTANCE, warnings),
+    embedStore: parsePrefixedBoolean('RAG_SEMANTIC_CACHE_EMBED_STORE', env.RAG_SEMANTIC_CACHE_EMBED_STORE, false, '[Semantic Cache]', warnings),
+  };
+}
+
+/** Off layer: every query-layer stage is disabled. On: only the stages whose sub-switch is off. The cache stage follows its backend. */
+function applyQueryLayerDisabledStages(queryLayer: QueryLayerConfig, cache: SemanticCacheConfig, disabled: Set<StageName>): void {
+  if (cache.backend === 'off') disabled.add('semantic_cache');
+  if (!queryLayer.enabled) {
+    for (const stage of QUERY_LAYER_STAGES) if (stage !== 'semantic_cache') disabled.add(stage);
+    return;
+  }
+  const t = queryLayer.transforms;
+  if (!t.condense) disabled.add('condense');
+  if (!t.normalizeDates) disabled.add('normalize_dates');
+  if (!t.expand) disabled.add('expand');
+  if (!t.hyde) disabled.add('hyde');
+  if (!t.decompose) disabled.add('decompose');
+}
+
 function applyV2DisabledStages(v2: V2Config, disabled: Set<StageName>): void {
   if (v2.reranker === 'none') disabled.add('rerank');
   if (!v2.compression) disabled.add('compress');
@@ -507,6 +790,7 @@ function memoKey(env: RagEnvInput): string {
     (env.COHERE_API_KEY ?? '').trim() !== '',
     env.COHERE_BASE_URL ?? '',
     env.RAG_REFUSAL_THRESHOLD ?? '',
+    env.RAG_REFUSAL_FLOOR ?? '',
     env.RAG_CONTEXT_EDGE_ORDER ?? '',
     env.RAG_CONTEXT_COMPRESSION ?? '',
     env.RAG_CONTEXT_TOKEN_BUDGET ?? '',
@@ -526,22 +810,69 @@ function memoKey(env: RagEnvInput): string {
     env.RAG_DOMAIN_EMBEDDINGS ?? '',
     env.RAG_DOMAIN_EMBEDDING_MAX_LEGS ?? '',
     env.RAG_DOMAIN_EMBEDDING_TIMEOUT_MS ?? '',
+    env.RAG_QUERY_LAYER ?? '',
+    env.RAG_QUERY_FRAMEWORK ?? '',
+    env.RAG_QUERY_LLM_MODEL ?? '',
+    env.RAG_QUERY_CONDENSE ?? '',
+    env.RAG_QUERY_EXPAND ?? '',
+    env.RAG_QUERY_DECOMPOSE ?? '',
+    env.RAG_QUERY_TRANSLATE ?? '',
+    env.RAG_QUERY_DATE_NORMALIZE ?? '',
+    env.RAG_QUERY_HYDE ?? '',
+    env.RAG_QUERY_TRANSLATE_DISABLED_PROFILES ?? '',
+    env.RAG_QUERY_VOICE_TRANSFORMS ?? '',
+    env.RAG_SEMANTIC_CACHE ?? '',
+    env.RAG_SEMANTIC_CACHE_TTL ?? '',
+    env.RAG_SEMANTIC_CACHE_REFUSAL_TTL ?? '',
+    env.RAG_SEMANTIC_CACHE_MAX_DISTANCE ?? '',
+    env.RAG_SEMANTIC_CACHE_EMBED_STORE ?? '',
   ]);
 }
 
+interface LanguageGate {
+  blocked: LanguagesNotConfigured | null;
+  /** An unset RAG_PIPELINE whose shipped default is v2 serves legacy while the languages are not chosen. */
+  servedLegacy: boolean;
+  monolingual: boolean;
+}
+
+const NO_LANGUAGE_GATE: LanguageGate = { blocked: null, servedLegacy: false, monolingual: false };
+const SHIPPED_DEFAULTS = { retrieval: DEFAULT_PIPELINE, ingest: 'legacy' } as const;
+
+/** D-02: a legacy pipeline (set or defaulted) keeps today's path and never reads the language settings. */
+function languageGate(env: RagEnvInput): LanguageGate {
+  const value = (env.RAG_PIPELINE ?? '').trim();
+  if (value === 'legacy' || (value === '' && DEFAULT_PIPELINE === 'legacy')) return NO_LANGUAGE_GATE;
+  const resolved = resolvePipelines({ RAG_PIPELINE: env.RAG_PIPELINE, RAG_INGEST_PIPELINE: 'legacy' }, SHIPPED_DEFAULTS, getLanguageSettings);
+  if (!resolved.languagesRead) return NO_LANGUAGE_GATE;
+  return {
+    blocked: resolved.retrieval.pipeline === LANGUAGES_NOT_CONFIGURED ? LANGUAGES_NOT_CONFIGURED : null,
+    servedLegacy: resolved.retrieval.servedLegacyBecauseUnset,
+    monolingual: resolved.monolingual,
+  };
+}
+
 export function loadRagConfig(env: RagEnvInput): RagConfig {
-  const snapshot = memoKey(env);
+  const gate = languageGate(env);
+  const snapshot = gate === NO_LANGUAGE_GATE ? memoKey(env) : `${memoKey(env)}|${gate.blocked ?? ''}|${gate.servedLegacy}|${gate.monolingual}`;
   const cached = memo.get(snapshot);
   if (cached) return cached;
 
   const warnings: string[] = [];
-  const pipeline = parsePipeline(env.RAG_PIPELINE, warnings);
+  const pipeline = gate.servedLegacy ? 'legacy' : parsePipeline(env.RAG_PIPELINE, warnings);
   const disabledStages = parseDisabled(env.RAG_DISABLED_STAGES, warnings);
   const overrideByProfile = parseTimeouts(env.RAG_STAGE_TIMEOUTS, warnings);
+  const queryLayer = parseQueryLayer(env, pipeline, warnings);
+  const semanticCache = parseSemanticCache(env, pipeline, warnings);
 
   const timeouts = {} as Record<Profile, StageTimeouts>;
   for (const profile of PROFILES) {
-    timeouts[profile] = { ...PROFILE_STAGE_DEFAULTS[profile], ...overrideByProfile[profile] };
+    const layerTranslate = queryLayer.enabled ? QUERY_LAYER_TRANSLATE[profile] : undefined;
+    timeouts[profile] = {
+      ...PROFILE_STAGE_DEFAULTS[profile],
+      ...(layerTranslate !== undefined ? { translate: layerTranslate } : {}),
+      ...overrideByProfile[profile],
+    };
   }
 
   const exactIdLookup = parseExactIdSwitch(env.RAG_EXACT_ID_LOOKUP, warnings);
@@ -555,13 +886,14 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
     },
     voyageModelByLang: parseVoyageModelByLang(env.RAG_RERANK_VOYAGE_MODEL_BY_LANG, warnings),
     refusalThreshold: parseBooleanSwitch(env.RAG_REFUSAL_THRESHOLD, false, 'refusal-threshold', warnings),
+    refusalFloor: parseNamedChoice('RAG_REFUSAL_FLOOR', env.RAG_REFUSAL_FLOOR, REFUSAL_FLOOR_POLICIES, 'similarity', warnings),
     edgeOrder: parseBooleanSwitch(env.RAG_CONTEXT_EDGE_ORDER, false, 'edge-order', warnings),
     compression: parseBooleanSwitch(env.RAG_CONTEXT_COMPRESSION, false, 'compression', warnings),
     tokenBudget: parseNonNegativeInt(env.RAG_CONTEXT_TOKEN_BUDGET, 6000, 1_000_000, 'token-budget', warnings),
     parentChild: parseBooleanSwitch(env.RAG_PARENT_CHILD, false, 'parent-child', warnings),
     iterativeScan: parseIterativeScan(env.RAG_HNSW_ITERATIVE_SCAN, warnings),
     exactScanCutoff: parseNonNegativeInt(env.RAG_EXACT_SCAN_CUTOFF, 0, 100_000, 'exact-scan-cutoff', warnings),
-    lexicalTranslation: parseBooleanSwitch(env.RAG_LEXICAL_TRANSLATION, false, 'lexical-translation', warnings),
+    lexicalTranslation: gate.monolingual ? false : parseBooleanSwitch(env.RAG_LEXICAL_TRANSLATION, false, 'lexical-translation', warnings),
     paramsOverride: parseParamsOverride(env.RAG_RETRIEVAL_PARAMS_OVERRIDE, warnings),
     hasCohereKey: (env.COHERE_API_KEY ?? '').trim() !== '',
     hasVoyageKey: (env.VOYAGE_API_KEY ?? '').trim() !== '',
@@ -569,9 +901,12 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
   };
 
   applyV2DisabledStages(v2, disabledStages);
+  applyQueryLayerDisabledStages(queryLayer, semanticCache, disabledStages);
 
   const config: RagConfig = {
     pipeline,
+    pipelineBlocked: gate.blocked,
+    monolingual: gate.monolingual,
     disabledStages,
     timeouts,
     exactIdLookup,
@@ -581,6 +916,8 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
     docTranslation: parseNamedChoice('RAG_DOC_TRANSLATION', env.RAG_DOC_TRANSLATION, ['off', 'on'], 'off', warnings),
     bgeM3Serving: parseNamedChoice('RAG_BGE_M3_SERVING', env.RAG_BGE_M3_SERVING, ['hosted', 'sidecar'], 'hosted', warnings),
     outputLinkAllowlist: (env.RAG_OUTPUT_LINK_ALLOWLIST ?? '').trim(),
+    queryLayer,
+    semanticCache,
     warnings,
   };
   memo.set(snapshot, config);

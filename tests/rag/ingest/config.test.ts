@@ -21,6 +21,7 @@ function ingestWarnings(): string[] {
 
 const DEFAULTS: IngestConfig = {
   pipeline: 'legacy',
+  pipelineBlocked: null,
   parser: 'llamaparse',
   parsePollBudgetMs: 45000,
   docTypeLlmDetect: false,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+from rag_sidecar.contracts.languages import language_codes
 from rag_sidecar.contracts.routing import ParseRoutingConfig, Preset
 from rag_sidecar.parse.converter import ConfigurationError
 from rag_sidecar.parse.docling_adapter import DEFAULT_DOCUMENT_TIMEOUT_SECONDS, to_ppocr_code
@@ -36,7 +37,7 @@ def preset_option_dict(
     """Pure option fingerprint for cache keys and tests; never imports Docling."""
     if preset not in _PRESET_ALIASES:
         raise ConfigurationError()
-    languages = ["zh", "en", "it"] if ocr_languages is None else ocr_languages
+    languages = list(language_codes()) if ocr_languages is None else ocr_languages
     codes = to_ppocr_code(languages)
     backend, do_ocr, ocr_mode, table_mode, heading = _PRESET_ALIASES[preset]  # type: ignore[index]
     routing = _resolve_cfg(cfg).presets

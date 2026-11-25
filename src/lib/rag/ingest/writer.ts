@@ -605,6 +605,8 @@ export interface ReembedWriter {
   count(profileId: string, tenantKey: string | null): Promise<ReembedCountRow[]>;
   previewBatch(profileId: string, tenantKey: string | null, after: string | null, limit: number): Promise<ReembedChunk[]>;
   legacyGuard(): Promise<ReembedLegacyGuard>;
+  /** The profile's doc types (0440), or null for an unscoped profile or an unknown id. */
+  profileScope(profileId: string): Promise<string[] | null>;
 }
 
 function reembedRefusal(message: string | undefined): { reason: string | null; detail: string | null } {
@@ -767,6 +769,13 @@ export function createReembedWriter(input: { db: RpcClient; signal: AbortSignal 
         versionedDocuments: count(row, 'versioned_documents'),
         profilesInUse: Array.isArray(row.profiles_in_use) ? row.profiles_in_use.filter((id): id is string => typeof id === 'string') : [],
       };
+    },
+
+    async profileScope(profileId) {
+      const row = (await call('rag_list_embedding_profile_scopes', {})).find((entry) => entry.id === profileId);
+      if (!row || !Array.isArray(row.doc_types)) return null;
+      const scope = row.doc_types.filter((entry): entry is string => typeof entry === 'string');
+      return scope.length > 0 ? scope : null;
     },
   };
   return writer;

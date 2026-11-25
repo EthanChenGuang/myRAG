@@ -4,13 +4,14 @@ import { LEGACY_PROFILE } from '../../embeddings/active-profile';
 import type { QueryEmbedding } from '../../embeddings/query-embedding';
 import type { FusedHit } from '../../fusion/rrf';
 import { LEXICAL_VERSION } from '../../lexical/chunk-text';
-import { runStage, stageSpec, type StageSpec } from '../../pipeline';
+import { runStage, StageError, stageSpec, type StageSpec } from '../../pipeline';
 import type { DedupeCounts } from '../../fusion/dedupe';
 import { decideRefusal, type GateCandidate, type GateInput, type QueryLanguage } from '../../refusal/gate';
-import { evalFloorCalibration, floorsFromCalibration, similarityFloor } from '../../refusal/floor';
+import { legacyQueryTerms } from '../../context/relevance';
+import { evalFloorCalibration, floorsFromCalibration, legacyRuleFloor, similarityFloor } from '../../refusal/floor';
 import { loadThresholds } from '../../refusal/thresholds';
 import type { RefusalRecord } from '../../refusal/types';
-import { resolveReranker } from '../../rerank/select';
+import { describeReranker, resolveReranker } from '../../rerank/select';
 import { rerankText } from '../../rerank/text';
 import { RERANK_TEXT_VERSION, type RerankScore, type RerankSpan } from '../../rerank/types';
 import type { TraceCollector } from '../../trace/collector';
@@ -84,6 +85,7 @@ function applyRefusal(
   queryLanguage: QueryLanguage | null,
   fusedHits: FusedHit[],
   rerankGate: RerankGateState,
+  query: string,
 ): { record: RefusalRecord; gate: RefusalRecord } {
   const { cells } = loadThresholds();
   const gate = decideRefusal({
@@ -101,6 +103,19 @@ function applyRefusal(
   const calibration =
     evalFloorCalibration(profile) ?? embedding.profile?.scoreCalibration ?? LEGACY_PROFILE.scoreCalibration;
   const floors = floorsFromCalibration(calibration as Record<string, unknown>);
+  if (config.v2.refusalFloor === 'legacy_rule') {
+    const record = legacyRuleFloor({
+      floors,
+      terms: legacyQueryTerms(query),
+      candidates: fusedHits.map((row) => ({
+        similarity: row.hit.similarity,
+        hasImage: hitHasImage(row.hit),
+        filename: row.hit.document.filename,
+        text: `${row.hit.content} ${row.hit.document.contentPreview}`,
+      })),
+    });
+    return { record, gate };
+  }
   const record = similarityFloor({
     floors,
     candidates: fusedHits.map((row) => ({
@@ -156,12 +171,22 @@ async function runRerankStage(ctx: RankStagesInput): Promise<RerankStageResult> 
 
   if (!baseSpec.enabled) {
     await runStage(baseSpec, signal, async () => null, collector, { candidatesIn: hits.length });
-    return notRun(hits, 'disabled', config.v2.reranker, null);
+    const configured =
+      config.v2.reranker === 'auto'
+        ? describeReranker(config, profile, queryLanguage ?? '', stageOverrides?.retrievalOverrides).id
+        : config.v2.reranker;
+    return notRun(hits, 'disabled', configured, null);
   }
 
   const resolved = resolveReranker(config, profile, queryLanguage ?? '', stageOverrides?.retrievalOverrides, deps.ragEnv(), deps.fetch);
   if (resolved.provider === 'none') {
-    await runStage({ ...baseSpec, enabled: false }, signal, async () => null, collector, { candidatesIn: hits.length });
+    if (resolved.auto) {
+      if (signal.aborted) throw new StageError('rerank', 'aborted', signal.reason);
+      const at = collector.now();
+      collector.record({ name: 'rerank', status: 'disabled', reason: 'disabled', startedAt: at, endedAt: at, candidatesIn: hits.length, detail: 'auto:none' });
+    } else {
+      await runStage({ ...baseSpec, enabled: false }, signal, async () => null, collector, { candidatesIn: hits.length });
+    }
     return notRun(hits, 'disabled', 'none', null);
   }
 
@@ -219,7 +244,7 @@ async function runRerankStage(ctx: RankStagesInput): Promise<RerankStageResult> 
         }
         return counts;
       },
-      detail: () => `${reranker.id}:${reranker.model}`,
+      detail: () => (resolved.auto ? `auto:${resolved.provider}` : `${reranker.id}:${reranker.model}`),
     },
   );
 
@@ -269,7 +294,7 @@ export async function runRankStages(ctx: RankStagesInput): Promise<RankStagesOut
   const refused = await runStage(
     spec('refusal', 'skip'),
     signal,
-    async () => applyRefusal(config, profile, embedding, queryLanguage, rankedHits, reranked.gate),
+    async () => applyRefusal(config, profile, embedding, queryLanguage, rankedHits, reranked.gate, ctx.input.query),
     collector,
     {
       candidatesIn: rankedHits.length,
@@ -278,12 +303,15 @@ export async function runRankStages(ctx: RankStagesInput): Promise<RankStagesOut
         if (record.decision === 'answer') return { answered: 1 };
         return { not_applied: 1 };
       },
-      detail: ({ record }) => (record.basis !== 'none' ? record.basis : record.reason),
+      detail: ({ record, gate }) => {
+        const base = record.basis !== 'none' ? record.basis : record.reason;
+        return record !== gate && config.v2.refusalFloor !== 'similarity' ? `${base} floor=${config.v2.refusalFloor}` : base;
+      },
     },
   );
 
   const { record: decision, gate } = refused.skipped
-    ? applyRefusal(config, profile, embedding, queryLanguage, rankedHits, reranked.gate)
+    ? applyRefusal(config, profile, embedding, queryLanguage, rankedHits, reranked.gate, ctx.input.query)
     : refused.value;
 
   const survivors = decision.decision === 'refuse' ? [] : rankedHits;

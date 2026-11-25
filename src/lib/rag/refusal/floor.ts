@@ -1,3 +1,4 @@
+import { legacyKeepReason, type LegacyKeepCandidate } from '../context/relevance';
 import type { RefusalRecord } from './types';
 
 export const LEGACY_TEXT_FLOOR = 0.65;
@@ -89,4 +90,46 @@ export function resetEvalScoreCalibration(): void {
 
 export function evalFloorCalibration(profile: string): Record<string, number> | null {
   return profile === 'eval' ? evalScoreCalibration : null;
+}
+
+/** Legacy refusal semantics: answer when any candidate passes the legacy keep rule (similarity, query term, image). */
+export function legacyRuleFloor(input: {
+  candidates: LegacyKeepCandidate[];
+  terms: readonly string[];
+  floors: SimilarityFloors;
+}): RefusalRecord {
+  const { candidates, terms, floors } = input;
+  if (candidates.length === 0) return notApplied('no_candidates');
+
+  let bestText: number | null = null;
+  let keptByScore = false;
+  let keptByTerm = false;
+  for (const candidate of candidates) {
+    const sim = candidate.similarity;
+    const dense = sim !== null && Number.isFinite(sim);
+    if (dense && (bestText === null || sim > bestText)) bestText = sim;
+    const reason = legacyKeepReason({ ...candidate, similarity: dense ? sim : null }, terms, floors);
+    if (reason === 'name') keptByTerm = true;
+    else if (reason !== null) keptByScore = true;
+  }
+
+  if (keptByScore || keptByTerm) {
+    return {
+      decision: 'answer',
+      basis: 'none',
+      reason: keptByScore ? 'above_similarity_floor' : 'query_term_match',
+      topScore: bestText,
+      threshold: floors.text,
+      cellKey: null,
+    };
+  }
+
+  return {
+    decision: 'refuse',
+    basis: 'similarity_floor',
+    reason: 'below_similarity_floor',
+    topScore: bestText,
+    threshold: floors.text,
+    cellKey: null,
+  };
 }

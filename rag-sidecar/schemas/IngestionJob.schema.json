@@ -36,7 +36,24 @@
     },
     "JobSettingsSnapshot": {
       "additionalProperties": false,
+      "description": "Settings frozen on a ledger job at enqueue.\n\nThe Phase 3.2 fields default to today's behaviour and are written only when they differ from it. The model\nkeeps extra=\"forbid\", so an older sidecar rejects a snapshot carrying them: deploy the sidecar first.",
       "properties": {
+        "approval": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/UploadApproval"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "carry_table_header": {
+          "default": false,
+          "title": "Carry Table Header",
+          "type": "boolean"
+        },
         "cloud_allowed": {
           "title": "Cloud Allowed",
           "type": "boolean"
@@ -64,6 +81,38 @@
         "escalation": {
           "title": "Escalation",
           "type": "boolean"
+        },
+        "hidden_text_check": {
+          "default": "off",
+          "enum": [
+            "off",
+            "flag",
+            "quarantine"
+          ],
+          "title": "Hidden Text Check",
+          "type": "string"
+        },
+        "hold_publish": {
+          "default": false,
+          "title": "Hold Publish",
+          "type": "boolean"
+        },
+        "language_aware": {
+          "default": false,
+          "title": "Language Aware",
+          "type": "boolean"
+        },
+        "languages": {
+          "items": {
+            "enum": [
+              "zh",
+              "en",
+              "it"
+            ],
+            "type": "string"
+          },
+          "title": "Languages",
+          "type": "array"
         },
         "max_tier": {
           "anyOf": [
@@ -124,6 +173,23 @@
           "title": "Premium Page Budget",
           "type": "integer"
         },
+        "primary_language": {
+          "anyOf": [
+            {
+              "enum": [
+                "zh",
+                "en",
+                "it"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Primary Language"
+        },
         "profile_id": {
           "title": "Profile Id",
           "type": "string"
@@ -137,6 +203,18 @@
           "title": "Progressive",
           "type": "boolean"
         },
+        "repeat_table_header_effective": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Repeat Table Header Effective"
+        },
         "routing": {
           "enum": [
             "fixed",
@@ -148,6 +226,11 @@
         "routing_config_version": {
           "title": "Routing Config Version",
           "type": "string"
+        },
+        "row_serialization": {
+          "default": false,
+          "title": "Row Serialization",
+          "type": "boolean"
         },
         "vlm_detect": {
           "title": "Vlm Detect",
@@ -488,6 +571,71 @@
       ],
       "title": "QualityCheckResult",
       "type": "object"
+    },
+    "UploadApproval": {
+      "additionalProperties": false,
+      "description": "Decision of the upload approval gate in `submitIngest()` (D-36, D-37).",
+      "properties": {
+        "decided_at": {
+          "format": "date-time",
+          "title": "Decided At",
+          "type": "string"
+        },
+        "mode": {
+          "enum": [
+            "off",
+            "members",
+            "all"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "member_upload",
+                "all_uploads",
+                "admin_upload",
+                "personal_workspace",
+                "exempt_connector",
+                "exempt_uploader",
+                "unknown_uploader"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "required": {
+          "title": "Required",
+          "type": "boolean"
+        },
+        "uploader_id": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uploader Id"
+        }
+      },
+      "required": [
+        "mode",
+        "required",
+        "decided_at"
+      ],
+      "title": "UploadApproval",
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -656,7 +804,8 @@
       "enum": [
         "ingest",
         "dry_run",
-        "delete"
+        "delete",
+        "translate"
       ],
       "title": "Kind",
       "type": "string"
@@ -903,7 +1052,8 @@
         "failed",
         "quarantined",
         "needs_review",
-        "skipped_duplicate"
+        "skipped_duplicate",
+        "pending_review"
       ],
       "title": "Status",
       "type": "string"

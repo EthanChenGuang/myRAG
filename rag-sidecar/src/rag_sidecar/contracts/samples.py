@@ -134,6 +134,28 @@ from rag_sidecar.contracts.cache import (
     SemanticCacheCalibration,
     SemanticCacheProfileCalibration,
 )
+from rag_sidecar.contracts.ingest_security import (
+    DocxHiddenTextRules,
+    HiddenTextReport,
+    HiddenTextRequest,
+    HiddenTextRules,
+    HiddenTextSpan,
+    LinkCheckResult,
+    LinkTargetFinding,
+    PdfHiddenTextRules,
+    QuarantineReason,
+    UploadApproval,
+)
+from rag_sidecar.contracts.ingest_settings import (
+    FingerprintImpact,
+    FingerprintImpactRow,
+    FingerprintSwitches,
+    IngestFingerprintParts,
+    IngestionSettingEntry,
+    LanguageSettings,
+    QuerySettingEntry,
+    SettingsClassification,
+)
 from rag_sidecar.contracts.languages import LANGUAGE_CODES, load_language_registry
 from rag_sidecar.contracts.latency import GroundednessBudgets, ScorerBudget
 from rag_sidecar.contracts.parse_eval import (
@@ -1551,6 +1573,136 @@ def _models() -> dict[str, Any]:
         **_phase31_contract_samples(),
         **_query_contract_samples(),
         **_cache_contract_samples(),
+        **_phase32_ingest_contract_samples(),
+    }
+
+
+def _quarantine_reasons() -> dict[str, QuarantineReason]:
+    values: list[dict[str, Any]] = [
+        {
+            "kind": "injection_rule",
+            "detail": "1 injection rule matched",
+            "checker_version": "injection-rules@1",
+        },
+        {
+            "kind": "hidden_text",
+            "detail": "2 hidden spans",
+            "spans": [
+                {"page": 1, "text": "Synthetic hidden sentence one.", "reason": "color_near_background"},
+                {"page": None, "text": "Synthetic hidden sentence two.", "reason": "zero_width"},
+            ],
+            "checker_version": "hidden-text@1",
+            "unlocated": 1,
+        },
+        {
+            "kind": "untrusted_link",
+            "detail": "1 target outside the allowlist",
+            "targets": ["https://outside.example.net/page"],
+            "checker_version": "link-check@1",
+        },
+        {
+            "kind": "invoice_extraction",
+            "detail": "invoice fields failed validation",
+            "checker_version": "invoice-extract@1",
+        },
+    ]
+    return {value["kind"]: QuarantineReason.model_validate(value) for value in values}
+
+
+def _phase32_ingest_contract_samples() -> dict[str, Any]:
+    return {
+        "QuarantineReason": _quarantine_reasons()["hidden_text"],
+        "LanguageSettings": LanguageSettings(
+            configured=True, languages=list(LANGUAGE_CODES), primary=LANGUAGE_CODES[0], monolingual=len(LANGUAGE_CODES) == 1
+        ),
+        "SettingsClassification": SettingsClassification(
+            entries=[
+                IngestionSettingEntry(name="RAG_EXAMPLE_CHECK", side="ingestion", mechanism="rescan"),
+                IngestionSettingEntry(name="RAG_EXAMPLE_PARSE", side="both", mechanism="reparse"),
+                QuerySettingEntry(name="RAG_EXAMPLE_QUERY", side="query"),
+            ]
+        ),
+        "IngestFingerprintParts": IngestFingerprintParts(
+            parser_used="docling",
+            parser_version="2.0.0",
+            processing_profile_id="general",
+            processing_profile_version=1,
+            ocr_engine_codes=["en"],
+            chunking_profile_id="legacy",
+            lexical_version=2,
+            embedding_text_version=1,
+            embedding_profile_id="example-embedding",
+            embedding_profile_version=1,
+            language_pack_versions={code: 1 for code in LANGUAGE_CODES},
+            switches=FingerprintSwitches(
+                language_aware_ingest="off",
+                table_header_repeat="profile",
+                table_row_serialization="false",
+                caption_language="en",
+            ),
+            assumed_defaults=["switches"],
+        ),
+        "FingerprintImpact": FingerprintImpact(
+            ingestion_keys=["RAG_EXAMPLE_PARSE"],
+            by_mechanism=[
+                FingerprintImpactRow(mechanism="reparse", doc_type="general", affected=3),
+                FingerprintImpactRow(mechanism="reparse", doc_type="scanned_image", affected=0),
+            ],
+            without_fingerprint=1,
+            total_current=10,
+        ),
+        "HiddenTextRequest": HiddenTextRequest(
+            filename="sample.pdf", mime_type="application/pdf", sha256=_HASH_A, size_bytes=2048
+        ),
+        "HiddenTextReport": HiddenTextReport(
+            status="hidden_found",
+            spans=[
+                HiddenTextSpan(
+                    page=1,
+                    text="Synthetic hidden sentence one.",
+                    reason="color_near_background",
+                    bbox=[72.0, 700.0, 300.0, 712.0],
+                )
+            ],
+            link_targets=["https://outside.example.net/page"],
+            checker_version="hidden-text@1",
+            dropped=0,
+        ),
+        "HiddenTextRules": HiddenTextRules(
+            rules_version="example-1",
+            pdf=PdfHiddenTextRules(
+                color_distance_max=0.05,
+                min_font_size_pt=1.0,
+                min_font_size_ratio=0.25,
+                outside_page_margin_pt=2.0,
+                covered_overlap_min=0.9,
+                min_span_chars=3,
+            ),
+            docx=DocxHiddenTextRules(color_distance_max=0.05, min_font_size_half_points=4, min_span_chars=3),
+            zero_width_threshold=5,
+        ),
+        "LinkCheckResult": LinkCheckResult(
+            status="untrusted_found",
+            targets=[
+                LinkTargetFinding(kind="url", target="https://outside.example.net/page", host="outside.example.net"),
+                LinkTargetFinding(kind="email", target="someone@outside.example.org", host="outside.example.org"),
+            ],
+            checker_version="link-check@1",
+        ),
+        "UploadApproval": UploadApproval(
+            mode="members",
+            required=True,
+            reason="member_upload",
+            uploader_id="00000000-0000-4000-8000-0000000000c1",
+            decided_at=_SAMPLE_NOW,
+        ),
+    }
+
+
+def _phase32_ingest_contract_variants() -> dict[str, dict[str, Any]]:
+    return {
+        f"QuarantineReason:{kind}": {"model": "QuarantineReason", "value": reason.model_dump(mode="json")}
+        for kind, reason in _quarantine_reasons().items()
     }
 
 
@@ -1646,4 +1798,5 @@ def build_samples() -> dict[str, dict[str, Any]]:
             "value": InvoiceFields(confidence=0.0, errors=["no invoice number found"]).model_dump(mode="json"),
         },
     }
+    variants.update(_phase32_ingest_contract_variants())
     return {"samples": samples, "variants": variants}

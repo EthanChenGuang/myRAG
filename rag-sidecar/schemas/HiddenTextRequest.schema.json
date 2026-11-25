@@ -1,0 +1,36 @@
+{
+  "additionalProperties": false,
+  "description": "JSON part of `POST /v1/hidden-text` (D-33); the original's bytes travel as the multipart file part.",
+  "properties": {
+    "filename": {
+      "maxLength": 255,
+      "minLength": 1,
+      "title": "Filename",
+      "type": "string"
+    },
+    "mime_type": {
+      "maxLength": 255,
+      "minLength": 1,
+      "title": "Mime Type",
+      "type": "string"
+    },
+    "sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Sha256",
+      "type": "string"
+    },
+    "size_bytes": {
+      "minimum": 0,
+      "title": "Size Bytes",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "filename",
+    "mime_type",
+    "sha256",
+    "size_bytes"
+  ],
+  "title": "HiddenTextRequest",
+  "type": "object"
+}

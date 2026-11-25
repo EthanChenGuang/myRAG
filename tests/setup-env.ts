@@ -6,6 +6,9 @@ const placeholders: Record<string, string> = {
   OPENROUTER_API_KEY: 'sk-or-abcdefghijklmnopqrstuvwxyzabcdef',
   EXA_API_KEY: 'test-exa-key-placeholder',
   NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE: 'single-tenant',
+  // D-02: CI, the eval pin and all fixtures run with zh, en and it, primary en.
+  RAG_SUPPORTED_LANGUAGES: 'zh,en,it',
+  RAG_PRIMARY_LANGUAGE: 'en',
 };
 
 for (const [name, value] of Object.entries(placeholders)) {

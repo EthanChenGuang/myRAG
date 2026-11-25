@@ -9,6 +9,7 @@ import {
   assertCloudAllowed,
   buildSourceKey,
   currentIngestConfig,
+  unifiedIngestRefusal,
   embedText,
   ingest,
   submitIngest,
@@ -933,6 +934,8 @@ export async function POST(req: Request) {
     // Knowledge-base uploads switch to ingest() only here, after the session and organization checks above.
     // Temporary attachments stay on the legacy parse call in both pipelines.
     if (!isTemporary && uploadPipeline() === 'unified') {
+      const refusal = unifiedIngestRefusal();
+      if (refusal) return NextResponse.json(refusal, { status: 503 });
       return await uploadThroughIngest({ req, formData, file, userId, orgIdFromForm, startedAt });
     }
 

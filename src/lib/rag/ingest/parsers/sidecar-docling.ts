@@ -8,6 +8,7 @@ import {
   type ParseJobState,
   type ParseResult,
 } from '@/lib/rag-eval/contracts.generated';
+import { PARSE_JOB_REQUEST_PHASE32_DEFAULTS, omitDefaultFields } from '../wire-defaults';
 import {
   MAX_ARTIFACTS,
   MAX_ARTIFACT_BYTES,
@@ -107,7 +108,7 @@ export function createSidecarParser(config: SidecarConfig): DocumentParser {
     const form = new FormData();
     // The upload is always named input.bin: a filename never reaches the sidecar.
     form.set('file', new Blob([request.bytes as unknown as BlobPart]), 'input.bin');
-    form.set('request', JSON.stringify(parsedRequest.data));
+    form.set('request', JSON.stringify(omitDefaultFields(parsedRequest.data, PARSE_JOB_REQUEST_PHASE32_DEFAULTS)));
     const response = await fetchParser('docling', `${base}/v1/parse/jobs`, { method: 'POST', headers: headers(), body: form }, request.signal, timeoutFor(request));
     if (response.status !== 202 && response.status !== 200) throw await refusal(response, request.signal);
     const accepted = ParseJobAcceptedSchema.safeParse(await readJson('docling', response, 4096, request.signal));

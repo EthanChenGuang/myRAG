@@ -3,7 +3,7 @@ import type { RagConfig, StageName } from '../../config';
 import { legacyAnalyze } from '../../legacy/enhanced-retrieval';
 import { buildRetrievalFilters } from '../../query/filters';
 import { queryLanguage } from '../../query/language';
-import { getTranslator, NONE_TRANSLATOR_NAME } from '../../query/translate';
+import { getTranslator, NONE_TRANSLATOR, NONE_TRANSLATOR_NAME } from '../../query/translate';
 import { buildQueryVariants } from '../../query/variants';
 import { timeframeToDateRange } from '../../query/timeframe';
 import { defaultQueryContext, type TemporalQueryContext } from '../../query/temporal-query-detector';
@@ -58,7 +58,7 @@ export async function runQueryStages(ctx: QueryStagesInput): Promise<QueryStages
   const queryContext = analysis.skipped ? defaultQueryContext() : analysis.value;
   const language = queryLanguage(input.query);
 
-  const translator = getTranslator();
+  const translator = config.monolingual ? NONE_TRANSLATOR : getTranslator();
   const translation = await runStage(
     spec('translate', 'skip'),
     signal,

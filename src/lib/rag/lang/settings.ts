@@ -11,6 +11,7 @@ import { getLanguageRegistry } from './registry';
 export type LanguageSettings = NormalizedLanguageSettings;
 
 let cached: LanguageSettings | null = null;
+let trap: (() => never) | null = null;
 
 function rawEnv(): { supported: string | undefined; primary: string | undefined } {
   return { supported: process.env.RAG_SUPPORTED_LANGUAGES, primary: process.env.RAG_PRIMARY_LANGUAGE };
@@ -18,6 +19,7 @@ function rawEnv(): { supported: string | undefined; primary: string | undefined 
 
 /** D-01: the only reader of RAG_SUPPORTED_LANGUAGES and RAG_PRIMARY_LANGUAGE. Never throws on a bad value. */
 export function getLanguageSettings(): LanguageSettings {
+  if (trap) trap();
   if (cached) return cached;
   const { supported, primary } = rawEnv();
   try {
@@ -44,6 +46,7 @@ export interface ValidateConfiguredLanguagesOptions {
 
 /** D-07 for the app entry point: the configured values against the registry and the active reranker. */
 export function validateConfiguredLanguages(options: ValidateConfiguredLanguagesOptions = {}): LanguageValidationResult {
+  if (trap) trap();
   const { supported, primary } = rawEnv();
   return validateLanguageSettings(
     { supported, primary },
@@ -53,4 +56,9 @@ export function validateConfiguredLanguages(options: ValidateConfiguredLanguages
 
 export function resetLanguageSettingsForTests(): void {
   cached = null;
+}
+
+/** Test seam: every reader call runs the trap first (the defaults test proves the legacy path never reads the settings). */
+export function setLanguageSettingsTrapForTests(next: (() => never) | null): void {
+  trap = next;
 }

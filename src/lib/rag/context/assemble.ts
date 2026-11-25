@@ -1,6 +1,7 @@
 import { formatURLsForContext, type ExtractedURL } from '@/lib/url-extractor';
 import { renderReferencedSection } from '../refs/resolve';
 import type { InjectionMarks } from '../security/injection-check';
+import { legacyKeepReason, legacyQueryTerms } from './relevance';
 import { docsFromBlocks, wrapDocuments, type WrapDoc } from './wrap';
 import type {
   CitationLabel,
@@ -13,6 +14,8 @@ import type {
   SourceImage,
   UsedDocument,
 } from '../types';
+
+export { normalizeQueryText } from './relevance';
 
 export interface AssemblyCandidate {
   chunk_id: string;
@@ -83,28 +86,10 @@ export const NO_CONTEXT_TEXT = 'No relevant context found.';
 
 export const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg'];
 
-export function normalizeQueryText(input: unknown): string {
-  if (typeof input === 'string') {
-    return input.toLowerCase();
-  }
-  if (Array.isArray(input) && input.length > 0) {
-    const textPart = input.find((part) => part.type === 'text');
-    return textPart && typeof textPart.text === 'string' ? textPart.text.toLowerCase() : '';
-  }
-  return '';
-}
-
-function queryTermsOf(queryText: unknown): string[] {
-  return normalizeQueryText(queryText)
-    .split(/\s+/)
-    .filter((term) => term.length > 3)
-    .map((term) => term.replace(/[^a-z0-9]/g, ''));
-}
-
 export function filterCandidates<C extends AssemblyCandidate>(input: AssembleInput<C>): FilteredCandidates<C> {
   const { candidates, documents, chunkMetadata, applyRelevanceFilter } = input;
   const hasQuery = Boolean(input.queryText);
-  const queryTerms = queryTermsOf(input.queryText);
+  const queryTerms = legacyQueryTerms(input.queryText);
   const usedDocuments: UsedDocument[] = (input.referenced?.usedDocuments ?? []).map((doc) => ({ ...doc }));
   const chunkKeptBy = new Map<string, KeptBy>();
   const docKeptBy = new Map<string, KeptBy>();
@@ -123,13 +108,13 @@ export function filterCandidates<C extends AssemblyCandidate>(input: AssembleInp
       }
 
       const hasImage = !!metadata?.image_url;
-      const docName = docMetadata.filename.toLowerCase();
-      const isRelevantByName = queryTerms.some(
-        (term) => docName.includes(term) || (docMetadata.content && docMetadata.content.toLowerCase().includes(term)),
+      const reason = legacyKeepReason(
+        { similarity: chunk.similarity, hasImage, filename: docMetadata.filename, text: docMetadata.content },
+        queryTerms,
       );
 
-      if (!applyRelevanceFilter || chunk.similarity > 0.65 || isRelevantByName || (hasImage && chunk.similarity > 0.25)) {
-        const keptBy: KeptBy = chunk.similarity > 0.65 ? 'similarity' : isRelevantByName ? 'name' : hasImage ? 'image' : 'similarity';
+      if (!applyRelevanceFilter || reason !== null) {
+        const keptBy: KeptBy = reason ?? (hasImage ? 'image' : 'similarity');
         chunkKeptBy.set(chunk.chunk_id, keptBy);
         const existingDoc = usedDocuments.find((doc) => doc.id === chunk.document_id);
         if (!existingDoc) {

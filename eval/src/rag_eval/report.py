@@ -29,6 +29,9 @@ from rag_eval.metrics import (
 from rag_eval.paths import REPO_ROOT
 
 K_VALUES = [5, 10]
+PINNED_EVAL_ENV_PATH = REPO_ROOT / "eval" / "config" / "rag-eval-env.json"
+SUPPORTED_LANGUAGES_VAR = "RAG_SUPPORTED_LANGUAGES"
+CROSS_LINGUAL_CATEGORY = "cross_lingual"
 LATENCY_BUDGETS_PATH = REPO_ROOT / "eval" / "config" / "latency-budgets.json"
 LATENCY_PROFILE = "chat"
 RETRIEVAL_TOTAL = "retrieval_total"
@@ -252,6 +255,49 @@ def load_latency_budgets(path: Path | None = None) -> LatencyBudgets:
     return LatencyBudgets.model_validate_json(source.read_text(encoding="utf-8"))
 
 
+def _parse_languages(raw: str) -> tuple[str, ...]:
+    return tuple(dict.fromkeys(code.strip().lower() for code in raw.split(",") if code.strip()))
+
+
+def run_supported_languages(manifest: RunManifest, pinned_path: Path = PINNED_EVAL_ENV_PATH) -> tuple[str, ...]:
+    """The run's RAG_SUPPORTED_LANGUAGES: the run config's env when it sets it, else the eval env pin."""
+    if manifest.run_config is not None and SUPPORTED_LANGUAGES_VAR in manifest.run_config.env:
+        return _parse_languages(manifest.run_config.env[SUPPORTED_LANGUAGES_VAR])
+    try:
+        pinned = json.loads(pinned_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ()
+    value = pinned.get(SUPPORTED_LANGUAGES_VAR, "") if isinstance(pinned, dict) else ""
+    return _parse_languages(value if isinstance(value, str) else "")
+
+
+def skip_monolingual_slices(aggregated: dict[str, object], languages: tuple[str, ...]) -> str | None:
+    """D-03: with one supported language, drop the cross-lingual, language-pair and other-language slices in place."""
+    if len(languages) != 1:
+        return None
+    (language,) = languages
+    by_language = aggregated["by_language"]
+    by_category = aggregated["by_category"]
+    by_language_category = aggregated["by_language_category"]
+    by_language_pair = aggregated["by_language_pair"]
+    assert isinstance(by_language, dict) and isinstance(by_category, dict)
+    assert isinstance(by_language_category, dict) and isinstance(by_language_pair, dict)
+    skipped_languages = sorted(code for code in by_language if code != language)
+    aggregated["by_language"] = {code: value for code, value in by_language.items() if code == language}
+    aggregated["by_category"] = {name: value for name, value in by_category.items() if name != CROSS_LINGUAL_CATEGORY}
+    aggregated["by_language_category"] = {
+        key: value
+        for key, value in by_language_category.items()
+        if key.split("/", 1)[0] == language and key.split("/", 1)[-1] != CROSS_LINGUAL_CATEGORY
+    }
+    aggregated["by_language_pair"] = {}
+    others = f", and the language slices of {', '.join(skipped_languages)}" if skipped_languages else ""
+    return (
+        f"Monolingual run ({SUPPORTED_LANGUAGES_VAR}={language}, D-03): skipped the {CROSS_LINGUAL_CATEGORY} "
+        f"category slices, the language-pair slices{others}, because only {language} is enabled."
+    )
+
+
 def build_report(
     manifest: RunManifest,
     results: list[ItemResult],
@@ -259,6 +305,7 @@ def build_report(
     traces: list[RagTrace] | None = None,
     *,
     judge: JudgeReport | None = None,
+    supported_languages: tuple[str, ...] | None = None,
 ) -> EvalReport:
     notes: list[str] = []
     if any(item.language == "zh" for item in golden):
@@ -272,6 +319,10 @@ def build_report(
     )
     if aggregated["gate_population"] == "production":
         notes.append(PRODUCTION_GATE_NOTE)
+    languages = run_supported_languages(manifest) if supported_languages is None else supported_languages
+    skipped_note = skip_monolingual_slices(aggregated, languages)
+    if skipped_note is not None:
+        notes.append(skipped_note)
     answer_fields: dict[str, object] = {}
     if traces:
         if citation_run(traces, requested=manifest.request_options.citations):
