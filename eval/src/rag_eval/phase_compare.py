@@ -1334,7 +1334,7 @@ class SwitchRun(_Model):
     checks: list[str] = Field(min_length=1)
 
     @model_validator(mode="after")
-    def _switch_names(self) -> "SwitchRun":
+    def _switch_names(self) -> SwitchRun:
         for name in self.switches:
             if not SWITCH_NAME.match(name):
                 raise ValueError(f"run {self.name}: {name} is not a RAG_* switch")
@@ -1356,7 +1356,7 @@ class SwitchComparisonSpec(_Model):
     commands: dict[str, list[str]] = Field(default_factory=dict)
 
     @model_validator(mode="after")
-    def _references(self) -> "SwitchComparisonSpec":
+    def _references(self) -> SwitchComparisonSpec:
         names = [run.name for run in self.runs]
         if len(names) != len(set(names)):
             raise ValueError("run names must be unique")
@@ -1418,22 +1418,43 @@ def _paired_cells(gate: GateResult, metrics: tuple[str, ...] | None = None) -> l
 
 def paired_all_zero_check(output: RunOutput, baseline: Baseline, noise: NoiseConfig) -> CheckResult:
     """Every paired difference against the baseline is zero (retrieval and refusal), on the same data."""
-    return CheckResult(name="paired_all_zero", passed=False, detail=["not implemented"])
+    gate = evaluate_gate(output.report, baseline, noise)
+    nonzero = _paired_cells(gate)
+    passed = gate.paired is not None and gate.paired.all_zero and not gate.mismatches and not nonzero
+    detail = [*gate.mismatches, *nonzero] or ([] if gate.paired is not None else ["no paired comparison"])
+    return CheckResult(name="paired_all_zero", passed=passed, detail=detail)
 
 
 def retrieval_unchanged_check(output: RunOutput, baseline: Baseline, noise: NoiseConfig) -> CheckResult:
     """Every Recall@5, Recall@10 and MRR paired difference is zero; answer-only request options may differ (gate.ANSWER_ONLY_OPTIONS)."""
-    return CheckResult(name="retrieval_unchanged", passed=False, detail=["not implemented"])
+    gate = evaluate_gate(output.report, baseline, noise)
+    nonzero = _paired_cells(gate, RETRIEVAL_METRICS)
+    passed = gate.paired is not None and not gate.mismatches and not nonzero
+    detail = [*gate.mismatches, *nonzero] or ([] if gate.paired is not None else ["no paired comparison"])
+    return CheckResult(name="retrieval_unchanged", passed=passed, detail=detail)
 
 
 def no_slice_drop_check(output: RunOutput, baseline: Baseline, noise: NoiseConfig) -> CheckResult:
     """No overall, language or category slice falls beyond the noise band on a retrieval metric."""
-    return CheckResult(name="no_slice_drop", passed=False, detail=["not implemented"])
+    gate = slice_drops(output.report, baseline, noise)
+    detail = [*gate.mismatches] + [
+        f"{o.slice}:{o.metric} {o.observed:.4f} < {o.threshold:.4f} (baseline {o.baseline_mean:.4f})" for o in gate.offenders
+    ]
+    return CheckResult(name="no_slice_drop", passed=not gate.mismatches and not gate.offenders, detail=detail)
 
 
 def citation_validity_check(output: RunOutput) -> CheckResult:
     """invalid_citation_rate is measured over at least one citation and is exactly 0."""
-    return CheckResult(name="citation_validity", passed=False, detail=["not implemented"])
+    rate = output.report.invalid_citation_rate
+    value = rate.value if rate is not None else None
+    n = rate.n if rate is not None else 0
+    if value is None or n == 0:
+        return CheckResult(
+            name="citation_validity", passed=False, detail=["invalid_citation_rate was not measured"], measures={"invalid_citation_rate": value}
+        )
+    passed = value == 0
+    detail = [] if passed else [f"invalid_citation_rate {value:.4f} over {n} citation(s)"]
+    return CheckResult(name="citation_validity", passed=passed, detail=detail, measures={"invalid_citation_rate": value, "citations": float(n)})
 
 
 def default_env_command_runner(argv: list[str], env: dict[str, str]) -> int:
@@ -1530,8 +1551,10 @@ def render_switch_markdown(c: SwitchComparison) -> str:
         "",
         f"Result: {_verdict(c.passed)}",
         "",
-        f"Noise band: max({c.noise_k:g} x baseline spread, {c.noise_floor:g}) on Recall@5, Recall@10 and MRR over the overall, "
-        "every language and every category slice. Paired differences are against the committed baseline of the run's fixture mode.",
+        (
+            f"Noise band: max({c.noise_k:g} x baseline spread, {c.noise_floor:g}) on Recall@5, Recall@10 and MRR over the overall, "
+            "every language and every category slice. Paired differences are against the committed baseline of the run's fixture mode."
+        ),
         "",
         "## Notes",
         "",
@@ -1550,9 +1573,11 @@ def render_switch_markdown(c: SwitchComparison) -> str:
             "",
             f"Switches: {switches}. Harness flags: {' '.join(r.harness_flags) or 'none'}.",
             "",
-            f"Recall@5 {_num(o.recall_at_5.value)}, Recall@10 {_num(o.recall_at_10.value)}, MRR {_num(o.mrr.value)}, "
-            f"correct refusal {_num(o.correct_refusal_rate.value)}, false refusal {_num(o.false_refusal_rate.value)}, "
-            f"invalid citation rate {_num(r.invalid_citation_rate)}, citation coverage {_num(r.citation_coverage)}.",
+            (
+                f"Recall@5 {_num(o.recall_at_5.value)}, Recall@10 {_num(o.recall_at_10.value)}, MRR {_num(o.mrr.value)}, "
+                f"correct refusal {_num(o.correct_refusal_rate.value)}, false refusal {_num(o.false_refusal_rate.value)}, "
+                f"invalid citation rate {_num(r.invalid_citation_rate)}, citation coverage {_num(r.citation_coverage)}."
+            ),
             "",
             "| Check | Result | Detail |",
             "|---|---|---|",

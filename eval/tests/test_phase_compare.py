@@ -17,6 +17,13 @@ from rag_eval.golden_io import write_golden
 from rag_eval.phase_compare import (
     ComparisonSpec,
     RunRequest,
+    SwitchComparison,
+    SwitchComparisonSpec,
+    citation_validity_check,
+    no_slice_drop_check,
+    paired_all_zero_check,
+    retrieval_unchanged_check,
+    run_switch_comparison,
     default_runner,
     PhaseComparison,
     RunOutput,
@@ -645,16 +652,6 @@ def test_default_runner_reads_the_golden_file_named_by_the_run_manifest(tmp_path
 
 
 # ---------- schema 2: switch comparison (Phase 5 D-25)
-
-from rag_eval.phase_compare import (  # noqa: E402
-    SwitchComparison,
-    SwitchComparisonSpec,
-    citation_validity_check,
-    no_slice_drop_check,
-    paired_all_zero_check,
-    retrieval_unchanged_check,
-    run_switch_comparison,
-)
 
 SPEC5 = REPO_ROOT / "eval" / "config" / "phase5-comparison.json"
 PHASE5_SWITCHES = (
