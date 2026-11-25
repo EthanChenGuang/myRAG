@@ -8,11 +8,13 @@ import {
   resolveFinalResultCount,
   warnInjectionCheckDisabled,
 } from '@/lib/rag/config';
+import { loadIngestConfig, resetIngestConfigForTests } from '@/lib/rag/ingest/config';
 
 let warn: MockInstance<(...args: unknown[]) => void>;
 
 beforeEach(() => {
   resetRagConfigForTests();
+  resetIngestConfigForTests();
   warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
 });
 
@@ -254,5 +256,23 @@ describe('resolveFinalResultCount', () => {
     resolveFinalResultCount(undefined, 'abc');
     resolveFinalResultCount(undefined, 'abc');
     expect(configWarnings()).toHaveLength(1);
+  });
+});
+function ingestConfigWarnings(): string[] {
+  return warn.mock.calls
+    .filter((call) => String(call[0]).includes('[Ingest Config]'))
+    .map((call) => call.map((part) => (typeof part === 'string' ? part : JSON.stringify(part))).join(' '));
+}
+
+describe('Phase 3.2 ingestion switches (D-47)', () => {
+  test('RAG_LANGUAGE_AWARE_INGEST defaults to off, accepts on, and falls back to off with one warning', () => {
+    expect(loadIngestConfig({}).languageAwareIngest).toBe('off');
+    expect(loadIngestConfig({ RAG_LANGUAGE_AWARE_INGEST: 'on' }).languageAwareIngest).toBe('on');
+    expect(loadIngestConfig({ RAG_LANGUAGE_AWARE_INGEST: 'off' }).languageAwareIngest).toBe('off');
+    expect(ingestConfigWarnings()).toEqual([]);
+    expect(loadIngestConfig({ RAG_LANGUAGE_AWARE_INGEST: 'yes' }).languageAwareIngest).toBe('off');
+    loadIngestConfig({ RAG_LANGUAGE_AWARE_INGEST: 'yes' });
+    expect(ingestConfigWarnings()).toHaveLength(1);
+    expect(ingestConfigWarnings()[0]).toContain('RAG_LANGUAGE_AWARE_INGEST');
   });
 });
