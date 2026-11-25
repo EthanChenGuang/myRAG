@@ -1,0 +1,70 @@
+{
+  "$defs": {
+    "LinkTargetFinding": {
+      "additionalProperties": false,
+      "properties": {
+        "host": {
+          "maxLength": 253,
+          "minLength": 1,
+          "title": "Host",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "url",
+            "domain",
+            "email",
+            "annotation"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "target": {
+          "maxLength": 2048,
+          "minLength": 1,
+          "title": "Target",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "target",
+        "host"
+      ],
+      "title": "LinkTargetFinding",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Outcome of the ingestion link check (D-35); targets are the ones outside the allowlist.",
+  "properties": {
+    "checker_version": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Checker Version",
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "clean",
+        "untrusted_found"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "targets": {
+      "items": {
+        "$ref": "#/$defs/LinkTargetFinding"
+      },
+      "maxItems": 200,
+      "title": "Targets",
+      "type": "array"
+    }
+  },
+  "required": [
+    "status",
+    "checker_version"
+  ],
+  "title": "LinkCheckResult",
+  "type": "object"
+}

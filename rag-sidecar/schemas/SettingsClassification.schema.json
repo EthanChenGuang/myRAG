@@ -1,0 +1,101 @@
+{
+  "$defs": {
+    "IngestionSettingEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "mechanism": {
+          "enum": [
+            "reparse",
+            "rechunk",
+            "relex",
+            "reembed",
+            "recaption",
+            "retranslate",
+            "rescan"
+          ],
+          "title": "Mechanism",
+          "type": "string"
+        },
+        "name": {
+          "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "side": {
+          "enum": [
+            "ingestion",
+            "both"
+          ],
+          "title": "Side",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "side",
+        "mechanism"
+      ],
+      "title": "IngestionSettingEntry",
+      "type": "object"
+    },
+    "QuerySettingEntry": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "side": {
+          "const": "query",
+          "title": "Side",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "side"
+      ],
+      "title": "QuerySettingEntry",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "`config/rag/settings-classification.json` (D-09): one entry per variable, ingestion entries name a mechanism.",
+  "properties": {
+    "entries": {
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "both": "#/$defs/IngestionSettingEntry",
+            "ingestion": "#/$defs/IngestionSettingEntry",
+            "query": "#/$defs/QuerySettingEntry"
+          },
+          "propertyName": "side"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/IngestionSettingEntry"
+          },
+          {
+            "$ref": "#/$defs/QuerySettingEntry"
+          }
+        ]
+      },
+      "minItems": 1,
+      "title": "Entries",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "entries"
+  ],
+  "title": "SettingsClassification",
+  "type": "object"
+}

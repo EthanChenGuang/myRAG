@@ -95,6 +95,15 @@ from rag_sidecar.contracts import (
     PreflightResult,
     QualityCheckResult,
     QuarantineReason,
+    FingerprintImpact,
+    HiddenTextReport,
+    HiddenTextRequest,
+    HiddenTextRules,
+    IngestFingerprintParts,
+    LanguageSettings,
+    LinkCheckResult,
+    SettingsClassification,
+    UploadApproval,
 )
 from rag_sidecar.contracts.samples import build_samples
 
@@ -193,6 +202,15 @@ CONTRACTS: list[tuple[type[BaseModel], Mode]] = [
     (CacheInvalidateResponse, "serialization"),
     (SemanticCacheCalibration, "serialization"),
     (QuarantineReason, "validation"),
+    (LanguageSettings, "serialization"),
+    (SettingsClassification, "validation"),
+    (IngestFingerprintParts, "validation"),
+    (FingerprintImpact, "serialization"),
+    (HiddenTextRequest, "validation"),
+    (HiddenTextReport, "serialization"),
+    (HiddenTextRules, "validation"),
+    (LinkCheckResult, "serialization"),
+    (UploadApproval, "validation"),
 ]
 
 

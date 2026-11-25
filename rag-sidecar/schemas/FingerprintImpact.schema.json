@@ -1,0 +1,83 @@
+{
+  "$defs": {
+    "FingerprintImpactRow": {
+      "additionalProperties": false,
+      "properties": {
+        "affected": {
+          "minimum": 0,
+          "title": "Affected",
+          "type": "integer"
+        },
+        "doc_type": {
+          "enum": [
+            "general",
+            "financial_report",
+            "contract_legal",
+            "invoice_receipt",
+            "product_technical",
+            "scanned_image"
+          ],
+          "title": "Doc Type",
+          "type": "string"
+        },
+        "mechanism": {
+          "enum": [
+            "reparse",
+            "rechunk",
+            "relex",
+            "reembed",
+            "recaption",
+            "retranslate",
+            "rescan"
+          ],
+          "title": "Mechanism",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mechanism",
+        "doc_type",
+        "affected"
+      ],
+      "title": "FingerprintImpactRow",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Response of `POST /api/rag/admin/ingest-fingerprint/impact` (D-11): aggregates only, no document ids.",
+  "properties": {
+    "by_mechanism": {
+      "items": {
+        "$ref": "#/$defs/FingerprintImpactRow"
+      },
+      "title": "By Mechanism",
+      "type": "array"
+    },
+    "ingestion_keys": {
+      "items": {
+        "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
+        "type": "string"
+      },
+      "title": "Ingestion Keys",
+      "type": "array"
+    },
+    "total_current": {
+      "minimum": 0,
+      "title": "Total Current",
+      "type": "integer"
+    },
+    "without_fingerprint": {
+      "minimum": 0,
+      "title": "Without Fingerprint",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "ingestion_keys",
+    "by_mechanism",
+    "without_fingerprint",
+    "total_current"
+  ],
+  "title": "FingerprintImpact",
+  "type": "object"
+}

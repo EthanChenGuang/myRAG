@@ -2113,6 +2113,25 @@
       "schema_version": 1,
       "tier": "smoke"
     },
+    "FingerprintImpact": {
+      "by_mechanism": [
+        {
+          "affected": 3,
+          "doc_type": "general",
+          "mechanism": "reparse"
+        },
+        {
+          "affected": 0,
+          "doc_type": "scanned_image",
+          "mechanism": "reparse"
+        }
+      ],
+      "ingestion_keys": [
+        "RAG_EXAMPLE_PARSE"
+      ],
+      "total_current": 10,
+      "without_fingerprint": 1
+    },
     "GateResult": {
       "mismatches": [],
       "offenders": [
@@ -2255,8 +2274,81 @@
       ],
       "schema_version": 1
     },
+    "HiddenTextReport": {
+      "checker_version": "hidden-text@1",
+      "dropped": 0,
+      "link_targets": [
+        "https://outside.example.net/page"
+      ],
+      "spans": [
+        {
+          "bbox": [
+            72.0,
+            700.0,
+            300.0,
+            712.0
+          ],
+          "page": 1,
+          "reason": "color_near_background",
+          "text": "Synthetic hidden sentence one."
+        }
+      ],
+      "status": "hidden_found"
+    },
+    "HiddenTextRequest": {
+      "filename": "sample.pdf",
+      "mime_type": "application/pdf",
+      "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "size_bytes": 2048
+    },
+    "HiddenTextRules": {
+      "docx": {
+        "color_distance_max": 0.05,
+        "min_font_size_half_points": 4,
+        "min_span_chars": 3
+      },
+      "pdf": {
+        "color_distance_max": 0.05,
+        "covered_overlap_min": 0.9,
+        "min_font_size_pt": 1.0,
+        "min_font_size_ratio": 0.25,
+        "min_span_chars": 3,
+        "outside_page_margin_pt": 2.0
+      },
+      "rules_version": "example-1",
+      "schema_version": 1,
+      "zero_width_threshold": 5
+    },
     "HypotheticalDocument": {
       "passage": "The product warranty lasts two years and covers ERR_TIMEOUT faults caused by the device."
+    },
+    "IngestFingerprintParts": {
+      "assumed_defaults": [
+        "switches"
+      ],
+      "chunking_profile_id": "legacy",
+      "embedding_profile_id": "example-embedding",
+      "embedding_profile_version": 1,
+      "embedding_text_version": 1,
+      "language_pack_versions": {
+        "en": 1,
+        "it": 1,
+        "zh": 1
+      },
+      "lexical_version": 2,
+      "ocr_engine_codes": [
+        "en"
+      ],
+      "parser_used": "docling",
+      "parser_version": "2.0.0",
+      "processing_profile_id": "general",
+      "processing_profile_version": 1,
+      "switches": {
+        "caption_language": "en",
+        "language_aware_ingest": "off",
+        "table_header_repeat": "profile",
+        "table_row_serialization": "false"
+      }
     },
     "IngestionJob": {
       "attempts": [
@@ -3095,6 +3187,16 @@
       ],
       "schema_version": 1
     },
+    "LanguageSettings": {
+      "configured": true,
+      "languages": [
+        "zh",
+        "en",
+        "it"
+      ],
+      "monolingual": false,
+      "primary": "zh"
+    },
     "LatencyBudgets": {
       "groundedness": {
         "hhem_2_1_open": {
@@ -3124,6 +3226,22 @@
         }
       },
       "schema_version": 1
+    },
+    "LinkCheckResult": {
+      "checker_version": "link-check@1",
+      "status": "untrusted_found",
+      "targets": [
+        {
+          "host": "outside.example.net",
+          "kind": "url",
+          "target": "https://outside.example.net/page"
+        },
+        {
+          "host": "outside.example.org",
+          "kind": "email",
+          "target": "someone@outside.example.org"
+        }
+      ]
     },
     "NoiseConfig": {
       "floor": 0.02,
@@ -4359,6 +4477,25 @@
       ],
       "schema_version": 1
     },
+    "SettingsClassification": {
+      "entries": [
+        {
+          "mechanism": "rescan",
+          "name": "RAG_EXAMPLE_CHECK",
+          "side": "ingestion"
+        },
+        {
+          "mechanism": "reparse",
+          "name": "RAG_EXAMPLE_PARSE",
+          "side": "both"
+        },
+        {
+          "name": "RAG_EXAMPLE_QUERY",
+          "side": "query"
+        }
+      ],
+      "schema_version": 1
+    },
     "SidecarError": {
       "error": "synthetic error"
     },
@@ -4382,6 +4519,13 @@
         "Does the product warranty cover ERR_TIMEOUT?",
         "How long is the product warranty?"
       ]
+    },
+    "UploadApproval": {
+      "decided_at": "2026-01-01T00:00:00Z",
+      "mode": "members",
+      "reason": "member_upload",
+      "required": true,
+      "uploader_id": "00000000-0000-4000-8000-0000000000c1"
     }
   },
   "variants": {
