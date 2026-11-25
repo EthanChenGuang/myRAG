@@ -16958,6 +16958,19 @@ When messaging:
 
                 const actions = document.createElement('div');
                 actions.className = 'flex gap-2';
+                const rowLabel = String(model.displayName || model.id || 'model');
+                [['up', -1, '↑'], ['down', 1, '↓']].forEach(([direction, delta, glyph]) => {
+                    const move = document.createElement('button');
+                    move.type = 'button';
+                    move.className = 'btn btn-sm btn-ghost btn-square';
+                    move.setAttribute('aria-label', `Move ${rowLabel} ${direction}`);
+                    move.dataset.move = direction;
+                    move.title = `Move ${direction}`;
+                    move.textContent = glyph;
+                    move.disabled = (delta < 0 && index === 0) || (delta > 0 && index === models.length - 1);
+                    move.addEventListener('click', () => moveModel(index, delta));
+                    actions.appendChild(move);
+                });
                 if (!isDefault) {
                     const setDefault = document.createElement('button');
                     setDefault.type = 'button';
@@ -17412,6 +17425,26 @@ When messaging:
                 ? ` with 🧠 ${newModel.reasoningMethod} reasoning`
                 : '';
             showToast(`Model '${displayName}' added successfully${reasoningStatus}!`, 'success');
+        }
+
+        function moveModel(index, delta) {
+            const models = modelConfig.provider === 'openai'
+                ? modelConfig.openaiModels
+                : modelConfig.provider === 'groq' ? modelConfig.groqModels : modelConfig.openrouterModels;
+            const target = index + delta;
+            if (target < 0 || target >= models.length) return;
+            const [moved] = models.splice(index, 1);
+            models.splice(target, 0, moved);
+            renderModels();
+            const container = document.getElementById('models-container');
+            const row = container ? container.querySelectorAll('.model-item')[target] : null;
+            const again = row ? row.querySelector(delta < 0 ? '[data-move="up"]' : '[data-move="down"]') : null;
+            if (again && !again.disabled) again.focus();
+            else if (row) {
+                const other = row.querySelector(delta < 0 ? '[data-move="down"]' : '[data-move="up"]');
+                if (other) other.focus();
+            }
+            showToast('Models reordered! Click "Save Model Configuration" to persist changes.', 'info');
         }
 
         function confirmRemoveModel(index, opener) {
