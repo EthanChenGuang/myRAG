@@ -529,6 +529,18 @@ describe('voice-rag under the v2 query layer', () => {
     expect(response.headers.get('x-rag-server-query-rewrite')).toBeNull();
   });
 
+  it('omits the header when the condense stage is disabled', async () => {
+    process.env.RAG_DISABLED_STAGES = 'condense';
+    try {
+      const POST = await load();
+      const response = await post(POST, V2_CANARY_QUERY, tokenB());
+      expect(response.status).toBe(200);
+      expect(response.headers.get('x-rag-server-query-rewrite')).toBeNull();
+    } finally {
+      delete process.env.RAG_DISABLED_STAGES;
+    }
+  });
+
   it('with the layer off under v2 the header is absent and history changes nothing in the response', async () => {
     process.env.RAG_QUERY_LAYER = 'false';
     const POST = await load();

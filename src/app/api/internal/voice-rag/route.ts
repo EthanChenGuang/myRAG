@@ -6,15 +6,15 @@ import {
     createTraceCollector,
     deriveVoiceKeywords,
     finishTrace,
-    loadRagConfig,
     readSecurityConfig,
     resolveVoiceScope,
     runRetrieval,
     scopeKey,
+    voiceServerCondenses,
     VOICE_SCOPE_HEADER,
+    type HistoryTurn,
+    type RetrievalResult,
 } from '@/lib/rag';
-import { getRagDeps } from '@/lib/rag/deps';
-import type { HistoryTurn, RetrievalResult } from '@/lib/rag/types';
 import { classifyQuery } from '@/lib/query-classifier';
 import { internalApiKeyMatches } from '@/lib/internal-api-key';
 
@@ -38,17 +38,6 @@ const bodySchema = z.object({
 /** The session binding of a history turn: the first 22 characters of base64url SHA-256 over the raw scope token. */
 function historyBinding(rawToken: string): string {
     return createHash('sha256').update(rawToken, 'utf8').digest('base64url').slice(0, 22);
-}
-
-/** D-30/W2: whether the voice profile condenses history server-side, so the agent can skip its own rewrite. */
-function serverCondensesVoice(): boolean {
-    const config = loadRagConfig(getRagDeps().ragEnv());
-    return (
-        config.pipelineBlocked === null &&
-        config.queryLayer.enabled &&
-        !config.disabledStages.has('condense') &&
-        config.queryLayer.voiceTransforms.includes('condense_history')
-    );
 }
 
 function fellBack(result: RetrievalResult): boolean {
@@ -120,7 +109,7 @@ export async function POST(req: NextRequest) {
             ...(trace ? { trace } : {}),
         });
         if (trace) finishTrace(trace, result, { query });
-        const headers: Record<string, string> = serverCondensesVoice() && !fellBack(result) ? { [SERVER_REWRITE_HEADER]: '1' } : {};
+        const headers: Record<string, string> = voiceServerCondenses() && !fellBack(result) ? { [SERVER_REWRITE_HEADER]: '1' } : {};
 
         const voice = result.voice;
         if (result.status === 'error' || (result.status === 'degraded' && (!voice || voice.results.length === 0))) {
