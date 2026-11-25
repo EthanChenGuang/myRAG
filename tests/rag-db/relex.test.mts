@@ -289,6 +289,16 @@ describe('rag:relex job (src/lib/rag/ingest/relex)', () => {
     assert.deepEqual(fns[0]?.config, ['search_path=""']);
   });
 
+  test('the CLI passes RAG_TABLE_ROW_SERIALIZATION to the run and reports the table chunks', async () => {
+    for (const value of ['true', 'false']) {
+      depsModule.setIngestDepsForTests({ db: () => pgliteRpc(fixture.db), ingestEnv: () => ({ RAG_TABLE_ROW_SERIALIZATION: value }) });
+      const lines: string[] = [];
+      const code = await cli.main(['--dry-run'], { out: (line) => lines.push(line), err: (line) => lines.push(line) });
+      assert.equal(code, 0);
+      assert.ok(lines.includes(`[RAG Relex] table chunks (RAG_TABLE_ROW_SERIALIZATION=${value}): would update 0`), lines.join('\n'));
+    }
+  });
+
   test('CLI parse accepts documented flags', () => {
     const parsed = cli.parseRelexArgs(['--dry-run', '--batch-size', '20', '--tenant', TENANT_A, '--resume-after', TWO_TENANT_IDS.chunkA]);
     assert.deepEqual(parsed, {
