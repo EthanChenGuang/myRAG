@@ -342,3 +342,127 @@ describe('apply pass', () => {
     }
   });
 });
+
+describe('identifier re-index (plan 03.3-16)', () => {
+  const FLAGGED_DEFINITIONS = [{ ...DEFINITIONS[0], in_identifier_index: true }, DEFINITIONS[1]];
+  const IDS = ['00000000-0000-4000-8000-0000000016e1', '00000000-0000-4000-8000-0000000016e2', '00000000-0000-4000-8000-0000000016e3'];
+
+  async function runFeed(argv: string[], options: { identifierIndex?: boolean; definitions?: unknown[]; env?: Record<string, string>; listed?: string[] } = {}) {
+    vi.resetModules();
+    const fakes = await import('../../helpers/ingest-fakes');
+    const { db, calls } = fakes.fakeIngestDb({
+      answers: {
+        rag_attribute_definitions_for: () => (options.definitions ?? FLAGGED_DEFINITIONS) as Record<string, unknown>[],
+        rag_document_attributes_read: (args) => (args.p_document_ids as string[]).map((id) => ({ document_id: id, attributes: { alpha_code: MARKER } })),
+        rag_attribute_identifier_documents: (args) => {
+          const after = args.p_after as string | null;
+          return (options.listed ?? IDS).filter((id) => after === null || id > after).slice(0, args.p_limit as number).map((id) => ({ document_id: id, is_current: true }));
+        },
+        rag_index_document_chunks: (args) =>
+          args.p_after === null ? [{ id: `${String(args.p_document_id).slice(0, -2)}c1`, chunking_profile_id: 'legacy', chunk_index: 0, section_path: [], content: 'neutral' }] : [],
+        rag_write_chunk_identifiers: () => [{ chunks_written: 1, document_changed: true }],
+        rag_import_document_attributes: (args) => [
+          { documents_changed: 2, documents_unchanged: 0, chunks_updated: 4, staged: 0, staged_unchanged: 0, changed_document_ids: args.p_dry_run ? [] : IDS.slice(0, 2), outbox_rows: 0 },
+        ],
+      },
+    });
+    fakes.installIngestDeps({ db, env: options.env ?? ON });
+    const out: string[] = [];
+    const err: string[] = [];
+    try {
+      const { mintScope } = await import('@/lib/rag/tenant/scope');
+      const cli = await import('@/lib/rag/ingest/attributes/cli');
+      const code = await cli.main(argv, { out: (line) => out.push(line), err: (line) => err.push(line) }, new AbortController().signal, {
+        rpc: db,
+        resolveScope: async () => ({ ok: true, scope: mintScope('org', null, ORG) }),
+        identifierIndex: () => options.identifierIndex ?? true,
+        loadPatterns: async () => ({ expressions: [], patternIds: [], loadFailed: false }),
+      });
+      return { code, out, err, calls: calls as RecordedRpc[], all: [...out, ...err, ...logs].join('\n') };
+    } finally {
+      fakes.uninstallIngestDeps();
+    }
+  }
+
+  const indexed = (calls: RecordedRpc[]) => [...new Set(calls.filter((call) => call.fn === 'rag_index_document_chunks').map((call) => call.args.p_document_id))];
+
+  it('parses --reindex-identifiers; exactly one of --import and --reindex-identifiers; USAGE names the flag', async () => {
+    const { parseAttributesArgs, USAGE } = await import('@/lib/rag/ingest/attributes/cli');
+    expect(parseAttributesArgs(['--tenant', TENANT, '--reindex-identifiers'])).toEqual({ ok: true, tenantKey: TENANT, reindexIdentifiers: true, apply: false });
+    expect(parseAttributesArgs(['--tenant', TENANT, '--reindex-identifiers', '--apply'])).toEqual({ ok: true, tenantKey: TENANT, reindexIdentifiers: true, apply: true });
+    expect(parseAttributesArgs(['--tenant', TENANT, '--reindex-identifiers', '--import', 'f.jsonl']).ok).toBe(false);
+    expect(parseAttributesArgs(['--tenant', TENANT, '--reindex-identifiers', '--reindex-identifiers']).ok).toBe(false);
+    expect(parseAttributesArgs(['--tenant', TENANT]).ok).toBe(false);
+    expect(USAGE).toContain('--reindex-identifiers');
+    const both = await runFeed(['--tenant', TENANT, '--import', 'f.jsonl', '--reindex-identifiers']);
+    expect(both.code).toBe(64);
+    expect(both.calls).toEqual([]);
+  });
+
+  it('with RAG_DOC_ATTRIBUTES off the re-index refuses as the import does (64, no RPC)', async () => {
+    const result = await runFeed(['--tenant', TENANT, '--reindex-identifiers', '--apply'], { env: {} });
+    expect(result.code).toBe(64);
+    expect(result.calls).toEqual([]);
+  });
+
+  it('the report comes first; without --apply it exits 2 and indexes nothing', async () => {
+    const result = await runFeed(['--tenant', TENANT, '--reindex-identifiers']);
+    expect(result.code).toBe(2);
+    expect(result.out.join('\n')).toMatch(/documents to re-index: 3/);
+    expect(indexed(result.calls)).toEqual([]);
+    expect(result.calls.some((call) => call.fn === 'rag_write_chunk_identifiers')).toBe(false);
+  });
+
+  it('with --apply every listed document is re-indexed in pages, with the count line and the cache effect', async () => {
+    const result = await runFeed(['--tenant', TENANT, '--reindex-identifiers', '--apply']);
+    expect(result.code).toBe(0);
+    expect(indexed(result.calls)).toEqual(IDS);
+    const text = result.out.join('\n');
+    expect(text.indexOf('documents to re-index: 3')).toBeLessThan(text.indexOf('identifier index: 3 documents re-indexed'));
+    expect(text).toMatch(/semantic cache: unaffected/);
+    for (const call of result.calls) if ('p_tenant_key' in call.args) expect(call.args.p_tenant_key).toBe(TENANT);
+    expect(result.all).not.toContain(MARKER);
+  });
+
+  it('identifier index off: nothing is written, exit 0, one [RAG Config] attribute_identifier_feed_off warning', async () => {
+    const result = await runFeed(['--tenant', TENANT, '--reindex-identifiers', '--apply'], { identifierIndex: false });
+    expect(result.code).toBe(0);
+    expect(result.calls.some((call) => call.fn === 'rag_write_chunk_identifiers' || call.fn === 'rag_index_document_chunks')).toBe(false);
+    expect(logs.filter((line) => line.includes('[RAG Config]') && line.includes('attribute_identifier_feed_off'))).toHaveLength(1);
+  });
+
+  it('an --apply import re-indexes exactly the changed documents and prints the line', async () => {
+    const target = await file('feed.jsonl', [row(1), row(2)]);
+    const result = await runFeed(['--tenant', TENANT, '--import', target, '--apply']);
+    expect(result.code).toBe(0);
+    expect(indexed(result.calls)).toEqual(IDS.slice(0, 2));
+    expect(result.out.join('\n')).toMatch(/identifier index: 2 documents re-indexed/);
+    expect(result.all).not.toContain(MARKER);
+  });
+
+  it('a dry-run import re-indexes nothing; an import without a flagged definition re-indexes nothing', async () => {
+    const target = await file('feed.jsonl', [row(1)]);
+    const dry = await runFeed(['--tenant', TENANT, '--import', target]);
+    expect(dry.code).toBe(2);
+    expect(indexed(dry.calls)).toEqual([]);
+    const unflagged = await runFeed(['--tenant', TENANT, '--import', target, '--apply'], { definitions: DEFINITIONS });
+    expect(unflagged.code).toBe(0);
+    expect(indexed(unflagged.calls)).toEqual([]);
+    expect(unflagged.out.join('\n')).not.toMatch(/identifier index:/);
+  });
+
+  it('an import with the identifier index off completes (exit 0) and warns once per process', async () => {
+    const target = await file('feed.jsonl', [row(1)]);
+    const result = await runFeed(['--tenant', TENANT, '--import', target, '--apply'], { identifierIndex: false });
+    expect(result.code).toBe(0);
+    expect(indexed(result.calls)).toEqual([]);
+    expect(logs.filter((line) => line.includes('attribute_identifier_feed_off'))).toHaveLength(1);
+    const { reindexAttributeIdentifiers } = await import('@/lib/rag/ingest/attributes/identifier-feed');
+    const { mintScope } = await import('@/lib/rag/tenant/scope');
+    const fakes = await import('../../helpers/ingest-fakes');
+    const { db } = fakes.fakeIngestDb();
+    await reindexAttributeIdentifiers(mintScope('org', null, ORG), IDS, { db, signal: new AbortController().signal, identifierIndex: () => false });
+    await reindexAttributeIdentifiers(mintScope('org', null, ORG), IDS, { db, signal: new AbortController().signal, identifierIndex: () => false });
+    expect(logs.filter((line) => line.includes('attribute_identifier_feed_off'))).toHaveLength(1);
+  });
+});

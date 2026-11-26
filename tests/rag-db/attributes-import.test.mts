@@ -23,6 +23,7 @@ const { resetIngestConfigForTests } = await import('@/lib/rag/ingest/config');
 const { indexDocumentForLookup } = await import('@/lib/rag/ingest/write-indexers');
 const { createIngestWriter } = await import('@/lib/rag/ingest/writer');
 const { backfillIdentifiers } = await import('@/lib/rag/identifiers/backfill');
+const { resetAttributeIdentifierFeedForTests } = await import('@/lib/rag/ingest/attributes/identifier-feed');
 const { backfillScope } = await import('@/lib/rag/tenant/backfill-scope');
 const { mintScope } = await import('@/lib/rag/tenant/scope');
 
@@ -548,5 +549,148 @@ for (const mode of ['multi-tenant', 'single-tenant'] as const) {
         await flag(db, a.key, 'alpha_code', true);
       });
     }
+  });
+}
+
+// --- TPL-04 re-index after an import and on request (plan 03.3-16; D-24, D-25) -----------------------------------------------------------
+
+async function cli(rpc: RpcClient, argv: string[], identifierIndex = true): Promise<{ code: number; out: string[]; err: string[]; logs: string }> {
+  const out: string[] = [];
+  const err: string[] = [];
+  const { value: code, text } = await capturedLogs(() =>
+    withIngest(rpc, FEED_ON, () =>
+      main(argv, { out: (line) => out.push(line), err: (line) => err.push(line) }, new AbortController().signal, {
+        rpc,
+        enabled: () => true,
+        resolveScope: async (key) => {
+          const scope = key.startsWith('o:') ? mintScope('org', null, key.slice(2)) : mintScope('single', null, null);
+          return { ok: true, scope };
+        },
+        identifierIndex: () => identifierIndex,
+        loadPatterns: NO_PATTERNS,
+      }),
+    ),
+  );
+  return { code, out, err, logs: text };
+}
+
+const norms = async (db: PGlite, id: string): Promise<{ chunks: string[][]; document: string[] }> => {
+  const stored = await identifiersOf(db, id);
+  return { chunks: stored.chunks.map((chunk) => (chunk.identifiers_norm as string[] | null) ?? []), document: (stored.document.identifiers_norm as string[] | null) ?? [] };
+};
+
+for (const mode of ['multi-tenant', 'single-tenant'] as const) {
+  describe(`attribute identifier re-index (${mode})`, () => {
+    let db: PGlite;
+    let a: Tenant;
+    let b: Tenant | null;
+
+    before(async () => {
+      ({ db, a, b } = await database(mode));
+      await flag(db, a.key, 'alpha_code', true);
+    });
+
+    after(async () => {
+      await db?.close();
+    });
+
+    test('rag_attribute_identifier_documents: the tenant ready documents with attributes, in id order after the cursor; limits checked', async () => {
+      const withValues = await publishedDocument(db, a, `set-h/${next('item')}`);
+      const without = await publishedDocument(db, a, `set-h/${next('item')}`);
+      const empty = await publishedDocument(db, a, `set-h/${next('item')}`);
+      await setAttributes(db, a.key, withValues, { alpha_code: 'LS-1' });
+      await setAttributes(db, a.key, empty, {});
+      const listed = (await rows(db, 'SELECT document_id FROM rag_attribute_identifier_documents($1, NULL, 1000)', [a.key])).map((row) => String(row.document_id));
+      assert.ok(listed.includes(withValues));
+      assert.ok(!listed.includes(without));
+      assert.ok(!listed.includes(empty));
+      assert.deepEqual(listed, [...listed].sort());
+      const afterCursor = (await rows(db, 'SELECT document_id FROM rag_attribute_identifier_documents($1, $2, 1000)', [a.key, withValues])).map((row) => String(row.document_id));
+      assert.ok(afterCursor.every((id) => id > withValues));
+      for (const limit of [0, 1001]) {
+        await assert.rejects(rows(db, 'SELECT * FROM rag_attribute_identifier_documents($1, NULL, $2)', [a.key, limit]), (error: { code?: string }) => error.code === '22023');
+      }
+      const otherMode = mode === 'multi-tenant' ? 's:default' : `o:${ORG_A}`;
+      await assert.rejects(rows(db, 'SELECT * FROM rag_attribute_identifier_documents($1, NULL, 10)', [otherMode]));
+      const grants = (
+        await rows(
+          db,
+          `SELECT has_function_privilege('anon', 'public.rag_attribute_identifier_documents(text, uuid, integer)', 'EXECUTE') AS anon,
+                  has_function_privilege('authenticated', 'public.rag_attribute_identifier_documents(text, uuid, integer)', 'EXECUTE') AS authenticated,
+                  has_function_privilege('service_role', 'public.rag_attribute_identifier_documents(text, uuid, integer)', 'EXECUTE') AS service`,
+        )
+      )[0];
+      assert.deepEqual(grants, { anon: false, authenticated: false, service: true });
+      if (b) {
+        const foreign = await publishedDocument(db, b, `set-h/${next('item')}`);
+        await setAttributes(db, b.key, foreign, { alpha_code: 'LS-2' });
+        const listedA = (await rows(db, 'SELECT document_id FROM rag_attribute_identifier_documents($1, NULL, 1000)', [a.key])).map((row) => String(row.document_id));
+        assert.ok(!listedA.includes(foreign));
+      }
+    });
+
+    test('an --apply import re-indexes the changed documents in the same run; a second identical run re-indexes none', async () => {
+      const key = `set-i/${next('item')}`;
+      const id = await publishedDocument(db, a, key);
+      const file = importFile([{ source_key: key, attributes: { alpha_code: 'IM-42' } }]);
+      const first = await cli(pgliteRpc(db), ['--tenant', a.key, '--import', file, '--apply']);
+      assert.equal(first.code, 0, first.err.join('\n'));
+      assert.ok(first.out.some((line) => /identifier index: 1 documents re-indexed/.test(line)), first.out.join('\n'));
+      const stored = await norms(db, id);
+      for (const chunk of stored.chunks) assert.ok(chunk.includes('im42'));
+      assert.ok(stored.document.includes('im42'));
+      const second = await cli(pgliteRpc(db), ['--tenant', a.key, '--import', file, '--apply']);
+      assert.equal(second.code, 0);
+      assert.ok(second.out.some((line) => /identifier index: 0 documents re-indexed/.test(line)), second.out.join('\n'));
+      assert.deepEqual(await norms(db, id), stored);
+      assert.ok(![...first.out, ...first.err, first.logs].join('\n').includes('IM-42'));
+    });
+
+    test('identifier index off: the import exits 0, no identifier column changes, one attribute_identifier_feed_off warning', async () => {
+      const key = `set-j/${next('item')}`;
+      const id = await publishedDocument(db, a, key);
+      const before = await identifiersOf(db, id);
+      const file = importFile([{ source_key: key, attributes: { alpha_code: 'OFF-9' } }]);
+      resetAttributeIdentifierFeedForTests();
+      const run = await cli(pgliteRpc(db), ['--tenant', a.key, '--import', file, '--apply'], false);
+      const again = await cli(pgliteRpc(db), ['--tenant', a.key, '--reindex-identifiers', '--apply'], false);
+      assert.equal(run.code, 0, run.err.join('\n'));
+      assert.equal(again.code, 0, again.err.join('\n'));
+      assert.deepEqual(await identifiersOf(db, id), before);
+      const warnings = [run.logs, again.logs].join('\n').split('\n').filter((line) => line.includes('attribute_identifier_feed_off'));
+      assert.equal(warnings.length, 1, 'one warning per process');
+      assert.ok(warnings[0]?.includes('[RAG Config]'));
+    });
+
+    test('--reindex-identifiers: report first, exit 2 without --apply; a flag turned off removes the entries, turned on restores them', async () => {
+      const id = await publishedDocument(db, a, `set-k/${next('item')}`);
+      await setAttributes(db, a.key, id, { alpha_code: 'RX-5' });
+      await indexOne(pgliteRpc(db), a, id, FEED_ON);
+      assert.ok((await norms(db, id)).document.includes('rx5'));
+      const otherBefore = b ? await tenantSnapshot(db, b.key) : null;
+
+      await flag(db, a.key, 'alpha_code', false);
+      const report = await cli(pgliteRpc(db), ['--tenant', a.key, '--reindex-identifiers']);
+      assert.equal(report.code, 2);
+      assert.ok(report.out.some((line) => /documents to re-index: \d+/.test(line)));
+      assert.ok((await norms(db, id)).document.includes('rx5'), 'a report-only run writes nothing');
+
+      const rpc = pgliteRpc(db);
+      const off = await cli(rpc, ['--tenant', a.key, '--reindex-identifiers', '--apply']);
+      assert.equal(off.code, 0, off.err.join('\n'));
+      const removed = await norms(db, id);
+      for (const chunk of removed.chunks) assert.ok(!chunk.includes('rx5'));
+      assert.ok(!removed.document.includes('rx5'));
+      assert.ok(rpc.calls.every((call) => !('p_tenant_key' in call.args) || call.args.p_tenant_key === a.key), 'every call names tenant A');
+
+      await flag(db, a.key, 'alpha_code', true);
+      const on = await cli(pgliteRpc(db), ['--tenant', a.key, '--reindex-identifiers', '--apply']);
+      assert.equal(on.code, 0);
+      const restored = await norms(db, id);
+      for (const chunk of restored.chunks) assert.ok(chunk.includes('rx5'));
+      assert.ok(restored.document.includes('rx5'));
+      assert.ok(on.out.some((line) => /semantic cache: unaffected/.test(line)));
+      if (b && otherBefore) assert.deepEqual(await tenantSnapshot(db, b.key), otherBefore, "tenant B's rows are byte-equal");
+    });
   });
 }

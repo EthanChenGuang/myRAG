@@ -106,3 +106,21 @@ export async function loadAttributeIdentifiers(
   const attributes = read.rows.find((row) => row.documentId === documentId)?.attributes ?? null;
   return attributeIdentifierEntries(schema.definitions, attributes as Record<string, unknown> | null);
 }
+
+// --- Re-index (plan 03.3-16 Task 3) — stub ---
+
+export const ATTRIBUTE_IDENTIFIER_FEED_OFF = 'attribute_identifier_feed_off';
+
+export interface ReindexAttributeIdentifiersReport {
+  status: 'done' | 'feed_off';
+  documents: number;
+  failed: number;
+  chunksWritten: number;
+  documentsChanged: number;
+}
+
+export async function reindexAttributeIdentifiers(_scope: TenantScope, _documentIds: readonly string[] | 'all', _deps: unknown): Promise<ReindexAttributeIdentifiersReport> {
+  return { status: 'done', documents: 0, failed: 0, chunksWritten: 0, documentsChanged: 0 };
+}
+
+export function resetAttributeIdentifierFeedForTests(): void {}
