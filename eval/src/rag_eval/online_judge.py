@@ -22,7 +22,7 @@ from rag_eval.judge.config import (
 )
 from rag_eval.judge.telemetry import check_no_results_upload
 from rag_eval.paths import resolve_cli_path
-from rag_eval.review_queue import _parse_time, _to_item
+from rag_eval.review_queue import _http_client, _parse_time, _to_item
 
 EXIT_OK, EXIT_INPUT, EXIT_API = 0, 2, 4
 METRICS = ("faithfulness", "answer_relevance")
@@ -36,6 +36,9 @@ NOTHING_NOTICE = (
 )
 
 JudgeFactory = Callable[[JudgeConfig], Any]
+
+MIRROR_ROUTE = "/api/rag/admin/monitor/judge-scores"
+DEFAULT_TOKEN_ENV = "RAG_ADMIN_BEARER"
 
 
 def select_sample(trace_ids: list[str], sample_rate: float, seed: int) -> list[str]:
@@ -149,6 +152,10 @@ def _summary(
     }
 
 
+def _mirror_scores(scores: list[dict[str, Any]], base_url: str | None, token_env: str) -> None:
+    return None
+
+
 def _live_factory(api_key: str) -> JudgeFactory:
     def build(config: JudgeConfig) -> Any:
         from rag_eval.judge.deepeval_judge import OpenRouterDeepEvalLLM
@@ -164,6 +171,10 @@ def main(argv: list[str] | None = None, *, judge_factory: JudgeFactory | None = 
     parser.add_argument("--to", dest="to_time", help="window end, ISO 8601 (default: now)")
     parser.add_argument("--config", type=str, default=str(DEFAULT_CONFIG_PATH))
     parser.add_argument("--dry-run", action="store_true", help="score the sample but do not post to Langfuse")
+    parser.add_argument("--base-url", help="app origin; when set with the admin token, the scores are also mirrored to the app")
+    parser.add_argument(
+        "--token-env", default=DEFAULT_TOKEN_ENV, help=f"environment variable holding the admin access token (default {DEFAULT_TOKEN_ENV})"
+    )
     args = parser.parse_args(argv)
 
     now = datetime.now(timezone.utc)
