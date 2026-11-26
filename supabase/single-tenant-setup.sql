@@ -17940,3 +17940,1402 @@ ALTER TABLE public.rag_answer_records ADD COLUMN IF NOT EXISTS tenant_key text G
 CREATE INDEX IF NOT EXISTS idx_rag_answer_records_tenant_created ON public.rag_answer_records (tenant_key, created_at);
 
 COMMIT;
+
+------------------------------------------
+-- Phase 6.1: Embedding fine-tuning registry, slots, export and binding guard (migrations 0651-0654, plan 06.1-18, after 0502 in migration order)
+------------------------------------------
+
+-- >>> supabase/migrations/0651_finetune_registry.sql
+-- 0651: fine-tune consent and model registry (Phase 6.1, FT-01, FT-10, D-27..D-30, D-32).
+-- rag_finetune_consent holds one row per tenant that opted in; no row means scope none. private: the tenant's data may train a model that
+-- serves only that tenant; deployment: it may also train a model shared across the deployment. A grant needs an evidence reference (a ticket
+-- or agreement id, never contact data) and an actor. embedding_model_versions is the registry of fine-tuned model cards: ids, hashes, prompts,
+-- probe vectors and offline metrics as numbers, never chunk or query text. Setting a tenant's consent to a scope that no longer covers a
+-- version trained on it marks that version tainted in the same transaction (D-29); 0652 reacts to the taint on the slot side.
+-- Every object is service_role only: RLS on without policies, nothing granted to anon or authenticated, every function SECURITY DEFINER with
+-- an empty search_path and schema-qualified names. Tenant keys are checked by public.rag_assert_tenant_key, so a key of the other deployment
+-- mode is refused. Idempotent.
+
+BEGIN;
+
+DO $finetune_precheck$
+BEGIN
+  IF pg_catalog.to_regprocedure('public.rag_assert_tenant_key(text)') IS NULL THEN
+    RAISE EXCEPTION '0651: apply 0403 first, public.rag_assert_tenant_key(text) is missing' USING ERRCODE = '55000';
+  END IF;
+END
+$finetune_precheck$;
+
+CREATE TABLE IF NOT EXISTS public.rag_finetune_consent (
+  tenant_key text PRIMARY KEY
+    CONSTRAINT rag_finetune_consent_tenant_key_shape
+    CHECK (tenant_key ~ '^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$'),
+  scope text NOT NULL CONSTRAINT rag_finetune_consent_scope_check CHECK (scope IN ('none', 'private', 'deployment')),
+  evidence_ref text CONSTRAINT rag_finetune_consent_evidence_shape
+    CHECK (evidence_ref IS NULL OR (pg_catalog.length(evidence_ref) BETWEEN 1 AND 200 AND evidence_ref !~ '[@[:cntrl:]]')),
+  granted_by text,
+  granted_at timestamptz,
+  revoked_at timestamptz,
+  revoked_by text,
+  updated_at timestamptz NOT NULL DEFAULT pg_catalog.now(),
+  CONSTRAINT rag_finetune_consent_grant_complete CHECK (
+    scope = 'none'
+    OR (COALESCE(pg_catalog.btrim(evidence_ref), '') <> '' AND COALESCE(pg_catalog.btrim(granted_by), '') <> ''
+        AND granted_at IS NOT NULL AND revoked_at IS NULL)
+  )
+);
+
+ALTER TABLE public.rag_finetune_consent ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.rag_finetune_consent FROM PUBLIC, anon, authenticated;
+GRANT ALL ON TABLE public.rag_finetune_consent TO service_role;
+
+CREATE TABLE IF NOT EXISTS public.embedding_model_versions (
+  id text PRIMARY KEY CONSTRAINT embedding_model_versions_id_shape CHECK (id ~ '^ft-[a-z0-9][a-z0-9.-]{2,58}$'),
+  base_model text NOT NULL CONSTRAINT embedding_model_versions_base_model_check CHECK (pg_catalog.btrim(base_model) <> ''),
+  base_revision text NOT NULL CONSTRAINT embedding_model_versions_base_revision_shape CHECK (base_revision ~ '^[0-9a-f]{40}$'),
+  scope text NOT NULL CONSTRAINT embedding_model_versions_scope_check CHECK (scope IN ('deployment', 'tenant')),
+  tenant_keys text[] NOT NULL,
+  dataset_manifest_sha256 text NOT NULL CONSTRAINT embedding_model_versions_manifest_shape CHECK (dataset_manifest_sha256 ~ '^[0-9a-f]{64}$'),
+  training_config_sha256 text NOT NULL CONSTRAINT embedding_model_versions_config_shape CHECK (training_config_sha256 ~ '^[0-9a-f]{64}$'),
+  offline_metrics jsonb NOT NULL,
+  probe jsonb NOT NULL,
+  query_prompt text NOT NULL,
+  document_prompt text NOT NULL,
+  dims integer NOT NULL CONSTRAINT embedding_model_versions_dims_check CHECK (dims = 1024),
+  artifact_uri text NOT NULL CONSTRAINT embedding_model_versions_artifact_uri_shape
+    CHECK (artifact_uri ~ '^[a-z][a-z0-9+.-]*://[^@?#[:space:][:cntrl:]]+$'),
+  status text NOT NULL DEFAULT 'registered'
+    CONSTRAINT embedding_model_versions_status_check CHECK (status IN ('registered', 'bound', 'retired', 'tainted')),
+  bound_slot text,
+  tainted_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT pg_catalog.now(),
+  created_by text NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT pg_catalog.now(),
+  CONSTRAINT embedding_model_versions_tenant_keys_shape CHECK (
+    pg_catalog.cardinality(tenant_keys) >= 1
+    AND pg_catalog.array_to_string(tenant_keys, ',', '?') ~
+      '^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(,(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}))*$'
+  ),
+  CONSTRAINT embedding_model_versions_tenant_scope_single CHECK (scope <> 'tenant' OR pg_catalog.cardinality(tenant_keys) = 1),
+  CONSTRAINT embedding_model_versions_bound_slot CHECK (status <> 'bound' OR bound_slot IS NOT NULL)
+);
+
+CREATE INDEX IF NOT EXISTS embedding_model_versions_tenant_keys_idx ON public.embedding_model_versions USING gin (tenant_keys);
+
+ALTER TABLE public.embedding_model_versions ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.embedding_model_versions FROM PUBLIC, anon, authenticated;
+GRANT ALL ON TABLE public.embedding_model_versions TO service_role;
+
+-- Records a tenant's consent. private and deployment need an evidence reference and an actor; none needs an actor and sets revoked_at.
+-- Every version whose tenant_keys contain the tenant and that the new scope no longer covers becomes tainted in the same transaction (D-29):
+-- none taints all of them, private taints the deployment-scope ones. Returns the ids tainted by this call.
+CREATE OR REPLACE FUNCTION public.rag_finetune_set_consent(p_tenant_key text, p_scope text, p_evidence_ref text, p_actor text)
+RETURNS TABLE (tenant_key text, scope text, tainted_versions text[])
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+DECLARE
+  v_tainted text[] := ARRAY[]::text[];
+BEGIN
+  BEGIN
+    PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  EXCEPTION WHEN invalid_parameter_value THEN
+    RAISE EXCEPTION 'tenant_key_invalid: %', SQLERRM USING ERRCODE = '22023';
+  END;
+  IF p_scope IS NULL OR p_scope NOT IN ('none', 'private', 'deployment') THEN
+    RAISE EXCEPTION 'consent_refused: scope must be none, private or deployment' USING ERRCODE = '22023';
+  END IF;
+  IF p_actor IS NULL OR pg_catalog.btrim(p_actor) = '' THEN
+    RAISE EXCEPTION 'consent_refused: actor_required' USING ERRCODE = '22023';
+  END IF;
+
+  IF p_scope = 'none' THEN
+    INSERT INTO public.rag_finetune_consent AS c (tenant_key, scope, revoked_at, revoked_by, updated_at)
+    VALUES (p_tenant_key, 'none', pg_catalog.now(), p_actor, pg_catalog.now())
+    ON CONFLICT ON CONSTRAINT rag_finetune_consent_pkey DO UPDATE
+      SET scope = 'none', revoked_at = pg_catalog.now(), revoked_by = p_actor, updated_at = pg_catalog.now();
+  ELSE
+    IF p_evidence_ref IS NULL OR pg_catalog.btrim(p_evidence_ref) = '' THEN
+      RAISE EXCEPTION 'consent_refused: evidence_required' USING ERRCODE = '22023';
+    END IF;
+    IF pg_catalog.length(p_evidence_ref) > 200 OR p_evidence_ref ~ '[@[:cntrl:]]' THEN
+      RAISE EXCEPTION 'consent_refused: evidence_ref_invalid (a ticket or agreement reference of at most 200 characters, no contact data)'
+        USING ERRCODE = '22023';
+    END IF;
+    INSERT INTO public.rag_finetune_consent AS c (tenant_key, scope, evidence_ref, granted_by, granted_at, revoked_at, revoked_by, updated_at)
+    VALUES (p_tenant_key, p_scope, p_evidence_ref, p_actor, pg_catalog.now(), NULL, NULL, pg_catalog.now())
+    ON CONFLICT ON CONSTRAINT rag_finetune_consent_pkey DO UPDATE
+      SET scope = EXCLUDED.scope, evidence_ref = EXCLUDED.evidence_ref, granted_by = EXCLUDED.granted_by, granted_at = EXCLUDED.granted_at,
+          revoked_at = NULL, revoked_by = NULL, updated_at = pg_catalog.now();
+  END IF;
+
+  WITH tainted AS (
+    UPDATE public.embedding_model_versions AS v
+    SET status = 'tainted', tainted_at = pg_catalog.now(), updated_at = pg_catalog.now()
+    WHERE p_tenant_key = ANY (v.tenant_keys)
+      AND v.status <> 'tainted'
+      AND (p_scope = 'none' OR (p_scope = 'private' AND v.scope = 'deployment'))
+    RETURNING v.id
+  )
+  SELECT COALESCE(pg_catalog.array_agg(t.id ORDER BY t.id), ARRAY[]::text[]) INTO v_tainted FROM tainted AS t;
+
+  RETURN QUERY SELECT p_tenant_key, p_scope, v_tainted;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_set_consent(text, text, text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_set_consent(text, text, text, text) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.rag_finetune_list_consent()
+RETURNS TABLE (
+  tenant_key text,
+  scope text,
+  evidence_ref text,
+  granted_by text,
+  granted_at timestamptz,
+  revoked_at timestamptz,
+  revoked_by text,
+  updated_at timestamptz
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+  SELECT c.tenant_key, c.scope, c.evidence_ref, c.granted_by, c.granted_at, c.revoked_at, c.revoked_by, c.updated_at
+  FROM public.rag_finetune_consent AS c
+  ORDER BY c.tenant_key
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_list_consent() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_list_consent() TO service_role;
+
+-- Returns p_tenant_keys when every key's consent covers p_purpose, else raises consent_refused naming the first key that is not covered (D-27).
+-- private: exactly one key whose scope is private or deployment; deployment: every key has scope deployment. The consent rows are locked
+-- FOR SHARE, so a concurrent revocation waits until the caller's transaction ends.
+CREATE OR REPLACE FUNCTION public.rag_finetune_consent_for_export(p_tenant_keys text[], p_purpose text)
+RETURNS text[]
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_key text;
+  v_scope text;
+BEGIN
+  IF p_purpose IS NULL OR p_purpose NOT IN ('private', 'deployment') THEN
+    RAISE EXCEPTION 'consent_refused: purpose must be private or deployment' USING ERRCODE = '22023';
+  END IF;
+  IF p_tenant_keys IS NULL OR pg_catalog.cardinality(p_tenant_keys) = 0 THEN
+    RAISE EXCEPTION 'consent_refused: tenant_keys_empty' USING ERRCODE = '22023';
+  END IF;
+  FOREACH v_key IN ARRAY p_tenant_keys LOOP
+    BEGIN
+      PERFORM public.rag_assert_tenant_key(v_key);
+    EXCEPTION WHEN invalid_parameter_value THEN
+      RAISE EXCEPTION 'tenant_key_invalid: %', SQLERRM USING ERRCODE = '22023';
+    END;
+  END LOOP;
+  IF (SELECT pg_catalog.count(DISTINCT k) FROM pg_catalog.unnest(p_tenant_keys) AS u(k)) <> pg_catalog.cardinality(p_tenant_keys) THEN
+    RAISE EXCEPTION 'consent_refused: tenant_keys_duplicate' USING ERRCODE = '22023';
+  END IF;
+  IF p_purpose = 'private' AND pg_catalog.cardinality(p_tenant_keys) <> 1 THEN
+    RAISE EXCEPTION 'consent_refused: private_takes_one_tenant' USING ERRCODE = '22023';
+  END IF;
+
+  FOREACH v_key IN ARRAY p_tenant_keys LOOP
+    SELECT c.scope INTO v_scope FROM public.rag_finetune_consent AS c WHERE c.tenant_key = v_key FOR SHARE;
+    IF NOT FOUND OR v_scope = 'none' OR (p_purpose = 'deployment' AND v_scope <> 'deployment') THEN
+      RAISE EXCEPTION 'consent_refused: consent of % does not cover %', v_key, p_purpose USING ERRCODE = '42501';
+    END IF;
+  END LOOP;
+  RETURN p_tenant_keys;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_consent_for_export(text[], text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_consent_for_export(text[], text) TO service_role;
+
+-- Registers a model version card (D-30). Refuses a card that is not a candidate (rejected_offline: offline_gate), whose dims is not 1024,
+-- whose id exists, whose artifact_uri carries userinfo, a query string or a fragment, whose offline report holds text, whose probe is not
+-- three unit vectors of 1024 numbers computed with the card's prompts, or whose tenants' consent does not cover the card scope
+-- (tenant: exactly one tenant with private or deployment; deployment: every tenant with deployment). The consent rows are locked FOR SHARE.
+CREATE OR REPLACE FUNCTION public.rag_finetune_register_model(p_card jsonb, p_actor text)
+RETURNS TABLE (version_id text, version_status text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_id text;
+  v_scope text;
+  v_keys text[];
+  v_key text;
+  v_consent text;
+  v_probe jsonb;
+  v_offline jsonb;
+  v_vector jsonb;
+  v_norm double precision;
+BEGIN
+  IF p_actor IS NULL OR pg_catalog.btrim(p_actor) = '' THEN
+    RAISE EXCEPTION 'register_refused: actor is required' USING ERRCODE = '22023';
+  END IF;
+  IF p_card IS NULL OR pg_catalog.jsonb_typeof(p_card) <> 'object' THEN
+    RAISE EXCEPTION 'register_refused: card must be a json object' USING ERRCODE = '22023';
+  END IF;
+
+  v_id := CASE WHEN pg_catalog.jsonb_typeof(p_card -> 'id') = 'string' THEN p_card ->> 'id' END;
+  IF v_id IS NULL OR v_id !~ '^ft-[a-z0-9][a-z0-9.-]{2,58}$' THEN
+    RAISE EXCEPTION 'register_refused: id must match ^ft-[a-z0-9][a-z0-9.-]{2,58}$' USING ERRCODE = '22023';
+  END IF;
+  IF p_card -> 'status' = '"rejected_offline"'::jsonb THEN
+    RAISE EXCEPTION 'register_refused: offline_gate (the card failed the offline evaluation)' USING ERRCODE = '22023';
+  END IF;
+  IF p_card -> 'status' IS DISTINCT FROM '"candidate"'::jsonb THEN
+    RAISE EXCEPTION 'register_refused: status must be candidate' USING ERRCODE = '22023';
+  END IF;
+  IF p_card -> 'dims' IS DISTINCT FROM '1024'::jsonb THEN
+    RAISE EXCEPTION 'register_refused: dims must be 1024' USING ERRCODE = '22023';
+  END IF;
+  IF pg_catalog.jsonb_typeof(p_card -> 'artifact_uri') IS DISTINCT FROM 'string'
+     OR pg_catalog.length(p_card ->> 'artifact_uri') > 2048
+     OR (p_card ->> 'artifact_uri') !~ '^[a-z][a-z0-9+.-]*://[^@?#[:space:][:cntrl:]]+$' THEN
+    RAISE EXCEPTION 'register_refused: artifact_uri must be scheme://location without userinfo, query string or fragment' USING ERRCODE = '22023';
+  END IF;
+
+  v_scope := CASE WHEN pg_catalog.jsonb_typeof(p_card -> 'scope') = 'string' THEN p_card ->> 'scope' END;
+  IF v_scope IS NULL OR v_scope NOT IN ('deployment', 'tenant') THEN
+    RAISE EXCEPTION 'register_refused: scope must be deployment or tenant' USING ERRCODE = '22023';
+  END IF;
+  IF pg_catalog.jsonb_typeof(p_card -> 'tenant_keys') IS DISTINCT FROM 'array'
+     OR pg_catalog.jsonb_array_length(p_card -> 'tenant_keys') = 0
+     OR EXISTS (SELECT 1 FROM pg_catalog.jsonb_array_elements(p_card -> 'tenant_keys') AS e(k) WHERE pg_catalog.jsonb_typeof(e.k) <> 'string') THEN
+    RAISE EXCEPTION 'register_refused: tenant_keys must be a non-empty array of tenant keys' USING ERRCODE = '22023';
+  END IF;
+  SELECT pg_catalog.array_agg(DISTINCT e.k ORDER BY e.k) INTO v_keys FROM pg_catalog.jsonb_array_elements_text(p_card -> 'tenant_keys') AS e(k);
+  IF pg_catalog.cardinality(v_keys) <> pg_catalog.jsonb_array_length(p_card -> 'tenant_keys') THEN
+    RAISE EXCEPTION 'register_refused: tenant_keys must not repeat a key' USING ERRCODE = '22023';
+  END IF;
+  FOREACH v_key IN ARRAY v_keys LOOP
+    BEGIN
+      PERFORM public.rag_assert_tenant_key(v_key);
+    EXCEPTION WHEN invalid_parameter_value THEN
+      RAISE EXCEPTION 'register_refused: tenant_keys hold a key this deployment cannot use (%)', SQLERRM USING ERRCODE = '22023';
+    END;
+  END LOOP;
+  IF v_scope = 'tenant' AND pg_catalog.cardinality(v_keys) <> 1 THEN
+    RAISE EXCEPTION 'register_refused: tenant_scope_single (a tenant-scope card names exactly one tenant)' USING ERRCODE = '22023';
+  END IF;
+
+  IF pg_catalog.jsonb_typeof(p_card -> 'base_model') IS DISTINCT FROM 'string'
+     OR pg_catalog.btrim(p_card ->> 'base_model') = '' OR pg_catalog.length(p_card ->> 'base_model') > 200 THEN
+    RAISE EXCEPTION 'register_refused: base_model must be a non-empty model name' USING ERRCODE = '22023';
+  END IF;
+  IF pg_catalog.jsonb_typeof(p_card -> 'base_revision') IS DISTINCT FROM 'string' OR (p_card ->> 'base_revision') !~ '^[0-9a-f]{40}$' THEN
+    RAISE EXCEPTION 'register_refused: base_revision must be a 40-character hex revision' USING ERRCODE = '22023';
+  END IF;
+  IF pg_catalog.jsonb_typeof(p_card -> 'dataset_manifest_sha256') IS DISTINCT FROM 'string'
+     OR (p_card ->> 'dataset_manifest_sha256') !~ '^[0-9a-f]{64}$'
+     OR pg_catalog.jsonb_typeof(p_card -> 'training_config_sha256') IS DISTINCT FROM 'string'
+     OR (p_card ->> 'training_config_sha256') !~ '^[0-9a-f]{64}$' THEN
+    RAISE EXCEPTION 'register_refused: hashes must be 64-character hex sha256 values' USING ERRCODE = '22023';
+  END IF;
+  IF pg_catalog.jsonb_typeof(p_card -> 'query_prompt') IS DISTINCT FROM 'string'
+     OR pg_catalog.jsonb_typeof(p_card -> 'document_prompt') IS DISTINCT FROM 'string'
+     OR pg_catalog.length(p_card ->> 'query_prompt') > 2000 OR pg_catalog.length(p_card ->> 'document_prompt') > 2000 THEN
+    RAISE EXCEPTION 'register_refused: prompts must be strings of at most 2000 characters' USING ERRCODE = '22023';
+  END IF;
+
+  v_offline := p_card -> 'offline';
+  IF pg_catalog.jsonb_typeof(v_offline) IS DISTINCT FROM 'object'
+     OR pg_catalog.jsonb_path_exists(v_offline - 'reasons', 'lax $.** ? (@.type() == "string")')
+     OR (v_offline ? 'reasons' AND (
+       pg_catalog.jsonb_typeof(v_offline -> 'reasons') <> 'array'
+       OR EXISTS (
+         SELECT 1 FROM pg_catalog.jsonb_array_elements(v_offline -> 'reasons') AS r(x)
+         WHERE pg_catalog.jsonb_typeof(r.x) <> 'string' OR (r.x #>> '{}') !~ '^[a-z][a-z0-9_]{0,63}$'
+       )
+     )) THEN
+    RAISE EXCEPTION 'register_refused: offline must be a report of numbers (reasons as enum codes only)' USING ERRCODE = '22023';
+  END IF;
+
+  v_probe := p_card -> 'probe';
+  IF pg_catalog.jsonb_typeof(v_probe) IS DISTINCT FROM 'object'
+     OR pg_catalog.jsonb_typeof(v_probe -> 'texts') IS DISTINCT FROM 'array'
+     OR pg_catalog.jsonb_typeof(v_probe -> 'vectors') IS DISTINCT FROM 'array' THEN
+    RAISE EXCEPTION 'register_refused: probe must hold texts and vectors' USING ERRCODE = '22023';
+  END IF;
+  IF pg_catalog.jsonb_array_length(v_probe -> 'texts') <> 3 OR pg_catalog.jsonb_array_length(v_probe -> 'vectors') <> 3
+     OR EXISTS (
+       SELECT 1 FROM pg_catalog.jsonb_array_elements(v_probe -> 'texts') AS t(x)
+       WHERE pg_catalog.jsonb_typeof(t.x) <> 'string' OR pg_catalog.btrim(t.x #>> '{}') = ''
+     )
+     OR v_probe -> 'query_prompt' IS DISTINCT FROM p_card -> 'query_prompt'
+     OR v_probe -> 'document_prompt' IS DISTINCT FROM p_card -> 'document_prompt' THEN
+    RAISE EXCEPTION 'register_refused: probe must hold three texts and the card''s prompts' USING ERRCODE = '22023';
+  END IF;
+  FOR v_vector IN SELECT e.v FROM pg_catalog.jsonb_array_elements(v_probe -> 'vectors') AS e(v) LOOP
+    IF pg_catalog.jsonb_typeof(v_vector) <> 'array' OR pg_catalog.jsonb_array_length(v_vector) <> 1024
+       OR EXISTS (SELECT 1 FROM pg_catalog.jsonb_array_elements(v_vector) AS x(n) WHERE pg_catalog.jsonb_typeof(x.n) <> 'number') THEN
+      RAISE EXCEPTION 'register_refused: probe vectors must be three arrays of 1024 numbers' USING ERRCODE = '22023';
+    END IF;
+    SELECT pg_catalog.sqrt(pg_catalog.sum((x.n)::double precision * (x.n)::double precision)) INTO v_norm
+    FROM pg_catalog.jsonb_array_elements(v_vector) AS x(n);
+    IF pg_catalog.abs(v_norm - 1) > 1e-3 THEN
+      RAISE EXCEPTION 'register_refused: probe vectors must have unit length' USING ERRCODE = '22023';
+    END IF;
+  END LOOP;
+
+  IF EXISTS (SELECT 1 FROM public.embedding_model_versions AS m WHERE m.id = v_id) THEN
+    RAISE EXCEPTION 'register_refused: duplicate (version % exists)', v_id USING ERRCODE = '23505';
+  END IF;
+
+  FOREACH v_key IN ARRAY v_keys LOOP
+    SELECT c.scope INTO v_consent FROM public.rag_finetune_consent AS c WHERE c.tenant_key = v_key FOR SHARE;
+    IF NOT FOUND OR v_consent = 'none' OR (v_scope = 'deployment' AND v_consent <> 'deployment') THEN
+      RAISE EXCEPTION 'register_refused: consent of % does not cover a % scope model', v_key, v_scope USING ERRCODE = '42501';
+    END IF;
+  END LOOP;
+
+  BEGIN
+    INSERT INTO public.embedding_model_versions (
+      id, base_model, base_revision, scope, tenant_keys, dataset_manifest_sha256, training_config_sha256, offline_metrics, probe,
+      query_prompt, document_prompt, dims, artifact_uri, status, created_by
+    )
+    VALUES (
+      v_id, p_card ->> 'base_model', p_card ->> 'base_revision', v_scope, v_keys, p_card ->> 'dataset_manifest_sha256',
+      p_card ->> 'training_config_sha256', v_offline,
+      pg_catalog.jsonb_build_object(
+        'texts', v_probe -> 'texts', 'vectors', v_probe -> 'vectors',
+        'query_prompt', v_probe -> 'query_prompt', 'document_prompt', v_probe -> 'document_prompt'
+      ),
+      p_card ->> 'query_prompt', p_card ->> 'document_prompt', 1024, p_card ->> 'artifact_uri', 'registered', p_actor
+    );
+  EXCEPTION WHEN unique_violation THEN
+    RAISE EXCEPTION 'register_refused: duplicate (version % exists)', v_id USING ERRCODE = '23505';
+  END;
+
+  RETURN QUERY SELECT v_id, 'registered'::text;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_register_model(jsonb, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_register_model(jsonb, text) TO service_role;
+
+-- Lists the registry. Probe vectors are large, so they are returned only with p_include_probe.
+CREATE OR REPLACE FUNCTION public.rag_finetune_list_models(p_include_probe boolean DEFAULT false)
+RETURNS TABLE (
+  id text,
+  base_model text,
+  base_revision text,
+  scope text,
+  tenant_keys text[],
+  dataset_manifest_sha256 text,
+  training_config_sha256 text,
+  offline_metrics jsonb,
+  query_prompt text,
+  document_prompt text,
+  dims integer,
+  artifact_uri text,
+  status text,
+  bound_slot text,
+  tainted_at timestamptz,
+  created_at timestamptz,
+  created_by text,
+  updated_at timestamptz,
+  probe jsonb
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+  SELECT m.id, m.base_model, m.base_revision, m.scope, m.tenant_keys, m.dataset_manifest_sha256, m.training_config_sha256,
+         m.offline_metrics, m.query_prompt, m.document_prompt, m.dims, m.artifact_uri, m.status, m.bound_slot, m.tainted_at,
+         m.created_at, m.created_by, m.updated_at,
+         CASE WHEN COALESCE(p_include_probe, false) THEN m.probe END
+  FROM public.embedding_model_versions AS m
+  ORDER BY m.created_at, m.id
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_list_models(boolean) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_list_models(boolean) TO service_role;
+
+-- Operator status changes (D-30): registered to retired, and any status to tainted. Taint is final. bound and its reverse belong to the
+-- slot functions of 0652.
+CREATE OR REPLACE FUNCTION public.rag_finetune_set_model_status(p_version_id text, p_status text, p_actor text)
+RETURNS TABLE (version_id text, version_status text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_current text;
+BEGIN
+  IF p_actor IS NULL OR pg_catalog.btrim(p_actor) = '' THEN
+    RAISE EXCEPTION 'status_refused: actor is required' USING ERRCODE = '22023';
+  END IF;
+  SELECT m.status INTO v_current FROM public.embedding_model_versions AS m WHERE m.id = p_version_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'status_refused: not_found (%)', p_version_id USING ERRCODE = 'P0002';
+  END IF;
+  IF v_current = 'tainted' THEN
+    IF p_status = 'tainted' THEN
+      RETURN QUERY SELECT p_version_id, v_current;
+      RETURN;
+    END IF;
+    RAISE EXCEPTION 'status_refused: tainted_final (a tainted version never changes status)' USING ERRCODE = '22023';
+  END IF;
+
+  IF p_status = 'tainted' THEN
+    UPDATE public.embedding_model_versions AS m
+    SET status = 'tainted', tainted_at = pg_catalog.now(), updated_at = pg_catalog.now()
+    WHERE m.id = p_version_id;
+  ELSIF p_status = 'retired' AND v_current = 'registered' THEN
+    UPDATE public.embedding_model_versions AS m
+    SET status = 'retired', updated_at = pg_catalog.now()
+    WHERE m.id = p_version_id;
+  ELSE
+    RAISE EXCEPTION 'status_refused: transition % to % is not allowed', v_current, COALESCE(p_status, 'null') USING ERRCODE = '22023';
+  END IF;
+
+  RETURN QUERY SELECT p_version_id, p_status;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_set_model_status(text, text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_set_model_status(text, text, text) TO service_role;
+
+COMMIT;
+
+-- >>> supabase/migrations/0652_finetune_slots.sql
+-- 0652: two fixed fine-tune slots, their bind/clear/release functions and the taint and evidence triggers (Phase 6.1, D-22, D-25, D-33, D-35).
+-- ft-a-1024 (provider ft_slot_a) and ft-b-1024 (provider ft_slot_b) are halfvec(1024) profiles seeded 'available' with model 'unbound',
+-- each with its own partial HNSW index; no DDL is ever generated at run time. A slot serves one registered model version (0651) at a time:
+-- rag_finetune_bind_slot sets the slot's model to the version id and its query_instruction to the card's query prompt, and
+-- rag_finetune_clear_slot deletes the slot's vectors in batches and resets it. The slot guard trigger refuses any other change of a slot's
+-- model, prompt, provider, dims or storage (the two functions set the transaction-local switch myrag.ft_slot_op around their own UPDATE and
+-- turn it off again; the switch guards against accidental writes, it is not a permission: every caller here is service_role already).
+-- The same trigger refuses evidence, backfilling and activation for a slot without a version, with a tainted version, or, while the slot is
+-- unscoped, with a tenant-scope version (a private model is never served globally, D-35; 06.1-20 binds those through scoped bindings).
+-- The version taint trigger drops the evidence of a tainted version's non-active slot, so the unchanged activation gate refuses eval_missing.
+-- rag_activate_embedding_profile, rag_rollback_embedding_profile, rag_record_eval_evidence, rag_set_embedding_profile_status and the
+-- re-embed functions are not redefined here (D-25); the triggers act on the rows they write.
+-- Server role only: every function is SECURITY DEFINER with SET search_path = '' and schema-qualified names, revoked from PUBLIC, anon and
+-- authenticated and granted to service_role. Idempotent: ON CONFLICT DO NOTHING, IF NOT EXISTS, CREATE OR REPLACE, DROP TRIGGER IF EXISTS.
+
+BEGIN;
+
+DO $finetune_slots_precheck$
+BEGIN
+  IF pg_catalog.to_regclass('public.embedding_model_versions') IS NULL THEN
+    RAISE EXCEPTION '0652: apply 0651_finetune_registry.sql first' USING ERRCODE = '55000';
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_attribute
+    WHERE attrelid = pg_catalog.to_regclass('public.embedding_profiles') AND attname = 'doc_types' AND NOT attisdropped
+  ) THEN
+    RAISE EXCEPTION '0652: apply 0440_embedding_bindings.sql first' USING ERRCODE = '55000';
+  END IF;
+END
+$finetune_slots_precheck$;
+
+-- Slot guard (trigger B). Runs for every row; returns at once for a profile that is not an ft-* slot.
+
+CREATE OR REPLACE FUNCTION public.rag_finetune_slot_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_op boolean := COALESCE(pg_catalog.current_setting('myrag.ft_slot_op', true), '') = 'on';
+  v_version public.embedding_model_versions%ROWTYPE;
+  v_has_version boolean;
+  v_evidence_new boolean;
+  v_serving_new boolean;
+BEGIN
+  IF TG_OP = 'UPDATE' AND OLD.id LIKE 'ft-%' AND NEW.id IS DISTINCT FROM OLD.id THEN
+    RAISE EXCEPTION 'slot_refused: id_change' USING ERRCODE = '42501';
+  END IF;
+  IF NEW.id NOT LIKE 'ft-%' THEN
+    RETURN NEW;
+  END IF;
+
+  IF NOT v_op THEN
+    IF TG_OP = 'INSERT' THEN
+      IF NEW.model <> 'unbound' OR NEW.query_instruction IS NOT NULL THEN
+        RAISE EXCEPTION 'slot_refused: model_change_outside_bind (a slot is created unbound)' USING ERRCODE = '42501';
+      END IF;
+    ELSIF NEW.model IS DISTINCT FROM OLD.model OR NEW.query_instruction IS DISTINCT FROM OLD.query_instruction
+       OR NEW.provider IS DISTINCT FROM OLD.provider OR NEW.dims IS DISTINCT FROM OLD.dims OR NEW.storage IS DISTINCT FROM OLD.storage THEN
+      RAISE EXCEPTION 'slot_refused: model_change_outside_bind (use rag_finetune_bind_slot or rag_finetune_clear_slot)' USING ERRCODE = '42501';
+    END IF;
+  END IF;
+
+  SELECT * INTO v_version FROM public.embedding_model_versions AS m WHERE m.id = NEW.model;
+  v_has_version := FOUND;
+  IF NOT v_has_version AND NEW.model <> 'unbound' THEN
+    RAISE EXCEPTION 'slot_refused: unknown_version (%)', NEW.model USING ERRCODE = '22023';
+  END IF;
+
+  -- A slot leaving active whose version is tainted or gone keeps no evidence, so it can never come back without new evidence.
+  IF TG_OP = 'UPDATE' AND OLD.status = 'active' AND NEW.status <> 'active' AND (NOT v_has_version OR v_version.status = 'tainted') THEN
+    NEW.eval_evidence := NULL;
+  END IF;
+
+  v_evidence_new := NEW.eval_evidence IS NOT NULL AND (TG_OP = 'INSERT' OR NEW.eval_evidence IS DISTINCT FROM OLD.eval_evidence);
+  v_serving_new := NEW.status IN ('backfilling', 'active') AND (TG_OP = 'INSERT' OR NEW.status IS DISTINCT FROM OLD.status);
+
+  IF v_evidence_new THEN
+    IF NOT v_has_version THEN
+      RAISE EXCEPTION 'slot_refused: evidence_without_version (slot % is unbound)', NEW.id USING ERRCODE = '55000';
+    END IF;
+    IF v_version.status = 'tainted' THEN
+      RAISE EXCEPTION 'slot_refused: version_tainted (%)', v_version.id USING ERRCODE = '55000';
+    END IF;
+    IF v_version.scope = 'tenant' AND NEW.doc_types IS NULL THEN
+      RAISE EXCEPTION 'slot_refused: tenant_scope_global (a tenant-scope version is served only through scoped bindings)' USING ERRCODE = '42501';
+    END IF;
+  END IF;
+
+  IF v_serving_new THEN
+    IF NOT v_has_version THEN
+      RAISE EXCEPTION 'slot_refused: unbound (slot % has no model version)', NEW.id USING ERRCODE = '55000';
+    END IF;
+    IF v_version.status = 'tainted' THEN
+      RAISE EXCEPTION 'slot_refused: version_tainted (%)', v_version.id USING ERRCODE = '55000';
+    END IF;
+    IF v_version.scope = 'tenant' AND NEW.doc_types IS NULL THEN
+      RAISE EXCEPTION 'slot_refused: tenant_scope_global (a tenant-scope version is served only through scoped bindings)' USING ERRCODE = '42501';
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_slot_guard() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_slot_guard() TO service_role;
+
+DROP TRIGGER IF EXISTS rag_finetune_slot_guard ON public.embedding_profiles;
+CREATE TRIGGER rag_finetune_slot_guard
+  BEFORE INSERT OR UPDATE ON public.embedding_profiles
+  FOR EACH ROW EXECUTE FUNCTION public.rag_finetune_slot_guard();
+
+-- Slot rows and their indexes (D-22).
+
+INSERT INTO public.embedding_profiles (id, provider, model, dims, storage, status, query_instruction, score_calibration)
+VALUES
+  ('ft-a-1024', 'ft_slot_a', 'unbound', 1024, 'halfvec', 'available', NULL, '{}'::jsonb),
+  ('ft-b-1024', 'ft_slot_b', 'unbound', 1024, 'halfvec', 'available', NULL, '{}'::jsonb)
+ON CONFLICT (id) DO NOTHING;
+
+CREATE INDEX IF NOT EXISTS chunk_embeddings_ft_a_1024_hnsw ON public.chunk_embeddings
+  USING hnsw ((embedding::public.halfvec(1024)) public.halfvec_cosine_ops) WITH (m = 64, ef_construction = 200)
+  WHERE profile_id = 'ft-a-1024';
+CREATE INDEX IF NOT EXISTS chunk_embeddings_ft_b_1024_hnsw ON public.chunk_embeddings
+  USING hnsw ((embedding::public.halfvec(1024)) public.halfvec_cosine_ops) WITH (m = 64, ef_construction = 200)
+  WHERE profile_id = 'ft-b-1024';
+
+-- Bind a registered deployment-scope version to an empty, free, unbound slot. Same table lock as the activation gate (0309), so a bind and
+-- an activation or rollback never interleave.
+
+CREATE OR REPLACE FUNCTION public.rag_finetune_bind_slot(p_slot text, p_version text, p_actor text)
+RETURNS TABLE (slot_id text, version_id text, query_instruction text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_slot public.embedding_profiles%ROWTYPE;
+  v_version public.embedding_model_versions%ROWTYPE;
+BEGIN
+  IF p_actor IS NULL OR pg_catalog.btrim(p_actor) = '' THEN
+    RAISE EXCEPTION 'bind_refused: actor_required' USING ERRCODE = '22023';
+  END IF;
+  IF p_slot IS NULL OR p_slot NOT IN ('ft-a-1024', 'ft-b-1024') THEN
+    RAISE EXCEPTION 'bind_refused: unknown_slot (%)', COALESCE(p_slot, 'null') USING ERRCODE = '22023';
+  END IF;
+
+  LOCK TABLE public.embedding_profiles IN SHARE ROW EXCLUSIVE MODE;
+
+  SELECT * INTO v_slot FROM public.embedding_profiles AS p WHERE p.id = p_slot;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'bind_refused: unknown_slot (%)', p_slot USING ERRCODE = '22023';
+  END IF;
+  IF v_slot.status = 'active' THEN
+    RAISE EXCEPTION 'bind_refused: slot_active' USING ERRCODE = '55000';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.embedding_profiles AS p WHERE p.status = 'active' AND p.previous_active_id = p_slot) THEN
+    RAISE EXCEPTION 'bind_refused: rollback_target (release it with rag_finetune_release_rollback first)' USING ERRCODE = '55000';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.chunk_embeddings AS e WHERE e.profile_id = p_slot) THEN
+    RAISE EXCEPTION 'bind_refused: slot_not_empty (clear it with rag_finetune_clear_slot first)' USING ERRCODE = '55000';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.embedding_backfill_runs AS r WHERE r.profile_id = p_slot AND r.status = 'running') THEN
+    RAISE EXCEPTION 'bind_refused: reembed_running' USING ERRCODE = '55000';
+  END IF;
+  IF v_slot.model <> 'unbound' THEN
+    RAISE EXCEPTION 'bind_refused: slot_bound (slot holds %, clear it first)', v_slot.model USING ERRCODE = '55000';
+  END IF;
+
+  SELECT * INTO v_version FROM public.embedding_model_versions AS m WHERE m.id = p_version FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'bind_refused: unknown_version (%)', COALESCE(p_version, 'null') USING ERRCODE = 'P0002';
+  END IF;
+  IF v_version.status = 'bound' THEN
+    RAISE EXCEPTION 'bind_refused: version_bound (held by %)', v_version.bound_slot USING ERRCODE = '55000';
+  END IF;
+  IF v_version.status <> 'registered' THEN
+    RAISE EXCEPTION 'bind_refused: version_status (%)', v_version.status USING ERRCODE = '55000';
+  END IF;
+  IF v_version.dims <> v_slot.dims THEN
+    RAISE EXCEPTION 'bind_refused: dims_mismatch (% vs %)', v_version.dims, v_slot.dims USING ERRCODE = '22023';
+  END IF;
+  IF v_version.scope = 'tenant' THEN
+    RAISE EXCEPTION 'bind_refused: tenant_scope_requires_scoping (bind a tenant-scope version with its doc types)' USING ERRCODE = '42501';
+  END IF;
+
+  PERFORM pg_catalog.set_config('myrag.ft_slot_op', 'on', true);
+  UPDATE public.embedding_profiles AS p
+  SET model = v_version.id, query_instruction = v_version.query_prompt, eval_evidence = NULL
+  WHERE p.id = p_slot;
+  PERFORM pg_catalog.set_config('myrag.ft_slot_op', '', true);
+
+  UPDATE public.embedding_model_versions AS m
+  SET status = 'bound', bound_slot = p_slot, updated_at = pg_catalog.now()
+  WHERE m.id = v_version.id;
+
+  RETURN QUERY SELECT p_slot, v_version.id, v_version.query_prompt;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_bind_slot(text, text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_bind_slot(text, text, text) TO service_role;
+
+-- Clear a free slot: delete up to p_limit of its vectors per call (slot-wide, every tenant: a slot holds one model version for the whole
+-- deployment); the call that leaves none resets the slot to unbound and retires its bound version (a tainted version stays tainted).
+
+CREATE OR REPLACE FUNCTION public.rag_finetune_clear_slot(p_slot text, p_actor text, p_limit integer DEFAULT 1000)
+RETURNS TABLE (slot_id text, deleted bigint, remaining bigint, cleared boolean)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+SET statement_timeout = '120s'
+AS $fn$
+DECLARE
+  v_slot public.embedding_profiles%ROWTYPE;
+  v_deleted bigint;
+  v_remaining bigint;
+BEGIN
+  IF p_actor IS NULL OR pg_catalog.btrim(p_actor) = '' THEN
+    RAISE EXCEPTION 'clear_refused: actor_required' USING ERRCODE = '22023';
+  END IF;
+  IF p_limit IS NULL OR p_limit < 1 OR p_limit > 10000 THEN
+    RAISE EXCEPTION 'clear_refused: invalid_limit (1 to 10000)' USING ERRCODE = '22023';
+  END IF;
+  IF p_slot IS NULL OR p_slot NOT IN ('ft-a-1024', 'ft-b-1024') THEN
+    RAISE EXCEPTION 'clear_refused: unknown_slot (%)', COALESCE(p_slot, 'null') USING ERRCODE = '22023';
+  END IF;
+
+  LOCK TABLE public.embedding_profiles IN SHARE ROW EXCLUSIVE MODE;
+
+  SELECT * INTO v_slot FROM public.embedding_profiles AS p WHERE p.id = p_slot;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'clear_refused: unknown_slot (%)', p_slot USING ERRCODE = '22023';
+  END IF;
+  IF v_slot.status = 'active' THEN
+    RAISE EXCEPTION 'clear_refused: slot_active' USING ERRCODE = '55000';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.embedding_profiles AS p WHERE p.status = 'active' AND p.previous_active_id = p_slot) THEN
+    RAISE EXCEPTION 'clear_refused: rollback_target (release it with rag_finetune_release_rollback first)' USING ERRCODE = '55000';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.embedding_backfill_runs AS r WHERE r.profile_id = p_slot AND r.status = 'running') THEN
+    RAISE EXCEPTION 'clear_refused: reembed_running' USING ERRCODE = '55000';
+  END IF;
+
+  WITH doomed AS (
+    SELECT e.chunk_id FROM public.chunk_embeddings AS e WHERE e.profile_id = p_slot ORDER BY e.chunk_id LIMIT p_limit
+  )
+  DELETE FROM public.chunk_embeddings AS e USING doomed AS d
+  WHERE e.profile_id = p_slot AND e.chunk_id = d.chunk_id;
+  GET DIAGNOSTICS v_deleted = ROW_COUNT;
+
+  SELECT pg_catalog.count(*) INTO v_remaining FROM public.chunk_embeddings AS e WHERE e.profile_id = p_slot;
+
+  IF v_remaining = 0 THEN
+    PERFORM pg_catalog.set_config('myrag.ft_slot_op', 'on', true);
+    UPDATE public.embedding_profiles AS p
+    SET model = 'unbound', query_instruction = NULL, eval_evidence = NULL, status = 'available'
+    WHERE p.id = p_slot;
+    PERFORM pg_catalog.set_config('myrag.ft_slot_op', '', true);
+
+    UPDATE public.embedding_model_versions AS m
+    SET status = CASE WHEN m.status = 'bound' THEN 'retired' ELSE m.status END, bound_slot = NULL, updated_at = pg_catalog.now()
+    WHERE m.id = v_slot.model;
+  END IF;
+
+  RETURN QUERY SELECT p_slot, v_deleted, v_remaining, v_remaining = 0;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_clear_slot(text, text, integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_clear_slot(text, text, integer) TO service_role;
+
+-- Drop the active profile's rollback target, so the older slot becomes free to clear or rebind. Needs p_ack = 'drop-rollback'.
+
+CREATE OR REPLACE FUNCTION public.rag_finetune_release_rollback(p_actor text, p_ack text)
+RETURNS TABLE (active_profile text, dropped_previous text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_active text;
+  v_previous text;
+BEGIN
+  IF p_actor IS NULL OR pg_catalog.btrim(p_actor) = '' THEN
+    RAISE EXCEPTION 'release_refused: actor_required' USING ERRCODE = '22023';
+  END IF;
+  IF p_ack IS DISTINCT FROM 'drop-rollback' THEN
+    RAISE EXCEPTION 'release_refused: ack_required (pass drop-rollback)' USING ERRCODE = '22023';
+  END IF;
+
+  LOCK TABLE public.embedding_profiles IN SHARE ROW EXCLUSIVE MODE;
+
+  SELECT p.id, p.previous_active_id INTO v_active, v_previous FROM public.embedding_profiles AS p WHERE p.status = 'active';
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'release_refused: no_active' USING ERRCODE = '55000';
+  END IF;
+  IF v_previous IS NOT NULL THEN
+    UPDATE public.embedding_profiles AS p SET previous_active_id = NULL WHERE p.id = v_active;
+  END IF;
+
+  RETURN QUERY SELECT v_active, v_previous;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_release_rollback(text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_release_rollback(text, text) TO service_role;
+
+-- Version taint (trigger A): when a version becomes tainted, its non-active slot loses its evidence, so activation refuses eval_missing.
+-- An active slot keeps it (serving does not stop by itself; the revoke output tells the operator to roll back); the slot guard drops it
+-- when the slot leaves active and refuses new evidence and re-activation while the version is tainted.
+
+CREATE OR REPLACE FUNCTION public.rag_finetune_version_taint_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+BEGIN
+  IF NEW.status = 'tainted' AND OLD.status IS DISTINCT FROM 'tainted' THEN
+    UPDATE public.embedding_profiles AS p
+    SET eval_evidence = NULL
+    WHERE p.id LIKE 'ft-%' AND p.model = NEW.id AND p.status <> 'active' AND p.eval_evidence IS NOT NULL;
+  END IF;
+  RETURN NULL;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_version_taint_guard() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_version_taint_guard() TO service_role;
+
+DROP TRIGGER IF EXISTS rag_finetune_version_taint_guard ON public.embedding_model_versions;
+CREATE TRIGGER rag_finetune_version_taint_guard
+  AFTER UPDATE OF status ON public.embedding_model_versions
+  FOR EACH ROW EXECUTE FUNCTION public.rag_finetune_version_taint_guard();
+
+COMMIT;
+
+-- >>> supabase/migrations/0653_finetune_export.sql
+-- 0653: fine-tune vector export (Phase 6.1, D-11, D-27, D-28, D-32).
+-- rag_finetune_export_vectors hands the operator CLI (npm run rag:finetune -- export-vectors) the stored vectors of one profile for the
+-- current, ready chunks of exactly one tenant, in chunk id order after a keyset cursor. The legacy_column profile reads
+-- document_chunks.embedding; every other profile reads chunk_embeddings. The tenant's consent is checked inside the function through
+-- rag_finetune_consent_for_export on every call, so a revocation between two pages or two commands stops the export.
+-- Refusals: export_refused: consent (42501), unknown_profile (P0002), unbound (55000), invalid_limit (22023); a malformed or other-mode
+-- tenant key raises tenant_key_invalid: (22023). Service role only.
+
+BEGIN;
+
+CREATE OR REPLACE FUNCTION public.rag_finetune_export_vectors(
+  p_tenant_key text,
+  p_purpose text,
+  p_profile_id text,
+  p_after uuid,
+  p_limit integer
+)
+RETURNS TABLE (chunk_id uuid, embedding real[], embedding_model text, dims integer)
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+DECLARE
+  v_profile public.embedding_profiles%ROWTYPE;
+BEGIN
+  IF p_limit IS NULL OR p_limit < 1 OR p_limit > 1000 THEN
+    RAISE EXCEPTION 'export_refused: invalid_limit (1 to 1000)' USING ERRCODE = '22023';
+  END IF;
+
+  BEGIN
+    PERFORM public.rag_finetune_consent_for_export(ARRAY[p_tenant_key], p_purpose);
+  EXCEPTION WHEN insufficient_privilege THEN
+    RAISE EXCEPTION 'export_refused: consent of % does not cover %', p_tenant_key, p_purpose USING ERRCODE = '42501';
+  END;
+
+  SELECT * INTO v_profile FROM public.embedding_profiles AS p WHERE p.id = p_profile_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'export_refused: unknown_profile' USING ERRCODE = 'P0002';
+  END IF;
+  IF v_profile.model = 'unbound' THEN
+    RAISE EXCEPTION 'export_refused: unbound (profile % has no model bound)', v_profile.id USING ERRCODE = '55000';
+  END IF;
+
+  IF v_profile.storage = 'legacy_column' THEN
+    RETURN QUERY
+      SELECT c.id, (c.embedding)::real[], v_profile.model, v_profile.dims
+      FROM public.document_chunks AS c
+      JOIN public.documents AS d ON d.id = c.document_id
+      WHERE c.tenant_key = p_tenant_key AND c.is_current AND c.status = 'ready' AND c.embedding IS NOT NULL
+        AND d.tenant_key = p_tenant_key AND d.is_current AND d.status = 'ready'
+        AND (p_after IS NULL OR c.id > p_after)
+      ORDER BY c.id
+      LIMIT p_limit;
+  ELSE
+    RETURN QUERY
+      SELECT c.id, ((e.embedding)::public.vector)::real[], e.embedding_model, e.dims
+      FROM public.chunk_embeddings AS e
+      JOIN public.document_chunks AS c ON c.id = e.chunk_id
+      JOIN public.documents AS d ON d.id = c.document_id
+      WHERE e.profile_id = v_profile.id AND e.tenant_key = p_tenant_key
+        AND c.tenant_key = p_tenant_key AND c.is_current AND c.status = 'ready'
+        AND d.tenant_key = p_tenant_key AND d.is_current AND d.status = 'ready'
+        AND (p_after IS NULL OR c.id > p_after)
+      ORDER BY c.id
+      LIMIT p_limit;
+  END IF;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_export_vectors(text, text, text, uuid, integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_export_vectors(text, text, text, uuid, integer) TO service_role;
+
+COMMIT;
+
+-- >>> supabase/migrations/0654_finetune_binding_guard.sql
+-- 0654: fine-tune slots served through Phase 3.1.1 bindings, and the guards that keep a slot inside its consent (Phase 6.1, FT-01, FT-09,
+-- D-28, D-29, D-33, D-35).
+-- A slot becomes a scoped profile (embedding_profiles.doc_types, 0440) in two ways: rag_finetune_bind_scoped_slot binds a registered
+-- version and sets its doc types in one statement (the only way to bind a tenant-scope version), and rag_finetune_scope_slot scopes or
+-- re-scopes a slot that already holds a version. A scoped profile is never backfilling or active (0440 scope trigger), so it serves only
+-- through rows of embedding_profile_bindings. The slot guard of 0652 is replaced: doc_types of an ft-* slot change only inside these
+-- functions or the final call of rag_finetune_clear_slot (all set the transaction-local myrag.ft_slot_op), a slot holding a tenant-scope
+-- version can never go back to NULL doc_types (not even with the switch set), and such a slot never takes profile-level evidence: its
+-- evidence lives on the 3.1.1 binding. rag_finetune_clear_slot is replaced: it refuses while a binding of the slot is active or
+-- backfilling, and the call that empties the slot deletes the slot's remaining binding rows and resets doc_types, so a later version never
+-- inherits a binding made for an earlier one.
+-- Binding guard (D-33): a binding row whose profile is an ft-* slot is written only when the slot's version is not tainted and
+--   (a) tenant_key IS NULL and the version is deployment scope, or
+--   (b) the version is tenant scope and tenant_key is its single tenant, or
+--   (c) the version is deployment scope and tenant_key is one of its tenants, or any tenant of this deployment while every tenant the
+--       version was trained on currently has deployment consent (the consent rows are share-locked until the transaction ends).
+-- It runs on INSERT and on every UPDATE except a move to available or retired that keeps the key, so the 3.1.1 activation gate and the
+-- staging function re-check consent each time a binding starts serving or backfilling.
+-- Backfill-run guard: a re-embed run of a slot holding a tenant-scope version is refused unless its tenant_key is the version's tenant
+-- (reembed_refused: tenant_scope_use_binding_backfill); rag_reembed_start_run itself is not redefined.
+-- Version taint (0652 trigger A, replaced): a tainted version's slot also has every active or backfilling binding set to available (the
+-- 3.1.1 deactivation semantics: a pointer flip, no vector deleted).
+-- Server role only: the slot, scope, bind and clear functions and the two replaced 0652 triggers are SECURITY DEFINER; the doc type helper
+-- and the two new trigger functions run as the invoker (every writer of these tables is service_role). All use SET search_path = '' with
+-- schema-qualified names, are revoked from PUBLIC, anon and authenticated and granted to service_role. Idempotent: CREATE OR REPLACE, DROP TRIGGER IF EXISTS.
+
+BEGIN;
+
+DO $finetune_binding_precheck$
+BEGIN
+  IF pg_catalog.to_regprocedure('public.rag_finetune_bind_slot(text,text,text)') IS NULL THEN
+    RAISE EXCEPTION '0654: apply 0652_finetune_slots.sql first' USING ERRCODE = '55000';
+  END IF;
+  IF pg_catalog.to_regprocedure('public.rag_activate_embedding_binding(uuid,text)') IS NULL
+     OR pg_catalog.to_regprocedure('public.rag_reembed_require_binding(text,text)') IS NULL THEN
+    RAISE EXCEPTION '0654: apply 0441_binding_gate.sql and 0442_reembed_scope.sql first' USING ERRCODE = '55000';
+  END IF;
+END
+$finetune_binding_precheck$;
+
+-- Slot guard (trigger B): the 0652 body plus the doc type scope rules.
+
+CREATE OR REPLACE FUNCTION public.rag_finetune_slot_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_op boolean := COALESCE(pg_catalog.current_setting('myrag.ft_slot_op', true), '') = 'on';
+  v_version public.embedding_model_versions%ROWTYPE;
+  v_has_version boolean;
+  v_evidence_new boolean;
+  v_serving_new boolean;
+BEGIN
+  IF TG_OP = 'UPDATE' AND OLD.id LIKE 'ft-%' AND NEW.id IS DISTINCT FROM OLD.id THEN
+    RAISE EXCEPTION 'slot_refused: id_change' USING ERRCODE = '42501';
+  END IF;
+  IF NEW.id NOT LIKE 'ft-%' THEN
+    RETURN NEW;
+  END IF;
+
+  IF NOT v_op THEN
+    IF TG_OP = 'INSERT' THEN
+      IF NEW.model <> 'unbound' OR NEW.query_instruction IS NOT NULL THEN
+        RAISE EXCEPTION 'slot_refused: model_change_outside_bind (a slot is created unbound)' USING ERRCODE = '42501';
+      END IF;
+      IF NEW.doc_types IS NOT NULL THEN
+        RAISE EXCEPTION 'slot_refused: scope_change_outside_bind (a slot is created unscoped)' USING ERRCODE = '42501';
+      END IF;
+    ELSE
+      IF NEW.model IS DISTINCT FROM OLD.model OR NEW.query_instruction IS DISTINCT FROM OLD.query_instruction
+         OR NEW.provider IS DISTINCT FROM OLD.provider OR NEW.dims IS DISTINCT FROM OLD.dims OR NEW.storage IS DISTINCT FROM OLD.storage THEN
+        RAISE EXCEPTION 'slot_refused: model_change_outside_bind (use rag_finetune_bind_slot or rag_finetune_clear_slot)' USING ERRCODE = '42501';
+      END IF;
+      IF NEW.doc_types IS DISTINCT FROM OLD.doc_types THEN
+        RAISE EXCEPTION 'slot_refused: scope_change_outside_bind (use rag_finetune_scope_slot, rag_finetune_bind_scoped_slot or rag_finetune_clear_slot)'
+          USING ERRCODE = '42501';
+      END IF;
+    END IF;
+  END IF;
+
+  SELECT * INTO v_version FROM public.embedding_model_versions AS m WHERE m.id = NEW.model;
+  v_has_version := FOUND;
+  IF NOT v_has_version AND NEW.model <> 'unbound' THEN
+    RAISE EXCEPTION 'slot_refused: unknown_version (%)', NEW.model USING ERRCODE = '22023';
+  END IF;
+
+  -- A slot holding a tenant-scope version never becomes unscoped again, whatever switch is set (D-35).
+  IF TG_OP = 'UPDATE' AND v_has_version AND v_version.scope = 'tenant' AND OLD.doc_types IS NOT NULL AND NEW.doc_types IS NULL THEN
+    RAISE EXCEPTION 'slot_refused: tenant_scope_global (a tenant-scope version keeps its doc types)' USING ERRCODE = '42501';
+  END IF;
+
+  -- A slot leaving active whose version is tainted or gone keeps no evidence, so it can never come back without new evidence.
+  IF TG_OP = 'UPDATE' AND OLD.status = 'active' AND NEW.status <> 'active' AND (NOT v_has_version OR v_version.status = 'tainted') THEN
+    NEW.eval_evidence := NULL;
+  END IF;
+
+  v_evidence_new := NEW.eval_evidence IS NOT NULL AND (TG_OP = 'INSERT' OR NEW.eval_evidence IS DISTINCT FROM OLD.eval_evidence);
+  v_serving_new := NEW.status IN ('backfilling', 'active') AND (TG_OP = 'INSERT' OR NEW.status IS DISTINCT FROM OLD.status);
+
+  IF v_evidence_new THEN
+    IF NOT v_has_version THEN
+      RAISE EXCEPTION 'slot_refused: evidence_without_version (slot % is unbound)', NEW.id USING ERRCODE = '55000';
+    END IF;
+    IF v_version.status = 'tainted' THEN
+      RAISE EXCEPTION 'slot_refused: version_tainted (%)', v_version.id USING ERRCODE = '55000';
+    END IF;
+    IF v_version.scope = 'tenant' AND NEW.doc_types IS NULL THEN
+      RAISE EXCEPTION 'slot_refused: tenant_scope_global (a tenant-scope version is served only through scoped bindings)' USING ERRCODE = '42501';
+    END IF;
+    IF v_version.scope = 'tenant' THEN
+      RAISE EXCEPTION 'slot_refused: tenant_scope_evidence (record the evidence on the 3.1.1 binding of the tenant)' USING ERRCODE = '42501';
+    END IF;
+  END IF;
+
+  IF v_serving_new THEN
+    IF NOT v_has_version THEN
+      RAISE EXCEPTION 'slot_refused: unbound (slot % has no model version)', NEW.id USING ERRCODE = '55000';
+    END IF;
+    IF v_version.status = 'tainted' THEN
+      RAISE EXCEPTION 'slot_refused: version_tainted (%)', v_version.id USING ERRCODE = '55000';
+    END IF;
+    IF v_version.scope = 'tenant' AND NEW.doc_types IS NULL THEN
+      RAISE EXCEPTION 'slot_refused: tenant_scope_global (a tenant-scope version is served only through scoped bindings)' USING ERRCODE = '42501';
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_slot_guard() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_slot_guard() TO service_role;
+
+-- The doc type list a scoping call takes: non-empty, no NULL entry, sorted and without repeats (the 0440 check constraint names the values).
+
+CREATE OR REPLACE FUNCTION public.rag_finetune_normalize_doc_types(p_doc_types text[], p_prefix text)
+RETURNS text[]
+LANGUAGE plpgsql
+IMMUTABLE
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_out text[];
+BEGIN
+  IF p_doc_types IS NULL OR pg_catalog.cardinality(p_doc_types) = 0 THEN
+    RAISE EXCEPTION '%: doc_types_empty (name at least one doc type)', p_prefix USING ERRCODE = '22023';
+  END IF;
+  IF pg_catalog.array_position(p_doc_types, NULL) IS NOT NULL THEN
+    RAISE EXCEPTION '%: doc_types_invalid (a NULL doc type)', p_prefix USING ERRCODE = '22023';
+  END IF;
+  SELECT pg_catalog.array_agg(DISTINCT d ORDER BY d) INTO v_out FROM pg_catalog.unnest(p_doc_types) AS u(d);
+  RETURN v_out;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_normalize_doc_types(text[], text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_normalize_doc_types(text[], text) TO service_role;
+
+-- Bind a registered version, either scope, to an empty, free, unbound slot and scope the slot to p_doc_types in the same statement. The
+-- only way to bind a tenant-scope version (D-35). Same checks and table lock as rag_finetune_bind_slot (0652).
+
+CREATE OR REPLACE FUNCTION public.rag_finetune_bind_scoped_slot(p_slot text, p_version text, p_doc_types text[], p_actor text)
+RETURNS TABLE (slot_id text, version_id text, version_scope text, doc_types text[], query_instruction text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_slot public.embedding_profiles%ROWTYPE;
+  v_version public.embedding_model_versions%ROWTYPE;
+  v_doc_types text[];
+BEGIN
+  IF p_actor IS NULL OR pg_catalog.btrim(p_actor) = '' THEN
+    RAISE EXCEPTION 'bind_refused: actor_required' USING ERRCODE = '22023';
+  END IF;
+  IF p_slot IS NULL OR p_slot NOT IN ('ft-a-1024', 'ft-b-1024') THEN
+    RAISE EXCEPTION 'bind_refused: unknown_slot (%)', COALESCE(p_slot, 'null') USING ERRCODE = '22023';
+  END IF;
+  v_doc_types := public.rag_finetune_normalize_doc_types(p_doc_types, 'bind_refused');
+
+  LOCK TABLE public.embedding_profiles IN SHARE ROW EXCLUSIVE MODE;
+
+  SELECT * INTO v_slot FROM public.embedding_profiles AS p WHERE p.id = p_slot;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'bind_refused: unknown_slot (%)', p_slot USING ERRCODE = '22023';
+  END IF;
+  IF v_slot.status = 'active' THEN
+    RAISE EXCEPTION 'bind_refused: slot_active' USING ERRCODE = '55000';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.embedding_profiles AS p WHERE p.status = 'active' AND p.previous_active_id = p_slot) THEN
+    RAISE EXCEPTION 'bind_refused: rollback_target (release it with rag_finetune_release_rollback first)' USING ERRCODE = '55000';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.chunk_embeddings AS e WHERE e.profile_id = p_slot) THEN
+    RAISE EXCEPTION 'bind_refused: slot_not_empty (clear it with rag_finetune_clear_slot first)' USING ERRCODE = '55000';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.embedding_backfill_runs AS r WHERE r.profile_id = p_slot AND r.status = 'running') THEN
+    RAISE EXCEPTION 'bind_refused: reembed_running' USING ERRCODE = '55000';
+  END IF;
+  IF v_slot.model <> 'unbound' THEN
+    RAISE EXCEPTION 'bind_refused: slot_bound (slot holds %, clear it first)', v_slot.model USING ERRCODE = '55000';
+  END IF;
+
+  SELECT * INTO v_version FROM public.embedding_model_versions AS m WHERE m.id = p_version FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'bind_refused: unknown_version (%)', COALESCE(p_version, 'null') USING ERRCODE = 'P0002';
+  END IF;
+  IF v_version.status = 'bound' THEN
+    RAISE EXCEPTION 'bind_refused: version_bound (held by %)', v_version.bound_slot USING ERRCODE = '55000';
+  END IF;
+  IF v_version.status <> 'registered' THEN
+    RAISE EXCEPTION 'bind_refused: version_status (%)', v_version.status USING ERRCODE = '55000';
+  END IF;
+  IF v_version.dims <> v_slot.dims THEN
+    RAISE EXCEPTION 'bind_refused: dims_mismatch (% vs %)', v_version.dims, v_slot.dims USING ERRCODE = '22023';
+  END IF;
+
+  PERFORM pg_catalog.set_config('myrag.ft_slot_op', 'on', true);
+  UPDATE public.embedding_profiles AS p
+  SET model = v_version.id, query_instruction = v_version.query_prompt, eval_evidence = NULL, doc_types = v_doc_types
+  WHERE p.id = p_slot;
+  PERFORM pg_catalog.set_config('myrag.ft_slot_op', '', true);
+
+  UPDATE public.embedding_model_versions AS m
+  SET status = 'bound', bound_slot = p_slot, updated_at = pg_catalog.now()
+  WHERE m.id = v_version.id;
+
+  RETURN QUERY SELECT p_slot, v_version.id, v_version.scope, v_doc_types, v_version.query_prompt;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_bind_scoped_slot(text, text, text[], text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_bind_scoped_slot(text, text, text[], text) TO service_role;
+
+-- Scope (or re-scope) a slot that already holds a version. p_doc_types NULL unscopes a slot holding a deployment-scope version (it then
+-- uses the global EMB-05 path); a slot holding a tenant-scope version needs a non-empty list. The slot must be empty and free; the 0440
+-- scope trigger also refuses a scope that drops the doc type of an existing binding of the slot.
+
+CREATE OR REPLACE FUNCTION public.rag_finetune_scope_slot(p_slot text, p_doc_types text[], p_actor text)
+RETURNS TABLE (slot_id text, version_id text, version_scope text, doc_types text[])
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_slot public.embedding_profiles%ROWTYPE;
+  v_version public.embedding_model_versions%ROWTYPE;
+  v_doc_types text[];
+BEGIN
+  IF p_actor IS NULL OR pg_catalog.btrim(p_actor) = '' THEN
+    RAISE EXCEPTION 'scope_refused: actor_required' USING ERRCODE = '22023';
+  END IF;
+  IF p_slot IS NULL OR p_slot NOT IN ('ft-a-1024', 'ft-b-1024') THEN
+    RAISE EXCEPTION 'scope_refused: unknown_slot (%)', COALESCE(p_slot, 'null') USING ERRCODE = '22023';
+  END IF;
+
+  LOCK TABLE public.embedding_profiles IN SHARE ROW EXCLUSIVE MODE;
+
+  SELECT * INTO v_slot FROM public.embedding_profiles AS p WHERE p.id = p_slot;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'scope_refused: unknown_slot (%)', p_slot USING ERRCODE = '22023';
+  END IF;
+  SELECT * INTO v_version FROM public.embedding_model_versions AS m WHERE m.id = v_slot.model;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'scope_refused: unbound (bind a version first)' USING ERRCODE = '55000';
+  END IF;
+  IF p_doc_types IS NULL THEN
+    IF v_version.scope = 'tenant' THEN
+      RAISE EXCEPTION 'scope_refused: tenant_scope_requires_doc_types (a tenant-scope version is served only through scoped bindings)'
+        USING ERRCODE = '42501';
+    END IF;
+    v_doc_types := NULL;
+  ELSE
+    IF pg_catalog.cardinality(p_doc_types) = 0 AND v_version.scope = 'tenant' THEN
+      RAISE EXCEPTION 'scope_refused: tenant_scope_requires_doc_types (a tenant-scope version is served only through scoped bindings)'
+        USING ERRCODE = '42501';
+    END IF;
+    v_doc_types := public.rag_finetune_normalize_doc_types(p_doc_types, 'scope_refused');
+  END IF;
+  IF v_version.status = 'tainted' THEN
+    RAISE EXCEPTION 'scope_refused: version_tainted (%)', v_version.id USING ERRCODE = '55000';
+  END IF;
+  IF v_slot.status = 'active' THEN
+    RAISE EXCEPTION 'scope_refused: slot_active' USING ERRCODE = '55000';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.embedding_profiles AS p WHERE p.status = 'active' AND p.previous_active_id = p_slot) THEN
+    RAISE EXCEPTION 'scope_refused: rollback_target (release it with rag_finetune_release_rollback first)' USING ERRCODE = '55000';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.chunk_embeddings AS e WHERE e.profile_id = p_slot) THEN
+    RAISE EXCEPTION 'scope_refused: slot_not_empty (clear it with rag_finetune_clear_slot first)' USING ERRCODE = '55000';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.embedding_backfill_runs AS r WHERE r.profile_id = p_slot AND r.status = 'running') THEN
+    RAISE EXCEPTION 'scope_refused: reembed_running' USING ERRCODE = '55000';
+  END IF;
+  IF v_doc_types IS NULL AND v_slot.status = 'backfilling' THEN
+    RAISE EXCEPTION 'scope_refused: slot_backfilling' USING ERRCODE = '55000';
+  END IF;
+
+  PERFORM pg_catalog.set_config('myrag.ft_slot_op', 'on', true);
+  UPDATE public.embedding_profiles AS p SET doc_types = v_doc_types, eval_evidence = NULL, status = CASE WHEN v_doc_types IS NOT NULL AND p.status = 'backfilling' THEN 'available' ELSE p.status END
+  WHERE p.id = p_slot;
+  PERFORM pg_catalog.set_config('myrag.ft_slot_op', '', true);
+
+  RETURN QUERY SELECT p_slot, v_version.id, v_version.scope, v_doc_types;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_scope_slot(text, text[], text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_scope_slot(text, text[], text) TO service_role;
+
+-- Clear (replaces 0652): refuses while a binding of the slot is active or backfilling; the call that leaves no vector also deletes the
+-- slot's remaining binding rows and resets doc_types, so a later version never inherits a binding made for an earlier one.
+
+CREATE OR REPLACE FUNCTION public.rag_finetune_clear_slot(p_slot text, p_actor text, p_limit integer DEFAULT 1000)
+RETURNS TABLE (slot_id text, deleted bigint, remaining bigint, cleared boolean)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+SET statement_timeout = '120s'
+AS $fn$
+DECLARE
+  v_slot public.embedding_profiles%ROWTYPE;
+  v_deleted bigint;
+  v_remaining bigint;
+BEGIN
+  IF p_actor IS NULL OR pg_catalog.btrim(p_actor) = '' THEN
+    RAISE EXCEPTION 'clear_refused: actor_required' USING ERRCODE = '22023';
+  END IF;
+  IF p_limit IS NULL OR p_limit < 1 OR p_limit > 10000 THEN
+    RAISE EXCEPTION 'clear_refused: invalid_limit (1 to 10000)' USING ERRCODE = '22023';
+  END IF;
+  IF p_slot IS NULL OR p_slot NOT IN ('ft-a-1024', 'ft-b-1024') THEN
+    RAISE EXCEPTION 'clear_refused: unknown_slot (%)', COALESCE(p_slot, 'null') USING ERRCODE = '22023';
+  END IF;
+
+  LOCK TABLE public.embedding_profiles IN SHARE ROW EXCLUSIVE MODE;
+  LOCK TABLE public.embedding_profile_bindings IN SHARE ROW EXCLUSIVE MODE;
+
+  SELECT * INTO v_slot FROM public.embedding_profiles AS p WHERE p.id = p_slot;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'clear_refused: unknown_slot (%)', p_slot USING ERRCODE = '22023';
+  END IF;
+  IF v_slot.status = 'active' THEN
+    RAISE EXCEPTION 'clear_refused: slot_active' USING ERRCODE = '55000';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.embedding_profiles AS p WHERE p.status = 'active' AND p.previous_active_id = p_slot) THEN
+    RAISE EXCEPTION 'clear_refused: rollback_target (release it with rag_finetune_release_rollback first)' USING ERRCODE = '55000';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.embedding_backfill_runs AS r WHERE r.profile_id = p_slot AND r.status = 'running') THEN
+    RAISE EXCEPTION 'clear_refused: reembed_running' USING ERRCODE = '55000';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.embedding_profile_bindings AS b WHERE b.profile_id = p_slot AND b.status IN ('active', 'backfilling')) THEN
+    RAISE EXCEPTION 'clear_refused: binding_active (deactivate the slot''s bindings first)' USING ERRCODE = '55000';
+  END IF;
+
+  WITH doomed AS (
+    SELECT e.chunk_id FROM public.chunk_embeddings AS e WHERE e.profile_id = p_slot ORDER BY e.chunk_id LIMIT p_limit
+  )
+  DELETE FROM public.chunk_embeddings AS e USING doomed AS d
+  WHERE e.profile_id = p_slot AND e.chunk_id = d.chunk_id;
+  GET DIAGNOSTICS v_deleted = ROW_COUNT;
+
+  SELECT pg_catalog.count(*) INTO v_remaining FROM public.chunk_embeddings AS e WHERE e.profile_id = p_slot;
+
+  IF v_remaining = 0 THEN
+    UPDATE public.embedding_profile_bindings AS b SET previous_binding_id = NULL
+    WHERE b.previous_binding_id IN (SELECT s.id FROM public.embedding_profile_bindings AS s WHERE s.profile_id = p_slot);
+    DELETE FROM public.embedding_profile_bindings AS b WHERE b.profile_id = p_slot;
+
+    PERFORM pg_catalog.set_config('myrag.ft_slot_op', 'on', true);
+    UPDATE public.embedding_profiles AS p
+    SET model = 'unbound', query_instruction = NULL, eval_evidence = NULL, status = 'available', doc_types = NULL
+    WHERE p.id = p_slot;
+    PERFORM pg_catalog.set_config('myrag.ft_slot_op', '', true);
+
+    UPDATE public.embedding_model_versions AS m
+    SET status = CASE WHEN m.status = 'bound' THEN 'retired' ELSE m.status END, bound_slot = NULL, updated_at = pg_catalog.now()
+    WHERE m.id = v_slot.model;
+  END IF;
+
+  RETURN QUERY SELECT p_slot, v_deleted, v_remaining, v_remaining = 0;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_clear_slot(text, text, integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_clear_slot(text, text, integer) TO service_role;
+
+-- Binding guard (D-33) on embedding_profile_bindings.
+
+CREATE OR REPLACE FUNCTION public.rag_finetune_binding_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_model text;
+  v_version public.embedding_model_versions%ROWTYPE;
+  v_key text;
+  v_scope text;
+BEGIN
+  IF NEW.profile_id NOT LIKE 'ft-%' THEN
+    RETURN NEW;
+  END IF;
+  IF TG_OP = 'UPDATE' AND NEW.status IN ('available', 'retired')
+     AND NEW.profile_id = OLD.profile_id AND NEW.doc_type = OLD.doc_type AND NEW.tenant_key IS NOT DISTINCT FROM OLD.tenant_key THEN
+    RETURN NEW;
+  END IF;
+
+  SELECT p.model INTO v_model FROM public.embedding_profiles AS p WHERE p.id = NEW.profile_id;
+  SELECT * INTO v_version FROM public.embedding_model_versions AS m WHERE m.id = v_model;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'binding_refused: finetune_unbound (slot % holds no model version)', NEW.profile_id USING ERRCODE = '42501';
+  END IF;
+  IF v_version.status = 'tainted' THEN
+    RAISE EXCEPTION 'binding_refused: finetune_tainted (%)', v_version.id USING ERRCODE = '42501';
+  END IF;
+
+  IF v_version.scope = 'tenant' THEN
+    IF NEW.tenant_key IS NULL THEN
+      RAISE EXCEPTION 'binding_refused: finetune_deployment_wide (a tenant-scope version is bound only for its tenant)' USING ERRCODE = '42501';
+    END IF;
+    IF NEW.tenant_key IS DISTINCT FROM v_version.tenant_keys[1] OR pg_catalog.cardinality(v_version.tenant_keys) <> 1 THEN
+      RAISE EXCEPTION 'binding_refused: finetune_tenant_mismatch (the version serves only the tenant it was trained on)' USING ERRCODE = '42501';
+    END IF;
+    RETURN NEW;
+  END IF;
+
+  IF NEW.tenant_key IS NULL OR NEW.tenant_key = ANY (v_version.tenant_keys) THEN
+    RETURN NEW;
+  END IF;
+  FOREACH v_key IN ARRAY v_version.tenant_keys LOOP
+    SELECT c.scope INTO v_scope FROM public.rag_finetune_consent AS c WHERE c.tenant_key = v_key FOR SHARE;
+    IF NOT FOUND OR v_scope IS DISTINCT FROM 'deployment' THEN
+      RAISE EXCEPTION 'binding_refused: finetune_consent (a trained tenant no longer grants deployment consent)' USING ERRCODE = '42501';
+    END IF;
+  END LOOP;
+  RETURN NEW;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_binding_guard() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_binding_guard() TO service_role;
+
+DROP TRIGGER IF EXISTS rag_finetune_binding_guard ON public.embedding_profile_bindings;
+CREATE TRIGGER rag_finetune_binding_guard
+  BEFORE INSERT OR UPDATE ON public.embedding_profile_bindings
+  FOR EACH ROW EXECUTE FUNCTION public.rag_finetune_binding_guard();
+
+-- Backfill-run guard: a run of a slot holding a tenant-scope version covers that tenant only (D-33, D-35).
+
+CREATE OR REPLACE FUNCTION public.rag_finetune_backfill_run_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_version public.embedding_model_versions%ROWTYPE;
+BEGIN
+  IF NEW.profile_id NOT LIKE 'ft-%' THEN
+    RETURN NEW;
+  END IF;
+  SELECT m.* INTO v_version
+  FROM public.embedding_profiles AS p JOIN public.embedding_model_versions AS m ON m.id = p.model
+  WHERE p.id = NEW.profile_id;
+  IF FOUND AND v_version.scope = 'tenant'
+     AND (NEW.tenant_key IS NULL OR NEW.tenant_key IS DISTINCT FROM v_version.tenant_keys[1]) THEN
+    RAISE EXCEPTION 'reembed_refused: tenant_scope_use_binding_backfill (slot % holds a tenant-scope version: run the 3.1.1 tenant-filtered binding backfill, npm run rag:reembed -- --profile % --tenant <its tenant>, after bind-status backfilling)',
+      NEW.profile_id, NEW.profile_id
+      USING ERRCODE = '42501';
+  END IF;
+  RETURN NEW;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_backfill_run_guard() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_backfill_run_guard() TO service_role;
+
+DROP TRIGGER IF EXISTS rag_finetune_backfill_run_guard ON public.embedding_backfill_runs;
+CREATE TRIGGER rag_finetune_backfill_run_guard
+  BEFORE INSERT ON public.embedding_backfill_runs
+  FOR EACH ROW EXECUTE FUNCTION public.rag_finetune_backfill_run_guard();
+
+-- Version taint (trigger A, replaces 0652): the 0652 evidence drop plus the deactivation of every serving binding of the version's slot.
+
+CREATE OR REPLACE FUNCTION public.rag_finetune_version_taint_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+BEGIN
+  IF NEW.status = 'tainted' AND OLD.status IS DISTINCT FROM 'tainted' THEN
+    UPDATE public.embedding_profiles AS p
+    SET eval_evidence = NULL
+    WHERE p.id LIKE 'ft-%' AND p.model = NEW.id AND p.status <> 'active' AND p.eval_evidence IS NOT NULL;
+
+    UPDATE public.embedding_profile_bindings AS b
+    SET status = 'available'
+    WHERE b.status IN ('active', 'backfilling')
+      AND b.profile_id IN (SELECT p.id FROM public.embedding_profiles AS p WHERE p.id LIKE 'ft-%' AND p.model = NEW.id);
+  END IF;
+  RETURN NULL;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_version_taint_guard() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_version_taint_guard() TO service_role;
+
+COMMIT;
