@@ -9,7 +9,7 @@ import type { RpcClient, RpcRequest, RpcResponse } from '@/lib/rag/backend/supab
 import { detectLanguage } from '@/lib/rag/lang/detect';
 import { LEXICAL_VERSION, chunkLexicalText } from '@/lib/rag/lexical/chunk-text';
 import { runRelex } from '@/lib/rag/ingest/relex/run';
-import { loadCorpus, type CorpusDocument } from './corpus.mts';
+import { fixtureLineageUuid, loadCorpus, type CorpusDocument } from './corpus.mts';
 import type { FakeEdge } from './fake-edge.mts';
 import { applyMigrations } from './migrations.mts';
 import { embedText } from './fixture-embedder.mts';
@@ -208,23 +208,59 @@ async function hasPublicColumn(db: PGlite, table: string, column: string): Promi
   return result.rows[0]?.present === true;
 }
 
+/** The highest version of every fixture lineage: that version is seeded current, the earlier ones superseded (D-40). */
+export function latestLineageVersions(documents: readonly CorpusDocument[]): Map<string, number> {
+  const latest = new Map<string, number>();
+  for (const doc of documents) {
+    if (doc.lineage) latest.set(doc.lineage.id, Math.max(latest.get(doc.lineage.id) ?? 0, doc.lineage.version));
+  }
+  return latest;
+}
+
 /**
  * The prechunked writer: inserts one corpus document and its pre-cut chunks as ready rows of the fixture tenant, bypassing ingest()
- * and its quarantine. Ingest mode uses it for the documents that simulate legacy or pre-scan content (D-13).
+ * and its quarantine. Ingest mode uses it for the documents that simulate legacy or pre-scan content (D-13). A document with a fixture
+ * lineage shares its lineage id, source and source key with the other versions; only the latest version is inserted current, so the
+ * caller passes the latest versions and supersedes the earlier ones after relex (supersedeFixtureLineages).
  */
-export async function prechunkedWriter(db: PGlite, deploymentMode: DeploymentMode): Promise<(doc: CorpusDocument) => Promise<void>> {
+export async function prechunkedWriter(
+  db: PGlite,
+  deploymentMode: DeploymentMode,
+  latestVersions?: ReadonlyMap<string, number>,
+): Promise<(doc: CorpusDocument) => Promise<void>> {
   const multiTenant = deploymentMode === 'multi-tenant';
   // A setup from before Phase 3 (the frozen pre-Phase-3 files, migrations:false) has no doc_type columns; 0301 and 0304 add them as 'general' on upgrade.
   const documentsDocType = await hasPublicColumn(db, 'documents', 'doc_type');
   const chunksDocType = await hasPublicColumn(db, 'document_chunks', 'doc_type');
   return async (doc) => {
+    let lineageColumns: InsertColumn[] = [];
+    if (doc.lineage) {
+      const latest = latestVersions?.get(doc.lineage.id);
+      if (latest === undefined) throw new Error(`[Fixture DB] ${doc.relpath} declares a lineage; only the prechunked fixture build seeds lineages`);
+      lineageColumns = [
+        ['lineage_id', fixtureLineageUuid(doc.lineage.id)],
+        ['version', doc.lineage.version],
+        ['source', 'config_upload'],
+        ['source_key', `fixture-lineage:${doc.lineage.id}`],
+        ['is_current', doc.lineage.version === latest],
+      ];
+    }
     await insertRow(db, 'documents', [
       ['id', doc.id],
       ['filename', doc.filename],
       ['content', doc.content],
-      ['metadata', JSON.stringify({ relpath: doc.relpath, language: doc.language }), 'jsonb'],
+      [
+        'metadata',
+        JSON.stringify({
+          relpath: doc.relpath,
+          language: doc.language,
+          ...(doc.fixtureDupTemplate !== undefined ? { fixture_dup_template: doc.fixtureDupTemplate } : {}),
+        }),
+        'jsonb',
+      ],
       ...(multiTenant ? [['user_id', FIXTURE_USER_ID] satisfies InsertColumn] : []),
       ...(documentsDocType ? [['doc_type', doc.docType] satisfies InsertColumn] : []),
+      ...lineageColumns,
       ['created_at', doc.createdAt],
     ]);
 
@@ -249,6 +285,29 @@ export async function prechunkedWriter(db: PGlite, deploymentMode: DeploymentMod
       ]);
     }
   };
+}
+
+/**
+ * D-40: every earlier version of a fixture lineage ends in the shape rag_publish_document_version leaves a superseded version in: ready,
+ * not current, superseded_by the next version, chunks not current with no vector in any profile. Runs after relex, which writes lexical
+ * text for current chunks only, so the superseded chunks keep the lexical text they had while current.
+ */
+export async function supersedeFixtureLineages(db: PGlite, documents: readonly CorpusDocument[]): Promise<void> {
+  const byLineage = new Map<string, CorpusDocument[]>();
+  for (const doc of documents) {
+    if (!doc.lineage) continue;
+    byLineage.set(doc.lineage.id, [...(byLineage.get(doc.lineage.id) ?? []), doc]);
+  }
+  for (const versions of byLineage.values()) {
+    versions.sort((a, b) => a.lineage!.version - b.lineage!.version);
+    for (let index = 0; index < versions.length - 1; index += 1) {
+      const previous = versions[index].id;
+      await db.query("UPDATE documents SET is_current = false, status = 'ready', superseded_by = $2 WHERE id = $1", [previous, versions[index + 1].id]);
+      await db.query('UPDATE document_chunks SET is_current = false, embedding = NULL WHERE document_id = $1', [previous]);
+      await db.query('DELETE FROM chunk_embeddings ce USING document_chunks c WHERE ce.chunk_id = c.id AND c.document_id = $1', [previous]);
+      await db.query('DELETE FROM embedding_backfill_gaps g USING document_chunks c WHERE g.chunk_id = c.id AND c.document_id = $1', [previous]);
+    }
+  }
 }
 
 export async function createFixtureDatabase(options: {
@@ -305,12 +364,13 @@ export async function createFixtureDatabase(options: {
   const corpus = loadCorpus(corpusDir);
   const { db, sqlSha256 } = await createEmptyFixtureDatabase(options);
   try {
-    const writer = await prechunkedWriter(db, deploymentMode);
+    const writer = await prechunkedWriter(db, deploymentMode, latestLineageVersions(corpus.documents));
     for (const doc of corpus.documents) await writer(doc);
     if (options.relex ?? (options.migrations !== false)) {
       await runFixtureRelex(db);
       sqlSha256[LEXICAL_SHA_KEY] = crypto.createHash('sha256').update(String(LEXICAL_VERSION)).digest('hex');
     }
+    await supersedeFixtureLineages(db, corpus.documents);
   } catch (error) {
     await db.close().catch(() => undefined);
     throw error;
