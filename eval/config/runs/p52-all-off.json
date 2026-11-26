@@ -1,0 +1,21 @@
+{
+  "name": "p52-all-off",
+  "env": {
+    "RAG_CITATION_PER_SENTENCE": "false",
+    "RAG_CLAIM_CHECK": "false",
+    "RAG_CONTEXT_RELEVANCE_RULE": "false",
+    "RAG_GROUNDEDNESS_JUDGE_MODEL": "",
+    "RAG_GROUNDEDNESS_LLM_JUDGE": "false",
+    "RAG_MAX_OUTPUT_TOKENS": "off",
+    "RAG_OUTPUT_GUARD": "off",
+    "RAG_PARTIAL_ANSWER_RULE": "false",
+    "RAG_REGISTRY_TEXTS": "false",
+    "RAG_SECURITY_EVENTS": "false",
+    "RAG_UPLOADER_ALERT_THRESHOLD": "0",
+    "RAG_UPLOADER_ALERT_WINDOW_HOURS": "24",
+    "RAG_UPLOADER_HOLD": "off",
+    "RAG_VERSION_LABELS": "false"
+  },
+  "overrides": null,
+  "generator_model": "fake/citation-alias-v1"
+}

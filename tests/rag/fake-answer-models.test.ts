@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, expect, test } from 'vitest';
 import type { LanguageModelV3, LanguageModelV3CallOptions, LanguageModelV3StreamPart } from '@ai-sdk/provider';
 import { ClaimCheckResultSchema, GoldenItemSchema, type GoldenItem } from '../../src/lib/rag-eval/contracts.generated';
@@ -10,7 +12,7 @@ import {
 } from '../../eval/harness/fake-answer-models.mts';
 import { FAKE_CITATION_GENERATOR_MODEL, fakeCitationAnswer } from '../../eval/harness/fake-citation-generator.mts';
 import { startFakeClaimsSidecar } from '../../eval/harness/fake-claims.mts';
-import { parseRunConfig, RunConfigError } from '../../eval/harness/run-config.mts';
+import { loadRunConfig, parseRunConfig, RunConfigError } from '../../eval/harness/run-config.mts';
 import { evalFakeLanguageModelFactory, resolveAnswerGenerator } from '../../eval/harness/run-eval.mts';
 
 const base = { review_status: 'approved', provenance: 'synthetic_fixture', split: 'dev', conversation: [] } as const;
@@ -435,5 +437,46 @@ describe('harness dispatch', () => {
     expect(fake.modelId).toBe(FAKE_CITATION_GENERATOR_MODEL);
     const answer = await fake.doGenerate(callOptions(sys, partialItem.question));
     expect(answer.content[0]).toMatchObject({ text: fakeCitationAnswer({ system: sys, question: partialItem.question }) });
+  });
+});
+
+describe('run configs', () => {
+  const RUNS = path.join(process.cwd(), 'eval/config/runs');
+  const RULE_SWITCHES = ['RAG_PARTIAL_ANSWER_RULE', 'RAG_CONTEXT_RELEVANCE_RULE', 'RAG_VERSION_LABELS', 'RAG_CITATION_PER_SENTENCE', 'RAG_CITATIONS'];
+  const load = (name: string) => loadRunConfig(path.join(RUNS, `${name}.json`));
+
+  test('all six Phase 5.2 configs load and name their generator', () => {
+    const expected: Record<string, string> = {
+      'p52-all-off': FAKE_CITATION_GENERATOR_MODEL,
+      'p52-rules-on': RULE_FOLLOWING,
+      'p52-violating-partial': 'fake/violating-partial-v1',
+      'p52-violating-versions': 'fake/violating-versions-v1',
+      'p52-violating-offtopic': 'fake/violating-offtopic-v1',
+      'p52-sec-output-guard': 'fake/repeating-injection-v1',
+    };
+    for (const [name, model] of Object.entries(expected)) {
+      const config = load(name);
+      expect(config.name).toBe(name);
+      expect(config.generatorModel, name).toBe(model);
+      expect(resolveAnswerGenerator({ generatorModel: model }).generator, name).toBe('fake');
+    }
+  });
+
+  test('all-off sets every Phase 5.2 switch to its pinned default', () => {
+    const pinned = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'eval/config/rag-eval-env.json'), 'utf8')) as Record<string, string>;
+    const config = load('p52-all-off');
+    expect(Object.keys(config.env)).toHaveLength(14);
+    for (const [key, value] of Object.entries(config.env)) expect(value, key).toBe(pinned[key]);
+  });
+
+  test('rules-on and each violating run set the same rule switches', () => {
+    const rulesOn = load('p52-rules-on').env;
+    for (const key of RULE_SWITCHES) expect(rulesOn[key], key).toBe('true');
+    for (const name of ['p52-violating-partial', 'p52-violating-versions', 'p52-violating-offtopic']) expect(load(name).env).toEqual(rulesOn);
+  });
+
+  test('the output-guard run is the recommended security configuration plus enforce, with security events off', () => {
+    const recommended = load('sec-recommended').env;
+    expect(load('p52-sec-output-guard').env).toEqual({ ...recommended, RAG_OUTPUT_GUARD: 'enforce', RAG_SECURITY_EVENTS: 'false' });
   });
 });

@@ -1,0 +1,13 @@
+{
+  "name": "p52-sec-output-guard",
+  "env": {
+    "RAG_CONTEXT_TAGGING": "true",
+    "RAG_INJECTION_CHECK": "drop",
+    "RAG_INJECTION_LAKERA": "false",
+    "RAG_INJECTION_PROMPT_GUARD": "false",
+    "RAG_OUTPUT_GUARD": "enforce",
+    "RAG_SECURITY_EVENTS": "false"
+  },
+  "overrides": null,
+  "generator_model": "fake/repeating-injection-v1"
+}
