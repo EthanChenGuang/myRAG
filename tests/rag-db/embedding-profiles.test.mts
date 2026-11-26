@@ -427,21 +427,40 @@ for (const mode of MODES) {
       }
     });
 
-    test('the unchanged activation gate refuses it without evidence and completeness', async () => {
+    test('the unchanged activation gate refuses it without completeness, then without evidence', async () => {
       const { db } = fixture;
-      await db.exec('SAVEPOINT bge_activate');
-      let message = 'accepted';
+      const attempt = async (): Promise<string> => {
+        await db.exec('SAVEPOINT bge_activate');
+        try {
+          await db.query('SELECT * FROM rag_activate_embedding_profile($1, $2)', [BGE_M3, 'operator-test']);
+          await db.exec('RELEASE SAVEPOINT bge_activate');
+          return 'accepted';
+        } catch (error) {
+          await db.exec('ROLLBACK TO SAVEPOINT bge_activate');
+          return error instanceof Error ? error.message : String(error);
+        }
+      };
+      await db.exec('BEGIN');
       try {
-        await db.query('SELECT * FROM rag_activate_embedding_profile($1, $2)', [BGE_M3, 'operator-test']);
-      } catch (error) {
-        message = error instanceof Error ? error.message : String(error);
+        assert.match(await attempt(), /activation_refused: incomplete/);
+        await db.query(
+          `INSERT INTO chunk_embeddings (chunk_id, profile_id, tenant_key, embedding, embedding_model, dims)
+           SELECT c.id, $1, c.tenant_key, array_fill(0.1::float4, ARRAY[1024])::halfvec, 'BAAI/bge-m3', 1024
+           FROM document_chunks c WHERE c.is_current AND c.status = 'ready'`,
+          [BGE_M3],
+        );
+        assert.match(await attempt(), /activation_refused: eval_missing/);
+        const status = await db.query<{ id: string; status: string }>(
+          "SELECT id, status FROM public.embedding_profiles WHERE id = $1 OR status = 'active' ORDER BY id",
+          [BGE_M3],
+        );
+        assert.deepEqual(status.rows, [
+          { id: BGE_M3, status: 'available' },
+          { id: LEGACY, status: 'active' },
+        ]);
       } finally {
-        await db.exec('ROLLBACK TO SAVEPOINT bge_activate');
+        await db.exec('ROLLBACK');
       }
-      assert.notEqual(message, 'accepted');
-      assert.match(message, /activation_refused|evidence|incomplete|refused/);
-      const status = await db.query<{ status: string }>('SELECT status FROM public.embedding_profiles WHERE id = $1', [BGE_M3]);
-      assert.equal(status.rows[0]?.status, 'available');
     });
 
     test('stores 1024-dimension vectors, refuses another length, and holds rows from two embedding hosts', async () => {
