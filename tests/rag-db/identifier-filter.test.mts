@@ -206,6 +206,47 @@ describe('identifier filter through runRetrieval (single-tenant, D-31, D-51)', (
     assert.equal(strict.identifierFilter?.resolved, 0);
   });
 
+  test('eval route, strict: refusal reason identifier_not_found and the identifier block with same-tenant suggestions (04.2-36)', async () => {
+    const { NextRequest } = await import('next/server');
+    const response = await withEnv(FILTER_ON, () =>
+      prepared.POST(
+        new NextRequest('http://localhost/api/internal/rag/run', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-rag-eval-secret': prepared.secret },
+          body: JSON.stringify({ schema_version: 1, query: 'What does entry KT-58217 say about the quandry settings?', rag_mode: 'strict', options: {} }),
+        }),
+      ),
+    );
+    assert.equal(response.status, 200);
+    const trace = (await response.json()) as { refused: boolean; refusal_reason: string | null; identifier?: Record<string, unknown>; kept: unknown[] };
+    assert.equal(trace.refused, true);
+    assert.equal(trace.refusal_reason, 'identifier_not_found');
+    assert.deepEqual(trace.kept, []);
+    const block = trace.identifier as { asked: number; resolved: number; fallback: boolean; near_miss_dropped: number; suggestions: string[] };
+    assert.equal(block.asked, 1);
+    assert.equal(block.resolved, 0);
+    assert.equal(typeof block.fallback, 'boolean');
+    assert.ok(block.suggestions.length >= 1 && block.suggestions.length <= 3, JSON.stringify(block.suggestions));
+    assert.ok(block.suggestions.includes(X), JSON.stringify(block.suggestions));
+  });
+
+  test('eval route, switch off: no identifier block and the refusal reason is unchanged (04.2-36)', async () => {
+    const { NextRequest } = await import('next/server');
+    const response = await withEnv(FILTER_OFF, () =>
+      prepared.POST(
+        new NextRequest('http://localhost/api/internal/rag/run', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-rag-eval-secret': prepared.secret },
+          body: JSON.stringify({ schema_version: 1, query: 'What does entry KT-58217 say about the quandry settings?', rag_mode: 'strict', options: {} }),
+        }),
+      ),
+    );
+    assert.equal(response.status, 200);
+    const trace = (await response.json()) as { refusal_reason: string | null; identifier?: unknown };
+    assert.equal(trace.identifier, undefined);
+    assert.notEqual(trace.refusal_reason, 'identifier_not_found');
+  });
+
   test('not found, balanced: near-miss chunks are dropped by the guard and the context carries the suggestion line', async () => {
     const balanced = await run('What does entry KT-58217 say about the quandry settings?', FILTER_ON, 'balanced');
     assert.notEqual(balanced.reason, 'identifier_not_found');
