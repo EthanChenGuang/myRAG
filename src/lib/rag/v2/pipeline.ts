@@ -28,7 +28,7 @@ import {
   type BindingEmbed,
   type BindingLegsPlan,
 } from './stages/binding-legs';
-import { buildSmallTalkResult, buildV2Result, fusedHitsToVoiceChunks, requestRetrievalConfigHash } from './result';
+import { buildCacheHitResult, buildSmallTalkResult, buildV2Result, fusedHitsToVoiceChunks, requestRetrievalConfigHash } from './result';
 import { buildRetrievalFilters } from '../query/filters';
 import { queryLanguage as detectQueryLanguage } from '../query/language';
 import type { RetrievalConfigHashQueryLayer } from './config-hash';
@@ -155,6 +155,18 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
     // D-10: small talk under the layer skips the search, rank and context groups; the model answers without KB context.
     if (query.queryLayer?.shortCircuit?.kind === 'small_talk') {
       return buildSmallTalkResult({ collector, profile, queryContext, queryLanguage, queryPlan });
+    }
+
+    // D-32: a cache hit skips the search, rank and context groups; the entry point streams the cached answer.
+    if (query.queryLayer?.shortCircuit?.kind === 'cache_hit' && query.queryLayer.cacheHit) {
+      return buildCacheHitResult({
+        collector,
+        queryContext,
+        queryLanguage,
+        queryPlan,
+        cacheHit: query.queryLayer.cacheHit,
+        ...(query.queryLayer.cacheTicket ? { retrievalConfigHash: query.queryLayer.cacheTicket.key.retrievalConfigHash } : {}),
+      });
     }
 
     // D-18: planned before the embed stage, so the binding map is known before anything reads the config hash.

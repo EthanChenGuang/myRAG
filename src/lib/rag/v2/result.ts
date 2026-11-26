@@ -15,7 +15,7 @@ import { describeReranker } from '../rerank/select';
 import { RERANK_TEXT_VERSION } from '../rerank/types';
 import type { TraceCollector } from '../trace/collector';
 import type { Candidate, InjectionSummary, Profile, RetrievalResult, RunRetrievalInput, StageRecord } from '../types';
-import type { CacheTicket } from '../cache/types';
+import type { CacheHit, CacheTicket } from '../cache/types';
 import type { TemporalQueryContext } from '../query/temporal-query-detector';
 import { isMultiTenant } from '@/lib/deployment-mode';
 import { getRagDeps } from '../deps';
@@ -152,6 +152,31 @@ export function buildSmallTalkResult(ctx: {
     refusal: null,
     queryLanguage: ctx.queryLanguage,
   };
+}
+
+/** D-32: a semantic-cache hit skips search, rank and context; ok with the cached answer for the entry point to stream. */
+export function buildCacheHitResult(ctx: {
+  collector: TraceCollector;
+  queryContext: TemporalQueryContext | null;
+  queryLanguage: string | null;
+  queryPlan: QueryPlan | null;
+  cacheHit: CacheHit;
+  retrievalConfigHash?: string;
+}): RetrievalResult {
+  const base = failure(ctx.collector, 'ok', 'cache_hit', ctx.queryContext);
+  return {
+    ...base,
+    ...(ctx.queryPlan ? { queryPlan: ctx.queryPlan } : {}),
+    ...(ctx.retrievalConfigHash ? { retrievalConfigHash: ctx.retrievalConfigHash } : {}),
+    cacheHit: ctx.cacheHit,
+    refusal: null,
+    queryLanguage: ctx.queryLanguage,
+  };
+}
+
+/** D-32: true only for the semantic-cache short-circuit. */
+export function isCacheHitResult(result: Pick<RetrievalResult, 'status' | 'reason' | 'cacheHit'> | null | undefined): boolean {
+  return result?.status === 'ok' && result.reason === 'cache_hit' && result.cacheHit !== undefined;
 }
 
 /** D-10: true only for the query layer's small-talk short-circuit, never for an ordinary ok result. */
