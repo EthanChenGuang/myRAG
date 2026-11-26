@@ -90,9 +90,9 @@ export function finishEmbedVote(sending: EmbedRatingState, previous: EmbedRating
 }
 
 const THUMB_CLASS =
-  'flex h-8 w-8 items-center justify-center rounded-lg text-gray-600 transition-colors motion-reduce:transition-none hover:bg-gray-200 touch-manipulation focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-900 disabled:cursor-wait';
+  'flex h-8 w-8 [@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11 items-center justify-center rounded-lg text-gray-600 transition-colors motion-reduce:transition-none hover:bg-gray-200 touch-manipulation [-webkit-tap-highlight-color:transparent] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-900 disabled:cursor-wait';
 const CHIP_CLASS =
-  'inline-flex min-h-8 items-center gap-1 rounded-2xl border bg-white px-2 py-1 text-xs text-gray-900 touch-manipulation focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-900 disabled:cursor-wait';
+  'inline-flex min-h-8 [@media(pointer:coarse)]:min-h-11 items-center gap-1 rounded-2xl border bg-white px-2 py-1 text-xs text-gray-900 transition-colors motion-reduce:transition-none hover:bg-gray-200 touch-manipulation [-webkit-tap-highlight-color:transparent] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-900 disabled:cursor-wait';
 
 export function EmbedRatingView(props: {
   state: EmbedRatingState;

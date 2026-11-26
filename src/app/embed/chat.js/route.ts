@@ -24,7 +24,7 @@ const RATING_ICON_PATHS = {
 // Every selector is scoped to the widget container so nothing reaches the host page (T-0511-60).
 const RATING_STYLE_TEXT = [
   '#myrag-widget-container .myrag-fb { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 8px; }',
-  '#myrag-widget-container .myrag-fb-btn { width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 8px; background: transparent; color: #666; cursor: pointer; padding: 0; margin: 0; font: inherit; touch-action: manipulation; transition: background-color 150ms; }',
+  '#myrag-widget-container .myrag-fb-btn { width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 8px; background: transparent; color: #666; cursor: pointer; padding: 0; margin: 0; font: inherit; touch-action: manipulation; -webkit-tap-highlight-color: transparent; transition: background-color 150ms; }',
   '#myrag-widget-container .myrag-fb-btn:hover:not(:disabled) { background: #eee; }',
   '#myrag-widget-container .myrag-fb-btn[aria-pressed="true"] { color: #333; }',
   '#myrag-widget-container .myrag-fb-btn[aria-pressed="true"] svg { fill: currentColor; }',
@@ -33,10 +33,12 @@ const RATING_STYLE_TEXT = [
   '#myrag-widget-container .myrag-fb-status.myrag-fb-status-error { color: #B91C1C; }',
   '#myrag-widget-container .myrag-fb-reasons { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }',
   '#myrag-widget-container .myrag-fb-legend { flex-basis: 100%; font-size: 12px; line-height: 16px; color: #666; }',
-  '#myrag-widget-container .myrag-fb-chip { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 4px 8px; border: 1px solid #ddd; border-radius: 16px; background: #fff; color: #333; font: inherit; font-size: 12px; line-height: 16px; cursor: pointer; margin: 0; touch-action: manipulation; }',
+  '#myrag-widget-container .myrag-fb-chip { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 4px 8px; border: 1px solid #ddd; border-radius: 16px; background: #fff; color: #333; font: inherit; font-size: 12px; line-height: 16px; cursor: pointer; margin: 0; touch-action: manipulation; -webkit-tap-highlight-color: transparent; transition: background-color 150ms; }',
+  '#myrag-widget-container .myrag-fb-chip:hover:not(:disabled) { background: #eee; }',
   '#myrag-widget-container .myrag-fb-chip[aria-pressed="true"] { border-color: #333; }',
   '#myrag-widget-container .myrag-fb-btn:focus-visible, #myrag-widget-container .myrag-fb-chip:focus-visible { outline: 2px solid #333; outline-offset: 2px; }',
-  '@media (prefers-reduced-motion: reduce) { #myrag-widget-container .myrag-fb-btn { transition: none; } }',
+  '@media (pointer: coarse) { #myrag-widget-container .myrag-fb-btn { width: 44px; height: 44px; } #myrag-widget-container .myrag-fb-chip { min-height: 44px; } }',
+  '@media (prefers-reduced-motion: reduce) { #myrag-widget-container .myrag-fb-btn, #myrag-widget-container .myrag-fb-chip { transition: none; } }',
 ].join(' ');
 
 // Read embed color with fallback for dev and production
