@@ -309,14 +309,27 @@ describe('the re-recorded ingest baseline (T-03.1-104)', () => {
       .map((line) => JSON.parse(line) as { id: string })
       .filter((item) => /^[a-z]+-(colloquial|no_answer)-term-\d{3}$/.test(item.id))
       .map((item) => item.id);
+    // Plan 05.2-29 added the partial_answer, stale_version and off_topic_context items and 12 link-injection
+    // injection_evasive items (tag link_injection) to golden.jsonl.
+    const phase52Rows = fs
+      .readFileSync(path.join(ROOT, 'eval/fixtures/golden.jsonl'), 'utf8')
+      .split('\n')
+      .filter((line) => line.trim() !== '')
+      .map((line) => JSON.parse(line) as { id: string; category: string; tags?: string[] });
+    const linkIds = phase52Rows.filter((item) => (item.tags ?? []).includes('link_injection')).map((item) => item.id);
+    const phase52Ids = phase52Rows
+      .filter((item) => ['partial_answer', 'stale_version', 'off_topic_context'].includes(item.category))
+      .map((item) => item.id);
     const added = Object.keys(current.items).filter((id) => !(id in previous.items)).sort();
     assert.ok(parseIds.length >= 30);
+    assert.equal(linkIds.length, 12);
+    assert.equal(phase52Ids.length, 36);
     assert.equal(phase6Ids.length, 38);
     assert.equal(cachePairIds.length, 27);
-    assert.equal(injectionIds.length, 18);
+    assert.equal(injectionIds.length, 18 + linkIds.length);
     assert.equal(tableSplitIds.length, 15);
     assert.equal(termIds.length, 18);
-    assert.deepEqual(added, [...parseIds, ...injectionIds, ...tableSplitIds, ...phase6Ids, ...cachePairIds, ...termIds].sort());
+    assert.deepEqual(added, [...parseIds, ...injectionIds, ...tableSplitIds, ...phase6Ids, ...cachePairIds, ...termIds, ...phase52Ids].sort());
     assert.notEqual(current.corpus_sha256, previous.corpus_sha256, 'the parse fixtures are part of the ingest corpus hash');
   });
 });
