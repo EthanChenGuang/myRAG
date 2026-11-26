@@ -77,7 +77,7 @@ const VERSIONS_DATES_LABELS = {
     'applyDates.bodyExpired': 'The document ended on {date}. It will no longer be used for answers.',
     'dates.applied': 'Dates saved: {file}.',
     'dates.dismissed': 'Dates dismissed: {file}. The document stays in use.',
-    'dates.order': '"From" must not be later than "To".',
+    'dates.order': '“From” must not be later than “To”.',
     'dates.off': 'Effective dates are stored and can be edited, but they do not limit answers while RAG_EFFECTIVE_DATES is off.',
     'dates.empty.title': 'No dates to confirm',
     'dates.empty.body': 'Extracted dates that would take a document out of today\'s answers wait here for your decision.',
@@ -102,6 +102,7 @@ const VERSIONS_DATES_LABELS = {
     'warn.datesNeedV2': 'This filter applies in the v2 retrieval pipeline only. The pipeline is set to legacy under RAG Modes.',
     'candidates.loaded': 'Possible older versions: {count}',
     'dates.loaded': 'Dates to confirm: {count}',
+    'loaded.both': '{versions}. {dates}.',
     'dates.loading': 'Loading dates…',
     'candidate.stale': 'One of these documents changed after this was found. Check both before you decide.',
     'doc.unavailable': 'This document is no longer available.',
@@ -125,6 +126,7 @@ const VERSIONS_DATES_LABELS = {
     'action.applying': 'Applying…',
     'action.savingDates': 'Saving…',
     'action.loadMoreVersions': 'Load more versions',
+    'action.cancelEdit': 'Cancel editing',
     'action.loadMoreDates': 'Load more dates',
     'confirmed.caption': 'Confirmed replacements',
     'confirmed.col.actions': 'Actions',
@@ -234,6 +236,7 @@ const VERSIONS_DATES_LABELS = {
     'warn.datesNeedV2': '此过滤仅在 v2 检索流程中生效。“RAG 模式”中的流程目前为 legacy。',
     'candidates.loaded': '可能的旧版本：{count}',
     'dates.loaded': '日期待确认：{count}',
+    'loaded.both': '{versions}。{dates}。',
     'dates.loading': '正在加载日期…',
     'candidate.stale': '发现此项后，其中一份文档已有变化。请先核对两份文档再决定。',
     'doc.unavailable': '此文档已不可用。',
@@ -257,6 +260,7 @@ const VERSIONS_DATES_LABELS = {
     'action.applying': '正在应用…',
     'action.savingDates': '正在保存…',
     'action.loadMoreVersions': '加载更多版本',
+    'action.cancelEdit': '取消编辑',
     'action.loadMoreDates': '加载更多日期',
     'confirmed.caption': '已确认的替换',
     'confirmed.col.actions': '操作',
@@ -366,6 +370,7 @@ const VERSIONS_DATES_LABELS = {
     'warn.datesNeedV2': 'Questo filtro si applica solo nella pipeline di recupero v2. In RAG Modes la pipeline è impostata su legacy.',
     'candidates.loaded': 'Possibili versioni precedenti: {count}',
     'dates.loaded': 'Date da confermare: {count}',
+    'loaded.both': '{versions}. {dates}.',
     'dates.loading': 'Caricamento delle date…',
     'candidate.stale': 'Uno dei due documenti è cambiato dopo la segnalazione. Controllali entrambi prima di decidere.',
     'doc.unavailable': 'Questo documento non è più disponibile.',
@@ -389,6 +394,7 @@ const VERSIONS_DATES_LABELS = {
     'action.applying': 'Applicazione in corso…',
     'action.savingDates': 'Salvataggio in corso…',
     'action.loadMoreVersions': 'Carica altre versioni',
+    'action.cancelEdit': 'Annulla modifica',
     'action.loadMoreDates': 'Carica altre date',
     'confirmed.caption': 'Sostituzioni confermate',
     'confirmed.col.actions': 'Azioni',
@@ -729,6 +735,7 @@ class VersionsDatesPanel {
       ],
       selected: 'candidates',
     });
+    for (const tab of Array.from(this.tabs.tablist.querySelectorAll('[role="tab"]'))) tab.classList.add('h-auto', 'min-h-8', 'py-1', 'leading-snug', 'text-balance');
     this.supHost = this.el('div', { className: 'min-w-0' });
     this.datesHost = this.el('div', { className: 'min-w-0' });
     this.tabs.panels.candidates.appendChild(this.supHost);
@@ -751,13 +758,26 @@ class VersionsDatesPanel {
     }
     this.bindWorkspace();
     this.renderAlerts();
-    await Promise.all([this.loadCandidates('first'), this.loadDates('first')]);
+    await this.loadBoth('first');
   }
 
   async refresh() {
     this.readWorkspace();
     this.renderAlerts();
-    await Promise.all([this.loadCandidates('refresh'), this.loadDates('refresh')]);
+    await this.loadBoth('panel');
+  }
+
+  /** Loads both lists and announces their counts once, so one load does not overwrite the other's announcement. */
+  async loadBoth(source) {
+    await Promise.all([this.loadCandidates(source), this.loadDates(source)]);
+    if (!this.sup || !this.dates || this.supAlert || this.datesAlert) return;
+    const ui = this.ui();
+    this.announce(
+      this.t('loaded.both', {
+        versions: this.t('candidates.loaded', { count: ui.ragUiFormatNumber(this.sup.candidates.length, this.locale) }),
+        dates: this.t('dates.loaded', { count: ui.ragUiFormatNumber(this.awaitingCount || 0, this.locale) }),
+      }),
+    );
   }
 
   /** zh and it through data-rag-i18n; English is the static markup (UI-SPEC 6.3). */
@@ -802,7 +822,7 @@ class VersionsDatesPanel {
       this.awaitingCount = null;
       this.datesQuery = '';
       this.datesToolbar = null;
-      await Promise.all([this.loadCandidates('first'), this.loadDates('first')]);
+      await this.loadBoth('first');
     });
   }
 
@@ -953,7 +973,7 @@ class VersionsDatesPanel {
       this.supAlert = null;
       this.renderAlerts();
       this.renderCandidates();
-      if (source === 'first' || source === 'refresh') this.announce(this.t('candidates.loaded', { count: ui.ragUiFormatNumber(view.candidates.length, this.locale) }));
+      if (source === 'refresh') this.announce(this.t('candidates.loaded', { count: ui.ragUiFormatNumber(view.candidates.length, this.locale) }));
       return;
     }
     const failure = this.loadFailure(result, this.supHost, hadContent);
@@ -996,10 +1016,15 @@ class VersionsDatesPanel {
     const ui = this.ui();
     const article = this.el('article', { className: 'border border-base-300 rounded-lg p-4 mb-4 min-w-0' });
     article.appendChild(this.el('h4', { className: 'text-base font-semibold mb-2 break-words text-balance', text: candidate.title }));
-    article.appendChild(ui.ragUiHoldLine(this.doc, { tone: 'info', icon: 'files', word: this.t('status.bothCurrent'), reason: this.t('hold.candidate') }));
-    const signals = this.el('div', { className: 'flex flex-wrap items-start gap-2 mt-2' });
+    article.appendChild(
+      this.el('div', { className: 'flex flex-wrap items-center gap-2 min-w-0' }, [
+        versionsDatesBadge(this.doc, 'info', 'files', this.t('status.bothCurrent')),
+        this.el('span', { className: 'text-sm min-w-0 break-words', text: this.t('hold.candidate') }),
+      ]),
+    );
+    const signals = this.el('div', { className: 'flex flex-col sm:flex-row items-start gap-2 mt-2 min-w-0' });
     if (candidate.origin) signals.appendChild(this.el('span', { className: 'badge badge-outline badge-sm gap-1 shrink-0 whitespace-nowrap' }, [ui.ragUiIcon(this.doc, VERSIONS_DATES_ORIGINS[candidate.origin]), this.el('span', { text: this.t('origin.' + candidate.origin) })]));
-    const lines = this.el('ul', { className: 'text-sm min-w-0 flex-1 space-y-1' });
+    const lines = this.el('ul', { className: 'text-sm min-w-0 sm:flex-1 space-y-1' });
     for (const signal of candidate.signals) {
       if (signal.key === 'signal.other') lines.appendChild(this.el('li', {}, [ui.ragUiCodeSentence(this.doc, this.locale, signal.code, this.t('signal.other'))]));
       else lines.appendChild(this.el('li', { text: this.t(signal.key) }));
@@ -1044,17 +1069,17 @@ class VersionsDatesPanel {
       section.appendChild(this.el('p', { className: 'text-sm', text: this.t('doc.unavailable') }));
       return section;
     }
-    const dl = this.el('dl', { className: 'grid grid-cols-[minmax(0,8rem)_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm' });
+    const dl = this.el('dl', { className: 'grid grid-cols-1 sm:grid-cols-[minmax(0,8rem)_minmax(0,1fr)] gap-x-3 sm:gap-y-1 text-sm' });
     const row = (label, value) => {
-      dl.appendChild(this.el('dt', { className: 'text-base-content/70', text: label }));
-      dl.appendChild(this.el('dd', { className: 'min-w-0 break-words' }, Array.isArray(value) ? value : [value]));
+      dl.appendChild(this.el('dt', { className: 'text-xs sm:text-sm text-base-content/70', text: label }));
+      dl.appendChild(this.el('dd', { className: 'min-w-0 break-words mb-2 sm:mb-0' }, Array.isArray(value) ? value : [value]));
     };
-    row(this.t('row.file'), this.el('span', { className: 'font-medium break-all', text: view.file }));
+    row(this.t('row.file'), this.el('span', { className: 'font-medium break-words [overflow-wrap:anywhere]', text: view.file }));
     row(this.t('row.docType'), view.docTypeLabel ? this.el('span', { text: view.docTypeLabel }) : this.missing('date.none'));
     row(this.t('row.docDate'), this.dayNode(view.docDate));
     row(this.t('row.effective'), this.effectiveNodes(view.from, view.to));
     const uploaded = [this.timeNode(view.uploadedAt)];
-    if (view.uploader) uploaded.push(' ', this.el('span', { className: 'break-all', text: this.t('doc.uploadedBy', { name: view.uploader }) }));
+    if (view.uploader) uploaded.push(' ', this.el('span', { className: 'break-words [overflow-wrap:anywhere]', text: this.t('doc.uploadedBy', { name: view.uploader }) }));
     row(this.t('row.uploaded'), uploaded);
     section.appendChild(dl);
     return section;
@@ -1093,7 +1118,7 @@ class VersionsDatesPanel {
         this.focus(this.doc.getElementById(id));
       });
       fieldset.appendChild(
-        this.el('div', { className: 'flex items-center gap-2 py-1 min-w-0' }, [input, this.el('label', { className: 'text-sm break-all cursor-pointer', text: view.file, attrs: { for: id } })]),
+        this.el('label', { className: 'flex items-center gap-3 py-2 min-w-0 cursor-pointer', attrs: { for: id } }, [input, this.el('span', { className: 'text-sm break-words [overflow-wrap:anywhere]', text: view.file })]),
       );
     }
     if (!chosen) fieldset.appendChild(this.el('p', { className: 'text-sm text-base-content/70 mt-1', id: reasonId, text: this.t('candidate.pickFirst') }));
@@ -1181,7 +1206,7 @@ class VersionsDatesPanel {
   renderLinkRow(link) {
     const name = (view) => (view ? view.file : this.t('doc.unavailable'));
     const when = [this.timeNode(link.decidedAt)];
-    if (link.decidedBy) when.push(' ', this.el('span', { className: 'break-all', text: this.t('confirmed.by', { name: link.decidedBy }) }));
+    if (link.decidedBy) when.push(' ', this.el('span', { className: 'break-words [overflow-wrap:anywhere]', text: this.t('confirmed.by', { name: link.decidedBy }) }));
     const undo = this.actionButton(this.t('action.undo'), this.t('action.undoAria', { file: name(link.older) }));
     undo.addEventListener('click', () => this.undoLink(link, undo));
     return this.el('tr', {}, [
@@ -1247,7 +1272,7 @@ class VersionsDatesPanel {
       this.datesAlert = null;
       this.renderAlerts();
       this.renderDates();
-      if (source === 'first' || source === 'refresh') this.announce(this.t('dates.loaded', { count: ui.ragUiFormatNumber(this.awaitingCount || 0, this.locale) }));
+      if (source === 'refresh') this.announce(this.t('dates.loaded', { count: ui.ragUiFormatNumber(this.awaitingCount || 0, this.locale) }));
       return;
     }
     const failure = this.loadFailure(result, this.datesHost, hadContent);
@@ -1287,7 +1312,7 @@ class VersionsDatesPanel {
         this.editor = null;
         this.renderDates();
       });
-      filters.appendChild(this.el('div', { className: 'flex items-center gap-2' }, [input, this.el('label', { className: 'text-sm cursor-pointer', text: this.t(key), attrs: { for: id } })]));
+      filters.appendChild(this.el('label', { className: 'flex items-center gap-2 py-1 cursor-pointer', attrs: { for: id } }, [input, this.el('span', { className: 'text-sm', text: this.t(key) })]));
     }
     const searchId = 'rag-versions-dates-search';
     const search = this.el('input', {
@@ -1366,9 +1391,9 @@ class VersionsDatesPanel {
   }
 
   renderDatesTable(rows) {
-    const table = this.el('table', { className: 'table table-sm' }, [
+    const table = this.el('table', { className: 'table table-sm block md:table' }, [
       this.el('caption', { className: 'sr-only', text: this.t('dates.caption') }),
-      this.el('thead', {}, [
+      this.el('thead', { className: 'hidden md:table-header-group' }, [
         this.el('tr', {}, [
           this.th(this.t('row.file')),
           this.th(this.t('dates.col.from')),
@@ -1379,13 +1404,13 @@ class VersionsDatesPanel {
         ]),
       ]),
     ]);
-    const body = this.el('tbody');
+    const body = this.el('tbody', { className: 'block md:table-row-group' });
     for (const row of rows) {
       body.appendChild(this.renderDateRow(row));
       if (row.quote) {
         body.appendChild(
-          this.el('tr', {}, [
-            this.el('td', { attrs: { colspan: '6' } }, [this.ui().ragUiEvidence(this.doc, { tone: 'quote', caption: this.t('dates.quote'), text: row.quote, locale: this.locale })]),
+          this.el('tr', { className: 'block md:table-row' }, [
+            this.el('td', { className: 'block md:table-cell pt-0', attrs: { colspan: '6' } }, [this.quoteBlock(row.quote)]),
           ]),
         );
       }
@@ -1393,6 +1418,13 @@ class VersionsDatesPanel {
     }
     table.appendChild(body);
     return table;
+  }
+
+  /** The inert evidence block (tone quote). DaisyUI centres figure content inside a card, so the block is set back to block layout. */
+  quoteBlock(text) {
+    const figure = this.ui().ragUiEvidence(this.doc, { tone: 'quote', caption: this.t('dates.quote'), text, locale: this.locale });
+    figure.classList.add('!block');
+    return figure;
   }
 
   confidenceText(value) {
@@ -1414,7 +1446,7 @@ class VersionsDatesPanel {
   renderDateRow(row) {
     const confidence = row.confidence === null ? this.missing('date.none') : this.el('span', { className: 'tabular-nums', text: this.confidenceText(row.confidence) });
     const effect = row.effect;
-    const actions = this.el('div', { className: 'flex flex-col md:flex-row md:flex-wrap gap-2' });
+    const actions = this.el('div', { className: 'flex flex-col md:flex-row md:flex-wrap lg:flex-nowrap gap-2' });
     const buttons = [];
     let apply = null;
     if (row.proposal) {
@@ -1433,16 +1465,22 @@ class VersionsDatesPanel {
     if (dismiss) dismiss.addEventListener('click', () => this.dismissDates(row, dismiss, buttons.filter((b) => b !== dismiss)));
     for (const b of buttons) actions.appendChild(b);
     const badge = this.stateBadge(row);
-    return this.el('tr', {}, [
-      this.el('th', { className: 'font-normal min-w-[10rem]', attrs: { scope: 'row' } }, [
-        this.el('span', { className: 'block font-medium break-all', text: row.file }),
+    const cell = 'block md:table-cell py-1 md:py-2';
+    const label = (key) => this.el('span', { className: 'md:hidden text-xs text-base-content/70 mr-1', text: this.t(key) + ':' });
+    return this.el('tr', { className: 'block md:table-row border-t border-base-300 md:border-t-0 py-2 md:py-0' }, [
+      this.el('th', { className: cell + ' font-normal md:min-w-[10rem]', attrs: { scope: 'row' } }, [
+        this.el('span', { className: 'block font-medium break-words [overflow-wrap:anywhere]', text: row.file }),
         badge ? this.el('span', { className: 'block mt-1' }, [badge]) : null,
       ]),
-      this.el('td', {}, [this.dayNode(row.window.from, 'date.noStart'), row.confidence === null ? null : this.el('span', { className: 'block text-xs text-base-content/70 lg:hidden tabular-nums', text: this.t('dates.col.confidence') + ': ' + this.confidenceText(row.confidence) })]),
-      this.el('td', {}, [this.dayNode(row.window.to, 'date.noEnd')]),
+      this.el('td', { className: cell }, [
+        label('dates.col.from'),
+        this.dayNode(row.window.from, 'date.noStart'),
+        row.confidence === null ? null : this.el('span', { className: 'block text-xs text-base-content/70 lg:hidden tabular-nums', text: this.t('dates.col.confidence') + ': ' + this.confidenceText(row.confidence) }),
+      ]),
+      this.el('td', { className: cell }, [label('dates.col.to'), this.dayNode(row.window.to, 'date.noEnd')]),
       this.el('td', { className: 'hidden lg:table-cell' }, [confidence]),
-      this.el('td', { className: 'min-w-[10rem]' }, this.effectNodes(effect)),
-      this.el('td', {}, [actions]),
+      this.el('td', { className: cell + ' md:min-w-[10rem]' }, [label('dates.col.effect'), ...this.effectNodes(effect)]),
+      this.el('td', { className: cell + ' pt-2' }, [actions]),
     ]);
   }
 
@@ -1571,7 +1609,7 @@ class VersionsDatesPanel {
     save.addEventListener('click', () => this.saveEditor(row, save, cancel));
     cancel.addEventListener('click', () => this.closeEditor(row));
     const fieldset = this.el('fieldset', { className: 'min-w-0' }, [
-      this.el('legend', { className: 'text-sm font-semibold mb-2 break-all', text: this.t('dates.editLegend', { file: row.file }) }),
+      this.el('legend', { className: 'text-sm font-semibold mb-2 break-words [overflow-wrap:anywhere]', text: this.t('dates.editLegend', { file: row.file }) }),
       this.el('div', { className: 'grid gap-3 md:grid-cols-2 max-w-xl' }, [field('from', this.t('dates.col.from')), field('to', this.t('dates.col.to'))]),
       this.el('p', { className: 'text-xs text-base-content/70 mt-2', id: ids.hint, text: this.t('dates.clearHint') }),
       this.el('p', { className: 'text-sm text-error mt-2', id: ids.order, text: orderError ? this.t('dates.order') : '', attrs: { 'data-versions-dates-order': '' } }),
@@ -1584,7 +1622,7 @@ class VersionsDatesPanel {
         this.closeEditor(row);
       }
     });
-    return this.el('tr', { attrs: { 'data-versions-dates-editor': row.id } }, [this.el('td', { attrs: { colspan: '6' } }, [fieldset])]);
+    return this.el('tr', { className: 'block md:table-row', attrs: { 'data-versions-dates-editor': row.id } }, [this.el('td', { className: 'block md:table-cell', attrs: { colspan: '6' } }, [fieldset])]);
   }
 
   /** Updates the order finding and Save dates in place, so typing keeps the focus in the date field. */

@@ -703,7 +703,7 @@ describe('Effective dates', () => {
     to.value = '2026-12-01';
     to.dispatch('input');
     await flush();
-    expect(panel.textContent).toContain('"From" must not be later than "To".');
+    expect(panel.textContent).toContain('“From” must not be later than “To”.');
     expect(button(panel, 'Save dates').disabled).toBe(true);
     expect(to.getAttribute('aria-invalid')).toBe('true');
     expect(to.getAttribute('min')).toBe('2026-12-10');
@@ -729,6 +729,29 @@ describe('Effective dates', () => {
     expect(page.calls('setDates').at(-1)!.body).toEqual({ from: null, to: null });
   });
 
+  it('Cancel editing closes the editor without a request and returns focus to Edit dates', async () => {
+    const page = await openDates();
+    const panel = page.panel('dates');
+    button(panel, 'Edit dates').click();
+    await flush();
+    button(panel, 'Cancel editing').click();
+    await flush();
+    expect(panel.querySelectorAll('input').filter((i) => i.getAttribute('type') === 'date')).toHaveLength(0);
+    expect(page.calls('setDates')).toHaveLength(0);
+    expect(page.doc.activeElement!.textContent).toBe('Edit dates');
+  });
+
+  it('every label a view can show exists in the panel table or the shared one', () => {
+    const source = fs.readFileSync(path.join(configUiDir, 'rag-panels/versions-dates.js'), 'utf8');
+    const keys = new Set([...source.matchAll(/this\.t\('([\w.]+)'/g)].map((m) => m[1]!));
+    for (const origin of ['detected', 'uploader', 'answer_conflict']) keys.add('origin.' + origin);
+    for (const key of keys) {
+      if (key.endsWith('.')) continue;
+      const text = mod.versionsDatesLabel(key, 'en');
+      expect(text, key).not.toBe(key);
+    }
+  });
+
   it('a 400 from the server is shown at the date fields and the editor stays open', async () => {
     const page = await openDates({ replies: { setDates: { status: 400, body: { success: false, error: 'invalid_window' } } } });
     const panel = page.panel('dates');
@@ -740,7 +763,7 @@ describe('Effective dates', () => {
     button(panel, 'Save dates').click();
     await flush();
     expect(panel.querySelectorAll('input').filter((i) => i.getAttribute('type') === 'date')).toHaveLength(2);
-    expect(panel.textContent).toContain('"From" must not be later than "To".');
+    expect(panel.textContent).toContain('“From” must not be later than “To”.');
   });
 
   it('with RAG_EFFECTIVE_DATES off the dates-off alert stands above the table', async () => {
