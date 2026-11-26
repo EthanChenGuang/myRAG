@@ -41,6 +41,7 @@ const DEFAULTS: IngestConfig = {
   hiddenTextCheck: 'off',
   ingestLinkCheck: 'off',
   outputLinkAllowlist: '',
+  siteUrl: '',
   uploadApproval: 'off',
   scopeTags: false,
   scopeTagSuggest: false,

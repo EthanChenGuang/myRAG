@@ -287,3 +287,102 @@ export function enrichChunkWithURLs(chunkContent: string, existingMetadata: any 
     url_categories: [...new Set(urlMetadata.urls.map(u => u.category))],
   };
 }
+
+/** Detection rules of the ingestion link check (config/rag/link-rules.json), passed in as data. */
+export interface LinkExtractionRules {
+  url_schemes: readonly string[];
+  www_prefix: boolean;
+  bare_host_lowercase_last_label: boolean;
+  bare_host_last_labels: readonly string[];
+  never_domain_extensions: readonly string[];
+}
+
+export interface LinkCandidate {
+  kind: 'url' | 'domain' | 'email';
+  /** The matched text: a URL with its scheme, a host, or an e-mail address. */
+  value: string;
+}
+
+const LABEL = '[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?';
+const IDEOGRAPH = /[㐀-鿿豈-﫿]/;
+const CLOSERS: Record<string, string> = { ')': '(', ']': '[', '}': '{', '>': '<' };
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Drops trailing sentence punctuation and unbalanced closing brackets; a path is cut at the first ideograph (CJK text after a link). */
+function trimUrl(raw: string): string {
+  let url = raw;
+  const schemeEnd = url.indexOf('://') + 3;
+  const pathStart = url.slice(schemeEnd).search(/[/?#]/);
+  if (pathStart >= 0) {
+    const rest = url.slice(schemeEnd + pathStart);
+    const cut = rest.search(IDEOGRAPH);
+    if (cut >= 0) url = url.slice(0, schemeEnd + pathStart + cut);
+  }
+  for (;;) {
+    const last = url.at(-1) ?? '';
+    if ('.,;:!?\'"*_'.includes(last) && url.length > schemeEnd) {
+      url = url.slice(0, -1);
+      continue;
+    }
+    const opener = CLOSERS[last];
+    if (opener !== undefined && url.split(opener).length <= url.split(last).length - 1) {
+      url = url.slice(0, -1);
+      continue;
+    }
+    return url;
+  }
+}
+
+/**
+ * Every URL, bare domain and e-mail address in a text, in order of appearance, for the ingestion link check (D-35). Unlike extractURLs it
+ * also finds bare hosts and addresses; a bare host counts only when its last label is listed in the rules and is not a file extension, so
+ * file names, version and section numbers and abbreviations are not domains. Nothing is fetched or resolved.
+ */
+export function extractLinkCandidates(text: string, rules: LinkExtractionRules): LinkCandidate[] {
+  const found: Array<LinkCandidate & { at: number }> = [];
+  let masked = text;
+  const mask = (start: number, length: number) => {
+    masked = masked.slice(0, start) + ' '.repeat(length) + masked.slice(start + length);
+  };
+
+  if (rules.url_schemes.length > 0) {
+    const schemes = rules.url_schemes.map(escapeRegExp).join('|');
+    const urlPattern = new RegExp(`(?<![A-Za-z0-9+.-])(?:${schemes}):\\/\\/[^\\s<>"'\`\\u3000-\\u303f\\uff00-\\uffef]+`, 'gi');
+    for (const match of text.matchAll(urlPattern)) {
+      const value = trimUrl(match[0]);
+      if (!/:\/\/[^/?#\s]/.test(value)) continue;
+      found.push({ kind: 'url', value, at: match.index });
+      mask(match.index, match[0].length);
+    }
+  }
+
+  const emailPattern = new RegExp(`(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@((?:${LABEL}\\.)+[A-Za-z]{2,63})(?![A-Za-z0-9-])`, 'g');
+  for (const match of masked.matchAll(emailPattern)) {
+    found.push({ kind: 'email', value: match[0], at: match.index });
+    mask(match.index, match[0].length);
+  }
+
+  if (rules.www_prefix) {
+    const wwwPattern = new RegExp(`(?<![A-Za-z0-9.@/\\\\-])www\\.(?:${LABEL}\\.)+[A-Za-z]{2,63}(?![A-Za-z0-9-]|\\.[A-Za-z0-9])`, 'gi');
+    for (const match of masked.matchAll(wwwPattern)) {
+      found.push({ kind: 'domain', value: match[0], at: match.index });
+      mask(match.index, match[0].length);
+    }
+  }
+
+  const lastLabels = new Set(rules.bare_host_last_labels.map((label) => label.toLowerCase()));
+  const extensions = new Set(rules.never_domain_extensions.map((extension) => extension.toLowerCase()));
+  const barePattern = new RegExp(`(?<![A-Za-z0-9@._/\\\\-])(?:${LABEL}\\.)+([A-Za-z]{2,63})(?![A-Za-z0-9-]|\\.[A-Za-z0-9])`, 'g');
+  for (const match of masked.matchAll(barePattern)) {
+    const last = match[1] ?? '';
+    if (rules.bare_host_lowercase_last_label && last !== last.toLowerCase()) continue;
+    const lower = last.toLowerCase();
+    if (!lastLabels.has(lower) || extensions.has(lower)) continue;
+    found.push({ kind: 'domain', value: match[0], at: match.index });
+  }
+
+  return found.sort((a, b) => a.at - b.at).map(({ kind, value }) => ({ kind, value }));
+}

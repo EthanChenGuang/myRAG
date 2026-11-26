@@ -35,6 +35,7 @@ export interface IngestEnvInput {
   RAG_HIDDEN_TEXT_CHECK?: string;
   RAG_INGEST_LINK_CHECK?: string;
   RAG_OUTPUT_LINK_ALLOWLIST?: string;
+  NEXT_PUBLIC_SITE_URL?: string;
   RAG_UPLOAD_APPROVAL?: string;
   RAG_SCOPE_TAGS?: string;
   RAG_SCOPE_TAG_SUGGEST?: string;
@@ -68,6 +69,8 @@ export interface IngestConfig {
   ingestLinkCheck: IngestCheckMode;
   /** Raw comma-separated domains; the link check parses it. */
   outputLinkAllowlist: string;
+  /** NEXT_PUBLIC_SITE_URL: its host is always on the link allowlist. */
+  siteUrl: string;
   uploadApproval: UploadApprovalMode;
   scopeTags: boolean;
   scopeTagSuggest: boolean;
@@ -102,6 +105,7 @@ const ENV_NAMES = [
   'RAG_HIDDEN_TEXT_CHECK',
   'RAG_INGEST_LINK_CHECK',
   'RAG_OUTPUT_LINK_ALLOWLIST',
+  'NEXT_PUBLIC_SITE_URL',
   'RAG_UPLOAD_APPROVAL',
   'RAG_SCOPE_TAGS',
   'RAG_SCOPE_TAG_SUGGEST',
@@ -233,6 +237,7 @@ export function loadIngestConfig(env: IngestEnvInput): IngestConfig {
     hiddenTextCheck: parseChoice('RAG_HIDDEN_TEXT_CHECK', env.RAG_HIDDEN_TEXT_CHECK, ['off', 'flag', 'quarantine'], 'off', warnings),
     ingestLinkCheck: parseChoice('RAG_INGEST_LINK_CHECK', env.RAG_INGEST_LINK_CHECK, ['off', 'flag', 'quarantine'], 'off', warnings),
     outputLinkAllowlist: (env.RAG_OUTPUT_LINK_ALLOWLIST ?? '').trim(),
+    siteUrl: (env.NEXT_PUBLIC_SITE_URL ?? '').trim(),
     uploadApproval: parseChoice('RAG_UPLOAD_APPROVAL', env.RAG_UPLOAD_APPROVAL, ['off', 'members', 'all'], 'off', warnings),
     scopeTags: parseFlag('RAG_SCOPE_TAGS', env.RAG_SCOPE_TAGS, warnings),
     scopeTagSuggest: parseFlag('RAG_SCOPE_TAG_SUGGEST', env.RAG_SCOPE_TAG_SUGGEST, warnings),
