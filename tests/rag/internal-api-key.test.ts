@@ -33,6 +33,10 @@ interface VoiceRoute {
 const LOADERS = {
   'voice-chat': () => import('@/app/api/internal/voice-chat/route'),
   'voice-rag': () => import('@/app/api/internal/voice-rag/route'),
+  'voice-timing': () => import('@/app/api/internal/voice-timing/route'),
+};
+const BODIES: Record<string, unknown> = {
+  'voice-timing': { traceId: '0123456789abcdef0123456789abcdef', ttft_ms: 500, pre_generation_ms: 200 },
 };
 const ROUTES = Object.keys(LOADERS) as Array<keyof typeof LOADERS>;
 
@@ -42,7 +46,7 @@ function post(route: string, key: string | null): NextRequest {
   return new NextRequest(`http://localhost/api/internal/${route}`, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ query: 'hello', messages: [] }),
+    body: JSON.stringify(BODIES[route] ?? { query: 'hello', messages: [] }),
   });
 }
 
