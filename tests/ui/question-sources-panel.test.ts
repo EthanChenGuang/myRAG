@@ -268,7 +268,7 @@ describe('QuestionSourcesPanel: chrome and Weekly sample', () => {
         ['English', '20'],
         ['Italian', '10'],
       ]);
-      expect(sample.querySelector('time')?.getAttribute('datetime')).toBe('2026-11-24T09:00:00Z');
+      expect(sample.querySelector('ul time')?.getAttribute('datetime')).toBe('2026-11-24T09:00:00Z');
       expect(text(root.querySelector('[data-question-sources-status]'))).toContain('Questions added to the review queue: 30');
     });
   });
