@@ -48,6 +48,7 @@ export interface EvalRunRequest {
 }
 
 type AdminClient = Pick<SupabaseClient, 'from'>;
+type TenantKeyClient = Pick<SupabaseClient, 'rpc'>;
 
 type SettingsReader = () => Pick<MonitorSettings, 'configGate'>;
 
@@ -89,6 +90,13 @@ export async function requestTenantNightly(
     console.error('[Config Gate] nightly request failed', { reason: input.reason, error: error instanceof Error ? error.name : 'unknown' });
     return { ok: false, requested: false };
   }
+}
+
+/** The tenants this admin administers, resolved in SQL by rag_admin_tenant_keys (service_role only); null when unreadable. */
+export async function adminTenantKeys(admin: TenantKeyClient, actorUserId: string): Promise<string[] | null> {
+  const { data, error } = await admin.rpc('rag_admin_tenant_keys', { p_actor: actorUserId });
+  if (error || !Array.isArray(data)) return null;
+  return cleanKeys(data.filter((key): key is string => typeof key === 'string'));
 }
 
 function summaryOf(value: unknown): EvalRunResultSummary | null {
