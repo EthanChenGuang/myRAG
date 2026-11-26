@@ -1,0 +1,11 @@
+{
+  "description": "Synthetic identifier patterns of the fixture tenant, inserted only when a run turns RAG_IDENTIFIER_INDEX on (plan 04.2-29, D-32). The pattern matches the no-digit code shape of the coded-list fixture documents, which the built-in rule (a digit is required) does not.",
+  "patterns": [
+    {
+      "id": "00000000-0000-4000-8000-0000000004f1",
+      "name": "fixture letter code",
+      "pattern": "\\b[A-Z]{2}-[A-Z]{3}-[A-Z]{3}\\b",
+      "flags": "u"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "by_profile": {
+    "openai-3-small-1536": {
+      "source": "fixture",
+      "threshold": 0.9280576109886169
+    }
+  },
+  "config_hash": "c2383b7a91e53b715c096388de8bf8683baf81f9b8cff43495387a39a396123c",
+  "provenance": {
+    "source": "calibration"
+  },
+  "threshold": 0.95
+}

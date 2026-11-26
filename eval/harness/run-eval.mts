@@ -14,7 +14,7 @@ import { canonicalJson, configHash } from '../../src/lib/rag-eval/trace.ts';
 import { EMBEDDER_ID, EMBEDDER_VERSION, embedderSourceSha256 } from './fixture-embedder.mts';
 import { ingestModeRetrievalEnv, partitionIngestModeItems } from './ingest-mode.mts';
 import { closeTableSplitTenants, isTableSplitItem, TABLE_SPLIT_USER_ID, withTableSplitTenant, type TableSplitTenant } from './table-split.mts';
-import { createFixtureDatabase, FIXTURE_USER_ID, seedTerminology, type DeploymentMode, type FixtureMode, type TerminologySeedRow } from './pglite-supabase.mts';
+import { createFixtureDatabase, FIXTURE_USER_ID, seedFixtureFeatures, seedTerminology, type DeploymentMode, type FixtureMode, type TerminologySeedRow } from './pglite-supabase.mts';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from './fake-edge.mts';
 import { applyFixtureProcessEnv } from './process-env.mts';
 import { FAKE_CITATION_GENERATOR_MODEL, installFakeCitationGenerator } from './fake-citation-generator.mts';
@@ -390,6 +390,19 @@ export async function prepareInProcessEval(options: {
     const report = await runReembed({ db: fixtureAdminClient(startedEdge.url), profileId: embeddingProfileId, batchSize: 32 });
     if (report.status !== 'completed') {
       throw new Error(`[Eval Harness] re-embed for profile ${embeddingProfileId} failed: ${report.reason ?? 'unknown'}`);
+    }
+  }
+
+  // Plan 04.2-29: the Phase 4.2 rebuild commands the run's switches call for, on the database this build made (prechunked only; the
+  // ingest mode writes those stores at ingestion with its build env).
+  if (!ingestFixture && fixtureMode !== 'ingest') {
+    try {
+      const { fixtureAdminClient } = await import('./ingest-fakes.mts');
+      await seedFixtureFeatures(fixture, { deploymentMode, admin: fixtureAdminClient(startedEdge.url) });
+    } catch (error) {
+      if (ownsEdge) await startedEdge.close().catch(() => undefined);
+      await fixture.db.close().catch(() => undefined);
+      throw error;
     }
   }
 

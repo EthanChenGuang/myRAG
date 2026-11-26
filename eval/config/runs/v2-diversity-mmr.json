@@ -10,5 +10,9 @@
     "RAG_DUP_CLUSTERS": "true",
     "RAG_RESULT_DIVERSITY": "mmr"
   },
-  "overrides": null
+  "overrides": {
+    "diversity": {
+      "mmr_lambda": 0.9
+    }
+  }
 }

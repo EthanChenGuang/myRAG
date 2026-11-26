@@ -369,6 +369,140 @@ export async function seedTerminology(db: PGlite, rows: readonly TerminologySeed
   }
 }
 
+/** D-32: the fixture tenant's synthetic identifier patterns (eval/fixtures/identifier-patterns.json). */
+export const FIXTURE_IDENTIFIER_PATTERNS_PATH = path.join(REPO_ROOT, 'eval/fixtures/identifier-patterns.json');
+
+export interface FixtureIdentifierPattern {
+  id: string;
+  name: string;
+  pattern: string;
+  flags: 'u' | 'iu';
+}
+
+export function loadFixtureIdentifierPatterns(filePath: string = FIXTURE_IDENTIFIER_PATTERNS_PATH): FixtureIdentifierPattern[] {
+  const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as { patterns?: unknown };
+  if (!Array.isArray(parsed.patterns)) throw new Error('[Fixture DB] identifier patterns file has no patterns list');
+  return parsed.patterns.map((entry) => {
+    const { id, name, pattern, flags } = (entry ?? {}) as Record<string, unknown>;
+    if (typeof id !== 'string' || typeof name !== 'string' || typeof pattern !== 'string' || (flags !== 'u' && flags !== 'iu')) {
+      throw new Error('[Fixture DB] identifier pattern entries need id, name, pattern and flags u or iu');
+    }
+    return { id, name, pattern, flags };
+  });
+}
+
+/** What feature seeding did; null keys were not part of the run. */
+export interface FixtureFeatureReport {
+  switches: string[];
+  relexed: number | null;
+  identifierDocuments: number | null;
+  tableRowsWritten: number | null;
+  dupClustered: number | null;
+  /** Entries added to the database inputs hash (sqlSha256); none when every switch is off. */
+  inputs: Record<string, string>;
+}
+
+function sha256Hex(value: string): string {
+  return crypto.createHash('sha256').update(value).digest('hex');
+}
+
+/**
+ * D-09, D-15, D-19, D-28, D-49: a prechunked fixture database after the rebuild commands of the Phase 4.2 ingestion-side switches the
+ * run's environment turns on, through the product code those commands run: rag:relex with the typed configuration (tenant lexical
+ * options from resolveLexicalOptions, stamps), rag:identifiers with the fixture pattern inserted as the owner, rag:table-rows, and
+ * rag:dup-clusters with evalRun (a fixture threshold entry applies here and nowhere else). Runs after the fixture edge and the run's
+ * process environment are in place, because these modules read the app environment when first imported. Every switch off: no read,
+ * no write and no new inputs entry, so the database equals the plain build.
+ */
+export async function seedFixtureFeatures(
+  fixture: { db: PGlite; fixtureUserId: string; sqlSha256: Record<string, string> },
+  options: { deploymentMode: DeploymentMode; admin: RpcClient; patternsPath?: string },
+): Promise<FixtureFeatureReport> {
+  const { loadRagConfig } = await import('@/lib/rag/config');
+  const { getRagDeps } = await import('@/lib/rag/deps');
+  const config = loadRagConfig(getRagDeps().ragEnv());
+  const { lexicalDictionary, lexicalStemIt, identifierIndex, tableLookup, dupClusters } = config.v2;
+  const lexical = lexicalDictionary || lexicalStemIt || identifierIndex;
+  const report: FixtureFeatureReport = {
+    switches: [],
+    relexed: null,
+    identifierDocuments: null,
+    tableRowsWritten: null,
+    dupClustered: null,
+    inputs: {},
+  };
+  if (!lexical && !tableLookup && !dupClusters) return report;
+  report.switches = [
+    ...(lexicalDictionary ? ['RAG_LEXICAL_DICTIONARY'] : []),
+    ...(lexicalStemIt ? ['RAG_LEXICAL_STEM_IT'] : []),
+    ...(identifierIndex ? ['RAG_IDENTIFIER_INDEX'] : []),
+    ...(tableLookup ? ['RAG_TABLE_LOOKUP'] : []),
+    ...(dupClusters ? ['RAG_DUP_CLUSTERS'] : []),
+  ];
+
+  const { mintScope, scopeKey } = await import('@/lib/rag/tenant/scope');
+  const scope = options.deploymentMode === 'multi-tenant' ? mintScope('personal', fixture.fixtureUserId, null) : mintScope('single', null, null);
+  const tenantKey = scopeKey(scope).toLowerCase();
+
+  if (identifierIndex) {
+    const { validateIdentifierPattern } = await import('@/lib/rag/identifiers/validate');
+    for (const entry of loadFixtureIdentifierPatterns(options.patternsPath)) {
+      const checked = validateIdentifierPattern(entry.pattern, entry.flags);
+      if (!checked.ok) throw new Error(`[Fixture DB] fixture identifier pattern ${entry.id} is rejected by the pattern validator`);
+      await fixture.db.query(
+        'INSERT INTO public.rag_identifier_patterns (id, tenant_key, name, pattern, flags, enabled) VALUES ($1, $2, $3, $4, $5, true)',
+        [entry.id, tenantKey, entry.name, entry.pattern, entry.flags],
+      );
+    }
+  }
+
+  if (lexical) {
+    const { resolveLexicalOptions } = await import('@/lib/rag/lexical/resolve-options');
+    const { effectiveLexicalVersion } = await import('@/lib/rag/config');
+    const resolved = await resolveLexicalOptions(scope, config, { language: null });
+    if (resolved.warnings.length > 0) throw new Error(`[Fixture DB] lexical options did not load: ${resolved.warnings.join(', ')}`);
+    const version = effectiveLexicalVersion(config);
+    report.inputs[`lexical_effective_version:${version}`] = sha256Hex(String(version));
+    if (resolved.stamp.dictVersion) report.inputs[`lexical_dict_version:${resolved.stamp.dictVersion}`] = sha256Hex(resolved.stamp.dictVersion);
+    if (resolved.stamp.patterns) report.inputs[`lexical_patterns:${resolved.stamp.patterns}`] = sha256Hex(resolved.stamp.patterns);
+    const relex = await runRelex({
+      db: options.admin,
+      batchSize: 500,
+      tenantKey,
+      config,
+      resolveScope: async (key) => (key === tenantKey ? { ok: true, scope } : { ok: false, reason: 'unknown_tenant' }),
+    });
+    if (relex.warnings?.length) throw new Error(`[Fixture DB] relex reported ${relex.warnings.join(', ')}`);
+    report.relexed = relex.updated;
+  }
+
+  if (identifierIndex) {
+    const { backfillIdentifiers } = await import('@/lib/rag/identifiers/backfill');
+    const indexed = await backfillIdentifiers({ db: options.admin, scope });
+    if (indexed.failed > 0) throw new Error(`[Fixture DB] identifier backfill failed for ${indexed.failed} documents`);
+    report.identifierDocuments = indexed.documents;
+  }
+
+  if (tableLookup) {
+    const { backfillTableRows } = await import('@/lib/rag/tables/backfill');
+    const tables = await backfillTableRows({ db: options.admin, scope });
+    if (tables.failed > 0) throw new Error(`[Fixture DB] table-row backfill failed for ${tables.failed} documents`);
+    report.tableRowsWritten = tables.rowsWritten;
+    report.inputs['table_rows:on'] = sha256Hex('on');
+  }
+
+  if (dupClusters) {
+    const { runDupBackfill } = await import('@/lib/rag/dedupe/backfill');
+    const clustered = await runDupBackfill({ db: options.admin, tenantKey, evalRun: true });
+    report.dupClustered = clustered.clustered;
+    const paramsPath = path.join(REPO_ROOT, 'eval/config/dup-cluster-params.json');
+    report.inputs['dup_clusters:eval_run'] = sha256Hex(fs.existsSync(paramsPath) ? fs.readFileSync(paramsPath, 'utf8') : '');
+  }
+
+  Object.assign(fixture.sqlSha256, report.inputs);
+  return report;
+}
+
 export async function createFixtureDatabase(options: {
   deploymentMode: DeploymentMode;
   corpusDir: string;
