@@ -80,8 +80,23 @@ async function runOne(hook: RegisteredHook, event: PostPublishEvent): Promise<vo
   }
 }
 
+const inflight = new Set<Promise<void>>();
+
 /** Runs every registered hook in registration order; resolves when all have finished or timed out, and never rejects. */
 export async function afterPublish(event: PostPublishEvent): Promise<void> {
-  syncBuiltInHooks();
-  for (const hook of hooks.slice()) await runOne(hook, event);
+  const run = (async () => {
+    syncBuiltInHooks();
+    for (const hook of hooks.slice()) await runOne(hook, event);
+  })();
+  inflight.add(run);
+  try {
+    await run;
+  } finally {
+    inflight.delete(run);
+  }
+}
+
+/** Tests only: resolves once every afterPublish started so far (and any it started in turn) has finished. */
+export async function postPublishSettledForTests(): Promise<void> {
+  while (inflight.size > 0) await Promise.allSettled([...inflight]);
 }
