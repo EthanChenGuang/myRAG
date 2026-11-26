@@ -5,6 +5,7 @@ from pathlib import Path
 
 import httpx
 import pytest
+from rag_sidecar.contracts.feedback_loop import DictionaryCandidate
 from rag_sidecar.contracts.golden import GoldenItem
 
 from rag_eval import feedback_exports
@@ -126,7 +127,7 @@ def test_dictionary_export_writes_one_validated_line_per_record(private_root, mo
     _install(monkeypatch, [_candidate()], seen=seen)
     assert _run("dictionary") == 0
     rows = [json.loads(line) for line in _out(private_root, "dictionary").read_text(encoding="utf-8").splitlines()]
-    assert rows == [_candidate()]
+    assert [DictionaryCandidate.model_validate(row) for row in rows] == [DictionaryCandidate.model_validate(_candidate())]
     (request,) = seen
     assert request.url.path == "/api/rag/admin/feedback-loop/export"
     assert request.url.params["kind"] == "dictionary" and request.url.params["tenant"] == TENANT
