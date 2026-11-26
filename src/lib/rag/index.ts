@@ -697,3 +697,5 @@ export {
   weekStart,
 } from './monitor/golden-evidence';
 export type { EvidenceCheckResult, EvidenceRow, EvidenceSpanInput, EvidenceSpanResult, EvidenceStatus } from './monitor/golden-evidence';
+export { IMPORT_LIMITS, importQuestions, parseQuestionFile, prepareQuestions, QuestionsImportError } from './monitor/questions-import';
+export type { ImportCounts, PreparedQuestions, QuestionFileFormat } from './monitor/questions-import';
