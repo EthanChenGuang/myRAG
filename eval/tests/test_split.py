@@ -154,7 +154,7 @@ def _bucket(key: str) -> str:
     return "dev" if int(hashlib.sha256(key.encode()).hexdigest()[:8], 16) % 100 < 70 else "test"
 
 
-def _document_id_with(split: str, start: int = 0) -> str:
+def _document_id_with(split: str, start: int = 0x100) -> str:
     n = start
     while True:
         candidate = f"{n:08x}-0000-4000-8000-000000000000"

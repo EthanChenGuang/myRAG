@@ -7,6 +7,7 @@ from rag_sidecar.contracts.judge import JudgeReport
 from rag_eval.config_files import load_gate_population
 from rag_eval.corpus import load_corpus
 from rag_eval.golden_io import load_golden, select_golden
+from rag_eval.split import DOCGROUP_SPLIT_RULE, load_group_manifest
 from rag_eval.metrics import RealSetTooSmall, score_items
 from rag_eval.paths import REPO_ROOT, resolve_cli_path
 from rag_eval.report import build_report, write_report
@@ -31,6 +32,23 @@ def _cross_check(golden_ids: list[str], trace_ids: list[str | None]) -> list[str
         if item_id not in known:
             problems.append(f"trace names unknown item {item_id!r}")
     return problems
+
+
+def _missing_from_manifest(golden_path: Path, golden_ids: list[str], explicit: Path | None) -> list[str]:
+    """Ids of the set's split manifest that the golden file lacks (D-20: the set only grows, deletions are refused).
+
+    Without --split-manifest only a docgroup-rule manifest next to the golden file is the set's own; an item-rule
+    manifest there may be shared by several files (the private root) and is not checked.
+    """
+    path = explicit if explicit is not None else golden_path.with_name("split-manifest.json")
+    manifest = load_group_manifest(path)
+    if manifest is None:
+        if explicit is not None:
+            raise ValueError(f"split manifest {path} does not exist")
+        return []
+    if explicit is None and manifest.rule != DOCGROUP_SPLIT_RULE:
+        return []
+    return sorted(set(manifest.assignments) - set(golden_ids))
 
 
 DEFAULT_CORPUS_DIR = REPO_ROOT / "eval" / "fixtures" / "corpus"
@@ -69,6 +87,20 @@ def _score(args: argparse.Namespace) -> int:
         )
     except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
+        return 2
+    try:
+        missing = _missing_from_manifest(
+            resolve_cli_path(args.golden),
+            [item.id for item in golden],
+            resolve_cli_path(args.split_manifest) if args.split_manifest else None,
+        )
+    except (OSError, ValueError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if missing:
+        print("error: the golden file lacks items its split manifest froze (deleted items are refused):", file=sys.stderr)
+        for item_id in missing:
+            print(f"  {item_id}", file=sys.stderr)
         return 2
     golden = select_golden(golden, manifest.golden_filter)
 
@@ -155,7 +187,13 @@ def main(argv: list[str] | None = None) -> int:
         help="GatePopulationConfig JSON (default: eval/config/gate-population.json); real mode below min_items "
         f"exits {EXIT_REAL_SET_TOO_SMALL} with real_set_too_small",
     )
-    score.add_argument("--split-manifest", type=Path, default=None)
+    score.add_argument(
+        "--split-manifest",
+        type=Path,
+        default=None,
+        help="split manifest whose every item id must be in the golden file (default: a docgroup-rule "
+        "split-manifest.json next to the golden file; a deleted item is refused)",
+    )
     score.set_defaults(handler=_score)
     args = parser.parse_args(argv)
     return args.handler(args)
