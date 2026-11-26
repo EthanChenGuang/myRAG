@@ -82,7 +82,7 @@ import { pickRefusalMetadata, type RefusalFeedbackValue } from '@/lib/chat/answe
 import { registerMessageTrace, setSourcesMessage, shouldShowRefusalControl } from '@/lib/chat/refusal-feedback-client'
 import { useGhostModeStore } from '@/lib/ghost-mode-store'
 import { imageLinkHref, isAllowedImageUrl } from '@/lib/safe-image-hosts'
-import { splitFollowups } from '@/lib/chat/followups'
+import { separateFollowupLines, splitFollowups } from '@/lib/chat/followups'
 import { answerQualityStrings } from '@/translations/answer-quality'
 import { RelatedQuestions } from './related-questions'
 import { ThinkingIndicator } from './thinking-indicator'
@@ -2703,7 +2703,7 @@ const TextPartRenderer = React.memo(({
         "mt-2"
       )}
     >
-      {typeof displayText === 'string' ? displayText : String(displayText)}
+      {separateFollowupLines(typeof displayText === 'string' ? displayText : String(displayText))}
     </Markdown>
   );
 });

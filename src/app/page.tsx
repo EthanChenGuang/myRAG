@@ -1788,15 +1788,14 @@ export default function Home() {
           createdAt: new Date()
         };
 
+        // State setters must not run inside the setMessages updater: React applies updaters lazily,
+        // so a queued commit would re-set isStreaming after the final cleanup and leave the answer "in flight".
         const commitStreamingMessage = () => {
-          setMessages(prevMessages => prevMessages.map(msg => {
-            if (msg.id === thinkingMessage.id || msg.id === streamingMessage.id) {
-              setIsStreaming(true);
-              setStreamingMessage(streamingMessage as StreamingMessage);
-              return { ...streamingMessage };
-            }
-            return msg;
-          }));
+          setIsStreaming(true);
+          setStreamingMessage(streamingMessage as StreamingMessage);
+          setMessages(prevMessages => prevMessages.map(msg => (
+            msg.id === thinkingMessage.id || msg.id === streamingMessage.id ? { ...streamingMessage } : msg
+          )));
         };
 
 
