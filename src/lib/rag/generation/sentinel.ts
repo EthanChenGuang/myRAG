@@ -195,3 +195,15 @@ export function neutralizeSentinel(text: string): { text: string; count: number 
   const parts = text.split(NO_ANSWER_SENTINEL);
   return { text: parts.join(NEUTRALIZED_SENTINEL), count: parts.length - 1 };
 }
+
+import type { StreamTextTransform, ToolSet } from 'ai';
+
+export interface SentinelTransformOptions {
+  refusalText: string;
+  onRefusal?: (info: { refusalOrigin: 'model_relevance' }) => void;
+  onStripped?: (count: number) => void;
+}
+
+export function sentinelTransform(_options: SentinelTransformOptions): StreamTextTransform<ToolSet> {
+  return () => new TransformStream();
+}
