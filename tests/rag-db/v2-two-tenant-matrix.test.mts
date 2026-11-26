@@ -695,6 +695,7 @@ describe('every v2 retrieval path stays inside the caller tenant, for every entr
               const plan = result.queryPlan;
               assert.ok(plan, `${where}: a query plan`);
               assert.equal(plan.framework, framework, `${where}: framework`);
+              assert.ok(plan.variants, `${where}: plan variants`);
               assert.ok(
                 plan.variants.some((variant) => variant.kind === kind),
                 `${where}: plan variants ${plan.variants.map((variant) => variant.kind).join(',')}`,
@@ -787,7 +788,7 @@ describe('every v2 retrieval path stays inside the caller tenant, for every entr
             const inA = (await retrieve(await scopeFor('chat', 'a'), 'chat', question)).result;
             assert.deepEqual(sharesCalls, [{ p_tenant_key: a.scopeKey }], `${framework}: A reads only its own shares`);
             assert.ok(inA.queryPlan?.gate.reasons.includes('R8_LANGUAGE_MISMATCH'), `${framework}: A gate ${inA.queryPlan?.gate.reasons.join(',')}`);
-            const translatedA = inA.queryPlan?.variants.find((variant) => variant.kind === 'translated');
+            const translatedA = inA.queryPlan?.variants?.find((variant) => variant.kind === 'translated');
             assert.deepEqual({ text: translatedA?.text, language: translatedA?.language }, { text: translation, language: 'zh' }, `${framework}: A translated into zh`);
             await assertOwnRows('a', inA, `${framework} shares A`);
 
@@ -796,7 +797,7 @@ describe('every v2 retrieval path stays inside the caller tenant, for every entr
             const inB = (await retrieve(await scopeFor('chat', 'b'), 'chat', question)).result;
             assert.deepEqual(sharesCalls, [{ p_tenant_key: b.scopeKey }], `${framework}: B reads only its own shares`);
             assert.ok(!inB.queryPlan?.gate.reasons.includes('R8_LANGUAGE_MISMATCH'), `${framework}: B does not translate`);
-            assert.equal(inB.queryPlan?.variants.some((variant) => variant.kind === 'translated'), false);
+            assert.equal(inB.queryPlan?.variants?.some((variant) => variant.kind === 'translated'), false);
             const translateCallsAfter = framework === 'langchain' ? langchain.calls.length : native.calls.length;
             assert.equal(translateCallsAfter, translateCallsBefore, `${framework}: no translate call for B`);
             await assertOwnRows('b', inB, `${framework} shares B`);

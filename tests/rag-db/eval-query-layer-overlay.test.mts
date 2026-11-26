@@ -70,7 +70,13 @@ function writeGolden(dir: string, items: GoldenItem[]): string {
 interface Trace {
   item_id: string;
   query: string;
-  query_plan: null | { original: string; standalone: string; framework: string; gate: { transforms: string[] } };
+  query_plan: null | {
+    original: string;
+    standalone: string;
+    framework: string;
+    gate: { transforms: string[] };
+    skipped?: Array<{ transform: string; reason: string }>;
+  };
   query_transforms: Array<{ kind: string; text: string; transform: string | null; status: string | null }>;
   candidates: Array<{ chunk_id: string; similarity: number; fused_score: number | null }>;
   kept: Array<{ chunk_id: string }>;

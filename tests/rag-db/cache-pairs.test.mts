@@ -81,8 +81,8 @@ describe('cache-pair requests (D-37)', () => {
     const options = cachePairOptions({
       max_results: 10,
       degrade: 'drop_top_candidate',
-      retrieval_filters: { document_ids: ['doc-1'] },
-      domain_control_leg: 'contract',
+      retrieval_filters: { current_only: true, date_range: null, doc_types: null, document_ids: ['doc-1'], invoice: null, languages: null, sources: null },
+      domain_control_leg: 'contract_legal',
       user_id: '00000000-0000-4000-8000-000000000001',
     });
     assert.deepEqual(options, { semantic_cache: 'pgvector', user_id: '00000000-0000-4000-8000-000000000001' });
@@ -149,6 +149,7 @@ describe('cache-pair run on PGlite (D-37)', () => {
     assert.equal(run.source, 'fixture');
     assert.equal(run.embedding_profile_id, 'fixture-ngram');
     assert.equal(run.probe_max_distance, 0.2);
+    assert.ok(run.pairs, 'the run lists its pairs');
     assert.equal(run.pairs.length, 3);
     const rows = new Map(run.pairs.map((row) => [row.pair_id, row]));
 
