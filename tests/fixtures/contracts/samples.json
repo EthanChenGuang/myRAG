@@ -7347,6 +7347,224 @@
       "row_index": 0,
       "table_key": "table-0"
     },
+    "TerminologyCandidate": {
+      "corpus_df": 0,
+      "entry_id": null,
+      "examples": [
+        "what is termalpha"
+      ],
+      "first_seen": "2026-01-01T00:00:00Z",
+      "id": "00000000-0000-4000-8000-000000000403",
+      "language": "zh",
+      "last_seen": "2026-01-01T00:00:00Z",
+      "source": "miss_log",
+      "status": "pending",
+      "support": 3,
+      "term": "termalpha"
+    },
+    "TerminologyEntry": {
+      "canonical": "term alpha beta",
+      "enabled": true,
+      "id": "00000000-0000-4000-8000-000000000401",
+      "kind": "alias",
+      "language": "any",
+      "layer": "shared",
+      "mode": "one_way",
+      "note": null,
+      "source_language": null,
+      "suppresses_entry_id": null,
+      "target_language": null,
+      "variants": [
+        "termalpha",
+        "alpha beta"
+      ]
+    },
+    "TerminologyExpansion": {
+      "capped": false,
+      "dense_text": "termalpha term alpha beta",
+      "expansion_tokens": [
+        "term",
+        "alpha",
+        "beta"
+      ],
+      "matches": [
+        {
+          "canonical": "term alpha beta",
+          "end": 9,
+          "entry_id": "00000000-0000-4000-8000-000000000401",
+          "kind": "alias",
+          "language": "any",
+          "layer": "shared",
+          "start": 0,
+          "surface": "termalpha"
+        }
+      ],
+      "version": "s12.w3"
+    },
+    "TerminologyImportReport": {
+      "applied": false,
+      "create": 1,
+      "delete": 0,
+      "issues": [
+        {
+          "code": "override",
+          "entry_ids": [
+            "00000000-0000-4000-8000-000000000401"
+          ],
+          "message": "the workspace entry overrides a shared entry for the same variant",
+          "row": 2,
+          "severity": "warning"
+        }
+      ],
+      "layer_version_seen": 3,
+      "unchanged": 2,
+      "update": 0
+    },
+    "TerminologyImportRow": {
+      "canonical": "term alpha beta",
+      "enabled": true,
+      "kind": "alias",
+      "language": "any",
+      "mode": "one_way",
+      "note": "placeholder entry",
+      "source_language": null,
+      "target_language": null,
+      "variants": [
+        "termalpha",
+        "alpha beta"
+      ]
+    },
+    "TerminologyLexicon": {
+      "entries_sha256": "bce3777ae2927d368438d442f382e3960f8889f8d432eb517c74b59828d5c961",
+      "terms": [
+        {
+          "kind": "alias",
+          "language": "any",
+          "normalized": "termalpha"
+        }
+      ],
+      "translations": [
+        {
+          "entry_id": "00000000-0000-4000-8000-000000000402",
+          "source_language": "zh",
+          "sources": [
+            "术语甲乙丙"
+          ],
+          "target": "term alpha beta",
+          "target_language": "en",
+          "target_normalized": "term alpha beta"
+        }
+      ],
+      "version": "s12.w3"
+    },
+    "TerminologyLexiconTerm": {
+      "kind": "alias",
+      "language": "any",
+      "normalized": "termalpha"
+    },
+    "TerminologyMatch": {
+      "canonical": "term alpha beta",
+      "end": 9,
+      "entry_id": "00000000-0000-4000-8000-000000000401",
+      "kind": "alias",
+      "language": "any",
+      "layer": "shared",
+      "start": 0,
+      "surface": "termalpha"
+    },
+    "TerminologyParams": {
+      "config_hash": null,
+      "dense_weight": 0.5,
+      "expansion_weight": 0.5,
+      "max_expansion_tokens": 24,
+      "max_matches": 8,
+      "max_terms_per_match": 4,
+      "min_han_chars": 2,
+      "provenance": {
+        "source": "defaults"
+      },
+      "reserve_slots": 2,
+      "schema_version": 1
+    },
+    "TerminologyPreviewRequest": {
+      "draft_entries": [
+        {
+          "canonical": "term alpha beta",
+          "enabled": true,
+          "id": "00000000-0000-4000-8000-000000000401",
+          "kind": "alias",
+          "language": "any",
+          "layer": "shared",
+          "mode": "one_way",
+          "note": null,
+          "source_language": null,
+          "suppresses_entry_id": null,
+          "target_language": null,
+          "variants": [
+            "termalpha",
+            "alpha beta"
+          ]
+        }
+      ],
+      "layer": "shared",
+      "organization_id": null,
+      "query": "what is termalpha"
+    },
+    "TerminologyPreviewResponse": {
+      "capped": false,
+      "expansion_tokens": [
+        "term",
+        "alpha",
+        "beta"
+      ],
+      "issues": [],
+      "matches": [
+        {
+          "canonical": "term alpha beta",
+          "end": 9,
+          "entry_id": "00000000-0000-4000-8000-000000000401",
+          "kind": "alias",
+          "language": "any",
+          "layer": "shared",
+          "start": 0,
+          "surface": "termalpha"
+        }
+      ],
+      "original_tokens": [
+        "termalpha"
+      ],
+      "overrides": [
+        {
+          "code": "override",
+          "entry_ids": [
+            "00000000-0000-4000-8000-000000000401"
+          ],
+          "message": "the workspace entry overrides a shared entry for the same variant",
+          "row": 2,
+          "severity": "warning"
+        }
+      ],
+      "version": "s12.w3"
+    },
+    "TerminologyTranslationPair": {
+      "entry_id": "00000000-0000-4000-8000-000000000402",
+      "source_language": "zh",
+      "sources": [
+        "术语甲乙丙"
+      ],
+      "target": "term alpha beta",
+      "target_language": "en",
+      "target_normalized": "term alpha beta"
+    },
+    "TerminologyValidationIssue": {
+      "code": "override",
+      "entry_ids": [
+        "00000000-0000-4000-8000-000000000401"
+      ],
+      "message": "the workspace entry overrides a shared entry for the same variant",
+      "row": 2,
+      "severity": "warning"
+    },
     "TrainingNegative": {
       "chunk_id": "chunk-0003",
       "confirmed": false,
@@ -10426,6 +10644,42 @@
           "title_match": true
         },
         "status": "confirmed"
+      }
+    },
+    "TerminologyEntry:suppression": {
+      "model": "TerminologyEntry",
+      "value": {
+        "canonical": "term alpha beta",
+        "enabled": true,
+        "id": null,
+        "kind": "alias",
+        "language": "any",
+        "layer": "workspace",
+        "mode": "one_way",
+        "note": null,
+        "source_language": null,
+        "suppresses_entry_id": "00000000-0000-4000-8000-000000000401",
+        "target_language": null,
+        "variants": []
+      }
+    },
+    "TerminologyEntry:translation_pair": {
+      "model": "TerminologyEntry",
+      "value": {
+        "canonical": "term alpha beta",
+        "enabled": true,
+        "id": "00000000-0000-4000-8000-000000000402",
+        "kind": "translation",
+        "language": "zh",
+        "layer": "shared",
+        "mode": "one_way",
+        "note": null,
+        "source_language": "zh",
+        "suppresses_entry_id": null,
+        "target_language": "en",
+        "variants": [
+          "术语甲乙丙"
+        ]
       }
     },
     "TranslationSettings:unconfigured": {

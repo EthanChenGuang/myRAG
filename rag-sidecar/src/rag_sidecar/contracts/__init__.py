@@ -164,6 +164,22 @@ from rag_sidecar.contracts.ingest_security import (
     UntrustedLinkQuarantineReason,
 )
 from rag_sidecar.contracts.embed import EmbedRequest, EmbedResponse
+from rag_sidecar.contracts.terminology import (
+    TerminologyCandidate,
+    TerminologyEntry,
+    TerminologyExpansion,
+    TerminologyImportReport,
+    TerminologyImportRow,
+    TerminologyLexicon,
+    TerminologyLexiconTerm,
+    TerminologyMatch,
+    TerminologyParams,
+    TerminologyPreviewRequest,
+    TerminologyPreviewResponse,
+    TerminologyTranslationPair,
+    TerminologyValidationIssue,
+    terminology_params_sha256,
+)
 from rag_sidecar.contracts.translation import ChunkTranslation, TranslationSettings
 from rag_sidecar.contracts.versions import (
     EffectiveDateExtraction,
@@ -486,4 +502,18 @@ __all__ = [
     "RetrievalParams",
     "compute_config_hash",
     "write_chunking_cases",
+    "TerminologyCandidate",
+    "TerminologyEntry",
+    "TerminologyExpansion",
+    "TerminologyImportReport",
+    "TerminologyImportRow",
+    "TerminologyLexicon",
+    "TerminologyLexiconTerm",
+    "TerminologyMatch",
+    "TerminologyParams",
+    "TerminologyPreviewRequest",
+    "TerminologyPreviewResponse",
+    "TerminologyTranslationPair",
+    "TerminologyValidationIssue",
+    "terminology_params_sha256",
 ]

@@ -256,6 +256,21 @@ from rag_sidecar.contracts.routing import (
 from rag_sidecar.contracts.embed import EmbedRequest, EmbedResponse
 from rag_sidecar.contracts.retrieval import RetrievalLegWeights
 from rag_sidecar.contracts.vector_sync import ReconcileReport, VectorSyncSliceReport
+from rag_sidecar.contracts.terminology import (
+    TerminologyCandidate,
+    TerminologyEntry,
+    TerminologyExpansion,
+    TerminologyImportReport,
+    TerminologyImportRow,
+    TerminologyLexicon,
+    TerminologyLexiconTerm,
+    TerminologyMatch,
+    TerminologyParams,
+    TerminologyPreviewRequest,
+    TerminologyPreviewResponse,
+    TerminologyTranslationPair,
+    TerminologyValidationIssue,
+)
 from rag_sidecar.contracts.translation import ChunkTranslation, TranslationSettings
 from rag_sidecar.contracts.versions import (
     EffectiveDateExtraction,
@@ -2186,6 +2201,128 @@ def _feedback_loop_models() -> dict[str, Any]:
         ),
     }
 
+_TERM_ENTRY = "00000000-0000-4000-8000-000000000401"
+_TERM_PAIR = "00000000-0000-4000-8000-000000000402"
+_TERM_SOURCE = LANGUAGE_CODES[0]
+_TERM_TARGET = LANGUAGE_CODES[1]
+
+
+def _term_entry() -> TerminologyEntry:
+    return TerminologyEntry(
+        id=_TERM_ENTRY,
+        layer="shared",
+        canonical="term alpha beta",
+        variants=["termalpha", "alpha beta"],
+        language="any",
+        kind="alias",
+    )
+
+
+def _term_pair() -> TerminologyEntry:
+    return TerminologyEntry(
+        id=_TERM_PAIR,
+        layer="shared",
+        canonical="term alpha beta",
+        variants=["术语甲乙丙"],
+        language=_TERM_SOURCE,
+        kind="translation",
+        source_language=_TERM_SOURCE,
+        target_language=_TERM_TARGET,
+    )
+
+
+def _term_match() -> TerminologyMatch:
+    return TerminologyMatch(
+        surface="termalpha",
+        canonical="term alpha beta",
+        entry_id=_TERM_ENTRY,
+        kind="alias",
+        language="any",
+        layer="shared",
+        start=0,
+        end=9,
+    )
+
+
+def _term_issue() -> TerminologyValidationIssue:
+    return TerminologyValidationIssue(
+        code="override",
+        severity="warning",
+        row=2,
+        entry_ids=[_TERM_ENTRY],
+        message="the workspace entry overrides a shared entry for the same variant",
+    )
+
+
+def _terminology_models() -> dict[str, Any]:
+    seen = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    return {
+        "TerminologyEntry": _term_entry(),
+        "TerminologyParams": TerminologyParams(),
+        "TerminologyMatch": _term_match(),
+        "TerminologyExpansion": TerminologyExpansion(
+            matches=[_term_match()],
+            expansion_tokens=["term", "alpha", "beta"],
+            dense_text="termalpha term alpha beta",
+            capped=False,
+            version="s12.w3",
+        ),
+        "TerminologyPreviewRequest": TerminologyPreviewRequest(
+            query="what is termalpha", layer="shared", draft_entries=[_term_entry()]
+        ),
+        "TerminologyPreviewResponse": TerminologyPreviewResponse(
+            matches=[_term_match()],
+            original_tokens=["termalpha"],
+            expansion_tokens=["term", "alpha", "beta"],
+            capped=False,
+            overrides=[_term_issue()],
+            issues=[],
+            version="s12.w3",
+        ),
+        "TerminologyImportRow": TerminologyImportRow(
+            canonical="term alpha beta",
+            variants=["termalpha", "alpha beta"],
+            language="any",
+            kind="alias",
+            note="placeholder entry",
+        ),
+        "TerminologyImportReport": TerminologyImportReport(
+            create=1, update=0, unchanged=2, delete=0, issues=[_term_issue()], layer_version_seen=3, applied=False
+        ),
+        "TerminologyValidationIssue": _term_issue(),
+        "TerminologyCandidate": TerminologyCandidate(
+            id="00000000-0000-4000-8000-000000000403",
+            term="termalpha",
+            language=_TERM_SOURCE,
+            support=3,
+            examples=["what is termalpha"],
+            corpus_df=0,
+            status="pending",
+            source="miss_log",
+            first_seen=seen,
+            last_seen=seen,
+        ),
+        "TerminologyLexiconTerm": TerminologyLexiconTerm(normalized="termalpha", language="any", kind="alias"),
+        "TerminologyTranslationPair": _term_translation(),
+        "TerminologyLexicon": TerminologyLexicon(
+            version="s12.w3",
+            entries_sha256=hashlib.sha256(b"terminology-sample").hexdigest(),
+            terms=[TerminologyLexiconTerm(normalized="termalpha", language="any", kind="alias")],
+            translations=[_term_translation()],
+        ),
+    }
+
+
+def _term_translation() -> TerminologyTranslationPair:
+    return TerminologyTranslationPair(
+        entry_id=_TERM_PAIR,
+        source_language=_TERM_SOURCE,
+        target_language=_TERM_TARGET,
+        sources=["术语甲乙丙"],
+        target="term alpha beta",
+        target_normalized="term alpha beta",
+    )
+
 
 def _phase42_models() -> dict[str, Any]:
     from rag_sidecar.contracts.retrieval import (
@@ -2416,7 +2553,7 @@ def _phase42_variants() -> dict[str, dict[str, Any]]:
 
 
 def build_samples() -> dict[str, dict[str, Any]]:
-    models = {**_models(), **_feedback_loop_models(), **_phase42_models()}
+    models = {**_models(), **_feedback_loop_models(), **_phase42_models(), **_terminology_models()}
     samples = {name: model.model_dump(mode="json") for name, model in models.items()}
     variants: dict[str, dict[str, Any]] = {
         "AnswerRecord:pending_unlinked": {
@@ -2527,6 +2664,20 @@ def build_samples() -> dict[str, dict[str, Any]]:
             "model": "InvoiceFields",
             "value": InvoiceFields(confidence=0.0, errors=["no invoice number found"]).model_dump(mode="json"),
         },
+    }
+    variants["TerminologyEntry:translation_pair"] = {
+        "model": "TerminologyEntry",
+        "value": _term_pair().model_dump(mode="json"),
+    }
+    variants["TerminologyEntry:suppression"] = {
+        "model": "TerminologyEntry",
+        "value": TerminologyEntry(
+            layer="workspace",
+            canonical="term alpha beta",
+            language="any",
+            kind="alias",
+            suppresses_entry_id=_TERM_ENTRY,
+        ).model_dump(mode="json"),
     }
     variants.update(_phase32_ingest_contract_variants())
     variants.update(_phase32_query_contract_variants())
