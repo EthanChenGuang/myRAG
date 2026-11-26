@@ -525,3 +525,16 @@ Applied to `<live-project-ref>` from the orchestrator session through Supabase M
 ### Verification
 - **Functions:** the 15 new functions all have `search_path=""`; none is executable by anon or authenticated.
 - **Tables:** the 3 new tables have RLS on.
+
+## Train 21: 0819 (applied after train 21, 2026-11-26)
+
+Applied to `<live-project-ref>` from the orchestrator session through Supabase MCP `apply_migration` at about 05:30 UTC on 2026-11-26, after train 21 (PR #103) reached `origin/main`.
+
+### Steps
+| # | Migration name | Result |
+|---|---|---|
+| 1 | train21_0819_supersession_peers | ok |
+
+### Verification
+- **Functions:** both functions 0819 adds (`rag_supersession_peers`, `rag_supersession_replace_target`) are SECURITY INVOKER with `search_path=""`; EXECUTE is granted to service_role only, with no anon or authenticated grant.
+- **Runtime:** the supersession peer detector runs only with `RAG_SUPERSESSION_DETECT=on`; it is off in production, so applying 0819 changes no live behaviour.
