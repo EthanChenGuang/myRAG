@@ -3,8 +3,12 @@ import { describe, expect, it } from 'vitest';
 import { blockFrom, FakeDocument } from './helpers/html-fake-dom';
 import {
   buttonByText,
+  coverageAnswer,
+  everything,
   flush,
   impactAnswer,
+  pendingRow,
+  runRow,
   indexHtml,
   loadImpactPage,
   maybeButton,
@@ -432,5 +436,364 @@ describe('Ingestion changes section, script tag and Settings sub-view (UI-SPEC 6
     expect(group.textContent).toContain('Ripetizione dell’intestazione delle tabelle');
     expect(group.textContent).toContain('La modifica riguarda i documenti già archiviati; al salvataggio vedrai quanti.');
     expect(maybeButton(page.root, 'Impostazioni') ?? page.root!.querySelectorAll('[role="tab"]').find((t) => t.textContent === 'Impostazioni')).toBeTruthy();
+  });
+});
+
+async function mountPanel(page: ImpactPage, options: Json = {}): Promise<void> {
+  const init = page.context.initIngestImpactPanel;
+  expect(typeof init, 'initIngestImpactPanel').toBe('function');
+  await (init as (o: Json) => Promise<void>)(options);
+  await flush();
+}
+
+function rebuildsTable(page: ImpactPage) {
+  return page.root!.querySelectorAll('table').find((t) => t.getAttribute('data-ingest-impact-table') === 'rebuilds') ?? null;
+}
+
+function pendingTable(page: ImpactPage) {
+  return page.root!.querySelectorAll('table').find((t) => t.getAttribute('data-ingest-impact-table') === 'pending') ?? null;
+}
+
+function rowsOf(table: ReturnType<typeof rebuildsTable>) {
+  return table ? table.querySelectorAll('tbody tr') : [];
+}
+
+function coverageWith(extra: Json): Json {
+  return { status: 200, body: coverageAnswer(extra) };
+}
+
+describe('Rebuilds view: documents on previous settings (UI-SPEC 6.4.2, finding 5)', () => {
+  it('lists each pending mechanism with Start rebuild, the command with Copy command, or the needs-async sentence', async () => {
+    const page = loadImpactPage({
+      replies: {
+        coverage: coverageWith({
+          pending: [
+            pendingRow('reparse', 7, 'needs_async'),
+            pendingRow('rechunk', 253, 'ui'),
+            pendingRow('relex', 12, 'cli', 'npm run rag:relex'),
+            pendingRow('reembed', 0, 'cli'),
+          ],
+        }),
+      },
+    });
+    await mountPanel(page);
+    const rows = rowsOf(pendingTable(page));
+    expect(rows).toHaveLength(3);
+    const byLabel = (label: string) => rows.find((r) => r.querySelector('th')!.textContent === label)!;
+    const rechunk = byLabel('Rebuild chunks');
+    expect(rechunk.textContent).toContain('253');
+    const start = buttonByText(rechunk, 'Start rebuild');
+    expect(start.className).toContain('btn-primary');
+    expect(start.getAttribute('aria-label')).toBe('Start rebuild: Rebuild chunks');
+    const relex = byLabel('Rebuild word index');
+    expect(relex.querySelector('code')!.textContent).toBe('npm run rag:relex');
+    expect(maybeButton(relex, 'Start rebuild')).toBeUndefined();
+    buttonByText(relex, 'Copy command').click();
+    await flush();
+    expect(page.clipboardWrites).toEqual(['npm run rag:relex']);
+    expect(page.status().textContent).toContain('Command copied.');
+    const reparse = byLabel('Parse again');
+    expect(reparse.textContent).toContain('Parsing again runs through the async ingest queue, which is off.');
+    expect(reparse.querySelector('code')!.textContent).toBe('npm run rag:rebuild -- start --mechanism reparse');
+    expect(maybeButton(reparse, 'Start rebuild')).toBeUndefined();
+    expect(page.root!.textContent).not.toContain('Rebuild embeddings');
+  });
+
+  it('renders no Copy command button when the clipboard API is missing', async () => {
+    const page = loadImpactPage({ clipboard: false, replies: { coverage: coverageWith({ pending: [pendingRow('relex', 3, 'cli', 'npm run rag:relex')] }) } });
+    await mountPanel(page);
+    expect(maybeButton(page.root, 'Copy command')).toBeUndefined();
+    expect(page.root!.querySelector('code')!.textContent).toBe('npm run rag:relex');
+  });
+
+  it('Start rebuild posts the mechanism only, shows its in-flight text, then announces and reloads', async () => {
+    const page = loadImpactPage({ hold: ['start'], replies: { coverage: coverageWith({ pending: [pendingRow('rechunk', 253, 'ui')] }) } });
+    await mountPanel(page);
+    const start = buttonByText(pendingTable(page), 'Start rebuild');
+    start.click();
+    await flush();
+    expect(page.calls('start')[0]!.body).toEqual({ mechanism: 'rechunk' });
+    expect(start.disabled).toBe(true);
+    expect(start.textContent).toContain('Starting…');
+    page.release('start', { status: 200, body: { success: true, mechanism: 'rechunk', affected: 253, status: 'started', run: runRow({ mechanism: 'rechunk' }) } });
+    await flush();
+    expect(page.status().textContent).toContain('Rebuild started: Rebuild chunks.');
+    expect(page.calls('coverage')).toHaveLength(2);
+  });
+
+  it('documents without a fingerprint show the coverage line with the backfill command', async () => {
+    const page = loadImpactPage({ replies: { coverage: coverageWith({ without_fingerprint: { count: 31, command: 'npm run rag:fingerprint -- backfill' } }) } });
+    await mountPanel(page);
+    expect(page.root!.textContent).toContain('Stored documents without a fingerprint: 31.');
+    expect(page.root!.querySelectorAll('code').map((c) => c.textContent)).toContain('npm run rag:fingerprint -- backfill');
+  });
+});
+
+describe('Rebuilds view: rebuild rows, activation and rollback (UI-SPEC 6.4.2, D-12, finding 6)', () => {
+  it('nothing pending and no rebuild shows the empty title and body', async () => {
+    const page = loadImpactPage();
+    await mountPanel(page);
+    expect(page.root!.textContent).toContain('No documents to rebuild');
+    expect(page.root!.textContent).toContain('Every stored document matches the saved ingestion settings.');
+    expect(pendingTable(page)).toBeNull();
+  });
+
+  it('pending documents without any rebuild show the no-rebuild sentence', async () => {
+    const page = loadImpactPage({ replies: { coverage: coverageWith({ pending: [pendingRow('rechunk', 5, 'ui')] }) } });
+    await mountPanel(page);
+    expect(page.root!.textContent).toContain('No rebuild has been started.');
+    expect(page.root!.textContent).not.toContain('No documents to rebuild');
+  });
+
+  it('a running rebuild shows the badge with word and icon, a native progress element and its progress text', async () => {
+    const page = loadImpactPage({ replies: { coverage: coverageWith({ rebuilds: [runRow()] }) } });
+    await mountPanel(page);
+    const row = rowsOf(rebuildsTable(page))[0]!;
+    const badge = row.querySelector('.badge')!;
+    expect(badge.textContent).toContain('Running');
+    expect(badge.querySelector('i.bi-arrow-repeat')).not.toBeNull();
+    const progress = row.querySelector('progress')!;
+    expect(progress.getAttribute('value')).toBe('120');
+    expect(progress.getAttribute('max')).toBe('310');
+    expect(row.textContent).toContain('120 of 310');
+    const time = row.querySelector('time')!;
+    expect(time.getAttribute('datetime')).toBe('2026-11-20T09:30:00.000Z');
+    expect(maybeButton(row, 'Activate rebuild')).toBeUndefined();
+  });
+
+  it('Activate and Roll back appear only for a held reparse batch; rechunk and reembed point to their panels', async () => {
+    const page = loadImpactPage({
+      replies: {
+        coverage: coverageWith({
+          rebuilds: [
+            runRow({ id: 'run-built', state: 'built', done: 310, started: '2026-11-21T09:00:00.000Z' }),
+            runRow({ id: 'run-active', state: 'active', done: 310, started: '2026-11-19T09:00:00.000Z' }),
+            runRow({ id: 'run-rechunk', mechanism: 'rechunk', state: 'built', done: 253, total: 253, activation: 'chunking_profiles', started: '2026-11-18T09:00:00.000Z' }),
+            runRow({ id: 'run-reembed', mechanism: 'reembed', state: 'built', done: 9, total: 9, activation: 'embedding_profiles', started: '2026-11-17T09:00:00.000Z' }),
+            runRow({ id: 'run-relex', mechanism: 'relex', state: 'completed', done: 4, total: 4, activation: 'none', started: '2026-11-16T09:00:00.000Z' }),
+          ],
+        }),
+      },
+    });
+    await mountPanel(page);
+    const rows = rowsOf(rebuildsTable(page));
+    const built = rows.find((r) => r.textContent.includes('Built, not active') && r.textContent.includes('Parse again'))!;
+    expect(buttonByText(built, 'Activate rebuild').className).toContain('btn-primary');
+    const active = rows.find((r) => r.textContent.includes('Active') && r.textContent.includes('Parse again') && !r.textContent.includes('not active'))!;
+    expect(buttonByText(active, 'Roll back rebuild').className).toContain('btn-outline');
+    const rechunk = rows.find((r) => r.textContent.includes('Rebuild chunks'))!;
+    expect(maybeButton(rechunk, 'Activate rebuild')).toBeUndefined();
+    expect(maybeButton(rechunk, 'Roll back rebuild')).toBeUndefined();
+    buttonByText(rechunk, 'Open chunking profiles').click();
+    expect(page.doc.activeElement).toBe(page.doc.getElementById('rag-chunking-title'));
+    const reembed = rows.find((r) => r.textContent.includes('Rebuild embeddings'))!;
+    buttonByText(reembed, 'Open embedding profiles').click();
+    expect(page.doc.activeElement).toBe(page.doc.getElementById('rag-profiles-title'));
+    const relex = rows.find((r) => r.textContent.includes('Rebuild word index'))!;
+    expect(relex.textContent).toContain('Completed');
+    expect(relex.querySelectorAll('button')).toHaveLength(0);
+  });
+
+  it('Activate asks for confirmation with focus on Keep current versions, then posts, announces and reloads', async () => {
+    const page = loadImpactPage({ replies: { coverage: coverageWith({ rebuilds: [runRow({ id: 'run-built', state: 'built', done: 310 })] }) } });
+    await mountPanel(page);
+    buttonByText(rowsOf(rebuildsTable(page))[0]!, 'Activate rebuild').click();
+    await flush();
+    const dialog = page.dialog()!;
+    expect(dialog.textContent).toContain('Activate this rebuild?');
+    expect(dialog.textContent).toContain('Documents in this rebuild: 310.');
+    expect(page.doc.activeElement).toBe(buttonByText(dialog, 'Keep current versions'));
+    expect(page.calls('activate')).toHaveLength(0);
+    buttonByText(dialog, 'Activate rebuild').click();
+    await flush();
+    expect(page.calls('activate')[0]!.path).toBe('/api/rag/admin/ingest-fingerprint/rebuild/run-built/activate');
+    expect(page.status().textContent).toContain('Rebuild activated.');
+    expect(page.calls('coverage')).toHaveLength(2);
+  });
+
+  it('Keep current versions sends nothing', async () => {
+    const page = loadImpactPage({ replies: { coverage: coverageWith({ rebuilds: [runRow({ state: 'built', done: 310 })] }) } });
+    await mountPanel(page);
+    buttonByText(rowsOf(rebuildsTable(page))[0]!, 'Activate rebuild').click();
+    await flush();
+    buttonByText(page.dialog(), 'Keep current versions').click();
+    await flush();
+    expect(page.calls('activate')).toHaveLength(0);
+  });
+
+  it.each([
+    ['eval_missing', 'Not activated. No evaluation result is recorded for this rebuild.'],
+    ['eval_failed', 'Not activated. The evaluation of this rebuild shows a slice dropping beyond the noise band.'],
+    ['incomplete', 'Not activated. Some documents are not rebuilt yet.'],
+  ])('a refused activation (409 %s) shows the gate sentence in a role=alert block and reloads', async (reason, sentence) => {
+    const page = loadImpactPage({
+      replies: {
+        coverage: coverageWith({ rebuilds: [runRow({ state: 'built', done: 310 })] }),
+        activate: { status: 409, body: { success: false, error: 'activation_refused', reason } },
+      },
+    });
+    await mountPanel(page);
+    buttonByText(rowsOf(rebuildsTable(page))[0]!, 'Activate rebuild').click();
+    await flush();
+    buttonByText(page.dialog(), 'Activate rebuild').click();
+    await flush();
+    expect(page.dialog()).toBeNull();
+    const alert = page.root!.querySelector('[data-ingest-impact-alert]')!.querySelector('[role="alert"]')!;
+    expect(alert).not.toBeNull();
+    expect(alert.className).toContain('alert-warning');
+    expect(alert.textContent).toContain(sentence);
+    expect(page.calls('coverage')).toHaveLength(2);
+  });
+
+  it('an unknown refusal reason is shown as its code inside the gate.other sentence', async () => {
+    const page = loadImpactPage({
+      replies: {
+        coverage: coverageWith({ rebuilds: [runRow({ state: 'active', done: 310 })] }),
+        rollback: { status: 409, body: { success: false, error: 'rollback_refused', reason: 'not_active' } },
+      },
+    });
+    await mountPanel(page);
+    buttonByText(rowsOf(rebuildsTable(page))[0]!, 'Roll back rebuild').click();
+    await flush();
+    expect(page.dialog()!.textContent).toContain('Roll back this rebuild?');
+    buttonByText(page.dialog(), 'Roll back rebuild').click();
+    await flush();
+    const alert = page.root!.querySelector('[data-ingest-impact-alert]')!.querySelector('[role="alert"]')!;
+    expect(alert.textContent).toContain('Not changed. The server gave the reason not_active.');
+    expect(alert.querySelector('code')!.textContent).toBe('not_active');
+  });
+
+  it('a successful rollback announces it', async () => {
+    const page = loadImpactPage({ replies: { coverage: coverageWith({ rebuilds: [runRow({ state: 'active', done: 310 })] }) } });
+    await mountPanel(page);
+    buttonByText(rowsOf(rebuildsTable(page))[0]!, 'Roll back rebuild').click();
+    await flush();
+    buttonByText(page.dialog(), 'Roll back rebuild').click();
+    await flush();
+    expect(page.status().textContent).toContain('Rebuild rolled back.');
+  });
+
+  it('a rebuild with gaps shows the Incomplete badge, the gaps line and Start rebuild again for the rest', async () => {
+    const page = loadImpactPage({
+      replies: {
+        coverage: coverageWith({
+          pending: [pendingRow('rechunk', 4, 'ui')],
+          rebuilds: [runRow({ mechanism: 'rechunk', state: 'incomplete', done: 249, total: 253, gaps: 4, activation: 'chunking_profiles' })],
+        }),
+      },
+    });
+    await mountPanel(page);
+    const row = rowsOf(rebuildsTable(page))[0]!;
+    expect(row.querySelector('.badge')!.textContent).toContain('Incomplete');
+    expect(row.querySelector('.badge')!.className).toContain('badge-warning');
+    expect(row.textContent).toContain('Documents that could not be rebuilt: 4');
+    expect(buttonByText(pendingTable(page), 'Start rebuild')).toBeTruthy();
+  });
+
+  it('rows are ordered running, incomplete, built, active, then by start time, and page by 20 with Load more rebuilds', async () => {
+    const many = Array.from({ length: 23 }, (_, i) =>
+      runRow({ id: `run-${i}`, mechanism: 'relex', state: 'completed', activation: 'none', done: 1, total: 1, started: `2026-10-${String(i + 1).padStart(2, '0')}T08:00:00.000Z` }),
+    );
+    const page = loadImpactPage({
+      replies: {
+        coverage: coverageWith({
+          rebuilds: [
+            ...many,
+            runRow({ id: 'a', state: 'active', done: 310 }),
+            runRow({ id: 'b', state: 'built', done: 310 }),
+            runRow({ id: 'c', mechanism: 'rechunk', state: 'incomplete', gaps: 2, activation: 'chunking_profiles' }),
+            runRow({ id: 'd', state: 'running' }),
+          ],
+        }),
+      },
+    });
+    await mountPanel(page);
+    let rows = rowsOf(rebuildsTable(page));
+    expect(rows).toHaveLength(20);
+    expect(rows.slice(0, 4).map((r) => r.querySelector('.badge')!.textContent)).toEqual(['Running', 'Incomplete', 'Built, not active', 'Active']);
+    expect(rows[4]!.querySelector('time')!.getAttribute('datetime')).toBe('2026-10-23T08:00:00.000Z');
+    buttonByText(page.root, 'Load more rebuilds').click();
+    await flush();
+    rows = rowsOf(rebuildsTable(page));
+    expect(rows).toHaveLength(27);
+    expect(maybeButton(page.root, 'Load more rebuilds')).toBeUndefined();
+  });
+
+  it('never renders batch ids, run ids or fingerprint values', async () => {
+    const fingerprint = 'f'.repeat(64);
+    const page = loadImpactPage({
+      replies: {
+        coverage: coverageWith({
+          fingerprint,
+          pending: [{ ...pendingRow('rechunk', 4, 'ui'), fingerprint, batch_id: 'batch-0000-secret' }],
+          rebuilds: [{ ...runRow({ state: 'built', done: 310 }), batch_id: 'batch-0000-secret', fingerprint }],
+        }),
+      },
+    });
+    await mountPanel(page);
+    const all = everything(page.root!);
+    expect(all).not.toContain('7d1c2a3b-0000-4000-8000-00000000abcd');
+    expect(all).not.toContain('batch-0000-secret');
+    expect(all).not.toContain(fingerprint);
+  });
+
+  it('401 replaces the Rebuilds view with the sign-in alert and keeps Settings usable; 503 shows the unavailable alert', async () => {
+    const signIn = loadImpactPage({ replies: { coverage: { status: 401, body: { error: 'Unauthorized' } } } });
+    await mountPanel(signIn);
+    expect(signIn.root!.textContent).toContain('Reload panel');
+    expect(signIn.root!.querySelector('.alert-warning i.bi-person-lock')).not.toBeNull();
+    expect(signIn.root!.contains(signIn.input('RAG_TABLE_HEADER_REPEAT'))).toBe(true);
+    const down = loadImpactPage({ replies: { coverage: { status: 503, body: { success: false, error: 'fingerprint_unavailable' } } } });
+    await mountPanel(down);
+    expect(down.root!.textContent).toContain('Ingestion changes are unavailable right now. Select Reload panel in a moment.');
+    buttonByText(down.root, 'Reload panel').click();
+    await flush();
+    expect(down.calls('coverage')).toHaveLength(2);
+  });
+});
+
+describe('Rebuilds view: polling while a rebuild runs (UI-SPEC 6.4.2 Refresh, decision 7)', () => {
+  it('refreshes while a rebuild runs and the tab is visible, and announces the end state', async () => {
+    let n = 0;
+    const page = loadImpactPage({
+      replies: {
+        coverage: () => {
+          n += 1;
+          return coverageWith({ rebuilds: [n < 3 ? runRow({ done: 100 + n }) : runRow({ state: 'built', done: 310 })] });
+        },
+      },
+    });
+    await mountPanel(page, { pollMs: 20, announceMs: 1000 });
+    await wait(120);
+    await flush();
+    expect(page.calls('coverage').length).toBe(3);
+    expect(page.status().textContent).toContain('Built, not active');
+    await wait(60);
+    expect(page.calls('coverage').length).toBe(3);
+  });
+
+  it('does not poll without a running rebuild, while the tab is inactive or while the document is hidden', async () => {
+    for (const options of [
+      { replies: { coverage: coverageWith({ rebuilds: [runRow({ state: 'built', done: 310 })] }) } },
+      { activeTab: false, replies: { coverage: coverageWith({ rebuilds: [runRow()] }) } },
+      { visibility: 'hidden' as const, replies: { coverage: coverageWith({ rebuilds: [runRow()] }) } },
+    ]) {
+      const page = loadImpactPage(options);
+      await mountPanel(page, { pollMs: 20 });
+      await wait(80);
+      expect(page.calls('coverage')).toHaveLength(1);
+    }
+  });
+
+  it('announces progress at most once per announce interval', async () => {
+    let n = 0;
+    const page = loadImpactPage({ replies: { coverage: () => coverageWith({ rebuilds: [runRow({ done: 100 + (n += 1) })] }) } });
+    await mountPanel(page, { pollMs: 15, announceMs: 10_000 });
+    const first = page.status().textContent;
+    expect(first).toContain('Parse again');
+    await wait(80);
+    expect(page.calls('coverage').length).toBeGreaterThan(2);
+    expect(page.status().textContent).toBe(first);
+    (page.context.ingestImpactPanel as { stopPolling: () => void }).stopPolling();
   });
 });
