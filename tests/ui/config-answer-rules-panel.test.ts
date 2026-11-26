@@ -741,6 +741,29 @@ describe('answer-rules.js: mount (UI-SPEC 6.11)', () => {
     expect(ui.byId('rag-answer-rules-caps').querySelectorAll('table')).toHaveLength(1);
   });
 
+  it('leaves the live regions untouched while their content does not change', async () => {
+    const ui = mountPanel();
+    await ui.init();
+    await ui.settle();
+    ui.toggle('RAG_CLAIM_CHECK', true);
+    const alert = ui.byId('rag-answer-rules-alerts').firstElementChild;
+    const sentence = ui.byId('rag-answer-rules-guard-now').firstElementChild;
+    ui.setValue('RAG_GROUNDEDNESS_JUDGE_MODEL', 'vendor/model-c', 'input');
+    ui.setValue('RAG_UPLOADER_ALERT_THRESHOLD', '0', 'input');
+    expect(ui.byId('rag-answer-rules-alerts').firstElementChild).toBe(alert);
+    expect(ui.byId('rag-answer-rules-guard-now').firstElementChild).toBe(sentence);
+  });
+
+  it('gives each Copy command button its own command as description', async () => {
+    const ui = mountPanel();
+    await ui.init();
+    await ui.settle();
+    const buttons = ui.doc.querySelectorAll('button').filter((b) => text(b) === 'Copy command');
+    expect(buttons).toHaveLength(2);
+    const described = buttons.map((b) => text(ui.byId(b.getAttribute('aria-describedby')!)));
+    expect(described).toEqual([`Calibrate with ${JUDGE_COMMAND}`, `Choose limits with ${SWEEP_COMMAND}`]);
+  });
+
   it('builds the DOM without innerHTML', async () => {
     const ui = mountPanel();
     await ui.init();
