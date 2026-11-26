@@ -372,6 +372,29 @@ describe('createEntry and updateEntry (D-05, D-22, D-24, D-32)', () => {
     expect(listed).toEqual(expect.arrayContaining([TENANT, 'shared']));
   });
 
+  it('reads the shared layer again when a shared write lands while a workspace write validates', async () => {
+    fake.layers.shared!.rows = [stored('shared', 'term alpha beta', ['termalpha'])];
+    fake.layers[TENANT] = { version: 5, sha: SHA, rows: [] };
+    upsertReturns(uuid(), 6);
+    let sharedReads = 0;
+    fake.outcomes.rag_term_list_entries = (args) => {
+      const layer = fake.layers[args.p_layer_key as string]!;
+      if (args.p_layer_key === 'shared') sharedReads += 1;
+      const version = args.p_layer_key === 'shared' && sharedReads === 1 ? layer.version - 1 : layer.version;
+      return { data: layer.rows.map((row) => ({ ...row, layer_version: version, total_count: layer.rows.length })), error: null };
+    };
+    const result = await admin.createEntry({
+      actorUserId: ACTOR,
+      layerKey: TENANT,
+      expectedVersion: 5,
+      entry: { canonical: 'term gamma delta', variants: ['termgamma'], language: LATIN, kind: 'synonym' },
+      signal,
+    });
+    expect(result.ok).toBe(true);
+    expect(sharedReads).toBe(2);
+    expect(upserts()).toHaveLength(1);
+  });
+
   it('reads every page of a large layer before validating', async () => {
     fake.layers.shared!.rows = Array.from({ length: 250 }, (_, index) => stored('shared', `term alpha ${index.toString(36)}x`, [`termalpha${index.toString(36)}x`]));
     upsertReturns(uuid(), 4);
