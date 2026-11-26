@@ -66,7 +66,7 @@ const QUARANTINE_LABELS = {
     'release.running': 'Releasing…',
     'release.done': '{file} is released and searchable.',
     'delete.title': 'Delete {file}?',
-    'delete.body': "The quarantined version is removed. This can't be undone.",
+    'delete.body': 'The quarantined version is removed. This can’t be undone.',
     'delete.running': 'Deleting…',
     'delete.done': '{file} is deleted.',
     'list.loading': 'Loading quarantined documents…',
@@ -707,6 +707,9 @@ class QuarantinePanel {
       selected: 'quarantined',
       onSelect: (id) => this.onSelect(id),
     });
+    // DaisyUI lays tabs out as an equal-width grid, which breaks "Not checked: 2" over three lines at 360px; whole tabs wrap instead.
+    this.tabs.tablist.classList.add('!flex');
+    for (const button of Array.from(this.tabs.tablist.querySelectorAll('button'))) button.classList.add('whitespace-nowrap', 'h-auto', 'min-h-8', 'py-2');
     this.listHost = this.el('div', { className: 'min-w-0' });
     this.tabs.panels.quarantined.appendChild(this.listHost);
     this.notCheckedAlertHost = this.el('div', { className: 'flex flex-col gap-2 empty:hidden mb-4' });
@@ -1020,7 +1023,7 @@ class QuarantinePanel {
       this.el('li', { className: 'min-w-0' }, [this.el('code', { className: 'font-mono text-xs break-all', text: ui.ragUiVisibleControls(target), attrs: { translate: 'no' } })]);
     const inline = targets.slice(0, QUARANTINE_INLINE_TARGETS).map(item);
     const rest = targets.slice(QUARANTINE_INLINE_TARGETS).map(item);
-    const figure = this.el('figure', { className: 'border-l-4 border-warning bg-base-100 rounded-r-lg p-2 min-w-0' }, [
+    const figure = this.el('figure', { className: '!block border-l-4 border-warning bg-base-100 rounded-r-lg p-2 min-w-0' }, [
       this.el('figcaption', { className: 'text-xs text-base-content/70 mb-1 break-words', text: caption }),
       this.el(
         'ul',
@@ -1045,17 +1048,20 @@ class QuarantinePanel {
     return figure;
   }
 
+  /** DaisyUI centres a figure inside .card as a flex row; the evidence block stays a block with its caption on top. */
+  evidenceBlock(caption, text) {
+    const figure = quarantineUiLib().ragUiEvidence(this.doc, { tone: 'untrusted', caption, text, locale: this.locale });
+    figure.classList.add('!block');
+    return figure;
+  }
+
   renderGroup(group) {
     const ui = quarantineUiLib();
     const evidence = [];
     if (group.kind === 'injection_rule') {
-      for (const snippet of group.snippets) {
-        evidence.push(ui.ragUiEvidence(this.doc, { tone: 'untrusted', caption: this.t('evidence.snippet'), text: snippet, locale: this.locale }));
-      }
+      for (const snippet of group.snippets) evidence.push(this.evidenceBlock(this.t('evidence.snippet'), snippet));
     } else if (group.kind === 'hidden_text') {
-      for (const span of group.spans) {
-        evidence.push(ui.ragUiEvidence(this.doc, { tone: 'untrusted', caption: span.caption, text: span.text, locale: this.locale }));
-      }
+      for (const span of group.spans) evidence.push(this.evidenceBlock(span.caption, span.text));
     }
     const blocks = [];
     if (evidence.length) blocks.push(...this.withDisclosure(evidence, QUARANTINE_INLINE_SPANS));
@@ -1184,8 +1190,8 @@ class QuarantinePanel {
     const area = this.control(QUARANTINE_ALLOWLIST_ENV);
     if (area) {
       const field = area.closest('.form-control') || area.parentNode;
-      this.ownLine = this.el('p', { className: 'text-xs text-base-content/70 mt-1 empty:hidden' });
-      this.invalidList = this.el('ul', { className: 'text-sm text-error mt-1 flex flex-col gap-1 empty:hidden', id: ui.ragUiNextId('rag-quarantine-allowlist-invalid'), attrs: { 'data-quarantine-allowlist-invalid': '' } });
+      this.ownLine = this.el('p', { className: 'text-xs text-base-content/70 mt-1 px-1 empty:hidden' });
+      this.invalidList = this.el('ul', { className: 'text-sm text-error mt-1 px-1 flex flex-col gap-1 empty:hidden', id: ui.ragUiNextId('rag-quarantine-allowlist-invalid'), attrs: { 'data-quarantine-allowlist-invalid': '' } });
       this.warningHost = this.el('div', { className: 'flex flex-col gap-2 mt-2 empty:hidden' });
       field.appendChild(this.ownLine);
       field.appendChild(this.invalidList);
@@ -1255,11 +1261,11 @@ class QuarantinePanel {
     const value = this.controlValue('RAG_INJECTION_SCAN') || 'off';
     const known = QUARANTINE_RULES_VALUES.includes(value);
     this.rulesMirror.replaceChildren(
-      this.el('p', { className: 'label px-0' }, [this.el('span', { className: 'label-text', text: this.t('check.name.rules') })]),
-      this.el('p', { className: 'text-sm font-semibold' }, [
+      this.el('p', { className: 'label' }, [this.el('span', { className: 'label-text', text: this.t('check.name.rules') })]),
+      this.el('p', { className: 'text-sm font-semibold px-1' }, [
         known ? this.el('span', { text: this.t('check.rules.value.' + value) }) : this.codeEl(value),
       ]),
-      this.el('div', { className: 'label flex-wrap gap-1 px-0' }, [
+      this.el('div', { className: 'label flex-wrap gap-1' }, [
         this.el('span', { className: 'label-text-alt' }, [
           known ? this.el('span', { text: this.t('check.rules.' + value) }) : ui.ragUiCodeSentence(this.doc, this.locale, value, this.t('check.unknown')),
           ' ',

@@ -503,7 +503,7 @@ describe('Release and Delete use the modal dialog (UI-SPEC finding 7, 12.4)', ()
     await flush();
     const dialog = page.dialog()!;
     expect(dialog.textContent).toContain('Delete document-1.pdf?');
-    expect(dialog.textContent).toContain("The quarantined version is removed. This can't be undone.");
+    expect(dialog.textContent).toContain('The quarantined version is removed. This can’t be undone.');
     expect(page.doc.activeElement!.textContent.trim()).toBe('Keep document');
     const confirm = buttonByText(dialog, 'Delete document');
     expect(confirm.className).toContain('btn-error');
