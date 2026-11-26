@@ -28,14 +28,15 @@ const FOLDED_SETUP: Record<DeploymentMode, string> = {
 /**
  * Migrations whose final shape is folded into both setup files: Phase 3 (0301-0320, plans 03-47 and later), Phase 3.1 (0351-0359, and the queue
  * hardening and chunk writer fix 0420-0424 after Phase 4, plan 03.1-52), Phase 4 (0401-0413, plan 04-42) and the empty search_path rewrite 0425
- * after 0424 (plan 04-47), Phase 3.1.1 (0440-0442, plan 03.1.1-14) and Phase 5 (0501-0502, plan 05-25). 0426, 0427 and Phase 6 (plan 06-45)
- * are not folded yet, so a fresh install from a setup file is completed by those migrations alone.
+ * after 0424 (plan 04-47), Phase 3.1.1 (0440-0442, plan 03.1.1-14), Phase 5 (0501-0502, plan 05-25) and Phase 5.1.1 (0531-0537, plan
+ * 05.1.1-22). 0426, 0427, Phase 4.1.1, Phase 6 (plan 06-45) and the 07xx and 08xx blocks are not folded yet, so a fresh install from a setup file is completed by those migrations alone.
  */
-const FOLDED_MIGRATION = /^supabase\/migrations\/(030[1-9]|031\d|0320|035[1-9]|040[1-9]|041[0-3]|042[0-5]|044[0-2]|050[12])_[a-z0-9_]+(\.(single|multi)-tenant)?\.sql$/;
+const FOLDED_MIGRATION = /^supabase\/migrations\/(030[1-9]|031\d|0320|035[1-9]|040[1-9]|041[0-3]|042[0-5]|044[0-2]|050[12]|053[1-7])_[a-z0-9_]+(\.(single|multi)-tenant)?\.sql$/;
 const PHASE4_MIGRATION = /^supabase\/migrations\/04(0[1-9]|1\d)_/;
 const PHASE31_MIGRATION = /^supabase\/migrations\/(035[1-9]|042[0-4])_/;
 const PHASE5_MIGRATION = /^supabase\/migrations\/050\d_/;
 const PHASE311_MIGRATION = /^supabase\/migrations\/044\d_/;
+const PHASE511_MIGRATION = /^supabase\/migrations\/053\d_/;
 const unfoldedMigrationFiles = (mode: DeploymentMode): string[] => migrationFiles(mode).filter((file) => !FOLDED_MIGRATION.test(file));
 
 /** Every function the Phase 4 migrations create; each one is service-role only (RET-04, D-04). */
@@ -308,6 +309,20 @@ describe('folded migration set', () => {
       ]);
       assert.deepEqual(phase311.filter((file) => !FOLDED_MIGRATION.test(file)), []);
     });
+
+    test(`every Phase 5.1.1 migration of ${mode} is folded into the setup file`, () => {
+      const phase511 = migrationFiles(mode).filter((file) => PHASE511_MIGRATION.test(file));
+      assert.deepEqual(phase511, [
+        'supabase/migrations/0531_rag_retrieval_log.sql',
+        `supabase/migrations/0532_rag_retrieval_log_tenant.${mode}.sql`,
+        'supabase/migrations/0533_rag_retrieval_log_functions.sql',
+        'supabase/migrations/0534_rag_feedback_review.sql',
+        'supabase/migrations/0535_rag_feedback_mining.sql',
+        'supabase/migrations/0536_rag_retrieval_log_source_opened.sql',
+        'supabase/migrations/0537_rag_feedback_mining_report.sql',
+      ]);
+      assert.deepEqual(phase511.filter((file) => !FOLDED_MIGRATION.test(file)), []);
+    });
   }
 });
 
@@ -411,6 +426,93 @@ async function assertAnswerRecordsSecured(db: PGlite, mode: DeploymentMode): Pro
   assert.deepEqual(policies.rows, [{ name: 'rag_answer_records_select_own', cmd: 'SELECT', roles: '{authenticated}', qual: '(user_id = auth.uid())' }]);
 }
 
+const FEEDBACK_TABLES = ['rag_domain_experts', 'rag_retrieval_log', 'rag_review_items', 'rag_tenant_feedback_settings'];
+const FEEDBACK_SERVICE_ROLE_FUNCTIONS = [
+  'rag_feedback_loop_on_chat_delete()',
+  'rag_mine_failed_queries(timestamptz, timestamptz, jsonb)',
+  'rag_mine_failed_queries_report(timestamptz, timestamptz, jsonb)',
+  'rag_purge_retrieval_log(integer, integer)',
+  'rag_record_source_opened(text, uuid)',
+];
+const LANGUAGE_COLUMNS: Record<string, string> = {
+  query_language: 'text',
+  query_language_confidence: 'real',
+  chunk_languages: 'text[]',
+  answer_language: 'text',
+};
+
+/** The Phase 5.1.1 schema as a fresh install gets it (D-03a, D-29): RLS on every table, no anon privilege, the language snapshot columns with
+ * their checks on the log and the review items, the tags column, the mode's tenant key and the functions locked to their roles. */
+async function assertFeedbackLoopSecured(db: PGlite, mode: DeploymentMode): Promise<void> {
+  const tables = await db.query<{ name: string; rls: boolean }>(
+    `SELECT c.relname AS name, c.relrowsecurity AS rls FROM pg_class c
+     WHERE c.relnamespace = 'public'::regnamespace AND c.relkind = 'r' AND c.relname = ANY($1::text[]) ORDER BY 1`,
+    [FEEDBACK_TABLES],
+  );
+  assert.deepEqual(tables.rows, FEEDBACK_TABLES.map((name) => ({ name, rls: true })), 'the feedback-loop tables exist with row level security');
+  for (const table of FEEDBACK_TABLES) {
+    const anon = await db.query<{ n: number }>(
+      `SELECT count(*)::int AS n FROM unnest(ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER']) AS p(privilege)
+       WHERE has_table_privilege('anon', $1, p.privilege)`,
+      [`public.${table}`],
+    );
+    assert.equal(anon.rows[0]?.n, 0, `anon has no privilege on ${table}`);
+  }
+  const logClient = await db.query<{ n: number }>(
+    `SELECT count(*)::int AS n FROM unnest(ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE']) AS p(privilege)
+     WHERE has_table_privilege('authenticated', 'public.rag_retrieval_log', p.privilege)`,
+  );
+  assert.equal(logClient.rows[0]?.n, 0, 'authenticated has no privilege on rag_retrieval_log');
+  for (const table of ['rag_retrieval_log', 'rag_review_items']) {
+    const columns = await db.query<{ name: string; type: string }>(
+      `SELECT a.attname AS name, format_type(a.atttypid, a.atttypmod) AS type FROM pg_attribute a
+       WHERE a.attrelid = $1::regclass AND a.attnum > 0 AND NOT a.attisdropped AND a.attname = ANY($2::text[]) ORDER BY 1`,
+      [`public.${table}`, Object.keys(LANGUAGE_COLUMNS)],
+    );
+    assert.deepEqual(
+      Object.fromEntries(columns.rows.map((row) => [row.name, row.type])),
+      LANGUAGE_COLUMNS,
+      `${table} carries the D-03a language columns`,
+    );
+    const checks = await db.query<{ name: string }>(
+      `SELECT conname AS name FROM pg_constraint WHERE conrelid = $1::regclass AND contype = 'c' AND conname = ANY($2::text[]) ORDER BY 1`,
+      [`public.${table}`, Object.keys(LANGUAGE_COLUMNS).map((column) => `${table}_${column}_check`)],
+    );
+    assert.equal(checks.rows.length, 4, `${table} checks each language column`);
+    const tenantKey = await db.query<{ generated: string }>(
+      `SELECT a.attgenerated AS generated FROM pg_attribute a WHERE a.attrelid = $1::regclass AND a.attname = 'tenant_key'`,
+      [`public.${table}`],
+    );
+    assert.ok(tenantKey.rows.length === 1, `${table} has tenant_key`);
+  }
+  const logKey = await db.query<{ expr: string }>(
+    `SELECT pg_get_expr(d.adbin, d.adrelid) AS expr FROM pg_attribute a JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+     WHERE a.attrelid = 'public.rag_retrieval_log'::regclass AND a.attname = 'tenant_key'`,
+  );
+  assert.match(String(logKey.rows[0]?.expr).replace(/\s+/g, ' ').trim(), ANSWER_RECORD_TENANT_KEY[mode], `rag_retrieval_log.tenant_key uses the ${mode} expression`);
+  const tags = await db.query<{ type: string; check: string | null }>(
+    `SELECT format_type(a.atttypid, a.atttypmod) AS type,
+            (SELECT conname FROM pg_constraint WHERE conrelid = a.attrelid AND conname = 'rag_review_items_tags_check') AS check
+     FROM pg_attribute a WHERE a.attrelid = 'public.rag_review_items'::regclass AND a.attname = 'tags'`,
+  );
+  assert.deepEqual(tags.rows, [{ type: 'text[]', check: 'rag_review_items_tags_check' }], 'rag_review_items carries the D-29 tags column');
+  for (const signature of FEEDBACK_SERVICE_ROLE_FUNCTIONS) {
+    const acl = await db.query<{ anon: boolean; authenticated: boolean; service: boolean }>(
+      `SELECT has_function_privilege('anon', to_regprocedure($1), 'EXECUTE') AS anon,
+              has_function_privilege('authenticated', to_regprocedure($1), 'EXECUTE') AS authenticated,
+              has_function_privilege('service_role', to_regprocedure($1), 'EXECUTE') AS service`,
+      [`public.${signature}`],
+    );
+    assert.deepEqual(acl.rows[0], { anon: false, authenticated: false, service: true }, `${signature} is service_role only`);
+  }
+  const expert = await db.query<{ anon: boolean; authenticated: boolean; service: boolean }>(
+    `SELECT has_function_privilege('anon', to_regprocedure('public.rag_is_domain_expert(text)'), 'EXECUTE') AS anon,
+            has_function_privilege('authenticated', to_regprocedure('public.rag_is_domain_expert(text)'), 'EXECUTE') AS authenticated,
+            has_function_privilege('service_role', to_regprocedure('public.rag_is_domain_expert(text)'), 'EXECUTE') AS service`,
+  );
+  assert.deepEqual(expert.rows[0], { anon: false, authenticated: true, service: true }, 'rag_is_domain_expert is the RLS helper for authenticated');
+}
+
 for (const mode of MODES) {
   describe(`${mode} setup`, () => {
     test(`${mode} setup applies cleanly on fresh PGlite`, async () => {
@@ -421,6 +523,7 @@ for (const mode of MODES) {
         await assertPhase4FunctionsServiceRoleOnly(fixture.db);
         await assertAnswerRecordsSecured(fixture.db, mode);
         await assertDomainBindingsSecured(fixture.db);
+        await assertFeedbackLoopSecured(fixture.db, mode);
         const tables = await fixture.db.query<{ name: string }>(
           `SELECT c.relname AS name FROM pg_class c WHERE c.relnamespace = 'public'::regnamespace AND c.relkind = 'r'
              AND c.relname IN ('document_parents', 'chunking_profiles', 'chunking_build_runs', 'chunking_build_gaps') ORDER BY 1`,
@@ -487,7 +590,8 @@ const PHASE_31_SECTIONS = [
 ] as const;
 const PHASE_4_HEADER = `${BAR}\n-- Phase 4: Hybrid retrieval`;
 // The empty search_path rewrite (0425, plan 04-47) runs after 0424, so its section follows the 0420-0424 section; the Phase 3.1.1 section
-// (0440-0442, plan 03.1.1-14) replaces 0425 guard and re-embed bodies, so it follows 0425; the Phase 5 section (0501-0502, plan 05-25) closes the file.
+// (0440-0442, plan 03.1.1-14) replaces 0425 guard and re-embed bodies, so it follows 0425; the Phase 5 section (0501-0502, plan 05-25) follows, and the Phase 5.1.1 section (0531-0537, plan
+// 05.1.1-22) closes the file.
 const SEARCH_PATH_SECTION = {
   header: `${BAR}\n-- Phase 4 gap closure: empty search_path for SECURITY DEFINER, trigger and post-Phase-3 functions (migration 0425, plan 04-47, after 0424)\n${BAR}`,
   files: /^supabase\/migrations\/0425_/,
@@ -499,6 +603,10 @@ const PHASE_311_SECTION = {
 const PHASE_5_SECTION = {
   header: `${BAR}\n-- Phase 5: Answer records (migrations 0501-0502, plan 05-25, after 0425 in migration order)\n${BAR}`,
   files: /^supabase\/migrations\/050[12]_/,
+} as const;
+const PHASE_511_SECTION = {
+  header: `${BAR}\n-- Phase 5.1.1: Feedback loop (migrations 0531-0537, plan 05.1.1-22, after 0502 in migration order)\n${BAR}`,
+  files: /^supabase\/migrations\/053[1-7]_/,
 } as const;
 const OTHER_MODE: Record<DeploymentMode, DeploymentMode> = { 'single-tenant': 'multi-tenant', 'multi-tenant': 'single-tenant' };
 
@@ -587,9 +695,9 @@ for (const mode of MODES) {
       assert.ok(text.includes(`${early}\n${PHASE_4_HEADER}`), 'the 0351-0359 section sits right before the Phase 4 section');
       assert.ok(
         text.endsWith(
-          `${late}\n${foldedSection(mode, SEARCH_PATH_SECTION)}\n${foldedSection(mode, PHASE_311_SECTION)}\n${foldedSection(mode, PHASE_5_SECTION)}`,
+          `${late}\n${foldedSection(mode, SEARCH_PATH_SECTION)}\n${foldedSection(mode, PHASE_311_SECTION)}\n${foldedSection(mode, PHASE_5_SECTION)}\n${foldedSection(mode, PHASE_511_SECTION)}`,
         ),
-        'after Phase 4 come the 0420-0424 section, the 0425 section, the 0440-0442 section and then the Phase 5 section, which closes the file',
+        'after Phase 4 come the 0420-0424, 0425, 0440-0442 and Phase 5 sections, then the Phase 5.1.1 section, which closes the file',
       );
       assert.ok(text.indexOf(late) > text.indexOf(PHASE_4_HEADER));
     });
