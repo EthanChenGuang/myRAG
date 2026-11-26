@@ -119,3 +119,23 @@ def test_committed_query_params_matches_defaults():
     assert model_cls is not None
     committed = model_cls.model_validate_json(path.read_text(encoding="utf-8"))
     assert committed == finalize_config(model_cls())
+
+
+@pytest.mark.parametrize(
+    ("rel", "model_cls"),
+    [
+        ("eval/config/retrieval-params.json", RetrievalParams),
+        ("eval/config/refusal-thresholds.json", RefusalThresholds),
+        ("eval/config/refusal-calibration.json", RefusalCalibrationConfig),
+    ],
+)
+def test_committed_config_rewrites_byte_identical_with_its_hash(tmp_path: Path, rel: str, model_cls):
+    """Phase 4.2 D-46: new optional contract fields leave the committed files and their config_hash unchanged."""
+    from rag_sidecar.contracts.retrieval import compute_config_hash
+
+    source = REPO_ROOT / rel
+    model = model_cls.model_validate_json(source.read_bytes())
+    target = tmp_path / Path(rel).name
+    write_config_atomically(target, model)
+    assert target.read_bytes() == source.read_bytes()
+    assert model.config_hash == compute_config_hash(model)

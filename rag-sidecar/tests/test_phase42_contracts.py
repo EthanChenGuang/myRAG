@@ -290,3 +290,127 @@ def test_committed_configs_redump_identically(rel, model):
     text = json.dumps(loaded.model_dump(mode="json"), sort_keys=True, indent=2, ensure_ascii=False) + "\n"
     assert text == raw
     assert loaded.config_hash == contracts.compute_config_hash(loaded)
+
+
+# --- Task 3: golden, report, trace and citation contracts (D-07, D-13, D-21, D-22, D-25, D-32, D-50, D-51)
+
+from rag_sidecar.contracts import answers as answer_contracts  # noqa: E402
+from rag_sidecar.contracts import eval_run as run_contracts  # noqa: E402
+from rag_sidecar.contracts import golden as golden_contracts  # noqa: E402
+from rag_sidecar.contracts import report as report_contracts  # noqa: E402
+from rag_sidecar.contracts.samples import build_samples  # noqa: E402
+
+
+def _golden(**overrides) -> dict:
+    payload = {
+        "id": "en-general-901",
+        "question": "Which two values does the reference list give?",
+        "language": "en",
+        "category": "general",
+        "answerable": True,
+        "expected_answer": "Both values.",
+        "gold_evidence": [
+            {"document": "doc-a.md", "section": "Part one", "quote": "first value"},
+            {"document": "doc-b.md", "section": "Part two", "quote": "second value"},
+            {"document": "doc-c.md", "section": "Part two", "quote": "second value copy"},
+        ],
+        "review_status": "approved",
+        "provenance": "synthetic_fixture",
+        "split": "dev",
+    }
+    payload.update(overrides)
+    return payload
+
+
+@pytest.mark.parametrize("category", ["duplicate_flood", "identifier_near_miss"])
+def test_golden_accepts_new_categories_answerable_or_not(category):
+    assert golden_contracts.GoldenItem.model_validate(_golden(category=category)).category == category
+    unanswerable = _golden(category=category, answerable=False, expected_answer=None, gold_evidence=[])
+    with pytest.raises(ValidationError):
+        golden_contracts.GoldenItem.model_validate(unanswerable)
+
+
+def test_golden_evidence_groups_rules_and_omission():
+    item = golden_contracts.GoldenItem.model_validate(_golden())
+    assert "evidence_groups" not in item.model_dump(mode="json")
+    grouped = golden_contracts.GoldenItem.model_validate(_golden(evidence_groups=[[0], [1, 2]]))
+    assert grouped.model_dump(mode="json")["evidence_groups"] == [[0], [1, 2]]
+    for groups in ([[0], [3]], [[0], []], [[0, 1], [1, 2]], [], [[-1]]):
+        with pytest.raises(ValidationError):
+            golden_contracts.GoldenItem.model_validate(_golden(evidence_groups=groups))
+
+
+def test_report_models_accept_new_optional_fields():
+    samples = build_samples()["samples"]
+    report = report_contracts.EvalReport.model_validate(samples["EvalReport"])
+    dumped = report.model_dump(mode="json")
+    for key in ("ttft", "pre_generation"):
+        assert key not in dumped
+    for key in ("ndcg_at_context_k", "k_zero", "topk_redundancy", "intent_coverage", "identifier_precision",
+                "near_miss_leakage"):
+        assert key not in dumped["overall"]
+    for key in ("context_k", "ndcg_at_context_k", "group_count", "topk_redundancy", "intent_coverage",
+                "identifier_precise", "near_miss_leak"):
+        assert all(key not in item for item in dumped["items"])
+
+    metric = {"value": 0.5, "n": 2}
+    overall = dict(samples["EvalReport"]["overall"], ndcg_at_context_k=metric, k_zero=metric,
+                   topk_redundancy=metric, intent_coverage=metric, identifier_precision=metric,
+                   near_miss_leakage=metric)
+    item = dict(samples["EvalReport"]["items"][0], context_k=8, ndcg_at_context_k=0.8, group_count=2,
+                topk_redundancy=0.25, intent_coverage=True, identifier_precise=True, near_miss_leak=False)
+    latency = {"p50_ms": 10.0, "p95_ms": 20.0, "n": 3}
+    full = dict(samples["EvalReport"], overall=overall, items=[item],
+                ttft={"hit": latency, "miss": latency}, pre_generation={"chat": latency})
+    validated = report_contracts.EvalReport.model_validate(full)
+    assert validated.ttft is not None and validated.ttft["miss"].p95_ms == 20.0
+    assert validated.items[0].group_count == 2
+    with pytest.raises(ValidationError):
+        report_contracts.EvalReport.model_validate(dict(full, ttft={"warm": latency}))
+
+
+def test_trace_models_accept_new_optional_fields():
+    samples = build_samples()["samples"]
+    trace = run_contracts.RagTrace.model_validate(samples["RagTrace"])
+    dumped = trace.model_dump(mode="json")
+    for key in ("ttft_ms", "pre_generation_ms", "cache", "version_scope", "topk_redundancy", "identifier"):
+        assert key not in dumped
+    assert all("dup_cluster_id" not in chunk for chunk in dumped["kept"])
+
+    kept = [dict(chunk, dup_cluster_id="c-1", document_version=2, is_current=False, identifiers_norm=["ab12"])
+            for chunk in samples["RagTrace"]["kept"]]
+    identifier = {"asked": 1, "resolved": 0, "near_miss_dropped": 2, "fallback": True,
+                  "suggestions": ["AB-13", "AB-21", "AB-31"]}
+    full = dict(samples["RagTrace"], kept=kept, ttft_ms=120.0, pre_generation_ms=80.0, cache="miss",
+                version_scope="all", topk_redundancy=0.5, identifier=identifier)
+    validated = run_contracts.RagTrace.model_validate(full)
+    assert validated.identifier is not None and validated.identifier.fallback is True
+    with pytest.raises(ValidationError):
+        run_contracts.RagTrace.model_validate(dict(full, identifier=dict(identifier, suggestions=["a", "b", "c", "d"])))
+    with pytest.raises(ValidationError):
+        run_contracts.RagTrace.model_validate(dict(full, cache="warm"))
+    range_trace = run_contracts.RagTrace.model_validate(dict(full, version_scope={"from": "2024-01-01"}))
+    assert range_trace.model_dump(mode="json", by_alias=True)["version_scope"] == {"from": "2024-01-01"}
+
+
+def test_refusal_reason_includes_identifier_not_found():
+    samples = build_samples()["samples"]
+    trace = run_contracts.RagTrace.model_validate(
+        dict(samples["RagTrace"], refused=True, refusal_reason="identifier_not_found")
+    )
+    assert trace.refusal_reason == "identifier_not_found"
+
+
+def test_citation_record_version_fields_and_also_in():
+    samples = build_samples()["samples"]
+    record = answer_contracts.CitationRecord.model_validate(samples["CitationRecord"])
+    dumped = record.model_dump(mode="json")
+    for key in ("isCurrent", "effectiveFrom", "effectiveTo", "alsoIn"):
+        assert key not in dumped
+    full = dict(samples["CitationRecord"], isCurrent=False, effectiveFrom="2024-01-01", effectiveTo="2024-12-31",
+                alsoIn=[{"documentId": "doc-2", "filename": "copy.md", "chunkId": "chunk-9"}])
+    validated = answer_contracts.CitationRecord.model_validate(full)
+    assert validated.alsoIn is not None and validated.alsoIn[0].filename == "copy.md"
+    assert validated.model_dump(mode="json")["effectiveFrom"] == "2024-01-01"
+    with pytest.raises(ValidationError):
+        answer_contracts.CitationRecord.model_validate(dict(full, alsoIn=[{"documentId": "doc-2"}]))
