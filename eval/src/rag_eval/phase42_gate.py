@@ -262,3 +262,77 @@ def run_config_for(spec: Phase42GateSpec, run: RunEntry) -> dict[str, Any]:
     if not resolve_cli_path(run.base).is_file():
         raise ComparisonError(f"run {run.name}: run config {run.base} does not exist")
     return materialise_run_config(CompareRunSpec(name=run.name, base=run.base, fixture_mode=run.fixture_mode, env=env), [])
+
+
+# ---------- gates (stub: names only, implemented in the GREEN commit)
+
+GATE_NAMES = ("off_identity", "diversity", "identifier", "table", "versions", "dictionary")
+
+
+class GateOutcome(_Model):
+    name: str
+    decision: str
+    passed: bool
+    runs: list[str] = Field(default_factory=list)
+    numbers: dict[str, float | int | None] = Field(default_factory=dict)
+    offenders: list[str] = Field(default_factory=list)
+
+
+class RuleOutcome(_Model):
+    name: str
+    decision: str
+    outcome: str
+    numbers: dict[str, float | int | None] = Field(default_factory=dict)
+    reasons: list[str] = Field(default_factory=list)
+
+
+def _stub(name: str, gate: Any) -> GateOutcome:
+    return GateOutcome(name=name, decision=gate.decision, passed=True)
+
+
+def off_identity_gate(gate, outputs, modes, baselines, noise) -> GateOutcome:
+    return _stub("off_identity", gate)
+
+
+def diversity_gate(gate, outputs, noise) -> GateOutcome:
+    return _stub("diversity", gate)
+
+
+def descriptive_ids(output, max_asked) -> list[str]:
+    return []
+
+
+def identifier_gate(gate, outputs, noise) -> GateOutcome:
+    return _stub("identifier", gate)
+
+
+def table_gate(gate, outputs, noise) -> GateOutcome:
+    return _stub("table", gate)
+
+
+def versions_gate(gate, outputs, noise) -> GateOutcome:
+    return _stub("versions", gate)
+
+
+def dictionary_gate(gate, outputs, noise) -> GateOutcome:
+    return _stub("dictionary", gate)
+
+
+def stem_rule(rule, outputs, noise) -> RuleOutcome:
+    return RuleOutcome(name="stem_it", decision=rule.decision, outcome="")
+
+
+def refusal_cell_rule(rule, calibration) -> RuleOutcome:
+    return RuleOutcome(name="refusal_mode_cells", decision=rule.decision, outcome="")
+
+
+def run_phase42_gates(spec, out, runner=None, *, only=None, reuse=None):
+    raise AssertionError("run_phase42_gates is not implemented")
+
+
+def default_runner(request):
+    raise AssertionError("default_runner is not implemented")
+
+
+def main(argv: list[str] | None = None) -> int:
+    return -1
