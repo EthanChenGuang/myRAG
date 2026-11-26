@@ -18,7 +18,7 @@ import os
 import re
 import sys
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TextIO
 
@@ -59,15 +59,15 @@ def _files(run_dir: Path) -> list[Path]:
 
 
 def _created_at(value: str) -> datetime:
-    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+    parsed = datetime.fromisoformat(value)
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
 def last_activity(run_dir: Path, created_at: str) -> datetime:
     newest = _created_at(created_at)
     for path in _files(run_dir):
         try:
-            mtime = datetime.fromtimestamp(path.lstat().st_mtime, tz=timezone.utc)
+            mtime = datetime.fromtimestamp(path.lstat().st_mtime, tz=UTC)
         except OSError:
             continue
         newest = max(newest, mtime)
@@ -99,7 +99,7 @@ def run_prune(
 ) -> PruneResult:
     out = out or sys.stdout
     err = err or sys.stderr
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     if tenant is not None and not _TENANT.fullmatch(tenant):
         print("[Finetune] prune refused: tenant_invalid", file=err)
         return PruneResult(EXIT_USAGE)

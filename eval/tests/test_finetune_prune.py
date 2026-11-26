@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from rag_sidecar.contracts.finetune import DatasetManifest
 
@@ -7,7 +7,7 @@ from rag_eval.finetune import bundle, cli, prune
 
 TENANT_A = "o:00000000-0000-4000-8000-0000000000a1"
 TENANT_B = "o:00000000-0000-4000-8000-0000000000b2"
-NOW = datetime(2026, 11, 26, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 11, 26, 12, 0, tzinfo=UTC)
 SENTENCE = "a neutral synthetic sentence about entry seven"
 
 TEXT_FILES = (
