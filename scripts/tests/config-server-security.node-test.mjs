@@ -25,3 +25,21 @@ test('existing classifications are unchanged', () => {
   assert.equal(isSecretConfigEntry('RAG_VOICE_TOKEN_TTL_SECONDS', '3600'), false);
   assert.equal(isSecretConfigEntry('RAG_SEMANTIC_CACHE_MAX_DISTANCE', '0.05'), false);
 });
+
+test('RAG_FT_EMBED_API_KEY is a secret and its value never leaves the server; the slot settings stay visible', () => {
+  assert.equal(isSecretConfigEntry('RAG_FT_EMBED_API_KEY', ''), true);
+  assert.equal(isSecretConfigEntry('RAG_FT_EMBED_API_KEY', 'placeholder-ft-key'), true);
+  const { config, secretsSet } = maskConfig({
+    RAG_FT_EMBED_API_KEY: 'placeholder-ft-key',
+    RAG_FINETUNE: 'off',
+    RAG_FT_SLOT_A_BASE_URL: 'http://localhost:8080/v1',
+    RAG_FT_SLOT_A_MODEL: 'example-model-v1',
+    RAG_FT_SLOT_A_QUERY_PROMPT: 'query: ',
+  });
+  assert.deepEqual(secretsSet, ['RAG_FT_EMBED_API_KEY']);
+  assert.equal(Object.prototype.hasOwnProperty.call(config, 'RAG_FT_EMBED_API_KEY'), false);
+  assert.doesNotMatch(JSON.stringify(config), /placeholder-ft-key/);
+  assert.equal(config.RAG_FT_SLOT_A_BASE_URL, 'http://localhost:8080/v1');
+  assert.equal(config.RAG_FT_SLOT_A_QUERY_PROMPT, 'query: ');
+  assert.equal(isSecretConfigEntry('RAG_FT_SLOT_B_BASE_URL', 'http://user:placeholder@localhost:8080/v1'), true);
+});

@@ -122,4 +122,19 @@ describe('pinned eval env', () => {
     const result = spawnSync('npx', ['tsx', 'eval/harness/eval-env.mts', '--check'], { cwd: REPO_ROOT, encoding: 'utf8' });
     expect(result.status).toBe(0);
   }, 60_000);
+  test('pins the Phase 6.1 fine-tune switch off with empty slot settings and an empty key', () => {
+    const pinned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'eval/config/rag-eval-env.json'), 'utf8'));
+    expect(pinned).toMatchObject({
+      RAG_FINETUNE: 'off',
+      RAG_FT_EMBED_API_KEY: '',
+      RAG_FT_SLOT_A_BASE_URL: '',
+      RAG_FT_SLOT_A_MODEL: '',
+      RAG_FT_SLOT_A_QUERY_PROMPT: '',
+      RAG_FT_SLOT_A_DOCUMENT_PROMPT: '',
+      RAG_FT_SLOT_B_BASE_URL: '',
+      RAG_FT_SLOT_B_MODEL: '',
+      RAG_FT_SLOT_B_QUERY_PROMPT: '',
+      RAG_FT_SLOT_B_DOCUMENT_PROMPT: '',
+    });
+  });
 });
