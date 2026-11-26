@@ -29,6 +29,12 @@ CROSS_LINGUAL_ADDED_BY_PLAN_06_38 = 8
 # Plan 06-39: four cache_paraphrase and five cache_near_miss items per language; test_golden_phase6.py checks
 # their pairs.
 CACHE_PAIRS_PER_LANGUAGE_06_39 = 9
+# Plan 04.1.1-10: five colloquial-term items (four answerable, one identifier alias) and one no_answer term item per
+# language, with the ids <lang>-colloquial-term-NNN and <lang>-no_answer-term-NNN; test_golden_terminology.py checks them.
+COLLOQUIAL_TERM_PER_LANGUAGE_04_1_1_10 = 5
+NO_ANSWER_TERM_PER_LANGUAGE_04_1_1_10 = 1
+TERM_ITEMS_PER_LANGUAGE_04_1_1_10 = COLLOQUIAL_TERM_PER_LANGUAGE_04_1_1_10 + NO_ANSWER_TERM_PER_LANGUAGE_04_1_1_10
+TERM_ITEM_ID = re.compile(r"^[a-z]+-(colloquial|no_answer)-term-\d{3}$")
 PHASE6_RELATIVE_TIME_TAG = "phase6_relative_time"
 PER_LANGUAGE_CATEGORY = {
     "general": 6,
@@ -37,8 +43,8 @@ PER_LANGUAGE_CATEGORY = {
     "exact_term": 3,
     "table": 3,
     "scanned": 2,
-    "no_answer": 10,
-    "colloquial": 2,
+    "no_answer": 10 + NO_ANSWER_TERM_PER_LANGUAGE_04_1_1_10,
+    "colloquial": 2 + COLLOQUIAL_TERM_PER_LANGUAGE_04_1_1_10,
     "ambiguous": 2,
     "typo": 2,
     "cross_lingual": 8,
@@ -60,11 +66,12 @@ def items():
 
 
 def test_corpus_has_nineteen_documents_per_language():
-    """Thirteen documents plus the sec-topics and sec-attacks pair per language from plan 05.1-09."""
+    """Thirteen documents plus the sec-topics and sec-attacks pair per language from plan 05.1-09, and one
+    synthetic-terms document per language from plan 04.1.1-10."""
     documents = load_corpus(CORPUS_DIR)
     counts = collections.Counter(doc.language for doc in documents)
-    assert len(documents) == 19
-    assert (counts["zh"], counts["en"], counts["it"]) == (6, 7, 6)
+    assert len(documents) == 19 + len(LANGUAGES)
+    assert (counts["zh"], counts["en"], counts["it"]) == (7, 8, 7)
 
 
 def test_corpus_has_one_image_caption_document():
@@ -75,7 +82,12 @@ def test_corpus_has_one_image_caption_document():
 def test_single_language_items_forty_per_language(items):
     single = [item for item in items if item.category != "cross_lingual"]
     counts = collections.Counter(item.language for item in single)
-    per_language = INJECTION_PER_LANGUAGE_05_1_17 + PHASE6_PER_LANGUAGE_06_38 + CACHE_PAIRS_PER_LANGUAGE_06_39
+    per_language = (
+        INJECTION_PER_LANGUAGE_05_1_17
+        + PHASE6_PER_LANGUAGE_06_38
+        + CACHE_PAIRS_PER_LANGUAGE_06_39
+        + TERM_ITEMS_PER_LANGUAGE_04_1_1_10
+    )
     assert len(single) == 102 + NO_ANSWER_ADDED_BY_PLAN_04_38 + per_language * len(LANGUAGES)
     expected = 40 + per_language
     assert {language: counts[language] for language in LANGUAGES} == {"zh": expected, "en": expected, "it": expected}
@@ -83,7 +95,12 @@ def test_single_language_items_forty_per_language(items):
 
 def test_twenty_six_cross_lingual_items_at_least_four_per_pair(items):
     cross = [item for item in items if item.category == "cross_lingual"]
-    per_language = INJECTION_PER_LANGUAGE_05_1_17 + PHASE6_PER_LANGUAGE_06_38 + CACHE_PAIRS_PER_LANGUAGE_06_39
+    per_language = (
+        INJECTION_PER_LANGUAGE_05_1_17
+        + PHASE6_PER_LANGUAGE_06_38
+        + CACHE_PAIRS_PER_LANGUAGE_06_39
+        + TERM_ITEMS_PER_LANGUAGE_04_1_1_10
+    )
     assert len(items) == 102 + NO_ANSWER_ADDED_BY_PLAN_04_38 + per_language * len(LANGUAGES) + len(cross)
     assert len(cross) == PER_PAIR_MINIMUM * len(PAIRS) + CROSS_LINGUAL_ADDED_BY_PLAN_04_38 + CROSS_LINGUAL_ADDED_BY_PLAN_06_38
     counts = collections.Counter((item.language, item.evidence_language) for item in cross)
@@ -107,6 +124,8 @@ def test_ids_are_unique_and_follow_language_category_number(items):
     for item in items:
         if item.category == "cross_lingual":
             expected = re.compile(rf"^xl-{item.language}-{item.evidence_language}-\d{{2}}$")
+        elif TERM_ITEM_ID.match(item.id):
+            expected = re.compile(rf"^{item.language}-{item.category}-term-\d{{3}}$")
         else:
             expected = re.compile(rf"^{item.language}-{item.category.replace('_', '-')}-\d{{3}}$")
         assert expected.match(item.id), item.id
