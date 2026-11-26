@@ -120,6 +120,31 @@ class StrategySlice(_Contract):
     raw_invalid_markers: int | None = Field(default=None, ge=0)
     generation_latency: StageLatency | None = None
     faithfulness: MetricValue | None = None
+    uncited_sentence_rate: MetricValue | None = _optional_metric()
+
+
+class AnswerRuleMetric(_Contract):
+    """One Phase 5.2 answer-rule metric overall and per language and category (D-21, D-54)."""
+
+    overall: MetricValue
+    by_language: dict[str, MetricValue] = Field(default_factory=dict)
+    by_category: dict[str, MetricValue] = Field(default_factory=dict)
+
+
+def _optional_rule_metric() -> "AnswerRuleMetric | None":
+    return Field(default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema)  # type: ignore[return-value]
+
+
+class AnswerRulesReport(_Contract):
+    """D-21, D-33, D-54: answer-rule metrics; uncited_sentence_rate is report-only in Phase 5.2."""
+
+    uncited_sentence_rate: AnswerRuleMetric | None = _optional_rule_metric()
+    unsupported_addition_rate: AnswerRuleMetric | None = _optional_rule_metric()
+    covered_part_answered: AnswerRuleMetric | None = _optional_rule_metric()
+    current_value_rate: AnswerRuleMetric | None = _optional_rule_metric()
+    mixed_versions_rate: AnswerRuleMetric | None = _optional_rule_metric()
+    adjacent_repurpose_rate: AnswerRuleMetric | None = _optional_rule_metric()
+    truncation_rate: AnswerRuleMetric | None = _optional_rule_metric()
 
 
 InjectionConfigLabel = Literal["all_off", "recommended", "tagging_only", "other"]
@@ -271,6 +296,9 @@ class EvalReport(_Contract):
     groundedness_latency: dict[ScoringScorer, StageLatency] = Field(default_factory=dict)
     by_strategy: dict[StrategyKey, StrategySlice] = Field(default_factory=dict)
     injection: InjectionReport | None = None
+    answer_rules: AnswerRulesReport | None = Field(
+        default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema
+    )
     query_layer: QueryLayerReport | None = None
     semantic_cache: SemanticCacheReport | None = None
     notes: list[str] = Field(default_factory=list)

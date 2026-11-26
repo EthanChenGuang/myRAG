@@ -66,6 +66,15 @@ class GroundednessBudgets(_Contract):
     report_only: Literal[True] = True
 
 
+class AnswerCheckBudgets(_Contract):
+    """D-28, D-61: report-only budgets for the post-stream checks and the guard's per-delta overhead."""
+
+    claim_check: ScorerBudget | None = None
+    groundedness_judge: ScorerBudget | None = None
+    output_guard: ScorerBudget | None = None
+    report_only: Literal[True] = True
+
+
 class TtftBudget(ScorerBudget):
     """D-26: time to first answer text delta, per channel and cache state; report-only for live traffic."""
 
@@ -88,5 +97,8 @@ class LatencyBudgets(_Contract):
         default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema
     )
     pre_generation: dict[Profile, PreGenerationBudget] | None = Field(
+        default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema
+    )
+    answer_checks: AnswerCheckBudgets | None = Field(
         default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema
     )
