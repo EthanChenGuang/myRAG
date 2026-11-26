@@ -4,15 +4,8 @@ import { RetrievalBackendError } from '../backend/supabase-rpc';
 import { isMissingPhase4Function, markV2Unavailable, resolveEffectivePipeline, V2_UNAVAILABLE } from './readiness';
 import { loadRagConfig } from '../config';
 import { getRagDeps } from '../deps';
-import { getEmbeddingProfileById } from '../embeddings/active-profile';
-import {
-  classifyProfileFailure,
-  embedQueries,
-  embedQueriesForEvalProfile,
-  embedQuery,
-  embedQueryForEvalProfile,
-  type QueryEmbedding,
-} from '../embeddings/query-embedding';
+import { LEGACY_PROFILE } from '../embeddings/active-profile';
+import { classifyProfileFailure, type QueryEmbedding } from '../embeddings/query-embedding';
 import { assembleVoiceResults, voiceContext, type VoiceResults } from '../context/voice';
 import { validResultCount, warnInjectionCheckDisabled } from '../config';
 import { downweightOrder, failure, injectionDropped, requireValue, runInjectionStage, runStage, stageSpec, StageError } from '../pipeline';
@@ -26,7 +19,7 @@ import { effectiveRetrievalParams } from './retrieval-params';
 import { evalFinalTopK, evalResultCap, runContextStages } from './stages/context';
 import { runQueryStages } from './stages/query';
 import { runRankStages } from './stages/rank';
-import { runSearchStages } from './stages/search';
+import { embedForRetrieval, embedVariantTexts, runSearchStages } from './stages/search';
 import {
   bindingHashFields,
   planBindingLegs,
@@ -35,27 +28,16 @@ import {
   type BindingEmbed,
   type BindingLegsPlan,
 } from './stages/binding-legs';
-import { buildSmallTalkResult, buildV2Result, fusedHitsToVoiceChunks } from './result';
+import { buildCacheHitResult, buildSmallTalkResult, buildV2Result, fusedHitsToVoiceChunks, requestRetrievalConfigHash } from './result';
+import { buildRetrievalFilters, effectiveOnFor } from '../query/filters';
+import { queryLanguage as detectQueryLanguage } from '../query/language';
+import type { RetrievalConfigHashQueryLayer } from './config-hash';
+import type { SemanticCacheSeam } from '../query/run-layer';
 import { variantDenseTexts } from '../query/variants';
 
 export const V2_PROFILES = ['chat', 'embed', 'eval', 'voice'] as const;
 
 const VOICE_DEFAULT_MATCH_COUNT = 5;
-
-function evalEmbeddingProfileId(input: RunRetrievalInput): string | undefined {
-  return input.profile === 'eval' ? input.options?.embeddingProfile : undefined;
-}
-
-async function embedForRetrieval(input: RunRetrievalInput, texts: string[], signal: AbortSignal): Promise<QueryEmbedding[]> {
-  const profileId = evalEmbeddingProfileId(input);
-  if (texts.length === 1) {
-    const [text] = texts;
-    if (profileId) return [await embedQueryForEvalProfile(text!, signal, await getEmbeddingProfileById(profileId))];
-    return [await embedQuery(text!, signal)];
-  }
-  if (profileId) return embedQueriesForEvalProfile(texts, signal, await getEmbeddingProfileById(profileId));
-  return embedQueries(texts, signal);
-}
 
 const PROFILE_FAILURE_REASONS = {
   mismatch: 'embedding_profile_mismatch',
@@ -74,6 +56,21 @@ function documentRowsOf(hits: readonly FusedHit[]): Array<{ id: string; metadata
     if (!rows.has(row.hit.documentId)) rows.set(row.hit.documentId, { id: row.hit.documentId, metadata: row.hit.document.metadata });
   }
   return [...rows.values()];
+}
+
+function precomputedVectors(entry: { text: string; embedding: QueryEmbedding } | undefined): Map<string, QueryEmbedding> | undefined {
+  return entry ? new Map([[entry.text, entry.embedding]]) : undefined;
+}
+
+/** The query-layer part of the config hash (research A-7); loaded only while the layer is on, so run-layer stays unimported otherwise. */
+async function queryLayerHashFor(input: RunRetrievalInput, config: ReturnType<typeof loadRagConfig>, profile: Profile): Promise<RetrievalConfigHashQueryLayer> {
+  const [{ effectiveQueryLayerConfig, queryLayerOverrides }, { effectiveQueryParams }, { queryLayerHashComponent }] = await Promise.all([
+    import('../query/layer-config'),
+    import('../query/query-params'),
+    import('../query/hash-part'),
+  ]);
+  const overrides = queryLayerOverrides(profile, input.stageOverrides);
+  return queryLayerHashComponent(effectiveQueryLayerConfig(config.queryLayer, overrides), effectiveQueryParams(profile, overrides?.queryParams));
 }
 
 export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCollector): Promise<RetrievalResult> {
@@ -104,8 +101,40 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
   let queryPlan: RetrievalResult['queryPlan'] | null = null;
   let layerTranslate = false;
   let effectiveOn: string | undefined;
+  let queryLayerHash: RetrievalConfigHashQueryLayer | undefined;
+  let cacheTicket: RetrievalResult['cacheTicket'];
   const security = deps.securityConfig();
   if (security.injectionCheck !== 'off') warnInjectionCheckDisabled(config, security.injectionCheck);
+
+  // D-18: the binding plan reads only the request's doc-type filter, so the cache stage may plan it before the query stages end.
+  let earlyBindingPlan: Promise<BindingLegsPlan> | null = null;
+  const planBindingsEarly = (): Promise<BindingLegsPlan> =>
+    (earlyBindingPlan ??= planBindingLegs({
+      profile,
+      config,
+      scope,
+      filters: buildRetrievalFilters({ explicit: input.retrievalFilters, referencedDocumentIds: [] }),
+      options: input.options,
+    }));
+  const layerHash = async (): Promise<RetrievalConfigHashQueryLayer> => {
+    queryLayerHash ??= await queryLayerHashFor(input, config, profile);
+    return queryLayerHash;
+  };
+  const cacheSeam: SemanticCacheSeam = {
+    embed: async (text, embedSignal) => (await embedForRetrieval(input, [text], embedSignal))[0]!,
+    retrievalConfigHash: async (embedded) =>
+      requestRetrievalConfigHash({
+        input,
+        config,
+        profile,
+        embeddingProfileId: embedded.profile?.id ?? LEGACY_PROFILE.id,
+        queryLanguage: detectQueryLanguage(input.query),
+        security,
+        bindingHash: bindingHashFields(await planBindingsEarly()),
+        queryLayerHash: await layerHash(),
+        ...(config.effectiveDates ? { effectiveOn: effectiveOnFor(config, deps.now()) } : {}),
+      }),
+  };
 
   try {
     const query = await runQueryStages({
@@ -116,20 +145,37 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
       signal,
       collector,
       stageOverrides: input.stageOverrides,
+      cache: cacheSeam,
     });
     queryContext = query.queryContext;
     queryLanguage = query.queryLanguage;
     queryPlan = query.queryLayer?.plan ?? null;
     layerTranslate = query.queryLayer?.handledTranslate === true;
     effectiveOn = query.filters.effectiveOn;
+    if (query.queryLayer) await layerHash();
+    cacheTicket = query.queryLayer?.cacheTicket;
 
     // D-10: small talk under the layer skips the search, rank and context groups; the model answers without KB context.
     if (query.queryLayer?.shortCircuit?.kind === 'small_talk') {
       return buildSmallTalkResult({ collector, profile, queryContext, queryLanguage, queryPlan });
     }
 
+    // D-32: a cache hit skips the search, rank and context groups; the entry point streams the cached answer.
+    if (query.queryLayer?.shortCircuit?.kind === 'cache_hit' && query.queryLayer.cacheHit) {
+      return buildCacheHitResult({
+        collector,
+        queryContext,
+        queryLanguage,
+        queryPlan,
+        cacheHit: query.queryLayer.cacheHit,
+        ...(query.queryLayer.cacheTicket ? { retrievalConfigHash: query.queryLayer.cacheTicket.key.retrievalConfigHash } : {}),
+      });
+    }
+
     // D-18: planned before the embed stage, so the binding map is known before anything reads the config hash.
-    bindingPlan = await planBindingLegs({ profile, config, scope, filters: query.filters, options: input.options });
+    bindingPlan = earlyBindingPlan
+      ? await earlyBindingPlan
+      : await planBindingLegs({ profile, config, scope, filters: query.filters, options: input.options });
     // 03.1.1-10: an eval binding override naming a profile that cannot be resolved fails the request; it never measures the global profile.
     const unresolved = profile === 'eval' ? unresolvedEvalOverride(bindingPlan) : null;
     if (unresolved) {
@@ -154,7 +200,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
         spec('embed', 'throw'),
         signal,
         (stageSignal) =>
-          embedForRetrieval(input, variantDenseTexts(query.variants), stageSignal),
+          embedVariantTexts(input, variantDenseTexts(query.variants), stageSignal, precomputedVectors(query.queryLayer?.precomputed)),
         collector,
         { detail: (value) => value[0]?.profile?.id },
       ),
@@ -335,6 +381,8 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
     queryPlan,
     ...(layerTranslate ? { layerTranslate } : {}),
     ...(effectiveOn ? { effectiveOn } : {}),
+    ...(queryLayerHash ? { queryLayerHash } : {}),
+    ...(cacheTicket ? { cacheTicket } : {}),
   });
 }
 

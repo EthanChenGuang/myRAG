@@ -66,6 +66,17 @@ export function securityHashComponent(
   };
 }
 
+/** The query layer's setup (D-04, research A-7); present only while the layer is on, so a Phase 4 hash is unchanged. */
+export interface RetrievalConfigHashQueryLayer {
+  framework: string;
+  model: string;
+  /** SHA-256 over the canonical effective query params. */
+  queryParamsHash: string;
+  /** Prompt file id to version. */
+  prompts: Record<string, number>;
+  transforms: Record<string, boolean>;
+}
+
 export interface RetrievalConfigHashInput {
   backendId: string;
   embeddingProfileId: string;
@@ -84,6 +95,8 @@ export interface RetrievalConfigHashInput {
   domainControlLeg?: string | null;
   /** D-44: the effective date passed to retrieval; absent or null while RAG_EFFECTIVE_DATES is off. */
   effectiveOn?: string | null;
+  /** Present only while the query layer is on. */
+  queryLayer?: RetrievalConfigHashQueryLayer | null;
 }
 
 function sortKeys(value: unknown): unknown {
@@ -99,7 +112,7 @@ function sortKeys(value: unknown): unknown {
   return value;
 }
 
-function canonicalJson(value: unknown): string {
+export function canonicalJson(value: unknown): string {
   return JSON.stringify(sortKeys(value));
 }
 
@@ -128,6 +141,7 @@ function buildPayload(input: RetrievalConfigHashInput): Record<string, unknown> 
     ...(input.embeddingBindings && Object.keys(input.embeddingBindings).length > 0 ? { embedding_bindings: input.embeddingBindings } : {}),
     ...(input.domainControlLeg ? { domain_control_leg: input.domainControlLeg } : {}),
     ...(input.effectiveOn ? { effective_on: input.effectiveOn } : {}),
+    ...(input.queryLayer ? { query_layer: input.queryLayer } : {}),
   };
 }
 

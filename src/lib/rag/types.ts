@@ -12,6 +12,7 @@ import type { InjectionCheckMode } from './security/config';
 import type { RerankProviderId } from './rerank/types';
 import type { TenantScope } from './tenant/scope';
 import type { TraceCollector } from './trace/collector';
+import type { CacheHit, CacheTicket } from './cache/types';
 
 export type Profile = 'chat' | 'embed' | 'voice' | 'media' | 'eval';
 
@@ -219,6 +220,16 @@ export interface HistoryTurn {
   content: string;
 }
 
+/** What the semantic cache needs from the entry point (D-32, spec rule 1). The entry profile is never caller data: it follows profile. */
+export interface RetrievalCacheContext {
+  generatorModel: string;
+  /** hashSystemPromptTemplate of the system prompt template before {{context}} substitution. */
+  systemPromptHash: string;
+  webSearch: boolean;
+  mcpTools: boolean;
+  chatId: string | null;
+}
+
 export interface RunRetrievalInput {
   scope: TenantScope | null;
   query: string;
@@ -240,6 +251,8 @@ export interface RunRetrievalInput {
   timeZone?: string;
   /** Who asked and through which channel; read only by the retrieval log when this call owns its trace. */
   logContext?: LogContext;
+  /** Chat and embed only; without it the semantic_cache stage stands down. */
+  cacheContext?: RetrievalCacheContext;
 }
 
 export type LogOutcomeValue = 'answered' | 'refused_no_context' | 'kb_unavailable' | 'degraded_answer' | 'unknown';
@@ -328,4 +341,8 @@ export interface RetrievalResult {
   queryPlan?: QueryPlan;
   /** Mutable holder the route sets before it returns (D-07); read by the after-response retrieval log write. */
   logOutcome?: LogOutcome;
+  /** Set only on the semantic-cache short-circuit (status ok, reason cache_hit). */
+  cacheHit?: CacheHit;
+  /** Set when the semantic_cache stage checked with no check-time bypass; the entry point stores the answer with it. */
+  cacheTicket?: CacheTicket;
 }
