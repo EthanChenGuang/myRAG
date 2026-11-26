@@ -35,7 +35,6 @@ const JUDGE_CAL_GATES =
 const JUDGE_CAL_API = '/api/rag/admin/judge-calibration';
 const JUDGE_CAL_COMMAND = 'python -m rag_eval.judge_calibration run';
 const JUDGE_CAL_ROLES = ['nightly', 'online'];
-const JUDGE_CAL_LANGUAGE_ORDER = ['zh', 'en', 'it'];
 const JUDGE_CAL_STATUS_STYLE = {
   gating: { classes: 'badge-success badge-outline', icon: 'bi-check-circle' },
   report_only: { classes: 'badge-ghost', icon: 'bi-eye' },
@@ -277,17 +276,12 @@ function judgeCalMeasure(metric, locale) {
   return { text: judgeCalLabel(key, locale), mono: false };
 }
 
-function judgeCalLanguageRank(code) {
-  const i = JUDGE_CAL_LANGUAGE_ORDER.indexOf(code);
-  return i < 0 ? JUDGE_CAL_LANGUAGE_ORDER.length : i;
-}
-
 function judgeCalFlagged(value, reasons, reason, locale, format) {
   return { text: format(value, locale), flagged: reasons.includes(reason) };
 }
 
 /**
- * Pure: one entry per judge role ({ role, title, version, rows }) with languages zh, en, it, then others. Only the fields of UI-SPEC 6.9
+ * Pure: one entry per judge role ({ role, title, version, rows }) in the route's order, which follows the language registry. Only the fields of UI-SPEC 6.9
  * and 8.1 are read; the cell key and the cell fingerprint are never part of a row.
  */
 function judgeCalRows(status, locale) {
@@ -298,11 +292,7 @@ function judgeCalRows(status, locale) {
   const { gatesUiScore, gatesUiSigned, gatesUiDate, gatesUiLanguageName } = JUDGE_CAL_GATES;
   const out = [];
   for (const role of JUDGE_CAL_ROLES) {
-    const own = cells
-      .map((cell, index) => ({ cell, index }))
-      .filter((entry) => entry.cell.role === role)
-      .sort((a, b) => judgeCalLanguageRank(a.cell.language) - judgeCalLanguageRank(b.cell.language) || a.index - b.index)
-      .map((entry) => entry.cell);
+    const own = cells.filter((cell) => cell.role === role);
     if (own.length === 0) continue;
     const seen = new Map();
     for (const cell of own) {
