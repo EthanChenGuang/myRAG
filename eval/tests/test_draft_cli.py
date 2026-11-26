@@ -192,7 +192,8 @@ def test_claude_request_names_categories_languages_and_the_real_user_mix():
         assert phrase in text
     assert call["model"] == "claude-sonnet-5-5"
     assert "temperature" not in call
-    assert call["tool_choice"] == {"type": "tool", "name": TOOL_NAME}
+    assert call["tool_choice"] == {"type": "auto"}
+    assert f"Call the {TOOL_NAME} tool once" in call["system"]
     assert call["tools"][0]["name"] == TOOL_NAME
     assert call["tools"][0]["input_schema"] == DraftedItemBatch.model_json_schema()
 

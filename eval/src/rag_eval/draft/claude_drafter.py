@@ -148,7 +148,9 @@ def draft_with_claude(
             system=system,
             messages=[{"role": "user", "content": content}],
             tools=[tool],
-            tool_choice={"type": "tool", "name": TOOL_NAME},
+            # Forced tool_choice ("tool"/"any") returns 400 on Sonnet 5.5, Opus 5.5 and Fable 5.1+; the system prompt names the tool
+            # and a batch without the tool call is reported as rejected below.
+            tool_choice={"type": "auto"},
         )
         stop_reason = getattr(response, "stop_reason", None)
         if stop_reason == "refusal":
