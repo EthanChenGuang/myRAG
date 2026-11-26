@@ -140,25 +140,37 @@
       "name": "legacy-prechunked",
       "overall": {
         "correct_refusal_rate": {
-          "n": 24,
-          "value": 0.7083333333333334
+          "n": 25,
+          "value": 0.68
         },
         "false_refusal_rate": {
-          "n": 132,
-          "value": 0.36363636363636365
+          "n": 143,
+          "value": 0.3356643356643357
         },
-        "false_refusal_upper_95": 0.43811077199785425,
+        "false_refusal_upper_95": 0.4062709843361731,
+        "k_zero": {
+          "n": 143,
+          "value": 48.0
+        },
         "mrr": {
-          "n": 132,
-          "value": 0.5189393939393939
+          "n": 143,
+          "value": 0.5396270396270396
+        },
+        "ndcg_at_context_k": {
+          "n": 143,
+          "value": 0.5456619263480117
         },
         "recall_at_10": {
-          "n": 132,
-          "value": 0.5378787878787878
+          "n": 143,
+          "value": 0.5664335664335665
         },
         "recall_at_5": {
-          "n": 132,
-          "value": 0.5378787878787878
+          "n": 143,
+          "value": 0.5664335664335665
+        },
+        "topk_redundancy": {
+          "n": 103,
+          "value": 0.6605177993527508
         }
       },
       "passed": true,
@@ -166,7 +178,7 @@
         "RAG_PIPELINE": "legacy",
         "RAG_QUERY_LAYER": "false"
       },
-      "run_config_hash": "48b492eaea27400283196659d77eac15ad393f435a3fd3f51022f69bd52c45a0",
+      "run_config_hash": "d1696792d558dc8f956a812c8cc209d8b553f8ff993c2c1487c5d0459d7a090c",
       "switches": {}
     },
     {
@@ -298,25 +310,37 @@
       "name": "legacy-ingest",
       "overall": {
         "correct_refusal_rate": {
-          "n": 29,
-          "value": 0.5517241379310345
+          "n": 30,
+          "value": 0.5333333333333333
         },
         "false_refusal_rate": {
-          "n": 166,
-          "value": 0.20481927710843373
+          "n": 177,
+          "value": 0.192090395480226
         },
-        "false_refusal_upper_95": 0.2631609119274331,
+        "false_refusal_upper_95": 0.2473781500979356,
+        "k_zero": {
+          "n": 177,
+          "value": 34.0
+        },
         "mrr": {
-          "n": 166,
-          "value": 0.606425702811245
+          "n": 177,
+          "value": 0.6177024482109228
+        },
+        "ndcg_at_context_k": {
+          "n": 177,
+          "value": 0.6355617601245251
         },
         "recall_at_10": {
-          "n": 166,
-          "value": 0.7108433734939759
+          "n": 177,
+          "value": 0.7231638418079096
         },
         "recall_at_5": {
-          "n": 166,
-          "value": 0.6987951807228916
+          "n": 177,
+          "value": 0.711864406779661
+        },
+        "topk_redundancy": {
+          "n": 157,
+          "value": 0.5593418259023354
         }
       },
       "passed": true,
@@ -324,7 +348,7 @@
         "RAG_PIPELINE": "legacy",
         "RAG_QUERY_LAYER": "false"
       },
-      "run_config_hash": "f6697586fb3dc0dc1c9611c2cb179bda717ed5a2bbab9eb2e1ac86149dd3f10b",
+      "run_config_hash": "626f73515ebddd299f5d7f91b1d94c8581e63edbd39fc45907fb029eaec9fe57",
       "switches": {}
     },
     {
@@ -452,32 +476,44 @@
       "name": "v2-all-off",
       "overall": {
         "correct_refusal_rate": {
-          "n": 24,
-          "value": 0.375
+          "n": 25,
+          "value": 0.36
         },
         "false_refusal_rate": {
-          "n": 132,
-          "value": 0.022727272727272728
+          "n": 143,
+          "value": 0.02097902097902098
         },
-        "false_refusal_upper_95": 0.05768960768778159,
+        "false_refusal_upper_95": 0.053326030893855625,
+        "k_zero": {
+          "n": 143,
+          "value": 3.0
+        },
         "mrr": {
-          "n": 132,
-          "value": 0.7616251803751803
+          "n": 143,
+          "value": 0.7650432900432901
+        },
+        "ndcg_at_context_k": {
+          "n": 143,
+          "value": 0.7893213528288183
         },
         "recall_at_10": {
-          "n": 132,
-          "value": 0.8636363636363636
+          "n": 143,
+          "value": 0.8741258741258742
         },
         "recall_at_5": {
-          "n": 132,
-          "value": 0.8409090909090909
+          "n": 143,
+          "value": 0.8531468531468531
+        },
+        "topk_redundancy": {
+          "n": 156,
+          "value": 0.12815170940170942
         }
       },
       "passed": true,
       "run_config_env": {
         "RAG_PIPELINE": "v2"
       },
-      "run_config_hash": "861435be1f2e5a6b27dc880ea2041e0bc99621e04baee05e92609c1054c7fe44",
+      "run_config_hash": "6ed053d8670aafcfe3533214e29d02e83b4143e6928e2d67e8c5c5e3c7a3dc47",
       "switches": {}
     },
     {
@@ -485,7 +521,7 @@
         {
           "detail": [],
           "measures": {
-            "items_compared": 229.0,
+            "items_compared": 247.0,
             "items_differing": 0.0
           },
           "name": "equal_runs:v2-all-off",
@@ -606,25 +642,37 @@
       "name": "query-layer-off",
       "overall": {
         "correct_refusal_rate": {
-          "n": 24,
-          "value": 0.375
+          "n": 25,
+          "value": 0.36
         },
         "false_refusal_rate": {
-          "n": 132,
-          "value": 0.022727272727272728
+          "n": 143,
+          "value": 0.02097902097902098
         },
-        "false_refusal_upper_95": 0.05768960768778159,
+        "false_refusal_upper_95": 0.053326030893855625,
+        "k_zero": {
+          "n": 143,
+          "value": 3.0
+        },
         "mrr": {
-          "n": 132,
-          "value": 0.7616251803751803
+          "n": 143,
+          "value": 0.7650432900432901
+        },
+        "ndcg_at_context_k": {
+          "n": 143,
+          "value": 0.7893213528288183
         },
         "recall_at_10": {
-          "n": 132,
-          "value": 0.8636363636363636
+          "n": 143,
+          "value": 0.8741258741258742
         },
         "recall_at_5": {
-          "n": 132,
-          "value": 0.8409090909090909
+          "n": 143,
+          "value": 0.8531468531468531
+        },
+        "topk_redundancy": {
+          "n": 156,
+          "value": 0.12815170940170942
         }
       },
       "passed": true,
@@ -632,30 +680,27 @@
         "RAG_PIPELINE": "v2",
         "RAG_QUERY_LAYER": "false"
       },
-      "run_config_hash": "d624a3b4618a594ba392219490536ad2a25261b8a1460d3a2ac6a549f4ba2040",
+      "run_config_hash": "cde49760d65e90356ac2dcfcfbc844e1fa033a2de9055a4395b5414ff108be26",
       "switches": {}
     },
     {
       "checks": [
         {
           "detail": [
-            "category:compound:recall_at_5 0.7778 < 0.8689 (query-layer-off 0.8889)",
-            "category:compound:recall_at_10 0.7778 < 0.8689 (query-layer-off 0.8889)",
-            "category:compound:mrr 0.8333 < 0.8504 (query-layer-off 0.8704)",
             "category:small_talk:correct_refusal_rate 0.0000 < 0.9800 (query-layer-off 1.0000)",
             "language:en:correct_refusal_rate 0.2222 < 0.3133 (query-layer-off 0.3333)",
-            "language:it:correct_refusal_rate 0.1429 < 0.2657 (query-layer-off 0.2857)",
+            "language:it:correct_refusal_rate 0.1250 < 0.2300 (query-layer-off 0.2500)",
             "language:zh:correct_refusal_rate 0.3750 < 0.4800 (query-layer-off 0.5000)",
-            "overall:correct_refusal_rate 0.2500 < 0.3550 (query-layer-off 0.3750)"
+            "overall:correct_refusal_rate 0.2400 < 0.3400 (query-layer-off 0.3600)"
           ],
           "measures": {
-            "category:compound:mrr_delta": -0.03703703703703698,
-            "category:compound:recall_at_10_delta": -0.11111111111111105,
-            "category:compound:recall_at_5_delta": -0.11111111111111105,
+            "category:compound:mrr_delta": 0.01851851851851849,
+            "category:compound:recall_at_10_delta": 0.0,
+            "category:compound:recall_at_5_delta": 0.0,
             "category:cross_lingual:mrr_delta": 0.0,
             "category:cross_lingual:recall_at_10_delta": 0.0,
             "category:cross_lingual:recall_at_5_delta": 0.0,
-            "category:multi_turn:mrr_delta": 0.039583333333333415,
+            "category:multi_turn:mrr_delta": 0.02604166666666674,
             "category:multi_turn:recall_at_10_delta": 0.0,
             "category:multi_turn:recall_at_5_delta": 0.0
           },
@@ -669,20 +714,16 @@
           "passed": true
         },
         {
-          "detail": [
-            "npx vitest run tests/rag/query/delays.test.ts exited 1"
-          ],
+          "detail": [],
           "measures": {},
           "name": "transform_delays",
-          "passed": false
+          "passed": true
         },
         {
-          "detail": [
-            "npx vitest run tests/rag/query/voice-budget.test.ts tests/rag/v2/voice-budget.test.ts exited 1"
-          ],
+          "detail": [],
           "measures": {},
           "name": "voice_budget",
-          "passed": false
+          "passed": true
         },
         {
           "detail": [],
@@ -805,25 +846,37 @@
       "name": "query-layer-llamaindex",
       "overall": {
         "correct_refusal_rate": {
-          "n": 24,
-          "value": 0.25
+          "n": 25,
+          "value": 0.24
         },
         "false_refusal_rate": {
-          "n": 132,
-          "value": 0.022727272727272728
+          "n": 143,
+          "value": 0.02097902097902098
         },
-        "false_refusal_upper_95": 0.05768960768778159,
+        "false_refusal_upper_95": 0.053326030893855625,
+        "k_zero": {
+          "n": 143,
+          "value": 3.0
+        },
         "mrr": {
-          "n": 132,
-          "value": 0.7638979076479077
+          "n": 143,
+          "value": 0.7691225441225441
+        },
+        "ndcg_at_context_k": {
+          "n": 143,
+          "value": 0.7908440010986383
         },
         "recall_at_10": {
-          "n": 132,
-          "value": 0.8560606060606061
+          "n": 143,
+          "value": 0.8741258741258742
         },
         "recall_at_5": {
-          "n": 132,
-          "value": 0.8333333333333334
+          "n": 143,
+          "value": 0.8531468531468531
+        },
+        "topk_redundancy": {
+          "n": 156,
+          "value": 0.12815170940170942
         }
       },
       "passed": false,
@@ -831,7 +884,7 @@
         "RAG_PIPELINE": "v2",
         "RAG_QUERY_LAYER": "true"
       },
-      "run_config_hash": "7d8a8b9638118c9e7b4c76675c2ad61885d77318c8dc23b9e9e8b580617828aa",
+      "run_config_hash": "2bf36ad8b421228b669c6c456e55e635db8184992a64ffe9a4c9bd2a15b8973c",
       "switches": {}
     },
     {
@@ -839,7 +892,7 @@
         {
           "detail": [],
           "measures": {
-            "items_compared": 229.0,
+            "items_compared": 247.0,
             "items_differing": 0.0
           },
           "name": "equal_runs:query-layer-llamaindex",
@@ -960,25 +1013,37 @@
       "name": "query-layer-llamaindex-cache-off",
       "overall": {
         "correct_refusal_rate": {
-          "n": 24,
-          "value": 0.25
+          "n": 25,
+          "value": 0.24
         },
         "false_refusal_rate": {
-          "n": 132,
-          "value": 0.022727272727272728
+          "n": 143,
+          "value": 0.02097902097902098
         },
-        "false_refusal_upper_95": 0.05768960768778159,
+        "false_refusal_upper_95": 0.053326030893855625,
+        "k_zero": {
+          "n": 143,
+          "value": 3.0
+        },
         "mrr": {
-          "n": 132,
-          "value": 0.7638979076479077
+          "n": 143,
+          "value": 0.7691225441225441
+        },
+        "ndcg_at_context_k": {
+          "n": 143,
+          "value": 0.7908440010986383
         },
         "recall_at_10": {
-          "n": 132,
-          "value": 0.8560606060606061
+          "n": 143,
+          "value": 0.8741258741258742
         },
         "recall_at_5": {
-          "n": 132,
-          "value": 0.8333333333333334
+          "n": 143,
+          "value": 0.8531468531468531
+        },
+        "topk_redundancy": {
+          "n": 156,
+          "value": 0.12815170940170942
         }
       },
       "passed": true,
@@ -987,7 +1052,7 @@
         "RAG_QUERY_LAYER": "true",
         "RAG_SEMANTIC_CACHE": "off"
       },
-      "run_config_hash": "490d32c54115b9e7df6f44bda069754ece819ec802382dcfee2ab2ac9295577f",
+      "run_config_hash": "6fe731aeac68526eeafc2f890dca4dd53bc55ce73961a09987ae2286ead81032",
       "switches": {}
     },
     {
@@ -995,7 +1060,7 @@
         {
           "detail": [],
           "measures": {
-            "items_compared": 229.0,
+            "items_compared": 247.0,
             "items_differing": 0.0
           },
           "name": "equal_runs:query-layer-llamaindex",
@@ -1116,25 +1181,37 @@
       "name": "query-layer-llamaindex-cache-on",
       "overall": {
         "correct_refusal_rate": {
-          "n": 24,
-          "value": 0.25
+          "n": 25,
+          "value": 0.24
         },
         "false_refusal_rate": {
-          "n": 132,
-          "value": 0.022727272727272728
+          "n": 143,
+          "value": 0.02097902097902098
         },
-        "false_refusal_upper_95": 0.05768960768778159,
+        "false_refusal_upper_95": 0.053326030893855625,
+        "k_zero": {
+          "n": 143,
+          "value": 3.0
+        },
         "mrr": {
-          "n": 132,
-          "value": 0.7638979076479077
+          "n": 143,
+          "value": 0.7691225441225441
+        },
+        "ndcg_at_context_k": {
+          "n": 143,
+          "value": 0.7908440010986383
         },
         "recall_at_10": {
-          "n": 132,
-          "value": 0.8560606060606061
+          "n": 143,
+          "value": 0.8741258741258742
         },
         "recall_at_5": {
-          "n": 132,
-          "value": 0.8333333333333334
+          "n": 143,
+          "value": 0.8531468531468531
+        },
+        "topk_redundancy": {
+          "n": 156,
+          "value": 0.12815170940170942
         }
       },
       "passed": true,
@@ -1143,7 +1220,7 @@
         "RAG_QUERY_LAYER": "true",
         "RAG_SEMANTIC_CACHE": "pgvector"
       },
-      "run_config_hash": "acbb48a10935f6f4c19c16e7fd16037ec7b69eb9b5918b6a5ddc59c21ebdfc38",
+      "run_config_hash": "316d37ec4cd72db2dc990d83eef1ff8113259f0486b125c2835102b7369a54bb",
       "switches": {}
     },
     {
@@ -1157,14 +1234,14 @@
         {
           "detail": [],
           "measures": {
-            "hit_p50_ms": 4.0,
-            "hit_p95_ms": 12.0,
+            "hit_p50_ms": 3.0,
+            "hit_p95_ms": 14.0,
             "hits": 6.0,
             "max_ratio": 0.5,
-            "miss_p50_ms": 21.0,
-            "miss_p95_ms": 60.0,
+            "miss_p50_ms": 19.0,
+            "miss_p95_ms": 51.0,
             "misses": 36.0,
-            "ratio": 0.2
+            "ratio": 0.27450980392156865
           },
           "name": "cache_latency",
           "passed": true
@@ -1205,7 +1282,7 @@
         "RAG_PIPELINE": "v2",
         "RAG_QUERY_LAYER": "true"
       },
-      "run_config_hash": "72a28daf45640ca430da73421676a13e59a82fdcff2ed26d3359a16a15552ab3",
+      "run_config_hash": "5d2bc59498c0eac5607c857066598837f49e181b70f10939851af56b66da1054",
       "switches": {}
     }
   ],
@@ -1250,12 +1327,9 @@
         "query-layer-llamaindex/transform_delays",
         "query-layer-llamaindex/voice_budget"
       ],
-      "failed": [
-        "query-layer-llamaindex/transform_delays",
-        "query-layer-llamaindex/voice_budget"
-      ],
+      "failed": [],
       "label": "d",
-      "passed": false,
+      "passed": true,
       "title": "Transform injected-delay and failure tests, voice budget"
     },
     {

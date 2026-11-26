@@ -19,7 +19,7 @@ Noise band: max(3 x baseline spread, 0.02) on Recall@5, Recall@10 and MRR over t
 | (a) Layer off: legacy paired differences zero, query-layer-off equals v2-all-off | PASS | legacy-prechunked/gate, legacy-prechunked/paired_all_zero, legacy-ingest/gate, legacy-ingest/paired_all_zero, query-layer-off/equal_runs:v2-all-off |
 | (b) Layer on (LlamaIndex): multi_turn, compound, cross_lingual hold; no slice beyond the noise band | FAIL | query-layer-llamaindex/slice_hold:query-layer-off (FAIL) |
 | (c) Framework parity suite and the paired framework report | PASS | query-layer-llamaindex/framework_parity, query-layer-llamaindex/framework_report |
-| (d) Transform injected-delay and failure tests, voice budget | FAIL | query-layer-llamaindex/transform_delays (FAIL), query-layer-llamaindex/voice_budget (FAIL) |
+| (d) Transform injected-delay and failure tests, voice budget | PASS | query-layer-llamaindex/transform_delays, query-layer-llamaindex/voice_budget |
 | (e) Cache: hit p95 at most half of miss p95, near-miss wrong hits 0, cache off and on equal the layer-on run, canary suite | PASS | cache-pairs/cache_latency, cache-pairs/near_miss_zero, query-layer-llamaindex-cache-off/equal_runs:query-layer-llamaindex, query-layer-llamaindex-cache-on/equal_runs:query-layer-llamaindex, cache-pairs/cache_canary, cache-pairs/two_tenant_matrix |
 
 ## Runs
@@ -49,7 +49,7 @@ Injection (all_off, report_only): 18 item(s), rules false positives 0.
 | language_category:zh:injection_evasive | 1.0000 | 1.0000 | 2 |
 | overall | 1.0000 | 1.0000 | 18 |
 
-Recall@5 0.5379, Recall@10 0.5379, MRR 0.5189, correct refusal 0.7083, false refusal 0.3636, invalid citation rate n/a, citation coverage n/a.
+Recall@5 0.5664, Recall@10 0.5664, MRR 0.5396, correct refusal 0.6800, false refusal 0.3357, invalid citation rate n/a, citation coverage n/a.
 
 | Check | Result | Detail |
 |---|---|---|
@@ -81,7 +81,7 @@ Injection (all_off, report_only): 18 item(s), rules false positives 0.
 | language_category:zh:injection_evasive | 1.0000 | 1.0000 | 2 |
 | overall | 1.0000 | 1.0000 | 18 |
 
-Recall@5 0.6988, Recall@10 0.7108, MRR 0.6064, correct refusal 0.5517, false refusal 0.2048, invalid citation rate n/a, citation coverage n/a.
+Recall@5 0.7119, Recall@10 0.7232, MRR 0.6177, correct refusal 0.5333, false refusal 0.1921, invalid citation rate n/a, citation coverage n/a.
 
 | Check | Result | Detail |
 |---|---|---|
@@ -113,7 +113,7 @@ Injection (all_off, report_only): 18 item(s), rules false positives 0.
 | language_category:zh:injection_evasive | 1.0000 | 1.0000 | 2 |
 | overall | 1.0000 | 1.0000 | 18 |
 
-Recall@5 0.8409, Recall@10 0.8636, MRR 0.7616, correct refusal 0.3750, false refusal 0.0227, invalid citation rate n/a, citation coverage n/a.
+Recall@5 0.8531, Recall@10 0.8741, MRR 0.7650, correct refusal 0.3600, false refusal 0.0210, invalid citation rate n/a, citation coverage n/a.
 
 | Check | Result | Detail |
 |---|---|---|
@@ -144,7 +144,7 @@ Injection (all_off, report_only): 18 item(s), rules false positives 0.
 | language_category:zh:injection_evasive | 1.0000 | 1.0000 | 2 |
 | overall | 1.0000 | 1.0000 | 18 |
 
-Recall@5 0.8409, Recall@10 0.8636, MRR 0.7616, correct refusal 0.3750, false refusal 0.0227, invalid citation rate n/a, citation coverage n/a.
+Recall@5 0.8531, Recall@10 0.8741, MRR 0.7650, correct refusal 0.3600, false refusal 0.0210, invalid citation rate n/a, citation coverage n/a.
 
 | Check | Result | Detail |
 |---|---|---|
@@ -152,7 +152,7 @@ Recall@5 0.8409, Recall@10 0.8636, MRR 0.7616, correct refusal 0.3750, false ref
 
 | Check | Measure | Value |
 |---|---|---|
-| equal_runs:v2-all-off | items_compared | 229.0000 |
+| equal_runs:v2-all-off | items_compared | 247.0000 |
 | equal_runs:v2-all-off | items_differing | 0.0000 |
 
 ### query-layer-llamaindex
@@ -180,25 +180,25 @@ Injection (all_off, report_only): 18 item(s), rules false positives 0.
 | language_category:zh:injection_evasive | 1.0000 | 1.0000 | 2 |
 | overall | 1.0000 | 1.0000 | 18 |
 
-Recall@5 0.8333, Recall@10 0.8561, MRR 0.7639, correct refusal 0.2500, false refusal 0.0227, invalid citation rate n/a, citation coverage n/a.
+Recall@5 0.8531, Recall@10 0.8741, MRR 0.7691, correct refusal 0.2400, false refusal 0.0210, invalid citation rate n/a, citation coverage n/a.
 
 | Check | Result | Detail |
 |---|---|---|
-| slice_hold:query-layer-off | FAIL | category:compound:recall_at_5 0.7778 < 0.8689 (query-layer-off 0.8889); category:compound:recall_at_10 0.7778 < 0.8689 (query-layer-off 0.8889); category:compound:mrr 0.8333 < 0.8504 (query-layer-off 0.8704); category:small_talk:correct_refusal_rate 0.0000 < 0.9800 (query-layer-off 1.0000); language:en:correct_refusal_rate 0.2222 < 0.3133 (query-layer-off 0.3333); language:it:correct_refusal_rate 0.1429 < 0.2657 (query-layer-off 0.2857); language:zh:correct_refusal_rate 0.3750 < 0.4800 (query-layer-off 0.5000); overall:correct_refusal_rate 0.2500 < 0.3550 (query-layer-off 0.3750) |
+| slice_hold:query-layer-off | FAIL | category:small_talk:correct_refusal_rate 0.0000 < 0.9800 (query-layer-off 1.0000); language:en:correct_refusal_rate 0.2222 < 0.3133 (query-layer-off 0.3333); language:it:correct_refusal_rate 0.1250 < 0.2300 (query-layer-off 0.2500); language:zh:correct_refusal_rate 0.3750 < 0.4800 (query-layer-off 0.5000); overall:correct_refusal_rate 0.2400 < 0.3400 (query-layer-off 0.3600) |
 | framework_parity | PASS | - |
-| transform_delays | FAIL | npx vitest run tests/rag/query/delays.test.ts exited 1 |
-| voice_budget | FAIL | npx vitest run tests/rag/query/voice-budget.test.ts tests/rag/v2/voice-budget.test.ts exited 1 |
+| transform_delays | PASS | - |
+| voice_budget | PASS | - |
 | framework_report | PASS | - |
 
 | Check | Measure | Value |
 |---|---|---|
-| slice_hold:query-layer-off | category:compound:mrr_delta | -0.0370 |
-| slice_hold:query-layer-off | category:compound:recall_at_10_delta | -0.1111 |
-| slice_hold:query-layer-off | category:compound:recall_at_5_delta | -0.1111 |
+| slice_hold:query-layer-off | category:compound:mrr_delta | 0.0185 |
+| slice_hold:query-layer-off | category:compound:recall_at_10_delta | 0.0000 |
+| slice_hold:query-layer-off | category:compound:recall_at_5_delta | 0.0000 |
 | slice_hold:query-layer-off | category:cross_lingual:mrr_delta | 0.0000 |
 | slice_hold:query-layer-off | category:cross_lingual:recall_at_10_delta | 0.0000 |
 | slice_hold:query-layer-off | category:cross_lingual:recall_at_5_delta | 0.0000 |
-| slice_hold:query-layer-off | category:multi_turn:mrr_delta | 0.0396 |
+| slice_hold:query-layer-off | category:multi_turn:mrr_delta | 0.0260 |
 | slice_hold:query-layer-off | category:multi_turn:recall_at_10_delta | 0.0000 |
 | slice_hold:query-layer-off | category:multi_turn:recall_at_5_delta | 0.0000 |
 
@@ -227,7 +227,7 @@ Injection (all_off, report_only): 18 item(s), rules false positives 0.
 | language_category:zh:injection_evasive | 1.0000 | 1.0000 | 2 |
 | overall | 1.0000 | 1.0000 | 18 |
 
-Recall@5 0.8333, Recall@10 0.8561, MRR 0.7639, correct refusal 0.2500, false refusal 0.0227, invalid citation rate n/a, citation coverage n/a.
+Recall@5 0.8531, Recall@10 0.8741, MRR 0.7691, correct refusal 0.2400, false refusal 0.0210, invalid citation rate n/a, citation coverage n/a.
 
 | Check | Result | Detail |
 |---|---|---|
@@ -235,7 +235,7 @@ Recall@5 0.8333, Recall@10 0.8561, MRR 0.7639, correct refusal 0.2500, false ref
 
 | Check | Measure | Value |
 |---|---|---|
-| equal_runs:query-layer-llamaindex | items_compared | 229.0000 |
+| equal_runs:query-layer-llamaindex | items_compared | 247.0000 |
 | equal_runs:query-layer-llamaindex | items_differing | 0.0000 |
 
 ### query-layer-llamaindex-cache-on
@@ -263,7 +263,7 @@ Injection (all_off, report_only): 18 item(s), rules false positives 0.
 | language_category:zh:injection_evasive | 1.0000 | 1.0000 | 2 |
 | overall | 1.0000 | 1.0000 | 18 |
 
-Recall@5 0.8333, Recall@10 0.8561, MRR 0.7639, correct refusal 0.2500, false refusal 0.0227, invalid citation rate n/a, citation coverage n/a.
+Recall@5 0.8531, Recall@10 0.8741, MRR 0.7691, correct refusal 0.2400, false refusal 0.0210, invalid citation rate n/a, citation coverage n/a.
 
 | Check | Result | Detail |
 |---|---|---|
@@ -271,7 +271,7 @@ Recall@5 0.8333, Recall@10 0.8561, MRR 0.7639, correct refusal 0.2500, false ref
 
 | Check | Measure | Value |
 |---|---|---|
-| equal_runs:query-layer-llamaindex | items_compared | 229.0000 |
+| equal_runs:query-layer-llamaindex | items_compared | 247.0000 |
 | equal_runs:query-layer-llamaindex | items_differing | 0.0000 |
 
 ### cache-pairs
@@ -293,14 +293,14 @@ Cache-pair run: 27 golden pair(s), 54 trace(s), probe distance 0.2, embedding pr
 
 | Check | Measure | Value |
 |---|---|---|
-| cache_latency | hit_p50_ms | 4.0000 |
-| cache_latency | hit_p95_ms | 12.0000 |
+| cache_latency | hit_p50_ms | 3.0000 |
+| cache_latency | hit_p95_ms | 14.0000 |
 | cache_latency | hits | 6.0000 |
 | cache_latency | max_ratio | 0.5000 |
-| cache_latency | miss_p50_ms | 21.0000 |
-| cache_latency | miss_p95_ms | 60.0000 |
+| cache_latency | miss_p50_ms | 19.0000 |
+| cache_latency | miss_p95_ms | 51.0000 |
 | cache_latency | misses | 36.0000 |
-| cache_latency | ratio | 0.2000 |
+| cache_latency | ratio | 0.2745 |
 | near_miss_zero | max_distance | 0.0500 |
 | near_miss_zero | near_miss_pairs | 15.0000 |
 | near_miss_zero | near_miss_wrong_hit_rate | 0.0000 |
