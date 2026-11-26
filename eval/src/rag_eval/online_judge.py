@@ -2,6 +2,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import sys
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
@@ -22,7 +23,7 @@ from rag_eval.judge.config import (
 )
 from rag_eval.judge.telemetry import check_no_results_upload
 from rag_eval.paths import resolve_cli_path
-from rag_eval.review_queue import _parse_time, _to_item
+from rag_eval.review_queue import _http_client, _parse_time, _to_item
 
 EXIT_OK, EXIT_INPUT, EXIT_API = 0, 2, 4
 METRICS = ("faithfulness", "answer_relevance")
@@ -36,6 +37,9 @@ NOTHING_NOTICE = (
 )
 
 JudgeFactory = Callable[[JudgeConfig], Any]
+
+MIRROR_ROUTE = "/api/rag/admin/monitor/judge-scores"
+DEFAULT_TOKEN_ENV = "RAG_ADMIN_BEARER"
 
 
 def select_sample(trace_ids: list[str], sample_rate: float, seed: int) -> list[str]:
@@ -149,6 +153,55 @@ def _summary(
     }
 
 
+MIRROR_BATCH = 500
+MIRROR_NOT_CONFIGURED_NOTICE = "::notice::app base URL or admin token not configured, judge scores are not mirrored to the app"
+_MIRROR_TRACE_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+_MIRROR_JUDGE_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:/@-]{0,127}$")
+
+
+def _mirror_entries(scores: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The numbers of the Langfuse scores in the app's form: trace id, metric, score and judge id; nothing else."""
+    entries: list[dict[str, Any]] = []
+    for entry in scores:
+        trace_id, metric, value = entry.get("traceId"), entry.get("name"), entry.get("value")
+        judge_id = (entry.get("metadata") or {}).get("judge_model")
+        if not (isinstance(trace_id, str) and _MIRROR_TRACE_RE.match(trace_id)):
+            continue
+        if metric not in METRICS or not isinstance(value, (int, float)) or not 0.0 <= float(value) <= 1.0:
+            continue
+        if not (isinstance(judge_id, str) and _MIRROR_JUDGE_RE.match(judge_id)):
+            continue
+        entries.append({"trace_id": trace_id, "metric": metric, "score": float(value), "judge_id": judge_id})
+    return entries
+
+
+def _mirror_scores(scores: list[dict[str, Any]], base_url: str | None, token_env: str) -> None:
+    """D-23: post the same numbers to the app so the monitor never reads Langfuse. Any failure is a notice, never an exit code."""
+    token = os.environ.get(token_env)
+    if not base_url or not token:
+        print(MIRROR_NOT_CONFIGURED_NOTICE)
+        return
+    entries = _mirror_entries(scores)
+    url = base_url.rstrip("/") + MIRROR_ROUTE
+    stored = dropped = 0
+    try:
+        with _http_client() as client:
+            for start in range(0, len(entries), MIRROR_BATCH):
+                batch = entries[start : start + MIRROR_BATCH]
+                response = client.post(url, json={"scores": batch}, headers={"Authorization": f"Bearer {token}"})
+                if response.status_code != 200:
+                    print(f"::notice::judge score mirror answered HTTP {response.status_code}, scores stay in Langfuse only")
+                    return
+                counts = response.json()
+                stored += int(counts.get("stored", 0))
+                dropped += int(counts.get("dropped", 0))
+    except Exception as exc:  # noqa: BLE001  (any mirror failure is only a notice)
+        print(f"::notice::judge score mirror failed ({type(exc).__name__}), scores stay in Langfuse only")
+        return
+    skipped = len(scores) - len(entries)
+    print(f"[Online Judge] scores mirrored to the app: stored={stored} dropped={dropped} skipped={skipped}", file=sys.stderr)
+
+
 def _live_factory(api_key: str) -> JudgeFactory:
     def build(config: JudgeConfig) -> Any:
         from rag_eval.judge.deepeval_judge import OpenRouterDeepEvalLLM
@@ -164,6 +217,10 @@ def main(argv: list[str] | None = None, *, judge_factory: JudgeFactory | None = 
     parser.add_argument("--to", dest="to_time", help="window end, ISO 8601 (default: now)")
     parser.add_argument("--config", type=str, default=str(DEFAULT_CONFIG_PATH))
     parser.add_argument("--dry-run", action="store_true", help="score the sample but do not post to Langfuse")
+    parser.add_argument("--base-url", help="app origin; when set with the admin token, the scores are also mirrored to the app")
+    parser.add_argument(
+        "--token-env", default=DEFAULT_TOKEN_ENV, help=f"environment variable holding the admin access token (default {DEFAULT_TOKEN_ENV})"
+    )
     args = parser.parse_args(argv)
 
     now = datetime.now(timezone.utc)
@@ -219,6 +276,7 @@ def main(argv: list[str] | None = None, *, judge_factory: JudgeFactory | None = 
                 post_status, accepted, rejected = result.status, result.accepted, result.rejected
                 for message in result.errors:
                     print(f"[Online Judge] score rejected: {message}", file=sys.stderr)
+                _mirror_scores(scores, args.base_url, args.token_env)
     except (JudgeFatalError, LangfuseApiError) as exc:
         return _fail(str(exc), EXIT_API)
 

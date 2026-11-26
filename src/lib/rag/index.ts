@@ -665,3 +665,6 @@ export { runDaily } from './monitor/daily';
 export type { RunDailyOptions, RunDailyResult } from './monitor/daily';
 export { deliverAlerts, deliverStoredAlerts, signWebhookBody, WEBHOOK_SIGNATURE_HEADER, WEBHOOK_TIMESTAMP_HEADER } from './monitor/deliver';
 export type { DeliveryReport, StoredDeliverySummary } from './monitor/deliver';
+export { setAlertStatus } from './monitor/alerts-store';
+export { alertForAdmin, alertFromRow, listAlerts, MAX_ALERTS_PAGE, monitorSummary } from './monitor/alerts-read';
+export type { AlertStatusFilter, ListAlertsResult, MonitorSummary } from './monitor/alerts-read';
