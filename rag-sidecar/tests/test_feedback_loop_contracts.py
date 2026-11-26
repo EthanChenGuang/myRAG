@@ -454,6 +454,17 @@ def test_review_item_candidates_need_document_ids_and_label_is_checked():
     assert item.label is not None and item.label.pii_checked is True
 
 
+def test_review_item_accepts_imported_and_sampled_rows():
+    """Phase 5.3 D-41, D-50: imported and sampled items carry representative or re_review and may have no trace."""
+    imported = ReviewItem.model_validate(_review_item(reasons=["representative"], trace_id=None))
+    assert imported.trace_id is None
+    assert ReviewItem.model_validate(_review_item(reasons=["re_review", "low_score"])).reasons == ["re_review", "low_score"]
+    with pytest.raises(ValidationError):
+        ReviewItem.model_validate(_review_item(reasons=["not_a_reason"]))
+    with pytest.raises(ValidationError):
+        ReviewItem.model_validate(_review_item(trace_id=""))
+
+
 def test_review_item_list_response_caps_at_fifty():
     ReviewItemListResponse.model_validate({"items": [_review_item()] * 50, "next_cursor": None})
     with pytest.raises(ValidationError):

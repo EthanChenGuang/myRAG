@@ -485,7 +485,9 @@
           "refused_high_score",
           "zero_results",
           "low_score",
-          "no_source_opened"
+          "no_source_opened",
+          "representative",
+          "re_review"
         ],
         "type": "string"
       },
@@ -573,10 +575,18 @@
       "type": "string"
     },
     "trace_id": {
-      "maxLength": 128,
-      "minLength": 1,
-      "title": "Trace Id",
-      "type": "string"
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Trace Id"
     },
     "triage": {
       "items": {
@@ -597,7 +607,6 @@
   "required": [
     "id",
     "tenant_key",
-    "trace_id",
     "channel",
     "outcome",
     "status",

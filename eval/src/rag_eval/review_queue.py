@@ -16,7 +16,8 @@ from rag_sidecar.contracts.feedback_loop import (
     ExpertLabel,
     LanguageCode,
     LogOutcome,
-    MiningReason,
+    ReviewItemReason,
+    ReviewSource,
     TenantKey,
     UuidStr,
 )
@@ -453,7 +454,7 @@ class _GoldenExportLine(BaseModel):
     query_language: LanguageCode | None = None
     channel: Channel
     outcome: LogOutcome
-    reasons: list[MiningReason] = Field(default_factory=list)
+    reasons: list[ReviewItemReason] = Field(default_factory=list)
     occurrences: int = Field(ge=1)
     labelled_at: str | None = None
     split: Split | None = None
@@ -462,6 +463,7 @@ class _GoldenExportLine(BaseModel):
     mined_at: str
     label: ExpertLabel
     evidence: list[_ExportEvidence] = Field(default_factory=list, max_length=20)
+    source: ReviewSource | None = None
 
 
 class _ExportError(Exception):

@@ -18,7 +18,8 @@ function badRequest(error: string): NextResponse {
 /**
  * D-17 and D-20: an operator admin pulls one tenant's labelled items of one triage kind as NDJSON (DictionaryCandidate, TrainingPair
  * or GoldenExportLine per line). requireAdminOrDeny runs before anything else; 404 unless RAG_DOMAIN_EXPERT_REVIEW is true; the
- * tenant key must be valid for the deployment mode. Reads use the service-role client filtered by that tenant_key.
+ * tenant key must be valid for the deployment mode. Reads use the service-role client filtered by that tenant_key. A golden line also
+ * carries its item's source, read from rag_review_item_strata for the exported item ids and that tenant only (research X-9).
  */
 export async function GET(request: Request): Promise<Response> {
   const denied = await requireAdminOrDeny(request);

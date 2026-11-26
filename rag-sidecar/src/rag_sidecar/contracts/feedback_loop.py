@@ -68,6 +68,18 @@ MiningReason = Literal[
     "low_score",
     "no_source_opened",
 ]
+ReviewItemReason = Literal[
+    "feedback_negative",
+    "refusal_disputed",
+    "groundedness_flagged",
+    "refused_high_score",
+    "zero_results",
+    "low_score",
+    "no_source_opened",
+    "representative",
+    "re_review",
+]
+ReviewSource = Literal["representative", "pilot", "drift_fill", "historical"]
 ReviewItemStatus = Literal["open", "labelled", "skipped", "exported"]
 Triage = Literal["dictionary", "training", "golden", "kb_gap", "not_a_failure"]
 DictionaryRelation = Literal["synonym", "abbreviation", "translation", "misspelling"]
@@ -265,14 +277,14 @@ class ReviewItem(_LanguageSnapshot):
     id: UuidStr
     tenant_key: TenantKey
     retrieval_log_id: UuidStr | None = None
-    trace_id: str = Field(min_length=1, max_length=128)
+    trace_id: str | None = Field(default=None, min_length=1, max_length=128)
     query_masked: str | None = Field(default=None, max_length=MAX_QUERY_CHARS)
     answer_masked: str | None = Field(default=None, max_length=20000)
     channel: Channel
     outcome: LogOutcome
     candidates: list[RetrievalLogCandidate] = Field(default_factory=list, max_length=MAX_LOG_CANDIDATES)
     retrieval_config_hash: str | None = Field(default=None, max_length=128)
-    reasons: list[MiningReason] = _unique(default_factory=list)
+    reasons: list[ReviewItemReason] = _unique(default_factory=list)
     occurrences: int = Field(default=1, ge=1)
     tags: list[ReviewTag] = Field(default_factory=list)
     status: ReviewItemStatus
