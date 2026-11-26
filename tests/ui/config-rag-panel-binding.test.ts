@@ -10,6 +10,7 @@ const panelDir = path.resolve(import.meta.dirname, '../../scripts/config-ui/rag-
 
 const PANELS = [
   { file: 'languages.js', rootId: 'rag-administration-languages', instance: 'languagesPanel', deps: ['rag-ui.js'] },
+  { file: 'ingest-impact.js', rootId: 'rag-administration-ingest-impact', instance: 'ingestImpactPanel', deps: ['rag-ui.js'] },
   { file: 'ingestion.js', rootId: 'rag-administration-ingestion', instance: 'ingestionPanel' },
   { file: 'doc-types.js', rootId: 'rag-administration-doc-types', instance: 'docTypesPanel' },
   { file: 'embedding-profiles.js', rootId: 'rag-administration-profiles', instance: 'embeddingProfilesPanel' },
