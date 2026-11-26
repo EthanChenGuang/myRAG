@@ -3,7 +3,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from rag_sidecar.contracts.eval_run import GoldenFilter, RagRunOptions
-from rag_sidecar.contracts.omit import omit_none_schema
+from rag_sidecar.contracts.omit import omit_default_schema, omit_none_schema
 from rag_sidecar.contracts.quality_gates import AbsoluteGateResult
 
 
@@ -74,6 +74,9 @@ class Baseline(_Contract):
     golden_set_version: int | None = Field(default=None, ge=1, exclude_if=_omit_none, json_schema_extra=omit_none_schema)
     golden_manifest_sha256: str | None = Field(
         default=None, pattern=r"^[a-f0-9]{64}$", exclude_if=_omit_none, json_schema_extra=omit_none_schema
+    )
+    rag_mode: Literal["strict", "balanced", "flexible"] = Field(
+        default="strict", exclude_if=lambda value: value == "strict", json_schema_extra=omit_default_schema
     )
 
 

@@ -175,6 +175,8 @@ export function itemRequestOptions(
   return options;
 }
 
+// D-07: every harness request runs in strict mode; run.json and the report carry it, run_config_hash does not.
+const EVAL_RAG_MODE = 'strict' as const;
 const NO_INGEST_DOCUMENT_IDS: ReadonlyMap<string, string> = new Map();
 
 const INJECTION_CATEGORIES: ReadonlySet<string> = new Set(['injection', 'injection_evasive']);
@@ -766,7 +768,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         schema_version: 1 as const,
         query: item.question,
         conversation: item.conversation,
-        rag_mode: 'strict' as const,
+        rag_mode: EVAL_RAG_MODE,
         web_search: false as const,
         options,
         item_id: item.id,
@@ -887,6 +889,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     embedding_profile: embeddingProfile,
     effective_config_hash: effectiveConfigHash,
     run_config_hash: runConfigHash,
+    rag_mode: EVAL_RAG_MODE,
     item_count: items.length,
     edge_errors: edgeErrors,
     ...(runConfigRecord ? { run_config: runConfigRecord } : {}),

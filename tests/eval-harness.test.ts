@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
@@ -109,6 +110,30 @@ describe('tracer retrieval through runEval', () => {
     expect(traces[0].kept.map((chunk) => chunk.document_name)).toContain('refund-policy.en.md');
     inProcessKeptIds = traces[0].kept.map((chunk) => chunk.chunk_id);
     expect(inProcessKeptIds.length).toBeGreaterThan(0);
+    // D-07: the request's RAG mode is recorded in run.json; it is not an input of run_config_hash.
+    expect(result.manifest.rag_mode).toBe('strict');
+    expect(JSON.parse(fs.readFileSync(result.runPath, 'utf8')).rag_mode).toBe('strict');
+  });
+});
+
+describe('run-smoke absolute-gate flags', () => {
+  test('--gates-mode without --gates is refused with exit 2 naming the flag', () => {
+    const result = spawnSync(process.execPath, ['--import', 'tsx', 'eval/harness/run-smoke.mts', '--gates-mode', 'report', '--out', makeOutDir()], {
+      cwd: REPO_ROOT,
+      encoding: 'utf8',
+    });
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('--gates-mode needs --gates');
+  });
+
+  test('--gates-mode accepts only enforce or report', () => {
+    const result = spawnSync(
+      process.execPath,
+      ['--import', 'tsx', 'eval/harness/run-smoke.mts', '--gates', 'eval/config/quality-gates.json', '--gates-mode', 'warn', '--out', makeOutDir()],
+      { cwd: REPO_ROOT, encoding: 'utf8' },
+    );
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain('--gates-mode must be enforce or report');
   });
 });
 
