@@ -47,7 +47,7 @@ const SWITCHES = [
   'EXA_API_KEY',
 ] as const;
 type SwitchName = (typeof SWITCHES)[number];
-const saved: Partial<Record<SwitchName, string | undefined>> = {};
+const saved: Partial<Record<SwitchName | 'RAG_SYSTEM_PROMPT', string | undefined>> = {};
 
 const RULES_ON = { RAG_PARTIAL_ANSWER_RULE: 'true', RAG_CONTEXT_RELEVANCE_RULE: 'true' } as const;
 const CLAUDE_MODEL = 'anthropic/claude-sonnet-5.5';

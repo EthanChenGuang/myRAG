@@ -91,7 +91,7 @@ function labels(language: string) {
 }
 
 describe('composeAnswerRules identity (D-04)', () => {
-  let log: ReturnType<typeof vi.spyOn>;
+  let log: { mock: { calls: unknown[][] }; mockRestore: () => void };
   beforeEach(() => {
     log = vi.spyOn(console, 'log').mockImplementation(() => undefined);
   });
@@ -108,12 +108,12 @@ describe('composeAnswerRules identity (D-04)', () => {
 
   it('logs nothing when no part is composed', () => {
     answerRules.composeAnswerRules(input({ mode: 'bypass', env: BOTH }));
-    expect(log.mock.calls.filter((call) => call[0] === '[Answer Rules]')).toHaveLength(0);
+    expect(log.mock.calls.filter((call: unknown[]) => call[0] === '[Answer Rules]')).toHaveLength(0);
   });
 
   it('logs one [Answer Rules] line with part ids, mode and channel only', () => {
     answerRules.composeAnswerRules(input({ env: EVERYTHING }));
-    const lines = log.mock.calls.filter((call) => call[0] === '[Answer Rules]');
+    const lines = log.mock.calls.filter((call: unknown[]) => call[0] === '[Answer Rules]');
     expect(lines).toHaveLength(1);
     expect(lines[0]![1]).toEqual({ parts: ['relevance', 'partial_answer', 'version', 'output_policy'], mode: 'strict', channel: 'web' });
   });
