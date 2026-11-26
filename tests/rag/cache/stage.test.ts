@@ -184,6 +184,8 @@ describe('semantic_cache stage in the query layer (D-05, D-32, D-33, D-36)', () 
       }),
     );
     expect(record).toMatchObject({ status: 'ok', detail: 'miss' });
+    // D-37: no calibrated entry for the legacy profile, so the check carries RAG_SEMANTIC_CACHE_MAX_DISTANCE.
+    expect(check.maxDistance).toBe(0.05);
     expect(out.shortCircuit).toBeNull();
     expect(out.cacheTicket).toMatchObject({ standalone: QUESTION, vector: VECTOR, embeddingProfileId: LEGACY_PROFILE.id });
     expect(out.cacheTicket?.key.entryProfile).toBe('chat');
