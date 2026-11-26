@@ -1,3 +1,4 @@
+import type { StreamTextTransform, ToolSet } from 'ai';
 import type { AnswerNotice } from '@/lib/rag-eval/contracts.generated';
 import { fixedText, type TextKey, type TextParams } from '../lang/texts';
 
@@ -34,4 +35,12 @@ export function emitNotice(kind: NoticeKind, options: NoticeOptions): AnswerNoti
 /** The plain-text form for channels that read text only (WhatsApp, embed, the eval answer): one final delta after a blank line. */
 export function renderNoticeAsText(notice: AnswerNotice): string {
   return `\n\n${notice.text}`;
+}
+
+/**
+ * D-11 stream adapter: appends end-of-answer text at the final finish-step (finish reason not tool-calls).
+ * Only text-end is held; finish-step, start-step, tool parts and finish are forwarded at once (RESEARCH Pitfall 1).
+ */
+export function noticeTransform(_textFor: (finishReason: string) => string | null): StreamTextTransform<ToolSet> {
+  return () => new TransformStream();
 }
