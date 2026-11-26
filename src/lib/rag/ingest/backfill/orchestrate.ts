@@ -1,6 +1,7 @@
 import path from 'node:path';
 import type { BackfillDryRunReport } from '@/lib/rag-eval/contracts.generated';
 import type { RpcClient } from '@/lib/rag/backend/supabase-rpc';
+import { requestTenantNightly } from '@/lib/rag/config-gate/eval-run-requests';
 import { scopeKey, type TenantScope } from '@/lib/rag/tenant/scope';
 import { getRagDeps } from '../../deps';
 import { batchApiAllowed } from '../../embeddings/openai-client';
@@ -286,6 +287,7 @@ export async function finishBatch(batch: BackfillBatchRef, deps: Pick<Orchestrat
   const end = await endReport(batch, { rpc, signal: deps.signal });
   const released = await releaseStagedOriginals(batch, { rpc, signal: deps.signal });
   await updateBatch(rpc, batch.id, deps.signal, { status: 'completed', totals: batchTotals(end) });
+  await requestTenantNightly(rpc, { tenantKey: scopeKey(batch.scope), reason: 'backfill_completed', refId: batch.id });
   for (const line of formatEndReport(end)) deps.io.out(line);
   if (released > 0) deps.io.out(`[Backfill] released ${released} staged originals`);
   return end;
