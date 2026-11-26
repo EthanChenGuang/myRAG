@@ -67,6 +67,14 @@ export interface TableRowAttachment {
   cells: Record<string, string>;
 }
 
+export function renderTableRowLines(_row: TableRowAttachment): string {
+  return '';
+}
+
+export function attachTableRow(_content: string, _row: TableRowAttachment): string | null {
+  return null;
+}
+
 export interface FilteredCandidates<C extends AssemblyCandidate = AssemblyCandidate> {
   hasQuery: boolean;
   queryTerms: string[];

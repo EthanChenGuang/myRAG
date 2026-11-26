@@ -1,10 +1,12 @@
 import {
   buildContext,
+  attachTableRow,
   filterCandidates,
   IMAGE_EXTENSIONS,
   type AssembleInput,
   type AssembleOutput,
   type AssemblyDocumentRow,
+  type TableRowAttachment,
 } from '../../context/assemble';
 import { selectWithinBudget, type BudgetOptions, type RenderEstimate } from '../../context/budget';
 import { compressChunks, type CompressibleChunk } from '../../context/compress';
@@ -67,6 +69,8 @@ export interface ContextStagesInput {
   queryLanguage?: string | null;
   /** D-21: the diversify stage's dropped duplicates per kept chunk. */
   alsoIn?: ReadonlyMap<string, AlsoIn[]>;
+  /** D-17: the matched table row per chunk of the table:0 list (search output); absent leaves the context unchanged. */
+  tableRows?: ReadonlyMap<string, TableRowAttachment>;
 }
 
 /** D-13: the assemble stage detail when the version lookup failed and the labels were skipped. */
