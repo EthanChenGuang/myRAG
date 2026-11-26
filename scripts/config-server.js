@@ -2952,6 +2952,76 @@ app.get('/api/config/injection-defense', (req, res) => {
   }
 });
 
+const QUERY_LAYER_PROFILE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+const QUERY_LAYER_TRACING_ENV = /^(LANGSMITH_|LANGCHAIN_TRACING)/;
+
+/** eval/config/semantic-cache.json (D-37): the distance per embedding profile; ids, numbers and dates only. */
+function readSemanticCacheCalibration() {
+  const filePath = path.join(REPO_ROOT, 'eval', 'config', 'semantic-cache.json');
+  if (!fs.existsSync(filePath)) return { calibrated: false, state: 'missing', profiles: [] };
+  let data;
+  try {
+    data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch {
+    return { calibrated: false, state: 'invalid', profiles: [] };
+  }
+  const list = data && data.schema_version === 1 ? (data.profiles === undefined ? [] : data.profiles) : null;
+  if (!Array.isArray(list)) return { calibrated: false, state: 'invalid', profiles: [] };
+  const profiles = [];
+  for (const entry of list) {
+    const valid =
+      entry && typeof entry.embedding_profile_id === 'string' && QUERY_LAYER_PROFILE_ID.test(entry.embedding_profile_id) &&
+      typeof entry.max_distance === 'number' && Number.isFinite(entry.max_distance) && entry.max_distance >= 0 && entry.max_distance <= 0.2 &&
+      (entry.source === 'default' || entry.source === 'calibrated') &&
+      (entry.fitted_at === undefined || entry.fitted_at === null || (typeof entry.fitted_at === 'string' && entry.fitted_at.length <= 64));
+    if (!valid) return { calibrated: false, state: 'invalid', profiles: [] };
+    profiles.push({
+      embedding_profile_id: entry.embedding_profile_id,
+      max_distance: entry.max_distance,
+      source: entry.source,
+      fitted_at: typeof entry.fitted_at === 'string' ? entry.fitted_at : null,
+    });
+  }
+  return { calibrated: true, state: 'ok', profiles };
+}
+
+function langchainInstalled() {
+  try {
+    // require.resolve caches hits, so a removed package is checked on disk again.
+    return fs.existsSync(require.resolve('@langchain/classic', { paths: [REPO_ROOT] }));
+  } catch {
+    return false;
+  }
+}
+
+/** Status for the Query layer panel (D-44, research P-10): choices, booleans, distances and warning codes; never an env value of a secret. */
+function describeQueryLayerStatus() {
+  const envPath = path.join(REPO_ROOT, '.env.local');
+  const fileEnv = fs.existsSync(envPath) ? dotenv.parse(fs.readFileSync(envPath, 'utf8')) : {};
+  const read = (key) => String(fileEnv[key] ?? '').trim().toLowerCase();
+  const framework = read('RAG_QUERY_FRAMEWORK') === 'langchain' ? 'langchain' : 'llamaindex';
+  const backendRaw = read('RAG_SEMANTIC_CACHE');
+  const backend = backendRaw === 'pgvector' || backendRaw === 'redisvl' ? backendRaw : 'off';
+  const pipeline = read('RAG_PIPELINE') === 'v2' ? 'v2' : 'legacy';
+  const installed = langchainInstalled();
+  const tracingSet = Object.keys(fileEnv).some((key) => QUERY_LAYER_TRACING_ENV.test(key) && String(fileEnv[key]).trim() !== '');
+  const warnings = [];
+  if (backend !== 'off' && pipeline === 'legacy') warnings.push('cache_under_legacy');
+  if (framework === 'langchain' && !installed) warnings.push('langchain_missing');
+  if (framework === 'langchain' && tracingSet) warnings.push('langsmith_tracing_set');
+  return { framework, backend, pipeline, langchain_installed: installed, calibration: readSemanticCacheCalibration(), warnings };
+}
+
+// Read-only status for the Query layer panel; served behind the same loopback and CSRF gate as every config endpoint.
+app.get('/api/config/query-layer/status', (req, res) => {
+  try {
+    return res.json(describeQueryLayerStatus());
+  } catch {
+    console.error('[Query Layer] status failed');
+    return res.status(500).json({ error: 'Query layer status failed', code: 'query_layer_status_failed' });
+  }
+});
+
 const languageSettings = require('./rag/language-settings-context');
 
 const MAX_LANGUAGE_ENTRIES = 64;
