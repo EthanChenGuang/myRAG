@@ -6,11 +6,11 @@ import math
 import re
 from datetime import datetime, timezone
 from bisect import bisect_left
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Literal, Sequence
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from rag_sidecar.contracts.baseline import NoiseConfig
 from rag_sidecar.contracts.eval_run import RagTrace, TraceRefusal
@@ -21,6 +21,8 @@ from rag_sidecar.contracts.retrieval import (
     RefusalCalibrationConfig,
     RefusalCell,
     RefusalMetricBlock,
+    RefusalMode,
+    RefusalModeTargets,
     RefusalThresholds,
     compute_config_hash,
 )
@@ -38,6 +40,8 @@ TOP_MARGIN = 1e-9
 DEV_SPLIT = "dev"
 TEST_SPLIT = "test"
 PASS_EPSILON = 1e-12
+MODES: tuple[RefusalMode, ...] = ("strict", "balanced", "flexible")
+SHARED_MODE = "*"
 
 
 class CalibrationError(RuntimeError):
@@ -82,10 +86,34 @@ class CalibrationRow:
 
 
 @dataclass(frozen=True)
+class SweepCandidate:
+    """One candidate threshold with its dev counts: answerable items refused and no-answer items answered."""
+
+    threshold: float
+    false_refusals: int
+    false_answers: int
+    answerable: int
+    no_answer: int
+
+    @property
+    def false_refusal(self) -> float:
+        return self.false_refusals / self.answerable if self.answerable else 0.0
+
+    @property
+    def false_answer(self) -> float:
+        return self.false_answers / self.no_answer if self.no_answer else 0.0
+
+    @property
+    def correct_refusal(self) -> float:
+        return (self.no_answer - self.false_answers) / self.no_answer if self.no_answer else 0.0
+
+
+@dataclass(frozen=True)
 class FitResult:
     threshold: float
     false_refusal: float
     correct_refusal: float
+    candidates: tuple[SweepCandidate, ...] = field(default=(), compare=False)
 
 
 @dataclass(frozen=True)
@@ -101,10 +129,18 @@ class CellFit:
     tokenizer_version: int
     rerank_text_version: int
     config_hash: str
+    mode: RefusalMode | None = None
+    target: float | None = None
+    max_false_answer: float | None = None
+
+    @property
+    def base_key(self) -> str:
+        return self.key if self.mode is None else self.key.rsplit("|", 1)[0]
 
 
-def cell_key(provider: str, model: str, query_language: str, pairing: str) -> str:
-    return f"{provider}|{model}|{query_language}|{pairing}"
+def cell_key(provider: str, model: str, query_language: str, pairing: str, mode: str | None = None) -> str:
+    base = f"{provider}|{model}|{query_language}|{pairing}"
+    return base if mode is None else f"{base}|{mode}"
 
 
 def assign_cell(trace: RagTrace, reranker: RerankerIdentity) -> Assignment | Exclusion:
@@ -126,34 +162,61 @@ def assign_cell(trace: RagTrace, reranker: RerankerIdentity) -> Assignment | Exc
     )
 
 
+def sweep_candidates(answerable: Sequence[float], no_answer: Sequence[float]) -> tuple[SweepCandidate, ...]:
+    """Every candidate threshold (never-refuse, each midpoint between distinct scores, above the top score), ascending."""
+    ans = sorted(answerable)
+    non = sorted(no_answer)
+    scores = sorted(set(ans) | set(non))
+    if not scores:
+        return ()
+    thresholds = [NEVER_REFUSE] + [(a + b) / 2 for a, b in zip(scores, scores[1:])] + [scores[-1] + TOP_MARGIN]
+    return tuple(
+        SweepCandidate(
+            threshold=t,
+            false_refusals=bisect_left(ans, t),
+            false_answers=len(non) - bisect_left(non, t),
+            answerable=len(ans),
+            no_answer=len(non),
+        )
+        for t in thresholds
+    )
+
+
 def fit_threshold(answerable: Sequence[float], no_answer: Sequence[float], target: float) -> FitResult:
     """Highest correct-refusal rate whose false-refusal rate is at or below target; the lowest such threshold wins ties."""
     if not answerable or not no_answer:
         raise ValueError("fit_threshold needs at least one answerable and one no-answer score")
-    ans = sorted(answerable)
-    non = sorted(no_answer)
-    scores = sorted(set(ans) | set(non))
-    candidates = [NEVER_REFUSE] + [(a + b) / 2 for a, b in zip(scores, scores[1:])] + [scores[-1] + TOP_MARGIN]
+    candidates = sweep_candidates(answerable, no_answer)
     best: FitResult | None = None
-    for threshold in candidates:
-        false_refusal = bisect_left(ans, threshold) / len(ans)
-        correct_refusal = bisect_left(non, threshold) / len(non)
-        if false_refusal <= target and (best is None or correct_refusal > best.correct_refusal):
-            best = FitResult(threshold, false_refusal, correct_refusal)
+    for cand in candidates:
+        if cand.false_refusal <= target and (best is None or cand.correct_refusal > best.correct_refusal):
+            best = FitResult(cand.threshold, cand.false_refusal, cand.correct_refusal)
     assert best is not None
-    return best
+    return FitResult(best.threshold, best.false_refusal, best.correct_refusal, candidates=candidates)
 
 
-def sweep_candidates(answerable: Sequence[float], no_answer: Sequence[float]) -> tuple:
-    return ()
-
-
-def fit_threshold_capped(answerable: Sequence[float], no_answer: Sequence[float], max_false_answer: float) -> FitResult | None:
-    return None
-
-
-def build_sweeps(rows: Sequence[CalibrationRow], records: Sequence[Any]) -> list:
-    return []
+def fit_threshold_capped(
+    answerable: Sequence[float],
+    no_answer: Sequence[float],
+    max_false_answer: float,
+    target_false_refusal: float | None = None,
+) -> FitResult | None:
+    """D-24 strict rule: the lowest false-refusal threshold whose false-answer rate is at or below the cap; the lower
+    threshold wins ties. A threshold that refuses every answerable item is no operating point, so None when only it meets the cap."""
+    if not answerable or not no_answer:
+        raise ValueError("fit_threshold_capped needs at least one answerable and one no-answer score")
+    candidates = sweep_candidates(answerable, no_answer)
+    best: SweepCandidate | None = None
+    for cand in candidates:
+        if cand.false_answer > max_false_answer or cand.false_refusals == cand.answerable:
+            continue
+        if target_false_refusal is not None and cand.false_refusal > target_false_refusal:
+            continue
+        if best is None or cand.false_refusal < best.false_refusal:
+            best = cand
+    if best is None:
+        return None
+    return FitResult(best.threshold, best.false_refusal, best.correct_refusal, candidates=candidates)
 
 
 def _metric_block(answerable: Sequence[float], no_answer: Sequence[float], threshold: float | None) -> RefusalMetricBlock:
@@ -191,38 +254,66 @@ def fit_cells(rows: Sequence[CalibrationRow], config: RefusalCalibrationConfig, 
         grouped.setdefault(row.key, []).append(row)
 
     fits: dict[str, CellFit] = {}
+    targets = config.targets_by_mode or {}
     for key in sorted(grouped):
         cell_rows = sorted(grouped[key], key=lambda r: r.item_id)
         identity = _cell_identity(cell_rows)
         answerable = [r.score for r in cell_rows if r.answerable]
         no_answer = [r.score for r in cell_rows if not r.answerable]
-        threshold: float | None = None
-        if len(answerable) < minimums.answerable or len(no_answer) < minimums.no_answer:
-            status = "insufficient_data"
-        else:
-            fit = fit_threshold(answerable, no_answer, config.target_false_refusal)
-            if fit.threshold == NEVER_REFUSE:
-                status = "no_separation"
+        enough = len(answerable) >= minimums.answerable and len(no_answer) >= minimums.no_answer
+        specs: list[tuple[RefusalMode | None, float | None, float | None]] = [(None, config.target_false_refusal, None)]
+        for mode in MODES:
+            if mode in targets:
+                mode_targets = targets[mode]
+                if mode_targets.max_false_answer is not None:
+                    specs.append((mode, mode_targets.target_false_refusal, mode_targets.max_false_answer))
+                else:
+                    target = mode_targets.target_false_refusal
+                    specs.append((mode, config.target_false_refusal if target is None else target, None))
+        for mode, target, cap in specs:
+            threshold: float | None = None
+            if not enough:
+                status = "insufficient_data"
+            elif cap is not None:
+                capped = fit_threshold_capped(answerable, no_answer, cap, target)
+                if capped is None:
+                    status = "cap_not_met"
+                elif capped.threshold == NEVER_REFUSE:
+                    status = "no_separation"
+                else:
+                    status = "fitted"
+                    threshold = capped.threshold
             else:
-                status = "fitted"
-                threshold = fit.threshold
-        fits[key] = CellFit(
-            key=key,
-            provider=identity.provider,
-            model=identity.model,
-            query_language=identity.query_language,
-            pairing=identity.pairing,
-            threshold=threshold,
-            status=status,
-            dev=_metric_block(answerable, no_answer, threshold),
-            tokenizer_version=identity.tokenizer_version,
-            rerank_text_version=identity.rerank_text_version,
-            config_hash=identity.config_hash,
-        )
+                fit = fit_threshold(answerable, no_answer, target if target is not None else config.target_false_refusal)
+                if fit.threshold == NEVER_REFUSE:
+                    status = "no_separation"
+                else:
+                    status = "fitted"
+                    threshold = fit.threshold
+            mode_key = cell_key(identity.provider, identity.model, identity.query_language, identity.pairing, mode)
+            if mode is None:
+                mode_key = key
+            fits[mode_key] = CellFit(
+                key=mode_key,
+                provider=identity.provider,
+                model=identity.model,
+                query_language=identity.query_language,
+                pairing=identity.pairing,
+                threshold=threshold,
+                status=status,
+                dev=_metric_block(answerable, no_answer, threshold),
+                tokenizer_version=identity.tokenizer_version,
+                rerank_text_version=identity.rerank_text_version,
+                config_hash=identity.config_hash,
+                mode=mode,
+                target=target,
+                max_false_answer=cap,
+            )
     return fits
 
 
 HoldoutStatus = Literal["calibrated", "failed_holdout", "insufficient_data"]
+HoldoutBasis = Literal["false_refusal", "false_answer"]
 
 
 class HoldoutResult(BaseModel):
@@ -234,6 +325,9 @@ class HoldoutResult(BaseModel):
     correct_refusal_count: int
     pass_limit: float
     false_refusal_p_value: float
+    basis: HoldoutBasis = "false_refusal"
+    false_answer_count: int = 0
+    false_answer_p_value: float = 1.0
 
 
 class PreviousCell(BaseModel):
@@ -252,6 +346,7 @@ class CellRecord(BaseModel):
     input_hash: str | None = None
     holdout_pass_limit: float | None = None
     holdout_false_refusal_p_value: float | None = None
+    holdout_basis: Literal["false_answer"] | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 def _check_one_row_set(test_rows: Sequence[CalibrationRow]) -> None:
@@ -278,19 +373,29 @@ def holdout_check(
     if fit.threshold is None:
         raise ValueError(f"cell {fit.key} has no threshold to check")
     _check_one_row_set(test_rows)
-    cell_rows = [r for r in test_rows if r.key == fit.key]
+    cell_rows = [r for r in test_rows if r.key == fit.base_key]
     answerable = [r.score for r in cell_rows if r.answerable]
     no_answer = [r.score for r in cell_rows if not r.answerable]
     block = _metric_block(answerable, no_answer, fit.threshold)
     false_refusals = sum(1 for s in answerable if s < fit.threshold)
     correct_refusals = sum(1 for s in no_answer if s < fit.threshold)
-    target = config.target_false_refusal
-    limit = target + max(noise_floor, 1 / len(answerable) if answerable else 0.0)
+    false_answers = len(no_answer) - correct_refusals
+    target = config.target_false_refusal if fit.target is None else fit.target
+    cap = fit.max_false_answer
+    basis: HoldoutBasis
+    if cap is None:
+        basis = "false_refusal"
+        limit = target + max(noise_floor, 1 / len(answerable) if answerable else 0.0)
+        observed = block.false_refusal_rate
+    else:
+        basis = "false_answer"
+        limit = cap + max(noise_floor, 1 / len(no_answer) if no_answer else 0.0)
+        observed = false_answers / len(no_answer) if no_answer else 0.0
     minimums = getattr(config.holdout_minimums, environment)
     status: HoldoutStatus
     if len(answerable) < minimums.answerable or len(no_answer) < minimums.no_answer:
         status = "insufficient_data"
-    elif block.false_refusal_rate <= limit + PASS_EPSILON:
+    elif observed <= limit + PASS_EPSILON:
         status = "calibrated"
     else:
         status = "failed_holdout"
@@ -301,21 +406,26 @@ def holdout_check(
         correct_refusal_count=correct_refusals,
         pass_limit=limit,
         false_refusal_p_value=_p_value_at_least(false_refusals, len(answerable), target),
+        basis=basis,
+        false_answer_count=false_answers,
+        false_answer_p_value=_p_value_at_least(false_answers, len(no_answer), cap) if cap is not None else 1.0,
     )
 
 
 def _input_hash(fit: CellFit, rows: Sequence[CalibrationRow], config: RefusalCalibrationConfig, *, with_test: bool) -> str:
     picked = sorted(
-        ((r.item_id, r.split, r.answerable, r.score) for r in rows if r.key == fit.key and (with_test or r.split == DEV_SPLIT)),
+        ((r.item_id, r.split, r.answerable, r.score) for r in rows if r.key == fit.base_key and (with_test or r.split == DEV_SPLIT)),
     )
-    payload = {
+    payload: dict[str, Any] = {
         "cell": fit.key,
         "rows": picked,
-        "calibration_config": compute_config_hash(config),
+        "calibration_config": compute_config_hash(config.model_copy(update={"targets_by_mode": None})),
         "retrieval_config": fit.config_hash,
         "tokenizer_version": fit.tokenizer_version,
         "rerank_text_version": fit.rerank_text_version,
     }
+    if fit.mode is not None and config.targets_by_mode is not None:
+        payload["mode_targets"] = config.targets_by_mode[fit.mode].model_dump(mode="json")
     return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
@@ -360,6 +470,7 @@ def calibrate_cells(
         recorded_at = before.recorded_at if unchanged and before and before.recorded_at else now
         cell = RefusalCell(
             key=key,
+            mode=fit.mode,
             provider=fit.provider,
             model=fit.model,
             query_language=fit.query_language,
@@ -382,9 +493,98 @@ def calibrate_cells(
                 input_hash=digest,
                 holdout_pass_limit=holdout.pass_limit if holdout else None,
                 holdout_false_refusal_p_value=holdout.false_refusal_p_value if holdout else None,
+                holdout_basis="false_answer" if holdout is not None and holdout.basis == "false_answer" else None,
             )
         )
     return records
+
+
+class SweepRates(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    answerable_count: int
+    no_answer_count: int
+    false_refusal_count: int
+    false_refusal_rate: float
+    false_refusal_rate_upper_bound: float
+    false_answer_count: int
+    false_answer_rate: float
+    false_answer_rate_upper_bound: float
+
+
+class SweepRow(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    threshold: float | None
+    dev: SweepRates
+    holdout: SweepRates | None = None
+    chosen_by: list[str] = []
+
+
+class CellSweep(BaseModel):
+    """D-24: every candidate threshold of one cell, on dev and (when the cell's test split was read) on holdout."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    key: str
+    candidates: list[SweepRow] = []
+
+
+def _sweep_rates(answerable: Sequence[float], no_answer: Sequence[float], threshold: float) -> SweepRates:
+    false_refusals = sum(1 for s in answerable if s < threshold)
+    false_answers = sum(1 for s in no_answer if s >= threshold)
+    return SweepRates(
+        answerable_count=len(answerable),
+        no_answer_count=len(no_answer),
+        false_refusal_count=false_refusals,
+        false_refusal_rate=false_refusals / len(answerable) if answerable else 0.0,
+        false_refusal_rate_upper_bound=upper_bound(false_refusals, len(answerable)),
+        false_answer_count=false_answers,
+        false_answer_rate=false_answers / len(no_answer) if no_answer else 0.0,
+        false_answer_rate_upper_bound=upper_bound(false_answers, len(no_answer)),
+    )
+
+
+def _record_base_key(record: CellRecord) -> str:
+    return record.cell.key if record.cell.mode is None else record.cell.key.rsplit("|", 1)[0]
+
+
+def _mode_label(mode: str | None) -> str:
+    return SHARED_MODE if mode is None else mode
+
+
+def build_sweeps(rows: Sequence[CalibrationRow], records: Sequence[CellRecord]) -> list[CellSweep]:
+    """The full candidate sweep per base cell; one run serves every mode, so the modes are different cuts of the same rows."""
+    by_base: dict[str, list[CellRecord]] = {}
+    for record in records:
+        by_base.setdefault(_record_base_key(record), []).append(record)
+    order = {label: i for i, label in enumerate((SHARED_MODE, *MODES))}
+    sweeps: list[CellSweep] = []
+    for key in sorted(by_base):
+        cell_rows = [r for r in rows if r.key == key]
+        dev = [r for r in cell_rows if r.split == DEV_SPLIT]
+        answerable = [r.score for r in dev if r.answerable]
+        no_answer = [r.score for r in dev if not r.answerable]
+        read_test = any(rec.holdout_pass_limit is not None for rec in by_base[key])
+        test = [r for r in cell_rows if r.split == TEST_SPLIT]
+        test_answerable = [r.score for r in test if r.answerable]
+        test_no_answer = [r.score for r in test if not r.answerable]
+        chosen: dict[float, list[str]] = {}
+        for rec in by_base[key]:
+            if rec.cell.threshold is not None:
+                chosen.setdefault(rec.cell.threshold, []).append(_mode_label(rec.cell.mode))
+        out: list[SweepRow] = []
+        for cand in sweep_candidates(answerable, no_answer):
+            out.append(
+                SweepRow(
+                    threshold=None if cand.threshold == NEVER_REFUSE else cand.threshold,
+                    dev=_sweep_rates(answerable, no_answer, cand.threshold),
+                    holdout=_sweep_rates(test_answerable, test_no_answer, cand.threshold) if read_test else None,
+                    chosen_by=sorted(chosen.get(cand.threshold, []), key=lambda label: order.get(label, len(order))),
+                )
+            )
+        sweeps.append(CellSweep(key=key, candidates=out))
+    return sweeps
 
 
 Runner = Callable[..., HarnessRun]
@@ -530,6 +730,8 @@ class CalibrationResult(BaseModel):
     excluded: dict[str, int] = {}
     stale_cells: list[str] = []
     cross_vs_same: list[CrossComparison] = []
+    targets_by_mode: dict[RefusalMode, RefusalModeTargets] | None = Field(default=None, exclude_if=lambda value: value is None)
+    sweeps: list[CellSweep] = []
     thresholds_written: bool = False
     thresholds_path: str | None = None
     similarity_floor: SimilarityFloorFit | None = None
@@ -644,6 +846,8 @@ def compare_cross_same(records: Sequence[CellRecord], noise_floor: float) -> lis
     groups: dict[tuple[str, str, str], dict[str, CellRecord]] = {}
     for record in records:
         cell = record.cell
+        if cell.mode is not None:
+            continue
         groups.setdefault((cell.provider, cell.model, cell.query_language), {})[cell.pairing] = record
 
     comparisons: list[CrossComparison] = []
@@ -708,7 +912,8 @@ def merge_thresholds(
     fresh = {cell.key: cell for cell in new_cells}
     carried = [c for c in existing.cells if c.key not in fresh and not _is_stale(c, versions)]
     merged = sorted([*carried, *fresh.values()], key=lambda c: c.key)
-    return finalize_config(RefusalThresholds(cells=merged), provenance_source="calibration")
+    schema_version: Literal[1, 2] = 2 if any(c.mode is not None for c in merged) else 1
+    return finalize_config(RefusalThresholds(schema_version=schema_version, cells=merged), provenance_source="calibration")
 
 
 def _fmt(value: float | None, digits: int = 3) -> str:
@@ -731,6 +936,109 @@ def _rate(block: RefusalMetricBlock) -> str:
 
 def _correct(block: RefusalMetricBlock) -> str:
     return "-" if block.no_answer_count == 0 else _fmt(block.correct_refusal_rate)
+
+
+def _false_answers(block: RefusalMetricBlock) -> int:
+    return block.no_answer_count - round(block.correct_refusal_rate * block.no_answer_count)
+
+
+def _false_answer_text(count: int, n: int) -> str:
+    if n == 0:
+        return "-"
+    return f"{_fmt(count / n)} (n={n}, 95% upper {_fmt(upper_bound(count, n))})"
+
+
+def _false_refusal_text(count: int, n: int, bound: float) -> str:
+    if n == 0:
+        return "-"
+    return f"{_fmt(count / n)} (n={n}, 95% upper {_fmt(bound)})"
+
+
+def _render_modes(result: CalibrationResult) -> list[str]:
+    lines = ["", "## Operating points per mode", ""]
+    targets = result.targets_by_mode
+    if not targets:
+        lines.append(
+            "Not configured: `targets_by_mode` is unset, so every RAG mode uses the shared cell (`*`) and the thresholds file keeps schema version 1."
+        )
+        return lines
+    for mode in MODES:
+        if mode not in targets:
+            continue
+        mode_targets = targets[mode]
+        if mode_targets.max_false_answer is not None:
+            lines.append(
+                f"- {mode} favours fewer false answers: the lowest false-refusal threshold whose dev false-answer rate (no-answer items "
+                f"answered) is at or below {_fmt(mode_targets.max_false_answer)}; holdout rule "
+                "`false_answer_test <= cap + max(noise_floor, 1 / n_test_no_answer)`."
+            )
+        else:
+            target = result.target_false_refusal if mode_targets.target_false_refusal is None else mode_targets.target_false_refusal
+            lines.append(
+                f"- {mode} favours fewer false refusals: the threshold with the most correct refusals whose dev false-refusal rate is at or "
+                f"below {_fmt(target)} (the Phase 4 rule); holdout rule `{result.pass_rule}`."
+            )
+    lines += [
+        f"- `{SHARED_MODE}` is the shared cell: voice (no mode), bypass and any mode without its own cell use it.",
+        "",
+        "A cap on false answers is only as strong as the number of no-answer items behind it: with n items, a cap c admits at most "
+        "floor(c * n) observed false answers, and the 95% upper bound beside each rate shows what the sample can prove.",
+        "",
+        "| Cell | Mode | Status | Threshold | Dev false-answer | Dev false refusal | Holdout false-answer | Holdout false refusal | Holdout evaluations |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    for record in result.cells:
+        c = record.cell
+        read = record.holdout_pass_limit is not None
+        dev_fr = round(c.dev.false_refusal_rate * c.dev.answerable_count)
+        hold_fr = round(c.holdout.false_refusal_rate * c.holdout.answerable_count)
+        lines.append(
+            f"| {_cell_text(_record_base_key(record))} | {_mode_label(c.mode)} | {c.status} | {_fmt(c.threshold, 4)} "
+            f"| {_false_answer_text(_false_answers(c.dev), c.dev.no_answer_count)} "
+            f"| {_false_refusal_text(dev_fr, c.dev.answerable_count, c.dev.false_refusal_rate_upper_bound)} "
+            f"| {_false_answer_text(_false_answers(c.holdout), c.holdout.no_answer_count) if read else '-'} "
+            f"| {_false_refusal_text(hold_fr, c.holdout.answerable_count, c.holdout.false_refusal_rate_upper_bound) if read else '-'} "
+            f"| {c.holdout_evaluations} |"
+        )
+    return lines
+
+
+def _sweep_rate(count: int, n: int, bound: float) -> str:
+    return "-" if n == 0 else f"{_fmt(count / n)} ({count}/{n}, 95% upper {_fmt(bound)})"
+
+
+def _render_sweeps(result: CalibrationResult) -> list[str]:
+    lines = ["", "## Candidate sweep", ""]
+    if not result.sweeps:
+        lines.append("No cells, so no candidates.")
+        return lines
+    lines += [
+        "Every candidate threshold of each cell: never refuse, each midpoint between neighbouring dev scores, and just above the top "
+        "score. A false refusal is an answerable item refused; a false-answer is a no-answer item answered. Holdout columns are filled "
+        "only for cells whose frozen test split was read (a cell with a threshold). `Chosen by` names the modes that picked the row "
+        f"(`{SHARED_MODE}` is the shared cell).",
+    ]
+    for sweep in result.sweeps:
+        lines += [
+            "",
+            f"### {sweep.key}",
+            "",
+            "| Threshold | Dev false refusal (95% upper) | Dev false-answer (95% upper) | Holdout false refusal (95% upper) "
+            "| Holdout false-answer (95% upper) | Chosen by |",
+            "| --- | --- | --- | --- | --- | --- |",
+        ]
+        for row in sweep.candidates:
+            d, h = row.dev, row.holdout
+            threshold = "never refuse" if row.threshold is None else _fmt(row.threshold, 4)
+            lines.append(
+                f"| {threshold} "
+                f"| {_sweep_rate(d.false_refusal_count, d.answerable_count, d.false_refusal_rate_upper_bound)} "
+                f"| {_sweep_rate(d.false_answer_count, d.no_answer_count, d.false_answer_rate_upper_bound)} "
+                f"| {_sweep_rate(h.false_refusal_count, h.answerable_count, h.false_refusal_rate_upper_bound) if h else '-'} "
+                f"| {_sweep_rate(h.false_answer_count, h.no_answer_count, h.false_answer_rate_upper_bound) if h else '-'} "
+                f"| {', '.join(row.chosen_by) if row.chosen_by else ''} |"
+            )
+    return lines
 
 
 def render_report(result: CalibrationResult) -> str:
@@ -778,6 +1086,9 @@ def render_report(result: CalibrationResult) -> str:
             lines += ["", "No threshold separated no-answer from answerable items within the target in: " + ", ".join(unseparated) + "."]
     else:
         lines.append("No cells: no trace had a usable rerank score and query language.")
+
+    lines += _render_modes(result)
+    lines += _render_sweeps(result)
 
     if result.excluded:
         lines += ["", "## Excluded traces", ""]
@@ -968,6 +1279,8 @@ def run_refusal_calibration(
         excluded=excluded,
         stale_cells=stale,
         cross_vs_same=compare_cross_same(records, noise.floor),
+        targets_by_mode=config.targets_by_mode,
+        sweeps=build_sweeps(rows, records),
         similarity_floor=floor_fit,
         notes=notes,
     )
