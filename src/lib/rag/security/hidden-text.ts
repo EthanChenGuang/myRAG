@@ -138,6 +138,14 @@ export function createHiddenTextClient(config: HiddenTextClientConfig): HiddenTe
   };
 }
 
+/**
+ * The report a queued job's worker made at preflight (D-33), checked like a sidecar answer. An invalid report comes back as null: the
+ * scan stage treats it as a checker that could not answer (fail closed under quarantine, T-03.2-381).
+ */
+export function workerHiddenTextReport(raw: unknown, fileSha256: string): { fileSha256: string; report: HiddenTextReport | null } {
+  return { fileSha256, report: validHiddenTextReport(raw) };
+}
+
 let override: HiddenTextClient | null = null;
 
 /** The report of the sidecar for one stored original; the client comes from RAG_SIDECAR_URL and RAG_SIDECAR_SECRET unless a test installed one. */

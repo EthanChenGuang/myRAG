@@ -184,6 +184,25 @@ app.get('/api/config', (req, res) => {
   }
 });
 
+// The variables the app's hidden-text client reads (src/lib/rag/security/hidden-text.ts: env.RAG_SIDECAR_URL, env.RAG_SIDECAR_SECRET).
+const HIDDEN_TEXT_CHECK_VAR = 'RAG_HIDDEN_TEXT_CHECK';
+const HIDDEN_TEXT_SIDECAR_VARS = ['RAG_SIDECAR_URL', 'RAG_SIDECAR_SECRET'];
+
+/**
+ * True when a save would leave RAG_HIDDEN_TEXT_CHECK=quarantine with no sidecar URL or secret, looking at the posted values over the
+ * saved .env.local. Only a request that sets the mode or one of the sidecar variables is checked, so an unrelated save still works.
+ * A save-time guard only: the scan stage still fails closed at run time (plan 03.2-37).
+ */
+function hiddenTextNeedsSidecar(posted) {
+  const touched = [HIDDEN_TEXT_CHECK_VAR, ...HIDDEN_TEXT_SIDECAR_VARS].some((name) => Object.prototype.hasOwnProperty.call(posted, name));
+  if (!touched) return false;
+  const envPath = path.join(REPO_ROOT, '.env.local');
+  const saved = fs.existsSync(envPath) ? dotenv.parse(fs.readFileSync(envPath, 'utf8')) : {};
+  const value = (name) => String(Object.prototype.hasOwnProperty.call(posted, name) ? (posted[name] ?? '') : (saved[name] ?? '')).trim();
+  if (value(HIDDEN_TEXT_CHECK_VAR).toLowerCase() !== 'quarantine') return false;
+  return HIDDEN_TEXT_SIDECAR_VARS.some((name) => value(name) === '');
+}
+
 // API endpoint to update .env.local file
 app.post('/api/config', (req, res) => {
   try {
@@ -213,6 +232,11 @@ app.post('/api/config', (req, res) => {
     }
     if (refused.length > 0) {
       return res.status(400).json({ error: 'Configuration contains values that cannot be stored', invalid: refused });
+    }
+
+    // RAG_HIDDEN_TEXT_CHECK=quarantine fails every PDF upload closed without a sidecar to check it (D-34): refuse to save that state.
+    if (hiddenTextNeedsSidecar(fullValues)) {
+      return res.status(400).json({ success: false, error: 'hidden_text_needs_sidecar' });
     }
 
     for (const name of ['RAG_EVAL_SECRET', 'RAG_SIDECAR_SECRET', 'RAG_VOICE_TOKEN_SECRET', 'VOYAGE_API_KEY', 'DEEPINFRA_API_KEY', 'COHERE_API_KEY', 'LAKERA_GUARD_API_KEY', 'RAG_EMBED_FEEDBACK_SECRET']) {

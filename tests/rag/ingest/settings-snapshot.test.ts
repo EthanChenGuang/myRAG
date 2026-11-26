@@ -91,6 +91,16 @@ describe('buildJobSettings', () => {
     expect(JobSettingsSnapshotSchema.safeParse(snapshot).success).toBe(true);
   });
 
+  test('hidden_text_check is written only when the check is not off (D-33, plan 03.2-38)', () => {
+    const queueConfig = loadQueueConfig({});
+    const base = { queueConfig, profile, bounds: { min_tier: 'fast', max_tier: 'premium' } as const, routingConfig };
+    const unset = buildJobSettings(base);
+    expect(buildJobSettings({ ...base, hiddenTextCheck: 'off' })).toEqual(unset);
+    expect(unset).not.toHaveProperty('hidden_text_check');
+    expect(buildJobSettings({ ...base, hiddenTextCheck: 'flag' })).toEqual({ ...unset, hidden_text_check: 'flag' });
+    expect(buildJobSettings({ ...base, hiddenTextCheck: 'quarantine' })).toEqual({ ...unset, hidden_text_check: 'quarantine' });
+  });
+
   test('backfill with OpenAI embedding profile forces batch_api and progressive off', () => {
     const queueConfig = loadQueueConfig({
       RAG_EMBED_BATCH_MODE: 'batch_api',

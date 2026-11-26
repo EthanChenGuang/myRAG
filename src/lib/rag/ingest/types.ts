@@ -258,6 +258,11 @@ export interface StageContext {
   document: IngestDocumentRef | null;
   parserUsed: string | null;
   work: IngestWork;
+  /**
+   * A queued job's hidden-text report made by the sidecar worker at preflight (D-33); scan_injection uses it instead of calling the
+   * sidecar. `report` null: the worker sent a report that failed validation, treated as a checker that could not answer.
+   */
+  workerHiddenText?: { fileSha256: string; report: HiddenTextReport | null };
 }
 
 /** What a stage that continues tells the trace: it ran switched off, took a fallback, or reached a named outcome. */

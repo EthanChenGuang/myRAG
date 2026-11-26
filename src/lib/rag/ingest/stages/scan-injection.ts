@@ -192,6 +192,11 @@ async function sidecarReport(ctx: StageContext): Promise<SidecarResult> {
   const identity = requireIdentity(ctx, 'scan_injection');
   const saved = ctx.state.hiddenText;
   if (saved && saved.fileSha256 === identity.fileSha256) return saved.report ? { kind: 'report', report: saved.report } : { kind: 'not_checked', failure: null };
+  // A queued job whose worker checked the original at preflight: its report, never a second call (D-33).
+  const fromWorker = ctx.workerHiddenText;
+  if (fromWorker && fromWorker.fileSha256 === identity.fileSha256 && hiddenTextMimeType(ctx.input.mimeType, identity.filename) !== null) {
+    return fromWorker.report ? { kind: 'report', report: fromWorker.report } : { kind: 'not_checked', failure: 'malformed' };
+  }
   const original = await originalForCheck(ctx);
   if (original.kind === 'unsupported') return { kind: 'not_checked', failure: null };
   if (original.kind === 'missing') return { kind: 'not_checked', failure: 'original_unavailable' };

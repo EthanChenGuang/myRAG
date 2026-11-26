@@ -140,6 +140,7 @@ export async function enqueueIngest(input: IngestInput, options: EnqueueIngestOp
       // Frozen at enqueue: a later change of the variables reaches neither this job's requests nor its parse-cache key (D-17).
       ingestConfig: ctx.config,
       languageSettings: ingestLanguageSettings(ctx.config),
+      hiddenTextCheck: ctx.config.hiddenTextCheck,
     });
     const base = {
       source: input.source,

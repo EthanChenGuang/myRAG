@@ -250,6 +250,8 @@ class _Run:
     est_cost: float = 0.0
     check_ms: int = 0
     reusable: dict[tuple[int, int], tuple[DoclingDocument, dict[str, Any]]] = field(default_factory=dict)
+    # The hidden-text report made at preflight (D-33); None while the snapshot has the check off.
+    hidden_text_report: Any = None
 
     def previous_attempt(self, start: int, end: int | None, preset: str, reason: str = "initial") -> Any:
         """The attempt an earlier run of this job recorded for the same pages, so a reclaimed job does not record it twice."""
@@ -1061,12 +1063,19 @@ def text_layer_share(result: PreflightResult) -> float:
     return sum(1 for row in result.pages if row.text_layer) / max(1, len(result.pages))
 
 
+async def _hidden_text(run: _Run) -> Any:
+    from rag_sidecar.ingest.process_job import hidden_text_preflight
+
+    return await hidden_text_preflight(run.deps, run.job, run.path)
+
+
 async def _run_pdf(run: _Run) -> str | None:
     """Preflight, range parsing, the check and escalation; returns the merged cache id, or None for a dry run."""
     deps = run.deps
     result = await _run_preflight(run)
     if deps.page_cap is not None and result.page_count > deps.page_cap:
         raise TieredFailure("page_cap", retryable=False)
+    run.hidden_text_report = await _hidden_text(run)
 
     await _advance(
         run,
@@ -1278,6 +1287,7 @@ async def _run_office(job: IngestionJob, deps: WorkerDeps, cfg: ParseRoutingConf
     from rag_sidecar.ingest.process_job import JobOutcome, _advance_until_done
 
     run = await _prepare(job, deps, work, cfg=cfg, need_converter=False)
+    run.hidden_text_report = await _hidden_text(run)
     structured = kind == "office_structured"
     tier, preset, convert_preset = ("structured", "structured_layout", "structured_layout") if structured else ("native", "native", "fast")
     opts_hash = options_hash({"preset": preset, "pages": "all", "input_format": job.mime_type or ext})
@@ -1346,7 +1356,13 @@ async def _run_office(job: IngestionJob, deps: WorkerDeps, cfg: ParseRoutingConf
     if cache_id is None:
         await _advance(run, "ready", stage_state={"dry_run": True, "ended_at": "check"})
         return JobOutcome(status="ready")
-    return await _advance_until_done(deps, job, cache_id, run.last_attempt_no or (job.attempts[-1].attempt_no if job.attempts else 1))
+    return await _advance_until_done(
+        deps,
+        job,
+        cache_id,
+        run.last_attempt_no or (job.attempts[-1].attempt_no if job.attempts else 1),
+        hidden_text_report=run.hidden_text_report,
+    )
 
 
 # -------------------------------------------------------------------------------------------------------------------------
@@ -1402,7 +1418,7 @@ async def run_tiered(job: IngestionJob, deps: WorkerDeps) -> JobOutcome:
             await _advance(run, "ready", stage_state={"dry_run": True, "ended_at": "check"})
             return JobOutcome(status="ready")
         attempt_no = run.last_attempt_no or (job.attempts[-1].attempt_no if job.attempts else 1)
-        return await _advance_until_done(deps, job, cache_id, attempt_no)
+        return await _advance_until_done(deps, job, cache_id, attempt_no, hidden_text_report=run.hidden_text_report)
     except progressive.ProgressiveEnded as ended:
         return ended.outcome
     except TieredFailure as failure:
