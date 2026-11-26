@@ -12,42 +12,70 @@
   },
   "profiles": {
     "chat": {
+      "groups": {
+        "query": {
+          "p50_ms": 600,
+          "p95_ms": 1200
+        }
+      },
       "stages": {
         "assemble": 100,
         "compress": 50,
+        "condense": 600,
+        "decompose": 800,
         "dedupe": 5,
         "embed": 200,
+        "expand": 700,
         "expand_parents": 100,
         "fuse": 5,
+        "hyde": 900,
         "injection_check": 400,
         "refusal": 1,
         "rerank": 600,
         "search": 400,
-        "translate": 5
+        "semantic_cache": 150,
+        "translate": 600
       },
       "total_p50_ms": 1000,
       "total_p95_ms": 2000
     },
     "embed": {
+      "groups": {
+        "query": {
+          "p50_ms": 600,
+          "p95_ms": 1200
+        }
+      },
       "stages": {
         "assemble": 100,
         "compress": 50,
+        "condense": 600,
+        "decompose": 800,
         "dedupe": 5,
         "embed": 200,
+        "expand": 700,
         "expand_parents": 100,
         "fuse": 5,
+        "hyde": 900,
         "injection_check": 400,
         "refusal": 1,
         "rerank": 600,
         "search": 400,
-        "translate": 5
+        "semantic_cache": 150,
+        "translate": 600
       },
       "total_p50_ms": 1000,
       "total_p95_ms": 2000
     },
     "voice": {
+      "groups": {
+        "query": {
+          "p95_ms": 300
+        }
+      },
       "stages": {
         "assemble": 50,
+        "condense": 300,
         "dedupe": 5,
         "embed": 200,
         "fuse": 5,

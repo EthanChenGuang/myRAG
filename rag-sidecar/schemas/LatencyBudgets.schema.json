@@ -35,9 +35,45 @@
       "title": "GroundednessBudgets",
       "type": "object"
     },
+    "GroupBudget": {
+      "additionalProperties": false,
+      "description": "D-29: a budget for a group of stages measured as one span, such as the pre-retrieval query stage.",
+      "properties": {
+        "p50_ms": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "P50 Ms"
+        },
+        "p95_ms": {
+          "exclusiveMinimum": 0,
+          "title": "P95 Ms",
+          "type": "number"
+        }
+      },
+      "required": [
+        "p95_ms"
+      ],
+      "title": "GroupBudget",
+      "type": "object"
+    },
     "ProfileBudget": {
       "additionalProperties": false,
       "properties": {
+        "groups": {
+          "additionalProperties": {
+            "$ref": "#/$defs/GroupBudget"
+          },
+          "title": "Groups",
+          "type": "object"
+        },
         "stages": {
           "additionalProperties": {
             "type": "number"

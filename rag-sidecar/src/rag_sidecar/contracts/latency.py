@@ -19,10 +19,24 @@ class StageLatency(_Contract):
         return self
 
 
+class GroupBudget(_Contract):
+    """D-29: a budget for a group of stages measured as one span, such as the pre-retrieval query stage."""
+
+    p50_ms: float | None = Field(default=None, gt=0)
+    p95_ms: float = Field(gt=0)
+
+    @model_validator(mode="after")
+    def _p50_not_above_p95(self) -> "GroupBudget":
+        if self.p50_ms is not None and self.p50_ms > self.p95_ms:
+            raise ValueError("p50_ms must not exceed p95_ms")
+        return self
+
+
 class ProfileBudget(_Contract):
     total_p50_ms: float = Field(gt=0)
     total_p95_ms: float = Field(gt=0)
     stages: dict[str, float] = Field(default_factory=dict)
+    groups: dict[str, GroupBudget] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _valid(self) -> "ProfileBudget":
