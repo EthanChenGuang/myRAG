@@ -97,8 +97,57 @@ def read_vector_set(
     profile_id: str | None = None,
     expected_dims: int | None = None,
 ) -> VectorSet:
-    header = VectorFileHeader.model_validate_json((Path(bundle_dir) / vector_files(base)["header"]).read_text())
-    return VectorSet(header=header, ids=(), matrix=np.zeros((0, header.dims), dtype=DTYPE))
+    bundle_dir = Path(bundle_dir)
+    files = {name: bundle_dir / rel for name, rel in vector_files(base).items()}
+    for name, path in files.items():
+        if not path.is_file():
+            raise VectorFileMissing("vector_file_missing", vector_files(base)[name])
+    header_name = vector_files(base)["header"]
+    try:
+        header = VectorFileHeader.model_validate_json(files["header"].read_text(encoding="utf-8"))
+    except (ValidationError, ValueError):
+        raise VectorFileInvalid("header_invalid", header_name) from None
+    if tenant_key is not None and header.tenant_key != tenant_key:
+        raise VectorFileInvalid("header_tenant_mismatch", header_name)
+    if profile_id is not None and header.profile_id != profile_id:
+        raise VectorFileInvalid("header_profile_mismatch", header_name)
+    if expected_dims is not None and header.dims != expected_dims:
+        raise VectorFileShapeError("dims_mismatch", header_name)
+    f32_name = vector_files(base)["f32"]
+    if _sha256(files["f32"]) != header.sha256:
+        raise VectorFileTampered("sha256_mismatch", f32_name)
+    size = files["f32"].stat().st_size
+    if size != header.rows * header.dims * DTYPE.itemsize:
+        raise VectorFileShapeError("size_mismatch", f32_name)
+    matrix = np.fromfile(files["f32"], dtype=DTYPE).reshape(header.rows, header.dims) if header.rows else np.zeros(
+        (0, header.dims), dtype=DTYPE
+    )
+
+    rows_name = vector_files(base)["rows"]
+    model = ChunkVectorRow if kind == "chunks" else QueryVectorRow
+    ids: list[str] = []
+    for number, line in enumerate(files["rows"].read_text(encoding="utf-8").split("\n"), start=1):
+        if not line.strip():
+            continue
+        try:
+            row = model.model_validate_json(line)
+        except (ValidationError, ValueError):
+            raise VectorFileInvalid(f"row_invalid:{number}", rows_name) from None
+        if row.dims != header.dims:
+            raise VectorFileShapeError(f"row_dims_mismatch:{number}", rows_name)
+        if row.profile_id != header.profile_id or row.model != header.model:
+            raise VectorFileInvalid(f"row_profile_mismatch:{number}", rows_name)
+        if isinstance(row, ChunkVectorRow):
+            if row.tenant_key != header.tenant_key:
+                raise VectorFileInvalid(f"row_tenant_mismatch:{number}", rows_name)
+            if row.row_index != len(ids):
+                raise VectorFileInvalid(f"row_index_out_of_order:{number}", rows_name)
+        ids.append(_row_id(row))
+    if len(ids) != header.rows:
+        raise VectorFileShapeError("row_count_mismatch", rows_name)
+    if len(set(ids)) != len(ids):
+        raise VectorFileInvalid("row_id_repeated", rows_name)
+    return VectorSet(header=header, ids=tuple(ids), matrix=matrix)
 
 
 def read_chunk_vectors(bundle_dir: Path, tenant_key: str, profile_id: str, *, expected_dims: int | None = None) -> VectorSet:
@@ -125,7 +174,6 @@ def read_query_vectors(bundle_dir: Path, tenant_key: str, profile_id: str, *, ex
 
 def chunk_vector_profiles(bundle_dir: Path, tenant_key: str) -> list[str]:
     """Profile ids that have a stored chunk vector header for this tenant, sorted."""
-    return []
     directory = Path(bundle_dir) / VECTORS_DIR
     prefix = f"{tenant_file_key(tenant_key)}."
     if not directory.is_dir():

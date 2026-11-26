@@ -134,7 +134,6 @@ class FakeEncoder:
         return vector
 
     def _encode(self, items: Sequence[TextItem]) -> np.ndarray:
-        return np.zeros((len(items), self.dims), dtype=np.float32)
         if not items:
             return np.zeros((0, self.dims), dtype=np.float32)
         return normalize_rows(np.stack([self._vector(item.text) for item in items]))
@@ -182,7 +181,6 @@ class SentenceTransformerEncoder:
         return self._model
 
     def _encode(self, items: Sequence[TextItem], prompt: str) -> np.ndarray:
-        return np.zeros((len(items), 1), dtype=np.float32)
         model = self.model
         if not items:
             return np.zeros((0, int(model.get_embedding_dimension())), dtype=np.float32)
