@@ -139,7 +139,12 @@ async function defaultLookup(host: string, signal: AbortSignal): Promise<Resolve
   return records;
 }
 
-async function assertPublicUrl(url: URL, lookupHost: NonNullable<BackfillSourceDeps['lookupHost']>, signal: AbortSignal): Promise<void> {
+/** https only, no credentials, no local or internal host names, and every DNS answer public; throws SourceRejection otherwise. */
+export async function assertPublicUrl(
+  url: URL,
+  lookupHost: NonNullable<BackfillSourceDeps['lookupHost']> = defaultLookup,
+  signal: AbortSignal = new AbortController().signal,
+): Promise<void> {
   if (url.protocol !== 'https:') throw new SourceRejection('manifest_https');
   if (url.username !== '' || url.password !== '') throw new SourceRejection('manifest_https');
   const host = url.hostname.replace(/^\[|\]$/g, '').toLowerCase();
