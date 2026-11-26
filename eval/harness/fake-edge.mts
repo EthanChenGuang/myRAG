@@ -895,6 +895,11 @@ export async function startFakeEdge(options: FakeEdgeOptions): Promise<FakeEdge>
   const server = http.createServer((req, res) => {
     void enqueue(() => handle(req, res));
   });
+  // The fake edge shares its process with the PGlite database, whose synchronous WASM work (an HNSW insert or a large UPDATE)
+  // can block the event loop for seconds. With Node's default 5 s keep-alive timeout the server then closes an idle socket in
+  // the same turn the client reuses it for its next request, and fetch fails ("fetch failed"). Only the client closes idle
+  // sockets here (undici's own keep-alive timeout), so a blocked loop can no longer drop a request.
+  server.keepAliveTimeout = 0;
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
     server.listen(0, '127.0.0.1', () => resolve());
