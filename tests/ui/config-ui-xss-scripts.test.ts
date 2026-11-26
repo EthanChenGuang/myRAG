@@ -353,3 +353,77 @@ describe('rag-panels/ingest-impact.js renders server data and setting values as 
     await pending;
   });
 });
+
+describe('rag-panels/upload-approvals.js renders server data as text (XSS)', () => {
+  it('file names, uploader names, sources, kinds and exemption names create no element and no inline handler', async () => {
+    const doc = new FakeDocument();
+    const section = host(doc, 'rag-administration-approvals', 'section');
+    for (const attr of ['data-upload-approvals-title', 'data-upload-approvals-description', 'data-upload-approvals-workspace', 'data-upload-approvals-alert', 'data-upload-approvals-content', 'data-upload-approvals-status']) {
+      const el = doc.createElement('div');
+      el.setAttribute(attr, '');
+      section.appendChild(el);
+    }
+    const selector = host(doc, 'workspace-selector', 'select');
+    const option = doc.createElement('option');
+    option.setAttribute('value', 'org-1');
+    option.textContent = XSS_PAYLOAD;
+    selector.appendChild(option);
+    selector.value = 'org-1';
+    const user = (display: string) => ({ id: JS_BREAKOUT, display });
+    const list = {
+      success: true,
+      mode: 'members',
+      total: 2,
+      items: [
+        { id: 'd1', file_name: XSS_PAYLOAD, uploader: user(JS_BREAKOUT), source: XSS_PAYLOAD, doc_type: JS_BREAKOUT, uploaded_at: XSS_PAYLOAD, new_version: true },
+        { id: JS_BREAKOUT, file_name: JS_BREAKOUT, uploader: user(''), source: 'upload', doc_type: 'general', uploaded_at: '2026-11-20T09:30:00.000Z' },
+      ],
+    };
+    const exemptions = {
+      success: true,
+      total: 1,
+      items: [{ id: 'e1', kind: XSS_PAYLOAD, ref: JS_BREAKOUT, display: XSS_PAYLOAD, added_by: user(XSS_PAYLOAD), added_at: JS_BREAKOUT }],
+      choices: { connector: [{ ref: JS_BREAKOUT, display: XSS_PAYLOAD }], uploader: [] },
+    };
+    const context: Record<string, unknown> = {
+      document: doc,
+      console: { log() {}, error() {}, warn() {}, info() {}, debug() {} },
+      navigator: { language: 'en-US' },
+      location: { origin: 'http://config.local' },
+      setTimeout,
+      clearTimeout,
+      AbortController,
+      URLSearchParams,
+      Intl,
+      ragFetch: async (apiPath: string, init: { method?: string } = {}) => {
+        if (apiPath.includes('/exemptions')) return { ok: true, status: 200, body: exemptions };
+        if (init.method === 'POST') return { ok: false, status: 409, body: { success: false, error: XSS_PAYLOAD, reason: JS_BREAKOUT } };
+        return { ok: true, status: 200, body: list };
+      },
+    };
+    context.window = context;
+    vm.createContext(context);
+    for (const file of ['rag-panels/rag-ui.js', 'rag-panels/upload-approvals.js']) {
+      new vm.Script(fs.readFileSync(path.join(configUiDir, file), 'utf8'), { filename: file }).runInContext(context);
+    }
+    const flushAll = async () => {
+      for (let i = 0; i < 25; i += 1) await new Promise((resolve) => setImmediate(resolve));
+    };
+    await (context.initUploadApprovalsPanel as () => Promise<void>)();
+    await flushAll();
+    doc.body.querySelectorAll('button').find((b) => b.textContent === 'Approve upload')!.click();
+    await flushAll();
+    doc.getElementById('rag-upload-approvals-tab-exemptions')!.click();
+    await flushAll();
+    const kind = doc.getElementById('rag-upload-approvals-exempt-kind')!;
+    kind.value = 'connector';
+    kind.dispatch('change');
+    doc.body.querySelectorAll('button').find((b) => b.textContent === 'Reject upload')!.click();
+    await flushAll();
+    expectSafe(doc);
+    expect(doc.innerHtmlWrites).toBe(0);
+    expect(doc.body.textContent).toContain(XSS_PAYLOAD);
+    expect(doc.body.textContent).toContain(JS_BREAKOUT);
+    doc.body.querySelectorAll('dialog').find((d) => d.open)!.close('keep');
+  });
+});
