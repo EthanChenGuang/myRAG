@@ -16,7 +16,7 @@ for f in sorted(glob.glob('.planning/phases/*/*-PLAN.md')):
     plans[n]=(eval(m.group(1)) if m else [], a.group(1) if a else '?')
 def anc(b,c): return subprocess.run(f"git merge-base --is-ancestor {c} {b}",shell=True).returncode==0
 HOLD_PLANS={'06.2-13','06.2-19','06.2-33','05.3-49','05.3-50','04.3-53','04.3-54','05.2-39','05.2-40','05.2.1-25','07-22','07-23','07-26','07-29'}  # per-plan holds (planning/phase-7 workers)
-BLOCKED_PHASES=('06.1-',)  # planning session hold, 2026-11-25
+BLOCKED_PHASES=()  # planning session hold, 2026-11-25
 PHASE_GATES={'06.2-':['06-','06.1-','04.1.1-'],'03.2.1-':['03.1.1-','03.2-'],'06.3-':['06-'],'05.3-':['05.1.1-22'],'04.3-':['03.2-','04.2-'],'05.2-':['05-','05.1-','05.1.1-','03.2-']}  # phase starts only when the whole gating phase is on trunk/done
 def phase_done(pref): return all(k in done for k in plans if k.startswith(pref))
 for n,(deps,a) in plans.items():

@@ -316,3 +316,64 @@ archived: 03.2-59, 03.2-64, 05.1.1-18, 05.1.1-19, 05.1.1-21, 06-40
 - 10:35Z owner: vector model per recommendation (Qwen3-8B-1024 main + OpenAI 3-small comparison). Rename: owner declined PAT; rename in dashboard. Train 23 PR #106 head da49fcb2 (migrations 0707, 0821). Flaky: sidecar test_preflight_hidden_text off-path compares wall-clock ms (follow-up for 03.2-36).
 - 10:45Z Supabase PAT saved as network secret for api.supabase.com (proxy-injected). Renamed fsgaeysipkukqoocgzbx -> myrag-medical via Management API PATCH /v1/projects/{ref}.
 - 10:50Z train 23 merged 4b05dade; 0707+0821 applied live as train23_0707_..._0821 (one migration); trunk synced; deployed. myrag-medical still lacks 0707/0821 (built at d2a3dd6e).
+
+## 2026-11-26 ~10:50Z — new orchestrator session_01SEn5g5F9BVw4WjuKoGXY7X took over
+- Archived (all done, exec branches + SUMMARY verified): 04.2-01..04, 04.1.1-01..03, 03.2-58, 03.2-62.
+- Old trigger trig_01Dbo1EWAoUoh2foydG7GjPX disabled (delete was refused by the permission classifier). New check-in trig_011G8WJWRHD5qoNHVsLtcb82 (11:16Z).
+- myrag-medical: applied eval_0707_vector_sync_reconcile_and_0821_translation_query_state; verified 7 fns search_path='' / service_role only.
+- Train 24 builder subagent started: ci/merge-train-24 = exec/04.1-12, 03.2-58, 03.2-62, 04.2-01..04, 04.1.1-01..03 (migrations 0822, 0851-0854, 0471).
+- Brief template now on branch ops/orchestrator-briefs (briefs/executor-brief.md).
+- Launched: 04.1.1-04 session_01SEn5g6aEfdvKy9VLKik62i (base exec/04.1.1-03), 04.2-28 session_01SEn5g5ujtwM6QC65Fc5Jfe (exec/04.2-01), 04.2-34 session_01SEn5g72xFnyChkxS2F9YT4 (exec/04.2-04), 04.2-39 session_01SEn5g92kvBmeQoJpt91RvF (exec/04.2-02).
+- Waiting for train-24 base: 04.1.1-05, 04.2-05..09, 03.2-66.
+- Medical: corpus re-download + offline dry-run agent running (no DB writes). Owner 10:50Z: medical RAG Italian-only (no cross-lingual) -> re-evaluation research agent running (incl. Italian biomedical BERT).
+- OWNER DECISION (2026-11-26 ~11:00Z): four domains. Medical + legal = Italian only (RAG_SUPPORTED_LANGUAGES=it, PRIMARY=it, translation off; Italian-only encoder allowed per eval). Finance + general docs = zh,it,en, switchable in Config UI (multilingual embedder required; query/doc translation on when cross-lingual). General docs = the existing production site myrag.laoxiang.app / ppvywaxrycaxrtrrditl (no new project); its language settings change together with the v2 flip after the 04.1 gate passes. Eval order: medical -> legal -> finance -> general; finance/general golden sets cover 3 languages + cross-lingual questions. Legal needs Supabase Pro first (remind owner).
+- OWNER (2026-11-26 ~11:10Z) approved: medical Italian-only re-eval (research/意大利语单语医疗RAG重新评估.md); online profile 1024-d halfvec (free-plan size); arm order 0..6 per report; first cheap experiment = ~100 Italian dev questions from TRAIN split, in-memory compare BM25+it-stem / OpenAI 3-small / Qwen3-8B-1024 / BGE-M3 (doc hit, section hit, R@10/@50), <$1, no DB writes. Start when corpus download agent finishes.
+## 11:06Z launched on ci/merge-train-24 (99cc57f4, pre-gate merge head)
+04.1.1-05 session_01SEn5g8BRHLFrerEoSWcZ1P
+04.2-05 session_01SEn5g6UWNfy17eqsv6QvZd
+04.2-06 session_01SEn5g95PvEDnsyWJALqAgX
+04.2-07 session_01SEn5g6J17DHiuVuBvxgW5H
+04.2-08 session_01SEn5g6vYoAGUPvsbybaTvy
+04.2-09 session_01SEn5g7dgJsMKX3hyGsrUuM
+03.2-66 session_01SEn5g8Q9kJF6x3toWuH5ER
+fix/sidecar-preflight-flaky session_01SEn5g5NxyajQuSDuERqa9P (base main) -> fold into train 25
+Not launched: 04.2-14 (ready2 listed exec/04.2-34 as base but 04.2-34 still running; wait). Human-only remaining: 03.1-53 (deferred), 04-43, 05-26, 05.1-23, 06-22 (not before 12-04).
+Running total: 12 sessions + 2 subagents (train24 builder, medical corpus).
+## 11:17Z
+- Archived done: 04.2-39 (8ddd58b2), 04.2-34 (7d038dd0), 04.2-28 (725a4ee9), 04.1.1-04 (9f0ad4e5; migrations 0472-0473, live apply = plan 15), fix/sidecar-preflight-flaky (54419e38). -> train 25.
+- base/04.2-14 = ci/merge-train-24 + exec/04.2-34 (28cc8619); 04.2-14 session_01SEn5g8SpUgEsTnrpsSDEWF.
+- Next check-in trig_01BrK5Eesmp8cecKMXSquSZW (11:43Z).
+- 11:22Z owner set ANTHROPIC_API_KEY as env variable (readable by all sessions; suggested low spend limit + delete after). 05-26 Task 1 live check session_01SEn5g9cf7JPzhX5CrRzCSZ (base main, branch exec/05-26-t1; results file only, no SUMMARY).
+- OWNER (11:35Z): domain switching = one standalone site + DB per domain (option 1); no in-admin DB switcher. Italian-only removals apply to medical+legal only (switches off, code kept); finance/general keep translation + trilingual eval.
+## 11:45Z train 24 DONE
+- PR #107 merged cce43e1c (16/16 green). Trunk synced. Live prod: train24_0822_0851_0854_0410r9_0471 applied; verified 12 fns search_path='' no anon/auth EXECUTE (definer only where intended), 6 new tables RLS on, 0 policies, no anon/auth SELECT. Deploy myrag-qvp1py8co READY.
+- Medical corpus: 790 PDFs verified; DB estimate does not fit free plan (openai alone ~600 MB). Owner: upgrade = move myrag-medical into the owner's other Supabase account org "ChenGuang's Org" (already Pro). Owner: legal + finance projects go in that account too. Email ambiguity (guang vs jung) asked. Transfer needs one user owning both orgs (dashboard Transfer project); Supabase MCP only sees org biyibndjlhbghshpmwua.
+- OWNER (11:50Z): Pro account = ethan.chen.guang@gmail.com (GitHub login), org ChenGuang's Org. myrag-medical moves there; legal + finance projects are created there too. Waiting for owner: invite current account as Owner in that org + Transfer project in dashboard.
+## 11:46Z
+- Archived done: 04.2-14 (d0701adb, migration 0858), 03.2-66 (e12c9edd), 04.2-08 (d6407d2d), 04.2-07 (185b25b8), 04.2-06 (9f1e6ae2), 04.2-05 (ca37c1d2), 04.1.1-05 (6bf7d216), old 05-26 t1 session (partial, key not loaded).
+- Train 25 builder subagent started (ci/merge-train-25 from main cce43e1c): 04.2-14(+34), 04.2-28, 04.2-39, 04.1.1-04, 04.1.1-05, 04.2-05..08, 03.2-66, fix/sidecar-preflight-flaky.
+- base/04.2-12 (d1e72536 = exec/04.2-05+exec/04.2-14), base/04.2-13 (687d6876 = exec/04.2-06+exec/04.2-08).
+- Launched: 05-26 t1 rerun session_01SEn5g6Nq4eHV1CRdcP9TTu; 03.2-67 ..6EtpkJEgPJ2o3zzu7; 04.1.1-06 ..9SccE91SUFnemgU6K; 04.1.1-07 ..67vsZAkJsCvQNZkNP; 04.1.1-16 ..58qAdCNRiSxmbm3Mz; 04.1.1-17 ..9AbwaeGwXU33QNnkE; 04.2-10 ..7T378XqZK4wirFBVa; 04.2-11 ..6BBL7cYVqHBfcGPu1; 04.2-12 ..6YncDkZVZA1bi9Sqg; 04.2-13 ..5ku6VtqD1HyJ2HR88. Still running: 04.2-09.
+- Medical gap analysis done: research/医疗导入前置能力差距分析.md; proposed new generic capabilities A section rules, B page boilerplate, C1-C3 doc attributes, D quantity tokens — waiting owner approval (needs a new phase / REQUIREMENTS+ROADMAP edit) and baseline-cleaning decision.
+- 11:57Z OWNER approved: new generic capabilities A/B/C1-C3/D as Phase 3.3 (REQUIREMENTS+ROADMAP edit OK); baseline ingest WITHOUT cleaning, cleaning as its own arm. Planning session session_01SEn5g9FC1vcs17JcX1Mttq (fable) -> branch plan/phase-03.3 (migrations 1001-1019). When pushed: I open PR to trunk/main, merge when green, then dispatch 3.3 plans.
+- myrag-medical transferred to org mkggbkwwrhkzpcksdias (ChenGuang's Org); Management API PAT sees it (ACTIVE_HEALTHY); Supabase MCP connector does NOT (authorized for old org only). Asked owner to reconnect connector at claude.ai/customize/connectors with both orgs; then medical work runs in a NEW session.
+- 12:05Z OWNER approved exception: eval DBs (myrag-medical, later myrag-legal/finance) may be operated via the Management API PAT (no MCP confirmation); production stays MCP-only. Log every eval-DB operation here. Connector stays on old org.
+- 12:06Z myrag-medical: applied eval_train24_0822_0851_0854_0410r9_0471 via Management API (POST /database/migrations).
+- 12:02Z medical baseline ingest session_01SEn5g87ryFzCYzkVWqTXdM (opus; materials on ops/orchestrator-briefs eval-medical/; PAT for eval DB only; openai-3-small baseline, no cleaning, docling local, all 790 PDFs, cap $5).
+## 12:13Z
+- Archived done: 04.2-12 (4b67c57e), 04.2-11 (7218f23f), 04.1.1-17 (1bec0095), 04.1.1-16 (6b12ae80), 04.1.1-06 (e25848f8); 05-26 t1 rerun (key not visible: ANTHROPIC_API_KEY env var does not reach sessions).
+- ci/merge-train-25 pushed (ce2e0309, pre-gate); plan/phase-03.3 pushed (bf687811, in progress).
+- Bases on train-25: base/04.1.1-09 (0066e8ae), base/04.2-19 (8e7661ab), base/04.2-31 (8c19b2a2). base/04.1.1-08 CONFLICT (config-hash.ts, result.ts) -> wait for train 26.
+- Launched: 04.1.1-09 session_01SEn5g5QRncffCkqABEieyV, 04.2-19 session_01SEn5g9oq4QkMLkpqnoK9mL, 04.2-31 session_01SEn5g6Z5DbE3hDoLoKFvHn. Next check trig_019ad3oZrmxvsyoNJWe2yL9p (12:39Z).
+## 12:41Z
+- Archived done: 04.2-31 (07d9f606), 04.2-19 (8eb83f5d), 04.1.1-09 (1c1f3e07), 04.2-13 (0702d57b; migration 0857), 04.2-10 (e16e2bbf), 04.1.1-07 (652814e2), 04.2-09 (9ae11ca6; migrations 0855, 0856), 03.2-67 (c98da904).
+- Train 26 candidates: 04.2-11, 04.2-12, 04.1.1-06, 04.1.1-16, 04.1.1-17, plus the 8 above.
+- Bases: base/04.1.1-10 (19a35d88), base/04.2-15 (c54da308), base/04.2-16 (ebaa0555), base/04.2-17 (cf236fd9, shared by 04.2-18). (Note: pushed new base branches with -f by mistake; they were new, nothing overwritten. Don't use -f.)
+- Launched: 03.2-68 ..7HWNcaUVtA6W6x523, 04.1.1-18 ..9m6rNjfyqQNe3vP3n, 04.1.1-10 ..7sVHDXDu5t9h3RAX5, 04.2-15 ..6ncYqzcop9DrXtFUz, 04.2-16 ..5R8SkZF1AqtRByUth, 04.2-17 ..8fidCnd3KRmRYmSot, 04.2-18 ..89UCdaSXfrioGfV3y.
+- 13:04Z owner renamed env var to MYRAG_ANTHROPIC_API_KEY. 05-26 t1 session_01SEn5g7mBGAwFKPJvVbSAeD (passes it inline per process only).
+- 13:06Z 04.1.1-08 session_01SEn5g7ybdHSVpgCCjaxvby (base ci/merge-train-25, merges exec/04.1.1-16 itself resolving config-hash.ts/result.ts). Critical: unblocks 05.1.1-22 -> Phase 5.3 (52 plans).
+- Golden set subagent: ~460 Italian Q from TEST split only, spend cap $10, out in $S/golden/.
+- Bottleneck: 06-22 (package age, not before 2026-12-04) blocks most of Phase 6/7 (06-45 x28, 07-07/08 x11).
+- 13:08Z OWNER: may install older package versions (or drop 2-week rule if needed). Chose research fallback set (all >=14 days): @langchain/core 1.4.0, classic 1.0.61, openai 1.8.4, redisvl 0.32.0, redis 8.1.0; CUTOFF 2026-11-19. 06-22 session_01SEn5g593aDETKh22oNFNEJ (Tasks 1-2 owner-approved/delegated). Later Phase 6 briefs: use these pins.
+- 13:15Z OWNER released Phase 6.1 (removed from BLOCKED_PHASES).
+- 13:11Z launched 06.1-03 session_01SEn5g9qAg43Qoiou6SaUTB, 06.1-04 session_01SEn5g6uNrWyQE7SwzJUekG, 06.1-01 session_01SEn5g7fzDTChmTk4QN4Svg (stops at Task 3 package approval: anthropic 2.12.0, httpx 0.28.1, numpy, sentence-transformers[train] 6.2.0, torch 2.15.0 CPU; eval optional extras only). Asked owner.
