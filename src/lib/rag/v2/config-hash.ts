@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
-import type { RetrievalParams, TerminologyParams } from '@/lib/rag-eval/contracts.generated';
-import type { IterativeScanMode, RerankerKind, RerankTier } from '../config';
+import type { AttributeFilterConfig, RetrievalParams, TerminologyParams } from '@/lib/rag-eval/contracts.generated';
+import type { AttributeFilterMode, IterativeScanMode, RerankerKind, RerankTier } from '../config';
 import type { InjectionCheckMode, SecurityConfig, ToolResultGuardMode } from '../security/config';
 import { detectorsConfigVersion } from '../security/detectors';
 import { injectionRulesVersion } from '../security/injection-rules';
@@ -108,6 +108,22 @@ export type TerminologyHashStage = { enabled: false } | { enabled: true; version
 
 export const TERMINOLOGY_UNAVAILABLE = 'terminology:unavailable';
 
+/** D-30: the attribute filter a request was retrieved with; present only while the attribute_resolve stage is enabled for the request. */
+export interface RetrievalConfigHashAttributeFilter {
+  mode: Exclude<AttributeFilterMode, 'off'>;
+  rules_version: number;
+  soft_weight: number;
+  id_cap: number;
+  /** The resolver's digest; ATTRIBUTE_STATE_NONE when nothing resolved; ATTRIBUTE_STATE_SKIPPED when the stage was skipped or not reached. */
+  state: string;
+}
+
+/** The attribute_resolve stage as the hash sees it: disabled for the request, or enabled with the state it ended with. */
+export type AttributeFilterHashStage = { enabled: false } | { enabled: true; state: string };
+
+export const ATTRIBUTE_STATE_NONE = 'attribute:none';
+export const ATTRIBUTE_STATE_SKIPPED = 'attribute:skipped';
+
 export interface RetrievalConfigHashInput {
   backendId: string;
   embeddingProfileId: string;
@@ -134,6 +150,8 @@ export interface RetrievalConfigHashInput {
   tuning?: RetrievalConfigHashTuning | null;
   /** D-21: present only while the terminology stage is enabled for the request (terminologyHashBlock). */
   terminology?: RetrievalConfigHashTerminology | null;
+  /** D-30: present only while the attribute_resolve stage is enabled for the request (attributeFilterHashBlock). */
+  attributeFilter?: RetrievalConfigHashAttributeFilter | null;
 }
 
 function sortKeys(value: unknown): unknown {
@@ -176,6 +194,19 @@ export function terminologyHashBlock(
   };
 }
 
+/**
+ * D-30: the only builder of the attribute_filter block. Undefined when the stage is disabled for the request (switch off, or
+ * attribute_resolve among the config's or the eval request's disabled stages), so the hash equals the value before the filter.
+ */
+export function attributeFilterHashBlock(
+  stage: AttributeFilterHashStage,
+  mode: AttributeFilterMode,
+  config: AttributeFilterConfig,
+): RetrievalConfigHashAttributeFilter | undefined {
+  if (!stage.enabled || mode === 'off') return undefined;
+  return { mode, rules_version: config.rules_version, soft_weight: config.soft_weight, id_cap: config.id_cap, state: stage.state };
+}
+
 function chunkingForHash(profiles: Record<string, string> | null): unknown {
   if (profiles === null) return 'chunking:unavailable';
   return profiles;
@@ -200,6 +231,7 @@ function buildPayload(input: RetrievalConfigHashInput): Record<string, unknown> 
     ...(input.docTranslation ? { doc_translation: input.docTranslation } : {}),
     ...(input.tuning && Object.keys(input.tuning).length > 0 ? { tuning: input.tuning } : {}),
     ...(input.terminology ? { terminology: input.terminology } : {}),
+    ...(input.attributeFilter ? { attribute_filter: input.attributeFilter } : {}),
   };
 }
 

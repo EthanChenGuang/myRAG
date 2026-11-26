@@ -12,7 +12,7 @@ export { buildHistoryWindow } from './query/history';
 export type { HistoryWindowLimits } from './query/history';
 export { loadRagConfig, effectiveLexicalVersion, CORE_STAGES, OPTIONAL_STAGES, PROFILE_STAGE_DEFAULTS } from './config';
 export type { RagConfig, StageName } from './config';
-export { currentLexicalVersion } from './deps';
+export { currentAttributeFilterMode, currentLexicalVersion } from './deps';
 export { createTraceCollector } from './trace/collector';
 export type { TraceCollector, StageEntry } from './trace/collector';
 export { isTraceId } from './trace/collector';

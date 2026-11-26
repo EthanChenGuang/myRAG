@@ -1,6 +1,7 @@
 import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -345,3 +346,108 @@ describe('migration 1008 catalog and idempotence', () => {
     });
   }
 });
+
+/**
+ * Plan 03.3-19: the attribute filter through the eval route, two tenants, v2 pipeline. One child process per deployment mode, because the
+ * app reads the deployment mode once at import (attribute-pipeline-run.mts seeds the family of 12 documents and prints a JSON report).
+ */
+interface PipelineSummary {
+  ids: string[];
+  docs: string[];
+  legs: Record<string, string[]>;
+  refused: boolean;
+  search: Record<string, number>;
+  attribute: Record<string, unknown> | null;
+  familyDocs: number;
+  foreign: string[];
+  namedRank: number;
+}
+
+function runPipeline(mode: 'multi-tenant' | 'single-tenant'): Record<string, unknown> {
+  const out = spawnSync(process.execPath, ['--import', 'tsx', path.join(REPO_ROOT, 'tests/rag-db/attribute-pipeline-run.mts'), mode], {
+    cwd: REPO_ROOT,
+    encoding: 'utf8',
+    env: { ...process.env },
+    timeout: 300_000,
+  });
+  assert.equal(out.status, 0, `pipeline run (${mode}) failed: ${out.stderr.slice(-2000)}`);
+  const line = out.stdout.trim().split('\n').pop() ?? '';
+  return JSON.parse(line) as Record<string, unknown>;
+}
+
+for (const mode of ['multi-tenant', 'single-tenant'] as const) {
+  describe(`attribute filter through the v2 pipeline (${mode}, plan 03.3-19)`, () => {
+    let report: Record<string, unknown>;
+    const part = (name: string) => report[name] as PipelineSummary & Record<string, unknown>;
+
+    before(() => {
+      report = runPipeline(mode);
+    });
+
+    test('off: candidates hold chunks of several family documents and the trace has no attribute block', () => {
+      const off = part('off');
+      assert.ok(off.familyDocs > 1, `expected several family documents, got ${off.familyDocs}`);
+      assert.equal(off.attribute, null);
+    });
+
+    test('hard: every candidate carries the named value, at exact-scan cutoff 0 and above 0 (dense counts printed)', () => {
+      for (const name of ['hard', 'hardExact'] as const) {
+        const run = part(name);
+        assert.ok(run.ids.length > 0, `${name}: no candidate`);
+        assert.equal(run.onlyNamed, true, `${name}: a candidate of another document`);
+        assert.equal(run.search.attribute_filter_applied, 1);
+        assert.equal(run.search.attribute_filter_fallback, 0);
+        assert.ok((run.search.dense ?? 0) > 0 && (run.search.lexical ?? 0) > 0, `${name}: dense and lexical legs both narrowed and found the chunk`);
+        assert.deepEqual(run.attribute, { mode: 'hard', explicit: false, matched_attributes: 1, resolved_documents: 1, applied: true, fallback: false, too_broad: false });
+        console.log(`[03.3-19 dense counts] ${mode} ${name}: dense=${run.search.dense} lexical=${run.search.lexical}`);
+      }
+    });
+
+    test('hard: a value no current document carries any more gives one fallback and the switch-off answer', () => {
+      const fallback = report.fallback as { attribute: Record<string, unknown>; ids: string[]; refused: boolean; offIds: string[]; offRefused: boolean };
+      assert.equal(fallback.attribute.fallback, true);
+      assert.deepEqual(fallback.ids, fallback.offIds);
+      assert.equal(fallback.refused, fallback.offRefused);
+    });
+
+    test('soft: the named document ranks at least as high as off, lists attr:0, and no similarity changes', () => {
+      const soft = part('soft');
+      const off = part('off');
+      assert.ok(soft.namedRank >= 0, 'named document missing under soft');
+      assert.ok(off.namedRank < 0 || soft.namedRank <= off.namedRank, `soft rank ${soft.namedRank} below off rank ${off.namedRank}`);
+      const namedDoc = soft.docs[soft.namedRank]!;
+      assert.ok(soft.legs[namedDoc]?.includes('attr:0'), 'the named candidate does not list attr:0');
+      assert.equal(soft.sharedSimilarityDiffers, 0);
+      assert.equal((soft.attribute as Record<string, unknown>).mode, 'soft');
+    });
+
+    test('explicit filter with the switch on: only documents carrying the value, also when the query names nothing; tiny cap is too broad', () => {
+      const explicit = part('explicit');
+      assert.ok(explicit.ids.length > 0);
+      assert.equal(explicit.onlyNamed, true);
+      assert.equal((explicit.attribute as Record<string, unknown>).explicit, true);
+      const tooBroad = part('tooBroad');
+      assert.equal((tooBroad.attribute as Record<string, unknown>).too_broad, true);
+      assert.equal(tooBroad.allowedOnly, true);
+      assert.ok(tooBroad.familyDocs <= 2, 'the explicit filter widened beyond the capped ids');
+    });
+
+    test('a query naming no value: candidate ids and order equal the off run', () => {
+      const plain = report.plain as { offIds: string[]; hardIds: string[] };
+      assert.deepEqual(plain.hardIds, plain.offIds);
+    });
+
+    test('a hard-filtered unrelated question never ends in a knowledge-base error', () => {
+      const unrelated = report.unrelated as { errorStages: string[] };
+      assert.deepEqual(unrelated.errorStages, []);
+    });
+
+    if (mode === 'multi-tenant') {
+      test("tenant B naming tenant A's value resolves nothing and sees no chunk of tenant A", () => {
+        const crossed = part('crossTenant') as PipelineSummary & { aChunks: string[] };
+        assert.equal((crossed.attribute as Record<string, unknown>).matched_attributes, 0);
+        assert.deepEqual(crossed.aChunks, [], `foreign chunk ids: ${crossed.aChunks.join(',')}`);
+      });
+    }
+  });
+}
