@@ -307,3 +307,78 @@ def test_validate_main_runs_through_the_cli_dispatch(tmp_path):
     assert cli.main(["import-mined", "--bundle", str(run_dir)]) == 2
 
 
+# --- clustering and split --------------------------------------------------------------------------------------------
+
+NEAR_1 = "which generic entry lists the three plain attributes"
+NEAR_2 = "which generic entry lists three plain attributes"
+
+
+def test_cluster_near_identical_queries_share_a_cluster_within_a_tenant_only():
+    rows = [(TENANT_A, NEAR_1), (TENANT_A, NEAR_2), (TENANT_B, NEAR_2), (TENANT_A, "how often is the placeholder reviewed")]
+    clusters = mined.cluster_queries(rows)
+    assert clusters[0] == clusters[1]
+    assert clusters[2] != clusters[0]
+    assert clusters[3] not in (clusters[0], clusters[2])
+
+
+def test_cluster_union_is_transitive():
+    a = "alpha beta gamma delta epsilon zeta"
+    b = "alpha beta gamma delta epsilon zeta eta"
+    c = "alpha beta gamma delta epsilon zeta eta theta"
+    assert mined.cluster_queries([(TENANT_A, a), (TENANT_A, c)], threshold=0.86) == [0, 1]
+    clusters = mined.cluster_queries([(TENANT_A, a), (TENANT_A, b), (TENANT_A, c)], threshold=0.86)
+    assert clusters[0] == clusters[1] == clusters[2]
+
+
+def test_cluster_near_identical_mined_queries_on_a_test_and_a_train_doc_land_in_the_first_members_split(tmp_path):
+    run_dir = _bundle(tmp_path)
+    rows = [_row(1, NEAR_1, "c-test-1"), _row(2, NEAR_2, "c-train-1")]
+    result = _run(run_dir, _write_rows(tmp_path, rows))
+    assert result.report.kept == 2
+    assert [p.split for p in _pairs(run_dir)] == ["test", "test"]
+    assert result.report.cluster_promoted == 1
+
+
+def test_cluster_takes_the_strictest_split_whatever_the_member_order(tmp_path):
+    run_dir = _bundle(tmp_path)
+    rows = [_row(1, NEAR_2, "c-train-1"), _row(2, NEAR_1, "c-dev-1"), _row(3, "how often is the placeholder reviewed", "c-train-3")]
+    _run(run_dir, _write_rows(tmp_path, rows))
+    assert {p.positive_chunk_id: p.split for p in _pairs(run_dir)} == {"c-train-1": "dev", "c-dev-1": "dev", "c-train-3": "train"}
+
+
+def test_cluster_a_held_out_member_pulls_its_cluster_into_test(tmp_path):
+    run_dir = _bundle(tmp_path)
+    rows = [_row(1, NEAR_2, "c-train-1"), _row(2, NEAR_1, "c-train-2", split="held_out")]
+    _run(run_dir, _write_rows(tmp_path, rows))
+    assert [p.split for p in _pairs(run_dir)] == ["test", "test"]
+
+
+def test_cluster_includes_rows_that_a_filter_later_drops(tmp_path):
+    run_dir = _bundle(tmp_path)
+    # the test-doc member is an exact duplicate and is dropped, but it still pulls the kept member into test
+    rows = [_row(1, NEAR_2, "c-train-1"), _row(2, NEAR_2 + "?", "c-test-1")]
+    result = _run(run_dir, _write_rows(tmp_path, rows))
+    assert result.report.dropped["near_duplicate"] == 1
+    assert [(p.positive_chunk_id, p.split) for p in _pairs(run_dir)] == [("c-train-1", "test")]
+
+
+def test_cluster_never_straddles_splits_in_the_written_pairs(tmp_path):
+    run_dir = _bundle(tmp_path)
+    rows = [
+        _row(1, NEAR_1, "c-train-1"),
+        _row(2, NEAR_2, "c-train-2"),
+        _row(3, NEAR_1 + " now", "c-test-1"),
+        _row(4, "what does each entry carry besides its label", "c-train-3"),
+    ]
+    _run(run_dir, _write_rows(tmp_path, rows))
+    pairs = _pairs(run_dir)
+    clusters = mined.cluster_queries([(p.tenant_key, p.anchor) for p in pairs])
+    by_cluster: dict[int, set[str]] = {}
+    for cluster, pair in zip(clusters, pairs, strict=True):
+        by_cluster.setdefault(cluster, set()).add(pair.split)
+    assert all(len(splits) == 1 for splits in by_cluster.values())
+
+
+@pytest.mark.parametrize("splits,expected", [(("train", "dev"), "dev"), (("dev", "test", "train"), "test"), (("train",), "train")])
+def test_cluster_strictest_split(splits, expected):
+    assert mined.strictest_split(splits) == expected
