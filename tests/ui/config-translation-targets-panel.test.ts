@@ -378,9 +378,9 @@ describe('Translation targets panel', () => {
     const save = page.save();
     expect(save.disabled).toBe(true);
     const reason = describedText(page.doc, save);
-    expect(reason).toContain('Document translation is off for this deployment.');
+    expect(reason).toContain('Document translation is off for this deployment');
     expect(reason).toContain('Settings');
-    expect(page.alertHost().textContent).toContain('Document translation is off for this deployment.');
+    expect(page.alertHost().textContent).toContain('Document translation is off for this deployment');
     save.click();
     await flush();
     expect(page.calls('put')).toHaveLength(0);
@@ -394,7 +394,7 @@ describe('Translation targets panel', () => {
     await flush();
     expect(page.calls('get')).toHaveLength(2);
     expect(page.calls('get')[1]!.query.has('organizationId')).toBe(false);
-    expect(page.root.querySelector('[data-translation-targets-workspace]')!.textContent).toBe('Workspace: Default Workspace');
+    expect(page.root.querySelector('[data-translation-targets-workspace]')!.textContent).toBe('Workspace: Default workspace');
   });
 
   it('renders server strings as text', async () => {
