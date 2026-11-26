@@ -1264,6 +1264,12 @@ def _share_cell(value: float | None) -> str:
     return "n/a" if value is None else f"{round(value, 3):.3f}"
 
 
+def gated_recall_scores(report: EvalReport) -> dict[str, float]:
+    """Per-item recall@5 of the gated answerable items, the item scores behind the weighted score (D-42)."""
+    gated = report_gate_items(report.items, report.golden_filter.gate_split, report.gate_population)
+    return {item.item_id: item.spans_hit_at_5 / item.span_count for item in gated if item.answerable and item.span_count > 0}
+
+
 def production_weighted_section(report: EvalReport, set_dir: Path | None) -> list[str]:
     """D-42: the report-only weighted score of a private real set that has strata.json and production-shares.json beside it."""
     if set_dir is None:
@@ -1282,10 +1288,7 @@ def production_weighted_section(report: EvalReport, set_dir: Path | None) -> lis
         shares = representativeness.load_production_shares(shares_path)
     except (PrivatePathError, OSError, ValueError):
         return []
-    gated = report_gate_items(report.items, report.golden_filter.gate_split, report.gate_population)
-    scores = {
-        item.item_id: item.spans_hit_at_5 / item.span_count for item in gated if item.answerable and item.span_count > 0
-    }
+    scores = gated_recall_scores(report)
     weighted = representativeness.weighted_score(scores, strata, shares)
     uncovered = representativeness.uncovered_share(strata, shares, scores)
     unweighted = report.overall.recall_at_5
