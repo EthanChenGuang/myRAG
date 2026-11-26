@@ -5,6 +5,8 @@ import { loadRagConfig, resetRagConfigForTests } from '@/lib/rag/config';
 import { createTraceCollector } from '@/lib/rag/trace/collector';
 import { mintScope } from '@/lib/rag/tenant/scope';
 import { terminologyParams } from '@/lib/rag/terminology/expand';
+import { RetrievalOverridesSchema } from '@/lib/rag-eval/contracts.generated';
+import type { RetrievalFilters } from '@/lib/rag/backend/types';
 import { resetV2StartupForTests, verifyV2Startup } from '@/lib/rag/v2/startup';
 import { effectiveRetrievalParams } from '@/lib/rag/v2/retrieval-params';
 import { runSearchStages, TERMINOLOGY_LIST_ID } from '@/lib/rag/v2/stages/search';
@@ -12,7 +14,9 @@ import { hit } from '../fusion/helpers';
 import { fakeEmbedder, installDeps, uninstallDeps } from '../helpers/pipeline-fakes';
 
 const scope = mintScope('single', null, null);
-const FILTERS = { currentOnly: true, docTypes: ['general'] };
+const FILTERS: RetrievalFilters = { currentOnly: true, docTypes: ['general'] };
+/** D-34: the pool is passed explicitly and asserted against what was passed. */
+const POOL = 17;
 const CHUNKING = { general: 'synthetic-profile' };
 const EXPANSION = ['term', 'alpha', 'beta'];
 
@@ -34,7 +38,7 @@ function recordingBackend(): { backend: RetrievalBackend; requests: BackendSearc
 async function search(terminology: { tokens: string[]; expansionWeight: number } | null, env: Record<string, string> = {}) {
   resetRagConfigForTests();
   const cfg = loadRagConfig({ RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'true', ...env });
-  const params = effectiveRetrievalParams('eval', cfg, { candidate_pool_size: 17 });
+  const params = effectiveRetrievalParams('eval', cfg, RetrievalOverridesSchema.parse({ candidate_pool_size: POOL }));
   const { backend, requests } = recordingBackend();
   setRetrievalBackendForTests(backend);
   const { embedder } = fakeEmbedder();
@@ -79,7 +83,8 @@ describe('the term:0 list (D-16, D-34, T-0411-46)', () => {
     const [original, term] = [requests.find((req) => req.denseVector !== null)!, requests.find((req) => req.denseVector === null)!];
     expect(term.lexicalTokens).toEqual(EXPANSION);
     expect(term.denseLimit).toBe(0);
-    expect(term.lexicalLimit).toBe(params.candidate_pool_size);
+    expect(params.candidate_pool_size).toBe(POOL);
+    expect(term.lexicalLimit).toBe(POOL);
     expect(term.lexicalLanguages).toBeNull();
     expect(term.scope).toBe(original.scope);
     expect(term.filters).toBe(original.filters);
