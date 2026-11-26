@@ -10,11 +10,12 @@ const TENANT_A = `u:${TWO_TENANT_IDS.userA}`;
 const TENANT_B = `u:${TWO_TENANT_IDS.userB}`;
 const TENANT_O = `o:${TWO_TENANT_IDS.orgO}`;
 /**
- * 140 fixture corpus documents of the fixture user (19 before the 04.1.1-10 synthetic-terms documents, 22 before the 05.2-28
- * Phase 5.2 documents and the 04.2-37 Phase 4.2 documents; the three superseded Phase 4.2 version notes are not current) plus
- * the three canary documents, all published before Phase 3.2.
+ * 146 fixture corpus documents of the fixture user (19 before the 04.1.1-10 synthetic-terms documents, 22 before the 05.2-28
+ * Phase 5.2 documents and the 04.2-37 Phase 4.2 documents, 140 before the six 05.3-15 documents; the three superseded Phase 4.2
+ * version notes are not current) plus the three canary documents, all published before Phase 3.2.
  */
-const DOCUMENTS = 143;
+const FIXTURE_USER_DOCUMENTS = 146;
+const DOCUMENTS = FIXTURE_USER_DOCUMENTS + 3;
 const SENTINEL = 'c'.repeat(64);
 
 type Row = Record<string, unknown>;
@@ -91,7 +92,7 @@ describe('rag:fingerprint backfill (src/lib/rag/ingest/fingerprint/backfill.ts)'
     assert.equal(report.updated, DOCUMENTS);
     assert.equal(report.skipped, 0);
     assert.equal(report.complete, true);
-    assert.deepEqual(report.tenants, { [TENANT_O]: 1, [TENANT_A]: 1, [TENANT_B]: 1, [`u:${'00000000-0000-4000-8000-0000000000f1'}`]: 140 });
+    assert.deepEqual(report.tenants, { [TENANT_O]: 1, [TENANT_A]: 1, [TENANT_B]: 1, [`u:${'00000000-0000-4000-8000-0000000000f1'}`]: FIXTURE_USER_DOCUMENTS });
     assert.equal(await fingerprinted(fixture.db), DOCUMENTS);
     assert.deepEqual(fetchCalls, []);
     assert.deepEqual([...new Set(calls)].sort(), ['rag_fingerprint_backfill_page', 'rag_fingerprint_backfill_write']);

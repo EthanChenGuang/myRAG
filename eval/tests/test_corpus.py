@@ -9,7 +9,7 @@ from rag_eval.corpus import load_corpus, main
 from rag_eval.paths import REPO_ROOT
 
 # Re-recorded on train 31 (the train-30 corpus plus the six 05.3-15 documents).
-COMMITTED_CORPUS_SHA256 = "PIN"
+COMMITTED_CORPUS_SHA256 = "bd839f9709028ceba3f8a14d7d3f6bf6470ffaf8bc7da555856d8c2845be6a9f"
 META = '<!-- fixture-meta {"filename": "Policy Handbook.pdf", "image_url": "https://example.test/a.png"} -->'
 
 
