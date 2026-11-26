@@ -164,6 +164,21 @@ from rag_sidecar.contracts.ingest_security import (
     UntrustedLinkQuarantineReason,
 )
 from rag_sidecar.contracts.embed import EmbedRequest, EmbedResponse
+from rag_sidecar.contracts.templated import (
+    AttributeDefinition,
+    AttributeFilterConfig,
+    AttributeHeaderTemplate,
+    AttributeImportRow,
+    AttributeSchema,
+    BoilerplateReport,
+    BoilerplateRule,
+    BoilerplateRulesConfig,
+    HeadingPattern,
+    ResolvedSectionRules,
+    SectionHeadingHit,
+    SectionRuleSet,
+    TenantRulesFile,
+)
 from rag_sidecar.contracts.terminology import (
     TerminologyCandidate,
     TerminologyEntry,
@@ -516,4 +531,17 @@ __all__ = [
     "TerminologyTranslationPair",
     "TerminologyValidationIssue",
     "terminology_params_sha256",
+    "AttributeDefinition",
+    "AttributeFilterConfig",
+    "AttributeHeaderTemplate",
+    "AttributeImportRow",
+    "AttributeSchema",
+    "BoilerplateReport",
+    "BoilerplateRule",
+    "BoilerplateRulesConfig",
+    "HeadingPattern",
+    "ResolvedSectionRules",
+    "SectionHeadingHit",
+    "SectionRuleSet",
+    "TenantRulesFile",
 ]

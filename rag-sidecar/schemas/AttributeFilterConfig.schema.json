@@ -1,0 +1,35 @@
+{
+  "additionalProperties": false,
+  "description": "`config/rag/attribute-filter.json` (D-29, D-30): numbers only.",
+  "properties": {
+    "id_cap": {
+      "minimum": 1,
+      "title": "Id Cap",
+      "type": "integer"
+    },
+    "rules_version": {
+      "minimum": 1,
+      "title": "Rules Version",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "soft_weight": {
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "title": "Soft Weight",
+      "type": "number"
+    }
+  },
+  "required": [
+    "rules_version",
+    "soft_weight",
+    "id_cap"
+  ],
+  "title": "AttributeFilterConfig",
+  "type": "object"
+}

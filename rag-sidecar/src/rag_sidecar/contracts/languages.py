@@ -23,6 +23,7 @@ from pydantic import (
 )
 
 from rag_sidecar.config_files import resolve_config_file
+from rag_sidecar.contracts.omit import omit_none_schema
 
 LANGUAGE_PACKS_FILE = "language-packs.json"
 
@@ -117,9 +118,37 @@ class LanguagePack(_Contract):
         return patterns
 
 
+UnitSymbol = Annotated[str, Field(pattern=r"^[^\s\d]{1,8}$")]
+NumberSeparator = Annotated[str, Field(pattern=r"^\D$")]
+
+
+def _omit_unset(value: object) -> bool:
+    return value is None
+
+
+class QuantityNotation(_Contract):
+    """Language-neutral unit symbols and number separators for quantity tokens (Phase 3.3 D-31, D-32).
+
+    One character may be both a decimal and a grouping separator: an ambiguous separator is read both ways.
+    """
+
+    unit_symbols: list[UnitSymbol] = Field(min_length=1, max_length=200)
+    decimal_separators: list[NumberSeparator] = Field(min_length=1, max_length=4)
+    grouping_separators: list[NumberSeparator] = Field(min_length=1, max_length=4)
+
+    @model_validator(mode="after")
+    def _unique_entries(self) -> QuantityNotation:
+        for name in ("unit_symbols", "decimal_separators", "grouping_separators"):
+            values = getattr(self, name)
+            if len(set(values)) != len(values):
+                raise ValueError(f"{name} must not repeat a value")
+        return self
+
+
 class LanguageRegistry(_Contract):
     schema_version: Literal[1] = 1
     packs: list[LanguagePack] = Field(min_length=1)
+    quantity: QuantityNotation | None = Field(default=None, exclude_if=_omit_unset, json_schema_extra=omit_none_schema)
 
     @model_validator(mode="after")
     def _unique_codes(self) -> LanguageRegistry:

@@ -1,0 +1,74 @@
+{
+  "additionalProperties": false,
+  "description": "Kind `line` removes lines a pattern matches; kind `fragment` removes short fragments repeated across pages.",
+  "properties": {
+    "doc_type": {
+      "enum": [
+        "general",
+        "financial_report",
+        "contract_legal",
+        "invoice_receipt",
+        "product_technical",
+        "scanned_image"
+      ],
+      "title": "Doc Type",
+      "type": "string"
+    },
+    "enabled": {
+      "default": true,
+      "title": "Enabled",
+      "type": "boolean"
+    },
+    "flags": {
+      "enum": [
+        "u",
+        "iu"
+      ],
+      "title": "Flags",
+      "type": "string"
+    },
+    "kind": {
+      "enum": [
+        "line",
+        "fragment"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "max_length": {
+      "maximum": 200,
+      "minimum": 1,
+      "title": "Max Length",
+      "type": "integer"
+    },
+    "min_page_share": {
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "title": "Min Page Share",
+      "type": "number"
+    },
+    "name": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "pattern": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Pattern",
+      "type": "string"
+    },
+    "source": {
+      "pattern": "^[a-z0-9][a-z0-9_.:-]{0,63}$",
+      "title": "Source",
+      "type": "string"
+    }
+  },
+  "required": [
+    "name",
+    "kind"
+  ],
+  "title": "BoilerplateRule",
+  "type": "object"
+}
