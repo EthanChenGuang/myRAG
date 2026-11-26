@@ -94,6 +94,10 @@ export interface CitationSession {
   /** The validated records with full quotes, for the answer record; null when no strategy is active. */
   fullRecords(): { citations: CitationRecord[]; invalidCitations: number } | null;
   answerText(): string;
+  /** The aliases of the attached AliasMap (empty when no strategy is active); a marker for any other alias never cites. */
+  aliases(): ReadonlySet<string>;
+  /** D-33: markers cut in half at a text-part end or at the stream end; dropped, never guessed. */
+  truncatedMarkers(): number;
 }
 
 const CitationListSchema = z.array(CitationRecordSchema);
@@ -313,6 +317,12 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
     },
     answerText() {
       return answer;
+    },
+    aliases() {
+      return new Set<string>();
+    },
+    truncatedMarkers() {
+      return 0;
     },
   };
 }
