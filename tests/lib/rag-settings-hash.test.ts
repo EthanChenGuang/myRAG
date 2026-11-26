@@ -3,7 +3,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 import { isSecretEnvName } from '@/lib/config-env-allowlist';
-import { RAG_AFFECTING_NAMES, isSecretName, ragAffectingDiff, ragSettingsCanonical, ragSettingsHash } from '@/lib/rag/config-gate/settings-hash';
+import { RAG_AFFECTING_NAMES, isSecretName, ragAffectingDiff, ragSettingsCanonical, ragSettingsHash } from '@/lib/rag';
 
 const require = createRequire(import.meta.url);
 const { isSecretConfigEntry } = require('../../scripts/config-server-security.js') as {
