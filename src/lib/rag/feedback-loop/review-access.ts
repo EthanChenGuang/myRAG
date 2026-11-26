@@ -53,12 +53,26 @@ const ITEM_COLUMNS = [
 /** The detail read adds the two internal link columns; they never leave this module. */
 const DETAIL_COLUMNS = [...ITEM_COLUMNS, 'user_id', 'chat_id'] as const;
 
+const REVIEW_REASONS = [
+  'feedback_negative',
+  'refusal_disputed',
+  'groundedness_flagged',
+  'refused_high_score',
+  'zero_results',
+  'low_score',
+  'no_source_opened',
+  'representative',
+  're_review',
+] as const;
+/** rag_review_item_strata.source (0967); a mined item has none. */
+export const REVIEW_SOURCES = ['representative', 'pilot', 'drift_fill', 'historical'] as const;
+export type ReviewSource = (typeof REVIEW_SOURCES)[number];
+
 export const ReviewListQuerySchema = z
   .object({
     status: ReviewItemSchema.shape.status.optional(),
-    reason: z
-      .enum(['feedback_negative', 'refusal_disputed', 'groundedness_flagged', 'refused_high_score', 'zero_results', 'low_score', 'no_source_opened'])
-      .optional(),
+    reason: z.enum(REVIEW_REASONS).optional(),
+    source: z.enum(REVIEW_SOURCES).optional(),
     language: z.string().regex(/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$/).optional(),
     cursor: z.string().min(1).max(256).optional(),
   })
@@ -170,6 +184,18 @@ export async function listReviewItems(ssr: Client, query: ReviewListQuery): Prom
       ? encodeCursor(last.mined_at, last.id)
       : null;
   return { ok: true, items, next_cursor };
+}
+
+export async function attachReviewSources(_admin: Client, items: ReviewItem[]): Promise<ReviewItem[]> {
+  return items;
+}
+
+export async function listReviewItemsWithSource(ssr: Client, _admin: Client, query: ReviewListQuery): Promise<ListReviewItemsResult> {
+  return listReviewItems(ssr, query);
+}
+
+export async function getReviewItemWithSource(ssr: Client, admin: Client, id: string): Promise<GetReviewItemResult> {
+  return getReviewItem(ssr, admin, id);
 }
 
 /** The item as RLS lets the caller see it, with the internal link columns; null when missing or not visible. */
