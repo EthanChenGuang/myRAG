@@ -278,6 +278,11 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
       variants: query.variants,
       dedupeCounts: search.dedupeCounts,
       queryContext: query.queryContext,
+      finalTopK:
+        profile === 'voice'
+          ? (validResultCount(input.options?.maxResults) ?? VOICE_DEFAULT_MATCH_COUNT)
+          : evalFinalTopK(profile, input, params.final_top_k),
+      embeddingProfileId: embedding.profile?.id ?? LEGACY_PROFILE.id,
       ...(query.queryLayer
         ? {
             queryPlan,
@@ -347,6 +352,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
         collector,
         stageOverrides: input.stageOverrides,
         rerank: rank.rerank,
+        ...(rank.alsoIn ? { alsoIn: rank.alsoIn } : {}),
         security,
         versionScope: search.versionScope,
         queryLanguage: query.queryLanguage,

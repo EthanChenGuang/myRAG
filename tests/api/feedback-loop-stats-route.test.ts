@@ -51,8 +51,8 @@ function item(tenant: string, extra: Row): Row {
 function fixtureTables(): Record<string, Row[]> {
   return {
     rag_retrieval_log: [
-      log(TENANT_A, '2026-11-01T00:00:00.000Z', { feedback_vote: 1, feedback_kind: 'answer', source_opened_count: 2 }),
-      log(TENANT_A, '2026-11-02T10:00:00.000Z', { feedback_vote: -1, feedback_kind: 'answer', top_score: 0.2 }),
+      log(TENANT_A, '2026-11-01T00:00:00.000Z', { feedback_vote: 1, feedback_kind: 'answer', source_opened_count: 2, topk_redundancy: 0.5 }),
+      log(TENANT_A, '2026-11-02T10:00:00.000Z', { feedback_vote: -1, feedback_kind: 'answer', top_score: 0.2, topk_redundancy: 0.25 }),
       log(TENANT_A, '2026-11-03T10:00:00.000Z', {
         channel: 'embed',
         feedback_vote: -1,
@@ -262,6 +262,7 @@ describe('GET /api/rag/admin/feedback-loop/stats (D-25)', () => {
     expect(a.source_open_rate).toBeCloseTo(1 / 3);
     expect([a.items_mined, a.items_labelled, a.items_skipped, a.items_exported]).toEqual([3, 2, 1, 1]);
     expect(a.triage).toEqual({ dictionary: 1, training: 0, golden: 2, kb_gap: 0, not_a_failure: 0 });
+    expect(a.topk_redundancy_mean).toBeCloseTo(0.375);
 
     expect(b.retrievals).toBe(3);
     expect(b.retrievals_by_channel).toEqual({ chat: 3, embed: 0, voice: 0 });
@@ -273,6 +274,7 @@ describe('GET /api/rag/admin/feedback-loop/stats (D-25)', () => {
     expect(b.refusal_disputes).toBe(0);
     expect(b.source_open_rate).toBe(1);
     expect([b.items_mined, b.items_labelled, b.items_skipped, b.items_exported]).toEqual([1, 0, 0, 0]);
+    expect(b.topk_redundancy_mean).toBeNull();
 
     const text = JSON.stringify(json);
     expect(text).not.toContain(TENANT_A.slice(2));
