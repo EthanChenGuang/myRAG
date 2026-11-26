@@ -10,6 +10,7 @@
 --   rag_dup_clusters_recompute  refresh member_count, source_document_ids and representative from current, ready members; a cluster left
 --                               with fewer than two members dissolves; clears the dirty flag set by the 0853 triggers
 --   rag_dup_backfill_candidates keyset listing of chunks to hash (chunks without bands for the active profile, or a document's chunks)
+--   rag_purge_hook_dup_chunk_bands  purge hook (phase rule: every new 4.2 store): removes the band rows of the purged documents' chunks
 -- Only the active embedding profile is compared; its vectors are document_chunks.embedding (legacy_column) or chunk_embeddings (halfvec).
 -- Chunks of one document never share a cluster. Idempotent; not folded into the setup files.
 
@@ -510,12 +511,39 @@ BEGIN
 END
 $fn$;
 
+-- Purge hook for the band table; returns the number of band rows removed. The cluster fields are handled by 0853's hook.
+CREATE OR REPLACE FUNCTION public.rag_purge_hook_dup_chunk_bands(p_tenant_key text, p_lineage_id uuid, p_document_ids uuid[])
+RETURNS bigint
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_removed bigint;
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  DELETE FROM public.rag_dup_chunk_bands b
+   USING public.document_chunks c, public.documents d
+   WHERE b.chunk_id = c.id
+     AND b.tenant_key = p_tenant_key
+     AND c.tenant_key = p_tenant_key
+     AND d.id = c.document_id
+     AND d.tenant_key = p_tenant_key
+     AND (d.lineage_id = p_lineage_id OR d.id = ANY (COALESCE(p_document_ids, '{}'::uuid[])));
+  GET DIAGNOSTICS v_removed = ROW_COUNT;
+  RETURN v_removed;
+END
+$fn$;
+
 REVOKE ALL ON FUNCTION public.rag_dup_write_hashes(text, jsonb) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.rag_dup_candidates(text, uuid[], integer, double precision, integer) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.rag_dup_clusters_recompute(text, uuid[]) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.rag_dup_assign(text, uuid[], uuid) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.rag_dup_backfill_candidates(text, uuid, integer, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_purge_hook_dup_chunk_bands(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rag_dup_write_hashes(text, jsonb) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_purge_hook_dup_chunk_bands(text, uuid, uuid[]) TO service_role;
 GRANT EXECUTE ON FUNCTION public.rag_dup_candidates(text, uuid[], integer, double precision, integer) TO service_role;
 GRANT EXECUTE ON FUNCTION public.rag_dup_clusters_recompute(text, uuid[]) TO service_role;
 GRANT EXECUTE ON FUNCTION public.rag_dup_assign(text, uuid[], uuid) TO service_role;

@@ -23,6 +23,7 @@ const DUP_FUNCTIONS = [
   'rag_dup_assign',
   'rag_dup_clusters_recompute',
   'rag_dup_backfill_candidates',
+  'rag_purge_hook_dup_chunk_bands',
 ] as const;
 
 /**
@@ -383,6 +384,7 @@ for (const mode of MODES) {
         rag_dup_assign: { p_chunk_ids: [], p_preferred_cluster_id: null },
         rag_dup_clusters_recompute: { p_cluster_ids: null },
         rag_dup_backfill_candidates: { p_after: null, p_limit: 10, p_document_id: null, p_chunk_ids: null },
+        rag_purge_hook_dup_chunk_bands: { p_lineage_id: null, p_document_ids: [] },
       };
       for (const fn of DUP_FUNCTIONS) {
         for (const key of [wrong, 'x:bad']) {
@@ -425,6 +427,28 @@ for (const mode of MODES) {
       assert.deepEqual(definer, [], 'every rag_dup_* function is SECURITY INVOKER with an empty search_path');
       const rls = await rows("SELECT relrowsecurity AS on FROM pg_class WHERE oid = 'public.rag_dup_chunk_bands'::regclass");
       assert.equal(rls[0]?.on, true);
+    });
+
+    test('the purge hook removes only the purged documents\' band rows, in that tenant', async () => {
+      const tenant = tenants[0] as Tenant;
+      const entry = seeded.get(tenant.key) as { shared: string[]; documents: string[] };
+      const target = entry.documents[COPIES - 1] as string;
+      const countFor = async (documentIds: string[]) =>
+        (await rows('SELECT count(*)::int AS n FROM rag_dup_chunk_bands b JOIN document_chunks c ON c.id = b.chunk_id WHERE c.document_id = ANY($1::uuid[])', [documentIds]))[0]?.n;
+      const othersBefore = (await rows('SELECT count(*)::int AS n FROM rag_dup_chunk_bands'))[0]?.n as number;
+      const own = (await countFor([target])) as number;
+      assert.ok(own > 0);
+      if (tenants.length > 1) {
+        const other = tenants[1] as Tenant;
+        const wrong = await rpc.rpc('rag_purge_hook_dup_chunk_bands', { p_tenant_key: other.key, p_lineage_id: target, p_document_ids: [target] });
+        assert.equal(wrong.error, null);
+        assert.equal(Number((wrong.data as Row[])[0]?.rag_purge_hook_dup_chunk_bands), 0, 'another tenant purges nothing');
+      }
+      const purged = await rpc.rpc('rag_purge_hook_dup_chunk_bands', { p_tenant_key: tenant.key, p_lineage_id: target, p_document_ids: [target] });
+      assert.equal(purged.error, null, JSON.stringify(purged.error));
+      assert.equal(Number((purged.data as Row[])[0]?.rag_purge_hook_dup_chunk_bands), own);
+      assert.equal(await countFor([target]), 0);
+      assert.equal((await rows('SELECT count(*)::int AS n FROM rag_dup_chunk_bands'))[0]?.n, othersBefore - own);
     });
 
     test('applying 0857 again succeeds and keeps the cluster rows', async () => {
