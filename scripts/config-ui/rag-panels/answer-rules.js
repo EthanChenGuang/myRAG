@@ -10,7 +10,6 @@ const ANSWER_RULES_TIMEOUT_MS = 15000;
 const ANSWER_RULES_SWEEP_COMMAND = 'python -m rag_eval.sweep output-cap';
 const ANSWER_RULES_JUDGE_COMMAND = 'python -m rag_eval.calibrate groundedness-judge';
 const ANSWER_RULES_CAP_MODES = ['strict', 'balanced'];
-const ANSWER_RULES_RULE_LANGUAGES = ['zh', 'en', 'it'];
 const ANSWER_RULES_GUARD_MODES = ['off', 'flag', 'enforce'];
 const ANSWER_RULES_HOST_IDS = {
   alerts: 'rag-answer-rules-alerts',
@@ -392,7 +391,9 @@ function isAnswerRulesSummary(summary) {
       typeof summary.rulesVersion === 'string' &&
       counts &&
       typeof counts === 'object' &&
-      ANSWER_RULES_RULE_LANGUAGES.every((lang) => answerRulesIsCount(counts[lang])),
+      !Array.isArray(counts) &&
+      Object.keys(counts).length > 0 &&
+      Object.keys(counts).every((lang) => /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(lang) && answerRulesIsCount(counts[lang])),
   );
 }
 
@@ -418,12 +419,10 @@ function answerRulesRows(summary, locale) {
     })),
     sameFamily: summary.sameFamily,
     allowlist: summary.allowlist.slice(),
-    rules: {
-      version: summary.rulesVersion,
-      zh: ui.ragUiFormatNumber(summary.ruleCounts.zh, locale),
-      en: ui.ragUiFormatNumber(summary.ruleCounts.en, locale),
-      it: ui.ragUiFormatNumber(summary.ruleCounts.it, locale),
-    },
+    rules: Object.assign(
+      { version: summary.rulesVersion },
+      Object.fromEntries(Object.keys(summary.ruleCounts).map((lang) => [lang, ui.ragUiFormatNumber(summary.ruleCounts[lang], locale)])),
+    ),
   };
 }
 
