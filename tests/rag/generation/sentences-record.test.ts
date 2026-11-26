@@ -145,6 +145,15 @@ describe('buildSentenceRecords (D-19, D-23)', () => {
     expect(isExemptSentence(unit!, { texts, inUnsourcedPart: true })).toBe(true);
   });
 
+  it('builds the records of a 200,000-character answer in under one second (T-05.2-071)', () => {
+    const text = 'A plain fact holds here [S1]. '.repeat(7000);
+    const started = performance.now();
+    const out = buildSentenceRecords({ text, part: 0, language: 'en', aliases: ALIASES });
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(out.length).toBe(7000);
+    expect(out.every((record) => record.factual && record.cited)).toBe(true);
+  });
+
   it('returns no records for an empty answer', () => {
     expect(records('')).toEqual([]);
   });
