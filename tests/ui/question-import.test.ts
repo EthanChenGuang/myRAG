@@ -230,7 +230,7 @@ describe('Import questions view', () => {
       const { view } = await openImport(doc, fetcher);
       const { file, fileMessage, button } = controls(view);
       await choose(file, 'big.csv', 'question\nx\n', 12 * 1024 * 1024);
-      expect(text(fileMessage)).toBe('This file is too large (limit: 10 MB, 20,000 rows). Split it and import the parts one after the other.');
+      expect(text(fileMessage)).toBe('This file is too large (limit: 10\u00a0MB, 20,000 rows). Split it and import the parts one after the other.');
       expect(fileMessage.classList.contains('text-error')).toBe(true);
       expect((button('Check file') as FakeElement).disabled).toBe(true);
       await choose(file, 'many.csv', csv(25000));

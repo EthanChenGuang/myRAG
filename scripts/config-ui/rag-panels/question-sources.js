@@ -624,6 +624,13 @@ function questionSourcesAddCounts(sums, body) {
   return out;
 }
 
+/** Shows or hides an element: the hidden attribute alone loses to a display class such as flex, so the page's .hidden class is set too. */
+function questionSourcesShow(el, shown) {
+  if (!el) return;
+  el.hidden = !shown;
+  el.classList.toggle('hidden', !shown);
+}
+
 class QuestionSourcesPanel {
   constructor(root, deps) {
     const d = deps || {};
@@ -746,11 +753,17 @@ class QuestionSourcesPanel {
       selected: this.current,
       onSelect: (id) => {
         this.current = id;
+        this.setStatus('');
         this.refresh();
       },
     });
     this.tabs = tabs;
-    tabs.tabs.forEach((tab, i) => tab.setAttribute('data-question-sources-tab', QUESTION_SOURCES_TABS[i]));
+    // DaisyUI tabs are a grid, so the shared flex-wrap does not apply; as flex they wrap at 360px instead of scrolling the page sideways.
+    tabs.root.classList.add('flex');
+    tabs.tabs.forEach((tab, i) => {
+      tab.setAttribute('data-question-sources-tab', QUESTION_SOURCES_TABS[i]);
+      tab.classList.add('h-auto', 'min-h-8', 'whitespace-nowrap');
+    });
     tabs.panels.forEach((panel, i) => {
       const id = QUESTION_SOURCES_TABS[i];
       panel.setAttribute('data-question-sources-view', id);
@@ -921,7 +934,7 @@ class QuestionSourcesPanel {
       },
       [this.el('table', { className: 'table table-sm' }, [this.el('caption', { className: 'sr-only', text: title }), this.el('thead', null, [head]), body])],
     );
-    return this.el('div', { className: 'flex flex-col gap-2 min-w-0' }, [this.el('h4', { className: 'text-base font-semibold', text: title }), region]);
+    return this.el('div', { className: 'flex flex-col gap-2 min-w-0' }, [this.el('h4', { className: 'text-base font-semibold text-balance', text: title }), region]);
   }
 
   async runSample() {
@@ -1020,8 +1033,8 @@ class QuestionSourcesPanel {
       const mapped = this.mapError(result, 'tab.pilot');
       this.pilotAlert.replaceChildren(gatesUiErrorAlert(mapped, this.locale, () => this.loadPilot()));
       const signIn = mapped.kind === 'signIn';
-      this.pilotForm.hidden = signIn;
-      this.pilotExplain.hidden = signIn;
+      questionSourcesShow(this.pilotForm, !signIn);
+      questionSourcesShow(this.pilotExplain, !signIn);
       if (signIn || !this.pilot.data) {
         this.pilot.data = false;
         this.pilotBody.replaceChildren();
@@ -1033,8 +1046,8 @@ class QuestionSourcesPanel {
       return;
     }
     this.pilotAlert.replaceChildren();
-    this.pilotForm.hidden = false;
-    this.pilotExplain.hidden = false;
+    questionSourcesShow(this.pilotForm, true);
+    questionSourcesShow(this.pilotExplain, true);
     const body = result.body && typeof result.body === 'object' ? result.body : {};
     const users = (Array.isArray(body.users) ? body.users : []).filter((u) => u && typeof u === 'object' && typeof u.user_id === 'string');
     this.pilot.users = cursor ? this.pilot.users.concat(users) : users;
@@ -1062,7 +1075,7 @@ class QuestionSourcesPanel {
     view.rows.forEach((row) => {
       const user = row.mono
         ? this.el('code', { className: 'font-mono text-xs break-all', text: row.label, attrs: { translate: 'no' } })
-        : this.el('span', { className: 'break-all', text: row.label });
+        : this.el('span', { className: 'break-all', text: row.label, attrs: { translate: 'no' } });
       const remove = this.el('button', {
         className: 'btn btn-outline md:btn-sm',
         text: this.t('action.removePilot'),
@@ -1071,9 +1084,9 @@ class QuestionSourcesPanel {
       remove.addEventListener('click', () => this.removePilot(row, remove));
       body.appendChild(
         this.el('tr', null, [
-          this.el('th', { className: 'font-normal text-sm align-top min-w-0', attrs: { scope: 'row' } }, [user]),
-          this.el('td', { className: 'text-sm align-top whitespace-nowrap' }, row.added ? [this.el('time', { text: row.added.text, attrs: { datetime: row.added.iso } })] : ['—']),
-          this.el('td', { className: 'align-top' }, [remove]),
+          this.el('th', { className: 'font-normal text-sm align-middle min-w-0', attrs: { scope: 'row' } }, [user]),
+          this.el('td', { className: 'text-sm align-middle whitespace-nowrap' }, row.added ? [this.el('time', { text: row.added.text, attrs: { datetime: row.added.iso } })] : ['—']),
+          this.el('td', { className: 'align-middle' }, [remove]),
         ]),
       );
     });
@@ -1187,13 +1200,13 @@ class QuestionSourcesPanel {
     this.importNeeds = this.el('div', { className: 'min-w-0' });
     this.importFile = this.el('input', {
       className: 'file-input file-input-bordered file-input-sm w-full max-w-md',
-      attrs: { type: 'file', id: fileId, accept: '.csv,.jsonl,text/csv,application/x-ndjson', 'aria-describedby': ids.fileMessage },
+      attrs: { type: 'file', id: fileId, name: 'question-file', accept: '.csv,.jsonl,text/csv,application/x-ndjson', 'aria-describedby': ids.fileMessage },
       on: { change: () => this.onImportFile() },
     });
     this.importFileMessage = this.el('p', { className: 'text-xs mt-1 empty:hidden max-w-prose', attrs: { id: ids.fileMessage, 'data-question-sources-file-message': '' } });
     this.importColumn = this.el('select', {
       className: 'select select-bordered select-sm w-full max-w-md',
-      attrs: { id: columnId, 'aria-describedby': ids.columnHelp },
+      attrs: { id: columnId, name: 'question-column', 'aria-describedby': ids.columnHelp },
       on: { change: () => this.onImportColumn() },
     });
     this.importColumn.disabled = true;
@@ -1205,7 +1218,7 @@ class QuestionSourcesPanel {
     this.importChooseFirst = this.el('p', { className: 'text-xs text-base-content/70 empty:hidden', text: this.t('import.chooseFirst'), attrs: { id: ids.chooseFirst } });
     this.importActions = this.el('div', { className: 'flex flex-wrap items-center gap-2' });
     this.importProgress = this.el('div', { className: 'flex flex-col gap-1 max-w-md min-w-0' });
-    this.importProgress.hidden = true;
+    questionSourcesShow(this.importProgress, false);
     this.importResult = this.el('div', { className: 'flex flex-col gap-4 min-w-0' });
     this.importForm = this.el('div', { className: 'flex flex-col gap-4 min-w-0' }, [
       this.el('p', { className: 'text-sm max-w-prose', text: this.t('import.explain') }),
@@ -1231,7 +1244,7 @@ class QuestionSourcesPanel {
     if (!this.importForm) return;
     const { gatesUiAlert } = QUESTION_SOURCES_GATES;
     const on = this.switches().review;
-    this.importForm.hidden = !on;
+    questionSourcesShow(this.importForm, on);
     if (on) {
       this.importNeeds.replaceChildren();
       if (!this.importForm.parentNode) this.views.import.appendChild(this.importForm);
@@ -1258,7 +1271,7 @@ class QuestionSourcesPanel {
   }
 
   tooLargeVars() {
-    return { size: '10 MB', rows: questionSourcesCount(QUESTION_SOURCES_LIMITS.maxRows, this.locale) };
+    return { size: '10\u00a0MB', rows: questionSourcesCount(QUESTION_SOURCES_LIMITS.maxRows, this.locale) };
   }
 
   setImportActions(buttons) {
@@ -1270,7 +1283,7 @@ class QuestionSourcesPanel {
     this.imp.sums = null;
     this.imp.checkedKey = null;
     this.importResult.replaceChildren();
-    this.importProgress.hidden = true;
+    questionSourcesShow(this.importProgress, false);
     this.importProgress.replaceChildren();
     this.importCheck.disabled = !this.imp.parsed;
     this.importChooseFirst.textContent = this.imp.parsed ? '' : this.t('import.chooseFirst');
@@ -1341,7 +1354,7 @@ class QuestionSourcesPanel {
       bar,
       this.el('p', { className: 'text-xs tabular-nums', text: this.t('import.progress', { done: questionSourcesCount(done, this.locale), total: questionSourcesCount(total, this.locale) }) }),
     );
-    this.importProgress.hidden = false;
+    questionSourcesShow(this.importProgress, true);
   }
 
   /** The counts list and the by-language table; counts only (UI-SPEC 11 rule 8). */
@@ -1384,7 +1397,7 @@ class QuestionSourcesPanel {
         ]),
       ],
     );
-    const nodes = [this.el('h4', { className: 'text-base font-semibold', text: this.t(headingKey) }), table];
+    const nodes = [this.el('h4', { className: 'text-base font-semibold text-balance', text: this.t(headingKey) }), table];
     const langs = Object.keys(sums.by_language)
       .sort((x, y) => sums.by_language[y] - sums.by_language[x] || (x < y ? -1 : 1))
       .map((code) => ({ code, name: QUESTION_SOURCES_GATES.gatesUiLanguageName(code, this.locale), count: questionSourcesCount(sums.by_language[code], this.locale) }));
@@ -1428,7 +1441,7 @@ class QuestionSourcesPanel {
     this.imp.running = false;
     pressed.replaceChildren(this.t(dryRun ? 'action.checkFile' : 'action.import'));
     this.importControlsDisabled(false);
-    this.importProgress.hidden = true;
+    questionSourcesShow(this.importProgress, false);
     const key = String(columnIndex) + '|' + (this.organizationId || '');
     if (failure) {
       const nodes = [];
