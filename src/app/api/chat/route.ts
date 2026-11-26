@@ -2603,7 +2603,6 @@ Context:
       const answerRuleOptions = {
         mode: ragMode,
         webSearchOffered: SUPPORTS_TOOLS && webSearchEnabled && Boolean(env.EXA_API_KEY),
-        contextTagging: readSecurityConfig().contextTagging,
       };
       systemPrompt = answerTurn.composeSystemPrompt(
         citationSession.decorateSystemPrompt(createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode, answerLanguage)),

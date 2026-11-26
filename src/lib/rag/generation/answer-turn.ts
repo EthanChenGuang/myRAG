@@ -1,5 +1,6 @@
 import type { AnswerConfig } from './answer-config';
 import { composeAnswerRules } from './answer-rules';
+import { readSecurityConfig } from '../security/config';
 import { previousTurnLanguage, resolveAnswerLanguage, type AnswerLanguageSource, type TurnMessage } from '../lang/answer-language';
 import { getLanguageSettings, languageVariablesUnset } from '../lang/settings';
 
@@ -25,7 +26,8 @@ export interface AnswerTurn {
 export interface ComposeSystemPromptOptions {
   mode: string;
   webSearchOffered: boolean;
-  contextTagging: boolean;
+  /** RAG_CONTEXT_TAGGING; read from the security config when absent, so the chat route never reads the switch. */
+  contextTagging?: boolean;
 }
 
 export interface AnswerTurnInput {
@@ -80,7 +82,7 @@ export function createAnswerTurn(input: AnswerTurnInput): AnswerTurn {
           webSearchOffered: options.webSearchOffered,
           capApplies,
           calcOffered: false,
-          contextTagging: options.contextTagging,
+          contextTagging: options.contextTagging ?? readSecurityConfig().contextTagging,
         },
         { log: !logged },
       );
