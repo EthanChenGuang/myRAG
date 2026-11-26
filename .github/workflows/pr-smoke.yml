@@ -290,6 +290,14 @@ jobs:
         run: npm run test-rag -- --out eval/out/smoke
       - name: Ingest-mode smoke tier against the ingest baseline
         run: npm run test-rag -- --fixture-mode ingest --out eval/out/smoke-ingest
+      - name: Legacy smoke tier, explicit RAG_PIPELINE=legacy, paired differences all zero
+        run: |
+          npm run test-rag -- --run-config eval/config/runs/legacy.json --baseline eval/baselines/fixture-baseline.json --out eval/out/smoke-legacy
+          jq -e '.paired.all_zero == true' eval/out/smoke-legacy/gate.json
+      - name: Legacy ingest-mode smoke tier, explicit RAG_PIPELINE=legacy, paired differences all zero
+        run: |
+          npm run test-rag -- --run-config eval/config/runs/legacy.json --fixture-mode ingest --baseline eval/baselines/fixture-ingest-baseline.json --out eval/out/smoke-legacy-ingest
+          jq -e '.paired.all_zero == true' eval/out/smoke-legacy-ingest/gate.json
       - name: Injection absolute-zero gate under the recommended SEC configuration
         run: npm run test-rag -- --run-config eval/config/runs/sec-recommended.json --out eval/out/smoke-sec
       - name: Upload smoke output
@@ -300,6 +308,8 @@ jobs:
           path: |
             eval/out/smoke
             eval/out/smoke-ingest
+            eval/out/smoke-legacy
+            eval/out/smoke-legacy-ingest
             eval/out/smoke-sec
           if-no-files-found: warn
 
