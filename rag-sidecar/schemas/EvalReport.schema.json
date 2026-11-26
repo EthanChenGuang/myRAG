@@ -404,6 +404,10 @@
           "title": "Context K",
           "type": "integer"
         },
+        "conversational_ok": {
+          "title": "Conversational Ok",
+          "type": "boolean"
+        },
         "doc_type": {
           "anyOf": [
             {
@@ -432,6 +436,11 @@
           ],
           "default": null,
           "title": "Evidence Language"
+        },
+        "expected_behavior": {
+          "const": "conversational",
+          "title": "Expected Behavior",
+          "type": "string"
         },
         "first_hit_rank": {
           "anyOf": [
@@ -1768,6 +1777,9 @@
           "$ref": "#/$defs/MetricValue"
         },
         "boilerplate_token_share": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "conversational_rate": {
           "$ref": "#/$defs/MetricValue"
         },
         "correct_refusal_rate": {

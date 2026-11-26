@@ -870,6 +870,23 @@ def _identifier_section(report: EvalReport) -> list[str]:
     return lines
 
 
+CONVERSATIONAL_NOTE = (
+    "Small-talk turns are not knowledge-base questions (D-10): correct means retrieval was skipped, no document was "
+    "kept or cited, and the turn was not refused. They are outside the refusal-rate denominators."
+)
+
+
+def _conversational_section(report: EvalReport) -> list[str]:
+    items = [item for item in report.items if item.conversational_ok is not None]
+    if not items:
+        return []
+    lines = ["## Small talk (conversational)", "", CONVERSATIONAL_NOTE, "", "| Slice | Conversational rate |", "|---|---|"]
+    for name, metrics in _per_language_rows(items).items():
+        lines.append(f"| {name} | {_optional_cell(metrics.conversational_rate)} |")
+    lines.append("")
+    return lines
+
+
 def _optional_cell(metric: MetricValue | None) -> str:
     return _cell(metric) if metric is not None else "n/a (n=0)"
 
@@ -1307,6 +1324,7 @@ def _render_markdown(report: EvalReport, budgets: LatencyBudgets | None = None) 
     lines.extend(_table_split_section(report))
     lines.extend(_duplicate_flood_section(report))
     lines.extend(_identifier_section(report))
+    lines.extend(_conversational_section(report))
     lines.extend(_query_layer_section(report))
     lines.extend(_semantic_cache_section(report))
     lines.extend(_backlog_section(report))

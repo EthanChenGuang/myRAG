@@ -32,6 +32,9 @@ import {
 import { buildCacheHitResult, buildSmallTalkResult, buildV2Result, fusedHitsToVoiceChunks, requestRetrievalConfigHash } from './result';
 import { buildRetrievalFilters, effectiveOnFor } from '../query/filters';
 import { queryLanguage as detectQueryLanguage } from '../query/language';
+import { effectiveQueryLayerConfig, queryLayerOverrides } from '../query/layer-config';
+import { effectiveQueryParams } from '../query/query-params';
+import { queryLayerHashComponent } from '../query/hash-part';
 import type { RetrievalConfigHashQueryLayer, TerminologyHashStage } from './config-hash';
 import { hasTranslationWork, planTranslationLegs, translationHashFields, type TranslationLegsPlan } from './translation-legs';
 import type { SemanticCacheSeam } from '../query/run-layer';
@@ -66,12 +69,8 @@ function precomputedVectors(entry: { text: string; embedding: QueryEmbedding } |
 }
 
 /** The query-layer part of the config hash (research A-7); loaded only while the layer is on, so run-layer stays unimported otherwise. */
-async function queryLayerHashFor(input: RunRetrievalInput, config: ReturnType<typeof loadRagConfig>, profile: Profile): Promise<RetrievalConfigHashQueryLayer> {
-  const [{ effectiveQueryLayerConfig, queryLayerOverrides }, { effectiveQueryParams }, { queryLayerHashComponent }] = await Promise.all([
-    import('../query/layer-config'),
-    import('../query/query-params'),
-    import('../query/hash-part'),
-  ]);
+// Static imports: a cold dynamic import here stalled the first request after a transform timeout until the embed stage timed out.
+function queryLayerHashFor(input: RunRetrievalInput, config: ReturnType<typeof loadRagConfig>, profile: Profile): RetrievalConfigHashQueryLayer {
   const overrides = queryLayerOverrides(profile, input.stageOverrides);
   return queryLayerHashComponent(effectiveQueryLayerConfig(config.queryLayer, overrides), effectiveQueryParams(profile, overrides?.queryParams));
 }
@@ -145,7 +144,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
       options: input.options,
     }));
   const layerHash = async (): Promise<RetrievalConfigHashQueryLayer> => {
-    queryLayerHash ??= await queryLayerHashFor(input, config, profile);
+    queryLayerHash ??= queryLayerHashFor(input, config, profile);
     return queryLayerHash;
   };
   // XLG-04: one translation state lookup per request and embedding profile, shared by the cache key and the search stage.

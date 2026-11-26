@@ -139,6 +139,7 @@ Scripted entries in `transforms.json`: 18 condense (each keeps every code verbat
    - `tests/rag-db/ingest-mode-routing.test.mts`: the 38 Phase 6 ids are among the ingest baseline additions.
    - The 7 route characterization snapshots were regenerated with `UPDATE_CHARACTERIZATION=1`. 5464 insertions, 0 deletions.
 4. Golden lines were appended. Earlier lines were not rewritten, so they are byte-identical.
+5. **Later change (Phase 6 gate fix, 2026-11-26, CONTEXT A-11):** the six `small_talk` lines were rewritten to add `expected_behavior: "conversational"`. Labelling them as refusals contradicted D-10 (small talk under the layer is answered, never refused), so D-42 (b) failed on a designed behaviour. They are now scored on whether the turn skipped the knowledge base and stay out of the refusal-rate denominators. Both baselines were re-recorded with all items identical.
 
 ## Tests that failed before the change
 

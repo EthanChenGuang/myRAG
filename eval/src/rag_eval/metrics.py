@@ -7,7 +7,7 @@ from typing import Literal
 from rag_sidecar.contracts.answers import CitationRecord
 from rag_sidecar.contracts.eval_run import RagTrace, TraceInjection
 from rag_sidecar.contracts.feedback_loop import GatePopulationConfig
-from rag_sidecar.contracts.golden import AttackSpec, GoldenItem, GoldSpan
+from rag_sidecar.contracts.golden import CONVERSATIONAL, AttackSpec, GoldenItem, GoldSpan
 from rag_sidecar.contracts.languages import LANGUAGE_CODES
 from rag_sidecar.contracts.report import (
     GroundednessLabelCounts,
@@ -171,6 +171,29 @@ def _identifier_fields(trace: RagTrace, item: GoldenItem) -> dict[str, object]:
     return {"identifier_precise": precise, "near_miss_leak": leak}
 
 
+def conversational_ok(trace: RagTrace) -> bool:
+    """D-10: a no-retrieval turn is correct only when it skipped the knowledge base and answered without it.
+
+    Wrong when the turn retrieved or kept documents, cited anything, or refused (strict "information not available").
+    """
+    plan = trace.query_plan
+    return (
+        plan is not None
+        and plan.gate.skip_retrieval
+        and not trace.candidates
+        and not trace.kept
+        and not trace.used_documents
+        and not trace.citations
+        and not trace.refused
+    )
+
+
+def _conversational_fields(trace: RagTrace, item: GoldenItem) -> dict[str, object]:
+    if item.expected_behavior != CONVERSATIONAL:
+        return {}
+    return {"expected_behavior": CONVERSATIONAL, "conversational_ok": conversational_ok(trace)}
+
+
 def score_items(
     traces: list[RagTrace],
     golden: list[GoldenItem],
@@ -218,6 +241,7 @@ def score_items(
                 report_only_reason=report_only_reason(item),
                 **_context_fields(trace, item),
                 **_identifier_fields(trace, item),
+                **_conversational_fields(trace, item),
             )
         )
     return results
@@ -242,7 +266,8 @@ def _k_zero(answerable: list[ItemResult]) -> MetricValue | None:
 
 def _slice(results: list[ItemResult]) -> SliceMetrics:
     answerable = [r for r in results if r.answerable]
-    unanswerable = [r for r in results if not r.answerable]
+    # Conversational (no-retrieval) items are their own measure, never in the refusal denominators.
+    unanswerable = [r for r in results if not r.answerable and r.expected_behavior != CONVERSATIONAL]
 
     def recall(k: int) -> MetricValue:
         field = _RECALL_FIELDS[k]
@@ -262,6 +287,7 @@ def _slice(results: list[ItemResult]) -> SliceMetrics:
         intent_coverage=_optional_mean([r.intent_coverage for r in answerable]),
         identifier_precision=_optional_mean([r.identifier_precise for r in results]),
         near_miss_leakage=_optional_mean([r.near_miss_leak for r in results]),
+        conversational_rate=_optional_mean([r.conversational_ok for r in results]),
     )
 
 

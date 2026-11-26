@@ -436,6 +436,11 @@ def test_every_committed_golden_line_still_validates_and_dumps_without_new_keys(
             assert GoldenItem.model_validate(item.model_dump(mode="json")) == item, f"{name}:{number}"
             continue
         dumped = item.model_dump(mode="json")
+        if item.category == "small_talk" and item.expected_behavior is not None:
+            # Phase 6 gate fix: small_talk items carry expected_behavior (D-10); the rest of their key set is unchanged.
+            assert GoldenItem.model_validate(dumped) == item, f"{name}:{number}"
+            assert dumped.pop("expected_behavior") == "conversational", f"{name}:{number}"
+            item = GoldenItem.model_validate(dumped)
         assert "table_answer" not in dumped, f"{name}:{number}"
         assert "native_review" not in dumped, f"{name}:{number}"
         assert set(dumped) == _PRE_PHASE32_ITEM_KEYS, f"{name}:{number}"
@@ -796,3 +801,19 @@ def test_phase52_items_serialize_without_new_keys_when_unset():
     plain = GoldenItem.model_validate(_item())
     dumped = plain.model_dump(mode="json")
     assert not {"partial", "versions", "off_topic"} & set(dumped)
+
+
+def _conversational_item(**overrides):
+    base = _item("no_answer", id="en-small-talk-009", question="hello")
+    return GoldenItem.model_validate({**base, "category": "small_talk", **overrides})
+
+
+def test_expected_behavior_conversational_is_accepted_on_small_talk_and_dumped():
+    item = _conversational_item(expected_behavior="conversational")
+    assert item.model_dump(mode="json")["expected_behavior"] == "conversational"
+    assert "expected_behavior" not in _conversational_item().model_dump(mode="json")
+
+
+def test_expected_behavior_conversational_is_refused_outside_conversational_item():
+    with pytest.raises(ValidationError, match="only for small_talk"):
+        GoldenItem.model_validate(_item("no_answer", expected_behavior="conversational"))
