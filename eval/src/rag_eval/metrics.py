@@ -135,9 +135,19 @@ def _asked_identifier(item: GoldenItem) -> str:
     raise ValueError(f"{IDENTIFIER_NEAR_MISS} item {item.id!r} needs a tag {ASKED_IDENTIFIER_TAG}<spelling>")
 
 
+def is_identifier_item(item: GoldenItem) -> bool:
+    """D-32 identifier items: identifier_near_miss items, and no_answer items asking about an identifier that does not exist.
+
+    GoldenItem keeps answerable false to no_answer and small_talk, so the no-answer half is a no_answer item with the
+    asked_identifier tag (plan 04.2-37)."""
+    if item.category == IDENTIFIER_NEAR_MISS:
+        return True
+    return item.category == "no_answer" and any(tag.startswith(ASKED_IDENTIFIER_TAG) for tag in item.tags)
+
+
 def _identifier_fields(trace: RagTrace, item: GoldenItem) -> dict[str, object]:
-    """D-32 on identifier_near_miss items: leak and precision over the kept chunks' normalized identifiers."""
-    if item.category != IDENTIFIER_NEAR_MISS:
+    """D-32 on identifier items: leak and precision over the kept chunks' normalized identifiers."""
+    if not is_identifier_item(item):
         return {}
     asked = _asked_identifier(item)
     if any(chunk.identifiers_norm is None for chunk in trace.kept):

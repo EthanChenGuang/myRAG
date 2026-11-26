@@ -18,6 +18,7 @@ from rag_eval.calibrate.refusal import CalibrationResult, CellRecord
 from rag_eval.golden_io import load_golden
 from rag_eval.harness_runner import HarnessError
 from rag_eval.matching import chunk_matches_span
+from rag_eval.metrics import is_identifier_item
 from rag_eval.ndcg import gold_unit_first_hits
 from rag_eval.paired import item_metrics
 from rag_eval.paths import repo_relative, resolve_cli_path
@@ -459,27 +460,43 @@ def _mean_over(items: Iterable[ItemResult], metric: str) -> float | None:
     return sum(values) / len(values) if values else None
 
 
+def identifier_members(output: RunOutput, slice_name: str) -> list[ItemResult]:
+    """The gated items of the slice plus the gated no_answer items that ask about an absent identifier (D-32, plan 04.2-37)."""
+    members = _slice_members(output, slice_name)
+    seen = {item.item_id for item in members}
+    golden = {item.id: item for item in output.golden}
+    absent = [
+        item
+        for item in _gated(output)
+        if item.item_id not in seen
+        and (source := golden.get(item.item_id)) is not None
+        and source.category == "no_answer"
+        and is_identifier_item(source)
+    ]
+    return [*members, *absent]
+
+
 def identifier_gate(gate: IdentifierGate, outputs: Mapping[str, RunOutput], noise: NoiseConfig) -> GateOutcome:
     on, reference = outputs[gate.run], outputs[gate.reference]
     offenders: list[str] = []
-    members = _slice_members(on, gate.slice)
+    members = identifier_members(on, gate.slice)
     numbers: dict[str, Number] = {"items": len(members)}
     if not members:
         offenders.append(f"no gated item in {gate.slice}")
-    metrics = _slice(on.report, gate.slice)
-    for field, bound, higher in (
-        ("identifier_precision", gate.identifier_precision_min, True),
-        ("near_miss_leakage", gate.near_miss_leakage_max, False),
+    for field, item_field, bound, higher in (
+        ("identifier_precision", "identifier_precise", gate.identifier_precision_min, True),
+        ("near_miss_leakage", "near_miss_leak", gate.near_miss_leakage_max, False),
     ):
-        value = getattr(metrics, field) if metrics is not None else None
-        numbers[field] = value.value if value is not None else None
-        numbers[f"{field}_n"] = value.n if value is not None else 0
-        if value is None or value.value is None:
+        measured = [float(value) for item in members if (value := getattr(item, item_field)) is not None]
+        mean = sum(measured) / len(measured) if measured else None
+        numbers[field] = mean
+        numbers[f"{field}_n"] = len(measured)
+        if mean is None:
             offenders.append(f"{gate.slice} {field} not measured")
-        elif value.n != len(members):
-            offenders.append(f"{gate.slice} {field} measured on {value.n} of {len(members)} item(s)")
-        elif (higher and value.value < bound) or (not higher and value.value > bound):
-            offenders.append(f"{gate.slice} {field} {value.value:.4f} {'<' if higher else '>'} {bound:.4f}")
+        elif len(measured) != len(members):
+            offenders.append(f"{gate.slice} {field} measured on {len(measured)} of {len(members)} item(s)")
+        elif (higher and mean < bound) or (not higher and mean > bound):
+            offenders.append(f"{gate.slice} {field} {mean:.4f} {'<' if higher else '>'} {bound:.4f}")
     ids = descriptive_ids(on, gate.descriptive.max_asked)
     numbers["descriptive_items"] = len(ids)
     if len(ids) < gate.descriptive.min_items:
