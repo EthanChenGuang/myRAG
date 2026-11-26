@@ -401,6 +401,24 @@ export type { AdminDocumentScopeInput } from './tenant/ingest-scope';
 export { softDeleteLineage } from './ingest/soft-delete';
 export { recomputeDirtyDupClusters } from './dedupe/cluster';
 export type { RecomputeOutcome } from './dedupe/cluster';
+export {
+  createIdentifierPattern,
+  deleteIdentifierPattern,
+  IDENTIFIER_PATTERN_LIMITS,
+  IdentifierPatternError,
+  listIdentifierPatterns,
+  testIdentifierPatterns,
+  updateIdentifierPattern,
+} from './identifiers/patterns';
+export type {
+  IdentifierPatternDraft,
+  IdentifierPatternErrorCode,
+  IdentifierPatternFinding,
+  IdentifierPatternFindingCode,
+  IdentifierPatternRow,
+  IdentifierTestMatch,
+  IdentifierTestResult,
+} from './identifiers/patterns';
 export { removeDocumentObjects } from './ingest/remove-document-objects';
 export type { DocumentObjectRow } from './ingest/remove-document-objects';
 export type { SoftDeleteResult, SoftDeleteFailure } from './ingest/soft-delete';
