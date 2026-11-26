@@ -168,8 +168,9 @@ for (const mode of MODES) {
       assert.deepEqual(await pending(db, TENANT_A), ['item-2']);
     });
 
-    test('an authenticated owner writing a document through the legacy path still fires the trigger', async () => {
-      await asRole(db, 'authenticated', USER_A, () => db.query("UPDATE documents SET status = 'deleted' WHERE id = $1", [docA1]));
+    test('an authenticated owner deleting a document through the legacy path still fires the trigger', async () => {
+      const deleted = await asRole(db, 'authenticated', USER_A, () => db.query('DELETE FROM documents WHERE id = $1', [docA1]));
+      assert.equal(deleted.affectedRows, 1);
       assert.deepEqual(await flags(db), { 'item-1': true, 'item-2': false });
     });
 
