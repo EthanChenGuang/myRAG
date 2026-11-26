@@ -44,6 +44,7 @@ ISO_TIMESTAMP_PATTERN = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-
 LANGUAGE_PAIR_PATTERN = r"^[a-z]{2,3}->[a-z]{2,3}$"
 SLICE_KEY_PATTERN = r"^(overall|language:[a-z]{2,3}|pair:[a-z]{2,3}->[a-z]{2,3}|source:(synthetic|mined))$"
 URI_SCHEME_PATTERN = r"^[a-z][a-z0-9+.-]*$"
+ARTIFACT_URI_PATTERN = r"^[a-z][a-z0-9+.-]*:[^@?#]+$"
 
 TenantKey = Annotated[str, Field(pattern=TENANT_KEY_PATTERN)]
 UuidStr = Annotated[str, Field(pattern=UUID_PATTERN)]
@@ -577,7 +578,22 @@ def _check_artifact_uri(value: str) -> str:
     return value
 
 
+# The JSON Schema states the one-tenant rule for tenant scope, so the generated Zod schema refuses it too (06.1-02).
+_CARD_SCOPE_SCHEMA = {
+    "anyOf": [
+        {"type": "object", "properties": {"scope": {"const": "deployment"}}, "required": ["scope"]},
+        {
+            "type": "object",
+            "properties": {"scope": {"const": "tenant"}, "tenant_keys": {"type": "array", "maxItems": 1}},
+            "required": ["scope", "tenant_keys"],
+        },
+    ]
+}
+
+
 class ModelVersionCard(_Contract):
+    model_config = ConfigDict(extra="forbid", frozen=True, json_schema_extra=_CARD_SCOPE_SCHEMA)
+
     id: ModelVersionId
     base_model: HfModelId
     base_revision: Revision
@@ -591,7 +607,7 @@ class ModelVersionCard(_Contract):
     offline: OfflineEvalReport
     status: CardStatus
     probe: ProbeSet
-    artifact_uri: str = Field(min_length=3, max_length=2048)
+    artifact_uri: str = Field(min_length=3, max_length=2048, pattern=ARTIFACT_URI_PATTERN)
 
     @field_validator("tenant_keys")
     @classmethod
