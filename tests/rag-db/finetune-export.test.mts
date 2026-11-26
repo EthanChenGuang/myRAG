@@ -352,3 +352,182 @@ describe('npm run rag:finetune over the fake edge (two tenants)', () => {
     await consent(tenantB, 'deployment');
   });
 });
+
+describe('npm run rag:finetune -- embed-queries over the fake edge', () => {
+  const FT_ENV = { RAG_FINETUNE: 'on' };
+  const PROFILE = 'voyage-4-large-1024';
+  const MODEL = 'voyage-4-large';
+  let fixture: import('../../eval/harness/two-tenant.mts').TwoTenantDatabase;
+  let edge: import('../../eval/harness/fake-edge.mts').FakeEdge;
+  let cli: typeof import('@/lib/rag/finetune/cli');
+  let bundleIo: typeof import('@/lib/rag/finetune/bundle-io');
+  let ingestDeps: typeof import('@/lib/rag/ingest/deps');
+  let ingestConfig: typeof import('@/lib/rag/ingest/config');
+  let activeProfile: typeof import('@/lib/rag/embeddings/active-profile');
+  let registry: typeof import('@/lib/rag/embeddings/registry');
+  let tenantA: string;
+  let tenantB: string;
+  let returnedModel = MODEL;
+  let providerCalls = 0;
+  const bundles: string[] = [];
+
+  function fakeVector(text: string): number[] {
+    const digest = crypto.createHash('sha256').update(text).digest();
+    const raw = Array.from({ length: 1024 }, (_, index) => ((digest[index % 32] + index) % 17) / 17 + 0.01);
+    const norm = Math.sqrt(raw.reduce((sum, x) => sum + x * x, 0));
+    return raw.map((x) => x / norm);
+  }
+
+  before(async () => {
+    const twoTenant = await import('../../eval/harness/two-tenant.mts');
+    const fakeEdge = await import('../../eval/harness/fake-edge.mts');
+    tenantA = `u:${twoTenant.TWO_TENANT_IDS.userA}`;
+    tenantB = `u:${twoTenant.TWO_TENANT_IDS.userB}`;
+    fixture = await twoTenant.createTwoTenantDatabase();
+    edge = await fakeEdge.startFakeEdge({ db: fixture.db });
+    Object.assign(process.env, fakeEdge.fixtureProcessEnv(edge.url));
+    process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = 'multi-tenant';
+    process.env.MYRAG_DEPLOYMENT_MODE = 'multi-tenant';
+    cli = await import('@/lib/rag/finetune/cli');
+    bundleIo = await import('@/lib/rag/finetune/bundle-io');
+    ingestDeps = await import('@/lib/rag/ingest/deps');
+    ingestConfig = await import('@/lib/rag/ingest/config');
+    activeProfile = await import('@/lib/rag/embeddings/active-profile');
+    registry = await import('@/lib/rag/embeddings/registry');
+
+    await fixture.db.query("UPDATE public.embedding_profiles SET status = 'available' WHERE status = 'active'");
+    await fixture.db.query("UPDATE public.embedding_profiles SET status = 'active', activated_at = now(), activated_by = 'test' WHERE id = $1", [PROFILE]);
+    await fixture.db.query('SELECT * FROM public.rag_finetune_set_consent($1, $2, $3, $4)', [tenantA, 'private', 'TICKET-3', 'op']);
+    registry.setEmbeddingProvidersForTests({
+      voyage: {
+        id: 'voyage',
+        model: MODEL,
+        maxInputTokens: 8000,
+        supportedDims: [1024, 2048],
+        normalize: true,
+        async embedDocuments(texts) {
+          providerCalls += 1;
+          return { vectors: texts.map(fakeVector), model: returnedModel, host: 'fake-host', usage: { tokens: texts.length } };
+        },
+        async embedQuery(text) {
+          providerCalls += 1;
+          return { vectors: [fakeVector(text)], model: returnedModel, host: 'fake-host', usage: { tokens: 1 } };
+        },
+      },
+    });
+    ingestConfig.resetIngestConfigForTests();
+    ingestDeps.setIngestDepsForTests({ ingestEnv: () => ({ RAG_EMBEDDING_PROFILES: 'on' }) });
+    activeProfile.resetActiveProfileForTests();
+  });
+
+  after(async () => {
+    registry?.resetEmbeddingProvidersForTests();
+    ingestDeps?.resetIngestDepsForTests();
+    activeProfile?.resetActiveProfileForTests();
+    for (const dir of bundles) fs.rmSync(dir, { recursive: true, force: true });
+    await edge?.close();
+    await fixture?.db.close();
+  });
+
+  function pairRow(id: string, split: 'train' | 'dev' | 'test', source: 'synthetic' | 'mined' = 'synthetic', tenant = tenantA): string {
+    return JSON.stringify({
+      pair_id: id,
+      tenant_key: tenant,
+      language: 'en',
+      positive_language: 'en',
+      anchor: `neutral synthetic question about sample record ${id}`,
+      positive_chunk_id: `chunk-${id}`,
+      positive: 'A neutral synthetic sentence about a sample record.',
+      negatives: [],
+      source,
+      split,
+      weight: source === 'mined' ? 2 : 1,
+    });
+  }
+
+  function makeBundle(): string {
+    const dir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ft-queries-'));
+    bundles.push(dir);
+    fs.writeFileSync(
+      path.join(dir, 'manifest.json'),
+      JSON.stringify({
+        run_id: 'run-queries-1',
+        purpose: 'private',
+        split_rule: 'ft-sha256-first8hex-mod100-80-10-10',
+        tenant_keys: [tenantA],
+        counts: {},
+        files: {},
+        created_at: '2026-11-26T10:00:00Z',
+      }),
+    );
+    fs.writeFileSync(path.join(dir, 'queries.kept.jsonl'), ['q-1', 'q-2', 'q-3'].map((id) => pairRow(id, 'train')).concat(pairRow('q-4', 'dev')).join('\n') + '\n');
+    fs.writeFileSync(path.join(dir, 'queries.test.kept.jsonl'), [pairRow('q-5', 'test'), pairRow('q-6', 'test')].join('\n') + '\n');
+    fs.writeFileSync(path.join(dir, 'pairs.mined.jsonl'), pairRow('q-7', 'train', 'mined') + '\n');
+    return dir;
+  }
+
+  async function run(...argv: string[]): Promise<{ code: number; out: string; err: string }> {
+    const out: string[] = [];
+    const err: string[] = [];
+    const code = await cli.main(argv, { out: (line) => out.push(line), err: (line) => err.push(line) }, undefined, FT_ENV);
+    return { code, out: out.join('\n'), err: err.join('\n') };
+  }
+
+  test('embeds the 7 kept queries with the active profile in input order, one f32 file equal to the fake vectors', async () => {
+    returnedModel = MODEL;
+    const dir = makeBundle();
+    const result = await run('embed-queries', '--bundle', dir, '--batch-size', '3');
+    assert.equal(result.code, 0, result.err);
+    const base = bundleIo.vectorFileBase('queries', tenantA, PROFILE);
+    const rows = fs.readFileSync(path.join(dir, `${base}.rows.jsonl`), 'utf8').trim().split('\n').map((line) => JSON.parse(line) as Record<string, unknown>);
+    assert.deepEqual(rows.map((row) => row.pair_id), ['q-1', 'q-2', 'q-3', 'q-4', 'q-5', 'q-6', 'q-7']);
+    for (const row of rows) {
+      assert.equal(row.profile_id, PROFILE);
+      assert.equal(row.model, MODEL);
+      assert.equal(row.dims, 1024);
+      assert.equal(Object.keys(row).some((key) => /anchor|text|query$/.test(key)), false);
+    }
+    assert.deepEqual(fs.readdirSync(path.join(dir, 'vectors')).filter((name) => name.endsWith('.f32')), [`query-vectors.${bundleIo.tenantFileKey(tenantA)}.${PROFILE}.f32`]);
+    const { header, vectors } = bundleIo.readVectorSet(dir, base);
+    assert.equal(header.rows, 7);
+    vectors.forEach((vector, index) => {
+      const expected = fakeVector(`neutral synthetic question about sample record q-${index + 1}`);
+      for (let c = 0; c < 1024; c += 1) assert.ok(Math.abs(vector[c] - expected[c]) < 1e-6, `row ${index} component ${c}`);
+    });
+    const written = fs.readFileSync(path.join(dir, `${base}.rows.jsonl`), 'utf8') + fs.readFileSync(path.join(dir, `${base}.header.json`), 'utf8');
+    assert.doesNotMatch(written, /neutral synthetic question/);
+    assert.doesNotMatch(result.out + result.err, /neutral synthetic question/);
+    assert.match(result.out, /7 rows in 3 batches/);
+  });
+
+  test('a model mismatch from the provider fails loudly and writes nothing', async () => {
+    returnedModel = 'another-embedding-model';
+    const dir = makeBundle();
+    const result = await run('embed-queries', '--bundle', dir);
+    assert.equal(result.code, 1);
+    assert.match(result.err, /profile_mismatch \(model\)/);
+    assert.deepEqual(fs.existsSync(path.join(dir, 'vectors')) ? fs.readdirSync(path.join(dir, 'vectors')) : [], []);
+    returnedModel = MODEL;
+  });
+
+  test('a revoke after export-vectors makes embed-queries refuse before any provider call', async () => {
+    const dir = makeBundle();
+    assert.equal((await run('export-vectors', '--bundle', dir)).code, 0);
+    await fixture.db.query('SELECT * FROM public.rag_finetune_set_consent($1, $2, $3, $4)', [tenantA, 'none', null, 'op']);
+    const calls = providerCalls;
+    const result = await run('embed-queries', '--bundle', dir);
+    assert.equal(result.code, 1);
+    assert.match(result.err, /refused: consent/);
+    assert.equal(providerCalls, calls);
+    assert.equal(fs.readdirSync(path.join(dir, 'vectors')).some((name) => name.startsWith('query-vectors.')), false);
+  });
+
+  test('a kept query of a tenant outside the manifest is refused', async () => {
+    await fixture.db.query('SELECT * FROM public.rag_finetune_set_consent($1, $2, $3, $4)', [tenantA, 'private', 'TICKET-3', 'op']);
+    const dir = makeBundle();
+    fs.appendFileSync(path.join(dir, 'pairs.mined.jsonl'), pairRow('q-8', 'train', 'mined', tenantB) + '\n');
+    const result = await run('embed-queries', '--bundle', dir);
+    assert.equal(result.code, 1);
+    assert.match(result.err, /rows_foreign_tenant/);
+  });
+});
