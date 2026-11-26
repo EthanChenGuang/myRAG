@@ -172,6 +172,35 @@ describe('instruction-sensitive fake generator (D-13)', () => {
     expect(answered.text).toBe(FAKE_UNSUPPORTED_ANSWERS.it);
   });
 
+  it('answers an answerable question from unlabelled context in instruction-sensitive mode (05.3-15)', () => {
+    const noAnswerQuestions = new Map([['Synthetic no-answer question', 'en']]);
+    const template = resolveEvalPromptTemplate({});
+    const question = 'Synthetic answerable question';
+    const blocks = [
+      '=== RELEVANT INFORMATION FROM DOCUMENTS ===',
+      '--- Document: doc-1.md (1 relevant chunks) ---',
+      'Document: doc-1.md. Chunk 1 of 2. Content: ## First heading\n\nThe first passage states one rule. It adds a detail.',
+      'Document: doc-1.md. Chunk 2 of 2. Content: ## Second heading\n\nThe second passage states another rule.',
+    ].join('\n\n');
+    const system = template.replace('{{context}}', blocks);
+    const answer = fakeCitationAnswer({ system, question, noAnswerQuestions, promptTemplate: template });
+    expect(answer).toBe('The first passage states one rule.');
+    expect(isAnyRefusal(answer)).toBe(false);
+    expect(findCitationMarkers(answer)).toEqual([]);
+
+    const tagged = template.replace('{{context}}', '<documents>\n<doc id="c1" source="doc-2.md">\nA tagged passage states a third rule.\n</doc>\n</documents>');
+    expect(fakeCitationAnswer({ system: tagged, question, noAnswerQuestions, promptTemplate: template })).toBe(
+      'A tagged passage states a third rule.',
+    );
+    // Without the instruction-sensitive option the answer is today's no-context sentence.
+    expect(fakeCitationAnswer({ system, question, promptTemplate: template })).toBe(fakeCitationAnswer({ system, question }));
+    // An empty retrieval still gets the no-context sentence.
+    const empty = template.replace('{{context}}', '');
+    expect(fakeCitationAnswer({ system: empty, question, noAnswerQuestions, promptTemplate: template })).toBe(
+      fakeCitationAnswer({ system: empty, question }),
+    );
+  });
+
   it('refuses to install a no-answer language without a refusal text', () => {
     expect(() => installFakeCitationGenerator(undefined, { noAnswerQuestions: new Map([['q', 'xx']]) })).toThrow(/xx/);
   });
