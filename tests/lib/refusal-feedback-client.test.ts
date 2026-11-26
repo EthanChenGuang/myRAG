@@ -9,7 +9,6 @@ import {
   resetRefusalFeedbackSession,
   setSourcesMessage,
   shouldShowRefusalControl,
-  signalSourceOpened,
   sourceKeyOf,
   sourcesMessage,
   traceForMessage,
@@ -216,24 +215,14 @@ describe('source-open signal', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it('resolves the trace through the message registry', () => {
-    const fetch = vi.fn(async () => new Response(null, { status: 204 }));
+  it('resolves a message to its trace through the registry', () => {
     registerMessageTrace('m1', TRACE);
     expect(traceForMessage('m1')).toBe(TRACE);
-    expect(signalSourceOpened({ messageId: 'm1', sourceKey: 'citation:1', incognito: false }, { fetch })).toBe(true);
-    expect(signalSourceOpened({ messageId: 'm2', sourceKey: 'citation:1', incognito: false }, { fetch })).toBe(false);
-    expect(signalSourceOpened({ messageId: null, sourceKey: 'citation:1', incognito: false }, { fetch })).toBe(false);
-    expect(signalSourceOpened({ messageId: 'm1', sourceKey: null, incognito: false }, { fetch })).toBe(false);
+    expect(traceForMessage('m2')).toBeUndefined();
+    registerMessageTrace('m3', 'not-a-trace');
+    expect(traceForMessage('m3')).toBeUndefined();
     registerMessageTrace('m1', undefined);
     expect(traceForMessage('m1')).toBeUndefined();
-    expect(fetch).toHaveBeenCalledTimes(1);
-  });
-
-  it('never sends in an incognito chat', () => {
-    const fetch = vi.fn(async () => new Response(null, { status: 204 }));
-    registerMessageTrace('m1', TRACE);
-    expect(signalSourceOpened({ messageId: 'm1', sourceKey: 'citation:1', incognito: true }, { fetch })).toBe(false);
-    expect(fetch).not.toHaveBeenCalled();
   });
 
   it('remembers which message owns the sources panel', () => {

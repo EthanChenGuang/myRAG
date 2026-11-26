@@ -4,6 +4,7 @@ import {
   CitationRecordSchema,
   type AnswerRecord,
   type CitationRecord,
+  RefusalFeedbackRequestSchema,
   type RefusalFeedbackRequest,
 } from '@/lib/rag-eval/contracts.generated';
 
@@ -39,6 +40,12 @@ const StrategySchema = CitationRecordSchema.shape.strategy;
 const InvalidCountSchema = z.number().int().gte(0);
 const GroundednessSchema = AnswerRecordSchema.shape.groundedness;
 const FeedbackSchema = AnswerRecordSchema.shape.feedback.removeDefault().options[0];
+/** The `{vote, reasons, at}` the refusal feedback route returns and the message metadata stores. */
+export const RefusalFeedbackValueSchema = z.object({
+  vote: RefusalFeedbackRequestSchema.shape.vote,
+  reasons: RefusalFeedbackRequestSchema.shape.reasons.unwrap(),
+  at: z.string().min(1).max(64),
+});
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
@@ -85,17 +92,30 @@ export function extractStreamAnswerMetadata(metadata: unknown, previous: StreamA
   if (!source) return previous;
   const next: StreamAnswerMetadata = { ...previous };
   if (typeof source.ragTraceId === 'string' && source.ragTraceId.length > 0) next.ragTraceId = source.ragTraceId;
+  if (source.refusal === true) next.refusal = true;
   return { ...next, ...pickCitationFields(source) };
 }
 
 /** The refusal flag and the stored refusal vote of message metadata (D-08); anything else is dropped. */
-export function pickRefusalMetadata(_metadata: unknown): RefusalMessageMetadata {
-  return {};
+export function pickRefusalMetadata(metadata: unknown): RefusalMessageMetadata {
+  const source = asRecord(metadata);
+  if (!source) return {};
+  const picked: RefusalMessageMetadata = {};
+  if (source.refusal === true) picked.refusal = true;
+  const feedback = RefusalFeedbackValueSchema.safeParse(source.refusalFeedback);
+  if (feedback.success) picked.refusalFeedback = feedback.data;
+  return picked;
 }
 
 /** Writes a saved refusal vote into the matching message's metadata; the same array when nothing changes. */
-export function withRefusalFeedback<T extends { id: string; metadata?: Record<string, unknown> }>(messages: T[], _messageId: string, _value: RefusalFeedbackValue): T[] {
-  return messages;
+export function withRefusalFeedback<T extends { id: string; metadata?: Record<string, unknown> }>(messages: T[], messageId: string, value: RefusalFeedbackValue): T[] {
+  let changed = false;
+  const next = messages.map((message) => {
+    if (message.id !== messageId || sameJson(message.metadata?.refusalFeedback, value)) return message;
+    changed = true;
+    return { ...message, metadata: { ...(message.metadata ?? {}), refusalFeedback: value } };
+  });
+  return changed ? next : messages;
 }
 
 function sameJson(a: unknown, b: unknown): boolean {
