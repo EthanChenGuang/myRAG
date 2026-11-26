@@ -22,18 +22,40 @@ online = [
     "httpx==0.28.1",
 ]
 fixtures = ["reportlab==5.1.0"]
+finetune-data = [
+    "anthropic==2.12.0",
+    "httpx==0.28.1",
+    "numpy==2.5.5",
+]
+finetune = [
+    "sentence-transformers[train]==6.2.0",
+    "torch==2.15.0",
+    "numpy==2.5.5",
+]
 
 [dependency-groups]
 dev = [
     "pytest==9.2.0",
 ]
 
+[tool.uv]
+exclude-newer-package = { accelerate = "2026-11-12T00:00:00Z", cloudpickle = "2026-11-12T00:00:00Z", joblib = "2026-11-12T00:00:00Z", mpmath = "2026-11-12T00:00:00Z", narwhals = "2026-11-12T00:00:00Z", psutil = "2026-11-12T00:00:00Z", safetensors = "2026-11-12T00:00:00Z", scikit-learn = "2026-11-12T00:00:00Z", sentence-transformers = "2026-11-12T00:00:00Z", sympy = "2026-11-12T00:00:00Z", threadpoolctl = "2026-11-12T00:00:00Z", tokenizers = "2026-11-12T00:00:00Z", transformers = "2026-11-12T00:00:00Z" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
 [tool.uv.sources]
 rag-sidecar = { path = "../rag-sidecar", editable = true }
+torch = [{ index = "pytorch-cpu" }]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-markers = ["harness_integration: drives the real Node eval harness over the fixtures; needs node and the repository node_modules"]
+markers = [
+    "harness_integration: drives the real Node eval harness over the fixtures; needs node and the repository node_modules",
+    "finetune_train: needs the finetune extra; trains a tiny model on CPU",
+]
 
 [build-system]
 requires = ["uv_build>=0.11.32,<0.12.0"]
