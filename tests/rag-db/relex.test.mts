@@ -17,8 +17,8 @@ const TENANT_A = `u:${TWO_TENANT_IDS.userA}`;
 const TENANT_B = `u:${TWO_TENANT_IDS.userB}`;
 const TENANT_O = `o:${TWO_TENANT_IDS.orgO}`;
 const CANARY_CHUNK_IDS = [TWO_TENANT_IDS.chunkA, TWO_TENANT_IDS.chunkB, TWO_TENANT_IDS.chunkO];
-/** 107 fixture corpus chunks (71 before the 05.1-09 injection documents) plus the three canary chunks. */
-const STALE_ROWS = 110;
+/** 122 fixture corpus chunks (71 before the 05.1-09 injection documents, 107 before the 04.1.1-10 synthetic-terms documents) plus the three canary chunks. */
+const STALE_ROWS = 125;
 
 type Row = Record<string, unknown>;
 
