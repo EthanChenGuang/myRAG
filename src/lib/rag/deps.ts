@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { env } from '@/lib/env';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { loadRagConfig, pipelineSourceOf, type RagEnvInput } from './config';
+import { effectiveLexicalVersion, loadRagConfig, pipelineSourceOf, type RagEnvInput } from './config';
 import type { RawPipelineEnv } from './lang/resolve';
 import { getLanguageSettings } from './lang/settings';
 import type { EmbeddingProfile } from './embeddings/active-profile';
@@ -70,8 +70,14 @@ function semanticCacheIo(deps: RagDeps): SemanticCacheIo {
   };
 }
 
+/** LangSmith/LangChain tracing switches as LangChain itself reads them (process.env); names only matter to the config check. */
+export function langchainTracingEnv(source: Readonly<Record<string, string | undefined>> = process.env): Record<string, string | undefined> {
+  return Object.fromEntries(Object.entries(source).filter(([name]) => /^(?:LANGSMITH_|LANGCHAIN_TRACING)/u.test(name)));
+}
+
 function readRagEnvInput(): RagEnvInput {
   return {
+    ...langchainTracingEnv(),
     RAG_PIPELINE: process.env.RAG_PIPELINE ?? env.RAG_PIPELINE,
     pipelineSourceHint: pipelineSourceOf(getRagDeps().rawPipelineEnv().RAG_PIPELINE),
     RAG_DISABLED_STAGES: process.env.RAG_DISABLED_STAGES ?? env.RAG_DISABLED_STAGES,
@@ -95,6 +101,9 @@ function readRagEnvInput(): RagEnvInput {
     RAG_LEXICAL_TRANSLATION: process.env.RAG_LEXICAL_TRANSLATION ?? env.RAG_LEXICAL_TRANSLATION,
     RAG_LEXICAL_DICTIONARY: process.env.RAG_LEXICAL_DICTIONARY ?? env.RAG_LEXICAL_DICTIONARY,
     RAG_LEXICAL_STEM_IT: process.env.RAG_LEXICAL_STEM_IT ?? env.RAG_LEXICAL_STEM_IT,
+    RAG_TERMINOLOGY: process.env.RAG_TERMINOLOGY,
+    RAG_TERMINOLOGY_DENSE: process.env.RAG_TERMINOLOGY_DENSE,
+    RAG_TERMINOLOGY_MINING: process.env.RAG_TERMINOLOGY_MINING,
     RAG_VERSION_SCOPE: process.env.RAG_VERSION_SCOPE ?? env.RAG_VERSION_SCOPE,
     RAG_EMBED_VERSION_SCOPE: process.env.RAG_EMBED_VERSION_SCOPE ?? env.RAG_EMBED_VERSION_SCOPE,
     RAG_TABLE_LOOKUP: process.env.RAG_TABLE_LOOKUP ?? env.RAG_TABLE_LOOKUP,
@@ -201,4 +210,8 @@ export function setRagDepsForTests(partial: Partial<RagDeps>): void {
 export function resetRagDepsForTests(): void {
   overrides = {};
   defaultQueryLlm = null;
+}
+/** D-42: the effective lexical version of the configuration this process loads, the value the search stage uses. */
+export function currentLexicalVersion(): number {
+  return effectiveLexicalVersion(loadRagConfig(getRagDeps().ragEnv()));
 }

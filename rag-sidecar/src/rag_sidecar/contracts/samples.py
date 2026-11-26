@@ -2328,6 +2328,7 @@ def _phase42_models() -> dict[str, Any]:
     from rag_sidecar.contracts.retrieval import (
         DiversityParams,
         DupClusterParams,
+        DupClusterParamsFile,
         IdentifierIndexEntry,
         IdentifierPattern,
         TableLookupParams,
@@ -2347,6 +2348,7 @@ def _phase42_models() -> dict[str, Any]:
         "TableLookupParams": TableLookupParams(),
         "DiversityParams": DiversityParams(),
         "DupClusterParams": DupClusterParams(),
+        "DupClusterParamsFile": DupClusterParamsFile(),
         "IdentifierPattern": IdentifierPattern(name="reference-code", pattern="[A-Z]{2}-[0-9]{4}"),
         "IdentifierIndexEntry": IdentifierIndexEntry(raw="AB-0012", normalized="ab0012"),
         "VersionRange": VersionRange.model_validate({"from": "2024-01-01", "to": "2024-12-31"}),
@@ -2766,8 +2768,256 @@ def _phase33_variants() -> dict[str, dict[str, Any]]:
     return variants
 
 
+def _finetune_models() -> dict[str, Any]:
+    from rag_sidecar.contracts import finetune as ft
+
+    tenant = "s:default"
+    sha = hashlib.sha256(b"finetune-sample").hexdigest()
+    revision = "0" * 40
+    document = "00000000-0000-4000-8000-000000000601"
+    unit = [1.0] + [0.0] * (ft.FINETUNE_DIMS - 1)
+    params = ft.MiningParams(
+        relative_margin=0.05,
+        range_min=0,
+        range_max=50,
+        num_negatives=5,
+        sampling_strategy="top",
+        neighbour_window=1,
+        fn_audit_sample=50,
+        fn_audit_max_upper=0.15,
+    )
+    recipe = ft.TrainingRecipe(
+        loss="CachedMultipleNegativesRankingLoss",
+        mini_batch_size=32,
+        per_device_train_batch_size=128,
+        batch_sampler="no_duplicates",
+        learning_rate=2e-5,
+        warmup_ratio=0.1,
+        num_train_epochs=1,
+        bf16=False,
+        seed=42,
+        eval_steps=100,
+        metric_for_best_model="ndcg_at_10",
+        load_best_model_at_end=True,
+        gist=ft.GistOptions(enabled=False, cached=True, guide="base_model"),
+        matryoshka=ft.MatryoshkaOptions(enabled=False, dims=[1024, 512, 256]),
+    )
+    metrics = ft.IrMetrics(n=10, recall_at_10=0.8, mrr_at_10=0.6, ndcg_at_10=0.65)
+    block = ft.ModelMetricsBlock(
+        overall=metrics,
+        by_language={"en": metrics},
+        by_pair={"en->en": metrics},
+        by_source={"synthetic": metrics, "mined": metrics},
+    )
+    offline = ft.OfflineEvalReport(
+        models=ft.OfflineModels(base=block, finetuned=block, production=block),
+        deltas=[
+            ft.MetricDelta(
+                comparison="finetuned_vs_production",
+                metric="ndcg_at_10",
+                slice="overall",
+                delta=0.04,
+                ci_low=0.01,
+                ci_high=0.07,
+            )
+        ],
+        noise_band=0.02,
+        passed=True,
+        reasons=[],
+    )
+    probe = ft.ProbeSet(
+        texts=list(ft.PROBE_TEXTS),
+        query_prompt="query: ",
+        document_prompt="passage: ",
+        vectors=[unit, unit, unit],
+    )
+    return {
+        "FinetuneConfig": ft.FinetuneConfig(
+            generator_model="claude-sonnet-5-5",
+            judge_model="claude-sonnet-5-5",
+            prompts=ft.PromptVersions(generate="ft-generate-v1", judge="ft-judge-v1"),
+            generation=ft.GenerationConfig(
+                queries_per_chunk=3,
+                styles=["keyword", "question", "colloquial"],
+                cross_language_share=0.15,
+                min_chunk_tokens=40,
+                batch_chars=60000,
+                max_tokens=8000,
+            ),
+            filters=ft.FilterConfig(
+                min_query_chars={"en": 3},
+                max_query_chars={"en": 300},
+                containment_ngram=5,
+                verbatim_containment=0.6,
+                lcs_ratio=0.7,
+                near_dup_ngram=3,
+                near_dup_jaccard=0.8,
+                judge_min_confidence=0.7,
+                golden_overlap_jaccard=0.8,
+            ),
+            mined=ft.MinedConfig(mined_weight=2),
+            mining=params,
+            split=ft.SplitConfig(rule=ft.FINETUNE_SPLIT_RULE),
+            base_models=[
+                ft.BaseModelSpec(
+                    id="example-org/example-embedding",
+                    revision=revision,
+                    dims=1024,
+                    licence="Apache-2.0",
+                    max_seq_length=512,
+                    default=True,
+                    query_prompt="query: ",
+                    document_prompt="passage: ",
+                    prompt_version="prefix-v1",
+                )
+            ],
+            training=recipe,
+            evaluation=ft.EvaluationConfig(
+                k=10, bootstrap_resamples=1000, bootstrap_seed=7, noise_config="eval/config/noise.json"
+            ),
+            retention=ft.RetentionConfig(retention_days=90),
+            export=ft.ExportConfig(batch_rows=500),
+            prices=ft.PriceTable(
+                generator=ft.TokenPrice(),
+                judge=ft.TokenPrice(),
+            ),
+        ),
+        "ExportedChunk": ft.ExportedChunk(
+            tenant_key=tenant,
+            document_id=document,
+            chunk_id="chunk-0001",
+            chunk_index=0,
+            content_hash=sha,
+            language="en",
+            split="train",
+            text="A neutral synthetic sentence about a widget and its colour.",
+            token_count=12,
+            is_golden_test_evidence=False,
+        ),
+        "DatasetManifest": ft.DatasetManifest(
+            run_id="run-0001",
+            purpose="private",
+            split_rule=ft.FINETUNE_SPLIT_RULE,
+            tenant_keys=[tenant],
+            chunks={"train": 8, "dev": 1, "test": 1},
+            counts={"train": {"synthetic": 24, "mined": 2}, "dev": {"synthetic": 3}, "test": {"synthetic": 3}},
+            files={"chunks.jsonl": sha, "pairs/train.jsonl": sha},
+            created_at="2026-11-26T10:00:00Z",
+        ),
+        "SyntheticQuery": ft.SyntheticQuery(
+            chunk_ref=0, language="en", style="question", query="what colour is the widget"
+        ),
+        "SyntheticQueryBatch": ft.SyntheticQueryBatch(
+            items=[
+                ft.SyntheticQuery(chunk_ref=0, language="en", style="keyword", query="widget colour"),
+                ft.SyntheticQuery(chunk_ref=0, language="en", style="question", query="what colour is the widget"),
+            ]
+        ),
+        "AnswerabilityVerdict": ft.AnswerabilityVerdict(answerable=True, confidence=0.9),
+        "FilterReport": ft.FilterReport(
+            kept=24,
+            dropped={"verbatim_copy": 2, "near_duplicate": 1},
+            by_language={"en": ft.LanguageFilterCounts(kept=24, dropped=3)},
+            round_trip="not_applied",
+            judge_skipped=False,
+        ),
+        "FinetunePair": ft.FinetunePair(
+            pair_id="pair-0001",
+            tenant_key=tenant,
+            language="en",
+            positive_language="en",
+            anchor="what colour is the widget",
+            positive_chunk_id="chunk-0001",
+            positive="A neutral synthetic sentence about a widget and its colour.",
+            negatives=[
+                ft.FinetuneNegative(
+                    chunk_id="chunk-0002",
+                    text="A neutral synthetic sentence about a gadget and its size.",
+                    negative_source="mined",
+                )
+            ],
+            source="synthetic",
+            split="train",
+            weight=1,
+        ),
+        "MiningReport": ft.MiningReport(
+            miner="vectors",
+            pairs=26,
+            with_full_negatives=25,
+            pairs_only=1,
+            mean_negatives=4.8,
+            round_trip_miss=0,
+            fn_audit=ft.FnAudit(sampled=50, answerable=2, upper_95=0.12, passed=True, skipped=False),
+            params=params,
+        ),
+        "TrainingRunConfig": ft.TrainingRunConfig(
+            run_id="run-0001",
+            base_model="example-org/example-embedding",
+            base_revision=revision,
+            dataset_manifest_sha256=sha,
+            config_sha256=sha,
+            seed=42,
+            git_commit="0000000",
+            library_versions=ft.LibraryVersions(
+                torch="2.15.0", transformers="5.17.0", sentence_transformers="6.2.0", datasets="4.0.0"
+            ),
+            recipe=recipe,
+        ),
+        "TrainingRunReport": ft.TrainingRunReport(
+            run_id="run-0001",
+            training_config_sha256=sha,
+            examples={"ntuple": 25, "pairs": 1},
+            steps=10,
+            final_train_loss=0.42,
+            best_step=10,
+            best_dev_ndcg_at_10=0.7,
+            duration_seconds=120.0,
+            device="cpu",
+        ),
+        "IrMetrics": metrics,
+        "OfflineEvalReport": offline,
+        "ProbeSet": probe,
+        "ModelVersionCard": ft.ModelVersionCard(
+            id="ft-example-0001",
+            base_model="example-org/example-embedding",
+            base_revision=revision,
+            dims=1024,
+            scope="tenant",
+            tenant_keys=[tenant],
+            dataset_manifest_sha256=sha,
+            training_config_sha256=sha,
+            query_prompt="query: ",
+            document_prompt="passage: ",
+            offline=offline,
+            status="candidate",
+            probe=probe,
+            artifact_uri="s3://models-bucket/ft/run-0001/",
+        ),
+        "QueryVectorRow": ft.QueryVectorRow(
+            pair_id="pair-0001", profile_id="profile-a", model="example-embedding", dims=3, vector=[1.0, 0.0, 0.0]
+        ),
+        "ChunkVectorRow": ft.ChunkVectorRow(
+            tenant_key=tenant,
+            chunk_id="chunk-0001",
+            row_index=0,
+            profile_id="profile-a",
+            model="example-embedding",
+            dims=3,
+        ),
+        "VectorFileHeader": ft.VectorFileHeader(
+            tenant_key=tenant,
+            profile_id="profile-a",
+            model="example-embedding",
+            dims=3,
+            rows=1,
+            dtype="float32-le",
+            sha256=sha,
+        ),
+    }
+
+
 def build_samples() -> dict[str, dict[str, Any]]:
-    models = {**_models(), **_feedback_loop_models(), **_phase42_models(), **_terminology_models(), **_phase33_models()}
+    models = {**_models(), **_feedback_loop_models(), **_phase42_models(), **_terminology_models(), **_phase33_models(), **_finetune_models()}
     samples = {name: model.model_dump(mode="json") for name, model in models.items()}
     variants: dict[str, dict[str, Any]] = {
         "AnswerRecord:pending_unlinked": {

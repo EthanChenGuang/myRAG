@@ -135,6 +135,13 @@ class DupClusterParams(_Contract):
     )
 
 
+class DupClusterParamsFile(DupClusterParams):
+    """D-49: eval/config/dup-cluster-params.json, written only by `rag_eval.calibrate dup-clusters`."""
+
+    provenance: ConfigProvenance = Field(default_factory=lambda: ConfigProvenance(source="defaults"))
+    config_hash: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+
+
 class TableRow(_Contract):
     """D-45: one parsed Markdown table row; cell_tokens holds one token array per cell."""
 

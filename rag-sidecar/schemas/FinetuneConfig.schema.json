@@ -1,0 +1,751 @@
+{
+  "$defs": {
+    "BaseModelSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "default": {
+          "title": "Default",
+          "type": "boolean"
+        },
+        "dims": {
+          "const": 1024,
+          "title": "Dims",
+          "type": "integer"
+        },
+        "document_prompt": {
+          "maxLength": 1024,
+          "title": "Document Prompt",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,95}/[A-Za-z0-9][A-Za-z0-9._-]{0,95}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "licence": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9.+-]{0,31}$",
+          "title": "Licence",
+          "type": "string"
+        },
+        "max_seq_length": {
+          "minimum": 16,
+          "title": "Max Seq Length",
+          "type": "integer"
+        },
+        "prompt_version": {
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,31}$",
+          "title": "Prompt Version",
+          "type": "string"
+        },
+        "query_prompt": {
+          "maxLength": 1024,
+          "title": "Query Prompt",
+          "type": "string"
+        },
+        "revision": {
+          "pattern": "^[a-f0-9]{40}$",
+          "title": "Revision",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "revision",
+        "dims",
+        "licence",
+        "max_seq_length",
+        "default",
+        "query_prompt",
+        "document_prompt",
+        "prompt_version"
+      ],
+      "title": "BaseModelSpec",
+      "type": "object"
+    },
+    "EvaluationConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "bootstrap_resamples": {
+          "maximum": 100000,
+          "minimum": 100,
+          "title": "Bootstrap Resamples",
+          "type": "integer"
+        },
+        "bootstrap_seed": {
+          "minimum": 0,
+          "title": "Bootstrap Seed",
+          "type": "integer"
+        },
+        "k": {
+          "const": 10,
+          "title": "K",
+          "type": "integer"
+        },
+        "noise_config": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]{0,255}$",
+          "title": "Noise Config",
+          "type": "string"
+        }
+      },
+      "required": [
+        "k",
+        "bootstrap_resamples",
+        "bootstrap_seed",
+        "noise_config"
+      ],
+      "title": "EvaluationConfig",
+      "type": "object"
+    },
+    "ExportConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "batch_rows": {
+          "maximum": 10000,
+          "minimum": 1,
+          "title": "Batch Rows",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "batch_rows"
+      ],
+      "title": "ExportConfig",
+      "type": "object"
+    },
+    "FilterConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "containment_ngram": {
+          "maximum": 10,
+          "minimum": 1,
+          "title": "Containment Ngram",
+          "type": "integer"
+        },
+        "golden_overlap_jaccard": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Golden Overlap Jaccard",
+          "type": "number"
+        },
+        "judge_min_confidence": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Judge Min Confidence",
+          "type": "number"
+        },
+        "lcs_ratio": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Lcs Ratio",
+          "type": "number"
+        },
+        "max_query_chars": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "propertyNames": {
+            "enum": [
+              "zh",
+              "en",
+              "it"
+            ]
+          },
+          "title": "Max Query Chars",
+          "type": "object"
+        },
+        "min_query_chars": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "propertyNames": {
+            "enum": [
+              "zh",
+              "en",
+              "it"
+            ]
+          },
+          "title": "Min Query Chars",
+          "type": "object"
+        },
+        "near_dup_jaccard": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Near Dup Jaccard",
+          "type": "number"
+        },
+        "near_dup_ngram": {
+          "maximum": 10,
+          "minimum": 1,
+          "title": "Near Dup Ngram",
+          "type": "integer"
+        },
+        "verbatim_containment": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Verbatim Containment",
+          "type": "number"
+        }
+      },
+      "required": [
+        "min_query_chars",
+        "max_query_chars",
+        "containment_ngram",
+        "verbatim_containment",
+        "lcs_ratio",
+        "near_dup_ngram",
+        "near_dup_jaccard",
+        "judge_min_confidence",
+        "golden_overlap_jaccard"
+      ],
+      "title": "FilterConfig",
+      "type": "object"
+    },
+    "GenerationConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "batch_chars": {
+          "minimum": 1000,
+          "title": "Batch Chars",
+          "type": "integer"
+        },
+        "cross_language_share": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Cross Language Share",
+          "type": "number"
+        },
+        "max_tokens": {
+          "minimum": 256,
+          "title": "Max Tokens",
+          "type": "integer"
+        },
+        "min_chunk_tokens": {
+          "minimum": 0,
+          "title": "Min Chunk Tokens",
+          "type": "integer"
+        },
+        "queries_per_chunk": {
+          "maximum": 10,
+          "minimum": 1,
+          "title": "Queries Per Chunk",
+          "type": "integer"
+        },
+        "styles": {
+          "items": {
+            "enum": [
+              "keyword",
+              "question",
+              "colloquial"
+            ],
+            "type": "string"
+          },
+          "maxItems": 10,
+          "minItems": 1,
+          "title": "Styles",
+          "type": "array"
+        }
+      },
+      "required": [
+        "queries_per_chunk",
+        "styles",
+        "cross_language_share",
+        "min_chunk_tokens",
+        "batch_chars",
+        "max_tokens"
+      ],
+      "title": "GenerationConfig",
+      "type": "object"
+    },
+    "GistOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "cached": {
+          "title": "Cached",
+          "type": "boolean"
+        },
+        "enabled": {
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "guide": {
+          "const": "base_model",
+          "title": "Guide",
+          "type": "string"
+        }
+      },
+      "required": [
+        "enabled",
+        "cached",
+        "guide"
+      ],
+      "title": "GistOptions",
+      "type": "object"
+    },
+    "MatryoshkaOptions": {
+      "additionalProperties": false,
+      "properties": {
+        "dims": {
+          "items": {
+            "type": "integer"
+          },
+          "maxItems": 8,
+          "minItems": 1,
+          "title": "Dims",
+          "type": "array"
+        },
+        "enabled": {
+          "title": "Enabled",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "enabled",
+        "dims"
+      ],
+      "title": "MatryoshkaOptions",
+      "type": "object"
+    },
+    "MinedConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "mined_weight": {
+          "maximum": 10,
+          "minimum": 1,
+          "title": "Mined Weight",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "mined_weight"
+      ],
+      "title": "MinedConfig",
+      "type": "object"
+    },
+    "MiningParams": {
+      "additionalProperties": false,
+      "properties": {
+        "absolute_margin": {
+          "anyOf": [
+            {
+              "maximum": 2,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Absolute Margin"
+        },
+        "fn_audit_max_upper": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Fn Audit Max Upper",
+          "type": "number"
+        },
+        "fn_audit_sample": {
+          "minimum": 0,
+          "title": "Fn Audit Sample",
+          "type": "integer"
+        },
+        "max_score": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": -1,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Score"
+        },
+        "min_score": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": -1,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min Score"
+        },
+        "neighbour_window": {
+          "maximum": 10,
+          "minimum": 0,
+          "title": "Neighbour Window",
+          "type": "integer"
+        },
+        "num_negatives": {
+          "maximum": 32,
+          "minimum": 1,
+          "title": "Num Negatives",
+          "type": "integer"
+        },
+        "range_max": {
+          "minimum": 1,
+          "title": "Range Max",
+          "type": "integer"
+        },
+        "range_min": {
+          "minimum": 0,
+          "title": "Range Min",
+          "type": "integer"
+        },
+        "relative_margin": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Relative Margin"
+        },
+        "round_trip_k": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Round Trip K"
+        },
+        "sampling_strategy": {
+          "enum": [
+            "top",
+            "random"
+          ],
+          "title": "Sampling Strategy",
+          "type": "string"
+        }
+      },
+      "required": [
+        "range_min",
+        "range_max",
+        "num_negatives",
+        "sampling_strategy",
+        "neighbour_window",
+        "fn_audit_sample",
+        "fn_audit_max_upper"
+      ],
+      "title": "MiningParams",
+      "type": "object"
+    },
+    "PriceTable": {
+      "additionalProperties": false,
+      "description": "Null means unknown cost: dry runs report the token projection and no dollar figure (D-06).",
+      "properties": {
+        "generator": {
+          "$ref": "#/$defs/TokenPrice"
+        },
+        "gpu_hour_usd": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gpu Hour Usd"
+        },
+        "judge": {
+          "$ref": "#/$defs/TokenPrice"
+        },
+        "reembed_usd_per_mtok": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reembed Usd Per Mtok"
+        }
+      },
+      "required": [
+        "generator",
+        "judge"
+      ],
+      "title": "PriceTable",
+      "type": "object"
+    },
+    "PromptVersions": {
+      "additionalProperties": false,
+      "properties": {
+        "generate": {
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,31}$",
+          "title": "Generate",
+          "type": "string"
+        },
+        "judge": {
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,31}$",
+          "title": "Judge",
+          "type": "string"
+        }
+      },
+      "required": [
+        "generate",
+        "judge"
+      ],
+      "title": "PromptVersions",
+      "type": "object"
+    },
+    "RetentionConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "retention_days": {
+          "maximum": 3650,
+          "minimum": 1,
+          "title": "Retention Days",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "retention_days"
+      ],
+      "title": "RetentionConfig",
+      "type": "object"
+    },
+    "SplitConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "rule": {
+          "const": "ft-sha256-first8hex-mod100-80-10-10",
+          "title": "Rule",
+          "type": "string"
+        }
+      },
+      "required": [
+        "rule"
+      ],
+      "title": "SplitConfig",
+      "type": "object"
+    },
+    "TokenPrice": {
+      "additionalProperties": false,
+      "properties": {
+        "input_usd_per_mtok": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Input Usd Per Mtok"
+        },
+        "output_usd_per_mtok": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Usd Per Mtok"
+        }
+      },
+      "title": "TokenPrice",
+      "type": "object"
+    },
+    "TrainingRecipe": {
+      "additionalProperties": false,
+      "properties": {
+        "batch_sampler": {
+          "const": "no_duplicates",
+          "title": "Batch Sampler",
+          "type": "string"
+        },
+        "bf16": {
+          "title": "Bf16",
+          "type": "boolean"
+        },
+        "eval_steps": {
+          "minimum": 1,
+          "title": "Eval Steps",
+          "type": "integer"
+        },
+        "gist": {
+          "$ref": "#/$defs/GistOptions"
+        },
+        "learning_rate": {
+          "exclusiveMinimum": 0,
+          "maximum": 0.01,
+          "title": "Learning Rate",
+          "type": "number"
+        },
+        "load_best_model_at_end": {
+          "title": "Load Best Model At End",
+          "type": "boolean"
+        },
+        "loss": {
+          "enum": [
+            "CachedMultipleNegativesRankingLoss",
+            "MultipleNegativesRankingLoss"
+          ],
+          "title": "Loss",
+          "type": "string"
+        },
+        "matryoshka": {
+          "$ref": "#/$defs/MatryoshkaOptions"
+        },
+        "metric_for_best_model": {
+          "const": "ndcg_at_10",
+          "title": "Metric For Best Model",
+          "type": "string"
+        },
+        "mini_batch_size": {
+          "minimum": 1,
+          "title": "Mini Batch Size",
+          "type": "integer"
+        },
+        "num_train_epochs": {
+          "maximum": 20,
+          "minimum": 1,
+          "title": "Num Train Epochs",
+          "type": "integer"
+        },
+        "per_device_train_batch_size": {
+          "minimum": 2,
+          "title": "Per Device Train Batch Size",
+          "type": "integer"
+        },
+        "seed": {
+          "minimum": 0,
+          "title": "Seed",
+          "type": "integer"
+        },
+        "warmup_ratio": {
+          "maximum": 0.5,
+          "minimum": 0,
+          "title": "Warmup Ratio",
+          "type": "number"
+        }
+      },
+      "required": [
+        "loss",
+        "mini_batch_size",
+        "per_device_train_batch_size",
+        "batch_sampler",
+        "learning_rate",
+        "warmup_ratio",
+        "num_train_epochs",
+        "bf16",
+        "seed",
+        "eval_steps",
+        "metric_for_best_model",
+        "load_best_model_at_end",
+        "gist",
+        "matryoshka"
+      ],
+      "title": "TrainingRecipe",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "base_models": {
+      "items": {
+        "$ref": "#/$defs/BaseModelSpec"
+      },
+      "minItems": 1,
+      "title": "Base Models",
+      "type": "array"
+    },
+    "evaluation": {
+      "$ref": "#/$defs/EvaluationConfig"
+    },
+    "export": {
+      "$ref": "#/$defs/ExportConfig"
+    },
+    "filters": {
+      "$ref": "#/$defs/FilterConfig"
+    },
+    "generation": {
+      "$ref": "#/$defs/GenerationConfig"
+    },
+    "generator_model": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$",
+      "title": "Generator Model",
+      "type": "string"
+    },
+    "judge_model": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$",
+      "title": "Judge Model",
+      "type": "string"
+    },
+    "mined": {
+      "$ref": "#/$defs/MinedConfig"
+    },
+    "mining": {
+      "$ref": "#/$defs/MiningParams"
+    },
+    "prices": {
+      "$ref": "#/$defs/PriceTable"
+    },
+    "prompts": {
+      "$ref": "#/$defs/PromptVersions"
+    },
+    "retention": {
+      "$ref": "#/$defs/RetentionConfig"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "split": {
+      "$ref": "#/$defs/SplitConfig"
+    },
+    "training": {
+      "$ref": "#/$defs/TrainingRecipe"
+    }
+  },
+  "required": [
+    "generator_model",
+    "judge_model",
+    "prompts",
+    "generation",
+    "filters",
+    "mined",
+    "mining",
+    "split",
+    "base_models",
+    "training",
+    "evaluation",
+    "retention",
+    "export",
+    "prices"
+  ],
+  "title": "FinetuneConfig",
+  "type": "object"
+}

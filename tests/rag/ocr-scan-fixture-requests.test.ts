@@ -109,7 +109,7 @@ describe('Docling through the sidecar, RAG_SUPPORTED_LANGUAGES=zh,it with primar
   });
 
   test('the request carries the registry OCR codes and equals the recorded request body', async () => {
-    await ingestScan({ RAG_PARSER: 'docling' });
+    await ingestScan({ RAG_PARSER: 'docling', RAG_TABLE_HEADER_REPEAT: 'profile' });
     expect(fake.uploads).toHaveLength(1);
     const upload = fake.uploads[0];
     expect(upload?.fileSha256).toBe(row?.sha256);
@@ -118,7 +118,7 @@ describe('Docling through the sidecar, RAG_SUPPORTED_LANGUAGES=zh,it with primar
   });
 
   test('the parse text that reaches the chunk stage equals the expected text', async () => {
-    await ingestScan({ RAG_PARSER: 'docling' });
+    await ingestScan({ RAG_PARSER: 'docling', RAG_TABLE_HEADER_REPEAT: 'profile' });
     expect(chunkerInputs).toHaveLength(1);
     const input = chunkerInputs[0];
     expect(blocks(input?.markdown ?? '')).toBe(expectedText());

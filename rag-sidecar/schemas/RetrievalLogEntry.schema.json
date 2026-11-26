@@ -413,6 +413,12 @@
       "default": null,
       "title": "Top Score"
     },
+    "topk_redundancy": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Topk Redundancy",
+      "type": "number"
+    },
     "trace_id": {
       "maxLength": 128,
       "minLength": 1,

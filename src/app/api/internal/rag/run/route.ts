@@ -13,11 +13,14 @@ import {
   countTokens,
   createCitationSession,
   createTraceCollector,
+  awaitPreGenerationDelay,
+  traceCacheState,
+  type TraceCollector,
   detectLanguage,
   evalScope,
   finishTrace,
   groundednessEligibility,
-  LEXICAL_VERSION,
+  currentLexicalVersion,
   OPTIONAL_STAGES,
   parseRetrievalFilters,
   resolveScopesFilter,
@@ -28,6 +31,7 @@ import {
   runRetrieval,
   scopeKey,
   scoreAnswerGroundedness,
+  topkRedundancy,
   type AnswerGroundedness,
   type CitationSession,
   type ClaudeTurnFacts,
@@ -70,6 +74,7 @@ function toRetrievalOverrides(input: RetrievalOverridesInput | undefined): Retri
   if (input.chunking_profile_by_doc_type && Object.keys(input.chunking_profile_by_doc_type).length > 0) {
     out.chunkingProfileByDocType = { ...input.chunking_profile_by_doc_type };
   }
+  if (input.table_lookup != null) out.tableLookup = { ...input.table_lookup };
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
@@ -90,6 +95,7 @@ function toFilterBody(input: NonNullable<RetrievalFiltersInput>): Record<string,
   }
   if (input.scopes != null) body.scopes = input.scopes;
   if (input.include_untagged === true) body.includeUntagged = true;
+  if (input.versions != null) body.versions = input.versions;
   return body;
 }
 
@@ -211,7 +217,7 @@ function v2TraceFields(result: RetrievalResult) {
     retrieval_config_hash: result.retrievalConfigHash ?? null,
     context_tokens: countTokens(result.context),
     query_language: result.queryLanguage ?? null,
-    retrieval_versions: { lexical: LEXICAL_VERSION, rerank_text: RERANK_TEXT_VERSION },
+    retrieval_versions: { lexical: currentLexicalVersion(), rerank_text: RERANK_TEXT_VERSION },
     refusal: record
       ? {
           decision: record.decision,
@@ -222,6 +228,17 @@ function v2TraceFields(result: RetrievalResult) {
           cell_key: record.cellKey,
         }
       : null,
+  };
+}
+
+/** D-25 on the eval trace: present only when an answer was generated. */
+function timingTraceFields(collector: TraceCollector) {
+  const timing = collector.timing();
+  if (!timing) return {};
+  return {
+    ...(timing.ttft_ms !== undefined ? { ttft_ms: timing.ttft_ms } : {}),
+    ...(timing.pre_generation_ms !== undefined ? { pre_generation_ms: timing.pre_generation_ms } : {}),
+    cache: timing.cache,
   };
 }
 
@@ -379,6 +396,7 @@ async function generateClaudeAnswer(input: {
 }
 
 export async function POST(req: NextRequest) {
+  const requestReceivedAt = Date.now();
   const access = checkEvalAccess(req.headers, {
     nodeEnv: process.env.NODE_ENV,
     endpointEnabled: env.RAG_EVAL_ENDPOINT_ENABLED,
@@ -472,6 +490,7 @@ export async function POST(req: NextRequest) {
       ...(classification ? { classification } : {}),
     });
 
+    collector.setCacheState(traceCacheState(result));
     try {
       if (result.status === 'error') {
         console.error('[RAG Eval] retrieval failed:', { reason: result.reason });
@@ -491,6 +510,10 @@ export async function POST(req: NextRequest) {
       let answer: string | null = null;
       const refused = result.refusalCandidate || result.refusal?.decision === 'refuse';
       if (generatorModel !== null && !refused) {
+        // D-25: only a turn that generates records timing, so a retrieval-only run traces as before
+        collector.markRequestStart(requestReceivedAt);
+        await awaitPreGenerationDelay();
+        collector.markGenerationStart();
         const generationStart = collector.now();
         citationSession?.attach(result);
         const answerLanguage = answerLanguageOptions(result);
@@ -521,6 +544,8 @@ export async function POST(req: NextRequest) {
           console.error('[RAG Eval] generation failed:', detail);
           return NextResponse.json({ error: `generation failed: ${detail}` }, { status: 500 });
         }
+        // The eval answer is generated whole, so its first text is the full answer
+        if (answer !== null && answer.length > 0) collector.markFirstTextDelta();
         collector.record({ name: 'generation', status: 'ok', startedAt: generationStart, endedAt: collector.now() });
       }
       const citationFields = citationTraceFields(citationSession);
@@ -564,6 +589,7 @@ export async function POST(req: NextRequest) {
       const injection = injectionTraceOf(result, documentNames);
       const effectiveConfig = buildEffectiveConfig({ security: injectionTraceVersions() });
       effectiveConfig.generator_model = generatorModel;
+      const redundancy = topkRedundancy(result.kept);
       const trace = {
         schema_version: 1 as const,
         item_id: itemId ?? null,
@@ -593,7 +619,11 @@ export async function POST(req: NextRequest) {
           ...(chunk.legs !== undefined ? { legs: chunk.legs } : {}),
           ...(chunk.language !== undefined ? { language: chunk.language } : {}),
         })),
-        kept: result.kept,
+        kept: result.kept.map(({ dupClusterId, alsoIn: _alsoIn, ...chunk }) => ({
+          ...chunk,
+          ...(dupClusterId ? { dup_cluster_id: dupClusterId } : {}),
+        })),
+        ...(redundancy !== null ? { topk_redundancy: redundancy } : {}),
         used_documents: result.usedDocuments.map((doc) => ({
           document_id: doc.id,
           name: doc.name,
@@ -612,6 +642,7 @@ export async function POST(req: NextRequest) {
           ? { citation_strategy: citationFields.citation_strategy, invalid_citations: citationFields.invalid_citations }
           : {}),
         ...(groundedness ? { groundedness } : {}),
+        ...(answer !== null ? timingTraceFields(collector) : {}),
         stage_latency_ms: collector.toStageLatency(),
         stage_status: collector.toStageStatus(),
         effective_config: effectiveConfig,

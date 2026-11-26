@@ -398,6 +398,56 @@
       "knownGaps": []
     },
     {
+      "name": "RAG_FINETUNE",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_FT_EMBED_API_KEY",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_FT_SLOT_A_BASE_URL",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_FT_SLOT_A_MODEL",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_FT_SLOT_A_QUERY_PROMPT",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_FT_SLOT_A_DOCUMENT_PROMPT",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_FT_SLOT_B_BASE_URL",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_FT_SLOT_B_MODEL",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_FT_SLOT_B_QUERY_PROMPT",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_FT_SLOT_B_DOCUMENT_PROMPT",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_DOMAIN_EMBEDDING_MAX_LEGS",
       "status": "managed",
       "knownGaps": []
@@ -1217,6 +1267,12 @@
       "name": "QDRANT_READ_API_KEY",
       "status": "managed",
       "knownGaps": []
+    },
+    {
+      "name": "RAG_OPENAI_EMBEDDINGS_VIA",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Host for the OpenAI embedding model: openai or openrouter (same model, same vectors; no Batch API through OpenRouter)"
     },
     {
       "name": "RAG_SECTION_RULES",

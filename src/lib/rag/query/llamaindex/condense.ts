@@ -1,4 +1,4 @@
-import { CondensedQuerySchema } from '@/lib/rag-eval/contracts.generated';
+import { CondensedQuerySchema, type CondensedQuery } from '@/lib/rag-eval/contracts.generated';
 import { getRagDeps } from '../../deps';
 import type { HistoryTurn } from '../../types';
 import { checkCondensed, DEFAULT_POST_CHECK_LIMITS, type PostCheckLimits, type PostCheckSkip } from '../post-checks';
@@ -37,6 +37,11 @@ export async function llamaindexCondense(input: CondenseInput): Promise<Condense
   const output = await getRagDeps()
     .queryLlm()
     .generate({ transform: 'condense', schema: CondensedQuerySchema, system: SYSTEM, prompt, input: input.query, signal: input.signal });
+  return finishCondense(input, output);
+}
+
+/** The D-15 post-checks on a CondensedQuery; shared by both frameworks so their results have one shape (D-02). */
+export function finishCondense(input: Pick<CondenseInput, 'query' | 'protectedTokens' | 'limits'>, output: CondensedQuery): CondenseResult {
   const text = output.unchanged ? input.query : output.standalone;
   const checked = checkCondensed({ text, input: input.query, protectedTokens: input.protectedTokens }, input.limits ?? DEFAULT_POST_CHECK_LIMITS);
   return { standalone: checked.text, passThrough: checked.passThrough, skip: checked.skip };

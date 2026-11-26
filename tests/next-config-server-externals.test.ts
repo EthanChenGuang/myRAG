@@ -66,6 +66,13 @@ describe('next.config.js server externals', () => {
     expect(config.serverExternalPackages ?? []).toContain('tiktoken');
   });
 
+  it('lists the LangChain packages and langsmith so their nested zod 4 stays out of the bundle', () => {
+    const config = loadNextConfig();
+    for (const name of ['@langchain/core', '@langchain/classic', '@langchain/openai', 'langsmith']) {
+      expect(config.serverExternalPackages ?? []).toContain(name);
+    }
+  });
+
   it('keeps the React Compiler and Turbopack root settings', () => {
     const config = loadNextConfig();
     expect(config.reactCompiler).toBe(true);

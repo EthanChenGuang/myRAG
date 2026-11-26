@@ -1,8 +1,10 @@
 import { redisvlInvalidationTarget } from '../../cache/emit';
+import { clusterPublishedDocument, dupClustersEnabled } from '../../dedupe/cluster';
 import { scheduleAfterResponse } from '../../trace/schedule';
 import { scopeKey } from '../../tenant/scope';
 import { buildIngestFingerprint, collectFingerprintParts } from '../fingerprint';
 import { afterPublish } from '../post-publish';
+import { phase32TraceOn } from '../trace';
 import { requireDocument, type IngestResult, type IngestStatus, type StageContext, type StageOutcome, type StageSpec } from '../types';
 import { recordReplacesIntent } from '../versions/admin';
 import { IngestWriterError } from '../writer';
@@ -44,14 +46,40 @@ async function holdForReview(ctx: StageContext, documentId: string, version: num
 /** D-10: the version records how it was ingested before it is published or held; the same builder serves inline and queued runs. */
 async function writeFingerprint(ctx: StageContext, documentId: string): Promise<void> {
   const parts = collectFingerprintParts(ctx);
-  await ctx.writer.setFields(documentId, { ingest_fingerprint: buildIngestFingerprint(parts), metadata: { ingest_fingerprint_parts: parts } });
+  const fingerprint = buildIngestFingerprint(parts);
+  await ctx.writer.setFields(documentId, { ingest_fingerprint: fingerprint, metadata: { ingest_fingerprint_parts: parts } });
+  // D-51: the hash only, and only while a Phase 3.2 ingestion switch is on, so today's trace is unchanged.
+  if (phase32TraceOn(ctx.config)) ctx.state.traceFacts = { ...ctx.state.traceFacts, ingest_fingerprint: fingerprint };
+}
+
+/** D-51: the approval state of this version, while RAG_UPLOAD_APPROVAL is on (identify only records a decision then). */
+function recordApprovalState(ctx: StageContext, held: boolean): void {
+  if (!ctx.state.approval) return;
+  const required = ctx.state.approval.required === true;
+  ctx.state.traceFacts = { ...ctx.state.traceFacts, approval_state: !required ? 'not_required' : held ? 'pending_review' : 'required' };
+}
+
+/**
+ * D-19: duplicate clustering is a non-fatal sub-step of publish, not a stage. It runs only for a version that became current; a failure
+ * is logged with the error name and repaired by `npm run rag:dup-clusters`.
+ */
+async function clusterAfterPublish(ctx: StageContext, documentId: string): Promise<void> {
+  try {
+    if (!(await dupClustersEnabled())) return;
+    await clusterPublishedDocument(ctx.input.scope, documentId, { signal: ctx.input.signal });
+  } catch (error) {
+    if (ctx.input.signal.aborted) throw error;
+    console.warn('[Ingest] Duplicate clustering failed; the document is published', { error: error instanceof Error ? error.name : 'unknown' });
+  }
 }
 
 async function run(ctx: StageContext): Promise<StageOutcome> {
   const document = requireDocument(ctx, 'publish');
   await writeFingerprint(ctx, document.id);
   await recordReplacesIntent(ctx, document.id);
-  if (ctx.state.approval?.required === true && !quarantinedByScan(ctx)) return holdForReview(ctx, document.id, document.version);
+  const held = ctx.state.approval?.required === true && !quarantinedByScan(ctx);
+  recordApprovalState(ctx, held);
+  if (held) return holdForReview(ctx, document.id, document.version);
 
   const batchHold = ctx.state.publishHold;
   if (batchHold) await ctx.writer.setFields(document.id, { metadata: { publish_hold: { batch_id: batchHold.batchId } } });
@@ -74,6 +102,7 @@ async function run(ctx: StageContext): Promise<StageOutcome> {
       // D-12: the batch's hold keeps the version out of retrieval until activation; for the ledger the job's work is done.
       return result(ctx, 'ready', published.documentId, published.version, 'publish_held');
     case 'published': {
+      await clusterAfterPublish(ctx, published.documentId);
       const tenantKey = ctx.identity?.tenantKey ?? scopeKey(ctx.input.scope).toLowerCase();
       // Never awaited: post-publish work must not delay or fail the ingest result (D-29, D-41).
       void afterPublish({ documentId: published.documentId, tenantKey });

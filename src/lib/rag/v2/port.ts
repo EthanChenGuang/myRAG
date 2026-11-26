@@ -1,4 +1,4 @@
-import type { BackendLegs, BackendSearchRequest, RankedHit, RetrievalBackend, RetrievalFilters } from '../backend/types';
+import type { BackendLegs, BackendSearchRequest, RankedHit, RetrievalBackend, RetrievalFilters, VersionScope } from '../backend/types';
 import { LEGACY_PROFILE } from '../embeddings/active-profile';
 import type { QueryEmbedding } from '../embeddings/query-embedding';
 import { rrf, type FusedHit, type RankedList } from '../fusion/rrf';
@@ -21,6 +21,10 @@ export interface RetrievalPortContext {
   /** Lexical search on and available; a dense-only variant sends no lexical tokens either way. */
   lexicalEnabled: boolean;
   chunkingProfileOverride?: Record<string, string>;
+  /** D-12: the effective non-current version scope; absent reads current versions. */
+  versionScope?: Exclude<VersionScope, 'current'>;
+  /** D-18: factor on the dense leg weight for a variant of kind terminology; absent means 1. */
+  terminologyDenseWeight?: number;
 }
 
 /** Server-side view of a port: the search stage reads the collected legs; the framework only ever sees `port`. */
@@ -46,10 +50,13 @@ export function variantSearchRequest(args: {
   lexicalEnabled: boolean;
   signal: AbortSignal;
   chunkingProfileOverride?: Record<string, string> | null;
+  /** D-12: set only for a non-current effective scope, so a default request sends today's request object. */
+  versionScope?: VersionScope;
 }): BackendSearchRequest {
   const { variant, embedding } = args;
   // P-6: a dense-only variant (HyDE) sends no lexical tokens, so it contributes no lexical list.
-  const useLexical = args.lexicalEnabled && variant.legs !== 'dense';
+  // D-18: a terminology variant is dense-only whether or not it carries the legs field.
+  const useLexical = args.lexicalEnabled && variant.legs !== 'dense' && variant.kind !== 'terminology';
   return {
     scope: args.scope,
     embeddingProfileId: embedding.profile?.id ?? LEGACY_PROFILE.id,
@@ -61,14 +68,22 @@ export function variantSearchRequest(args: {
     lexicalLimit: args.pool,
     signal: args.signal,
     ...(args.chunkingProfileOverride ? { chunkingProfileOverride: args.chunkingProfileOverride } : {}),
+    ...(args.versionScope !== undefined && args.versionScope !== 'current' ? { versionScope: args.versionScope } : {}),
   };
 }
 
-export function listsFromLegs(variantIndex: number, dense: RankedHit[], lexical: RankedHit[], params: RetrievalParams): RankedList[] {
+/** denseFactor scales the dense leg weight in force for this variant's dense list (D-18: the terminology variant); 1 otherwise. */
+export function listsFromLegs(
+  variantIndex: number,
+  dense: RankedHit[],
+  lexical: RankedHit[],
+  params: RetrievalParams,
+  denseFactor = 1,
+): RankedList[] {
   const lists: RankedList[] = [];
   const weights = params.leg_weights ?? { dense: 1, lexical: 1, exact_id: 1 };
   if (dense.length > 0) {
-    lists.push({ id: `dense:${variantIndex}`, weight: weights.dense, hits: dense });
+    lists.push({ id: `dense:${variantIndex}`, weight: weights.dense * denseFactor, hits: dense });
   }
   if (lexical.length > 0) {
     lists.push({ id: `lexical:${variantIndex}`, weight: weights.lexical, hits: lexical });
@@ -127,6 +142,7 @@ export function createRetrievalPort(ctx: RetrievalPortContext): RetrievalPortHan
           lexicalEnabled,
           signal,
           chunkingProfileOverride: ctx.chunkingProfileOverride ?? null,
+          ...(ctx.versionScope !== undefined ? { versionScope: ctx.versionScope } : {}),
         }),
       );
       collected.set(index, legs);
@@ -151,7 +167,9 @@ export function createRetrievalPort(ctx: RetrievalPortContext): RetrievalPortHan
   const fusedById = (): Map<string, FusedHit> => {
     const lists = [...collected.entries()]
       .sort(([a], [b]) => a - b)
-      .flatMap(([index, legs]) => listsFromLegs(index, legs.dense, legs.lexical, params));
+      .flatMap(([index, legs]) =>
+        listsFromLegs(index, legs.dense, legs.lexical, params, variants[index]?.kind === 'terminology' ? (ctx.terminologyDenseWeight ?? 1) : 1),
+      );
     return new Map(rrf(lists, params.rrf_k).map((row) => [row.hit.chunkId, row]));
   };
 

@@ -18,6 +18,9 @@ import {
   answerLanguageOptions,
   type AnswerLanguageOptions,
   createTraceCollector,
+  awaitPreGenerationDelay,
+  traceCacheState,
+  withFirstTextDelta,
   detectLanguage,
   effectiveLogMode,
   finishTrace,
@@ -128,14 +131,19 @@ function preferredLanguage(request: NextRequest): string {
   return primary || 'en';
 }
 
-function knowledgeBaseUnavailableResponse(request: NextRequest) {
+function knowledgeBaseUnavailableResponse(request: NextRequest, collector?: TraceCollector) {
   const errorText = knowledgeBaseUnavailableMessage(preferredLanguage(request));
   const stream = createUIMessageStream({
     execute: async ({ writer }) => {
       writer.write({ type: 'error', errorText });
     },
   });
-  return createUIMessageStreamResponse({ stream, headers: CORS_HEADERS });
+  return createUIMessageStreamResponse({ stream: timeFirstText(stream, collector ?? null), headers: CORS_HEADERS });
+}
+
+/** D-25: observes the first answer text delta for the turn's collector; without one the stream is returned as is. */
+function timeFirstText<T extends { type: string }>(stream: ReadableStream<T>, collector: TraceCollector | null): ReadableStream<T> {
+  return collector ? withFirstTextDelta(stream, () => collector.markFirstTextDelta()) : stream;
 }
 
 /** The embed system prompt template before {{context}} substitution. */
@@ -189,6 +197,7 @@ Context:
 }
 
 export async function POST(request: NextRequest) {
+  const requestReceivedAt = Date.now();
   let pendingTrace: { collector: TraceCollector; result: RetrievalResult } | null = null;
   // Set only while RAG_RETRIEVAL_LOG is on; off leaves finishTrace's arguments as they were
   let logContext: LogContext | null = null;
@@ -379,6 +388,7 @@ export async function POST(request: NextRequest) {
         scope: embedScope.scope,
         query: queryText,
         profile: 'embed',
+        channel: 'embed',
         options: {
           maxResults: parseInt(env.RAG_FINAL_RESULT_COUNT || '25'),
           fallbackToLowerThreshold: true,
@@ -394,6 +404,8 @@ export async function POST(request: NextRequest) {
       });
       collector.setReviewContent({ query: queryText, context: result.context, model });
       pendingTrace = { collector, result };
+      collector.markRequestStart(requestReceivedAt);
+      collector.setCacheState(traceCacheState(result));
       feedbackTraceId = collector.traceId;
       if (readFeedbackLoopConfig().retrievalLog !== 'off') {
         logContext = {
@@ -419,7 +431,7 @@ export async function POST(request: NextRequest) {
           result.logOutcome.answerLanguage = knowledgeBaseUnavailableLanguage(preferredLanguage(request));
         }
         finishPendingTrace();
-        return knowledgeBaseUnavailableResponse(request);
+        return knowledgeBaseUnavailableResponse(request, collector);
       }
 
       // D-32: a hit streams the cached answer with no generation call
@@ -438,7 +450,7 @@ export async function POST(request: NextRequest) {
             streamCachedAnswer(cacheHit, { writer, startMetadata: feedbackToken ? { feedbackToken } : {} });
           },
         });
-        return createUIMessageStreamResponse({ stream, headers: streamHeaders() });
+        return createUIMessageStreamResponse({ stream: timeFirstText(stream, collector), headers: streamHeaders() });
       }
       if (result.cacheTicket) cacheStore = { result, traceId: collector.traceId };
 
@@ -495,6 +507,9 @@ export async function POST(request: NextRequest) {
     console.log('EMBED API: Model provider initialized successfully');
 
     try {
+      const timingCollector = pendingTrace?.collector ?? null;
+      await awaitPreGenerationDelay();
+      timingCollector?.markGenerationStart();
       const result = await streamText({
         model: modelProvider,
         messages: messagesForModel,
@@ -535,10 +550,14 @@ export async function POST(request: NextRequest) {
       const feedbackToken = await embedFeedbackToken();
 
       // Return the AI SDK stream directly (SAME AS MAIN CHAT API)
-      return result.toUIMessageStreamResponse({
-        ...(feedbackToken
-          ? { messageMetadata: ({ part }) => (part.type === 'start' ? { feedbackToken } : undefined) }
-          : {}),
+      // Same composition as result.toUIMessageStreamResponse, with the first text delta observed
+      return createUIMessageStreamResponse({
+        stream: timeFirstText(
+          result.toUIMessageStream(
+            feedbackToken ? { messageMetadata: ({ part }) => (part.type === 'start' ? { feedbackToken } : undefined) } : {},
+          ),
+          timingCollector,
+        ),
         headers: streamHeaders(),
       });
 

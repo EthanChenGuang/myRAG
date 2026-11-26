@@ -1,4 +1,6 @@
-export type EmbeddingProviderId = 'openai' | 'voyage' | 'qwen3';
+export type EmbeddingProviderId = 'openai' | 'voyage' | 'qwen3' | 'bge-m3' | 'ft_slot_a' | 'ft_slot_b';
+
+export type FinetuneSlotProviderId = 'ft_slot_a' | 'ft_slot_b';
 
 export type EmbeddingStorage = 'legacy_column' | 'halfvec';
 
@@ -47,12 +49,24 @@ export type ProfileShapeResult = { ok: true } | { ok: false; reason: ProfileShap
 
 export const OPENAI_NATIVE_DIMS = 1536;
 export const QWEN_NATIVE_DIMS = 4096;
+export const BGE_M3_NATIVE_DIMS = 1024;
 export const VOYAGE_SUPPORTED_DIMS: readonly number[] = [256, 512, 1024, 2048];
 export const QWEN_SUPPORTED_DIMS: readonly number[] = [256, 512, 1024, 1536, 2048, QWEN_NATIVE_DIMS];
 export const VOYAGE_MODEL_ID = 'voyage-4-large';
 export const VOYAGE_LAW_MODEL_ID = 'voyage-law-2';
 export const VOYAGE_FINANCE_MODEL_ID = 'voyage-finance-2';
 export const QWEN_MODEL_ID = 'Qwen/Qwen3-Embedding-8B';
+export const BGE_M3_MODEL_ID = 'BAAI/bge-m3';
+/** Fine-tune slots (06.1 D-22) hold 1024-dim halfvec vectors only. */
+export const FT_SLOT_DIMS = 1024;
+export const FT_SLOT_SUPPORTED_DIMS: readonly number[] = [FT_SLOT_DIMS];
+/** The model of a slot with no bound version; migration 0652 seeds the slot rows with it. */
+export const FT_SLOT_UNBOUND_MODEL = 'unbound';
+export const FINETUNE_SLOT_PROVIDERS: readonly FinetuneSlotProviderId[] = ['ft_slot_a', 'ft_slot_b'];
+
+export function isFinetuneSlotProvider(provider: string): provider is FinetuneSlotProviderId {
+  return (FINETUNE_SLOT_PROVIDERS as readonly string[]).includes(provider);
+}
 
 const VOYAGE_MODEL_IDS: readonly string[] = [VOYAGE_MODEL_ID, VOYAGE_LAW_MODEL_ID, VOYAGE_FINANCE_MODEL_ID];
 
@@ -63,6 +77,7 @@ export function canonicalModelId(model: string): string {
   const id = model.trim();
   const lower = id.toLowerCase();
   if (lower === QWEN_MODEL_ID.toLowerCase()) return QWEN_MODEL_ID;
+  if (lower === BGE_M3_MODEL_ID.toLowerCase()) return BGE_M3_MODEL_ID;
   for (const voyage of VOYAGE_MODEL_IDS) {
     if (lower === voyage || lower === `mongodb/${voyage}`) return voyage;
   }
@@ -102,4 +117,17 @@ export function toProviderError(error: unknown, host: string, signal: AbortSigna
   if (isAbortError(error, signal)) return error;
   if (error instanceof Error && error.name === 'EmbeddingProfileMismatch') return error;
   return new EmbeddingProviderError(host, statusOf(error));
+}
+
+export type EmbeddingInputErrorCode = 'embedding_input_empty' | 'embedding_input_too_long';
+
+/** An input the provider refuses before or instead of embedding it; inputs are never truncated and never embedded as empty. */
+export class EmbeddingInputError extends Error {
+  readonly code: EmbeddingInputErrorCode;
+
+  constructor(code: EmbeddingInputErrorCode) {
+    super(`[Embedding Profile] ${code}`);
+    this.name = 'EmbeddingInputError';
+    this.code = code;
+  }
 }

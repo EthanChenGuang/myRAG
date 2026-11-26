@@ -1,0 +1,9 @@
+{
+  "a1": {
+    "status": 200,
+    "citationsDelta": true,
+    "serverToolUse": true,
+    "webSearchResult": true
+  },
+  "requests": 1
+}

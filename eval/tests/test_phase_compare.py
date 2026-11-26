@@ -1261,3 +1261,27 @@ def test_an_optional_arm_without_runs_is_not_run_and_a_required_one_fails(tmp_pa
 
 def test_a_schema3_spec_needs_the_runs_manifest(tmp_path: Path):
     assert main(["--spec", str(PHASE32_SPEC), "--out", str(tmp_path / "out")]) == 2
+
+
+def test_an_arm_records_its_run_ids_and_the_counting_rows_of_every_gated_slice(tmp_path: Path):
+    off = _arm_items() + [_arm_item("it-drafted-001", "it", "table_split", report_only_reason="native_review_pending")]
+    on = _arm_items() + [_arm_item("it-drafted-001", "it", "table_split", hit=False, report_only_reason="native_review_pending")]
+    runs = _all_arms(table_header_repeat=(off, on))
+    spec, runs_path = _arm_world(tmp_path, runs)
+    manifest = json.loads(runs_path.read_text(encoding="utf-8"))
+    for side in ("off", "on"):
+        report = Path(manifest["table_header_repeat"][side])
+        payload = json.loads(report.read_text(encoding="utf-8"))
+        payload["run_id"] = f"run-{side}-0001"
+        report.write_text(json.dumps(payload), encoding="utf-8")
+    out = tmp_path / "out"
+    assert main(["--spec", str(spec), "--runs", str(runs_path), "--out", str(out)]) == 0
+    arm = _arm(json.loads((out / "comparison.json").read_text(encoding="utf-8")), "table_header_repeat")
+    assert arm.get("runs") == {"off": "run-off-0001", "on": "run-on-0001"}
+    gated = {(row["slice"], row["metric"]): row for row in arm.get("gated_rows", [])}
+    assert {"overall", "language:en", "language:zh", "language:it", "category:table_split", "pair:en->it"} <= {key[0] for key in gated}
+    assert not any(key[0] == "category:table" for key in gated), "category:table is not a gated slice"
+    split = gated[("category:table_split", "recall_at_10")]
+    assert split["n"] == 3 and split["paired"]["mean_d"] == 0.0, "the report-only item stays out of the counting rows"
+    judged = next(row for row in arm["rows"] if row["slice"] == "category:table_split" and row["metric"] == "recall_at_10")
+    assert judged["n"] == 4

@@ -1,7 +1,7 @@
 import type { IngestionJob } from '@/lib/rag-eval/contracts.generated';
 import type { TenantScope } from '../tenant/scope';
-import { createIngestTrace, finishIngestTrace, type IngestTrace } from './trace';
-import type { IngestResult, StageName } from './types';
+import { cleanDetail, createIngestTrace, detailRules, finishIngestTrace, phaseSpanDetail, type IngestTrace } from './trace';
+import type { IngestResult, IngestTraceFacts, StageName } from './types';
 
 const POST_PARSE: readonly StageName[] = [
   'content_hash_dedup',
@@ -17,6 +17,11 @@ const POST_PARSE: readonly StageName[] = [
 
 function pagesBetween(start: number, end: number): number {
   return Math.max(0, end - start + 1);
+}
+
+function traceFactsOf(stageState: IngestionJob['stage_state']): IngestTraceFacts | null {
+  const raw = stageState?.traceFacts;
+  return raw !== null && typeof raw === 'object' && !Array.isArray(raw) ? (raw as IngestTraceFacts) : null;
 }
 
 /** Records ledger-derived spans on the trace collector; names and rules only, no document text (D-24, D-44). */
@@ -61,11 +66,14 @@ export function buildQueueIngestTrace(job: IngestionJob, trace: IngestTrace): vo
     collector.record({ name: 'check', status: 'ok', startedAt: started, endedAt: started + timings.check });
   }
 
+  // D-51: the Phase 3.2 facts the stages kept in the job's state; absent while every switch that sets one is off.
+  const facts = traceFactsOf(job.stage_state);
   for (const stage of POST_PARSE) {
     const ms = timings[stage];
     if (typeof ms !== 'number') continue;
     const started = now();
-    collector.record({ name: stage, status: 'ok', startedAt: started, endedAt: started + ms });
+    const rules = detailRules(cleanDetail(phaseSpanDetail(stage, facts)));
+    collector.record({ name: stage, status: 'ok', startedAt: started, endedAt: started + ms, ...(rules.length > 0 ? { rules } : {}) });
   }
 }
 

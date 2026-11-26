@@ -51,6 +51,16 @@ function readApiKey(): string | undefined {
   return process.env.OPENROUTER_API_KEY ?? env.OPENROUTER_API_KEY;
 }
 
+/** The OpenRouter key the query LLM uses; the LangChain chat model gets the same one from transformer.ts. */
+export function openRouterApiKey(): string | undefined {
+  return readApiKey();
+}
+
+/** The OpenRouter attribution headers of the native query LLM. */
+export function openRouterHeaders(): Record<string, string> {
+  return { 'HTTP-Referer': siteUrl(), 'X-Title': getAppName() };
+}
+
 function siteUrl(): string {
   return (
     env.NEXT_PUBLIC_SITE_URL ||
@@ -65,7 +75,7 @@ async function openRouterModel(modelId: string, apiKey: string): Promise<Languag
   const provider = createOpenRouter({
     apiKey,
     baseURL: OPENROUTER_BASE_URL,
-    headers: { 'HTTP-Referer': siteUrl(), 'X-Title': getAppName() },
+    headers: openRouterHeaders(),
   });
   return provider(modelId, {
     provider: { require_parameters: true, data_collection: 'deny', sort: 'latency' },

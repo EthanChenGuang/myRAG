@@ -84,8 +84,10 @@ describe('defaults equal Phase 3: every write path with all Phase 3.1 switches a
     process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = 'single-tenant';
     // The unified pipeline is the Phase 3 write path under test; everything Phase 3.1 added stays unset.
     process.env.RAG_INGEST_PIPELINE = 'unified';
+    // D-19 (03.2-67): the default of RAG_TABLE_HEADER_REPEAT is always; Phase 3 chunking is the explicit profile value.
+    process.env.RAG_TABLE_HEADER_REPEAT = 'profile';
     const { INGEST_MODE_ENV, fixtureAdminClient, installIngestFakes } = await import('../../eval/harness/ingest-fakes.mts');
-    const fakes = await installIngestFakes({ db: fixtureAdminClient(edge.url), env: INGEST_MODE_ENV });
+    const fakes = await installIngestFakes({ db: fixtureAdminClient(edge.url), env: { ...INGEST_MODE_ENV, RAG_TABLE_HEADER_REPEAT: 'profile' } });
     uninstall = fakes.uninstall;
     rag = await import('@/lib/rag');
     queueConfig = await import('@/lib/rag/ingest/queue-config');
@@ -132,7 +134,9 @@ describe('defaults equal Phase 3: every write path with all Phase 3.1 switches a
   test('the Phase 3.2 switches resolve to their off values when unset (D-47)', () => {
     const ingest = rag.loadIngestConfig({ RAG_INGEST_PIPELINE: 'unified' });
     assert.equal(ingest.languageAwareIngest, 'off');
-    assert.equal(ingest.tableHeaderRepeat, 'profile');
+    // Unset, header repetition is always (eval/decisions/03.2-table-header-default.json); profile restores Phase 3 chunking.
+    assert.equal(ingest.tableHeaderRepeat, 'always');
+    assert.equal(rag.loadIngestConfig({ RAG_INGEST_PIPELINE: 'unified', RAG_TABLE_HEADER_REPEAT: 'profile' }).tableHeaderRepeat, 'profile');
     assert.equal(ingest.tableRowSerialization, false);
     assert.equal(ingest.captionLanguage, 'en');
     assert.equal(ingest.docTranslation, 'off');

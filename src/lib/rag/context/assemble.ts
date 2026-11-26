@@ -57,6 +57,37 @@ export interface AssembleInput<C extends AssemblyCandidate = AssemblyCandidate> 
   contextTagging?: boolean;
   /** Downweight: flagged chunks render after unflagged ones and their entries are marked flagged. */
   injectionMarks?: InjectionMarks | null;
+  /** D-13: document id to its version line; a labelled document renders as its own section with the line before each entry. */
+  versionLabels?: ReadonlyMap<string, string>;
+}
+
+/** D-17: a matched table row as the table leg found it; header names key the cells. */
+export interface TableRowAttachment {
+  header: string[];
+  cells: Record<string, string>;
+}
+
+function tableLine(values: readonly string[]): string {
+  return `| ${values.map((value) => value.replace(/\|/g, '\\|')).join(' | ')} |`;
+}
+
+/** The header row, the separator and the matched row as Markdown table lines; only the pipe is escaped. */
+export function renderTableRowLines(row: TableRowAttachment): string {
+  return [tableLine(row.header), tableLine(row.header.map(() => '---')), tableLine(row.header.map((name) => row.cells[name] ?? ''))].join('\n');
+}
+
+function normalizeTableText(text: string): string {
+  return text.replace(/\s+/g, ' ').replace(/ ?\| ?/g, '|').trim();
+}
+
+/**
+ * D-17: the chunk text with the header and matched row in front, or null when nothing is added: the row has no header, or the chunk
+ * already carries the header row (compared after whitespace normalization).
+ */
+export function attachTableRow(content: string, row: TableRowAttachment): string | null {
+  if (row.header.length === 0) return null;
+  if (normalizeTableText(content).includes(normalizeTableText(tableLine(row.header)))) return null;
+  return `${renderTableRowLines(row)}\n\n${content}`;
 }
 
 export interface FilteredCandidates<C extends AssemblyCandidate = AssemblyCandidate> {
@@ -279,18 +310,27 @@ export function buildContext<C extends AssemblyCandidate>(
       Array<{ content: string; similarity: number; chunkNum?: number; chunkId: string; documentId: string; metadata?: Record<string, any> }>
     >();
     const collectedURLs: ExtractedURL[] = [];
+    // Sections group by file name; a version-labelled document groups by its id, so two versions of one file stay apart.
+    const sectionNames = new Map<string, string>();
+    const sectionKey = (documentId: string, docName: string): string => {
+      if (!input.versionLabels?.has(documentId)) return docName;
+      const key = `${docName}\u0000${documentId}`;
+      sectionNames.set(key, docName);
+      return key;
+    };
 
     for (const chunk of relevantChunks) {
       const docInfo = docById.get(chunk.document_id);
       const docName = docInfo?.filename || docInfo?.name || 'Unknown Document';
+      const groupKey = sectionKey(chunk.document_id, docName);
 
       const chunkMatch = chunk.content.match(/Chunk (\d+) of \d+/);
       const chunkNum = chunkMatch ? parseInt(chunkMatch[1]) : undefined;
 
-      if (!chunksByDocument.has(docName)) {
-        chunksByDocument.set(docName, []);
+      if (!chunksByDocument.has(groupKey)) {
+        chunksByDocument.set(groupKey, []);
       }
-      chunksByDocument.get(docName)!.push({
+      chunksByDocument.get(groupKey)!.push({
         content: chunk.content,
         similarity: chunk.similarity,
         chunkNum,
@@ -312,7 +352,7 @@ export function buildContext<C extends AssemblyCandidate>(
       const idToName = new Map<string, string>();
       for (const chunk of relevantChunks) {
         const docInfo = docById.get(chunk.document_id);
-        const name = docInfo?.filename || docInfo?.name || 'Unknown Document';
+        const name = sectionKey(chunk.document_id, docInfo?.filename || docInfo?.name || 'Unknown Document');
         if (!idToName.has(chunk.document_id)) idToName.set(chunk.document_id, name);
       }
       const seen = new Set<string>();
@@ -325,7 +365,7 @@ export function buildContext<C extends AssemblyCandidate>(
       }
       for (const chunk of relevantChunks) {
         const docInfo = docById.get(chunk.document_id);
-        const name = docInfo?.filename || docInfo?.name || 'Unknown Document';
+        const name = sectionKey(chunk.document_id, docInfo?.filename || docInfo?.name || 'Unknown Document');
         if (chunksByDocument.has(name) && !seen.has(name)) {
           docNameOrder.push(name);
           seen.add(name);
@@ -341,9 +381,11 @@ export function buildContext<C extends AssemblyCandidate>(
       docNameOrder.splice(0, docNameOrder.length, ...reordered);
     }
 
-    for (const docName of docNameOrder) {
-      const chunks = chunksByDocument.get(docName);
+    for (const docKey of docNameOrder) {
+      const chunks = chunksByDocument.get(docKey);
       if (!chunks) continue;
+      const docName = sectionNames.get(docKey) ?? docKey;
+      const versionLine = sectionNames.has(docKey) ? input.versionLabels?.get(chunks[0]!.documentId) : undefined;
       const isImageDoc = IMAGE_EXTENSIONS.some((ext) => docName.toLowerCase().endsWith(ext));
       if (isImageDoc) continue;
 
@@ -403,7 +445,12 @@ export function buildContext<C extends AssemblyCandidate>(
           flagged: marks !== null && draft.chunkIds.some((chunkId) => marks.chunkIds.has(chunkId)),
         });
         const label = labeller.add(draft);
-        if (label) contextParts.push(`${label.header}\n${label.text}`);
+        if (versionLine !== undefined && !draft.isImage) {
+          // The line is written before the entry (and is the wrapped doc's header), never into the block text that citations quote.
+          labeller.headers.set(labeller.blocks.length - 1, label ? `${versionLine}\n${label.header}` : versionLine);
+          if (label) contextParts.push(`${versionLine}\n${label.header}\n${label.text}`);
+          else contextParts.push(`${versionLine}\n${group.map((piece) => piece.rendered).join('\n\n')}`);
+        } else if (label) contextParts.push(`${label.header}\n${label.text}`);
         else contextParts.push(...group.map((piece) => piece.rendered));
         start = end;
       }

@@ -26,7 +26,17 @@ export interface RetrievalFilters {
   effectiveOn?: string;
 }
 
-export type RetrievalFilterInput = Omit<RetrievalFilters, 'currentOnly' | 'effectiveOn'>;
+/** D-12: which document versions a request reads. 'current' (the default) is today's behaviour; a range takes ISO dates. */
+export type VersionScope = 'current' | 'all' | { from?: string; to?: string };
+
+/** versionScope is the request's ask; it never reaches RetrievalFilters, and the search stage applies it only when the switch allows (D-12). */
+export type RetrievalFilterInput = Omit<RetrievalFilters, 'currentOnly' | 'effectiveOn'> & { versionScope?: Exclude<VersionScope, 'current'> };
+
+/** Request fields a backend honours beyond the base contract; a backend that does not declare one is never handed it (backendForRequest). */
+export interface BackendCapabilities {
+  versionScope?: boolean;
+  identifierFilter?: boolean;
+}
 
 export interface RankedHitDocument {
   filename: string;
@@ -50,6 +60,11 @@ export interface RankedHit {
   docType: string | null;
   language: string | null;
   document: RankedHitDocument;
+  /** D-48: the chunk's near-duplicate cluster, when the search function returns one. */
+  dupClusterId?: string;
+  /** False for a superseded version returned under a non-current version scope. */
+  isCurrent?: boolean;
+  documentVersion?: number;
 }
 
 export interface BackendSearchRequest {
@@ -62,6 +77,10 @@ export interface BackendSearchRequest {
   denseLimit: number;
   lexicalLimit: number;
   chunkingProfileOverride?: Record<string, string>;
+  /** D-12, D-40: absent or 'current' reads current versions only; filters.currentOnly stays true. */
+  versionScope?: VersionScope;
+  /** D-31, D-45: normalized identifiers; every leg keeps only chunks that carry one of them. */
+  identifiersNorm?: string[];
   signal: AbortSignal;
 }
 
@@ -110,6 +129,7 @@ export interface BackendHealth {
 
 export interface RetrievalBackend {
   readonly id: BackendId;
+  readonly capabilities?: BackendCapabilities;
   search(req: BackendSearchRequest): Promise<BackendLegs>;
   /** Absent on a backend without chunk translations: no translation leg runs. */
   searchTranslations?(req: BackendTranslationSearchRequest): Promise<TranslationHit[]>;

@@ -14,6 +14,7 @@ export function buildCitationRecords(
   for (const alias of validAliases) {
     const block = aliasMap.byAlias.get(alias);
     if (!block || block.text.length === 0) continue;
+    const facts = aliasMap.documents?.get(block.documentId);
     records.push({
       n: records.length + 1,
       alias,
@@ -26,6 +27,11 @@ export function buildCitationRecords(
       quote: block.text,
       quoteHash: createHash('sha256').update(block.text).digest('hex'),
       strategy,
+      // D-13, D-21: the used document's version currency, effective dates and other sources, only when set.
+      ...(facts?.isCurrent !== undefined ? { isCurrent: facts.isCurrent } : {}),
+      ...(facts?.effectiveFrom !== undefined ? { effectiveFrom: facts.effectiveFrom } : {}),
+      ...(facts?.effectiveTo !== undefined ? { effectiveTo: facts.effectiveTo } : {}),
+      ...(facts?.alsoIn !== undefined ? { alsoIn: facts.alsoIn.map((entry) => ({ ...entry })) } : {}),
     });
   }
   return records;

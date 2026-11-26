@@ -356,6 +356,8 @@ export interface RagEnvInput {
   RAG_DOMAIN_EMBEDDING_TIMEOUT_MS?: string;
   RAG_QUERY_LAYER?: string;
   RAG_QUERY_FRAMEWORK?: string;
+  /** Third-party LangChain/LangSmith tracing switches (research P-10); read only to keep the langchain framework off. */
+  [tracing: `LANGSMITH_${string}` | `LANGCHAIN_TRACING${string}`]: string | undefined;
   RAG_QUERY_LLM_MODEL?: string;
   RAG_QUERY_CONDENSE?: string;
   RAG_QUERY_EXPAND?: string;
@@ -807,6 +809,70 @@ function parseTranslateDisabledProfiles(raw: string | undefined, warnings: strin
   return out;
 }
 
+/** The packages the LangChain adapter imports; the framework falls back to llamaindex when any cannot be resolved (D-44). */
+const LANGCHAIN_PACKAGES = ['@langchain/core/retrievers', '@langchain/classic/retrievers/ensemble', '@langchain/openai'] as const;
+/** Any of these set to true turns LangChain's env-driven LangSmith tracer on, whatever callbacks are passed (research P-10). */
+const LANGCHAIN_TRACING_VARIABLE = /^(?:LANGSMITH_[A-Z0-9_]+|LANGCHAIN_TRACING[A-Z0-9_]*)$/u;
+
+let langchainResolverOverride: (() => boolean) | null = null;
+let langchainResolvable: boolean | null = null;
+
+/** Resolved once per process from the app root; the module loader is fetched at run time so no bundler follows it. */
+function defaultLangChainResolver(): boolean {
+  try {
+    const nodeModule = process.getBuiltinModule?.('node:module') as typeof import('node:module') | undefined;
+    if (!nodeModule) return true;
+    const resolve = nodeModule.createRequire(`${process.cwd()}/package.json`).resolve;
+    for (const name of LANGCHAIN_PACKAGES) resolve(name);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function langchainPackagesResolvable(): boolean {
+  if (langchainResolverOverride) return langchainResolverOverride();
+  langchainResolvable ??= defaultLangChainResolver();
+  return langchainResolvable;
+}
+
+/** Names of the tracing variables set to true; values are never read beyond that test and never logged. */
+function enabledTracingVariables(env: RagEnvInput): string[] {
+  return Object.entries(env)
+    .filter(([name, value]) => LANGCHAIN_TRACING_VARIABLE.test(name) && typeof value === 'string' && value.trim().toLowerCase() === 'true')
+    .map(([name]) => name)
+    .sort();
+}
+
+/**
+ * D-44 / research P-10: the langchain framework runs only when its packages resolve and no LangSmith tracing variable is
+ * on (the tracer would send queries and history to LangSmith); otherwise llamaindex, with one [Query Layer] warning.
+ */
+function checkLangChainFramework(env: RagEnvInput, warnings: string[]): QueryFramework {
+  const tracing = enabledTracingVariables(env);
+  if (tracing.length > 0) {
+    problem(
+      warnings,
+      `query-framework-tracing:${tracing.join(',')}`,
+      'RAG_QUERY_FRAMEWORK=langchain with LangSmith tracing on would send query text to LangSmith; using llamaindex',
+      { variables: tracing.join(',') },
+      '[Query Layer]',
+    );
+    return 'llamaindex';
+  }
+  if (!langchainPackagesResolvable()) {
+    problem(
+      warnings,
+      'query-framework-unresolvable',
+      'RAG_QUERY_FRAMEWORK=langchain but the @langchain packages cannot be resolved; using llamaindex',
+      { packages: '@langchain/core,@langchain/classic,@langchain/openai' },
+      '[Query Layer]',
+    );
+    return 'llamaindex';
+  }
+  return 'langchain';
+}
+
 function parseQueryLayer(env: RagEnvInput, pipeline: 'legacy' | 'v2', warnings: string[]): QueryLayerConfig {
   const requested = parsePrefixedBoolean('RAG_QUERY_LAYER', env.RAG_QUERY_LAYER, false, '[Query Layer]', warnings);
   if (requested && pipeline !== 'v2') {
@@ -814,7 +880,7 @@ function parseQueryLayer(env: RagEnvInput, pipeline: 'legacy' | 'v2', warnings: 
   }
   const frameworkRaw = (env.RAG_QUERY_FRAMEWORK ?? '').trim().toLowerCase();
   let framework: QueryFramework = 'llamaindex';
-  if (frameworkRaw === 'langchain') framework = 'langchain';
+  if (frameworkRaw === 'langchain') framework = checkLangChainFramework(env, warnings);
   else if (frameworkRaw !== '' && frameworkRaw !== 'llamaindex') {
     problem(warnings, `query-framework:${frameworkRaw}`, 'Unsupported RAG_QUERY_FRAMEWORK value, using llamaindex', { value: frameworkRaw.slice(0, 32) }, '[Query Layer]');
   }
@@ -1081,6 +1147,7 @@ function memoKey(env: RagEnvInput): string {
     env.RAG_DOMAIN_EMBEDDING_TIMEOUT_MS ?? '',
     env.RAG_QUERY_LAYER ?? '',
     env.RAG_QUERY_FRAMEWORK ?? '',
+    enabledTracingVariables(env).join(','),
     env.RAG_QUERY_LLM_MODEL ?? '',
     env.RAG_QUERY_CONDENSE ?? '',
     env.RAG_QUERY_EXPAND ?? '',
@@ -1250,5 +1317,12 @@ export function terminologyDenseFor(config: RagConfig, profile: Profile): boolea
 
 export function resetRagConfigForTests(): void {
   loggedProblems.clear();
+  memo.clear();
+}
+
+/** Test-only: replace the @langchain package check; null restores the shipped resolver. Clears the memo. */
+export function setLangChainResolverForTests(resolver: (() => boolean) | null): void {
+  langchainResolverOverride = resolver;
+  langchainResolvable = null;
   memo.clear();
 }

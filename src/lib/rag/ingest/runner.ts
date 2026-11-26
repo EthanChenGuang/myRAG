@@ -14,7 +14,7 @@ import { parseStage } from './stages/parse';
 import { publishStage } from './stages/publish';
 import { reapplyHiddenTextRemoval, scanInjectionStage } from './stages/scan-injection';
 import { storeOriginalStage } from './stages/store-original';
-import type { IngestSpan, IngestSpanDetail, IngestSpanEnd, IngestTrace } from './trace';
+import { phaseSpanDetail, type IngestSpan, type IngestSpanDetail, type IngestSpanEnd, type IngestTrace } from './trace';
 import {
   IngestStageError,
   type IngestResult,
@@ -190,7 +190,7 @@ function pagesOf(ctx: StageContext): number | null {
   return pages > 0 ? pages : null;
 }
 
-function spanDetail(ctx: StageContext, extra: { fallbackReason?: string; outcome?: string }): IngestSpanDetail {
+function spanDetail(ctx: StageContext, stage: StageName, extra: { fallbackReason?: string; outcome?: string }): IngestSpanDetail {
   const chunkCount = ctx.work.chunksWritten > 0 ? ctx.work.chunksWritten : ctx.work.chunks.length;
   return {
     parser_used: ctx.parserUsed,
@@ -200,6 +200,7 @@ function spanDetail(ctx: StageContext, extra: { fallbackReason?: string; outcome
     doc_type_origin: ctx.identity?.docTypeOrigin ?? ctx.state.docTypeOrigin,
     fallback_reason: extra.fallbackReason ?? null,
     outcome: extra.outcome ?? null,
+    ...phaseSpanDetail(stage, ctx.state.traceFacts),
   };
 }
 
@@ -224,7 +225,7 @@ export async function runIngestStages(
     const span: IngestSpan | undefined = options.trace?.start(stage.name);
     const warningsBefore = ctx.warnings.length;
     const close = (end: Omit<IngestSpanEnd, 'detail'>, extra: { fallbackReason?: string; outcome?: string } = {}): void =>
-      span?.end({ ...end, detail: spanDetail(ctx, { ...extra, fallbackReason: extra.fallbackReason ?? ctx.warnings[warningsBefore] }) });
+      span?.end({ ...end, detail: spanDetail(ctx, stage.name, { ...extra, fallbackReason: extra.fallbackReason ?? ctx.warnings[warningsBefore] }) });
     try {
       ctx.signal.throwIfAborted();
       if (ctx.deadline - ctx.deps.now() < stage.minMsNeeded) {
