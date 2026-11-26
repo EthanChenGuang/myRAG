@@ -266,15 +266,15 @@ import rag_sidecar.security as security
 import rag_sidecar.main  # noqa: F401
 assert "defusedxml" not in sys.modules
 try:
-    security.check_hidden_text(Path(sys.argv[1]).read_bytes(), "%s")
+    security.check_hidden_text(Path(sys.argv[1]).read_bytes(), sys.argv[2])
 except security.CheckerUnavailable:
     print("ok")
-""" % DOCX_MIME
+"""
 
 
 def test_the_word_checker_is_unavailable_without_the_extra():
     done = subprocess.run(
-        [sys.executable, "-I", "-c", _BLOCKED_DOCX_IMPORT, str(FIXTURE_DIR / "clean-plain.docx")],
+        [sys.executable, "-I", "-c", _BLOCKED_DOCX_IMPORT, str(FIXTURE_DIR / "clean-plain.docx"), DOCX_MIME],
         capture_output=True,
         text=True,
         env={"PYTHONPATH": str(SIDECAR_DIR / "src"), "RAG_SIDECAR_SECRET": ""},

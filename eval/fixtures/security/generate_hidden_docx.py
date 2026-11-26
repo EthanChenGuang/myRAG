@@ -326,7 +326,7 @@ def entity_expansion() -> bytes:
 def _with_document(document: str) -> bytes:
     return write_zip(
         [
-            ("[Content_Types].xml", f'{XML_DECL}<Types xmlns="{CT_NS}"/>'.encode("utf-8")),
+            ("[Content_Types].xml", f'{XML_DECL}<Types xmlns="{CT_NS}"/>'.encode()),
             ("word/document.xml", document.encode("utf-8")),
         ]
     )

@@ -12,10 +12,11 @@ one that sets a property wins.
 
 from __future__ import annotations
 
+import io
+import math
 import posixpath
 import zipfile
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass, field, replace
 from xml.etree.ElementTree import Element, ParseError
 
 from rag_sidecar.contracts.ingest_security import HiddenTextRules, HiddenTextSpanReason
@@ -64,7 +65,7 @@ class _Package:
         if data.startswith(OLE_MAGIC):
             raise EncryptedDocument("OLE container (password-protected Word file)")
         try:
-            self._zip = zipfile.ZipFile(_bytes_io(data))
+            self._zip = zipfile.ZipFile(io.BytesIO(data))
             infos = self._zip.infolist()
         except (zipfile.BadZipFile, zipfile.LargeZipFile, ValueError, OSError) as exc:
             raise UnreadableDocument("not a zip package") from exc
@@ -121,12 +122,6 @@ class _Package:
         return out
 
 
-def _bytes_io(data: bytes) -> Any:
-    import io
-
-    return io.BytesIO(data)
-
-
 def _on(element: Element | None) -> bool | None:
     """A toggle property: absent -> None, present -> on unless w:val says off."""
     if element is None:
@@ -135,21 +130,86 @@ def _on(element: Element | None) -> bool | None:
     return value is None or value.strip().lower() not in OFF_VALUES
 
 
-@dataclass
+RGB = tuple[float, float, float]
+WHITE: RGB = (1.0, 1.0, 1.0)
+DEFAULT_SIZE_HALF_POINTS = 20
+HIGHLIGHT_HEX = {
+    "black": "000000", "blue": "0000FF", "cyan": "00FFFF", "green": "00FF00", "magenta": "FF00FF",
+    "red": "FF0000", "yellow": "FFFF00", "white": "FFFFFF", "darkBlue": "000080", "darkCyan": "008080",
+    "darkGreen": "008000", "darkMagenta": "800080", "darkRed": "800000", "darkYellow": "808000",
+    "darkGray": "808080", "lightGray": "C0C0C0",
+}
+
+
+def _hex(value: str | None) -> RGB | None:
+    if not value or len(value) != 6:
+        return None
+    try:
+        number = int(value, 16)
+    except ValueError:
+        return None
+    return ((number >> 16 & 0xFF) / 255.0, (number >> 8 & 0xFF) / 255.0, (number & 0xFF) / 255.0)
+
+
+def _shading(element: Element | None) -> RGB | None:
+    """The colour a w:shd paints: the fill for clear and pattern shading, the pattern colour when solid."""
+    if element is None:
+        return None
+    pattern = (element.get(f"{W}val") or "clear").lower()
+    if pattern == "nil":
+        return None
+    if pattern == "solid":
+        return _hex(element.get(f"{W}color"))
+    return _hex(element.get(f"{W}fill"))
+
+
+def _distance(a: RGB, b: RGB) -> float:
+    return math.sqrt(sum((x - y) ** 2 for x, y in zip(a, b, strict=True))) / math.sqrt(3.0)
+
+
+@dataclass(frozen=True)
 class _Props:
     vanish: bool | None = None
+    color: RGB | None = None
+    size: int | None = None
+    background: RGB | None = None
 
     def merged(self, rpr: Element | None) -> _Props:
         if rpr is None:
             return self
         vanish = _on(rpr.find(f"{W}vanish"))
-        return _Props(vanish=self.vanish if vanish is None else vanish)
+        color_el = rpr.find(f"{W}color")
+        color = self.color
+        if color_el is not None:
+            color = _hex(color_el.get(f"{W}val"))
+        size = self.size
+        size_raw = _val(rpr, "sz")
+        if size_raw is not None:
+            try:
+                size = int(float(size_raw))
+            except ValueError:
+                pass
+        background = self.background
+        shd = rpr.find(f"{W}shd")
+        if shd is not None:
+            background = _shading(shd)
+        highlight = _val(rpr, "highlight")
+        if highlight is not None:
+            background = _hex(HIGHLIGHT_HEX.get(highlight)) or background
+        return _Props(
+            vanish=self.vanish if vanish is None else vanish,
+            color=color,
+            size=size,
+            background=background,
+        )
 
 
 @dataclass
 class _Style:
     based_on: str | None
     rpr: Element | None
+    ppr: Element | None
+    element: Element
 
 
 @dataclass
@@ -157,7 +217,6 @@ class _Styles:
     defaults: _Props = field(default_factory=_Props)
     styles: dict[str, _Style] = field(default_factory=dict)
     default_paragraph: str | None = None
-    cache: dict[str, _Props] = field(default_factory=dict)
 
     @classmethod
     def load(cls, root: Element | None) -> _Styles:
@@ -170,16 +229,20 @@ class _Styles:
             style_id = style.get(f"{W}styleId")
             if not style_id:
                 continue
-            based = style.find(f"{W}basedOn")
-            styles[style_id] = _Style(based_on=based.get(f"{W}val") if based is not None else None, rpr=style.find(f"{W}rPr"))
+            styles[style_id] = _Style(
+                based_on=_val(style, "basedOn"),
+                rpr=style.find(f"{W}rPr"),
+                ppr=style.find(f"{W}pPr"),
+                element=style,
+            )
             is_default = (style.get(f"{W}default") or "").lower() in {"1", "true", "on"}
             if style.get(f"{W}type") == "paragraph" and is_default and default_paragraph is None:
                 default_paragraph = style_id
         return cls(defaults=defaults, styles=styles, default_paragraph=default_paragraph)
 
-    def chain(self, style_id: str | None) -> list[Element]:
-        """rPr elements of a style chain, base first; cycles and over-long chains stop."""
-        out: list[Element | None] = []
+    def chain(self, style_id: str | None) -> list[_Style]:
+        """A style and its basedOn ancestors, base first; cycles and over-long chains stop."""
+        out: list[_Style] = []
         seen: set[str] = set()
         current = style_id
         while current and current not in seen and len(seen) < MAX_STYLE_CHAIN:
@@ -187,15 +250,32 @@ class _Styles:
             style = self.styles.get(current)
             if style is None:
                 break
-            out.append(style.rpr)
+            out.append(style)
             current = style.based_on
-        return [rpr for rpr in reversed(out) if rpr is not None]
+        return list(reversed(out))
 
     def apply(self, base: _Props, style_id: str | None) -> _Props:
         props = base
-        for rpr in self.chain(style_id):
-            props = props.merged(rpr)
+        for style in self.chain(style_id):
+            props = props.merged(style.rpr)
         return props
+
+    def paragraph_shading(self, style_id: str | None) -> RGB | None:
+        shading = None
+        for style in self.chain(style_id):
+            if style.ppr is not None and style.ppr.find(f"{W}shd") is not None:
+                shading = _shading(style.ppr.find(f"{W}shd"))
+        return shading
+
+    def table_fills(self, style_id: str | None) -> list[RGB]:
+        """Every fill a table style chain can paint (whole table, cells or conditional rows and columns)."""
+        fills: list[RGB] = []
+        for style in self.chain(style_id):
+            for shd in style.element.iter(f"{W}shd"):
+                fill = _shading(shd)
+                if fill is not None and fill not in fills:
+                    fills.append(fill)
+        return fills
 
 
 def _val(parent: Element | None, tag: str) -> str | None:
@@ -251,16 +331,58 @@ class _Context:
 
 @dataclass(frozen=True)
 class _Where:
-    paragraph: _Props
+    base: _Props
+    # The colours that can lie under the text: one when it is known, several when a table style may paint any of them.
+    backgrounds: tuple[RGB, ...]
+    paragraph: _Props | None = None
     deleted: bool = False
 
 
 def _run_reason(run: Element, where: _Where, ctx: _Context) -> HiddenTextSpanReason | None:
+    if where.deleted:
+        return "tracked_deletion"
     rpr = run.find(f"{W}rPr")
-    props = ctx.styles.apply(where.paragraph, _val(rpr, "rStyle")).merged(rpr)
+    paragraph = where.paragraph if where.paragraph is not None else where.base
+    props = ctx.styles.apply(paragraph, _val(rpr, "rStyle")).merged(rpr)
     if props.vanish:
         return "vanished_run"
+    size = props.size if props.size is not None else DEFAULT_SIZE_HALF_POINTS
+    if size < ctx.rules.docx.min_font_size_half_points:
+        return "font_too_small"
+    if props.color is not None:
+        backgrounds = (props.background,) if props.background is not None else where.backgrounds
+        limit = ctx.rules.docx.color_distance_max
+        if backgrounds and all(_distance(props.color, background) <= limit for background in backgrounds):
+            return "color_near_background"
     return None
+
+
+def _table(element: Element, where: _Where, ctx: _Context) -> _Where:
+    tblpr = element.find(f"{W}tblPr")
+    style_id = _val(tblpr, "tblStyle")
+    base = ctx.styles.apply(ctx.styles.defaults, style_id)
+    own = _shading(tblpr.find(f"{W}shd")) if tblpr is not None else None
+    if own is not None:
+        backgrounds: tuple[RGB, ...] = (own,)
+    else:
+        backgrounds = tuple(dict.fromkeys((*where.backgrounds, *ctx.styles.table_fills(style_id))))
+    return replace(where, base=base, backgrounds=backgrounds, paragraph=None)
+
+
+def _cell(element: Element, where: _Where) -> _Where:
+    fill = _shading(element.find(f"{W}tcPr/{W}shd"))
+    return replace(where, backgrounds=(fill,)) if fill is not None else where
+
+
+def _paragraph(element: Element, where: _Where, ctx: _Context) -> _Where:
+    ppr = element.find(f"{W}pPr")
+    style_id = _val(ppr, "pStyle") or ctx.styles.default_paragraph
+    paragraph = ctx.styles.apply(where.base, style_id)
+    shading = _shading(ppr.find(f"{W}shd")) if ppr is not None and ppr.find(f"{W}shd") is not None else None
+    if shading is None:
+        shading = ctx.styles.paragraph_shading(style_id)
+    backgrounds = (shading,) if shading is not None else where.backgrounds
+    return replace(where, paragraph=paragraph, backgrounds=backgrounds)
 
 
 def _walk(element: Element, where: _Where, ctx: _Context, depth: int) -> None:
@@ -274,27 +396,30 @@ def _walk(element: Element, where: _Where, ctx: _Context, depth: int) -> None:
                 _walk(choice, where, ctx, depth + 1)
         elif tag == f"{W}p":
             ctx.flush()
-            ppr = child.find(f"{W}pPr")
-            style_id = _val(ppr, "pStyle") or ctx.styles.default_paragraph
-            paragraph = ctx.styles.apply(ctx.styles.defaults, style_id)
-            _walk(child, _Where(paragraph=paragraph, deleted=where.deleted), ctx, depth + 1)
+            _walk(child, _paragraph(child, where, ctx), ctx, depth + 1)
             ctx.flush()
+        elif tag == f"{W}tbl":
+            ctx.flush()
+            _walk(child, _table(child, where, ctx), ctx, depth + 1)
+        elif tag == f"{W}tc":
+            _walk(child, _cell(child, where), ctx, depth + 1)
+        elif tag in (f"{W}del", f"{W}moveFrom"):
+            _walk(child, replace(where, deleted=True), ctx, depth + 1)
         elif tag == f"{W}r":
             text = _run_text(child)
             if text:
                 ctx.hit(_run_reason(child, where, ctx), text)
             _walk(child, where, ctx, depth + 1)
-        elif tag in (f"{W}rPr", f"{W}pPr"):
+        elif tag in (f"{W}rPr", f"{W}pPr", f"{W}tblPr", f"{W}tcPr", f"{W}trPr", f"{W}sectPr"):
             continue
         else:
             _walk(child, where, ctx, depth + 1)
 
 
-def _story_parts(package: _Package, main: str) -> list[str]:
-    parts = [main]
-    related = package.relationships(main)
-    parts.extend(sorted({target for kind, target in related if kind in STORY_PARTS and package.has(target)}))
-    return parts
+def _comments(root: Element, ctx: _Context) -> None:
+    for comment in root.iter(f"{W}comment"):
+        text = "\n".join(_run_text(run) for run in comment.iter(f"{W}r"))
+        ctx.add("comment", text)
 
 
 def _main_part(package: _Package) -> str:
@@ -310,14 +435,26 @@ def check_docx_hidden_text(data: bytes, rules: HiddenTextRules) -> CheckOutcome:
     """Report vanished runs, near-background colour, tiny size, comments and tracked deletions as spans."""
     package = _Package(data)
     main = _main_part(package)
-    related = package.relationships(main)
+    related = [(kind, target) for kind, target in package.relationships(main) if package.has(target)]
     styles_part = next((target for kind, target in related if kind == "styles"), None)
     styles = _Styles.load(package.read_xml(styles_part) if styles_part else None)
+    document = package.read_xml(main)
+    if document is None:
+        raise UnreadableDocument("no main document part")
+    background = document.find(f"{W}background")
+    page = (_hex(background.get(f"{W}color")) if background is not None else None) or WHITE
     ctx = _Context(styles=styles, rules=rules, spans=[])
-    for part in _story_parts(package, main):
-        root = package.read_xml(part)
-        if root is None:
-            continue
-        _walk(root, _Where(paragraph=styles.defaults), ctx, 0)
+    start = _Where(base=styles.defaults, backgrounds=(page,))
+    stories = [document] + [
+        root
+        for root in (package.read_xml(target) for target in sorted({t for k, t in related if k in STORY_PARTS}))
+        if root is not None
+    ]
+    for root in stories:
+        _walk(root, start, ctx, 0)
         ctx.flush()
+    for target in sorted({t for k, t in related if k == "comments"}):
+        root = package.read_xml(target)
+        if root is not None:
+            _comments(root, ctx)
     return CheckOutcome(checked=True, spans=ctx.spans, link_targets=[])
