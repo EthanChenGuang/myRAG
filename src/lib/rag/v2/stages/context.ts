@@ -71,6 +71,8 @@ export interface ContextStagesInput {
   alsoIn?: ReadonlyMap<string, AlsoIn[]>;
   /** D-17: the matched table row per chunk of the table:0 list (search output); absent leaves the context unchanged. */
   tableRows?: ReadonlyMap<string, TableRowAttachment>;
+  /** D-31, D-51: balanced and flexible only, a missing identifier: the localized suggestion line appended after the passages. */
+  identifierSuggestionLine?: string;
 }
 
 /** D-13: the assemble stage detail when the version lookup failed and the labels were skipped. */
@@ -652,13 +654,20 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
 
   // Labelling is the last context step: it renders the final selection once more, in the same order, with the labels.
   const labeler = input.citationLabeler;
-  if (!labeler) return { assembly: withAlsoIn(withVersionFields(final.output, versionInfo)), candidates, ...injectionOut };
+  const line = ctx.identifierSuggestionLine ?? '';
+  if (!labeler) return { assembly: withSuggestionLine(withAlsoIn(withVersionFields(final.output, versionInfo)), line), candidates, ...injectionOut };
   const labelled = render(final.selected, base.groupOrder, { runs: base.blockRuns, chunkIds: base.blockChunkIds, labeler });
   return {
-    assembly: withAlsoIn(withVersionFields({ ...final.output, context: labelled.context, blocks: labelled.blocks }, versionInfo)),
+    assembly: withSuggestionLine(withAlsoIn(withVersionFields({ ...final.output, context: labelled.context, blocks: labelled.blocks }, versionInfo)), line),
     candidates,
     ...injectionOut,
   };
+}
+
+/** D-31, D-51: the suggestion line goes after the passages, outside any document block; an empty line changes nothing. */
+function withSuggestionLine(assembly: AssembleOutput<Candidate>, line: string): AssembleOutput<Candidate> {
+  if (line.length === 0) return assembly;
+  return { ...assembly, context: assembly.context.length > 0 ? `${assembly.context}\n\n${line}` : line };
 }
 
 /** D-22, D-34: the top-k redundancy as an integer per mille, only when a kept chunk carries a cluster id. */

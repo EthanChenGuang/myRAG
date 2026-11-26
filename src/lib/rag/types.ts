@@ -367,4 +367,19 @@ export interface RetrievalResult {
   cacheHit?: CacheHit;
   /** Set when the semantic_cache stage checked with no check-time bypass; the entry point stores the answer with it. */
   cacheTicket?: CacheTicket;
+  /**
+   * D-31, D-51: at most 3 existing identifiers of the caller's tenant closest to the asked ones; set only when the question names
+   * identifiers and none exists (strict: reason identifier_not_found). Rendered with identifierSuggestionMessage.
+   */
+  identifierSuggestions?: string[];
+  /** D-31: identifier filter counts for the trace; absent while RAG_IDENTIFIER_FILTER is off or the resolve stage did not run. */
+  identifierFilter?: IdentifierFilterSummary;
+}
+
+/** D-31: counts only, never an identifier. */
+export interface IdentifierFilterSummary {
+  asked: number;
+  resolved: number;
+  fallback: boolean;
+  nearMissDropped: number;
 }

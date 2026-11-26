@@ -40,6 +40,24 @@ export function noKnowledgeBaseResponse(language: string): string {
 Would you like me to turn on web search and check? Do you want to upload a document that contains this information? Is there a specific detail you want me to focus on?`;
 }
 
-export function identifierSuggestionMessage(_language: string | null | undefined, _suggestions: readonly string[] | undefined): string {
-  return '';
+const IDENTIFIER_SUGGESTION_MESSAGES: Record<string, (list: string) => string> = {
+  en: (list) => `No passage names the identifier you asked about. Closest existing identifiers: ${list}.`,
+  zh: (list) => `没有找到提到您所问标识符的内容。最接近的现有标识符：${list}。`,
+  it: (list) => `Nessun passaggio cita l'identificativo richiesto. Identificativi esistenti più vicini: ${list}.`,
+};
+
+const SUGGESTION_UNSAFE = /[\p{Cc}\p{Cf}<>`]/gu;
+
+/**
+ * D-31: the localized sentence that names up to three existing identifiers of the caller's tenant (zh, en, it; other languages en).
+ * Suggestions are rendered as plain text without markup or control characters; no suggestion gives an empty string.
+ */
+export function identifierSuggestionMessage(language: string | null | undefined, suggestions: readonly string[] | undefined): string {
+  const list = (suggestions ?? [])
+    .map((value) => value.replace(SUGGESTION_UNSAFE, '').trim())
+    .filter((value) => value.length > 0)
+    .slice(0, 3);
+  if (list.length === 0) return '';
+  const key = language && Object.prototype.hasOwnProperty.call(IDENTIFIER_SUGGESTION_MESSAGES, language) ? language : 'en';
+  return IDENTIFIER_SUGGESTION_MESSAGES[key]!(list.join(key === 'zh' ? '、' : ', '));
 }
