@@ -16,6 +16,7 @@ PYPI_REGISTRY = "https://pypi.org/simple"
 FORBIDDEN_LOCK_NAMES = {"pymupdf", "fitz"}
 PINNED_EXTRAS: dict[str, set[str]] = {
     "preflight": {"pypdfium2", "pdfplumber"},
+    "hidden-text": {"pypdfium2", "pdfplumber", "python-docx", "lxml", "defusedxml"},
     "docling": {"pypdfium2", "pdfplumber"},
     "ray": {"ray"},
 }

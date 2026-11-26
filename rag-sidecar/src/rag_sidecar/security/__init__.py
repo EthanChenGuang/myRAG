@@ -4,6 +4,7 @@ from rag_sidecar.security.hidden_text import (
     CheckerUnavailable,
     EncryptedDocument,
     UnreadableDocument,
+    UnsafePackage,
     check_hidden_text,
     load_hidden_text_rules,
 )
@@ -13,6 +14,7 @@ __all__ = [
     "CheckerUnavailable",
     "EncryptedDocument",
     "UnreadableDocument",
+    "UnsafePackage",
     "build_hidden_text_router",
     "check_hidden_text",
     "load_hidden_text_rules",

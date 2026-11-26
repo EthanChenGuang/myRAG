@@ -1,6 +1,6 @@
 """Hidden-text check over an original file (D-33): dispatch by MIME type, report bounds, rules data.
 
-Base install only: the PDF checker's optional imports (preflight extra) happen inside the call, so a missing
+Base install only: the PDF and Word checkers' optional imports (hidden-text extra) happen inside the call, so a missing
 extra surfaces as CheckerUnavailable at request time, never at import time.
 """
 
@@ -26,6 +26,7 @@ from rag_sidecar.contracts.ingest_security import (
 RULES_FILE = "hidden-text-rules.json"
 CHECKER_VERSION = "1"
 PDF_MIME_TYPES = frozenset({"application/pdf", "application/x-pdf"})
+DOCX_MIME_TYPES = frozenset({"application/vnd.openxmlformats-officedocument.wordprocessingml.document"})
 
 
 class CheckerUnavailable(Exception):
@@ -38,6 +39,10 @@ class UnreadableDocument(Exception):
 
 class EncryptedDocument(Exception):
     """The file needs a password; nothing was checked."""
+
+
+class UnsafePackage(Exception):
+    """The package exceeds the safety caps or carries a DTD or entity; refused before it is fully read."""
 
 
 @dataclass(frozen=True)
@@ -120,4 +125,8 @@ def check_hidden_text(data: bytes, mime_type: str, rules: HiddenTextRules | None
         from rag_sidecar.security.pdf_checks import check_pdf_hidden_text
 
         return build_report(check_pdf_hidden_text(data, active), active)
+    if kind in DOCX_MIME_TYPES:
+        from rag_sidecar.security.docx_checks import check_docx_hidden_text
+
+        return build_report(check_docx_hidden_text(data, active), active)
     return build_report(CheckOutcome(checked=False, spans=[], link_targets=[]), active)
