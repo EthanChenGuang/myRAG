@@ -11,6 +11,8 @@ import { assembleContext, type AssembleInput, type AssemblyCandidate, type Assem
 import { docsFromBlocks } from '@/lib/rag/context/wrap';
 import { buildAliasMap, createCitationLabeler } from '@/lib/rag/generation/citations/blocks';
 import { buildClaudeCitationRequest } from '@/lib/rag/generation/citations/claude';
+import { buildCitationRecords } from '@/lib/rag/generation/citations/record';
+import { CitationRecordSchema } from '@/lib/rag-eval/contracts.generated';
 
 const BASE_SELECT = 'id, filename, created_at, content, metadata';
 const VERSION_SELECT = `${BASE_SELECT}, version, doc_type, doc_date, effective_from, version_label`;
@@ -303,5 +305,35 @@ describe('version labels in assembly (D-48, D-50)', () => {
     const output = assembleContext(assembleInput(baseRows()));
     expect(output.blocks.map((block) => block.title)).toEqual(['widgets.md', 'widgets.md', 'gadgets.md']);
     expect(output.context).toContain('--- Document: gadgets.md (1 relevant chunks) ---');
+  });
+});
+
+describe('version label and date on citation records (D-50, UI-SPEC 6.7)', () => {
+  function recordsFor(rowsMap: Map<string, AssemblyDocumentRow>) {
+    const output = assembleContext(assembleInput(rowsMap, { citationLabeler: createCitationLabeler() }));
+    return buildCitationRecords(['S1', 'S2', 'S3'], buildAliasMap(output.blocks), 'chunk-alias');
+  }
+
+  it('copies the block version label and effective date, valid against CitationRecordSchema', () => {
+    vi.stubEnv('RAG_VERSION_LABELS', 'true');
+    const records = recordsFor(versionRows('B-2'));
+    expect(records.map((record) => [record.documentVersion, record.versionLabel, record.effectiveFrom])).toEqual([
+      [2, 'B-2', '2026-03-01'],
+      [1, 'Version 1', '2025-01-02'],
+      [null, undefined, undefined],
+    ]);
+    expect(records[2]).not.toHaveProperty('versionLabel');
+    expect(records[2]).not.toHaveProperty('effectiveFrom');
+    for (const record of records) expect(CitationRecordSchema.safeParse(record).success).toBe(true);
+  });
+
+  it('adds no key with the switch off', () => {
+    const records = recordsFor(versionRows('B-2'));
+    for (const record of records) {
+      expect(record).not.toHaveProperty('versionLabel');
+      expect(record).not.toHaveProperty('effectiveFrom');
+    }
+    const strip = ({ documentVersion: _v, ...rest }: (typeof records)[number]) => rest;
+    expect(records.map(strip)).toEqual(recordsFor(baseRows()).map(strip));
   });
 });
