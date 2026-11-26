@@ -104,7 +104,7 @@ def test_run_fixture_exits_0_and_writes_every_report(fixture_run):
 def test_run_every_stage_produced_rows(fixture_run):
     run_dir = fixture_run["run_dir"]
     manifest = DatasetManifest.model_validate_json((run_dir / "manifest.json").read_text())
-    assert manifest.tenant_keys == ["s:default"]
+    assert manifest.tenant_keys == sorted(pipeline.FIXTURE_TENANTS)
     assert all(manifest.chunks[split] > 0 for split in ("train", "dev", "test"))
     assert _rows(run_dir / "queries.kept.jsonl") and _rows(run_dir / "queries.test.kept.jsonl")
     mined = _rows(run_dir / "pairs.mined.jsonl", FinetunePair)
