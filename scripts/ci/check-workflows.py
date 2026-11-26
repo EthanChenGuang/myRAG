@@ -6,6 +6,7 @@ Requires PyYAML. Exits 1 and lists every failed assertion.
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -755,12 +756,126 @@ def check_no_ray_extra(name: str, text: str, errors: list[str]) -> None:
         errors.append(f"{name}: must not install the ray extra (it runs only in ray-optional.yml)")
 
 
+QUALITY_GATES = "eval/config/quality-gates.json"
+PROMPT_CONTROL_OVERLAY = "eval/fixtures/controls/no-refusal-directive.overlay.json"
+FIXTURE_MANIFESTS = ("eval/fixtures/golden.manifest.json", "eval/fixtures/ingest/golden-ingest.manifest.json")
+JUDGE_CALIBRATION = "eval/config/judge-calibration.json"
+STAGE_ORDER = {"before": 0, "after": 1}
+SMOKE_COMMAND_RE = re.compile(r"npm run test-rag\b(?P<args>[^\n]*)")
+OUT_RE = re.compile(r"--out\s+(\S+)")
+GATES_FILE_RE = re.compile(r"--gates\s+(\S+)")
+
+
+def latest_tier_modes(measurement_path: Path = MEASUREMENT) -> dict[str, str]:
+    """The mode of each measured tier's latest stage, keyed by its --out directory (05.3-15 measurement record)."""
+    data = json.loads(measurement_path.read_text(encoding="utf-8"))
+    latest: dict[str, tuple[int, dict]] = {}
+    for entry in data.get("tiers") or []:
+        name = str(entry.get("name"))
+        rank = STAGE_ORDER.get(str(entry.get("stage")), -1)
+        if name not in latest or rank > latest[name][0]:
+            latest[name] = (rank, entry)
+    return {str(entry["out"]): str(entry.get("mode") or "") for _, entry in latest.values() if entry.get("out")}
+
+
 def report_only_outs(measurement_path: Path = MEASUREMENT) -> set[str]:
-    return set()
+    return {out for out, mode in latest_tier_modes(measurement_path).items() if mode == "report"}
+
+
+def check_smoke_gate_flags(job_name: str, job: dict, report_outs: set[str], errors: list[str]) -> None:
+    for step in all_steps(job):
+        for match in SMOKE_COMMAND_RE.finditer(str(step.get("run", ""))):
+            args = match.group("args")
+            if "--cache-pairs" in args:
+                continue
+            out_match = OUT_RE.search(args)
+            out = out_match.group(1) if out_match else "eval/out/smoke"
+            if "--no-gate" in args:
+                errors.append(f"pr-smoke: the {job_name} step writing {out} must not pass --no-gate; the absolute gates run in every tier")
+            gates = GATES_FILE_RE.search(args)
+            if gates is not None and gates.group(1) != QUALITY_GATES:
+                errors.append(f"pr-smoke: the {job_name} step writing {out} must use {QUALITY_GATES}, not {gates.group(1)}")
+            if re.search(r"--gates-mode\s+report\b", args) and out not in report_outs:
+                errors.append(
+                    f"pr-smoke: the {job_name} step writing {out} runs --gates-mode report, but {MEASUREMENT.relative_to(ROOT)} does not mark it report"
+                )
+
+
+def check_prompt_control(job: dict | None, errors: list[str]) -> None:
+    if job is None:
+        return
+    runs = [str(step.get("run", "")) for step in all_steps(job)]
+    regression = [run for run in runs if re.search(r'test\s+"?\$code"?\s+-eq\s+10\b', run)]
+    if len(regression) < 2:
+        errors.append("pr-smoke: gate-negative-control must keep both regression controls asserting 'test \"$code\" -eq 10'")
+    control = [run for run in runs if PROMPT_CONTROL_OVERLAY in run]
+    if not control or not any(re.search(r'test\s+"?\$code"?\s+-eq\s+11\b', run) for run in control):
+        errors.append(
+            f"pr-smoke: gate-negative-control must run the prompt control with --env-overlay {PROMPT_CONTROL_OVERLAY} and assert 'test \"$code\" -eq 11'"
+        )
+        return
+    body = next(run for run in control if re.search(r'test\s+"?\$code"?\s+-eq\s+11\b', run))
+    if not re.search(r"jq -e '[^']*false_answer_rate[^']*overall[^']*failed[^']*' \S+/gate\.json", body):
+        errors.append("pr-smoke: the prompt control must assert a failed false_answer_rate check on overall with jq -e on its gate.json")
+
+
+def check_manifest_verify(job: dict | None, errors: list[str]) -> None:
+    lines = [line for line in step_text(job or {}).splitlines() if "rag_eval.golden_set verify" in line]
+    for manifest in FIXTURE_MANIFESTS:
+        if not any(f"--manifest {manifest}" in line for line in lines):
+            errors.append(f"pr-smoke: job python must run 'python -m rag_eval.golden_set verify' for {manifest}")
+
+
+def check_nightly_absolute(job: dict | None, errors: list[str]) -> None:
+    if job is None:
+        errors.append("nightly: job 'judge' missing")
+        return
+    flag = "HAS_JUDGE_KEYS == 'true'"
+    steps = all_steps(job)
+    runs = [str(step.get("run", "")) for step in steps]
+    judge = next((i for i, run in enumerate(runs) if "rag_eval.judge.run" in run), None)
+    stale = next((i for i, run in enumerate(runs) if "rag_eval.golden_set stale-scan" in run), None)
+    if stale is None:
+        errors.append("nightly: job judge must run the fixture 'rag_eval.golden_set stale-scan'")
+    elif flag not in str(steps[stale].get("if", "")):
+        errors.append(f"nightly: the stale-scan step must be conditioned on {flag}")
+    gate = next((i for i, run in enumerate(runs) if "rag_eval.absolute_gate check" in run), None)
+    if gate is None:
+        errors.append("nightly: job judge must run 'python -m rag_eval.absolute_gate check --tier nightly' on its report")
+        return
+    body = runs[gate]
+    if flag not in str(steps[gate].get("if", "")):
+        errors.append(f"nightly: the absolute_gate step must be conditioned on {flag}")
+    for needle in ("--tier nightly", "--report eval/out/nightly/report.json", f"--gates {QUALITY_GATES}", "--judge-report", f"--calibration {JUDGE_CALIBRATION}"):
+        if needle not in body:
+            errors.append(f"nightly: the absolute_gate step must pass {needle}")
+    if not re.search(r"--mode\s+report\b", body):
+        errors.append("nightly: the absolute_gate step must run with --mode report until the owner ratifies the floors (O-2)")
+    if "secrets." in body:
+        errors.append("nightly: the absolute_gate step must take secrets only through step env")
+    if judge is None or gate < judge:
+        errors.append("nightly: the absolute_gate step must run after the judge step")
+    uploads = [step for step in steps if str(step.get("uses", "")).startswith("actions/upload-artifact@")]
+    if not any("eval/out/nightly/absolute.json" in str((step.get("with") or {}).get("path", "")) for step in uploads):
+        errors.append("nightly: job judge must upload eval/out/nightly/absolute.json")
 
 
 def check_absolute_gates(pr: dict | None, nightly: dict | None, errors: list[str], measurement_path: Path = MEASUREMENT) -> None:
-    return None
+    """D-06, O-1, O-2: every CI tier carries the absolute gates; a tier runs report-only solely because the measurement says so."""
+    try:
+        report_outs = report_only_outs(measurement_path)
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+        errors.append(f"absolute gates: cannot read {measurement_path}: {exc}")
+        return
+    if pr is not None:
+        jobs = pr.get("jobs") or {}
+        for name in ("eval-smoke", "gate-negative-control"):
+            if name in jobs:
+                check_smoke_gate_flags(name, jobs[name], report_outs, errors)
+        check_prompt_control(jobs.get("gate-negative-control"), errors)
+        check_manifest_verify(jobs.get("python"), errors)
+    if nightly is not None:
+        check_nightly_absolute((nightly.get("jobs") or {}).get("judge"), errors)
 
 
 def main() -> int:
@@ -781,6 +896,7 @@ def main() -> int:
     else:
         errors.append(f"missing {RAY_OPTIONAL.relative_to(ROOT)}")
     check_lakera_secret_scope(errors)
+    check_absolute_gates(load(PR)[0] if PR.exists() else None, load(NIGHTLY)[0] if NIGHTLY.exists() else None, errors)
     workflows = [load(path)[0] for path in (PR, NIGHTLY) if path.exists()]
     check_tsx_tests_covered(workflows, TESTS_DIR, errors)
     if errors:
