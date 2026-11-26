@@ -2507,6 +2507,7 @@ Context:
       context.trim().toLowerCase().startsWith('no relevant context found');
 
     if (shouldBlockNoContextResponse) {
+      // D-31, D-51: identifier_not_found adds the same-tenant suggestion sentence to the fixed text; no model call
       const suggestionText =
         retrievalResult?.reason === IDENTIFIER_NOT_FOUND
           ? identifierSuggestionMessage(fallbackLanguage, retrievalResult.identifierSuggestions)
