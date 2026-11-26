@@ -40,8 +40,44 @@ export function createPgliteAdmin(db: PGlite, options: PgliteAdminOptions = {}) 
     });
   };
 
+  const procCache = new Map<string, { retset: boolean; table: boolean }>();
+  const procShape = async (fn: string) => {
+    const cached = procCache.get(fn);
+    if (cached) return cached;
+    const result = await db.query<{ retset: boolean; table: boolean }>(
+      `SELECT p.proretset AS retset, COALESCE('t' = ANY (p.proargmodes::text[]), false) AS table
+         FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = 'public' AND p.proname = $1 LIMIT 1`,
+      [fn],
+    );
+    const shape = result.rows[0] ?? { retset: false, table: false };
+    procCache.set(fn, shape);
+    return shape;
+  };
+
   const admin = {
     queries,
+    /** supabase-js rpc over named arguments: objects and arrays bind as JSON, a scalar return is unwrapped. */
+    async rpc(fn: string, args: Row = {}): Promise<Result> {
+      const name = identifier(fn);
+      const params: unknown[] = [];
+      const named = Object.entries(args).map(([key, value]) => {
+        params.push(value !== null && typeof value === 'object' ? JSON.stringify(value) : value);
+        return `${identifier(key)} => $${params.length}`;
+      });
+      const sql = `SELECT * FROM public.${name}(${named.join(', ')})`;
+      queries.push({ sql, params: [...params] });
+      try {
+        const shape = await procShape(fn);
+        const rows = plain((await execute(sql, params)).rows);
+        if (shape.table) return { data: rows, error: null };
+        if (shape.retset) return { data: rows.map((row) => row[fn]), error: null };
+        return { data: rows[0]?.[fn] ?? null, error: null };
+      } catch (error) {
+        const code = typeof (error as { code?: unknown }).code === 'string' ? (error as { code: string }).code : 'XX000';
+        return { data: null, error: { code, message: error instanceof Error ? error.message : String(error) } };
+      }
+    },
     storage: {
       from: () => ({ remove: async () => ({ error: null }) }),
     },
@@ -170,6 +206,26 @@ export function createPgliteAdmin(db: PGlite, options: PgliteAdminOptions = {}) 
         is(column: string, value: null) {
           if (value !== null) throw new Error('[pglite-admin] is() takes null only');
           where.push(`${identifier(column)} IS NULL`);
+          return builder;
+        },
+        gte(column: string, value: unknown) {
+          where.push(`${identifier(column)} >= ${bind(value)}`);
+          return builder;
+        },
+        gt(column: string, value: unknown) {
+          where.push(`${identifier(column)} > ${bind(value)}`);
+          return builder;
+        },
+        lte(column: string, value: unknown) {
+          where.push(`${identifier(column)} <= ${bind(value)}`);
+          return builder;
+        },
+        lt(column: string, value: unknown) {
+          where.push(`${identifier(column)} < ${bind(value)}`);
+          return builder;
+        },
+        range(from: number, to: number) {
+          limitSql = ` LIMIT ${Math.trunc(to - from + 1)} OFFSET ${Math.trunc(from)}`;
           return builder;
         },
         in(column: string, values: unknown[]) {

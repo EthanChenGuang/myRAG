@@ -39,7 +39,16 @@ export const PHASE53_SERVICE_ROLE_FUNCTIONS: ReadonlyArray<{ signature: string; 
   { signature: 'rag_golden_evidence_clear(text,text,text[])', kind: 'invoker' },
   { signature: 'rag_golden_evidence_on_documents_update()', kind: 'trigger' },
   { signature: 'rag_golden_evidence_on_documents_delete()', kind: 'trigger' },
+  {
+    signature: 'rag_monitor_alert_evidence(text,text,timestampwithtimezone,timestampwithtimezone,jsonb,integer)',
+    kind: 'invoker',
+  },
+  { signature: 'rag_monitor_cluster_shares(text,timestampwithtimezone)', kind: 'invoker' },
+  { signature: 'rag_review_items_enqueue_re_review(text,jsonb)', kind: 'invoker' },
 ];
+
+/** Tables of the block that must never be folded into a setup file, checked by name as well as by the inventory diff. */
+const NOT_FOLDED_NAMES = ['rag_monitor_runs', 'rag_monitor_alert_evidence', 'rag_monitor_cluster_shares', 'rag_review_items_enqueue_re_review'];
 
 const normalise = (signature: string): string => signature.replace(/\s+/g, '');
 
@@ -156,6 +165,7 @@ for (const mode of MODES) {
     test('no table or function of the phase appears in either setup file', () => {
       const names = [...phaseTables, ...phaseFunctions.map((signature) => signature.slice(0, signature.indexOf('(')))];
       assert.ok(names.includes('rag_golden_evidence_index'));
+      for (const name of NOT_FOLDED_NAMES) assert.ok(names.includes(name), `${name} is not created by a 0960 to 0979 file`);
       for (const setup of SETUP_FILES) {
         const text = fs.readFileSync(path.join(REPO_ROOT, setup), 'utf8');
         for (const name of names) assert.ok(!new RegExp(`\\b${name}\\b`).test(text), `${name} is folded into ${setup}`);
