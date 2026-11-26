@@ -411,6 +411,7 @@ export type { TenantFeedbackSettingsRow, TenantRetrievalLog } from './feedback-l
 export { purgeRetrievalLog, PurgeError } from './feedback-loop/purge';
 export type { PurgeCounts } from './feedback-loop/purge';
 export { isMiningWindowError, miningDisabledReason, MiningError, parseMiningDate, runMining } from './feedback-loop/mining';
+export { computeFeedbackLoopStats, isStatsWindowError, MAX_STATS_WINDOW_DAYS, StatsError } from './feedback-loop/stats';
 export {
   getReviewItem,
   getReviewItemChunks,
