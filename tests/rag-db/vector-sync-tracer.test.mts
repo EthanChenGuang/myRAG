@@ -150,7 +150,7 @@ describe('vector sync tracer: one document out to an external store and back, re
       assert.equal(point.payload.tenant_key, KEY_A);
       assert.equal(point.vector.length, 1536);
       // lexical_text is the shared-tokenizer output (D-03, A-11); no other field may carry chunk text.
-      const { lexical_text: _lexical, ...rest } = point.payload;
+      const rest = Object.fromEntries(Object.entries(point.payload).filter(([key]) => key !== 'lexical_text'));
       const serialized = JSON.stringify({ id: point.id, payload: rest });
       for (const content of CHUNKS) assert.ok(!serialized.includes(content), 'no chunk text outside lexical_text');
       assert.ok(!serialized.includes(FILENAME), 'no document name in the point');

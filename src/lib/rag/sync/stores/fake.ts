@@ -44,12 +44,18 @@ function cosine(a: number[], b: number[]): number {
   return na === 0 || nb === 0 ? 0 : dot / Math.sqrt(na * nb);
 }
 
+/** An empty or absent list keeps everything; a null field never matches a set list. */
+function inList(values: string[] | undefined, value: string | null): boolean {
+  if (!values || values.length === 0) return true;
+  return value !== null && values.includes(value);
+}
+
 function passesFilters(point: VectorPoint, filters: RetrievalFilters): boolean {
   const p = point.payload;
-  if (filters.documentIds && filters.documentIds.length > 0 && !filters.documentIds.includes(p.document_id)) return false;
-  if (filters.docTypes && filters.docTypes.length > 0 && (p.doc_type === null || !filters.docTypes.includes(p.doc_type))) return false;
-  if (filters.languages && filters.languages.length > 0 && (p.language === null || !filters.languages.includes(p.language))) return false;
-  if (filters.sources && filters.sources.length > 0 && (p.source === null || !filters.sources.includes(p.source))) return false;
+  if (!inList(filters.documentIds, p.document_id)) return false;
+  if (!inList(filters.docTypes, p.doc_type)) return false;
+  if (!inList(filters.languages, p.language)) return false;
+  if (!inList(filters.sources, p.source)) return false;
   const range = filters.dateRange;
   if (range && (range.from || range.to)) {
     if (p.doc_date === null) return range.includeUndated === true;
