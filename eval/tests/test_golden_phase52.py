@@ -252,3 +252,32 @@ def test_new_items_take_the_frozen_split_and_existing_splits_do_not_move(golden,
         if index >= pre_count:
             assert item.split == assign_split(item.id), item.id
 
+
+# Re-baseline (D-54, D-62 a): every pre-existing item and slice equals the pre-05.2-29 baseline; the new items are in.
+
+PHASE52_SLICES = ("category:partial_answer", "category:stale_version", "category:off_topic_context")
+
+
+@pytest.mark.parametrize("name", sorted(PRE_ITEM_SETS))
+def test_rebaseline_pre_existing_items_equal_the_previous_baseline(name):
+    previous = _previous(name)
+    current = _baseline(BASELINES / f"{name}.json")
+    assert len(current["runs"]) >= 3
+    assert {run["run_id"] for run in current["runs"]}.isdisjoint({run["run_id"] for run in previous["runs"]}), "not re-recorded"
+    assert current["corpus_sha256"] != previous["corpus_sha256"] and current["golden_sha256"] != previous["golden_sha256"]
+    assert {item_id: current["items"][item_id] for item_id in previous["items"]} == previous["items"], name
+    for slice_name, metrics in previous["slices"].items():
+        before = {metric: stat["runs"] for metric, stat in metrics.items()}
+        after = {metric: stat["runs"] for metric, stat in current["slices"][slice_name].items()}
+        if slice_name.startswith("language:") or slice_name == "category:injection_evasive":
+            continue
+        assert after == before, (name, slice_name)
+    assert all(stat["spread"] == 0.0 for stats in current["slices"].values() for stat in stats.values()), name
+
+
+@pytest.mark.parametrize("name", sorted(PRE_ITEM_SETS))
+def test_rebaseline_holds_the_new_items_and_their_category_slices(name, new_items):
+    current = _baseline(BASELINES / f"{name}.json")
+    assert {item.id for item in new_items} <= set(current["items"]), name
+    for slice_name in PHASE52_SLICES:
+        assert slice_name in current["slices"], (name, slice_name)
