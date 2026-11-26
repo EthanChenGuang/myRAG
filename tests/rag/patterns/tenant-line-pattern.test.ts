@@ -308,36 +308,25 @@ describe('matchTenantLinePatterns run-time match (D-11, TPL-08)', () => {
     const tenantSources = new Set(['^qorvane\\b', '^-{3,}$']);
     const offending: string[] = [];
     const isTenant = (value: unknown) => value instanceof RegExp && tenantSources.has(value.source);
-    const origTest = RegExp.prototype.test;
-    const origMatch = String.prototype.match;
-    const origMatchAll = String.prototype.matchAll;
-    const origReplace = String.prototype.replace;
-    const origSplit = String.prototype.split;
-    const testSpy = vi.spyOn(RegExp.prototype, 'test').mockImplementation(function (this: RegExp, input: string) {
-      if (isTenant(this)) offending.push('test');
-      return origTest.call(this, input);
-    });
-    const matchSpy = vi.spyOn(String.prototype, 'match').mockImplementation(function (this: string, re: never) {
-      if (isTenant(re)) offending.push('match');
-      return origMatch.call(this, re);
-    });
-    const matchAllSpy = vi.spyOn(String.prototype, 'matchAll').mockImplementation(function (this: string, re: never) {
-      if (isTenant(re)) offending.push('matchAll');
-      return origMatchAll.call(this, re);
-    });
-    const replaceSpy = vi.spyOn(String.prototype, 'replace').mockImplementation(function (this: string, re: never, value: never) {
-      if (isTenant(re)) offending.push('replace');
-      return origReplace.call(this, re, value);
-    });
-    const splitSpy = vi.spyOn(String.prototype, 'split').mockImplementation(function (this: string, re: never, limit?: number) {
-      if (isTenant(re)) offending.push('split');
-      return origSplit.call(this, re, limit);
-    });
-    const origExec = RegExp.prototype.exec;
-    const execSpy = vi.spyOn(RegExp.prototype, 'exec').mockImplementation(function (this: RegExp, input: string) {
-      if (isTenant(this)) offending.push('exec');
-      return origExec.call(this, input);
-    });
+    type Methods = Record<string, (..._args: unknown[]) => unknown>;
+    const watch = (target: object, method: string, pick: (_self: unknown, _args: unknown[]) => unknown) => {
+      const original = (target as Methods)[method]!;
+      return vi.spyOn(target as Methods, method).mockImplementation(function (this: unknown, ...args: unknown[]) {
+        if (isTenant(pick(this, args))) offending.push(method);
+        return Reflect.apply(original, this, args);
+      });
+    };
+    const onSelf = (self: unknown) => self;
+    const onFirst = (_self: unknown, args: unknown[]) => args[0];
+    const spies = [
+      watch(RegExp.prototype, 'exec', onSelf),
+      watch(RegExp.prototype, 'test', onSelf),
+      watch(String.prototype, 'match', onFirst),
+      watch(String.prototype, 'matchAll', onFirst),
+      watch(String.prototype, 'replace', onFirst),
+      watch(String.prototype, 'search', onFirst),
+      watch(String.prototype, 'split', onFirst),
+    ];
     try {
       const verdict = await matchTenantLinePatterns({
         patterns: [
@@ -348,7 +337,7 @@ describe('matchTenantLinePatterns run-time match (D-11, TPL-08)', () => {
       });
       expect(verdict).toMatchObject({ kind: 'ok' });
     } finally {
-      for (const spy of [execSpy, testSpy, matchSpy, matchAllSpy, replaceSpy, splitSpy]) spy.mockRestore();
+      for (const spy of spies) spy.mockRestore();
     }
     expect(offending).toEqual([]);
   });

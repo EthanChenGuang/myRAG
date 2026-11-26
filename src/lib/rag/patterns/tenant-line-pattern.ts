@@ -1,4 +1,5 @@
 import { checkIdentifierPattern } from '../identifiers/patterns';
+import { runPatternInWorker, type WorkerPattern } from '../identifiers/probe-worker';
 import {
   IDENTIFIER_PATTERN_FINDING_CODES,
   validateIdentifierPattern,
@@ -129,8 +130,15 @@ export async function checkTenantLinePattern(
   return { ok: false, findings: ordered(found) };
 }
 
-export const TENANT_LINE_MATCH_WINDOW = 0;
-export const TENANT_LINE_DEFAULT_DEADLINE_MS = 0;
+/** Lines are matched within their first 200 UTF-16 code units (one fewer when the cut would split a surrogate pair). */
+export const TENANT_LINE_MATCH_WINDOW = 200;
+export const TENANT_LINE_DEFAULT_DEADLINE_MS = 3000;
+
+const MIN_DEADLINE_MS = 100;
+const MAX_DEADLINE_MS = 30_000;
+const MAX_PATTERNS_PER_CALL = 100;
+const MAX_LINES_PER_CALL = 20_000;
+const MAX_PATTERN_ID_LENGTH = 64;
 
 export interface TenantLinePatternEntry {
   id: string;
@@ -142,6 +150,7 @@ export interface TenantLinePatternEntry {
 export interface TenantLineHit {
   inputIndex: number;
   patternId: string;
+  /** UTF-16 offsets into the line. */
   start: number;
   end: number;
 }
@@ -153,9 +162,82 @@ export type TenantLineMatchVerdict =
   | { kind: 'timeout' }
   | { kind: 'error'; error: TenantLineMatchError };
 
+export interface TenantLineMatchOptions {
+  deadlineMs?: number;
+  signal?: AbortSignal;
+}
+
+function clampDeadline(value: number | undefined): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return TENANT_LINE_DEFAULT_DEADLINE_MS;
+  return Math.min(MAX_DEADLINE_MS, Math.max(MIN_DEADLINE_MS, Math.floor(value)));
+}
+
+function cutToWindow(line: string): string {
+  const text = typeof line === 'string' ? line : '';
+  if (text.length <= TENANT_LINE_MATCH_WINDOW) return text;
+  const last = text.charCodeAt(TENANT_LINE_MATCH_WINDOW - 1);
+  const end = last >= 0xd800 && last <= 0xdbff ? TENANT_LINE_MATCH_WINDOW - 1 : TENANT_LINE_MATCH_WINDOW;
+  return text.slice(0, end);
+}
+
+function validIds(patterns: readonly TenantLinePatternEntry[]): boolean {
+  const seen = new Set<string>();
+  for (const entry of patterns) {
+    const id = entry?.id;
+    if (typeof id !== 'string' || id.length === 0 || id.length > MAX_PATTERN_ID_LENGTH || seen.has(id)) return false;
+    seen.add(id);
+  }
+  return true;
+}
+
+/**
+ * Run-time match for one document: every entry that passes the static re-check goes to the 04.2-14 worker in one call, with the
+ * lines cut to the match window. Reports at most the first hit per line and pattern; callers decide what a hit means.
+ */
 export async function matchTenantLinePatterns(
-  _request: { patterns: readonly TenantLinePatternEntry[]; lines: readonly string[] },
-  _options: { deadlineMs?: number; signal?: AbortSignal } = {},
+  request: { patterns: readonly TenantLinePatternEntry[]; lines: readonly string[] },
+  options: TenantLineMatchOptions = {},
 ): Promise<TenantLineMatchVerdict> {
-  return { kind: 'error', error: 'worker_failed' };
+  options.signal?.throwIfAborted();
+  const patterns = Array.isArray(request?.patterns) ? request.patterns : [];
+  const lines = Array.isArray(request?.lines) ? request.lines : [];
+  if (patterns.length > MAX_PATTERNS_PER_CALL) return { kind: 'error', error: 'too_many_patterns' };
+  if (lines.length > MAX_LINES_PER_CALL) return { kind: 'error', error: 'too_many_lines' };
+  if (!validIds(patterns)) return { kind: 'error', error: 'invalid_pattern_id' };
+
+  const sent: WorkerPattern[] = [];
+  const skipped: string[] = [];
+  for (const entry of patterns) {
+    const validation = validateTenantLinePattern(entry.kind, entry.pattern, entry.flags);
+    if (validation.ok) sent.push({ id: entry.id, source: entry.pattern, flags: validation.compiledFlags });
+    else skipped.push(entry.id);
+  }
+  if (sent.length === 0 || lines.length === 0) return { kind: 'ok', hits: [], skipped };
+
+  const inputs = lines.map(cutToWindow);
+  const result = await runPatternInWorker({ patterns: sent, inputs, maxSpans: 1 }, { deadlineMs: clampDeadline(options.deadlineMs), signal: options.signal });
+  if (result.kind === 'timeout') return { kind: 'timeout' };
+  if (result.kind === 'error') {
+    if (result.error === 'aborted') {
+      options.signal?.throwIfAborted();
+      return { kind: 'error', error: 'worker_failed' };
+    }
+    return { kind: 'error', error: result.error };
+  }
+
+  const order = new Map(sent.map((pattern, index) => [pattern.id, index]));
+  const kept = new Map<string, TenantLineHit>();
+  for (const span of result.spans) {
+    const rank = order.get(span.patternId);
+    const input = inputs[span.inputIndex];
+    if (rank === undefined || input === undefined) continue;
+    if (!Number.isInteger(span.start) || !Number.isInteger(span.end) || span.start < 0 || span.end <= span.start || span.end > input.length) continue;
+    const key = `${span.inputIndex}\u0000${rank}`;
+    const previous = kept.get(key);
+    if (!previous || span.start < previous.start) {
+      kept.set(key, { inputIndex: span.inputIndex, patternId: span.patternId, start: span.start, end: span.end });
+    }
+  }
+  const hits = [...kept.values()].sort((a, b) => a.inputIndex - b.inputIndex || (order.get(a.patternId) ?? 0) - (order.get(b.patternId) ?? 0));
+  return { kind: 'ok', hits, skipped };
 }
