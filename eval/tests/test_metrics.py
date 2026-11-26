@@ -963,11 +963,11 @@ def test_the_03_2_67_baseline_moves_only_table_split_items_and_none_drops():
 # The prechunked corpus hash before plan 04.1.1-10 added the three synthetic-terms files.
 PRE_TERMS_CORPUS_SHA256 = "2d1e198f73a6aba71d94eac166fc21f92853113267cfe00be6659e6c6010ca04"
 TERM_CORPUS_FILES = {"en/synthetic-terms.en.md", "it/synthetic-terms.it.md", "zh/synthetic-terms.zh.md"}
-# Corpus files added by later plans (05.2-28); they are not part of the 04.1.1-10 comparison.
+# Corpus files added by later plans (05.2-28, 05.2-29); they are not part of the 04.1.1-10 comparison.
 LATER_CORPUS_FILES = {
     f"{language}/{kind}.{language}.md"
     for language in ("en", "it", "zh")
-    for kind in ("p52-answers", "p52-rules-v1", "p52-rules-v2", "sec-links")
+    for kind in ("p52-answers", "p52-rules-v1", "p52-rules-v2", "sec-links", "sec-link-topics")
 }
 
 

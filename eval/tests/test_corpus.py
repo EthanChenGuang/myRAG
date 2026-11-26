@@ -8,7 +8,7 @@ import pytest
 from rag_eval.corpus import load_corpus, main
 from rag_eval.paths import REPO_ROOT
 
-COMMITTED_CORPUS_SHA256 = "51ba2ab714737fc8f212f10185663561c1635d1db5ffc196079ec07bed917e57"
+COMMITTED_CORPUS_SHA256 = "d4968bbbf1b7a1f8993f13aec9d4eb6868ca9d7d46016e1ae6d9599069ac9ae1"
 META = '<!-- fixture-meta {"filename": "Policy Handbook.pdf", "image_url": "https://example.test/a.png"} -->'
 
 
