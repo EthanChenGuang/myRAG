@@ -48,6 +48,8 @@ export interface AnswerFinishInput {
   /** The evidence sent to the model: alias blocks in order, plus webSearch result texts when that tool ran. */
   premise: { blocks: Array<{ alias: string; text: string }>; webSearchTexts: string[] };
   requestLanguage: string;
+  /** A semantic-cache hit: the cached groundedness is inserted unchanged and no scoring runs (06-36, plan-check W6). */
+  groundedness?: AnswerGroundedness;
 }
 
 export interface AnswerPendingContext {
@@ -61,8 +63,8 @@ export interface AnswerFinishDeps {
   insert: (admin: SupabaseClient, input: InsertAnswerRecordInput) => Promise<{ inserted: boolean }>;
   schedule: (task: () => Promise<void>) => void;
   readConfig: () => Pick<GenerationConfig, 'groundedness'>;
-  /** Continues with scoring when the record was inserted as pending. */
-  onPending?: (context: AnswerPendingContext) => Promise<void>;
+  /** Continues with scoring when the record was inserted as pending; resolves with the label it produced. */
+  onPending?: (context: AnswerPendingContext) => Promise<AnswerGroundedness | null | void>;
 }
 
 export interface GroundednessStepDeps {
@@ -228,7 +230,9 @@ async function flagForReview(input: AnswerFinishInput, admin: SupabaseClient, de
 }
 
 /** The onPending continuation (D-15): score, store, log, then report to Langfuse when allowed. Never throws. */
-export function createGroundednessStep(overrides: Partial<GroundednessStepDeps> = {}): (context: AnswerPendingContext) => Promise<void> {
+export function createGroundednessStep(
+  overrides: Partial<GroundednessStepDeps> = {},
+): (context: AnswerPendingContext) => Promise<AnswerGroundedness | null> {
   const deps: GroundednessStepDeps = { ...defaultStepDeps, ...overrides };
   return async ({ answerId, input, admin }) => {
     try {
@@ -273,8 +277,10 @@ export function createGroundednessStep(overrides: Partial<GroundednessStepDeps> 
 
       if (groundedness.label === 'possibly_unreliable') await flagForReview(input, admin, deps);
       await reportGroundedness(input, groundedness, language, { startedAt, endedAt }, deps);
+      return groundedness;
     } catch (error) {
       console.warn('[Answer Record] Groundedness step failed:', { answerId, code: errorCode(error) });
+      return null;
     }
   };
 }
@@ -361,11 +367,11 @@ async function ownedChatId(admin: SupabaseClient, input: AnswerFinishInput): Pro
   }
 }
 
-async function finishAnswer(input: AnswerFinishInput, deps: AnswerFinishDeps): Promise<void> {
+async function finishAnswer(input: AnswerFinishInput, deps: AnswerFinishDeps): Promise<AnswerGroundedness | null> {
   if (!isTenantScope(input.scope)) throw new Error('unminted tenant scope');
   const admin = deps.admin();
   if (!admin) throw new Error('admin client unavailable');
-  const groundedness = initialGroundedness(input, deps.readConfig().groundedness);
+  const groundedness = input.groundedness ?? initialGroundedness(input, deps.readConfig().groundedness);
   const chatId = await ownedChatId(admin, input);
   const { inserted } = await deps.insert(admin, {
     id: input.answerId,
@@ -381,27 +387,44 @@ async function finishAnswer(input: AnswerFinishInput, deps: AnswerFinishDeps): P
     citations: input.citations,
     groundedness,
   });
-  if (!inserted || groundedness.status !== 'pending' || !deps.onPending) return;
+  if (!inserted) return null;
+  if (groundedness.status !== 'pending') return groundedness;
+  if (!deps.onPending) return null;
   try {
-    await deps.onPending({ answerId: input.answerId, input, admin });
+    return (await deps.onPending({ answerId: input.answerId, input, admin })) ?? null;
   } catch (error) {
     console.warn('[Answer Record] Post-insert step failed:', { answerId: input.answerId, code: errorCode(error) });
+    return null;
   }
 }
 
-/** Writes the answer record after the response; runs once per answerId and never throws into the caller. */
-export function scheduleAnswerFinish(input: AnswerFinishInput, deps: Partial<AnswerFinishDeps> = {}): void {
+/**
+ * Writes the answer record after the response; runs once per answerId and never throws into the caller. The returned promise never
+ * rejects: it settles with the record's final groundedness (scored or not_checked) or null when no record was written; the semantic
+ * cache store waits on it (06-36).
+ */
+export function scheduleAnswerFinish(input: AnswerFinishInput, deps: Partial<AnswerFinishDeps> = {}): Promise<AnswerGroundedness | null> {
+  let settle: (value: AnswerGroundedness | null) => void = () => undefined;
+  const handle = new Promise<AnswerGroundedness | null>((resolve) => {
+    settle = resolve;
+  });
   try {
-    if (!claim(input.answerId)) return;
+    if (!claim(input.answerId)) {
+      settle(null);
+      return handle;
+    }
     const resolved: AnswerFinishDeps = { ...defaultDeps, ...deps };
     resolved.schedule(async () => {
       try {
-        await finishAnswer(input, resolved);
+        settle(await finishAnswer(input, resolved));
       } catch (error) {
+        settle(null);
         console.error('[Answer Record] Insert failed:', { answerId: input.answerId, code: errorCode(error) });
       }
     });
   } catch (error) {
+    settle(null);
     console.error('[Answer Record] Scheduling failed:', { answerId: input.answerId, code: errorCode(error) });
   }
+  return handle;
 }
