@@ -114,13 +114,15 @@ describe('driftInputs (D-43)', () => {
     expect(inputs.clusters.reduce((sum, c) => sum + c.share, 0)).toBeCloseTo(1, 9);
     const bySlice = Object.fromEntries(inputs.slices.map((s) => [s.slice, s]));
     expect(Object.keys(bySlice).sort()).toEqual(['all', 'channel:chat', 'channel:voice', 'language:xx', 'language:yy']);
+    expect(bySlice.all.online_judge.mean).toBeCloseTo((32 / 50 + 36 / 50 + 6 / 50 + 8 / 50) / 2, 12);
     expect(bySlice.all).toEqual({
       slice: 'all',
-      online_judge: { mean: (32 / 50 + 36 / 50 + 6 / 50 + 8 / 50) / 2, n: 50 },
+      online_judge: { mean: expect.any(Number), n: 50 },
       not_helpful_rate: { value: 6 / 24, count: 6, n: 24 },
       refusal_rate: { value: 10 / 100, count: 10, n: 100 },
     });
-    expect(bySlice['language:xx'].online_judge).toEqual({ mean: (32 / 40 + 36 / 40) / 2, n: 40 });
+    expect(bySlice['language:xx'].online_judge.n).toBe(40);
+    expect(bySlice['language:xx'].online_judge.mean).toBeCloseTo((32 / 40 + 36 / 40) / 2, 12);
     expect(bySlice['channel:voice'].refusal_rate).toEqual({ value: 0.1, count: 2, n: 20 });
     const json = JSON.stringify(inputs);
     expect(json).not.toContain('c-99');

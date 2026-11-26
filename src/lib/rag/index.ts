@@ -657,6 +657,8 @@ export {
   PILOT_PAGE_SIZE,
 } from './monitor/pilot-users';
 export type { AddPilotUserResult, PilotUserEntry, PilotUserPage, PilotSamplingParams } from './monitor/pilot-users';
+export { driftInputs, DRIFT_WINDOW_DAYS } from './monitor/drift-inputs';
+export type { DriftInputs, DriftInputSlice, DriftInputCluster } from './monitor/drift-inputs';
 export { assignTestItems, MAX_ASSIGN_ITEMS, MAX_ASSIGN_QUESTION_CHARS } from './monitor/clusters';
 export type { AssignTestItemsResult, TestItemQuestion } from './monitor/clusters';
 export { allocateStrata, drawWeeklySample, loadSampleConfig, missingSamplePrerequisites, planWeeklySample, sampleStatus, sampleTenants, sampleWindow } from './monitor/sample';

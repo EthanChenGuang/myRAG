@@ -24,6 +24,7 @@ export type ParsedMonitorArgs =
   | { command: 'record-change'; keys: string[]; reason: string; beforeHash?: string; afterHash?: string }
   | { command: 'test-alert'; tenant: string }
   | { command: 'sample'; tenant?: string }
+  | { command: 'drift-inputs'; tenant: string }
   | { command: 'invalid'; message: string };
 
 export const USAGE = [
@@ -31,10 +32,12 @@ export const USAGE = [
   '       npm run rag:monitor -- record-change --keys <NAME,NAME> --reason <text> [--before-hash <sha256>] [--after-hash <sha256>]',
   '       npm run rag:monitor -- test-alert --tenant <tenant key>',
   '       npm run rag:monitor -- sample [--tenant <tenant key>]',
+  '       npm run rag:monitor -- drift-inputs --tenant <tenant key>',
   '  daily          aggregate the retrieval log, evaluate the alert rules and deliver new and pending alerts (default)',
   '  record-change  record a setting change made in the host environment (names only; reason 10 to 500 characters)',
   '  test-alert     deliver a synthetic alert with neutral ids through the configured channels; nothing is stored',
   '  sample         draw the weekly representative sample of last week into the review queue, per tenant (RAG_REPRESENTATIVE_SAMPLE)',
+  '  drift-inputs   print one tenant\'s 30-day cluster shares and online rates as JSON, numbers only (RAG_REPRESENTATIVE_SAMPLE)',
 ].join('\n');
 
 const ENV_NAME_RE = /^[A-Z][A-Z0-9_]{0,127}$/;
@@ -81,6 +84,13 @@ export function parseMonitorArgs(argv: string[]): ParsedMonitorArgs {
     if (tenant === undefined) return { command: 'sample' };
     if (!TENANT_KEY_RE.test(tenant)) return invalid('--tenant must be s:default, u:<uuid> or o:<uuid>');
     return { command: 'sample', tenant };
+  }
+  if (command === 'drift-inputs') {
+    const opts = options(rest, ['--tenant']);
+    const tenant = opts?.get('--tenant');
+    if (!opts || tenant === undefined) return invalid('drift-inputs takes --tenant <tenant key>');
+    if (!TENANT_KEY_RE.test(tenant)) return invalid('--tenant must be s:default, u:<uuid> or o:<uuid>');
+    return { command: 'drift-inputs', tenant };
   }
   if (command === 'record-change') {
     const opts = options(rest, ['--keys', '--reason', '--before-hash', '--after-hash']);
@@ -319,6 +329,30 @@ async function sample(
   return failures > 0 ? 1 : 0;
 }
 
+/** D-43: one tenant's drift inputs as one JSON line (counts, shares and rates; no text). */
+async function driftInputsCommand(
+  parsed: Extract<ParsedMonitorArgs, { command: 'drift-inputs' }>,
+  env: Record<string, string | undefined>,
+  deps: MonitorCliDeps,
+  io: CliIo,
+): Promise<number> {
+  if ((env.RAG_REPRESENTATIVE_SAMPLE ?? '').trim().toLowerCase() !== 'true') {
+    io.out(`${PREFIX} drift inputs need RAG_REPRESENTATIVE_SAMPLE=true; nothing was read`);
+    return 0;
+  }
+  const client = clientFor(env, deps, io);
+  if (!client) return 2;
+  const { driftInputs } = await import('./drift-inputs');
+  try {
+    io.out(JSON.stringify(await driftInputs(client, { tenantKey: parsed.tenant, now: deps.now ?? new Date() })));
+    return 0;
+  } catch (error) {
+    const operation = (error as { operation?: unknown } | null)?.operation;
+    io.err(`${PREFIX} drift-inputs failed${typeof operation === 'string' ? ` (${operation})` : ''}`);
+    return 1;
+  }
+}
+
 /**
  * The rag:monitor CLI (D-16, D-20, D-21). Prints counts, ids and channel outcomes only: never a URL, secret, reason or text.
  * Exit codes: 0 done, 1 the database or a channel failed, 2 the arguments or the environment were wrong. With RAG_MONITOR off,
@@ -335,6 +369,7 @@ export async function main(argv: string[] = process.argv.slice(2), io: CliIo = c
   const env = deps.env ?? process.env;
   if (parsed.command === 'record-change') return recordChange(parsed, env, deps, io);
   if (parsed.command === 'sample') return sample(parsed, env, deps, io);
+  if (parsed.command === 'drift-inputs') return driftInputsCommand(parsed, env, deps, io);
   if (!monitorOn(env)) {
     io.out(`${PREFIX} RAG_MONITOR is off; nothing to do`);
     return 0;
