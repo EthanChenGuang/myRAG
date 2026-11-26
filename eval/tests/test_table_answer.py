@@ -83,3 +83,19 @@ def test_a_distractor_that_differs_only_in_trailing_zeros_is_still_the_distracto
     gold = TableAnswer(value="340.1", column="Second value (cm)", distractor_values=["306.4"])
     assert score_table_answer("It is 306.40 cm.", gold) == "wrong"
     assert score_table_answer("It is 340.10 cm.", gold) == "correct"
+
+
+def test_every_fixture_item_scores_its_expected_answer_correct_and_each_distractor_wrong():
+    from pathlib import Path
+
+    from rag_sidecar.contracts.golden import GoldenItem
+
+    path = Path(__file__).resolve().parents[1] / "fixtures" / "ingest" / "golden-ingest.jsonl"
+    items = [GoldenItem.model_validate_json(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    table_items = [item for item in items if item.category == "table_split"]
+    assert len(table_items) >= 12
+    for item in table_items:
+        assert item.table_answer is not None, item.id
+        assert score_table_answer(item.expected_answer or "", item.table_answer) == "correct", item.id
+        for distractor in item.table_answer.distractor_values:
+            assert score_table_answer(f"{distractor}", item.table_answer) == "wrong", (item.id, distractor)
