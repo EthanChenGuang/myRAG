@@ -214,6 +214,43 @@ describe('langfuse span replay', () => {
   });
 });
 
+describe('request timing on the root (D-25)', () => {
+  const TIMING_KEYS = ['ttft_ms', 'pre_generation_ms', 'cache'];
+
+  test('timing recorded after finishTrace, before the export runs, lands on the root metadata only', async () => {
+    const collector = buildCollector();
+    const start = collector.startedAt - 20;
+    collector.markRequestStart(start);
+    collector.markGenerationStart();
+    finishTrace(collector, buildResult(), { config: configFor(), query: QUERY_TEXT });
+    collector.markFirstTextDelta();
+    collector.setCacheState('miss');
+    const timing = collector.timing();
+    assert.ok(timing && typeof timing.ttft_ms === 'number' && typeof timing.pre_generation_ms === 'number');
+    await waitFor(() => fake.completedTraceRequests() === 1);
+
+    const root = fake.spans.find((span) => span.name === 'rag-request');
+    assert.ok(root);
+    assert.equal(Number(root.attributes[`${ATTR}ttft_ms`]), timing.ttft_ms);
+    assert.equal(Number(root.attributes[`${ATTR}pre_generation_ms`]), timing.pre_generation_ms);
+    assert.equal(root.attributes[`${ATTR}cache`], 'miss');
+    for (const span of fake.spans.filter((candidate) => candidate.name !== 'rag-request')) {
+      for (const key of TIMING_KEYS) assert.ok(!(`${ATTR}${key}` in span.attributes), `${span.name} ${key}`);
+    }
+    const text = attributeText(fake.spans);
+    assert.ok(!text.includes('refund window'));
+    assert.ok(!text.includes('kestrel-9042'));
+  });
+
+  test('a trace that records no timing exports no timing key', async () => {
+    finishTrace(buildCollector(), buildResult(), { config: configFor() });
+    await waitFor(() => fake.completedTraceRequests() === 1);
+    for (const span of fake.spans) {
+      for (const key of TIMING_KEYS) assert.ok(!(`${ATTR}${key}` in span.attributes), `${span.name} ${key}`);
+    }
+  });
+});
+
 describe('fallback to the [RAG Trace] log line', () => {
   test('LANGFUSE_ENABLED=false with keys present sends nothing and builds no processor', async () => {
     const lines: string[] = [];

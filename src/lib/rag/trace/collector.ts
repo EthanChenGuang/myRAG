@@ -37,6 +37,16 @@ export interface ReviewContent {
   model?: string;
 }
 
+/** Whether the answer came from the semantic cache; `bypass` when no cache lookup applied. */
+export type TraceCacheState = 'hit' | 'miss' | 'bypass';
+
+/** D-25: request timing in milliseconds from the route's receipt time; numbers and one fixed word only. */
+export interface TraceTiming {
+  pre_generation_ms?: number;
+  ttft_ms?: number;
+  cache: TraceCacheState;
+}
+
 /** The retrieval profiles plus `ingest`, the profile of an ingestion trace. */
 export type TraceProfile = Profile | 'ingest';
 
@@ -52,6 +62,13 @@ export interface TraceCollector {
   toStageStatus(): Record<string, StageRunStatus>;
   setReviewContent(content: ReviewContent): void;
   reviewContent(): ReviewContent | null;
+  /** The route's receipt time; `startedAt` is retrieval start. Defaults to the clock. */
+  markRequestStart(at?: number): void;
+  markGenerationStart(): void;
+  markFirstTextDelta(): void;
+  setCacheState(state: TraceCacheState): void;
+  /** Null until a request start was marked, so a request that records no timing exports what it exported before. */
+  timing(): TraceTiming | null;
 }
 
 export interface TraceCollectorOptions {
@@ -105,6 +122,11 @@ export function createTraceCollector(options: TraceCollectorOptions): TraceColle
       review = { ...review, ...content };
     },
     reviewContent: () => (review ? { ...review } : null),
+    markRequestStart() {},
+    markGenerationStart() {},
+    markFirstTextDelta() {},
+    setCacheState() {},
+    timing: () => null,
     toStageStatus() {
       const status: Record<string, StageRunStatus> = {};
       for (const record of records) status[record.name] = record.status;
