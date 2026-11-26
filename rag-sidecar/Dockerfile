@@ -19,14 +19,14 @@ WORKDIR /app
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv sync --locked --no-install-project --no-dev --extra docling
+    uv sync --locked --no-install-project --no-dev --extra docling --extra hidden-text
 
 COPY pyproject.toml uv.lock ./
 COPY src ./src
 COPY config ./config
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-dev --extra docling
+    uv sync --locked --no-dev --extra docling --extra hidden-text
 
 RUN mkdir -p "$HF_HOME" "$TIKTOKEN_CACHE_DIR" "$RAG_SIDECAR_DOCLING_ARTIFACTS" \
     && docling-tools models download -o "$RAG_SIDECAR_DOCLING_ARTIFACTS" \
@@ -103,14 +103,14 @@ WORKDIR /app
 RUN --mount=type=cache,target=/root/.cache/uv \
     --mount=type=bind,source=uv.lock,target=uv.lock \
     --mount=type=bind,source=pyproject.toml,target=pyproject.toml \
-    uv sync --locked --no-install-project --no-dev
+    uv sync --locked --no-install-project --no-dev --extra hidden-text
 
 COPY pyproject.toml uv.lock ./
 COPY src ./src
 COPY config ./config
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-dev
+    uv sync --locked --no-dev --extra hidden-text
 
 RUN useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin sidecar \
     && chown -R sidecar /app
