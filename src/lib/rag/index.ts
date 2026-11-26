@@ -668,3 +668,16 @@ export type { DeliveryReport, StoredDeliverySummary } from './monitor/deliver';
 export { setAlertStatus } from './monitor/alerts-store';
 export { alertForAdmin, alertFromRow, listAlerts, MAX_ALERTS_PAGE, monitorSummary } from './monitor/alerts-read';
 export type { AlertStatusFilter, ListAlertsResult, MonitorSummary } from './monitor/alerts-read';
+export {
+  addPilotUser,
+  decodePilotCursor,
+  listPilotUsers,
+  maskEmail,
+  pilotSamplingParams,
+  PilotUsersError,
+  removePilotUser,
+  PILOT_PAGE_SIZE,
+} from './monitor/pilot-users';
+export type { AddPilotUserResult, PilotUserEntry, PilotUserPage, PilotSamplingParams } from './monitor/pilot-users';
+export { allocateStrata, drawWeeklySample, loadSampleConfig, missingSamplePrerequisites, planWeeklySample, sampleStatus, sampleTenants, sampleWindow } from './monitor/sample';
+export type { DrawWeeklySampleResult, SamplePrerequisite, SampleStatus, WeeklySampleConfig } from './monitor/sample';

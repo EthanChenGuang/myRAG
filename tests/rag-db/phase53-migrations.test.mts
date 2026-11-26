@@ -17,13 +17,16 @@ const CLIENT_READABLE_TABLES = new Set(['rag_judge_labels']);
 /** 0966 references rag_retrieval_log(id) by foreign key and stops with 55000 without it (fail closed, plan 05.3-10). */
 const REQUIRES_RETRIEVAL_LOG = /^supabase\/migrations\/0966_/;
 
-export type Phase53FunctionKind = 'invoker' | 'trigger';
+/** definer: service-role-only readers of auth.users (0977); trigger: definer triggers; invoker: everything else. */
+export type Phase53FunctionKind = 'invoker' | 'trigger' | 'definer';
 
 /** Every function created by the 0960 to 0979 files, by regprocedure signature without the schema. */
 export const PHASE53_SERVICE_ROLE_FUNCTIONS: ReadonlyArray<{ signature: string; kind: Phase53FunctionKind }> = [
   { signature: 'rag_eval_run_request_enqueue(text,text,text)', kind: 'invoker' },
   { signature: 'rag_pilot_user_add(text,uuid,uuid)', kind: 'invoker' },
   { signature: 'rag_pilot_user_remove(text,uuid)', kind: 'invoker' },
+  { signature: 'rag_pilot_user_resolve(text,text)', kind: 'definer' },
+  { signature: 'rag_pilot_users_list(text,integer,timestampwithtimezone,uuid)', kind: 'definer' },
   { signature: 'rag_monitor_purge(integer)', kind: 'invoker' },
   { signature: 'rag_monitor_alert_upsert(jsonb)', kind: 'invoker' },
   { signature: 'rag_monitor_alert_set_status(uuid,text,uuid)', kind: 'invoker' },
@@ -209,7 +212,7 @@ for (const mode of MODES) {
         assert.equal(row.authenticated, false, `${signature} executable by authenticated`);
         assert.equal(row.service_role, true, `${signature} not executable by service_role`);
         assert.equal(row.public_exec, false, `${signature} executable by PUBLIC`);
-        assert.equal(row.prosecdef, kind === 'trigger', `${signature} SECURITY ${row.prosecdef ? 'DEFINER' : 'INVOKER'}`);
+        assert.equal(row.prosecdef, kind !== 'invoker', `${signature} SECURITY ${row.prosecdef ? 'DEFINER' : 'INVOKER'}`);
         assert.ok((row.proconfig ?? []).includes('search_path=""'), `${signature} search_path ${JSON.stringify(row.proconfig)}`);
       }
       await assertNoClientCallableRagFunctions(full);

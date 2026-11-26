@@ -23,15 +23,18 @@ export type ParsedMonitorArgs =
   | { command: 'daily' }
   | { command: 'record-change'; keys: string[]; reason: string; beforeHash?: string; afterHash?: string }
   | { command: 'test-alert'; tenant: string }
+  | { command: 'sample'; tenant?: string }
   | { command: 'invalid'; message: string };
 
 export const USAGE = [
   'usage: npm run rag:monitor [-- daily]',
   '       npm run rag:monitor -- record-change --keys <NAME,NAME> --reason <text> [--before-hash <sha256>] [--after-hash <sha256>]',
   '       npm run rag:monitor -- test-alert --tenant <tenant key>',
+  '       npm run rag:monitor -- sample [--tenant <tenant key>]',
   '  daily          aggregate the retrieval log, evaluate the alert rules and deliver new and pending alerts (default)',
   '  record-change  record a setting change made in the host environment (names only; reason 10 to 500 characters)',
   '  test-alert     deliver a synthetic alert with neutral ids through the configured channels; nothing is stored',
+  '  sample         draw the weekly representative sample of last week into the review queue, per tenant (RAG_REPRESENTATIVE_SAMPLE)',
 ].join('\n');
 
 const ENV_NAME_RE = /^[A-Z][A-Z0-9_]{0,127}$/;
@@ -70,6 +73,14 @@ export function parseMonitorArgs(argv: string[]): ParsedMonitorArgs {
     if (!opts || tenant === undefined) return invalid('test-alert takes --tenant <tenant key>');
     if (!TENANT_KEY_RE.test(tenant)) return invalid('--tenant must be s:default, u:<uuid> or o:<uuid>');
     return { command: 'test-alert', tenant };
+  }
+  if (command === 'sample') {
+    const opts = options(rest, ['--tenant']);
+    if (!opts) return invalid('sample takes only --tenant <tenant key>');
+    const tenant = opts.get('--tenant');
+    if (tenant === undefined) return { command: 'sample' };
+    if (!TENANT_KEY_RE.test(tenant)) return invalid('--tenant must be s:default, u:<uuid> or o:<uuid>');
+    return { command: 'sample', tenant };
   }
   if (command === 'record-change') {
     const opts = options(rest, ['--keys', '--reason', '--before-hash', '--after-hash']);
@@ -257,10 +268,62 @@ async function testAlert(
   return failed ? 1 : 0;
 }
 
+const SAMPLE_SETTINGS = {
+  sample: 'RAG_REPRESENTATIVE_SAMPLE=true',
+  log: 'RAG_RETRIEVAL_LOG=masked_query',
+  review: 'RAG_DOMAIN_EXPERT_REVIEW=true',
+} as const;
+
+/** D-39: the weekly sample of every tenant with masked log rows in the last ISO week, or of one tenant. Counts and tenant hashes only. */
+async function sample(
+  parsed: Extract<ParsedMonitorArgs, { command: 'sample' }>,
+  env: Record<string, string | undefined>,
+  deps: MonitorCliDeps,
+  io: CliIo,
+): Promise<number> {
+  const { drawWeeklySample, missingSamplePrerequisites, sampleTenants } = await import('./sample');
+  const missing = missingSamplePrerequisites(env);
+  if (missing.length > 0) {
+    io.out(`${PREFIX} the weekly sample needs ${missing.map((code) => SAMPLE_SETTINGS[code]).join(', ')}; nothing was written`);
+    return 0;
+  }
+  const client = clientFor(env, deps, io);
+  if (!client) return 2;
+  const { tenantHash } = await import('../feedback-loop/mining');
+  const now = deps.now ?? new Date();
+  let tenants: string[];
+  try {
+    tenants = parsed.tenant ? [parsed.tenant] : await sampleTenants(client, now);
+  } catch {
+    io.err(`${PREFIX} sample failed (tenant read)`);
+    return 1;
+  }
+  let failures = 0;
+  let added = 0;
+  for (const tenantKey of tenants) {
+    try {
+      const result = await drawWeeklySample(client, { tenantKey, now, env });
+      if (!result.written) continue;
+      added += result.added;
+      const s = result.by_source;
+      io.out(
+        `${PREFIX} sample ${tenantHash(tenantKey)} ${result.week}: added ${result.added} (representative ${s.representative}, pilot ${s.pilot}, drift_fill ${s.drift_fill}), excluded_queued ${result.excluded_queued}`,
+      );
+    } catch (error) {
+      failures += 1;
+      const operation = (error as { operation?: unknown } | null)?.operation;
+      io.err(`${PREFIX} sample failed for ${tenantHash(tenantKey)}${typeof operation === 'string' ? ` (${operation})` : ''}`);
+    }
+  }
+  io.out(`${PREFIX} sample: tenants ${tenants.length}, added ${added}, failed ${failures}`);
+  return failures > 0 ? 1 : 0;
+}
+
 /**
  * The rag:monitor CLI (D-16, D-20, D-21). Prints counts, ids and channel outcomes only: never a URL, secret, reason or text.
  * Exit codes: 0 done, 1 the database or a channel failed, 2 the arguments or the environment were wrong. With RAG_MONITOR off,
- * daily and test-alert print one notice and return 0 without a query; record-change records a host change in either case.
+ * daily and test-alert print one notice and return 0 without a query; record-change records a host change in either case. sample has
+ * its own switch (RAG_REPRESENTATIVE_SAMPLE) and prerequisites; with one missing it prints a notice and returns 0 without a client.
  */
 export async function main(argv: string[] = process.argv.slice(2), io: CliIo = consoleIo, deps: MonitorCliDeps = {}): Promise<number> {
   const parsed = parseMonitorArgs(argv);
@@ -271,6 +334,7 @@ export async function main(argv: string[] = process.argv.slice(2), io: CliIo = c
   }
   const env = deps.env ?? process.env;
   if (parsed.command === 'record-change') return recordChange(parsed, env, deps, io);
+  if (parsed.command === 'sample') return sample(parsed, env, deps, io);
   if (!monitorOn(env)) {
     io.out(`${PREFIX} RAG_MONITOR is off; nothing to do`);
     return 0;
