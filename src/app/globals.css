@@ -690,7 +690,7 @@
 
 @layer base {
   :root {
-    --background: #FFF1E5;
+    --background: 27.7 100% 94.9%;
     --foreground: 222.2 84% 4.9%;
     --card: 0 0% 100%;
     --card-foreground: 222.2 84% 4.9%;
@@ -1446,14 +1446,6 @@ html {
 /* Improved spacing for content after headings with colons */
 .prose :where(strong):not(:where([class~="not-prose"] *)):has(+ :not(strong)) {
   margin-right: 0.25rem;
-}
-
-/* Make numbered list headings larger and more prominent */
-.react-markdown ol>li>strong {
-  font-size: 1.25rem;
-  line-height: 1.75rem;
-  margin-bottom: 0.5rem;
-  display: inline-block;
 }
 
 /* Ensure proper spacing in lists */
