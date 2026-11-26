@@ -2,10 +2,11 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LanguageValidationResult } from '../../config/rag/validate-language-settings.cjs';
 import { resetLanguageRegistryForTests, setLanguageRegistryForTests } from '@/lib/rag/lang/registry';
 import { ProfileUnavailableError } from '@/lib/rag/embeddings/active-profile';
+import { resetLanguageEmbeddingStartupCheckForTests, verifyLanguagesAgainstEmbeddingProfileAtStartup } from '@/lib/rag/lang/startup';
 import {
   resetLanguageSettingsForTests,
   setActiveEmbeddingProfileReaderForTests,
@@ -299,5 +300,53 @@ describe('the default embedding profile declaration', () => {
     const { defaultEmbeddingProfileDeclaration } = await import('@/lib/rag/embeddings/catalog');
     expect(script.defaultEmbeddingDeclaration(REPO_ROOT)).toEqual(defaultEmbeddingProfileDeclaration());
     expect(SHIPPED_DECLARATIONS.default_profile.id).toBe('openai-3-small-1536');
+  });
+});
+
+describe('app startup check against the active embedding profile', () => {
+  afterEach(() => {
+    setActiveEmbeddingProfileReaderForTests(null);
+    appAdapter.cleanup();
+    resetLanguageEmbeddingStartupCheckForTests();
+    vi.restoreAllMocks();
+  });
+
+  function languageWarnings(spy: ReturnType<typeof vi.spyOn>): unknown[][] {
+    return spy.mock.calls.filter((call) => String(call[0]).startsWith('[RAG Languages]'));
+  }
+
+  it('warns once, naming the language and the profile, when the active profile does not declare a chosen language', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    setEnv('RAG_SUPPORTED_LANGUAGES', 'zh,en');
+    setEnv('RAG_PRIMARY_LANGUAGE', 'en');
+    setEnv('RAG_RERANKER', 'none');
+    setActiveEmbeddingProfileReaderForTests(async () => ({ id: 'voyage-finance-2-1024', provider: 'voyage', model: 'voyage-finance-2' }));
+    const first = await verifyLanguagesAgainstEmbeddingProfileAtStartup();
+    await verifyLanguagesAgainstEmbeddingProfileAtStartup();
+    expect(first?.errors).toEqual([{ code: 'embedding_profile_unsupported', language: 'zh', id: 'voyage-finance-2-1024' }]);
+    const lines = languageWarnings(warn);
+    expect(lines).toHaveLength(1);
+    expect(lines[0][1]).toEqual({ profile: 'voyage-finance-2-1024', languages: ['zh'], verifiedAgainstActiveProfile: true });
+  });
+
+  it('reads nothing and logs nothing while the language variables are unset', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    setEnv('RAG_SUPPORTED_LANGUAGES', null);
+    setEnv('RAG_PRIMARY_LANGUAGE', null);
+    const reader = vi.fn(async () => ({ id: 'x', provider: 'voyage', model: 'voyage-finance-2' }));
+    setActiveEmbeddingProfileReaderForTests(reader);
+    expect(await verifyLanguagesAgainstEmbeddingProfileAtStartup()).toBeNull();
+    expect(reader).not.toHaveBeenCalled();
+    expect(languageWarnings(warn)).toEqual([]);
+  });
+
+  it('logs nothing when the active profile declares every chosen language', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    setEnv('RAG_SUPPORTED_LANGUAGES', 'zh,en,it');
+    setEnv('RAG_PRIMARY_LANGUAGE', 'en');
+    setEnv('RAG_RERANKER', 'none');
+    setActiveEmbeddingProfileReaderForTests(async () => ({ id: 'bge-m3-1024', provider: 'bge-m3', model: 'BAAI/bge-m3' }));
+    expect((await verifyLanguagesAgainstEmbeddingProfileAtStartup())?.ok).toBe(true);
+    expect(languageWarnings(warn)).toEqual([]);
   });
 });

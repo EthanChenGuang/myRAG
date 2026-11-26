@@ -44,3 +44,9 @@ export function verifyLanguageSettingsAtStartup(defaults: ShippedPipelineDefault
 export function resetLanguageStartupCheckForTests(): void {
   checked = false;
 }
+
+export async function verifyLanguagesAgainstEmbeddingProfileAtStartup(): Promise<null> {
+  return null;
+}
+
+export function resetLanguageEmbeddingStartupCheckForTests(): void {}
