@@ -155,7 +155,9 @@ async function load() {
   deps.setIngestDepsForTests({ db: () => fakeRpc() });
   const session = await import('@/lib/admin-session');
   const collection = await import('@/app/api/rag/admin/identifier-patterns/route');
-  return { session, collection };
+  const item = await import('@/app/api/rag/admin/identifier-patterns/[id]/route');
+  const tester = await import('@/app/api/rag/admin/identifier-patterns/test/route');
+  return { session, collection, item, tester };
 }
 
 type Loaded = Awaited<ReturnType<typeof load>>;
@@ -180,6 +182,9 @@ const cookieOf = (value: string | null) => `admin_session=${value}`;
 const patternCalls = () => state.calls.filter((call) => /identifier_pattern/.test(call.fn));
 const BASE = '/api/rag/admin/identifier-patterns';
 const createBody = (extra: Record<string, unknown> = {}) => ({ name: 'Order code', pattern: PATTERN, flags: 'u', enabled: true, ...extra });
+
+const params = (id: string) => ({ params: Promise.resolve({ id }) });
+const writeCalls = () => state.calls.filter((call) => /identifier_pattern_(create|update|delete)/.test(call.fn));
 
 let logged: string[] = [];
 
@@ -221,6 +226,25 @@ describe('list and create: admin guard', () => {
   const ROUTES: RouteCase[] = [
     { name: 'GET', call: (l, init) => l.collection.GET(req(BASE, init)), okStatus: 200 },
     { name: 'POST', call: (l, init) => l.collection.POST(req(BASE, { method: 'POST', body: createBody(), ...init })), okStatus: 201 },
+    {
+      name: 'PATCH {id}',
+      call: (l, init) => {
+        state.rows = [patternRow(`u:${ADMIN_ID}`, 'Seeded')];
+        const id = state.rows[0].id;
+        return l.item.PATCH(req(`${BASE}/${id}`, { method: 'PATCH', body: { enabled: false }, ...init }), params(id));
+      },
+      okStatus: 200,
+    },
+    {
+      name: 'DELETE {id}',
+      call: (l, init) => {
+        state.rows = [patternRow(`u:${ADMIN_ID}`, 'Seeded')];
+        const id = state.rows[0].id;
+        return l.item.DELETE(req(`${BASE}/${id}`, { method: 'DELETE', ...init }), params(id));
+      },
+      okStatus: 200,
+    },
+    { name: 'POST test', call: (l, init) => l.tester.POST(req(`${BASE}/test`, { method: 'POST', body: { sample: 'ref QZ123' }, ...init })), okStatus: 200 },
   ];
 
   describe.each(ROUTES)('$name /api/rag/admin/identifier-patterns', (route) => {
@@ -457,8 +481,247 @@ describe('POST /api/rag/admin/identifier-patterns', () => {
   });
 });
 
+describe('PATCH /api/rag/admin/identifier-patterns/{id}', () => {
+  it('answers 400 for a non-uuid id and for a body with no field, before any call', async () => {
+    state.session = { id: ADMIN_ID };
+    const { item } = await load();
+    const badId = await item.PATCH(req(`${BASE}/not-a-uuid`, { method: 'PATCH', body: { enabled: false } }), params('not-a-uuid'));
+    expect(badId.status).toBe(400);
+    expect((await badId.json()).details[0].path).toBe('id');
+    const id = nextId();
+    for (const body of [{}, { organizationId: ORG_X }, { enabled: false, extra: 1 }, { name: 'n'.repeat(81) }, { flags: 'g' }]) {
+      const response = await item.PATCH(req(`${BASE}/${id}`, { method: 'PATCH', body }), params(id));
+      expect(response.status, JSON.stringify(body)).toBe(400);
+      expect((await response.json()).error).toBe('Invalid request data');
+    }
+    const malformed = await item.PATCH(req(`${BASE}/${id}`, { method: 'PATCH', rawBody: '{not json' }), params(id));
+    expect(malformed.status).toBe(400);
+    expect(state.calls).toEqual([]);
+  });
+
+  it('disables a pattern and answers 200 with the item; log lines carry the action and id only', async () => {
+    state.session = { id: ADMIN_ID };
+    const row = patternRow(`u:${ADMIN_ID}`, 'Order code');
+    state.rows = [row];
+    const { item } = await load();
+    const response = await item.PATCH(req(`${BASE}/${row.id}`, { method: 'PATCH', body: { enabled: false } }), params(row.id));
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(await response.json()).toEqual({
+      success: true,
+      item: { id: row.id, name: 'Order code', pattern: PATTERN, flags: 'u', enabled: false, updated_at: '2026-11-26T11:00:00.000Z' },
+    });
+    expect(writeCalls().at(-1)?.args).toMatchObject({ p_tenant_key: `u:${ADMIN_ID}`, p_id: row.id, p_enabled: false });
+    expect(logged.some((line) => line.includes('update_identifier_pattern') && line.includes(row.id))).toBe(true);
+    expect(logged.join('\n')).not.toContain(PATTERN);
+  });
+
+  it('answers 400 invalid_identifier_pattern for a new pattern that fails validation and changes nothing', async () => {
+    state.session = { id: ADMIN_ID };
+    const row = patternRow(`u:${ADMIN_ID}`, 'Order code');
+    state.rows = [row];
+    const { item } = await load();
+    const response = await item.PATCH(req(`${BASE}/${row.id}`, { method: 'PATCH', body: { pattern: '(a)\\1' } }), params(row.id));
+    expect(response.status).toBe(400);
+    const json = await response.json();
+    expect(json.error).toBe('invalid_identifier_pattern');
+    expect(json.details).toContainEqual({ path: 'pattern', message: 'backreference' });
+    expect(writeCalls()).toEqual([]);
+    expect(state.rows[0].pattern).toBe(PATTERN);
+  });
+
+  it('answers 409 name_exists for a name another pattern of the workspace has', async () => {
+    state.session = { id: ADMIN_ID };
+    const first = patternRow(`u:${ADMIN_ID}`, 'First');
+    const second = patternRow(`u:${ADMIN_ID}`, 'Second');
+    state.rows = [first, second];
+    const { item } = await load();
+    const response = await item.PATCH(req(`${BASE}/${second.id}`, { method: 'PATCH', body: { name: 'First' } }), params(second.id));
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ success: false, error: 'name_exists' });
+  });
+
+  it('answers 404 pattern_not_found for another organization pattern and leaves it unchanged, in both modes', async () => {
+    state.session = { id: ADMIN_ID };
+    state.members = [{ organization_id: ORG_X, user_id: ADMIN_ID }];
+    const foreign = patternRow(`o:${ORG_Y}`, 'Foreign');
+    state.rows = [foreign];
+    const { item } = await load();
+    const response = await item.PATCH(req(`${BASE}/${foreign.id}`, { method: 'PATCH', body: { organizationId: ORG_X, enabled: false } }), params(foreign.id));
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ success: false, error: 'pattern_not_found' });
+    expect(writeCalls().every((call) => call.args.p_tenant_key === `o:${ORG_X}`)).toBe(true);
+    expect(state.rows[0].enabled).toBe(true);
+
+    const forbidden = await item.PATCH(req(`${BASE}/${foreign.id}`, { method: 'PATCH', body: { organizationId: ORG_Y, enabled: false } }), params(foreign.id));
+    expect(forbidden.status).toBe(403);
+    expect((await forbidden.json()).error).toBe('Forbidden');
+
+    state.mode = 'single-tenant';
+    const single = await load();
+    const singleResponse = await single.item.PATCH(req(`${BASE}/${foreign.id}`, { method: 'PATCH', body: { organizationId: ORG_Y, enabled: false } }), params(foreign.id));
+    expect(singleResponse.status).toBe(404);
+    expect(writeCalls().at(-1)?.args.p_tenant_key).toBe('s:default');
+    expect(state.rows[0].enabled).toBe(true);
+  });
+
+  it('answers 503 without the database message when the update fails', async () => {
+    state.session = { id: ADMIN_ID };
+    const { item } = await load();
+    state.rpcFails = true;
+    const id = nextId();
+    const response = await item.PATCH(req(`${BASE}/${id}`, { method: 'PATCH', body: { enabled: true } }), params(id));
+    expect(response.status).toBe(503);
+    expect(JSON.stringify(await response.json())).not.toContain(SECRET);
+    expect(logged.join('\n')).not.toContain(SECRET);
+  });
+});
+
+describe('DELETE /api/rag/admin/identifier-patterns/{id}', () => {
+  it('deletes a pattern of the workspace named in the query string and answers 200', async () => {
+    state.session = { id: ADMIN_ID };
+    state.members = [{ organization_id: ORG_X, user_id: ADMIN_ID }];
+    const row = patternRow(`o:${ORG_X}`, 'Order code');
+    state.rows = [row];
+    const { item } = await load();
+    const response = await item.DELETE(req(`${BASE}/${row.id}?organizationId=${ORG_X}`, { method: 'DELETE' }), params(row.id));
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(await response.json()).toEqual({ success: true, id: row.id });
+    expect(state.rows).toEqual([]);
+    expect(writeCalls()).toEqual([{ fn: 'rag_identifier_pattern_delete', args: { p_tenant_key: `o:${ORG_X}`, p_id: row.id } }]);
+    expect(logged.some((line) => line.includes('delete_identifier_pattern') && line.includes(row.id))).toBe(true);
+  });
+
+  it('answers 404 pattern_not_found for an unknown or foreign id and 403 Forbidden for a foreign organization', async () => {
+    state.session = { id: ADMIN_ID };
+    const foreign = patternRow(`o:${ORG_Y}`, 'Foreign');
+    state.rows = [foreign];
+    const { item } = await load();
+    const unknown = nextId();
+    for (const id of [unknown, foreign.id]) {
+      const response = await item.DELETE(req(`${BASE}/${id}`, { method: 'DELETE' }), params(id));
+      expect(response.status).toBe(404);
+      expect(await response.json()).toEqual({ success: false, error: 'pattern_not_found' });
+    }
+    const forbidden = await item.DELETE(req(`${BASE}/${foreign.id}?organizationId=${ORG_Y}`, { method: 'DELETE' }), params(foreign.id));
+    expect(forbidden.status).toBe(403);
+    expect(state.rows).toEqual([foreign]);
+    expect(writeCalls().every((call) => call.args.p_tenant_key === `u:${ADMIN_ID}`)).toBe(true);
+  });
+
+  it('answers 400 for a non-uuid id before any call', async () => {
+    state.session = { id: ADMIN_ID };
+    const { item } = await load();
+    expect((await item.DELETE(req(`${BASE}/nope`, { method: 'DELETE' }), params('nope'))).status).toBe(400);
+    expect(state.calls).toEqual([]);
+  });
+});
+
+describe('POST /api/rag/admin/identifier-patterns/test', () => {
+  const TEST = `${BASE}/test`;
+
+  it('returns built-in, saved and draft matches with sources, offsets, tested, truncated and total', async () => {
+    state.session = { id: ADMIN_ID };
+    const saved = patternRow(`u:${ADMIN_ID}`, 'Saved', 'K-[A-Z]{3}');
+    const disabled = patternRow(`u:${ADMIN_ID}`, 'Off', 'W-[A-Z]{2}', 'u', false);
+    state.rows = [saved, disabled, patternRow(`u:${USER_A}`, 'Other tenant', 'V-[A-Z]{2}')];
+    const { tester } = await load();
+    const sample = '😀 see QZ123 and K-ABC then W-XY and V-AB and M-DEF';
+    const response = await tester.POST(req(TEST, { method: 'POST', body: { sample, draft: { pattern: 'M-[A-Z]{3}', flags: 'u' } } }));
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    const body = await response.json();
+    expect(body.success).toBe(true);
+    expect(body.matches.map((m: Row) => [m.raw, m.source])).toEqual([
+      ['QZ123', 'built_in'],
+      ['K-ABC', saved.id],
+      ['M-DEF', 'draft'],
+    ]);
+    for (const match of body.matches) {
+      expect(sample.slice(match.start, match.end)).toBe(match.raw);
+      expect(typeof match.normalized).toBe('string');
+    }
+    expect(body.matches[0].start).toBe(sample.indexOf('QZ123'));
+    expect(body.tested).toEqual({ pattern_ids: [saved.id] });
+    expect(body.truncated).toBe(false);
+    expect(body.total).toBe(3);
+    expect(patternCalls().map((call) => call.args.p_tenant_key)).toEqual([`u:${ADMIN_ID}`]);
+  });
+
+  it('lets a draft with an id replace that saved pattern for the test only', async () => {
+    state.session = { id: ADMIN_ID };
+    const saved = patternRow(`u:${ADMIN_ID}`, 'Saved', 'K-[A-Z]{3}');
+    state.rows = [saved];
+    const { tester } = await load();
+    const body = await (await tester.POST(req(TEST, { method: 'POST', body: { sample: 'K-ABC and M-DEF', draft: { id: saved.id, pattern: 'M-[A-Z]{3}', flags: 'u' } } }))).json();
+    expect(body.matches.map((m: Row) => [m.raw, m.source])).toEqual([['M-DEF', 'draft']]);
+    expect(body.tested).toEqual({ pattern_ids: [] });
+    expect(state.rows[0].pattern).toBe('K-[A-Z]{3}');
+    expect(writeCalls()).toEqual([]);
+  });
+
+  it('answers 400 for a sample over 10000 characters with path sample, and invalid_identifier_pattern for a refused draft', async () => {
+    state.session = { id: ADMIN_ID };
+    const { tester } = await load();
+    const long = await tester.POST(req(TEST, { method: 'POST', body: { sample: 'x'.repeat(10_001) } }));
+    expect(long.status).toBe(400);
+    expect((await long.json()).details.some((d: { path: string }) => d.path === 'sample')).toBe(true);
+    for (const body of [{}, { sample: 'a', extra: 1 }, { sample: 'a', draft: { pattern: 'A', flags: 'u', other: 1 } }, { sample: 'a', draft: { id: 'nope', pattern: 'A', flags: 'u' } }]) {
+      expect((await tester.POST(req(TEST, { method: 'POST', body }))).status, JSON.stringify(body)).toBe(400);
+    }
+    const refused = await tester.POST(req(TEST, { method: 'POST', body: { sample: 'abc', draft: { pattern: '(?<=x)A1', flags: 'u' } } }));
+    expect(refused.status).toBe(400);
+    const json = await refused.json();
+    expect(json.error).toBe('invalid_identifier_pattern');
+    expect(json.details).toContainEqual({ path: 'pattern', message: 'lookbehind' });
+    expect(state.calls).toEqual([]);
+  });
+
+  it('reports truncated and total when matches exceed the cap', async () => {
+    state.session = { id: ADMIN_ID };
+    const { tester } = await load();
+    const sample = Array.from({ length: 700 }, (_, i) => `A${i}`).join(' ');
+    const body = await (await tester.POST(req(TEST, { method: 'POST', body: { sample } }))).json();
+    expect(body.matches).toHaveLength(500);
+    expect(body.truncated).toBe(true);
+    expect(body.total).toBe(700);
+  });
+
+  it('answers 403 Forbidden for a foreign organization and 503 without the database message when the list fails', async () => {
+    state.session = { id: ADMIN_ID };
+    const { tester } = await load();
+    const forbidden = await tester.POST(req(TEST, { method: 'POST', body: { organizationId: ORG_Y, sample: 'QZ123' } }));
+    expect(forbidden.status).toBe(403);
+    expect((await forbidden.json()).error).toBe('Forbidden');
+    expect(state.calls).toEqual([]);
+    state.rpcFails = true;
+    const failed = await tester.POST(req(TEST, { method: 'POST', body: { sample: 'QZ123' } }));
+    expect(failed.status).toBe(503);
+    expect(JSON.stringify(await failed.json())).not.toContain(SECRET);
+  });
+
+  it('writes no console line containing the sample, a match or the draft pattern', async () => {
+    state.session = { id: ADMIN_ID };
+    state.rows = [patternRow(`u:${ADMIN_ID}`, 'Saved', 'K-[A-Z]{3}')];
+    const { tester } = await load();
+    const sample = 'private sample QZ987 K-QRS M-TUV';
+    const draft = { pattern: 'M-[A-Z]{3}', flags: 'u' };
+    expect((await tester.POST(req(TEST, { method: 'POST', body: { sample, draft } }))).status).toBe(200);
+    expect((await tester.POST(req(TEST, { method: 'POST', body: { sample, draft: { pattern: '(?<=y)Q1', flags: 'u' } } }))).status).toBe(400);
+    state.rpcFails = true;
+    expect((await tester.POST(req(TEST, { method: 'POST', body: { sample, draft } }))).status).toBe(503);
+    const text = logged.join('\n');
+    for (const secret of ['private sample', 'QZ987', 'K-QRS', 'M-TUV', 'M-[A-Z]{3}', '(?<=y)Q1', 'K-[A-Z]{3}']) expect(text, secret).not.toContain(secret);
+  });
+});
+
 describe('route sources', () => {
-  const ROUTE_FILES = ['src/app/api/rag/admin/identifier-patterns/route.ts'];
+  const ROUTE_FILES = [
+    'src/app/api/rag/admin/identifier-patterns/route.ts',
+    'src/app/api/rag/admin/identifier-patterns/[id]/route.ts',
+    'src/app/api/rag/admin/identifier-patterns/test/route.ts',
+  ];
 
   it.each(ROUTE_FILES)('%s uses checkAdmin, resolveAdminWorkspaceScope, zod/v3 and imports RAG code only from @/lib/rag', (file) => {
     const source = fs.readFileSync(path.join(REPO_ROOT, file), 'utf8');
