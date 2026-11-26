@@ -132,3 +132,21 @@ def near_duplicates(
             seen.add(key)
             kept_grams.append(grams)
     return dropped
+
+
+KEPT_FILE = "queries.kept.jsonl"
+TEST_KEPT_FILE = "queries.test.kept.jsonl"
+REPORT_FILE = "filter-report.json"
+
+
+class _StubResult:
+    exit_code = 1
+    report = None
+
+
+def run_filter(run_dir, **_kwargs):
+    return _StubResult()
+
+
+def main(argv=None, **_kwargs) -> int:
+    return 1
