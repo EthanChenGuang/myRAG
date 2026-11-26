@@ -659,3 +659,98 @@ describe('the impact guard of plan 57 (UI-SPEC 6.2.2, 6.4.1)', () => {
     expect(asked).toBe(0);
   });
 });
+
+describe('backstops: labels, overflow, long text and injection (UI-SPEC 10, UI Considerations)', () => {
+  const uiSource = fs.readFileSync(path.join(repoRoot, 'scripts/config-ui/rag-panels/rag-ui.js'), 'utf8');
+
+  it('every label key the panel uses has an en, zh and it entry', () => {
+    const { LANGUAGES_LABELS } = loadModule();
+    const { RAG_UI_LABELS } = require('../../scripts/config-ui/rag-panels/rag-ui.js') as { RAG_UI_LABELS: Record<Locale, Record<string, string>> };
+    const used = new Set<string>();
+    for (const m of languagesSource.matchAll(/(?:this\.t|languagesLabel)\('([\w.]+)'/g)) used.add(m[1]!);
+    for (const m of languagesSource.matchAll(/key: '([\w.]+[\w])'(?! \+)/g)) used.add(m[1]!);
+    for (const m of languagesSource.matchAll(/\['(\w+\.\w+)', '(?:profile|reranker)'\]/g)) used.add(m[1]!);
+    for (const code of ['empty_set', 'primary_not_in_set', 'incomplete_pack', 'embedding_profile_unsupported', 'reranker_unsupported']) used.add('error.' + code);
+    expect(used.size).toBeGreaterThan(20);
+    for (const key of used) {
+      for (const loc of ['en', 'zh', 'it'] as const) {
+        const text = LANGUAGES_LABELS[loc][key] ?? RAG_UI_LABELS[loc][key];
+        expect(text, `${loc} ${key}`).toBeTruthy();
+      }
+    }
+    const uiKeys = new Set([...uiSource.matchAll(/ragUiLabel\('([\w.]+)'/g)].map((m) => m[1]!));
+    for (const key of uiKeys) for (const loc of ['en', 'zh', 'it'] as const) expect(RAG_UI_LABELS[loc][key], `${loc} ${key}`).toBeTruthy();
+    for (const loc of ['en', 'zh', 'it'] as const) {
+      expect(Object.keys(LANGUAGES_LABELS[loc]).sort()).toEqual(Object.keys(LANGUAGES_LABELS.en).sort());
+    }
+  });
+
+  it('copy uses the ellipsis character and curly quotes', () => {
+    const { LANGUAGES_LABELS } = loadModule();
+    for (const loc of ['en', 'zh', 'it'] as const) {
+      for (const [key, text] of Object.entries(LANGUAGES_LABELS[loc])) {
+        expect(text, `${loc} ${key}`).not.toContain('...');
+        expect(text, `${loc} ${key}`).not.toContain('"');
+      }
+    }
+  });
+
+  it.each(['en', 'zh', 'it'] as const)('renders in %s with the panel lang and localized controls', async (locale) => {
+    const page = await mounted({ locale: locale === 'en' ? 'en-GB' : locale === 'zh' ? 'zh-CN' : 'it-IT' });
+    const { LANGUAGES_LABELS } = loadModule();
+    expect(page.section.getAttribute('lang')).toBe(locale);
+    expect(page.content.textContent).toContain(LANGUAGES_LABELS[locale]['action.save']);
+    expect(page.banner.textContent).toContain(LANGUAGES_LABELS[locale]['banner.title']);
+    expect(page.heading.textContent).toBe(LANGUAGES_LABELS[locale]['panel.title']);
+  });
+
+  it('the table sits in a focusable region that scrolls sideways inside itself; button rows wrap', async () => {
+    const page = await mounted();
+    const region = page.content.querySelector('[role="region"]') as FakeElement;
+    expect(region.getAttribute('tabindex')).toBe('0');
+    expect(region.getAttribute('aria-label')).toBe('Languages');
+    expect(region.className).toContain('overflow-x-auto');
+    expect(region.firstElementChild!.tagName).toBe('table');
+    expect(region.querySelector('caption')!.className).toContain('sr-only');
+    expect(region.querySelectorAll('th').filter((th) => th.getAttribute('scope') === 'col')).toHaveLength(5);
+    expect(region.querySelectorAll('th').filter((th) => th.getAttribute('scope') === 'row')).toHaveLength(3);
+    const hidden = region.querySelectorAll('th').filter((th) => th.className.includes('hidden md:table-cell')).map((th) => th.textContent);
+    expect(hidden).toEqual(['Code', 'Documents']);
+    const save = buttonByText(page.content, 'Save languages');
+    expect(save.parentNode!.className).toContain('flex-wrap');
+  });
+
+  it('a 200-character name without spaces breaks inside its cell', async () => {
+    const long = 'x'.repeat(200);
+    const page = await mounted({ get: { status: 200, body: languagesAnswer({ packs: [pack('en', long, long + 'y')] }) } });
+    const name = rowFor(page.content, 'en').querySelector('[lang="en"]') as FakeElement;
+    expect(name.className).toContain('break-words');
+    expect(name.parentNode!.className).toContain('min-w-0');
+  });
+
+  it('the banner and the panel create no element or link from injected server strings', async () => {
+    const page = await mounted({
+      get: {
+        status: 200,
+        body: languagesAnswer({
+          packs: [
+            pack('zh', XSS_PAYLOAD, 'javascript:alert(1)', { groundedness: 'none' }),
+            pack('en', 'javascript:alert(1)', XSS_PAYLOAD, { selectable: false, reasons: [{ code: 'embedding_profile_unsupported', id: XSS_PAYLOAD }, { code: XSS_PAYLOAD }] }),
+          ],
+        }),
+      },
+      post: {
+        status: 400,
+        body: { success: false, details: [{ code: 'reranker_unsupported', language: XSS_PAYLOAD, id: XSS_PAYLOAD }, { code: XSS_PAYLOAD }] },
+      },
+    });
+    toggle(useBox(page.content, 'zh'), true);
+    buttonByText(page.content, 'Save languages').click();
+    await flush();
+    expect(page.section.textContent).toContain(XSS_PAYLOAD);
+    expect(injectedElements(page.doc)).toEqual([]);
+    expect(page.doc.documentElement.querySelectorAll('a').filter((a) => a.getAttribute('data-tab') === null)).toEqual([]);
+    expect(page.doc.documentElement.querySelectorAll('*').filter((el) => el.hasAttribute('href') || el.hasAttribute('src'))).toEqual([]);
+    expect(page.doc.innerHtmlWrites).toBe(0);
+  });
+});

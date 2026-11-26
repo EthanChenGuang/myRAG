@@ -32,7 +32,7 @@ const RAG_UI_LABELS = {
     'error.approvalNeedsUnified':
       'Not uploaded. Upload approval is on and needs the unified ingest pipeline, which is off. Ask an admin to turn it on.',
     'error.hiddenNeedsSidecar':
-      'Not saved. Quarantining hidden text needs the sidecar service, which is not configured. Set it up, or choose "Record only".',
+      'Not saved. Quarantining hidden text needs the sidecar service, which is not configured. Set it up, or choose “Record only”.',
   },
   zh: {
     'evidence.inert': '仅以文本显示，不是链接。',
@@ -203,7 +203,7 @@ function ragUiTemplateNodes(doc, template, vars, codeVars) {
  */
 function ragUiAlert(doc, { tone, icon, title, body, role, actions, className }) {
   const text = ragUiEl(doc, 'div', { className: 'min-w-0 max-w-prose' });
-  if (title) text.appendChild(ragUiEl(doc, 'p', { className: 'text-base font-semibold', text: title }));
+  if (title) text.appendChild(ragUiEl(doc, 'p', { className: 'text-base font-semibold text-balance', text: title }));
   const bodies = Array.isArray(body) ? body : body === undefined || body === null ? [] : [body];
   for (const part of bodies) {
     if (typeof part === 'string') text.appendChild(ragUiEl(doc, 'p', { className: 'text-sm', text: part }));
@@ -217,7 +217,7 @@ function ragUiAlert(doc, { tone, icon, title, body, role, actions, className }) 
     doc,
     'div',
     {
-      className: 'alert alert-' + (tone || 'info') + ' items-start text-sm flex-wrap' + (className ? ' ' + className : ''),
+      className: 'alert alert-' + (tone || 'info') + ' items-start text-sm' + (className ? ' ' + className : ''),
       attrs: { role: role || null },
     },
     children,
@@ -436,7 +436,7 @@ function ragUiConfirmDialog(doc, { title, body, keepLabel, confirmLabel, running
   const titleId = ragUiNextId('rag-dialog-title');
   const bodyId = ragUiNextId('rag-dialog-body');
   const dialog = ragUiEl(doc, 'dialog', { className: 'modal', attrs: { 'aria-labelledby': titleId, 'aria-describedby': bodyId } });
-  const keep = ragUiEl(doc, 'button', { className: 'btn btn-sm md:btn-sm', text: keepLabel, attrs: { type: 'button' } });
+  const keep = ragUiEl(doc, 'button', { className: 'btn btn-sm', text: keepLabel, attrs: { type: 'button' } });
   const confirm = ragUiEl(doc, 'button', {
     className: 'btn btn-sm ' + (tone === 'error' ? 'btn-error' : 'btn-primary'),
     text: confirmLabel,
@@ -448,8 +448,8 @@ function ragUiConfirmDialog(doc, { title, body, keepLabel, confirmLabel, running
     if (typeof part === 'string') bodyEl.appendChild(ragUiEl(doc, 'p', { text: part }));
     else if (part) bodyEl.appendChild(part);
   }
-  const box = ragUiEl(doc, 'div', { className: 'modal-box min-w-0' }, [
-    ragUiEl(doc, 'h3', { className: 'text-base font-semibold mb-2 break-words', id: titleId, text: title }),
+  const box = ragUiEl(doc, 'div', { className: 'modal-box min-w-0 overscroll-contain' }, [
+    ragUiEl(doc, 'h3', { className: 'text-base font-semibold mb-2 break-words text-balance', id: titleId, text: title }),
     bodyEl,
     ragUiEl(doc, 'div', { className: 'modal-action flex-wrap gap-2' }, [keep, confirm]),
   ]);

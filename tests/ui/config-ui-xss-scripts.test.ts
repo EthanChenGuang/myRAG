@@ -225,3 +225,58 @@ describe('mcp-config.js renders MCP server data as text (XSS)', () => {
     expectSafe(doc);
   });
 });
+
+describe('rag-panels/languages.js and rag-ui.js render server data as text (XSS)', () => {
+  it('pack names, reason ids and refused-save details create no element and no inline handler', async () => {
+    const doc = new FakeDocument();
+    const section = host(doc, 'rag-administration-languages', 'section');
+    for (const attr of ['data-languages-title', 'data-languages-description', 'data-languages-alert', 'data-languages-content', 'data-languages-mirrors', 'data-languages-status']) {
+      const el = doc.createElement('div');
+      el.setAttribute(attr, '');
+      section.appendChild(el);
+    }
+    host(doc, 'rag-language-banner');
+    const answer = {
+      configured: false,
+      languages: [],
+      primary: null,
+      variablesSet: {},
+      pipelines: { RAG_PIPELINE: { value: 'v2', explicit: true } },
+      verifiedAgainstActiveProfile: false,
+      packs: [
+        { code: 'zh', nativeName: JS_BREAKOUT, englishName: XSS_PAYLOAD, groundedness: 'none', selectable: true, reasons: [] },
+        { code: 'en', nativeName: XSS_PAYLOAD, englishName: JS_BREAKOUT, selectable: false, reasons: [{ code: 'reranker_unsupported', id: JS_BREAKOUT }] },
+      ],
+    };
+    const context: Record<string, unknown> = {
+      document: doc,
+      console: { log() {}, error() {}, warn() {}, info() {}, debug() {} },
+      navigator: { language: 'en-US' },
+      location: { origin: 'http://config.local' },
+      setTimeout,
+      clearTimeout,
+      AbortController,
+      Intl,
+      fetch: async (_url: string, init: { method?: string } = {}) => ({
+        ok: init.method !== 'POST',
+        status: init.method === 'POST' ? 400 : 200,
+        json: async () =>
+          init.method === 'POST' ? { success: false, details: [{ code: 'incomplete_pack', language: XSS_PAYLOAD }, { code: JS_BREAKOUT }] } : answer,
+      }),
+      ragFetch: async () => ({ ok: true, status: 200, body: { counts: [{ language: 'zh', documents: 3 }] } }),
+    };
+    context.window = context;
+    vm.createContext(context);
+    for (const file of ['rag-panels/rag-ui.js', 'rag-panels/languages.js']) {
+      new vm.Script(fs.readFileSync(path.join(configUiDir, file), 'utf8'), { filename: file }).runInContext(context);
+    }
+    await (context.initLanguagesPanel as () => Promise<void>)();
+    const save = doc.body.querySelectorAll('button').find((b) => b.textContent === 'Save languages')!;
+    save.click();
+    for (let i = 0; i < 20; i += 1) await new Promise((resolve) => setImmediate(resolve));
+    expectSafe(doc);
+    expect(doc.innerHtmlWrites).toBe(0);
+    expect(doc.body.textContent).toContain(JS_BREAKOUT);
+    expect(doc.body.textContent).toContain(XSS_PAYLOAD);
+  });
+});

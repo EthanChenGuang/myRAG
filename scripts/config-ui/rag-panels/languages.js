@@ -9,11 +9,11 @@ const LANGUAGES_LABELS = {
     'banner.bodyLegacy':
       'Questions are still answered by the legacy pipelines. Choose the languages before you turn on the newer ones.',
     'banner.bodyExplicit':
-      '{variable} is set, but no language is chosen. Until you choose, the knowledge base answers "temporarily unavailable" and new uploads are refused.',
+      '{variable} is set, but no language is chosen. Until you choose, the knowledge base answers “temporarily unavailable” and new uploads are refused.',
     'banner.action': 'Choose languages',
     'panel.title': 'Languages',
     'panel.description':
-      "The languages this deployment's knowledge base supports. Parsing, text recognition, chunking, detection and translation work for these languages only. Applies to every workspace.",
+      "The languages this deployment’s knowledge base supports. Parsing, text recognition, chunking, detection and translation work for these languages only. Applies to every workspace.",
     'firstRun.title': 'Choose the languages of your documents',
     'firstRun.body':
       'Tick every language your documents and questions use, then pick the primary one. It is used when a language cannot be detected. You can change this later.',
@@ -30,7 +30,7 @@ const LANGUAGES_LABELS = {
     'blocked.reranker': 'The active reranker, {reranker}, does not declare this language.',
     'primary.moved': '{language} is now the primary language.',
     'note.monolingual': 'With one language, language detection, query translation and document translation are off.',
-    'note.groundedness': 'Answers in {language} are not checked for groundedness and are recorded as "not checked".',
+    'note.groundedness': 'Answers in {language} are not checked for groundedness and are recorded as “not checked”.',
     'note.removed': 'Documents in {language} stay searchable. Detection and translation stop for this language.',
     'action.save': 'Save languages',
     'action.reset': 'Reset selection',
@@ -512,7 +512,7 @@ class LanguagesPanel {
     if (view.firstRun) {
       nodes.push(
         this.el('div', { className: 'mb-4 max-w-prose' }, [
-          this.el('h4', { className: 'text-base font-semibold', text: this.t('firstRun.title') }),
+          this.el('h4', { className: 'text-base font-semibold text-balance', text: this.t('firstRun.title') }),
           this.el('p', { className: 'text-sm', text: this.t('firstRun.body') }),
         ]),
       );
@@ -578,7 +578,7 @@ class LanguagesPanel {
     radio.addEventListener('change', () => {
       if (radio.checked) this.onPrimary(row.code);
     });
-    const nameCell = this.el('th', { className: 'min-w-0 font-normal text-left', attrs: { scope: 'row' } }, [
+    const nameCell = this.el('th', { className: 'min-w-0 font-normal text-left align-top', attrs: { scope: 'row' } }, [
       this.el('span', { className: 'text-sm break-words', text: row.nativeName, attrs: { lang: row.code } }),
     ]);
     if (row.uiName) nameCell.appendChild(this.el('p', { className: 'text-xs text-base-content/70 break-words', text: row.uiName }));
@@ -586,13 +586,15 @@ class LanguagesPanel {
     row.blocked.forEach((reason, index) => {
       const id = 'languages-blocked-' + row.code + '-' + index;
       blockedIds.push(id);
-      const line = this.el('p', { className: 'text-xs text-warning mt-1 break-words', id });
-      if (reason.key === 'error.invalid') line.appendChild(ui.ragUiCodeSentence(this.doc, this.locale, reason.vars.detail));
-      else line.append(...this.sentence(reason.key, reason.vars, Object.keys(reason.vars)));
-      nameCell.appendChild(line);
+      const text = this.el('span', { className: 'min-w-0 break-words', id });
+      if (reason.key === 'error.invalid') text.appendChild(ui.ragUiCodeSentence(this.doc, this.locale, reason.vars.detail));
+      else text.append(...this.sentence(reason.key, reason.vars, Object.keys(reason.vars)));
+      nameCell.appendChild(
+        this.el('p', { className: 'flex items-start gap-1 text-xs mt-1' }, [ui.ragUiIcon(this.doc, 'exclamation-triangle', 'text-warning shrink-0'), text]),
+      );
     });
     if (blockedIds.length) box.setAttribute('aria-describedby', blockedIds.join(' '));
-    const countCell = this.el('td', { className: 'text-right tabular-nums hidden md:table-cell' });
+    const countCell = this.el('td', { className: 'text-right tabular-nums align-top hidden md:table-cell' });
     if (row.count === null) {
       countCell.appendChild(this.el('span', { text: '—', attrs: { 'aria-hidden': 'true' } }));
       countCell.appendChild(this.el('span', { className: 'sr-only', text: this.t('docs.noCount') }));
@@ -603,13 +605,13 @@ class LanguagesPanel {
       );
     }
     return this.el('tr', { attrs: { 'data-language': row.code } }, [
-      this.el('td', {}, [box]),
+      this.el('td', { className: 'align-top' }, [this.el('label', { className: 'inline-flex p-2 -m-2' + (row.selectable ? ' cursor-pointer' : '') }, [box])]),
       nameCell,
-      this.el('td', { className: 'hidden md:table-cell' }, [
+      this.el('td', { className: 'align-top hidden md:table-cell' }, [
         this.el('code', { className: 'font-mono text-xs', text: row.code, attrs: { translate: 'no' } }),
       ]),
       countCell,
-      this.el('td', {}, [radio]),
+      this.el('td', { className: 'align-top' }, [this.el('label', { className: 'inline-flex p-2 -m-2 cursor-pointer' }, [radio])]),
     ]);
   }
 
@@ -681,9 +683,9 @@ class LanguagesPanel {
     if (!this.notesHost || !this.view) return;
     const ui = languagesUiLib();
     const items = languagesNotes(this.view, [...this.checked]).map((note) => {
-      const tone = note.tone === 'warning' ? 'text-warning' : note.tone === 'muted' ? 'text-xs text-base-content/70' : '';
-      return this.el('p', { className: 'flex items-start gap-2 ' + (note.tone === 'muted' ? '' : 'text-sm ') + tone }, [
-        note.icon ? ui.ragUiIcon(this.doc, note.icon, 'mt-0.5') : null,
+      const muted = note.tone === 'muted';
+      return this.el('p', { className: 'flex items-start gap-2 ' + (muted ? 'text-xs text-base-content/70' : 'text-sm leading-5') }, [
+        note.icon ? ui.ragUiIcon(this.doc, note.icon, 'shrink-0' + (note.tone === 'warning' ? ' text-warning' : '')) : null,
         this.el('span', { className: 'min-w-0 break-words', text: this.t(note.key, note.vars) }),
       ]);
     });
