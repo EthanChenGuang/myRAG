@@ -14,8 +14,10 @@ import {
   type OutboxRow,
   type SyncProfile,
 } from './claim';
+import { logVectorSync, type VectorSyncLogSink } from './log';
 import { planChunkSync, planDocumentSync, type SyncPlan } from './servable';
 import type { VectorStore } from './stores/types';
+import { traceVectorSync, type VectorSyncTraceOptions } from './trace';
 
 export const DRAIN_DEFAULT_BUDGET_MS = 45_000;
 export const DRAIN_DEFAULT_BATCH = 100;
@@ -37,7 +39,9 @@ export interface DrainSliceOptions {
   leaseSeconds?: number;
   pageSize?: number;
   now?: () => number;
-  sink?: (line: string) => void;
+  sink?: VectorSyncLogSink;
+  /** Langfuse options for the per-slice trace; false turns it off. Default: the environment's Langfuse config. */
+  trace?: VectorSyncTraceOptions | false;
 }
 
 export interface DrainUntilEmptyOptions extends DrainSliceOptions {
@@ -339,9 +343,8 @@ export async function drainSlice(options: DrainSliceOptions): Promise<VectorSync
     budget_ms: Math.max(0, Math.round(budgetMs)),
     more_pending: morePending,
   });
-  (options.sink ?? ((line: string) => console.log(line)))(
-    `[Vector Sync] ${JSON.stringify({ mode: report.mode, claimed: report.claimed, upserted: report.upserted, deleted: report.deleted, failed: report.failed, dead: report.dead, lagSeconds: report.lag_seconds, elapsedMs: report.elapsed_ms })}`,
-  );
+  logVectorSync(report, options.sink);
+  if (options.trace !== false) traceVectorSync(report, options.trace ?? {});
   return report;
 }
 
