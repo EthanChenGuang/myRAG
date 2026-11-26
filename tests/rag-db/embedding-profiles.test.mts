@@ -19,6 +19,7 @@ const SCOPED_PROFILES = ['voyage-4-large-1024-domain', 'voyage-finance-2-1024', 
 /** Unscoped open-source fallback seeded by 0811 (Phase 3.2.1, EMB-11, D-25). */
 const BGE_M3 = 'bge-m3-1024';
 const MIGRATION_0811 = path.join(REPO_ROOT, 'supabase/migrations/0811_bge_m3_profile.sql');
+const FINETUNE_SLOTS = ['ft-a-1024', 'ft-b-1024'];
 
 function halfvecLiteral(dims: number, value = 0.1): string {
   return `[${Array.from({ length: dims }, () => value).join(',')}]`;
@@ -113,7 +114,7 @@ for (const mode of MODES) {
         query_instruction: string | null;
       }>('SELECT id, provider, model, dims, storage, status, score_calibration, query_instruction FROM embedding_profiles ORDER BY id');
       const byId = new Map(result.rows.map((row) => [row.id, row]));
-      assert.deepEqual([...byId.keys()].sort(), [LEGACY, ...HALFVEC_PROFILES, ...SCOPED_PROFILES, BGE_M3].sort());
+      assert.deepEqual([...byId.keys()].sort(), [LEGACY, ...HALFVEC_PROFILES, ...SCOPED_PROFILES, BGE_M3, ...FINETUNE_SLOTS].sort());
 
       const legacy = byId.get(LEGACY);
       assert.equal(legacy?.provider, 'openai');
@@ -321,7 +322,7 @@ for (const mode of MODES) {
 
       await db.query("UPDATE embedding_profiles SET eval_evidence = '{\"gate_passed\": true}'::jsonb WHERE id = 'voyage-4-large-1024'");
       const list = await db.query<Record<string, unknown>>('SELECT * FROM rag_list_embedding_profiles()');
-      assert.equal(list.rows.length, 5 + SCOPED_PROFILES.length + 1);
+      assert.equal(list.rows.length, 5 + SCOPED_PROFILES.length + 1 + FINETUNE_SLOTS.length);
       assert.ok(!('eval_evidence' in (list.rows[0] ?? {})), 'the list must not return evidence bodies');
       const withEvidence = list.rows.filter((row) => row.has_evidence === true).map((row) => row.id);
       assert.deepEqual(withEvidence, ['voyage-4-large-1024']);
