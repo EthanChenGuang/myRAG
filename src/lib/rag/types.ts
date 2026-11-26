@@ -165,7 +165,7 @@ export interface RetrievalOptions {
   domainControlLeg?: DocType;
 }
 
-export type QueryVariantKind = 'original' | 'condensed' | 'expanded' | 'hyde' | 'sub_question' | 'translated';
+export type QueryVariantKind = 'original' | 'condensed' | 'expanded' | 'hyde' | 'sub_question' | 'translated' | 'terminology';
 
 export interface QueryVariant {
   text: string;

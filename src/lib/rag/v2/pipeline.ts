@@ -245,9 +245,11 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
       filters: query.filters,
       bindings: { plan: bindingPlan, embeds: bindingEmbeds },
       ...(hasTranslationWork(translationPlan) ? { translations: translationPlan } : {}),
-      ...(query.terminology && query.terminology.expansionTokens.length > 0
+      // D-31: term:0 is searched only when the stage's accounting kept it.
+      ...(query.terminology && query.terminology.termSearch && query.terminology.expansionTokens.length > 0
         ? { terminology: { tokens: query.terminology.expansionTokens, expansionWeight: query.terminology.expansionWeight } }
         : {}),
+      ...(query.terminology ? { terminologyDenseWeight: query.terminology.denseWeight } : {}),
     });
 
     const rank = await runRankStages({

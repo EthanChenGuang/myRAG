@@ -144,6 +144,6 @@ describe('terminology tracer through the eval route', () => {
     for (const entry of CASES) {
       assert.ok(!counts.includes(entry.variant) && !counts.includes(entry.canonical));
     }
-    assert.deepEqual(Object.keys(on.stage_counts?.terminology ?? {}).sort(), ['capped', 'matches', 'shared_version', 'tokens', 'workspace_version']);
+    assert.deepEqual(Object.keys(on.stage_counts?.terminology ?? {}).sort(), ['capped', 'matches', 'search_cut', 'shared_version', 'tokens', 'variant_cut', 'workspace_version']);
   });
 });

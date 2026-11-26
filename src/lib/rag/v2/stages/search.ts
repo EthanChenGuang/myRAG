@@ -21,6 +21,7 @@ import type { TenantScope } from '../../tenant/scope';
 import type { TraceCollector } from '../../trace/collector';
 import type { Profile, QueryVariant, RunRetrievalInput, StageOverrides } from '../../types';
 import { getV2StartupVerdict } from '../startup';
+import { terminologyParams } from '../../terminology/expand';
 import { evalChunkingOverride } from '../overrides';
 import { createRetrievalPort, listsFromLegs, variantSearchRequest, type RetrievalPortHandle } from '../port';
 import { bindingFailureDetail, hasBindingWork, runBindingLegs, type BindingEmbed, type BindingLegsOutput, type BindingLegsPlan } from './binding-legs';
@@ -60,6 +61,8 @@ export interface SearchStagesInput {
   translations?: TranslationLegsPlan;
   /** D-16: the terminology stage's expansion; non-empty tokens add one lexical-only term:0 list. */
   terminology?: { tokens: readonly string[]; expansionWeight: number } | null;
+  /** D-18: factor on the dense leg weight for a variant of kind terminology; absent reads TerminologyParams.dense_weight. */
+  terminologyDenseWeight?: number;
 }
 
 /** D-16: the expansion list id; no dense/lexical prefix, so nothing that inspects list ids by prefix counts it as a leg. */
@@ -330,6 +333,9 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
   const icuSkipLexical = lexicalEnabled && !verdict.icuAvailable;
   const chunkingOverride = evalChunkingOverride(profile, stageOverrides?.retrievalOverrides);
   const bindings = ctx.bindings && hasBindingWork(ctx.bindings.plan) ? ctx.bindings : null;
+  // D-18, D-34: the terminology variant's dense list weighs dense_weight × the dense leg weight in force, read at run time.
+  const terminologyDenseWeight = ctx.terminologyDenseWeight ?? terminologyParams().dense_weight;
+  const denseFactor = (index: number): number => (variants[index]?.kind === 'terminology' ? terminologyDenseWeight : 1);
   const searchSpec = spec('search', 'throw');
   const bindingTimeoutMs = Math.max(
     1,
@@ -411,6 +417,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       lexicalEnabled: lexicalEnabled && verdict.icuAvailable,
       ...(chunkingOverride ? { chunkingProfileOverride: chunkingOverride } : {}),
       ...versionScopeArg,
+      terminologyDenseWeight,
     });
     let order: unknown;
     try {
@@ -598,7 +605,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
         if (delegated) {
           fusedHits = delegatedFusion(delegated, extraLists, params.rrf_k);
         } else {
-          const lists = searchValue.flatMap((legs, index) => listsFromLegs(index, legs.dense, legs.lexical, params));
+          const lists = searchValue.flatMap((legs, index) => listsFromLegs(index, legs.dense, legs.lexical, params, denseFactor(index)));
           lists.push(...extraLists);
           fusedHits = rrf(lists, params.rrf_k);
         }
