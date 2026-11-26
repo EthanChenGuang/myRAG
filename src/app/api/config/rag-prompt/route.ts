@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdminOrDeny } from '@/lib/admin-route-auth';
+import { adminDenied, checkAdmin, requireAdminOrDeny } from '@/lib/admin-route-auth';
 import { EnvWriteError, invalidEnvValueReason, readEnvFile, writeEnvUpdates } from '@/lib/env-file';
+import { guardAppEnvWrite } from '@/lib/rag/config-gate/guard';
 
 /**
  * API endpoint for RAG system prompt configuration
@@ -129,12 +130,12 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const denied = await requireAdminOrDeny(request);
-  if (denied) return denied;
+  const admin = await checkAdmin(request);
+  if (!admin.ok) return adminDenied(admin.status);
 
   try {
     const body = await request.json();
-    const { preContext, postContext } = body;
+    const { preContext, postContext, ragGate } = body;
 
     if (!preContext || typeof preContext !== 'string') {
       return NextResponse.json(
@@ -173,6 +174,9 @@ export async function POST(request: NextRequest) {
     // Assemble prompt for response (not saved to env file)
     const assembledPrompt = assemblePrompt(preContext, postContext || '');
 
+    const gate = await guardAppEnvWrite({ updates, ragGate, actorUserId: admin.userId, route: 'rag-prompt' });
+    if (!gate.ok) return gate.response;
+
     writeEnvUpdates(updates);
 
     return NextResponse.json({
@@ -180,7 +184,8 @@ export async function POST(request: NextRequest) {
       message: 'RAG prompt configuration saved successfully',
       preContext,
       postContext: postContext || '',
-      assembledPrompt
+      assembledPrompt,
+      ...(gate.ragGate ? { ragGate: gate.ragGate } : {})
     });
   } catch (error) {
     console.error('[RAG Prompt API] failed to save RAG prompt configuration');
