@@ -913,9 +913,9 @@ Ejected: `exec/04.2-37` (Phase 4.2 fixture documents, golden items and both fixt
 | 8 | `0962_rag_monitor_daily.sql` | None. Daily aggregate table and `rag_monitor_purge`. |
 | 9 | `0963_rag_monitor_alerts.sql` | Needs `rag_assert_tenant_key`. Alerts table, upsert and set-status functions. |
 | 10 | `0964_rag_online_judge_scores.sql` | Needs 0962 (replaces `rag_monitor_purge`) and 0531 `rag_retrieval_log` (guarded with to_regclass). |
-| 11 | `0965_rag_judge_labels.sql` | Needs 0533 `rag_review_items` and 0534 `rag_is_domain_expert` (no-op without them). Adds unique `(id, tenant_key)` on `rag_review_items`; authenticated RLS policies gated by domain expert. **DROP:** `DROP POLICY IF EXISTS` three times before re-creating them. |
+| 11 | `0965_rag_judge_labels.sql` | Needs 0534 (`rag_review_items`, `rag_is_domain_expert`; no-op without them). Adds unique `(id, tenant_key)` on `rag_review_items`; authenticated RLS policies gated by domain expert. **DROP:** `DROP POLICY IF EXISTS` three times before re-creating them. |
 | 12 | `0966_rag_query_clusters.sql` | Needs 0531 `rag_retrieval_log` (assignments cascade with it). Cluster sets, clusters and assignments, service_role only. |
-| 13 | `0967_rag_review_item_strata.sql` | Needs `rag_review_items` (no-op without it). **DROP:** drops and re-creates the `rag_review_items` reasons CHECK constraint with `representative` and `re_review` added, and drops NOT NULL on `rag_review_items.trace_id` where it is still set. Adds `rag_review_item_strata` and `rag_review_items_enqueue`. Owner present. |
+| 13 | `0967_rag_review_item_strata.sql` | Needs 0534 `rag_review_items` and 0531 `rag_retrieval_log` (no-op without the review queue). **DROP:** drops and re-creates the `rag_review_items` reasons CHECK constraint with `representative` and `re_review` added, and drops NOT NULL on `rag_review_items.trace_id` where it is still set. Adds `rag_review_item_strata` and `rag_review_items_enqueue`. Owner present. |
 | 14 | `0968_rag_drift_weekly.sql` | Needs `rag_assert_tenant_key`. Table and upsert, service_role only. |
 | 15 | `0970_rag_pilot_users.sql` | Needs `rag_assert_tenant_key`. Table, add and remove functions, service_role only. |
 | 16 | `0971_rag_monitor_aggregate.sql` | Needs 0962 and 0964; reads `rag_retrieval_log`, `rag_answer_records`, `documents` (guarded with to_regclass). |
