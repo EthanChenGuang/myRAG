@@ -247,7 +247,13 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
       ...(hasTranslationWork(translationPlan) ? { translations: translationPlan } : {}),
       // D-31: term:0 is searched only when the stage's accounting kept it.
       ...(query.terminology && query.terminology.termSearch && query.terminology.expansionTokens.length > 0
-        ? { terminology: { tokens: query.terminology.expansionTokens, expansionWeight: query.terminology.expansionWeight } }
+        ? {
+            terminology: {
+              tokens: query.terminology.expansionTokens,
+              expansionWeight: query.terminology.expansionWeight,
+              reserveSlots: query.terminology.reserveSlots,
+            },
+          }
         : {}),
       ...(query.terminology ? { terminologyDenseWeight: query.terminology.denseWeight } : {}),
     });

@@ -22,6 +22,7 @@ import type { TraceCollector } from '../../trace/collector';
 import type { Profile, QueryVariant, RunRetrievalInput, StageOverrides } from '../../types';
 import { getV2StartupVerdict } from '../startup';
 import { terminologyParams } from '../../terminology/expand';
+import { reserveTerminologyHits } from '../../terminology/reserve';
 import { evalChunkingOverride } from '../overrides';
 import { createRetrievalPort, listsFromLegs, variantSearchRequest, type RetrievalPortHandle } from '../port';
 import { bindingFailureDetail, hasBindingWork, runBindingLegs, type BindingEmbed, type BindingLegsOutput, type BindingLegsPlan } from './binding-legs';
@@ -59,7 +60,7 @@ export interface SearchStagesInput {
   /** Planned translation legs (XLG-04, D-30); absent or empty runs none. */
   translations?: TranslationLegsPlan;
   /** D-16: the terminology stage's expansion; non-empty tokens add one lexical-only term:0 list. */
-  terminology?: { tokens: readonly string[]; expansionWeight: number } | null;
+  terminology?: { tokens: readonly string[]; expansionWeight: number; reserveSlots?: number } | null;
   /** D-18: factor on the dense leg weight for a variant of kind terminology; absent reads TerminologyParams.dense_weight. */
   terminologyDenseWeight?: number;
 }
@@ -592,10 +593,19 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     'fuse',
   );
 
+  // D-34: bounded rerank-input places for term:0-only hits; absent reserveSlots reads TerminologyParams.reserve_slots.
+  const reserve = (result: DedupeResult): DedupeResult =>
+    termList && ctx.terminology
+      ? reserveTerminologyHits(result, fused, termList.hits, {
+          reserveSlots: ctx.terminology.reserveSlots ?? terminologyParams().reserve_slots,
+          byParent: config.v2.parentChild,
+        })
+      : result;
+
   const deduped = await runStage(
     spec('dedupe', 'skip'),
     signal,
-    () => dedupeAndCap(fused, { byParent: config.v2.parentChild, cap: params.rerank_input_cap }),
+    () => reserve(dedupeAndCap(fused, { byParent: config.v2.parentChild, cap: params.rerank_input_cap })),
     collector,
     {
       candidatesIn: fused.length,
@@ -604,7 +614,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     },
   );
 
-  const capped = deduped.skipped ? sliceCap(fused, params.rerank_input_cap) : deduped.value;
+  const capped = deduped.skipped ? reserve(sliceCap(fused, params.rerank_input_cap)) : deduped.value;
 
   return { fusedHits: capped.hits, dedupeCounts: capped.counts };
 }
