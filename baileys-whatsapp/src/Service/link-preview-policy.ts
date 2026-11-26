@@ -55,5 +55,18 @@ export const socketLinkPreviewConfig = (env: LinkPreviewEnv = process.env) => ({
 	generateHighQualityLinkPreview: getLinkPreviewHosts(env).size > 0
 })
 
-export const buildTextMessage = (text: string, env: LinkPreviewEnv = process.env): TextMessageContent =>
-	allowsLinkPreview(text, env) ? { text } : { text, linkPreview: null }
+export type TextMessageOptions = {
+	linkPreview?: false
+}
+
+export type LinkPreviewField = { ok: true; options: TextMessageOptions } | { ok: false }
+
+export const parseLinkPreviewField = (_value: unknown): LinkPreviewField => ({ ok: true, options: {} })
+
+export const linkPreviewHostList = (_env: LinkPreviewEnv = process.env): string[] => []
+
+export const buildTextMessage = (
+	text: string,
+	env: LinkPreviewEnv = process.env,
+	_options: TextMessageOptions = {}
+): TextMessageContent => (allowsLinkPreview(text, env) ? { text } : { text, linkPreview: null })
