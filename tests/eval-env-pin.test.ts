@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, test } from 'vitest';
 import { derivePinnedEvalEnv } from '../eval/harness/eval-env.mts';
-import { RUN_CONFIG_ENV_ALLOWLIST } from '../eval/harness/run-config.mts';
+import { parseRunConfig, RUN_CONFIG_ENV_ALLOWLIST, RunConfigError } from '../eval/harness/run-config.mts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -118,6 +118,49 @@ describe('pinned eval env', () => {
       expect(pinned, `${name} is pinned`).toHaveProperty(name);
       expect(pinned[name], name).toBe(value);
     }
+  });
+
+  test('pins the fourteen Phase 5.2 answer-rule switches at their D-58 defaults', () => {
+    const expected = {
+      RAG_REGISTRY_TEXTS: 'false',
+      RAG_PARTIAL_ANSWER_RULE: 'false',
+      RAG_CONTEXT_RELEVANCE_RULE: 'false',
+      RAG_CITATION_PER_SENTENCE: 'false',
+      RAG_CLAIM_CHECK: 'false',
+      RAG_GROUNDEDNESS_LLM_JUDGE: 'false',
+      RAG_GROUNDEDNESS_JUDGE_MODEL: '',
+      RAG_MAX_OUTPUT_TOKENS: 'off',
+      RAG_OUTPUT_GUARD: 'off',
+      RAG_VERSION_LABELS: 'false',
+      RAG_SECURITY_EVENTS: 'false',
+      RAG_UPLOADER_ALERT_THRESHOLD: '0',
+      RAG_UPLOADER_ALERT_WINDOW_HOURS: '24',
+      RAG_UPLOADER_HOLD: 'off',
+    };
+    expect(Object.keys(expected)).toHaveLength(14);
+    const pinned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'eval/config/rag-eval-env.json'), 'utf8'));
+    for (const [name, value] of Object.entries(expected)) {
+      expect(pinned, `${name} is pinned`).toHaveProperty(name);
+      expect(pinned[name], name).toBe(value);
+      expect(RUN_CONFIG_ENV_ALLOWLIST, `${name} is settable by a run config`).toContain(name);
+    }
+    expect(pinned).not.toHaveProperty('WHATSAPP_LINK_PREVIEW_HOSTS');
+  });
+
+  test('a run config may set the Phase 5.2 switches and still rejects an unknown name or value', () => {
+    const config = parseRunConfig(
+      {
+        name: 'answer-rules',
+        env: { RAG_OUTPUT_GUARD: 'enforce', RAG_PARTIAL_ANSWER_RULE: 'true', RAG_MAX_OUTPUT_TOKENS: '600' },
+      },
+      'inline',
+    );
+    expect(config.env).toEqual({ RAG_MAX_OUTPUT_TOKENS: '600', RAG_OUTPUT_GUARD: 'enforce', RAG_PARTIAL_ANSWER_RULE: 'true' });
+    expect(parseRunConfig({ name: 'cap-auto', env: { RAG_MAX_OUTPUT_TOKENS: 'auto' } }, 'inline').env.RAG_MAX_OUTPUT_TOKENS).toBe('auto');
+    expect(() => parseRunConfig({ name: 'unknown', env: { RAG_NOT_A_SWITCH: 'true' } }, 'inline')).toThrow(RunConfigError);
+    expect(() => parseRunConfig({ name: 'bad-guard', env: { RAG_OUTPUT_GUARD: 'block' } }, 'inline')).toThrow(RunConfigError);
+    expect(() => parseRunConfig({ name: 'bad-hold', env: { RAG_UPLOADER_HOLD: 'always' } }, 'inline')).toThrow(RunConfigError);
+    expect(() => parseRunConfig({ name: 'bad-cap', env: { RAG_MAX_OUTPUT_TOKENS: 'lots' } }, 'inline')).toThrow(RunConfigError);
   });
 
   test('a run config cannot set the embed version-scope switch (D-58)', () => {
