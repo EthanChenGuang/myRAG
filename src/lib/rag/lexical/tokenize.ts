@@ -59,6 +59,11 @@ function normalize(text: string): string {
   return foldLatin(mapApostrophe(text.normalize('NFKC')).toLowerCase());
 }
 
+/** D-09: the tokenizer's normalization (NFKC, lower case, apostrophes, accent folding); the one normalizer for dictionary text. */
+export function normalizeLexical(text: string): string {
+  return normalize(text);
+}
+
 function joinedForm(code: string): string {
   return code.replace(JOINED_SEP, '');
 }

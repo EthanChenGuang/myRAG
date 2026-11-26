@@ -245,6 +245,9 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
       filters: query.filters,
       bindings: { plan: bindingPlan, embeds: bindingEmbeds },
       ...(hasTranslationWork(translationPlan) ? { translations: translationPlan } : {}),
+      ...(query.terminology && query.terminology.expansionTokens.length > 0
+        ? { terminology: { tokens: query.terminology.expansionTokens, expansionWeight: query.terminology.expansionWeight } }
+        : {}),
     });
 
     const rank = await runRankStages({
