@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { TerminologyParamsSchema, type RetrievalParams, type TerminologyParams } from '@/lib/rag-eval/contracts.generated';
-import * as configHash from '@/lib/rag/v2/config-hash';
-import { computeRetrievalConfigHash, type RetrievalConfigHashInput } from '@/lib/rag/v2/config-hash';
+import { TerminologyParamsSchema, type RetrievalParams } from '@/lib/rag-eval/contracts.generated';
+import {
+  computeRetrievalConfigHash,
+  TERMINOLOGY_UNAVAILABLE,
+  terminologyHashBlock,
+  type RetrievalConfigHashInput,
+  type RetrievalConfigHashTerminology,
+} from '@/lib/rag/v2/config-hash';
 import { loadRagConfig, resetRagConfigForTests } from '@/lib/rag/config';
 
 /** The literal input of params-hash.test.ts, so the pinned value does not move with committed files. */
@@ -45,17 +50,14 @@ function literalHashInput(): RetrievalConfigHashInput {
 /** Captured from the unmodified computeRetrievalConfigHash before this plan (equals PINNED_DEFAULT_HASH in params-hash.test.ts). */
 const GOLDEN_NO_BLOCK = 'f0bbcf06e9a792e368b2bcf880adf10f17336aa167a2c9fe5597198df3fc4fac';
 
-type Block = { version: string; params_sha256: string; dense: boolean };
-type BlockBuilder = (stage: { enabled: false } | { enabled: true; version: string | null }, params: TerminologyParams, dense: boolean) => Block | undefined;
+type Block = RetrievalConfigHashTerminology;
 
-function builder(): BlockBuilder {
-  const fn = (configHash as Record<string, unknown>).terminologyHashBlock;
-  expect(typeof fn).toBe('function');
-  return fn as BlockBuilder;
+function builder(): typeof terminologyHashBlock {
+  return terminologyHashBlock;
 }
 
 function hashWith(block: Block | undefined): string {
-  return computeRetrievalConfigHash({ ...literalHashInput(), ...(block ? { terminology: block } : {}) } as RetrievalConfigHashInput);
+  return computeRetrievalConfigHash({ ...literalHashInput(), ...(block ? { terminology: block } : {}) });
 }
 
 const DEFAULT_PARAMS = TerminologyParamsSchema.parse({});
@@ -100,7 +102,7 @@ describe('terminologyHashBlock (04.1.1-16, D-21)', () => {
     const skipped = builder()({ enabled: true, version: null }, DEFAULT_PARAMS, false);
     expect(skipped?.version).toBe('terminology:unavailable');
     expect(hashWith(ok)).not.toBe(hashWith(skipped));
-    expect(configHash.TERMINOLOGY_UNAVAILABLE).toBe('terminology:unavailable');
+    expect(TERMINOLOGY_UNAVAILABLE).toBe('terminology:unavailable');
   });
 
   it('params_sha256 follows every TerminologyParams value and ignores config_hash and provenance', () => {
@@ -129,8 +131,6 @@ describe('the hash switches do not gain the terminology config fields (04.1.1-16
     resetRagConfigForTests();
     const config = loadRagConfig({
       RAG_PIPELINE: 'v2',
-      RAG_SUPPORTED_LANGUAGES: 'zh,en,it',
-      RAG_PRIMARY_LANGUAGE: 'en',
       RAG_TERMINOLOGY: 'true',
       RAG_TERMINOLOGY_DENSE: 'true',
       RAG_TERMINOLOGY_MINING: 'true',
