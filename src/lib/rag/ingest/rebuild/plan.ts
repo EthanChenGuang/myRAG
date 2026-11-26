@@ -35,11 +35,26 @@ export interface RebuildSelection {
 /**
  * Per document, the same comparison as the coverage count (countImpact over the saved values): a document is selected when the expected
  * parts for this mechanism differ from its stored parts. Documents without a fingerprint are never selected; they need the backfill first.
+ * TPL-05 (D-27): for rechunk, the documents of staleHeaderIds (a changed attribute header) are selected too, each once, with or without a
+ * fingerprint; every other mechanism ignores the set.
  */
-export function selectAffected(candidates: readonly RebuildCandidate[], mechanism: RebuildMechanism, proposal: Record<string, string>): RebuildSelection {
+export function selectAffected(
+  candidates: readonly RebuildCandidate[],
+  mechanism: RebuildMechanism,
+  proposal: Record<string, string>,
+  staleHeaderIds?: ReadonlySet<string>,
+): RebuildSelection {
   const documents: RebuildTarget[] = [];
+  const selected = new Set<string>();
+  const staleHeader = mechanism === 'rechunk' ? staleHeaderIds : undefined;
   let withoutFingerprint = 0;
   for (const candidate of candidates) {
+    if (selected.has(candidate.documentId)) continue;
+    if (staleHeader?.has(candidate.documentId)) {
+      selected.add(candidate.documentId);
+      documents.push({ documentId: candidate.documentId, tenantKey: candidate.tenantKey, docType: candidate.docType });
+      continue;
+    }
     const group: FingerprintGroup = { docType: candidate.docType, fingerprint: candidate.fingerprint, parts: candidate.parts, documents: 1 };
     const counts = countImpact([group], proposal);
     if (counts.withoutFingerprint > 0) {
@@ -48,14 +63,21 @@ export function selectAffected(candidates: readonly RebuildCandidate[], mechanis
     }
     const byType = counts.affected.get(mechanism);
     const affected = byType ? [...byType.values()].reduce((sum, value) => sum + value, 0) : 0;
-    if (affected > 0) documents.push({ documentId: candidate.documentId, tenantKey: candidate.tenantKey, docType: candidate.docType });
+    if (affected > 0) {
+      selected.add(candidate.documentId);
+      documents.push({ documentId: candidate.documentId, tenantKey: candidate.tenantKey, docType: candidate.docType });
+    }
   }
   return { documents, withoutFingerprint };
 }
 
-/** One hash per mechanism and saved values: a second start under the same settings finds the run of the first. */
-export function rebuildSettingsHash(mechanism: RebuildMechanism, proposal: Record<string, string>): string {
-  return createHash('sha256').update(canonicalJson({ mechanism, values: proposal })).digest('hex');
+/**
+ * One hash per mechanism and saved values: a second start under the same settings finds the run of the first. A stale-header digest (the
+ * header state a rechunk rebuild covers, D-27) is hashed only when given, so without it the value equals today's.
+ */
+export function rebuildSettingsHash(mechanism: RebuildMechanism, proposal: Record<string, string>, staleHeaderDigest?: string): string {
+  const hashed = staleHeaderDigest === undefined ? { mechanism, values: proposal } : { mechanism, values: proposal, stale_header: staleHeaderDigest };
+  return createHash('sha256').update(canonicalJson(hashed)).digest('hex');
 }
 
 export interface PlanOptions {

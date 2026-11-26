@@ -146,6 +146,8 @@ describe('stored header in embedding text and lexical_text (two tenants, plan 03
     scopeModule = await import('@/lib/rag/tenant/scope');
     rechunk = await import('@/lib/rag/ingest/rechunk/run');
     objectStoreModule.setObjectStoreForTests((await import('../helpers/fake-object-store')).createFakeObjectStore());
+    // The suite counts only its own documents: the fixture's seeded tenant documents are removed first.
+    await fixture.db.exec('DELETE FROM document_chunks; DELETE FROM document_parents; DELETE FROM documents;');
     for (const key of [keyA(), keyB()]) await defineKeys(fixture.db, key);
     await q("INSERT INTO public.rag_attribute_header_templates (tenant_key, template, version) VALUES ($1, $2, 1), ($3, $4, 1)", [
       keyA(),
@@ -426,8 +428,12 @@ describe('stored header in embedding text and lexical_text (two tenants, plan 03
     const deps = { db: ingestDb(), scopeFor, ingestAsync: () => false };
     const dry = await rebuild.startRebuild({ mechanism: 'rechunk', dryRun: true, startedBy: null }, deps);
     assert.equal(dry.status, 'dry_run');
-    assert.equal(dry.affected, 1, "A's stale document");
     assert.equal(dry.plan.kind, 'chunking_profile');
+    // A's stale-header document only: B's documents keep their header state.
+    assert.deepEqual(
+      dry.plan.kind === 'chunking_profile' ? dry.plan.documents.map((document) => document.documentId).sort() : [],
+      [docs.a],
+    );
 
     const started = await rebuild.startRebuild({ mechanism: 'rechunk', startedBy: null }, deps);
     assert.equal(started.status, 'started');
