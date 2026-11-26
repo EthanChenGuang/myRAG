@@ -83,6 +83,7 @@
     <script src="rag-panels/chunking-profiles.js"></script>
     <script src="rag-panels/refusal-calibration.js"></script>
     <script src="rag-panels/injection-defense.js"></script>
+    <script src="rag-panels/review-labelling.js"></script>
 
     <style>
         /* Tab content visibility */
@@ -9085,7 +9086,7 @@
                         <div class="card bg-base-100 shadow-lg">
                             <div class="card-body p-4 lg:p-6">
                                 <h2 class="card-title text-xl lg:text-2xl text-myrag-primary mb-2">🛡️ RAG Administration</h2>
-                                <p class="text-base-content/70 mb-6">Choose languages, manage document-type defaults, ingestion and its changes, held uploads, tags, versions and translation, and the embedding and chunking profiles, using your existing admin session.</p>
+                                <p class="text-base-content/70 mb-6">Choose languages, manage document-type defaults, ingestion and its changes, held uploads, tags, versions and translation, and the embedding and chunking profiles, using your existing admin session. Domain experts label failed questions in the Review queue with their own sign-in.</p>
 
                                 <div class="grid gap-6">
                                     <section id="rag-administration-languages" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-languages-title">
@@ -9634,6 +9635,16 @@
                                             <div data-refusal-alert class="mb-4 empty:mb-0"></div>
                                             <div data-refusal-content></div>
                                             <div data-refusal-status class="text-sm mt-4" role="status" aria-live="polite"></div>
+                                        </div>
+                                    </section>
+
+                                    <section id="rag-administration-review" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-review-title">
+                                        <div class="card-body">
+                                            <h3 id="rag-review-title" class="text-lg font-semibold mb-2 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" tabindex="-1" data-review-title>Review queue</h3>
+                                            <p class="text-sm text-base-content/70 mb-4 max-w-prose" data-review-description></p>
+                                            <div data-review-alert class="mb-4 empty:mb-0"></div>
+                                            <div data-review-content></div>
+                                            <div data-review-status class="text-sm mt-4" role="status" aria-live="polite"></div>
                                         </div>
                                     </section>
                                 </div>
