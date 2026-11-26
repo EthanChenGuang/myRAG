@@ -3,9 +3,19 @@ import hashlib
 import math
 from collections.abc import Callable, Sequence
 
-from rag_sidecar.contracts.finetune import AnswerabilityVerdict, SyntheticQuery, SyntheticQueryBatch
+from rag_sidecar.contracts.finetune import (
+    AnswerabilityVerdict,
+    SyntheticQuery,
+    SyntheticQueryBatch,
+)
 
-from rag_eval.finetune.llm import GenerationRequest, GenerationResult, JudgeItem, JudgeResult, Usage
+from rag_eval.finetune.llm import (
+    GenerationRequest,
+    GenerationResult,
+    JudgeItem,
+    JudgeResult,
+    Usage,
+)
 
 TEMPLATES: dict[str, dict[str, str]] = {
     "en": {
@@ -31,7 +41,7 @@ UNANSWERABLE_MARKER = "UNANSWERABLE"
 
 
 def _tag(text: str, style: str) -> str:
-    return hashlib.sha256(f"{style}|{text}".encode("utf-8")).hexdigest()[:8]
+    return hashlib.sha256(f"{style}|{text}".encode()).hexdigest()[:8]
 
 
 def _tokens(text: str) -> int:
