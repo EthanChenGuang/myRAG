@@ -64,6 +64,8 @@ class SidecarSettings(BaseModel):
     vectara_api_key: SecretStr | None = None
     vectara_base_url: str = DEFAULT_VECTARA_BASE_URL
     hhem_model_revision: str = DEFAULT_HHEM_MODEL_REVISION
+    claims_deadline_ms: int = Field(default=15_000, ge=50, le=60_000)
+    claim_premise_max_chars: int = Field(default=6_000, ge=200, le=60_000)
     prompt_guard_enabled: bool = False
     prompt_guard_model_dir: str | None = None
     redis_url: SecretStr | None = None
