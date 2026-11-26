@@ -14,10 +14,6 @@ const BOOLEAN_SWITCHES = [
   ['RAG_SECURITY_EVENTS', 'securityEvents'],
 ] as const;
 
-function codes(source: Record<string, string | undefined>): string[] {
-  return readAnswerConfig(source).warnings.map((warning) => warning.code);
-}
-
 describe('readAnswerConfig', () => {
   afterEach(() => {
     vi.restoreAllMocks();
