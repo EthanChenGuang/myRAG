@@ -110,3 +110,14 @@ export function describeIngestStatus(state: IngestJobState, language: string): I
   if (state.provisional && TONES[status] === 'pending') return { label: labels.provisional, tone: 'info' };
   return { label: labels[status], tone: TONES[status] };
 }
+
+const TIMEOUT_MESSAGE = 'Document processing is taking longer than expected. Please try with a smaller document or try again later.';
+
+/** The sentence a failed knowledge-base upload shows on its row. */
+export function uploadErrorMessage(status: number, body: unknown, _language: string): string {
+  const record = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
+  const error = typeof record.error === 'string' && record.error.length > 0 ? record.error : null;
+  const message = error ?? 'Unknown error occurred';
+  if (status === 504 || message.includes('timed out') || message.includes('taking longer')) return TIMEOUT_MESSAGE;
+  return message;
+}

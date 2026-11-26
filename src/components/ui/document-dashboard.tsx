@@ -29,6 +29,7 @@ import { isMultiTenant } from "@/lib/deployment-mode"
 import { useShallow } from "zustand/react/shallow"
 import type { IngestJobState } from "@/lib/hooks/use-ingest-job-status"
 import { IngestStatusBadge, TrackedIngestStatusBadge } from "@/components/ui/ingest-status-badge"
+import { uploadErrorMessage } from "@/components/ui/ingest-status-labels"
 import {
   attachQueuedJob,
   classifyUploadResponse,
@@ -809,14 +810,7 @@ export function DocumentDashboard({
         const result = await response.json();
 
         if (!response.ok) {
-          let errorMessage = result.error || 'Unknown error occurred';
-
-          // Special handling for timeout errors
-          if (response.status === 504 || errorMessage.includes('timed out') || errorMessage.includes('taking longer')) {
-            errorMessage = 'Document processing is taking longer than expected. Please try with a smaller document or try again later.';
-          }
-
-          throw new Error(errorMessage);
+          throw new Error(uploadErrorMessage(response.status, result, language));
         }
 
         if (result.error) {
@@ -921,7 +915,7 @@ export function DocumentDashboard({
     if (failedCount > 0) {
       console.warn(`${failedCount} document(s) failed to process.`);
     }
-  }, [files, fileDocTypes, docTypePickerEnabled, tenantDocTypeDefault, onProcessingStart, onProcessingComplete, onProcessingError, setActiveTab, storedDocuments, currentOrganization?.id, isPersonalMode, workspaceQuery]);
+  }, [files, fileDocTypes, docTypePickerEnabled, tenantDocTypeDefault, onProcessingStart, onProcessingComplete, onProcessingError, setActiveTab, storedDocuments, currentOrganization?.id, isPersonalMode, workspaceQuery, language]);
 
   // Create a function to handle tab switching with better visual feedback
   const handleTabChange = (tab: string) => {
