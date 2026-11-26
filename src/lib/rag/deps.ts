@@ -16,7 +16,7 @@ import { createLakeraDetector, lakeraSettingsFrom } from './security/lakera';
 import { classifyWithPromptGuard } from './security/prompt-guard-client';
 import { createQueryLlm, type QueryLlm } from './query/llm';
 import type { RpcClient } from './backend/supabase-rpc';
-import { getSemanticCache } from './cache/index';
+import { createSemanticCacheBackend, getSemanticCache, type SemanticCacheIo } from './cache/index';
 import type { SemanticCache } from './cache/types';
 
 export interface ProfileQueryEmbedding {
@@ -56,6 +56,17 @@ export interface RagDeps {
   languagesConfigured: () => boolean | null;
   /** The semantic answer cache for RAG_SEMANTIC_CACHE, wrapped fail-open; null when the cache is off (D-34, D-35). */
   semanticCache: () => SemanticCache | null;
+  /** The same backend without the fail-open wrapper, for the admin clear action that must report failures (D-44). */
+  semanticCacheAdmin: () => SemanticCache | null;
+}
+
+function semanticCacheIo(deps: RagDeps): SemanticCacheIo {
+  return {
+    adminClient: () => deps.adminClient() as unknown as RpcClient | null,
+    fetch: (input, init) => deps.fetch(input, init),
+    sidecarUrl: process.env.RAG_SIDECAR_URL ?? env.RAG_SIDECAR_URL ?? '',
+    sidecarSecret: process.env.RAG_SIDECAR_SECRET ?? env.RAG_SIDECAR_SECRET ?? '',
+  };
 }
 
 function readRagEnvInput(): RagEnvInput {
@@ -153,12 +164,11 @@ const defaults: RagDeps = {
   languagesConfigured: () => null,
   semanticCache: () => {
     const deps = getRagDeps();
-    return getSemanticCache(loadRagConfig(deps.ragEnv()).semanticCache, {
-      adminClient: () => deps.adminClient() as unknown as RpcClient | null,
-      fetch: (input, init) => deps.fetch(input, init),
-      sidecarUrl: process.env.RAG_SIDECAR_URL ?? env.RAG_SIDECAR_URL ?? '',
-      sidecarSecret: process.env.RAG_SIDECAR_SECRET ?? env.RAG_SIDECAR_SECRET ?? '',
-    });
+    return getSemanticCache(loadRagConfig(deps.ragEnv()).semanticCache, semanticCacheIo(deps));
+  },
+  semanticCacheAdmin: () => {
+    const deps = getRagDeps();
+    return createSemanticCacheBackend(loadRagConfig(deps.ragEnv()).semanticCache, semanticCacheIo(deps))?.backend ?? null;
   },
 };
 

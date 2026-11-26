@@ -134,10 +134,13 @@ export function withFailOpen(backend: SemanticCache, name: BackendName, options:
 
 let warnedUnconfiguredSidecar = false;
 
-/** The backend RAG_SEMANTIC_CACHE selects, wrapped fail-open; null when the cache is off or RedisVL has no sidecar to call. */
-export function getSemanticCache(config: SemanticCacheConfig, io: SemanticCacheIo): SemanticCache | null {
+/** The unwrapped backend RAG_SEMANTIC_CACHE selects: errors propagate. Null when the cache is off or RedisVL has no sidecar to call. */
+export function createSemanticCacheBackend(
+  config: SemanticCacheConfig,
+  io: SemanticCacheIo,
+): { name: BackendName; backend: SemanticCache } | null {
   if (config.backend === 'pgvector') {
-    return withFailOpen(createPgvectorSemanticCache({ adminClient: io.adminClient, config }), 'pgvector');
+    return { name: 'pgvector', backend: createPgvectorSemanticCache({ adminClient: io.adminClient, config }) };
   }
   if (config.backend === 'redisvl') {
     if (!io.sidecarUrl.trim() || !io.sidecarSecret.trim()) {
@@ -147,16 +150,22 @@ export function getSemanticCache(config: SemanticCacheConfig, io: SemanticCacheI
       }
       return null;
     }
-    return withFailOpen(
-      createRedisvlSemanticCache({
+    return {
+      name: 'redisvl',
+      backend: createRedisvlSemanticCache({
         url: io.sidecarUrl,
         secret: io.sidecarSecret,
         fetch: io.fetch,
         adminClient: io.adminClient,
         config,
       }),
-      'redisvl',
-    );
+    };
   }
   return null;
+}
+
+/** The backend RAG_SEMANTIC_CACHE selects, wrapped fail-open; null when the cache is off or RedisVL has no sidecar to call. */
+export function getSemanticCache(config: SemanticCacheConfig, io: SemanticCacheIo): SemanticCache | null {
+  const created = createSemanticCacheBackend(config, io);
+  return created ? withFailOpen(created.backend, created.name) : null;
 }
