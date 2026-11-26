@@ -7,7 +7,10 @@ import {
 } from '@/lib/rag/context/fetch-rows';
 import { effectiveDateOf, versionHeaderSuffix, versionLabelOf } from '@/lib/rag/context/version-labels';
 import { resetLanguageSettingsForTests } from '@/lib/rag/lang/settings';
-import type { AssemblyCandidate } from '@/lib/rag/context/assemble';
+import { assembleContext, type AssembleInput, type AssemblyCandidate, type AssemblyDocumentRow } from '@/lib/rag/context/assemble';
+import { docsFromBlocks } from '@/lib/rag/context/wrap';
+import { buildAliasMap, createCitationLabeler } from '@/lib/rag/generation/citations/blocks';
+import { buildClaudeCitationRequest } from '@/lib/rag/generation/citations/claude';
 
 const BASE_SELECT = 'id, filename, created_at, content, metadata';
 const VERSION_SELECT = `${BASE_SELECT}, version, doc_type, doc_date, effective_from, version_label`;
@@ -152,5 +155,153 @@ describe('conditional version columns (D-49, RESEARCH Pitfalls 14 and 15)', () =
       'documents lookup failed',
     );
     expect(off.calls).toHaveLength(1);
+  });
+});
+
+const DOC_B = '00000000-0000-4000-8000-0000000000e2';
+const DOC_C = '00000000-0000-4000-8000-0000000000e3';
+
+const ASSEMBLY_CANDIDATES: AssemblyCandidate[] = [
+  { chunk_id: 'k1', document_id: DOC_A, content: 'first synthetic widget passage', similarity: 0.9 },
+  { chunk_id: 'k2', document_id: DOC_B, content: 'second synthetic widget passage', similarity: 0.8 },
+  { chunk_id: 'k3', document_id: DOC_C, content: 'third synthetic widget passage', similarity: 0.7 },
+];
+
+function baseRows(): Map<string, AssemblyDocumentRow> {
+  return new Map<string, AssemblyDocumentRow>([
+    [DOC_A, { id: DOC_A, filename: 'widgets.md', created_at: null, content: null, metadata: null }],
+    [DOC_B, { id: DOC_B, filename: 'widgets.md', created_at: null, content: null, metadata: null }],
+    [DOC_C, { id: DOC_C, filename: 'gadgets.md', created_at: null, content: null, metadata: null }],
+  ]);
+}
+
+function versionRows(labelA: string | null = null): Map<string, AssemblyDocumentRow> {
+  const rows = baseRows();
+  rows.set(DOC_A, { ...rows.get(DOC_A)!, version: 2, doc_type: 'general', doc_date: null, effective_from: '2026-03-01', version_label: labelA });
+  rows.set(DOC_B, { ...rows.get(DOC_B)!, version: 1, doc_type: 'general', doc_date: '2025-01-02', effective_from: null, version_label: null });
+  rows.set(DOC_C, { ...rows.get(DOC_C)!, version: null, doc_type: 'general', doc_date: null, effective_from: null, version_label: null });
+  return rows;
+}
+
+function assembleInput(documents: Map<string, AssemblyDocumentRow>, over: Partial<AssembleInput> = {}): AssembleInput {
+  return {
+    queryText: 'synthetic widget passage',
+    candidates: ASSEMBLY_CANDIDATES,
+    documents,
+    chunkMetadata: new Map(),
+    referenced: null,
+    isGPTModel: false,
+    ragMode: 'strict',
+    webSearchEnabled: false,
+    applyRelevanceFilter: false,
+    ...over,
+  };
+}
+
+const VARIANTS: Array<[string, Partial<AssembleInput>]> = [
+  ['plain', {}],
+  ['labelled', { citationLabeler: createCitationLabeler() }],
+  ['tagged', { contextTagging: true }],
+  ['labelled and tagged', { citationLabeler: createCitationLabeler(), contextTagging: true }],
+];
+
+describe('version labels in assembly (D-48, D-50)', () => {
+  it.each(VARIANTS)('switch off: the %s context and blocks equal those without version columns', (_name, over) => {
+    const without = assembleContext(assembleInput(baseRows(), over));
+    const withColumns = assembleContext(assembleInput(versionRows('B-2'), over));
+    expect(withColumns.context).toBe(without.context);
+    expect(withColumns.blocks.map(({ documentVersion: _v, ...rest }) => rest)).toEqual(without.blocks.map(({ documentVersion: _v, ...rest }) => rest));
+    for (const block of withColumns.blocks) {
+      expect(Object.prototype.hasOwnProperty.call(block, 'versionLabel')).toBe(false);
+      expect(Object.prototype.hasOwnProperty.call(block, 'effectiveFrom')).toBe(false);
+    }
+  });
+
+  it('switch off: the legacy document lines are unchanged', () => {
+    const output = assembleContext(assembleInput(versionRows()));
+    expect(output.context).toContain('--- Document: widgets.md (2 relevant chunks) ---');
+    expect(output.blocks.map((block) => block.title)).toEqual(['widgets.md', 'widgets.md', 'gadgets.md']);
+  });
+
+  it('switch on: titles, document lines and labeler headers carry the suffix; block fields are set', () => {
+    vi.stubEnv('RAG_VERSION_LABELS', 'true');
+    const plain = assembleContext(assembleInput(versionRows()));
+    expect(plain.context).toContain('--- Document: widgets.md · Version 2 · Effective from 2026-03-01 (1 relevant chunks) ---');
+    expect(plain.context).toContain('--- Document: widgets.md · Version 1 · Effective from 2025-01-02 (1 relevant chunks) ---');
+    expect(plain.context).toContain('--- Document: gadgets.md (1 relevant chunks) ---');
+    expect(plain.blocks.map((block) => block.title)).toEqual([
+      'widgets.md · Version 2 · Effective from 2026-03-01',
+      'widgets.md · Version 1 · Effective from 2025-01-02',
+      'gadgets.md',
+    ]);
+    expect(plain.blocks.map((block) => [block.documentVersion, block.versionLabel, block.effectiveFrom])).toEqual([
+      [2, 'Version 2', '2026-03-01'],
+      [1, 'Version 1', '2025-01-02'],
+      [null, undefined, undefined],
+    ]);
+    expect(Object.prototype.hasOwnProperty.call(plain.blocks[2], 'versionLabel')).toBe(false);
+
+    const labelled = assembleContext(assembleInput(versionRows('B-2'), { citationLabeler: createCitationLabeler() }));
+    expect(labelled.context).toContain('[S1] widgets.md · B-2 · Effective from 2026-03-01\n');
+    expect(labelled.context).toContain('[S2] widgets.md · Version 1 · Effective from 2025-01-02\n');
+    expect(labelled.blocks.map((block) => block.text)).toEqual(
+      assembleContext(assembleInput(baseRows(), { citationLabeler: createCitationLabeler() })).blocks.map((block) => block.text),
+    );
+  });
+
+  it('switch on with tagging: <doc> carries escaped version and effective attributes', () => {
+    vi.stubEnv('RAG_VERSION_LABELS', 'true');
+    const output = assembleContext(assembleInput(versionRows('a"b<c>'), { citationLabeler: createCitationLabeler(), contextTagging: true }));
+    expect(output.context).toContain('<doc id="S1" source="widgets.md" version="a&quot;b&lt;c&gt;" effective="2026-03-01">');
+    expect(output.context).toContain('<doc id="S2" source="widgets.md" version="Version 1" effective="2025-01-02">');
+    expect(output.context).toContain('<doc id="S3" source="gadgets.md">');
+    expect(output.context).not.toContain('version="a"b');
+    const docs = docsFromBlocks(output.blocks);
+    expect(docs[0]).toMatchObject({ version: 'a"b<c>', effective: '2026-03-01' });
+    expect(docs[2]).not.toHaveProperty('version');
+  });
+
+  it('switch on: the Claude document title carries the suffix through block.title', () => {
+    vi.stubEnv('RAG_VERSION_LABELS', 'true');
+    const output = assembleContext(assembleInput(versionRows(), { citationLabeler: createCitationLabeler() }));
+    const aliasMap = buildAliasMap(output.blocks);
+    const request = buildClaudeCitationRequest({
+      provider: (() => ({})) as never,
+      aliasMap,
+      system: 'system',
+      history: [],
+      question: 'q',
+      anthropicId: 'claude-test',
+    });
+    const parts = (request.messages.at(-1)!.content as Array<{ providerOptions?: { anthropic?: { title?: string } } }>).filter(
+      (part) => part.providerOptions,
+    );
+    expect(parts.map((part) => part.providerOptions!.anthropic!.title)).toEqual([
+      'widgets.md · Version 2 · Effective from 2026-03-01',
+      'widgets.md · Version 1 · Effective from 2025-01-02',
+      'gadgets.md',
+    ]);
+  });
+
+  it('switch on: labels follow the question language among the enabled languages, else the primary language', () => {
+    vi.stubEnv('RAG_VERSION_LABELS', 'true');
+    vi.stubEnv('RAG_SUPPORTED_LANGUAGES', 'en,it');
+    vi.stubEnv('RAG_PRIMARY_LANGUAGE', 'en');
+    resetLanguageSettingsForTests();
+    const italian = assembleContext(
+      assembleInput(versionRows(), {
+        queryText: 'Qual è il valore indicato nella sezione del documento sintetico per questo parametro e quando è stato aggiornato?',
+      }),
+    );
+    expect(italian.blocks[0]!.title).toBe('widgets.md · Versione 2 · In vigore dal 2026-03-01');
+    const unclear = assembleContext(assembleInput(versionRows(), { queryText: '42' }));
+    expect(unclear.blocks[0]!.title).toBe('widgets.md · Version 2 · Effective from 2026-03-01');
+  });
+
+  it('switch on: rows without version columns (fallback read) render today\'s titles', () => {
+    vi.stubEnv('RAG_VERSION_LABELS', 'true');
+    const output = assembleContext(assembleInput(baseRows()));
+    expect(output.blocks.map((block) => block.title)).toEqual(['widgets.md', 'widgets.md', 'gadgets.md']);
+    expect(output.context).toContain('--- Document: gadgets.md (1 relevant chunks) ---');
   });
 });
