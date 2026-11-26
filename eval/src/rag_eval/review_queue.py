@@ -541,6 +541,13 @@ def _quote_problem(line: _GoldenExportLine) -> str | None:
     return None
 
 
+def _provenance(line: _GoldenExportLine) -> str:
+    """D-51: an imported question stays historical even when the expert reworded it; otherwise the Phase 5.1.1 rule applies."""
+    if line.source == "historical":
+        return "historical"
+    return "human" if line.label.paraphrased_question else "production"
+
+
 def _build_item(line: _GoldenExportLine, question: str, tags: list[str]) -> GoldenItem:
     label = line.label
     return GoldenItem(
@@ -555,7 +562,7 @@ def _build_item(line: _GoldenExportLine, question: str, tags: list[str]) -> Gold
             for span in label.evidence
         ],
         review_status="approved",
-        provenance="human" if label.paraphrased_question else "production",
+        provenance=_provenance(line),
         split="dev",
         tags=tags,
     )
