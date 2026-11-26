@@ -80,12 +80,9 @@ function documentsAnswer(table: Record<string, string[]>): Answer {
   return (args) => {
     const filters = args.p_filters as Record<string, string[]>;
     const limit = Number(args.p_limit);
-    let ids: Set<string> | null = null;
-    for (const [key, values] of Object.entries(filters)) {
-      const forKey = new Set(values.flatMap((value) => table[`${key}=${value}`] ?? []));
-      ids = ids === null ? forKey : new Set([...ids].filter((id) => forKey.has(id)));
-    }
-    return { data: [...(ids ?? [])].sort().slice(0, limit).map((document_id) => ({ document_id })), error: null };
+    const perKey = Object.entries(filters).map(([key, values]) => new Set(values.flatMap((value) => table[`${key}=${value}`] ?? [])));
+    const ids = perKey.length === 0 ? new Set<string>() : perKey.reduce((acc, next) => new Set([...acc].filter((id) => next.has(id))));
+    return { data: [...ids].sort().slice(0, limit).map((document_id) => ({ document_id })), error: null };
   };
 }
 
@@ -312,7 +309,7 @@ describe('automatic matching', () => {
 
 describe('aliases through the terminology matcher', () => {
   const aliasLoader = () =>
-    vi.fn(async () => ({
+    vi.fn(async (_scope: TenantScope, _options: { minHanChars: number; signal?: AbortSignal }) => ({
       dictionary: { tenantKey: `o:${ORG_A}`, entries: [], sharedVersion: 0, workspaceVersion: 0, version: 's0' },
       matcher: buildMatcher([termEntry('Orbit', ['circuit path']), termEntry('Kappa-200', ['old part'])], { minHanChars: 2 }),
     }));

@@ -193,12 +193,30 @@ function store(tenantKey: string, entry: CacheEntry): void {
  * The scope's filterable values and their matcher, cached per tenant key: 256 tenants, 60 s, 10 s after a failed load (D-29). The only tenant
  * input is the minted scope; its key is both the RPC argument and the cache key. A failed load throws (RetrievalBackendError, code only).
  */
-export async function attributeLexiconFor(scope: TenantScope, _options: AttributeOptions = {}): Promise<AttributeLexicon> {
+export async function attributeLexiconFor(scope: TenantScope, options: AttributeOptions = {}): Promise<AttributeLexicon> {
   assertTenantScope(scope);
-  return makeLexicon(scopeKey(scope), [], false);
+  const tenantKey = scopeKey(scope);
+  const now = (options.now ?? getRagDeps().now)();
+  const hit = cached(tenantKey, now);
+  if (hit) {
+    if (hit.lexicon) return hit.lexicon;
+    throw new RetrievalBackendError(VALUES_RPC, 'cached_failure');
+  }
+  try {
+    const lexicon = await fetchLexicon(tenantKey, options);
+    store(tenantKey, { loadedAt: now, lexicon });
+    return lexicon;
+  } catch (error) {
+    if (!options.signal?.aborted) store(tenantKey, { loadedAt: now, lexicon: null });
+    throw error;
+  }
 }
 
-export function invalidateAttributeLexicon(_tenantKey: string | 'all'): void {}
+/** Drops one tenant key's lexicon, or every lexicon; writers of attribute values or definitions call it. */
+export function invalidateAttributeLexicon(tenantKey: string | 'all'): void {
+  if (tenantKey === 'all') cache.clear();
+  else cache.delete(tenantKey);
+}
 
 export function resetAttributeLexiconForTests(): void {
   cache.clear();
@@ -208,22 +226,249 @@ export function attributeLexiconSizeForTests(): number {
   return cache.size;
 }
 
+type ValueSets = Map<string, Set<string>>;
+
+function addValue(target: ValueSets, key: string, value: string): boolean {
+  let set = target.get(key);
+  if (!set) {
+    set = new Set();
+    target.set(key, set);
+  }
+  if (set.has(value)) return false;
+  set.add(value);
+  return true;
+}
+
+function canonical(sets: ValueSets): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const key of [...sets.keys()].sort()) out[key] = [...sets.get(key)!].sort();
+  return out;
+}
+
+function normalizeExplicit(explicit: Record<string, readonly string[]> | null | undefined): ValueSets {
+  const sets: ValueSets = new Map();
+  if (!explicit) return sets;
+  for (const [key, values] of Object.entries(explicit)) {
+    for (const value of values ?? []) addValue(sets, key, value);
+    if (sets.get(key)?.size === 0) sets.delete(key);
+  }
+  return sets;
+}
+
+function unknownAttribute(explicit: ValueSets, lexicon: AttributeLexicon | null): AttributeFilterError {
+  const keys = [...explicit.keys()].sort();
+  const suspects = lexicon ? keys.filter((key) => !lexicon.keys.has(key)) : [];
+  const details = suspects.map((key) => ({ path: `attributes.${key}`, message: 'unknown_attribute' }));
+  return new AttributeFilterError('unknown_attribute', 400, 'an attribute key is not a filterable attribute', details);
+}
+
+interface DocumentsCall {
+  ids: string[];
+  tooBroad: boolean;
+}
+
+async function documentsFor(
+  scope: TenantScope,
+  filters: Record<string, string[]>,
+  idCap: number,
+  options: AttributeOptions,
+  onUnknown: () => AttributeFilterError,
+): Promise<DocumentsCall> {
+  options.signal?.throwIfAborted();
+  let request = serviceClient(options).rpc(DOCUMENTS_RPC, { p_tenant_key: scopeKey(scope), p_filters: filters, p_limit: idCap + 1 });
+  if (options.signal) request = request.abortSignal(options.signal);
+  const { data, error } = await request;
+  options.signal?.throwIfAborted();
+  if (error) {
+    if (typeof error.message === 'string' && error.message.startsWith('unknown_attribute')) throw onUnknown();
+    throw new RetrievalBackendError(DOCUMENTS_RPC, error.code ?? null);
+  }
+  const ids = rpcRows(data)
+    .map((row) => (typeof row === 'object' && row !== null ? (row as Record<string, unknown>).document_id : null))
+    .filter((id): id is string => typeof id === 'string')
+    .sort();
+  if (ids.length > idCap) return { ids: ids.slice(0, idCap), tooBroad: true };
+  return { ids, tooBroad: false };
+}
+
+function digest(state: unknown): string {
+  return crypto.createHash('sha256').update(JSON.stringify(state)).digest('hex');
+}
+
+function terminologyOn(options: AttributeOptions): boolean {
+  if (options.terminology !== undefined) return options.terminology;
+  return loadRagConfig(getRagDeps().ragEnv()).v2.terminology;
+}
+
+interface Matched {
+  hard: ValueSets;
+  soft: ValueSets;
+  /** Ambiguous values: the keys each one is stored under. */
+  ambiguous: Map<string, Set<string>>;
+  aliasMatches: number;
+  aliasUnavailable: boolean;
+}
+
+/** D-01, F-17: values found in the query by the shared matcher, aliases mapped through the tenant's TERM dictionary. */
+async function automaticMatches(scope: TenantScope, query: string, lexicon: AttributeLexicon, skip: ReadonlySet<string>, options: AttributeOptions): Promise<Matched> {
+  const minHanChars = options.minHanChars ?? terminologyParams().min_han_chars;
+  const keysByValue = new Map<string, Set<string>>();
+  for (const item of lexicon.values) addValue(keysByValue, item.value, item.key);
+  const byTermKey = new Map<string, AttributeLexiconValue[]>();
+  for (const item of lexicon.values) {
+    if (!automaticallyMatchable(item.value)) continue;
+    const forms = new Set([termKey(item.value), ...(item.type === 'code' ? [termKey(item.value, true)] : [])]);
+    for (const form of forms) {
+      if (!form) continue;
+      const list = byTermKey.get(form);
+      if (list) list.push(item);
+      else byTermKey.set(form, [item]);
+    }
+  }
+
+  const found = new Map<string, AttributeLexiconValue>();
+  const foundKey = (item: AttributeLexiconValue) => `${item.key}\u0000${item.value}`;
+  for (const match of lexicon.matcher(minHanChars).match(query)) {
+    const item = lexicon.values[Number(match.entry.entryId)];
+    if (item) found.set(foundKey(item), item);
+  }
+
+  let aliasMatches = 0;
+  let aliasUnavailable = false;
+  if (!lexicon.truncated && byTermKey.size > 0 && terminologyOn(options)) {
+    try {
+      const loader = options.terminologyLoader ?? terminologyMatcherFor;
+      const { matcher } = await loader(scope, { minHanChars, signal: options.signal });
+      for (const match of matcher.match(query)) {
+        const forms = new Set([termKey(match.entry.canonical), termKey(match.entry.canonical, true)]);
+        for (const form of forms) {
+          for (const item of byTermKey.get(form) ?? []) {
+            if (found.has(foundKey(item))) continue;
+            found.set(foundKey(item), item);
+            aliasMatches += 1;
+          }
+        }
+      }
+    } catch {
+      if (options.signal?.aborted) throw options.signal.reason;
+      aliasUnavailable = true;
+    }
+  }
+
+  const matched: Matched = { hard: new Map(), soft: new Map(), ambiguous: new Map(), aliasMatches, aliasUnavailable };
+  for (const item of found.values()) {
+    if (skip.has(item.key)) continue;
+    const keys = [...(keysByValue.get(item.value) ?? [])].filter((key) => !skip.has(key));
+    if (keys.length > 1) {
+      matched.ambiguous.set(item.value, new Set(keys));
+      continue;
+    }
+    addValue(item.soft ? matched.soft : matched.hard, item.key, item.value);
+  }
+  return matched;
+}
+
+/**
+ * D-29, D-30: turns the standalone query and an explicit attributes filter into document id lists of the scope's tenant. A key of the explicit
+ * filter is not resolved automatically; the explicit filter is resolved even when the lexicon cannot be loaded or is truncated. A set above the
+ * id cap of config/rag/attribute-filter.json is never a hard list: it is too broad and its first ids go to softIds. Nothing named and nothing
+ * explicit costs no document call. Logs and errors carry codes and counts only.
+ */
 export async function resolveAttributeFilter(
   scope: TenantScope,
-  _query: string,
-  _explicit: Record<string, readonly string[]> | null | undefined,
-  _options: AttributeOptions = {},
+  query: string,
+  explicit: Record<string, readonly string[]> | null | undefined,
+  options: AttributeOptions = {},
 ): Promise<AttributeResolution> {
   assertTenantScope(scope);
-  return {
-    explicitIds: null,
-    hardIds: null,
-    softIds: [],
-    counts: { explicitKeys: 0, matchedKeys: 0, aliasMatches: 0, ambiguous: 0, softKeys: 0 },
-    tooBroad: false,
-    lexiconTruncated: false,
-    lexiconUnavailable: false,
-    aliasUnavailable: false,
-    stateDigest: null,
+  const config = options.config ?? attributeFilterConfig();
+  const idCap = config.id_cap;
+  const explicitSets = normalizeExplicit(explicit);
+
+  let lexicon: AttributeLexicon | null = null;
+  let lexiconUnavailable = false;
+  try {
+    lexicon = await attributeLexiconFor(scope, options);
+  } catch (error) {
+    if (options.signal?.aborted) throw options.signal.reason;
+    if (!(error instanceof RetrievalBackendError)) throw error;
+    lexiconUnavailable = true;
+    console.warn('[Document Search] attribute lexicon unavailable:', { code: error.code });
+  }
+
+  const matched: Matched =
+    lexicon && !lexicon.truncated
+      ? await automaticMatches(scope, query, lexicon, new Set(explicitSets.keys()), options)
+      : { hard: new Map(), soft: new Map(), ambiguous: new Map(), aliasMatches: 0, aliasUnavailable: false };
+
+  const counts = {
+    explicitKeys: explicitSets.size,
+    matchedKeys: new Set([...matched.hard.keys(), ...matched.soft.keys()]).size,
+    aliasMatches: matched.aliasMatches,
+    ambiguous: matched.ambiguous.size,
+    softKeys: matched.soft.size,
   };
+  const base = {
+    lexiconTruncated: lexicon?.truncated ?? false,
+    lexiconUnavailable,
+    aliasUnavailable: matched.aliasUnavailable,
+  };
+
+  if (explicitSets.size === 0 && matched.hard.size === 0 && matched.soft.size === 0 && matched.ambiguous.size === 0) {
+    return { explicitIds: null, hardIds: null, softIds: [], counts, tooBroad: false, ...base, stateDigest: null };
+  }
+
+  const onUnknown = () => unknownAttribute(explicitSets, lexicon);
+  let tooBroad = false;
+  const soft = new Set<string>();
+
+  let explicitIds: string[] | null = null;
+  if (explicitSets.size > 0) {
+    const call = await documentsFor(scope, canonical(explicitSets), idCap, options, onUnknown);
+    if (call.tooBroad) {
+      tooBroad = true;
+      call.ids.forEach((id) => soft.add(id));
+    } else explicitIds = call.ids;
+  }
+
+  let hardIds: string[] | null = null;
+  if (matched.hard.size > 0) {
+    const call = await documentsFor(scope, canonical(matched.hard), idCap, options, onUnknown);
+    if (call.tooBroad) {
+      tooBroad = true;
+      call.ids.forEach((id) => soft.add(id));
+    } else hardIds = call.ids;
+  }
+
+  if (matched.soft.size > 0) {
+    const call = await documentsFor(scope, canonical(matched.soft), idCap, options, onUnknown);
+    if (call.tooBroad) tooBroad = true;
+    call.ids.forEach((id) => soft.add(id));
+  }
+
+  for (const value of [...matched.ambiguous.keys()].sort()) {
+    for (const key of [...matched.ambiguous.get(value)!].sort()) {
+      const call = await documentsFor(scope, { [key]: [value] }, idCap, options, onUnknown);
+      if (call.tooBroad) tooBroad = true;
+      call.ids.forEach((id) => soft.add(id));
+    }
+  }
+
+  const softIds = [...soft].sort();
+  if (softIds.length > idCap) {
+    tooBroad = true;
+    softIds.length = idCap;
+  }
+
+  const ambiguousState: Record<string, string[]> = {};
+  for (const value of [...matched.ambiguous.keys()].sort()) ambiguousState[value] = [...matched.ambiguous.get(value)!].sort();
+  const stateDigest = digest({
+    explicit: canonical(explicitSets),
+    hard: canonical(matched.hard),
+    soft: canonical(matched.soft),
+    ambiguous: ambiguousState,
+    tooBroad,
+  });
+
+  return { explicitIds, hardIds, softIds, counts, tooBroad, ...base, stateDigest };
 }
