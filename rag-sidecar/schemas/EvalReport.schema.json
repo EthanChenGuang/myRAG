@@ -2568,6 +2568,7 @@
         "enum": [
           "hhem_2_3_vectara",
           "hhem_2_1_open",
+          "llm_judge",
           "none"
         ]
       },

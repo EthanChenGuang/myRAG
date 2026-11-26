@@ -28,6 +28,83 @@
       "wait_ms": 0,
       "worker_id": "worker-1"
     },
+    "AnswerChecks": {
+      "claims": {
+        "judge_version": null,
+        "not_checked": 1,
+        "reasons": {
+          "too_many": 1
+        },
+        "scorer": "hhem_2_1_open",
+        "total": 2,
+        "unsupported": 0
+      },
+      "finish_reason": "stop",
+      "output_guard": {
+        "blocked_ranges": [
+          {
+            "end": 32,
+            "part": 0,
+            "start": 16,
+            "text_hash": "219bc6effc75b730c9a1e6ecd0c18ad473138092421671aa4daf88352aee80e1"
+          }
+        ],
+        "credential_blocked": 1,
+        "credential_warned": 0,
+        "event_ids": [
+          "00000000-0000-4000-8000-0000000000e1"
+        ],
+        "links_checked": 2,
+        "links_removed": 1,
+        "mode": "enforce",
+        "rule_ids": [
+          "rule-1"
+        ],
+        "rules_version": "1",
+        "source_chunk_ids": [
+          "chunk-001"
+        ]
+      },
+      "sentences": [
+        {
+          "cited": true,
+          "end": 15,
+          "factual": true,
+          "index": 0,
+          "kind": "sentence",
+          "part": 0,
+          "reason": null,
+          "scorer": "hhem_2_1_open",
+          "start": 0,
+          "support": "supported",
+          "text_hash": "219bc6effc75b730c9a1e6ecd0c18ad473138092421671aa4daf88352aee80e1"
+        },
+        {
+          "cited": false,
+          "end": 32,
+          "factual": true,
+          "index": 1,
+          "kind": "sentence",
+          "part": 0,
+          "reason": "too_many",
+          "scorer": null,
+          "start": 16,
+          "support": "not_checked",
+          "text_hash": "219bc6effc75b730c9a1e6ecd0c18ad473138092421671aa4daf88352aee80e1"
+        }
+      ],
+      "text_language": "en",
+      "truncated": false,
+      "version_conflict": {
+        "document_ids": [
+          "doc-0001",
+          "doc-0002"
+        ],
+        "group_rule": "supersession_link",
+        "latest_document_id": "doc-0002",
+        "mixed_versions": false
+      }
+    },
     "AnswerFeedbackRequest": {
       "chatId": "00000000-0000-4000-8000-0000000000b1",
       "comment": "It left out carry-over days.",
@@ -36,6 +113,11 @@
         "bad_citation"
       ],
       "vote": "not_helpful"
+    },
+    "AnswerNotice": {
+      "kind": "uncited",
+      "language": "en",
+      "text": "This sentence has no source."
     },
     "AnswerRecord": {
       "answerId": "00000000-0000-4000-8000-0000000000a1",
@@ -93,6 +175,19 @@
       "ragMode": "strict",
       "traceId": "0123456789abcdef0123456789abcdef",
       "updatedAt": "2026-01-01T00:00:10.000Z"
+    },
+    "AnswerSentence": {
+      "cited": true,
+      "end": 15,
+      "factual": true,
+      "index": 0,
+      "kind": "sentence",
+      "part": 0,
+      "reason": null,
+      "scorer": "hhem_2_1_open",
+      "start": 0,
+      "support": "supported",
+      "text_hash": "219bc6effc75b730c9a1e6ecd0c18ad473138092421671aa4daf88352aee80e1"
     },
     "AnswerabilityVerdict": {
       "answerable": true,
@@ -1207,6 +1302,69 @@
         "Annual leave"
       ],
       "strategy": "chunk-alias"
+    },
+    "ClaimCheckRequest": {
+      "allow_vectara": false,
+      "claims": [
+        {
+          "hypothesis": "A neutral claim sentence.",
+          "index": 0,
+          "premise_refs": [
+            "S1"
+          ]
+        }
+      ],
+      "language": "en",
+      "premises": [
+        {
+          "ref": "S1",
+          "text": "A neutral premise sentence."
+        }
+      ],
+      "request_id": "req-0001"
+    },
+    "ClaimCheckResult": {
+      "claims": [
+        {
+          "index": 0,
+          "reason": null,
+          "score": 0.81,
+          "scorer": "hhem_2_1_open",
+          "status": "scored"
+        },
+        {
+          "index": 1,
+          "reason": "too_many",
+          "score": null,
+          "scorer": "none",
+          "status": "not_checked"
+        }
+      ],
+      "latency_ms": 420
+    },
+    "ClaimJudgement": {
+      "judgements": [
+        {
+          "evidence_ref": "S1",
+          "index": 0,
+          "verdict": "supported"
+        },
+        {
+          "evidence_ref": null,
+          "index": 1,
+          "verdict": "not_enough_info"
+        }
+      ]
+    },
+    "ClaimsSummary": {
+      "judge_version": null,
+      "not_checked": 1,
+      "reasons": {
+        "too_many": 1
+      },
+      "scorer": "hhem_2_1_open",
+      "total": 2,
+      "unsupported": 0
     },
     "CondensedQuery": {
       "standalone": "Does the product warranty cover ERR_TIMEOUT, and how long is the warranty?",
@@ -4878,6 +5036,25 @@
       "rule": "sha256-first8hex-mod100-lt70-dev",
       "schema_version": 1
     },
+    "GroundednessJudgeThresholds": {
+      "cells": [
+        {
+          "config_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "fitted_at": null,
+          "judge_model": "judge/model-j",
+          "judge_version": "judge-v1",
+          "language": "it",
+          "max_unsupported_share": 0.2,
+          "precision": 0.9,
+          "recall": 0.8,
+          "run_ids": [
+            "run-0001"
+          ],
+          "source": "fixture"
+        }
+      ],
+      "schema_version": 1
+    },
     "GroundednessRequest": {
       "allow_vectara": false,
       "hypothesis": "Employees get twenty days of paid leave each year.",
@@ -6049,6 +6226,16 @@
           "target": "someone@outside.example.org"
         }
       ]
+    },
+    "LinkPreviewStatus": {
+      "hosts_not_allowlisted": [
+        "other.example"
+      ],
+      "preview_hosts": [
+        "host.example",
+        "other.example"
+      ],
+      "state": "mismatch"
     },
     "MiningReport": {
       "fn_audit": {
@@ -9490,6 +9677,76 @@
       "noise_band": 0.02,
       "passed": true,
       "reasons": []
+    },
+    "OutputCaps": {
+      "cells": [
+        {
+          "config_hash": null,
+          "limit": null,
+          "mode": "strict",
+          "run_ids": [],
+          "source": "default"
+        },
+        {
+          "config_hash": null,
+          "limit": null,
+          "mode": "balanced",
+          "run_ids": [],
+          "source": "default"
+        }
+      ],
+      "schema_version": 1
+    },
+    "OutputGuardRules": {
+      "credential_rules": [
+        {
+          "id": "rule-1",
+          "language": "en",
+          "request_terms": [
+            "send me"
+          ],
+          "secret_terms": [
+            "password"
+          ]
+        }
+      ],
+      "obfuscation_patterns": [
+        {
+          "id": "rule-2",
+          "pattern": "h\\s*t\\s*t\\s*p"
+        }
+      ],
+      "opaque_schemes": [
+        "data",
+        "javascript"
+      ],
+      "schema_version": 1,
+      "version": "1"
+    },
+    "OutputGuardSummary": {
+      "blocked_ranges": [
+        {
+          "end": 32,
+          "part": 0,
+          "start": 16,
+          "text_hash": "219bc6effc75b730c9a1e6ecd0c18ad473138092421671aa4daf88352aee80e1"
+        }
+      ],
+      "credential_blocked": 1,
+      "credential_warned": 0,
+      "event_ids": [
+        "00000000-0000-4000-8000-0000000000e1"
+      ],
+      "links_checked": 2,
+      "links_removed": 1,
+      "mode": "enforce",
+      "rule_ids": [
+        "rule-1"
+      ],
+      "rules_version": "1",
+      "source_chunk_ids": [
+        "chunk-001"
+      ]
     },
     "PageStructureVerdict": {
       "complexity": "simple",
@@ -14104,6 +14361,74 @@
       "skip_toc": true,
       "toc_min_run": 3
     },
+    "SecurityAlert": {
+      "created_at": null,
+      "event_count": 6,
+      "held": false,
+      "id": "00000000-0000-4000-8000-0000000000f1",
+      "status": "open",
+      "tenant_key": "s:default",
+      "uploader_id": "00000000-0000-4000-8000-0000000000c1",
+      "window_end": "2026-01-02T00:00:00Z",
+      "window_start": "2026-01-01T00:00:00Z"
+    },
+    "SecurityAlertView": {
+      "event_count": 6,
+      "held": false,
+      "id": "00000000-0000-4000-8000-0000000000f1",
+      "opened_at": "2026-01-02T00:00:00Z",
+      "status": "open",
+      "tenant_key": "s:default",
+      "threshold": 5,
+      "uploader_email": null,
+      "uploader_id": "00000000-0000-4000-8000-0000000000c1",
+      "uploader_name": "Uploader A",
+      "window_hours": 24,
+      "workspace_name": "Workspace A"
+    },
+    "SecurityEvent": {
+      "action": "removed",
+      "chunk_id": "chunk-001",
+      "created_at": null,
+      "detector": "output_guard",
+      "document_id": "doc-0001",
+      "id": null,
+      "rule_ids": [
+        "rule-1"
+      ],
+      "source": "output_guard",
+      "tenant_key": "s:default",
+      "trace_id": "0123456789abcdef0123456789abcdef",
+      "uploader_id": "00000000-0000-4000-8000-0000000000c1"
+    },
+    "SecurityEventView": {
+      "action": "removed",
+      "created_at": "2026-01-01T00:00:05Z",
+      "detector": "output_guard",
+      "document_id": "doc-0001",
+      "file_name": "document-a.pdf",
+      "id": "00000000-0000-4000-8000-0000000000e1",
+      "rule_ids": [
+        "rule-1"
+      ],
+      "source": "output_guard",
+      "tenant_key": "s:default",
+      "uploader_email": null,
+      "uploader_id": "00000000-0000-4000-8000-0000000000c1",
+      "uploader_name": "Uploader A",
+      "workspace_name": "Workspace A"
+    },
+    "SecurityUploaderView": {
+      "display_name": "Uploader A",
+      "email": null,
+      "event_count": 6,
+      "held": false,
+      "held_since": null,
+      "last_event_at": "2026-01-01T23:00:00Z",
+      "tenant_key": "s:default",
+      "user_id": "00000000-0000-4000-8000-0000000000c1",
+      "workspace_name": "Workspace A"
+    },
     "SemanticCacheCalibration": {
       "profiles": [
         {
@@ -14606,6 +14931,15 @@
       "required": true,
       "uploader_id": "00000000-0000-4000-8000-0000000000c1"
     },
+    "UploaderHold": {
+      "created_at": "2026-01-02T00:00:00Z",
+      "created_by": "00000000-0000-4000-8000-0000000000c2",
+      "id": null,
+      "reason": "Repeated flagged uploads.",
+      "released_at": null,
+      "tenant_key": "s:default",
+      "user_id": "00000000-0000-4000-8000-0000000000c1"
+    },
     "VectorFileHeader": {
       "dims": 3,
       "dtype": "float32-le",
@@ -14626,6 +14960,15 @@
       "mode": "drain",
       "more_pending": false,
       "upserted": 3
+    },
+    "VersionConflict": {
+      "document_ids": [
+        "doc-0001",
+        "doc-0002"
+      ],
+      "group_rule": "supersession_link",
+      "latest_document_id": "doc-0002",
+      "mixed_versions": false
     },
     "VersionRange": {
       "from": "2024-01-01",
@@ -14739,6 +15082,18 @@
     }
   },
   "variants": {
+    "AnswerChecks:empty": {
+      "model": "AnswerChecks",
+      "value": {
+        "claims": null,
+        "finish_reason": null,
+        "output_guard": null,
+        "sentences": [],
+        "text_language": null,
+        "truncated": false,
+        "version_conflict": null
+      }
+    },
     "AnswerFeedbackRequest:vote_only": {
       "model": "AnswerFeedbackRequest",
       "value": {
@@ -14772,6 +15127,144 @@
         "invalidCitations": 0,
         "modelId": "generator/model-b",
         "ragMode": "strict",
+        "traceId": "0123456789abcdef0123456789abcdef",
+        "updatedAt": "2026-01-01T00:00:10.000Z"
+      }
+    },
+    "AnswerRecord:with_checks": {
+      "model": "AnswerRecord",
+      "value": {
+        "answerId": "00000000-0000-4000-8000-0000000000a1",
+        "answerLanguage": "en",
+        "chatId": "00000000-0000-4000-8000-0000000000b1",
+        "checks": {
+          "claims": {
+            "judge_version": null,
+            "not_checked": 1,
+            "reasons": {
+              "too_many": 1
+            },
+            "scorer": "hhem_2_1_open",
+            "total": 2,
+            "unsupported": 0
+          },
+          "finish_reason": "stop",
+          "output_guard": {
+            "blocked_ranges": [
+              {
+                "end": 32,
+                "part": 0,
+                "start": 16,
+                "text_hash": "219bc6effc75b730c9a1e6ecd0c18ad473138092421671aa4daf88352aee80e1"
+              }
+            ],
+            "credential_blocked": 1,
+            "credential_warned": 0,
+            "event_ids": [
+              "00000000-0000-4000-8000-0000000000e1"
+            ],
+            "links_checked": 2,
+            "links_removed": 1,
+            "mode": "enforce",
+            "rule_ids": [
+              "rule-1"
+            ],
+            "rules_version": "1",
+            "source_chunk_ids": [
+              "chunk-001"
+            ]
+          },
+          "sentences": [
+            {
+              "cited": true,
+              "end": 15,
+              "factual": true,
+              "index": 0,
+              "kind": "sentence",
+              "part": 0,
+              "reason": null,
+              "scorer": "hhem_2_1_open",
+              "start": 0,
+              "support": "supported",
+              "text_hash": "219bc6effc75b730c9a1e6ecd0c18ad473138092421671aa4daf88352aee80e1"
+            },
+            {
+              "cited": false,
+              "end": 32,
+              "factual": true,
+              "index": 1,
+              "kind": "sentence",
+              "part": 0,
+              "reason": "too_many",
+              "scorer": null,
+              "start": 16,
+              "support": "not_checked",
+              "text_hash": "219bc6effc75b730c9a1e6ecd0c18ad473138092421671aa4daf88352aee80e1"
+            }
+          ],
+          "text_language": "en",
+          "truncated": false,
+          "version_conflict": {
+            "document_ids": [
+              "doc-0001",
+              "doc-0002"
+            ],
+            "group_rule": "supersession_link",
+            "latest_document_id": "doc-0002",
+            "mixed_versions": false
+          }
+        },
+        "citationStrategy": "chunk-alias",
+        "citations": [
+          {
+            "alias": "S1",
+            "chunkIds": [
+              "00000000-0000-4000-8000-0000000000c1",
+              "00000000-0000-4000-8000-0000000000c2"
+            ],
+            "documentId": "00000000-0000-4000-8000-0000000000d1",
+            "documentName": "leave-policy.pdf",
+            "documentVersion": 2,
+            "n": 1,
+            "page": 4,
+            "quote": "Employees receive twenty days of paid leave per calendar year.",
+            "quoteHash": "47b56646d72eb06958f6cd1642b43e163abfd20e36d888edfec3a6747594b2af",
+            "sectionPath": [
+              "Leave",
+              "Annual leave"
+            ],
+            "strategy": "chunk-alias"
+          }
+        ],
+        "createdAt": "2026-01-01T00:00:00.000Z",
+        "documents": {
+          "00000000-0000-4000-8000-0000000000d1": "current"
+        },
+        "feedback": {
+          "comment": "It left out carry-over days.",
+          "reasons": [
+            "incomplete"
+          ],
+          "updatedAt": "2026-01-01T00:00:10.000Z",
+          "vote": "not_helpful"
+        },
+        "feedbackEnabled": true,
+        "groundedness": {
+          "checkedAt": "2026-01-01T00:00:03.000Z",
+          "label": "verified",
+          "latencyMs": 640,
+          "reason": null,
+          "score": 0.82,
+          "scorer": "hhem_2_1_open",
+          "status": "scored",
+          "threshold": 0.5,
+          "thresholdSource": "default",
+          "truncated": false
+        },
+        "invalidCitations": 0,
+        "modelId": "generator/model-b",
+        "ragMode": "strict",
+        "textsSource": "registry",
         "traceId": "0123456789abcdef0123456789abcdef",
         "updatedAt": "2026-01-01T00:00:10.000Z"
       }
@@ -14906,6 +15399,30 @@
       "value": {
         "document_ids": null,
         "tenant_key": "s:default"
+      }
+    },
+    "CitationRecord:version_label": {
+      "model": "CitationRecord",
+      "value": {
+        "alias": "S1",
+        "chunkIds": [
+          "00000000-0000-4000-8000-0000000000c1",
+          "00000000-0000-4000-8000-0000000000c2"
+        ],
+        "documentId": "00000000-0000-4000-8000-0000000000d1",
+        "documentName": "leave-policy.pdf",
+        "documentVersion": 2,
+        "effectiveFrom": "2025-03-01",
+        "n": 1,
+        "page": 4,
+        "quote": "Employees receive twenty days of paid leave per calendar year.",
+        "quoteHash": "47b56646d72eb06958f6cd1642b43e163abfd20e36d888edfec3a6747594b2af",
+        "sectionPath": [
+          "Leave",
+          "Annual leave"
+        ],
+        "strategy": "chunk-alias",
+        "versionLabel": "v2"
       }
     },
     "CitationRecord:versions_also_in": {
@@ -17452,6 +17969,34 @@
             }
           }
         }
+      }
+    },
+    "LinkPreviewStatus:unknown": {
+      "model": "LinkPreviewStatus",
+      "value": {
+        "state": "unknown"
+      }
+    },
+    "OutputCaps:sweep": {
+      "model": "OutputCaps",
+      "value": {
+        "cells": [
+          {
+            "config_hash": "h-1",
+            "limit": 600,
+            "mode": "strict",
+            "run_ids": [
+              "run-0001"
+            ],
+            "source": "sweep"
+          },
+          {
+            "limit": null,
+            "mode": "balanced",
+            "source": "default"
+          }
+        ],
+        "schema_version": 1
       }
     },
     "ParseJobState:failed_with_error_class": {

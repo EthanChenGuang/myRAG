@@ -1,0 +1,79 @@
+{
+  "additionalProperties": false,
+  "description": "D-45: one row of `rag_security_alerts`, unique per uploader and window.",
+  "properties": {
+    "created_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Created At"
+    },
+    "event_count": {
+      "minimum": 1,
+      "title": "Event Count",
+      "type": "integer"
+    },
+    "held": {
+      "default": false,
+      "title": "Held",
+      "type": "boolean"
+    },
+    "id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Id"
+    },
+    "status": {
+      "enum": [
+        "open",
+        "acknowledged"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "tenant_key": {
+      "minLength": 1,
+      "title": "Tenant Key",
+      "type": "string"
+    },
+    "uploader_id": {
+      "format": "uuid",
+      "title": "Uploader Id",
+      "type": "string"
+    },
+    "window_end": {
+      "minLength": 1,
+      "title": "Window End",
+      "type": "string"
+    },
+    "window_start": {
+      "minLength": 1,
+      "title": "Window Start",
+      "type": "string"
+    }
+  },
+  "required": [
+    "tenant_key",
+    "uploader_id",
+    "event_count",
+    "window_start",
+    "window_end",
+    "status"
+  ],
+  "title": "SecurityAlert",
+  "type": "object"
+}

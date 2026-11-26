@@ -4,6 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from rag_sidecar.contracts.answer_checks import AnswerChecks
 from rag_sidecar.contracts.groundedness import GroundednessScorer, ReasonCode, ThresholdSource
 
 CitationStrategy = Literal["claude-citations", "chunk-alias"]
@@ -13,6 +14,7 @@ FeedbackVote = Literal["helpful", "not_helpful"]
 FeedbackReason = Literal["wrong", "incomplete", "not_from_documents", "bad_citation"]
 AnswerRagMode = Literal["strict", "balanced", "flexible", "bypass"]
 DocumentAvailability = Literal["current", "unavailable"]
+TextsSource = Literal["registry", "legacy"]
 
 
 class _Contract(BaseModel):
@@ -21,6 +23,10 @@ class _Contract(BaseModel):
 
 def _omit_none(value: object) -> bool:
     return value is None
+
+
+def _omit_empty_checks(value: object) -> bool:
+    return value == AnswerChecks()
 
 
 def _omit_none_schema(schema: dict) -> None:
@@ -51,6 +57,9 @@ class CitationRecord(_Contract):
     quoteHash: str = Field(pattern=r"^[a-f0-9]{64}$")
     strategy: CitationStrategy
     isCurrent: bool | None = Field(default=None, exclude_if=_omit_none, json_schema_extra=_omit_none_schema)
+    versionLabel: str | None = Field(
+        default=None, max_length=40, exclude_if=_omit_none, json_schema_extra=_omit_none_schema
+    )
     effectiveFrom: date | None = Field(default=None, exclude_if=_omit_none, json_schema_extra=_omit_none_schema)
     effectiveTo: date | None = Field(default=None, exclude_if=_omit_none, json_schema_extra=_omit_none_schema)
     alsoIn: list[CitationAlsoIn] | None = Field(
@@ -143,3 +152,5 @@ class AnswerRecord(_Contract):
     feedbackEnabled: bool = False
     createdAt: str = Field(min_length=1)
     updatedAt: str = Field(min_length=1)
+    checks: AnswerChecks = Field(default_factory=AnswerChecks, exclude_if=_omit_empty_checks)
+    textsSource: TextsSource | None = Field(default=None, exclude_if=_omit_none, json_schema_extra=_omit_none_schema)
