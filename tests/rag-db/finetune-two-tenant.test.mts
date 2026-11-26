@@ -215,7 +215,8 @@ for (const mode of ['multi-tenant', 'single-tenant'] as const) {
       await harness.use(db, mode);
       harness.setFinetune(false);
       harness.setProfilesSwitch(profilesSwitch);
-      const { checkedAt: _checkedAt, ...verdict } = (await harness.activeProfile.verifyActiveEmbeddingProfileAtStartup({ timeoutMs: 10_000 })) as Record<string, unknown>;
+      const verdict: Record<string, unknown> = { ...(await harness.activeProfile.verifyActiveEmbeddingProfileAtStartup({ timeoutMs: 10_000 })) };
+      delete verdict.checkedAt;
       const results: Record<string, Observation> = {};
       for (const item of goldenQuestions()) {
         const result = await harness.rag.runRetrieval({
