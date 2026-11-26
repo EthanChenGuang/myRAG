@@ -732,6 +732,26 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_finetune_set_model_status(text, text, text) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_finetune_set_model_status(text, text, text) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_finetune_bind_slot(text, text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_bind_slot(text, text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_bind_slot(text, text, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_finetune_clear_slot(text, text, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_clear_slot(text, text, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_clear_slot(text, text, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_finetune_release_rollback(text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_release_rollback(text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_release_rollback(text, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_finetune_slot_guard()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_slot_guard() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_slot_guard() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_finetune_version_taint_guard()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_version_taint_guard() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_version_taint_guard() TO service_role;
+  END IF;
 END
 $service_role_only$;
 
