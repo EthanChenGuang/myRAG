@@ -200,6 +200,7 @@ function loadQuarantinePage(options: HarnessOptions = {}) {
     clearTimeout,
     AbortController,
     URLSearchParams,
+    URL,
     Intl,
     Date,
     ragFetch,

@@ -104,6 +104,13 @@ const QUARANTINE_LABELS = {
     'check.links.flag': 'Link targets outside the allowlist are recorded on the document. The document is indexed.',
     'check.links.quarantine': 'A document with any link, domain or e-mail address outside the allowlist is quarantined.',
     'check.unknown': 'The value {code} is not one this page knows.',
+    'RAG_HIDDEN_TEXT_CHECK.opt.off': 'Off',
+    'RAG_HIDDEN_TEXT_CHECK.opt.flag': 'Record only',
+    'RAG_HIDDEN_TEXT_CHECK.opt.quarantine': 'Remove and quarantine',
+    'RAG_INGEST_LINK_CHECK.opt.off': 'Off',
+    'RAG_INGEST_LINK_CHECK.opt.flag': 'Record only',
+    'RAG_INGEST_LINK_CHECK.opt.quarantine': 'Quarantine',
+    'settings.affectsStored': 'Changing this affects documents already stored; saving shows how many.',
     'allowlist.label': 'Allowed link domains',
     'allowlist.help': 'One domain per line, without https:// and without a path. Subdomains are included.',
     'allowlist.own': '{domain} is always allowed.',
@@ -114,6 +121,7 @@ const QUARANTINE_LABELS = {
     'rescan.heading': 'Existing documents',
     'rescan.body': 'Saving a check does not check documents that are already stored.',
     'rescan.cli': 'Run this command on the server:',
+    'rescan.loading': 'Checking how stored documents can be rescanned…',
     'rescan.unavailable': 'Whether stored documents can be rescanned is unknown right now. Select Reload panel in a moment.',
     'action.rescan': 'Rescan existing documents',
     'action.keepAsIs': 'Keep documents as they are',
@@ -220,6 +228,13 @@ const QUARANTINE_LABELS = {
     'check.links.flag': '白名单之外的链接目标会记录在文档上。文档照常入库。',
     'check.links.quarantine': '只要含有白名单之外的链接、域名或电子邮件地址，文档就会被隔离。',
     'check.unknown': '此页面不认识取值 {code}。',
+    'RAG_HIDDEN_TEXT_CHECK.opt.off': '关闭',
+    'RAG_HIDDEN_TEXT_CHECK.opt.flag': '仅记录',
+    'RAG_HIDDEN_TEXT_CHECK.opt.quarantine': '移除并隔离',
+    'RAG_INGEST_LINK_CHECK.opt.off': '关闭',
+    'RAG_INGEST_LINK_CHECK.opt.flag': '仅记录',
+    'RAG_INGEST_LINK_CHECK.opt.quarantine': '隔离',
+    'settings.affectsStored': '更改此项会影响已入库的文档；保存时会显示数量。',
     'allowlist.label': '允许的链接域名',
     'allowlist.help': '每行一个域名，不带 https:// 和路径。包含其子域名。',
     'allowlist.own': '{domain} 始终允许。',
@@ -229,6 +244,7 @@ const QUARANTINE_LABELS = {
     'rescan.heading': '已有文档',
     'rescan.body': '保存检查设置不会检查已入库的文档。',
     'rescan.cli': '在服务器上运行此命令：',
+    'rescan.loading': '正在确认已入库文档的重新扫描方式…',
     'rescan.unavailable': '暂时无法确定能否重新扫描已入库的文档。请稍后选择“重新加载面板”。',
     'action.rescan': '重新扫描已有文档',
     'action.keepAsIs': '保持文档现状',
@@ -338,6 +354,13 @@ const QUARANTINE_LABELS = {
     'check.links.flag': 'Le destinazioni fuori dalla lista consentita vengono registrate sul documento. Il documento è indicizzato.',
     'check.links.quarantine': 'Un documento con un link, un dominio o un indirizzo e-mail fuori dalla lista consentita va in quarantena.',
     'check.unknown': 'Il valore {code} non è noto a questa pagina.',
+    'RAG_HIDDEN_TEXT_CHECK.opt.off': 'Disattivato',
+    'RAG_HIDDEN_TEXT_CHECK.opt.flag': 'Solo registrazione',
+    'RAG_HIDDEN_TEXT_CHECK.opt.quarantine': 'Rimuovi e metti in quarantena',
+    'RAG_INGEST_LINK_CHECK.opt.off': 'Disattivato',
+    'RAG_INGEST_LINK_CHECK.opt.flag': 'Solo registrazione',
+    'RAG_INGEST_LINK_CHECK.opt.quarantine': 'Quarantena',
+    'settings.affectsStored': 'La modifica riguarda i documenti già archiviati; al salvataggio vedrai quanti.',
     'allowlist.label': 'Domini consentiti per i link',
     'allowlist.help': 'Un dominio per riga, senza https:// e senza percorso. I sottodomini sono inclusi.',
     'allowlist.own': '{domain} è sempre consentito.',
@@ -348,6 +371,7 @@ const QUARANTINE_LABELS = {
     'rescan.heading': 'Documenti esistenti',
     'rescan.body': 'Salvare un controllo non controlla i documenti già archiviati.',
     'rescan.cli': 'Esegui questo comando sul server:',
+    'rescan.loading': 'Verifica di come riesaminare i documenti archiviati…',
     'rescan.unavailable': 'Al momento non si sa se i documenti archiviati possano essere riesaminati. Seleziona Ricarica pannello tra poco.',
     'action.rescan': 'Riesamina i documenti esistenti',
     'action.keepAsIs': 'Mantieni i documenti come sono',
@@ -383,6 +407,7 @@ const QUARANTINE_INLINE_SPANS = 5;
 const QUARANTINE_INLINE_TARGETS = 10;
 
 let quarantineUi = null;
+let quarantinePanelInstance = null;
 if (typeof require !== 'undefined') {
   try {
     quarantineUi = require('./rag-ui.js');
@@ -523,6 +548,83 @@ function quarantineReleaseLines(view, locale) {
   return lines;
 }
 
+/** A host name: letters, digits and hyphens in dot-separated labels, at least one dot; no scheme, path, port, wildcard or space. */
+const QUARANTINE_HOST = /^(?=.{1,253}$)[\p{L}\p{N}](?:[\p{L}\p{N}-]{0,61}[\p{L}\p{N}])?(?:\.[\p{L}\p{N}](?:[\p{L}\p{N}-]{0,61}[\p{L}\p{N}])?)+$/u;
+const QUARANTINE_ALLOWLIST_ENV = 'RAG_OUTPUT_LINK_ALLOWLIST';
+
+/**
+ * The allowlist as typed (one domain per line) or as saved (comma-separated). Lines are trimmed, lower-cased and
+ * de-duplicated silently; a line that is not a host name is returned in `invalid` exactly as typed (UI-SPEC 6.5.4).
+ */
+function quarantineParseAllowlist(value) {
+  const hosts = [];
+  const invalid = [];
+  for (const raw of quarantineText(value).split(/[\n\r,]+/)) {
+    const line = raw.trim();
+    if (!line) continue;
+    const host = line.toLowerCase().replace(/\.$/, '');
+    if (!QUARANTINE_HOST.test(host)) invalid.push(line);
+    else if (!hosts.includes(host)) hosts.push(host);
+  }
+  return { hosts, invalid, value: hosts.join(',') };
+}
+
+/** The host of NEXT_PUBLIC_SITE_URL, which the server always allows; null when unset or not a URL. */
+function quarantineOwnDomain(siteUrl) {
+  const text = quarantineText(siteUrl).trim();
+  if (!text) return null;
+  try {
+    return new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : 'https://' + text).hostname || null;
+  } catch {
+    return null;
+  }
+}
+
+/** warn.emptyAllowlist (D-35): the link check quarantines while no domain is allowed. */
+function quarantineEmptyAllowlistWarning(linkCheck, allowlist) {
+  return quarantineText(linkCheck).trim() === 'quarantine' && quarantineParseAllowlist(allowlist).hosts.length === 0;
+}
+
+function quarantineAllowlistRefused() {
+  const locale = quarantineUiLib().ragUiBrowserLocale();
+  const message = quarantineLabel('allowlist.refused', locale);
+  if (quarantinePanelInstance) quarantinePanelInstance.allowlistRefused(message);
+  if (typeof window !== 'undefined' && typeof window.showToast === 'function') window.showToast(message, 'error');
+}
+
+/**
+ * Wraps the page's save guard (window.ragIngestImpactGuard, called by saveConfig): an allowlist with a line that is not a
+ * domain refuses the save; a valid one is saved comma-separated before the impact check compares it with the saved value.
+ */
+function quarantineCreateGuard(inner) {
+  const has = (obj) => obj && typeof obj === 'object' && Object.prototype.hasOwnProperty.call(obj, QUARANTINE_ALLOWLIST_ENV);
+  const guard = async (next, saved) => {
+    let savedForInner = saved;
+    if (has(next)) {
+      const parsed = quarantineParseAllowlist(next[QUARANTINE_ALLOWLIST_ENV]);
+      if (parsed.invalid.length) {
+        quarantineAllowlistRefused();
+        return false;
+      }
+      next[QUARANTINE_ALLOWLIST_ENV] = parsed.value;
+      if (has(saved)) {
+        const before = quarantineParseAllowlist(saved[QUARANTINE_ALLOWLIST_ENV]);
+        if (!before.invalid.length) savedForInner = { ...saved, [QUARANTINE_ALLOWLIST_ENV]: before.value };
+      }
+    }
+    return typeof inner === 'function' ? inner(next, savedForInner) : true;
+  };
+  guard.quarantineAllowlistGuard = true;
+  return guard;
+}
+
+function quarantineInstallGuard() {
+  if (typeof window === 'undefined') return;
+  const current = window.ragIngestImpactGuard;
+  if (current && current.quarantineAllowlistGuard) return;
+  window.ragIngestImpactGuard = quarantineCreateGuard(current);
+}
+
 class QuarantinePanel {
   constructor(root) {
     this.root = root;
@@ -537,6 +639,16 @@ class QuarantinePanel {
     this.alertHost = null;
     this.refreshButton = null;
     this.updatedAt = null;
+    this.notCheckedHost = null;
+    this.notCheckedAlertHost = null;
+    this.notChecked = null;
+    this.notCheckedSeq = 0;
+    this.checksBuilt = false;
+    this.rescanHost = null;
+    this.rescan = null;
+    this.rescanWanted = false;
+    this.rescanSeq = 0;
+    this.hiddenError = null;
   }
 
   t(key, vars) {
@@ -597,6 +709,10 @@ class QuarantinePanel {
     });
     this.listHost = this.el('div', { className: 'min-w-0' });
     this.tabs.panels.quarantined.appendChild(this.listHost);
+    this.notCheckedAlertHost = this.el('div', { className: 'flex flex-col gap-2 empty:hidden mb-4' });
+    this.notCheckedHost = this.el('div', { className: 'min-w-0' });
+    this.tabs.panels['not-checked'].appendChild(this.notCheckedAlertHost);
+    this.tabs.panels['not-checked'].appendChild(this.notCheckedHost);
     const content = this.el('div', { className: 'min-w-0' }, [
       description,
       this.alertHost,
@@ -608,15 +724,21 @@ class QuarantinePanel {
     if (list && list.parentNode) {
       list.parentNode.insertBefore(content, list);
       list.remove();
-    }    else if (title && title.parentNode) title.parentNode.appendChild(content);
+    } else if (title && title.parentNode) title.parentNode.appendChild(content);
     if (status && status.parentNode) status.parentNode.appendChild(status);
-    await this.loadList('first');
+    this.buildChecks(this.tabs.panels.checks);
+    await Promise.all([this.loadList('first'), this.loadNotChecked('first')]);
   }
 
-  onSelect(_id) {}
+  onSelect(id) {
+    if (id === 'checks' && !this.rescan) this.loadRescan();
+  }
 
   async refresh() {
-    await this.loadList('refresh');
+    this.syncChecks();
+    const work = [this.loadList('refresh'), this.loadNotChecked('refresh')];
+    if (this.rescanWanted) work.push(this.loadRescan());
+    await Promise.all(work);
   }
 
   renderAlerts() {
@@ -1012,6 +1134,365 @@ class QuarantinePanel {
     await this.actionFailed(result);
   }
 
+  /** zh and it through data-rag-i18n; English is the static markup (UI-SPEC 6.3). */
+  localizeSettings(group) {
+    if (this.locale === 'en') return;
+    for (const node of Array.from(group.querySelectorAll('[data-rag-i18n]'))) {
+      const text = this.t(node.getAttribute('data-rag-i18n'));
+      if (typeof text === 'string' && text !== node.getAttribute('data-rag-i18n')) node.textContent = text;
+    }
+  }
+
+  control(id) {
+    return this.doc.getElementById(id);
+  }
+
+  controlValue(id) {
+    const control = this.control(id);
+    return control ? quarantineText(control.value).trim() : '';
+  }
+
+  addDescribedBy(control, id) {
+    const ids = (control.getAttribute('aria-describedby') || '').split(/\s+/).filter(Boolean);
+    if (!ids.includes(id)) control.setAttribute('aria-describedby', [...ids, id].join(' '));
+  }
+
+  removeDescribedBy(control, id) {
+    const ids = (control.getAttribute('aria-describedby') || '').split(/\s+/).filter((v) => v && v !== id);
+    if (ids.length) control.setAttribute('aria-describedby', ids.join(' '));
+    else control.removeAttribute('aria-describedby');
+  }
+
+  /** The Checks sub-view (UI-SPEC 6.5.4): the moved security group, the read-only rules mirror, allowlist checks, rescan. */
+  buildChecks(host) {
+    const ui = quarantineUiLib();
+    const group = this.doc.querySelector('[data-rag-settings-group="security"]');
+    this.rulesMirror = this.el('div', { className: 'form-control mb-4 min-w-0', attrs: { 'data-quarantine-rules': '' } });
+    const nodes = [this.el('h4', { className: 'text-base font-semibold mb-2', text: this.t('checks.heading') }), this.rulesMirror];
+    if (group) {
+      this.localizeSettings(group);
+      nodes.push(group);
+    }
+    this.rescanHost = this.el('div', { className: 'min-w-0' });
+    nodes.push(
+      this.el('h4', { className: 'text-base font-semibold mt-6 mb-2', text: this.t('rescan.heading') }),
+      this.el('p', { className: 'text-sm max-w-prose mb-2', text: this.t('rescan.body') }),
+      this.rescanHost,
+    );
+    host.replaceChildren(...nodes);
+
+    const area = this.control(QUARANTINE_ALLOWLIST_ENV);
+    if (area) {
+      const field = area.closest('.form-control') || area.parentNode;
+      this.ownLine = this.el('p', { className: 'text-xs text-base-content/70 mt-1 empty:hidden' });
+      this.invalidList = this.el('ul', { className: 'text-sm text-error mt-1 flex flex-col gap-1 empty:hidden', id: ui.ragUiNextId('rag-quarantine-allowlist-invalid'), attrs: { 'data-quarantine-allowlist-invalid': '' } });
+      this.warningHost = this.el('div', { className: 'flex flex-col gap-2 mt-2 empty:hidden' });
+      field.appendChild(this.ownLine);
+      field.appendChild(this.invalidList);
+      field.appendChild(this.warningHost);
+      if (area.value && !/\n/.test(area.value)) area.value = quarantineParseAllowlist(area.value).hosts.join('\n') || area.value;
+      area.addEventListener('input', () => this.validateAllowlist());
+      area.addEventListener('change', () => this.validateAllowlist());
+    }
+    const hidden = this.control('RAG_HIDDEN_TEXT_CHECK');
+    if (hidden) {
+      hidden.addEventListener('change', () => {
+        this.clearHiddenError();
+        this.updateHelp('RAG_HIDDEN_TEXT_CHECK', 'rag-hidden-text-check-help', 'check.hidden.');
+        this.renderNotChecked();
+      });
+    }
+    const links = this.control('RAG_INGEST_LINK_CHECK');
+    if (links) {
+      links.addEventListener('change', () => {
+        this.updateHelp('RAG_INGEST_LINK_CHECK', 'rag-ingest-link-check-help', 'check.links.');
+        this.renderAllowlistWarnings();
+      });
+    }
+    const scan = this.control('RAG_INJECTION_SCAN');
+    if (scan) scan.addEventListener('change', () => this.renderRulesMirror());
+    this.checksBuilt = true;
+    this.syncChecks();
+  }
+
+  syncChecks() {
+    if (!this.checksBuilt) return;
+    this.renderRulesMirror();
+    this.updateHelp('RAG_HIDDEN_TEXT_CHECK', 'rag-hidden-text-check-help', 'check.hidden.');
+    this.updateHelp('RAG_INGEST_LINK_CHECK', 'rag-ingest-link-check-help', 'check.links.');
+    const own = quarantineOwnDomain(this.controlValue('NEXT_PUBLIC_SITE_URL'));
+    if (this.ownLine) {
+      this.ownLine.replaceChildren(
+        ...(own ? quarantineUiLib().ragUiTemplateNodes(this.doc, this.t('allowlist.own'), { domain: own }, ['domain']) : []),
+      );
+    }
+    this.validateAllowlist();
+  }
+
+  /** "What it does now": the effect sentence of the select's current value, before saving (UI-SPEC 6.5.4). */
+  updateHelp(controlId, helpId, prefix) {
+    const help = this.doc.getElementById(helpId);
+    if (!help) return;
+    const value = this.controlValue(controlId);
+    const target =
+      help.querySelector('[data-quarantine-effect]') ||
+      Array.from(help.querySelectorAll('[data-rag-i18n]')).find((node) => (node.getAttribute('data-rag-i18n') || '').startsWith(prefix));
+    if (!target) return;
+    target.setAttribute('data-quarantine-effect', '');
+    if (QUARANTINE_CHECK_VALUES.includes(value)) {
+      target.setAttribute('data-rag-i18n', prefix + value);
+      target.textContent = this.t(prefix + value);
+    } else {
+      target.removeAttribute('data-rag-i18n');
+      target.replaceChildren(quarantineUiLib().ragUiCodeSentence(this.doc, this.locale, value, this.t('check.unknown')));
+    }
+  }
+
+  /** Injection rules are set under RAG Modes; here they are shown read-only from #RAG_INJECTION_SCAN. */
+  renderRulesMirror() {
+    if (!this.rulesMirror) return;
+    const ui = quarantineUiLib();
+    const value = this.controlValue('RAG_INJECTION_SCAN') || 'off';
+    const known = QUARANTINE_RULES_VALUES.includes(value);
+    this.rulesMirror.replaceChildren(
+      this.el('p', { className: 'label px-0' }, [this.el('span', { className: 'label-text', text: this.t('check.name.rules') })]),
+      this.el('p', { className: 'text-sm font-semibold' }, [
+        known ? this.el('span', { text: this.t('check.rules.value.' + value) }) : this.codeEl(value),
+      ]),
+      this.el('div', { className: 'label flex-wrap gap-1 px-0' }, [
+        this.el('span', { className: 'label-text-alt' }, [
+          known ? this.el('span', { text: this.t('check.rules.' + value) }) : ui.ragUiCodeSentence(this.doc, this.locale, value, this.t('check.unknown')),
+          ' ',
+          this.el('span', { text: this.t('check.rulesPointer') }),
+        ]),
+        this.codeEl('RAG_INJECTION_SCAN'),
+      ]),
+    );
+  }
+
+  /** Browser check of the allowlist: each invalid line is named, the field gets aria-invalid (UI-SPEC 6.5.4, 9.4). */
+  validateAllowlist() {
+    const area = this.control(QUARANTINE_ALLOWLIST_ENV);
+    if (!area || !this.invalidList) return true;
+    const ui = quarantineUiLib();
+    const parsed = quarantineParseAllowlist(area.value);
+    this.invalidList.replaceChildren(
+      ...parsed.invalid.map((line) => this.el('li', { className: 'break-words' }, ui.ragUiTemplateNodes(this.doc, this.t('allowlist.invalid'), { line }, ['line']))),
+    );
+    if (parsed.invalid.length) {
+      area.setAttribute('aria-invalid', 'true');
+      this.addDescribedBy(area, this.invalidList.id);
+    } else {
+      area.removeAttribute('aria-invalid');
+      this.removeDescribedBy(area, this.invalidList.id);
+    }
+    this.renderAllowlistWarnings();
+    return parsed.invalid.length === 0;
+  }
+
+  renderAllowlistWarnings() {
+    if (!this.warningHost) return;
+    const area = this.control(QUARANTINE_ALLOWLIST_ENV);
+    const show = quarantineEmptyAllowlistWarning(this.controlValue('RAG_INGEST_LINK_CHECK'), area ? area.value : '');
+    this.warningHost.replaceChildren(
+      ...(show ? [quarantineUiLib().ragUiAlert(this.doc, { tone: 'warning', icon: 'exclamation-triangle', body: [this.t('warn.emptyAllowlist')] })] : []),
+    );
+  }
+
+  /** The save guard refused an invalid allowlist: open Checks, mark the lines, say why in the status region. */
+  allowlistRefused(message) {
+    this.validateAllowlist();
+    if (this.tabs) this.tabs.select('checks');
+    this.announce(message, true);
+  }
+
+  /** saveConfig answered 400 hidden_text_needs_sidecar: the sentence goes under the hidden-text select (UI-SPEC 8.2). */
+  saveRejected(detail) {
+    const body = detail && detail.body && typeof detail.body === 'object' ? detail.body : null;
+    if (!detail || detail.status !== 400 || !body || body.error !== 'hidden_text_needs_sidecar') return;
+    const ui = quarantineUiLib();
+    const select = this.control('RAG_HIDDEN_TEXT_CHECK');
+    if (!select) return;
+    const mapped = ui.ragUiMapError({ ok: false, status: 400, body }, this.locale);
+    this.clearHiddenError();
+    this.hiddenError = this.el('p', { className: 'text-sm text-error mt-1 flex items-start gap-1', id: ui.ragUiNextId('rag-quarantine-hidden-error'), attrs: { 'data-quarantine-hidden-error': '' } }, [
+      ui.ragUiIcon(this.doc, 'exclamation-circle', 'shrink-0'),
+      this.el('span', { text: mapped.message }),
+    ]);
+    const field = select.closest('.form-control') || select.parentNode;
+    field.insertBefore(this.hiddenError, select.nextSibling || null);
+    select.setAttribute('aria-invalid', 'true');
+    this.addDescribedBy(select, this.hiddenError.id);
+    if (this.tabs) this.tabs.select('checks');
+    this.announce(mapped.message, true);
+  }
+
+  clearHiddenError() {
+    const select = this.control('RAG_HIDDEN_TEXT_CHECK');
+    if (this.hiddenError) {
+      if (select) this.removeDescribedBy(select, this.hiddenError.id);
+      this.hiddenError.remove();
+      this.hiddenError = null;
+    }
+    if (select) select.removeAttribute('aria-invalid');
+  }
+
+  /** How the security rescan starts, as the coverage route declares it: a button for `ui`, otherwise the command. */
+  async loadRescan() {
+    if (!this.rescanHost) return;
+    const ui = quarantineUiLib();
+    this.rescanWanted = true;
+    const seq = ++this.rescanSeq;
+    if (this.rescan) ui.ragUiListBusy(this.rescanHost, true);
+    else ui.ragUiListLoading(this.doc, this.rescanHost, this.t('rescan.loading'));
+    const result = await ui.ragUiRagRequest(QUARANTINE_COVERAGE_PATH, { method: 'GET' });
+    if (seq !== this.rescanSeq) return;
+    ui.ragUiListBusy(this.rescanHost, false);
+    const rows = result && result.ok && result.body && Array.isArray(result.body.pending) ? result.body.pending : null;
+    const row = rows ? rows.find((r) => r && r.mechanism === 'rescan') : null;
+    if (row) {
+      this.rescan = { start: quarantineText(row.start), command: quarantineText(row.command), affected: quarantineCount(row.affected) };
+      this.renderRescan();
+      return;
+    }
+    this.rescan = null;
+    const mapped = rows ? { kind: 'unavailable', message: this.t('rescan.unavailable') } : ui.ragUiMapError(result, this.locale, { unavailable: this.t('rescan.unavailable') });
+    this.rescanHost.replaceChildren(
+      mapped.kind === 'signIn' ? ui.ragUiSignInAlert(this.doc, this.locale, () => this.loadRescan()) : ui.ragUiUnavailableAlert(this.doc, this.locale, mapped.message, () => this.loadRescan()),
+    );
+  }
+
+  renderRescan() {
+    if (!this.rescanHost || !this.rescan) return;
+    if (this.rescan.start === 'ui') {
+      const button = this.el('button', { className: 'btn btn-outline btn-sm', text: this.t('action.rescan'), attrs: { type: 'button' } });
+      button.addEventListener('click', () => this.startRescan(button));
+      this.rescanHost.replaceChildren(button);
+      return;
+    }
+    this.rescanHost.replaceChildren(
+      this.el('p', { className: 'text-sm mb-1', text: this.t('rescan.cli') }),
+      this.el('pre', { className: 'bg-base-100 rounded p-2 overflow-x-auto max-w-full' }, [this.codeEl(this.rescan.command || 'npm run rag:rebuild -- rescan')]),
+    );
+  }
+
+  async startRescan(button) {
+    const ui = quarantineUiLib();
+    let result = null;
+    const confirmed = await ui.ragUiConfirmDialog(this.doc, {
+      title: this.t('rescan.title'),
+      body: [this.t('rescan.confirmBody', { count: ui.ragUiFormatNumber(this.rescan ? this.rescan.affected : 0, this.locale) })],
+      keepLabel: this.t('action.keepAsIs'),
+      confirmLabel: this.t('action.rescan'),
+      runningLabel: this.t('rescan.running'),
+      tone: 'primary',
+      opener: button,
+      fallbackFocus: this.statusEl(),
+      onConfirm: async () => {
+        result = await ui.ragUiRagRequest(QUARANTINE_REBUILD_PATH, { method: 'POST', body: JSON.stringify({ mechanism: 'rescan' }) }, 60000);
+      },
+    });
+    if (!confirmed || !result) return;
+    if (result.ok) {
+      this.announce(this.t('rescan.started'));
+      return;
+    }
+    this.announce(ui.ragUiMapError(result, this.locale, { unavailable: this.t('rescan.unavailable'), action: 'start' }).message, true);
+  }
+
+  async loadNotChecked(source, offset) {
+    if (!this.notCheckedHost) return;
+    const ui = quarantineUiLib();
+    const append = source === 'more';
+    const seq = ++this.notCheckedSeq;
+    const params = new URLSearchParams({ view: 'not_checked', limit: String(QUARANTINE_PAGE), offset: String(append ? offset || 0 : 0) });
+    const button = append ? this.root.querySelector('[data-quarantine-not-checked-more]') : null;
+    const { result, mapped } = await this.request(this.notCheckedHost, QUARANTINE_PATH + '?' + params.toString(), {
+      source,
+      loadingText: this.t('notChecked.loading'),
+      unavailable: this.t('notChecked.unavailable'),
+      hadContent: Boolean(this.notChecked) && !append,
+      button,
+    });
+    if (seq !== this.notCheckedSeq) return;
+    if (!mapped) {
+      const data = result.body;
+      const rows = (Array.isArray(data.items) ? data.items : [])
+        .filter((item) => item && typeof item === 'object' && item.id)
+        .map((item) => ({
+          id: quarantineText(item.id),
+          file: quarantineText(item.filename) || quarantineText(item.id),
+          docType: quarantineText(item.doc_type),
+          source: quarantineText(item.source),
+          uploadedAt: quarantineText(item.uploaded_at),
+        }));
+      const merged = append && this.notChecked ? [...this.notChecked.rows, ...rows.filter((r) => !this.notChecked.rows.some((o) => o.id === r.id))] : rows;
+      const total = Number.isFinite(Number(data.total)) ? Math.max(Number(data.total), merged.length) : merged.length;
+      this.notChecked = { total, rows: merged };
+      this.notCheckedAlertHost.replaceChildren();
+      ui.ragUiListBusy(this.notCheckedHost, false);
+      this.setTabCount('not-checked', 'tab.notChecked', total);
+      this.renderNotChecked();
+      return;
+    }
+    if (mapped.kind === 'signIn' || mapped.kind === 'workspace') this.notChecked = null;
+    this.showLoadFailure(this.notCheckedHost, mapped, Boolean(this.notChecked), () => this.refresh(), (alert) => {
+      this.notCheckedAlertHost.replaceChildren(...(alert ? [alert] : []));
+    });
+    if (!this.notChecked) this.setTabCount('not-checked', 'tab.notChecked', '—');
+  }
+
+  docTypeLabel(docType) {
+    if (!docType) return '—';
+    if (typeof window !== 'undefined' && typeof window.docTypeLabelForLocale === 'function') return window.docTypeLabelForLocale(docType, this.locale);
+    return docType;
+  }
+
+  /** Read-only (D-34): these documents are searchable, so the list has no action. */
+  renderNotChecked() {
+    if (!this.notCheckedHost || !this.notChecked) return;
+    const nodes = [this.el('p', { className: 'text-sm max-w-prose mb-4', text: this.t('notChecked.description') })];
+    if (this.controlValue('RAG_HIDDEN_TEXT_CHECK') === 'off' || this.controlValue('RAG_HIDDEN_TEXT_CHECK') === '') {
+      nodes.push(this.el('p', { className: 'text-sm max-w-prose py-8 text-center mx-auto', text: this.t('notChecked.off') }));
+    } else if (!this.notChecked.rows.length) {
+      nodes.push(this.el('p', { className: 'text-sm max-w-prose py-8 text-center mx-auto', text: this.t('notChecked.empty') }));
+    } else {
+      const th = (text, extra) => this.el('th', { className: 'font-semibold' + (extra ? ' ' + extra : ''), text, attrs: { scope: 'col' } });
+      const table = this.el('table', { className: 'table table-sm' }, [
+        this.el('caption', { className: 'sr-only', text: this.t('notChecked.caption') }),
+        this.el('thead', {}, [this.el('tr', {}, [th(this.t('col.file')), th(this.t('col.docType')), th(this.t('col.source'), 'hidden md:table-cell'), th(this.t('col.uploaded'))])]),
+        this.el(
+          'tbody',
+          {},
+          this.notChecked.rows.map((row) =>
+            this.el('tr', {}, [
+              this.el('th', { className: 'font-normal align-top min-w-0 [overflow-wrap:anywhere]', text: row.file, attrs: { scope: 'row' } }),
+              this.el('td', { className: 'align-top break-words', text: this.docTypeLabel(row.docType) }),
+              this.el('td', { className: 'align-top hidden md:table-cell' }, [row.source ? this.codeEl(row.source) : this.el('span', { text: '—' })]),
+              this.el('td', { className: 'align-top tabular-nums lg:whitespace-nowrap' }, [this.timeEl(row.uploadedAt)]),
+            ]),
+          ),
+        ),
+      ]);
+      nodes.push(
+        this.el(
+          'div',
+          {
+            className: 'overflow-x-auto rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2',
+            attrs: { tabindex: '0', role: 'region', 'aria-label': this.t('notChecked.caption') },
+          },
+          [table],
+        ),
+      );
+      if (this.notChecked.rows.length < this.notChecked.total) {
+        const more = this.el('button', { className: 'btn btn-outline btn-sm mt-4', text: this.t('action.loadMore'), attrs: { type: 'button', 'data-quarantine-not-checked-more': '' } });
+        more.addEventListener('click', () => this.loadNotChecked('more', this.notChecked ? this.notChecked.rows.length : 0));
+        nodes.push(more);
+      }
+    }
+    this.notCheckedHost.replaceChildren(...nodes);
+  }
+
   release(item, button, sibling) {
     return this.decide(item, button, sibling, true);
   }
@@ -1020,8 +1501,6 @@ class QuarantinePanel {
     return this.decide(item, button, sibling, false);
   }
 }
-
-let quarantinePanelInstance = null;
 
 function initQuarantinePanel() {
   if (typeof document === 'undefined') return null;
@@ -1050,8 +1529,13 @@ if (typeof window !== 'undefined') {
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
   window.initQuarantinePanel = initQuarantinePanel;
+  quarantineInstallGuard();
   quarantineBindPanel();
+  document.addEventListener('rag:config-save-rejected', (event) => {
+    if (quarantinePanelInstance) quarantinePanelInstance.saveRejected(event && event.detail);
+  });
   document.addEventListener('DOMContentLoaded', () => {
+    quarantineInstallGuard();
     quarantineBindPanel();
     const active = document.getElementById('rag-administration');
     if (active && active.classList.contains('active')) initQuarantinePanel();
@@ -1066,6 +1550,10 @@ if (typeof module !== 'undefined' && module.exports) {
     quarantineListView,
     quarantineHoldReasons,
     quarantineReleaseLines,
+    quarantineParseAllowlist,
+    quarantineOwnDomain,
+    quarantineEmptyAllowlistWarning,
+    quarantineCreateGuard,
     QuarantinePanel,
     initQuarantinePanel,
   };
