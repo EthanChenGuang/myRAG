@@ -24,6 +24,7 @@ from rag_sidecar.contracts import (
     SidecarReady,
 )
 from rag_sidecar.extract.invoice import extract_invoice
+from rag_sidecar.groundedness.claims import build_claims_router
 from rag_sidecar.groundedness.router import build_groundedness_router
 from rag_sidecar.groundedness.scorer import Scorer, available_scorer_names, build_scorers, close_scorers
 from rag_sidecar.injection.router import build_injection_router
@@ -349,6 +350,7 @@ def create_app(
         return JSONResponse(content=fields.model_dump(mode="json"))
 
     v1.include_router(build_groundedness_router(resolved, active_scorers))
+    v1.include_router(build_claims_router(resolved, active_scorers))
     v1.include_router(build_injection_router(active_injection_scorer, prompt_guard_config))
     v1.include_router(build_hidden_text_router(resolved))
     app.include_router(v1)
