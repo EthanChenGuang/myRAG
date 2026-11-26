@@ -23,6 +23,8 @@ from rag_sidecar.contracts.report import (
 from rag_eval.bounds import upper_bound
 from rag_eval.config_files import load_gate_population
 from rag_eval.matching import chunk_matches_span, normalize_text
+from rag_eval.identifiers import is_near_miss, normalize_identifier
+from rag_eval.ndcg import gold_unit_first_hits, ndcg_at_context_k
 from rag_eval.native_review import MIN_GATED_ITEMS, counts_in_gated_slices, report_only_reason
 from rag_eval.table_answer import score_table_answer
 
@@ -86,17 +88,76 @@ def _pair_members(results: Iterable[ItemResult]) -> list[ItemResult]:
     return [r for r in results if r.category == CROSS_LINGUAL and r.evidence_language is not None]
 
 
-def _first_rank_per_span(trace: RagTrace, item: GoldenItem, *, ranked) -> list[int | None]:
-    ranks: list[int | None] = []
-    for span in item.gold_evidence:
-        rank = None
-        for position, chunk in enumerate(ranked, start=1):
-            document_name = getattr(chunk, "document_name", None) or ""
-            if chunk_matches_span(document_name, chunk.content, span):
-                rank = position
-                break
-        ranks.append(rank)
-    return ranks
+def _context_k(trace: RagTrace) -> int:
+    """D-07: k is the number of chunks sent to the model; a refused item sends none."""
+    return 0 if trace.refused else len(trace.kept)
+
+
+def _topk_redundancy(trace: RagTrace) -> float | None:
+    """D-22: the largest share of kept chunks in one duplicate cluster; a chunk without a cluster id is its own cluster."""
+    k = _context_k(trace)
+    if k == 0:
+        return None
+    sizes: dict[str, int] = {}
+    largest = 1
+    for chunk in trace.kept:
+        if chunk.dup_cluster_id is None:
+            continue
+        sizes[chunk.dup_cluster_id] = sizes.get(chunk.dup_cluster_id, 0) + 1
+        largest = max(largest, sizes[chunk.dup_cluster_id])
+    return largest / k
+
+
+def _context_fields(trace: RagTrace, item: GoldenItem) -> dict[str, object]:
+    """Report-only per-item fields over the kept chunks (D-07, D-22, D-50)."""
+    k = _context_k(trace)
+    fields: dict[str, object] = {"context_k": k, "topk_redundancy": _topk_redundancy(trace)}
+    if not item.answerable:
+        return fields
+    units = [] if k == 0 else gold_unit_first_hits(trace, item)
+    fields["ndcg_at_context_k"] = ndcg_at_context_k(units, k) if units else 0.0
+    if item.evidence_groups is not None:
+        fields["group_count"] = len(item.evidence_groups)
+        fields["intent_coverage"] = bool(units) and all(position is not None for position in units)
+    return fields
+
+
+IDENTIFIER_NEAR_MISS = "identifier_near_miss"
+ASKED_IDENTIFIER_TAG = "asked_identifier:"
+
+
+def _asked_identifier(item: GoldenItem) -> str:
+    for tag in item.tags:
+        if tag.startswith(ASKED_IDENTIFIER_TAG):
+            asked = normalize_identifier(tag[len(ASKED_IDENTIFIER_TAG) :])
+            if asked:
+                return asked
+    raise ValueError(f"{IDENTIFIER_NEAR_MISS} item {item.id!r} needs a tag {ASKED_IDENTIFIER_TAG}<spelling>")
+
+
+def _identifier_fields(trace: RagTrace, item: GoldenItem) -> dict[str, object]:
+    """D-32 on identifier_near_miss items: leak and precision over the kept chunks' normalized identifiers."""
+    if item.category != IDENTIFIER_NEAR_MISS:
+        return {}
+    asked = _asked_identifier(item)
+    if any(chunk.identifiers_norm is None for chunk in trace.kept):
+        return {}
+    carries = {chunk.chunk_id: asked in (chunk.identifiers_norm or []) for chunk in trace.kept}
+    leak = any(
+        not carries[chunk.chunk_id] and any(is_near_miss(asked, other) for other in chunk.identifiers_norm or [])
+        for chunk in trace.kept
+    )
+    if not item.answerable:
+        precise = trace.refused and not leak
+    else:
+        cited = [chunk_id for citation in trace.citations for chunk_id in citation.chunkIds]
+        precise = (
+            not trace.refused
+            and not leak
+            and any(carries.values())
+            and all(carries.get(chunk_id, False) for chunk_id in cited)
+        )
+    return {"identifier_precise": precise, "near_miss_leak": leak}
 
 
 def score_items(
@@ -123,7 +184,8 @@ def score_items(
         if trace is None:
             raise ValueError(f"no trace for golden item {item.id!r}")
         ranked = trace.kept if rank_field == "kept" else trace.candidates
-        ranks = [] if trace.refused else [r for r in _first_rank_per_span(trace, item, ranked=ranked) if r is not None]
+        units = gold_unit_first_hits(trace, item, ranked=ranked)
+        ranks = [] if trace.refused else [r for r in units if r is not None]
         results.append(
             ItemResult(
                 item_id=item.id,
@@ -134,7 +196,7 @@ def score_items(
                 provenance=item.provenance,
                 answerable=item.answerable,
                 refused=trace.refused,
-                span_count=len(item.gold_evidence),
+                span_count=len(units),
                 spans_hit_at_5=sum(1 for r in ranks if r <= 5),
                 spans_hit_at_10=sum(1 for r in ranks if r <= 10),
                 first_hit_rank=min(ranks) if ranks else None,
@@ -143,6 +205,8 @@ def score_items(
                 rerank_status=trace.stage_status.get(RERANK_STAGE),
                 lexical_hit_at_10=_lexical_hit(trace, item, leg_ran=leg_ran),
                 report_only_reason=report_only_reason(item),
+                **_context_fields(trace, item),
+                **_identifier_fields(trace, item),
             )
         )
     return results
@@ -150,6 +214,19 @@ def score_items(
 
 def _mean(values: list[float]) -> MetricValue:
     return MetricValue(value=sum(values) / len(values) if values else None, n=len(values))
+
+
+def _optional_mean(values: list[float | bool | None]) -> MetricValue | None:
+    """Mean over the items that carry the value; None when no item does (report-only slice fields)."""
+    present = [float(value) for value in values if value is not None]
+    return _mean(present) if present else None
+
+
+def _k_zero(answerable: list[ItemResult]) -> MetricValue | None:
+    scored = [r for r in answerable if r.context_k is not None and r.ndcg_at_context_k is not None]
+    if not scored:
+        return None
+    return MetricValue(value=float(sum(1 for r in scored if r.context_k == 0)), n=len(scored))
 
 
 def _slice(results: list[ItemResult]) -> SliceMetrics:
@@ -167,6 +244,12 @@ def _slice(results: list[ItemResult]) -> SliceMetrics:
         correct_refusal_rate=_mean([1.0 if r.refused else 0.0 for r in unanswerable]),
         false_refusal_rate=_mean([1.0 if r.refused else 0.0 for r in answerable]),
         false_refusal_upper_95=upper_bound(sum(1 for r in answerable if r.refused), len(answerable)),
+        ndcg_at_context_k=_optional_mean([r.ndcg_at_context_k for r in answerable]),
+        k_zero=_k_zero(answerable),
+        topk_redundancy=_optional_mean([r.topk_redundancy for r in results]),
+        intent_coverage=_optional_mean([r.intent_coverage for r in answerable]),
+        identifier_precision=_optional_mean([r.identifier_precise for r in results]),
+        near_miss_leakage=_optional_mean([r.near_miss_leak for r in results]),
     )
 
 

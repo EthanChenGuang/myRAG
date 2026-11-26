@@ -8,6 +8,7 @@ import pytest
 from rag_eval.corpus import load_corpus, main
 from rag_eval.paths import REPO_ROOT
 
+COMMITTED_CORPUS_SHA256 = "2d1e198f73a6aba71d94eac166fc21f92853113267cfe00be6659e6c6010ca04"
 META = '<!-- fixture-meta {"filename": "Policy Handbook.pdf", "image_url": "https://example.test/a.png"} -->'
 
 
@@ -128,3 +129,152 @@ def test_cli_module_entry_point_dumps_the_committed_corpus():
     payload = json.loads(result.stdout)
     assert payload and all(doc["chunks"] for doc in payload)
     assert [d["relpath"] for d in payload] == sorted(d["relpath"] for d in payload)
+
+
+TEMPLATE_META = {
+    "doc_type": "product_technical",
+    "generate": {
+        "count": 30,
+        "name": "copy-{n}.en.md",
+        "substitutions": [["lantern", "lantern"], ["lantern", "beacon"], ["lantern", "signal"]],
+        "template_id": "T",
+    },
+}
+TEMPLATE_BODY = "## Shared notice\n\nThe lantern panel opens after the second chime.\n<!-- chunk -->\n## Closing\n\nThe lantern stays lit.\n"
+
+
+def _template(meta: dict | None = None, body: str = TEMPLATE_BODY) -> str:
+    return f"<!-- fixture-meta {json.dumps(meta or TEMPLATE_META)} -->\n{body}"
+
+
+def test_generate_block_expands_into_named_copies_and_hides_the_template(tmp_path: Path):
+    _write(tmp_path, "en/template.en.md", _template())
+    _write(tmp_path, "en/other.en.md", "## Other\n\nUnrelated body.\n")
+    docs = load_corpus(tmp_path)
+    copies = [d for d in docs if d.fixture_dup_template == "T"]
+    assert len(copies) == 30
+    assert "en/template.en.md" not in [d.relpath for d in docs]
+    assert [d.relpath for d in docs] == sorted(d.relpath for d in docs)
+    assert [d.filename for d in copies] == [f"copy-{i:02d}.en.md" for i in range(1, 31)]
+    other = next(d for d in docs if d.relpath == "en/other.en.md")
+    assert other.fixture_dup_template is None
+    words = ["lantern", "beacon", "signal"]
+    for i, doc in enumerate(copies):
+        word = words[i % 3]
+        assert doc.doc_type == "product_technical"
+        assert doc.language == "en"
+        assert [c.text for c in doc.chunks] == [
+            f"## Shared notice\n\nThe {word} panel opens after the second chime.",
+            f"## Closing\n\nThe {word} stays lit.",
+            f"T-{i + 1:02d}",
+        ]
+        assert doc.chunks[0].stored == f"Document: {doc.filename}. Chunk 1 of 3. Content: {doc.chunks[0].text}"
+
+
+def test_generate_index_width_follows_the_count(tmp_path: Path):
+    meta = {"generate": {"count": 100, "name": "c{n}.it.md", "substitutions": [], "template_id": "W"}}
+    _write(tmp_path, "it/t.it.md", _template(meta, "## Uno\n\nTesto.\n"))
+    docs = load_corpus(tmp_path)
+    assert [d.filename for d in docs][:2] == ["c001.it.md", "c002.it.md"]
+    assert docs[-1].filename == "c100.it.md"
+    assert docs[0].chunks[-1].text == "W-001"
+
+
+@pytest.mark.parametrize(
+    "generate",
+    [
+        {"count": 0, "name": "c{n}.md", "substitutions": [], "template_id": "T"},
+        {"count": 101, "name": "c{n}.md", "substitutions": [], "template_id": "T"},
+        {"count": 2.5, "name": "c{n}.md", "substitutions": [], "template_id": "T"},
+        {"count": True, "name": "c{n}.md", "substitutions": [], "template_id": "T"},
+        {"count": 2, "name": "c{n}.md", "substitutions": []},
+        {"count": 2, "name": "c{n}.md", "substitutions": [], "template_id": ""},
+        {"count": 2, "name": "c{n}.md", "substitutions": [], "template_id": "T", "extra": 1},
+        {"count": 2, "name": "fixed.md", "substitutions": [], "template_id": "T"},
+        {"count": 2, "name": "sub/c{n}.md", "substitutions": [], "template_id": "T"},
+        {"count": 2, "name": "c{n}.md", "substitutions": [["", "x"]], "template_id": "T"},
+        {"count": 2, "name": "c{n}.md", "substitutions": [["a"]], "template_id": "T"},
+        {"count": 2, "name": "c{n}.md", "template_id": "T"},
+        "not an object",
+    ],
+)
+def test_malformed_generate_block_names_the_file(tmp_path: Path, generate):
+    _write(tmp_path, "en/bad-template.en.md", _template({"generate": generate}))
+    with pytest.raises(ValueError, match=r"invalid generate block in en/bad-template\.en\.md"):
+        load_corpus(tmp_path)
+
+
+def test_generated_name_colliding_with_a_committed_file_fails(tmp_path: Path):
+    meta = {"generate": {"count": 2, "name": "c{n}.en.md", "substitutions": [], "template_id": "T"}}
+    _write(tmp_path, "en/t.en.md", _template(meta))
+    _write(tmp_path, "en/c01.en.md", "## C\n")
+    with pytest.raises(ValueError, match="duplicate corpus document en/c01.en.md"):
+        load_corpus(tmp_path)
+
+
+def test_corpus_hash_covers_template_bytes_once(tmp_path: Path):
+    from rag_eval.corpus import corpus_sha256
+
+    _write(tmp_path, "en/other.en.md", "## Other\n\nUnrelated body.\n")
+    without = corpus_sha256(tmp_path)
+    _write(tmp_path, "en/template.en.md", _template())
+    with_one = corpus_sha256(tmp_path)
+    assert with_one != without
+
+    import hashlib
+
+    expected = hashlib.sha256()
+    for relpath in ["en/other.en.md", "en/template.en.md"]:
+        expected.update(relpath.encode("utf-8"))
+        expected.update(b"\x00")
+        expected.update((tmp_path / relpath).read_bytes())
+    assert with_one == expected.hexdigest()
+
+    second = dict(TEMPLATE_META, generate=dict(TEMPLATE_META["generate"], name="other-{n}.en.md", template_id="U"))
+    _write(tmp_path, "en/template2.en.md", _template(second))
+    assert corpus_sha256(tmp_path) not in {with_one, without}
+
+
+def test_lineage_and_version_are_read_and_validated(tmp_path: Path):
+    _write(tmp_path, "en/a-v1.en.md", '<!-- fixture-meta {"lineage": "L", "version": 1} -->\n## A\n\nOld.\n')
+    _write(tmp_path, "en/a-v2.en.md", '<!-- fixture-meta {"lineage": "L", "version": 2} -->\n## A\n\nNew.\n')
+    _write(tmp_path, "en/plain.en.md", "## P\n")
+    docs = {d.relpath: d for d in load_corpus(tmp_path)}
+    assert (docs["en/a-v1.en.md"].lineage, docs["en/a-v1.en.md"].version) == ("L", 1)
+    assert (docs["en/a-v2.en.md"].lineage, docs["en/a-v2.en.md"].version) == ("L", 2)
+    assert (docs["en/plain.en.md"].lineage, docs["en/plain.en.md"].version) == (None, None)
+
+
+@pytest.mark.parametrize(
+    "meta",
+    [{"lineage": "L"}, {"version": 1}, {"lineage": "", "version": 1}, {"lineage": "L", "version": 0}, {"lineage": "L", "version": 1.5}],
+)
+def test_malformed_lineage_names_the_file(tmp_path: Path, meta):
+    _write(tmp_path, "en/bad.en.md", f"<!-- fixture-meta {json.dumps(meta)} -->\n## A\n")
+    with pytest.raises(ValueError, match=r"invalid lineage in en/bad\.en\.md"):
+        load_corpus(tmp_path)
+
+
+def test_duplicate_lineage_version_fails(tmp_path: Path):
+    _write(tmp_path, "en/a.en.md", '<!-- fixture-meta {"lineage": "L", "version": 1} -->\n## A\n')
+    _write(tmp_path, "en/b.en.md", '<!-- fixture-meta {"lineage": "L", "version": 1} -->\n## B\n')
+    with pytest.raises(ValueError, match="duplicate lineage version L 1"):
+        load_corpus(tmp_path)
+
+
+def test_dump_carries_template_and_lineage_keys_only_when_set(tmp_path: Path, capsys):
+    meta = {"generate": {"count": 1, "name": "c{n}.en.md", "substitutions": [], "template_id": "T"}}
+    _write(tmp_path, "en/t.en.md", _template(meta))
+    _write(tmp_path, "en/v.en.md", '<!-- fixture-meta {"lineage": "L", "version": 2} -->\n## V\n')
+    _write(tmp_path, "en/z.en.md", "## Z\n")
+    assert main(["dump", str(tmp_path)]) == 0
+    payload = {d["relpath"]: d for d in json.loads(capsys.readouterr().out)}
+    assert payload["en/c01.en.md"]["fixture_dup_template"] == "T"
+    assert payload["en/v.en.md"]["lineage"] == "L" and payload["en/v.en.md"]["version"] == 2
+    assert {"fixture_dup_template", "lineage", "version"}.isdisjoint(payload["en/z.en.md"])
+
+
+def test_committed_corpus_hash_is_unchanged():
+    from rag_eval.corpus import corpus_sha256
+
+    assert corpus_sha256(REPO_ROOT / "eval/fixtures/corpus") == COMMITTED_CORPUS_SHA256

@@ -29,6 +29,7 @@ import { checkBypassReason, type CacheRetrievalOptions, type TurnFacts } from '.
 import { resolveHitSources } from '../cache/sources';
 import type { CacheHit, CacheKeyParts, CacheTicket, EntryProfile } from '../cache/types';
 import { resolveFinalResultCount } from '../config';
+import { effectiveVersionScope } from './filters';
 import type { RpcClient } from '../backend/supabase-rpc';
 
 export type QueryLayerShortCircuit = { kind: 'small_talk' } | { kind: 'cache_hit' };
@@ -70,6 +71,8 @@ export interface QueryLayerInput {
   scope?: TenantScope;
   /** Absent: the semantic_cache stage stands down. */
   cache?: SemanticCacheSeam;
+  /** D-15 (Phase 4.1.1): run after the parallel group has joined and before semantic_cache, on the standalone query. */
+  afterTransforms?: (standalone: string) => Promise<void>;
 }
 
 const NO_LAYER_OUTCOME: Readonly<QueryLayerOutcome> = Object.freeze({
@@ -321,6 +324,8 @@ async function runSemanticCacheStage(args: CacheStageInput): Promise<CacheStageR
     retrievalOptions: cacheRetrievalOptions(input),
     defaultMaxResults: resolveFinalResultCount(undefined, env.RAG_FINAL_RESULT_COUNT),
   };
+  const versionScope = effectiveVersionScope(ctx.config, profile, input.retrievalFilters?.versionScope).scope;
+  if (versionScope !== 'current') facts.versionScope = versionScope;
   const bypass = checkBypassReason(facts);
   if (bypass !== null) {
     record('disabled', `bypass=${bypass}`);
@@ -621,6 +626,8 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
     hyde: hypothetical?.variant ? { text: hypothetical.variant.text, protectedOk: hypothetical.variant.protectedOk } : null,
     subQuestions: subQuestions?.variants.map((variant) => variant.text) ?? [],
   });
+
+  if (ctx.afterTransforms) await ctx.afterTransforms(standalone);
 
   const cached = await runSemanticCacheStage({
     ctx,

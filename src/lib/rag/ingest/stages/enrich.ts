@@ -1,10 +1,11 @@
 import { enrichChunkWithURLs } from '@/lib/url-extractor';
 import { detectLanguage } from '../../lang/detect';
 import { getLanguageSettings } from '../../lang/settings';
-import { detectChunkLanguages, documentLanguages, type ChunkLanguageOptions } from '../lang/chunk-language';
+import { UND, detectChunkLanguages, documentLanguages, type ChunkLanguage, type ChunkLanguageOptions } from '../lang/chunk-language';
 import { tableRowLanguage, tableRowSeparator } from '../text/table-rows';
 import { countTokens } from '../text/tokens';
-import { LEXICAL_VERSION, chunkLexicalText } from '../../lexical/chunk-text';
+import { chunkLexicalText } from '../../lexical/chunk-text';
+import { ingestLexical, lexicalStampMetadata } from '../lexical-options';
 import { contentHash } from '../hash';
 import { requireDocument, requireIdentity, type StageContext, type StageOutcome, type StageSpec } from '../types';
 
@@ -26,12 +27,33 @@ async function writeChunkLanguages(ctx: StageContext, documentId: string, option
     draft.language = results[index]!.language;
     draft.language_confidence = results[index]!.confidence;
   });
-  const { language, languages } = documentLanguages(
-    results,
-    drafts.map((draft) => countTokens(draft.content)),
-  );
+  const tokenCounts = drafts.map((draft) => countTokens(draft.content));
+  const { language, languages } = documentLanguages(results, tokenCounts);
+  ctx.state.traceFacts = { ...ctx.state.traceFacts, ...languageTraceFacts(results, tokenCounts) };
   await ctx.writer.setFields(documentId, language === null ? { languages } : { language, languages });
   return language;
+}
+
+/** D-51: each detected language's token share (2 decimals) and the number of und chunks; codes and numbers only. */
+export function languageTraceFacts(
+  results: readonly ChunkLanguage[],
+  tokenCounts: readonly number[],
+): { language_shares: Record<string, number>; und_count: number } {
+  const tokens = new Map<string, number>();
+  let total = 0;
+  let undCount = 0;
+  results.forEach((result, index) => {
+    if (result.language === UND) {
+      undCount += 1;
+      return;
+    }
+    const count = Math.max(0, Math.trunc(tokenCounts[index] ?? 0));
+    tokens.set(result.language, (tokens.get(result.language) ?? 0) + count);
+    total += count;
+  });
+  const shares: Record<string, number> = {};
+  if (total > 0) for (const code of [...tokens.keys()].sort()) shares[code] = Math.round(((tokens.get(code) ?? 0) / total) * 100) / 100;
+  return { language_shares: shares, und_count: undCount };
 }
 
 /**
@@ -53,6 +75,9 @@ async function run(ctx: StageContext): Promise<StageOutcome> {
     if (documentLanguage !== null) await ctx.writer.setFields(document.id, { language: documentLanguage });
   }
   ctx.work.documentLanguage = documentLanguage;
+  // D-55: the language is known before any lexical text is built; one resolve per document (plan 04.2-19).
+  const lexical = await ingestLexical(ctx);
+  const stamps = lexicalStampMetadata(lexical);
 
   const rowSerialization = ctx.config.tableRowSerialization === true;
   const primary = rowSerialization ? getLanguageSettings().primary : null;
@@ -70,11 +95,11 @@ async function run(ctx: StageContext): Promise<StageOutcome> {
       metadata: draft.metadata,
       documentFilename: filename,
       ...(separator !== null ? { tableRowSeparator: separator } : {}),
-    });
+    }, lexical.resolved.options);
     draft.content_hash = contentHash(draft.content);
     draft.metadata = {
       ...(enrichChunkWithURLs(draft.content, draft.metadata) as Record<string, unknown>),
-      lexical_version: LEXICAL_VERSION,
+      ...stamps,
     };
   }
 

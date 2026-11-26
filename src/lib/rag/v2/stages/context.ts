@@ -14,6 +14,9 @@ import { mergeAdjacent, type AdjacentChunk } from '../../context/merge-adjacent'
 import { getRagDeps } from '../../deps';
 import { countTokens } from '../../ingest/text/tokens';
 import type { RpcClient } from '../../backend/supabase-rpc';
+import type { VersionScope } from '../../backend/types';
+import { versionLabelLine, type VersionLabelInfo } from '../../context/version-label';
+import { scopeKey, type TenantScope } from '../../tenant/scope';
 import { expandParents, selectWithParents, type ParentBudgetCandidate, type ParentSelection } from '../../parents/expand';
 import type { RerankSpan } from '../../rerank/types';
 import type { FusedHit } from '../../fusion/rrf';
@@ -56,6 +59,47 @@ export interface ContextStagesInput {
   rerank?: ContextRerankInput;
   /** Defaults to RagDeps.securityConfig(). */
   security?: SecurityConfig;
+  /** D-13: the search stage's effective version scope; absent or current renders today's context. */
+  versionScope?: VersionScope;
+  /** Picks the version line's language; absent falls back to English. */
+  queryLanguage?: string | null;
+}
+
+/** D-13: the assemble stage detail when the version lookup failed and the labels were skipped. */
+export const VERSION_LABELS_UNAVAILABLE = 'version_labels_unavailable';
+
+interface DocumentVersionRow {
+  document_id: string;
+  version: number;
+  is_current: boolean;
+  effective_from: string | null;
+  effective_to: string | null;
+}
+
+function isoDate(value: unknown): string | null {
+  if (typeof value !== 'string' || value.length < 10) return null;
+  return value.slice(0, 10);
+}
+
+/** One batched rag_document_versions call for the request's documents (0855; tenant asserted in SQL). */
+async function fetchDocumentVersions(scope: TenantScope, documentIds: string[], signal: AbortSignal): Promise<Map<string, VersionLabelInfo>> {
+  const admin = getRagDeps().adminClient() as RpcClient | null;
+  if (!admin) throw new Error('[RAG Context] admin client unavailable');
+  const { data, error } = await admin
+    .rpc('rag_document_versions', { p_tenant_key: scopeKey(scope), p_document_ids: documentIds })
+    .abortSignal(signal);
+  if (error) throw new Error(`[RAG Context] rag_document_versions failed (${error.code ?? 'unknown'})`);
+  const out = new Map<string, VersionLabelInfo>();
+  for (const row of (data ?? []) as DocumentVersionRow[]) {
+    if (typeof row.document_id !== 'string' || typeof row.version !== 'number') continue;
+    out.set(row.document_id, {
+      version: row.version,
+      isCurrent: row.is_current === true,
+      effectiveFrom: isoDate(row.effective_from),
+      effectiveTo: isoDate(row.effective_to),
+    });
+  }
+  return out;
 }
 
 export interface ContextStagesOutput {
@@ -78,6 +122,7 @@ function assemblyRowsFromHits(hits: FusedHit[]): AssemblyRows {
         created_at: hit.document.createdAt,
         content: hit.document.contentPreview || null,
         metadata: hit.document.metadata,
+        ...(typeof hit.documentVersion === 'number' ? { version: hit.documentVersion } : {}),
       });
     }
     chunkMetadata.set(hit.chunkId, hit.metadata);
@@ -216,6 +261,7 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
     // With tagging on, buildContext renders the final blocks through wrapDocuments on every render (assemble, compress, label).
     ...(security.contextTagging ? { contextTagging: true } : {}),
     ...(injectionMarks ? { injectionMarks } : {}),
+    ...(versionLabels ? { versionLabels } : {}),
   });
 
   const render = (list: Candidate[], groupOrder: string[], blocks?: BlockShape): AssembleOutput<Candidate> => {
@@ -226,6 +272,9 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
   const filenameOf = (documentId: string) => rows.documents.get(documentId)?.filename ?? 'Unknown Document';
 
   let injectionMarks: InjectionMarks | null = null;
+  let versionLabels: Map<string, string> | null = null;
+  let versionInfo: Map<string, VersionLabelInfo> | null = null;
+  let versionLookupFailed = false;
   let budgetInput: ParentBudgetCandidate[] = candidates.map((candidate, index) => ({
     rank: index + 1,
     chunk_id: candidate.chunk_id,
@@ -318,6 +367,21 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
     }
   }
 
+  // D-13: only a non-current scope looks versions up; a current request makes no call and renders today's context.
+  if (ctx.versionScope !== undefined && ctx.versionScope !== 'current') {
+    const documentIds = [...new Set(candidates.map((candidate) => candidate.document_id))].sort();
+    try {
+      if (!input.scope) throw new Error('[RAG Context] version labels need a tenant scope');
+      versionInfo = documentIds.length > 0 ? await fetchDocumentVersions(input.scope, documentIds, signal) : new Map();
+      versionLabels = new Map([...versionInfo].map(([documentId, info]) => [documentId, versionLabelLine(info, ctx.queryLanguage)]));
+    } catch (error) {
+      if (signal.aborted) throw error;
+      versionLookupFailed = true;
+      versionInfo = null;
+      versionLabels = null;
+    }
+  }
+
   const assembled = await runStage(
     spec('assemble', 'skip'),
     signal,
@@ -405,6 +469,7 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
         groups: value.groups,
         ...(resultCap !== null ? { max_results: resultCap } : {}),
       }),
+      ...(versionLookupFailed ? { status: () => 'degraded' as const, detail: () => VERSION_LABELS_UNAVAILABLE } : {}),
     },
   );
 
@@ -462,7 +527,25 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
 
   // Labelling is the last context step: it renders the final selection once more, in the same order, with the labels.
   const labeler = input.citationLabeler;
-  if (!labeler) return { assembly: final.output, candidates, ...injectionOut };
+  if (!labeler) return { assembly: withVersionFields(final.output, versionInfo), candidates, ...injectionOut };
   const labelled = render(final.selected, base.groupOrder, { runs: base.blockRuns, chunkIds: base.blockChunkIds, labeler });
-  return { assembly: { ...final.output, context: labelled.context, blocks: labelled.blocks }, candidates, ...injectionOut };
+  return {
+    assembly: withVersionFields({ ...final.output, context: labelled.context, blocks: labelled.blocks }, versionInfo),
+    candidates,
+    ...injectionOut,
+  };
+}
+
+/** D-13: version fields on sources only for a non-current scope with a successful lookup; dates are the document's own. */
+function withVersionFields(assembly: AssembleOutput<Candidate>, versions: Map<string, VersionLabelInfo> | null): AssembleOutput<Candidate> {
+  if (!versions || versions.size === 0) return assembly;
+  return {
+    ...assembly,
+    usedDocuments: assembly.usedDocuments.map((doc) => {
+      const info = versions.get(doc.id);
+      return info
+        ? { ...doc, version: info.version, isCurrent: info.isCurrent, effectiveFrom: info.effectiveFrom, effectiveTo: info.effectiveTo }
+        : doc;
+    }),
+  };
 }

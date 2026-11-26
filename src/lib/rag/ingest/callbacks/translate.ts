@@ -1,6 +1,7 @@
 import type { IngestionJob, TranslateCallbackRequest, TranslateCallbackResponse } from '@/lib/rag-eval/contracts.generated';
 import { getIngestDeps } from '../deps';
 import { advanceJob, failJob, getJobInternal } from '../ledger';
+import { finishTranslationTrace } from '../trace';
 import { translateDocumentChunks, type TranslationRunResult } from '../translate/produce';
 import { isTerminal, leaseHolds, mapError, refuse, type CallbackResult } from './common';
 
@@ -61,6 +62,7 @@ export async function handleTranslateCallback(jobId: string, body: TranslateCall
       if (NOTHING_TO_DO.has(result.reason)) return await finish(job, workerId, { skipped: result.reason }, timingMs, options.signal);
       return answer(workerId, { outcome: 'retry', reason: result.reason });
     }
+    finishTranslationTrace({ tenantKey: job.tenant_key, documentId: job.document_id, translated: result.translated, gaps: result.gaps });
     const progress = { translated: result.translated, gaps: result.gaps, remaining: result.remaining };
     if (result.remaining === 0) return await finish(job, workerId, progress, timingMs, options.signal);
     if (result.stopped === 'time_budget') {

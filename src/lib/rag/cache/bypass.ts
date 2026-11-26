@@ -1,6 +1,7 @@
 import { extractProtectedTokens } from '../query/protected';
 import lexicon from '../query/rewrite-gate.lexicon.json';
 import { matchRelativeTime, type GateResult } from '../query/rewrite-gate';
+import type { VersionScope } from '../backend/types';
 import type { Profile, RagMode, RetrievalOptions, RetrievalStatus } from '../types';
 import type { GroundednessLabel } from './types';
 
@@ -11,6 +12,7 @@ export type CheckBypassReason =
   | 'skip_retrieval'
   | 'document_refs'
   | 'retrieval_options'
+  | 'version_scope'
   | 'tools'
   | 'protected_tokens'
   | 'relative_time'
@@ -47,6 +49,8 @@ export interface TurnFacts {
   documentRefCount: number;
   retrievalOptions?: CacheRetrievalOptions;
   defaultMaxResults: number;
+  /** D-14, D-47: the effective version scope; anything but current (or absent) is neither checked nor stored. */
+  versionScope?: VersionScope;
 }
 
 export interface StoreTurnFacts extends TurnFacts {
@@ -125,6 +129,7 @@ function checkRules(facts: TurnFacts): CheckBypassReason | null {
   if (facts.gate.skipRetrieval === true) return 'skip_retrieval';
   if (!(facts.documentRefCount === 0)) return 'document_refs';
   if (!retrievalOptionsAreDefault(facts.retrievalOptions, facts.defaultMaxResults)) return 'retrieval_options';
+  if (facts.versionScope !== undefined && facts.versionScope !== 'current') return 'version_scope';
   if (facts.webSearch || facts.mcpTools) return 'tools';
   if (hasProtectedTokens(facts)) return 'protected_tokens';
   if (hasRelativeTime(facts)) return 'relative_time';

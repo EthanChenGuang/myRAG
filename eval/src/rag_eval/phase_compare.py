@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
-from rag_sidecar.contracts.baseline import Baseline, GateOffender, GateResult, NoiseConfig
+from rag_sidecar.contracts.baseline import Baseline, GateOffender, GateResult, NoiseConfig, PairedStat
 from rag_sidecar.contracts.eval_run import RagTrace
 from rag_sidecar.contracts.golden import GoldenItem
 from rag_sidecar.contracts.report import EvalReport, InjectionReport, ItemResult, SliceMetrics
@@ -24,7 +24,9 @@ from rag_eval.calibrate.refusal import IMAGE_FLOOR, CalibrationResult, CrossComp
 from rag_eval.gate import evaluate_gate
 from rag_eval.golden_io import load_golden
 from rag_eval.harness_runner import HARNESS_SCRIPT, TAIL_LINES, HarnessError, Spawner, _tail, default_spawner
-from rag_eval.metrics import CLAUSE_TAG, CROSS_LINGUAL
+from rag_eval.metrics import CLAUSE_TAG, CROSS_LINGUAL, language_pair_key
+from rag_eval.native_review import counts_in_gated_slices
+from rag_eval.paired import _stat, is_gated_slice, item_metrics
 from rag_eval.paths import REPO_ROOT, repo_relative, resolve_cli_path
 from rag_eval.profile_compare import baseline_from_report
 from rag_eval.sweep.chunking import CLAUSE_SLICE, GENERAL_DOC_TYPE, LEGACY_ID, _profiles_for, ingest_doc_types, parse_presets
@@ -1820,6 +1822,421 @@ def render_switch_markdown(c: SwitchComparison) -> str:
     return "\n".join(lines) + "\n"
 
 
+# ---------- schema 3: per-switch arms (Phase 3.2 D-46)
+#
+# Each arm is two runs over the same fixture that differ only in one switch (off and on). The arm is judged on the slices it is meant
+# to move, by the paired difference on in against off, and fails when its on-run drops any gated slice beyond the noise band.
+
+ARM_METRICS: tuple[str, ...] = ("recall_at_5", "recall_at_10", "mrr", "correct_refusal_rate", "false_refusal_rate")
+ARM_JSON_NAME = "comparison.json"
+ARM_MARKDOWN_NAME = "comparison.md"
+ARM_SLICE_KINDS = ("overall", "language:", "category:", "pair:")
+FIXTURE_EMBEDDER_PREFIX = "fixture"
+ARM_WIRING_PROOF = (
+    "wiring proof: fixture corpus, fixture embedder and fakes; the numbers prove each comparison runs end to end, not that a switch "
+    "helps or hurts, so no recommendation is given"
+)
+ARM_NOT_RUN = "the arm has no off and on runs"
+ArmStatus = Literal["passed", "failed", "not_run"]
+ArmSide = Literal["ingestion", "query"]
+ArmRunner = Literal["smoke", "translation"]
+Direction = Literal["up", "down", "none", "no data"]
+
+
+class ArmSpec(_Model):
+    name: str = Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")
+    switch: str
+    off: str = Field(min_length=1)
+    on: str = Field(min_length=1)
+    side: ArmSide
+    fixture_mode: FixtureMode = "ingest"
+    runner: ArmRunner = "smoke"
+    judged: list[str] = Field(min_length=1)
+    optional: bool = False
+    description: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _arm(self) -> ArmSpec:
+        _validate_switches(self.name, {self.switch: self.on}, "switch")
+        if self.off == self.on:
+            raise ValueError(f"arm {self.name}: off and on are the same value")
+        if len(set(self.judged)) != len(self.judged):
+            raise ValueError(f"arm {self.name}: judged slices must be unique")
+        return self
+
+
+class ArmComparisonSpec(_Model):
+    schema_version: Literal[3]
+    phase: str = Field(pattern=r"^\d{2}(\.\d+)*$")
+    noise: str
+    live_checks: str = Field(pattern=r"^\d{2}(\.\d+)*-\d{2,3}$")
+    item_groups: dict[str, str] = Field(default_factory=dict)
+    arms: list[ArmSpec] = Field(min_length=1)
+    notes: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _references(self) -> ArmComparisonSpec:
+        names = [arm.name for arm in self.arms]
+        if len(names) != len(set(names)):
+            raise ValueError("arm names must be unique")
+        for group, pattern in self.item_groups.items():
+            if not CATEGORY_NAME.match(group) or f"{group}:" in ARM_SLICE_KINDS:
+                raise ValueError(f"item group {group!r} must be a lowercase name that is not a slice kind")
+            try:
+                re.compile(pattern)
+            except re.error as exc:
+                raise ValueError(f"item group {group}: {exc}") from exc
+        kinds = (*ARM_SLICE_KINDS, *(f"{group}:" for group in self.item_groups))
+        for arm in self.arms:
+            for judged in arm.judged:
+                if judged != "overall" and not any(judged.startswith(kind) for kind in kinds if kind != "overall"):
+                    raise ValueError(f"arm {arm.name}: judged slice {judged!r} is not one of {', '.join(kinds)}")
+        return self
+
+
+class ArmSliceRow(_Model):
+    slice: str
+    metric: str
+    n: int = Field(ge=0)
+    off: float | None
+    on: float | None
+    paired: PairedStat
+    band: float
+    beyond_band: bool
+    direction: Direction
+
+
+class ArmRunIds(_Model):
+    off: str | None
+    on: str | None
+
+
+class ArmResult(_Model):
+    name: str
+    switch: str
+    off_value: str
+    on_value: str
+    side: ArmSide
+    fixture_mode: FixtureMode
+    optional: bool
+    status: ArmStatus
+    judged_slices: list[str]
+    rows: list[ArmSliceRow]
+    failures: list[str]
+    wiring_proof: bool
+    recommendation: str | None
+    notes: list[str] = Field(default_factory=list)
+    runs: ArmRunIds | None = None
+    gated_rows: list[ArmSliceRow] = Field(default_factory=list)
+
+
+class ArmComparison(_Model):
+    schema_version: Literal[3] = 3
+    phase: str
+    passed: bool
+    wiring_proof: bool
+    label: str | None
+    band: float
+    live_checks: str
+    arms: list[ArmResult]
+    notes: list[str]
+
+
+@dataclass(frozen=True)
+class ArmRun:
+    """One run of an arm: its scored items and the embedder that produced them."""
+
+    items: list[ItemResult]
+    embedder_id: str | None = None
+    run_id: str | None = None
+
+
+def _arm_members(items: list[ItemResult], groups: Mapping[str, re.Pattern[str]]) -> dict[str, list[ItemResult]]:
+    members: dict[str, list[ItemResult]] = {"overall": list(items)}
+    for item in items:
+        members.setdefault(f"language:{item.language}", []).append(item)
+        members.setdefault(f"category:{item.category}", []).append(item)
+        if item.category == CROSS_LINGUAL and item.evidence_language is not None:
+            members.setdefault(f"pair:{language_pair_key(item.language, item.evidence_language)}", []).append(item)
+        for group, pattern in groups.items():
+            if pattern.search(item.item_id):
+                members.setdefault(f"{group}:{item.language}", []).append(item)
+    return members
+
+
+def _judged(slice_name: str, judged: list[str]) -> bool:
+    return any(slice_name == entry or (entry.endswith(":") and slice_name.startswith(entry)) for entry in judged)
+
+
+def _arm_mean(values: list[float]) -> float | None:
+    return round(math.fsum(values) / len(values), 6) if values else None
+
+
+def _paired_cell(members: list[ItemResult], on_by_id: Mapping[str, ItemResult], metric: str) -> tuple[list[float], list[float], list[float]]:
+    offs: list[float] = []
+    ons: list[float] = []
+    differences: list[float] = []
+    for item in members:
+        other = on_by_id.get(item.item_id)
+        if other is None:
+            continue
+        off_value = item_metrics(item)[metric]
+        on_value = item_metrics(other)[metric]
+        if off_value is None or on_value is None:
+            continue
+        offs.append(off_value)
+        ons.append(on_value)
+        differences.append(on_value - off_value)
+    return offs, ons, differences
+
+
+def _direction(stat: PairedStat, higher_is_better: bool) -> Direction:
+    if stat.n == 0 or stat.mean_d is None:
+        return "no data"
+    if stat.mean_d == 0:
+        return "none"
+    better = stat.mean_d > 0 if higher_is_better else stat.mean_d < 0
+    return "up" if better else "down"
+
+
+def _rounded(stat: PairedStat) -> PairedStat:
+    return stat if stat.mean_d is None else stat.model_copy(update={"mean_d": round(stat.mean_d, 6)})
+
+
+def _arm_recommendation(rows: list[ArmSliceRow], failures: list[str]) -> str:
+    if failures:
+        return "Keep the switch off: its on-run drops a gated slice beyond the noise band (" + "; ".join(failures) + ")."
+    gains = sorted({f"{row.slice}:{row.metric}" for row in rows if row.beyond_band and row.direction == "up"})
+    if gains:
+        return "The on-run improves beyond the noise band on " + ", ".join(gains) + " with no gated slice dropping."
+    return "No judged slice moves beyond the noise band; the switch shows no measurable effect on these items."
+
+
+def compare_arm(
+    arm: ArmSpec,
+    off: ArmRun | None,
+    on: ArmRun | None,
+    noise: NoiseConfig,
+    *,
+    item_groups: Mapping[str, str] | None = None,
+) -> ArmResult:
+    """Paired on-minus-off differences on the arm's judged slices, and a failure for every gated slice the on-run drops beyond the band.
+
+    Judged rows use every item of the slice (a report-only item is shown, never gated); the drop check uses only the items that count
+    in gated slices (native_review) and the gated slice prefixes of the noise config. The band is the noise floor: an arm compares two
+    single runs, so there is no run-to-run spread to widen it."""
+    base = {
+        "name": arm.name,
+        "switch": arm.switch,
+        "off_value": arm.off,
+        "on_value": arm.on,
+        "side": arm.side,
+        "fixture_mode": arm.fixture_mode,
+        "optional": arm.optional,
+        "judged_slices": list(arm.judged),
+    }
+    if off is None or on is None:
+        if arm.optional:
+            return ArmResult(**base, status="not_run", rows=[], failures=[], wiring_proof=False, recommendation=None, notes=["not run"])
+        return ArmResult(**base, status="failed", rows=[], failures=[ARM_NOT_RUN], wiring_proof=False, recommendation=None)
+    band = noise.floor
+    groups = {name: re.compile(pattern) for name, pattern in (item_groups or {}).items()}
+    wiring_proof = any(
+        run.embedder_id is not None and run.embedder_id.startswith(FIXTURE_EMBEDDER_PREFIX) for run in (off, on)
+    )
+    on_by_id = {item.item_id: item for item in on.items}
+    off_ids = {item.item_id for item in off.items}
+    notes: list[str] = []
+    missing = sorted(off_ids - set(on_by_id))
+    extra = sorted(set(on_by_id) - off_ids)
+    if missing or extra:
+        notes.append(f"{len(missing)} item(s) only in the off-run and {len(extra)} only in the on-run are left out of every pair")
+
+    rows: list[ArmSliceRow] = []
+    members = _arm_members(off.items, groups)
+    for slice_name in sorted(members):
+        if not _judged(slice_name, arm.judged):
+            continue
+        for metric in ARM_METRICS:
+            offs, ons, differences = _paired_cell(members[slice_name], on_by_id, metric)
+            if not differences:
+                continue
+            stat = _rounded(_stat(differences))
+            higher = noise.metrics.get(metric, "higher") == "higher"
+            rows.append(
+                ArmSliceRow(
+                    slice=slice_name,
+                    metric=metric,
+                    n=len(differences),
+                    off=_arm_mean(offs),
+                    on=_arm_mean(ons),
+                    paired=stat,
+                    band=band,
+                    beyond_band=stat.mean_d is not None and abs(stat.mean_d) > band,
+                    direction=_direction(stat, higher),
+                )
+            )
+    judged_seen = {row.slice for row in rows}
+    for judged in arm.judged:
+        if not any(_judged(name, [judged]) for name in judged_seen):
+            notes.append(f"judged slice {judged} has no paired item in these runs")
+
+    failures: list[str] = []
+    gated_rows: list[ArmSliceRow] = []
+    counting = [item for item in off.items if counts_in_gated_slices(item)]
+    counting_on = {item.item_id: item for item in on.items if counts_in_gated_slices(item)}
+    for slice_name, slice_items in sorted(_arm_members(counting, {}).items()):
+        if not is_gated_slice(slice_name, noise):
+            continue
+        for metric in ARM_METRICS:
+            offs, ons, differences = _paired_cell(slice_items, counting_on, metric)
+            if not differences:
+                continue
+            mean_d = math.fsum(differences) / len(differences)
+            higher = noise.metrics.get(metric, "higher") == "higher"
+            stat = _rounded(_stat(differences))
+            gated_rows.append(
+                ArmSliceRow(
+                    slice=slice_name,
+                    metric=metric,
+                    n=len(differences),
+                    off=_arm_mean(offs),
+                    on=_arm_mean(ons),
+                    paired=stat,
+                    band=band,
+                    beyond_band=abs(mean_d) > band + RATE_TOLERANCE,
+                    direction=_direction(stat, higher),
+                )
+            )
+            drop = -mean_d if higher else mean_d
+            if drop > band + RATE_TOLERANCE:
+                failures.append(f"{slice_name}:{metric} dropped by {drop:.4f} (band {band:g}, n={len(differences)})")
+    return ArmResult(
+        **base,
+        status="failed" if failures else "passed",
+        rows=rows,
+        failures=failures,
+        wiring_proof=wiring_proof,
+        recommendation=None if wiring_proof else _arm_recommendation(rows, failures),
+        notes=notes,
+        runs=ArmRunIds(off=off.run_id, on=on.run_id),
+        gated_rows=gated_rows,
+    )
+
+
+def build_arm_comparison(
+    spec: ArmComparisonSpec, runs: Mapping[str, tuple[ArmRun, ArmRun]], noise: NoiseConfig
+) -> ArmComparison:
+    unknown = sorted(set(runs) - {arm.name for arm in spec.arms})
+    if unknown:
+        raise ComparisonError(f"runs name unknown arms: {', '.join(unknown)}")
+    results = [
+        compare_arm(arm, *(runs.get(arm.name) or (None, None)), noise, item_groups=spec.item_groups) for arm in spec.arms
+    ]
+    ran = [result for result in results if result.status != "not_run"]
+    wiring_proof = any(result.wiring_proof for result in ran)
+    notes = [
+        f"Paired difference is the on-run minus the off-run, item by item; the band is the noise floor ({noise.floor:g}).",
+        f"Real observations come from the live checks of plan {spec.live_checks}; a fixture comparison is never a reason to flip a default.",
+        *spec.notes,
+    ]
+    return ArmComparison(
+        phase=spec.phase,
+        passed=all(result.status != "failed" for result in results),
+        wiring_proof=wiring_proof,
+        label=ARM_WIRING_PROOF if wiring_proof else None,
+        band=noise.floor,
+        live_checks=spec.live_checks,
+        arms=results,
+        notes=notes,
+    )
+
+
+def _arm_status(status: ArmStatus) -> str:
+    return {"passed": "PASS", "failed": "FAIL", "not_run": "not run"}[status]
+
+
+def render_arm_markdown(c: ArmComparison) -> str:
+    lines = [f"# Phase {c.phase} per-switch comparison", ""]
+    if c.label:
+        lines += [f"> {c.label}", ""]
+    lines += [f"Result: {_verdict(c.passed)}", "", "## Notes", "", *[f"- {note}" for note in c.notes], "", "## Arms"]
+    for arm in c.arms:
+        lines += [
+            "",
+            f"### {arm.name}",
+            "",
+            f"Switch: `{arm.switch}` {arm.off_value} (off) against {arm.on_value} (on); {arm.side}-side, fixture mode {arm.fixture_mode}"
+            f"{', optional' if arm.optional else ''}. Result: {_arm_status(arm.status)}.",
+            "",
+            f"Judged on: {', '.join(arm.judged_slices)}.",
+            "",
+        ]
+        if arm.status == "not_run":
+            lines += ["This optional arm was not run.", ""]
+            continue
+        if arm.failures == [ARM_NOT_RUN]:
+            lines += ["This required arm did not run, so it fails the comparison.", ""]
+            continue
+        if arm.wiring_proof:
+            lines += ["Wiring proof only: no recommendation.", ""]
+        if arm.rows:
+            lines += ["| Slice | Metric | n | Off | On | Paired diff | 95% CI | Beyond band | Direction |", "|---|---|---:|---:|---:|---:|---|---|---|"]
+            for row in arm.rows:
+                interval = f"[{_num(row.paired.ci_low)}, {_num(row.paired.ci_high)}]"
+                lines.append(
+                    f"| {row.slice} | {row.metric} | {row.n} | {_num(row.off)} | {_num(row.on)} | {_num(row.paired.mean_d)} | {interval} | "
+                    f"{'yes' if row.beyond_band else 'no'} | {row.direction} |"
+                )
+            lines.append("")
+        else:
+            lines += ["No judged slice had a paired item.", ""]
+        if arm.failures:
+            lines += ["Gated slices that dropped beyond the band (this arm fails its comparison):", "", *[f"- {failure}" for failure in arm.failures], ""]
+        else:
+            lines += ["No gated slice dropped beyond the band.", ""]
+        if arm.recommendation:
+            lines += [f"Recommendation: {arm.recommendation}", ""]
+        lines += [f"- {note}" for note in arm.notes]
+        if arm.notes:
+            lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def load_arm_run(path: Path) -> ArmRun:
+    raw = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(raw, dict) or not isinstance(raw.get("items"), list):
+        raise ComparisonError(f"{path}: not an eval report (no items)")
+    embedder = raw.get("embedder_id")
+    run_id = raw.get("run_id")
+    return ArmRun(
+        items=[ItemResult.model_validate(item) for item in raw["items"]],
+        embedder_id=embedder if isinstance(embedder, str) else None,
+        run_id=run_id if isinstance(run_id, str) else None,
+    )
+
+
+def run_arm_comparison(spec: ArmComparisonSpec | Path, runs_manifest: Path, out: Path) -> ArmComparison:
+    """runs_manifest: {"<arm>": {"off": "<report.json>", "on": "<report.json>"}}; an arm left out is not run."""
+    if not isinstance(spec, ArmComparisonSpec):
+        spec = _read_model(ArmComparisonSpec, str(spec), "comparison spec")
+    noise = _read_model(NoiseConfig, spec.noise, "noise config")
+    manifest = _read_json(str(runs_manifest), "arm runs")
+    runs: dict[str, tuple[ArmRun, ArmRun]] = {}
+    for name, entry in manifest.items():
+        if not isinstance(entry, dict) or not isinstance(entry.get("off"), str) or not isinstance(entry.get("on"), str):
+            raise ComparisonError(f"arm runs: {name} needs off and on report paths")
+        try:
+            runs[name] = (load_arm_run(resolve_cli_path(entry["off"])), load_arm_run(resolve_cli_path(entry["on"])))
+        except (OSError, ValueError, ValidationError) as exc:
+            raise ComparisonError(f"arm runs: {name}: {exc}") from exc
+    comparison = build_arm_comparison(spec, runs, noise)
+    out_dir = Path(out)
+    _write_text(out_dir / ARM_JSON_NAME, comparison.model_dump_json(indent=2) + "\n")
+    _write_text(out_dir / ARM_MARKDOWN_NAME, render_arm_markdown(comparison))
+    return comparison
+
+
 def _write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")
@@ -1837,14 +2254,19 @@ def _schema_version(path: Path) -> int | None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        prog="rag_eval.phase_compare", description="Phase comparison against the baseline (schema 1: Phase 4 D-28; schema 2: switch runs)"
+        prog="rag_eval.phase_compare", description="Phase comparison against the baseline (schema 1: Phase 4 D-28; schema 2: switch runs; schema 3: per-switch arms)"
     )
     parser.add_argument("--spec", required=True, type=Path)
     parser.add_argument("--out", required=True, type=Path)
+    parser.add_argument("--runs", type=Path, help="schema 3 only: JSON mapping each arm to its off and on report.json")
     args = parser.parse_args(argv)
     try:
         spec_path = resolve_cli_path(args.spec)
-        if _schema_version(spec_path) == 2:
+        if _schema_version(spec_path) == 3:
+            if args.runs is None:
+                raise ComparisonError("a schema-3 spec needs --runs")
+            result = run_arm_comparison(spec_path, resolve_cli_path(args.runs), resolve_cli_path(args.out))
+        elif _schema_version(spec_path) == 2:
             result = run_switch_comparison(spec_path, resolve_cli_path(args.out), runner=default_runner, commands=default_env_command_runner)
         else:
             result = run_phase_comparison(spec_path, resolve_cli_path(args.out), runner=default_runner, commands=default_command_runner)

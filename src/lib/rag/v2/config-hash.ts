@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { RetrievalParams } from '@/lib/rag-eval/contracts.generated';
+import type { RetrievalParams, TerminologyParams } from '@/lib/rag-eval/contracts.generated';
 import type { IterativeScanMode, RerankerKind, RerankTier } from '../config';
 import type { InjectionCheckMode, SecurityConfig, ToolResultGuardMode } from '../security/config';
 import { detectorsConfigVersion } from '../security/detectors';
@@ -77,6 +77,30 @@ export interface RetrievalConfigHashQueryLayer {
   transforms: Record<string, boolean>;
 }
 
+/** D-34: only the entries of the Phase 4.2 switches that are on; absent while every switch is off. */
+export interface RetrievalConfigHashTuning {
+  table_lookup?: { min_cells: number; limit: number; weight: number };
+  diversity?: { mode: 'collapse' } | { mode: 'mmr'; mmr_lambda: number; mmr_window_factor: number };
+  version_scope?: true;
+  identifier_filter?: true;
+  dup_clusters?: true;
+  identifier_index?: true;
+}
+
+/** D-21: the dictionary a request was retrieved with; present only while the terminology stage is enabled for the request. */
+export interface RetrievalConfigHashTerminology {
+  /** The effective version (s<n> or s<n>.w<m>) when the stage ended ok; TERMINOLOGY_UNAVAILABLE when it was skipped. */
+  version: string;
+  /** SHA-256 over the canonical TerminologyParams, config_hash and provenance left out. */
+  params_sha256: string;
+  dense: boolean;
+}
+
+/** The terminology stage as the hash sees it: disabled for the request, or enabled with the version it ended with (null: skipped). */
+export type TerminologyHashStage = { enabled: false } | { enabled: true; version: string | null };
+
+export const TERMINOLOGY_UNAVAILABLE = 'terminology:unavailable';
+
 export interface RetrievalConfigHashInput {
   backendId: string;
   embeddingProfileId: string;
@@ -99,6 +123,10 @@ export interface RetrievalConfigHashInput {
   queryLayer?: RetrievalConfigHashQueryLayer | null;
   /** XLG-04: present only when translation legs run for the request (RAG_DOC_TRANSLATION on and the tenant has translations). */
   docTranslation?: { switch: 'on'; languages: string[]; weight: number } | null;
+  /** D-34: present only while a Phase 4.2 query or index switch is on (tuningHashComponent). */
+  tuning?: RetrievalConfigHashTuning | null;
+  /** D-21: present only while the terminology stage is enabled for the request (terminologyHashBlock). */
+  terminology?: RetrievalConfigHashTerminology | null;
 }
 
 function sortKeys(value: unknown): unknown {
@@ -123,6 +151,24 @@ function paramsForHash(params: RetrievalParams): Record<string, unknown> {
   return rest as Record<string, unknown>;
 }
 
+/**
+ * D-21: the only builder of the terminology block. Undefined when the stage is disabled for the request (switch off, or
+ * terminology among the config's or the eval request's disabled stages), so the hash equals the pre-terminology value.
+ */
+export function terminologyHashBlock(
+  stage: TerminologyHashStage,
+  params: TerminologyParams,
+  dense: boolean,
+): RetrievalConfigHashTerminology | undefined {
+  if (!stage.enabled) return undefined;
+  const { config_hash: _hash, provenance: _prov, ...rest } = params;
+  return {
+    version: stage.version ?? TERMINOLOGY_UNAVAILABLE,
+    params_sha256: createHash('sha256').update(canonicalJson(rest), 'utf8').digest('hex'),
+    dense,
+  };
+}
+
 function chunkingForHash(profiles: Record<string, string> | null): unknown {
   if (profiles === null) return 'chunking:unavailable';
   return profiles;
@@ -145,6 +191,8 @@ function buildPayload(input: RetrievalConfigHashInput): Record<string, unknown> 
     ...(input.effectiveOn ? { effective_on: input.effectiveOn } : {}),
     ...(input.queryLayer ? { query_layer: input.queryLayer } : {}),
     ...(input.docTranslation ? { doc_translation: input.docTranslation } : {}),
+    ...(input.tuning && Object.keys(input.tuning).length > 0 ? { tuning: input.tuning } : {}),
+    ...(input.terminology ? { terminology: input.terminology } : {}),
   };
 }
 

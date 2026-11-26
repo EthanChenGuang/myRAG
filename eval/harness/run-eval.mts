@@ -259,6 +259,8 @@ export async function prepareInProcessEval(options: {
   ingestBuildEnv?: Record<string, string>;
   /** The run's requests set options.query_layer=true (D-38); with the env overlay it decides the fake query LLM install (D-39). */
   queryLayer?: boolean;
+  /** D-27: dictionary rows written into the fixture database it builds (ignored with ingestFixture, which the caller seeds). */
+  terminologySeed?: readonly import('./pglite-supabase.mts').TerminologySeedRow[];
 }): Promise<InProcessEval> {
   const {
     corpusDir,
@@ -301,6 +303,7 @@ export async function prepareInProcessEval(options: {
       ...(tableSplit ? { tableSplit: true } : {}),
       ...(tableSplit && options.tableSplitDocType ? { tableSplitDocType: options.tableSplitDocType } : {}),
       ...(options.ingestBuildEnv ? { ingestEnv: options.ingestBuildEnv } : {}),
+      ...(options.terminologySeed?.length ? { terminologySeed: options.terminologySeed } : {}),
     }));
   if (tableSplit && !fixture.tableSplitTenants) {
     if (!ingestFixture) await fixture.db.close().catch(() => undefined);

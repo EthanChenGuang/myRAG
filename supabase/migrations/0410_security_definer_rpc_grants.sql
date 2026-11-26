@@ -676,6 +676,58 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_write_profile_chunks(uuid, text, text, jsonb, jsonb, jsonb, boolean, integer) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_write_profile_chunks(uuid, text, text, jsonb, jsonb, jsonb, boolean, integer) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_term_apply_import(uuid, text, jsonb, text, bigint)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_term_apply_import(uuid, text, jsonb, text, bigint) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_term_apply_import(uuid, text, jsonb, text, bigint) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_term_delete_entry(uuid, text, uuid, bigint)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_term_delete_entry(uuid, text, uuid, bigint) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_term_delete_entry(uuid, text, uuid, bigint) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_term_list_audit(uuid, text, integer, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_term_list_audit(uuid, text, integer, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_term_list_audit(uuid, text, integer, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_term_list_entries(uuid, text, integer, integer, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_term_list_entries(uuid, text, integer, integer, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_term_list_entries(uuid, text, integer, integer, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_term_set_suppression(uuid, text, uuid, boolean, bigint)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_term_set_suppression(uuid, text, uuid, boolean, bigint) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_term_set_suppression(uuid, text, uuid, boolean, bigint) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_term_upsert_entry(uuid, text, jsonb, bigint)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_term_upsert_entry(uuid, text, jsonb, bigint) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_term_upsert_entry(uuid, text, jsonb, bigint) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_term_corpus_df(text, text[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_term_corpus_df(text, text[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_term_corpus_df(text, text[]) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_term_decide_candidate(uuid, uuid, text, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_term_decide_candidate(uuid, uuid, text, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_term_decide_candidate(uuid, uuid, text, uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_term_list_candidates(uuid, text, integer, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_term_list_candidates(uuid, text, integer, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_term_list_candidates(uuid, text, integer, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_term_purge_misses(integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_term_purge_misses(integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_term_purge_misses(integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_term_read_misses(text, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_term_read_misses(text, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_term_read_misses(text, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_term_record_miss(text, jsonb)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_term_record_miss(text, jsonb) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_term_record_miss(text, jsonb) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_term_upsert_candidates(text, jsonb)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_term_upsert_candidates(text, jsonb) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_term_upsert_candidates(text, jsonb) TO service_role;
+  END IF;
   IF to_regprocedure('public.share_chat(uuid, jsonb)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.share_chat(uuid, jsonb) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.share_chat(uuid, jsonb) TO service_role;

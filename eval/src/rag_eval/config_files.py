@@ -15,6 +15,7 @@ from rag_sidecar.contracts.query import QueryParams
 from rag_sidecar.contracts.retrieval import (
     ChunkingSweepReport,
     ConfigProvenance,
+    DupClusterParamsFile,
     RefusalCalibrationConfig,
     RefusalThresholds,
     RetrievalParams,
@@ -35,6 +36,7 @@ CONFIG_TARGETS: list[tuple[str, type[BaseModel], Callable[[], BaseModel]]] = [
         ChunkingSweepReport,
         lambda: ChunkingSweepReport(profiles=[], provenance=ConfigProvenance(source="defaults")),
     ),
+    ("eval/config/dup-cluster-params.json", DupClusterParamsFile, DupClusterParamsFile),
 ]
 
 PROTECTED_SOURCES = frozenset({"sweep", "calibration", "fixture", "live"})

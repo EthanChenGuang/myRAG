@@ -8,8 +8,9 @@ import { vector } from '@electric-sql/pglite-pgvector';
 import type { RpcClient, RpcRequest, RpcResponse } from '@/lib/rag/backend/supabase-rpc';
 import { detectLanguage } from '@/lib/rag/lang/detect';
 import { LEXICAL_VERSION, chunkLexicalText } from '@/lib/rag/lexical/chunk-text';
+import { normalizeLexical } from '@/lib/rag/lexical/tokenize';
 import { runRelex } from '@/lib/rag/ingest/relex/run';
-import { loadCorpus, type CorpusDocument } from './corpus.mts';
+import { fixtureLineageUuid, loadCorpus, type CorpusDocument } from './corpus.mts';
 import type { FakeEdge } from './fake-edge.mts';
 import { applyMigrations } from './migrations.mts';
 import { embedText } from './fixture-embedder.mts';
@@ -208,23 +209,59 @@ async function hasPublicColumn(db: PGlite, table: string, column: string): Promi
   return result.rows[0]?.present === true;
 }
 
+/** The highest version of every fixture lineage: that version is seeded current, the earlier ones superseded (D-40). */
+export function latestLineageVersions(documents: readonly CorpusDocument[]): Map<string, number> {
+  const latest = new Map<string, number>();
+  for (const doc of documents) {
+    if (doc.lineage) latest.set(doc.lineage.id, Math.max(latest.get(doc.lineage.id) ?? 0, doc.lineage.version));
+  }
+  return latest;
+}
+
 /**
  * The prechunked writer: inserts one corpus document and its pre-cut chunks as ready rows of the fixture tenant, bypassing ingest()
- * and its quarantine. Ingest mode uses it for the documents that simulate legacy or pre-scan content (D-13).
+ * and its quarantine. Ingest mode uses it for the documents that simulate legacy or pre-scan content (D-13). A document with a fixture
+ * lineage shares its lineage id, source and source key with the other versions; only the latest version is inserted current, so the
+ * caller passes the latest versions and supersedes the earlier ones after relex (supersedeFixtureLineages).
  */
-export async function prechunkedWriter(db: PGlite, deploymentMode: DeploymentMode): Promise<(doc: CorpusDocument) => Promise<void>> {
+export async function prechunkedWriter(
+  db: PGlite,
+  deploymentMode: DeploymentMode,
+  latestVersions?: ReadonlyMap<string, number>,
+): Promise<(doc: CorpusDocument) => Promise<void>> {
   const multiTenant = deploymentMode === 'multi-tenant';
   // A setup from before Phase 3 (the frozen pre-Phase-3 files, migrations:false) has no doc_type columns; 0301 and 0304 add them as 'general' on upgrade.
   const documentsDocType = await hasPublicColumn(db, 'documents', 'doc_type');
   const chunksDocType = await hasPublicColumn(db, 'document_chunks', 'doc_type');
   return async (doc) => {
+    let lineageColumns: InsertColumn[] = [];
+    if (doc.lineage) {
+      const latest = latestVersions?.get(doc.lineage.id);
+      if (latest === undefined) throw new Error(`[Fixture DB] ${doc.relpath} declares a lineage; only the prechunked fixture build seeds lineages`);
+      lineageColumns = [
+        ['lineage_id', fixtureLineageUuid(doc.lineage.id)],
+        ['version', doc.lineage.version],
+        ['source', 'config_upload'],
+        ['source_key', `fixture-lineage:${doc.lineage.id}`],
+        ['is_current', doc.lineage.version === latest],
+      ];
+    }
     await insertRow(db, 'documents', [
       ['id', doc.id],
       ['filename', doc.filename],
       ['content', doc.content],
-      ['metadata', JSON.stringify({ relpath: doc.relpath, language: doc.language }), 'jsonb'],
+      [
+        'metadata',
+        JSON.stringify({
+          relpath: doc.relpath,
+          language: doc.language,
+          ...(doc.fixtureDupTemplate !== undefined ? { fixture_dup_template: doc.fixtureDupTemplate } : {}),
+        }),
+        'jsonb',
+      ],
       ...(multiTenant ? [['user_id', FIXTURE_USER_ID] satisfies InsertColumn] : []),
       ...(documentsDocType ? [['doc_type', doc.docType] satisfies InsertColumn] : []),
+      ...lineageColumns,
       ['created_at', doc.createdAt],
     ]);
 
@@ -251,6 +288,68 @@ export async function prechunkedWriter(db: PGlite, deploymentMode: DeploymentMod
   };
 }
 
+/**
+ * D-40: every earlier version of a fixture lineage ends in the shape rag_publish_document_version leaves a superseded version in: ready,
+ * not current, superseded_by the next version, chunks not current with no vector in any profile. Runs after relex, which writes lexical
+ * text for current chunks only, so the superseded chunks keep the lexical text they had while current.
+ */
+export async function supersedeFixtureLineages(db: PGlite, documents: readonly CorpusDocument[]): Promise<void> {
+  const byLineage = new Map<string, CorpusDocument[]>();
+  for (const doc of documents) {
+    if (!doc.lineage) continue;
+    byLineage.set(doc.lineage.id, [...(byLineage.get(doc.lineage.id) ?? []), doc]);
+  }
+  for (const versions of byLineage.values()) {
+    versions.sort((a, b) => a.lineage!.version - b.lineage!.version);
+    for (let index = 0; index < versions.length - 1; index += 1) {
+      const previous = versions[index].id;
+      await db.query("UPDATE documents SET is_current = false, status = 'ready', superseded_by = $2 WHERE id = $1", [previous, versions[index + 1].id]);
+      await db.query('UPDATE document_chunks SET is_current = false, embedding = NULL WHERE document_id = $1', [previous]);
+      await db.query('DELETE FROM chunk_embeddings ce USING document_chunks c WHERE ce.chunk_id = c.id AND c.document_id = $1', [previous]);
+      await db.query('DELETE FROM embedding_backfill_gaps g USING document_chunks c WHERE g.chunk_id = c.id AND c.document_id = $1', [previous]);
+    }
+  }
+}
+
+/** D-27: one dictionary row for a fixture database, written as the database owner (the writer RPCs are plan 04's). */
+export interface TerminologySeedRow {
+  /** 'shared' or a tenant key of the fixture's deployment mode. */
+  layer: string;
+  canonical: string;
+  variants: string[];
+  language: string;
+  kind: 'synonym' | 'abbreviation' | 'alias' | 'identifier' | 'translation' | 'misspelling';
+  mode: 'one_way' | 'equivalent';
+  source_language?: string | null;
+  target_language?: string | null;
+}
+
+/** Inserts the rows and a version-1 layer row per layer; normalized_variants come from the tokenizer's normalizer (D-09). */
+export async function seedTerminology(db: PGlite, rows: readonly TerminologySeedRow[]): Promise<void> {
+  if (rows.length === 0) return;
+  for (const layer of new Set(rows.map((row) => row.layer))) {
+    await db.query('INSERT INTO public.rag_term_layers (layer_key, version) VALUES ($1, 1) ON CONFLICT (layer_key) DO NOTHING', [layer]);
+  }
+  for (const row of rows) {
+    await db.query(
+      `INSERT INTO public.rag_term_entries
+         (layer_key, canonical, variants, normalized_variants, language, kind, mode, source_language, target_language)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [
+        row.layer,
+        row.canonical,
+        row.variants,
+        row.variants.map((variant) => normalizeLexical(variant)),
+        row.language,
+        row.kind,
+        row.mode,
+        row.source_language ?? null,
+        row.target_language ?? null,
+      ],
+    );
+  }
+}
+
 export async function createFixtureDatabase(options: {
   deploymentMode: DeploymentMode;
   corpusDir: string;
@@ -272,6 +371,8 @@ export async function createFixtureDatabase(options: {
   tableSplitDocType?: string;
   /** Ingest mode only: ingestion switches layered over the build's fixed ingest env. */
   ingestEnv?: Record<string, string>;
+  /** D-27: dictionary rows written after the corpus load, in either fixture mode. */
+  terminologySeed?: readonly TerminologySeedRow[];
 }): Promise<FixtureDatabase> {
   const { deploymentMode, corpusDir } = options;
   if (deploymentMode !== 'single-tenant' && deploymentMode !== 'multi-tenant') {
@@ -284,7 +385,7 @@ export async function createFixtureDatabase(options: {
   if (fixtureMode === 'ingest') {
     // Loaded on demand: the ingest code reads its environment at import time, which prechunked runs must not disturb.
     const { buildIngestFixtureDatabase } = await import('./ingest-mode.mts');
-    return buildIngestFixtureDatabase({
+    const built = await buildIngestFixtureDatabase({
       deploymentMode,
       corpusDir,
       processEnv: options.processEnv,
@@ -297,6 +398,15 @@ export async function createFixtureDatabase(options: {
       ...(options.tableSplit && options.tableSplitDocType ? { tableSplitDocType: options.tableSplitDocType } : {}),
       ...(options.ingestEnv ? { ingestEnv: options.ingestEnv } : {}),
     });
+    if (options.terminologySeed?.length) {
+      try {
+        await seedTerminology(built.db, options.terminologySeed);
+      } catch (error) {
+        await built.db.close().catch(() => undefined);
+        throw error;
+      }
+    }
+    return built;
   }
   if (options.tableSplit) throw new Error('[Fixture DB] the table_split tenants need the ingest fixture mode');
   if (options.chunkingProfiles?.length) throw new Error('[Fixture DB] chunking profiles are seeded only in the ingest fixture mode');
@@ -305,12 +415,14 @@ export async function createFixtureDatabase(options: {
   const corpus = loadCorpus(corpusDir);
   const { db, sqlSha256 } = await createEmptyFixtureDatabase(options);
   try {
-    const writer = await prechunkedWriter(db, deploymentMode);
+    const writer = await prechunkedWriter(db, deploymentMode, latestLineageVersions(corpus.documents));
     for (const doc of corpus.documents) await writer(doc);
+    if (options.terminologySeed?.length) await seedTerminology(db, options.terminologySeed);
     if (options.relex ?? (options.migrations !== false)) {
       await runFixtureRelex(db);
       sqlSha256[LEXICAL_SHA_KEY] = crypto.createHash('sha256').update(String(LEXICAL_VERSION)).digest('hex');
     }
+    await supersedeFixtureLineages(db, corpus.documents);
   } catch (error) {
     await db.close().catch(() => undefined);
     throw error;

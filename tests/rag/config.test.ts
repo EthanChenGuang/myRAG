@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi, type MockInstance } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
 import {
   CORE_STAGES,
   OPTIONAL_STAGES,
@@ -36,6 +38,7 @@ const PHASE42_V2_FIELDS = [
   'lexicalDictionary',
   'lexicalStemIt',
   'versionScope',
+  'embedVersionScope',
   'tableLookup',
   'dupClusters',
   'resultDiversity',
@@ -364,7 +367,7 @@ describe('Phase 3.2 typed switches (D-47)', () => {
       supersessionDetect: config.supersessionDetect,
       effectiveDateLlmExtract: config.effectiveDateLlmExtract,
     }).toEqual({
-      tableHeaderRepeat: 'profile',
+      tableHeaderRepeat: 'always',
       tableRowSerialization: false,
       captionLanguage: 'en',
       docTranslation: 'off',
@@ -379,6 +382,16 @@ describe('Phase 3.2 typed switches (D-47)', () => {
       effectiveDateLlmExtract: false,
     });
     expect(config.warnings).toEqual([]);
+  });
+
+  // The default of RAG_TABLE_HEADER_REPEAT is the outcome recorded in eval/decisions/03.2-table-header-default.json (D-19).
+  test('RAG_TABLE_HEADER_REPEAT defaults to always and profile restores the processing profile flag', () => {
+    const decision = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'eval/decisions/03.2-table-header-default.json'), 'utf8')) as { decision: string };
+    expect(loadIngestConfig({}).tableHeaderRepeat).toBe(decision.decision);
+    expect(decision.decision).toBe('always');
+    const explicit = loadIngestConfig({ RAG_TABLE_HEADER_REPEAT: 'profile' });
+    expect(explicit.tableHeaderRepeat).toBe('profile');
+    expect(explicit.warnings).toEqual([]);
   });
 
   test('ingestion-side fields accept every D-47 value', () => {
@@ -419,7 +432,7 @@ describe('Phase 3.2 typed switches (D-47)', () => {
   });
 
   test.each([
-    ['RAG_TABLE_HEADER_REPEAT', 'tableHeaderRepeat', 'sometimes', 'profile'],
+    ['RAG_TABLE_HEADER_REPEAT', 'tableHeaderRepeat', 'sometimes', 'always'],
     ['RAG_TABLE_ROW_SERIALIZATION', 'tableRowSerialization', 'yes', false],
     ['RAG_TABLE_ROW_SERIALIZATION', 'tableRowSerialization', '1', false],
     ['RAG_CAPTION_LANGUAGE', 'captionLanguage', 'fr', 'en'],
@@ -1217,5 +1230,80 @@ describe('Phase 3.3 switches (D-03, D-29, D-33)', () => {
     expect(config.disabledStages.has('attribute_resolve')).toBe(true);
     expect(config.timeouts.chat.attribute_resolve).toBe(250);
     expect(configWarnings()).toEqual([]);
+  });
+});
+
+describe('RAG_EMBED_VERSION_SCOPE (D-58, D-40)', () => {
+  const FULL = { RAG_EMBED_VERSION_SCOPE: 'true', RAG_VERSION_SCOPE: 'true', RAG_LEXICAL_SEARCH: 'true' };
+
+  function embedWarnings(): string[] {
+    return configWarnings().filter((line) => line.includes('RAG_EMBED_VERSION_SCOPE'));
+  }
+
+  test('unset: the embed switch is false and no warning is logged', () => {
+    expect(loadRagConfig({}).v2.embedVersionScope).toBe(false);
+    expect(loadRagConfig({ RAG_PIPELINE: 'v2' }).v2.embedVersionScope).toBe(false);
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test('unset: every other v2 field equals the configuration without the variable', () => {
+    const { embedVersionScope: _a, ...withEmbedUnset } = loadRagConfig({ RAG_VERSION_SCOPE: 'true', RAG_LEXICAL_SEARCH: 'true' }).v2;
+    resetRagConfigForTests();
+    const { embedVersionScope: _b, ...withEmbedFalse } = loadRagConfig({
+      RAG_VERSION_SCOPE: 'true',
+      RAG_LEXICAL_SEARCH: 'true',
+      RAG_EMBED_VERSION_SCOPE: 'false',
+    }).v2;
+    expect(withEmbedFalse).toEqual(withEmbedUnset);
+    expect(withEmbedUnset.versionScope).toBe(true);
+  });
+
+  test('true together with the effective version scope: true, no warning', () => {
+    expect(loadRagConfig(FULL).v2.embedVersionScope).toBe(true);
+    expect(loadRagConfig({ ...FULL, RAG_EMBED_VERSION_SCOPE: 'TRUE' }).v2.embedVersionScope).toBe(true);
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test('true while RAG_VERSION_SCOPE is off: one warning naming both variables, false', () => {
+    for (const versionScope of [undefined, 'false']) {
+      const env: Record<string, string> = { RAG_EMBED_VERSION_SCOPE: 'true', RAG_LEXICAL_SEARCH: 'true' };
+      if (versionScope) env.RAG_VERSION_SCOPE = versionScope;
+      expect(loadRagConfig(env).v2.embedVersionScope).toBe(false);
+    }
+    const warnings = embedWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('[RAG Config]');
+    expect(warnings[0]).toContain('RAG_VERSION_SCOPE');
+  });
+
+  test('true while the version scope is invalid because lexical search is off: one embed warning, false', () => {
+    const config = loadRagConfig({ RAG_EMBED_VERSION_SCOPE: 'true', RAG_VERSION_SCOPE: 'true' });
+    expect(config.v2.versionScope).toBe(false);
+    expect(config.v2.embedVersionScope).toBe(false);
+    loadRagConfig({ RAG_EMBED_VERSION_SCOPE: 'true', RAG_VERSION_SCOPE: 'true', RAG_LEXICAL_SEARCH: 'false' });
+    const warnings = embedWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('RAG_VERSION_SCOPE');
+  });
+
+  test('false never warns, whatever the version scope', () => {
+    expect(loadRagConfig({ ...FULL, RAG_EMBED_VERSION_SCOPE: 'false' }).v2.embedVersionScope).toBe(false);
+    expect(loadRagConfig({ RAG_EMBED_VERSION_SCOPE: 'false' }).v2.embedVersionScope).toBe(false);
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test('any other value warns once and is false', () => {
+    for (let i = 0; i < 3; i += 1) {
+      expect(loadRagConfig({ ...FULL, RAG_EMBED_VERSION_SCOPE: 'on' }).v2.embedVersionScope).toBe(false);
+    }
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('[RAG Config]');
+  });
+
+  test('the variable is part of the memo key', () => {
+    const base = loadRagConfig({ RAG_VERSION_SCOPE: 'true', RAG_LEXICAL_SEARCH: 'true' });
+    expect(loadRagConfig(FULL)).not.toBe(base);
+    expect(loadRagConfig({})).not.toBe(loadRagConfig({ RAG_EMBED_VERSION_SCOPE: 'true' }));
   });
 });

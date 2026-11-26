@@ -13,6 +13,7 @@ const SAFE_CELL_KEY = /^[a-z0-9_.|-]{1,120}$/;
 const REFUSAL_DECISION = new Set(['refuse', 'answer', 'not_applied']);
 const REFUSAL_BASIS = new Set(['rerank_threshold', 'similarity_floor', 'none']);
 const REFUSAL_REASON = /^[a-z][a-z0-9_]*$/;
+const CACHE_STATES = new Set(['hit', 'miss', 'bypass']);
 const DETECTOR_VERSION = /^[a-z_]{1,32}@[A-Za-z0-9._-]{1,64}$/;
 
 function finiteOrNull(value: number | null | undefined): number | null {
@@ -43,6 +44,16 @@ export function sanitizeRefusalForLog(refusal: RefusalRecord): Record<string, un
   return payload;
 }
 
+function timingForLog(collector: TraceCollector): Record<string, unknown> {
+  const timing = collector.timing();
+  if (!timing) return {};
+  return {
+    ttft_ms: finiteOrNull(timing.ttft_ms),
+    pre_generation_ms: finiteOrNull(timing.pre_generation_ms),
+    cache: CACHE_STATES.has(timing.cache) ? timing.cache : 'bypass',
+  };
+}
+
 export function buildTraceLogPayload(collector: TraceCollector, result: RetrievalResult) {
   return {
     traceId: collector.traceId,
@@ -66,6 +77,7 @@ export function buildTraceLogPayload(collector: TraceCollector, result: Retrieva
     }),
     ...(result.refusal ? { refusal: sanitizeRefusalForLog(result.refusal) } : {}),
     ...(result.injection ? { injectionFlagged: result.injection.flagged === true } : {}),
+    ...timingForLog(collector),
   };
 }
 

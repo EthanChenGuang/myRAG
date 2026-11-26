@@ -992,3 +992,72 @@ test('the config UI offers pgvector, weaviate and qdrant for both backend select
     assert.match(html, new RegExp(`<input type="password" id="${name}"`), `${name} is a password input`);
   }
 });
+
+const FINETUNE_NAMES = [
+  'RAG_FINETUNE',
+  'RAG_FT_EMBED_API_KEY',
+  'RAG_FT_SLOT_A_BASE_URL',
+  'RAG_FT_SLOT_A_MODEL',
+  'RAG_FT_SLOT_A_QUERY_PROMPT',
+  'RAG_FT_SLOT_A_DOCUMENT_PROMPT',
+  'RAG_FT_SLOT_B_BASE_URL',
+  'RAG_FT_SLOT_B_MODEL',
+  'RAG_FT_SLOT_B_QUERY_PROMPT',
+  'RAG_FT_SLOT_B_DOCUMENT_PROMPT',
+];
+
+test('the manifest lists the ten fine-tune names as managed (06.1 D-02, D-23)', () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(REPO, MANIFEST), 'utf8'));
+  const byName = new Map(manifest.vars.map((entry) => [entry.name, entry]));
+  for (const name of FINETUNE_NAMES) {
+    assert.equal(byName.get(name)?.status, 'managed', name);
+    assert.deepEqual(byName.get(name)?.knownGaps, [], name);
+  }
+});
+
+test('fails and names the location when RAG_FT_SLOT_B_MODEL is removed from any single location', () => {
+  for (const [relative, location] of [
+    ['scripts/init-env.js', 'init-env'],
+    ['src/lib/env.ts', 'env-ts'],
+    ['scripts/config-server.js', 'config-server'],
+    ['scripts/config-ui/index.html', 'config-ui'],
+  ]) {
+    const root = copyRealTree();
+    try {
+      removeName(root, relative, 'RAG_FT_SLOT_B_MODEL');
+      const { code, out } = run(root);
+      assert.equal(code, 1, `removed from ${location}: ${out}`);
+      assert.match(out, new RegExp(`RAG_FT_SLOT_B_MODEL \\[${location}\\] missing from this location`));
+    } finally {
+      cleanup(root);
+    }
+  }
+});
+
+test('the fine-tune defaults are off and empty in init-env, env.ts and all three config-server templates', () => {
+  const init = fs.readFileSync(path.join(REPO, 'scripts/init-env.js'), 'utf8');
+  const envTs = fs.readFileSync(path.join(REPO, 'src/lib/env.ts'), 'utf8');
+  const server = fs.readFileSync(path.join(REPO, 'scripts/config-server.js'), 'utf8');
+  assert.match(init, /^RAG_FINETUNE=off$/m);
+  for (const name of FINETUNE_NAMES.slice(1)) {
+    assert.match(init, new RegExp(`^${name}=$`, 'm'), `init-env ${name} must be empty`);
+    assert.ok(envTs.includes(`${name}: process.env.${name} || '',`), `env.ts ${name}`);
+  }
+  for (const name of FINETUNE_NAMES) {
+    assert.deepEqual(templatesMissing(server, name), [], `config-server ${name}`);
+  }
+  for (const [label, block] of templateBlocks(server)) {
+    assert.ok(
+      block.includes("'RAG_FINETUNE=off'") || block.includes("getEnvValue('RAG_FINETUNE') || 'off'"),
+      `${label} template default for RAG_FINETUNE`,
+    );
+  }
+});
+
+test('the config UI hides the fine-tune endpoint key and offers only off and on for the switch', () => {
+  const html = fs.readFileSync(path.join(REPO, 'scripts/config-ui/index.html'), 'utf8');
+  assert.match(html, /<input type="password" id="RAG_FT_EMBED_API_KEY"/);
+  const select = html.match(/<select id="RAG_FINETUNE"[^>]*>([\s\S]*?)<\/select>/);
+  assert.ok(select, 'RAG_FINETUNE select exists');
+  assert.deepEqual([...select[1].matchAll(/value="([^"]*)"/g)].map((m) => m[1]), ['off', 'on']);
+});

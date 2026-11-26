@@ -7,24 +7,31 @@ import pytest
 from rag_sidecar.contracts.baseline import NoiseConfig
 from rag_sidecar.contracts.golden import GoldenItem
 from rag_sidecar.contracts.retrieval import RetrievalParams, compute_config_hash
+from test_report_runner import QUOTE, _item, _manifest, _trace
 
 from rag_eval.golden_io import load_golden, write_golden
-from rag_eval.harness_runner import HarnessError, HarnessRun, dev_only_golden, run_harness
+from rag_eval.harness_runner import (
+    HarnessError,
+    HarnessRun,
+    dev_only_golden,
+    run_harness,
+)
 from rag_eval.metrics import score_items
 from rag_eval.report import build_report, write_report
 from rag_eval.split import assign_split
 from rag_eval.sweep.retrieval import (
+    CAP_MIN,
     PARAMS_PATH,
     SweepCell,
     SweepGrid,
     SweepResult,
     SweepUsageError,
+    cell_scores,
     choose_configuration,
     main,
     rerank_cap,
     run_retrieval_sweep,
 )
-from test_report_runner import QUOTE, _item, _manifest, _trace
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 NOISE = NoiseConfig.model_validate_json((REPO_ROOT / "eval" / "config" / "noise.json").read_text(encoding="utf-8"))
@@ -259,6 +266,7 @@ def _cell(pool: int, top_k: int, recall: float, mrr: float, tokens: float = 1000
 
 
 def test_rerank_cap_clamps_the_pool_to_25_through_100():
+    assert CAP_MIN == 25
     assert [rerank_cap(p) for p in (1, 25, 50, 75, 100, 150, 200)] == [25, 25, 50, 75, 100, 100, 100]
 
 
@@ -510,3 +518,84 @@ def test_sweep_records_cell_directories_relative_to_the_repo_root(tmp_path: Path
     assert [cell.out_dir for cell in result.cells] == ["out/cells/pool-50_k-5"]
     written = json.loads((tmp_path / "out" / "retrieval-sweep.json").read_text(encoding="utf-8"))
     assert str(tmp_path) not in json.dumps(written)
+
+
+def test_sweep_cell_accepts_a_cap_of_25_and_a_cell_written_before_ndcg_still_validates():
+    old = {
+        "candidate_pool_size": 25,
+        "rerank_input_cap": 25,
+        "final_top_k": 5,
+        "recall_at_k": 0.5,
+        "mrr": 0.5,
+        "mean_context_tokens": 10.0,
+        "latency_p95_ms": 1.0,
+        "n_items": 3,
+    }
+    cell = SweepCell.model_validate(old)
+    assert cell.ndcg_at_context_k is None
+    assert cell.k_zero is None
+    with pytest.raises(ValueError):
+        SweepCell.model_validate({**old, "rerank_input_cap": 24})
+
+
+def test_cell_scores_report_ndcg_at_context_k_and_count_refusals_and_empty_context_in_k_zero():
+    ids = _ids("dev", 3)
+    items = [_item(i, "en", answerable=True) for i in ids]
+    hit = ("doc.en.md", f"intro {QUOTE} outro")
+    traces = [
+        _trace(ids[0], [hit, ("filler.md", "x")]),
+        _trace(ids[1], [hit], refused=True),
+        _trace(ids[2], []),
+    ]
+    scores = cell_scores(traces, items, 5)
+    assert scores.n_items == 3
+    assert scores.recall_at_k == pytest.approx(1 / 3)
+    assert scores.ndcg_at_context_k == pytest.approx(1 / 3)
+    assert scores.k_zero == 2
+
+
+def test_cell_scores_count_evidence_groups_for_recall_and_mrr():
+    second = "a second synthetic statement about another sample value"
+    base = _item(_ids("dev", 1)[0], "en", answerable=True)
+    spans = [*base.gold_evidence, base.gold_evidence[0].model_copy(update={"quote": second})]
+    grouped = GoldenItem.model_validate(
+        {**base.model_dump(mode="json"), "gold_evidence": [s.model_dump(mode="json") for s in spans], "evidence_groups": [[0, 1]]}
+    )
+    trace = _trace(grouped.id, [("filler.md", "x"), ("doc.en.md", f"intro {QUOTE} outro")])
+    scores = cell_scores([trace], [grouped], 5)
+    assert scores.recall_at_k == pytest.approx(1.0)
+    assert scores.mrr == pytest.approx(0.5)
+
+
+def test_choose_configuration_is_unchanged_by_ndcg_values():
+    plain = [_cell(75, 8, 0.90, 0.80), _cell(50, 8, 0.89, 0.79), _cell(25, 8, 0.80, 0.70)]
+    with_ndcg = [
+        cell.model_copy(update={"ndcg_at_context_k": value, "k_zero": 0})
+        for cell, value in zip(plain, (0.10, 0.20, 0.99))
+    ]
+    assert choose_configuration(plain, NOISE) == choose_configuration(with_ndcg, NOISE).model_copy(
+        update={"chosen": choose_configuration(plain, NOISE).chosen}
+    )
+    assert choose_configuration(with_ndcg, NOISE).chosen.candidate_pool_size == 50
+
+
+def test_ndcg_is_report_only_and_not_a_gated_noise_metric():
+    noise = json.loads((REPO_ROOT / "eval" / "config" / "noise.json").read_text(encoding="utf-8"))
+    assert not any("ndcg" in name for name in noise["metrics"])
+
+
+def test_sweep_report_carries_the_ndcg_column_and_the_k_zero_count(tmp_path: Path):
+    config, golden = _fixture_inputs(tmp_path)
+    out = tmp_path / "out"
+    result = run_retrieval_sweep(
+        config, SweepGrid(pools=(25, 50), top_ks=(5, 8)), out, runner=_SweepStub(gold_rank=lambda pool, k: 1), golden=golden
+    )
+    assert all(cell.ndcg_at_context_k == pytest.approx(1.0) for cell in result.cells)
+    assert all(cell.k_zero == 0 for cell in result.cells)
+    assert {cell.rerank_input_cap for cell in result.cells if cell.candidate_pool_size == 25} == {25}
+    recorded = json.loads((out / "retrieval-sweep.json").read_text(encoding="utf-8"))
+    assert all("ndcg_at_context_k" in cell for cell in recorded["cells"])
+    report = (out / "retrieval-sweep.md").read_text(encoding="utf-8")
+    assert "nDCG@k" in report
+    assert "k = 0" in report
+    assert "| 25 | 25 | 5 | 1.0000 | 1.0000 | 1.0000 | 0 |" in report

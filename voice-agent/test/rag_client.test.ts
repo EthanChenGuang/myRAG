@@ -5,7 +5,7 @@ import type { AddressInfo } from 'node:net';
 import { createHash } from 'node:crypto';
 import { RAGClient, scopeTokenBinding, type HistoryTurn } from '../src/rag_client.js';
 
-type Seen = { headers: http.IncomingHttpHeaders; body: any };
+type Seen = { url?: string; method?: string; headers: http.IncomingHttpHeaders; body: any };
 
 let server: http.Server;
 let baseUrl: string;
@@ -27,7 +27,7 @@ before(async () => {
             } catch {
                 body = null;
             }
-            seen.push({ headers: req.headers, body });
+            seen.push({ url: req.url, method: req.method, headers: req.headers, body });
             respond(res);
         });
     });
@@ -36,6 +36,7 @@ before(async () => {
 });
 
 after(async () => {
+    server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
 });
 
@@ -322,4 +323,108 @@ test('history content is never written to the console', async () => {
         console.log = origLog;
     }
     assert.equal(lines.some((l) => l.includes('history-marker-placeholder')), false);
+});
+
+const TRACE_ID = '0123456789abcdef0123456789abcdef';
+
+test('query returns the traceId of the app answer with results', async () => {
+    reply(200, { results: [{ document_id: 'short', content: 'gamma', similarity: 0.7 }], traceId: TRACE_ID });
+    const client = new RAGClient(baseUrl, 'key-placeholder');
+    const result = await client.query('q', 'token-placeholder');
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.traceId, TRACE_ID);
+});
+
+test('query returns the traceId of an empty answer', async () => {
+    reply(200, { results: [], traceId: TRACE_ID });
+    const client = new RAGClient(baseUrl, 'key-placeholder');
+    assert.deepEqual(await client.query('q', 'token-placeholder'), {
+        ok: true,
+        context: '',
+        sources: [],
+        source_images: [],
+        serverQueryRewrite: false,
+        traceId: TRACE_ID,
+    });
+});
+
+for (const [label, value] of [
+    ['absent (older app)', undefined],
+    ['not a string', 42],
+    ['not 32 lower-case hex', 'ABCDEF0123456789ABCDEF0123456789'],
+] as const) {
+    test(`query leaves traceId undefined when it is ${label}`, async () => {
+        reply(200, { results: [{ document_id: 'short', content: 'gamma', similarity: 0.7 }], ...(value === undefined ? {} : { traceId: value }) });
+        const client = new RAGClient(baseUrl, 'key-placeholder');
+        const result = await client.query('q', 'token-placeholder');
+        assert.equal(result.ok, true);
+        if (!result.ok) return;
+        assert.equal(result.traceId, undefined);
+        assert.equal('traceId' in result, false);
+    });
+}
+
+test('reportTiming posts the numbers to the voice-timing path with the api key and scope token', async () => {
+    reply(202, { accepted: true });
+    const client = new RAGClient(baseUrl, 'key-placeholder');
+    await client.reportTiming(TRACE_ID, { ttft_ms: 840, pre_generation_ms: 310 }, 'token-placeholder');
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0].method, 'POST');
+    assert.equal(seen[0].url, '/api/internal/voice-timing');
+    assert.equal(seen[0].headers['x-api-key'], 'key-placeholder');
+    assert.equal(seen[0].headers['x-rag-scope-token'], 'token-placeholder');
+    assert.match(String(seen[0].headers['content-type']), /application\/json/);
+    assert.deepEqual(seen[0].body, { traceId: TRACE_ID, ttft_ms: 840, pre_generation_ms: 310 });
+});
+
+test('reportTiming resolves without throwing on a 500 answer', async () => {
+    reply(500, { error: 'Internal Server Error' });
+    const client = new RAGClient(baseUrl, 'key-placeholder');
+    const quietDebug = console.debug;
+    console.debug = () => {};
+    try {
+        await assert.doesNotReject(client.reportTiming(TRACE_ID, { ttft_ms: 1, pre_generation_ms: 0 }, 'token-placeholder'));
+    } finally {
+        console.debug = quietDebug;
+    }
+    assert.equal(seen.length, 1);
+});
+
+test('reportTiming resolves without throwing on a refused connection', async () => {
+    const closed = http.createServer();
+    await new Promise<void>((resolve) => closed.listen(0, '127.0.0.1', resolve));
+    const port = (closed.address() as AddressInfo).port;
+    await new Promise<void>((resolve) => closed.close(() => resolve()));
+    const client = new RAGClient(`http://127.0.0.1:${port}/api/internal/voice-rag`, 'key-placeholder');
+    const quietDebug = console.debug;
+    console.debug = () => {};
+    try {
+        await assert.doesNotReject(client.reportTiming(TRACE_ID, { ttft_ms: 1, pre_generation_ms: 0 }, 'token-placeholder'));
+    } finally {
+        console.debug = quietDebug;
+    }
+});
+
+test('reportTiming resolves after its short timeout when the server never answers', async () => {
+    seen = [];
+    respond = () => {};
+    const client = new RAGClient(baseUrl, 'key-placeholder', { timingTimeoutMs: 100 });
+    const lines: unknown[][] = [];
+    const quietDebug = console.debug;
+    console.debug = (...args: unknown[]) => {
+        lines.push(args);
+    };
+    const started = Date.now();
+    try {
+        await assert.doesNotReject(client.reportTiming(TRACE_ID, { ttft_ms: 1, pre_generation_ms: 0 }, 'token-placeholder'));
+    } finally {
+        console.debug = quietDebug;
+    }
+    assert.ok(Date.now() - started < 2000);
+    assert.equal(lines.length, 1);
+    const text = JSON.stringify(lines[0]);
+    assert.equal(text.includes('token-placeholder'), false);
+    assert.equal(text.includes('key-placeholder'), false);
+    assert.match(text, /"failures":1/);
 });

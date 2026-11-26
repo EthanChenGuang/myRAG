@@ -1,7 +1,8 @@
+import json
 import pytest
 from rag_sidecar.contracts.eval_run import RagTrace
 from rag_sidecar.contracts.golden import GoldenItem
-from rag_sidecar.contracts.report import ItemResult
+from rag_sidecar.contracts.report import ItemResult, MetricValue
 
 from rag_eval.metrics import aggregate, score_items
 
@@ -632,11 +633,16 @@ def test_table_split_is_gated_and_the_re_recorded_ingest_baseline_leaves_every_o
     else:
         assert not added
     moved = {"overall"} | {name for name in previous.slices if name.startswith("language:")}
+    # Plan 03.2-67 flipped the default of RAG_TABLE_HEADER_REPEAT to always: only table_split items moved, so the slices that hold
+    # them and those items are compared by test_the_03_2_67_baseline_moves_only_table_split_items_and_none_drops.
+    header_moved = moved | {"category:table_split"}
+    table_split_ids = {item_id for item_id in previous.items if item_id.startswith("ingest-table-split-")}
     for name, stats in previous.slices.items():
-        if golden_grew and name in moved:
+        if (golden_grew and name in moved) or name in header_moved:
             continue
         assert current.slices[name] == stats, name
-    assert {item_id: current.items[item_id] for item_id in previous.items} == previous.items
+    unchanged = set(previous.items) - table_split_ids
+    assert {item_id: current.items[item_id] for item_id in unchanged} == {item_id: previous.items[item_id] for item_id in unchanged}
     assert all(stat.spread == 0.0 for stats in current.slices.values() for stat in stats.values())
 
     golden = [
@@ -650,3 +656,297 @@ def test_table_split_is_gated_and_the_re_recorded_ingest_baseline_leaves_every_o
     assert all(not counts_in_gated_slices(item) for item in table_items if item.language in {"zh", "it"})
     gated = current.slices["category:table_split"]
     assert gated["recall_at_5"].n == len(counting)
+
+
+# --- Phase 4.2 plan 12: evidence groups, nDCG at context k, redundancy, intent coverage ---
+
+FLOOD_DOC = "flood-copy-{index}.en.md"
+
+
+def _grouped_item(item_id: str = "en-flood-001") -> GoldenItem:
+    spans = [(FLOOD_DOC.format(index=index), "the shared passage statement") for index in range(30)]
+    spans.append((DOC, "the single passage statement"))
+    item = _item(item_id, spans, category="duplicate_flood")
+    return item.model_copy(update={"evidence_groups": [list(range(30)), [30]]})
+
+
+def _with_clusters(trace: RagTrace, clusters: list[str | None]) -> RagTrace:
+    kept = [
+        chunk.model_copy(update={"dup_cluster_id": cluster}) for chunk, cluster in zip(trace.kept, clusters, strict=True)
+    ]
+    return trace.model_copy(update={"kept": kept})
+
+
+def test_evidence_groups_count_a_group_once_when_any_span_is_kept():
+    item = _grouped_item()
+    kept = [(FLOOD_DOC.format(index=7), "the shared passage statement"), (DOC, "the single passage statement")]
+    (result,) = score_items([_trace(item.id, kept)], [item])
+    assert result.group_count == 2
+    assert (result.span_count, result.spans_hit_at_5, result.spans_hit_at_10) == (2, 2, 2)
+    assert result.intent_coverage is True
+    assert aggregate([result])["overall"].recall_at_10.value == 1.0
+
+
+def test_evidence_groups_with_one_group_missing_halve_recall_and_lose_intent_coverage():
+    item = _grouped_item()
+    kept = [(FLOOD_DOC.format(index=3), "the shared passage statement")] + _filler(3)
+    (result,) = score_items([_trace(item.id, kept)], [item])
+    assert result.group_count == 2
+    assert result.intent_coverage is False
+    assert aggregate([result])["overall"].recall_at_10.value == 0.5
+    assert aggregate([result])["overall"].mrr.value == 1.0
+
+
+def test_item_without_evidence_groups_has_no_group_fields():
+    item = _item("en-a-001", [(DOC, "alpha fact"), (DOC, "beta fact")])
+    (result,) = score_items([_trace("en-a-001", [(DOC, "alpha fact")])], [item])
+    assert result.group_count is None
+    assert result.intent_coverage is None
+    assert (result.span_count, result.spans_hit_at_5, result.first_hit_rank) == (2, 1, 1)
+
+
+def test_ndcg_at_context_k_uses_the_kept_chunks():
+    item = _item("en-a-001", [(DOC, "gold sentence")])
+    (first,) = score_items([_trace("en-a-001", [(DOC, "gold sentence")] + _filler(3))], [item])
+    assert (first.context_k, first.ndcg_at_context_k) == (4, 1.0)
+    (second,) = score_items([_trace("en-a-001", _filler(1) + [(DOC, "gold sentence")])], [item])
+    assert second.context_k == 2
+    assert second.ndcg_at_context_k == pytest.approx(1 / __import__("math").log2(3))
+
+
+def test_refused_or_empty_context_scores_ndcg_zero_and_counts_in_k_zero():
+    golden = [_item("en-a-001", [(DOC, "gold sentence")]), _item("en-a-002", [(DOC, "gold sentence")])]
+    traces = [_trace("en-a-001", [(DOC, "gold sentence")], refused=True), _trace("en-a-002", [])]
+    results = score_items(traces, golden)
+    assert [(r.context_k, r.ndcg_at_context_k) for r in results] == [(0, 0.0), (0, 0.0)]
+    overall = aggregate(results)["overall"]
+    assert overall.ndcg_at_context_k == MetricValue(value=0.0, n=2)
+    assert overall.k_zero == MetricValue(value=2.0, n=2)
+
+
+def test_unanswerable_items_carry_no_ndcg():
+    (result,) = score_items([_trace("en-n-001", [], refused=True)], [_item("en-n-001")])
+    assert result.ndcg_at_context_k is None
+    overall = aggregate([result])["overall"]
+    assert overall.ndcg_at_context_k is None and overall.k_zero is None
+
+
+def test_topk_redundancy_is_the_largest_cluster_share_of_kept_chunks():
+    item = _item("en-a-001", [(DOC, "gold sentence")])
+    clustered = _with_clusters(_trace("en-a-001", _filler(8)), ["c1"] * 5 + ["c2", None, None])
+    (result,) = score_items([clustered], [item])
+    assert result.topk_redundancy == 0.625
+    (plain,) = score_items([_trace("en-a-001", _filler(8))], [item])
+    assert plain.topk_redundancy == 0.125
+    (empty,) = score_items([_trace("en-a-001", [])], [item])
+    assert empty.topk_redundancy is None
+
+
+def test_slice_means_redundancy_and_rates_intent_coverage():
+    flood = _grouped_item("en-flood-001")
+    flood_two = _grouped_item("en-flood-002")
+    covered = [(FLOOD_DOC.format(index=1), "the shared passage statement"), (DOC, "the single passage statement")]
+    missed = [(FLOOD_DOC.format(index=1), "the shared passage statement")] * 4
+    traces = [
+        _with_clusters(_trace(flood.id, covered), ["k1", None]),
+        _with_clusters(_trace(flood_two.id, missed), ["k1"] * 4),
+    ]
+    overall = aggregate(score_items(traces, [flood, flood_two]))["overall"]
+    assert overall.topk_redundancy == MetricValue(value=0.75, n=2)
+    assert overall.intent_coverage == MetricValue(value=0.5, n=2)
+
+
+def test_slice_without_group_items_has_no_intent_coverage():
+    item = _item("en-a-001", [(DOC, "gold sentence")])
+    overall = aggregate(score_items([_trace("en-a-001", [(DOC, "gold sentence")])], [item]))["overall"]
+    assert overall.intent_coverage is None
+    assert overall.topk_redundancy == MetricValue(value=1.0, n=1)
+
+
+def _reference_ranks(item: GoldenItem, ranked) -> list[int]:
+    """The span loop of score_items before plan 04.2-12, kept verbatim as the oracle for items without groups."""
+    from rag_eval.matching import chunk_matches_span
+
+    ranks: list[int] = []
+    for span in item.gold_evidence:
+        for position, chunk in enumerate(ranked, start=1):
+            if chunk_matches_span(getattr(chunk, "document_name", None) or "", chunk.content, span):
+                ranks.append(position)
+                break
+    return ranks
+
+
+def _reference_gated(results: list[ItemResult], traces: list[RagTrace], golden: list[GoldenItem], rank_field: str):
+    by_id = {trace.item_id: trace for trace in traces}
+    for result, item in zip(results, golden, strict=True):
+        trace = by_id[item.id]
+        ranked = trace.kept if rank_field == "kept" else trace.candidates
+        ranks = [] if trace.refused else _reference_ranks(item, ranked)
+        assert result.span_count == len(item.gold_evidence), item.id
+        assert result.spans_hit_at_5 == sum(1 for r in ranks if r <= 5), item.id
+        assert result.spans_hit_at_10 == sum(1 for r in ranks if r <= 10), item.id
+        assert result.first_hit_rank == (min(ranks) if ranks else None), item.id
+
+
+@pytest.mark.parametrize("rank_field", ["kept", "candidates"])
+def test_items_without_groups_score_exactly_as_before(rank_field):
+    import random
+
+    rng = random.Random(4212)
+    words = ["alpha", "beta", "gamma", "delta", "epsilon", "zeta"]
+    golden: list[GoldenItem] = []
+    traces: list[RagTrace] = []
+    for index in range(60):
+        item_id = f"en-r-{index:03d}"
+        spans = [(DOC, f"{word} fact") for word in rng.sample(words, rng.randint(1, 3))]
+        answerable = index % 7 != 0
+        golden.append(_item(item_id, spans if answerable else None))
+        rows = [(DOC, f"{rng.choice(words)} fact") if rng.random() < 0.3 else _filler(1)[0] for _ in range(rng.randint(0, 14))]
+        trace = _trace(item_id, rows, refused=index % 11 == 0)
+        if rank_field == "candidates":
+            candidates = [
+                {**chunk.model_dump(mode="json", include={"rank", "chunk_id", "document_id", "document_name", "content", "similarity"}), "has_image": False}
+                for chunk in reversed(trace.kept)
+            ]
+            trace = RagTrace.model_validate({**trace.model_dump(mode="json"), "candidates": candidates})
+        traces.append(trace)
+    results = score_items(traces, golden, rank_field=rank_field)
+    _reference_gated(results, traces, golden, rank_field)
+
+
+# --- Phase 4.2 plan 12: identifier precision and near-miss leakage (D-32) ---
+
+ID_DOC = "identifiers.en.md"
+
+
+def _identifier_item(item_id: str, asked: str | None, *, answerable: bool = True) -> GoldenItem:
+    item = _item(item_id, [(ID_DOC, "the asked record")], category="identifier_near_miss")
+    update: dict[str, object] = {"tags": [f"asked_identifier:{asked}"] if asked is not None else []}
+    if not answerable:
+        # D-32 no-answer identifier items; the GoldenItem category rule does not admit them yet (hand-off 04.2-12-golden-rule).
+        update.update(answerable=False, expected_answer=None, gold_evidence=[])
+    return item.model_copy(update=update)
+
+
+def _identifier_trace(item_id: str, chunks: list[list[str] | None], *, refused: bool = False, cited: list[int] = ()):
+    trace = _trace(item_id, [(ID_DOC, f"the asked record part {index}") for index in range(len(chunks))], refused=refused)
+    kept = [chunk.model_copy(update={"identifiers_norm": ids}) for chunk, ids in zip(trace.kept, chunks, strict=True)]
+    citations = [
+        {
+            "alias": f"S{position + 1}",
+            "chunkIds": [kept[position].chunk_id],
+            "documentId": kept[position].document_id,
+            "documentName": ID_DOC,
+            "n": position + 1,
+            "quote": kept[position].content,
+            "quoteHash": "a" * 64,
+            "strategy": "chunk-alias",
+        }
+        for position in cited
+    ]
+    return RagTrace.model_validate(
+        {**trace.model_dump(mode="json"), "kept": [k.model_dump(mode="json") for k in kept], "citations": citations}
+    )
+
+
+def test_answerable_identifier_item_is_precise_when_only_the_asked_identifier_is_kept():
+    item = _identifier_item("en-id-001", "QX-4471")
+    (result,) = score_items([_identifier_trace(item.id, [["qx4471"], ["other99"]], cited=[0])], [item])
+    assert (result.identifier_precise, result.near_miss_leak) == (True, False)
+
+
+def test_a_near_miss_chunk_without_the_asked_identifier_leaks():
+    item = _identifier_item("en-id-001", "qx 4471")
+    (result,) = score_items([_identifier_trace(item.id, [["qx4471"], ["qx4472"]])], [item])
+    assert (result.identifier_precise, result.near_miss_leak) == (False, True)
+
+
+def test_a_chunk_holding_both_the_asked_and_a_near_miss_identifier_does_not_leak():
+    item = _identifier_item("en-id-001", "QX4471")
+    (result,) = score_items([_identifier_trace(item.id, [["qx4471", "qx4472"]])], [item])
+    assert (result.identifier_precise, result.near_miss_leak) == (True, False)
+
+
+def test_citing_a_chunk_without_the_asked_identifier_is_not_precise():
+    item = _identifier_item("en-id-001", "QX4471")
+    (result,) = score_items([_identifier_trace(item.id, [["qx4471"], ["lm9902"]], cited=[0, 1])], [item])
+    assert (result.identifier_precise, result.near_miss_leak) == (False, False)
+
+
+def test_answerable_item_without_a_kept_asked_identifier_is_not_precise():
+    item = _identifier_item("en-id-001", "QX4471")
+    (result,) = score_items([_identifier_trace(item.id, [["lm9902"]])], [item])
+    assert result.identifier_precise is False
+
+
+def test_no_answer_identifier_item_is_precise_only_when_refused_without_leak():
+    item = _identifier_item("en-id-002", "QX4479", answerable=False)
+    (refused,) = score_items([_identifier_trace(item.id, [], refused=True)], [item])
+    assert (refused.identifier_precise, refused.near_miss_leak) == (True, False)
+    (answered,) = score_items([_identifier_trace(item.id, [["lm9902"]])], [item])
+    assert answered.identifier_precise is False
+    (leaked,) = score_items([_identifier_trace(item.id, [["qx4471"]], refused=True)], [item])
+    assert (leaked.identifier_precise, leaked.near_miss_leak) == (False, True)
+
+
+def test_identifier_item_without_the_asked_tag_is_a_scoring_error():
+    item = _identifier_item("en-id-009", None)
+    with pytest.raises(ValueError, match="en-id-009"):
+        score_items([_identifier_trace(item.id, [["qx4471"]])], [item])
+
+
+def test_traces_without_identifiers_norm_give_no_identifier_values():
+    item = _identifier_item("en-id-001", "QX4471")
+    (result,) = score_items([_identifier_trace(item.id, [["qx4471"], None])], [item])
+    assert (result.identifier_precise, result.near_miss_leak) == (None, None)
+
+
+def test_identifier_slices_count_identifier_items_only():
+    golden = [
+        _identifier_item("en-id-001", "QX4471"),
+        _identifier_item("en-id-002", "QX4471"),
+        _item("en-a-001", [(DOC, "gold sentence")]),
+    ]
+    traces = [
+        _identifier_trace("en-id-001", [["qx4471"]]),
+        _identifier_trace("en-id-002", [["qx4471"], ["qx4417"]]),
+        _trace("en-a-001", [(DOC, "gold sentence")]),
+    ]
+    results = score_items(traces, golden)
+    assert results[2].identifier_precise is None and results[2].near_miss_leak is None
+    overall = aggregate(results)["overall"]
+    assert overall.identifier_precision == MetricValue(value=0.5, n=2)
+    assert overall.near_miss_leakage == MetricValue(value=0.5, n=2)
+
+
+def test_the_03_2_67_baseline_moves_only_table_split_items_and_none_drops():
+    """D-19 (plan 03.2-67): the ingest baseline re-recorded with RAG_TABLE_HEADER_REPEAT=always as the default."""
+    from pathlib import Path
+
+    from rag_sidecar.contracts.baseline import Baseline
+
+    root = Path(__file__).resolve().parents[1]
+    previous = Baseline.model_validate_json(
+        (root / "baselines" / "history" / "fixture-ingest-baseline.pre-03.2-67.json").read_text(encoding="utf-8")
+    )
+    current = Baseline.model_validate_json((root / "baselines" / "fixture-ingest-baseline.json").read_text(encoding="utf-8"))
+    decision = json.loads((root / "decisions" / "03.2-table-header-default.json").read_text(encoding="utf-8"))
+    assert decision["decision"] == "always"
+    assert {run.run_id for run in current.runs}.isdisjoint({run.run_id for run in previous.runs}), "not re-recorded"
+    assert current.corpus_sha256 == previous.corpus_sha256 and current.golden_sha256 == previous.golden_sha256
+    assert previous.items is not None and current.items is not None
+    assert set(current.items) == set(previous.items)
+    moved = sorted(item_id for item_id in previous.items if current.items[item_id] != previous.items[item_id])
+    assert moved and all(item_id.startswith("ingest-table-split-") for item_id in moved), moved
+    lower_is_better = {"false_refusal_rate"}
+    for item_id in moved:
+        for metric, before in previous.items[item_id].items():
+            after = current.items[item_id][metric]
+            for old, new in zip(before, after):
+                if old is None or new is None:
+                    assert old == new, (item_id, metric)
+                elif metric in lower_is_better:
+                    assert new <= old, (item_id, metric)
+                else:
+                    assert new >= old, (item_id, metric)
+    assert all(stat.spread == 0.0 for stats in current.slices.values() for stat in stats.values())

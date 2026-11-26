@@ -4,7 +4,7 @@ import { config as loadDotenv } from 'dotenv';
 import { isTenantKey } from '../writer';
 
 export type ParsedRelexArgs =
-  | { ok: true; dryRun: boolean; tenantKey: string | null; batchSize: number; resumeAfter: string | null }
+  | { ok: true; dryRun: boolean; tenantKey: string | null; batchSize: number; resumeAfter: string | null; staleDictionary?: true }
   | { ok: false; error: string };
 
 export interface CliIo {
@@ -16,19 +16,24 @@ export const DEFAULT_RELEX_BATCH_SIZE = 500;
 const MAX_BATCH_SIZE = 1000;
 const CHUNK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export const USAGE = 'usage: npm run rag:relex -- [--dry-run] [--batch-size 500] [--tenant <key>] [--resume-after <chunkId>]';
+export const USAGE =
+  'usage: npm run rag:relex -- [--dry-run] [--batch-size 500] [--tenant <key>] [--stale-dictionary] [--resume-after <chunkId>]';
 
 const WITH_VALUE = new Set(['--batch-size', '--tenant', '--resume-after']);
 
-/** `[--dry-run] [--batch-size n] [--tenant <key>] [--resume-after <chunkId>]`. */
+/** `[--dry-run] [--batch-size n] [--tenant <key>] [--stale-dictionary] [--resume-after <chunkId>]`; --stale-dictionary needs --tenant. */
 export function parseRelexArgs(argv: string[]): ParsedRelexArgs {
   let dryRun = false;
+  let staleDictionary = false;
   const values = new Map<string, string>();
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i] as string;
     if (arg === '--dry-run') {
       if (dryRun) return { ok: false, error: '--dry-run was given twice' };
       dryRun = true;
+    } else if (arg === '--stale-dictionary') {
+      if (staleDictionary) return { ok: false, error: '--stale-dictionary was given twice' };
+      staleDictionary = true;
     } else if (WITH_VALUE.has(arg)) {
       const value = argv[(i += 1)];
       if (value === undefined || value.startsWith('--')) return { ok: false, error: `${arg} needs a value` };
@@ -54,12 +59,16 @@ export function parseRelexArgs(argv: string[]): ParsedRelexArgs {
     return { ok: false, error: '--tenant needs a tenant key: s:default, u:<uuid> or o:<uuid>' };
   }
 
+  if (staleDictionary && tenantKey === null) {
+    return { ok: false, error: '--stale-dictionary needs --tenant <key>' };
+  }
+
   const resumeAfter = values.get('--resume-after') ?? null;
   if (resumeAfter !== null && !CHUNK_ID.test(resumeAfter)) {
     return { ok: false, error: '--resume-after needs a chunk id (a UUID)' };
   }
 
-  return { ok: true, dryRun, tenantKey, batchSize, resumeAfter };
+  return { ok: true, dryRun, tenantKey, batchSize, resumeAfter, ...(staleDictionary ? { staleDictionary: true as const } : {}) };
 }
 
 const consoleIo: CliIo = { out: (line) => console.log(line), err: (line) => console.error(line) };
@@ -84,6 +93,9 @@ export async function main(argv: string[] = process.argv.slice(2), io: CliIo = c
   const { getIngestDeps } = await import('../deps');
   const { currentIngestConfig } = await import('../current-config');
   const tableRowSerialization = currentIngestConfig().tableRowSerialization;
+  const { loadRagConfig } = await import('../../config');
+  const { getRagDeps } = await import('../../deps');
+  const config = loadRagConfig(getRagDeps().ragEnv());
   const db = getIngestDeps().db();
   if (!db) {
     io.err('[RAG Relex] admin client unavailable: set NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY');
@@ -98,6 +110,8 @@ export async function main(argv: string[] = process.argv.slice(2), io: CliIo = c
         batchSize: parsed.batchSize,
         resumeAfter: parsed.resumeAfter,
         tableRowSerialization,
+        config,
+        staleDictionary: parsed.staleDictionary === true,
         ...(signal ? { signal } : {}),
       });
       io.out('[RAG Relex] dry run, nothing written');
@@ -116,6 +130,8 @@ export async function main(argv: string[] = process.argv.slice(2), io: CliIo = c
       resumeAfter: parsed.resumeAfter,
       onProgress: (line) => io.out(`[RAG Relex] ${line}`),
       tableRowSerialization,
+      config,
+      staleDictionary: parsed.staleDictionary === true,
       ...(signal ? { signal } : {}),
     });
     for (const [tenant, count] of Object.entries(report.tenants).sort(([a], [b]) => (a < b ? -1 : 1))) {
