@@ -8,6 +8,7 @@ matrix row, in matrix order. A file whose sha256 differs from its header is refu
 disagreement in dims, row count, tenant, profile or model (VectorFileShapeError, VectorFileInvalid). Errors name files and
 codes only, never vector or text content.
 """
+
 import hashlib
 import json
 import os
@@ -65,7 +66,11 @@ def vector_file_base(kind: VectorKind, tenant_key: str, profile_id: str) -> str:
 
 
 def vector_files(base: str) -> dict[str, str]:
-    return {"f32": f"{base}.f32", "rows": f"{base}.rows.jsonl", "header": f"{base}{HEADER_SUFFIX}"}
+    return {
+        "f32": f"{base}.f32",
+        "rows": f"{base}.rows.jsonl",
+        "header": f"{base}{HEADER_SUFFIX}",
+    }
 
 
 @dataclass(frozen=True)
@@ -123,8 +128,10 @@ def read_vector_set(
     size = files["f32"].stat().st_size
     if size != header.rows * header.dims * DTYPE.itemsize:
         raise VectorFileShapeError("size_mismatch", f32_name)
-    matrix = np.fromfile(files["f32"], dtype=DTYPE).reshape(header.rows, header.dims) if header.rows else np.zeros(
-        (0, header.dims), dtype=DTYPE
+    matrix = (
+        np.fromfile(files["f32"], dtype=DTYPE).reshape(header.rows, header.dims)
+        if header.rows
+        else np.zeros((0, header.dims), dtype=DTYPE)
     )
 
     rows_name = vector_files(base)["rows"]
@@ -154,7 +161,13 @@ def read_vector_set(
     return VectorSet(header=header, ids=tuple(ids), matrix=matrix)
 
 
-def read_chunk_vectors(bundle_dir: Path, tenant_key: str, profile_id: str, *, expected_dims: int | None = None) -> VectorSet:
+def read_chunk_vectors(
+    bundle_dir: Path,
+    tenant_key: str,
+    profile_id: str,
+    *,
+    expected_dims: int | None = None,
+) -> VectorSet:
     return read_vector_set(
         bundle_dir,
         vector_file_base("chunks", tenant_key, profile_id),
@@ -165,7 +178,13 @@ def read_chunk_vectors(bundle_dir: Path, tenant_key: str, profile_id: str, *, ex
     )
 
 
-def read_query_vectors(bundle_dir: Path, tenant_key: str, profile_id: str, *, expected_dims: int | None = None) -> VectorSet:
+def read_query_vectors(
+    bundle_dir: Path,
+    tenant_key: str,
+    profile_id: str,
+    *,
+    expected_dims: int | None = None,
+) -> VectorSet:
     return read_vector_set(
         bundle_dir,
         vector_file_base("queries", tenant_key, profile_id),
@@ -226,11 +245,20 @@ def write_vector_set(
     for position, item in enumerate(ids):
         if kind == "chunks":
             row = ChunkVectorRow(
-                tenant_key=tenant_key, chunk_id=item, row_index=position, profile_id=profile_id, model=model, dims=dims
+                tenant_key=tenant_key,
+                chunk_id=item,
+                row_index=position,
+                profile_id=profile_id,
+                model=model,
+                dims=dims,
             )
         else:
             row = QueryVectorRow(
-                pair_id=item, profile_id=profile_id, model=model, dims=dims, vector=[float(v) for v in matrix[position]]
+                pair_id=item,
+                profile_id=profile_id,
+                model=model,
+                dims=dims,
+                vector=[float(v) for v in matrix[position]],
             )
         lines.append(json.dumps(row.model_dump(mode="json", exclude_none=True), sort_keys=True) + "\n")
     header = VectorFileHeader(
@@ -244,5 +272,8 @@ def write_vector_set(
     )
     _write(files["f32"], data)
     _write(files["rows"], "".join(lines).encode("utf-8"))
-    _write(files["header"], (json.dumps(header.model_dump(mode="json"), indent=2) + "\n").encode("utf-8"))
+    _write(
+        files["header"],
+        (json.dumps(header.model_dump(mode="json"), indent=2) + "\n").encode("utf-8"),
+    )
     return header

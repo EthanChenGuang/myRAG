@@ -1,11 +1,28 @@
+import hashlib
+import json
+import os
 import subprocess
 import sys
+import textwrap
+from pathlib import Path
 
 import numpy as np
 import pytest
+from finetune_fakes import FakeQueryLLM
+from rag_sidecar.contracts.finetune import (
+    DatasetManifest,
+    ExportedChunk,
+    FinetuneNegative,
+    FinetunePair,
+    MiningParams,
+    MiningReport,
+)
 
-from rag_eval.finetune import encoders, vectors_io
+from rag_eval.finetune import bundle, cli, encoders, miner, vectors_io
+from rag_eval.finetune.config import load_finetune_config
 from rag_eval.finetune.encoders import FakeEncoder, StoredVectorsEncoder, TextItem
+from rag_eval.finetune.generate import RawSyntheticQuery
+from rag_eval.finetune.mined import cluster_queries
 from rag_eval.finetune.vectors_io import (
     VectorFileInvalid,
     VectorFileShapeError,
@@ -23,7 +40,15 @@ MODEL = "fake-model"
 
 def _write_chunks(run_dir, tenant=TENANT_A, ids=("c1", "c2", "c3"), dims=4):
     matrix = np.arange(len(ids) * dims, dtype=np.float32).reshape(len(ids), dims) + 1
-    write_vector_set(run_dir, kind="chunks", tenant_key=tenant, profile_id=PROFILE, model=MODEL, ids=list(ids), matrix=matrix)
+    write_vector_set(
+        run_dir,
+        kind="chunks",
+        tenant_key=tenant,
+        profile_id=PROFILE,
+        model=MODEL,
+        ids=list(ids),
+        matrix=matrix,
+    )
     return matrix
 
 
@@ -34,7 +59,13 @@ def test_io_round_trip_uses_the_per_tenant_06_1_10_names(tmp_path):
     matrix = _write_chunks(tmp_path)
     queries = np.eye(2, 4, dtype=np.float32)
     write_vector_set(
-        tmp_path, kind="queries", tenant_key=TENANT_A, profile_id=PROFILE, model=MODEL, ids=["q1", "q2"], matrix=queries
+        tmp_path,
+        kind="queries",
+        tenant_key=TENANT_A,
+        profile_id=PROFILE,
+        model=MODEL,
+        ids=["q1", "q2"],
+        matrix=queries,
     )
     stem = "o_00000000-0000-4000-8000-0000000000a1." + PROFILE
     for suffix in (".f32", ".rows.jsonl", ".header.json"):
@@ -89,7 +120,11 @@ def test_io_row_count_mismatch_is_refused(tmp_path):
 
 def test_encoder_fake_is_deterministic_and_unit_norm():
     encoder = FakeEncoder(dims=32)
-    items = [TextItem("a", "a neutral sample sentence"), TextItem("b", "a neutral sample sentence"), TextItem("c", "x")]
+    items = [
+        TextItem("a", "a neutral sample sentence"),
+        TextItem("b", "a neutral sample sentence"),
+        TextItem("c", "x"),
+    ]
     first = encoder.encode_queries(items)
     again = FakeEncoder(dims=32).encode_documents(items)
     assert first.dtype == np.float32 and first.shape == (3, 32)
@@ -123,7 +158,13 @@ def test_encoder_stored_vectors_by_id(tmp_path):
 def test_encoder_stored_vectors_refuse_query_dims_mismatch(tmp_path):
     _write_chunks(tmp_path, dims=4)
     write_vector_set(
-        tmp_path, kind="queries", tenant_key=TENANT_A, profile_id=PROFILE, model=MODEL, ids=["q1"], matrix=np.ones((1, 3))
+        tmp_path,
+        kind="queries",
+        tenant_key=TENANT_A,
+        profile_id=PROFILE,
+        model=MODEL,
+        ids=["q1"],
+        matrix=np.ones((1, 3)),
     )
     with pytest.raises(VectorFileShapeError):
         StoredVectorsEncoder.from_bundle(tmp_path, TENANT_A, PROFILE)
@@ -148,22 +189,6 @@ def test_encoder_st_module_imports_without_the_finetune_extra():
 
 # --- Task 2: vectors miner, guards and the split rule --------------------------------------------------------
 
-import hashlib  # noqa: E402
-import json  # noqa: E402
-
-from rag_sidecar.contracts.finetune import (  # noqa: E402
-    DatasetManifest,
-    ExportedChunk,
-    FinetuneNegative,
-    FinetunePair,
-    MiningParams,
-    MiningReport,
-)
-
-from rag_eval.finetune import bundle, miner  # noqa: E402
-from rag_eval.finetune.config import load_finetune_config  # noqa: E402
-from rag_eval.finetune.generate import RawSyntheticQuery  # noqa: E402
-from rag_eval.finetune.mined import cluster_queries  # noqa: E402
 
 DIMS = 16
 
@@ -191,7 +216,16 @@ def _chunk(chunk_id, text, *, doc=1, index=0, split="train", tenant=TENANT_A, co
     )
 
 
-def _pair(pair_id, anchor, positive: ExportedChunk, *, split="train", source="synthetic", negatives=(), weight=1):
+def _pair(
+    pair_id,
+    anchor,
+    positive: ExportedChunk,
+    *,
+    split="train",
+    source="synthetic",
+    negatives=(),
+    weight=1,
+):
     return FinetunePair(
         pair_id=pair_id,
         tenant_key=positive.tenant_key,
@@ -231,7 +265,14 @@ def _hand_built():
         _chunk("dup-hash", "copy passage", doc=4, content_hash=positive.content_hash),
         _chunk("c040", "far passage", doc=5),
     ]
-    scores = {"pos": 0.80, "c079": 0.79, "c075": 0.75, "neighbour": 0.5, "dup-hash": 0.5, "c040": 0.40}
+    scores = {
+        "pos": 0.80,
+        "c079": 0.79,
+        "c075": 0.75,
+        "neighbour": 0.5,
+        "dup-hash": 0.5,
+        "c040": 0.40,
+    }
     documents = {c.chunk_id: _unit(scores[c.chunk_id], slot) for slot, c in enumerate(chunks, start=1)}
     pair = _pair("q1", "a neutral question", positive)
     encoder = StoredVectorsEncoder({"q1": [1.0] + [0.0] * (DIMS - 1)}, documents)
@@ -251,15 +292,31 @@ def test_vectors_relative_margin_on_hand_built_scores():
 def test_vectors_other_margins_and_score_limits():
     pair, chunks, encoder = _hand_built()
     [absolute] = miner.mine_vectors(
-        [pair], chunks, encoder, _params(relative_margin=None, absolute_margin=0.1, num_negatives=2)
+        [pair],
+        chunks,
+        encoder,
+        _params(relative_margin=None, absolute_margin=0.1, num_negatives=2),
     )
     assert [n.chunk_id for n in absolute.negatives] == ["c040"]
-    [capped] = miner.mine_vectors([pair], chunks, encoder, _params(relative_margin=None, max_score=0.76, num_negatives=2))
+    [capped] = miner.mine_vectors(
+        [pair],
+        chunks,
+        encoder,
+        _params(relative_margin=None, max_score=0.76, num_negatives=2),
+    )
     assert [n.chunk_id for n in capped.negatives] == ["c075", "c040"]
-    [floored] = miner.mine_vectors([pair], chunks, encoder, _params(relative_margin=None, min_score=0.6, num_negatives=2))
+    [floored] = miner.mine_vectors(
+        [pair],
+        chunks,
+        encoder,
+        _params(relative_margin=None, min_score=0.6, num_negatives=2),
+    )
     assert [n.chunk_id for n in floored.negatives] == ["c079", "c075"]
     [ranked] = miner.mine_vectors(
-        [pair], chunks, encoder, _params(relative_margin=None, range_min=1, range_max=4, num_negatives=2)
+        [pair],
+        chunks,
+        encoder,
+        _params(relative_margin=None, range_min=1, range_max=4, num_negatives=2),
     )
     # ranks 1..3 of the non-positive candidates are c075, neighbour, dup-hash; c040 (rank 4) is outside range_max
     assert [n.chunk_id for n in ranked.negatives] == ["c075"]
@@ -271,15 +328,32 @@ def test_guard_neighbour_and_duplicate_hash_are_never_negatives():
     ids = [n.chunk_id for n in mined.negatives]
     assert ids == ["c075", "c040"]
     assert "neighbour" not in ids and "dup-hash" not in ids and "pos" not in ids
-    [wide] = miner.mine_vectors([pair], chunks, encoder, _params(relative_margin=0.05, num_negatives=5, neighbour_window=0))
+    [wide] = miner.mine_vectors(
+        [pair],
+        chunks,
+        encoder,
+        _params(relative_margin=0.05, num_negatives=5, neighbour_window=0),
+    )
     assert "neighbour" in [n.chunk_id for n in wide.negatives]
 
 
 def test_guard_positive_of_a_near_duplicate_query_is_never_a_negative():
     encoder = FakeEncoder(dims=64)
-    first = _chunk("c-first", "the sample register keeps a neutral entry for every placeholder item", doc=1)
-    second = _chunk("c-second", "the sample register keeps one neutral entry for each placeholder item", doc=2)
-    other = _chunk("c-other", "an unrelated filler sentence about generic weather in a fictional place", doc=3)
+    first = _chunk(
+        "c-first",
+        "the sample register keeps a neutral entry for every placeholder item",
+        doc=1,
+    )
+    second = _chunk(
+        "c-second",
+        "the sample register keeps one neutral entry for each placeholder item",
+        doc=2,
+    )
+    other = _chunk(
+        "c-other",
+        "an unrelated filler sentence about generic weather in a fictional place",
+        doc=3,
+    )
     pairs = [
         _pair("q-a", "where does the sample register keep the neutral entry", first),
         _pair("q-b", "where does the sample register keep the neutral entries", second),
@@ -293,7 +367,18 @@ def test_guard_positive_of_a_near_duplicate_query_is_never_a_negative():
 
 
 def test_guard_clusters_match_the_all_pairs_comparison():
-    words = ["sample", "neutral", "record", "entry", "item", "value", "code", "label", "cycle", "team"]
+    words = [
+        "sample",
+        "neutral",
+        "record",
+        "entry",
+        "item",
+        "value",
+        "code",
+        "label",
+        "cycle",
+        "team",
+    ]
     rng = np.random.default_rng(7)
     texts = []
     for _ in range(120):
@@ -305,7 +390,13 @@ def test_guard_clusters_match_the_all_pairs_comparison():
 
 def _corpus(tenant, prefix, n=12, split_of=lambda i: "train"):
     return [
-        _chunk(f"{prefix}{i}", f"generic record {i} names attribute {i % 4} and value {i * 7}", doc=i + 1, tenant=tenant, split=split_of(i))
+        _chunk(
+            f"{prefix}{i}",
+            f"generic record {i} names attribute {i % 4} and value {i * 7}",
+            doc=i + 1,
+            tenant=tenant,
+            split=split_of(i),
+        )
         for i in range(n)
     ]
 
@@ -315,19 +406,27 @@ def test_tenant_identical_chunks_never_cross():
     b = _corpus(TENANT_B, "b-")
     pairs = [_pair(f"qa{i}", f"generic record {i} attribute", a[i]) for i in range(4)]
     pairs += [_pair(f"qb{i}", f"generic record {i} attribute", b[i]) for i in range(4)]
-    mined = miner.mine_vectors(pairs, a + b, FakeEncoder(dims=64), _params(relative_margin=None, num_negatives=3))
+    mined = miner.mine_vectors(
+        pairs,
+        a + b,
+        FakeEncoder(dims=64),
+        _params(relative_margin=None, num_negatives=3),
+    )
     for pair in mined:
         prefix = "a-" if pair.tenant_key == TENANT_A else "b-"
         assert pair.negatives and all(n.chunk_id.startswith(prefix) for n in pair.negatives)
 
 
 def test_split_train_pairs_only_get_train_negatives_and_dev_pairs_no_test():
-    split_of = lambda i: ("train", "dev", "test")[i % 3]  # noqa: E731
+    split_of = lambda i: ("train", "dev", "test")[i % 3]
     chunks = _corpus(TENANT_A, "c-", n=18, split_of=split_of)
     by_id = {c.chunk_id: c for c in chunks}
     pairs = [_pair(f"q{i}", f"generic record {i} attribute", chunks[i], split=chunks[i].split) for i in range(6)]
     mined = miner.mine_vectors(
-        [p for p in pairs if p.split != "test"], chunks, FakeEncoder(dims=64), _params(relative_margin=None, num_negatives=4)
+        [p for p in pairs if p.split != "test"],
+        chunks,
+        FakeEncoder(dims=64),
+        _params(relative_margin=None, num_negatives=4),
     )
     for pair in mined:
         splits = {by_id[n.chunk_id].split for n in pair.negatives}
@@ -345,15 +444,32 @@ def test_vectors_random_sampling_is_seeded_and_reproducible():
     other = miner.mine_vectors(pairs, chunks, FakeEncoder(dims=64), params, seed=12)
     assert [p.negatives for p in first] == [p.negatives for p in again]
     assert [p.negatives for p in first] != [p.negatives for p in other]
-    top = miner.mine_vectors(pairs, chunks, FakeEncoder(dims=64), _params(relative_margin=None, num_negatives=3, range_max=20))
+    top = miner.mine_vectors(
+        pairs,
+        chunks,
+        FakeEncoder(dims=64),
+        _params(relative_margin=None, num_negatives=3, range_max=20),
+    )
     assert [p.negatives for p in first] != [p.negatives for p in top]
 
 
 def test_vectors_expert_negatives_first_and_the_miner_tops_up():
     chunks = _corpus(TENANT_A, "c-", n=12)
     expert = FinetuneNegative(chunk_id="c-9", text=chunks[9].text, negative_source="expert")
-    pair = _pair("mined:item-1", "generic record 0 attribute", chunks[0], source="mined", negatives=[expert], weight=2)
-    [mined] = miner.mine_vectors([pair], chunks, FakeEncoder(dims=64), _params(relative_margin=None, num_negatives=3))
+    pair = _pair(
+        "mined:item-1",
+        "generic record 0 attribute",
+        chunks[0],
+        source="mined",
+        negatives=[expert],
+        weight=2,
+    )
+    [mined] = miner.mine_vectors(
+        [pair],
+        chunks,
+        FakeEncoder(dims=64),
+        _params(relative_margin=None, num_negatives=3),
+    )
     assert mined.negatives[0] == expert
     assert [n.negative_source for n in mined.negatives] == ["expert", "mined", "mined"]
     assert "c-9" not in [n.chunk_id for n in mined.negatives[1:]]
@@ -371,14 +487,38 @@ def test_vectors_query_blocks_do_not_change_the_result():
 
 # --- bundle-level helpers (used by Task 2 and Task 3 tests) ---------------------------------------------------
 
-WORDS = ["alpha", "bravo", "cobalt", "delta", "ember", "fjord", "garnet", "harbor", "indigo", "juniper", "kelp", "lumen"]
+WORDS = [
+    "alpha",
+    "bravo",
+    "cobalt",
+    "delta",
+    "ember",
+    "fjord",
+    "garnet",
+    "harbor",
+    "indigo",
+    "juniper",
+    "kelp",
+    "lumen",
+]
 
 
 def _fixture_texts(n):
-    return [f"record {WORDS[i % 12]} {WORDS[(i * 5 + 3) % 12]} lists entry {i} with code {i * 13 % 97}" for i in range(n)]
+    return [
+        f"record {WORDS[i % 12]} {WORDS[(i * 5 + 3) % 12]} lists entry {i} with code {i * 13 % 97}" for i in range(n)
+    ]
 
 
-def _write_bundle(tmp_path, *, tenants=(TENANT_A,), n_chunks=40, n_queries=20, split_of=lambda i: "train", mined_pairs=(), vectors=True):
+def _write_bundle(
+    tmp_path,
+    *,
+    tenants=(TENANT_A,),
+    n_chunks=40,
+    n_queries=20,
+    split_of=lambda i: "train",
+    mined_pairs=(),
+    vectors=True,
+):
     run_dir = bundle.new_run_dir(tmp_path / "out", "run-1")
     chunks, raws = [], []
     texts = _fixture_texts(n_chunks)
@@ -407,7 +547,9 @@ def _write_bundle(tmp_path, *, tenants=(TENANT_A,), n_chunks=40, n_queries=20, s
     train_dev = [r for r in raws if r.split != "test"]
     files["queries.kept.jsonl"] = bundle.write_jsonl(run_dir / "queries.kept.jsonl", train_dev, RawSyntheticQuery)
     files["queries.test.kept.jsonl"] = bundle.write_jsonl(
-        run_dir / "queries.test.kept.jsonl", [r for r in raws if r.split == "test"], RawSyntheticQuery
+        run_dir / "queries.test.kept.jsonl",
+        [r for r in raws if r.split == "test"],
+        RawSyntheticQuery,
     )
     if mined_pairs:
         files["pairs.mined.jsonl"] = bundle.write_jsonl(run_dir / "pairs.mined.jsonl", list(mined_pairs), FinetunePair)
@@ -455,7 +597,7 @@ def _read_pairs(path):
 
 
 def test_vectors_run_writes_ntuple_pairs_and_dev_files(tmp_path, capsys):
-    split_of = lambda i: "dev" if i % 5 == 4 else ("test" if i % 7 == 6 else "train")  # noqa: E731
+    split_of = lambda i: "dev" if i % 5 == 4 else ("test" if i % 7 == 6 else "train")
     run_dir, chunks = _write_bundle(tmp_path, n_chunks=40, n_queries=24, split_of=split_of)
     config = load_finetune_config()
     config = config.model_copy(update={"mining": _params(relative_margin=0.05, num_negatives=5, range_max=12)})
@@ -483,7 +625,12 @@ def test_vectors_run_writes_ntuple_pairs_and_dev_files(tmp_path, capsys):
     assert report.pairs_only == len(short) + len(dev) - dev_full
     assert report.fn_audit.skipped and report.params.range_max == 12
     manifest = bundle.read_manifest(run_dir)
-    for name in ("train_ntuple.jsonl", "train_pairs.jsonl", "dev.jsonl", "mining-report.json"):
+    for name in (
+        "train_ntuple.jsonl",
+        "train_pairs.jsonl",
+        "dev.jsonl",
+        "mining-report.json",
+    ):
         assert manifest.files[name] == bundle.sha256_file(run_dir / name)
     captured = capsys.readouterr()
     for chunk in chunks:
@@ -528,7 +675,15 @@ def test_vectors_run_refuses_tampered_vectors_and_missing_query_vectors(tmp_path
     header = json.loads((run_dir / "vectors" / f"{stem}.header.json").read_text())
     matrix = np.fromfile(run_dir / "vectors" / f"{stem}.f32", dtype="<f4").reshape(header["rows"], header["dims"])
     ids = [json.loads(r)["pair_id"] for r in rows][:-1]
-    write_vector_set(run_dir, kind="queries", tenant_key=TENANT_A, profile_id=PROFILE, model=MODEL, ids=ids, matrix=matrix[:-1])
+    write_vector_set(
+        run_dir,
+        kind="queries",
+        tenant_key=TENANT_A,
+        profile_id=PROFILE,
+        model=MODEL,
+        ids=ids,
+        matrix=matrix[:-1],
+    )
     assert miner.run_mine(run_dir, fixture=True, skip_audit=True).exit_code == 1
 
 
@@ -541,13 +696,6 @@ def test_vectors_run_refuses_a_kept_file_changed_after_the_manifest(tmp_path):
 
 # --- Task 3: false-negative audit, report, round trip, st backend --------------------------------------------
 
-import os  # noqa: E402
-import textwrap  # noqa: E402
-from pathlib import Path  # noqa: E402
-
-from finetune_fakes import FakeQueryLLM  # noqa: E402
-
-from rag_eval.finetune import cli  # noqa: E402
 
 PRICED = {"input_usd_per_mtok": 1.0, "output_usd_per_mtok": 5.0}
 
@@ -579,7 +727,12 @@ def test_fn_audit_zero_of_fifty_answerable_passes(tmp_path, capsys):
     result = miner.run_mine(run_dir, budget_usd=5.0, config=config, llm=llm)
     assert result.exit_code == 0
     audit = result.report.fn_audit
-    assert (audit.sampled, audit.answerable, audit.skipped, audit.passed) == (50, 0, False, True)
+    assert (audit.sampled, audit.answerable, audit.skipped, audit.passed) == (
+        50,
+        0,
+        False,
+        True,
+    )
     assert 0.05 < audit.upper_95 < 0.08
     assert len(seen) == 50 and llm.judge_calls >= 1
     report = MiningReport.model_validate_json((run_dir / "mining-report.json").read_text())
@@ -657,7 +810,15 @@ def test_fn_audit_skipped_in_fixture_mode_is_recorded(tmp_path):
 def test_report_records_the_parameters_used(tmp_path):
     run_dir, _ = _audit_bundle(tmp_path)
     config = load_finetune_config().model_copy(
-        update={"mining": _params(relative_margin=0.1, num_negatives=4, range_min=1, range_max=15, sampling_strategy="random")}
+        update={
+            "mining": _params(
+                relative_margin=0.1,
+                num_negatives=4,
+                range_min=1,
+                range_max=15,
+                sampling_strategy="random",
+            )
+        }
     )
     assert miner.run_mine(run_dir, fixture=True, skip_audit=True, config=config).exit_code == 0
     report = MiningReport.model_validate_json((run_dir / "mining-report.json").read_text())
@@ -693,7 +854,20 @@ def test_cli_dispatches_mine(tmp_path):
     run_dir, _ = _audit_bundle(tmp_path)
     assert cli.main(["mine", "--bundle", str(run_dir), "--fixture", "--skip-audit"]) == 0
     assert (run_dir / "train_ntuple.jsonl").is_file()
-    assert cli.main(["mine", "--bundle", str(run_dir), "--round-trip-k", "0", "--fixture", "--skip-audit"]) == 2
+    assert (
+        cli.main(
+            [
+                "mine",
+                "--bundle",
+                str(run_dir),
+                "--round-trip-k",
+                "0",
+                "--fixture",
+                "--skip-audit",
+            ]
+        )
+        == 2
+    )
     assert cli.main(["mine", "--bundle", str(tmp_path / "missing"), "--fixture", "--skip-audit"]) == 2
 
 
@@ -722,12 +896,27 @@ def test_finetune_train_required_turns_a_skip_into_a_failure(tmp_path):
             """
         )
     )
-    command = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", str(tmp_path)]
+    command = [
+        sys.executable,
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        str(tmp_path),
+    ]
     env = {k: v for k, v in os.environ.items() if k != "FINETUNE_TRAIN_REQUIRED"}
-    relaxed = subprocess.run(command, cwd=tmp_path, env=env, capture_output=True, text=True)
+    relaxed = subprocess.run(command, cwd=tmp_path, env=env, capture_output=True, text=True, check=False)
     assert relaxed.returncode == 0, relaxed.stdout
     assert "2 skipped" in relaxed.stdout
-    strict = subprocess.run(command, cwd=tmp_path, env={**env, "FINETUNE_TRAIN_REQUIRED": "1"}, capture_output=True, text=True)
+    strict = subprocess.run(
+        command,
+        cwd=tmp_path,
+        env={**env, "FINETUNE_TRAIN_REQUIRED": "1"},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
     assert strict.returncode == 1, strict.stdout
     assert "1 failed" in strict.stdout and "1 skipped" in strict.stdout
 
@@ -755,7 +944,12 @@ def _st_fixture(tenant=TENANT_A, prefix="c-", split_of=lambda i: "train"):
     texts = _fixture_texts(20)
     chunks = [_chunk(f"{prefix}{i}", text, doc=i + 1, tenant=tenant, split=split_of(i)) for i, text in enumerate(texts)]
     pairs = [
-        _pair(f"{prefix}q{i}", f"{WORDS[i % 12]} {WORDS[(i * 5 + 3) % 12]} entry {i}", chunks[i], split=chunks[i].split)
+        _pair(
+            f"{prefix}q{i}",
+            f"{WORDS[i % 12]} {WORDS[(i * 5 + 3) % 12]} entry {i}",
+            chunks[i],
+            split=chunks[i].split,
+        )
         for i in range(8)
     ]
     return chunks, pairs
@@ -779,25 +973,43 @@ def test_st_parity_both_miners_pick_the_same_negatives():
     model = _tiny_model([c.text for c in chunks] + [p.anchor for p in pairs])
     for overrides in (
         {"relative_margin": 0.05, "num_negatives": 3, "range_max": 10},
-        {"relative_margin": None, "absolute_margin": 0.02, "num_negatives": 4, "range_min": 1, "range_max": 12},
-        {"relative_margin": 0.05, "num_negatives": 3, "range_max": 10, "sampling_strategy": "random"},
+        {
+            "relative_margin": None,
+            "absolute_margin": 0.02,
+            "num_negatives": 4,
+            "range_min": 1,
+            "range_max": 12,
+        },
+        {
+            "relative_margin": 0.05,
+            "num_negatives": 3,
+            "range_max": 10,
+            "sampling_strategy": "random",
+        },
     ):
         params = _params(**overrides)
         by_vectors = miner.mine_vectors(pairs, chunks, encoders.SentenceTransformerEncoder(model), params, seed=5)
         by_st = miner.mine_st(pairs, chunks, model, params, seed=5)
-        assert [[n.chunk_id for n in p.negatives] for p in by_st] == [[n.chunk_id for n in p.negatives] for p in by_vectors]
+        assert [[n.chunk_id for n in p.negatives] for p in by_st] == [
+            [n.chunk_id for n in p.negatives] for p in by_vectors
+        ]
         assert sum(len(p.negatives) for p in by_st) > 0
 
 
 @pytest.mark.finetune_train
 def test_st_two_tenants_and_split_rule():
-    split_of = lambda i: ("train", "train", "dev", "test")[i % 4]  # noqa: E731
+    split_of = lambda i: ("train", "train", "dev", "test")[i % 4]
     a_chunks, a_pairs = _st_fixture(TENANT_A, "a-", split_of)
     b_chunks, b_pairs = _st_fixture(TENANT_B, "b-", split_of)
     chunks = a_chunks + b_chunks
     pairs = [p for p in a_pairs + b_pairs if p.split != "test"]
     model = _tiny_model([c.text for c in chunks] + [p.anchor for p in pairs])
-    mined = miner.mine_st(pairs, chunks, model, _params(relative_margin=None, num_negatives=3, range_max=10))
+    mined = miner.mine_st(
+        pairs,
+        chunks,
+        model,
+        _params(relative_margin=None, num_negatives=3, range_max=10),
+    )
     by_id = {(c.tenant_key, c.chunk_id): c for c in chunks}
     assert any(p.negatives for p in mined)
     for pair in mined:
@@ -810,9 +1022,20 @@ def test_st_two_tenants_and_split_rule():
 @pytest.mark.finetune_train
 def test_st_run_writes_the_same_outputs_shape(tmp_path):
     run_dir, chunks = _write_bundle(tmp_path, n_chunks=20, n_queries=10, vectors=False)
-    model = _tiny_model([c.text for c in chunks] + [f"{WORDS[i % 12]} {WORDS[(i * 5 + 3) % 12]} entry {i}" for i in range(10)])
-    config = load_finetune_config().model_copy(update={"mining": _params(relative_margin=0.05, num_negatives=3, range_max=10)})
-    result = miner.run_mine(run_dir, miner="st", fixture=True, skip_audit=True, config=config, st_model=model)
+    model = _tiny_model(
+        [c.text for c in chunks] + [f"{WORDS[i % 12]} {WORDS[(i * 5 + 3) % 12]} entry {i}" for i in range(10)]
+    )
+    config = load_finetune_config().model_copy(
+        update={"mining": _params(relative_margin=0.05, num_negatives=3, range_max=10)}
+    )
+    result = miner.run_mine(
+        run_dir,
+        miner="st",
+        fixture=True,
+        skip_audit=True,
+        config=config,
+        st_model=model,
+    )
     assert result.exit_code == 0
     report = MiningReport.model_validate_json((run_dir / "mining-report.json").read_text())
     assert report.miner == "st" and report.pairs == 10

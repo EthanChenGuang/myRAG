@@ -2,8 +2,8 @@ from _finetune_guard import pytest_runtest_makereport, set_offline
 
 set_offline()
 
-import pytest  # noqa: E402
-from _private_runs import make_private_root  # noqa: E402
+import pytest
+from _private_runs import make_private_root
 
 
 @pytest.fixture

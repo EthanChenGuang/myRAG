@@ -6,6 +6,7 @@ An Encoder turns TextItems into L2-normalised float32 rows, one per item, in inp
 - SentenceTransformerEncoder: any sentence-transformers model with the query and document prompts from finetune.json.
   sentence_transformers is imported on first use, so this module imports without the finetune extra.
 """
+
 import hashlib
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -60,7 +61,11 @@ class StoredVectorsEncoder:
 
     name = "vectors"
 
-    def __init__(self, queries: VectorSet | Mapping[str, Sequence[float]], documents: VectorSet | Mapping[str, Sequence[float]]):
+    def __init__(
+        self,
+        queries: VectorSet | Mapping[str, Sequence[float]],
+        documents: VectorSet | Mapping[str, Sequence[float]],
+    ):
         self._queries = self._table(queries)
         self._documents = self._table(documents)
         q_dims, d_dims = self._queries[1].shape[1], self._documents[1].shape[1]
@@ -75,7 +80,9 @@ class StoredVectorsEncoder:
         self.dims = int(d_dims)
 
     @staticmethod
-    def _table(source: VectorSet | Mapping[str, Sequence[float]]) -> tuple[dict[str, int], np.ndarray]:
+    def _table(
+        source: VectorSet | Mapping[str, Sequence[float]],
+    ) -> tuple[dict[str, int], np.ndarray]:
         if isinstance(source, VectorSet):
             return source.index(), normalize_rows(source.matrix)
         ids = list(source)

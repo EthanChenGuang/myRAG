@@ -30,6 +30,7 @@ the command exits 6 and writes only mining-report.json. `--fixture --skip-audit`
 Outputs: train_ntuple.jsonl (train pairs with num_negatives negatives), train_pairs.jsonl (the other train pairs),
 dev.jsonl, mining-report.json (MiningReport). Stdout, stderr and the report carry ids, counts and codes only (D-31).
 """
+
 import argparse
 import inspect
 import json
@@ -91,7 +92,10 @@ OVERFETCH_FACTOR = 3
 JUDGE_ITEM_OVERHEAD_CHARS = 40
 JUDGE_OUTPUT_TOKENS_PER_ITEM = 20
 SPLIT_ORDER: tuple[FinetuneSplit, ...] = ("train", "dev", "test")
-CORPUS_SPLITS: dict[str, tuple[FinetuneSplit, ...]] = {"train": ("train",), "dev": ("train", "dev")}
+CORPUS_SPLITS: dict[str, tuple[FinetuneSplit, ...]] = {
+    "train": ("train",),
+    "dev": ("train", "dev"),
+}
 AUDIT_HINT = "raise mining.relative_margin or mining.range_min in finetune.json and mine again"
 
 EXIT_OK = 0
@@ -217,7 +221,11 @@ def _guard_sets(
 
 
 def _survivors(
-    scores: np.ndarray, positive_cols: Sequence[int], positive_score: float, max_positives: int, params: MiningParams
+    scores: np.ndarray,
+    positive_cols: Sequence[int],
+    positive_score: float,
+    max_positives: int,
+    params: MiningParams,
 ) -> list[int]:
     """mine_hard_negatives' candidate window for one query: corpus columns in descending score order."""
     k = min(params.range_max + max_positives, scores.shape[0])
@@ -246,7 +254,12 @@ def _survivors(
     return kept[params.range_min : params.range_max]
 
 
-def _guarded(chunk: ExportedChunk, positive: ExportedChunk, blocked_ids: frozenset[str], window: int) -> bool:
+def _guarded(
+    chunk: ExportedChunk,
+    positive: ExportedChunk,
+    blocked_ids: frozenset[str],
+    window: int,
+) -> bool:
     if chunk.chunk_id in blocked_ids or chunk.chunk_id == positive.chunk_id:
         return True
     if chunk.content_hash == positive.content_hash:
@@ -366,7 +379,9 @@ def mine_vectors(
         if not dataset.pairs:
             continue
         if dataset.tenant_key not in encoders:
-            encoders[dataset.tenant_key] = encoder if hasattr(encoder, "encode_queries") else encoder(dataset.tenant_key)
+            encoders[dataset.tenant_key] = (
+                encoder if hasattr(encoder, "encode_queries") else encoder(dataset.tenant_key)
+            )
         enc = encoders[dataset.tenant_key]
         corpus = dataset.corpus
         col_of = {c.chunk_id: col for col, c in enumerate(corpus)}
@@ -474,16 +489,81 @@ def mine_st(
     batch_size: int = 32,
 ) -> list[FinetunePair]:
     """Delegates the window to mine_hard_negatives once per tenant and split corpus (train pairs against train chunks,
-    dev pairs against train and dev chunks). mine_hard_negatives is called with sampling_strategy 'top'; the guards and
-    the configured sampling run afterwards on the returned window, as in the vectors miner."""
-    return list(pairs)
+    dev pairs against train and dev chunks). mine_hard_negatives is called with sampling_strategy 'top' (num_negatives x 3
+    first, then the whole window when the guards leave too few; the whole window at once for random sampling), and the
+    guards and the configured sampling run afterwards on the returned window, as in the vectors miner."""
+    function = _st_function()
+    guards = _guards_for(pairs, guard_queries, near_dup_ngram, near_dup_jaccard)
+    results: dict[int, FinetunePair] = {}
+    window_size = params.range_max - params.range_min
+    # random sampling draws from every valid candidate of the window, so it needs the whole window at once
+    first = (
+        window_size
+        if params.sampling_strategy == "random"
+        else min(params.num_negatives * OVERFETCH_FACTOR, window_size)
+    )
+    for dataset in _datasets(pairs, chunks):
+        if not dataset.pairs:
+            continue
+        by_text: dict[str, list[ExportedChunk]] = {}
+        for chunk in dataset.corpus:
+            by_text.setdefault(chunk.text, []).append(chunk)
+        with tempfile.TemporaryDirectory(prefix="ft-mine-st-") as cache_folder:
+            windows = {
+                first: _st_window(
+                    function,
+                    model,
+                    dataset,
+                    params,
+                    first,
+                    query_prompt=query_prompt,
+                    corpus_prompt=corpus_prompt,
+                    batch_size=batch_size,
+                    cache_folder=cache_folder,
+                )
+            }
+            for index, pair in dataset.pairs:
+                positive = dataset.chunks_by_id[pair.positive_chunk_id]
+                for count in (first, window_size):
+                    if count not in windows:
+                        windows[count] = _st_window(
+                            function,
+                            model,
+                            dataset,
+                            params,
+                            count,
+                            query_prompt=query_prompt,
+                            corpus_prompt=corpus_prompt,
+                            batch_size=batch_size,
+                            cache_folder=cache_folder,
+                        )
+                    texts = windows[count].get((pair.anchor, positive.text), [])
+                    ranked = [chunk for text in texts for chunk in by_text.get(text, [])]
+                    finished, _ = _finish(
+                        pair,
+                        ranked,
+                        positive=positive,
+                        blocked_ids=_blocked(guards, pair),
+                        chunks_by_id=dataset.chunks_by_id,
+                        params=params,
+                        seed=seed,
+                    )
+                    results[index] = finished
+                    if len(finished.negatives) >= params.num_negatives or len(texts) < count or count == window_size:
+                        break
+    return _assemble(pairs, results)
 
 
 # --- round trip and false-negative audit ----------------------------------------------------------------------
 
 
 def round_trip_misses(
-    pairs: Sequence[FinetunePair], chunks: Sequence[ExportedChunk], encoder: Encoder, k: int, *, block_size: int = QUERY_BLOCK
+    pairs: Sequence[FinetunePair],
+    chunks: Sequence[ExportedChunk],
+    encoder: Encoder,
+    k: int,
+    *,
+    block_size: int = QUERY_BLOCK,
 ) -> set[str]:
     """Pair ids whose positive ranks below the top k of `chunks` (one tenant's chunks) for its query."""
     if not pairs:
@@ -532,13 +612,51 @@ def run_fn_audit(
 ) -> FnAudit:
     """Judges a seeded sample of mined negatives: an answerable verdict means the negative answers the query (a false
     negative). Passes when the Clopper-Pearson 95% upper bound of that share is <= max_upper."""
-    return FnAudit(sampled=0, answerable=0, passed=True, skipped=True)
+    items = [(pair, negative) for pair in pairs for negative in pair.negatives if negative.negative_source == "mined"]
+    if not items:
+        return FnAudit(sampled=0, answerable=0, passed=True, skipped=True)
+    sample = random.Random(f"{seed}:fn-audit").sample(items, min(sample_size, len(items)))
+    answerable = 0
+    for batch in _judge_batches(sample, batch_chars):
+        estimate = Usage(
+            input_tokens=sum(estimate_tokens(p.anchor + n.text, p.language) for p, n in batch)
+            + estimate_tokens(" " * JUDGE_ITEM_OVERHEAD_CHARS * len(batch), "en"),
+            output_tokens=JUDGE_OUTPUT_TOKENS_PER_ITEM * len(batch),
+        )
+        if budget.would_exceed(estimate):
+            raise _BudgetStop()
+        judge_items = [
+            JudgeItem(ref=ref, query=p.anchor, language=p.language, chunk_text=n.text)
+            for ref, (p, n) in enumerate(batch)
+        ]
+        try:
+            result = llm.judge_answerability(judge_items, prompt_version=prompt_version)
+        except LLMOutputInvalid as exc:
+            budget.charge(exc.usage)
+            raise
+        budget.charge(result.usage)
+        if len(result.verdicts) != len(batch):
+            raise LLMOutputInvalid("judge_refs_mismatch")
+        answerable += sum(1 for verdict in result.verdicts if verdict.answerable)
+    bound = upper_bound(answerable, len(sample))
+    return FnAudit(
+        sampled=len(sample),
+        answerable=answerable,
+        upper_95=bound,
+        passed=bound <= max_upper,
+        skipped=False,
+    )
 
 
 # --- bundle IO ------------------------------------------------------------------------------------------------
 
 
-def _read_rows(path: Path, chunks_by_key: dict[tuple[str, str], ExportedChunk], *, raw_allowed: bool) -> list[FinetunePair]:
+def _read_rows(
+    path: Path,
+    chunks_by_key: dict[tuple[str, str], ExportedChunk],
+    *,
+    raw_allowed: bool,
+) -> list[FinetunePair]:
     pairs: list[FinetunePair] = []
     if not path.is_file():
         return pairs
@@ -639,7 +757,9 @@ def _stored_encoders(run_dir: Path, tenants: Iterable[str], profile: str | None)
     out: dict[str, StoredVectorsEncoder] = {}
     for tenant_key in tenants:
         try:
-            out[tenant_key] = StoredVectorsEncoder.from_bundle(run_dir, tenant_key, _resolve_profile(run_dir, tenant_key, profile))
+            out[tenant_key] = StoredVectorsEncoder.from_bundle(
+                run_dir, tenant_key, _resolve_profile(run_dir, tenant_key, profile)
+            )
         except vectors_io.VectorFileMissing:
             raise MineRefused("vectors_missing: run npm run rag:finetune -- export-vectors and embed-queries") from None
         except vectors_io.VectorFileError as exc:
@@ -648,7 +768,9 @@ def _stored_encoders(run_dir: Path, tenants: Iterable[str], profile: str | None)
 
 
 def _restrict_to_stored(
-    pairs: list[FinetunePair], chunks: list[ExportedChunk], stored: dict[str, StoredVectorsEncoder]
+    pairs: list[FinetunePair],
+    chunks: list[ExportedChunk],
+    stored: dict[str, StoredVectorsEncoder],
 ) -> tuple[list[ExportedChunk], int]:
     """Drops chunks without a stored vector from the corpus; a pair whose query or positive lacks one is refused."""
     for pair in pairs:
@@ -662,11 +784,18 @@ def _restrict_to_stored(
 
 
 def _prompts(config: FinetuneConfig, model: str) -> tuple[str, str]:
-    spec = next((m for m in config.base_models if m.id == model), None) or next(m for m in config.base_models if m.default)
+    spec = next((m for m in config.base_models if m.id == model), None) or next(
+        m for m in config.base_models if m.default
+    )
     return spec.query_prompt, spec.document_prompt
 
 
-def _write_outputs(run_dir: Path, manifest: DatasetManifest, report: MiningReport, pairs: list[FinetunePair] | None) -> None:
+def _write_outputs(
+    run_dir: Path,
+    manifest: DatasetManifest,
+    report: MiningReport,
+    pairs: list[FinetunePair] | None,
+) -> None:
     files = dict(manifest.files)
     for name in OUTPUT_FILES:
         files.pop(name, None)
@@ -731,19 +860,27 @@ def run_mine(
             if config.mining.fn_audit_sample == 0:
                 raise MineRefused("fn_audit_sample_zero: set mining.fn_audit_sample above 0")
         params = MiningParams.model_validate(
-            {**config.mining.model_dump(), "round_trip_k": round_trip_k if round_trip_k is not None else config.mining.round_trip_k}
+            {
+                **config.mining.model_dump(),
+                "round_trip_k": round_trip_k if round_trip_k is not None else config.mining.round_trip_k,
+            }
         )
         loaded = _load_bundle(run_dir)
         pairs = loaded.pairs
         chunks = loaded.chunks
         tenants = sorted({p.tenant_key for p in pairs})
         stored: dict[str, StoredVectorsEncoder] = {}
-        need_stored = (miner == "vectors" and encoder_factory is None) or (params.round_trip_k is not None and encoder_factory is None)
+        need_stored = (miner == "vectors" and encoder_factory is None) or (
+            params.round_trip_k is not None and encoder_factory is None
+        )
         if need_stored:
             stored = _stored_encoders(run_dir, tenants, profile)
             chunks, skipped = _restrict_to_stored(pairs, chunks, stored)
             if skipped:
-                _print(err, f"[Finetune] mine: chunks_without_vector={skipped} (left out of the candidate corpus)")
+                _print(
+                    err,
+                    f"[Finetune] mine: chunks_without_vector={skipped} (left out of the candidate corpus)",
+                )
 
         def production(tenant_key: str) -> Encoder:
             return encoder_factory(tenant_key) if encoder_factory is not None else stored[tenant_key]
@@ -756,7 +893,12 @@ def run_mine(
                 tenant_chunks = [c for c in chunks if c.tenant_key == tenant_key]
                 dropped |= {
                     (tenant_key, pid)
-                    for pid in round_trip_misses(tenant_pairs, tenant_chunks, production(tenant_key), params.round_trip_k)
+                    for pid in round_trip_misses(
+                        tenant_pairs,
+                        tenant_chunks,
+                        production(tenant_key),
+                        params.round_trip_k,
+                    )
                 }
             round_trip_miss = len(dropped)
             pairs = [p for p in pairs if (p.tenant_key, p.pair_id) not in dropped]
@@ -773,7 +915,15 @@ def run_mine(
             model_id = model or next(m.id for m in config.base_models if m.default)
             query_prompt, document_prompt = _prompts(config, model_id)
             st = st_model if st_model is not None else load_sentence_transformer(model_id)
-            mined = mine_st(pairs, chunks, st, params, query_prompt=query_prompt, corpus_prompt=document_prompt, **common)
+            mined = mine_st(
+                pairs,
+                chunks,
+                st,
+                params,
+                query_prompt=query_prompt,
+                corpus_prompt=document_prompt,
+                **common,
+            )
     except MineRefused as exc:
         _print(err, f"[Finetune] mine refused: {exc.code}")
         return MineResult(exc.exit_code)
@@ -804,7 +954,10 @@ def run_mine(
                 batch_chars=config.generation.batch_chars,
             )
         except _BudgetStop:
-            _print(err, f"[Finetune] mine stopped: budget (spent_usd={meter.spent_usd:.6f}); nothing written")
+            _print(
+                err,
+                f"[Finetune] mine stopped: budget (spent_usd={meter.spent_usd:.6f}); nothing written",
+            )
             return MineResult(EXIT_BUDGET)
         except (LLMCallFailed, LLMOutputInvalid) as exc:
             code = getattr(exc, "code", "llm_call_failed")
@@ -839,7 +992,10 @@ def run_mine(
     if not audit.passed:
         _write_outputs(run_dir, loaded.manifest, report, None)
         _print(out, summary)
-        _print(err, f"[Finetune] mine failed: fn_audit upper bound above the limit; {AUDIT_HINT}")
+        _print(
+            err,
+            f"[Finetune] mine failed: fn_audit upper bound above the limit; {AUDIT_HINT}",
+        )
         return MineResult(EXIT_AUDIT, report, mined)
     _write_outputs(run_dir, loaded.manifest, report, mined)
     _print(out, summary)
@@ -850,14 +1006,41 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="python -m rag_eval.finetune mine")
     parser.add_argument("--bundle", required=True, type=Path, help="run directory")
     parser.add_argument("--miner", choices=("vectors", "st"), default="vectors")
-    parser.add_argument("--model", default=None, help="sentence-transformers model path or id (--miner st)")
-    parser.add_argument("--profile", default=None, help="embedding profile of the stored vectors (default: the only one)")
-    parser.add_argument("--budget-usd", type=float, default=None, help="limit for the false-negative audit judge")
+    parser.add_argument(
+        "--model",
+        default=None,
+        help="sentence-transformers model path or id (--miner st)",
+    )
+    parser.add_argument(
+        "--profile",
+        default=None,
+        help="embedding profile of the stored vectors (default: the only one)",
+    )
+    parser.add_argument(
+        "--budget-usd",
+        type=float,
+        default=None,
+        help="limit for the false-negative audit judge",
+    )
     parser.add_argument("--fixture", action="store_true", help="fixture run (permits --skip-audit)")
-    parser.add_argument("--skip-audit", action="store_true", help="skip the false-negative audit (only with --fixture)")
-    parser.add_argument("--round-trip-k", type=int, default=None, help="drop pairs whose positive is not in the top K")
+    parser.add_argument(
+        "--skip-audit",
+        action="store_true",
+        help="skip the false-negative audit (only with --fixture)",
+    )
+    parser.add_argument(
+        "--round-trip-k",
+        type=int,
+        default=None,
+        help="drop pairs whose positive is not in the top K",
+    )
     parser.add_argument("--seed", type=int, default=None, help="sampling seed (default training.seed)")
-    parser.add_argument("--config", type=Path, default=None, help="finetune.json (default eval/config/finetune.json)")
+    parser.add_argument(
+        "--config",
+        type=Path,
+        default=None,
+        help="finetune.json (default eval/config/finetune.json)",
+    )
     return parser
 
 

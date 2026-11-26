@@ -4,6 +4,7 @@ Hugging Face hub, datasets and transformers run offline for the whole session (s
 hidden download fails instead of fetching. With FINETUNE_TRAIN_REQUIRED=1 a finetune_train test that would skip (for
 example because the finetune extra is missing) fails instead.
 """
+
 import os
 
 import pytest
