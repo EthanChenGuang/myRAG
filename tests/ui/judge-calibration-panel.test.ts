@@ -239,8 +239,8 @@ describe('JudgeCalPanel', () => {
       await new JudgeCalPanel(root, { fetcher: fakeFetcher({ ok: true, status: 200, body: MIXED() }).fetcher, locale: 'en' }).mount();
       const heads = (root.querySelector('table') as FakeElement).querySelectorAll('th[scope="col"]');
       const cls = (label: string) => heads.find((h) => text(h) === label)?.className ?? '';
-      for (const label of ['Unsupported content found', 'Length bias', 'Same answer, reworded']) expect(cls(label)).toContain('hidden lg:table-cell');
-      expect(cls('Checked')).toContain('hidden md:table-cell');
+      for (const label of ['Unsupported content found', 'Length bias', 'Same answer, reworded']) expect(cls(label)).toContain('max-lg:hidden');
+      expect(cls('Checked')).toContain('max-md:hidden');
       for (const label of ['Language', 'Measure', 'Status', 'Kappa', 'Accuracy', 'Labels']) expect(cls(label)).not.toContain('hidden');
       expect(root.querySelectorAll('details.lg\\:hidden').length).toBeGreaterThan(0);
     });

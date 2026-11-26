@@ -19,8 +19,8 @@ const GATES_UI_LABELS = {
     'verdict.running': 'Running',
     'verdict.pending': 'Waiting',
     'reason.timeout': 'It stopped after 10 minutes.',
-    'reason.crashed': "The check stopped unexpectedly. See the config server's log under [Config Gate].",
-    'reason.toolchain_missing': "The evaluation tools are not installed on this machine. Install the project's dependencies, then select Run check again.",
+    'reason.crashed': "The check stopped unexpectedly. See the config server’s log under [Config Gate].",
+    'reason.toolchain_missing': "The evaluation tools are not installed on this machine. Install the project’s dependencies, then select Run check again.",
     'reason.live_off': 'The live model check is switched off.',
     'reason.keys_missing': 'No key is set for the chat model.',
     'reason.no_real_set': 'This workspace has no test set of its own on this machine.',
@@ -147,15 +147,15 @@ const GATES_UI_LABELS = {
     'reason.toolchain_missing': 'Gli strumenti di valutazione non sono installati su questa macchina. Installa le dipendenze del progetto, poi seleziona Ripeti controllo.',
     'reason.live_off': 'Il controllo con il modello reale è disattivato.',
     'reason.keys_missing': 'Nessuna chiave impostata per il modello di chat.',
-    'reason.no_real_set': "Quest'area di lavoro non ha un proprio set di test su questa macchina.",
-    'reason.eval_endpoint_off': "L'endpoint di valutazione è disattivato.",
+    'reason.no_real_set': "Quest’area di lavoro non ha un proprio set di test su questa macchina.",
+    'reason.eval_endpoint_off': "L’endpoint di valutazione è disattivato.",
     'reason.no_answer': 'Il server di configurazione non ha risposto. Verifica che sia in esecuzione.',
     'reason.other': 'Codice del motivo: {code}.',
-    'reason.missing': "L'app non ha indicato un motivo. Seleziona Ricarica pannello; se si ripete, controlla il log dell'app.",
+    'reason.missing': "L’app non ha indicato un motivo. Seleziona Ricarica pannello; se si ripete, controlla il log dell’app.",
     'layer.deterministic': 'Domande di test integrate',
     'layer.live': 'Modello reale',
-    'layer.real_set': "Set di test dell'area di lavoro",
-    'layer.real_set.named': "Set di test dell'area di lavoro {hash}",
+    'layer.real_set': "Set di test dell’area di lavoro",
+    'layer.real_set.named': "Set di test dell’area di lavoro {hash}",
     'check.no_answer_share': 'Quota di domande senza risposta nei documenti',
     'check.false_answer_rate': 'Risposte indebite',
     'check.false_refusal_rate': 'Rifiuti indebiti',
@@ -183,9 +183,9 @@ const GATES_UI_LABELS = {
     'value.on': 'Attivo',
     'value.off': 'Disattivato',
     'error.unavailable': '{view} non è disponibile in questo momento. Seleziona Ricarica pannello tra poco.',
-    'error.switchedOffApp': "L'app ha risposto che la funzione è disattivata. Se hai appena salvato l'impostazione, riavvia l'app e seleziona Ricarica pannello.",
-    'error.unknownCode': "L'app ha restituito un codice che questa pagina non conosce: {code}. Seleziona Ricarica pannello; se si ripete, controlla il log dell'app.",
-    'settings.saveHint': "Queste impostazioni si salvano con Save All Changes in cima alla pagina e valgono dopo il riavvio dell'app.",
+    'error.switchedOffApp': "L’app ha risposto che la funzione è disattivata. Se hai appena salvato l’impostazione, riavvia l’app e seleziona Ricarica pannello.",
+    'error.unknownCode': "L’app ha restituito un codice che questa pagina non conosce: {code}. Seleziona Ricarica pannello; se si ripete, controlla il log dell’app.",
+    'settings.saveHint': "Queste impostazioni si salvano con Save All Changes in cima alla pagina e valgono dopo il riavvio dell’app.",
     'settings.secret.set': 'Un segreto è già salvato. Lascia vuoto per mantenerlo.',
     'settings.secret.reveal': 'Mostra o nascondi il segreto del webhook',
     'banner.title': 'Richiede attenzione',
@@ -403,7 +403,7 @@ function gatesUiSpinner() {
 function gatesUiAppendMessage(el, message) {
   for (const segment of message.segments) {
     if (segment.text !== undefined) el.appendChild(document.createTextNode(segment.text));
-    else if (segment.code !== undefined) el.appendChild(gatesUiEl('code', { className: 'font-mono text-xs break-all', text: segment.code, attrs: { translate: 'no' } }));
+    else if (segment.code !== undefined) el.appendChild(gatesUiEl('code', { className: 'font-mono text-xs break-words', text: segment.code, attrs: { translate: 'no' } }));
     else if (segment.mono !== undefined) el.appendChild(gatesUiEl('span', { className: 'font-mono text-xs break-all', text: segment.mono, attrs: { translate: 'no' } }));
     else if (segment.time) el.appendChild(gatesUiEl('time', { text: segment.time.text, attrs: { datetime: segment.time.iso } }));
   }
@@ -419,7 +419,7 @@ function gatesUiAlert(tone, icon, message, extras, lang) {
   const text = gatesUiMessageEl('p', 'text-sm', message);
   if (lang) text.setAttribute('lang', lang);
   const body = gatesUiEl('div', { className: 'flex flex-col gap-2 items-start min-w-0 max-w-prose' }, [text, ...(extras || [])]);
-  return gatesUiEl('div', { className: 'alert alert-' + tone + ' items-start text-left' }, [gatesUiIcon(icon, 'mt-0.5'), body]);
+  return gatesUiEl('div', { className: 'alert alert-' + tone + ' items-start justify-items-start text-left' }, [gatesUiIcon(icon, 'mt-0.5'), body]);
 }
 
 /** Writes a message into a panel's status region; an error gets text-error and a leading icon. */
@@ -449,7 +449,7 @@ function gatesUiLoadingBlock(text) {
 function gatesUiEmptyBlock(title, body) {
   const bodyEl = typeof body === 'string' ? gatesUiEl('p', { className: 'text-sm text-base-content/70 max-w-prose', text: body }) : gatesUiMessageEl('p', 'text-sm text-base-content/70 max-w-prose', body);
   return gatesUiEl('div', { className: 'flex flex-col items-center text-center gap-2 py-8' }, [
-    gatesUiEl('h4', { className: 'text-base font-semibold', text: title }),
+    gatesUiEl('h4', { className: 'text-base font-semibold text-balance', text: title }),
     bodyEl,
   ]);
 }
@@ -607,7 +607,7 @@ function gatesUiShareBar(share) {
   const value = gatesUiFinite(share) ? Math.max(0, Math.min(1, share)) : 0;
   const fill = gatesUiEl('div', { className: 'h-1 rounded-full bg-base-content/60' });
   fill.style.width = Math.round(value * 1000) / 10 + '%';
-  return gatesUiEl('div', { className: 'w-24 h-1 rounded-full bg-base-300 hidden md:block shrink-0', attrs: { 'aria-hidden': 'true' } }, [fill]);
+  return gatesUiEl('div', { className: 'w-24 h-1 rounded-full bg-base-300 max-md:hidden shrink-0', attrs: { 'aria-hidden': 'true' } }, [fill]);
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------
@@ -708,7 +708,7 @@ function gatesUiConfirm(opts) {
     bodyEl.setAttribute('id', id + '-body');
     const keep = gatesUiEl('button', { className: 'btn', text: o.keepLabel || '', attrs: { type: 'button', autofocus: true } });
     const confirm = gatesUiEl('button', { className: 'btn btn-primary', text: o.confirmLabel || '', attrs: { type: 'button' } });
-    const box = gatesUiEl('div', { className: 'modal-box w-11/12 max-w-lg' }, [
+    const box = gatesUiEl('div', { className: 'modal-box w-11/12 max-w-lg overscroll-contain' }, [
       titleEl,
       bodyEl,
       gatesUiEl('div', { className: 'modal-action flex-col-reverse sm:flex-row gap-2' }, [keep, confirm]),
@@ -860,9 +860,9 @@ function gatesUiBannerEl(view, locale, deps) {
       ]),
     );
   }
-  return gatesUiEl('div', { className: 'alert alert-' + view.tone + ' items-start text-left mb-6', attrs: { lang: locale } }, [
+  return gatesUiEl('div', { className: 'alert alert-' + view.tone + ' items-start justify-items-start text-left mb-6', attrs: { lang: locale } }, [
     gatesUiIcon('bi-exclamation-triangle', 'mt-0.5'),
-    gatesUiEl('div', { className: 'flex flex-col gap-2 min-w-0 w-full' }, [gatesUiEl('h2', { className: 'text-base font-semibold', text: gatesUiLabel('banner.title', locale) }), list]),
+    gatesUiEl('div', { className: 'flex flex-col gap-2 min-w-0 w-full' }, [gatesUiEl('h2', { className: 'text-base font-semibold text-balance', text: gatesUiLabel('banner.title', locale) }), list]),
   ]);
 }
 

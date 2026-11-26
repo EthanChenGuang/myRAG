@@ -65,7 +65,7 @@ const JUDGE_CAL_LABELS = {
   en: {
     'panel.title': 'Judge calibration',
     'panel.description':
-      "Read-only. The model judges that score answers are compared with human labels every month. A judge's score counts towards a limit only for the language and measure where it agrees with people. Results change only through the calibration tool and a pull request. Applies to every workspace in this deployment.",
+      "Read-only. The model judges that score answers are compared with human labels every month. A judge’s score counts towards a limit only for the language and measure where it agrees with people. Results change only through the calibration tool and a pull request. Applies to every workspace in this deployment.",
     'status.loading': 'Loading judge calibration…',
     'status.loaded': 'Judge calibration loaded. Rows: {cells}. Enforced: {enforced}.',
     'action.refresh': 'Refresh status',
@@ -193,7 +193,7 @@ const JUDGE_CAL_LABELS = {
     'warning.none_enforced': 'Nessun giudice è vincolante: ogni punteggio dei giudici è solo report e nessun limite dipende da un giudice.',
     'warning.calibration_invalid': 'Il file di calibrazione dei giudici non è valido, quindi ogni giudice è solo report. Esegui di nuovo {command} e fai commit del risultato.',
     'warning.expired_cells': 'Calibrazioni più vecchie di {days} giorni: {count}. Restano solo report finché non si riesegue {command}.',
-    'warning.judge_changed': "Il modello, il prompt o la griglia del giudice sono cambiati dall'ultima calibrazione: le sue righe sono solo report. Esegui {command}.",
+    'warning.judge_changed': "Il modello, il prompt o la griglia del giudice sono cambiati dall’ultima calibrazione: le sue righe sono solo report. Esegui {command}.",
     'role.nightly': 'Giudice notturno',
     'role.online': 'Giudice online',
     'judge.version': 'Versione del giudice: {fingerprint}',
@@ -213,18 +213,18 @@ const JUDGE_CAL_LABELS = {
     'status.report_only': 'Solo report',
     'status.uncalibrated': 'Scaduta',
     'legend.summary': 'Significato degli stati',
-    'legend.gating': "Vincolante: qui il giudice concorda con le persone, quindi il suo limite vale nell'esecuzione notturna.",
-    'legend.report_only': "Solo report: il punteggio viene mostrato e non fa mai fallire un'esecuzione.",
+    'legend.gating': "Vincolante: qui il giudice concorda con le persone, quindi il suo limite vale nell’esecuzione notturna.",
+    'legend.report_only': "Solo report: il punteggio viene mostrato e non fa mai fallire un’esecuzione.",
     'legend.uncalibrated': 'Scaduta: il controllo è troppo vecchio o il giudice è cambiato. Trattata come solo report.',
-    'reason.kappa_below_floor': "L'accordo (kappa) è sotto il minimo.",
-    'reason.accuracy_below_floor': "L'accuratezza è sotto il minimo.",
+    'reason.kappa_below_floor': "L’accordo (kappa) è sotto il minimo.",
+    'reason.accuracy_below_floor': "L’accuratezza è sotto il minimo.",
     'reason.too_few_labels': 'Troppe poche etichette per questa lingua.',
     'reason.labels_unconfirmed': 'Le etichette non sono ancora confermate da una persona.',
     'reason.length_bias': 'Le risposte corrette più lunghe ottengono punteggi diversi oltre la tolleranza.',
     'reason.perturbation': 'Riformulare la stessa risposta cambia il punteggio oltre la tolleranza.',
     'reason.expired': 'Ultimo controllo più di {days} giorni fa.',
     'reason.fingerprint_mismatch': 'Il modello, il prompt o la griglia del giudice sono cambiati dopo questo controllo.',
-    'reason.holistic': "I punteggi sull'intera risposta sono solo report per regola.",
+    'reason.holistic': "I punteggi sull’intera risposta sono solo report per regola.",
     'reason.other': 'Codice del motivo: {code}.',
     'source.seed': 'Set iniziale',
     'source.review_queue': 'Coda di revisione',
@@ -234,7 +234,7 @@ const JUDGE_CAL_LABELS = {
     'cell.probes': 'più lunga {expanded}, più assertiva {assertive}',
     'cell.validUntil': 'Valida fino al {date}',
     'cell.showAll': 'Mostra tutte le misure',
-    'holistic.note': "I punteggi sull'intera risposta, su scala da 1 a 5, sono riportati e non contano mai per un limite.",
+    'holistic.note': "I punteggi sull’intera risposta, su scala da 1 a 5, sono riportati e non contano mai per un limite.",
     'empty.title': 'Nessuna calibrazione dei giudici',
     'empty.body':
       'Finché non viene registrata una calibrazione, ogni punteggio dei giudici è solo report e nessun limite dipende da un giudice. Esegui {command}, fai commit del risultato e ridistribuisci.',
@@ -543,10 +543,10 @@ class JudgeCalPanel {
       col('col.kappa', 'text-right'),
       col('col.accuracy', 'text-right'),
       col('col.labels', 'text-right'),
-      col('col.unsupported', 'hidden lg:table-cell'),
-      col('col.lengthBias', 'text-right hidden lg:table-cell'),
-      col('col.probes', 'hidden lg:table-cell'),
-      col('col.checked', 'hidden md:table-cell'),
+      col('col.unsupported', 'max-lg:hidden'),
+      col('col.lengthBias', 'text-right max-lg:hidden'),
+      col('col.probes', 'max-lg:hidden'),
+      col('col.checked', 'max-md:hidden'),
     ]);
     const body = this.el('tbody');
     for (const row of role.rows) {
@@ -597,13 +597,13 @@ class JudgeCalPanel {
         this.el('div', { className: 'text-sm tabular-nums', text: row.labels.count }),
         this.el('div', { className: 'text-xs text-base-content/70', text: row.labels.source }),
       ]);
-      const checkedCell = this.el('td', { className: 'align-top text-sm hidden md:table-cell whitespace-nowrap' });
+      const checkedCell = this.el('td', { className: 'align-top text-sm max-md:hidden whitespace-nowrap' });
       if (row.checked) checkedCell.appendChild(this.el('time', { text: row.checked.text, attrs: { datetime: row.checked.iso } }));
       if (row.validUntil) {
         const until = gatesUiMessageEl('div', 'text-xs text-base-content/70', judgeCalMessage('cell.validUntil', this.locale, { date: { time: row.validUntil } }));
         checkedCell.appendChild(until);
       }
-      const probes = this.el('td', { className: 'align-top text-sm tabular-nums hidden lg:table-cell' });
+      const probes = this.el('td', { className: 'align-top text-sm tabular-nums max-lg:hidden' });
       if (row.probes.flagged && row.probes.text) {
         probes.appendChild(gatesUiIcon('bi-exclamation-triangle', 'text-warning mr-1'));
         probes.appendChild(this.el('span', { className: 'sr-only', text: this.t('cell.belowFloor') + ': ' }));
@@ -617,8 +617,8 @@ class JudgeCalPanel {
           this.flaggedCell(row.kappa),
           this.flaggedCell(row.accuracy),
           labelsCell,
-          this.el('td', { className: 'align-top text-sm tabular-nums hidden lg:table-cell', text: row.unsupported || '—' }),
-          this.flaggedCell(row.lengthBias, 'hidden lg:table-cell'),
+          this.el('td', { className: 'align-top text-sm tabular-nums max-lg:hidden', text: row.unsupported || '—' }),
+          this.flaggedCell(row.lengthBias, 'max-lg:hidden'),
           probes,
           checkedCell,
         ]),
