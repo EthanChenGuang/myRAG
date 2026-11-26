@@ -93,3 +93,69 @@ describe('AGENTS.md reflects the Phase 4.1 retrieval-defaults outcome', () => {
     expect(section14).not.toContain('the refusal threshold');
   });
 });
+
+describe('AGENTS.md reflects Phase 3.2 language support and ingestion hardening', () => {
+  const section6 = AGENTS.slice(AGENTS.indexOf('## 6. RAG & Data Pipeline'), AGENTS.indexOf('## 7. AI Model Management'));
+  const section14 = AGENTS.slice(AGENTS.indexOf('## 14. Behaviour to Preserve'), AGENTS.indexOf('## 15. Quality Checklist'));
+  const section16 = AGENTS.slice(AGENTS.indexOf('## 16. Handy Scripts'), AGENTS.indexOf('## 17. Supplementary Documentation'));
+
+  test.each([
+    '### Language support and ingestion hardening (Phase 3.2)',
+    '`RAG_SUPPORTED_LANGUAGES=`',
+    '`RAG_PRIMARY_LANGUAGE=`',
+    '`getLanguageSettings()`',
+    'config/rag/validate-language-settings.cjs',
+    '`languages_not_configured`',
+    'config/rag/language-packs.json',
+    'scripts/ci/language-literal-allowlist.json',
+    '`RAG_LANGUAGE_AWARE_INGEST=off`',
+    '`RAG_TABLE_HEADER_REPEAT=always`',
+    '`RAG_TABLE_ROW_SERIALIZATION=false`',
+    '`RAG_CAPTION_LANGUAGE=en`',
+    '`RAG_BGE_M3_SERVING=hosted`',
+    '`RAG_DOC_TRANSLATION=off`',
+    '`RAG_DOC_TRANSLATION_MODEL=`',
+    '`RAG_HIDDEN_TEXT_CHECK=off`',
+    '`RAG_INGEST_LINK_CHECK=off`',
+    '`RAG_OUTPUT_LINK_ALLOWLIST=`',
+    '`RAG_UPLOAD_APPROVAL=off`',
+    '`RAG_SCOPE_TAGS=false`',
+    '`RAG_SCOPE_TAG_SUGGEST=false`',
+    '`RAG_SUPERSESSION_DETECT=off`',
+    '`RAG_EFFECTIVE_DATES=false`',
+    '`RAG_EFFECTIVE_DATE_LLM_EXTRACT=false`',
+    'npm run rag:fingerprint',
+    'npm run rag:rebuild -- start --mechanism',
+    'npm run rag:translate',
+    'npm run rag:reembed -- --recaption',
+    'eval/decisions/03.2-table-header-default.json',
+    '`upload_approval_requires_unified_pipeline`',
+    '`clean`, `hidden_found` or `not_checked`',
+    'Migrations 0801–0822',
+    're-run the whole 08xx block',
+  ])('section 6 mentions %s', (fragment) => {
+    expect(section6).toContain(fragment);
+  });
+
+  test('every Phase 3.2 switch default in the guide matches src/lib/env.ts', () => {
+    const envSource = fs.readFileSync(path.resolve(__dirname, '../../src/lib/env.ts'), 'utf8');
+    const block = section6.slice(section6.indexOf('(Phase 3.2)'), section6.indexOf('### Hybrid retrieval (Phase 4)'));
+    const defaults = block
+      .split('\n')
+      .filter((line) => line.startsWith('- Languages:') || line.startsWith('- Other switches'))
+      .join('\n');
+    const stated = [...defaults.matchAll(/`(RAG_[A-Z0-9_]+)=([^`]*)`/g)];
+    expect(stated.length).toBeGreaterThanOrEqual(18);
+    for (const [, name, value] of stated) {
+      const match = envSource.match(new RegExp(`${name}: process\\.env\\.${name} \\|\\| '([^']*)'`));
+      if (!match) continue;
+      expect(`${name}=${match[1]}`).toBe(`${name}=${value}`);
+    }
+  });
+
+  test('the fold sentence lists the 08xx block as not folded, and sections 14 and 16 are current', () => {
+    expect(AGENTS).toContain('Phase 3.2 (0801–0822)');
+    expect(section14).toContain('Phase 3.2 is additive');
+    for (const command of ['rag:fingerprint', 'rag:rebuild', 'rag:translate', 'rag:reembed -- --recaption']) expect(section16).toContain(command);
+  });
+});
