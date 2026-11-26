@@ -218,7 +218,11 @@ for (const mode of MODES) {
       await db.query('DELETE FROM rag_identifier_patterns WHERE tenant_key = $1 AND name = $2', [tenantA, 'shape 19']);
       const duplicate = await serviceFailure(db, CREATE_SQL, [tenantA, 'shape 0', '[0-9]{5}', 'u', true]);
       assert.ok(duplicate && duplicate.message.startsWith('name_exists'), `got ${JSON.stringify(duplicate)}`);
-      const renameClash = await serviceFailure(db, UPDATE_SQL, [tenantA, (await list(db, tenantA))[1]?.id, 'shape 0', null, null, null]);
+      // The twenty creates run without clockPast(), so created_at can tie and list order is not creation order; pick the
+      // row to rename by name.
+      const shapeOne = (await list(db, tenantA)).find((row) => row.name === 'shape 1');
+      assert.ok(shapeOne);
+      const renameClash = await serviceFailure(db, UPDATE_SQL, [tenantA, shapeOne.id, 'shape 0', null, null, null]);
       assert.ok(renameClash && renameClash.message.startsWith('name_exists'), `got ${JSON.stringify(renameClash)}`);
 
       const other = await createForB('shape 0');
