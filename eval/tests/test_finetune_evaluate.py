@@ -37,20 +37,22 @@ def _text(i: int) -> str:
 
 
 class TargetEncoder:
-    """Documents: FakeEncoder vectors of their text. A query is encoded as the document vector of the chunk text its
-    target function picks, so the test decides exactly which chunk ranks first."""
+    """Documents: FakeEncoder vectors of their text. A hit encodes the query as its positive chunk's vector (rank 1); a
+    miss as the negated vector, so the positive ranks last and, with more than 10 chunks, outside the top 10."""
 
     name = "target"
 
-    def __init__(self, target):
+    def __init__(self, hit):
         self._fake = FakeEncoder(dims=64)
-        self._target = target
+        self._hit = hit
 
     def encode_documents(self, items):
         return self._fake.encode_documents(items)
 
     def encode_queries(self, items):
-        return self._fake.encode_documents([TextItem(item.id, self._target(item)) for item in items])
+        vectors = self._fake.encode_documents([TextItem(item.id, _positive_text(item)) for item in items])
+        signs = np.array([1.0 if self._hit(_anchor_index(item)) else -1.0 for item in items], dtype=np.float32)
+        return vectors * signs[:, None]
 
 
 def _chunk(tenant, chunk_id, i, *, language="en", split="test", content_hash=None):
@@ -140,12 +142,8 @@ def _positive_text(item):
     return _text(_anchor_index(item))
 
 
-def _wrong_text(item):
-    return _text((_anchor_index(item) + 1) % 12)
-
-
 def _hit_if(predicate):
-    return TargetEncoder(lambda item: _positive_text(item) if predicate(_anchor_index(item)) else _wrong_text(item))
+    return TargetEncoder(predicate)
 
 
 ALWAYS = _hit_if(lambda i: True)
@@ -262,7 +260,7 @@ def test_evaluate_below_production_and_below_base(tmp_path):
 
 
 def test_evaluate_cross_language_pairs_are_sliced(tmp_path):
-    run_dir, chunks = _write_bundle(tmp_path, languages=lambda i: "en")
+    run_dir, _ = _write_bundle(tmp_path, languages=lambda i: "en")
     cross = [
         line
         for line in (run_dir / "queries.test.kept.jsonl").read_text().splitlines()
