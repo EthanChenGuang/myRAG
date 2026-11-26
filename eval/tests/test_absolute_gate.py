@@ -277,12 +277,22 @@ def _cell(
         "metric": metric,
         "status": status,
         "reasons": [] if status == "gating" else ["n_below_minimum"],
+        "kappa": 0.74,
+        "accuracy": 0.88,
+        "n": 60 if status == "gating" else 10,
+        "source": "review_queue",
+        "labels_human_confirmed": True,
         "recorded_at": recorded_at,
     }
 
 
 def _calibration(*cells: dict) -> dict:
-    return {"schema_version": 1, "cells": list(cells), "running_fingerprints": {"nightly": FINGERPRINT}}
+    return {
+        "schema_version": 1,
+        "cells": list(cells),
+        "running_fingerprints": {"nightly": FINGERPRINT},
+        "provenance": {"source": "calibration"},
+    }
 
 
 def _floor(result, library: str = "ragas", metric: str = "faithfulness", language: str = "en"):
