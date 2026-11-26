@@ -200,7 +200,7 @@ describe('rag:relex with the lexical dictionary and identifier patterns (multi-t
     const first = await run({ tenantKey: TENANT_A });
     assert.equal(first.updated, await currentCount(TENANT_A), 'the empty-list fingerprint is stamped first');
     assert.ok(!String((await chunk(TWO_TENANT_IDS.chunkA)).lexical_text).split(' ').includes(IDENT_TOKEN));
-    await fixture.db.query('SELECT * FROM public.rag_identifier_pattern_create($1, $2, $3, $4, $5, NULL)', [TENANT_A, 'qv', PATTERN, 'u', true]);
+    await fixture.db.query('SELECT * FROM public.rag_identifier_pattern_create($1, $2, $3, $4, $5, NULL)', [TENANT_A, 'qv', PATTERN, 'iu', true]);
     h.patterns.resetIdentifierPatternCacheForTests();
     const second = await run({ tenantKey: TENANT_A });
     assert.equal(second.updated, await currentCount(TENANT_A));
