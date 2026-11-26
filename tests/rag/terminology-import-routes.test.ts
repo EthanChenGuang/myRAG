@@ -510,7 +510,7 @@ describe('POST /api/rag/admin/terminology/preview (D-22, D-24, D-32)', () => {
 
   it('lists a workspace entry overriding a shared one under overrides', async () => {
     setEffective([
-      effectiveRow(1, 'shared', 'term alpha beta', ['termalpha']),
+      effectiveRow(1, 'shared', 'term alpha beta', ['termalpha'], { tenant_version: 1 }),
       effectiveRow(2, 'workspace', 'term alpha beta', ['alpha beta'], { tenant_version: 1 }),
     ]);
     const answer = await postPreview(await load(), { layer: 'workspace', query: 'about alpha beta' });
