@@ -8,6 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { MockLanguageModelV3 } from 'ai/test';
 import type { LanguageModel } from 'ai';
+import type { FakeLangChainTable } from '../../src/lib/rag/query/langchain/fake.ts';
 import { GoldenItemSchema, RagTraceSchema, RunManifestSchema, TerminologyImportRowSchema, type GoldenItem, type RagRunRequest, type RagTrace, type RunManifest } from '../../src/lib/rag-eval/contracts.generated.ts';
 import { canonicalJson, configHash } from '../../src/lib/rag-eval/trace.ts';
 import { EMBEDDER_ID, EMBEDDER_VERSION, embedderSourceSha256 } from './fixture-embedder.mts';
@@ -404,12 +405,21 @@ export async function prepareInProcessEval(options: {
   let restoreQueryLlm: (() => void) | undefined;
   if (shouldInstallFakeQueryLlm(process.env, { queryLayer: options.queryLayer })) {
     const depsModule = await import('../../src/lib/rag/deps.ts');
-    const { createFakeQueryLlm } = await import('./fake-query-llm.mts');
+    const { createFakeQueryLlm, loadFakeQueryLlmTable } = await import('./fake-query-llm.mts');
+    const transformerModule = await import('../../src/lib/rag/query/transformer.ts');
+    const { createFakeLangChainChatModel } = await import('../../src/lib/rag/query/langchain/fake.ts');
     const previous = depsModule.getRagDeps().queryLlm;
-    const fake = createFakeQueryLlm();
+    const table = loadFakeQueryLlmTable();
+    const fake = createFakeQueryLlm({ table });
     fakeQueryLlm = fake;
     depsModule.setRagDepsForTests({ queryLlm: () => fake });
-    restoreQueryLlm = () => depsModule.setRagDepsForTests({ queryLlm: previous });
+    // The LangChain path reads the same table through its fake chat model, so it never builds ChatOpenAI (D-39).
+    const langchainFake = createFakeLangChainChatModel({ table: table as unknown as FakeLangChainTable });
+    transformerModule.setLangChainChatModelFactoryForTests(() => langchainFake);
+    restoreQueryLlm = () => {
+      depsModule.setRagDepsForTests({ queryLlm: previous });
+      transformerModule.setLangChainChatModelFactoryForTests(null);
+    };
   }
 
   const floorModule = await import('../../src/lib/rag/refusal/floor.ts');
