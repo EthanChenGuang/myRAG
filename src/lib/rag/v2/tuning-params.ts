@@ -11,7 +11,8 @@ import {
 } from '@/lib/rag-eval/contracts.generated';
 import type { RagConfig } from '../config';
 import type { Profile } from '../types';
-import type { RetrievalConfigHashTuning } from './config-hash';
+import type { LexicalStamp } from '../lexical/resolve-options';
+import { IDENTIFIER_PATTERNS_UNAVAILABLE, LEXICAL_DICTIONARY_UNAVAILABLE, type RetrievalConfigHashTuning } from './config-hash';
 import { effectiveRetrievalParams } from './retrieval-params';
 
 export interface TuningParams {
@@ -97,8 +98,15 @@ export function effectiveTuningParams(
   return { tableLookup: { ...tableLookup }, diversity: { ...diversity }, dupClusterThreshold };
 }
 
-/** D-34: the hash entries of the switches that are on, or null when none is, so the off-hash keeps its value. */
-export function tuningHashComponent(config: Pick<RagConfig, 'v2'>, params: TuningParams): RetrievalConfigHashTuning | null {
+/**
+ * D-34: the hash entries of the switches that are on, or null when none is, so the off-hash keeps its value. A lexical stamp adds the
+ * dictionary version and the patterns fingerprint, each only while its switch is on.
+ */
+export function tuningHashComponent(
+  config: Pick<RagConfig, 'v2'>,
+  params: TuningParams,
+  lexicalStamp?: LexicalStamp,
+): RetrievalConfigHashTuning | null {
   const v2 = config.v2;
   const tuning: RetrievalConfigHashTuning = {
     ...(v2.tableLookup
@@ -112,6 +120,8 @@ export function tuningHashComponent(config: Pick<RagConfig, 'v2'>, params: Tunin
     ...(v2.identifierFilter ? { identifier_filter: true as const } : {}),
     ...(v2.dupClusters ? { dup_clusters: true as const } : {}),
     ...(v2.identifierIndex ? { identifier_index: true as const } : {}),
+    ...(lexicalStamp && v2.lexicalDictionary ? { lexical_dictionary_version: lexicalStamp.dictVersion ?? LEXICAL_DICTIONARY_UNAVAILABLE } : {}),
+    ...(lexicalStamp && v2.identifierIndex ? { identifier_patterns: lexicalStamp.patterns ?? IDENTIFIER_PATTERNS_UNAVAILABLE } : {}),
   };
   return Object.keys(tuning).length > 0 ? tuning : null;
 }

@@ -135,6 +135,7 @@ export async function requestRetrievalConfigHash(ctx: RequestConfigHashInput): P
     tuning: tuningHashComponent(
       config,
       effectiveTuningParams(profile, config, evalTuningOverrides(profile, input.stageOverrides?.retrievalOverrides), { embeddingProfileId: ctx.embeddingProfileId }),
+      ctx.lexicalStamp,
     ),
     ...(ctx.bindingHash ?? {}),
     ...(ctx.translationHash ?? {}),

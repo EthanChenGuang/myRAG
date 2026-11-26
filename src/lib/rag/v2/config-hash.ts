@@ -85,7 +85,14 @@ export interface RetrievalConfigHashTuning {
   identifier_filter?: true;
   dup_clusters?: true;
   identifier_index?: true;
+  /** LANG-07: the tenant's effective TERM version while RAG_LEXICAL_DICTIONARY is on (LEXICAL_DICTIONARY_UNAVAILABLE when not loaded). */
+  lexical_dictionary_version?: string;
+  /** RET-15: the tenant's identifier patterns fingerprint while RAG_IDENTIFIER_INDEX is on (IDENTIFIER_PATTERNS_UNAVAILABLE when not loaded). */
+  identifier_patterns?: string;
 }
+
+export const LEXICAL_DICTIONARY_UNAVAILABLE = 'lexical_dictionary:unavailable';
+export const IDENTIFIER_PATTERNS_UNAVAILABLE = 'identifier_patterns:unavailable';
 
 /** D-21: the dictionary a request was retrieved with; present only while the terminology stage is enabled for the request. */
 export interface RetrievalConfigHashTerminology {

@@ -92,6 +92,15 @@ export function resetLexicalStaleCountForTests(): void {
   staleCounts.clear();
 }
 
+/** A scalar function answers a bare value (PostgREST, bigint as text) or one row keyed by the function name. */
+function staleCountValue(data: unknown): number | null {
+  const row = Array.isArray(data) ? data[0] : data;
+  const raw = row !== null && typeof row === 'object' ? (row as Record<string, unknown>)[STALE_COUNT_RPC] : row;
+  if (typeof raw !== 'number' && typeof raw !== 'string') return null;
+  const value = Number(raw);
+  return Number.isInteger(value) && value >= 0 ? value : null;
+}
+
 /** D-09: chunks of the tenant not yet relexed with this dictionary version; null when the count failed or took too long. */
 async function lexicalStaleCount(scope: TenantScope, version: string, signal: AbortSignal): Promise<number | null> {
   const tenantKey = scopeKey(scope);
@@ -111,11 +120,7 @@ async function lexicalStaleCount(scope: TenantScope, version: string, signal: Ab
       }, STALE_COUNT_TIMEOUT_MS);
     });
     const call = Promise.resolve(client.rpc(STALE_COUNT_RPC, { p_tenant_key: tenantKey, p_dict_version: version }).abortSignal(controller.signal)).then(
-      (response) => {
-        if (response.error) return null;
-        const value = Number(response.data);
-        return Number.isFinite(value) && value >= 0 ? value : null;
-      },
+      (response) => (response.error ? null : staleCountValue(response.data)),
       () => null,
     );
     const value = await Promise.race([call, timeout]);
