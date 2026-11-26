@@ -3,8 +3,10 @@ from typing import Literal
 from pydantic import Field, model_validator
 
 from rag_sidecar.contracts.golden import _Contract
+from rag_sidecar.contracts.omit import omit_none_schema
 
 Profile = Literal["chat", "embed", "voice"]
+CacheState = Literal["hit", "miss", "bypass"]
 
 
 class StageLatency(_Contract):
@@ -64,7 +66,27 @@ class GroundednessBudgets(_Contract):
     report_only: Literal[True] = True
 
 
+class TtftBudget(ScorerBudget):
+    """D-26: time to first answer text delta, per channel and cache state; report-only for live traffic."""
+
+
+class PreGenerationBudget(_Contract):
+    """D-26: time until the generator call starts, per channel; the CI gate reads p95."""
+
+    p95_ms: float = Field(gt=0)
+
+
+def _omit_none(value: object) -> bool:
+    return value is None
+
+
 class LatencyBudgets(_Contract):
     schema_version: Literal[1] = 1
     profiles: dict[Profile, ProfileBudget]
     groundedness: GroundednessBudgets | None = None
+    ttft: dict[Profile, dict[CacheState, TtftBudget]] | None = Field(
+        default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema
+    )
+    pre_generation: dict[Profile, PreGenerationBudget] | None = Field(
+        default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema
+    )

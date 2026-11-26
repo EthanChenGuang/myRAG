@@ -1,0 +1,22 @@
+{
+  "additionalProperties": false,
+  "description": "D-21, D-48: MMR over the reranked list; lambda 0.7 until a live sweep sets the shipped value.",
+  "properties": {
+    "mmr_lambda": {
+      "default": 0.7,
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Mmr Lambda",
+      "type": "number"
+    },
+    "mmr_window_factor": {
+      "default": 3,
+      "maximum": 10,
+      "minimum": 1,
+      "title": "Mmr Window Factor",
+      "type": "integer"
+    }
+  },
+  "title": "DiversityParams",
+  "type": "object"
+}
