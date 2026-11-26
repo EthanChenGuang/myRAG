@@ -1212,6 +1212,12 @@
       "name": "QDRANT_READ_API_KEY",
       "status": "managed",
       "knownGaps": []
+    },
+    {
+      "name": "RAG_OPENAI_EMBEDDINGS_VIA",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Host for the OpenAI embedding model: openai or openrouter (same model, same vectors; no Batch API through OpenRouter)"
     }
   ]
 }

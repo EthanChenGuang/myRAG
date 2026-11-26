@@ -7263,6 +7263,19 @@
                                             </label>
                                         </div>
 
+                                        <div class="form-control mb-4">
+                                            <label class="label" for="RAG_OPENAI_EMBEDDINGS_VIA">
+                                                <span class="label-text">OpenAI embedding host</span>
+                                            </label>
+                                            <select id="RAG_OPENAI_EMBEDDINGS_VIA" class="select select-bordered w-full" aria-describedby="openai-embeddings-via-help">
+                                                <option value="openai">openai</option>
+                                                <option value="openrouter">openrouter</option>
+                                            </select>
+                                            <label class="label">
+                                                <span class="label-text-alt" id="openai-embeddings-via-help">openrouter sends the same embedding model through OpenRouter with the OpenRouter API key (same vectors, no re-embed); the OpenAI Batch API is then unavailable and backfills embed immediately.</span>
+                                            </label>
+                                        </div>
+
                                         <h4 class="text-md font-semibold mt-6 mb-2">Ingestion</h4>
                                         <p class="text-sm mb-2" data-ingestion-i18n="settings.movedPointer">Queue and tiered parsing settings are under RAG administration, Ingestion.</p>
                                         <button type="button" class="btn btn-link btn-sm" id="open-ingestion-settings-link" data-ingestion-i18n="settings.movedOpen">Open Ingestion settings</button>

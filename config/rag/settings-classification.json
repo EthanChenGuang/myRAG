@@ -362,6 +362,10 @@
       "side": "query"
     },
     {
+      "name": "RAG_OPENAI_EMBEDDINGS_VIA",
+      "side": "query"
+    },
+    {
       "name": "RAG_OUTPUT_LINK_ALLOWLIST",
       "side": "both",
       "mechanism": "rescan"

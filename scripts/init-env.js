@@ -571,6 +571,8 @@ RAG_DOMAIN_EMBEDDING_TIMEOUT_MS=800
 RAG_QWEN_EMBED_FALLBACK=openrouter
 # Primary host for the Qwen embedding provider: deepinfra | openrouter (openrouter needs only OPENROUTER_API_KEY; the fallback then goes to DeepInfra when a key is set)
 RAG_QWEN_EMBED_PRIMARY=deepinfra
+# Host for the OpenAI embedding model: openai | openrouter (openrouter sends embedding requests to OpenRouter with OPENROUTER_API_KEY, same model and vectors; the OpenAI Batch API is then unavailable and backfills embed in sync)
+RAG_OPENAI_EMBEDDINGS_VIA=openai
 
 # -----------------------------
 # INGESTION (Phase 3.1 queue)
