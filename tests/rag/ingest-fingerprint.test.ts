@@ -365,3 +365,79 @@ describe('settings classification', () => {
     expect(ingestionKeysOf({ RAG_PARSER: 'docling', RAG_PIPELINE: 'v2' })).toEqual([{ name: 'RAG_PARSER', mechanism: 'reparse' }]);
   });
 });
+
+describe('chunk_prep part (Phase 3.3 D-13)', () => {
+  const RULE_SET = '44444444-4444-4444-8444-444444444444';
+  const snapshot = {
+    fingerprint: 'e'.repeat(64),
+    boilerplate: { mode: 'both' as const, cleanerVersion: 1, rulesVersion: 1, ruleIds: [], removedLineKeys: ['k:line'] },
+    warnings: [],
+    truncated: false,
+  };
+
+  test('a run without a snapshot has no chunk_prep key and today’s fingerprint', () => {
+    const ctx = contextFor({}, []);
+    const parts = collectFingerprintParts(ctx);
+    expect('chunk_prep' in parts).toBe(false);
+  });
+
+  test('a snapshot fills the boilerplate sub-part, and the section_rules sub-part when it names a rule set', () => {
+    const ctx = contextFor({}, []);
+    ctx.state.chunkPrep = snapshot;
+    const parts = collectFingerprintParts(ctx);
+    expect(parts.chunk_prep).toEqual({ boilerplate: { mode: 'both', cleaner_version: 1, rules_version: 1, rule_fingerprint: 'e'.repeat(64) } });
+    expect(buildIngestFingerprint(parts)).not.toBe(buildIngestFingerprint(collectFingerprintParts(contextFor({}, []))));
+    ctx.state.chunkPrep = {
+      ...snapshot,
+      sectionRules: { ruleSetId: RULE_SET, ruleSetVersion: 2, toc: { skip: true, minRunLines: 3 }, headingHits: {}, satisfied: true },
+    };
+    expect(collectFingerprintParts(ctx).chunk_prep?.section_rules).toEqual({ rule_set_id: RULE_SET, version: 2 });
+  });
+
+  test('stored parts without chunk_prep still parse', () => {
+    expect(IngestFingerprintPartsSchema.safeParse(baseParts()).success).toBe(true);
+  });
+
+  test('expectedFingerprintFor: a proposed cleaning mode adds the sub-part with a zero rule fingerprint; the stored mode keeps it; off removes it', () => {
+    const plain = baseParts();
+    const added = expectedFingerprintFor(plain, { RAG_PAGE_BOILERPLATE: 'detect' });
+    expect(added.parts.chunk_prep).toEqual({ boilerplate: { mode: 'detect', cleaner_version: 1, rules_version: 1, rule_fingerprint: '0'.repeat(64) } });
+    expect(added.fingerprint).not.toBe(buildIngestFingerprint(plain));
+    expect(expectedFingerprintFor(plain, { RAG_PAGE_BOILERPLATE: 'off' }).fingerprint).toBe(buildIngestFingerprint(plain));
+
+    const cleaned = baseParts({ chunk_prep: { boilerplate: { mode: 'both', cleaner_version: 1, rules_version: 1, rule_fingerprint: 'e'.repeat(64) } } });
+    expect(expectedFingerprintFor(cleaned, { RAG_PAGE_BOILERPLATE: 'both' }).parts).toEqual(cleaned);
+    expect(expectedFingerprintFor(cleaned, { RAG_PAGE_BOILERPLATE: 'off' }).parts).toEqual(plain);
+  });
+
+  test('expectedFingerprintFor: RAG_SECTION_RULES=off removes the section_rules sub-part; on leaves it and needs the dry run', async () => {
+    const { needsRechunkDryRun } = await import('@/lib/rag/ingest/fingerprint');
+    const both = baseParts({
+      chunk_prep: {
+        boilerplate: { mode: 'rules', cleaner_version: 1, rules_version: 1, rule_fingerprint: 'e'.repeat(64) },
+        section_rules: { rule_set_id: RULE_SET, version: 1 },
+      },
+    });
+    expect(expectedFingerprintFor(both, { RAG_SECTION_RULES: 'off' }).parts.chunk_prep).toEqual({ boilerplate: both.chunk_prep!.boilerplate });
+    expect(expectedFingerprintFor(both, { RAG_SECTION_RULES: 'on' }).parts).toEqual(both);
+    expect(needsRechunkDryRun({ RAG_SECTION_RULES: 'on' })).toBe(true);
+    expect(needsRechunkDryRun({ RAG_SECTION_RULES: 'off' })).toBe(false);
+    const onlyRules = baseParts({ chunk_prep: { section_rules: { rule_set_id: RULE_SET, version: 1 } } });
+    expect('chunk_prep' in expectedFingerprintFor(onlyRules, { RAG_SECTION_RULES: 'off' }).parts).toBe(false);
+  });
+
+  test('impact: saved mode off and no stored part counts as today; a proposed mode counts the documents under rechunk', async () => {
+    const { countImpact, coverageFromGroups, savedFingerprintValues } = await import('@/lib/rag/ingest/fingerprint/impact');
+    const parts = baseParts();
+    const groups = [{ docType: 'general', fingerprint: buildIngestFingerprint(parts), parts, documents: 4 }];
+    const saved = savedFingerprintValues({});
+    expect(saved.RAG_PAGE_BOILERPLATE).toBe('off');
+    const { RAG_PAGE_BOILERPLATE: _mode, ...withoutMode } = saved;
+    expect(coverageFromGroups(groups, saved, false)).toEqual(coverageFromGroups(groups, withoutMode, false));
+    expect(countImpact(groups, { RAG_PAGE_BOILERPLATE: 'off' }).affected.get('rechunk')?.get('general')).toBe(0);
+    const counts = countImpact(groups, { RAG_PAGE_BOILERPLATE: 'both' });
+    expect(counts.mechanisms).toEqual(['rechunk']);
+    expect(counts.affected.get('rechunk')?.get('general')).toBe(4);
+    expect(countImpact(groups, { RAG_SECTION_RULES: 'on' }).needsRechunkDryRun).toEqual(['RAG_SECTION_RULES']);
+  });
+});

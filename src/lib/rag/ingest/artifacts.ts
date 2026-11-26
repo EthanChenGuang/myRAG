@@ -6,6 +6,8 @@ export const PARSE_ARTIFACT = 'parse.md';
 export const DOCLING_ARTIFACT = 'docling.json';
 /** The parser's own chunks (Docling), kept so a resumed run chunks the same way as an uninterrupted one. */
 export const PARSE_CHUNKS_ARTIFACT = 'chunks.json';
+/** Per-page text of a page-aware parser (the fixed LlamaParse chain), `{ pages: [{ page, text }] }`; stored only while page cleaning reads it. */
+export const PAGE_TEXTS_ARTIFACT = 'page-texts.json';
 /** The pictures the parser found, kept (with RAG_PDF_IMAGE_CHUNKS on) so a resumed run selects and captions the same ones. */
 export const PICTURES_ARTIFACT = 'pictures.json';
 

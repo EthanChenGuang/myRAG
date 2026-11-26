@@ -29,6 +29,8 @@ export interface FakeEmbeddingEndpoints {
   setFtDims(dims: number): void;
   /** Mixed into every slot vector; a new salt stands for other weights behind the same URL and model name. */
   setFtSalt(salt: string): void;
+  /** Replaces the slot model (default: fakeSlotVector); the salt is still prepended to every input. */
+  setFtEncoder(encoder: ((input: string) => number[]) | null): void;
   stop(): Promise<void>;
 }
 
@@ -72,6 +74,7 @@ export async function startFakeEmbeddingEndpoints(): Promise<FakeEmbeddingEndpoi
   let voyageReturnDims: number | null = null;
   let ftDims = 1024;
   let ftSalt = '';
+  let ftEncoder: ((input: string) => number[]) | null = null;
 
   function hostFor(url: string): FakeEmbeddingHost | null {
     if (url === `${VOYAGE_PREFIX}/embeddings`) return 'voyage';
@@ -107,7 +110,7 @@ export async function startFakeEmbeddingEndpoints(): Promise<FakeEmbeddingEndpoi
         vectors = inputs.map((text) => unit(expand(text, size)));
         model = 'voyage-4-large';
       } else if (host === 'ft') {
-        vectors = inputs.map((text) => fakeSlotVector(text, ftSalt, ftDims));
+        vectors = inputs.map((text) => (ftEncoder ? ftEncoder(`${ftSalt}${text}`) : fakeSlotVector(text, ftSalt, ftDims)));
         model = 'served-by-fake-endpoint';
       } else {
         vectors = inputs.map((text) => expand(text, qwenRawDims));
@@ -167,6 +170,9 @@ export async function startFakeEmbeddingEndpoints(): Promise<FakeEmbeddingEndpoi
     },
     setFtSalt: (salt) => {
       ftSalt = salt;
+    },
+    setFtEncoder: (encoder) => {
+      ftEncoder = encoder;
     },
     stop: () =>
       new Promise<void>((resolve) => {

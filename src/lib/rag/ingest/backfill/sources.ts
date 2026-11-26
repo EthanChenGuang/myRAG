@@ -7,6 +7,7 @@ import { createInterface } from 'node:readline';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { BackfillManifestEntrySchema, type BackfillManifestEntry } from '@/lib/rag-eval/contracts.generated';
+import { ATTRIBUTE_KEY_PATTERN, ATTRIBUTE_LIMITS } from '../attributes/validate';
 import { isTenantScope, scopeKey, type TenantScope } from '@/lib/rag/tenant/scope';
 import { ORIGINALS_BUCKET, ORIGINALS_MAX_BYTES } from '../object-store';
 
@@ -17,6 +18,8 @@ export interface SourceItem {
   size: number;
   ext: string;
   docType?: BackfillManifestEntry['doc_type'];
+  /** A manifest row's attribute values (D-23), checked and staged by enqueueRun; never logged. */
+  attributes?: NonNullable<BackfillManifestEntry['attributes']>;
   open(signal?: AbortSignal): Promise<NodeJS.ReadableStream>;
 }
 
@@ -425,6 +428,11 @@ function parseManifestLine(line: string): { ok: true; entry: BackfillManifestEnt
   const parsed = BackfillManifestEntrySchema.safeParse(raw);
   if (!parsed.success) return { ok: false, reason: 'manifest_schema' };
   const entry = parsed.data;
+  // The generated schema checks only keys that match the key pattern; any other key, or more keys than a schema can hold, breaks the contract.
+  if (entry.attributes !== undefined) {
+    const keys = Object.keys(entry.attributes);
+    if (keys.length > ATTRIBUTE_LIMITS.maxDefinitions || keys.some((key) => !ATTRIBUTE_KEY_PATTERN.test(key))) return { ok: false, reason: 'manifest_schema' };
+  }
   const hasPath = entry.path !== null && entry.path.trim() !== '';
   const hasUrl = entry.url !== null && entry.url.trim() !== '';
   if (hasPath === hasUrl) return { ok: false, reason: 'manifest_location' };
@@ -469,6 +477,7 @@ async function* listManifest(ref: string, explicitRoot: string | undefined, deps
       }
       seenKeys.add(entry.source_key);
       const docType = entry.doc_type ?? undefined;
+      const attributes = entry.attributes !== undefined ? { attributes: entry.attributes } : {};
 
       if (entry.path !== null && entry.path.trim() !== '') {
         if (path.isAbsolute(entry.path) || path.win32.isAbsolute(entry.path)) {
@@ -515,6 +524,7 @@ async function* listManifest(ref: string, explicitRoot: string | undefined, deps
           size,
           ext: extname(entry.path),
           docType,
+          ...attributes,
           async open() {
             const again = await realpath(resolved);
             if (!inside(root, again)) throw new SourceRejection('outside_root');
@@ -539,6 +549,7 @@ async function* listManifest(ref: string, explicitRoot: string | undefined, deps
         size: bytes.byteLength,
         ext: extname(new URL(url).pathname),
         docType,
+        ...attributes,
         async open() {
           return Readable.from([Buffer.from(bytes)]);
         },

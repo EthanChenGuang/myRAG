@@ -70,7 +70,13 @@ function writeGolden(dir: string, items: GoldenItem[]): string {
 interface Trace {
   item_id: string;
   query: string;
-  query_plan: null | { original: string; standalone: string; framework: string; gate: { transforms: string[] } };
+  query_plan: null | {
+    original: string;
+    standalone: string;
+    framework: string;
+    gate: { transforms: string[] };
+    skipped?: Array<{ transform: string; reason: string }>;
+  };
   query_transforms: Array<{ kind: string; text: string; transform: string | null; status: string | null }>;
   candidates: Array<{ chunk_id: string; similarity: number; fused_score: number | null }>;
   kept: Array<{ chunk_id: string }>;
@@ -274,6 +280,27 @@ describe('Phase 6 run configs through npm run test-rag', () => {
     }
     // The pre-06-38 Italian follow-ups do not trip the gate (06-29-SUMMARY); the 06-38 ones do, so all three languages condense.
     for (const language of ['en', 'zh', 'it']) assert.ok(condensedLanguages.has(language), `a condensed ${language} multi_turn item`);
+  });
+
+  test('query-layer-langchain condenses the multi_turn items through the LangChain fake, never a live chat model', () => {
+    const items = golden().filter((item) => item.category === 'multi_turn');
+    const { traces } = runSmoke(runConfigFile('query-layer-langchain.json'), items);
+
+    const scripted = scriptedCondense();
+    let condensed = 0;
+    for (const trace of traces) {
+      assert.ok(trace.query_plan, `${trace.item_id} has a query plan`);
+      assert.equal(trace.query_plan.framework, 'langchain');
+      assert.deepEqual(trace.query_plan.skipped, [], `${trace.item_id} skipped no transform`);
+      if (!trace.query_plan.gate.transforms.includes('condense_history')) continue;
+      assert.equal(trace.query_plan.standalone, scripted.get(trace.query), trace.item_id);
+      assert.ok(
+        trace.query_transforms.some((entry) => entry.transform === 'condense' && entry.status === 'ok'),
+        trace.item_id,
+      );
+      condensed += 1;
+    }
+    assert.ok(condensed >= 3, `expected condensed multi_turn items, got ${condensed}`);
   });
 
   test('query-layer-off gives the same traces and per-item results as the v2-all-off run', () => {

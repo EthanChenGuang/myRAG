@@ -179,6 +179,73 @@ class SecSmokeStepTest(unittest.TestCase):
         self.assertTrue(any("after the all-off smoke step" in e for e in self.errors_for(job)))
 
 
+class FrameworkAndCacheGateTest(unittest.TestCase):
+    """D-40, D-42 e, T-06-92: every PR compares both query-layer frameworks and gates cache near-miss wrong hits at zero."""
+
+    def job(self) -> dict:
+        return check_workflows.load(check_workflows.PR)[0]["jobs"]["eval-smoke"]
+
+    def errors_for(self, job: dict) -> list[str]:
+        errors: list[str] = []
+        check_workflows.check_eval_smoke(job, errors)
+        return errors
+
+    def without(self, job: dict, needle: str) -> dict:
+        job["steps"] = [step for step in job["steps"] if needle not in str(step.get("run", ""))]
+        return job
+
+    def step_with(self, job: dict, needle: str) -> dict:
+        return next(step for step in job["steps"] if needle in str(step.get("run", "")))
+
+    def test_repository_workflow_runs_both_gates(self):
+        self.assertEqual(self.errors_for(self.job()), [])
+
+    def test_missing_framework_comparison_is_reported(self):
+        job = self.without(self.job(), "rag_eval.compare frameworks")
+        self.assertTrue(any(check_workflows.FRAMEWORKS_STEP in e for e in self.errors_for(job)))
+
+    def test_a_soft_framework_comparison_is_reported(self):
+        job = self.job()
+        self.step_with(job, "rag_eval.compare frameworks")["run"] += " || true"
+        self.assertTrue(any("framework comparison" in e and "fail the job" in e for e in self.errors_for(job)))
+        job = self.job()
+        self.step_with(job, "rag_eval.compare frameworks")["continue-on-error"] = True
+        self.assertTrue(any("framework comparison" in e and "fail the job" in e for e in self.errors_for(job)))
+
+    def test_missing_cache_check_is_reported(self):
+        job = self.job()
+        step = self.step_with(job, check_workflows.CACHE_CHECK_STEP)
+        step["run"] = "\n".join(line for line in step["run"].splitlines() if check_workflows.CACHE_CHECK_STEP not in line)
+        self.assertTrue(any(check_workflows.CACHE_CHECK_STEP in e for e in self.errors_for(job)))
+
+    def test_missing_cache_pair_run_is_reported(self):
+        job = self.job()
+        step = self.step_with(job, check_workflows.CACHE_CHECK_STEP)
+        step["run"] = "\n".join(line for line in step["run"].splitlines() if "--cache-pairs" not in line)
+        self.assertTrue(any("--cache-pairs" in e for e in self.errors_for(job)))
+
+    def test_a_check_before_the_fresh_pair_run_is_reported(self):
+        job = self.job()
+        step = self.step_with(job, check_workflows.CACHE_CHECK_STEP)
+        step["run"] = "\n".join(reversed(step["run"].splitlines()))
+        self.assertTrue(any("fresh pair run" in e for e in self.errors_for(job)))
+
+    def test_a_soft_cache_check_is_reported(self):
+        job = self.job()
+        self.step_with(job, check_workflows.CACHE_CHECK_STEP)["run"] += " || true"
+        self.assertTrue(any("cache" in e and "fail the job" in e for e in self.errors_for(job)))
+
+    def test_both_gates_run_after_the_installs(self):
+        job = self.job()
+        steps = job["steps"]
+        for needle in ("rag_eval.compare frameworks", check_workflows.CACHE_CHECK_STEP):
+            step = self.step_with(job, needle)
+            steps.remove(step)
+            steps.insert(1, step)
+        errors = self.errors_for(job)
+        self.assertTrue(any("after npm ci and uv sync" in e for e in errors), errors)
+
+
 class InjectionSecJobTest(unittest.TestCase):
     """D-14, A-13, T-05.1-60: the live SEC matrix runs nightly; the Lakera key is reachable from nightly.yml only."""
 

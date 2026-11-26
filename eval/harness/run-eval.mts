@@ -8,6 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { MockLanguageModelV3 } from 'ai/test';
 import type { LanguageModel } from 'ai';
+import type { FakeLangChainTable } from '../../src/lib/rag/query/langchain/fake.ts';
 import { GoldenItemSchema, RagTraceSchema, RunManifestSchema, TerminologyImportRowSchema, type GoldenItem, type RagRunRequest, type RagTrace, type RunManifest } from '../../src/lib/rag-eval/contracts.generated.ts';
 import { canonicalJson, configHash } from '../../src/lib/rag-eval/trace.ts';
 import { EMBEDDER_ID, EMBEDDER_VERSION, embedderSourceSha256 } from './fixture-embedder.mts';
@@ -19,6 +20,7 @@ import { applyFixtureProcessEnv } from './process-env.mts';
 import { FAKE_CITATION_GENERATOR_MODEL, installFakeCitationGenerator } from './fake-citation-generator.mts';
 import { startFakeGroundedness, type FakeGroundedness } from './fake-groundedness.mts';
 import { CHUNKING_PROFILES_NEED_INGEST, RunConfigError, type RunConfig } from './run-config.mts';
+import { CACHE_PAIRS_APP_ENV, CACHE_PAIRS_FILE, cachePairOptions, cachePairSpecs, cachePairsRun, runCachePairs } from './cache-pairs.mts';
 
 export type EvalTier = 'smoke' | 'nightly' | 'live';
 
@@ -115,6 +117,10 @@ export interface RunEvalOptions {
    * the nightly's Prompt Guard sidecar endpoint. Never recorded in the manifest.
    */
   appEnv?: Record<string, string>;
+  /** D-37: run the golden cache pairs (anchor stored, candidate checked) and write cache-pairs.json instead of item traces. */
+  cachePairs?: boolean;
+  /** With cachePairs and baseUrl: the live run seeds and probes a live cache (plan 06-46); refused without it. */
+  allowLiveCache?: boolean;
 }
 
 export interface RunEvalResult {
@@ -127,6 +133,8 @@ export interface RunEvalResult {
   edgeErrors: number;
   runPath: string;
   manifest: RunManifest;
+  /** Set by a cache-pairs run. */
+  cachePairsPath?: string;
 }
 
 /** An item filter names a document id that ingest mode did not write from any corpus file: the run stops instead of dropping it. */
@@ -397,12 +405,21 @@ export async function prepareInProcessEval(options: {
   let restoreQueryLlm: (() => void) | undefined;
   if (shouldInstallFakeQueryLlm(process.env, { queryLayer: options.queryLayer })) {
     const depsModule = await import('../../src/lib/rag/deps.ts');
-    const { createFakeQueryLlm } = await import('./fake-query-llm.mts');
+    const { createFakeQueryLlm, loadFakeQueryLlmTable } = await import('./fake-query-llm.mts');
+    const transformerModule = await import('../../src/lib/rag/query/transformer.ts');
+    const { createFakeLangChainChatModel } = await import('../../src/lib/rag/query/langchain/fake.ts');
     const previous = depsModule.getRagDeps().queryLlm;
-    const fake = createFakeQueryLlm();
+    const table = loadFakeQueryLlmTable();
+    const fake = createFakeQueryLlm({ table });
     fakeQueryLlm = fake;
     depsModule.setRagDepsForTests({ queryLlm: () => fake });
-    restoreQueryLlm = () => depsModule.setRagDepsForTests({ queryLlm: previous });
+    // The LangChain path reads the same table through its fake chat model, so it never builds ChatOpenAI (D-39).
+    const langchainFake = createFakeLangChainChatModel({ table: table as unknown as FakeLangChainTable });
+    transformerModule.setLangChainChatModelFactoryForTests(() => langchainFake);
+    restoreQueryLlm = () => {
+      depsModule.setRagDepsForTests({ queryLlm: previous });
+      transformerModule.setLangChainChatModelFactoryForTests(null);
+    };
   }
 
   const floorModule = await import('../../src/lib/rag/refusal/floor.ts');
@@ -522,6 +539,10 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     retainInProcess,
     runConfig,
   } = options;
+  const cachePairs = options.cachePairs === true;
+  if (cachePairs && baseUrl && options.allowLiveCache !== true) {
+    throw new Error('[Eval Harness] a --cache-pairs run against --base-url seeds and probes a live cache; pass --allow-live-cache (plan 06-46)');
+  }
   const requestOptions: EvalRequestOptions = { ...(options.requestOptions ?? {}) };
   const citations = options.citations === true;
   const groundedness = options.groundedness === true;
@@ -606,6 +627,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
   let answerModule: typeof import('../../src/lib/rag-eval/answer.ts') | undefined;
   let fakeGroundedness: FakeGroundedness | undefined;
   let edgeErrors = 0;
+  let cachePairsPath: string | undefined;
   let firstEffectiveConfig: RagTrace['effective_config'] | null = null;
   let manifestInputs: { corpusSha256: string | null; sqlSha256: Record<string, string> } = { corpusSha256: null, sqlSha256: {} };
   try {
@@ -643,7 +665,11 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
           ...(options.ingestBuildEnv ? { ingestBuildEnv: options.ingestBuildEnv } : {}),
           ...(runConfig && Object.keys(runConfig.env).length > 0 ? { envOverrides: runConfig.env } : {}),
           ...(runConfig?.chunkingProfiles?.length ? { chunkingProfiles: runConfig.chunkingProfiles } : {}),
-          ...(options.appEnv && Object.keys(options.appEnv).length > 0 ? { appEnv: options.appEnv } : {}),
+          ...(cachePairs
+            ? { appEnv: { ...options.appEnv, ...CACHE_PAIRS_APP_ENV } }
+            : options.appEnv && Object.keys(options.appEnv).length > 0
+              ? { appEnv: options.appEnv }
+              : {}),
           ...(requestOptions.query_layer === true ? { queryLayer: true } : {}),
         });
         inProcess = prepared;
@@ -685,12 +711,39 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
       };
     }
 
+    if (cachePairs) {
+      const pairOptions = cachePairOptions(requestOptions);
+      if (inProcess && deploymentMode === 'multi-tenant' && !pairOptions.user_id && !pairOptions.organization_id) {
+        pairOptions.user_id = inProcess.fixtureUserId;
+      }
+      const session = inProcess;
+      if (!session) console.warn('[Eval Harness] live cache-pair run: the cache is not cleared between pairs');
+      const rows = await runCachePairs({
+        specs: cachePairSpecs(items),
+        options: pairOptions,
+        send,
+        // A fresh fixture database per run; clearing it per pair makes each distance the distance to the pair's own anchor.
+        ...(session ? { clear: async () => void (await session.fixtureDb.query('DELETE FROM public.rag_semantic_cache')) } : {}),
+        onTrace: (trace) => {
+          firstEffectiveConfig ??= trace.effective_config ?? null;
+          fs.appendFileSync(tracesPath, `${JSON.stringify(trace)}\n`);
+        },
+      });
+      const pairsRun = cachePairsRun({
+        rows,
+        source: baseUrl ? 'live' : 'fixture',
+        embeddingProfileId: baseUrl ? (requestOptions.embedding_profile ?? null) : EMBEDDER_ID,
+      });
+      cachePairsPath = path.join(outDir, CACHE_PAIRS_FILE);
+      fs.writeFileSync(cachePairsPath, `${JSON.stringify(pairsRun, null, 2)}\n`);
+    }
+
     const tableTenants = routed.tableSplit.length > 0 ? inProcess?.tableSplitTenants : undefined;
     if (routed.tableSplit.length > 0 && !tableTenants) {
       throw new Error('[Eval Harness] table_split items need an ingest session prepared with the table_split tenants');
     }
     // Ingest mode routes by category: the other items first, exactly as before, then each table_split item against its tenant.
-    for (const item of [...routed.main, ...routed.tableSplit]) {
+    for (const item of cachePairs ? [] : [...routed.main, ...routed.tableSplit]) {
       // Ingest mode: filter ids name the documents the build wrote; the table_split tenants have no map, so their filters fail closed.
       const documentIds =
         fixtureMode === 'ingest'
@@ -841,5 +894,16 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
   const runPath = path.join(outDir, 'run.json');
   fs.writeFileSync(runPath, `${JSON.stringify(manifest, null, 2)}\n`);
 
-  return { tracesPath, logPath, itemCount: items.length, skippedCount: allItems.length - items.length, tier, deploymentMode: effectiveDeploymentMode, edgeErrors, runPath, manifest };
+  return {
+    tracesPath,
+    logPath,
+    itemCount: items.length,
+    skippedCount: allItems.length - items.length,
+    tier,
+    deploymentMode: effectiveDeploymentMode,
+    edgeErrors,
+    runPath,
+    manifest,
+    ...(cachePairsPath ? { cachePairsPath } : {}),
+  };
 }

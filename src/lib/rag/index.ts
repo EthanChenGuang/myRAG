@@ -128,6 +128,7 @@ export type {
   LogOutcome,
   LogOutcomeValue,
   Profile,
+  RetrievalCacheContext,
   RetrievalOptions,
   RetrievalResult,
   RetrievalStatus,
@@ -344,6 +345,8 @@ export type {
 } from './ingest/scopes/admin';
 export { activeUploadVocabulary, uploadScopesEnabled, validateUploadScopes, warnUploadScopesIgnored } from './ingest/scopes/upload';
 export type { UploadScopeFailure, UploadVocabularyEntry, ValidateUploadScopesResult } from './ingest/scopes/upload';
+export { attributesFormField, uploadAttributesRefusal, validateUploadAttributes } from './ingest/attributes/apply';
+export type { UploadAttributesRefusal, ValidateUploadAttributesResult } from './ingest/attributes/apply';
 export {
   confirmSupersession,
   dismissSupersession,
@@ -528,7 +531,7 @@ export {
 export type { ExportKind, GoldenExportLine, MarkExportedRequest, MarkItem, MarkResult } from './feedback-loop/exports';
 export type { ReviewSearchHit, ReviewSearchRequest, ReviewSearchResult } from './feedback-loop/review-search';
 export { hashSystemPromptTemplate } from './cache/keys';
-export { cacheSourcesFromResult, scheduleCacheStore } from './cache/store-after';
+export { cacheSourcesFromResult, scheduleCacheStore, storeCacheAnswerNow, type CacheStoreOutcome } from './cache/store-after';
 export { sourceDocumentFields, type SourceDocumentFields } from './context/source-fields';
 export type { CacheStoreFacts, CacheStoreSource, ScheduleCacheStoreInput } from './cache/store-after';
 export { cacheHitMetadata, streamCachedAnswer } from './cache/hit-stream';

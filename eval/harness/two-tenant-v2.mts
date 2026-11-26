@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import type { PGlite } from '@electric-sql/pglite';
+import type { RpcClient, RpcRequest, RpcResponse } from '../../src/lib/rag/backend/supabase-rpc';
 import { chunkLexicalText } from '../../src/lib/rag/lexical/chunk-text';
 import { embedText } from './fixture-embedder.mts';
 import { runFixtureRelex } from './pglite-supabase.mts';
@@ -325,4 +326,98 @@ export function foreignMarkers(seed: TwoTenantV2Seed, own: V2TenantLabel): strin
     if (label !== own) foreign.push(phrases[label]);
   }
   return foreign;
+}
+
+/** One question both tenants ask the semantic cache: the same text, the same vector and the same key parts. */
+export const V2_CACHE_QUESTION = 'which clause of the canary handbook describes tenant isolation';
+
+export interface V2CacheSource {
+  documentId: string;
+  lineageId: string;
+  version: number;
+}
+
+/**
+ * A current, ready document of the tenant that a cached answer cites. Each call makes a new lineage, so a test can soft
+ * delete or replace it without touching the canary rows. Inserting it deletes the tenant's cache rows (0603 trigger),
+ * so callers store after seeding.
+ */
+export async function insertV2CacheSource(db: PGlite, tenant: TwoTenantV2Tenant): Promise<V2CacheSource> {
+  const documentId = crypto.randomUUID();
+  const filename = `v2-cache-source-${tenant.label}-${documentId.slice(0, 8)}.md`;
+  await db.query(
+    `INSERT INTO documents (id, filename, content, metadata, user_id, organization_id, created_at, lineage_id, source_key, status, is_current, version)
+     VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $1, $8, 'ready', true, 1)`,
+    [
+      documentId,
+      filename,
+      `Cache source of the canary handbook ${tenant.markers.child}`,
+      JSON.stringify({ relpath: `two-tenant-v2/${filename}` }),
+      tenant.userId,
+      tenant.organizationId,
+      CREATED_AT,
+      `upload:${documentId}`,
+    ],
+  );
+  return { documentId, lineageId: documentId, version: 1 };
+}
+
+/** A processing, not yet current next version of a cache source, for rag_publish_document_version. */
+export async function insertV2CacheSourceVersion(db: PGlite, tenant: TwoTenantV2Tenant, source: V2CacheSource): Promise<string> {
+  const documentId = crypto.randomUUID();
+  await db.query(
+    `INSERT INTO documents (id, filename, content, metadata, user_id, organization_id, created_at, lineage_id, source_key, status, is_current, version)
+     VALUES ($1, $2, $3, '{}'::jsonb, $4, $5, $6, $7, $8, 'processing', false, $9)`,
+    [
+      documentId,
+      `v2-cache-source-${tenant.label}-${documentId.slice(0, 8)}.md`,
+      `Replaced cache source ${tenant.markers.child}`,
+      tenant.userId,
+      tenant.organizationId,
+      CREATED_AT,
+      source.lineageId,
+      `upload:${source.lineageId}`,
+      source.version + 1,
+    ],
+  );
+  return documentId;
+}
+
+const CACHE_RPC_CASTS: Record<string, string> = {
+  p_embedding: 'public.halfvec',
+  p_answer: 'jsonb',
+  p_source_versions: 'jsonb',
+  p_document_ids: 'uuid[]',
+};
+const CACHE_RPC_SETOF = new Set(['rag_cache_check', 'rag_cache_resolve_sources']);
+
+/** PostgREST-shaped service_role access to the cache RPCs over PGlite: a SETOF function answers rows, any other its single value. */
+export function v2CacheServiceRoleRpc(db: PGlite): RpcClient {
+  return {
+    rpc(fn, args) {
+      const names = Object.keys(args);
+      const values = names.map((name) => {
+        const value = args[name];
+        return CACHE_RPC_CASTS[name] === 'jsonb' && value !== null ? JSON.stringify(value) : value;
+      });
+      const params = names.map((name, index) => `${name} => $${index + 1}${CACHE_RPC_CASTS[name] ? `::${CACHE_RPC_CASTS[name]}` : ''}`).join(', ');
+      const setof = CACHE_RPC_SETOF.has(fn);
+      const sql = setof ? `SELECT * FROM public.${fn}(${params})` : `SELECT public.${fn}(${params}) AS value`;
+      const pending: Promise<RpcResponse> = db
+        .transaction(async (tx) => {
+          await tx.exec('SET LOCAL ROLE service_role');
+          return (await tx.query<Record<string, unknown>>(sql, values)).rows;
+        })
+        .then((rows): RpcResponse => ({ data: setof ? rows : (rows[0]?.value ?? null), error: null }))
+        .catch((error: unknown): RpcResponse => ({
+          data: null,
+          error: { message: error instanceof Error ? error.message : String(error), code: (error as { code?: string }).code },
+        }));
+      const request: RpcRequest = {
+        abortSignal: () => request,
+        then: (onFulfilled, onRejected) => pending.then(onFulfilled, onRejected),
+      };
+      return request;
+    },
+  };
 }
