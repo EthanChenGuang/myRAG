@@ -59,6 +59,7 @@ class FakeQueryLLM:
         judge_rule: Callable[[JudgeItem], tuple[bool, float]] | None = None,
         unknown_refs: int = 0,
         wrong_language: bool = False,
+        usage_override: Usage | None = None,
     ):
         self.generator_model = generator_model
         self.judge_model = judge_model
@@ -70,6 +71,7 @@ class FakeQueryLLM:
         )
         self.unknown_refs = unknown_refs
         self.wrong_language = wrong_language
+        self.usage_override = usage_override
 
     def submit_queries(self, request: GenerationRequest) -> GenerationResult:
         self.generate_calls += 1
@@ -94,7 +96,7 @@ class FakeQueryLLM:
             input_tokens=sum(_tokens(chunk.text) for chunk in request.chunks) + 200,
             output_tokens=sum(_tokens(item.query) + 10 for item in items),
         )
-        return GenerationResult(SyntheticQueryBatch(items=items), usage)
+        return GenerationResult(SyntheticQueryBatch(items=items), self.usage_override or usage)
 
     def judge_answerability(self, items: Sequence[JudgeItem], *, prompt_version: str) -> JudgeResult:
         self.judge_calls += 1

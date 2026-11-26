@@ -1,3 +1,4 @@
+import hashlib
 import json
 import subprocess
 import sys
@@ -5,9 +6,14 @@ from types import SimpleNamespace
 
 import pytest
 from finetune_fakes import FakeQueryLLM
-from rag_sidecar.contracts.finetune import SyntheticQueryBatch, TokenPrice
+from rag_sidecar.contracts.finetune import (
+    DatasetManifest,
+    ExportedChunk,
+    SyntheticQueryBatch,
+    TokenPrice,
+)
 
-from rag_eval.finetune import budget, llm
+from rag_eval.finetune import budget, bundle, generate, llm
 from rag_eval.finetune.config import load_finetune_config
 from rag_eval.paths import REPO_ROOT
 
@@ -288,3 +294,264 @@ def test_budget_refuses_unknown_prices_and_negative_limits():
         budget.Budget(limit_usd=1.0, price=TokenPrice(input_usd_per_mtok=1.0))
     with pytest.raises(ValueError):
         budget.Budget(limit_usd=-1.0, price=PRICE)
+
+
+# --- generate -------------------------------------------------------------------------------------------------------
+
+TENANT = "s:default"
+SENTENCES = {
+    "en": "This neutral sample paragraph describes record number {i} and its three generic attributes in plain words. ",
+    "it": "Questo paragrafo neutro di esempio descrive il record numero {i} e i suoi tre attributi generici. ",
+    "zh": "这是一段中性的示例段落，描述第{i}号记录及其三个通用属性，用于测试。",
+}
+LAYOUT = [
+    # (language, split, token_count)
+    ("en", "train", 120), ("en", "train", 120), ("en", "dev", 120), ("en", "test", 120),
+    ("it", "train", 120), ("it", "train", 120), ("it", "dev", 120), ("it", "train", 10),
+    ("zh", "train", 120), ("zh", "train", 120), ("zh", "dev", 120), ("zh", "test", 120),
+]
+
+
+def _text(language: str, i: int) -> str:
+    return (SENTENCES[language].format(i=i) * 8)[:420]
+
+
+def _fixture_chunks() -> list[ExportedChunk]:
+    rows = []
+    for i, (language, split, tokens) in enumerate(LAYOUT):
+        text = _text(language, i)
+        rows.append(
+            ExportedChunk(
+                tenant_key=TENANT,
+                document_id=f"00000000-0000-4000-8000-{i:012d}",
+                chunk_id=f"chunk-{i:02d}",
+                chunk_index=0,
+                content_hash=hashlib.sha256(text.encode()).hexdigest(),
+                language=language,
+                split=split,
+                text=text,
+                token_count=tokens,
+                is_golden_test_evidence=False,
+            )
+        )
+    return rows
+
+
+def _bundle(tmp_path, chunks: list[ExportedChunk] | None = None):
+    run_dir = bundle.new_run_dir(tmp_path / "out", "run-1")
+    chunks = chunks if chunks is not None else _fixture_chunks()
+    sha = bundle.write_jsonl(run_dir / bundle.CHUNKS_FILE, chunks, ExportedChunk)
+    bundle.write_manifest(
+        run_dir,
+        DatasetManifest(
+            run_id="run-1",
+            purpose="private",
+            split_rule="ft-sha256-first8hex-mod100-80-10-10",
+            tenant_keys=[TENANT],
+            chunks={},
+            counts={},
+            files={bundle.CHUNKS_FILE: sha},
+            created_at="2026-11-26T00:00:00Z",
+        ),
+    )
+    return run_dir
+
+
+def _config(*, input_price=None, output_price=None, share=None, batch_chars=None):
+    config = load_finetune_config()
+    generation = config.generation.model_copy(
+        update={
+            k: v
+            for k, v in {"cross_language_share": share, "batch_chars": batch_chars}.items()
+            if v is not None
+        }
+    )
+    prices = config.prices.model_copy(
+        update={"generator": TokenPrice(input_usd_per_mtok=input_price, output_usd_per_mtok=output_price)}
+    )
+    return config.model_copy(update={"generation": generation, "prices": prices})
+
+
+PRICED = {"input_price": 3.0, "output_price": 15.0}
+
+
+def _rows(path):
+    return [generate.RawSyntheticQuery.model_validate_json(line) for line in path.read_text().splitlines() if line]
+
+
+def test_generate_writes_three_queries_per_eligible_chunk_in_its_language(tmp_path):
+    run_dir = _bundle(tmp_path)
+    config = _config(**PRICED)
+    fake = FakeQueryLLM(generator_model=config.generator_model)
+    result = generate.run_generate(run_dir, budget_usd=1.0, llm=fake, config=config)
+    assert result.exit_code == 0
+    chunks = {c.chunk_id: c for c in _fixture_chunks()}
+    raw = _rows(run_dir / generate.RAW_FILE)
+    test_rows = _rows(run_dir / generate.TEST_RAW_FILE)
+    eligible = [c for c in chunks.values() if c.split != "test" and c.token_count >= 40]
+    for chunk in eligible:
+        own = [r for r in raw if r.chunk_id == chunk.chunk_id and r.style != "cross_language"]
+        assert [r.style for r in own] == ["keyword", "question", "colloquial"]
+        assert {r.language for r in own} == {chunk.language}
+        assert {(r.tenant_key, r.split, r.document_id) for r in own} == {(TENANT, chunk.split, chunk.document_id)}
+        target = generate.cross_language_target(chunk.chunk_id, chunk.language, config.generation.cross_language_share)
+        cross = [r for r in raw if r.chunk_id == chunk.chunk_id and r.style == "cross_language"]
+        assert [r.language for r in cross] == ([target] if target else [])
+    assert {r.chunk_id for r in raw} == {c.chunk_id for c in eligible}
+    assert {r.split for r in raw} == {"train", "dev"}
+    assert {r.chunk_id for r in test_rows} == {"chunk-03", "chunk-11"}
+    assert {r.split for r in test_rows} == {"test"}
+    assert "chunk-07" not in {r.chunk_id for r in raw + test_rows}
+    report = generate.GenerateReport.model_validate_json((run_dir / generate.REPORT_FILE).read_text())
+    assert report.skipped == {"short": 1}
+    assert report.eligible == {"train": 6, "dev": 3, "test": 2}
+    assert report.queries == {"train_dev": len(raw), "test": len(test_rows)}
+    assert report.stopped_reason is None and report.complete is True
+    assert report.model == config.generator_model
+    manifest = bundle.read_manifest(run_dir)
+    assert manifest.files[generate.RAW_FILE] == bundle.sha256_file(run_dir / generate.RAW_FILE)
+    assert manifest.files[generate.TEST_RAW_FILE] == bundle.sha256_file(run_dir / generate.TEST_RAW_FILE)
+    assert oct((run_dir / generate.RAW_FILE).stat().st_mode & 0o777) == "0o600"
+
+
+def test_generate_cross_language_share_one_adds_a_query_in_another_language(tmp_path):
+    run_dir = _bundle(tmp_path)
+    config = _config(share=1.0, **PRICED)
+    generate.run_generate(run_dir, budget_usd=1.0, llm=FakeQueryLLM(), config=config)
+    chunks = {c.chunk_id: c for c in _fixture_chunks()}
+    cross = [r for r in _rows(run_dir / generate.RAW_FILE) if r.style == "cross_language"]
+    assert len(cross) == 9
+    for row in cross:
+        assert row.language != chunks[row.chunk_id].language
+        assert row.chunk_language == chunks[row.chunk_id].language
+
+
+def test_cross_language_target_is_seeded_by_chunk_id_and_near_the_share():
+    picks = [generate.cross_language_target(f"chunk-{i}", "en", 0.15) for i in range(4000)]
+    again = [generate.cross_language_target(f"chunk-{i}", "en", 0.15) for i in range(4000)]
+    assert picks == again
+    share = sum(1 for p in picks if p) / len(picks)
+    assert 0.12 < share < 0.18
+    assert {p for p in picks if p} == {"zh", "it"}
+    assert generate.cross_language_target("chunk-1", "en", 0.0) is None
+
+
+def test_generate_second_run_makes_no_llm_call(tmp_path):
+    run_dir = _bundle(tmp_path)
+    config = _config(**PRICED)
+    generate.run_generate(run_dir, budget_usd=1.0, llm=FakeQueryLLM(), config=config)
+    first = (run_dir / generate.RAW_FILE).read_bytes()
+    again = FakeQueryLLM()
+    result = generate.run_generate(run_dir, budget_usd=1.0, llm=again, config=config)
+    assert result.exit_code == 0
+    assert again.generate_calls == 0
+    assert (run_dir / generate.RAW_FILE).read_bytes() == first
+    report = generate.GenerateReport.model_validate_json((run_dir / generate.REPORT_FILE).read_text())
+    assert report.cached_chunks == 11 and report.llm_calls == 0
+
+
+def test_generate_cache_key_is_content_hash_prompt_version_and_model():
+    expected = hashlib.sha256(b"abc|ft-generate-v1|some-model").hexdigest()
+    assert generate.cache_key("abc", "ft-generate-v1", "some-model") == expected
+
+
+def test_generate_stops_before_the_call_that_exceeds_the_budget_and_resumes(tmp_path):
+    run_dir = _bundle(tmp_path)
+    probe = _config(batch_chars=1000, **PRICED)
+    batches = generate.plan_batches(generate.load_chunks(run_dir), probe)
+    assert len(batches) >= 3
+    estimate = generate.estimate_batch_usage(batches[0], probe)
+    per_token = 0.00006 / (estimate.input_tokens + estimate.output_tokens) * 1_000_000
+    config = _config(batch_chars=1000, input_price=per_token, output_price=per_token)
+    first = FakeQueryLLM(usage_override=estimate)
+    result = generate.run_generate(run_dir, budget_usd=0.0001, llm=first, config=config)
+    assert result.exit_code == 5
+    assert first.generate_calls == 1
+    report = generate.GenerateReport.model_validate_json((run_dir / generate.REPORT_FILE).read_text())
+    assert report.stopped_reason == "budget" and report.complete is False
+    assert report.spent_usd == pytest.approx(0.00006)
+    done_first = {chunk.chunk_id for chunk in batches[0]}
+    assert {r.chunk_id for r in _rows(run_dir / generate.RAW_FILE)} | {
+        r.chunk_id for r in _rows(run_dir / generate.TEST_RAW_FILE)
+    } == done_first
+    resumed = FakeQueryLLM()
+    result = generate.run_generate(run_dir, budget_usd=1.0, llm=resumed, config=config)
+    assert result.exit_code == 0
+    assert resumed.generate_calls == len(batches) - 1
+    asked = {chunk.text for request in resumed.requests for chunk in request.chunks}
+    assert not asked & {chunk.text for chunk in batches[0]}
+    report = generate.GenerateReport.model_validate_json((run_dir / generate.REPORT_FILE).read_text())
+    assert report.complete is True and report.stopped_reason is None
+
+
+def test_generate_drops_and_counts_unknown_chunk_refs_and_wrong_languages(tmp_path):
+    run_dir = _bundle(tmp_path)
+    config = _config(**PRICED)
+    generate.run_generate(run_dir, budget_usd=1.0, llm=FakeQueryLLM(unknown_refs=2), config=config)
+    report = generate.GenerateReport.model_validate_json((run_dir / generate.REPORT_FILE).read_text())
+    assert report.dropped["unknown_chunk_ref"] == 2 * report.llm_calls
+    other = _bundle(tmp_path / "second")
+    no_cross = _config(share=0.0, **PRICED)
+    generate.run_generate(other, budget_usd=1.0, llm=FakeQueryLLM(wrong_language=True), config=no_cross)
+    report = generate.GenerateReport.model_validate_json((other / generate.REPORT_FILE).read_text())
+    assert report.dropped["language"] == 3 * 11
+    assert report.missing_chunks == 11
+
+
+def test_generate_without_budget_exits_2(tmp_path, capsys):
+    run_dir = _bundle(tmp_path)
+    fake = FakeQueryLLM()
+    assert generate.main(["--bundle", str(run_dir)], llm=fake, config=_config(**PRICED)) == 2
+    assert "--budget-usd" in capsys.readouterr().err
+    assert fake.generate_calls == 0
+    assert not (run_dir / generate.RAW_FILE).exists()
+
+
+def test_generate_with_a_budget_but_no_prices_exits_2(tmp_path, capsys):
+    run_dir = _bundle(tmp_path)
+    fake = FakeQueryLLM()
+    assert generate.main(["--bundle", str(run_dir), "--budget-usd", "5"], llm=fake, config=_config()) == 2
+    assert "prices" in capsys.readouterr().err
+    assert fake.generate_calls == 0
+
+
+def test_generate_dry_run_projects_tokens_and_reports_unknown_cost(tmp_path, capsys):
+    run_dir = _bundle(tmp_path)
+    fake = FakeQueryLLM()
+    assert generate.main(["--bundle", str(run_dir), "--dry-run"], llm=fake, config=_config()) == 0
+    out = capsys.readouterr().out
+    assert "cost unknown: set prices in finetune.json" in out
+    assert "input_tokens=" in out and "output_tokens=" in out
+    assert fake.generate_calls == 0
+    assert not (run_dir / generate.RAW_FILE).exists()
+    assert generate.main(["--bundle", str(run_dir), "--dry-run"], llm=fake, config=_config(**PRICED)) == 0
+    assert "cost_usd=" in capsys.readouterr().out
+
+
+def test_generate_missing_bundle_exits_2(tmp_path, capsys):
+    assert generate.main(["--bundle", str(tmp_path / "nope"), "--budget-usd", "1"], llm=FakeQueryLLM()) == 2
+
+
+def test_generate_stdout_and_report_carry_counts_only(tmp_path, capsys):
+    run_dir = _bundle(tmp_path)
+    assert generate.main(["--bundle", str(run_dir), "--budget-usd", "1"], llm=FakeQueryLLM(), config=_config(**PRICED)) == 0
+    captured = capsys.readouterr()
+    report = (run_dir / generate.REPORT_FILE).read_text()
+    for language in SENTENCES:
+        fragment = SENTENCES[language].format(i=1)[:20]
+        assert fragment not in captured.out + captured.err
+        assert fragment not in report
+    assert "queries" in captured.out
+    raw = (run_dir / generate.RAW_FILE).read_text()
+    assert "sample topic terms" not in captured.out + report
+    assert raw
+
+
+def test_generate_refuses_a_chunk_of_a_tenant_outside_the_manifest(tmp_path, capsys):
+    chunks = _fixture_chunks()
+    chunks[0] = chunks[0].model_copy(update={"tenant_key": "o:00000000-0000-4000-8000-0000000000ff"})
+    run_dir = _bundle(tmp_path, chunks)
+    fake = FakeQueryLLM()
+    result = generate.run_generate(run_dir, budget_usd=1.0, llm=fake, config=_config(**PRICED))
+    assert result.exit_code == 1
+    assert fake.generate_calls == 0
