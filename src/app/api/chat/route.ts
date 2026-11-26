@@ -28,7 +28,10 @@ import {
   finishTrace,
   isSmallTalkResult,
   isV2Pipeline,
+  answerFinishFields,
+  answerTraceFields,
   createAnswerTurn,
+  parseBodyChannel,
   kbUnavailableLanguage,
   kbUnavailableText,
   noInformationLanguage,
@@ -1302,6 +1305,7 @@ export async function POST(req: Request) {
         disableRAG?: boolean, // WhatsApp and other overrides
         ragMode?: 'strict' | 'balanced' | 'flexible' | 'bypass' // RAG behavior mode
         capabilities?: unknown
+        channel?: unknown // Phase 5.2: 'web' | 'whatsapp', selects the notice rendering only
       },
       imageStorage?: Record<string, string> // Add imageStorage for attached images
     } = requestBody;
@@ -1395,11 +1399,12 @@ export async function POST(req: Request) {
       history: rawMessages,
       uiLanguage: userLanguage,
       channel:
-        Boolean(data?.systemPromptOverride) ||
+        parseBodyChannel(data?.channel ?? requestBody?.channel) ??
+        (Boolean(data?.systemPromptOverride) ||
         (typeof data?.chatId === 'string' && data.chatId.includes('whatsapp')) ||
         rawMessages.some((message) => message.name?.includes('@s.whatsapp.net'))
           ? 'whatsapp'
-          : 'web',
+          : 'web'),
       ragMode,
     });
     const registryAnswerLanguage = answerTurn.textsSource === 'registry' ? answerTurn.answerLanguage : null;
@@ -3895,7 +3900,11 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       // First streamText call with merged tools and reasoning
       let answerToolOutputUsed = false;
       const citationTransformParams = () => {
-        const citationTransforms = citationSession.transforms();
+        // Phase 5.2 D-35: the citation transforms unchanged with every 5.2 switch off
+        const citationTransforms = answerTurn.transforms(citationSession.transforms(), {
+          webSearchOffered: SUPPORTS_TOOLS && webSearchEnabled && Boolean(env.EXA_API_KEY),
+          aliases: () => citationSession.aliases(),
+        });
         return citationTransforms.length > 0 ? { experimental_transform: citationTransforms } : {};
       };
 
@@ -4311,7 +4320,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           invalidCitations: records?.invalidCitations ?? 0,
           answerText: responseText,
           aborted,
-          groundednessEligible: !failed && (ragMode === 'strict' || ragMode === 'balanced') && knowledgeBaseContext,
+          groundednessEligible:
+            !failed && (ragMode === 'strict' || ragMode === 'balanced') && knowledgeBaseContext && !answerTurn.refusedByModel(),
           toolOutputUsed: answerToolOutputUsed,
           premise: {
             blocks: premiseBlocks,
@@ -4320,6 +4330,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
               .filter((text) => text.length > 0),
           },
           requestLanguage: userLanguage,
+          ...(answerTurn.config.anyNonDefault ? answerFinishFields(answerTurn, retrievalResult) : {}),
         });
       };
 
@@ -4395,7 +4406,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
               return undefined;
             }
             if (part.type !== 'finish') return undefined;
-            const finishMetadata = { ...buildFinishMetadata(), ...citationSession.finishMetadata() };
+            const finishMetadata = { ...buildFinishMetadata(), ...citationSession.finishMetadata(), ...answerTurn.finishMetadata() };
             if (!ragTraceId && !answerId && injectionFlagged === undefined && Object.keys(finishMetadata).length === 0) return undefined;
             return { ...(ragTraceId ? { ragTraceId } : {}), ...(answerId ? { answerId } : {}), ...injectionFlaggedField, ...finishMetadata };
           };
@@ -4435,15 +4446,20 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             if (ragLogContext) setRagLogOutcome(null, detectLanguage(directText));
           }
           if (ragLogContext && (isAborted || generationFailed || finishReason === 'error')) setRagLogOutcome(null, null);
+          // D-16: a sentinel refusal is logged like the server-side refusal
+          if (answerTurn.refusedByModel()) setRagLogOutcome('refused_no_context', answerTurn.answerLanguage);
           if (ragTrace) {
             const status = isAborted ? 'aborted' : generationFailed || finishReason === 'error' ? 'error' : 'ok';
             const fallbackReason = citationSession.fallbackReason;
+            const answerTrace = answerTraceFields(answerTurn, citationSession.truncatedMarkers());
+            const rules = [...(fallbackReason ? [`citation_strategy_fallback:${fallbackReason}`] : []), ...answerTrace.rules];
             ragTrace.collector.record({
               name: 'generation',
               status,
               startedAt: aiStartTime,
               endedAt: ragTrace.collector.now(),
-              ...(fallbackReason ? { rules: [`citation_strategy_fallback:${fallbackReason}`] } : {}),
+              ...(rules.length > 0 ? { rules } : {}),
+              ...(answerTrace.counts ? { counts: answerTrace.counts } : {}),
             });
           }
           finishRagTrace();

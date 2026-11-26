@@ -94,6 +94,10 @@ export interface CitationSession {
   /** The validated records with full quotes, for the answer record; null when no strategy is active. */
   fullRecords(): { citations: CitationRecord[]; invalidCitations: number } | null;
   answerText(): string;
+  /** The aliases of the attached AliasMap (empty when no strategy is active); a marker for any other alias never cites. */
+  aliases(): ReadonlySet<string>;
+  /** D-33: markers cut in half at a text-part end or at the stream end; dropped, never guessed. */
+  truncatedMarkers(): number;
 }
 
 const CitationListSchema = z.array(CitationRecordSchema);
@@ -134,6 +138,7 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
   let finished: { citations: CitationRecord[]; invalidCitations: number } | null = null;
   let full: CitationRecord[] = [];
   let answer = '';
+  let truncated = 0;
 
   const claudeBasePrompt = (basePrompt: string): string => {
     const tagging = input.contextTagging ?? readSecurityConfig().contextTagging;
@@ -176,6 +181,7 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
     }
     try {
       const parsed = parser.finish();
+      truncated = parsed.truncatedMarkers ?? 0;
       const records = CitationListSchema.parse(buildCitationRecords(parsed.valid, aliasMap, strategy));
       finished = { citations: CitationListSchema.parse(capQuotes(records)), invalidCitations: parsed.invalidCitations };
       full = records;
@@ -261,6 +267,7 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
       finished = null;
       full = [];
       answer = '';
+      truncated = 0;
       parser = createMarkerParser({ aliases: aliasMap.aliases });
     },
     stripHistory(messages) {
@@ -313,6 +320,14 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
     },
     answerText() {
       return answer;
+    },
+    aliases() {
+      return strategy && aliasMap ? aliasMap.aliases : new Set<string>();
+    },
+    truncatedMarkers() {
+      if (!strategy || strategy !== 'chunk-alias') return 0;
+      finalize();
+      return truncated;
     },
   };
 }
