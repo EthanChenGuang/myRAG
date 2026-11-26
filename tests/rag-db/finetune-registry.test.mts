@@ -320,7 +320,7 @@ for (const mode of MODES) {
         assert.equal(listed.rows[0]?.probe, null);
         assert.deepEqual(listed.rows[0]?.tenant_keys, [A]);
         assert.equal(listed.rows[0]?.scope, 'tenant');
-        assert.equal(JSON.stringify(listed.rows[0]?.offline_metrics).includes('"'.concat('reasons')), true);
+        assert.deepEqual(listed.rows[0]?.offline_metrics, card('x', 'tenant', [A]).offline);
         const withProbe = await db.query<{ probe: { vectors: number[][] } }>('SELECT probe FROM public.rag_finetune_list_models(true)');
         assert.equal(withProbe.rows[0]?.probe.vectors.length, 3);
         assert.equal(withProbe.rows[0]?.probe.vectors[0]?.length, 1024);

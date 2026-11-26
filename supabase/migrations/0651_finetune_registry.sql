@@ -123,6 +123,16 @@ BEGIN
           revoked_at = NULL, revoked_by = NULL, updated_at = pg_catalog.now();
   END IF;
 
+  WITH tainted AS (
+    UPDATE public.embedding_model_versions AS v
+    SET status = 'tainted', tainted_at = pg_catalog.now(), updated_at = pg_catalog.now()
+    WHERE p_tenant_key = ANY (v.tenant_keys)
+      AND v.status <> 'tainted'
+      AND (p_scope = 'none' OR (p_scope = 'private' AND v.scope = 'deployment'))
+    RETURNING v.id
+  )
+  SELECT COALESCE(pg_catalog.array_agg(t.id ORDER BY t.id), ARRAY[]::text[]) INTO v_tainted FROM tainted AS t;
+
   RETURN QUERY SELECT p_tenant_key, p_scope, v_tainted;
 END
 $fn$;
@@ -199,5 +209,255 @@ $fn$;
 
 REVOKE ALL ON FUNCTION public.rag_finetune_consent_for_export(text[], text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rag_finetune_consent_for_export(text[], text) TO service_role;
+
+-- Registers a model version card (D-30). Refuses a card that is not a candidate (rejected_offline: offline_gate), whose dims is not 1024,
+-- whose id exists, whose artifact_uri carries userinfo, a query string or a fragment, whose offline report holds text, whose probe is not
+-- three unit vectors of 1024 numbers computed with the card's prompts, or whose tenants' consent does not cover the card scope
+-- (tenant: exactly one tenant with private or deployment; deployment: every tenant with deployment). The consent rows are locked FOR SHARE.
+CREATE OR REPLACE FUNCTION public.rag_finetune_register_model(p_card jsonb, p_actor text)
+RETURNS TABLE (version_id text, version_status text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_id text;
+  v_scope text;
+  v_keys text[];
+  v_key text;
+  v_consent text;
+  v_probe jsonb;
+  v_offline jsonb;
+  v_vector jsonb;
+  v_norm double precision;
+BEGIN
+  IF p_actor IS NULL OR pg_catalog.btrim(p_actor) = '' THEN
+    RAISE EXCEPTION 'register_refused: actor is required' USING ERRCODE = '22023';
+  END IF;
+  IF p_card IS NULL OR pg_catalog.jsonb_typeof(p_card) <> 'object' THEN
+    RAISE EXCEPTION 'register_refused: card must be a json object' USING ERRCODE = '22023';
+  END IF;
+
+  v_id := CASE WHEN pg_catalog.jsonb_typeof(p_card -> 'id') = 'string' THEN p_card ->> 'id' END;
+  IF v_id IS NULL OR v_id !~ '^ft-[a-z0-9][a-z0-9.-]{2,58}$' THEN
+    RAISE EXCEPTION 'register_refused: id must match ^ft-[a-z0-9][a-z0-9.-]{2,58}$' USING ERRCODE = '22023';
+  END IF;
+  IF p_card -> 'status' = '"rejected_offline"'::jsonb THEN
+    RAISE EXCEPTION 'register_refused: offline_gate (the card failed the offline evaluation)' USING ERRCODE = '22023';
+  END IF;
+  IF p_card -> 'status' IS DISTINCT FROM '"candidate"'::jsonb THEN
+    RAISE EXCEPTION 'register_refused: status must be candidate' USING ERRCODE = '22023';
+  END IF;
+  IF p_card -> 'dims' IS DISTINCT FROM '1024'::jsonb THEN
+    RAISE EXCEPTION 'register_refused: dims must be 1024' USING ERRCODE = '22023';
+  END IF;
+  IF pg_catalog.jsonb_typeof(p_card -> 'artifact_uri') IS DISTINCT FROM 'string'
+     OR pg_catalog.length(p_card ->> 'artifact_uri') > 2048
+     OR (p_card ->> 'artifact_uri') !~ '^[a-z][a-z0-9+.-]*://[^@?#[:space:][:cntrl:]]+$' THEN
+    RAISE EXCEPTION 'register_refused: artifact_uri must be scheme://location without userinfo, query string or fragment' USING ERRCODE = '22023';
+  END IF;
+
+  v_scope := CASE WHEN pg_catalog.jsonb_typeof(p_card -> 'scope') = 'string' THEN p_card ->> 'scope' END;
+  IF v_scope IS NULL OR v_scope NOT IN ('deployment', 'tenant') THEN
+    RAISE EXCEPTION 'register_refused: scope must be deployment or tenant' USING ERRCODE = '22023';
+  END IF;
+  IF pg_catalog.jsonb_typeof(p_card -> 'tenant_keys') IS DISTINCT FROM 'array'
+     OR pg_catalog.jsonb_array_length(p_card -> 'tenant_keys') = 0
+     OR EXISTS (SELECT 1 FROM pg_catalog.jsonb_array_elements(p_card -> 'tenant_keys') AS e(k) WHERE pg_catalog.jsonb_typeof(e.k) <> 'string') THEN
+    RAISE EXCEPTION 'register_refused: tenant_keys must be a non-empty array of tenant keys' USING ERRCODE = '22023';
+  END IF;
+  SELECT pg_catalog.array_agg(DISTINCT e.k ORDER BY e.k) INTO v_keys FROM pg_catalog.jsonb_array_elements_text(p_card -> 'tenant_keys') AS e(k);
+  IF pg_catalog.cardinality(v_keys) <> pg_catalog.jsonb_array_length(p_card -> 'tenant_keys') THEN
+    RAISE EXCEPTION 'register_refused: tenant_keys must not repeat a key' USING ERRCODE = '22023';
+  END IF;
+  FOREACH v_key IN ARRAY v_keys LOOP
+    BEGIN
+      PERFORM public.rag_assert_tenant_key(v_key);
+    EXCEPTION WHEN invalid_parameter_value THEN
+      RAISE EXCEPTION 'register_refused: tenant_keys hold a key this deployment cannot use (%)', SQLERRM USING ERRCODE = '22023';
+    END;
+  END LOOP;
+  IF v_scope = 'tenant' AND pg_catalog.cardinality(v_keys) <> 1 THEN
+    RAISE EXCEPTION 'register_refused: tenant_scope_single (a tenant-scope card names exactly one tenant)' USING ERRCODE = '22023';
+  END IF;
+
+  IF pg_catalog.jsonb_typeof(p_card -> 'base_model') IS DISTINCT FROM 'string'
+     OR pg_catalog.btrim(p_card ->> 'base_model') = '' OR pg_catalog.length(p_card ->> 'base_model') > 200 THEN
+    RAISE EXCEPTION 'register_refused: base_model must be a non-empty model name' USING ERRCODE = '22023';
+  END IF;
+  IF pg_catalog.jsonb_typeof(p_card -> 'base_revision') IS DISTINCT FROM 'string' OR (p_card ->> 'base_revision') !~ '^[0-9a-f]{40}$' THEN
+    RAISE EXCEPTION 'register_refused: base_revision must be a 40-character hex revision' USING ERRCODE = '22023';
+  END IF;
+  IF pg_catalog.jsonb_typeof(p_card -> 'dataset_manifest_sha256') IS DISTINCT FROM 'string'
+     OR (p_card ->> 'dataset_manifest_sha256') !~ '^[0-9a-f]{64}$'
+     OR pg_catalog.jsonb_typeof(p_card -> 'training_config_sha256') IS DISTINCT FROM 'string'
+     OR (p_card ->> 'training_config_sha256') !~ '^[0-9a-f]{64}$' THEN
+    RAISE EXCEPTION 'register_refused: hashes must be 64-character hex sha256 values' USING ERRCODE = '22023';
+  END IF;
+  IF pg_catalog.jsonb_typeof(p_card -> 'query_prompt') IS DISTINCT FROM 'string'
+     OR pg_catalog.jsonb_typeof(p_card -> 'document_prompt') IS DISTINCT FROM 'string'
+     OR pg_catalog.length(p_card ->> 'query_prompt') > 2000 OR pg_catalog.length(p_card ->> 'document_prompt') > 2000 THEN
+    RAISE EXCEPTION 'register_refused: prompts must be strings of at most 2000 characters' USING ERRCODE = '22023';
+  END IF;
+
+  v_offline := p_card -> 'offline';
+  IF pg_catalog.jsonb_typeof(v_offline) IS DISTINCT FROM 'object'
+     OR pg_catalog.jsonb_path_exists(v_offline - 'reasons', 'lax $.** ? (@.type() == "string")')
+     OR (v_offline ? 'reasons' AND (
+       pg_catalog.jsonb_typeof(v_offline -> 'reasons') <> 'array'
+       OR EXISTS (
+         SELECT 1 FROM pg_catalog.jsonb_array_elements(v_offline -> 'reasons') AS r(x)
+         WHERE pg_catalog.jsonb_typeof(r.x) <> 'string' OR (r.x #>> '{}') !~ '^[a-z][a-z0-9_]{0,63}$'
+       )
+     )) THEN
+    RAISE EXCEPTION 'register_refused: offline must be a report of numbers (reasons as enum codes only)' USING ERRCODE = '22023';
+  END IF;
+
+  v_probe := p_card -> 'probe';
+  IF pg_catalog.jsonb_typeof(v_probe) IS DISTINCT FROM 'object'
+     OR pg_catalog.jsonb_typeof(v_probe -> 'texts') IS DISTINCT FROM 'array'
+     OR pg_catalog.jsonb_typeof(v_probe -> 'vectors') IS DISTINCT FROM 'array' THEN
+    RAISE EXCEPTION 'register_refused: probe must hold texts and vectors' USING ERRCODE = '22023';
+  END IF;
+  IF pg_catalog.jsonb_array_length(v_probe -> 'texts') <> 3 OR pg_catalog.jsonb_array_length(v_probe -> 'vectors') <> 3
+     OR EXISTS (
+       SELECT 1 FROM pg_catalog.jsonb_array_elements(v_probe -> 'texts') AS t(x)
+       WHERE pg_catalog.jsonb_typeof(t.x) <> 'string' OR pg_catalog.btrim(t.x #>> '{}') = ''
+     )
+     OR v_probe -> 'query_prompt' IS DISTINCT FROM p_card -> 'query_prompt'
+     OR v_probe -> 'document_prompt' IS DISTINCT FROM p_card -> 'document_prompt' THEN
+    RAISE EXCEPTION 'register_refused: probe must hold three texts and the card''s prompts' USING ERRCODE = '22023';
+  END IF;
+  FOR v_vector IN SELECT e.v FROM pg_catalog.jsonb_array_elements(v_probe -> 'vectors') AS e(v) LOOP
+    IF pg_catalog.jsonb_typeof(v_vector) <> 'array' OR pg_catalog.jsonb_array_length(v_vector) <> 1024
+       OR EXISTS (SELECT 1 FROM pg_catalog.jsonb_array_elements(v_vector) AS x(n) WHERE pg_catalog.jsonb_typeof(x.n) <> 'number') THEN
+      RAISE EXCEPTION 'register_refused: probe vectors must be three arrays of 1024 numbers' USING ERRCODE = '22023';
+    END IF;
+    SELECT pg_catalog.sqrt(pg_catalog.sum((x.n)::double precision * (x.n)::double precision)) INTO v_norm
+    FROM pg_catalog.jsonb_array_elements(v_vector) AS x(n);
+    IF pg_catalog.abs(v_norm - 1) > 1e-3 THEN
+      RAISE EXCEPTION 'register_refused: probe vectors must have unit length' USING ERRCODE = '22023';
+    END IF;
+  END LOOP;
+
+  IF EXISTS (SELECT 1 FROM public.embedding_model_versions AS m WHERE m.id = v_id) THEN
+    RAISE EXCEPTION 'register_refused: duplicate (version % exists)', v_id USING ERRCODE = '23505';
+  END IF;
+
+  FOREACH v_key IN ARRAY v_keys LOOP
+    SELECT c.scope INTO v_consent FROM public.rag_finetune_consent AS c WHERE c.tenant_key = v_key FOR SHARE;
+    IF NOT FOUND OR v_consent = 'none' OR (v_scope = 'deployment' AND v_consent <> 'deployment') THEN
+      RAISE EXCEPTION 'register_refused: consent of % does not cover a % scope model', v_key, v_scope USING ERRCODE = '42501';
+    END IF;
+  END LOOP;
+
+  BEGIN
+    INSERT INTO public.embedding_model_versions (
+      id, base_model, base_revision, scope, tenant_keys, dataset_manifest_sha256, training_config_sha256, offline_metrics, probe,
+      query_prompt, document_prompt, dims, artifact_uri, status, created_by
+    )
+    VALUES (
+      v_id, p_card ->> 'base_model', p_card ->> 'base_revision', v_scope, v_keys, p_card ->> 'dataset_manifest_sha256',
+      p_card ->> 'training_config_sha256', v_offline,
+      pg_catalog.jsonb_build_object(
+        'texts', v_probe -> 'texts', 'vectors', v_probe -> 'vectors',
+        'query_prompt', v_probe -> 'query_prompt', 'document_prompt', v_probe -> 'document_prompt'
+      ),
+      p_card ->> 'query_prompt', p_card ->> 'document_prompt', 1024, p_card ->> 'artifact_uri', 'registered', p_actor
+    );
+  EXCEPTION WHEN unique_violation THEN
+    RAISE EXCEPTION 'register_refused: duplicate (version % exists)', v_id USING ERRCODE = '23505';
+  END;
+
+  RETURN QUERY SELECT v_id, 'registered'::text;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_register_model(jsonb, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_register_model(jsonb, text) TO service_role;
+
+-- Lists the registry. Probe vectors are large, so they are returned only with p_include_probe.
+CREATE OR REPLACE FUNCTION public.rag_finetune_list_models(p_include_probe boolean DEFAULT false)
+RETURNS TABLE (
+  id text,
+  base_model text,
+  base_revision text,
+  scope text,
+  tenant_keys text[],
+  dataset_manifest_sha256 text,
+  training_config_sha256 text,
+  offline_metrics jsonb,
+  query_prompt text,
+  document_prompt text,
+  dims integer,
+  artifact_uri text,
+  status text,
+  bound_slot text,
+  tainted_at timestamptz,
+  created_at timestamptz,
+  created_by text,
+  updated_at timestamptz,
+  probe jsonb
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+  SELECT m.id, m.base_model, m.base_revision, m.scope, m.tenant_keys, m.dataset_manifest_sha256, m.training_config_sha256,
+         m.offline_metrics, m.query_prompt, m.document_prompt, m.dims, m.artifact_uri, m.status, m.bound_slot, m.tainted_at,
+         m.created_at, m.created_by, m.updated_at,
+         CASE WHEN COALESCE(p_include_probe, false) THEN m.probe END
+  FROM public.embedding_model_versions AS m
+  ORDER BY m.created_at, m.id
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_list_models(boolean) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_list_models(boolean) TO service_role;
+
+-- Operator status changes (D-30): registered to retired, and any status to tainted. Taint is final. bound and its reverse belong to the
+-- slot functions of 0652.
+CREATE OR REPLACE FUNCTION public.rag_finetune_set_model_status(p_version_id text, p_status text, p_actor text)
+RETURNS TABLE (version_id text, version_status text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_current text;
+BEGIN
+  IF p_actor IS NULL OR pg_catalog.btrim(p_actor) = '' THEN
+    RAISE EXCEPTION 'status_refused: actor is required' USING ERRCODE = '22023';
+  END IF;
+  SELECT m.status INTO v_current FROM public.embedding_model_versions AS m WHERE m.id = p_version_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'status_refused: not_found (%)', p_version_id USING ERRCODE = 'P0002';
+  END IF;
+  IF v_current = 'tainted' THEN
+    IF p_status = 'tainted' THEN
+      RETURN QUERY SELECT p_version_id, v_current;
+      RETURN;
+    END IF;
+    RAISE EXCEPTION 'status_refused: tainted_final (a tainted version never changes status)' USING ERRCODE = '22023';
+  END IF;
+
+  IF p_status = 'tainted' THEN
+    UPDATE public.embedding_model_versions AS m
+    SET status = 'tainted', tainted_at = pg_catalog.now(), updated_at = pg_catalog.now()
+    WHERE m.id = p_version_id;
+  ELSIF p_status = 'retired' AND v_current = 'registered' THEN
+    UPDATE public.embedding_model_versions AS m
+    SET status = 'retired', updated_at = pg_catalog.now()
+    WHERE m.id = p_version_id;
+  ELSE
+    RAISE EXCEPTION 'status_refused: transition % to % is not allowed', v_current, COALESCE(p_status, 'null') USING ERRCODE = '22023';
+  END IF;
+
+  RETURN QUERY SELECT p_version_id, p_status;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_set_model_status(text, text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_set_model_status(text, text, text) TO service_role;
 
 COMMIT;
