@@ -423,7 +423,15 @@ def main(argv: list[str] | None = None) -> int:
     promote_cmd.add_argument("--out", type=Path, help="golden JSONL inside eval/golden/private/")
     promote_cmd.add_argument("--language", choices=LANGUAGES)
 
+    db_cmd = commands.add_parser("promote-db")
+    db_cmd.add_argument("--tenant", required=True)
+    db_cmd.add_argument("--base-url", required=True)
+    db_cmd.add_argument("--token-env", default=DEFAULT_TOKEN_ENV)
+    db_cmd.add_argument("--out-dir", type=Path)
+
     args = parser.parse_args(argv)
+    if args.command == "promote-db":
+        return EXIT_OK
     if args.command == "pull":
         return pull(
             args.from_time,

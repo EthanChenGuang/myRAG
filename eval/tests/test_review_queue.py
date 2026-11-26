@@ -536,3 +536,291 @@ def test_pull_source_langfuse_is_the_default_and_never_calls_the_app(private_roo
         assert main(["pull", "--from", FROM, "--to", TO]) == 0
     assert seen == []
     assert len(_read_queue(private_root)) == 1
+
+
+# --- promote-db (Phase 5.1.1 D-20, D-21, D-22, D-29) ---
+
+import hashlib  # noqa: E402
+
+from rag_eval.split import DOCGROUP_SPLIT_RULE, load_group_manifest, write_manifest  # noqa: E402
+
+DB_TENANT = "o:11111111-2222-4333-8444-555555555555"
+DB_TENANT_HASH = hashlib.sha256(DB_TENANT.encode()).hexdigest()[:16]
+DOC_ONE = "d0000000-0000-4000-8000-000000000001"
+DOC_TWO = "d0000000-0000-4000-8000-000000000002"
+CHUNK_ONE = "The widget accepts three inputs and returns one summary value."
+CHUNK_TWO = "Archived records move to cold storage after the retention period."
+
+
+def _review_id(n: int) -> str:
+    return f"a0000000-0000-4000-8000-{n:012x}"
+
+
+def _golden_line(n: int, *, question: str | None = None, document_id: str = DOC_ONE, chunk: str = CHUNK_ONE, quote: str | None = None, verified: bool | None = None, **label_overrides) -> dict:
+    quote = quote if quote is not None else chunk.split(" and ")[0].split(" after ")[0]
+    label = {
+        "answerable": True,
+        "category": "general",
+        "language": "en",
+        "expected_answer": "A synthetic expected answer.",
+        "evidence": [
+            {"chunk_id": f"chunk-{n}", "document_id": document_id, "document_name": f"doc-{document_id[-1]}.md", "section": "Overview", "quote": quote}
+        ],
+        "triage": ["golden"],
+        "pii_checked": True,
+    }
+    label.update(label_overrides)
+    return {
+        "id": _review_id(n),
+        "tenant_key": DB_TENANT,
+        "query_masked": question if question is not None else f"How does synthetic feature number {n} behave?",
+        "query_language": "en",
+        "channel": "chat",
+        "outcome": "answered",
+        "reasons": ["feedback_negative"],
+        "occurrences": 1,
+        "labelled_at": "2026-11-20T10:00:00.000Z",
+        "split": None,
+        "split_group": None,
+        "mining_window": "2026-11-16",
+        "mined_at": "2026-11-17T10:00:00.000Z",
+        "label": label,
+        "evidence": [
+            {
+                **span,
+                "chunk_text": chunk,
+                "quote_verified": (quote in chunk) if verified is None else verified,
+            }
+            for span in label["evidence"]
+        ],
+    }
+
+
+class _App:
+    def __init__(self, lines: list[dict], *, export_status: int = 200, mark_status: int = 200) -> None:
+        self.lines = lines
+        self.export_status = export_status
+        self.mark_status = mark_status
+        self.requests: list[httpx.Request] = []
+        self.marked: list[dict] = []
+
+    def handler(self, request: httpx.Request) -> httpx.Response:
+        self.requests.append(request)
+        if request.url.path == "/api/rag/admin/feedback-loop/export" and request.method == "GET":
+            if self.export_status != 200:
+                return httpx.Response(self.export_status, json={"error": "nope"})
+            body = "".join(json.dumps(line) + "\n" for line in self.lines)
+            return httpx.Response(200, text=body, headers={"content-type": "application/x-ndjson"})
+        if request.url.path == "/api/rag/admin/feedback-loop/export/mark" and request.method == "POST":
+            payload = json.loads(request.content)
+            if self.mark_status != 200:
+                return httpx.Response(self.mark_status, json={"success": False, "marked": [], "conflicts": [], "ignored": []})
+            self.marked.append(payload)
+            exported = {item["id"] for item in payload["items"]}
+            self.lines = [line for line in self.lines if line["id"] not in exported]
+            return httpx.Response(200, json={"success": True, "marked": sorted(exported), "conflicts": [], "ignored": []})
+        return httpx.Response(404)
+
+
+def _install(monkeypatch, app: _App) -> None:
+    from rag_eval import review_queue
+
+    monkeypatch.setattr(review_queue, "_http_client", lambda: httpx.Client(transport=httpx.MockTransport(app.handler), timeout=5.0))
+    monkeypatch.setenv("RAG_ADMIN_BEARER", "admin-token-placeholder")
+
+
+def _promote_db(*extra: str) -> int:
+    return main(["promote-db", "--tenant", DB_TENANT, "--base-url", "https://app.example.test", *extra])
+
+
+def _domain_dir(private: Path) -> Path:
+    return private / "domain" / DB_TENANT_HASH
+
+
+def test_promote_db_promotes_two_items_with_production_provenance_and_marks_their_splits(private_root, monkeypatch, capsys):
+    app = _App([_golden_line(1), _golden_line(2, document_id=DOC_TWO, chunk=CHUNK_TWO)])
+    _install(monkeypatch, app)
+    assert _promote_db() == 0
+    items = load_golden(_domain_dir(private_root) / "golden.jsonl")
+    assert len(items) == 2
+    assert {item.provenance for item in items} == {"production"}
+    assert {item.review_status for item in items} == {"approved"}
+    get = app.requests[0]
+    assert get.method == "GET" and get.url.params["kind"] == "golden" and get.url.params["tenant"] == DB_TENANT
+    assert get.headers["authorization"] == "Bearer admin-token-placeholder"
+    manifest = load_group_manifest(_domain_dir(private_root) / "split-manifest.json")
+    assert manifest.rule == DOCGROUP_SPLIT_RULE
+    assert set(manifest.assignments) == {item.id for item in items}
+    assert manifest.group_assignments == {
+        hashlib.sha256(item.gold_evidence[0].document_id.encode()).hexdigest(): item.split for item in items
+    }
+    (mark,) = app.marked
+    assert mark["tenant"] == DB_TENANT
+    by_review = {entry["id"]: entry for entry in mark["items"]}
+    assert set(by_review) == {_review_id(1), _review_id(2)}
+    for item in items:
+        doc = item.gold_evidence[0].document_id
+        review = _review_id(1) if doc == DOC_ONE else _review_id(2)
+        assert by_review[review]["split"] == item.split
+        assert by_review[review]["split_group"] == hashlib.sha256(doc.encode()).hexdigest()
+    out = capsys.readouterr()
+    assert "admin-token-placeholder" not in out.out + out.err
+    assert "synthetic feature" not in out.out + out.err and CHUNK_ONE not in out.out + out.err
+
+
+def test_promote_db_spans_keep_the_document_id_and_carry_no_chunk_user_chat_or_trace_id(private_root, monkeypatch):
+    _install(monkeypatch, _App([_golden_line(1)]))
+    assert _promote_db() == 0
+    raw = (_domain_dir(private_root) / "golden.jsonl").read_text(encoding="utf-8")
+    (line,) = [json.loads(row) for row in raw.splitlines() if row.strip()]
+    (span,) = line["gold_evidence"]
+    assert span == {"document": "doc-1.md", "section": "Overview", "quote": "The widget accepts three inputs", "document_id": DOC_ONE}
+    for forbidden in ("chunk-1", _review_id(1), "user_id", "chat_id", "trace_id"):
+        assert forbidden not in raw
+    assert line["id"].startswith("prod-en-")
+
+
+def test_promote_db_leaves_the_item_rule_manifest_at_the_private_root_untouched(private_root, monkeypatch):
+    root_manifest = private_root / "split-manifest.json"
+    write_manifest(root_manifest, {"prod-en-existing01": "dev"})
+    before = root_manifest.read_bytes()
+    _install(monkeypatch, _App([_golden_line(1)]))
+    assert _promote_db() == 0
+    assert root_manifest.read_bytes() == before
+    assert (_domain_dir(private_root) / "split-manifest.json").is_file()
+
+
+def test_promote_db_refuses_a_question_that_changes_under_masking(private_root, monkeypatch, capsys):
+    app = _App([_golden_line(1, question="Contact jane.doe@example.com about synthetic feature one?")])
+    _install(monkeypatch, app)
+    assert _promote_db() == 2
+    assert not (_domain_dir(private_root) / "golden.jsonl").exists()
+    assert app.marked == []
+    err = capsys.readouterr().err
+    assert _review_id(1)[:8] in err or "masking" in err
+    assert "jane.doe" not in err
+
+
+def test_promote_db_uses_the_paraphrased_question_with_human_provenance(private_root, monkeypatch):
+    _install(monkeypatch, _App([_golden_line(1, paraphrased_question="How does the synthetic widget behave?")]))
+    assert _promote_db() == 0
+    (item,) = load_golden(_domain_dir(private_root) / "golden.jsonl")
+    assert item.provenance == "human" and item.question == "How does the synthetic widget behave?"
+
+
+def test_promote_db_refuses_an_unconfirmed_near_duplicate_and_names_the_existing_id(private_root, monkeypatch, capsys):
+    _install(monkeypatch, _App([_golden_line(1, question="How does synthetic feature alpha behave in practice?")]))
+    assert _promote_db() == 0
+    (existing,) = load_golden(_domain_dir(private_root) / "golden.jsonl")
+    app = _App([_golden_line(2, question="how does synthetic feature alpha behave in practice", document_id=DOC_TWO, chunk=CHUNK_TWO)])
+    _install(monkeypatch, app)
+    assert _promote_db() == 2
+    assert existing.id in capsys.readouterr().err
+    assert len(load_golden(_domain_dir(private_root) / "golden.jsonl")) == 1
+    assert app.marked == []
+
+
+def test_promote_db_promotes_a_confirmed_near_duplicate_with_the_tag_and_the_same_group(private_root, monkeypatch):
+    _install(monkeypatch, _App([_golden_line(1, question="How does synthetic feature alpha behave in practice?")]))
+    assert _promote_db() == 0
+    (existing,) = load_golden(_domain_dir(private_root) / "golden.jsonl")
+    app = _App(
+        [
+            _golden_line(
+                2,
+                question="how does synthetic feature alpha behave in practice",
+                document_id=DOC_TWO,
+                chunk=CHUNK_TWO,
+                confirm_near_duplicate_of=existing.id,
+            )
+        ]
+    )
+    _install(monkeypatch, app)
+    assert _promote_db() == 0
+    items = {item.id: item for item in load_golden(_domain_dir(private_root) / "golden.jsonl")}
+    (new_id,) = set(items) - {existing.id}
+    assert f"near_duplicate_confirmed:{existing.id}" in items[new_id].tags
+    assert items[new_id].split == existing.split
+    (mark,) = app.marked
+    assert mark["items"][0]["split_group"] == hashlib.sha256(DOC_ONE.encode()).hexdigest()
+
+
+def test_promote_db_refuses_a_quote_no_longer_in_its_chunk(private_root, monkeypatch, capsys):
+    app = _App([_golden_line(1, quote="The widget accepts three inputs", chunk="The chunk was rewritten entirely.", verified=False)])
+    _install(monkeypatch, app)
+    assert _promote_db() == 2
+    assert not (_domain_dir(private_root) / "golden.jsonl").exists()
+    assert "quote" in capsys.readouterr().err
+
+
+def test_promote_db_rechecks_the_quote_even_when_the_server_says_verified(private_root, monkeypatch):
+    app = _App([_golden_line(1, quote="The widget accepts three inputs", chunk="The chunk was rewritten entirely.", verified=True)])
+    _install(monkeypatch, app)
+    assert _promote_db() == 2
+
+
+def test_promote_db_refuses_an_output_outside_the_private_directory(private_root, monkeypatch, capsys, tmp_path):
+    _install(monkeypatch, _App([_golden_line(1)]))
+    assert _promote_db("--out-dir", str(tmp_path / "elsewhere")) == 6
+    assert "eval/golden/private" in capsys.readouterr().err
+
+
+def test_promote_db_without_the_token_exits_non_zero_naming_the_variable(private_root, monkeypatch, capsys):
+    app = _App([_golden_line(1)])
+    _install(monkeypatch, app)
+    monkeypatch.delenv("RAG_ADMIN_BEARER")
+    assert _promote_db() == 2
+    assert "RAG_ADMIN_BEARER" in capsys.readouterr().err
+    assert app.requests == []
+    monkeypatch.setenv("CUSTOM_BEARER", "")
+    assert _promote_db("--token-env", "CUSTOM_BEARER") == 2
+    assert "CUSTOM_BEARER" in capsys.readouterr().err
+
+
+def test_promote_db_twice_adds_nothing_the_second_time(private_root, monkeypatch):
+    app = _App([_golden_line(1), _golden_line(2, document_id=DOC_TWO, chunk=CHUNK_TWO)])
+    _install(monkeypatch, app)
+    assert _promote_db() == 0
+    golden = _domain_dir(private_root) / "golden.jsonl"
+    manifest = _domain_dir(private_root) / "split-manifest.json"
+    before = (golden.read_bytes(), manifest.read_bytes())
+    assert _promote_db() == 0
+    assert (golden.read_bytes(), manifest.read_bytes()) == before
+    assert len(app.marked) == 1
+
+
+def test_promote_db_re_marks_an_item_already_in_the_set_without_adding_it_again(private_root, monkeypatch):
+    app = _App([_golden_line(1)], mark_status=503)
+    _install(monkeypatch, app)
+    assert _promote_db() == 4
+    golden = _domain_dir(private_root) / "golden.jsonl"
+    assert len(load_golden(golden)) == 1
+    app.mark_status = 200
+    assert _promote_db() == 0
+    assert len(load_golden(golden)) == 1
+    assert [entry["id"] for entry in app.marked[0]["items"]] == [_review_id(1)]
+
+
+def test_promote_db_reports_an_export_failure_or_an_invalid_line_with_exit_four(private_root, monkeypatch, capsys):
+    _install(monkeypatch, _App([_golden_line(1)], export_status=503))
+    assert _promote_db() == 4
+    bad = _golden_line(1)
+    bad["user_id"] = _review_id(9)
+    _install(monkeypatch, _App([bad]))
+    assert _promote_db() == 4
+    assert not (_domain_dir(private_root) / "golden.jsonl").exists()
+    assert "admin-token-placeholder" not in capsys.readouterr().err
+
+
+def test_promote_db_refuses_a_line_of_another_tenant(private_root, monkeypatch):
+    other = _golden_line(1)
+    other["tenant_key"] = "o:99999999-2222-4333-8444-555555555555"
+    _install(monkeypatch, _App([other]))
+    assert _promote_db() == 4
+    assert not (_domain_dir(private_root) / "golden.jsonl").exists()
+
+
+def test_promote_db_rejects_an_invalid_tenant_key(private_root, monkeypatch, capsys):
+    _install(monkeypatch, _App([]))
+    assert main(["promote-db", "--tenant", "tenant-a", "--base-url", "https://app.example.test"]) == 2
+    assert "tenant" in capsys.readouterr().err
