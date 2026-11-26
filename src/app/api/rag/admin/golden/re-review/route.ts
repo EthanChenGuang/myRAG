@@ -1,5 +1,5 @@
 import { z } from 'zod/v3';
-import { MAX_RE_REVIEW_ITEMS, enqueueReReview } from '@/lib/rag/monitor/golden-evidence';
+import { MAX_RE_REVIEW_ITEMS, enqueueReReview } from '@/lib/rag';
 import { fail, goldenGuard, invalid, jsonNoStore, readJson, tenantAccess, unavailable } from '../_lib';
 
 export const runtime = 'nodejs';

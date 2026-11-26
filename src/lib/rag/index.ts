@@ -640,3 +640,19 @@ export {
   writeCheck,
 } from './config-gate/gate-core';
 export type { BuildChangeRecordInput, ChangeRecordClient, ChangeRecordRow, DecideSaveOptions, RagGateInput, SaveDecision } from './config-gate/gate-core';
+export {
+  checkEvidence,
+  clearEvidence,
+  enqueueReReview,
+  MAX_DOCUMENT_NAME_CHARS,
+  MAX_EVIDENCE_SPANS,
+  MAX_QUOTE_CHARS,
+  MAX_RE_REVIEW_ITEMS,
+  MAX_REGISTER_ROWS,
+  normalizeQuote,
+  pendingEvidence,
+  quoteSha256,
+  registerEvidence,
+  weekStart,
+} from './monitor/golden-evidence';
+export type { EvidenceCheckResult, EvidenceRow, EvidenceSpanInput, EvidenceSpanResult, EvidenceStatus } from './monitor/golden-evidence';

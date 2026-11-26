@@ -1,5 +1,5 @@
 import { z } from 'zod/v3';
-import { MAX_REGISTER_ROWS, clearEvidence, pendingEvidence, registerEvidence } from '@/lib/rag/monitor/golden-evidence';
+import { MAX_REGISTER_ROWS, clearEvidence, pendingEvidence, registerEvidence } from '@/lib/rag';
 import { fail, goldenGuard, invalid, jsonNoStore, readJson, tenantAccess, unavailable } from '../_lib';
 
 export const runtime = 'nodejs';

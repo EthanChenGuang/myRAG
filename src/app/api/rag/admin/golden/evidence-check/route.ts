@@ -1,5 +1,5 @@
 import { z } from 'zod/v3';
-import { MAX_DOCUMENT_NAME_CHARS, MAX_EVIDENCE_SPANS, MAX_QUOTE_CHARS, checkEvidence } from '@/lib/rag/monitor/golden-evidence';
+import { MAX_DOCUMENT_NAME_CHARS, MAX_EVIDENCE_SPANS, MAX_QUOTE_CHARS, checkEvidence } from '@/lib/rag';
 import { fail, goldenGuard, invalid, jsonNoStore, readJson, tenantAccess, unavailable } from '../_lib';
 
 export const runtime = 'nodejs';

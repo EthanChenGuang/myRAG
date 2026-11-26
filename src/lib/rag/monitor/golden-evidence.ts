@@ -47,8 +47,14 @@ export interface EvidenceRow {
   quote_sha256: string;
 }
 
-const SPACE_RE = /[\s\u001c-\u001f\u0085]/u;
+const SPACE_RE = /\s/u;
 const PUNCT_RE = /\p{P}/u;
+
+/** Python str.isspace also holds the information separators U+001C to U+001F and NEL (U+0085). */
+function isSpace(char: string): boolean {
+  const code = char.codePointAt(0) ?? 0;
+  return SPACE_RE.test(char) || (code >= 0x1c && code <= 0x1f) || code === 0x85;
+}
 const FULL_FOLDS: Record<string, string> = { 'ß': 'ss', 'ẞ': 'ss', 'ς': 'σ', 'ϐ': 'β', 'ϑ': 'θ', 'ϕ': 'φ', 'ϖ': 'π', 'ϰ': 'κ', 'ϱ': 'ρ', 'ϵ': 'ε', 'ẛ': 'ṡ' };
 
 /** TypeScript twin of `rag_eval.matching.normalize_text`: NFKC, case fold, then drop whitespace and punctuation (shared vectors). */
@@ -58,7 +64,7 @@ export function normalizeQuote(text: string): string {
   for (const char of folded) {
     const mapped = FULL_FOLDS[char] ?? char;
     for (const c of mapped) {
-      if (SPACE_RE.test(c) || PUNCT_RE.test(c)) continue;
+      if (isSpace(c) || PUNCT_RE.test(c)) continue;
       out += c;
     }
   }

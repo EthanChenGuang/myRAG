@@ -2,8 +2,7 @@ import { NextResponse } from 'next/server';
 import type { z } from 'zod/v3';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { adminDenied, checkAdmin } from '@/lib/admin-route-auth';
-import { adminTenantKeys } from '@/lib/rag/config-gate/eval-run-requests';
-import { validateGrantTenantKey } from '@/lib/rag/feedback-loop/review-access';
+import { adminTenantKeys, validateGrantTenantKey } from '@/lib/rag';
 import { getDeploymentMode } from '@/lib/deployment-mode';
 import { getSupabaseAdmin } from '@/lib/supabase';
 
