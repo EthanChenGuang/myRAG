@@ -43,6 +43,7 @@ import {
 import type { RetrievalParams } from '@/lib/rag-eval/contracts.generated';
 import type { SearchDelegate } from '../../query/port-types';
 import { effectiveVersionScope } from '../../query/filters';
+import type { AttributeSearchInput } from './query';
 
 export interface SearchStagesInput {
   input: RunRetrievalInput;
@@ -72,6 +73,8 @@ export interface SearchStagesInput {
   terminologyDenseWeight?: number;
   /** LANG-07 (D-08, D-09): resolved once per request; present only while a lexical option switch is on. */
   lexical?: QueryLexicalOptions;
+  /** D-29: the attribute stage's soft list and fallback filters; absent runs neither. */
+  attributes?: AttributeSearchInput;
 }
 
 /** The request's query-side lexical options and what they were built from. */
@@ -143,6 +146,12 @@ function lexicalDictionaryDetail(lexical: QueryLexicalOptions, staleCount: numbe
 
 /** D-16: the expansion list id; no dense/lexical prefix, so nothing that inspects list ids by prefix counts it as a leg. */
 export const TERMINOLOGY_LIST_ID = 'term:0';
+
+/** D-29: the soft attribute list id; like term:0 it has no dense/lexical prefix. */
+export const ATTRIBUTE_LIST_ID = 'attr:0';
+/** D-29: fixed trace codes of the search stage detail for the attribute filter. */
+export const ATTRIBUTE_FILTER_FALLBACK = 'attribute_filter_fallback';
+export const ATTRIBUTE_SOFT_LEG_FAILED = 'attribute_soft_leg_failed';
 
 function evalEmbeddingProfileId(input: RunRetrievalInput): string | undefined {
   return input.profile === 'eval' ? input.options?.embeddingProfile : undefined;
@@ -386,10 +395,19 @@ function standaloneVariantIndex(variants: readonly QueryVariant[]): number {
   return condensed >= 0 ? condensed : variants.findIndex((variant) => variant.kind === 'original');
 }
 
-function withStandaloneSimilarity(fused: FusedHit[], variants: readonly QueryVariant[], legsByVariant: BackendLegs[]): FusedHit[] {
+function withStandaloneSimilarity(
+  fused: FusedHit[],
+  variants: readonly QueryVariant[],
+  legsByVariant: BackendLegs[],
+  attributeDense: readonly RankedHit[] = [],
+): FusedHit[] {
   const index = standaloneVariantIndex(variants);
   const similarity = new Map<string, number>();
   for (const hit of index >= 0 ? (legsByVariant[index]?.dense ?? []) : []) {
+    if (!similarity.has(hit.chunkId)) similarity.set(hit.chunkId, hit.similarity ?? 0);
+  }
+  // D-29: the attr:0 search ran the standalone variant's vector, so its similarity is that variant's for chunks the main legs lack.
+  for (const hit of attributeDense) {
     if (!similarity.has(hit.chunkId)) similarity.set(hit.chunkId, hit.similarity ?? 0);
   }
   return fused.map((row) => ({ ...row, standaloneSimilarity: similarity.get(row.hit.chunkId) ?? 0 }));
@@ -458,6 +476,9 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     dictionaryDetailOn ? lexicalDictionaryDetail(lexical, await stalePending) : undefined;
   const identifiers = config.v2.identifierFilter ? await runIdentifierResolve(ctx) : null;
   const filterIdentifiers = identifiers && identifiers.found.length > 0 ? identifiers.found : undefined;
+  const attributes = ctx.attributes ?? null;
+  const fallbackFilters = attributes?.fallbackFilters ?? null;
+  const attributeActive = attributes !== null && (attributes.softIds.length > 0 || fallbackFilters !== null);
 
   // D-31: with found identifiers every leg is first filtered to chunks carrying one; an empty filtered search reruns once without it.
   const runLegs = async (identifiersNorm: string[] | undefined, legCodes: readonly string[]) => {
@@ -485,12 +506,12 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       Math.min(config.v2.domainEmbeddings.timeoutMs, searchSpec.timeoutMs - BINDING_STAGE_MARGIN_MS),
     );
 
-    const runDomainLegs = (stageSignal: AbortSignal): Promise<BindingLegsOutput | null> =>
+    const runDomainLegs = (stageSignal: AbortSignal, roundFilters: RetrievalFilters): Promise<BindingLegsOutput | null> =>
       bindings
         ? runBindingLegs({
             backend,
             scope,
-            filters,
+            filters: roundFilters,
             params,
             plan: bindings.plan,
             embeds: bindings.embeds,
@@ -504,7 +525,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
 
     const translations = hasTranslationWork(ctx.translations) ? ctx.translations : null;
     const originalText = variants.find((variant) => variant.kind === 'original')?.text ?? input.query;
-    const runTranslations = (stageSignal: AbortSignal): Promise<TranslationLegsOutput | null> =>
+    const runTranslations = (stageSignal: AbortSignal, roundFilters: RetrievalFilters): Promise<TranslationLegsOutput | null> =>
       translations
         ? runTranslationLegs({
             backend,
@@ -513,7 +534,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
             queryText: originalText,
             queryEmbedding: embedding,
             embeddingProfileId: embedding.profile?.id ?? LEGACY_PROFILE.id,
-            filters,
+            filters: roundFilters,
             params,
             lexicalEnabled: lexicalEnabled && verdict.icuAvailable,
             signal: stageSignal,
@@ -524,7 +545,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
 
     // D-16: one lexical-only call (no vector, dense limit 0) under the same scope, filters and chunking override as the other legs.
     const termTokens = ctx.terminology && lexicalEnabled && verdict.icuAvailable ? [...ctx.terminology.tokens] : [];
-    const runTermLeg = (stageSignal: AbortSignal): Promise<RankedHit[] | null> =>
+    const runTermLeg = (stageSignal: AbortSignal, roundFilters: RetrievalFilters): Promise<RankedHit[] | null> =>
       termTokens.length > 0
         ? backend
             .search({
@@ -533,7 +554,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
               denseVector: null,
               lexicalTokens: termTokens,
               lexicalLanguages: null,
-              filters,
+              filters: roundFilters,
               denseLimit: 0,
               lexicalLimit: pool,
               signal: stageSignal,
@@ -544,17 +565,51 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
             .then((legs) => legs.lexical)
         : Promise.resolve(null);
 
-    const runDelegatedSearch = async (stageSignal: AbortSignal, delegate: SearchDelegate) => {
-      const domainPending = runDomainLegs(stageSignal);
-      const translationPending = runTranslations(stageSignal);
-      const termPending = runTermLeg(stageSignal);
+    // D-29: one extra search for the standalone variant restricted to the soft ids (within the round's document filter); its own
+    // vector and tokens, no embed call. A failure degrades the stage and the other legs continue.
+    const softVariantIndex = standaloneVariantIndex(variants);
+    type SoftOutcome = { legs: BackendLegs | null; failed: boolean };
+    const runSoftLeg = async (stageSignal: AbortSignal, roundFilters: RetrievalFilters): Promise<SoftOutcome | null> => {
+      if (!attributes || attributes.softIds.length === 0 || softVariantIndex < 0) return null;
+      const allowed = roundFilters.documentIds ? new Set(roundFilters.documentIds) : null;
+      const softDocs = allowed ? attributes.softIds.filter((id) => allowed.has(id)) : [...attributes.softIds];
+      if (softDocs.length === 0) return null;
+      try {
+        const legs = await backend.search(
+          variantSearchRequest({
+            scope,
+            variant: variants[softVariantIndex]!,
+            embedding: ctx.variantEmbeddings?.[softVariantIndex] ?? embedding,
+            filters: { ...roundFilters, documentIds: softDocs },
+            pool,
+            lexicalEnabled: lexicalEnabled && verdict.icuAvailable,
+            signal: stageSignal,
+            chunkingProfileOverride: chunkingOverride,
+            ...versionScopeArg,
+            ...identifierArg,
+            ...lexicalOptionsArg,
+          }),
+        );
+        return { legs, failed: false };
+      } catch (error) {
+        if (stageSignal.aborted) throw error;
+        return { legs: null, failed: true };
+      }
+    };
+
+    const runDelegatedSearch = async (stageSignal: AbortSignal, delegate: SearchDelegate, roundFilters: RetrievalFilters) => {
+      const domainPending = runDomainLegs(stageSignal, roundFilters);
+      const translationPending = runTranslations(stageSignal, roundFilters);
+      const termPending = runTermLeg(stageSignal, roundFilters);
+      const softPending = runSoftLeg(stageSignal, roundFilters);
       // Awaited below; a delegate failure first must not leave the term call's rejection unhandled.
       termPending.catch(() => undefined);
+      softPending.catch(() => undefined);
       const handle = createRetrievalPort({
         scope,
         backend,
         variants,
-        filters,
+        filters: roundFilters,
         params,
         signal: stageSignal,
         // The embed stage already embedded every variant in one batch; the port reuses those vectors.
@@ -584,6 +639,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       const domain = await domainPending;
       const translation = await translationPending;
       const term = await termPending;
+      const soft = await softPending;
       return {
         legsByVariant,
         denseTotal: legsByVariant.reduce((total, legs) => total + legs.dense.length, 0),
@@ -591,26 +647,29 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
         domain,
         translation,
         term,
+        soft,
         delegated: { handle, order: order as string[] } as DelegatedFusion | null,
         lexicalDetail: await lexicalDetail(),
       };
     };
 
-    const runBackendSearch = async (stageSignal: AbortSignal) => {
-      if (ctx.searchDelegate) return runDelegatedSearch(stageSignal, ctx.searchDelegate);
+    const runRound = async (stageSignal: AbortSignal, roundFilters: RetrievalFilters) => {
+      if (ctx.searchDelegate) return runDelegatedSearch(stageSignal, ctx.searchDelegate, roundFilters);
       let denseTotal = 0;
       let lexicalTotal = 0;
-      const domainPending = runDomainLegs(stageSignal);
-      const translationPending = runTranslations(stageSignal);
+      const domainPending = runDomainLegs(stageSignal, roundFilters);
+      const translationPending = runTranslations(stageSignal, roundFilters);
+      const softPending = runSoftLeg(stageSignal, roundFilters);
+      softPending.catch(() => undefined);
       const [term, ...legsByVariant] = await Promise.all([
-        runTermLeg(stageSignal),
+        runTermLeg(stageSignal, roundFilters),
         ...variants.map(async (variant, index) => {
           const legs = await backend.search(
             variantSearchRequest({
               scope,
               variant,
               embedding: ctx.variantEmbeddings?.[index] ?? embedding,
-              filters,
+              filters: roundFilters,
               pool,
               lexicalEnabled: lexicalEnabled && verdict.icuAvailable,
               signal: stageSignal,
@@ -627,6 +686,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       ]) as [RankedHit[] | null, ...BackendLegs[]];
       const domain = await domainPending;
       const translation = await translationPending;
+      const soft = await softPending;
       return {
         legsByVariant,
         denseTotal,
@@ -634,9 +694,28 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
         domain,
         translation,
         term,
+        soft,
         delegated: null as DelegatedFusion | null,
         lexicalDetail: await lexicalDetail(),
       };
+    };
+
+    type RoundResult = Awaited<ReturnType<typeof runRound>>;
+    const roundEmpty = (value: RoundResult): boolean =>
+      value.denseTotal + value.lexicalTotal === 0 &&
+      (value.term?.length ?? 0) === 0 &&
+      (value.domain?.lists ?? []).every((list) => list.hits.length === 0) &&
+      (value.translation?.lists ?? []).every((list) => list.hits.length === 0);
+
+    // D-29: a hard attribute filter that finds nothing on any leg runs the same legs once more without the automatic ids, inside the
+    // same search stage (one record, one timeout); the explicit filter, document ids and scopes stay in force.
+    const runBackendSearch = async (stageSignal: AbortSignal) => {
+      const first = await runRound(stageSignal, filters);
+      if (fallbackFilters && roundEmpty(first)) {
+        const second = await runRound(stageSignal, fallbackFilters);
+        return { ...second, appliedFilters: fallbackFilters, attributeFallback: true };
+      }
+      return { ...first, appliedFilters: filters, attributeFallback: false };
     };
 
     type SearchResult = Awaited<ReturnType<typeof runBackendSearch>>;
@@ -648,6 +727,8 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       domain: BindingLegsOutput | null;
       translation: TranslationLegsOutput | null;
       term: RankedHit[] | null;
+      soft: SoftOutcome | null;
+      attributeFallback: boolean;
     }) => ({
       dense: value.denseTotal,
       lexical: value.lexicalTotal,
@@ -655,12 +736,26 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       ...(value.translation ? value.translation.counts : {}),
       ...(value.term ? { term: value.term.length } : {}),
       ...(historyScope ? { superseded: supersededCount(value) } : {}),
+      ...(fallbackFilters ? { attribute_filter_applied: 1, attribute_filter_fallback: value.attributeFallback ? 1 : 0 } : {}),
+      ...(value.soft?.legs ? { attribute_soft: value.soft.legs.dense.length + value.soft.legs.lexical.length } : {}),
     });
 
+    const attributeFailed = (value: SearchResult): boolean => value.soft?.failed === true;
+    const attributeCodes = (value: SearchResult): (string | undefined)[] => [
+      value.attributeFallback ? ATTRIBUTE_FILTER_FALLBACK : undefined,
+      attributeFailed(value) ? ATTRIBUTE_SOFT_LEG_FAILED : undefined,
+    ];
     const extraFailed = (value: SearchResult): boolean =>
-      (value.domain !== null && value.domain.failures.length > 0) || (value.translation !== null && value.translation.failures.length > 0);
+      (value.domain !== null && value.domain.failures.length > 0) ||
+      (value.translation !== null && value.translation.failures.length > 0) ||
+      attributeFailed(value);
     const extraDetail = (value: SearchResult): string | undefined =>
-      joinDetail([value.domain ? bindingFailureDetail(value.domain.failures) : undefined, translationDetail(value.translation), value.lexicalDetail]);
+      joinDetail([
+        value.domain ? bindingFailureDetail(value.domain.failures) : undefined,
+        translationDetail(value.translation),
+        ...attributeCodes(value),
+        value.lexicalDetail,
+      ]);
     const hasVersionCodes = versionCodes.some((code) => code !== undefined);
 
     let searchValue: Awaited<ReturnType<typeof runBackendSearch>>['legsByVariant'];
@@ -668,6 +763,8 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     let translationOutput: TranslationLegsOutput | null = null;
     let delegated: DelegatedFusion | null = null;
     let termHits: RankedHit[] | null = null;
+    let softLegs: BackendLegs | null = null;
+    let appliedFilters: RetrievalFilters = filters;
     if (icuSkipLexical) {
       const startedAt = collector.now();
       let searched: SearchResult;
@@ -690,12 +787,14 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       translationOutput = searched.translation;
       delegated = searched.delegated;
       termHits = searched.term;
+      softLegs = searched.soft?.legs ?? null;
+      appliedFilters = searched.appliedFilters;
       collector.record({
         name: 'search',
         status: 'degraded',
         startedAt,
         endedAt: collector.now(),
-        detail: joinDetail(['lexical_icu_unavailable', translationDetail(searched.translation), searched.lexicalDetail, ...versionCodes])!,
+        detail: joinDetail(['lexical_icu_unavailable', translationDetail(searched.translation), ...attributeCodes(searched), searched.lexicalDetail, ...versionCodes])!,
         counts: searchCounts(searched),
         candidatesOut: searched.denseTotal + searched.lexicalTotal,
       });
@@ -710,7 +809,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
             candidatesOut: (value) => value.denseTotal + value.lexicalTotal,
             counts: searchCounts,
             ...(ctx.searchDelegate ? { failureDetail: delegateFailureDetail } : {}),
-            ...(bindings || translations || hasVersionCodes || dictionaryDetailOn
+            ...(bindings || translations || hasVersionCodes || dictionaryDetailOn || attributeActive
               ? {
                   // D-19, D-30: a dropped binding or translation leg degrades the stage; the original legs and the answer continue.
                   // D-12: a backend that cannot serve the version scope is replaced by pgvector and degrades the stage too.
@@ -727,6 +826,8 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       translationOutput = searched.translation;
       delegated = searched.delegated;
       termHits = searched.term;
+      softLegs = searched.soft?.legs ?? null;
+      appliedFilters = searched.appliedFilters;
     }
     // Mapped to source chunks before fusion; a chunk the original legs also found keeps the original hit (D-30).
     // D-31: translation hits cannot be filtered in SQL; while filtered only chunks the filtered legs also found are kept.
@@ -743,7 +844,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       // rag_exact_id_documents takes no filter arguments, so while a request narrows the search the leg stands down rather than widen it.
       const exactSpec = spec('exact_id_lookup', 'skip');
       const exact = await runStage(
-        hasNarrowingFilters(filters) ? { ...exactSpec, enabled: false } : exactSpec,
+        hasNarrowingFilters(appliedFilters) ? { ...exactSpec, enabled: false } : exactSpec,
         signal,
         (stageSignal) =>
           exactIdStage(input.query, scope, {
@@ -772,7 +873,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     if (config.v2.tableLookup) {
       const tableSpec = spec('table_lookup', 'skip');
       const candidatesIn = searchValue.reduce((total, legs) => total + legs.dense.length + legs.lexical.length, 0);
-      if (tableSpec.enabled && hasNarrowingFilters(filters)) {
+      if (tableSpec.enabled && hasNarrowingFilters(appliedFilters)) {
         const at = collector.now();
         collector.record({ name: 'table_lookup', status: 'disabled', reason: 'disabled', startedAt: at, endedAt: at, candidatesIn, detail: TABLE_LOOKUP_NARROWED });
       } else {
@@ -808,8 +909,9 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       domainLists.reduce((total, list) => total + list.hits.length, 0) +
       translationLists.reduce((total, list) => total + list.hits.length, 0) +
       (exactList?.hits.length ?? 0) +
-      (tableList?.hits.length ?? 0);
-    return { searchValue, domainLists, translationLists, delegated, termHits, exactList, tableList, tableRows, found };
+      (tableList?.hits.length ?? 0) +
+      (softLegs ? softLegs.dense.length + softLegs.lexical.length : 0);
+    return { searchValue, domainLists, translationLists, delegated, termHits, softLegs, exactList, tableList, tableRows, found };
   };
 
   let legs = await runLegs(filterIdentifiers, []);
@@ -818,7 +920,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     fallback = true;
     legs = await runLegs(undefined, [IDENTIFIER_FILTER_FALLBACK]);
   }
-  const { searchValue, domainLists, translationLists, delegated, termHits, exactList, tableList, tableRows } = legs;
+  const { searchValue, domainLists, translationLists, delegated, termHits, softLegs, exactList, tableList, tableRows } = legs;
 
   // D-16: weight = expansion_weight × the lexical leg weight in force, so the list stays a fraction of the lexical leg.
   const termList: RankedList | null =
@@ -826,12 +928,33 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       ? { id: TERMINOLOGY_LIST_ID, weight: ctx.terminology.expansionWeight * (params.leg_weights?.lexical ?? 1), hits: termHits }
       : null;
 
+  // D-29, F-18: the soft search's legs fused into one order and added as one list; a chunk any other list found keeps that hit, so no
+  // similarity, lexical score or rerank input the refusal gate reads changes. attr:0-only chunks keep the restricted search's own hit.
+  const otherLists = [
+    ...(exactList ? [exactList] : []),
+    ...(tableList ? [tableList] : []),
+    ...domainLists,
+    ...translationLists,
+    ...(termList ? [termList] : []),
+  ];
+  let attributeList: RankedList | null = null;
+  if (softLegs && attributes && softLegs.dense.length + softLegs.lexical.length > 0) {
+    const order = rrf(listsFromLegs(0, softLegs.dense, softLegs.lexical, params, 1), params.rrf_k);
+    const known = legHitsByChunkId(searchValue);
+    for (const list of otherLists) for (const item of list.hits) if (!known.has(item.chunkId)) known.set(item.chunkId, item);
+    const [preferred] = preferOriginalHits(
+      [{ id: ATTRIBUTE_LIST_ID, weight: attributes.softWeight, hits: order.map((row, index) => ({ ...row.hit, rank: index + 1 })) }],
+      known,
+    );
+    attributeList = preferred ?? null;
+  }
+
   const fused = requireValue(
     await runStage(
       spec('fuse', 'throw'),
       signal,
       () => {
-        const extraLists = [...(exactList ? [exactList] : []), ...(tableList ? [tableList] : []), ...domainLists, ...translationLists, ...(termList ? [termList] : [])];
+        const extraLists = [...otherLists, ...(attributeList ? [attributeList] : [])];
         let fusedHits: FusedHit[];
         if (delegated) {
           fusedHits = delegatedFusion(delegated, extraLists, params.rrf_k);
@@ -840,7 +963,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
           lists.push(...extraLists);
           fusedHits = rrf(lists, params.rrf_k);
         }
-        return ctx.trackStandalone ? withStandaloneSimilarity(fusedHits, variants, searchValue) : fusedHits;
+        return ctx.trackStandalone ? withStandaloneSimilarity(fusedHits, variants, searchValue, softLegs?.dense ?? []) : fusedHits;
       },
       collector,
       // A framework delegate's fusion is marked in the trace; the native fuse record is unchanged.

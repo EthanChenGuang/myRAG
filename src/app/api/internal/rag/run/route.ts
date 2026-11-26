@@ -22,6 +22,7 @@ import {
   finishTrace,
   groundednessEligibility,
   IDENTIFIER_NOT_FOUND,
+  currentAttributeFilterMode,
   currentLexicalVersion,
   hashSystemPromptTemplate,
   isCacheHitResult,
@@ -102,6 +103,7 @@ function toFilterBody(input: NonNullable<RetrievalFiltersInput>): Record<string,
   if (input.scopes != null) body.scopes = input.scopes;
   if (input.include_untagged === true) body.includeUntagged = true;
   if (input.versions != null) body.versions = input.versions;
+  if (input.attributes != null) body.attributes = input.attributes;
   return body;
 }
 
@@ -229,6 +231,29 @@ function stageCountsOf(stages: RetrievalResult['stages']): Record<string, Record
     if (stage.counts && Object.keys(stage.counts).length > 0) out[stage.name] = { ...stage.counts };
   }
   return out;
+}
+
+/** D-29, D-30: the attribute filter on the eval trace, from the attribute_resolve and search records; counts and flags only. */
+function attributeFilterTrace(stages: RetrievalResult['stages'], mode: 'off' | 'hard' | 'soft') {
+  const resolve = stages.find((stage) => stage.name === 'attribute_resolve');
+  if (!resolve || resolve.status === 'disabled' || mode === 'off') return undefined;
+  const counts = resolve.counts ?? {};
+  const search = stages.find((stage) => stage.name === 'search')?.counts ?? {};
+  const explicit = (counts.explicit_keys ?? 0) > 0 || (counts.explicit_rejected ?? 0) > 0;
+  const explicitIds = counts.explicit_ids ?? 0;
+  const hardIds = counts.hard_ids ?? 0;
+  const softIds = counts.soft_ids ?? 0;
+  return {
+    attribute_filter: {
+      mode,
+      explicit,
+      matched_attributes: counts.matched_keys ?? 0,
+      resolved_documents: explicitIds + (mode === 'soft' ? softIds : hardIds + softIds),
+      applied: explicit || (search.attribute_filter_applied ?? 0) > 0,
+      fallback: (search.attribute_filter_fallback ?? 0) > 0,
+      too_broad: (counts.too_broad ?? 0) > 0,
+    },
+  };
 }
 
 function v2TraceFields(result: RetrievalResult) {
@@ -710,6 +735,7 @@ export async function POST(req: NextRequest) {
         refused,
         refusal_reason: refusalReasonOf(result, refused),
         ...(v2Result ? v2TraceFields(result) : {}),
+        ...(v2Result ? (attributeFilterTrace(result.stages, currentAttributeFilterMode()) ?? {}) : {}),
         ...(Object.keys(stageCounts).length > 0 ? { stage_counts: stageCounts } : {}),
         ...(injection ? { injection } : {}),
         answer,
