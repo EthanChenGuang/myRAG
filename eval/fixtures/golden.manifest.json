@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "set_id": "fixture",
-  "version": 2,
+  "version": 3,
   "items": [
     {
       "id": "en-ambiguous-001",
@@ -671,7 +671,7 @@
     },
     {
       "id": "en-small-talk-001",
-      "item_sha256": "6966113b1739bbdc3f5930f98777a5aa2bb4e0eebaa24e98c8d51719fbf7ad15",
+      "item_sha256": "7b5dd9499a195091db2f994cbe19b39431d2c09c37d2d5d5bf4a8c3cf883787e",
       "status": "active",
       "stale_reason": null,
       "stale_since": null,
@@ -680,7 +680,7 @@
     },
     {
       "id": "en-small-talk-002",
-      "item_sha256": "f20129d1f162cab638b2e8db00e9450394d333de96958082f591d2f5f53dfb64",
+      "item_sha256": "07878f59fbd0a0f6cbb5bc6f1762bf4fb9e3e43300b5ae67aa82e488125705bc",
       "status": "active",
       "stale_reason": null,
       "stale_since": null,
@@ -1436,7 +1436,7 @@
     },
     {
       "id": "it-small-talk-001",
-      "item_sha256": "1bd158de1166820b54b40f400f7016bd631c3fd233745792500ddda8d74035df",
+      "item_sha256": "5bc0b5bbb8e2e6713e3733c20b26c931a26bcf1abbc481db40ec8e7e4414f3ef",
       "status": "active",
       "stale_reason": null,
       "stale_since": null,
@@ -1445,7 +1445,7 @@
     },
     {
       "id": "it-small-talk-003",
-      "item_sha256": "24079ec9a41b4422940f0e80f4c29a64985cbf21aa5fcd8b4a7db0118c992c29",
+      "item_sha256": "65f9ef67614257fa0938402f8aa3b366953f58394918d5dcabfec8e63e781379",
       "status": "active",
       "stale_reason": null,
       "stale_since": null,
@@ -2480,7 +2480,7 @@
     },
     {
       "id": "zh-small-talk-001",
-      "item_sha256": "f4845757b1f9cf2655eb9de9a7b832dae54b13d7f1985d3d497024a0c1ba5aca",
+      "item_sha256": "2a7522bcfbda45aeebb578fef6d54c15ff24e294f51c8c1a049f89045b218ecc",
       "status": "active",
       "stale_reason": null,
       "stale_since": null,
@@ -2489,7 +2489,7 @@
     },
     {
       "id": "zh-small-talk-002",
-      "item_sha256": "f70f22c288e7722aded212d8345da81c1162150becce0a9c8b579e4b6ce633a9",
+      "item_sha256": "518f4c627062b809aa6edfd8ca523921a08c1affd85622433c3359bd0a046561",
       "status": "active",
       "stale_reason": null,
       "stale_since": null,
@@ -2852,7 +2852,22 @@
       "changed": [],
       "retired": [],
       "stale": []
+    },
+    {
+      "version": 3,
+      "date": "2026-11-26",
+      "added": [],
+      "changed": [
+        "en-small-talk-001",
+        "en-small-talk-002",
+        "it-small-talk-001",
+        "it-small-talk-003",
+        "zh-small-talk-001",
+        "zh-small-talk-002"
+      ],
+      "retired": [],
+      "stale": []
     }
   ],
-  "manifest_sha256": "a8415ea8d5233b9d4738e4591a067f363115e6be92810a456dd9d27525bec900"
+  "manifest_sha256": "5d97a1329c167a134717b135d916a86d93af3d29317855bb2dedb558ddbe0a8d"
 }
