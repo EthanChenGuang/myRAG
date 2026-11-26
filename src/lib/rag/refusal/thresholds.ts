@@ -5,7 +5,7 @@ import { cellKey, type ThresholdCell, type ThresholdCells } from './gate';
 export type { ThresholdCells };
 
 /** The embedding model the app embeds queries with, as the OpenAI embedding readers resolve it (D-18). */
-export function runningEmbeddingModel(source: { OPENAI_EMBEDDING_MODEL?: string } = process.env): string {
+export function runningEmbeddingModel(source: Readonly<Record<string, string | undefined>> = process.env): string {
   return (source.OPENAI_EMBEDDING_MODEL ?? '').trim() || 'text-embedding-3-small';
 }
 
