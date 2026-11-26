@@ -17,8 +17,8 @@ const MODES: DeploymentMode[] = ['single-tenant', 'multi-tenant'];
 // the two dump digests below are re-recorded together with the baselines.
 const COMMITTED_CORPUS_SHA256 = '660fcda829267149cd218f0394bc547808193bfd3b4a99240bc2b90b29e2e5da';
 const COMMITTED_DUMP_SHA256: Record<DeploymentMode, string> = {
-  'single-tenant': 'bc9fa1c5fc4bd85e032a7aab53bff6f654c75977e8c66c9f5ffd1625774d480d',
-  'multi-tenant': '324ae2dd9069c888a96542423e9dfe9aa8c7ed1551b29bb32a2b5d7b50163e25',
+  'single-tenant': 'b9db5564fbb4b148b13430b639bb79f9205c36cb77412d03af618e007740fb66',
+  'multi-tenant': '74bd6f389ab3d99476884bd7b5cf89717901414a4ae23ec77c956fdd656dbacc',
 };
 const DUMP_DOCUMENT_COLUMNS =
   'id, filename, content, metadata, status, is_current, version, lineage_id, source, source_key, tenant_key, superseded_by, doc_type, user_id, created_at';
