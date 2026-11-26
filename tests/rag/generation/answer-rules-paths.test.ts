@@ -64,7 +64,7 @@ function setEnv(values: Partial<Record<SwitchName, string>>): void {
 async function ask(
   values: Partial<Record<SwitchName, string>>,
   data: Record<string, unknown>,
-): Promise<Array<Record<string, any>>> {
+): Promise<typeof h.capture.calls> {
   setEnv(values);
   h.capture.reset();
   vi.resetModules();
