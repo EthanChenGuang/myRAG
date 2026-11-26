@@ -63,7 +63,7 @@ function thenable(outcome: unknown) {
 function fakeDb(): FakeDb {
   const fake: Omit<FakeDb, 'db'> = { misses: [], corpus: {}, dictionary: {}, candidates: new Map(), calls: [], tables: [] };
   const df = (tenant: string, token: string) => (fake.corpus[tenant] ?? []).filter((doc) => lexicalTokens(doc).includes(token)).length;
-  const db: MinerDb = {
+  const db = {
     rpc(fn: string, args: Row) {
       fake.calls.push({ fn, args });
       if (fn === 'rag_term_read_misses') {
@@ -119,7 +119,7 @@ function fakeDb(): FakeDb {
       };
       return builder;
     },
-  };
+  } as unknown as MinerDb;
   return { ...fake, db };
 }
 
