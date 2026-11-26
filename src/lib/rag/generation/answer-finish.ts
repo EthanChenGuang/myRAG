@@ -14,6 +14,8 @@ import { exportReviewCandidate, type ReviewCandidateInput, type ReviewExportOpti
 import { isSampled } from '../trace/sample';
 import { postLangfuseScores, type LangfuseScoreInput, type PostScoresOptions, type PostScoresResult } from '../trace/scores';
 import type { StageRunStatus } from '../types';
+import type { AnswerChecksInput } from './answer-checks';
+import type { TextsSource } from './answer-turn';
 import { readGenerationConfig, type GenerationConfig } from './config';
 import { answerGroundednessLanguage, scoreAnswerGroundedness, type AnswerGroundedness } from './groundedness';
 import { requestGroundedness } from './groundedness-client';
@@ -50,6 +52,13 @@ export interface AnswerFinishInput {
   requestLanguage: string;
   /** A semantic-cache hit: the cached groundedness is inserted unchanged and no scoring runs (06-36, plan-check W6). */
   groundedness?: AnswerGroundedness;
+  /** Phase 5.2 (set only when a 5.2 switch is on): the stream-end checks; plan 05.2-24 stores them. */
+  checks?: AnswerChecksInput;
+  /** D-09 / D-89: the answer language of the turn. */
+  answerLanguage?: string | null;
+  textsSource?: TextsSource;
+  /** D-16: a sentinel refusal; treated like the server-side refusal (not scored). */
+  refusedByModel?: boolean;
 }
 
 export interface AnswerPendingContext {
