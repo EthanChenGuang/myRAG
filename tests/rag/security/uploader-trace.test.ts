@@ -7,6 +7,7 @@ import type { RetrievalResult } from '@/lib/rag/types';
 import { fakeEmbedder, fakeRpcClient, installDeps, uninstallDeps, type FakeRow } from '../helpers/pipeline-fakes';
 import { assembleContext, type AssembleInput, type AssemblyCandidate, type AssemblyDocumentRow } from '@/lib/rag/context/assemble';
 import { fetchAssemblyRows } from '@/lib/rag/context/fetch-rows';
+import { fetchOverviewDocuments } from '@/lib/rag/context/overview';
 import type { ContextBlock, ReferencedState } from '@/lib/rag/types';
 
 vi.mock('@/lib/rag/security/security-events', async (importOriginal) => {
@@ -324,5 +325,31 @@ describe('retrieval-time injection events (D-43, D-44)', () => {
     expect(stage).not.toHaveProperty('attributes');
     const [line] = injectionLogs();
     expect(Object.keys(line!).sort()).toEqual(['counts', 'droppedChunkIds', 'flaggedChunkIds', 'flaggedReferenceIds', 'mode', 'ruleIds', 'traceId']);
+  });
+});
+
+describe('the overview documents read (D-44)', () => {
+  function overviewAdmin() {
+    const selects: string[] = [];
+    const builder: Record<string, unknown> = {};
+    for (const name of ['in', 'eq', 'abortSignal']) builder[name] = () => builder;
+    builder.select = (value: string) => {
+      selects.push(value);
+      return builder;
+    };
+    builder.then = (onFulfilled: (value: unknown) => unknown) => Promise.resolve({ data: [], error: null }).then(onFulfilled);
+    return { admin: { from: () => builder } as never, selects };
+  }
+  const chunks = [{ chunk_id: 'c1', document_id: DOC_A, content: 'synthetic', similarity: 0.9 }];
+
+  it('keeps the base select with the switch off and adds user_id with it on', async () => {
+    const off = overviewAdmin();
+    vi.stubEnv('RAG_SECURITY_EVENTS', 'false');
+    await fetchOverviewDocuments(chunks, { admin: off.admin, signal: new AbortController().signal });
+    expect(off.selects).toEqual([BASE_SELECT]);
+    const on = overviewAdmin();
+    vi.stubEnv('RAG_SECURITY_EVENTS', 'true');
+    await fetchOverviewDocuments(chunks, { admin: on.admin, signal: new AbortController().signal });
+    expect(on.selects).toEqual([`${BASE_SELECT}, user_id`]);
   });
 });

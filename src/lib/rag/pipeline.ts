@@ -52,9 +52,12 @@ import {
   applyInjectionAction,
   injectionDetectorsFor,
   injectionItems,
+  injectionSecurityEvents,
   injectionVersions,
   releasedRulesFromRows,
   logInjectionSummary,
+  securityEventsOn,
+  uploadersFromRows,
   runInjectionCheck,
   runInjectionDetectors,
   type ActiveInjectionMode,
@@ -66,6 +69,7 @@ import {
   type ItemCandidate,
   type ReleasedRules,
 } from './security/injection-check';
+import { recordSecurityEvents, securitySpanAttributes } from './security/security-events';
 import { exactIdStage, mergeExactCandidates } from './retrieval/exact-id';
 import { hybridRerank } from './rerank/local-hybrid';
 import { assertTenantScope, scopeKey, type TenantScope } from './tenant/scope';
@@ -109,6 +113,8 @@ export interface StageRunOptions<T> {
   status?: (value: T) => Extract<StageRecord['status'], 'ok' | 'degraded'>;
   /** Detail recorded when the stage fails (reason failed), e.g. search_delegate_error. */
   failureDetail?: (error: unknown) => string | undefined;
+  /** Scalar span metadata for the stage record; omitted from the record when the function returns undefined. */
+  attributes?: (value: T) => Record<string, string | number | boolean> | undefined;
 }
 
 export class StageError extends Error {
@@ -178,6 +184,7 @@ export async function runStage<T>(
     const value = await runAgainstSignal(signal, fn);
     signal.throwIfAborted();
     const counts = options.counts ? sanitizeStageCounts(options.counts(value)) : undefined;
+    const attributes = options.attributes ? options.attributes(value) : undefined;
     collector.record({
       name: spec.name,
       status: options.status ? options.status(value) : 'ok',
@@ -188,6 +195,7 @@ export async function runStage<T>(
       ...(counts !== undefined ? { counts } : {}),
       ...(options.rules ? { rules: options.rules(value) } : {}),
       ...(options.versions ? { versions: options.versions(value) } : {}),
+      ...(attributes !== undefined ? { attributes } : {}),
       detail: options.detail ? options.detail(value) : undefined,
     });
     return { skipped: false, value };
@@ -290,6 +298,8 @@ export interface InjectionStageInput<C extends ItemCandidate> {
   released?: ReleasedRules;
   /** Document filenames from the same rows, recorded on the summary's item records. */
   documentNames?: ReadonlyMap<string, string>;
+  /** Document id to uploader from the same rows (present only while RAG_SECURITY_EVENTS is on, D-44). */
+  uploaders?: ReadonlyMap<string, string | null>;
 }
 
 export interface InjectionStageRun<C extends ItemCandidate> {
@@ -317,6 +327,11 @@ export async function runInjectionStage<C extends ItemCandidate>(input: Injectio
   const { spec, items, mode } = input;
   const deps = getRagDeps();
   const versions = injectionVersions(injectionDetectorsFor(input.profile, input.security));
+  // D-43/D-44: with RAG_SECURITY_EVENTS on, flagged items become events with their uploader; off, nothing below changes.
+  const securityTenant = input.scope && securityEventsOn() ? scopeKey(input.scope) : null;
+  const securityContext = securityTenant
+    ? { tenantKey: securityTenant, traceId: input.collector.traceId, ...(input.uploaders ? { uploaders: input.uploaders } : {}) }
+    : null;
   let held: InjectionApplied<C> | null = null;
   const apply = (verdicts: InjectionVerdicts) =>
     applyInjectionAction({
@@ -360,11 +375,19 @@ export async function runInjectionStage<C extends ItemCandidate>(input: Injectio
       versions: () => versions,
       status: (value) => (value.summary.detectorsUnavailable.length > 0 ? 'degraded' : 'ok'),
       detail: (value) => (value.summary.detectorsUnavailable.length > 0 ? INJECTION_DETECTOR_UNAVAILABLE : undefined),
+      ...(securityContext
+        ? { attributes: (value: InjectionApplied<C>) => securitySpanAttributes(securityContext.tenantKey, injectionSecurityEvents(value.summary, securityContext)) }
+        : {}),
     },
   );
   const applied: InjectionApplied<C> | null = checked.skipped ? held : checked.value;
   const stalled = checked.skipped && applied !== null;
-  if (applied) logInjectionSummary(applied.summary, applied.counts, { traceId: input.collector.traceId, stalled });
+  if (applied && securityContext) {
+    const events = injectionSecurityEvents(applied.summary, securityContext);
+    logInjectionSummary(applied.summary, applied.counts, { traceId: input.collector.traceId, stalled, security: { tenant: securityContext.tenantKey, events } });
+    // Eval runs record nothing, so a fixture run never counts towards an uploader alert or hold.
+    if (events.length > 0 && input.profile !== 'eval') recordSecurityEvents({ tenantKey: securityContext.tenantKey, events, traceId: input.collector.traceId });
+  } else if (applied) logInjectionSummary(applied.summary, applied.counts, { traceId: input.collector.traceId, stalled });
   return { applied, stalled };
 }
 
@@ -694,6 +717,7 @@ async function runOverviewPipeline(
         referenced,
         released: releasedRulesFromRows(documentRows),
         documentNames: documentNamesFromRows(documentRows),
+        uploaders: uploadersFromRows(documentRows),
       });
       injectionStalled = run.stalled;
       if (run.applied) {
@@ -1043,6 +1067,7 @@ async function runPipeline(input: RunRetrievalInput, collector: TraceCollector):
           referenced,
           released: releasedRulesFromRows(loadedRows?.documents),
           documentNames: documentNamesFromRows(loadedRows?.documents),
+          uploaders: uploadersFromRows(loadedRows?.documents),
         });
         injectionStalled = run.stalled;
         if (run.applied) {

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ContextBlock, UsedDocument } from '../types';
 import { NO_CONTEXT_TEXT, type AssemblyDocumentRow } from './assemble';
+import { assemblyDocumentSelect } from './fetch-rows';
 import { docsFromBlocks, wrapDocuments } from './wrap';
 
 export const OVERVIEW_QUERY = 'general information overview';
@@ -42,7 +43,7 @@ export async function fetchOverviewDocuments(
 
   const result = await options.admin
     .from('documents')
-    .select('id, filename, created_at, content, metadata')
+    .select(assemblyDocumentSelect())
     .in('id', ids)
     .eq('is_current', true)
     .eq('status', 'ready')
@@ -50,7 +51,7 @@ export async function fetchOverviewDocuments(
   options.signal.throwIfAborted();
   if (result.error) throw new Error(`[RAG Overview] documents lookup failed: ${result.error.message}`);
 
-  for (const row of (result.data ?? []) as AssemblyDocumentRow[]) documents.set(row.id, row);
+  for (const row of (result.data ?? []) as unknown as AssemblyDocumentRow[]) documents.set(row.id, row);
   return documents;
 }
 

@@ -54,6 +54,8 @@ export interface StageRecord {
   detail?: string;
   counts?: Record<string, number>;
   versions?: string[];
+  /** Scalar span metadata exported to Langfuse (ids and counts only); set only by the stages that need it. */
+  attributes?: Record<string, string | number | boolean>;
 }
 
 export interface UsedDocument {

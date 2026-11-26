@@ -20,7 +20,7 @@ export interface FetchAssemblyRowsOptions {
 const DOCUMENT_BASE_SELECT = 'id, filename, created_at, content, metadata';
 
 /** The base columns, plus user_id (the uploader, D-44) only while RAG_SECURITY_EVENTS is on, so the all-off request is unchanged. */
-function documentSelect(): string {
+export function assemblyDocumentSelect(): string {
   const optional: string[] = [];
   if (readAnswerConfig().securityEvents) optional.push('user_id');
   return optional.length > 0 ? `${DOCUMENT_BASE_SELECT}, ${optional.join(', ')}` : DOCUMENT_BASE_SELECT;
@@ -43,7 +43,7 @@ export async function fetchAssemblyRows(
 
   const documentResult = await adminClient
     .from('documents')
-    .select(documentSelect())
+    .select(assemblyDocumentSelect())
     .in('id', documentIds)
     .abortSignal(signal);
   signal.throwIfAborted();
@@ -53,7 +53,7 @@ export async function fetchAssemblyRows(
   signal.throwIfAborted();
   if (chunkResult.error) throw new Error(`[RAG Assemble] chunk metadata lookup failed: ${chunkResult.error.message}`);
 
-  for (const row of (documentResult.data ?? []) as AssemblyDocumentRow[]) {
+  for (const row of (documentResult.data ?? []) as unknown as AssemblyDocumentRow[]) {
     documents.set(row.id, row);
   }
   for (const row of (chunkResult.data ?? []) as Array<{ id: string; metadata: Record<string, any> | null }>) {
