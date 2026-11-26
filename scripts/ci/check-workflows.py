@@ -501,6 +501,10 @@ def check_real_docling(data: dict, errors: list[str]) -> None:
             errors.append(f"nightly: real-docling step '{step.get('name', step.get('uses', '?'))}' must be conditioned on {DOCLING_READY}")
 
 
+def check_weekly_report(data: dict, errors: list[str]) -> None:
+    pass
+
+
 def check_nightly(errors: list[str]) -> None:
     data, text = load(NIGHTLY)
     check_common("nightly", data, text, errors)
