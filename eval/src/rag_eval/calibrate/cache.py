@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Sequence
 
 from pydantic import ValidationError
-
 from rag_sidecar.contracts.cache import (
     CACHE_MAX_DISTANCE,
     CachePairResult,
@@ -123,7 +122,7 @@ def calibrate(
     now: datetime | None = None,
 ) -> CacheCalibrationResult:
     profile = _profile_id(run, profile_id)
-    fitted_at = (now or datetime.now(timezone.utc)).isoformat().replace("+00:00", "Z")
+    fitted_at = (now or datetime.now(UTC)).isoformat().replace("+00:00", "Z")
     dev_pairs = [pair for pair in run.pairs if pair.split == "dev"]
     test_pairs = [pair for pair in run.pairs if pair.split == "test"]
     threshold = fit_threshold(dev_pairs)
