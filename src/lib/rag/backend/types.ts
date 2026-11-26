@@ -67,6 +67,8 @@ export interface BackendSearchRequest {
 
 export interface BackendLegsMeta {
   denseMode: 'ann' | 'exact' | null;
+  /** External backends (D-10): store ids that failed re-validation in this request. */
+  tenantValidationDropped?: number;
 }
 
 export interface BackendLegs {
