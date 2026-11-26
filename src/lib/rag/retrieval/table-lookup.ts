@@ -18,7 +18,11 @@ export interface TableLookupRow {
   header: string[];
   cells: Record<string, string>;
   matched_cells: number;
+  /** The row's qualifying chunks in chunk order; chunk_id, content and metadata are the first one's. */
   chunk_ids: string[];
+  chunk_id: string;
+  content: string;
+  metadata: Record<string, unknown> | null;
 }
 
 export interface TableLookupOptions {
@@ -45,6 +49,7 @@ function toRow(raw: unknown): TableLookupRow | null {
   if (typeof row.row_index !== 'number' || !Number.isInteger(row.row_index) || row.row_index < 0) return null;
   if (typeof row.matched_cells !== 'number' || !Number.isInteger(row.matched_cells)) return null;
   if (!isStringArray(row.chunk_ids) || row.chunk_ids.length === 0) return null;
+  if (typeof row.chunk_id !== 'string') return null;
   if (!isStringArray(row.header)) return null;
   if (typeof row.cells !== 'object' || row.cells === null || Array.isArray(row.cells)) return null;
   const cells: Record<string, string> = {};
@@ -60,6 +65,9 @@ function toRow(raw: unknown): TableLookupRow | null {
     cells,
     matched_cells: row.matched_cells,
     chunk_ids: [...row.chunk_ids],
+    chunk_id: row.chunk_id,
+    content: typeof row.content === 'string' ? row.content : '',
+    metadata: typeof row.metadata === 'object' && row.metadata !== null && !Array.isArray(row.metadata) ? (row.metadata as Record<string, unknown>) : null,
   };
 }
 

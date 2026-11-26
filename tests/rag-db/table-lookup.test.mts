@@ -17,7 +17,7 @@ const USER_B = '00000000-0000-4000-8000-0000000024b1';
 const MODES: DeploymentMode[] = ['multi-tenant', 'single-tenant'];
 const FN = 'rag_table_lookup';
 const SIGNATURE = 'public.rag_table_lookup(text,text[],integer,integer,jsonb,text[])';
-const LOOKUP = `SELECT row_id::text, document_id::text, table_key, row_index, header, cells, matched_cells, chunk_ids::text[] AS chunk_ids
+const LOOKUP = `SELECT row_id::text, document_id::text, table_key, row_index, header, cells, matched_cells, chunk_ids::text[] AS chunk_ids, chunk_id::text, content
   FROM public.${FN}($1, $2::text[], $3, $4, $5::jsonb, $6::text[])`;
 
 const HEADER = ['Kelmo', 'Darvi', 'Quenta', 'Zemo'];
@@ -183,6 +183,8 @@ for (const mode of MODES) {
       assert.deepEqual(row!.header, HEADER);
       assert.deepEqual(row!.cells, { Kelmo: 'plin', Darvi: 'mepra', Quenta: 'sefa', Zemo: 'brel' });
       assert.deepEqual(row!.chunk_ids, [chunks.main]);
+      assert.equal(row!.chunk_id, chunks.main);
+      assert.equal(row!.content, 'neutral table chunk');
     });
 
     test('one value is not enough with min_cells 2; with min_cells 1 every row holding it, by matched cells then row index', async () => {
@@ -342,8 +344,8 @@ for (const mode of MODES) {
           (error: unknown) => error instanceof RetrievalBackendError && error.rpc === FN && error.code === '22023' && !error.message.includes('detail'),
         );
 
-        const good = { row_id: crypto.randomUUID(), document_id: crypto.randomUUID(), table_key: 'k:t0', row_index: 0, header: ['A'], cells: { A: 'x' }, matched_cells: 2, chunk_ids: [crypto.randomUUID()] };
-        const junk = cannedRpc({ data: [good, null, { ...good, chunk_ids: [] }, { ...good, row_index: 'x' }, { ...good, document_id: 5 }, 'text'], error: null }, calls);
+        const good = { row_id: crypto.randomUUID(), document_id: crypto.randomUUID(), table_key: 'k:t0', row_index: 0, header: ['A'], cells: { A: 'x' }, matched_cells: 2, chunk_ids: [crypto.randomUUID()], chunk_id: crypto.randomUUID(), content: 'c', metadata: {} };
+        const junk = cannedRpc({ data: [good, null, { ...good, chunk_ids: [] }, { ...good, row_index: 'x' }, { ...good, document_id: 5 }, { ...good, chunk_id: null }, 'text'], error: null }, calls);
         const rows = await tableLookup(await scopeA(), ['plin'], params, { client: junk, signal: new AbortController().signal });
         assert.equal(rows.length, 1);
         assert.equal(rows[0]!.row_id, good.row_id);

@@ -9,7 +9,7 @@
 -- identifiers_norm overlap. Current rows need a current, ready document; under the version scope all or range superseded ready rows of
 -- the caller's tenant qualify too (rag_version_history_ok), and a range keeps only versions whose period overlaps it
 -- (rag_version_period_ok). Quarantined, pending, deleted and failed versions never qualify. The returned chunk_ids are the row's
--- qualifying chunks only.
+-- qualifying chunks only, in chunk order; chunk_id, content and metadata are those of the first of them.
 -- Order: matched cells descending, then row index, document id, table key and row id.
 -- Caps (ERRCODE 22023): at most 64 tokens, limit 1..50, min_cells 1..10, at most 100 identifiers; a malformed version scope raises 22023
 -- as in 0856. SECURITY INVOKER with an empty search_path; service_role only. Reads existing tables only (no new store, so no purge hook).
@@ -44,7 +44,10 @@ RETURNS TABLE (
   header text[],
   cells jsonb,
   matched_cells integer,
-  chunk_ids uuid[]
+  chunk_ids uuid[],
+  chunk_id uuid,
+  content text,
+  metadata jsonb
 )
 LANGUAGE plpgsql
 STABLE
@@ -178,8 +181,10 @@ BEGIN
     FROM candidates m
     WHERE m.matched >= p_min_cells
   )
-  SELECT q.id, q.document_id, q.table_key, q.row_index, q.header, q.cells, q.matched, q.qualified_chunks
+  SELECT q.id, q.document_id, q.table_key, q.row_index, q.header, q.cells, q.matched, q.qualified_chunks,
+         fc.id, fc.content, fc.metadata
   FROM qualified q
+  JOIN public.document_chunks fc ON fc.id = q.qualified_chunks[1] AND fc.tenant_key = p_tenant_key
   WHERE q.qualified_chunks IS NOT NULL
   ORDER BY q.matched DESC, q.row_index, q.document_id, q.table_key, q.id
   LIMIT p_limit;
