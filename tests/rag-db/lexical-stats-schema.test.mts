@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { PGlite } from '@electric-sql/pglite';
-import { applyMigrationFiles, migrationFiles } from '../../eval/harness/migrations.mts';
+import { applyMigrationFiles } from '../../eval/harness/migrations.mts';
 import { createEmptyFixtureDatabase, type DeploymentMode } from '../../eval/harness/pglite-supabase.mts';
 
 /**
@@ -211,8 +211,8 @@ for (const mode of MODES) {
       assert.ok(fs.existsSync(path.join(REPO_ROOT, MIGRATION)), `${MIGRATION} is missing`);
       const fixture = await createEmptyFixtureDatabase({ deploymentMode: mode, migrations: false });
       try {
-        const before0403 = migrationFiles(mode).filter((file) => Number(path.basename(file).slice(0, 4)) < 403);
-        await applyMigrationFiles(fixture.db, before0403);
+        // The setup files fold 0403, so the missing prerequisite is simulated by dropping it.
+        await fixture.db.exec('DROP FUNCTION IF EXISTS public.rag_assert_tenant_key(text) CASCADE');
         await rejectsWithCode(() => applyMigrationFiles(fixture.db, [MIGRATION]), '55000');
       } finally {
         await fixture.db.close();
