@@ -246,6 +246,8 @@ def test_invariant_every_pair_belongs_to_one_tenant(fixture_run):
 def _fixture_sentences(n: int = 20) -> list[str]:
     sentences: list[str] = []
     for doc in sorted(load_corpus(CORPUS_DIR), key=lambda d: d.relpath):
+        if len(sentences) >= n:
+            return sentences
         for piece in re.split(r"(?<=[.!?。！？])\s*|\n+", doc.content):
             piece = piece.strip().lstrip("#-*> ").strip()
             if len(piece) >= 24 and piece not in sentences:
