@@ -646,3 +646,5 @@ export { runDaily } from './monitor/daily';
 export type { RunDailyOptions, RunDailyResult } from './monitor/daily';
 export { deliverAlerts, deliverStoredAlerts, signWebhookBody, WEBHOOK_SIGNATURE_HEADER, WEBHOOK_TIMESTAMP_HEADER } from './monitor/deliver';
 export type { DeliveryReport, StoredDeliverySummary } from './monitor/deliver';
+export { IMPORT_LIMITS, importQuestions, parseQuestionFile, prepareQuestions, QuestionsImportError } from './monitor/questions-import';
+export type { ImportCounts, PreparedQuestions, QuestionFileFormat } from './monitor/questions-import';
