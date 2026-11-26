@@ -358,6 +358,7 @@ def test_nightly_floor_without_a_judge_report_is_skipped_not_passed():
 
 
 def _write(path: Path, payload: object) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload) if not isinstance(payload, str) else payload, encoding="utf-8")
     return path
 
@@ -417,8 +418,8 @@ def test_cli_crash_exits_70_not_a_gate_failure(tmp_path: Path, monkeypatch, caps
 
 def test_measure_writes_one_record_with_per_tier_checks_and_would_be_codes(tmp_path: Path):
     seventeen = _slice(refused=17)
-    failing = _write(tmp_path / "a.json", _report(overall=seventeen, languages={}).model_dump_json())
-    passing = _write(tmp_path / "b.json", _report().model_dump_json())
+    failing = _write(tmp_path / "smoke" / "report.json", _report(overall=seventeen, languages={}).model_dump_json())
+    passing = _write(tmp_path / "ingest" / "report.json", _report().model_dump_json())
     out = tmp_path / "measure.json"
     code = main(
         ["measure", "--stage", "before", "--tier", f"smoke={failing}", "--tier", f"ingest={passing}",
@@ -426,10 +427,39 @@ def test_measure_writes_one_record_with_per_tier_checks_and_would_be_codes(tmp_p
     )
     assert code == 0
     record = json.loads(out.read_text(encoding="utf-8"))
-    assert record["stage"] == "before"
-    assert record["tiers"]["smoke"]["would_exit"] == 11
-    assert record["tiers"]["ingest"]["would_exit"] == 0
-    assert record["tiers"]["smoke"]["checks"]
+    tiers = {entry["name"]: entry for entry in record["tiers"]}
+    assert [entry["name"] for entry in record["tiers"]] == ["ingest", "smoke"]
+    assert all(entry["stage"] == "before" for entry in record["tiers"])
+    assert tiers["smoke"]["exit_code"] == 11 and tiers["ingest"]["exit_code"] == 0
+    assert tiers["smoke"]["out"] == str(Path(failing).parent)
+    assert tiers["smoke"]["checks"]
+    assert tiers["smoke"]["false_answer_rate"] == pytest.approx(0.15)
+    assert tiers["smoke"]["rag_mode"] == "strict" and tiers["smoke"]["composition_result"] in {"passed", "insufficient_n", "failed"}
+
+
+def test_measure_records_wall_time_gate_exit_and_keeps_other_stages(tmp_path: Path):
+    report = _write(tmp_path / "smoke" / "report.json", _report().model_dump_json())
+    out = tmp_path / "measure.json"
+    markdown = tmp_path / "measure.md"
+    base = ["measure", "--tier", f"smoke={report}", "--gates", str(GATES_PATH), "--out", str(out)]
+    assert main([*base, "--stage", "before", "--wall-time", "smoke=12.5", "--gate-exit", "smoke=0", "--markdown", str(markdown)]) == 0
+    assert main([*base, "--stage", "after"]) == 0
+    assert main([*base, "--stage", "before", "--wall-time", "smoke=13"]) == 0
+    record = json.loads(out.read_text(encoding="utf-8"))
+    assert [(entry["name"], entry["stage"]) for entry in record["tiers"]] == [("smoke", "after"), ("smoke", "before")]
+    before = next(entry for entry in record["tiers"] if entry["stage"] == "before")
+    assert before["wall_time_s"] == 13.0 and before["gate_exit"] is None
+    text = markdown.read_text(encoding="utf-8")
+    assert "wall time" in text and "| smoke | before |" in text
+
+
+def test_measure_rejects_a_wall_time_for_an_unknown_tier(tmp_path: Path):
+    report = _write(tmp_path / "report.json", _report().model_dump_json())
+    code = main(
+        ["measure", "--stage", "before", "--tier", f"smoke={report}", "--wall-time", "other=1", "--gates", str(GATES_PATH),
+         "--out", str(tmp_path / "m.json")]
+    )
+    assert code == 2
 
 
 def test_measure_rejects_a_malformed_tier_argument(tmp_path: Path):
