@@ -1,9 +1,10 @@
 import type { QueryFramework } from '../config';
 import { getRagDeps } from '../deps';
-import { llamaindexCondense, type CondenseInput, type CondenseResult } from './llamaindex/condense';
+import type { CondensedQuery } from '@/lib/rag-eval/contracts.generated';
+import { finishCondense, llamaindexCondense, type CondenseInput, type CondenseResult } from './llamaindex/condense';
 import { nativeDecompose, type DecomposeInput, type DecomposeResult } from './llamaindex/decompose';
-import { nativeExpand, type ExpandInput, type ExpandResult } from './llamaindex/expand';
-import { nativeHyde, type HydeInput, type HydeResult } from './llamaindex/hyde';
+import { finishExpand, nativeExpand, type ExpandInput, type ExpandResult, type FinishExpandInput } from './llamaindex/expand';
+import { finishHyde, nativeHyde, type FinishHydeInput, type HydeInput, type HydeResult } from './llamaindex/hyde';
 import { nativeTranslate, type NativeTranslateInput, type NativeTranslateResult } from './llamaindex/translate';
 
 export type { CondenseInput, CondenseResult } from './llamaindex/condense';
@@ -50,3 +51,19 @@ const TRANSFORMERS: Readonly<Record<QueryFramework, QueryTransformer | null>> = 
 export function getQueryTransformer(framework: QueryFramework = 'llamaindex'): QueryTransformer {
   return TRANSFORMERS[framework] ?? NATIVE_TRANSFORMER;
 }
+
+/**
+ * The post-check step after the LLM call, identical for every framework (D-02): the LangChain adapter gets these in its
+ * deps, so it imports no post-check module and its results have exactly the native shapes.
+ */
+export interface QueryTransformFinishers {
+  condense(input: Pick<CondenseInput, 'query' | 'protectedTokens' | 'limits'>, output: CondensedQuery): CondenseResult;
+  expand(input: FinishExpandInput, queries: readonly string[]): ExpandResult;
+  hyde(input: FinishHydeInput, passage: string): HydeResult;
+}
+
+export const QUERY_TRANSFORM_FINISHERS: QueryTransformFinishers = Object.freeze({
+  condense: finishCondense,
+  expand: finishExpand,
+  hyde: finishHyde,
+});
