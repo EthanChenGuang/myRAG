@@ -57,7 +57,18 @@ export const ReviewListQuerySchema = z
   .object({
     status: ReviewItemSchema.shape.status.optional(),
     reason: z
-      .enum(['feedback_negative', 'refusal_disputed', 'groundedness_flagged', 'refused_high_score', 'zero_results', 'low_score', 'no_source_opened'])
+      .enum([
+        'feedback_negative',
+        'refusal_disputed',
+        'groundedness_flagged',
+        'refused_high_score',
+        'zero_results',
+        'low_score',
+        'no_source_opened',
+        'claim_unsupported',
+        'output_guard',
+        'version_conflict',
+      ])
       .optional(),
     language: z.string().regex(/^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$/).optional(),
     cursor: z.string().min(1).max(256).optional(),
