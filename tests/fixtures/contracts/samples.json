@@ -15079,6 +15079,19 @@
       "schema_version": 1,
       "sub_question_coverage": true
     },
+    "ReviewCheckDetails": {
+      "check": "output_guard",
+      "detector": "rules",
+      "documents": [
+        {
+          "document_id": "00000000-0000-4000-8000-0000000000d1",
+          "file_name": "document-a.pdf",
+          "uploader_email": null,
+          "uploader_id": "00000000-0000-4000-8000-0000000000c1",
+          "uploader_name": "Uploader A"
+        }
+      ]
+    },
     "ReviewItem": {
       "answer_language": "en",
       "answer_masked": null,
@@ -21649,6 +21662,42 @@
         "rrf_k": 60,
         "schema_version": 1,
         "sub_question_coverage": true
+      }
+    },
+    "ReviewItem:check_raised": {
+      "model": "ReviewItem",
+      "value": {
+        "answer_language": "en",
+        "answer_masked": null,
+        "candidates": [],
+        "channel": null,
+        "chunk_languages": [
+          "en"
+        ],
+        "expires_at": null,
+        "id": "00000000-0000-4000-8000-000000000011",
+        "label": null,
+        "labelled_at": null,
+        "labelled_by": null,
+        "mined_at": "2026-11-23T03:00:00Z",
+        "mining_window": "2026-11-16/2026-11-23",
+        "occurrences": 1,
+        "outcome": "unknown",
+        "query_language": "en",
+        "query_language_confidence": 1.0,
+        "query_masked": "",
+        "reasons": [
+          "output_guard"
+        ],
+        "retrieval_config_hash": "cfg-0001",
+        "retrieval_log_id": "00000000-0000-4000-8000-000000000100",
+        "split": null,
+        "split_group": null,
+        "status": "open",
+        "tags": [],
+        "tenant_key": "s:default",
+        "trace_id": null,
+        "triage": []
       }
     },
     "SectionRuleSet:full": {

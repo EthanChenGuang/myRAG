@@ -3486,6 +3486,8 @@ def _phase52_models() -> dict[str, Any]:
     )
     from rag_sidecar.contracts.security_events import (  # noqa: PLC0415
         LinkPreviewStatus,
+        ReviewCheckDetails,
+        ReviewCheckDocument,
         SecurityAlert,
         SecurityAlertView,
         SecurityEvent,
@@ -3647,6 +3649,18 @@ def _phase52_models() -> dict[str, Any]:
         "LinkPreviewStatus": LinkPreviewStatus(
             state="mismatch", preview_hosts=["host.example", "other.example"], hosts_not_allowlisted=["other.example"]
         ),
+        "ReviewCheckDetails": ReviewCheckDetails(
+            check="output_guard",
+            detector="rules",
+            documents=[
+                ReviewCheckDocument(
+                    document_id="00000000-0000-4000-8000-0000000000d1",
+                    file_name="document-a.pdf",
+                    uploader_id=uploader,
+                    uploader_name="Uploader A",
+                )
+            ],
+        ),
     }
 
 
@@ -3679,6 +3693,31 @@ def _phase52_variants() -> dict[str, Any]:
             },
         },
         "LinkPreviewStatus:unknown": {"model": "LinkPreviewStatus", "value": {"state": "unknown"}},
+        "ReviewItem:check_raised": {
+            "model": "ReviewItem",
+            "value": _fl_review_item()
+            .model_copy(
+                update={
+                    "channel": None,
+                    "trace_id": None,
+                    "query_masked": "",
+                    "outcome": "unknown",
+                    "candidates": [],
+                    "reasons": ["output_guard"],
+                    "occurrences": 1,
+                    "tags": [],
+                    "status": "open",
+                    "triage": [],
+                    "label": None,
+                    "labelled_by": None,
+                    "labelled_at": None,
+                    "split": None,
+                    "split_group": None,
+                    "expires_at": None,
+                }
+            )
+            .model_dump(mode="json"),
+        },
     }
 
 
