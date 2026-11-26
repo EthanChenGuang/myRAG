@@ -166,6 +166,7 @@ const defaultsCalls = () => state.calls.filter((call) => /doc_type_default/.test
 const PICKER = '/api/rag/doc-type-defaults';
 /** Plan 03.2-43: today's answer plus the tags block, disabled while RAG_SCOPE_TAGS is off (the default). */
 const TAGS_OFF = { enabled: false, vocabulary: [] };
+const REPLACES_OFF = { enabled: false, confirmedAtOnce: false };
 const ADMIN = '/api/rag/admin/doc-type-defaults';
 
 let logged: string[] = [];
@@ -220,7 +221,7 @@ describe('GET /api/rag/doc-type-defaults (the picker default)', () => {
     const { picker } = await load();
     const response = await picker.GET(req(`${PICKER}?source=chat_upload`));
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ enabled: false, tags: TAGS_OFF });
+    expect(await response.json()).toEqual({ enabled: false, tags: TAGS_OFF, replaces: REPLACES_OFF });
     expect(defaultsCalls()).toEqual([]);
   });
 
@@ -229,25 +230,25 @@ describe('GET /api/rag/doc-type-defaults (the picker default)', () => {
     const { picker } = await load();
 
     const none = await (await picker.GET(req(`${PICKER}?source=chat_upload`))).json();
-    expect(none).toEqual({ enabled: true, docType: 'general', origin: 'fallback', tags: TAGS_OFF });
+    expect(none).toEqual({ enabled: true, docType: 'general', origin: 'fallback', tags: TAGS_OFF, replaces: REPLACES_OFF });
 
     state.rows = [defaultRow(`u:${USER_A}`, 'tenant', 'financial_report')];
     const tenant = await (await picker.GET(req(`${PICKER}?source=chat_upload`))).json();
-    expect(tenant).toEqual({ enabled: true, docType: 'financial_report', origin: 'tenant_default', tags: TAGS_OFF });
+    expect(tenant).toEqual({ enabled: true, docType: 'financial_report', origin: 'tenant_default', tags: TAGS_OFF, replaces: REPLACES_OFF });
 
     state.rows.push(defaultRow(`u:${USER_A}`, 'chat_upload', 'contract_legal'));
     const source = await (await picker.GET(req(`${PICKER}?source=chat_upload`))).json();
-    expect(source).toEqual({ enabled: true, docType: 'contract_legal', origin: 'source_default', tags: TAGS_OFF });
+    expect(source).toEqual({ enabled: true, docType: 'contract_legal', origin: 'source_default', tags: TAGS_OFF, replaces: REPLACES_OFF });
 
     const other = await (await picker.GET(req(`${PICKER}?source=config_upload`))).json();
-    expect(other).toEqual({ enabled: true, docType: 'financial_report', origin: 'tenant_default', tags: TAGS_OFF });
+    expect(other).toEqual({ enabled: true, docType: 'financial_report', origin: 'tenant_default', tags: TAGS_OFF, replaces: REPLACES_OFF });
   });
 
   it('returns an auto default as auto', async () => {
     state.session = { id: USER_A };
     state.rows = [defaultRow(`u:${USER_A}`, 'chat_upload', 'auto')];
     const { picker } = await load();
-    expect(await (await picker.GET(req(`${PICKER}?source=chat_upload`))).json()).toEqual({ enabled: true, docType: 'auto', origin: 'source_default', tags: TAGS_OFF });
+    expect(await (await picker.GET(req(`${PICKER}?source=chat_upload`))).json()).toEqual({ enabled: true, docType: 'auto', origin: 'source_default', tags: TAGS_OFF, replaces: REPLACES_OFF });
   });
 
   it('honours an organization only through the membership check, and reads that organization tenant only', async () => {
@@ -262,11 +263,11 @@ describe('GET /api/rag/doc-type-defaults (the picker default)', () => {
     state.members = [{ organization_id: ORG_X, user_id: USER_A }];
     const member = await picker.GET(req(`${PICKER}?source=chat_upload&organizationId=${ORG_X}`));
     expect(member.status).toBe(200);
-    expect(await member.json()).toEqual({ enabled: true, docType: 'invoice_receipt', origin: 'tenant_default', tags: TAGS_OFF });
+    expect(await member.json()).toEqual({ enabled: true, docType: 'invoice_receipt', origin: 'tenant_default', tags: TAGS_OFF, replaces: REPLACES_OFF });
     expect(defaultsCalls().at(-1)?.args.p_tenant_key).toBe(`o:${ORG_X}`);
 
     const personal = await picker.GET(req(`${PICKER}?source=chat_upload`));
-    expect(await personal.json()).toEqual({ enabled: true, docType: 'contract_legal', origin: 'tenant_default', tags: TAGS_OFF });
+    expect(await personal.json()).toEqual({ enabled: true, docType: 'contract_legal', origin: 'tenant_default', tags: TAGS_OFF, replaces: REPLACES_OFF });
   });
 
   it('keeps two tenants apart in both modes: each caller reads only the default of their own tenant', async () => {
@@ -281,7 +282,7 @@ describe('GET /api/rag/doc-type-defaults (the picker default)', () => {
     state.mode = 'single-tenant';
     const single = await load();
     state.session = { id: USER_A };
-    expect(await (await single.picker.GET(req(`${PICKER}?source=chat_upload`))).json()).toEqual({ enabled: true, docType: 'financial_report', origin: 'tenant_default', tags: TAGS_OFF });
+    expect(await (await single.picker.GET(req(`${PICKER}?source=chat_upload`))).json()).toEqual({ enabled: true, docType: 'financial_report', origin: 'tenant_default', tags: TAGS_OFF, replaces: REPLACES_OFF });
     expect(defaultsCalls().at(-1)?.args.p_tenant_key).toBe('s:default');
   });
 
@@ -289,7 +290,7 @@ describe('GET /api/rag/doc-type-defaults (the picker default)', () => {
     state.session = { id: USER_A };
     state.leakForeignRow = true;
     const { picker } = await load();
-    expect(await (await picker.GET(req(`${PICKER}?source=chat_upload`))).json()).toEqual({ enabled: true, docType: 'general', origin: 'fallback', tags: TAGS_OFF });
+    expect(await (await picker.GET(req(`${PICKER}?source=chat_upload`))).json()).toEqual({ enabled: true, docType: 'general', origin: 'fallback', tags: TAGS_OFF, replaces: REPLACES_OFF });
   });
 
   it('answers 400 for a missing or unknown source and 503, without the database message, when the read fails', async () => {

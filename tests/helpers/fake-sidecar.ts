@@ -55,7 +55,8 @@ interface ManifestEntry {
   path: string;
   file_sha256: string;
   profile_id: string;
-  recorded: { parse_result: string; artifacts: Record<string, string> };
+  /** parse_result_header_repeat: the result of the RAG_TABLE_HEADER_REPEAT=always request (long-table fixtures only). */
+  recorded: { parse_result: string; parse_result_header_repeat?: string; artifacts: Record<string, string> };
 }
 
 export interface FakeSidecarManifest {
@@ -228,13 +229,17 @@ export async function startFakeSidecar(options: { secret?: string } = {}): Promi
         const requestField = form.get('request');
         const bytes = file instanceof Blob ? Buffer.from(await file.arrayBuffer()) : Buffer.alloc(0);
         const sha = createHash('sha256').update(bytes).digest('hex');
-        uploads.push({ fileSha256: sha, fileBytes: bytes.byteLength, request: JSON.parse(typeof requestField === 'string' ? requestField : '{}') as Record<string, unknown> });
+        const jobRequest = JSON.parse(typeof requestField === 'string' ? requestField : '{}') as Record<string, unknown>;
+        uploads.push({ fileSha256: sha, fileBytes: bytes.byteLength, request: jobRequest });
         const known = sources.find((source) => source.entry.file_sha256 === sha);
         let result: Record<string, unknown> = { ...DEFAULT_RESULT };
         const artifacts: Record<string, Buffer> = {};
         if (known) {
           const { base, entry } = known;
-          result = JSON.parse(readFileSync(join(base, entry.recorded.parse_result), 'utf8')) as Record<string, unknown>;
+          // A request that repeats and carries table headers (RAG_TABLE_HEADER_REPEAT=always) gets that recording when one exists.
+          const headerRepeat = jobRequest.repeat_table_header === true && jobRequest.carry_table_header === true;
+          const recordedPath = headerRepeat && entry.recorded.parse_result_header_repeat ? entry.recorded.parse_result_header_repeat : entry.recorded.parse_result;
+          result = JSON.parse(readFileSync(join(base, recordedPath), 'utf8')) as Record<string, unknown>;
           for (const [name, path] of Object.entries(entry.recorded.artifacts)) artifacts[name] = readFileSync(join(base, path));
         }
         if (spec.result !== undefined) result = spec.result as Record<string, unknown>;

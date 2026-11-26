@@ -8,7 +8,7 @@ import {
   isDataUIPart,
   isToolUIPart,
 } from 'ai';
-import { pickAnswerMetadata, type AnswerMessageMetadata } from '@/lib/chat/answer-metadata';
+import { pickAnswerMetadata, pickRefusalMetadata, type AnswerMessageMetadata, type RefusalMessageMetadata } from '@/lib/chat/answer-metadata';
 
 type AppDataTypes = {
   'content-part': ContentPart;
@@ -175,7 +175,7 @@ export interface DBMessage {
   name?: string;
   createdAt?: Date;
   attachments?: Attachment[];
-  metadata?: { ragTraceId?: string } & AnswerMessageMetadata;
+  metadata?: { ragTraceId?: string } & AnswerMessageMetadata & RefusalMessageMetadata;
 }
 
 interface AppMessageMetadata {
@@ -217,7 +217,7 @@ function ragTraceIdOf(metadata: Record<string, unknown> | undefined): string | u
 
 function persistedMetadataOf(metadata: Record<string, unknown> | undefined): DBMessage['metadata'] | undefined {
   const ragTraceId = ragTraceIdOf(metadata);
-  const answer = pickAnswerMetadata(metadata);
+  const answer = { ...pickAnswerMetadata(metadata), ...pickRefusalMetadata(metadata) };
   if (!ragTraceId && Object.keys(answer).length === 0) return undefined;
   return { ...(ragTraceId ? { ragTraceId } : {}), ...answer };
 }

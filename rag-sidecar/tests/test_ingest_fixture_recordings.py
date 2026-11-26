@@ -147,3 +147,19 @@ def test_the_carry_leaves_the_single_table_variant_untouched(fixture_id, tmp_pat
     plain, _ = _parse(fixture_id, tmp_path, repeat_table_header=True)
     carried, _ = _parse(fixture_id, tmp_path, repeat_table_header=True, carry_table_header=True)
     assert carried.chunks == plain.chunks
+
+
+def test_the_header_repeat_recordings_repeat_the_header_in_every_table_chunk():
+    manifest = json.loads((INGEST / "manifest.json").read_text(encoding="utf-8"))
+    entries = manifest["long_table_fixtures"]
+    assert entries and all("parse_result_header_repeat" in entry["recorded"] for entry in entries)
+    for entry in entries:
+        header = " | ".join(entry["expected"]["long_table"]["header"])
+        result = json.loads((INGEST / entry["recorded"]["parse_result_header_repeat"]).read_text(encoding="utf-8"))
+        tables = [chunk for chunk in result["chunks"] if chunk["is_table"]]
+        assert len(tables) >= 2, entry["id"]
+        for chunk in tables:
+            first_line = " | ".join(cell.strip() for cell in chunk["text"].split("\n", 1)[0].strip("|").split("|"))
+            assert first_line == header, (entry["id"], chunk["text"][:80])
+        plain = json.loads((INGEST / entry["recorded"]["parse_result"]).read_text(encoding="utf-8"))
+        assert result["markdown"] == plain["markdown"], entry["id"]

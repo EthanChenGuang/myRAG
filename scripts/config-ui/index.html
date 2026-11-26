@@ -73,6 +73,7 @@
     <script src="rag-panels/rag-fetch.js"></script>
     <script src="rag-panels/rag-ui.js"></script>
     <script src="rag-panels/languages.js"></script>
+    <script src="rag-panels/ingest-impact.js"></script>
     <script src="rag-panels/doc-types.js"></script>
     <script src="rag-panels/quarantine.js"></script>
     <script src="rag-panels/embedding-profiles.js"></script>
@@ -82,6 +83,7 @@
     <script src="rag-panels/chunking-profiles.js"></script>
     <script src="rag-panels/refusal-calibration.js"></script>
     <script src="rag-panels/injection-defense.js"></script>
+    <script src="rag-panels/review-labelling.js"></script>
 
     <style>
         /* Tab content visibility */
@@ -9084,7 +9086,7 @@
                         <div class="card bg-base-100 shadow-lg">
                             <div class="card-body p-4 lg:p-6">
                                 <h2 class="card-title text-xl lg:text-2xl text-myrag-primary mb-2">🛡️ RAG Administration</h2>
-                                <p class="text-base-content/70 mb-6">Choose languages, manage document-type defaults, ingestion and its changes, held uploads, tags, versions and translation, and the embedding and chunking profiles, using your existing admin session.</p>
+                                <p class="text-base-content/70 mb-6">Choose languages, manage document-type defaults, ingestion and its changes, held uploads, tags, versions and translation, and the embedding and chunking profiles, using your existing admin session. Domain experts label failed questions in the Review queue with their own sign-in.</p>
 
                                 <div class="grid gap-6">
                                     <section id="rag-administration-languages" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-languages-title">
@@ -9564,6 +9566,18 @@
                                         </div>
                                     </section>
 
+                                    <!-- rag-ingest-impact:start -->
+                                    <section id="rag-administration-ingest-impact" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-ingest-impact-title">
+                                        <div class="card-body">
+                                            <h3 id="rag-ingest-impact-title" class="text-lg font-semibold mb-2 text-balance rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" tabindex="-1" data-ingest-impact-title>Ingestion changes</h3>
+                                            <p class="text-sm text-base-content/70 mb-4 max-w-prose" data-ingest-impact-description>Settings that change how documents are processed, and the rebuilds that bring stored documents up to date. A rebuild is built next to the live data and can be rolled back. Applies to every workspace.</p>
+                                            <div data-ingest-impact-alert class="mb-4 empty:mb-0"></div>
+                                            <div data-ingest-impact-content></div>
+                                            <div data-ingest-impact-status class="text-sm mt-4" role="status" aria-live="polite" tabindex="-1"></div>
+                                        </div>
+                                    </section>
+                                    <!-- rag-ingest-impact:end -->
+
                                     <section id="rag-administration-quarantine" class="card bg-base-200 shadow-md">
                                         <div class="card-body">
                                             <h3 class="text-lg font-semibold mb-2">Quarantine</h3>
@@ -9621,6 +9635,16 @@
                                             <div data-refusal-alert class="mb-4 empty:mb-0"></div>
                                             <div data-refusal-content></div>
                                             <div data-refusal-status class="text-sm mt-4" role="status" aria-live="polite"></div>
+                                        </div>
+                                    </section>
+
+                                    <section id="rag-administration-review" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-review-title">
+                                        <div class="card-body">
+                                            <h3 id="rag-review-title" class="text-lg font-semibold mb-2 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" tabindex="-1" data-review-title>Review queue</h3>
+                                            <p class="text-sm text-base-content/70 mb-4 max-w-prose" data-review-description></p>
+                                            <div data-review-alert class="mb-4 empty:mb-0"></div>
+                                            <div data-review-content></div>
+                                            <div data-review-status class="text-sm mt-4" role="status" aria-live="polite"></div>
                                         </div>
                                     </section>
                                 </div>
@@ -10392,6 +10416,7 @@
                     const response = await fetch('/api/config');
                     const data = await response.json();
                     this.config = data.config || {};
+                    this.savedConfig = { ...this.config };
                     this.secretsSet = new Set(data.secretsSet || []);
                     // Expose config globally for other components (like workspace selector)
                     window.currentConfig = this.config;
@@ -10657,6 +10682,22 @@
             }
 
             async saveConfig() {
+                const impactGuard = typeof window !== 'undefined' ? window.ragIngestImpactGuard : undefined;
+                if (typeof impactGuard === 'function') {
+                    try {
+                        const decision = await impactGuard(this.config, this.savedConfig || {});
+                        if (decision === false) return;
+                        if (decision && typeof decision === 'object') {
+                            for (const key of Object.keys(this.config)) {
+                                if (!Object.prototype.hasOwnProperty.call(decision, key)) delete this.config[key];
+                            }
+                            Object.assign(this.config, decision);
+                        }
+                    } catch (error) {
+                        console.error('[Config] Ingestion impact check failed; saving without it');
+                    }
+                }
+
                 console.log('SaveConfig called - showing save indicator');
 
                 // Show saving indicator immediately - handle both desktop and mobile
@@ -10721,6 +10762,7 @@
                     }
 
                     this.hasChanges = false;
+                    this.savedConfig = { ...this.config };
 
                     // Update indicators to show success
                     if (desktopIndicator) {
@@ -14395,6 +14437,7 @@
 
                     const captureOrgId = this.workspaces.isMultiTenant ? this.workspaces.currentSelection : null;
 
+                    this.lastUploadPayload = null;
                     if (response.status === 202) {
                         let payload = {};
                         try {
@@ -14402,6 +14445,7 @@
                         } catch (_) {
                             payload = {};
                         }
+                        this.lastUploadPayload = payload;
                         const jobId = payload && payload.jobId;
                         if (jobId) {
                             const lang = (navigator.language || 'en').slice(0, 2);
@@ -14434,8 +14478,24 @@
                         }
                     }
 
+                    // An inline upload that ran out of its request budget answers 202 processing without a job: continue it with resume calls.
+                    let unfinished = null;
+                    if (response.status === 202) {
+                        const documentId = this.lastUploadPayload && (this.lastUploadPayload.documentId || this.lastUploadPayload.id);
+                        if (this.lastUploadPayload && this.lastUploadPayload.status === 'processing' && typeof documentId === 'string' && documentId) {
+                            unfinished = await this.resumeUnfinishedUpload(fileItem, documentId, captureOrgId);
+                            if (unfinished.kind !== 'settled') {
+                                throw new Error(unfinished.kind === 'failed'
+                                    ? `Document processing failed (${unfinished.reason})`
+                                    : `Document processing could not finish (${unfinished.reason})`);
+                            }
+                        }
+                    }
+
                     if (response.ok) {
-                        const result = await response.json();
+                        const result = response.status === 202
+                            ? { ...(this.lastUploadPayload || {}), ...(unfinished ? { status: unfinished.status } : {}) }
+                            : await response.json();
                         fileItem.status = 'completed';
                         fileItem.progress = 100;
                         this.results.push({
@@ -14624,6 +14684,56 @@
             monitorUiLocale() {
                 const lang = (navigator.language || 'en').slice(0, 2);
                 return lang === 'zh' || lang === 'it' ? lang : 'en';
+            }
+
+            async resumeUnfinishedUpload(fileItem, documentId, organizationId) {
+                const maxAttempts = 20;
+                const maxStalled = 3;
+                const query = organizationId ? `?organizationId=${encodeURIComponent(organizationId)}` : '';
+                const base = `/api/rag/ingest/${encodeURIComponent(documentId)}`;
+                const settled = ['ready', 'quarantined', 'pending_review'];
+                let lastKey = null;
+                let stalled = 0;
+                for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+                    let body = null;
+                    let httpStatus = 0;
+                    try {
+                        const res = await fetch(`${base}/resume${query}`, { method: 'POST' });
+                        httpStatus = res.status;
+                        body = res.ok ? await res.json().catch(() => null) : null;
+                    } catch (_) {
+                        body = null;
+                    }
+                    if ([401, 403, 404].includes(httpStatus)) return { kind: 'refused', reason: `http_${httpStatus}` };
+                    const status = body && typeof body.status === 'string' ? body.status : null;
+                    if (status && settled.includes(status)) return { kind: 'settled', status };
+                    if (status === 'failed') return { kind: 'failed', reason: typeof body.reason === 'string' ? body.reason : 'failed' };
+                    if (body && body.reason === 'resume_state_missing') return { kind: 'stalled', reason: body.reason };
+                    let stage = '';
+                    let parsePending = false;
+                    if (status) {
+                        try {
+                            const statusRes = await fetch(`${base}${query}`);
+                            const statusBody = statusRes.ok ? await statusRes.json() : null;
+                            stage = statusBody && typeof statusBody.lastCompleted === 'string' ? statusBody.lastCompleted : '';
+                            parsePending = Boolean(statusBody && Array.isArray(statusBody.warnings) && statusBody.warnings.includes('parse_pending'));
+                        } catch (_) {
+                            stage = '';
+                        }
+                    }
+                    const key = status ? `${stage}|${Number.isInteger(body.chunkCount) ? body.chunkCount : 0}` : null;
+                    const progressed = key !== null && key !== lastKey;
+                    if (key !== null) lastKey = key;
+                    stalled = progressed || parsePending ? 0 : stalled + 1;
+                    fileItem.displayStatus = `Processing… step ${attempt}/${maxAttempts}${stage ? ` (${stage})` : ''}`;
+                    this.logActivity(`⏳ ${fileItem.name}: ${fileItem.displayStatus}`);
+                    this.updateCurrentProcessing();
+                    if (stalled >= maxStalled) return { kind: 'stalled', reason: (body && body.reason) || 'no_progress' };
+                    if (attempt < maxAttempts) {
+                        await new Promise((resolve) => setTimeout(resolve, Math.min(1000 * 2 ** stalled, 15000)));
+                    }
+                }
+                return { kind: 'exhausted', reason: 'max_attempts' };
             }
 
             beginQueuedUploadMonitor(resultEntry, locale) {

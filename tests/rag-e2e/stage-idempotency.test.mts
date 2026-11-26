@@ -78,7 +78,7 @@ describe('stage idempotency: a slice is bounded, a replay changes nothing and a 
     const last = await harness.withHeartbeat(jobId, WORKER, async () => {
       let cursor: string | null = null;
       let reply: Awaited<ReturnType<QueuedHarness['callback']>> | null = null;
-      for (let call = 0; call < 40; call += 1) {
+      for (let call = 0; call < 120; call += 1) {
         const body = advanceBody(cacheId, cursor, 1);
         requests.push(body);
         reply = await harness.callback(jobId, 'advance', body);
@@ -93,7 +93,15 @@ describe('stage idempotency: a slice is bounded, a replay changes nothing and a 
     assert.equal(last.body.done, true);
     assert.equal(last.body.status, 'ready', JSON.stringify(last.body));
     assert.ok(requests.length >= POST_PARSE.length, `one stage per call at 1 ms, got ${requests.length} calls`);
-    assert.deepEqual(stages.slice(0, -1), [...new Set(stages.slice(0, -1))], 'every call moved to a new stage');
+    // The embed stage yields between batches when the slice budget runs out, so the stage before it repeats while
+    // embedding is in progress; every other call moves to a new stage.
+    const beforeEmbed = POST_PARSE[POST_PARSE.indexOf('embed') - 1];
+    const moved = stages.slice(0, -1).filter((stage, index, all) => index === 0 || stage !== all[index - 1]);
+    assert.deepEqual(moved, [...new Set(moved)], 'every call moved to a new stage or continued embedding');
+    assert.ok(
+      stages.slice(0, -1).every((stage, index, all) => index === 0 || stage !== all[index - 1] || stage === beforeEmbed),
+      `only the embed stage spans several calls: ${stages.join(', ')}`,
+    );
     assert.deepEqual(stages.filter((stage) => POST_PARSE.includes(stage as (typeof POST_PARSE)[number])).slice(0, 3), ['content_hash_dedup', 'scan_injection', 'chunk']);
 
     const [{ n, distinct }] = (await harness.rows('SELECT count(*)::int AS n, count(DISTINCT id)::int AS distinct FROM document_chunks WHERE document_id = $1', [documentId])) as Array<{ n: number; distinct: number }>;

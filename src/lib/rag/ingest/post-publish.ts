@@ -1,3 +1,5 @@
+import { SUPERSESSION_HOOK, registerSupersessionHook, supersessionDetectOn } from './versions/detect';
+
 /**
  * The one place that runs work after a document version becomes current (D-29, D-41). The publish stage calls afterPublish once its
  * outcome is `published`; approval, rebuild activation and quarantine release call it too. A hook never fails or delays ingestion:
@@ -32,6 +34,17 @@ export function registerPostPublishHook(name: string, run: PostPublishHook, opti
   const index = hooks.findIndex((hook) => hook.name === name);
   if (index >= 0) hooks[index] = entry;
   else hooks.push(entry);
+}
+
+export function unregisterPostPublishHook(name: string): void {
+  const index = hooks.findIndex((hook) => hook.name === name);
+  if (index >= 0) hooks.splice(index, 1);
+}
+
+/** D-41: the supersession detector is a hook only while RAG_SUPERSESSION_DETECT=on; off, it is removed and nothing runs. */
+function syncBuiltInHooks(): void {
+  if (supersessionDetectOn()) registerSupersessionHook(registerPostPublishHook);
+  else unregisterPostPublishHook(SUPERSESSION_HOOK);
 }
 
 export function resetPostPublishHooksForTests(): void {
@@ -69,5 +82,6 @@ async function runOne(hook: RegisteredHook, event: PostPublishEvent): Promise<vo
 
 /** Runs every registered hook in registration order; resolves when all have finished or timed out, and never rejects. */
 export async function afterPublish(event: PostPublishEvent): Promise<void> {
+  syncBuiltInHooks();
   for (const hook of hooks.slice()) await runOne(hook, event);
 }

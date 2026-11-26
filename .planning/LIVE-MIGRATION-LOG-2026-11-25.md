@@ -508,3 +508,20 @@ Applied to `<live-project-ref>` from `origin/main` 78ca69f8 (train 19, PR #97). 
 - Re-running 0810 puts back the old `rag_translation_settings_set` body (deployment admins only); re-run 0816 after it.
 - Re-running 0803 restores the 0803 `rag_upload_approval_keys` body; re-run 0814 after it, since 0805 and 0807 depend on its organization-admin rule.
 - All five files carry their own REVOKE/GRANT; re-run 0410 after any future migration that adds a definer function it lists.
+
+## Train 20: 0536, 0537, 0817, 0818 and 0809 (applied after train 20, 2026-11-26)
+
+Applied to `<live-project-ref>` from the orchestrator session through Supabase MCP `apply_migration`, one call per file, at about 02:20 UTC on 2026-11-26, after train 20 (PR #100) reached `origin/main`.
+
+### Steps
+| # | Migration name | Result |
+|---|---|---|
+| 1 | train20_0536_rag_retrieval_log_source_opened | ok |
+| 2 | train20_0537_rag_feedback_mining_report | ok |
+| 3 | train20_0817_released_link_targets | ok |
+| 4 | train20_0818_upload_scopes | ok |
+| 5 | train20_0809_rebuild_batches | ok |
+
+### Verification
+- **Functions:** the 15 new functions all have `search_path=""`; none is executable by anon or authenticated.
+- **Tables:** the 3 new tables have RLS on.

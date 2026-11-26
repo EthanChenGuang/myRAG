@@ -55,6 +55,16 @@
       "path": "src/lib/rag/generation/groundedness.ts",
       "owner": "Phase 5",
       "reason": "groundedness scorer language tags incl. zh-Hans/zh-Hant (created by plan 05-14); the registry groundedness field replaces them"
+    },
+    {
+      "path": "src/app/embed/embed-rating-strings.ts",
+      "owner": "Phase 5.2 (LANG-09)",
+      "reason": "embed rating UI string table keyed by locale (05.1.1-16); LANG-09 moves UI locales to the registry"
+    },
+    {
+      "path": "scripts/config-ui/rag-panels/review-labelling.js",
+      "owner": "Phase 5.2 (LANG-09)",
+      "reason": "review labelling language filter (05.1.1-17); LANG-09 reads it from the registry"
     }
   ]
 }

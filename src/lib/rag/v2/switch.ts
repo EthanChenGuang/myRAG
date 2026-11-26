@@ -23,3 +23,10 @@ export function voiceServerCondenses(): boolean {
     config.queryLayer.voiceTransforms.includes('condense_history')
   );
 }
+
+/** CACHE-01: whether the semantic_cache stage can run now (v2 served, the query layer on, a backend selected); entry points pass cacheContext only then. */
+export function isSemanticCacheActive(): boolean {
+  const config = loadRagConfig(getRagDeps().ragEnv());
+  if (config.pipelineBlocked !== null || !isV2Pipeline()) return false;
+  return config.queryLayer.enabled && config.semanticCache.backend !== 'off' && !config.disabledStages.has('semantic_cache');
+}

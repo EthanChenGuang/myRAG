@@ -76,6 +76,12 @@ interface IngestInputBase {
    * once its row exists and before any chunk is written. Absent: no tag is written, as today.
    */
   scopes?: string[];
+  /**
+   * The document this upload replaces ("Replaces…", D-41), already checked by validateUploadReplaces in the route: a current document of
+   * the same tenant outside the upload's lineage. Recorded on the version at publish; after publish it is raised as a supersession
+   * candidate (confirmed at once for an admin of the tenant). Absent, or with RAG_SUPERSESSION_DETECT=off: nothing is recorded.
+   */
+  replacesDocumentId?: string;
   options?: IngestOptions;
   signal: AbortSignal;
   trace?: TraceCollector;
@@ -141,6 +147,18 @@ export interface IngestState {
   parserVersion?: string;
   /** The hidden-text check of this version (D-33, D-34), kept so a retried scan reuses the report and removes each span once. */
   hiddenText?: HiddenTextState;
+  /** Single-tenant runs only: the server-set uploader, so that uploader can resume the version without being an administrator. */
+  uploaderId?: string;
+  /** An embed stage that yielded between batches: where a resumed run continues, valid only for the same targets and chunk total. */
+  embedProgress?: EmbedProgress;
+}
+
+export interface EmbedProgress {
+  batchesDone: number;
+  written: number;
+  total: number;
+  targets: string[];
+  gaps: Array<{ profileId: string; chunkIndex: number }>;
 }
 
 export interface HiddenTextState {

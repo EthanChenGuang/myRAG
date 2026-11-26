@@ -218,3 +218,141 @@ def test_every_new_non_small_talk_item_has_a_transform_entry(phase6, entries):
         if item.category == "small_talk":
             continue
         assert _normalize_query(item.question) in keyed, item.id
+
+
+# Plan 06-39 (D-37, D-41, semantic-cache spec eval gate): cache pairs. A candidate names its anchor with pair_of;
+# the pair run stores the anchor and checks the candidate, so both sit in the same split.
+CACHE_PARAPHRASE = "cache_paraphrase"
+CACHE_NEAR_MISS = "cache_near_miss"
+CACHE_PAIR_CATEGORIES = (CACHE_PARAPHRASE, CACHE_NEAR_MISS)
+CACHE_PAIRS_PER_LANGUAGE_MINIMUM = 4
+NEAR_MISS_KIND_TAGS = (
+    "near_miss_code",
+    "near_miss_number",
+    "near_miss_language",
+    "near_miss_product",
+    "near_miss_date",
+)
+
+
+def _lexicon_pattern(source: str):
+    import regex
+
+    return regex.compile(source)
+
+
+@pytest.fixture(scope="module")
+def protected_patterns(lexicon):
+    patterns = lexicon["patterns"]
+    sources = [
+        patterns["exact_code"],
+        *patterns["quoted"],
+        patterns["url"],
+        patterns["email"],
+        patterns["currency_amount"],
+        patterns["number_with_unit"],
+        *patterns["explicit_date"],
+        patterns["version"],
+    ]
+    return [_lexicon_pattern(source) for source in sources]
+
+
+def _protected(text, protected_patterns):
+    return [match.group(0) for pattern in protected_patterns for match in pattern.finditer(text)]
+
+
+def _cache_items(items, category=None):
+    wanted = (category,) if category else CACHE_PAIR_CATEGORIES
+    return [item for item in items if item.category in wanted]
+
+
+def _by_id(items):
+    return {item.id: item for item in items}
+
+
+def test_each_language_has_the_cache_pair_minimums(items):
+    for category in CACHE_PAIR_CATEGORIES:
+        counts = collections.Counter(item.language for item in _cache_items(items, category))
+        for language in LANGUAGES:
+            assert counts[language] >= CACHE_PAIRS_PER_LANGUAGE_MINIMUM, (category, language)
+
+
+def test_every_pair_names_an_answerable_non_pair_anchor_in_the_same_split(items):
+    index = _by_id(items)
+    pairs = _cache_items(items)
+    assert pairs
+    for item in pairs:
+        anchor = index.get(item.pair_of)
+        assert anchor is not None, item.id
+        assert anchor.answerable and anchor.category not in CACHE_PAIR_CATEGORIES, item.id
+        assert anchor.category not in ("multi_turn", "selective_filter", "injection", "injection_evasive"), item.id
+        assert not anchor.conversation and anchor.retrieval_filters is None, item.id
+        assert anchor.split == item.split, item.id
+        assert item.provenance == "synthetic_fixture" and item.review_status == "approved", item.id
+        assert item.answerable and not item.conversation and item.retrieval_filters is None, item.id
+
+
+def test_pairs_are_fitted_on_dev_and_checked_on_test_in_every_language(items):
+    cells = collections.defaultdict(set)
+    for item in _cache_items(items):
+        cells[(item.category, item.language)].add(item.split)
+    for category in CACHE_PAIR_CATEGORIES:
+        for language in LANGUAGES:
+            assert cells[(category, language)] == {"dev", "test"}, (category, language)
+
+
+def test_paraphrases_ask_the_anchor_question_in_other_words_without_protected_tokens(items, protected_patterns):
+    index = _by_id(items)
+    for item in _cache_items(items, CACHE_PARAPHRASE):
+        anchor = index[item.pair_of]
+        assert anchor.language == item.language, item.id
+        assert _normalize_query(item.question) != _normalize_query(anchor.question), item.id
+        assert item.gold_evidence == anchor.gold_evidence, item.id
+        assert not _protected(item.question, protected_patterns), item.id
+        assert not _protected(anchor.question, protected_patterns), (item.id, anchor.id)
+        assert not [tag for tag in item.tags if tag.startswith("near_miss")], item.id
+
+
+def test_every_near_miss_has_one_kind_and_every_kind_occurs_per_language(items):
+    seen = collections.defaultdict(set)
+    for item in _cache_items(items, CACHE_NEAR_MISS):
+        kinds = [tag for tag in item.tags if tag in NEAR_MISS_KIND_TAGS]
+        assert len(kinds) == 1, item.id
+        seen[item.language].add(kinds[0])
+    for language in LANGUAGES:
+        assert seen[language] == set(NEAR_MISS_KIND_TAGS), language
+
+
+def test_near_misses_change_the_answer_and_keep_their_language_rule(items):
+    index = _by_id(items)
+    for item in _cache_items(items, CACHE_NEAR_MISS):
+        anchor = index[item.pair_of]
+        assert item.gold_evidence != anchor.gold_evidence or item.expected_answer != anchor.expected_answer, item.id
+        if "near_miss_language" in item.tags:
+            assert anchor.language != item.language, item.id
+        else:
+            assert anchor.language == item.language, item.id
+
+
+def test_code_near_misses_carry_a_different_code_verbatim(items):
+    index = _by_id(items)
+    for item in _cache_items(items, CACHE_NEAR_MISS):
+        if "near_miss_code" not in item.tags:
+            continue
+        codes = set(EXACT_CODE.findall(item.question))
+        anchor_codes = set(EXACT_CODE.findall(index[item.pair_of].question))
+        assert codes and anchor_codes and codes != anchor_codes, item.id
+        quotes = " ".join(span.quote for span in item.gold_evidence)
+        assert any(code in quotes for code in codes - anchor_codes), item.id
+
+
+def test_cache_pair_quotes_are_found_in_their_documents(items):
+    from rag_eval.matching import chunk_matches_span
+
+    documents = {doc.filename: doc for doc in load_corpus(CORPUS_DIR)}
+    for item in _cache_items(items):
+        for span in item.gold_evidence:
+            assert documents[span.document].language == item.language, item.id
+            assert any(
+                chunk_matches_span(span.document, chunk.text, span) for chunk in documents[span.document].chunks
+            ), (item.id, span.quote)

@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validat
 from rag_sidecar.contracts.ingest import DocType
 
 from .languages import Language
+from .omit import omit_none_schema
 from .scopes import ScopeFilter
 
 FilterLanguage = Language
@@ -24,6 +25,8 @@ ChunkingProfileStatus = Literal["building", "ready", "active", "retired"]
 ParentMode = Literal["none", "structure", "fixed"]
 ChunkingPreset = Literal["128/512", "256/1024", "256/2048", "custom"]
 ChunkingDecisionSource = Literal["fixture", "live"]
+VectorBackend = Literal["pgvector", "weaviate", "qdrant"]
+ExternalVectorBackend = Literal["weaviate", "qdrant"]
 
 _CHUNKING_ERROR_CODES = frozenset(
     {
@@ -106,6 +109,11 @@ class RetrievalOverrides(_Contract):
     leg_weights: RetrievalLegWeights | None = None
     rerank_model: str | None = Field(default=None, min_length=1)
     chunking_profile_by_doc_type: dict[DocType, Annotated[str, Field(min_length=1, max_length=128)]] = Field(default_factory=dict)
+    backend: VectorBackend | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        json_schema_extra=omit_none_schema,
+    )
 
 
 class DateRangeFilter(_Contract):

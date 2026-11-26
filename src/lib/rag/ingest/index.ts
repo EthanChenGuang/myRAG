@@ -1,3 +1,4 @@
+import { normalizeUploaderId } from './approval/decide';
 import { loadIngestConfig } from './config';
 import { getIngestDeps } from './deps';
 import { REGISTERED_STAGES, runIngestStages } from './runner';
@@ -59,6 +60,8 @@ export async function ingest(input: IngestInput): Promise<IngestResult> {
     work: { parseText: null, parserVersion: null, chunks: [], chunksWritten: 0 },
   };
   if (input.typeChange) ctx.state.typeChange = { ...input.typeChange };
+  const uploaderId = input.scope.kind === 'single' ? normalizeUploaderId(input.uploaderId) : null;
+  if (uploaderId) ctx.state.uploaderId = uploaderId;
   const trace = createIngestTrace(input.scope, input.trace);
   const result = await runIngestStages(ctx, REGISTERED_STAGES, { trace });
   if (trace?.owned) finishIngestTrace(trace, result);

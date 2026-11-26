@@ -94,6 +94,14 @@ export interface RunEvalOptions {
   ingestFixture?: import('./pglite-supabase.mts').FixtureDatabase;
   /** Ingest mode only: fill the database through the queue per routing mode or forced tier (D-40). */
   ingestRouting?: import('./ingest-mode.mts').IngestRoutingOptions;
+  /**
+   * Eval check only: load the table_split documents with this processing-profile doc type instead of the manifest's (the
+   * header-in-context check under RAG_TABLE_HEADER_REPEAT=always runs every profile). Changes the corpus hash, so such a run is
+   * never gated against the default baseline.
+   */
+  tableSplitDocType?: string;
+  /** Eval check only: ingestion switches for the in-process ingest build, also recorded in the retrieval env (never gated). */
+  ingestBuildEnv?: Record<string, string>;
   /** Reuse a prepared in-process eval session (the harness keeps the edge open). */
   retainInProcess?: InProcessEval;
   /** Named configuration: an env overlay (in-process only) and eval overrides sent with every request. */
@@ -245,6 +253,10 @@ export async function prepareInProcessEval(options: {
   chunkingProfiles?: import('../../src/lib/rag-eval/contracts.generated.ts').ChunkingProfile[];
   /** Ingest mode: also load the isolated table_split tenants (table-split.mts). */
   tableSplit?: boolean;
+  /** Ingest mode: the doc type the table_split documents are loaded with (RunEvalOptions.tableSplitDocType). */
+  tableSplitDocType?: string;
+  /** Ingest mode: ingestion switches for the fixture build, also recorded in the retrieval env (RunEvalOptions.ingestBuildEnv). */
+  ingestBuildEnv?: Record<string, string>;
   /** The run's requests set options.query_layer=true (D-38); with the env overlay it decides the fake query LLM install (D-39). */
   queryLayer?: boolean;
 }): Promise<InProcessEval> {
@@ -287,6 +299,8 @@ export async function prepareInProcessEval(options: {
       ...(seeding ? { chunkingProfiles } : {}),
       ...(ingestRouting ? { ingestRouting } : {}),
       ...(tableSplit ? { tableSplit: true } : {}),
+      ...(tableSplit && options.tableSplitDocType ? { tableSplitDocType: options.tableSplitDocType } : {}),
+      ...(options.ingestBuildEnv ? { ingestEnv: options.ingestBuildEnv } : {}),
     }));
   if (tableSplit && !fixture.tableSplitTenants) {
     if (!ingestFixture) await fixture.db.close().catch(() => undefined);
@@ -311,7 +325,7 @@ export async function prepareInProcessEval(options: {
   applyFixtureProcessEnv({
     edgeUrl: startedEdge.url,
     deploymentMode,
-    extra: { ...evalEnv, ...retrievalEnv, ...appEnv },
+    extra: { ...evalEnv, ...retrievalEnv, ...options.ingestBuildEnv, ...appEnv },
     vendorEmbeddingRoutes: !!(embeddingProfileId || ingestFixture),
   });
 
@@ -580,6 +594,8 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
           ingestFixture,
           ...(ingestRouting ? { ingestRouting } : {}),
           ...(routed.tableSplit.length > 0 ? { tableSplit: true } : {}),
+          ...(routed.tableSplit.length > 0 && options.tableSplitDocType ? { tableSplitDocType: options.tableSplitDocType } : {}),
+          ...(options.ingestBuildEnv ? { ingestBuildEnv: options.ingestBuildEnv } : {}),
           ...(runConfig && Object.keys(runConfig.env).length > 0 ? { envOverrides: runConfig.env } : {}),
           ...(runConfig?.chunkingProfiles?.length ? { chunkingProfiles: runConfig.chunkingProfiles } : {}),
           ...(options.appEnv && Object.keys(options.appEnv).length > 0 ? { appEnv: options.appEnv } : {}),

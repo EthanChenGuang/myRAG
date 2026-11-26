@@ -1,0 +1,17 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`chat route semantic cache (CACHE-01, D-32, D-33, A-3) > cache off: no cacheContext is passed, nothing is checked or stored, and the stream is today's 1`] = `
+"data: {"type":"start","messageMetadata":{"ragTraceId":"<trace>"},"messageId":"<id>"}
+
+data: {"type":"text-start","id":"fake-text"}
+
+data: {"type":"text-delta","id":"fake-text","delta":"A neutral placeholder answer."}
+
+data: {"type":"text-end","id":"fake-text"}
+
+data: {"type":"finish","messageMetadata":{"ragTraceId":"<trace>"}}
+
+data: [DONE]
+
+"
+`;

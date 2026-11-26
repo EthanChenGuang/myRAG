@@ -99,6 +99,8 @@ export async function loadTableSplitTenants(deps: {
   buildSourceKey: (source: 'config_upload', parts: { filename: string }) => string;
   mintScope: (kind: 'single' | 'personal', userId: string | null, organizationId: string | null) => TenantScope;
   scopeKey: (scope: TenantScope) => string;
+  /** Overrides every document's manifest doc type (the header-in-context check runs every processing profile). */
+  docType?: string;
 }): Promise<TableSplitTenant[]> {
   const fixtures = longTableFixtures();
   const tenants: TableSplitTenant[] = [];
@@ -131,7 +133,7 @@ export async function loadTableSplitTenants(deps: {
             file: new Uint8Array(fs.readFileSync(path.join('eval/fixtures/ingest', entry.path))),
             filename,
             mimeType: entry.mime,
-            docType: entry.doc_type as IngestInput['docType'],
+            docType: (deps.docType ?? entry.doc_type) as IngestInput['docType'],
             signal: new AbortController().signal,
           });
           if (result.status !== 'ready') {

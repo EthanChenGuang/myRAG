@@ -193,6 +193,7 @@ export async function POST(request: NextRequest) {
     }
     const requestedScopes = formData.getAll('scopes');
     let uploadScopes: string[] | undefined;
+    let uploadReplaces: string | undefined;
     if (pipeline === 'unified') {
       const resolved = await resolveUploadScope(request, formData, sessionUser);
       if ('response' in resolved) return resolved.response;
@@ -207,6 +208,21 @@ export async function POST(request: NextRequest) {
           : NextResponse.json({ success: false, error: scopeCheck.reason }, { status: 400 });
       }
       uploadScopes = scopeCheck.scopes;
+      // D-41: "Replaces…" names one current document of the same workspace; it applies to a single ingested file only.
+      const requestedReplaces = formData.get('replaces_document_id');
+      if (typeof requestedReplaces === 'string' && requestedReplaces.trim() !== '' && files.length > 1) {
+        return NextResponse.json({ success: false, error: 'replaces_needs_one_file' }, { status: 400 });
+      }
+      const { validateUploadReplaces } = await import('@/lib/rag');
+      // Every image upload starts its own lineage (a unique storage path), so it can never be the named document's lineage.
+      const replacesCheck = await validateUploadReplaces(ingestScope, requestedReplaces, { signal: request.signal, source: 'image_upload', sourceKey: '' });
+      if (!replacesCheck.ok) {
+        console.warn('[Ingest] upload replaces refused', { reason: replacesCheck.reason });
+        return replacesCheck.reason === 'unavailable'
+          ? NextResponse.json({ error: 'replaces_unavailable' }, { status: 503 })
+          : NextResponse.json({ success: false, error: replacesCheck.reason }, { status: 400 });
+      }
+      uploadReplaces = replacesCheck.replacesDocumentId;
     } else if (requestedScopes.length > 0) {
       // Tags count only where the unified pipeline ingests; the legacy path loads nothing new for them.
       console.warn('[Ingest] upload scope tags ignored', { count: requestedScopes.length, reason: processRag ? 'legacy_pipeline' : 'not_ingested' });
@@ -304,7 +320,7 @@ export async function POST(request: NextRequest) {
 
     let queuedIngest: EnqueueResult[] | null = null;
     if (ingestScope && pendingImages.length > 0) {
-      queuedIngest = await scheduleImageIngest(ingestScope, sessionUser.id, pendingImages, imageContext || undefined, startedAt, uploadScopes);
+      queuedIngest = await scheduleImageIngest(ingestScope, sessionUser.id, pendingImages, imageContext || undefined, startedAt, uploadScopes, uploadReplaces);
     }
 
     (async () => {
@@ -402,6 +418,7 @@ async function scheduleImageIngest(
   imageContext: string | undefined,
   startedAt: number,
   scopes?: string[],
+  replacesDocumentId?: string,
 ): Promise<EnqueueResult[] | null> {
   const deadlineAt = startedAt + INGEST_BUDGET_MS;
 
@@ -411,6 +428,7 @@ async function scheduleImageIngest(
     sourceKey: image.filePath,
     uploaderId,
     ...(scopes ? { scopes } : {}),
+    ...(replacesDocumentId ? { replacesDocumentId } : {}),
     file: image.bytes,
     filename: image.name,
     mimeType: image.type,

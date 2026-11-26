@@ -56,6 +56,15 @@ class SupersessionRules(_Contract):
     title_similarity_min: float = Field(gt=0, le=1)
     content_overlap_min_percent: int = Field(ge=1, le=100)
     min_conflicting_numbers: int = Field(ge=1)
+    title_min_chars: int = Field(default=3, ge=1, le=200, description="a normalized title shorter than this never matches")
+    year_pattern: str = Field(
+        default=r"(?:19|20)\d{2}", min_length=1, max_length=200, description="finds the year inside a matched version marker"
+    )
+    max_title_candidates: int = Field(default=100, ge=1, le=500, description="most recent same-type documents compared by title")
+    overlap_max_documents: int = Field(default=10, ge=0, le=50, description="most recent same-type documents compared by content")
+    overlap_max_chars_per_document: int = Field(default=20_000, ge=200, le=100_000)
+    overlap_min_sentence_chars: int = Field(default=12, ge=1, le=500)
+    hook_timeout_ms: int = Field(default=5_000, ge=100, le=60_000)
 
 
 class EffectiveDateExtraction(_Contract):

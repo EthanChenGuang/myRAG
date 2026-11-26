@@ -291,6 +291,22 @@ describe('answer metadata persistence (D-15)', () => {
     expect(saveAndReload(plain)).not.toHaveProperty('metadata');
   });
 
+  it('keeps the refusal flag and the stored refusal vote through save, reload and the UI shape (D-08)', () => {
+    const metadata = {
+      ragTraceId: 'f'.repeat(32),
+      refusal: true,
+      refusalFeedback: { vote: 'expected_answer', reasons: ['answer_exists', 'other'], at: '2026-11-26T10:00:00.000Z' },
+    };
+    const stored = JSON.parse(JSON.stringify(toDBMessages([assistantWith(metadata)]))) as DBMessage[];
+    expect(stored[0].metadata).toEqual(metadata);
+    const [restored] = fromDBMessages(stored);
+    expect(restored.metadata).toEqual(metadata);
+    expect(saveAndReload(fromUIMessage(toMessage(restored))).metadata).toEqual(metadata);
+
+    const malformed = saveAndReload(assistantWith({ ragTraceId: 'f'.repeat(32), refusal: 'yes', refusalFeedback: { vote: 'maybe' } }));
+    expect(malformed.metadata).toEqual({ ragTraceId: 'f'.repeat(32) });
+  });
+
   it('drops malformed values field by field and never persists unknown keys', () => {
     const metadata = {
       ...answerMetadata(),

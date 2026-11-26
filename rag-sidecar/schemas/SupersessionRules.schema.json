@@ -8,9 +8,46 @@
       "title": "Content Overlap Min Percent",
       "type": "integer"
     },
+    "hook_timeout_ms": {
+      "default": 5000,
+      "maximum": 60000,
+      "minimum": 100,
+      "title": "Hook Timeout Ms",
+      "type": "integer"
+    },
+    "max_title_candidates": {
+      "default": 100,
+      "description": "most recent same-type documents compared by title",
+      "maximum": 500,
+      "minimum": 1,
+      "title": "Max Title Candidates",
+      "type": "integer"
+    },
     "min_conflicting_numbers": {
       "minimum": 1,
       "title": "Min Conflicting Numbers",
+      "type": "integer"
+    },
+    "overlap_max_chars_per_document": {
+      "default": 20000,
+      "maximum": 100000,
+      "minimum": 200,
+      "title": "Overlap Max Chars Per Document",
+      "type": "integer"
+    },
+    "overlap_max_documents": {
+      "default": 10,
+      "description": "most recent same-type documents compared by content",
+      "maximum": 50,
+      "minimum": 0,
+      "title": "Overlap Max Documents",
+      "type": "integer"
+    },
+    "overlap_min_sentence_chars": {
+      "default": 12,
+      "maximum": 500,
+      "minimum": 1,
+      "title": "Overlap Min Sentence Chars",
       "type": "integer"
     },
     "rules_version": {
@@ -25,11 +62,27 @@
       "title": "Schema Version",
       "type": "integer"
     },
+    "title_min_chars": {
+      "default": 3,
+      "description": "a normalized title shorter than this never matches",
+      "maximum": 200,
+      "minimum": 1,
+      "title": "Title Min Chars",
+      "type": "integer"
+    },
     "title_similarity_min": {
       "exclusiveMinimum": 0,
       "maximum": 1,
       "title": "Title Similarity Min",
       "type": "number"
+    },
+    "year_pattern": {
+      "default": "(?:19|20)\\d{2}",
+      "description": "finds the year inside a matched version marker",
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Year Pattern",
+      "type": "string"
     }
   },
   "required": [

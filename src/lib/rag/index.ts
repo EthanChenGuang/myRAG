@@ -6,7 +6,7 @@ export type { RetrievalFilterInput } from './backend/types';
 export { LEXICAL_VERSION } from './lexical/chunk-text';
 export { RERANK_TEXT_VERSION } from './rerank/types';
 export { countTokens } from './ingest/text/tokens';
-export { isQueryLayerEnabled, isV2Pipeline, voiceServerCondenses } from './v2/switch';
+export { isQueryLayerEnabled, isSemanticCacheActive, isV2Pipeline, voiceServerCondenses } from './v2/switch';
 export { isSmallTalkResult } from './v2/result';
 export { buildHistoryWindow } from './query/history';
 export type { HistoryWindowLimits } from './query/history';
@@ -305,6 +305,22 @@ export type {
 export { activeUploadVocabulary, uploadScopesEnabled, validateUploadScopes, warnUploadScopesIgnored } from './ingest/scopes/upload';
 export type { UploadScopeFailure, UploadVocabularyEntry, ValidateUploadScopesResult } from './ingest/scopes/upload';
 export {
+  confirmSupersession,
+  dismissSupersession,
+  listSupersession,
+  replacesConfirmedAtOnce,
+  replacesEnabled,
+  undoSupersession,
+  validateUploadReplaces,
+} from './ingest/versions/admin';
+export type {
+  SupersessionAdminFailure,
+  SupersessionDocumentView,
+  SupersessionEntry,
+  UploadReplacesFailure,
+  ValidateUploadReplacesResult,
+} from './ingest/versions/admin';
+export {
   AUTO_APPLY_MIN_CONFIDENCE,
   MAX_QUERY_LENGTH as MAX_EFFECTIVE_DATES_QUERY_LENGTH,
   applyEffectiveDates,
@@ -411,6 +427,7 @@ export type { TenantFeedbackSettingsRow, TenantRetrievalLog } from './feedback-l
 export { purgeRetrievalLog, PurgeError } from './feedback-loop/purge';
 export type { PurgeCounts } from './feedback-loop/purge';
 export { isMiningWindowError, miningDisabledReason, MiningError, parseMiningDate, runMining } from './feedback-loop/mining';
+export { computeFeedbackLoopStats, isStatsWindowError, MAX_STATS_WINDOW_DAYS, StatsError } from './feedback-loop/stats';
 export {
   getReviewItem,
   getReviewItemChunks,
@@ -437,4 +454,20 @@ export {
 export { LabelRequestSchema, normalizeQuoteText, validateAndSaveLabel } from './feedback-loop/labels';
 export type { EvidenceFailureReason, LabelRequest, SaveLabelResult } from './feedback-loop/labels';
 export { REVIEW_SEARCH_POOL, ReviewSearchRequestSchema, searchForReviewItem } from './feedback-loop/review-search';
+export {
+  buildExport,
+  EXPORT_KINDS,
+  exportDictionary,
+  exportGolden,
+  exportTraining,
+  GoldenExportLineSchema,
+  markExported,
+  MarkExportedRequestSchema,
+} from './feedback-loop/exports';
+export type { ExportKind, GoldenExportLine, MarkExportedRequest, MarkItem, MarkResult } from './feedback-loop/exports';
 export type { ReviewSearchHit, ReviewSearchRequest, ReviewSearchResult } from './feedback-loop/review-search';
+export { hashSystemPromptTemplate } from './cache/keys';
+export { cacheSourcesFromResult, scheduleCacheStore } from './cache/store-after';
+export type { CacheStoreFacts, CacheStoreSource, ScheduleCacheStoreInput } from './cache/store-after';
+export { cacheHitMetadata, streamCachedAnswer } from './cache/hit-stream';
+export { isCacheHitResult } from './v2/result';

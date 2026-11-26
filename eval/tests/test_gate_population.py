@@ -53,14 +53,15 @@ def _result_for(item: GoldenItem, index: int, provenance: str | None = None) -> 
     )
 
 
-# Plan 06-38 appended the Phase 6 items after the snapshot was saved; the snapshot keeps the earlier set.
+# Plans 06-38 and 06-39 appended the Phase 6 items after the snapshot was saved; the snapshot keeps the earlier set.
+CACHE_PAIR_CATEGORIES = frozenset({"cache_paraphrase", "cache_near_miss"})
 PHASE6_TAGS = frozenset(
     {"phase6_protected_followup", "phase6_elliptical", "phase6_relative_time", "phase6_compound", "phase6_cross_lingual"}
 )
 
 
 def _added_after_snapshot(item: GoldenItem) -> bool:
-    return item.category == "small_talk" or bool(PHASE6_TAGS & set(item.tags))
+    return item.category == "small_talk" or item.category in CACHE_PAIR_CATEGORIES or bool(PHASE6_TAGS & set(item.tags))
 
 
 def fixture_shapes() -> dict[str, tuple[list[ItemResult], frozenset[str]]]:
