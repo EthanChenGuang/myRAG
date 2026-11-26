@@ -457,3 +457,236 @@ describe('initQuestionSourcesPanel', () => {
     expect(() => withDoc(async () => initQuestionSourcesPanel())).not.toThrow();
   });
 });
+
+const USER_A = 'aaaaaaaa-0000-4000-8000-000000000001';
+const USER_B = 'aaaaaaaa-0000-4000-8000-000000000002';
+
+function pilotUser(i: number, masked: string | null = `u•••@e••••••.com`) {
+  const id = `aaaaaaaa-0000-4000-8000-${String(i).padStart(12, '0')}`;
+  return { user_id: id, masked_email: masked, added_at: `2026-11-${String(20 - (i % 10)).padStart(2, '0')}T12:00:00Z` };
+}
+
+async function openPilot(doc: FakeDocument, answer: (path: string, init?: FetchInit) => FetchResult | Promise<FetchResult>, locale: Locale = 'en') {
+  const { QuestionSourcesPanel } = load();
+  workspaceSelector(doc);
+  settingsBlock(doc);
+  const { fetcher, calls } = fakeFetcher(answer);
+  const root = panelRoot(doc);
+  const panel = new QuestionSourcesPanel(root, { fetcher, locale, config: ON });
+  await panel.mount();
+  await panel.selectTab('pilot');
+  await flush();
+  await flush();
+  return { root, calls, panel, pilot: view(root, 'pilot') };
+}
+
+function pilotForm(pilot: FakeElement) {
+  const form = pilot.querySelector('form') as FakeElement;
+  const input = form.querySelector('input[name="pilot-user"]') as FakeElement;
+  const help = pilot.querySelector('[data-question-sources-pilot-help]') as FakeElement;
+  return { form, input, help };
+}
+
+describe('QuestionSourcesPanel: Pilot users', () => {
+  it('lists the masked e-mail or the user id in code, the date added and Remove pilot user with the user in its accessible name', async () => {
+    await withDoc(async (doc) => {
+      const users = [
+        { user_id: USER_A, masked_email: 'm•••@e••••••.com', added_at: '2026-11-20T12:00:00Z' },
+        { user_id: USER_B, masked_email: null, added_at: '2026-11-18T12:00:00Z' },
+      ];
+      const { pilot, calls } = await openPilot(doc, (path) =>
+        path.startsWith('/api/rag/admin/pilot-users') ? { ok: true, status: 200, body: { success: true, users, weight: 3, cap_share: 0.25, next_cursor: null } } : { ok: true, status: 200, body: status() },
+      );
+      expect(calls.at(-1)).toMatchObject({ method: 'GET', path: `/api/rag/admin/pilot-users?organizationId=${ORG}` });
+      expect(text(pilot)).toContain('Questions from pilot users are sampled 3 times as often, up to 25.0% of each weekly sample.');
+      const rows = pilot.querySelectorAll('tbody tr');
+      expect(rows).toHaveLength(2);
+      expect(text(rows[0].childNodes[0] as FakeElement)).toBe('m•••@e••••••.com');
+      expect(text(rows[0].childNodes[1] as FakeElement)).toBe('Nov 20, 2026');
+      expect((rows[1].childNodes[0] as FakeElement).querySelector('code')).toBeTruthy();
+      expect(text(rows[1].childNodes[0] as FakeElement)).toBe(USER_B);
+      const remove = rows[0].querySelector('button') as FakeElement;
+      expect(text(remove)).toBe('Remove pilot user');
+      expect(remove.getAttribute('aria-label')).toBe('Remove pilot user m•••@e••••••.com');
+      const { input, form } = pilotForm(pilot);
+      expect(input.getAttribute('autocomplete')).toBe('off');
+      expect(input.getAttribute('spellcheck')).toBe('false');
+      expect(pilot.querySelector(`label[for="${input.id}"]`)).toBeTruthy();
+      expect(text(form)).toContain('Add pilot user');
+    });
+  });
+
+  it('pilot.explain has no numbers when the route sends no weight', async () => {
+    await withDoc(async (doc) => {
+      const { pilot } = await openPilot(doc, (path) =>
+        path.startsWith('/api/rag/admin/pilot-users') ? { ok: true, status: 200, body: { success: true, users: [], next_cursor: null } } : { ok: true, status: 200, body: status() },
+      );
+      expect(text(pilot)).toContain('Questions from pilot users are sampled more often than others.');
+      expect(text(pilot)).toContain('No pilot users');
+      expect(text(pilot)).toContain('Add the people who try the system first.');
+      expect(pilotForm(pilot).form).toBeTruthy();
+    });
+  });
+
+  it('an empty field shows pilot.empty.field on submit and keeps focus; no request is made', async () => {
+    await withDoc(async (doc) => {
+      const { pilot, calls } = await openPilot(doc, (path) =>
+        path.startsWith('/api/rag/admin/pilot-users') ? { ok: true, status: 200, body: { success: true, users: [], next_cursor: null } } : { ok: true, status: 200, body: status() },
+      );
+      const before = calls.length;
+      const { form, input, help } = pilotForm(pilot);
+      input.value = '   ';
+      const event = form.dispatch('submit');
+      await flush();
+      expect(event.defaultPrevented).toBe(true);
+      expect(calls.length).toBe(before);
+      expect(text(help)).toBe('Enter an e-mail address or a user ID.');
+      expect(help.classList.contains('text-error')).toBe(true);
+      expect(input.getAttribute('aria-invalid')).toBe('true');
+      expect(doc.activeElement).toBe(input);
+    });
+  });
+
+  it('201 clears the field, reloads the list, says pilot.added and returns focus to the field; the button spins while in flight', async () => {
+    await withDoc(async (doc) => {
+      let release: (value: FetchResult) => void = () => {};
+      let listed: unknown[] = [];
+      const { pilot, calls } = await openPilot(doc, (path, init) => {
+        if (path.startsWith('/api/rag/admin/pilot-users') && init?.method === 'POST') return new Promise<FetchResult>((resolve) => (release = resolve));
+        if (path.startsWith('/api/rag/admin/pilot-users')) return { ok: true, status: 200, body: { success: true, users: listed, next_cursor: null } };
+        return { ok: true, status: 200, body: status() };
+      });
+      const { form, input } = pilotForm(pilot);
+      input.value = 'person@example.invalid';
+      form.dispatch('submit');
+      await flush();
+      const button = form.querySelector('button') as FakeElement;
+      expect(button.disabled).toBe(true);
+      expect(button.querySelector('.loading')).toBeTruthy();
+      expect(calls.at(-1)).toMatchObject({ method: 'POST', path: `/api/rag/admin/pilot-users?organizationId=${ORG}`, body: { user: 'person@example.invalid' } });
+      listed = [{ user_id: USER_A, masked_email: 'p•••@e••••••.invalid', added_at: '2026-11-26T12:00:00Z' }];
+      release({ ok: true, status: 201, body: { success: true, user: listed[0] } });
+      await flush();
+      await flush();
+      await flush();
+      expect(input.value).toBe('');
+      expect(button.disabled).toBe(false);
+      expect(calls.at(-1)).toMatchObject({ method: 'GET', path: `/api/rag/admin/pilot-users?organizationId=${ORG}` });
+      expect(pilot.querySelectorAll('tbody tr')).toHaveLength(1);
+      expect(text(doc.querySelector('[data-question-sources-status]'))).toBe('Pilot user added.');
+      expect(doc.activeElement).toBe(input);
+    });
+  });
+
+  it('404 user_not_found and 409 already_pilot show their messages at the field with aria-invalid', async () => {
+    for (const [code, statusCode, message] of [
+      ['user_not_found', 404, 'No user with that e-mail or ID belongs to this workspace.'],
+      ['already_pilot', 409, 'This user is already a pilot user.'],
+    ] as const) {
+      await withDoc(async (doc) => {
+        const { pilot } = await openPilot(doc, (path, init) => {
+          if (path.startsWith('/api/rag/admin/pilot-users') && init?.method === 'POST') return { ok: false, status: statusCode, body: { success: false, error: code } };
+          if (path.startsWith('/api/rag/admin/pilot-users')) return { ok: true, status: 200, body: { success: true, users: [], next_cursor: null } };
+          return { ok: true, status: 200, body: status() };
+        });
+        const { form, input, help } = pilotForm(pilot);
+        input.value = USER_A;
+        form.dispatch('submit');
+        await flush();
+        await flush();
+        expect(text(help)).toBe(message);
+        expect(help.classList.contains('text-error')).toBe(true);
+        expect(input.getAttribute('aria-invalid')).toBe('true');
+        expect(input.getAttribute('aria-describedby')).toContain(help.id);
+        expect(input.value).toBe(USER_A);
+      });
+    }
+  });
+
+  it('Remove pilot user asks first (default focus Keep pilot user); on 200 the row leaves and focus moves to the next row', async () => {
+    await withDoc(async (doc) => {
+      const users = [pilotUser(1, 'a•••@e••••••.com'), pilotUser(2, 'b•••@e••••••.com')];
+      const { pilot, calls } = await openPilot(doc, (path, init) => {
+        if (init?.method === 'DELETE') return { ok: true, status: 200, body: { success: true } };
+        if (path.startsWith('/api/rag/admin/pilot-users')) return { ok: true, status: 200, body: { success: true, users, next_cursor: null } };
+        return { ok: true, status: 200, body: status() };
+      });
+      const first = pilot.querySelectorAll('tbody tr')[0].querySelector('button') as FakeElement;
+      first.click();
+      await flush();
+      const dialog = doc.querySelector('dialog') as FakeElement;
+      expect(dialog).toBeTruthy();
+      expect(text(dialog)).toContain('Remove this pilot user?');
+      expect(text(dialog)).toContain('a•••@e••••••.com goes back to the normal sampling rate.');
+      expect(text(doc.activeElement)).toBe('Keep pilot user');
+      const confirm = dialog.querySelectorAll('button').find((b) => text(b) === 'Remove pilot user') as FakeElement;
+      confirm.click();
+      await flush();
+      await flush();
+      expect(calls.at(-1)).toMatchObject({ method: 'DELETE', path: `/api/rag/admin/pilot-users?organizationId=${ORG}&user_id=${users[0].user_id}` });
+      const rows = pilot.querySelectorAll('tbody tr');
+      expect(rows).toHaveLength(1);
+      expect(text(doc.querySelector('[data-question-sources-status]'))).toBe('Pilot user removed.');
+      expect(doc.activeElement).toBe(rows[0].querySelector('button'));
+    });
+  });
+
+  it('Keep pilot user sends nothing; a 404 on remove says pilot.gone and reloads the list', async () => {
+    await withDoc(async (doc) => {
+      const users = [pilotUser(1)];
+      const { pilot, calls } = await openPilot(doc, (path, init) => {
+        if (init?.method === 'DELETE') return { ok: false, status: 404, body: { success: false, error: 'not_found' } };
+        if (path.startsWith('/api/rag/admin/pilot-users')) return { ok: true, status: 200, body: { success: true, users, next_cursor: null } };
+        return { ok: true, status: 200, body: status() };
+      });
+      const remove = pilot.querySelector('tbody button') as FakeElement;
+      remove.click();
+      await flush();
+      (doc.querySelector('dialog') as FakeElement).querySelectorAll('button').find((b) => text(b) === 'Keep pilot user')!.click();
+      await flush();
+      expect(calls.some((c) => c.method === 'DELETE')).toBe(false);
+      remove.click();
+      await flush();
+      (doc.querySelector('dialog') as FakeElement).querySelectorAll('button').find((b) => text(b) === 'Remove pilot user')!.click();
+      await flush();
+      await flush();
+      await flush();
+      expect(text(doc.querySelector('[data-question-sources-status]'))).toBe('This pilot user was already removed. The list has been reloaded.');
+      expect(calls.at(-1)).toMatchObject({ method: 'GET', path: `/api/rag/admin/pilot-users?organizationId=${ORG}` });
+    });
+  });
+
+  it('60 pilot users: 50 rows, then Load more pilot users appends the rest and every Remove stays reachable', async () => {
+    await withDoc(async (doc) => {
+      const all = Array.from({ length: 60 }, (_, i) => pilotUser(i + 1));
+      const { pilot, calls } = await openPilot(doc, (path) => {
+        if (path.startsWith('/api/rag/admin/pilot-users') && path.includes('cursor=')) return { ok: true, status: 200, body: { success: true, users: all.slice(50), next_cursor: null } };
+        if (path.startsWith('/api/rag/admin/pilot-users')) return { ok: true, status: 200, body: { success: true, users: all.slice(0, 50), next_cursor: 'CURSOR-1' } };
+        return { ok: true, status: 200, body: status() };
+      });
+      expect(pilot.querySelectorAll('tbody tr')).toHaveLength(50);
+      const more = buttonsByText(pilot, 'Load more pilot users');
+      expect(more).toHaveLength(1);
+      more[0].click();
+      await flush();
+      await flush();
+      expect(calls.at(-1)?.path).toBe(`/api/rag/admin/pilot-users?organizationId=${ORG}&cursor=CURSOR-1`);
+      const rows = pilot.querySelectorAll('tbody tr');
+      expect(rows).toHaveLength(60);
+      expect(rows.every((r) => r.querySelector('button') && !(r.querySelector('button') as FakeElement).disabled)).toBe(true);
+      expect(buttonsByText(pilot, 'Load more pilot users')).toHaveLength(0);
+    });
+  });
+
+  it('renders server user ids and masked e-mails as text only, and never unmasks', async () => {
+    await withDoc(async (doc) => {
+      const users = [{ user_id: USER_A, masked_email: XSS, added_at: '2026-11-20T12:00:00Z' }];
+      const { pilot } = await openPilot(doc, (path) =>
+        path.startsWith('/api/rag/admin/pilot-users') ? { ok: true, status: 200, body: { success: true, users, next_cursor: null } } : { ok: true, status: 200, body: status() },
+      );
+      expect(text(pilot)).toContain(XSS);
+      expect(injectedElements(doc)).toEqual([]);
+      expect(doc.innerHtmlWrites).toBe(0);
+    });
+  });
+});
