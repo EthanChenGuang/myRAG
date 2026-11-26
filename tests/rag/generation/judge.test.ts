@@ -1,16 +1,22 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import cases from '../../fixtures/rag/model-family-cases.json';
+import rawJudgeThresholds from '../../../eval/config/groundedness-judge-thresholds.json';
+import { AnswerRecordSchema } from '@/lib/rag-eval/contracts.generated';
 import { REFERENCE_NOTICE } from '@/lib/rag/context/wrap';
 import {
   JUDGE_PROMPT,
   JUDGE_RUBRIC_VERSION,
   estimateJudgeCost,
+  judgeAnswerLabel,
   judgeClaims,
   judgeVersion,
+  loadJudgeThresholds,
+  loadJudgeThresholdsFromData,
   modelFamily,
   setClaimJudgeForTests,
   type ClaimJudgeCall,
   type JudgeClaimsInput,
+  type JudgeVerdict,
 } from '@/lib/rag/generation/judge';
 
 afterEach(() => {
@@ -197,5 +203,87 @@ describe('estimateJudgeCost', () => {
     const prices = { 'fixture/judge': { input_usd_per_mtok: 2, output_usd_per_mtok: 8 } };
     expect(estimateJudgeCost('fixture/judge', { inputTokens: 1000, outputTokens: 500 }, prices)).toBeCloseTo(0.006, 10);
     expect(estimateJudgeCost('fixture/judge', { inputTokens: null, outputTokens: 500 }, prices)).toBeNull();
+  });
+});
+
+describe('judgeAnswerLabel (D-27)', () => {
+  const recordSchema = AnswerRecordSchema.shape.groundedness;
+  const TEST_JUDGE = 'fixture/judge-model';
+  const NOW = new Date('2026-11-26T10:00:00.000Z');
+  const verdicts = (unsupported: number, total = 10): JudgeVerdict[] =>
+    Array.from({ length: total }, (_, index) => ({ index, verdict: index < unsupported ? 'unsupported' : 'supported', evidenceRef: null }));
+  const cell = (overrides: Record<string, unknown> = {}) => ({
+    judge_model: TEST_JUDGE,
+    judge_version: judgeVersion(TEST_JUDGE),
+    language: 'it',
+    max_unsupported_share: 0.2,
+    precision: 0.9,
+    recall: 0.8,
+    run_ids: ['run-1'],
+    config_hash: 'hash-1',
+    fitted_at: null,
+    source: 'calibrated',
+    ...overrides,
+  });
+
+  it('commits the thresholds file with schema_version 1 and no cell', () => {
+    expect(rawJudgeThresholds).toEqual({ cells: [], schema_version: 1 });
+    expect(loadJudgeThresholds().cells.size).toBe(0);
+  });
+
+  it('keeps an uncalibrated language not_checked judge_uncalibrated', () => {
+    const result = judgeAnswerLabel({ judgements: verdicts(1), judgeModel: JUDGE, judgeVersion: judgeVersion(JUDGE), language: 'it', latencyMs: 40, now: () => NOW });
+    expect(result).toMatchObject({ status: 'not_checked', label: 'not_checked', reason: 'judge_uncalibrated', score: null, threshold: null });
+    expect(recordSchema.parse(result)).toEqual(result);
+  });
+
+  it('labels with the cell of (judge_model, judge_version, language): 1 of 10 verified, 3 of 10 possibly_unreliable', () => {
+    const { cells } = loadJudgeThresholdsFromData({ schema_version: 1, cells: [cell()] });
+    const base = { judgeModel: TEST_JUDGE, judgeVersion: judgeVersion(TEST_JUDGE), language: 'it', latencyMs: 40, cells, now: () => NOW };
+    const verified = judgeAnswerLabel({ ...base, judgements: verdicts(1) });
+    expect(verified).toEqual({
+      status: 'scored',
+      label: 'verified',
+      scorer: 'llm_judge',
+      score: 0.9,
+      threshold: 0.8,
+      thresholdSource: 'calibrated',
+      reason: null,
+      truncated: false,
+      latencyMs: 40,
+      checkedAt: NOW.toISOString(),
+    });
+    expect(recordSchema.parse(verified)).toEqual(verified);
+    const flagged = judgeAnswerLabel({ ...base, judgements: verdicts(3) });
+    expect(flagged).toMatchObject({ status: 'scored', label: 'possibly_unreliable', scorer: 'llm_judge' });
+    expect(flagged.score).toBeCloseTo(0.7, 10);
+    expect(recordSchema.parse(flagged)).toEqual(flagged);
+  });
+
+  it('counts not_enough_info as unsupported', () => {
+    const { cells } = loadJudgeThresholdsFromData({ schema_version: 1, cells: [cell()] });
+    const judgements = verdicts(0).map((verdict, index) => (index < 3 ? { ...verdict, verdict: 'not_enough_info' as const } : verdict));
+    const result = judgeAnswerLabel({ judgements, judgeModel: TEST_JUDGE, judgeVersion: judgeVersion(TEST_JUDGE), language: 'it', latencyMs: 1, cells });
+    expect(result.label).toBe('possibly_unreliable');
+  });
+
+  it('applies no cell of another judge version, model or language', () => {
+    for (const other of [cell({ judge_version: 'other-version' }), cell({ judge_model: 'fixture/other' }), cell({ language: 'en' })]) {
+      const { cells } = loadJudgeThresholdsFromData({ schema_version: 1, cells: [other] });
+      const result = judgeAnswerLabel({ judgements: verdicts(1), judgeModel: TEST_JUDGE, judgeVersion: judgeVersion(TEST_JUDGE), language: 'it', latencyMs: 1, cells });
+      expect(result).toMatchObject({ status: 'not_checked', reason: 'judge_uncalibrated' });
+    }
+  });
+
+  it('never applies a fixture cell outside an eval run, even for a production model id', () => {
+    const { cells } = loadJudgeThresholdsFromData({ schema_version: 1, cells: [cell({ judge_model: JUDGE, judge_version: judgeVersion(JUDGE), source: 'fixture' })] });
+    const base = { judgements: verdicts(1), judgeModel: JUDGE, judgeVersion: judgeVersion(JUDGE), language: 'it', latencyMs: 1, cells };
+    expect(judgeAnswerLabel(base)).toMatchObject({ status: 'not_checked', reason: 'judge_uncalibrated' });
+    expect(judgeAnswerLabel({ ...base, allowFixtureCells: true })).toMatchObject({ status: 'scored', label: 'verified' });
+  });
+
+  it('ignores an invalid thresholds file', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(loadJudgeThresholdsFromData({ schema_version: 2, cells: 'x' }).cells.size).toBe(0);
   });
 });

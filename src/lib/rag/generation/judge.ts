@@ -240,3 +240,23 @@ export async function judgeClaims(input: JudgeClaimsInput): Promise<JudgeClaimsR
   console.log('[Groundedness] Judge', { claims: input.claims.length, judged: verdicts.length, latencyMs: usage.latencyMs });
   return { status: 'judged', judgeModel, judgeVersion: version, verdicts, usage };
 }
+
+export type JudgeThresholdCells = ReadonlyMap<string, never>;
+export function loadJudgeThresholdsFromData(_data: unknown): { cells: JudgeThresholdCells } {
+  return { cells: new Map() };
+}
+export function loadJudgeThresholds(): { cells: JudgeThresholdCells } {
+  return { cells: new Map() };
+}
+export function judgeAnswerLabel(_input: {
+  judgements: readonly JudgeVerdict[];
+  judgeModel: string;
+  judgeVersion: string;
+  language: string;
+  latencyMs: number;
+  cells?: JudgeThresholdCells;
+  allowFixtureCells?: boolean;
+  now?: () => Date;
+}): import('./groundedness').AnswerGroundedness {
+  return { status: 'pending' } as never;
+}

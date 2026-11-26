@@ -429,3 +429,67 @@ describe('createPendingStep', () => {
     expect(await step({ answerId: input.answerId, input, admin: {} as SupabaseClient })).toBe(judged);
   });
 });
+
+describe('createClaimStep with the judge (D-25, D-27, D-28)', () => {
+  const JUDGE = 'google/gemini-2.5-flash';
+
+  it('judges a language without HHEM, stores the verdicts, keeps the answer label uncalibrated and records the judge span', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const traces: Array<{ stages: Array<{ name: string; attributes?: Record<string, unknown> }> }> = [];
+    const h = harness(
+      {
+        judge: vi.fn(async (input: JudgeClaimsInput): Promise<JudgeClaimsResult> => {
+          h.judgeCalls.push(input);
+          return {
+            status: 'judged',
+            judgeModel: JUDGE,
+            judgeVersion: 'abcdef0123456789',
+            verdicts: input.claims.map((claim, i) => ({ index: claim.index, verdict: i === 0 ? 'supported' : 'not_enough_info', evidenceRef: null })),
+            usage: { inputTokens: 300, outputTokens: 40, latencyMs: 25, costUsd: null },
+          };
+        }),
+        langfuse: () => langfuse(),
+        exportTrace: vi.fn(async (trace) => {
+          traces.push(trace as never);
+        }),
+      },
+      { llmJudge: true, judgeModel: JUDGE },
+    );
+    const outcome = await h.step(h.context(finishInput({ answerText: IT_ANSWER }, 'it')));
+    expect(h.deps.request).not.toHaveBeenCalled();
+    expect(h.judgeCalls).toHaveLength(1);
+    expect(h.judgeCalls[0]).toMatchObject({ language: 'it', generatorModelId: 'openai/gpt-4o-mini', judgeModel: JUDGE });
+
+    const checks = h.checksWrites[0]!;
+    const factual = checks.sentences!.filter((sentence) => sentence.factual);
+    expect(factual.map((sentence) => [sentence.support, sentence.scorer, sentence.reason])).toEqual([
+      ['supported', 'llm_judge', null],
+      ['unsupported', 'llm_judge', 'not_enough_info'],
+    ]);
+    expect(checks.claims).toMatchObject({ total: 2, unsupported: 1, not_checked: 0, scorer: 'llm_judge', judge_version: 'abcdef0123456789' });
+    expect(h.reasons).toEqual(['claim_unsupported']);
+
+    expect(h.groundednessWrites).toHaveLength(1);
+    expect(h.groundednessWrites[0]).toMatchObject({ status: 'not_checked', label: 'not_checked', reason: 'judge_uncalibrated' });
+    expect(outcome?.groundedness).toEqual(h.groundednessWrites[0]);
+
+    const span = traces[0]!.stages.find((stage) => stage.name === 'groundedness_judge');
+    expect(span?.attributes).toMatchObject({ input_tokens: 300, output_tokens: 40, latency_ms: 25 });
+    expect(span?.attributes).not.toHaveProperty('estimated_cost_usd');
+  });
+
+  it('marks every claim not_checked with the judge reason and keeps the answer label when the judge does not run', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const h = harness(
+      {
+        judge: vi.fn(async (): Promise<JudgeClaimsResult> => ({ status: 'not_checked', reason: 'judge_same_family', judgeModel: JUDGE, judgeVersion: null, usage: null })),
+      },
+      { llmJudge: true, judgeModel: JUDGE },
+    );
+    await h.step(h.context(finishInput({ answerText: IT_ANSWER }, 'it')));
+    const factual = h.checksWrites[0]!.sentences!.filter((sentence) => sentence.factual);
+    expect(factual.every((sentence) => sentence.support === 'not_checked' && sentence.reason === 'judge_same_family')).toBe(true);
+    expect(h.groundednessWrites).toEqual([]);
+    expect(h.reasons).toEqual([]);
+  });
+});
