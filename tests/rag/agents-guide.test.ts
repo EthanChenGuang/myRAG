@@ -159,3 +159,25 @@ describe('AGENTS.md reflects Phase 3.2 language support and ingestion hardening'
     for (const command of ['rag:fingerprint', 'rag:rebuild', 'rag:translate', 'rag:reembed -- --recaption']) expect(section16).toContain(command);
   });
 });
+
+describe('AGENTS.md reflects Phase 6.1 (embedding fine-tuning)', () => {
+  const section6 = AGENTS.slice(AGENTS.indexOf('## 6. RAG & Data Pipeline'), AGENTS.indexOf('## 7. AI Model Management'));
+
+  test.each([
+    '### Embedding fine-tuning (Phase 6.1)',
+    '`RAG_FINETUNE=off`',
+    '`ft-a-1024`',
+    '`ft-b-1024`',
+    '`npm run rag:finetune --`',
+    '`npm run rag:embedding -- ft-consent',
+    '`python -m rag_eval.finetune',
+    'prune',
+    '06.1-19',
+  ])('section 6 mentions %s', (fragment) => {
+    expect(section6).toContain(fragment);
+  });
+
+  test('the fold sentence names Phase 6.1', () => {
+    expect(AGENTS).toContain('Phase 6.1 (0651–0654)');
+  });
+});
