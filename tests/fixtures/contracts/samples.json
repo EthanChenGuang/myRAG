@@ -7274,10 +7274,17 @@
     },
     "SupersessionRules": {
       "content_overlap_min_percent": 70,
+      "hook_timeout_ms": 5000,
+      "max_title_candidates": 100,
       "min_conflicting_numbers": 1,
+      "overlap_max_chars_per_document": 20000,
+      "overlap_max_documents": 10,
+      "overlap_min_sentence_chars": 12,
       "rules_version": "supersession@1",
       "schema_version": 1,
-      "title_similarity_min": 0.9
+      "title_min_chars": 3,
+      "title_similarity_min": 0.9,
+      "year_pattern": "(?:19|20)\\d{2}"
     },
     "TrainingNegative": {
       "chunk_id": "chunk-0003",
