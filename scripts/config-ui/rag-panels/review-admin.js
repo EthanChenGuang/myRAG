@@ -1028,7 +1028,7 @@ class ReviewAdminPanel {
         this.el('th', { className: 'text-xs font-semibold', text: this.t('col.expert'), attrs: { scope: 'col' } }),
         this.el('th', { className: 'text-xs font-semibold', text: this.t('col.userId'), attrs: { scope: 'col' } }),
         this.el('th', { className: 'text-xs font-semibold', text: this.t('col.granted'), attrs: { scope: 'col' } }),
-        this.el('th', { attrs: { scope: 'col' } }, [this.el('span', { className: 'sr-only', text: this.t('action.revoke') })]),
+        this.el('th', { className: 'hidden md:table-cell', attrs: { scope: 'col' } }, [this.el('span', { className: 'sr-only', text: this.t('action.revoke') })]),
       ]);
       const rows = this.grants.map((grant) => this.renderGrantRow(grant));
       const table = this.el('table', { className: 'table table-sm', attrs: { 'data-review-admin-experts': true } }, [
@@ -1056,17 +1056,23 @@ class ReviewAdminPanel {
     const granted = grant.createdAt
       ? this.el('time', { text: this.h.formatDate(grant.createdAt, this.locale), attrs: { datetime: grant.createdAt } })
       : this.el('span', {}, [this.el('span', { text: '—', attrs: { 'aria-hidden': 'true' } }), this.el('span', { className: 'sr-only', text: this.t('col.noDate') })]);
-    const revoke = this.el('button', {
-      className: 'btn btn-outline md:btn-sm',
-      text: this.t('action.revoke'),
-      attrs: { type: 'button', 'aria-label': this.t('action.revokeAria', { expert: grant.email }), 'data-review-admin-revoke': true, 'data-review-admin-action': true },
-    });
-    revoke.addEventListener('click', () => this.confirmRevoke(grant, revoke));
+    const revokeButton = (extra) => {
+      const button = this.el('button', {
+        className: `btn btn-outline md:btn-sm whitespace-nowrap ${extra}`,
+        text: this.t('action.revoke'),
+        attrs: { type: 'button', 'aria-label': this.t('action.revokeAria', { expert: grant.email }), 'data-review-admin-revoke': true, 'data-review-admin-action': true },
+      });
+      button.addEventListener('click', () => this.confirmRevoke(grant, button));
+      return button;
+    };
     return this.el('tr', { attrs: { 'data-review-admin-expert': true } }, [
-      this.el('th', { className: 'font-normal break-words', text: grant.email, attrs: { scope: 'row', translate: 'no' } }),
-      this.el('td', { className: 'font-mono text-xs break-all', text: grant.userId, attrs: { translate: 'no' } }),
-      this.el('td', { className: 'whitespace-nowrap' }, [granted]),
-      this.el('td', { className: 'text-right' }, [revoke]),
+      this.el('th', { className: 'font-normal break-words align-top', attrs: { scope: 'row', translate: 'no' } }, [
+        this.el('span', { text: grant.email }),
+        this.el('div', { className: 'mt-2 md:hidden' }, [revokeButton('')]),
+      ]),
+      this.el('td', { className: 'font-mono text-xs break-all min-w-[10rem] align-top', text: grant.userId, attrs: { translate: 'no' } }),
+      this.el('td', { className: 'whitespace-nowrap align-top' }, [granted]),
+      this.el('td', { className: 'hidden md:table-cell text-right' }, [revokeButton('')]),
     ]);
   }
 
