@@ -533,6 +533,18 @@ html .chat-composer-card button.chat-composer-model-pill.is-open {
     border-radius: 9999px;
   }
 
+  /* The expanded card is taller than the dock's blur band, and the dock is its backdrop root, so a glass
+     fill shows two tints (band vs. bare messages). While typing, the card is solid. */
+  .chat-input-container[data-composer='expanded'] .chat-composer-fill {
+    background-color: var(--chat-surface);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+
+  .chat-composer-card button {
+    touch-action: manipulation;
+  }
+
   .chat-input-container[data-composer='collapsed'] .chat-composer-text-row {
     margin-bottom: 0 !important;
     padding-left: 36px;

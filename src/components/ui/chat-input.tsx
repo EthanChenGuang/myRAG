@@ -374,6 +374,8 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
   const autoResize = useCallback((textarea: HTMLTextAreaElement) => {
     // Store current height to prevent jumps
     const currentHeight = textarea.offsetHeight;
+    // Measuring with height:auto resets the inner scroll; keep it so the caret line stays put.
+    const currentScrollTop = textarea.scrollTop;
 
     // Reset height to get accurate scrollHeight
     textarea.style.height = 'auto';
@@ -404,6 +406,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
     } else {
       textarea.style.height = `${currentHeight}px`;
     }
+    textarea.scrollTop = currentScrollTop;
 
     // Dynamic mobile margin: expand when textarea grows past single line (~56px)
     // Use ref to avoid stale closure issues
@@ -413,13 +416,6 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
       if (isTextareaExpandedRef.current) setIsTextareaExpanded(false);
     }
 
-    // Mobile-specific adjustments
-    if (typeof window !== 'undefined' && window.innerWidth <= 1024) {
-      // Ensure textarea remains visible during resize on mobile
-      requestAnimationFrame(() => {
-        textarea.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      });
-    }
   }, []);
 
   // Initialize textarea height on mount to prevent jump
