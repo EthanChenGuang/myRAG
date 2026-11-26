@@ -1212,6 +1212,36 @@
       "name": "QDRANT_READ_API_KEY",
       "status": "managed",
       "knownGaps": []
+    },
+    {
+      "name": "RAG_SECTION_RULES",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_PAGE_BOILERPLATE",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_DOC_ATTRIBUTES",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_ATTRIBUTE_HEADER",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_ATTRIBUTE_FILTER",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_LEXICAL_QUANTITY",
+      "status": "managed",
+      "knownGaps": []
     }
   ]
 }
