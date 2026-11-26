@@ -274,7 +274,7 @@ describe('outputGuardTransform on the real streamText (D-35, D-38)', () => {
 
 describe('guard slot of buildAnswerTransforms (D-35, D-36)', () => {
   it('off installs no guard transform: the 05.2-09 array is unchanged', () => {
-    expect(readAnswerConfig({ RAG_OUTPUT_GUARD: 'off' } as NodeJS.ProcessEnv).outputGuard).toBe('off');
+    expect(readAnswerConfig({ RAG_OUTPUT_GUARD: 'off' }).outputGuard).toBe('off');
     const citation: Transform = () => new TransformStream();
     expect(buildAnswerTransforms({ citationTransforms: [citation] })).toEqual([citation]);
   });

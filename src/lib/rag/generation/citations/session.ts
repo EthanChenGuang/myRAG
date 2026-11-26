@@ -58,6 +58,8 @@ export interface ClaudeStartInput {
   outputCap?: number | null;
   onError(error: unknown): void;
   fetch?: typeof fetch;
+  /** Phase 5.2 D-35: transforms after the marker and alias transforms (the output guard); absent adds none. */
+  extraTransforms?: Array<StreamTextTransform<ToolSet>>;
 }
 
 export interface CitationFinishMetadata {
@@ -258,6 +260,7 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
         ...(typeof start.outputCap === 'number' ? { outputCap: start.outputCap } : {}),
         abortSignal: start.abortSignal,
         onError: start.onError,
+        ...(start.extraTransforms && start.extraTransforms.length > 0 ? { extraTransforms: start.extraTransforms } : {}),
       });
       return claude;
     },
