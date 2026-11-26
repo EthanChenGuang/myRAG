@@ -4,7 +4,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { NextRequest } from 'next/server';
 import type { PGlite } from '@electric-sql/pglite';
 import { env } from '@/lib/env';
-import { noKnowledgeBaseResponse } from '@/lib/rag/generation/messages';
+import { knowledgeBaseUnavailableMessage, noKnowledgeBaseResponse } from '@/lib/rag/generation/messages';
+import { LANGUAGES_NOT_CONFIGURED } from '@/lib/rag/lang/resolve';
 import { mintScope } from '@/lib/rag/tenant/scope';
 import { mintVoiceToken } from '@/lib/rag/tenant/voice-token';
 import { loadPinnedEvalEnv } from '../../eval/harness/eval-env.mts';
@@ -433,6 +434,62 @@ describe('defaults characterization (Phase 4.1 D-01 set, explicit)', () => {
       expect(rerank?.detail).toBe('auto:local_bm25');
     }
     expect(fixture.edge.calls.filter((call) => call.path.endsWith('/rerank')).length).toBe(rerankBefore);
+  });
+});
+
+describe('defaults characterization (explicit v2 without languages)', () => {
+  let fixture: RouteFixture;
+
+  beforeAll(async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+    fixture = await startRouteFixture({
+      deploymentMode: 'single-tenant',
+      env: { ...D01_ENV, RAG_SUPPORTED_LANGUAGES: undefined, RAG_PRIMARY_LANGUAGE: undefined, EXA_API_KEY: EXA_PLACEHOLDER },
+    });
+  });
+
+  afterAll(async () => {
+    await fixture.close();
+    vi.useRealTimers();
+  });
+
+  beforeEach(() => {
+    h.capture.reset();
+    h.exa.reset();
+    h.traced.length = 0;
+    quietConsole();
+  });
+
+  it('explicit v2 without languages reports the knowledge base as unavailable', async () => {
+    const answerable = readGolden().find((item) => item.answerable && item.category === 'general') as GoldenItem;
+    const hybridBefore = hybridCalls(fixture);
+    const legacyBefore = legacyMatchCalls(fixture);
+    const { body } = await postChat(fixture, answerable.question, { ragMode: 'strict', settings: { webSearch: false } });
+    expect(h.traced.at(-1)).toMatchObject({ status: 'error', reason: LANGUAGES_NOT_CONFIGURED });
+    expect(body).toContain(JSON.stringify(knowledgeBaseUnavailableMessage('en')).slice(1, -1));
+    expect(body).not.toContain(NOT_AVAILABLE);
+    expect(LOCALIZED_NOT_AVAILABLE.some((title) => body.includes(title))).toBe(false);
+    expect(h.capture.streamText).not.toHaveBeenCalled();
+    expect(hybridCalls(fixture) - hybridBefore).toBe(0);
+    expect(legacyMatchCalls(fixture) - legacyBefore).toBe(0);
+  });
+
+  it('explicit v2 without languages continues with web search on', async () => {
+    const answerable = readGolden().find((item) => item.answerable && item.category === 'general') as GoldenItem;
+    const hybridBefore = hybridCalls(fixture);
+    const legacyBefore = legacyMatchCalls(fixture);
+    const { body } = await postChat(fixture, answerable.question, { ragMode: 'strict', settings: { webSearch: true } });
+    expect(body).not.toContain(NOT_AVAILABLE);
+    expect(body).not.toContain(UNAVAILABLE_EN);
+    expect(h.capture.streamText).toHaveBeenCalledTimes(1);
+    expect(Object.keys(h.capture.calls[0].tools ?? {})).toContain('webSearch');
+    const system = systemTextOf(h.capture.calls[0]);
+    for (const evidence of answerable.gold_evidence) expect(system).not.toContain(evidence.quote);
+    if (h.traced.length === 0) await h.capture.calls[0].onFinish?.({ text: '' });
+    expect(h.traced.at(-1)).toMatchObject({ status: 'degraded', reason: LANGUAGES_NOT_CONFIGURED });
+    expect(hybridCalls(fixture) - hybridBefore).toBe(0);
+    expect(legacyMatchCalls(fixture) - legacyBefore).toBe(0);
   });
 });
 
