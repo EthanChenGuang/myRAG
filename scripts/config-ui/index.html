@@ -10917,6 +10917,13 @@
 
                     if (!response.ok) {
                         console.error('Failed to save config');
+                        let rejectedBody = null;
+                        try {
+                            rejectedBody = await response.json();
+                        } catch {
+                            rejectedBody = null;
+                        }
+                        document.dispatchEvent(new CustomEvent('rag:config-save-rejected', { detail: { status: response.status, body: rejectedBody } }));
                         if (desktopIndicator) {
                             desktopIndicator.textContent = 'Failed to save configuration';
                             desktopIndicator.classList.remove('alert-info', 'alert-success');

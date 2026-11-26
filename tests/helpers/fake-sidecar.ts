@@ -10,6 +10,10 @@ const PARSE_FIXTURES = join(process.cwd(), 'eval/fixtures/parse');
 const PARSE_CHAIN_MANIFEST = join(PARSE_FIXTURES, 'chain/manifest.json');
 /** The hidden-text PDF corpus of plan 03.2-35 and the report each file is expected to get. */
 const SECURITY_PDF_FIXTURES = join(process.cwd(), 'eval/fixtures/security/pdf');
+/** The Word corpus of plan 03.2-36 and the link corpus of plan 03.2-39 (its PDFs carry link annotations). */
+const SECURITY_DOCX_FIXTURES = join(process.cwd(), 'eval/fixtures/security/docx');
+const SECURITY_LINK_FIXTURES = join(process.cwd(), 'eval/fixtures/security/links');
+const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 /** checker_version the fake answers with: hidden-text/1/<rules_version> as the sidecar builds it. */
 export const FAKE_HIDDEN_TEXT_CHECKER_VERSION = 'hidden-text/1/2026-11-25.1';
 
@@ -18,6 +22,18 @@ interface SecurityManifestEntry {
   hidden_text: string | null;
   reason: string | null;
   sha256: string;
+  /** PDF corpus only: the link annotation targets the checker reports. */
+  link_targets?: string[];
+}
+
+interface LinkManifestEntry {
+  mime: string;
+  sha256: string;
+  annotation_targets?: string[];
+}
+
+function manifestEntries<T>(dir: string): T[] {
+  return Object.values((JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')) as { fixtures: Record<string, T> }).fixtures);
 }
 
 export function securityPdfBytes(name: string): Uint8Array {
@@ -31,14 +47,26 @@ export function securityPdfEntry(name: string): SecurityManifestEntry {
   return entry;
 }
 
-/** The report the real checker gives a fixture of the corpus, built from its manifest entry; any other PDF is clean, any other format not_checked. */
+/**
+ * The report the real checker gives a fixture of the corpora, built from its manifest entry (the sidecar tests pin each manifest to the
+ * checker's own answer): the PDF and Word hidden-text fixtures with their span and link annotation targets, the link corpus PDFs with
+ * their annotation targets. Any other PDF is clean, any other Word file and any other format not_checked.
+ */
 function recordedHiddenTextReport(sha256: string, mimeType: string): Record<string, unknown> {
-  const manifest = JSON.parse(readFileSync(join(SECURITY_PDF_FIXTURES, 'manifest.json'), 'utf8')) as { fixtures: Record<string, SecurityManifestEntry> };
-  const entry = Object.values(manifest.fixtures).find((fixture) => fixture.sha256 === sha256);
-  const base = { link_targets: [], checker_version: FAKE_HIDDEN_TEXT_CHECKER_VERSION, dropped: 0 };
+  const base = { link_targets: [] as string[], checker_version: FAKE_HIDDEN_TEXT_CHECKER_VERSION, dropped: 0 };
+  const recorded = (entry: SecurityManifestEntry) =>
+    entry.expected === 'clean' || entry.hidden_text === null
+      ? { ...base, link_targets: entry.link_targets ?? [], status: 'clean', spans: [] }
+      : { ...base, link_targets: entry.link_targets ?? [], status: 'hidden_found', spans: [{ page: 1, text: entry.hidden_text, reason: entry.reason, bbox: null }] };
+  if (mimeType === DOCX_MIME) {
+    const entry = manifestEntries<SecurityManifestEntry>(SECURITY_DOCX_FIXTURES).find((fixture) => fixture.sha256 === sha256);
+    return entry ? { ...recorded(entry), link_targets: [] } : { ...base, status: 'not_checked', spans: [] };
+  }
   if (mimeType !== 'application/pdf') return { ...base, status: 'not_checked', spans: [] };
-  if (!entry || entry.expected === 'clean' || entry.hidden_text === null) return { ...base, status: 'clean', spans: [] };
-  return { ...base, status: 'hidden_found', spans: [{ page: 1, text: entry.hidden_text, reason: entry.reason, bbox: null }] };
+  const entry = manifestEntries<SecurityManifestEntry>(SECURITY_PDF_FIXTURES).find((fixture) => fixture.sha256 === sha256);
+  if (entry) return recorded(entry);
+  const link = manifestEntries<LinkManifestEntry>(SECURITY_LINK_FIXTURES).find((fixture) => fixture.sha256 === sha256 && fixture.mime === mimeType);
+  return { ...base, link_targets: link?.annotation_targets ?? [], status: 'clean', spans: [] };
 }
 
 /** One answer of the fake /v1/hidden-text route: an error status, a replacement report, or a delay longer than the caller waits. */

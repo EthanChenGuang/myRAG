@@ -220,6 +220,13 @@ def test_a_hidden_fixture_without_links_returns_no_target(client):
     assert report_for(client, "white-on-white.pdf").link_targets == []
 
 
+def test_every_fixture_reports_the_link_targets_its_manifest_records(client):
+    # The app-side fixture gate (tests/rag-e2e/security-fixture-gates.test.mts) replays these targets; they must be the checker's own.
+    manifest = json.loads((FIXTURE_DIR / "manifest.json").read_text(encoding="utf-8"))
+    for name, entry in manifest["fixtures"].items():
+        assert report_for(client, name).link_targets == entry["link_targets"], name
+
+
 def _check(data: bytes, mime: str = "application/pdf") -> HiddenTextReport:
     from rag_sidecar.security import check_hidden_text
 
@@ -343,3 +350,16 @@ def test_a_password_protected_pdf_is_refused(client):
     response = post(client, data)
     assert response.status_code == 422
     assert response.json()["error"] == "encrypted_document"
+
+
+def test_the_link_corpus_pdfs_report_the_annotation_targets_their_manifest_records(client):
+    links_dir = REPO_ROOT / "eval" / "fixtures" / "security" / "links"
+    manifest = json.loads((links_dir / "manifest.json").read_text(encoding="utf-8"))
+    pdfs = {name: entry for name, entry in manifest["fixtures"].items() if entry["mime"] == "application/pdf"}
+    assert pdfs
+    for name, entry in pdfs.items():
+        response = post(client, (links_dir / name).read_bytes(), filename=name)
+        assert response.status_code == 200, response.text
+        report = HiddenTextReport.model_validate(response.json())
+        assert report.status == "clean", name
+        assert report.link_targets == entry["annotation_targets"], name

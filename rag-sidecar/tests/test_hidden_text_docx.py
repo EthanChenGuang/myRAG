@@ -283,3 +283,15 @@ def test_the_word_checker_is_unavailable_without_the_extra():
     )
     assert done.returncode == 0, done.stderr[-2000:]
     assert done.stdout.strip().endswith("ok")
+
+
+def test_every_word_fixture_gets_the_report_its_manifest_records(client):
+    # The app-side fixture gate (tests/rag-e2e/security-fixture-gates.test.mts) replays the manifest; it must be the checker's own answer.
+    manifest = json.loads((FIXTURE_DIR / "manifest.json").read_text(encoding="utf-8"))
+    for name, entry in manifest["fixtures"].items():
+        report = report_for(client, name)
+        assert report.status == entry["expected"], name
+        assert [(span.text, span.reason) for span in report.spans] == (
+            [] if entry["hidden_text"] is None else [(entry["hidden_text"], entry["reason"])]
+        ), name
+        assert report.link_targets == [], name

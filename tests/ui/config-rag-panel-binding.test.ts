@@ -13,6 +13,7 @@ const PANELS = [
   { file: 'ingest-impact.js', rootId: 'rag-administration-ingest-impact', instance: 'ingestImpactPanel', deps: ['rag-ui.js'] },
   { file: 'upload-approvals.js', rootId: 'rag-administration-approvals', instance: 'uploadApprovalsPanel', deps: ['rag-ui.js'] },
   { file: 'scope-tags.js', rootId: 'rag-administration-scopes', instance: 'scopeTagsPanel', deps: ['rag-ui.js'] },
+  { file: 'quarantine.js', rootId: 'rag-administration-quarantine', instance: 'quarantinePanel', deps: ['rag-ui.js'] },
   { file: 'ingestion.js', rootId: 'rag-administration-ingestion', instance: 'ingestionPanel' },
   { file: 'doc-types.js', rootId: 'rag-administration-doc-types', instance: 'docTypesPanel' },
   { file: 'embedding-profiles.js', rootId: 'rag-administration-profiles', instance: 'embeddingProfilesPanel' },
