@@ -42,6 +42,9 @@ interface DumpDocument {
   language: string;
   doc_type: string;
   chunks: DumpChunk[];
+  version?: number;
+  version_label?: string;
+  effective_from?: string;
 }
 
 const tmpDirs: string[] = [];
@@ -76,13 +79,16 @@ describe('fixture corpus loaders', () => {
     expect(dump.status, dump.stderr).toBe(0);
     const python = JSON.parse(dump.stdout) as DumpDocument[];
 
-    expect(loaded.documents).toHaveLength(22);
+    expect(loaded.documents).toHaveLength(34);
     const fromTs = loaded.documents.map((doc) => ({
       relpath: doc.relpath,
       filename: doc.filename,
       language: doc.language,
       doc_type: doc.docType,
       chunks: doc.chunks.map((chunk) => ({ index: chunk.index, section: chunk.section, text: chunk.text, stored: chunk.stored })),
+      ...(doc.version !== undefined ? { version: doc.version } : {}),
+      ...(doc.versionLabel !== undefined ? { version_label: doc.versionLabel } : {}),
+      ...(doc.effectiveFrom !== undefined ? { effective_from: doc.effectiveFrom } : {}),
     }));
     expect(fromTs).toEqual(python);
     for (const doc of loaded.documents) {

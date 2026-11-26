@@ -8,7 +8,7 @@ import pytest
 from rag_eval.corpus import load_corpus, main
 from rag_eval.paths import REPO_ROOT
 
-COMMITTED_CORPUS_SHA256 = "4d9bd0210cebe95433e3065f19414c92f328f1c9f4530cf437647438b230309b"
+COMMITTED_CORPUS_SHA256 = "51ba2ab714737fc8f212f10185663561c1635d1db5ffc196079ec07bed917e57"
 META = '<!-- fixture-meta {"filename": "Policy Handbook.pdf", "image_url": "https://example.test/a.png"} -->'
 
 
@@ -247,7 +247,7 @@ def test_lineage_and_version_are_read_and_validated(tmp_path: Path):
 
 @pytest.mark.parametrize(
     "meta",
-    [{"lineage": "L"}, {"version": 1}, {"lineage": "", "version": 1}, {"lineage": "L", "version": 0}, {"lineage": "L", "version": 1.5}],
+    [{"lineage": "L"}, {"lineage": "", "version": 1}, {"lineage": "L", "version": 0}, {"lineage": "L", "version": 1.5}],
 )
 def test_malformed_lineage_names_the_file(tmp_path: Path, meta):
     _write(tmp_path, "en/bad.en.md", f"<!-- fixture-meta {json.dumps(meta)} -->\n## A\n")
@@ -278,3 +278,33 @@ def test_committed_corpus_hash_is_unchanged():
     from rag_eval.corpus import corpus_sha256
 
     assert corpus_sha256(REPO_ROOT / "eval/fixtures/corpus") == COMMITTED_CORPUS_SHA256
+
+
+def test_version_fields_without_a_lineage_load_as_a_current_document(tmp_path: Path):
+    meta = {"version": 2, "version_label": "v2", "effective_from": "2026-03-01"}
+    _write(tmp_path, "en/rules-v2.en.md", f"<!-- fixture-meta {json.dumps(meta)} -->\n## A\n\nRule.\n")
+    _write(tmp_path, "en/plain.en.md", "## P\n")
+    docs = {d.relpath: d for d in load_corpus(tmp_path)}
+    versioned = docs["en/rules-v2.en.md"]
+    assert (versioned.lineage, versioned.version, versioned.version_label, versioned.effective_from) == (None, 2, "v2", "2026-03-01")
+    plain = docs["en/plain.en.md"]
+    assert (plain.version, plain.version_label, plain.effective_from) == (None, None, None)
+
+
+@pytest.mark.parametrize(
+    ("meta", "field"),
+    [
+        ({"version": 0}, "version"),
+        ({"version": 1.5}, "version"),
+        ({"version_label": ""}, "version_label"),
+        ({"version_label": 2}, "version_label"),
+        ({"effective_from": "2026-3-01"}, "effective_from"),
+        ({"effective_from": "2026-02-30"}, "effective_from"),
+        ({"effective_from": 20260301}, "effective_from"),
+    ],
+)
+def test_malformed_version_fields_name_the_file(tmp_path: Path, meta, field):
+    _write(tmp_path, "en/bad.en.md", f"<!-- fixture-meta {json.dumps(meta)} -->\n## A\n\nSecret body.\n")
+    with pytest.raises(ValueError, match=rf"invalid {field} in en/bad\.en\.md") as raised:
+        load_corpus(tmp_path)
+    assert "Secret body" not in str(raised.value)

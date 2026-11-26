@@ -51,6 +51,18 @@ export interface CorpusDocument {
   fixtureDupTemplate?: string;
   /** fixture-meta `lineage` and `version`: versions of one lineage are seeded as published versions (D-40). */
   lineage?: { id: string; version: number };
+  /** fixture-meta `version` on a document without a lineage: a separate current document that states its version (05.2 D-52). */
+  version?: number;
+  /** fixture-meta `version_label`, the label an admin would set (05.2 D-49). */
+  versionLabel?: string;
+  /** fixture-meta `effective_from`, YYYY-MM-DD (Phase 3.2 D-43). */
+  effectiveFrom?: string;
+}
+
+interface VersionFields {
+  version?: number;
+  versionLabel?: string;
+  effectiveFrom?: string;
 }
 
 export interface LoadedCorpus {
@@ -115,12 +127,12 @@ function parseGenerate(raw: unknown, meta: Record<string, unknown>, relpath: str
   for (const pair of substitutions) {
     if (!Array.isArray(pair) || pair.length !== 2 || !pair.every((part) => typeof part === 'string') || pair[0] === '') throw error;
   }
-  if ('filename' in meta || 'lineage' in meta || 'version' in meta) throw error;
+  if (['filename', 'lineage', 'version', 'version_label', 'effective_from'].some((key) => key in meta)) throw error;
   return { count, name, substitutions: substitutions as Array<[string, string]>, templateId };
 }
 
 function parseLineage(meta: Record<string, unknown>, relpath: string): { id: string; version: number } | undefined {
-  if (!('lineage' in meta) && !('version' in meta)) return undefined;
+  if (!('lineage' in meta)) return undefined;
   const { lineage, version } = meta;
   if (typeof lineage !== 'string' || lineage.length === 0 || typeof version !== 'number' || !Number.isInteger(version) || version < 1) {
     throw new Error(`[Fixture Corpus] invalid lineage in ${relpath}`);
@@ -128,12 +140,46 @@ function parseLineage(meta: Record<string, unknown>, relpath: string): { id: str
   return { id: lineage, version };
 }
 
+const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+function isIsoDate(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  const match = ISO_DATE_RE.exec(value);
+  if (!match) return false;
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  return date.toISOString().slice(0, 10) === value;
+}
+
+/** version (only without a lineage), version_label and effective_from; each optional, each validated; errors name the file only. */
+function parseVersionFields(meta: Record<string, unknown>, relpath: string, hasLineage: boolean): VersionFields {
+  const fields: VersionFields = {};
+  if (!hasLineage && 'version' in meta) {
+    const { version } = meta;
+    if (typeof version !== 'number' || !Number.isInteger(version) || version < 1) {
+      throw new Error(`[Fixture Corpus] invalid version in ${relpath}`);
+    }
+    fields.version = version;
+  }
+  if ('version_label' in meta) {
+    const label = meta.version_label;
+    if (typeof label !== 'string' || label.trim().length === 0 || label.length > 64) {
+      throw new Error(`[Fixture Corpus] invalid version_label in ${relpath}`);
+    }
+    fields.versionLabel = label;
+  }
+  if ('effective_from' in meta) {
+    if (!isIsoDate(meta.effective_from)) throw new Error(`[Fixture Corpus] invalid effective_from in ${relpath} (expected YYYY-MM-DD)`);
+    fields.effectiveFrom = meta.effective_from;
+  }
+  return fields;
+}
+
 function buildDocument(
   relpath: string,
   filename: string,
   lines: string[],
   meta: Record<string, unknown>,
-  extra: { fixtureDupTemplate?: string; lineage?: { id: string; version: number } } = {},
+  extra: { fixtureDupTemplate?: string; lineage?: { id: string; version: number }; versions?: VersionFields } = {},
 ): CorpusDocument {
   const language = relpath.split('/')[0] as CorpusLanguage;
   const parts: string[] = [];
@@ -167,6 +213,9 @@ function buildDocument(
     })),
     ...(extra.fixtureDupTemplate !== undefined ? { fixtureDupTemplate: extra.fixtureDupTemplate } : {}),
     ...(extra.lineage ? { lineage: extra.lineage } : {}),
+    ...(extra.versions?.version !== undefined ? { version: extra.versions.version } : {}),
+    ...(extra.versions?.versionLabel !== undefined ? { versionLabel: extra.versions.versionLabel } : {}),
+    ...(extra.versions?.effectiveFrom !== undefined ? { effectiveFrom: extra.versions.effectiveFrom } : {}),
   };
 }
 
@@ -221,7 +270,8 @@ export function loadCorpus(corpusDir: string): LoadedCorpus {
     }
     const lineage = parseLineage(meta, relpath);
     const filename = typeof meta.filename === 'string' ? meta.filename : path.posix.basename(relpath);
-    documents.push(buildDocument(relpath, filename, lines, meta, lineage ? { lineage } : {}));
+    const versionFields = parseVersionFields(meta, relpath, lineage !== undefined);
+    documents.push(buildDocument(relpath, filename, lines, meta, { ...(lineage ? { lineage } : {}), versions: versionFields }));
   }
 
   const seen = new Set<string>();
