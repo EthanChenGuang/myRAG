@@ -40,7 +40,8 @@ def _raw_spec() -> dict:
 def _allowlist() -> set[str]:
     text = RUN_CONFIG_TS.read_text(encoding="utf-8")
     block = text.split("export const RUN_CONFIG_ENV_ALLOWLIST", 1)[1].split("];", 1)[0]
-    return set(re.findall(r"'([A-Z0-9_]+)'", block))
+    constrained = text.split("export const RUN_CONFIG_CONSTRAINED_VALUES", 1)[1].split("};", 1)[0]
+    return set(re.findall(r"'([A-Z0-9_]+)'", block)) | set(re.findall(r"^\s+([A-Z0-9_]+):", constrained, re.MULTILINE))
 
 
 # ---------- spec
