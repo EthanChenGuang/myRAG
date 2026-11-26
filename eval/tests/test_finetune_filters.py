@@ -9,7 +9,7 @@ from rag_eval.finetune.decontam import GoldenIndex, load_golden_questions
 from rag_eval.finetune.generate import RAW_FILE, TEST_RAW_FILE, RawSyntheticQuery
 
 TENANT = "s:default"
-OTHER_TENANT = "s:other"
+OTHER_TENANT = "o:00000000-0000-4000-8000-000000000001"
 
 CHUNK_EN = "The sample retention period is 24 months from the creation date."
 CHUNK_ZH = "样本保留期为自创建之日起24个月。"
