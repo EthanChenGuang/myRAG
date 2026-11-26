@@ -8,7 +8,6 @@ const USER_U = '00000000-0000-4000-8000-000000100344';
 const KEY_A = `o:${ORG_A}`;
 const SECRET = 'placeholder-secret-zq81';
 
-type Row = Record<string, unknown>;
 type Outcome = { data: unknown; error: { code?: string; message: string } | null } | Error;
 
 const state = {
