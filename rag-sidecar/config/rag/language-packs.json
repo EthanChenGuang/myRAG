@@ -89,6 +89,7 @@
         "instructions": {
           "citation": "请使用 [S<编号>] 标记引用你所依据的来源，编号只能取自上方带标签的来源，例如 [S1] 或 [S1][S3]。不要引用标签中不存在的编号。",
           "citation_per_sentence": "每个陈述事实的句子都要在句末标注支持它的带标签来源的 [S<编号>] 标记，编号只能取自上方带标签的来源，例如 [S1] 或 [S1][S3]。不要引用标签中不存在的编号。",
+          "grounding_per_sentence": "回答中每个陈述事实的句子都要以所附文档为依据，并由其中的来源支持。",
           "attached_documents": "与本问题相关的参考文档已附在对话中。",
           "relevance": "如果上下文讲的是与所问内容相关但不同的主题，它就不能回答这个问题。这种情况下只输出 {sentinel}，不要输出其他任何内容。",
           "relevance_web": "如果上下文讲的是与所问内容相关但不同的主题，它就不能回答这个问题。这种情况下请使用 webSearch 工具。如果网络搜索也没有找到能回答问题的内容，只输出 {sentinel}，不要输出其他任何内容。",
@@ -282,6 +283,7 @@
         "instructions": {
           "citation": "Cite the sources you use with [S<number>] markers taken only from the labelled sources above, for example [S1] or [S1][S3]. Never cite a number that is not in a label.",
           "citation_per_sentence": "End every factual sentence with the [S<number>] marker of the labelled source that supports it, taken only from the labelled sources above, for example [S1] or [S1][S3]. Never cite a number that is not in a label.",
+          "grounding_per_sentence": "Ground every factual sentence of your answer in the attached documents, so that a source supports each one.",
           "attached_documents": "The reference documents for this question are attached to the conversation.",
           "relevance": "If the context is about a related but different subject than the one asked, it does not answer the question. In that case write only {sentinel} and nothing else.",
           "relevance_web": "If the context is about a related but different subject than the one asked, it does not answer the question. In that case use the webSearch tool. If the web search finds nothing that answers the question, write only {sentinel} and nothing else.",
@@ -481,6 +483,7 @@
         "instructions": {
           "citation": "Cita le fonti che usi con i marcatori [S<numero>] presi solo dalle fonti etichettate qui sopra, per esempio [S1] o [S1][S3]. Non citare mai un numero che non compare in un'etichetta.",
           "citation_per_sentence": "Termina ogni frase che afferma un fatto con il marcatore [S<numero>] della fonte etichettata che la supporta, preso solo dalle fonti etichettate qui sopra, per esempio [S1] o [S1][S3]. Non citare mai un numero che non compare in un'etichetta.",
+          "grounding_per_sentence": "Basa ogni frase della risposta che afferma un fatto sui documenti allegati, in modo che una fonte la supporti.",
           "attached_documents": "I documenti di riferimento per questa domanda sono allegati alla conversazione.",
           "relevance": "Se il contesto riguarda un argomento collegato ma diverso da quello richiesto, non risponde alla domanda. In quel caso scrivi solo {sentinel} e nient'altro.",
           "relevance_web": "Se il contesto riguarda un argomento collegato ma diverso da quello richiesto, non risponde alla domanda. In quel caso usa lo strumento webSearch. Se la ricerca web non trova nulla che risponda alla domanda, scrivi solo {sentinel} e nient'altro.",

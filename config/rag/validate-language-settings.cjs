@@ -53,6 +53,7 @@ const TEXT_KEYS = Object.freeze([
   'labels.badge_tooltip_not_checked',
   'instructions.citation',
   'instructions.citation_per_sentence',
+  'instructions.grounding_per_sentence',
   'instructions.attached_documents',
   'instructions.relevance',
   'instructions.relevance_web',

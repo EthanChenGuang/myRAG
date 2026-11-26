@@ -492,6 +492,22 @@
       ]
     },
     {
+      "name": "no_instructions_grounding_per_sentence",
+      "base": "zh",
+      "change": {
+        "op": "set",
+        "path": [
+          "texts",
+          "instructions",
+          "grounding_per_sentence"
+        ],
+        "value": null
+      },
+      "missing": [
+        "texts.instructions.grounding_per_sentence"
+      ]
+    },
+    {
       "name": "no_instructions_attached_documents",
       "base": "en",
       "change": {
