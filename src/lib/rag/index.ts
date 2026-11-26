@@ -540,3 +540,40 @@ export type { ClearSemanticCacheError, ClearSemanticCacheOptions, ClearSemanticC
 export { isCacheHitResult } from './v2/result';
 export { topkRedundancy } from './v2/diversify';
 export type { AlsoIn } from './types';
+export {
+  deleteBoilerplateRule,
+  deleteSectionRuleSet,
+  listBoilerplateRules,
+  listSectionRuleSets,
+  pageBoilerplateEnabled,
+  RULE_FAILURE_REASONS,
+  RULE_LIMIT_NAMES,
+  saveBoilerplateRule,
+  saveSectionRuleSet,
+  sectionRulesEnabled,
+  TENANT_RULE_LIMITS,
+} from './ingest/rules/service';
+export type {
+  BoilerplateRuleResult,
+  DeleteRuleResult,
+  ListBoilerplateRulesResult,
+  ListSectionRuleSetsResult,
+  RuleAdminInput,
+  RuleFailure,
+  RuleFailureReason,
+  RuleLimitName,
+  SectionRuleSetResult,
+  StoredBoilerplateRule,
+  StoredSectionRuleSet,
+} from './ingest/rules/service';
+export { deleteAttributeDefinition, docAttributesEnabled, listAttributeDefinitions, upsertAttributeDefinition } from './ingest/attributes/schema';
+export type {
+  AttributeAdminError,
+  AttributeAdminFailure,
+  AttributeAdminInput,
+  AttributeDefinitionEntry,
+  AttributeDefinitionInput,
+  DeleteAttributeDefinitionResult,
+  ListAttributeDefinitionsResult,
+  UpsertAttributeDefinitionResult,
+} from './ingest/attributes/schema';
