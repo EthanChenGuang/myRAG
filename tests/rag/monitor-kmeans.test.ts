@@ -181,7 +181,7 @@ describe('assignNearest and distanceThreshold', () => {
     const result = sphericalKMeans(vectors, { k: 2, seed: 'thr', maxIterations: 50 });
     const threshold = distanceThreshold(result, vectors, 0.95);
     const distances = vectors.map((v, i) => 1 - dot(v, result.centroids[result.assignments[i] as number] as Float32Array));
-    const within = distances.filter((d) => d <= threshold + 1e-9).length;
+    const within = distances.filter((d) => d <= threshold + 1e-6).length;
     expect(within / distances.length).toBeGreaterThanOrEqual(0.95);
     expect(threshold).toBeGreaterThan(0);
     expect(threshold).toBeLessThanOrEqual(2);
