@@ -21,7 +21,11 @@ export interface ReembedCostReport {
   note: string | null;
 }
 
-const PROVIDERS: readonly string[] = ['openai', 'voyage', 'qwen3'];
+const PROVIDERS: readonly string[] = ['openai', 'voyage', 'qwen3', 'ft_slot_a', 'ft_slot_b'];
+const SLOT_PROVIDERS: readonly string[] = ['ft_slot_a', 'ft_slot_b'];
+
+export const SLOT_NOTE =
+  'A fine-tune slot is served by the operator\'s own endpoint and has no list price; the figure is 0 USD and excludes the serving cost.';
 
 export const ESTIMATE_NOTE =
   'Token counts are cl100k_base estimates for non-OpenAI models; the vendor bills its own count, so the cost is an estimate.';
@@ -43,7 +47,8 @@ export function estimateReembedCost(provider: string, totals: Record<string, Ten
     { chunks: 0, tokens: 0, usd: 0 },
   );
   const estimated = price(0).estimated;
-  return { tenants, totals: sum, estimated, note: estimated ? ESTIMATE_NOTE : null };
+  const note = SLOT_PROVIDERS.includes(provider) ? SLOT_NOTE : estimated ? ESTIMATE_NOTE : null;
+  return { tenants, totals: sum, estimated, note };
 }
 
 /** Dollars to six decimals under one dollar, two decimals from one dollar up. */

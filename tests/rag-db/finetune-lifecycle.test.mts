@@ -49,7 +49,7 @@ for (const mode of MODES) {
           ? (await createTwoTenantDatabase()).db
           : (await createFixtureDatabase({ deploymentMode: mode, corpusDir: path.join(REPO_ROOT, 'eval/fixtures/corpus') })).db;
       await installFixtureProductionModel(db);
-      harness.use(db, mode);
+      await harness.use(db, mode);
     });
 
     after(async () => {
@@ -57,7 +57,7 @@ for (const mode of MODES) {
     });
 
     beforeEach(async () => {
-      harness.use(db, mode);
+      await harness.use(db, mode);
       await resetFinetuneState(db);
       harness.setFinetune(true);
       harness.setProfilesSwitch('on');
@@ -121,7 +121,8 @@ for (const mode of MODES) {
 
       const dry = await harness.reembed('--profile', SLOT_A, '--dry-run');
       assert.equal(dry.code, 0, dry.text);
-      assert.match(dry.text, /estimated cost 0\.000000 USD/);
+      assert.match(dry.text, /total: chunks \d+, tokens \d+, estimated cost 0\.000000 USD/);
+      assert.match(dry.text, /no list price/);
 
       const runId = await reembedSlot();
       const models = (await rowsOf(db, 'SELECT DISTINCT embedding_model FROM chunk_embeddings WHERE profile_id = $1', [SLOT_A])).map((row) => row.embedding_model);

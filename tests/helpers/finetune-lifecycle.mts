@@ -117,7 +117,7 @@ export interface Harness {
   ingestConfig: typeof import('@/lib/rag/ingest/config');
   ragDeps: typeof import('@/lib/rag/deps');
   /** Selects the database and deployment mode every later call uses. */
-  use(db: PGlite, mode: DeploymentMode): void;
+  use(db: PGlite, mode: DeploymentMode): Promise<void>;
   embedding(...argv: string[]): Promise<CliResult>;
   reembed(...argv: string[]): Promise<CliResult>;
   setFinetune(on: boolean): void;
@@ -158,8 +158,10 @@ export async function startHarness(): Promise<Harness> {
     ingestDeps: await import('@/lib/rag/ingest/deps'),
     ingestConfig: await import('@/lib/rag/ingest/config'),
     ragDeps: await import('@/lib/rag/deps'),
-    use(next, mode) {
+    async use(next, mode) {
       db.use(next);
+      // A fixture build outlasts the edge's keep-alive window; the first request after it may meet a socket the server already closed.
+      for (let attempt = 0; attempt < 2; attempt += 1) await fetch(`${edge.url}/rest/v1/`).catch(() => undefined);
       harness.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = mode;
       harness.env.MYRAG_DEPLOYMENT_MODE = mode;
       process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = mode;
