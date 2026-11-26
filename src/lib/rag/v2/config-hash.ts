@@ -97,6 +97,8 @@ export interface RetrievalConfigHashInput {
   effectiveOn?: string | null;
   /** Present only while the query layer is on. */
   queryLayer?: RetrievalConfigHashQueryLayer | null;
+  /** XLG-04: present only when translation legs run for the request (RAG_DOC_TRANSLATION on and the tenant has translations). */
+  docTranslation?: { switch: 'on'; languages: string[]; weight: number } | null;
 }
 
 function sortKeys(value: unknown): unknown {
@@ -142,6 +144,7 @@ function buildPayload(input: RetrievalConfigHashInput): Record<string, unknown> 
     ...(input.domainControlLeg ? { domain_control_leg: input.domainControlLeg } : {}),
     ...(input.effectiveOn ? { effective_on: input.effectiveOn } : {}),
     ...(input.queryLayer ? { query_layer: input.queryLayer } : {}),
+    ...(input.docTranslation ? { doc_translation: input.docTranslation } : {}),
   };
 }
 

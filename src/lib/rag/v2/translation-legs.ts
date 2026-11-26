@@ -159,13 +159,26 @@ function legHits(hits: readonly TranslationHit[], leg: TranslationHit['leg']): R
  * The ranked lists dense_tr:<lang> and lexical_tr:<lang> of source chunk ids. A hit on a chunk already written in the language is
  * dropped (it has no translation into its own language); scores are cleared, ranks are renumbered in their own order.
  */
-export function translationLists(_hits: readonly TranslationHit[], _language: string, _options: { weight?: number } = {}): RankedList[] {
-  return [];
+export function translationLists(hits: readonly TranslationHit[], language: string, options: { weight?: number } = {}): RankedList[] {
+  const usable = hits.filter((entry) => entry.translationLanguage === language && entry.hit.language !== language);
+  const weight = options.weight ?? 1;
+  const lists: RankedList[] = [];
+  const dense = legHits(usable, 'dense');
+  if (dense.length > 0) lists.push({ id: `dense_tr:${language}`, weight, hits: dense });
+  const lexical = legHits(usable, 'lexical');
+  if (lexical.length > 0) lists.push({ id: `lexical_tr:${language}`, weight, hits: lexical });
+  return lists;
 }
 
 /** A chunk also hit by an original leg is one candidate that keeps the original's hit (and its similarity), whichever list RRF reads first. */
-export function preferOriginalHits(lists: readonly RankedList[], _known: ReadonlyMap<string, RankedHit>): RankedList[] {
-  return [...lists];
+export function preferOriginalHits(lists: readonly RankedList[], known: ReadonlyMap<string, RankedHit>): RankedList[] {
+  return lists.map((list) => ({
+    ...list,
+    hits: list.hits.map((hit) => {
+      const original = known.get(hit.chunkId);
+      return original ? { ...original, rank: hit.rank } : hit;
+    }),
+  }));
 }
 
 export interface RunTranslationLegsInput {
