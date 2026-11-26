@@ -2,7 +2,7 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { embedText } from '../../eval/harness/fixture-embedder.mts';
 
-export type FakeEmbeddingHost = 'voyage' | 'deepinfra' | 'openrouter';
+export type FakeEmbeddingHost = 'voyage' | 'deepinfra' | 'openrouter' | 'ft';
 
 export interface FakeEmbeddingCall {
   host: FakeEmbeddingHost;
@@ -25,16 +25,26 @@ export interface FakeEmbeddingEndpoints {
   setQwenRawDims(dims: number): void;
   /** Component count Voyage returns regardless of output_dimension (default: honour it). */
   setVoyageReturnDims(dims: number | null): void;
+  /** Component count the fine-tune slot endpoint returns (default 1024). */
+  setFtDims(dims: number): void;
+  /** Mixed into every slot vector; a new salt stands for other weights behind the same URL and model name. */
+  setFtSalt(salt: string): void;
   stop(): Promise<void>;
 }
 
 const VOYAGE_PREFIX = '/voyage/v1';
 const DEEPINFRA_PREFIX = '/deepinfra/v1/openai';
 const OPENROUTER_PREFIX = '/openrouter/api/v1';
+const FT_PREFIX = '/ft/v1';
 
 function expand(text: string, size: number): number[] {
   const base = embedText(text);
   return Array.from({ length: size }, (_, index) => base[index % base.length] + 0.001 * (Math.floor(index / base.length) + 1));
+}
+
+/** The raw (not normalized) vector the fake slot endpoint returns for one input string, as sent (prompt included). */
+export function fakeSlotVector(input: string, salt = '', dims = 1024): number[] {
+  return expand(`${salt}${input}`, dims);
 }
 
 function unit(vector: number[]): number[] {
@@ -55,16 +65,19 @@ async function readJson(request: http.IncomingMessage): Promise<Record<string, u
 
 export async function startFakeEmbeddingEndpoints(): Promise<FakeEmbeddingEndpoints> {
   const calls: FakeEmbeddingCall[] = [];
-  const failures: Record<FakeEmbeddingHost, number[]> = { voyage: [], deepinfra: [], openrouter: [] };
-  const delays: Record<FakeEmbeddingHost, number> = { voyage: 0, deepinfra: 0, openrouter: 0 };
+  const failures: Record<FakeEmbeddingHost, number[]> = { voyage: [], deepinfra: [], openrouter: [], ft: [] };
+  const delays: Record<FakeEmbeddingHost, number> = { voyage: 0, deepinfra: 0, openrouter: 0, ft: 0 };
   const timers = new Set<NodeJS.Timeout>();
   let qwenRawDims = 4096;
   let voyageReturnDims: number | null = null;
+  let ftDims = 1024;
+  let ftSalt = '';
 
   function hostFor(url: string): FakeEmbeddingHost | null {
     if (url === `${VOYAGE_PREFIX}/embeddings`) return 'voyage';
     if (url === `${DEEPINFRA_PREFIX}/embeddings`) return 'deepinfra';
     if (url === `${OPENROUTER_PREFIX}/embeddings`) return 'openrouter';
+    if (url === `${FT_PREFIX}/embeddings`) return 'ft';
     return null;
   }
 
@@ -93,6 +106,9 @@ export async function startFakeEmbeddingEndpoints(): Promise<FakeEmbeddingEndpoi
         const size = voyageReturnDims ?? Number(body.output_dimension ?? 1024);
         vectors = inputs.map((text) => unit(expand(text, size)));
         model = 'voyage-4-large';
+      } else if (host === 'ft') {
+        vectors = inputs.map((text) => fakeSlotVector(text, ftSalt, ftDims));
+        model = 'served-by-fake-endpoint';
       } else {
         vectors = inputs.map((text) => expand(text, qwenRawDims));
         model = String(body.model);
@@ -127,6 +143,7 @@ export async function startFakeEmbeddingEndpoints(): Promise<FakeEmbeddingEndpoi
       voyage: `${origin}${VOYAGE_PREFIX}`,
       deepinfra: `${origin}${DEEPINFRA_PREFIX}`,
       openrouter: `${origin}${OPENROUTER_PREFIX}`,
+      ft: `${origin}${FT_PREFIX}`,
     },
     calls,
     callsFor: (host) => calls.filter((call) => call.host === host),
@@ -144,6 +161,12 @@ export async function startFakeEmbeddingEndpoints(): Promise<FakeEmbeddingEndpoi
     },
     setVoyageReturnDims: (dims) => {
       voyageReturnDims = dims;
+    },
+    setFtDims: (dims) => {
+      ftDims = dims;
+    },
+    setFtSalt: (salt) => {
+      ftSalt = salt;
     },
     stop: () =>
       new Promise<void>((resolve) => {

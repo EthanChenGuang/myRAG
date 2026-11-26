@@ -1,4 +1,6 @@
-export type EmbeddingProviderId = 'openai' | 'voyage' | 'qwen3';
+export type EmbeddingProviderId = 'openai' | 'voyage' | 'qwen3' | 'ft_slot_a' | 'ft_slot_b';
+
+export type FinetuneSlotProviderId = 'ft_slot_a' | 'ft_slot_b';
 
 export type EmbeddingStorage = 'legacy_column' | 'halfvec';
 
@@ -53,6 +55,16 @@ export const VOYAGE_MODEL_ID = 'voyage-4-large';
 export const VOYAGE_LAW_MODEL_ID = 'voyage-law-2';
 export const VOYAGE_FINANCE_MODEL_ID = 'voyage-finance-2';
 export const QWEN_MODEL_ID = 'Qwen/Qwen3-Embedding-8B';
+/** Fine-tune slots (06.1 D-22) hold 1024-dim halfvec vectors only. */
+export const FT_SLOT_DIMS = 1024;
+export const FT_SLOT_SUPPORTED_DIMS: readonly number[] = [FT_SLOT_DIMS];
+/** The model of a slot with no bound version; migration 0652 seeds the slot rows with it. */
+export const FT_SLOT_UNBOUND_MODEL = 'unbound';
+export const FINETUNE_SLOT_PROVIDERS: readonly FinetuneSlotProviderId[] = ['ft_slot_a', 'ft_slot_b'];
+
+export function isFinetuneSlotProvider(provider: string): provider is FinetuneSlotProviderId {
+  return (FINETUNE_SLOT_PROVIDERS as readonly string[]).includes(provider);
+}
 
 const VOYAGE_MODEL_IDS: readonly string[] = [VOYAGE_MODEL_ID, VOYAGE_LAW_MODEL_ID, VOYAGE_FINANCE_MODEL_ID];
 
