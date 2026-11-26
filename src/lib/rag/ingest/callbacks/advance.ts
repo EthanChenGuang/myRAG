@@ -16,6 +16,8 @@ import { originFields } from '../origin';
 import { getProcessingProfile, profileFor, type DocType } from '../profiles/load';
 import { finishQueueIngestTrace } from '../queue-trace';
 import { uploadScopesEnabled, writeUploadScopes } from '../scopes/upload';
+import { docAttributesEnabled } from '../attributes/schema';
+import { writeDocumentAttributes } from '../attributes/apply';
 import { readParseResultForJob } from '../parse-cache';
 import { QUEUED_INPUT_ARTIFACT, buildQueuedContext, decodeQueuedInput, encodeQueuedInput } from '../queued-context';
 import { INGEST_STAGES, REGISTERED_STAGES, rehydrateFromStore, runIngestStages } from '../runner';
@@ -27,7 +29,7 @@ import { createLedgerStateStore, saveContextState } from '../state-store';
 import { ingestStateFromRecord } from '../status';
 import { createIngestWriter } from '../writer';
 import { workerHiddenTextReport } from '../../security/hidden-text';
-import { INGEST_SOURCES, type ChunkDraft, type IngestInput, type IngestResult, type IngestSource, type StageContext, type StageName, type StageSpec } from '../types';
+import { INGEST_SOURCES, IngestStageError, type ChunkDraft, type IngestInput, type IngestResult, type IngestSource, type StageContext, type StageName, type StageSpec } from '../types';
 import { isTerminal, leaseHolds, mapError, refuse, type CallbackResult } from './common';
 
 /** One advance call runs stages for at most this long (D-07); the worker calls again with the cursor it was given. */
@@ -367,8 +369,15 @@ async function startProgressiveFinal(
   const originValues = originFields(record.options);
   if (originValues !== null) await writer.setFields(begun.documentId, originValues);
   // D-40: the final version carries the upload's tags before its chunks are written, as the first version did.
-  if (record.scopes && record.scopes.length > 0 && uploadScopesEnabled(loadIngestConfig(getIngestDeps().ingestEnv()))) {
+  const ingestConfig = loadIngestConfig(getIngestDeps().ingestEnv());
+  if (record.scopes && record.scopes.length > 0 && uploadScopesEnabled(ingestConfig)) {
     await writeUploadScopes(db, tenantKey, begun.documentId, record.scopes, signal);
+  }
+  // D-23: explicit values from the record, else the lineage's current value (the first version, published by now).
+  if (docAttributesEnabled(ingestConfig)) {
+    await writeDocumentAttributes(db, tenantKey, begun.documentId, record.attributes, signal);
+  } else if (record.attributes !== undefined) {
+    throw new IngestStageError('file_hash_dedup', 'attributes_not_enabled');
   }
   await saveArtifact(to, QUEUED_INPUT_ARTIFACT, encodeQueuedInput({ ...record, state: { ...record.state, artifacts } }), 'application/json');
   return { kind: 'continue', job: await beginProgressiveFinal(job.id, workerId, begun.documentId, { signal }) };
