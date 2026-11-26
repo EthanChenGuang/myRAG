@@ -27,6 +27,9 @@ logger = logging.getLogger(__name__)
 _DEFAULT_CONNECT_TIMEOUT = 10.0
 _DEFAULT_READ_TIMEOUT = 40.0
 _MAX_CALLBACK_RETRIES = 3
+# A translate slice starts chunks for half its deadline and then finishes the one in flight (one model call, at most 30 s): below the
+# route's 60 s limit, above the default read timeout.
+_TRANSLATE_READ_TIMEOUT = 55.0
 
 
 class AppAuthError(Exception):
@@ -107,15 +110,18 @@ class AppClient:
             SECRET_HEADER.decode("ascii"): self._secret,
         }
 
-    async def _post_json(self, path: str, body: dict[str, Any]) -> httpx.Response:
+    async def _post_json(self, path: str, body: dict[str, Any], read_timeout: float | None = None) -> httpx.Response:
         url = f"{self._base_url}{path}"
-        return await self._client.post(url, json=body, headers=self._headers())
+        if read_timeout is None:
+            return await self._client.post(url, json=body, headers=self._headers())
+        timeout = httpx.Timeout(connect=_DEFAULT_CONNECT_TIMEOUT, read=read_timeout, write=read_timeout, pool=_DEFAULT_CONNECT_TIMEOUT)
+        return await self._client.post(url, json=body, headers=self._headers(), timeout=timeout)
 
-    async def _call_with_retries(self, path: str, body: dict[str, Any]) -> httpx.Response:
+    async def _call_with_retries(self, path: str, body: dict[str, Any], read_timeout: float | None = None) -> httpx.Response:
         last_error: Exception | None = None
         for attempt in range(_MAX_CALLBACK_RETRIES):
             try:
-                response = await self._post_json(path, body)
+                response = await self._post_json(path, body, read_timeout)
             except httpx.TimeoutException as exc:
                 last_error = exc
                 if attempt + 1 >= _MAX_CALLBACK_RETRIES:
@@ -175,4 +181,16 @@ class AppClient:
             raise AppTransientError(f"advance returned {response.status_code}")
         return AdvanceResponse.model_validate(response.json())
     async def translate(self, job_id: str, request: TranslateCallbackRequest) -> TranslateCallbackResponse:
-        raise AppTransientError("translate callback not implemented")
+        """D-29: runs one slice of a translate job in the app; the tenant, document and language are the job row's."""
+        await self._bucket.acquire()
+        body = request.model_dump(mode="json")
+        response = await self._call_with_retries(
+            f"/api/internal/rag/ingest/jobs/{job_id}/translate",
+            body,
+            read_timeout=_TRANSLATE_READ_TIMEOUT,
+        )
+        if response.status_code == 401:
+            raise AppAuthError("callback unauthorized")
+        if response.status_code >= 400:
+            raise AppTransientError(f"translate returned {response.status_code}")
+        return TranslateCallbackResponse.model_validate(response.json())

@@ -186,6 +186,36 @@ export async function enqueueJob(
   return parseJobRow('rag_enqueue_ingestion_job', row);
 }
 
+export interface EnqueueTranslateJobArgs {
+  documentId: string;
+  /** The document's own source (documents.source). */
+  source: string;
+  settings: JobSettingsSnapshotWire;
+  priority: number;
+}
+
+/**
+ * A job of kind translate (D-29). The tenant key is the published document's own (the post-publish event), checked again by the ledger
+ * function against the document row; the function returns the active job for the same document and language instead of a second one.
+ */
+export async function enqueueTranslateLedgerJob(tenantKey: string, args: EnqueueTranslateJobArgs, options: LedgerCallOptions): Promise<IngestionJob> {
+  const row = await callOne(
+    'rag_enqueue_ingestion_job',
+    {
+      p_tenant_key: tenantKey,
+      p_kind: 'translate',
+      p_source: args.source,
+      p_source_key: null,
+      p_settings: args.settings,
+      p_priority: args.priority,
+      p_document_id: args.documentId,
+      p_status: 'queued',
+    },
+    options,
+  );
+  return parseJobRow('rag_enqueue_ingestion_job', row);
+}
+
 export interface AdvanceJobArgs {
   jobId: string;
   worker: string;

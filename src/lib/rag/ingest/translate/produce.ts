@@ -585,16 +585,31 @@ export const TRANSLATION_HOOK = 'translation';
 export const INLINE_TRANSLATION_BUDGET_MS = 15_000;
 const HOOK_MARGIN_MS = 10_000;
 
-/** Inline translation after publish: switch on, more than one language, and asynchronous ingestion off (on, it is a queued job). */
-export function inlineTranslationOn(): boolean {
+/** Translation after publish at all: the deployment switch is on and more than one language is configured. */
+export function translationAfterPublishOn(): boolean {
   try {
     if (currentIngestConfig().docTranslation !== 'on') return false;
     const settings = getLanguageSettings();
-    if (!settings.configured || settings.monolingual || settings.languages.length < 2) return false;
-    return !queueConfigFromProcessEnv().ingestAsync;
+    return settings.configured && !settings.monolingual && settings.languages.length >= 2;
   } catch {
     return false;
   }
+}
+
+/** Inline translation after publish: switch on, more than one language, and asynchronous ingestion off (on, it is a queued job). */
+export function inlineTranslationOn(): boolean {
+  try {
+    return translationAfterPublishOn() && !queueConfigFromProcessEnv().ingestAsync;
+  } catch {
+    return false;
+  }
+}
+
+/** The tenant's targets under the same gate as every run (switch, languages, tenant setting); used to enqueue one job per target. */
+export async function translationTargets(tenantKey: string, signal: AbortSignal): Promise<{ ok: true; targets: string[] } | { ok: false; reason: TranslationRefusal }> {
+  const gated = await gate(tenantKey, undefined, signal);
+  if ('reason' in gated) return { ok: false, reason: gated.reason };
+  return { ok: true, targets: gated.targets };
 }
 
 type Register = (name: string, run: (event: PostPublishEvent, signal: AbortSignal) => Promise<void>, options: { timeoutMs: number }) => void;
