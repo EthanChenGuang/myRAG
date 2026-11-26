@@ -30,7 +30,8 @@ describe('languages filter (D-06)', () => {
 
   it('takes its accepted codes from the language registry', async () => {
     vi.resetModules();
-    vi.doMock('@/lib/rag/lang/registry', () => ({
+    vi.doMock('@/lib/rag/lang/registry', async (importOriginal) => ({
+      ...(await importOriginal<typeof import('@/lib/rag/lang/registry')>()),
       getLanguageRegistry: () => ({ packs: [{ code: 'zh' }, { code: 'en' }] }),
     }));
     const mod = await import('@/lib/rag/query/filters');

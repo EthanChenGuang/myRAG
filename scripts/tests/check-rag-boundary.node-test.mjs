@@ -79,6 +79,16 @@ test('retrieval-rpc: single-line, multi-line double-quote and template-literal f
   assert.deepEqual(rulesFor({ 'src/lib/rag/backend/x.ts': files['src/lib/a.ts'] }), []);
 });
 
+test('retrieval-rpc: the attribute resolver and the value read are pipeline-only', () => {
+  const files = {
+    'src/app/api/a/route.ts': "const r = await db.rpc('rag_attribute_documents', args);\n",
+    'src/lib/b.ts': 'const r = await db.rpc(\n  "rag_attribute_filter_values",\n  args,\n);\n',
+  };
+  assert.deepEqual(rulesFor(files).sort(), ['src/app/api/a/route.ts:retrieval-rpc', 'src/lib/b.ts:retrieval-rpc']);
+  assert.deepEqual(rulesFor({ 'src/lib/rag/retrieval/attributes.ts': files['src/app/api/a/route.ts'] }), []);
+  assert.deepEqual(rulesFor({ 'src/lib/a.ts': "await db.rpc('rag_attribute_definitions_for', {});\n" }), []);
+});
+
 test('retrieval-rpc: unrelated rpc names are not flagged under src', () => {
   assert.deepEqual(rulesFor({ 'src/lib/a.ts': "await db.rpc('increment_counter', {});\n" }), []);
 });
