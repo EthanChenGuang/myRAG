@@ -431,6 +431,24 @@ describe('isolation and score bands', () => {
     }
   });
 
+  test('the golden off_topic_context items are the planned questions, with the planned adjacent section and score band', () => {
+    const items = fs
+      .readFileSync(GOLDEN_PATH, 'utf8')
+      .split('\n')
+      .filter((line) => line.trim() !== '')
+      .map((line) => JSON.parse(line) as GoldenLine & { category: string; language: CorpusLanguage; off_topic?: { adjacent_quotes: Array<{ section: string }>; score_band: string } })
+      .filter((item) => item.category === 'off_topic_context');
+    const fromGolden = items.map((item) => ({
+      language: item.language,
+      question: item.question,
+      adjacent: item.off_topic?.adjacent_quotes.map((span) => span.section),
+      band: item.off_topic?.score_band,
+    }));
+    const planned = OFF_TOPIC_QUESTIONS.map((entry) => ({ language: entry.language, question: entry.question, adjacent: [entry.adjacent], band: entry.band }));
+    const key = (entry: { language: string; question: string }) => `${entry.language}|${entry.question}`;
+    expect([...fromGolden].sort((a, b) => key(a).localeCompare(key(b)))).toEqual([...planned].sort((a, b) => key(a).localeCompare(key(b))));
+  });
+
   test.each(LANGUAGES)('%s: at least 4 off_topic_context questions, split half below and half above the threshold', (language) => {
     const planned = OFF_TOPIC_QUESTIONS.filter((entry) => entry.language === language);
     expect(planned.length).toBeGreaterThanOrEqual(4);
