@@ -4,7 +4,9 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createClient } from '@supabase/supabase-js';
 import type { PGlite } from '@electric-sql/pglite';
+import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from '../../eval/harness/fake-edge.mts';
 import { createFixtureDatabase, type DeploymentMode } from '../../eval/harness/pglite-supabase.mts';
 import { embedText } from '../../eval/harness/fixture-embedder.mts';
 import { TWO_TENANT_IDS, createTwoTenantDatabase } from '../../eval/harness/two-tenant.mts';
@@ -17,11 +19,13 @@ const LEGACY = 'openai-3-small-1536';
 const HALFVEC = 'voyage-4-large-1024';
 
 /** Golden ids shared with tests/rag/sync/reconcile.test.ts: bucket and signed 64-bit hash of md5(id). */
-export const GOLDEN_IDS = [
+const GOLDEN_IDS = [
   '00000000-0000-4000-8000-000000000001',
   '00000000-0000-4000-8000-000000000002',
   '7f3c2a10-1b2c-4d5e-8f60-0123456789ab',
 ] as const;
+const GOLDEN_BUCKETS = [5, 25, 60];
+const GOLDEN_HASHES = ['5016017787118691403', '-7398545041996669218', '4332796155272647876'];
 
 function md5(text: string): string {
   return crypto.createHash('md5').update(text).digest('hex');
@@ -219,8 +223,19 @@ for (const mode of MODES) {
       }
       assert.deepEqual(
         GOLDEN_IDS.map((id) => bucketOf(id)),
-        GOLDEN_IDS.map((id) => parseInt(md5(id).slice(0, 2), 16) % 64),
+        GOLDEN_BUCKETS,
       );
+      assert.deepEqual(
+        GOLDEN_IDS.map((id) => hash64(md5(id)).toString()),
+        GOLDEN_HASHES,
+      );
+      // The SQL hash of one golden id, isolated: the bucket's XOR with every other listed id taken out.
+      const bucket = GOLDEN_BUCKETS[2]!;
+      const listed = await bucketRows(a.key, bucket);
+      let others = 0n;
+      for (const row of listed) if (row.chunk_id !== GOLDEN_IDS[2]) others ^= hash64(md5(row.chunk_id));
+      const sqlXor = BigInt((await summary(a.key))[bucket]!.id_xor);
+      assert.equal(BigInt.asIntN(64, sqlXor ^ others).toString(), GOLDEN_HASHES[2]);
     });
 
     test('a content_hash or lexical_version change moves only content_xor of that bucket', async () => {
@@ -434,3 +449,42 @@ for (const mode of MODES) {
     });
   });
 }
+
+describe('vector sync reconcile RPCs through the fake edge (multi-tenant)', () => {
+  let db: PGlite;
+  let edge: FakeEdge;
+  let client: ReturnType<typeof createClient>;
+  const key = `u:${TWO_TENANT_IDS.userA}`;
+
+  before(async () => {
+    db = (await createTwoTenantDatabase()).db;
+    edge = await startFakeEdge({ db });
+    const env = fixtureProcessEnv(edge.url);
+    client = createClient(edge.url, env.SUPABASE_SERVICE_ROLE_KEY as string, { auth: { persistSession: false, autoRefreshToken: false } });
+  });
+
+  after(async () => {
+    await edge?.close();
+    await db?.close();
+  });
+
+  test('summary, tenants and prune answer with their registered argument names; checksums arrive as exact decimal text', async () => {
+    const summary = await client.rpc('rag_vector_sync_reconcile_summary', { p_tenant_key: key, p_profile_id: LEGACY });
+    assert.equal(summary.error, null);
+    const rows = summary.data as SummaryRow[];
+    assert.equal(rows.length, 64);
+    for (const row of rows) assert.match(row.id_xor, /^-?[0-9]+$/);
+    const direct = (await db.query<SummaryRow>('SELECT * FROM rag_vector_sync_reconcile_summary($1, $2)', [key, LEGACY])).rows;
+    assert.deepEqual(
+      rows.map((row) => [row.bucket, Number(row.row_count), row.id_xor, row.content_xor]),
+      direct.map((row) => [row.bucket, Number(row.row_count), row.id_xor, row.content_xor]),
+    );
+    const prune = await client.rpc('rag_vector_sync_prune', { p_days: 7 });
+    assert.equal(prune.error, null);
+  });
+
+  test('an argument outside the registered list is rejected', async () => {
+    const response = await client.rpc('rag_vector_sync_reconcile_summary', { p_tenant_key: key, p_profile_id: LEGACY, p_extra: 1 });
+    assert.notEqual(response.error, null);
+  });
+});
