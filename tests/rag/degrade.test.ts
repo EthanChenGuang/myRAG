@@ -131,6 +131,33 @@ describe('degrade option on the eval route', () => {
     expect(res.json.candidates).toHaveLength(4);
   });
 
+  test('max_results reaches the pipeline only when the request sets it', async () => {
+    const seen: Array<RunRetrievalInput['options']> = [];
+    vi.doMock('@/lib/rag', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('@/lib/rag')>();
+      return {
+        ...actual,
+        runRetrieval: (retrieval: RunRetrievalInput) => {
+          seen.push(retrieval.options);
+          return actual.runRetrieval(retrieval);
+        },
+      };
+    });
+    const savedCount = env.RAG_FINAL_RESULT_COUNT;
+    env.RAG_FINAL_RESULT_COUNT = '3';
+    try {
+      expect((await post({})).status).toBe(200);
+      expect((await post({ max_results: 2 })).status).toBe(200);
+    } finally {
+      vi.doUnmock('@/lib/rag');
+      if (savedCount === undefined) delete env.RAG_FINAL_RESULT_COUNT;
+      else env.RAG_FINAL_RESULT_COUNT = savedCount;
+    }
+    expect(seen).toHaveLength(2);
+    expect(seen[0]?.maxResults).toBeUndefined();
+    expect(seen[1]?.maxResults).toBe(2);
+  });
+
   test('an unknown degrade value is rejected by validation', async () => {
     const res = await post({ degrade: 'drop_everything' });
     expect(res.status).toBe(400);

@@ -6,7 +6,7 @@ from rag_sidecar.contracts.answers import CitationStrategy
 from rag_sidecar.contracts.eval_run import GoldenFilter, RagRunOptions
 from rag_sidecar.contracts.golden import Category, Language, Provenance, Split
 from rag_sidecar.contracts.groundedness import GroundednessScorer
-from rag_sidecar.contracts.latency import StageLatency
+from rag_sidecar.contracts.latency import GroupBudget, Profile, StageLatency
 from rag_sidecar.contracts.omit import omit_none_schema
 
 
@@ -96,6 +96,55 @@ class InjectionReport(_Contract):
     gate: Literal["absolute_zero", "report_only"]
 
 
+class TransformOutcomeCounts(_Contract):
+    """Per transform: traces where it ran, was off by config, or was skipped, with the skip reasons (D-28, D-38)."""
+
+    run: int = Field(default=0, ge=0)
+    disabled: int = Field(default=0, ge=0)
+    skipped: int = Field(default=0, ge=0)
+    skip_reasons: dict[str, int] = Field(default_factory=dict)
+
+
+BudgetStatus = Literal["within", "over", "no_budget"]
+
+
+class BudgetedLatency(_Contract):
+    latency: StageLatency
+    status: BudgetStatus
+
+
+class QueryLayerReport(_Contract):
+    """D-29, D-38: what the query layer did; counts, rates and latencies only, never query text (T-06-73)."""
+
+    items: int = Field(ge=0)
+    items_with_plan: int = Field(ge=0)
+    gate_rules: dict[str, int] = Field(default_factory=dict)
+    transforms: dict[str, TransformOutcomeCounts] = Field(default_factory=dict)
+    llm_transform_share: MetricValue
+    protected_token_losses: int = Field(ge=0)
+    budget_profile: Profile
+    query_budget: GroupBudget | None = None
+    query_latency: BudgetedLatency | None = None
+    query_latency_by_language: dict[str, BudgetedLatency] = Field(default_factory=dict)
+    query_latency_by_category: dict[str, BudgetedLatency] = Field(default_factory=dict)
+
+
+class SemanticCacheReport(_Contract):
+    """D-42 e, spec rule 8: cache checks, bypasses, hits and misses, hit versus miss latency, near-miss wrong hits."""
+
+    checks: int = Field(ge=0)
+    hits: int = Field(ge=0)
+    misses: int = Field(ge=0)
+    failures: int = Field(ge=0)
+    bypasses: dict[str, int] = Field(default_factory=dict)
+    hit_rate: MetricValue
+    hit_latency: StageLatency | None = None
+    miss_latency: StageLatency | None = None
+    near_miss_checks: int = Field(ge=0)
+    near_miss_wrong_hits: int = Field(ge=0)
+    near_miss_wrong_hit_rate: MetricValue | None = None
+
+
 class EvalReport(_Contract):
     schema_version: Literal[1] = 1
     run_id: str
@@ -133,6 +182,8 @@ class EvalReport(_Contract):
     groundedness_latency: dict[ScoringScorer, StageLatency] = Field(default_factory=dict)
     by_strategy: dict[StrategyKey, StrategySlice] = Field(default_factory=dict)
     injection: InjectionReport | None = None
+    query_layer: QueryLayerReport | None = None
+    semantic_cache: SemanticCacheReport | None = None
     notes: list[str] = Field(default_factory=list)
     native_review_backlog: list[NativeReviewBacklogEntry] | None = Field(
         default=None, exclude_if=lambda value: value is None, json_schema_extra=omit_none_schema

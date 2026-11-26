@@ -9,15 +9,21 @@ import { classifyQuery } from '@/lib/query-classifier';
 import {
   buildHistoryWindow,
   createEnhancedRAGPrompt,
+  answerLanguageOptions,
+  type AnswerLanguageOptions,
   createTraceCollector,
   detectLanguage,
+  effectiveLogMode,
   finishTrace,
   isQueryLayerEnabled,
   isSmallTalkResult,
   isV2Pipeline,
   knowledgeBaseUnavailableLanguage,
   knowledgeBaseUnavailableMessage,
+  mintEmbedFeedbackToken,
   parseRetrievalFilters,
+  resolveScopesFilter,
+  ScopeFilterError,
   readFeedbackLoopConfig,
   resolveEmbedScope,
   runRetrieval,
@@ -131,6 +137,7 @@ export async function POST(request: NextRequest) {
   // Set only while RAG_RETRIEVAL_LOG is on; off leaves finishTrace's arguments as they were
   let logContext: LogContext | null = null;
   let logQuery: string | undefined;
+  let feedbackTraceId: string | null = null;
   const finishPendingTrace = () => {
     if (!pendingTrace) return;
     const pending = pendingTrace;
@@ -241,6 +248,19 @@ export async function POST(request: NextRequest) {
       return knowledgeBaseUnavailableResponse(request);
     }
 
+    // D-39: a scopes filter narrows only the configured embed tenant, and only with values of its vocabulary
+    if (retrievalFilters?.scopes) {
+      try {
+        retrievalFilters = await resolveScopesFilter(retrievalFilters, { scope: embedScope.scope, signal: request.signal });
+      } catch (error) {
+        if (!(error instanceof ScopeFilterError)) throw error;
+        return NextResponse.json(
+          { success: false, error: error.code, details: error.details },
+          { status: error.status, headers: CORS_HEADERS }
+        );
+      }
+    }
+
     const parsed = embedChatSchema.parse(body);
     const messages = parsed.messages.filter(message => message.role !== 'system');
     const model = resolveEmbedModel(parsed.model);
@@ -251,6 +271,7 @@ export async function POST(request: NextRequest) {
 
     let context = '';
     let smallTalkTurn = false;
+    let answerLanguage: AnswerLanguageOptions | undefined;
 
     if (queryText.trim().length > 0) {
       const isGPTModel = model.includes('gpt-4') || model.includes('o1') || model.includes('chatgpt');
@@ -281,6 +302,7 @@ export async function POST(request: NextRequest) {
       });
       collector.setReviewContent({ query: queryText, context: result.context, model });
       pendingTrace = { collector, result };
+      feedbackTraceId = collector.traceId;
       if (readFeedbackLoopConfig().retrievalLog !== 'off') {
         logContext = {
           channel: 'embed',
@@ -311,6 +333,7 @@ export async function POST(request: NextRequest) {
       // D-10: small talk under the query layer skipped retrieval and is answered without knowledge-base context
       smallTalkTurn = isSmallTalkResult(result);
       context = smallTalkTurn ? '' : result.context;
+      answerLanguage = smallTalkTurn ? undefined : answerLanguageOptions(result);
     } else {
       console.log('[Document Search] Embed request has no query text, skipping retrieval');
     }
@@ -371,7 +394,7 @@ Context:
     const finalSystemPrompt = smallTalkTurn
       ? createEnhancedRAGPrompt(systemPrompt, '', 'bypass')
       : context.length > 0
-        ? createEnhancedRAGPrompt(systemPrompt, context)
+        ? createEnhancedRAGPrompt(systemPrompt, context, 'strict', answerLanguage)
         : systemPrompt.replace('{{context}}', context);
 
     console.log('[EMBED RAG] Final system prompt preview (first 300 chars):', finalSystemPrompt.substring(0, 300));
@@ -424,8 +447,20 @@ Context:
       const answeredOutcome = logContext ? pendingTrace?.result.logOutcome : undefined;
       if (answeredOutcome && answeredOutcome.value === 'unknown') answeredOutcome.value = 'answered';
 
+      // D-11: only with the embed rating enabled and a logged row to rate; otherwise the stream is unchanged
+      let feedbackToken: string | null = null;
+      if (feedbackTraceId && readFeedbackLoopConfig().embedFeedbackEnabled) {
+        const tenantKey = scopeKey(embedScope.scope);
+        if ((await effectiveLogMode(tenantKey)) !== 'off') {
+          feedbackToken = mintEmbedFeedbackToken({ traceId: feedbackTraceId, tenantKey });
+        }
+      }
+
       // Return the AI SDK stream directly (SAME AS MAIN CHAT API)
       return result.toUIMessageStreamResponse({
+        ...(feedbackToken
+          ? { messageMetadata: ({ part }) => (part.type === 'start' ? { feedbackToken } : undefined) }
+          : {}),
         headers: {
           'Content-Type': 'text/plain; charset=utf-8',
           'Cache-Control': 'no-cache, no-transform',

@@ -2,7 +2,7 @@ import { generateText, type LanguageModel } from 'ai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { env } from '@/lib/env';
 import { SystemPromptManager } from '@/lib/system-prompt-manager';
-import { createEnhancedRAGPrompt } from '@/lib/rag';
+import { createEnhancedRAGPrompt, type AnswerLanguageOptions } from '@/lib/rag';
 import type { GroundednessRequest, GroundednessResult } from '@/lib/rag-eval/contracts.generated';
 
 export const EVAL_DEFAULT_SYSTEM_PROMPT = `You are a helpful AI assistant with access to a knowledge base. When answering questions:
@@ -85,12 +85,14 @@ export function buildEvalSystemPrompt(input: {
   context: string;
   ragMode: EvalRagMode;
   promptEnv?: EvalPromptEnv;
+  /** D-25: the query plan's language and the kept chunks' languages (the trace has a query plan). */
+  answerLanguage?: AnswerLanguageOptions;
 }): string {
-  const { context, ragMode } = input;
+  const { context, ragMode, answerLanguage } = input;
   const ragSystemPrompt = resolveEvalPromptTemplate(input.promptEnv);
 
   if (context.length > 0) {
-    return createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode);
+    return createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode, answerLanguage);
   }
   return SystemPromptManager.injectContext(ragSystemPrompt, context);
 }
@@ -146,9 +148,10 @@ export async function generateEvalAnswer(input: {
   promptEnv?: EvalPromptEnv;
   /** Applied to the finished system prompt, e.g. the citation instruction. */
   decorateSystemPrompt?: (prompt: string) => string;
+  answerLanguage?: AnswerLanguageOptions;
 }): Promise<string> {
-  const { query, conversation, context, ragMode, generatorModel, signal, promptEnv, decorateSystemPrompt } = input;
-  const basePrompt = buildEvalSystemPrompt({ context, ragMode, promptEnv });
+  const { query, conversation, context, ragMode, generatorModel, signal, promptEnv, decorateSystemPrompt, answerLanguage } = input;
+  const basePrompt = buildEvalSystemPrompt({ context, ragMode, promptEnv, answerLanguage });
   const system = decorateSystemPrompt ? decorateSystemPrompt(basePrompt) : basePrompt;
   const result = await generateText({
     model: currentFactory(generatorModel),

@@ -28,13 +28,14 @@ const FOLDED_SETUP: Record<DeploymentMode, string> = {
 /**
  * Migrations whose final shape is folded into both setup files: Phase 3 (0301-0320, plans 03-47 and later), Phase 3.1 (0351-0359, and the queue
  * hardening and chunk writer fix 0420-0424 after Phase 4, plan 03.1-52), Phase 4 (0401-0413, plan 04-42) and the empty search_path rewrite 0425
- * after 0424 (plan 04-47), and Phase 5 (0501-0502, plan 05-25). 0426, 0427 and Phase 6 (plan 06-45) are not folded yet, so a fresh install from
- * a setup file is completed by those migrations alone.
+ * after 0424 (plan 04-47), Phase 3.1.1 (0440-0442, plan 03.1.1-14) and Phase 5 (0501-0502, plan 05-25). 0426, 0427 and Phase 6 (plan 06-45)
+ * are not folded yet, so a fresh install from a setup file is completed by those migrations alone.
  */
-const FOLDED_MIGRATION = /^supabase\/migrations\/(030[1-9]|031\d|0320|035[1-9]|040[1-9]|041[0-3]|042[0-5]|050[12])_[a-z0-9_]+(\.(single|multi)-tenant)?\.sql$/;
+const FOLDED_MIGRATION = /^supabase\/migrations\/(030[1-9]|031\d|0320|035[1-9]|040[1-9]|041[0-3]|042[0-5]|044[0-2]|050[12])_[a-z0-9_]+(\.(single|multi)-tenant)?\.sql$/;
 const PHASE4_MIGRATION = /^supabase\/migrations\/04(0[1-9]|1\d)_/;
 const PHASE31_MIGRATION = /^supabase\/migrations\/(035[1-9]|042[0-4])_/;
 const PHASE5_MIGRATION = /^supabase\/migrations\/050\d_/;
+const PHASE311_MIGRATION = /^supabase\/migrations\/044\d_/;
 const unfoldedMigrationFiles = (mode: DeploymentMode): string[] => migrationFiles(mode).filter((file) => !FOLDED_MIGRATION.test(file));
 
 /** Every function the Phase 4 migrations create; each one is service-role only (RET-04, D-04). */
@@ -297,8 +298,86 @@ describe('folded migration set', () => {
       assert.deepEqual(phase5, ['supabase/migrations/0501_rag_answer_records.sql', `supabase/migrations/0502_rag_answer_records_tenant.${mode}.sql`]);
       assert.deepEqual(phase5.filter((file) => !FOLDED_MIGRATION.test(file)), []);
     });
+
+    test(`every Phase 3.1.1 migration of ${mode} is folded into the setup file`, () => {
+      const phase311 = migrationFiles(mode).filter((file) => PHASE311_MIGRATION.test(file));
+      assert.deepEqual(phase311, [
+        'supabase/migrations/0440_embedding_bindings.sql',
+        'supabase/migrations/0441_binding_gate.sql',
+        'supabase/migrations/0442_reembed_scope.sql',
+      ]);
+      assert.deepEqual(phase311.filter((file) => !FOLDED_MIGRATION.test(file)), []);
+    });
   }
 });
+
+/** Every function 0440-0442 create; each one is service-role only with an empty search_path (D-06, D-16). */
+const PHASE311_FUNCTIONS = [
+  'rag_embedding_profiles_scope_guard',
+  'rag_embedding_bindings_guard',
+  'rag_list_embedding_bindings',
+  'rag_list_embedding_profile_scopes',
+  'rag_create_embedding_binding',
+  'rag_set_embedding_binding_status',
+  'rag_record_binding_evidence',
+  'rag_activate_embedding_binding',
+  'rag_rollback_embedding_binding',
+  'rag_deactivate_embedding_binding',
+  'rag_reembed_require_binding',
+] as const;
+
+/** The 0440-0442 schema as a fresh install gets it: the bindings table locked to service_role, the doc_types scope, the seeded candidates, their
+ * indexes, the new functions and the scoped guard and re-embed bodies (not the 0425 ones they replace). */
+async function assertDomainBindingsSecured(db: PGlite): Promise<void> {
+  const table = await db.query<{ rls: boolean }>("SELECT relrowsecurity AS rls FROM pg_class WHERE oid = to_regclass('public.embedding_profile_bindings')");
+  assert.equal(table.rows[0]?.rls, true, 'embedding_profile_bindings exists with row level security enabled');
+  const privileges = ['SELECT', 'INSERT', 'UPDATE', 'DELETE'];
+  const held = await db.query<{ role: string; privilege: string }>(
+    `SELECT r.role, p.privilege FROM unnest(ARRAY['anon', 'authenticated', 'service_role']) AS r(role), unnest($1::text[]) AS p(privilege)
+     WHERE has_table_privilege(r.role, 'public.embedding_profile_bindings', p.privilege) ORDER BY 1, 2`,
+    [privileges],
+  );
+  assert.deepEqual(held.rows.filter((row) => row.role !== 'service_role'), [], 'clients have no privilege on embedding_profile_bindings');
+  assert.deepEqual(held.rows.filter((row) => row.role === 'service_role').map((row) => row.privilege), [...privileges].sort());
+  const column = await db.query<{ type: string }>(
+    "SELECT format_type(atttypid, atttypmod) AS type FROM pg_attribute WHERE attrelid = 'public.embedding_profiles'::regclass AND attname = 'doc_types'",
+  );
+  assert.equal(column.rows[0]?.type, 'text[]', 'embedding_profiles.doc_types');
+  const seeded = await db.query<{ id: string; status: string; doc_types: string[] }>(
+    "SELECT id, status, doc_types FROM public.embedding_profiles WHERE doc_types IS NOT NULL ORDER BY id",
+  );
+  assert.deepEqual(seeded.rows, [
+    { id: 'voyage-4-large-1024-domain', status: 'available', doc_types: ['contract_legal', 'financial_report', 'invoice_receipt'] },
+    { id: 'voyage-finance-2-1024', status: 'available', doc_types: ['financial_report', 'invoice_receipt'] },
+    { id: 'voyage-law-2-1024', status: 'available', doc_types: ['contract_legal'] },
+  ]);
+  const indexes = await db.query<{ name: string }>(
+    `SELECT indexname AS name FROM pg_indexes WHERE schemaname = 'public'
+       AND indexname IN ('chunk_embeddings_voyage_law_2_1024_hnsw', 'chunk_embeddings_voyage_finance_2_1024_hnsw',
+                         'chunk_embeddings_voyage_4_large_1024_domain_hnsw', 'embedding_profile_bindings_single_active',
+                         'embedding_profile_bindings_single_backfilling', 'embedding_profile_bindings_triple_ux') ORDER BY 1`,
+  );
+  assert.equal(indexes.rows.length, 6, `the 0440 indexes: ${indexes.rows.map((row) => row.name).join(', ')}`);
+  const functions = await db.query<{ proname: string; signature: string; config: string[] | null; anon: boolean; authenticated: boolean; service_role: boolean }>(
+    `SELECT p.proname, p.oid::regprocedure::text AS signature, p.proconfig AS config,
+            has_function_privilege('anon', p.oid, 'EXECUTE') AS anon,
+            has_function_privilege('authenticated', p.oid, 'EXECUTE') AS authenticated,
+            has_function_privilege('service_role', p.oid, 'EXECUTE') AS service_role
+     FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.proname = ANY($1::text[])`,
+    [[...PHASE311_FUNCTIONS]],
+  );
+  const present = new Set(functions.rows.map((row) => row.proname));
+  assert.deepEqual(PHASE311_FUNCTIONS.filter((name) => !present.has(name)), [], 'every 0440-0442 function is defined by the setup file');
+  for (const row of functions.rows) {
+    assert.ok(!row.anon && !row.authenticated, `${row.signature} is not executable by anon or authenticated`);
+    assert.ok(row.service_role, `${row.signature} is executable by service_role`);
+    assert.ok((row.config ?? []).includes('search_path=""'), `${row.signature} pins an empty search_path (${JSON.stringify(row.config)})`);
+  }
+  for (const signature of ['rag_chunk_embeddings_guard()', 'rag_reembed_pick(text,text,uuid,integer)', 'rag_reembed_start_run(text,text,text,text)']) {
+    const source = await functionSource(db, signature);
+    assert.ok(source?.includes('doc_types'), `${signature} carries the 0440/0442 doc-type scope`);
+  }
+}
 
 const ANSWER_RECORD_TENANT_KEY: Record<DeploymentMode, RegExp> = {
   'single-tenant': /^'s:default'::text$/,
@@ -341,6 +420,7 @@ for (const mode of MODES) {
         await assertRagFunctionsNotCallableByClients(fixture.db);
         await assertPhase4FunctionsServiceRoleOnly(fixture.db);
         await assertAnswerRecordsSecured(fixture.db, mode);
+        await assertDomainBindingsSecured(fixture.db);
         const tables = await fixture.db.query<{ name: string }>(
           `SELECT c.relname AS name FROM pg_class c WHERE c.relnamespace = 'public'::regnamespace AND c.relkind = 'r'
              AND c.relname IN ('document_parents', 'chunking_profiles', 'chunking_build_runs', 'chunking_build_gaps') ORDER BY 1`,
@@ -406,11 +486,15 @@ const PHASE_31_SECTIONS = [
   },
 ] as const;
 const PHASE_4_HEADER = `${BAR}\n-- Phase 4: Hybrid retrieval`;
-// The empty search_path rewrite (0425, plan 04-47) runs after 0424, so its section follows the 0420-0424 section; the Phase 5 section (0501-0502,
-// plan 05-25) follows it and closes the file.
+// The empty search_path rewrite (0425, plan 04-47) runs after 0424, so its section follows the 0420-0424 section; the Phase 3.1.1 section
+// (0440-0442, plan 03.1.1-14) replaces 0425 guard and re-embed bodies, so it follows 0425; the Phase 5 section (0501-0502, plan 05-25) closes the file.
 const SEARCH_PATH_SECTION = {
   header: `${BAR}\n-- Phase 4 gap closure: empty search_path for SECURITY DEFINER, trigger and post-Phase-3 functions (migration 0425, plan 04-47, after 0424)\n${BAR}`,
   files: /^supabase\/migrations\/0425_/,
+} as const;
+const PHASE_311_SECTION = {
+  header: `${BAR}\n-- Phase 3.1.1: Domain embedding bindings and scoped re-embed (migrations 0440-0442, plan 03.1.1-14, after 0425 in migration order)\n${BAR}`,
+  files: /^supabase\/migrations\/044[0-2]_/,
 } as const;
 const PHASE_5_SECTION = {
   header: `${BAR}\n-- Phase 5: Answer records (migrations 0501-0502, plan 05-25, after 0425 in migration order)\n${BAR}`,
@@ -437,8 +521,10 @@ function foldedSection(mode: DeploymentMode, { header, files }: { header: string
 }
 
 const searchPathFiles = (mode: DeploymentMode): string[] => migrationFiles(mode).filter((file) => SEARCH_PATH_SECTION.files.test(file));
+const phase311Files = (mode: DeploymentMode): string[] => migrationFiles(mode).filter((file) => PHASE_311_SECTION.files.test(file));
 
-/** The folded setup file with both Phase 3.1 sections and the later 0425 section cut out: what the setup was before the Phase 3.1 fold. */
+/** The folded setup file with both Phase 3.1 sections and the later 0425 and 0440-0442 sections cut out: what the setup was before the Phase 3.1
+ * fold. */
 function setupWithoutPhase31(mode: DeploymentMode): string {
   let text = fs.readFileSync(path.join(REPO_ROOT, FOLDED_SETUP[mode]), 'utf8');
   for (const section of phase31Sections(mode)) {
@@ -447,7 +533,9 @@ function setupWithoutPhase31(mode: DeploymentMode): string {
   }
   const searchPath = foldedSection(mode, SEARCH_PATH_SECTION);
   assert.ok(text.includes(searchPath), `${FOLDED_SETUP[mode]} lacks the 0425 section`);
-  return text.replace(searchPath, '');
+  const phase311 = foldedSection(mode, PHASE_311_SECTION);
+  assert.ok(text.includes(phase311), `${FOLDED_SETUP[mode]} lacks the 0440-0442 section`);
+  return text.replace(searchPath, '').replace(phase311, '');
 }
 
 /** Supabase Realtime as far as 0353 needs it: realtime.messages with RLS, realtime.topic() and realtime.send(). */
@@ -498,15 +586,22 @@ for (const mode of MODES) {
       const [early, late] = phase31Sections(mode) as [string, string];
       assert.ok(text.includes(`${early}\n${PHASE_4_HEADER}`), 'the 0351-0359 section sits right before the Phase 4 section');
       assert.ok(
-        text.endsWith(`${late}\n${foldedSection(mode, SEARCH_PATH_SECTION)}\n${foldedSection(mode, PHASE_5_SECTION)}`),
-        'after Phase 4 come the 0420-0424 section, the 0425 section and then the Phase 5 section, which closes the file',
+        text.endsWith(
+          `${late}\n${foldedSection(mode, SEARCH_PATH_SECTION)}\n${foldedSection(mode, PHASE_311_SECTION)}\n${foldedSection(mode, PHASE_5_SECTION)}`,
+        ),
+        'after Phase 4 come the 0420-0424 section, the 0425 section, the 0440-0442 section and then the Phase 5 section, which closes the file',
       );
       assert.ok(text.indexOf(late) > text.indexOf(PHASE_4_HEADER));
     });
 
     test(`${mode} setup alone equals the setup without its Phase 3.1 sections plus the Phase 3.1 migrations`, async () => {
       const folded = await freshDatabase([readRepo(FOLDED_SETUP[mode])]);
-      const migrated = await freshDatabase([setupWithoutPhase31(mode), ...phase31Files(mode).map(readRepo), ...searchPathFiles(mode).map(readRepo)]);
+      const migrated = await freshDatabase([
+        setupWithoutPhase31(mode),
+        ...phase31Files(mode).map(readRepo),
+        ...searchPathFiles(mode).map(readRepo),
+        ...phase311Files(mode).map(readRepo),
+      ]);
       try {
         const foldedDump = await catalogDump(folded);
         assert.ok(foldedDump.columns.some((row) => row.includes('"table":"ingestion_jobs"')), 'ingestion_jobs is in the setup file');

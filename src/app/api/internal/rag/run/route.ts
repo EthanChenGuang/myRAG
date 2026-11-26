@@ -5,6 +5,9 @@ import { env } from '@/lib/env';
 import { validateRequest } from '@/lib/api-middleware';
 import { classifyQuery } from '@/lib/query-classifier';
 import {
+  answerLanguageOptions,
+  appendAnswerLanguage,
+  type AnswerLanguageOptions,
   BINDING_DOC_TYPES,
   CORE_STAGES,
   countTokens,
@@ -17,6 +20,8 @@ import {
   LEXICAL_VERSION,
   OPTIONAL_STAGES,
   parseRetrievalFilters,
+  resolveScopesFilter,
+  ScopeFilterError,
   readGenerationConfig,
   injectionTraceVersions,
   RERANK_TEXT_VERSION,
@@ -83,6 +88,8 @@ function toFilterBody(input: NonNullable<RetrievalFiltersInput>): Record<string,
       currency: input.invoice.currency,
     };
   }
+  if (input.scopes != null) body.scopes = input.scopes;
+  if (input.include_untagged === true) body.includeUntagged = true;
   return body;
 }
 
@@ -343,6 +350,7 @@ async function generateClaudeAnswer(input: {
   query: string;
   conversation: EvalConversationTurn[];
   signal: AbortSignal;
+  answerLanguage?: AnswerLanguageOptions;
 }): Promise<string | null> {
   const { session } = input;
   let streamError: unknown = null;
@@ -351,7 +359,7 @@ async function generateClaudeAnswer(input: {
       input.conversation.map((turn) => ({ role: turn.role, content: turn.content })),
     ) as ModelMessage[];
     const stream = session.startClaude({
-      system: session.claudeSystemPrompt(resolveEvalPromptTemplate()),
+      system: appendAnswerLanguage(session.claudeSystemPrompt(resolveEvalPromptTemplate()), input.answerLanguage),
       history,
       question: input.query,
       reasoning: false,
@@ -403,6 +411,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: 'Invalid request data', details: filtersParsed.details }, { status: 400 });
     }
     retrievalFilters = filtersParsed.filters;
+    if (retrievalFilters?.scopes) {
+      try {
+        retrievalFilters = await resolveScopesFilter(retrievalFilters, { scope, signal: req.signal });
+      } catch (error) {
+        if (!(error instanceof ScopeFilterError)) throw error;
+        return NextResponse.json({ success: false, error: error.code, details: error.details }, { status: error.status });
+      }
+    }
   }
 
   const bindingOverrides = toBindingOverrides(options);
@@ -438,7 +454,8 @@ export async function POST(req: NextRequest) {
       query,
       profile: 'eval',
       options: {
-        maxResults: options?.max_results ?? parseInt(env.RAG_FINAL_RESULT_COUNT || '25'),
+        // Unset: each pipeline applies RAG_FINAL_RESULT_COUNT itself (legacy) or keeps its own final top-k (v2).
+        ...(options?.max_results != null ? { maxResults: options.max_results } : {}),
         isGPTModel,
         ragMode,
         webSearchEnabled: false,
@@ -476,9 +493,16 @@ export async function POST(req: NextRequest) {
       if (generatorModel !== null && !refused) {
         const generationStart = collector.now();
         citationSession?.attach(result);
+        const answerLanguage = answerLanguageOptions(result);
         try {
           if (citationSession?.strategy === 'claude-citations') {
-            answer = await generateClaudeAnswer({ session: citationSession, query, conversation: conversation ?? [], signal: req.signal });
+            answer = await generateClaudeAnswer({
+              session: citationSession,
+              query,
+              conversation: conversation ?? [],
+              signal: req.signal,
+              ...(answerLanguage ? { answerLanguage } : {}),
+            });
           }
           if (answer === null) {
             answer = await generateEvalAnswer({
@@ -488,6 +512,7 @@ export async function POST(req: NextRequest) {
               ragMode,
               generatorModel,
               ...(citationSession ? { decorateSystemPrompt: (prompt: string) => citationSession.decorateSystemPrompt(prompt) } : {}),
+              ...(answerLanguage ? { answerLanguage } : {}),
             });
             citationSession?.ingestFullText(answer);
           }

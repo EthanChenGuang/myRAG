@@ -5,6 +5,7 @@ import { backfillDocumentScope } from '../../tenant/backfill-scope';
 import { scopeFromIngestionJob } from '../../tenant/ingestion-job';
 import { scopeKey } from '../../tenant/scope';
 import { isArtifactName, loadArtifact, originalName, saveArtifact, type ArtifactContext } from '../artifacts';
+import { loadIngestConfig } from '../config';
 import { getIngestDeps } from '../deps';
 import { callerDocumentMetadata } from '../document-metadata';
 import { enqueueStageContext, queuedInputRecordOf, runEnqueueStages } from '../enqueue';
@@ -14,6 +15,7 @@ import { ORIGINALS_BUCKET, assertObjectKey, getObjectStore } from '../object-sto
 import { originFields } from '../origin';
 import { getProcessingProfile, profileFor, type DocType } from '../profiles/load';
 import { finishQueueIngestTrace } from '../queue-trace';
+import { uploadScopesEnabled, writeUploadScopes } from '../scopes/upload';
 import { readParseResultForJob } from '../parse-cache';
 import { QUEUED_INPUT_ARTIFACT, buildQueuedContext, decodeQueuedInput, encodeQueuedInput } from '../queued-context';
 import { INGEST_STAGES, REGISTERED_STAGES, rehydrateFromStore, runIngestStages } from '../runner';
@@ -24,6 +26,7 @@ import { applyParseResult, stripBom } from '../stages/parse';
 import { createLedgerStateStore, saveContextState } from '../state-store';
 import { ingestStateFromRecord } from '../status';
 import { createIngestWriter } from '../writer';
+import { workerHiddenTextReport } from '../../security/hidden-text';
 import { INGEST_SOURCES, type ChunkDraft, type IngestInput, type IngestResult, type IngestSource, type StageContext, type StageName, type StageSpec } from '../types';
 import { isTerminal, leaseHolds, mapError, refuse, type CallbackResult } from './common';
 
@@ -171,6 +174,16 @@ export function applySnapshotDecisions(ctx: StageContext, job: IngestionJob): vo
   else delete ctx.state.approval;
   if (job.settings.hold_publish === true && job.batch_id) ctx.state.publishHold = { batchId: job.batch_id };
   else delete ctx.state.publishHold;
+}
+
+/**
+ * The hidden-text report the worker made at preflight (D-33), handed to scan_injection so it makes no sidecar call. It is used only while
+ * the check is on and only for this job's original; a report that fails validation is kept as null, which the stage treats as a checker
+ * that could not answer.
+ */
+export function applyWorkerHiddenText(ctx: StageContext, job: IngestionJob, raw: unknown): void {
+  if (raw === undefined || raw === null || ctx.config.hiddenTextCheck === 'off' || !job.file_sha256) return;
+  ctx.workerHiddenText = workerHiddenTextReport(raw, job.file_sha256);
 }
 
 function parseHasText(ctx: StageContext): boolean {
@@ -353,6 +366,10 @@ async function startProgressiveFinal(
   if (callerMetadata) await writer.setFields(begun.documentId, { metadata: callerMetadata });
   const originValues = originFields(record.options);
   if (originValues !== null) await writer.setFields(begun.documentId, originValues);
+  // D-40: the final version carries the upload's tags before its chunks are written, as the first version did.
+  if (record.scopes && record.scopes.length > 0 && uploadScopesEnabled(loadIngestConfig(getIngestDeps().ingestEnv()))) {
+    await writeUploadScopes(db, tenantKey, begun.documentId, record.scopes, signal);
+  }
   await saveArtifact(to, QUEUED_INPUT_ARTIFACT, encodeQueuedInput({ ...record, state: { ...record.state, artifacts } }), 'application/json');
   return { kind: 'continue', job: await beginProgressiveFinal(job.id, workerId, begun.documentId, { signal }) };
 }
@@ -523,6 +540,7 @@ export async function handleAdvance(jobId: string, body: AdvanceBody, options: {
     if (!built.ok) return refuse(built.reason === 'document_not_processing' ? 409 : 404, built.reason);
     const { ctx } = built;
     applySnapshotDecisions(ctx, job);
+    applyWorkerHiddenText(ctx, job, body.hidden_text_report);
 
     if (position === null) {
       const cached = await readParseResultForJob(job, body.parse_cache_id, signal);

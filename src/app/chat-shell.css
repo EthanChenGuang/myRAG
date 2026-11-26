@@ -765,6 +765,315 @@ html .chat-source-pill.is-open {
   font-family: var(--font-chat-ui), ui-sans-serif, system-ui, sans-serif;
 }
 
+/* ---------- Assistant answer typography (Claude-app scale) ---------- */
+
+/* The user's text-size setting picks the base; every element below scales from it in em. */
+html .chat-answer,
+html .chat-row[data-role='user'] .chat-message.rounded-\[20px\] {
+  --answer-fs: 15px;
+  --answer-ink: var(--chat-ink);
+  max-width: 100% !important;
+  min-width: 0;
+}
+
+html .chat-answer.text-size-small,
+html .chat-row[data-role='user'] .chat-message.rounded-\[20px\].text-size-small {
+  --answer-fs: 13px;
+}
+
+html .chat-answer.text-size-large,
+html .chat-row[data-role='user'] .chat-message.rounded-\[20px\].text-size-large {
+  --answer-fs: 17px;
+}
+
+html .chat-row[data-role='assistant'] {
+  gap: 12px;
+}
+
+@media (max-width: 639px) {
+  html .chat-row {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  html .chat-row[data-role='assistant'] {
+    gap: 0;
+  }
+
+  html .chat-row[data-role='assistant'] > .chat-assistant-avatar {
+    display: none !important;
+  }
+
+  html .chat-answer,
+  html .chat-row[data-role='user'] .chat-message.rounded-\[20px\] {
+    --answer-fs: 16px;
+  }
+
+  html .chat-answer.text-size-small,
+  html .chat-row[data-role='user'] .chat-message.rounded-\[20px\].text-size-small {
+    --answer-fs: 14px;
+  }
+
+  html .chat-answer.text-size-large,
+  html .chat-row[data-role='user'] .chat-message.rounded-\[20px\].text-size-large {
+    --answer-fs: 18px;
+  }
+}
+
+html .chat-answer .react-markdown {
+  font-size: var(--answer-fs) !important;
+  line-height: 1.55;
+  color: var(--answer-ink);
+  letter-spacing: normal;
+}
+
+html .chat-answer.font-inter .react-markdown,
+html .chat-answer.font-inter .react-markdown :is(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--font-chat-ui), ui-sans-serif, system-ui, sans-serif;
+}
+
+html .chat-answer .react-markdown :is(p, li, td, th, blockquote, strong, b, em) {
+  color: var(--answer-ink) !important;
+}
+
+html .chat-answer .react-markdown :is(p, li) {
+  font-size: 1em !important;
+  line-height: 1.55 !important;
+}
+
+html .chat-answer .react-markdown p {
+  margin: 0 0 0.75em;
+}
+
+html .chat-answer .react-markdown :is(strong, b) {
+  font-weight: 600;
+}
+
+/* No heading hierarchy: every heading level reads as a bold line at body size. */
+html .chat-answer .react-markdown :is(h1, h2, h3, h4, h5, h6) {
+  color: var(--answer-ink) !important;
+  font-size: var(--answer-fs) !important;
+  font-weight: 600 !important;
+  line-height: 1.5;
+  letter-spacing: 0;
+  margin: 1em 0 0.35em !important;
+}
+
+html .chat-answer .react-markdown > :first-child {
+  margin-top: 0 !important;
+}
+
+html .chat-answer .react-markdown > :last-child {
+  margin-bottom: 0 !important;
+}
+
+html .chat-answer .react-markdown :is(ul, ol) {
+  padding-left: 1.25em !important;
+  margin: 0 0 0.75em !important;
+}
+
+html .chat-answer .react-markdown :is(ul, ol) > * + * {
+  margin-top: 0 !important;
+}
+
+html .chat-answer .react-markdown li {
+  margin: 0.35em 0 0 !important;
+  padding-left: 0.15em !important;
+}
+
+html .chat-answer .react-markdown li:first-child {
+  margin-top: 0 !important;
+}
+
+html .chat-answer .react-markdown li > :is(p, ul, ol) {
+  margin-top: 0.35em !important;
+  margin-bottom: 0 !important;
+}
+
+html .chat-answer .react-markdown li > p:first-child {
+  margin-top: 0 !important;
+}
+
+html .chat-answer .react-markdown li :is(ul, ol) {
+  padding-left: 1.1em !important;
+}
+
+html .chat-answer .react-markdown li::marker {
+  color: var(--chat-ink-muted);
+  font-weight: 400;
+}
+
+html .chat-answer .react-markdown a {
+  color: var(--chat-accent-ink) !important;
+  font-weight: inherit !important;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+
+html .chat-answer .react-markdown :not(pre) > code {
+  background-color: var(--chat-hover) !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  border-radius: 4px !important;
+  padding: 0.12em 0.35em !important;
+  font-size: 0.9em !important;
+  font-weight: 400;
+  color: var(--answer-ink) !important;
+}
+
+html .chat-answer .react-markdown :is(code, pre, kbd, samp) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace !important;
+}
+
+html .chat-answer .react-markdown :not(pre) > code::before,
+html .chat-answer .react-markdown :not(pre) > code::after {
+  content: none !important;
+}
+
+html .chat-answer .react-markdown pre {
+  background-color: var(--chat-surface) !important;
+  color: var(--answer-ink) !important;
+  border: 0.5px solid var(--chat-hairline);
+  border-radius: 12px !important;
+  padding: 0 !important;
+  margin: 0.25em 0 0.9em !important;
+  overflow: hidden;
+  font-size: 0.82em;
+}
+
+html .chat-answer .react-markdown pre pre {
+  border: 0;
+  border-radius: 0 !important;
+  margin: 0 !important;
+  padding: 12px 14px !important;
+  overflow-x: auto;
+  background-color: transparent !important;
+  font-size: 1em;
+}
+
+html .chat-answer .react-markdown pre > div {
+  margin: 0 !important;
+  border-radius: 0 !important;
+  background-color: transparent !important;
+}
+
+html .chat-answer .react-markdown pre > div > div:first-child {
+  background-color: var(--chat-hover) !important;
+  border-color: var(--chat-hairline) !important;
+  padding: 4px 6px 4px 14px !important;
+  font-family: var(--font-chat-ui), ui-sans-serif, system-ui, sans-serif !important;
+}
+
+html .chat-answer .react-markdown pre > div > div:first-child :is(span, button) {
+  font-family: inherit !important;
+  color: var(--chat-ink-muted) !important;
+}
+
+html .chat-answer .react-markdown pre > div > div:first-child button {
+  min-height: 32px;
+  padding: 0 8px !important;
+}
+
+html .chat-answer .react-markdown blockquote {
+  border-left: 2px solid var(--chat-hairline) !important;
+  padding-left: 0.9em !important;
+  margin: 0 0 0.75em !important;
+  font-style: normal !important;
+  quotes: none;
+}
+
+html .chat-answer .react-markdown blockquote :is(p, li) {
+  color: var(--chat-ink-muted) !important;
+}
+
+html .chat-answer .react-markdown hr {
+  border: 0 !important;
+  border-top: 0.5px solid var(--chat-hairline) !important;
+  margin: 1.1em 0 !important;
+}
+
+html .chat-answer .react-markdown table {
+  display: block;
+  width: max-content !important;
+  max-width: 100%;
+  height: auto !important;
+  overflow-x: auto !important;
+  -webkit-overflow-scrolling: touch;
+  border: 0 !important;
+  border-radius: 0 !important;
+  border-collapse: collapse !important;
+  margin: 0.25em 0 0.9em !important;
+  font-size: 0.88em !important;
+  line-height: 1.4;
+}
+
+html .chat-answer .react-markdown :is(thead, tbody, tr) {
+  height: auto !important;
+  border: 0 !important;
+}
+
+html .chat-answer .react-markdown table :is(th, td) {
+  height: auto !important;
+  border: 0.5px solid var(--chat-hairline) !important;
+  border-radius: 0 !important;
+  padding: 6px 10px !important;
+  background-color: transparent !important;
+  color: var(--answer-ink) !important;
+  font-weight: 400 !important;
+  text-align: left !important;
+  vertical-align: top;
+  word-break: normal !important;
+}
+
+html .chat-answer .react-markdown table th {
+  font-weight: 600 !important;
+  background-color: var(--chat-hover) !important;
+}
+
+/* Related questions keep the answer's scale. */
+html .chat-answer [data-related-questions] {
+  border-top: 0.5px solid var(--chat-hairline);
+  font-family: var(--font-chat-ui), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* No visible heading: it stays for screen readers (the list's accessible name). */
+html .chat-answer [data-related-questions] > p {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+html .chat-answer [data-related-questions] ul {
+  border-color: var(--chat-hairline);
+}
+
+html .chat-answer [data-related-questions] :is(button, div)[class*='min-h-'] {
+  font-size: calc(var(--answer-fs) * 0.875) !important;
+  color: var(--chat-ink-muted) !important;
+}
+
+/* User bubble text matches the answer size and face. */
+html .chat-row[data-role='user'] .chat-message.rounded-\[20px\] {
+  font-size: var(--answer-fs);
+  line-height: 1.45;
+}
+
+html .chat-row[data-role='user'] .chat-message.rounded-\[20px\].font-inter {
+  font-family: var(--font-chat-ui), ui-sans-serif, system-ui, sans-serif;
+}
+
+html .chat-row[data-role='user'] .chat-message.rounded-\[20px\] :is(div, p) {
+  font-size: inherit !important;
+  color: var(--chat-ink) !important;
+}
+
 /* ---------- Empty state on phones ---------- */
 
 @media (max-width: 639px) {

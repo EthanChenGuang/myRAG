@@ -19,7 +19,17 @@ import { routeTransforms, type RoutedTransform, type RoutedTransforms } from './
 import { getQueryTransformer, type CondenseResult, type DecomposeResult, type ExpandResult, type HydeResult, type QueryTransformer } from './transformer';
 import { queryLayerTranslator, type QueryLayerTranslateContext } from './translate';
 import type { TranslatedQuery } from './variants';
-import { getActiveProfile } from '../embeddings/active-profile';
+import { getActiveProfile, LEGACY_PROFILE } from '../embeddings/active-profile';
+import { effectiveQueryLayerConfig, queryLayerOverrides } from './layer-config';
+
+export { effectiveQueryLayerConfig, queryLayerOverrides } from './layer-config';
+import type { QueryEmbedding } from '../embeddings/query-embedding';
+import { env } from '@/lib/env';
+import { checkBypassReason, type CacheRetrievalOptions, type TurnFacts } from '../cache/bypass';
+import { resolveHitSources } from '../cache/sources';
+import type { CacheHit, CacheKeyParts, CacheTicket, EntryProfile } from '../cache/types';
+import { resolveFinalResultCount } from '../config';
+import type { RpcClient } from '../backend/supabase-rpc';
 
 export type QueryLayerShortCircuit = { kind: 'small_talk' } | { kind: 'cache_hit' };
 
@@ -33,6 +43,20 @@ export interface QueryLayerOutcome {
   /** True when the layer served translation itself, so the Phase 4 translate stage stands down. */
   handledTranslate: boolean;
   shortCircuit: QueryLayerShortCircuit | null;
+  /** Set with shortCircuit cache_hit: the cached answer, citations re-resolved against the current sources. */
+  cacheHit?: CacheHit;
+  /** Set when the semantic_cache stage checked with no check-time bypass (D-32, A-3). */
+  cacheTicket?: CacheTicket;
+  /** The standalone query's embedding from the cache stage; the embed stage reuses it instead of embedding the text again. */
+  precomputed?: { text: string; embedding: QueryEmbedding };
+}
+
+/** What the pipeline lends the semantic_cache stage, so its key and vector equal what the retrieval stages use. */
+export interface SemanticCacheSeam {
+  /** Embeds one text exactly as the embed stage would (eval embedding profile included). */
+  embed(text: string, signal: AbortSignal): Promise<QueryEmbedding>;
+  /** The request's retrieval-config hash for this embedding, query-layer part included. */
+  retrievalConfigHash(embedding: QueryEmbedding): Promise<string>;
 }
 
 export interface QueryLayerInput {
@@ -42,8 +66,10 @@ export interface QueryLayerInput {
   signal: AbortSignal;
   collector: TraceCollector;
   stageOverrides?: StageOverrides;
-  /** The request's minted scope: the only tenant input for the KB language shares (D-23). */
+  /** The request's minted scope: the only tenant input for the KB language shares (D-23) and the semantic cache. */
   scope?: TenantScope;
+  /** Absent: the semantic_cache stage stands down. */
+  cache?: SemanticCacheSeam;
 }
 
 const NO_LAYER_OUTCOME: Readonly<QueryLayerOutcome> = Object.freeze({
@@ -72,26 +98,6 @@ const SWITCH: Readonly<Record<TransformStage, keyof QueryTransformSwitches>> = {
   hyde: 'hyde',
   decompose: 'decompose',
 };
-
-/** D-38: request overrides apply to the eval profile only, following the Phase 4 requestOverrides gate. */
-export function queryLayerOverrides(profile: Profile, overrides: StageOverrides | undefined): QueryLayerOverrides | undefined {
-  return profile === 'eval' ? overrides?.queryLayer : undefined;
-}
-
-/** The request's query-layer config: the environment, overlaid with the eval-only request overrides (D-38). */
-export function effectiveQueryLayerConfig(base: QueryLayerConfig, overrides: QueryLayerOverrides | undefined): QueryLayerConfig {
-  if (!overrides) return base;
-  const transforms = { ...base.transforms };
-  for (const [name, value] of Object.entries(overrides.transforms ?? {}) as Array<[keyof QueryTransformSwitches, boolean | undefined]>) {
-    if (typeof value === 'boolean' && name in transforms) transforms[name] = value;
-  }
-  return {
-    ...base,
-    enabled: overrides.enabled === false ? false : base.enabled,
-    framework: overrides.framework ?? base.framework,
-    transforms,
-  };
-}
 
 function usableHistory(history: readonly HistoryTurn[] | undefined): HistoryTurn[] {
   if (!history) return [];
@@ -234,6 +240,146 @@ function translateSkipReason(reason: TranslateSkip['reason']): SkippedTransform[
   return 'error';
 }
 
+const ENTRY_PROFILES: Readonly<Partial<Record<Profile, EntryProfile>>> = { chat: 'chat', embed: 'embed', eval: 'eval' };
+
+/** D-38: an eval request runs the cache only when it asks for it; the environment still has to enable a backend. */
+function evalCacheOverride(overrides: QueryLayerOverrides | undefined): boolean {
+  return overrides?.semanticCache !== undefined && overrides.semanticCache !== 'off';
+}
+
+function cacheRetrievalOptions(input: RunRetrievalInput): CacheRetrievalOptions | undefined {
+  const options = input.options;
+  if (!options) return undefined;
+  const picked: CacheRetrievalOptions = {};
+  if (options.mediaKind !== undefined) picked.mediaKind = options.mediaKind;
+  if (options.generalOverview !== undefined) picked.generalOverview = options.generalOverview;
+  if (options.maxResults !== undefined) picked.maxResults = options.maxResults;
+  if (options.degrade !== undefined) picked.degrade = options.degrade;
+  if (options.embeddingBindings !== undefined) picked.embeddingBindings = options.embeddingBindings;
+  if (options.domainControlLeg !== undefined) picked.domainControlLeg = options.domainControlLeg;
+  return picked;
+}
+
+interface CacheStageInput {
+  ctx: QueryLayerInput;
+  layerOverrides: QueryLayerOverrides | undefined;
+  gate: GateResult;
+  standalone: string;
+  historyLength: number;
+  condenseOk: boolean;
+  framework: CacheKeyParts['queryFramework'];
+  spec: StageSpec;
+  embedSpec: StageSpec;
+}
+
+interface CacheStageResult {
+  hit?: CacheHit;
+  ticket?: CacheTicket;
+  precomputed?: { text: string; embedding: QueryEmbedding };
+}
+
+type CacheLookup = { kind: 'hit'; hit: CacheHit } | { kind: 'miss' } | { kind: 'unresolved' };
+
+function lookupDetail(lookup: CacheLookup): string {
+  if (lookup.kind === 'hit') return `hit distance=${lookup.hit.distance.toFixed(4)}`;
+  return lookup.kind === 'unresolved' ? 'miss citations_unresolved' : 'miss';
+}
+
+/**
+ * D-05/D-32/D-33/D-36: the cache lookup after the parallel group. Bypass rules run before anything is embedded or checked;
+ * the standalone is embedded once and lent to the embed stage; check and source re-resolution share the 150 ms stage budget
+ * and fail open to a miss. The lookup is scoped by the request's TenantScope and the embedding profile, and the entry
+ * profile follows input.profile, never caller data.
+ */
+async function runSemanticCacheStage(args: CacheStageInput): Promise<CacheStageResult> {
+  const { ctx, gate, spec } = args;
+  const { input, profile, signal, collector } = ctx;
+  const record = (status: 'disabled' | 'skipped', detail: string, reason?: 'disabled' | 'failed' | 'timeout') => {
+    const at = collector.now();
+    collector.record({ name: 'semantic_cache', status, reason: reason ?? (status === 'disabled' ? 'disabled' : 'failed'), startedAt: at, endedAt: at, detail });
+  };
+
+  const evalOverride = profile === 'eval' && evalCacheOverride(args.layerOverrides);
+  if (!spec.enabled || (profile === 'eval' && !evalOverride)) {
+    record('disabled', 'off');
+    return {};
+  }
+
+  const context = input.cacheContext;
+  const facts: TurnFacts = {
+    profile,
+    evalCacheOverride: evalOverride,
+    ragMode: input.options?.ragMode ?? 'bypass',
+    gate: { transforms: gate.transforms, reasons: gate.reasons, protectedTokens: gate.protectedTokens, skipRetrieval: gate.skipRetrieval },
+    rawQuery: input.query,
+    standalone: args.standalone,
+    historyLength: args.historyLength,
+    condenseOk: args.condenseOk,
+    webSearch: context?.webSearch ?? input.options?.webSearchEnabled === true,
+    mcpTools: context?.mcpTools ?? false,
+    documentRefCount: (input.documentRefs?.mentions.length ?? 0) + (input.documentRefs?.documentParts.length ?? 0),
+    retrievalOptions: cacheRetrievalOptions(input),
+    defaultMaxResults: resolveFinalResultCount(undefined, env.RAG_FINAL_RESULT_COUNT),
+  };
+  const bypass = checkBypassReason(facts);
+  if (bypass !== null) {
+    record('disabled', `bypass=${bypass}`);
+    return {};
+  }
+
+  const entryProfile = ENTRY_PROFILES[profile];
+  const scope = ctx.scope;
+  const cache = getRagDeps().semanticCache();
+  if (!context || !ctx.cache || !scope || !entryProfile) {
+    record('disabled', 'no_cache_context');
+    return {};
+  }
+  if (!cache) {
+    record('disabled', 'no_backend');
+    return {};
+  }
+
+  let embedding: QueryEmbedding;
+  let retrievalConfigHash: string;
+  try {
+    embedding = await ctx.cache.embed(args.standalone, transformSignal(signal, null, args.embedSpec.timeoutMs));
+    retrievalConfigHash = await ctx.cache.retrievalConfigHash(embedding);
+  } catch (error) {
+    if (signal.aborted) throw new StageError('semantic_cache', 'aborted', error);
+    record('skipped', 'key_unavailable');
+    logger.warn('RAG Pipeline', 'Optional stage skipped', { stage: 'semantic_cache', reason: 'key_unavailable' });
+    return {};
+  }
+  const precomputed = { text: args.standalone, embedding };
+
+  const key: CacheKeyParts = {
+    answerLanguage: gate.lang,
+    ragMode: facts.ragMode as CacheKeyParts['ragMode'],
+    generatorModel: context.generatorModel,
+    retrievalConfigHash,
+    queryFramework: args.framework,
+    entryProfile,
+    systemPromptHash: context.systemPromptHash,
+  };
+  const embeddingProfileId = embedding.profile?.id ?? LEGACY_PROFILE.id;
+  const ticket: CacheTicket = { key, embeddingProfileId, standalone: args.standalone, vector: embedding.vector, turn: facts };
+
+  const looked = await runStage<CacheLookup>(
+    spec,
+    signal,
+    async (stageSignal) => {
+      const hit = await cache.check({ ...key, scope, standalone: args.standalone, vector: embedding.vector, embeddingProfileId, signal: stageSignal });
+      if (!hit) return { kind: 'miss' };
+      const client = getRagDeps().adminClient() as unknown as RpcClient | null;
+      return resolveHitSources(scope, hit, { client, signal: stageSignal });
+    },
+    collector,
+    { detail: lookupDetail },
+  );
+  if (!looked.skipped && looked.value.kind === 'hit') return { hit: looked.value.hit, ticket, precomputed };
+  return { ticket, precomputed };
+}
+
 export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOutcome> {
   const { input, config, profile, signal, collector, stageOverrides } = ctx;
   const deps = getRagDeps();
@@ -314,6 +460,7 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
   const routed = new Set(route.transforms);
 
   let condensed: string | null = null;
+  let condenseOk = false;
   if (routed.has('condense')) {
     const outcome = await runTransform<CondenseResult>(
       {
@@ -330,8 +477,9 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
       if (outcome.value.skip) {
         skip('condense_history', postCheckReason(outcome.value.skip.reason));
         console.warn('[Query Layer] condense output discarded', { reason: outcome.value.skip.reason });
-      } else if (!outcome.value.passThrough) {
-        condensed = outcome.value.standalone;
+      } else {
+        condenseOk = true;
+        if (!outcome.value.passThrough) condensed = outcome.value.standalone;
       }
     } else if (outcome.reason !== 'disabled') {
       skip('condense_history', outcome.reason === 'timeout' ? 'timeout' : 'error');
@@ -473,11 +621,26 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
     hyde: hypothetical?.variant ? { text: hypothetical.variant.text, protectedOk: hypothetical.variant.protectedOk } : null,
     subQuestions: subQuestions?.variants.map((variant) => variant.text) ?? [],
   });
+
+  const cached = await runSemanticCacheStage({
+    ctx,
+    layerOverrides: overrides,
+    gate,
+    standalone,
+    historyLength: history.length,
+    condenseOk,
+    framework: transformer.framework,
+    spec: cacheSpec,
+    embedSpec: spec('embed', 'throw'),
+  });
   return {
     plan,
     variants: planToVariants(plan),
     dateRange: normalized?.range ?? null,
     handledTranslate,
-    shortCircuit: null,
+    shortCircuit: cached.hit ? { kind: 'cache_hit' } : null,
+    ...(cached.hit ? { cacheHit: cached.hit } : {}),
+    ...(cached.ticket ? { cacheTicket: cached.ticket } : {}),
+    ...(cached.precomputed ? { precomputed: cached.precomputed } : {}),
   };
 }

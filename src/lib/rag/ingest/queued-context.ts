@@ -2,7 +2,7 @@ import { z } from 'zod/v3';
 import type { IngestionJob } from '@/lib/rag-eval/contracts.generated';
 import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
 import { loadArtifact, versionPrefix, type ArtifactContext } from './artifacts';
-import { loadIngestConfig } from './config';
+import { loadIngestConfig, type IngestCheckMode, type IngestConfig } from './config';
 import { getIngestDeps } from './deps';
 import { ORIGINALS_BUCKET, getObjectStore } from './object-store';
 import { getProcessingProfile, profileFor, type DocType } from './profiles/load';
@@ -31,6 +31,7 @@ const RecordSchema = z.object({
   mimeType: z.string(),
   kind: z.enum(['file', 'text']),
   docType: z.string().optional(),
+  scopes: z.array(z.string().max(80)).max(20).optional(),
   options: z.record(z.unknown()).optional(),
   typeChange: z.record(z.unknown()).optional(),
   state: z.record(z.unknown()),
@@ -44,6 +45,8 @@ export interface QueuedInputRecord {
   mimeType: string;
   kind: 'file' | 'text';
   docType?: string;
+  /** The upload's scope tags (D-40), for a version the progressive final begin starts. */
+  scopes?: string[];
   options?: IngestOptions;
   typeChange?: TypeChangeState;
   /** The state slices identify and the earlier stages produced; the ledger's stage_state is laid over it. */
@@ -93,6 +96,18 @@ function profileOf(source: IngestSource, docType: string, warnings: string[]): {
     warnings.push('doc_type_invalid');
     return { docType: 'general', profile: getProcessingProfile('general') };
   }
+}
+
+const CHECK_RANK: Readonly<Record<IngestCheckMode, number>> = { off: 0, flag: 1, quarantine: 2 };
+
+/**
+ * The hidden-text mode of a queued job: the stricter of the current variable and the job's snapshot (D-33). The worker checked the
+ * original under the snapshot's mode, so a later relaxation of RAG_HIDDEN_TEXT_CHECK does not let the job skip it; a snapshot without
+ * the field (off) changes nothing.
+ */
+export function withSnapshotChecks(config: IngestConfig, job: Pick<IngestionJob, 'settings'>): IngestConfig {
+  const snapshot = job.settings.hidden_text_check ?? 'off';
+  return CHECK_RANK[snapshot] > CHECK_RANK[config.hiddenTextCheck] ? { ...config, hiddenTextCheck: snapshot } : config;
 }
 
 /**
@@ -155,6 +170,7 @@ export async function buildQueuedContext(input: BuildQueuedContextInput): Promis
     filename: record.filename,
     mimeType: record.mimeType,
     ...(record.docType ? { docType: record.docType as DocType | 'auto' } : {}),
+    ...(record.scopes && record.scopes.length > 0 ? { scopes: record.scopes } : {}),
     ...(record.options !== undefined ? { options: record.options } : {}),
     ...(state.typeChange ? { typeChange: state.typeChange } : {}),
     signal,
@@ -169,7 +185,7 @@ export async function buildQueuedContext(input: BuildQueuedContextInput): Promis
     input: ingestInput,
     deps,
     writer,
-    config: loadIngestConfig(deps.ingestEnv()),
+    config: withSnapshotChecks(loadIngestConfig(deps.ingestEnv()), job),
     signal,
     deadline: deps.now() + input.deadlineMs,
     state,

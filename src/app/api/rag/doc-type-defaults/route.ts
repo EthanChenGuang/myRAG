@@ -1,7 +1,17 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod/v3';
 import { requireSessionUser } from '@/lib/session-auth';
-import { DocTypeDefaultsError, INGEST_SOURCES, docTypePickerEnabled, resolvePickerDefault, resolveTenantScope } from '@/lib/rag';
+import {
+  DocTypeDefaultsError,
+  INGEST_SOURCES,
+  activeUploadVocabulary,
+  docTypePickerEnabled,
+  resolvePickerDefault,
+  resolveTenantScope,
+  uploadScopesEnabled,
+  type TenantScope,
+  type UploadVocabularyEntry,
+} from '@/lib/rag';
 
 export const runtime = 'nodejs';
 
@@ -20,9 +30,19 @@ function fail(status: number, error: string, details?: Array<{ path: string; mes
   return NextResponse.json(details ? { success: false, error, details } : { success: false, error }, { status, headers: NO_STORE });
 }
 
+const TAGS_OFF = { enabled: false, vocabulary: [] as UploadVocabularyEntry[] };
+
+/** D-40, UI-SPEC 8.1: whether the upload tag picker shows, and the active vocabulary of the caller's own workspace (never another's). */
+async function uploadTags(scope: TenantScope, signal: AbortSignal): Promise<{ enabled: boolean; vocabulary: UploadVocabularyEntry[] } | null> {
+  if (!uploadScopesEnabled()) return TAGS_OFF;
+  const vocabulary = await activeUploadVocabulary(scope, { signal });
+  return vocabulary.ok ? { enabled: true, vocabulary: vocabulary.items } : null;
+}
+
 /**
  * The type the upload picker pre-selects for the caller's tenant (D-15, D-17). The session comes first, in both deployment modes; the
- * tenant is the session user's own, or an organization they are a member of. Under the legacy pipeline the picker stays hidden.
+ * tenant is the session user's own, or an organization they are a member of. Under the legacy pipeline the picker stays hidden. The tags
+ * block says whether the tag picker shows (unified pipeline and RAG_SCOPE_TAGS) and lists that workspace's active values.
  */
 export async function GET(request: Request): Promise<Response> {
   const session = await requireSessionUser(TAG);
@@ -39,7 +59,7 @@ export async function GET(request: Request): Promise<Response> {
     return fail(400, 'Invalid request data', parsed.error.errors.map((issue) => ({ path: issue.path.join('.'), message: issue.message })));
   }
 
-  if (!docTypePickerEnabled()) return NextResponse.json({ enabled: false }, { headers: NO_STORE });
+  if (!docTypePickerEnabled()) return NextResponse.json({ enabled: false, tags: TAGS_OFF }, { headers: NO_STORE });
 
   const tenant = await resolveTenantScope({
     requestedOrganizationId: parsed.data.organizationId ?? null,
@@ -61,7 +81,9 @@ export async function GET(request: Request): Promise<Response> {
       },
       { signal: request.signal },
     );
-    return NextResponse.json({ enabled: true, docType: choice.docType, origin: choice.origin }, { headers: NO_STORE });
+    const tags = await uploadTags(tenant.scope, request.signal);
+    if (tags === null) return fail(503, 'Document type defaults are unavailable');
+    return NextResponse.json({ enabled: true, docType: choice.docType, origin: choice.origin, tags }, { headers: NO_STORE });
   } catch (error) {
     console.error(`${TAG} defaults lookup failed`, {
       error: error instanceof Error ? error.name : 'unknown',

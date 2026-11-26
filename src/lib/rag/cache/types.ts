@@ -1,6 +1,7 @@
 import type { CachedAnswer } from '@/lib/rag-eval/contracts.generated';
 import type { TenantScope } from '../tenant/scope';
 import type { RagMode } from '../types';
+import type { TurnFacts } from './bypass';
 
 /** Key namespace: eval entries can never match chat or embed lookups. */
 export type EntryProfile = 'chat' | 'embed' | 'eval';
@@ -19,6 +20,12 @@ export interface CacheKeyParts {
   entryProfile: EntryProfile;
   /** hashSystemPromptTemplate of the template before {{context}} substitution. */
   systemPromptHash: string;
+  /** D-39: the resolved scope tags; absent (or empty) for no filter, so a filter-free key is unchanged. */
+  scopes?: readonly string[];
+  /** D-39: only with scopes. */
+  scopesIncludeUntagged?: boolean;
+  /** D-44: the effective date passed to retrieval; absent while RAG_EFFECTIVE_DATES is off. */
+  effectiveOn?: string;
 }
 
 export interface CacheQuery extends CacheKeyParts {
@@ -46,4 +53,17 @@ export interface SemanticCache {
   check(q: CacheQuery): Promise<CacheHit | null>;
   store(q: CacheQuery, answer: CachedAnswer): Promise<void>;
   invalidateTenant(scope: TenantScope, documentIds?: string[], opts?: CacheCallOptions): Promise<number>;
+}
+
+/**
+ * Handed out on a check that no check-time rule bypassed; the entry point stores the answer with it after the response.
+ * It carries no scope: the store takes the scope from the request again.
+ */
+export interface CacheTicket {
+  key: CacheKeyParts;
+  embeddingProfileId: string;
+  standalone: string;
+  vector: number[];
+  /** The check-time facts; the store adds the A-3 store-only facts and runs storeBypassReason. */
+  turn: TurnFacts;
 }

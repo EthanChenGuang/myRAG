@@ -101,11 +101,12 @@ class LanguagePack(_Contract):
     texts: LanguageTexts
     groundedness: GroundednessSupport
     effective_date_patterns: list[str]
+    effective_date_end_patterns: list[str] = Field(default=[])
     version_markers: list[str]
     fixtures: LanguageFixtures
     pack_version: int = Field(ge=1)
 
-    @field_validator("effective_date_patterns", "version_markers")
+    @field_validator("effective_date_patterns", "effective_date_end_patterns", "version_markers")
     @classmethod
     def _patterns_compile(cls, patterns: list[str]) -> list[str]:
         for index, pattern in enumerate(patterns):

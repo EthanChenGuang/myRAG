@@ -1,6 +1,7 @@
 export { runRetrieval, runStage, deriveStatus, StageError } from './pipeline';
 export type { StageSpec, StageOutcome } from './pipeline';
 export { parseRetrievalFilters } from './query/filters';
+export { resolveScopesFilter, ScopeFilterError } from './query/scopes';
 export type { RetrievalFilterInput } from './backend/types';
 export { LEXICAL_VERSION } from './lexical/chunk-text';
 export { RERANK_TEXT_VERSION } from './rerank/types';
@@ -135,12 +136,21 @@ export type { VoiceResult, VoiceResults, VoiceSourceImage } from './context/voic
 export { deriveVoiceKeywords } from './voice/keyword-fallback';
 export { createEnhancedRAGPrompt } from './generation/prompt';
 export {
+  answerLanguageInstruction,
+  answerLanguageOptions,
+  appendAnswerLanguage,
+  contextLanguages,
+  type AnswerLanguageOptions,
+} from './generation/answer-language';
+export {
   knowledgeBaseUnavailableLanguage,
   knowledgeBaseUnavailableMessage,
   noKnowledgeBaseResponse,
   noKnowledgeBaseResponseLanguage,
 } from './generation/messages';
 export { readFeedbackLoopConfig } from './feedback-loop/config';
+export { EMBED_FEEDBACK_AUDIENCE, mintEmbedFeedbackToken, verifyEmbedFeedbackToken } from './feedback-loop/embed-token';
+export type { EmbedFeedbackTokenClaims } from './feedback-loop/embed-token';
 export { readGenerationConfig } from './generation/config';
 export { detectLanguage } from './lang/detect';
 export type { Language } from './lang/registry';
@@ -292,6 +302,8 @@ export type {
   VocabularyEntry,
   VocabularyEntryResult,
 } from './ingest/scopes/admin';
+export { activeUploadVocabulary, uploadScopesEnabled, validateUploadScopes, warnUploadScopesIgnored } from './ingest/scopes/upload';
+export type { UploadScopeFailure, UploadVocabularyEntry, ValidateUploadScopesResult } from './ingest/scopes/upload';
 export {
   AUTO_APPLY_MIN_CONFIDENCE,
   MAX_QUERY_LENGTH as MAX_EFFECTIVE_DATES_QUERY_LENGTH,
@@ -375,6 +387,21 @@ export { escapeToolOutput, scanToolOutput, wrapToolResultsForPrompt } from './se
 export { FingerprintImpactError, computeFingerprintCoverage, computeFingerprintImpact, isSettingName } from './ingest/fingerprint/impact';
 export type { FingerprintCoverage, PendingRebuild, RebuildStart } from './ingest/fingerprint/impact';
 export {
+  RebuildInputError,
+  RebuildNotFound,
+  RebuildRefused,
+  RebuildUnavailable,
+  activateRebuild,
+  getRebuildRun,
+  listRebuildRuns,
+  recordRebuildEvidence,
+  rollbackRebuild,
+  startRebuild,
+} from './ingest/rebuild/run';
+export type { RebuildActivation, RebuildRunRow, RebuildRunState, StartRebuildResult } from './ingest/rebuild/run';
+export { MECHANISM_COMMANDS } from './ingest/fingerprint/impact';
+export { REBUILDABLE_MECHANISMS, isRebuildableMechanism } from './ingest/rebuild/plan';
+export {
   effectiveLogMode,
   readTenantFeedbackSettings,
   setTenantFeedbackSettings,
@@ -383,6 +410,7 @@ export {
 export type { TenantFeedbackSettingsRow, TenantRetrievalLog } from './feedback-loop/settings';
 export { purgeRetrievalLog, PurgeError } from './feedback-loop/purge';
 export type { PurgeCounts } from './feedback-loop/purge';
+export { isMiningWindowError, miningDisabledReason, MiningError, parseMiningDate, runMining } from './feedback-loop/mining';
 export {
   getReviewItem,
   getReviewItemChunks,
@@ -397,3 +425,16 @@ export {
 } from './feedback-loop/review-access';
 export type { DomainExpertGrant, ReviewChunk, ReviewListQuery } from './feedback-loop/review-access';
 export { openReviewSession, REVIEW_NO_STORE, reviewNotFound, reviewUnavailable } from './feedback-loop/review-route';
+export { recordSourceOpened, setRefusalVote, SOURCE_OPENED_CAP } from './feedback-loop/votes';
+export type { RecordSourceOpenedResult, SetRefusalVoteResult } from './feedback-loop/votes';
+export {
+  openRetrievalRequest,
+  RETRIEVAL_NO_STORE,
+  retrievalNotFound,
+  retrievalUnavailable,
+  traceHash,
+} from './feedback-loop/retrieval-route';
+export { LabelRequestSchema, normalizeQuoteText, validateAndSaveLabel } from './feedback-loop/labels';
+export type { EvidenceFailureReason, LabelRequest, SaveLabelResult } from './feedback-loop/labels';
+export { REVIEW_SEARCH_POOL, ReviewSearchRequestSchema, searchForReviewItem } from './feedback-loop/review-search';
+export type { ReviewSearchHit, ReviewSearchRequest, ReviewSearchResult } from './feedback-loop/review-search';

@@ -71,6 +71,11 @@ interface IngestInputBase {
   mimeType: string;
   /** The type picked for the file, or 'auto' to detect it. Absent: the admin defaults decide. */
   docType?: DocType | 'auto';
+  /**
+   * Scope tags the uploader chose (dimension:value, D-40), already checked by validateUploadScopes in the route. Stored on the document
+   * once its row exists and before any chunk is written. Absent: no tag is written, as today.
+   */
+  scopes?: string[];
   options?: IngestOptions;
   signal: AbortSignal;
   trace?: TraceCollector;
@@ -238,6 +243,8 @@ export interface IngestWork {
   templateRow?: Record<string, string | null> | null;
   chunks: ChunkDraft[];
   chunksWritten: number;
+  /** The document's dominant language as the enrich stage wrote it; absent on a run resumed after enrich. */
+  documentLanguage?: string | null;
   /** RAG_CAPTION_LANGUAGE=document: the caption target language, resolved once per run (null: no target, English prompt). */
   captionTarget?: { language: string | null };
 }
@@ -258,6 +265,11 @@ export interface StageContext {
   document: IngestDocumentRef | null;
   parserUsed: string | null;
   work: IngestWork;
+  /**
+   * A queued job's hidden-text report made by the sidecar worker at preflight (D-33); scan_injection uses it instead of calling the
+   * sidecar. `report` null: the worker sent a report that failed validation, treated as a checker that could not answer.
+   */
+  workerHiddenText?: { fileSha256: string; report: HiddenTextReport | null };
 }
 
 /** What a stage that continues tells the trace: it ran switched off, took a fallback, or reached a named outcome. */

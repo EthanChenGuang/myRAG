@@ -15,11 +15,12 @@ import { describeReranker } from '../rerank/select';
 import { RERANK_TEXT_VERSION } from '../rerank/types';
 import type { TraceCollector } from '../trace/collector';
 import type { Candidate, InjectionSummary, Profile, RetrievalResult, RunRetrievalInput, StageRecord } from '../types';
+import type { CacheHit, CacheTicket } from '../cache/types';
 import type { TemporalQueryContext } from '../query/temporal-query-detector';
 import { isMultiTenant } from '@/lib/deployment-mode';
 import { getRagDeps } from '../deps';
 import type { SecurityConfig } from '../security/config';
-import { computeRetrievalConfigHash, securityHashComponent } from './config-hash';
+import { computeRetrievalConfigHash, securityHashComponent, type RetrievalConfigHashQueryLayer } from './config-hash';
 import { effectiveRetrievalParams } from './retrieval-params';
 import type { AssembleOutput } from '../context/assemble';
 import type { QueryPlan, RetrievalParams } from '@/lib/rag-eval/contracts.generated';
@@ -50,6 +51,60 @@ export interface BuildV2ResultInput {
   queryPlan?: QueryPlan | null;
   /** True when the query layer served the translate stage (D-24): its record is then soft like the other layer stages. */
   layerTranslate?: boolean;
+  /** D-44: the effective date the search used; absent while RAG_EFFECTIVE_DATES is off. */
+  effectiveOn?: string;
+  /** The query-layer part of the config hash; present only while the layer ran (research A-7). */
+  queryLayerHash?: RetrievalConfigHashQueryLayer;
+  /** The semantic_cache stage's store ticket (D-32). */
+  cacheTicket?: CacheTicket;
+}
+
+export interface RequestConfigHashInput {
+  input: RunRetrievalInput;
+  config: RagConfig;
+  profile: Profile;
+  embeddingProfileId: string;
+  queryLanguage: string | null;
+  security: SecurityConfig;
+  bindingHash?: { embeddingBindings?: Record<string, string>; domainControlLeg?: string };
+  queryLayerHash?: RetrievalConfigHashQueryLayer;
+  effectiveOn?: string;
+}
+
+/** The request's retrieval-config hash; the result and the semantic-cache key both use it, so they never disagree. */
+export async function requestRetrievalConfigHash(ctx: RequestConfigHashInput): Promise<string> {
+  const { input, config, profile, queryLanguage, security } = ctx;
+  const { configHash: thresholdsConfigHash } = loadThresholds();
+  const chunking = await getActiveChunkingProfiles();
+  return computeRetrievalConfigHash({
+    backendId: getRetrievalBackend().id,
+    embeddingProfileId: ctx.embeddingProfileId,
+    lexicalVersion: LEXICAL_VERSION,
+    rerankTextVersion: RERANK_TEXT_VERSION,
+    params: effectiveRetrievalParams(profile, config, evalRetrievalOverrides(profile, input.stageOverrides?.retrievalOverrides)),
+    reranker: describeReranker(config, profile, queryLanguage ?? '', input.stageOverrides?.retrievalOverrides),
+    thresholdsConfigHash,
+    activeChunkingProfiles: hashedChunkingProfiles(profile, chunking, input.stageOverrides?.retrievalOverrides),
+    switches: {
+      lexicalSearch: config.v2.lexicalSearch,
+      refusalThreshold: config.v2.refusalThreshold,
+      edgeOrder: config.v2.edgeOrder,
+      compression: config.v2.compression,
+      tokenBudget: config.v2.tokenBudget,
+      parentChild: config.v2.parentChild,
+      iterativeScan: config.v2.iterativeScan,
+      exactScanCutoff: config.v2.exactScanCutoff,
+      lexicalTranslation: config.v2.lexicalTranslation,
+      exactIdLookup: config.exactIdLookup,
+      rerankTierChat: config.v2.rerankTier.chat,
+      rerankTierVoice: config.v2.rerankTier.voice,
+      ...(config.monolingual ? { monolingual: true as const } : {}),
+    },
+    security: securityHashComponent(security, { multiTenant: isMultiTenant() }),
+    ...(ctx.bindingHash ?? {}),
+    ...(ctx.queryLayerHash ? { queryLayer: ctx.queryLayerHash } : {}),
+    ...(ctx.effectiveOn ? { effectiveOn: ctx.effectiveOn } : {}),
+  });
 }
 
 export function fusedHitsToVoiceChunks(hits: FusedHit[], scoreByChunk?: Map<string, number>): ChunkWithScore[] {
@@ -101,6 +156,31 @@ export function buildSmallTalkResult(ctx: {
     refusal: null,
     queryLanguage: ctx.queryLanguage,
   };
+}
+
+/** D-32: a semantic-cache hit skips search, rank and context; ok with the cached answer for the entry point to stream. */
+export function buildCacheHitResult(ctx: {
+  collector: TraceCollector;
+  queryContext: TemporalQueryContext | null;
+  queryLanguage: string | null;
+  queryPlan: QueryPlan | null;
+  cacheHit: CacheHit;
+  retrievalConfigHash?: string;
+}): RetrievalResult {
+  const base = failure(ctx.collector, 'ok', 'cache_hit', ctx.queryContext);
+  return {
+    ...base,
+    ...(ctx.queryPlan ? { queryPlan: ctx.queryPlan } : {}),
+    ...(ctx.retrievalConfigHash ? { retrievalConfigHash: ctx.retrievalConfigHash } : {}),
+    cacheHit: ctx.cacheHit,
+    refusal: null,
+    queryLanguage: ctx.queryLanguage,
+  };
+}
+
+/** D-32: true only for the semantic-cache short-circuit. */
+export function isCacheHitResult(result: Pick<RetrievalResult, 'status' | 'reason' | 'cacheHit'> | null | undefined): boolean {
+  return result?.status === 'ok' && result.reason === 'cache_hit' && result.cacheHit !== undefined;
 }
 
 /** D-10: true only for the query layer's small-talk short-circuit, never for an ordinary ok result. */
@@ -173,41 +253,23 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
     reason = refusedReason(refusal);
   }
 
-  const { configHash: thresholdsConfigHash } = loadThresholds();
-  const chunking = await getActiveChunkingProfiles();
-  const profileId = embedding.profile?.id ?? LEGACY_PROFILE.id;
-  const retrievalConfigHash = computeRetrievalConfigHash({
-    backendId: getRetrievalBackend().id,
-    embeddingProfileId: profileId,
-    lexicalVersion: LEXICAL_VERSION,
-    rerankTextVersion: RERANK_TEXT_VERSION,
-    params: effectiveRetrievalParams(profile, config, evalRetrievalOverrides(profile, input.stageOverrides?.retrievalOverrides)),
-    reranker: describeReranker(config, profile, queryLanguage ?? '', input.stageOverrides?.retrievalOverrides),
-    thresholdsConfigHash,
-    activeChunkingProfiles: hashedChunkingProfiles(profile, chunking, input.stageOverrides?.retrievalOverrides),
-    switches: {
-      lexicalSearch: config.v2.lexicalSearch,
-      refusalThreshold: config.v2.refusalThreshold,
-      edgeOrder: config.v2.edgeOrder,
-      compression: config.v2.compression,
-      tokenBudget: config.v2.tokenBudget,
-      parentChild: config.v2.parentChild,
-      iterativeScan: config.v2.iterativeScan,
-      exactScanCutoff: config.v2.exactScanCutoff,
-      lexicalTranslation: config.v2.lexicalTranslation,
-      exactIdLookup: config.exactIdLookup,
-      rerankTierChat: config.v2.rerankTier.chat,
-      rerankTierVoice: config.v2.rerankTier.voice,
-      ...(config.monolingual ? { monolingual: true as const } : {}),
-    },
-    security: securityHashComponent(security, { multiTenant: isMultiTenant() }),
-    ...(ctx.bindingHash ?? {}),
+  const retrievalConfigHash = await requestRetrievalConfigHash({
+    input,
+    config,
+    profile,
+    embeddingProfileId: embedding.profile?.id ?? LEGACY_PROFILE.id,
+    queryLanguage,
+    security,
+    ...(ctx.bindingHash ? { bindingHash: ctx.bindingHash } : {}),
+    ...(ctx.queryLayerHash ? { queryLayerHash: ctx.queryLayerHash } : {}),
+    ...(ctx.effectiveOn ? { effectiveOn: ctx.effectiveOn } : {}),
   });
 
   const base = {
     ...failure(collector, status, reason, queryContext),
     ...(injection ? { injection } : {}),
     ...(queryPlan ? { queryPlan } : {}),
+    ...(ctx.cacheTicket && profile !== 'voice' ? { cacheTicket: ctx.cacheTicket } : {}),
   };
 
   if (profile === 'voice') {

@@ -4,6 +4,9 @@ import { loadIngestConfig } from '@/lib/rag/ingest/config';
 import { getIngestDeps } from '@/lib/rag/ingest/deps';
 import { reapplyHiddenTextRemoval, scanInjectionStage } from '@/lib/rag/ingest/stages/scan-injection';
 import { emptyIngestState, type StageContext } from '@/lib/rag/ingest/types';
+import { applyWorkerHiddenText } from '@/lib/rag/ingest/callbacks/advance';
+import { withSnapshotChecks } from '@/lib/rag/ingest/queued-context';
+import type { IngestionJob } from '@/lib/rag-eval/contracts.generated';
 import { createIngestWriter } from '@/lib/rag/ingest/writer';
 import { findZeroWidth, resetHiddenTextRulesForTests, setHiddenTextRulesForTests, stripZeroWidth } from '@/lib/rag/security/zero-width';
 import { resetHiddenTextClientForTests, setHiddenTextClientForTests, type HiddenTextOutcome, type HiddenTextReport } from '@/lib/rag/security/hidden-text';
@@ -183,10 +186,26 @@ describe('the three checks', () => {
     expect(fieldsOf(calls)).toEqual([{ hidden_text_check: 'not_checked' }]);
   });
 
-  test('the link switch alone runs no check yet (plan 39 registers it) and writes nothing', async () => {
+  test('the link switch alone runs only the link check: a text with no link writes nothing', async () => {
     const { ctx, calls } = setup({ RAG_INGEST_LINK_CHECK: 'quarantine' }, RULE_HIT);
-    expect(await scanInjectionStage.run(ctx)).toEqual({ kind: 'next', disabled: true, outcome: 'scan_off' });
+    expect(await scanInjectionStage.run(ctx)).toEqual({ kind: 'next', outcome: 'links:clean' });
     expect(callsOf(calls, 'rag_set_document_fields')).toHaveLength(0);
+  });
+
+  test('link rules that cannot be loaded fail the run closed under quarantine and do not under flag', async () => {
+    const links = await import('@/lib/rag/security/link-check');
+    const spy = vi.spyOn(links, 'loadLinkRules').mockImplementation(() => {
+      throw new Error('link_rules_invalid');
+    });
+    try {
+      const closed = setup({ RAG_INGEST_LINK_CHECK: 'quarantine' }, CLEAN);
+      expect(await scanInjectionStage.run(closed.ctx)).toEqual({ kind: 'fail', reason: 'link_rules_unavailable' });
+      uninstallIngestDeps();
+      const open = setup({ RAG_INGEST_LINK_CHECK: 'flag' }, CLEAN);
+      expect(await scanInjectionStage.run(open.ctx)).toEqual({ kind: 'next', outcome: 'links:rules_unavailable' });
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   test('hidden-text rules that cannot be loaded fail the run closed under quarantine and do not under flag', async () => {
@@ -351,6 +370,54 @@ describe('the sidecar hidden-text report (plan 03.2-37)', () => {
     expect(open.ctx.warnings).toContain('hidden_text_not_checked');
   });
 
+  describe('a queued job whose worker checked the original at preflight (plan 03.2-38)', () => {
+    const jobWith = (hidden_text_check?: 'off' | 'flag' | 'quarantine') =>
+      ({ file_sha256: SHA, settings: hidden_text_check ? { hidden_text_check } : {} }) as unknown as IngestionJob;
+
+    test('the worker report is used and the sidecar is not called', async () => {
+      const { ctx, calls } = setupFile({ RAG_HIDDEN_TEXT_CHECK: 'quarantine' }, PDF_TEXT, 'application/pdf', 'notes.pdf');
+      applyWorkerHiddenText(ctx, jobWith('quarantine'), report('hidden_found', [HIDDEN]));
+      expect(await scanInjectionStage.run(ctx)).toEqual({ kind: 'next', outcome: 'hidden_text:quarantined' });
+      expect(requests).toHaveLength(0);
+      expect(ctx.work.parseText).not.toContain('grey lever');
+      const writes = fieldsOf(calls);
+      expect(writes[0]).toMatchObject({ status: 'quarantined', hidden_text_check: 'hidden_found' });
+      const reason = QuarantineReasonSchema.parse((((writes[0]?.metadata as Record<string, unknown>).quarantine as Record<string, unknown>).reasons as unknown[])[0]);
+      expect(reason).toMatchObject({ kind: 'hidden_text', spans: [{ page: 1, text: HIDDEN, reason: 'color_near_background' }], unlocated: 0 });
+    });
+
+    test('an invalid worker report fails the run closed under quarantine and is not_checked under flag, with no sidecar call (T-03.2-381)', async () => {
+      const forged = { status: 'hidden_found', spans: [], checker_version: 'hidden-text/1/test' };
+      const quarantine = setupFile({ RAG_HIDDEN_TEXT_CHECK: 'quarantine' }, PDF_TEXT, 'application/pdf', 'notes.pdf');
+      applyWorkerHiddenText(quarantine.ctx, jobWith('quarantine'), forged);
+      expect(await scanInjectionStage.run(quarantine.ctx)).toEqual({ kind: 'fail', reason: 'hidden_text_checker_unavailable' });
+      const flag = setupFile({ RAG_HIDDEN_TEXT_CHECK: 'flag' }, PDF_TEXT, 'application/pdf', 'notes.pdf');
+      applyWorkerHiddenText(flag.ctx, jobWith('flag'), { status: 'clean', spans: [{ page: 1, text: HIDDEN, reason: 'color_near_background', bbox: null }], checker_version: 'x' });
+      expect(await scanInjectionStage.run(flag.ctx)).toEqual({ kind: 'next', outcome: 'hidden_text:not_checked' });
+      expect(flag.ctx.warnings).toContain('hidden_text_not_checked');
+      expect(requests).toHaveLength(0);
+    });
+
+    test('a report for another original or with the check off is ignored', async () => {
+      const other = setupFile({ RAG_HIDDEN_TEXT_CHECK: 'quarantine' }, PDF_TEXT, 'application/pdf', 'notes.pdf');
+      applyWorkerHiddenText(other.ctx, { ...jobWith('quarantine'), file_sha256: 'b'.repeat(64) } as IngestionJob, report('hidden_found', [HIDDEN]));
+      expect(await scanInjectionStage.run(other.ctx)).toEqual({ kind: 'next', outcome: 'hidden_text:clean' });
+      expect(requests).toHaveLength(1);
+
+      const off = setupFile({}, PDF_TEXT, 'application/pdf', 'notes.pdf');
+      applyWorkerHiddenText(off.ctx, jobWith(), report('hidden_found', [HIDDEN]));
+      expect(off.ctx.workerHiddenText).toBeUndefined();
+    });
+
+    test('the queued mode is the stricter of the variable and the snapshot; a snapshot without the field changes nothing', () => {
+      const config = loadIngestConfig({ RAG_HIDDEN_TEXT_CHECK: 'flag' });
+      expect(withSnapshotChecks(config, jobWith())).toBe(config);
+      expect(withSnapshotChecks(config, jobWith('off'))).toBe(config);
+      expect(withSnapshotChecks(config, jobWith('quarantine')).hiddenTextCheck).toBe('quarantine');
+      expect(withSnapshotChecks(loadIngestConfig({ RAG_HIDDEN_TEXT_CHECK: 'quarantine' }), jobWith('flag')).hiddenTextCheck).toBe('quarantine');
+    });
+  });
+
   test('a retried stage reuses the saved report, removes each span once and gives the same reasons', async () => {
     answers.push({ ok: true, report: report('hidden_found', [HIDDEN, 'Second hidden line for the check.']) });
     const first = setupFile({ RAG_HIDDEN_TEXT_CHECK: 'quarantine' }, `${PDF_TEXT}Second hidden line for the check.\n`, 'application/pdf', 'notes.pdf');
@@ -400,5 +467,36 @@ describe('the sidecar hidden-text report (plan 03.2-37)', () => {
     const logged = JSON.stringify(warn.mock.calls);
     expect(logged).not.toMatch(/grey|lever|notes\.pdf/i);
     expect(logged).toContain('hidden_text');
+  });
+});
+
+describe('the link check (plan 39, D-35)', () => {
+  const LINKED = '# Notes\n\nThe blue module joins the second relay; steps at https://phish.example.net/login and docs.example.com.\n';
+  const linkEnv = { RAG_INGEST_LINK_CHECK: 'quarantine', RAG_OUTPUT_LINK_ALLOWLIST: 'example.com' };
+
+  test('quarantine: one untrusted_link reason with the target outside the allowlist; a first version reads no released targets', async () => {
+    const { ctx, calls } = setup(linkEnv, LINKED);
+    expect(await scanInjectionStage.run(ctx)).toEqual({ kind: 'next', outcome: 'links:quarantined' });
+    expect(callsOf(calls, 'rag_released_link_targets')).toHaveLength(0);
+    const quarantine = fieldsOf(calls).find((fields) => fields.status === 'quarantined')?.metadata as Record<string, unknown>;
+    const reasons = ((quarantine.quarantine as Record<string, unknown>).reasons as unknown[]).map((reason) => QuarantineReasonSchema.parse(reason));
+    expect(reasons).toEqual([
+      expect.objectContaining({ kind: 'untrusted_link', targets: ['https://phish.example.net/login'], unlocated: 0 }),
+    ]);
+    expect(ctx.work.parseText).toBe(LINKED);
+  });
+
+  test('flag on a later version: released targets are read for that document and skipped; nothing is quarantined', async () => {
+    const { ctx, calls } = setup({ ...linkEnv, RAG_INGEST_LINK_CHECK: 'flag' }, LINKED, (context) => {
+      context.document = { id: FAKE_DOCUMENT_ID, lineageId: FAKE_LINEAGE_ID, version: 2, resumed: false };
+    });
+    expect(await scanInjectionStage.run(ctx)).toEqual({ kind: 'next', outcome: 'links:flagged' });
+    expect(callsOf(calls, 'rag_released_link_targets')).toEqual([
+      expect.objectContaining({ args: { p_document_id: FAKE_DOCUMENT_ID, p_tenant_key: expect.any(String) } }),
+    ]);
+    const writes = fieldsOf(calls);
+    expect(writes).toHaveLength(1);
+    expect(writes[0]).not.toHaveProperty('status');
+    expect((writes[0]?.metadata as Record<string, unknown>).link_check).toMatchObject({ status: 'untrusted_found', dropped: 0 });
   });
 });

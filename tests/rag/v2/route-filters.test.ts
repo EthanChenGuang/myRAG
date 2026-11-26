@@ -189,6 +189,73 @@ describe('retrievalFilters on the chat and embed bodies', () => {
     });
   });
 
+  describe('scopes filter (D-39)', () => {
+    let savedScopeTags: string | undefined;
+    beforeEach(() => {
+      savedScopeTags = env.RAG_SCOPE_TAGS;
+    });
+    afterEach(() => {
+      if (savedScopeTags === undefined) delete env.RAG_SCOPE_TAGS;
+      else env.RAG_SCOPE_TAGS = savedScopeTags;
+    });
+
+    for (const routePath of ['chat', 'embed/chat'] as const) {
+      const body = (extra: Record<string, unknown>) => (routePath === 'chat' ? chatBody(extra) : embedBody(extra));
+      const profile = routePath === 'chat' ? 'chat' : 'embed';
+
+      it(`${routePath}: with RAG_SCOPE_TAGS off a scopes filter answers 400 scopes_disabled before any stream`, async () => {
+        delete env.RAG_SCOPE_TAGS;
+        const { POST } = await loadRoute(routePath, 'v2');
+        const response = await POST(body({ retrievalFilters: { scopes: { region: ['a1'] } } }));
+
+        expect(response.status).toBe(400);
+        const json = (await response.json()) as { success: boolean; error: string };
+        expect(json).toMatchObject({ success: false, error: 'scopes_disabled' });
+        expect(h.runSpy).not.toHaveBeenCalled();
+        expect(h.capture.calls).toHaveLength(0);
+      });
+
+      it(`${routePath}: a value outside the tenant vocabulary answers 400 unknown_scope_value`, async () => {
+        env.RAG_SCOPE_TAGS = 'true';
+        const { POST } = await loadRoute(routePath, 'v2');
+        const response = await POST(body({ retrievalFilters: { scopes: { region: ['a1'] } } }));
+
+        expect(response.status).toBe(400);
+        const json = (await response.json()) as { success: boolean; error: string; details: Array<{ path: string }> };
+        expect(json).toMatchObject({ success: false, error: 'unknown_scope_value' });
+        expect(json.details[0].path).toBe('scopes.region');
+        expect(h.runSpy).not.toHaveBeenCalled();
+      });
+
+      it(`${routePath}: an empty scopes object or empty dimension is no filter, with the switch off too`, async () => {
+        delete env.RAG_SCOPE_TAGS;
+        for (const scopes of [{}, { region: [] }]) {
+          h.runSpy.mockReset();
+          const { POST } = await loadRoute(routePath, 'v2');
+          const response = await POST(body({ retrievalFilters: { scopes, includeUntagged: true } }));
+          await response.text();
+
+          expect(response.status).toBe(200);
+          const calls = retrievalCalls(profile);
+          expect(calls).toHaveLength(1);
+          expect('retrievalFilters' in calls[0]).toBe(false);
+        }
+      });
+
+      it(`${routePath}: the legacy pipeline ignores a scopes filter as it ignores the other filters`, async () => {
+        delete env.RAG_SCOPE_TAGS;
+        const { POST } = await loadRoute(routePath, 'legacy');
+        const response = await POST(body({ retrievalFilters: { scopes: { region: ['a1'] } } }));
+        await response.text();
+
+        expect(response.status).toBe(200);
+        const calls = retrievalCalls(profile);
+        expect(calls).toHaveLength(1);
+        expect('retrievalFilters' in calls[0]).toBe(false);
+      });
+    }
+  });
+
   describe('embed', () => {
     it('passes a valid retrievalFilters to runRetrieval under v2', async () => {
       const { POST } = await loadRoute('embed/chat', 'v2');

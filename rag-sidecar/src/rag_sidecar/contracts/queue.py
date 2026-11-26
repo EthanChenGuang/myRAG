@@ -8,8 +8,9 @@ from typing import Annotated, Any, Literal
 from pydantic import Field, field_validator, model_validator
 
 from rag_sidecar.contracts.ingest import DocType, OcrLanguage, ParseResult, check_language_selection
-from rag_sidecar.contracts.ingest_security import UploadApproval
+from rag_sidecar.contracts.ingest_security import HiddenTextReport, UploadApproval
 from rag_sidecar.contracts.languages import Language
+from rag_sidecar.contracts.omit import OmitNoneModel, omit_none_schema
 from rag_sidecar.contracts.routing import (
     DetectCounts,
     PageRange,
@@ -258,7 +259,9 @@ class ParseExternalResponse(_Contract):
         return self
 
 
-class AdvanceRequest(_Contract):
+class AdvanceRequest(_Contract, OmitNoneModel):
+    _omit_when_none = ("hidden_text_report",)
+
     worker_id: WorkerId
     attempt_no: int = Field(ge=1)
     phase: AdvancePhase
@@ -267,11 +270,15 @@ class AdvanceRequest(_Contract):
     cursor: str | None = None
     # Progressive mode (D-30): the run publishes the provisional fast version and the job stays open for the routed run.
     provisional: bool = False
+    # D-33: the hidden-text report the worker made at preflight (tiered routing, check not off); left out of the body otherwise.
+    hidden_text_report: HiddenTextReport | None = Field(default=None, json_schema_extra=omit_none_schema)
 
     @model_validator(mode="after")
     def _post_parse_requires_cache(self) -> AdvanceRequest:
         if self.phase == "post_parse" and self.parse_cache_id is None:
             raise ValueError("post_parse requires parse_cache_id")
+        if self.phase != "post_parse" and self.hidden_text_report is not None:
+            raise ValueError("hidden_text_report is sent with post_parse only")
         return self
 
 

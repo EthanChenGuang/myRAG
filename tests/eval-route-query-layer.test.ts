@@ -301,6 +301,59 @@ describe('eval route query-layer overrides (D-38)', () => {
     ]);
   });
 
+  it('asks for the plan language in the generated answer when the kept chunks are in another language (D-25)', async () => {
+    const systems: string[] = [];
+    const generate = async (result: unknown) => {
+      h.next.result = result;
+      const route = await loadRoute();
+      const answer = await import('@/lib/rag-eval/answer');
+      const { MockLanguageModelV3 } = await import('ai/test');
+      answer.setEvalLanguageModelFactory(
+        () =>
+          new MockLanguageModelV3({
+            doGenerate: async (options) => {
+              const system = (options.prompt as Array<{ role: string; content: unknown }>).find((message) => message.role === 'system');
+              systems.push(String(system?.content ?? ''));
+              return {
+                content: [{ type: 'text' as const, text: 'ANSWER' }],
+                finishReason: { unified: 'stop' as const, raw: 'stop' },
+                usage: {
+                  inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+                  outputTokens: { total: 1, text: 1, reasoning: 0 },
+                },
+                warnings: [],
+              };
+            },
+          }),
+      );
+      try {
+        const response = await route.POST(
+          new NextRequest('http://localhost/api/internal/rag/run', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', 'x-rag-eval-secret': SECRET },
+            body: JSON.stringify({ schema_version: 1, query: ORIGINAL, rag_mode: 'strict', include_answer: true, options: { generator_model: 'meta-llama/llama-3.3-70b-instruct' } }),
+          }),
+        );
+        expect(response.status).toBe(200);
+      } finally {
+        answer.setEvalLanguageModelFactory(null);
+      }
+    };
+    const kept = [{ chunk_id: 'chunk-1', document_id: 'doc-1', document_name: 'alpha.md', content: 'A neutral synthetic chunk about the alpha module.', similarity: 0.8, rank: 1, kept_by: 'fused' }];
+    const zhCandidates = baseResult().candidates.map((candidate) => ({ ...candidate, language: 'zh' }));
+    const { answerLanguageInstruction } = await import('@/lib/rag/generation/answer-language');
+    const line = answerLanguageInstruction({ answerLanguage: 'en', contextLanguages: ['zh'] }) as string;
+
+    await generate(baseResult({ kept, candidates: zhCandidates }));
+    await generate({ ...layerResult(), kept, candidates: zhCandidates });
+    await generate({ ...layerResult(), kept });
+
+    expect(systems).toHaveLength(3);
+    expect(systems[0]).not.toContain(line);
+    expect(systems[1]).toBe(`${systems[0]}\n\n${line}`);
+    expect(systems[2]).toBe(systems[0]);
+  });
+
   it('keeps query_plan null and query_transforms empty while the layer is off, and the trace validates', async () => {
     const route = await loadRoute();
     const trace = (await (await route.POST(evalRequest({ query_layer: false }))).json()) as TraceBody;

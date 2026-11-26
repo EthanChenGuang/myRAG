@@ -1,5 +1,28 @@
 {
   "$defs": {
+    "BudgetedLatency": {
+      "additionalProperties": false,
+      "properties": {
+        "latency": {
+          "$ref": "#/$defs/StageLatency"
+        },
+        "status": {
+          "enum": [
+            "within",
+            "over",
+            "no_budget"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "latency",
+        "status"
+      ],
+      "title": "BudgetedLatency",
+      "type": "object"
+    },
     "DateRangeFilter": {
       "additionalProperties": false,
       "properties": {
@@ -77,6 +100,35 @@
         }
       },
       "title": "GroundednessLabelCounts",
+      "type": "object"
+    },
+    "GroupBudget": {
+      "additionalProperties": false,
+      "description": "D-29: a budget for a group of stages measured as one span, such as the pre-retrieval query stage.",
+      "properties": {
+        "p50_ms": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "P50 Ms"
+        },
+        "p95_ms": {
+          "exclusiveMinimum": 0,
+          "title": "P95 Ms",
+          "type": "number"
+        }
+      },
+      "required": [
+        "p95_ms"
+      ],
+      "title": "GroupBudget",
       "type": "object"
     },
     "InjectionReport": {
@@ -469,6 +521,98 @@
         }
       },
       "title": "QueryBudgetMsOverride",
+      "type": "object"
+    },
+    "QueryLayerReport": {
+      "additionalProperties": false,
+      "description": "D-29, D-38: what the query layer did; counts, rates and latencies only, never query text (T-06-73).",
+      "properties": {
+        "budget_profile": {
+          "enum": [
+            "chat",
+            "embed",
+            "voice"
+          ],
+          "title": "Budget Profile",
+          "type": "string"
+        },
+        "gate_rules": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Gate Rules",
+          "type": "object"
+        },
+        "items": {
+          "minimum": 0,
+          "title": "Items",
+          "type": "integer"
+        },
+        "items_with_plan": {
+          "minimum": 0,
+          "title": "Items With Plan",
+          "type": "integer"
+        },
+        "llm_transform_share": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "protected_token_losses": {
+          "minimum": 0,
+          "title": "Protected Token Losses",
+          "type": "integer"
+        },
+        "query_budget": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/GroupBudget"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "query_latency": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BudgetedLatency"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "query_latency_by_category": {
+          "additionalProperties": {
+            "$ref": "#/$defs/BudgetedLatency"
+          },
+          "title": "Query Latency By Category",
+          "type": "object"
+        },
+        "query_latency_by_language": {
+          "additionalProperties": {
+            "$ref": "#/$defs/BudgetedLatency"
+          },
+          "title": "Query Latency By Language",
+          "type": "object"
+        },
+        "transforms": {
+          "additionalProperties": {
+            "$ref": "#/$defs/TransformOutcomeCounts"
+          },
+          "title": "Transforms",
+          "type": "object"
+        }
+      },
+      "required": [
+        "items",
+        "items_with_plan",
+        "llm_transform_share",
+        "protected_token_losses",
+        "budget_profile"
+      ],
+      "title": "QueryLayerReport",
       "type": "object"
     },
     "QueryParamsOverride": {
@@ -1282,6 +1426,96 @@
       "title": "ScopeFilter",
       "type": "object"
     },
+    "SemanticCacheReport": {
+      "additionalProperties": false,
+      "description": "D-42 e, spec rule 8: cache checks, bypasses, hits and misses, hit versus miss latency, near-miss wrong hits.",
+      "properties": {
+        "bypasses": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Bypasses",
+          "type": "object"
+        },
+        "checks": {
+          "minimum": 0,
+          "title": "Checks",
+          "type": "integer"
+        },
+        "failures": {
+          "minimum": 0,
+          "title": "Failures",
+          "type": "integer"
+        },
+        "hit_latency": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StageLatency"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "hit_rate": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "hits": {
+          "minimum": 0,
+          "title": "Hits",
+          "type": "integer"
+        },
+        "miss_latency": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StageLatency"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "misses": {
+          "minimum": 0,
+          "title": "Misses",
+          "type": "integer"
+        },
+        "near_miss_checks": {
+          "minimum": 0,
+          "title": "Near Miss Checks",
+          "type": "integer"
+        },
+        "near_miss_wrong_hit_rate": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MetricValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "near_miss_wrong_hits": {
+          "minimum": 0,
+          "title": "Near Miss Wrong Hits",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "checks",
+        "hits",
+        "misses",
+        "failures",
+        "hit_rate",
+        "near_miss_checks",
+        "near_miss_wrong_hits"
+      ],
+      "title": "SemanticCacheReport",
+      "type": "object"
+    },
     "SliceMetrics": {
       "additionalProperties": false,
       "properties": {
@@ -1679,6 +1913,39 @@
       ],
       "title": "StrategySlice",
       "type": "object"
+    },
+    "TransformOutcomeCounts": {
+      "additionalProperties": false,
+      "description": "Per transform: traces where it ran, was off by config, or was skipped, with the skip reasons (D-28, D-38).",
+      "properties": {
+        "disabled": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Disabled",
+          "type": "integer"
+        },
+        "run": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Run",
+          "type": "integer"
+        },
+        "skip_reasons": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Skip Reasons",
+          "type": "object"
+        },
+        "skipped": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Skipped",
+          "type": "integer"
+        }
+      },
+      "title": "TransformOutcomeCounts",
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -1953,6 +2220,17 @@
     "overall": {
       "$ref": "#/$defs/SliceMetrics"
     },
+    "query_layer": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/QueryLayerReport"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "raw_invalid_markers": {
       "anyOf": [
         {
@@ -1993,6 +2271,17 @@
       "default": 1,
       "title": "Schema Version",
       "type": "integer"
+    },
+    "semantic_cache": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SemanticCacheReport"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "tier": {
       "enum": [

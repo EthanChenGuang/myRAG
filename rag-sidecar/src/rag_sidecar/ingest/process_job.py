@@ -9,12 +9,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import shutil
+import tempfile
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from rag_sidecar.contracts.ingest_security import HiddenTextReport
 from rag_sidecar.contracts.queue import (
     AdvanceRequest,
     AdvanceResponse,
@@ -25,6 +28,12 @@ from rag_sidecar.contracts.queue import (
 from rag_sidecar.ingest.app_client import AppAuthError, AppTransientError
 from rag_sidecar.ingest.cache_keys import options_hash
 from rag_sidecar.ingest.ledger_client import LeaseLost, LedgerError, Transient
+from rag_sidecar.preflight.hidden_text_hook import (
+    HiddenTextChecker,
+    HiddenTextPreflightUnavailable,
+    needs_hidden_text_check,
+    run_hidden_text_preflight,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +74,8 @@ class WorkerDeps:
     page_cap: int | None = None
     work_dir: Path | None = None
     document_timeout_s: float | None = None
+    # Tests replace the hidden-text checker (D-33); None runs rag_sidecar.security.check_hidden_text.
+    hidden_text_checker: HiddenTextChecker | None = None
 
 
 class _Stop(Exception):
@@ -140,10 +151,68 @@ async def _record_fixed_chain_attempt(deps: WorkerDeps, job: IngestionJob, elaps
     )
 
 
+# The stage at which the hidden-text check is the app's to repeat: past it, the app's run state already holds the report.
+_SCAN_DONE_CURSORS = frozenset({"scan_injection", "chunk", "enrich", "extract", "images", "embed", "write", "publish"})
+HIDDEN_TEXT_TIMEOUT_S = 60.0
+
+
+async def hidden_text_preflight(deps: WorkerDeps, job: IngestionJob, path: Path) -> HiddenTextReport | None:
+    """The hidden-text report of the original at ``path`` when the snapshot asks for it (D-33).
+
+    A check that cannot run under quarantine fails the job before anything is handed to the app (D-34); under flag the
+    report is left out and the app records the document as it does inline.
+    """
+    if needs_hidden_text_check(job) is None:
+        return None
+    try:
+        data = path.read_bytes()
+        return await asyncio.wait_for(
+            asyncio.to_thread(run_hidden_text_preflight, job, data, checker=deps.hidden_text_checker),
+            timeout=HIDDEN_TEXT_TIMEOUT_S,
+        )
+    except HiddenTextPreflightUnavailable as exc:
+        raise _Stop(await _fail(deps, job, exc.error_class, retryable=exc.retryable)) from exc
+    except (TimeoutError, OSError) as exc:
+        logger.warning("[RAG Security] hidden-text preflight failed", extra={"error": type(exc).__name__})
+        if job.settings.hidden_text_check == "quarantine":
+            raise _Stop(await _fail(deps, job, HiddenTextPreflightUnavailable(retryable=True).error_class, retryable=True)) from exc
+        return None
+
+
+async def _resume_hidden_text(deps: WorkerDeps, job: IngestionJob) -> HiddenTextReport | None:
+    """A reclaimed tiered job that has not passed scan_injection checks its original again, so the app never has to."""
+    if job.settings.routing != "tiered" or needs_hidden_text_check(job) is None:
+        return None
+    state = job.stage_state if isinstance(job.stage_state, dict) else {}
+    if state.get("cursor") in _SCAN_DONE_CURSORS:
+        return None
+    if deps.storage is None or job.original_ref is None:
+        if job.settings.hidden_text_check == "quarantine":
+            raise _Stop(await _fail(deps, job, "hidden_text_checker_unavailable", retryable=True))
+        return None
+    if deps.work_dir is not None:
+        deps.work_dir.mkdir(parents=True, exist_ok=True)
+    work = Path(tempfile.mkdtemp(prefix="rag-hidden-text-", dir=deps.work_dir))
+    try:
+        path = await deps.storage.download(job.original_ref, dest_dir=work)
+        return await hidden_text_preflight(deps, job, Path(path))
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
 async def _advance_until_done(
-    deps: WorkerDeps, job: IngestionJob, cache_id: str, attempt_no: int, *, provisional: bool = False
+    deps: WorkerDeps,
+    job: IngestionJob,
+    cache_id: str,
+    attempt_no: int,
+    *,
+    provisional: bool = False,
+    hidden_text_report: HiddenTextReport | None = None,
 ) -> JobOutcome:
-    """Drives advance until done. A provisional run (D-30) ends with stage ``provisional`` and the job stays open for the routed run."""
+    """Drives advance until done. A provisional run (D-30) ends with stage ``provisional`` and the job stays open for the routed run.
+
+    The hidden-text report, when the worker made one, travels with every call: any slice may be the one that runs scan_injection.
+    """
     cursor: str | None = None
     for _ in range(MAX_ADVANCE_CALLS):
         response: AdvanceResponse = await deps.app.advance(
@@ -156,6 +225,7 @@ async def _advance_until_done(
                 deadline_ms=ADVANCE_DEADLINE_MS,
                 cursor=cursor,
                 provisional=provisional,
+                hidden_text_report=hidden_text_report,
             ),
         )
         if response.done:
@@ -216,7 +286,8 @@ async def process_job(job: IngestionJob, deps: WorkerDeps) -> JobOutcome:
         resume_cache = _resume_parse_cache(job)
         if resume_cache:
             attempt_no = job.attempts[-1].attempt_no if job.attempts else 1
-            return await _advance_until_done(deps, job, resume_cache, attempt_no)
+            report = await _resume_hidden_text(deps, job)
+            return await _advance_until_done(deps, job, resume_cache, attempt_no, hidden_text_report=report)
         if job.settings.routing == "tiered":
             from rag_sidecar.ingest.tiered import run_tiered
 

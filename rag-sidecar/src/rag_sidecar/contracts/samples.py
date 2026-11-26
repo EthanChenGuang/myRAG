@@ -121,6 +121,13 @@ from rag_sidecar.contracts import (
     TraceUsedDocument,
 )
 
+from rag_sidecar.contracts.latency import GroupBudget
+from rag_sidecar.contracts.report import (
+    BudgetedLatency,
+    QueryLayerReport,
+    SemanticCacheReport,
+    TransformOutcomeCounts,
+)
 from rag_sidecar.contracts.feedback_loop import (
     ChannelCounts,
     DictionaryCandidate,
@@ -1005,6 +1012,40 @@ def _eval_report() -> EvalReport:
                 generation_latency=StageLatency(p50_ms=300.0, p95_ms=900.0, n=4),
             )
         },
+        query_layer=QueryLayerReport(
+            items=4,
+            items_with_plan=4,
+            gate_rules={"R1_PRONOUN": 3, "R9_KEYWORDS": 1},
+            transforms={
+                "condense": TransformOutcomeCounts(run=3),
+                "hyde": TransformOutcomeCounts(disabled=4),
+                "expand": TransformOutcomeCounts(skipped=1, skip_reasons={"timeout": 1}),
+            },
+            llm_transform_share=MetricValue(value=0.5, n=4),
+            protected_token_losses=1,
+            budget_profile="chat",
+            query_budget=GroupBudget(p50_ms=600, p95_ms=1200),
+            query_latency=BudgetedLatency(latency=StageLatency(p50_ms=300.0, p95_ms=900.0, n=4), status="within"),
+            query_latency_by_language={
+                "en": BudgetedLatency(latency=StageLatency(p50_ms=300.0, p95_ms=900.0, n=4), status="within")
+            },
+            query_latency_by_category={
+                "multi_turn": BudgetedLatency(latency=StageLatency(p50_ms=700.0, p95_ms=1300.0, n=2), status="over")
+            },
+        ),
+        semantic_cache=SemanticCacheReport(
+            checks=4,
+            hits=1,
+            misses=3,
+            failures=1,
+            bypasses={"protected_tokens": 2},
+            hit_rate=MetricValue(value=0.25, n=4),
+            hit_latency=StageLatency(p50_ms=20.0, p95_ms=20.0, n=1),
+            miss_latency=StageLatency(p50_ms=400.0, p95_ms=800.0, n=3),
+            near_miss_checks=2,
+            near_miss_wrong_hits=0,
+            near_miss_wrong_hit_rate=MetricValue(value=0.0, n=2),
+        ),
         notes=["synthetic sample"],
     )
 
@@ -1013,9 +1054,14 @@ def _latency_budgets() -> LatencyBudgets:
     return LatencyBudgets(
         profiles={
             "chat": ProfileBudget(
-                total_p50_ms=1000, total_p95_ms=2000, stages={"embed": 200, "search": 400, "assemble": 100}
+                total_p50_ms=1000,
+                total_p95_ms=2000,
+                stages={"embed": 200, "search": 400, "assemble": 100, "condense": 600},
+                groups={"query": GroupBudget(p50_ms=600, p95_ms=1200)},
             ),
-            "voice": ProfileBudget(total_p50_ms=400, total_p95_ms=800),
+            "voice": ProfileBudget(
+                total_p50_ms=400, total_p95_ms=800, groups={"query": GroupBudget(p95_ms=300)}
+            ),
         },
         groundedness=GroundednessBudgets(
             hhem_2_1_open=ScorerBudget(p50_ms=2500, p95_ms=5000),

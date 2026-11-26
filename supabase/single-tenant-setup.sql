@@ -16736,6 +16736,1143 @@ $function$;
 COMMIT;
 
 ------------------------------------------
+-- Phase 3.1.1: Domain embedding bindings and scoped re-embed (migrations 0440-0442, plan 03.1.1-14, after 0425 in migration order)
+------------------------------------------
+
+-- >>> supabase/migrations/0440_embedding_bindings.sql
+-- 0440: scoped embedding profiles and per-doc-type bindings (Phase 3.1.1, D-03, D-05, D-06, D-28).
+-- embedding_profiles gains doc_types (NULL = unscoped, the Phase 3 meaning). A scoped profile holds vectors only for chunks whose
+-- COALESCE(chunk.doc_type, document.doc_type) is in its scope, and it can never be 'backfilling' or 'active': the global pointer and the
+-- Phase 3 dual-write stay on unscoped profiles, and the Phase 3 gate function is not edited. Its vectors are reached only through a row of
+-- embedding_profile_bindings (one active and one backfilling row per doc type and tenant key, NULL = deployment-wide), which 0441 manages.
+-- Three scoped candidates are seeded 'available', each with its own partial HNSW index; nothing is bound or activated here. A further
+-- candidate is a further migration (profile row plus partial index, D-04). Everything here is for the server role only: RLS is on without
+-- policies, nothing is granted to anon or authenticated, and every function uses SET search_path = '' with schema-qualified names.
+--
+-- Replaces public.rag_chunk_embeddings_guard(). The body starts from 0425_search_path_empty.sql (the newest definition; 0308 and 0410 are
+-- older) and differs from it only by the doc type scope check: dims, the unknown-profile refusal and tenant_key copying are unchanged, as
+-- are the signature, SECURITY DEFINER, the empty search_path and the grants (CREATE OR REPLACE keeps the ACL; no GRANT is issued for it).
+-- Live upgrade: run this read-only dry run first. One row with live = expected means the live body is the 0425 one; any other result means
+-- it was changed by hand or 0425 was not applied: compare pg_get_functiondef with the repository before applying.
+--   SELECT 'f7aa72d3c0bcc173f7dd103cced69c03' AS expected, pg_catalog.md5(p.prosrc) AS live
+--     FROM pg_catalog.pg_proc p WHERE p.oid = pg_catalog.to_regprocedure('public.rag_chunk_embeddings_guard()');
+-- Re-running 0425 after this file puts back the 0425 guard without the scope check, so re-run 0440 after it.
+-- Idempotent: ADD COLUMN IF NOT EXISTS, constraints added only when absent, ON CONFLICT DO NOTHING, IF NOT EXISTS, CREATE OR REPLACE.
+
+BEGIN;
+
+DO $bindings_precheck$
+DECLARE
+  v_vector_schema text;
+BEGIN
+  SELECT n.nspname INTO v_vector_schema
+  FROM pg_catalog.pg_extension e JOIN pg_catalog.pg_namespace n ON n.oid = e.extnamespace
+  WHERE e.extname = 'vector';
+  IF v_vector_schema IS DISTINCT FROM 'public' THEN
+    RAISE EXCEPTION '0440: pgvector must be in schema public, found %', COALESCE(v_vector_schema, 'no vector extension') USING ERRCODE = '55000';
+  END IF;
+  IF pg_catalog.to_regprocedure('public.rag_chunk_embeddings_guard()') IS NULL OR pg_catalog.to_regprocedure('public.rag_assert_tenant_key(text)') IS NULL THEN
+    RAISE EXCEPTION '0440: apply the earlier migrations first (0308, 0403, 0425)' USING ERRCODE = '55000';
+  END IF;
+END
+$bindings_precheck$;
+
+-- Scope column.
+
+ALTER TABLE public.embedding_profiles ADD COLUMN IF NOT EXISTS doc_types text[];
+
+DO $doc_types_check$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_constraint
+    WHERE conrelid = pg_catalog.to_regclass('public.embedding_profiles') AND conname = 'embedding_profiles_doc_types_check'
+  ) THEN
+    ALTER TABLE public.embedding_profiles ADD CONSTRAINT embedding_profiles_doc_types_check
+      CHECK (doc_types IS NULL OR (cardinality(doc_types) > 0 AND doc_types <@ ARRAY['financial_report', 'contract_legal', 'invoice_receipt', 'product_technical', 'scanned_image', 'general']::text[]));
+  END IF;
+END
+$doc_types_check$;
+
+-- Scope trigger: a scoped profile is never backfilling or active, and its scope is fixed once it has vectors; a binding's doc type cannot
+-- leave its profile's scope (the bindings table is created below; plpgsql resolves the name when the trigger runs).
+
+CREATE OR REPLACE FUNCTION public.rag_embedding_profiles_scope_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
+BEGIN
+  IF TG_OP = 'UPDATE' AND NEW.doc_types IS DISTINCT FROM OLD.doc_types THEN
+    IF EXISTS (SELECT 1 FROM public.chunk_embeddings e WHERE e.profile_id = OLD.id) THEN
+      RAISE EXCEPTION 'profile_status_refused: scope_locked' USING ERRCODE = '22000';
+    END IF;
+    IF EXISTS (
+      SELECT 1 FROM public.embedding_profile_bindings b
+      WHERE b.profile_id = OLD.id AND (NEW.doc_types IS NULL OR NOT (b.doc_type = ANY (NEW.doc_types)))
+    ) THEN
+      RAISE EXCEPTION 'profile_status_refused: scope_locked' USING ERRCODE = '22000';
+    END IF;
+  END IF;
+
+  IF NEW.doc_types IS NOT NULL THEN
+    IF NEW.status = 'active' THEN
+      RAISE EXCEPTION 'activation_refused: scoped_profile' USING ERRCODE = '22023';
+    END IF;
+    IF NEW.status = 'backfilling' THEN
+      RAISE EXCEPTION 'profile_status_refused: scoped_profile' USING ERRCODE = '22023';
+    END IF;
+  END IF;
+  RETURN NEW;
+END
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_embedding_profiles_scope_guard() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_embedding_profiles_scope_guard() TO service_role;
+
+DROP TRIGGER IF EXISTS rag_embedding_profiles_scope_guard ON public.embedding_profiles;
+CREATE TRIGGER rag_embedding_profiles_scope_guard
+  BEFORE INSERT OR UPDATE OF status, doc_types ON public.embedding_profiles
+  FOR EACH ROW EXECUTE FUNCTION public.rag_embedding_profiles_scope_guard();
+
+-- Seeded scoped candidates (D-03). Vendor model ids and Phase 3 doc type ids only.
+
+INSERT INTO public.embedding_profiles (id, provider, model, dims, storage, status, query_instruction, score_calibration, doc_types)
+VALUES
+  ('voyage-law-2-1024', 'voyage', 'voyage-law-2', 1024, 'halfvec', 'available', NULL, '{}'::jsonb, ARRAY['contract_legal']::text[]),
+  ('voyage-finance-2-1024', 'voyage', 'voyage-finance-2', 1024, 'halfvec', 'available', NULL, '{}'::jsonb, ARRAY['financial_report', 'invoice_receipt']::text[]),
+  (
+    'voyage-4-large-1024-domain', 'voyage', 'voyage-4-large', 1024, 'halfvec', 'available', NULL, '{}'::jsonb,
+    ARRAY['contract_legal', 'financial_report', 'invoice_receipt']::text[]
+  )
+ON CONFLICT (id) DO NOTHING;
+
+CREATE INDEX IF NOT EXISTS chunk_embeddings_voyage_law_2_1024_hnsw ON public.chunk_embeddings
+  USING hnsw ((embedding::public.halfvec(1024)) public.halfvec_cosine_ops) WITH (m = 64, ef_construction = 200)
+  WHERE profile_id = 'voyage-law-2-1024';
+CREATE INDEX IF NOT EXISTS chunk_embeddings_voyage_finance_2_1024_hnsw ON public.chunk_embeddings
+  USING hnsw ((embedding::public.halfvec(1024)) public.halfvec_cosine_ops) WITH (m = 64, ef_construction = 200)
+  WHERE profile_id = 'voyage-finance-2-1024';
+CREATE INDEX IF NOT EXISTS chunk_embeddings_voyage_4_large_1024_domain_hnsw ON public.chunk_embeddings
+  USING hnsw ((embedding::public.halfvec(1024)) public.halfvec_cosine_ops) WITH (m = 64, ef_construction = 200)
+  WHERE profile_id = 'voyage-4-large-1024-domain';
+
+-- Per-doc-type bindings (D-06). tenant_key NULL = deployment-wide; otherwise a key of this deployment mode (public.rag_assert_tenant_key).
+-- 0441 moves rows between statuses through the gate; the indexes keep one active and one backfilling row per (doc type, tenant).
+
+CREATE TABLE IF NOT EXISTS public.embedding_profile_bindings (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  doc_type text NOT NULL CONSTRAINT embedding_profile_bindings_doc_type_check
+    CHECK (doc_type IN ('financial_report', 'contract_legal', 'invoice_receipt', 'product_technical', 'scanned_image', 'general')),
+  tenant_key text,
+  profile_id text NOT NULL REFERENCES public.embedding_profiles (id),
+  status text NOT NULL DEFAULT 'available' CONSTRAINT embedding_profile_bindings_status_check
+    CHECK (status IN ('backfilling', 'active', 'available', 'retired')),
+  previous_binding_id uuid REFERENCES public.embedding_profile_bindings (id),
+  eval_evidence jsonb,
+  activated_at timestamptz,
+  activated_by text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  created_by text NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS embedding_profile_bindings_single_active
+  ON public.embedding_profile_bindings ((doc_type), (COALESCE(tenant_key, ''))) WHERE status = 'active';
+CREATE UNIQUE INDEX IF NOT EXISTS embedding_profile_bindings_single_backfilling
+  ON public.embedding_profile_bindings ((doc_type), (COALESCE(tenant_key, ''))) WHERE status = 'backfilling';
+CREATE UNIQUE INDEX IF NOT EXISTS embedding_profile_bindings_triple_ux
+  ON public.embedding_profile_bindings (doc_type, (COALESCE(tenant_key, '')), profile_id);
+
+CREATE OR REPLACE FUNCTION public.rag_embedding_bindings_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_scope text[];
+BEGIN
+  SELECT p.doc_types INTO v_scope FROM public.embedding_profiles p WHERE p.id = NEW.profile_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'binding_refused: unknown_profile' USING ERRCODE = '22023';
+  END IF;
+  IF v_scope IS NULL OR NOT (NEW.doc_type = ANY (v_scope)) THEN
+    RAISE EXCEPTION 'binding_refused: profile_scope_mismatch' USING ERRCODE = '22023';
+  END IF;
+  IF NEW.tenant_key IS NOT NULL THEN
+    PERFORM public.rag_assert_tenant_key(NEW.tenant_key);
+  END IF;
+  RETURN NEW;
+END
+$$;
+
+REVOKE ALL ON FUNCTION public.rag_embedding_bindings_guard() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_embedding_bindings_guard() TO service_role;
+
+DROP TRIGGER IF EXISTS rag_embedding_bindings_guard ON public.embedding_profile_bindings;
+CREATE TRIGGER rag_embedding_bindings_guard
+  BEFORE INSERT OR UPDATE OF profile_id, doc_type, tenant_key ON public.embedding_profile_bindings
+  FOR EACH ROW EXECUTE FUNCTION public.rag_embedding_bindings_guard();
+
+ALTER TABLE public.embedding_profile_bindings ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.embedding_profile_bindings FROM PUBLIC, anon, authenticated;
+GRANT ALL ON TABLE public.embedding_profile_bindings TO service_role;
+
+-- chunk_embeddings guard: the 0425 body plus the doc type scope check.
+
+CREATE OR REPLACE FUNCTION public.rag_chunk_embeddings_guard()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_dims integer;
+  v_tenant text;
+  v_scope text[];
+  v_doc_type text;
+BEGIN
+  SELECT p.dims, p.doc_types INTO v_dims, v_scope FROM public.embedding_profiles p WHERE p.id = NEW.profile_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'embedding_profile_mismatch: unknown profile' USING ERRCODE = '22023';
+  END IF;
+  IF public.vector_dims(NEW.embedding) <> v_dims THEN
+    RAISE EXCEPTION 'expected % dimensions, not %', v_dims, public.vector_dims(NEW.embedding) USING ERRCODE = '22000';
+  END IF;
+
+  SELECT c.tenant_key INTO v_tenant FROM public.document_chunks c WHERE c.id = NEW.chunk_id;
+  IF v_tenant IS NULL THEN
+    RAISE EXCEPTION 'chunk_embeddings: chunk % has no tenant_key', NEW.chunk_id USING ERRCODE = '23502';
+  END IF;
+
+  IF v_scope IS NOT NULL THEN
+    SELECT COALESCE(c.doc_type, d.doc_type) INTO v_doc_type
+    FROM public.document_chunks c LEFT JOIN public.documents d ON d.id = c.document_id
+    WHERE c.id = NEW.chunk_id;
+    IF v_doc_type IS NULL OR NOT (v_doc_type = ANY (v_scope)) THEN
+      RAISE EXCEPTION 'embedding_profile_mismatch: doc_type_scope' USING ERRCODE = '22023';
+    END IF;
+  END IF;
+
+  NEW.tenant_key := v_tenant;
+  NEW.dims := public.vector_dims(NEW.embedding);
+  RETURN NEW;
+END
+$function$;
+
+COMMIT;
+
+-- >>> supabase/migrations/0441_binding_gate.sql
+-- 0441: the binding gate (Phase 3.1.1, D-06, D-09, D-10, D-11, D-13, D-27).
+-- A binding (0440) adds a scoped profile's vectors to every query of one doc type, for one tenant or deployment-wide. These functions are the
+-- only way a binding row changes status: list, create, stage (available, backfilling, retired), record evidence, activate through the gate,
+-- roll back to the previous binding and deactivate. Activation needs a complete index of the binding's scope and evidence proven on real
+-- items; rollback and deactivate are pointer flips that delete no vector.
+-- Every refusal starts with 'binding_refused: <code>' (the prefix the TS mapper reads, 03-40). Every function is SECURITY DEFINER with
+-- SET search_path = '' and schema-qualified names (the 0425 rule), revoked from PUBLIC, anon and authenticated and granted to service_role.
+-- The tenant is never taken from the caller beyond the binding row: completeness counts only the binding's tenant (all tenants for a
+-- deployment-wide row), so one tenant's chunks never refuse or change another tenant's binding.
+-- Idempotent: CREATE OR REPLACE and REVOKE/GRANT only.
+
+BEGIN;
+
+DO $binding_gate_precheck$
+BEGIN
+  IF pg_catalog.to_regclass('public.embedding_profile_bindings') IS NULL OR pg_catalog.to_regprocedure('public.rag_embedding_bindings_guard()') IS NULL THEN
+    RAISE EXCEPTION '0441: apply 0440 first' USING ERRCODE = '55000';
+  END IF;
+END
+$binding_gate_precheck$;
+
+-- Registry reads (D-06).
+
+CREATE OR REPLACE FUNCTION public.rag_list_embedding_bindings()
+RETURNS TABLE(
+  id uuid, doc_type text, tenant_key text, profile_id text, model text, doc_types text[], status text, previous_binding_id uuid,
+  has_evidence boolean, baseline_global_profile text, activated_at timestamptz, activated_by text, created_at timestamptz, created_by text
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  SELECT b.id, b.doc_type, b.tenant_key, b.profile_id, p.model, p.doc_types, b.status, b.previous_binding_id,
+         b.eval_evidence IS NOT NULL, b.eval_evidence->>'baseline_global_profile', b.activated_at, b.activated_by, b.created_at, b.created_by
+  FROM public.embedding_profile_bindings b
+  JOIN public.embedding_profiles p ON p.id = b.profile_id
+  ORDER BY b.doc_type, b.tenant_key NULLS FIRST, b.profile_id
+$$;
+
+CREATE OR REPLACE FUNCTION public.rag_list_embedding_profile_scopes()
+RETURNS TABLE(id text, doc_types text[])
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  SELECT p.id, p.doc_types FROM public.embedding_profiles p ORDER BY p.id
+$$;
+
+-- Create: returns the existing row for the same (doc type, tenant, profile). The 0440 guard refuses an unscoped profile, a doc type outside
+-- the profile's scope and a tenant key of the other deployment mode.
+
+CREATE OR REPLACE FUNCTION public.rag_create_embedding_binding(p_doc_type text, p_tenant_key text, p_profile_id text, p_actor text)
+RETURNS TABLE(binding_id uuid, binding_status text, created boolean)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_row public.embedding_profile_bindings%ROWTYPE;
+BEGIN
+  IF p_actor IS NULL OR pg_catalog.btrim(p_actor) = '' THEN
+    RAISE EXCEPTION 'binding_refused: actor_required' USING ERRCODE = '22023';
+  END IF;
+
+  LOCK TABLE public.embedding_profile_bindings IN SHARE ROW EXCLUSIVE MODE;
+
+  SELECT * INTO v_row FROM public.embedding_profile_bindings b
+  WHERE b.doc_type = p_doc_type AND COALESCE(b.tenant_key, '') = COALESCE(p_tenant_key, '') AND b.profile_id = p_profile_id;
+  IF FOUND THEN
+    RETURN QUERY SELECT v_row.id, v_row.status, false;
+    RETURN;
+  END IF;
+
+  INSERT INTO public.embedding_profile_bindings (doc_type, tenant_key, profile_id, status, created_by)
+  VALUES (p_doc_type, p_tenant_key, p_profile_id, 'available', p_actor)
+  RETURNING * INTO v_row;
+
+  RETURN QUERY SELECT v_row.id, v_row.status, true;
+END
+$$;
+
+-- Staging: available, backfilling and retired only. 'active' is reached through the gate, and an active row changes only through
+-- activate, rollback or deactivate.
+
+CREATE OR REPLACE FUNCTION public.rag_set_embedding_binding_status(p_binding_id uuid, p_status text, p_actor text)
+RETURNS TABLE(binding_id uuid, binding_status text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_current text;
+BEGIN
+  IF p_actor IS NULL OR pg_catalog.btrim(p_actor) = '' THEN
+    RAISE EXCEPTION 'binding_refused: actor_required' USING ERRCODE = '22023';
+  END IF;
+  IF p_status = 'active' THEN
+    RAISE EXCEPTION 'binding_refused: use_activation_gate' USING ERRCODE = '22023';
+  END IF;
+  IF p_status IS NULL OR p_status NOT IN ('available', 'backfilling', 'retired') THEN
+    RAISE EXCEPTION 'binding_refused: invalid_status' USING ERRCODE = '22023';
+  END IF;
+
+  LOCK TABLE public.embedding_profile_bindings IN SHARE ROW EXCLUSIVE MODE;
+
+  SELECT b.status INTO v_current FROM public.embedding_profile_bindings b WHERE b.id = p_binding_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'binding_refused: unknown_binding' USING ERRCODE = '22023';
+  END IF;
+  IF v_current = 'active' THEN
+    RAISE EXCEPTION 'binding_refused: binding_is_active' USING ERRCODE = '55000';
+  END IF;
+
+  BEGIN
+    UPDATE public.embedding_profile_bindings b SET status = p_status WHERE b.id = p_binding_id;
+  EXCEPTION WHEN unique_violation THEN
+    RAISE EXCEPTION 'binding_refused: backfilling_exists' USING ERRCODE = '55000';
+  END;
+
+  RETURN QUERY SELECT p_binding_id, p_status;
+END
+$$;
+
+-- Evidence (D-13): validated against the Pydantic BindingActivationEvidence before the call; here it must name this binding, its profile,
+-- doc type and tenant. The gate re-checks every number it relies on.
+
+CREATE OR REPLACE FUNCTION public.rag_record_binding_evidence(p_binding_id uuid, p_evidence jsonb, p_actor text)
+RETURNS TABLE(binding_id uuid, recorded_at timestamptz)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_row public.embedding_profile_bindings%ROWTYPE;
+BEGIN
+  IF p_actor IS NULL OR pg_catalog.btrim(p_actor) = '' THEN
+    RAISE EXCEPTION 'binding_refused: actor_required' USING ERRCODE = '22023';
+  END IF;
+
+  LOCK TABLE public.embedding_profile_bindings IN SHARE ROW EXCLUSIVE MODE;
+
+  SELECT * INTO v_row FROM public.embedding_profile_bindings b WHERE b.id = p_binding_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'binding_refused: unknown_binding' USING ERRCODE = '22023';
+  END IF;
+  IF v_row.status = 'active' THEN
+    RAISE EXCEPTION 'binding_refused: binding_is_active' USING ERRCODE = '55000';
+  END IF;
+  IF p_evidence IS NULL OR pg_catalog.jsonb_typeof(p_evidence) <> 'object' THEN
+    RAISE EXCEPTION 'binding_refused: invalid_evidence' USING ERRCODE = '22023';
+  END IF;
+  IF p_evidence->>'binding_id' IS DISTINCT FROM v_row.id::text
+     OR p_evidence->>'target_profile' IS DISTINCT FROM v_row.profile_id
+     OR p_evidence->>'doc_type' IS DISTINCT FROM v_row.doc_type
+     OR p_evidence->>'tenant_key' IS DISTINCT FROM v_row.tenant_key THEN
+    RAISE EXCEPTION 'binding_refused: evidence_mismatch' USING ERRCODE = '55000';
+  END IF;
+
+  UPDATE public.embedding_profile_bindings b SET eval_evidence = p_evidence WHERE b.id = p_binding_id;
+
+  RETURN QUERY SELECT p_binding_id, pg_catalog.now();
+END
+$$;
+
+REVOKE ALL ON FUNCTION
+  public.rag_list_embedding_bindings(),
+  public.rag_list_embedding_profile_scopes(),
+  public.rag_create_embedding_binding(text, text, text, text),
+  public.rag_set_embedding_binding_status(uuid, text, text),
+  public.rag_record_binding_evidence(uuid, jsonb, text)
+FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION
+  public.rag_list_embedding_bindings(),
+  public.rag_list_embedding_profile_scopes(),
+  public.rag_create_embedding_binding(text, text, text, text),
+  public.rag_set_embedding_binding_status(uuid, text, text),
+  public.rag_record_binding_evidence(uuid, jsonb, text)
+TO service_role;
+
+
+-- Activation gate (D-09, D-11, D-27), in the order of the Phase 3 gate (0309, newest body in 0425). Scope of a binding: current ready chunks
+-- with COALESCE(chunk.doc_type, document.doc_type) = the binding's doc type, of the binding's tenant (every tenant when tenant_key is NULL).
+-- The evidence must name the live baselines, pass on at least c_min_real_items real (production or human) items of the doc type, pass every
+-- language sub-slice present in it (the keys are data: the deployment's languages, never a list in this function), pass the other slices,
+-- name a completed run of the profile covering the binding's tenant, and be newer than the newest vector of the profile in scope. Fixture
+-- evidence never reaches the real-items threshold, so it can never activate a binding.
+
+CREATE OR REPLACE FUNCTION public.rag_activate_embedding_binding(p_binding_id uuid, p_actor text)
+RETURNS TABLE(activated_binding uuid, previous_binding uuid)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+SET statement_timeout = '120s'
+AS $$
+DECLARE
+  c_min_real_items CONSTANT integer := 30;
+  v_row public.embedding_profile_bindings%ROWTYPE;
+  v_profile public.embedding_profiles%ROWTYPE;
+  v_previous public.embedding_profile_bindings%ROWTYPE;
+  v_has_previous boolean;
+  v_global text;
+  v_missing bigint;
+  v_bad bigint;
+  v_evidence jsonb;
+  v_slice jsonb;
+  v_real numeric;
+  v_total numeric;
+  v_lang record;
+  v_recorded timestamptz;
+  v_last timestamptz;
+BEGIN
+  IF p_actor IS NULL OR pg_catalog.btrim(p_actor) = '' THEN
+    RAISE EXCEPTION 'binding_refused: actor_required' USING ERRCODE = '22023';
+  END IF;
+
+  LOCK TABLE public.embedding_profile_bindings IN SHARE ROW EXCLUSIVE MODE;
+  LOCK TABLE public.embedding_profiles IN SHARE MODE;
+
+  SELECT * INTO v_row FROM public.embedding_profile_bindings b WHERE b.id = p_binding_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'binding_refused: unknown_binding' USING ERRCODE = '22023';
+  END IF;
+  IF v_row.status = 'active' THEN
+    RAISE EXCEPTION 'binding_refused: already_active' USING ERRCODE = '55000';
+  END IF;
+  IF v_row.status NOT IN ('available', 'backfilling') THEN
+    RAISE EXCEPTION 'binding_refused: binding_retired' USING ERRCODE = '55000';
+  END IF;
+
+  SELECT * INTO v_profile FROM public.embedding_profiles p WHERE p.id = v_row.profile_id;
+  IF NOT FOUND OR v_profile.doc_types IS NULL OR NOT (v_row.doc_type = ANY (v_profile.doc_types)) THEN
+    RAISE EXCEPTION 'binding_refused: profile_scope_mismatch' USING ERRCODE = '22023';
+  END IF;
+
+  SELECT * INTO v_previous FROM public.embedding_profile_bindings b
+  WHERE b.status = 'active' AND b.doc_type = v_row.doc_type AND COALESCE(b.tenant_key, '') = COALESCE(v_row.tenant_key, '');
+  v_has_previous := FOUND;
+  SELECT p.id INTO v_global FROM public.embedding_profiles p WHERE p.status = 'active';
+
+  SELECT count(*) INTO v_missing
+  FROM public.document_chunks c JOIN public.documents d ON d.id = c.document_id
+  WHERE c.is_current AND c.status = 'ready' AND COALESCE(c.doc_type, d.doc_type) = v_row.doc_type
+    AND (v_row.tenant_key IS NULL OR c.tenant_key = v_row.tenant_key)
+    AND NOT EXISTS (SELECT 1 FROM public.chunk_embeddings e WHERE e.chunk_id = c.id AND e.profile_id = v_profile.id);
+  IF v_missing > 0 THEN
+    RAISE EXCEPTION 'binding_refused: incomplete (% current ready % chunks have no vector for profile %)', v_missing, v_row.doc_type, v_profile.id
+      USING ERRCODE = '55000';
+  END IF;
+
+  SELECT count(*) INTO v_bad
+  FROM public.chunk_embeddings e
+  JOIN public.document_chunks c ON c.id = e.chunk_id
+  JOIN public.documents d ON d.id = c.document_id
+  WHERE e.profile_id = v_profile.id AND c.is_current AND c.status = 'ready' AND COALESCE(c.doc_type, d.doc_type) = v_row.doc_type
+    AND (v_row.tenant_key IS NULL OR c.tenant_key = v_row.tenant_key)
+    AND (e.embedding_model <> v_profile.model OR e.dims <> v_profile.dims);
+  IF v_bad > 0 THEN
+    RAISE EXCEPTION 'binding_refused: model_mismatch (% rows of profile % differ from model % at % dims)', v_bad, v_profile.id, v_profile.model, v_profile.dims
+      USING ERRCODE = '55000';
+  END IF;
+
+  v_evidence := v_row.eval_evidence;
+  IF v_evidence IS NULL OR pg_catalog.jsonb_typeof(v_evidence) <> 'object' THEN
+    RAISE EXCEPTION 'binding_refused: eval_missing' USING ERRCODE = '55000';
+  END IF;
+  IF v_evidence->>'binding_id' IS DISTINCT FROM v_row.id::text
+     OR v_evidence->>'target_profile' IS DISTINCT FROM v_row.profile_id
+     OR v_evidence->>'doc_type' IS DISTINCT FROM v_row.doc_type
+     OR v_evidence->>'tenant_key' IS DISTINCT FROM v_row.tenant_key THEN
+    RAISE EXCEPTION 'binding_refused: evidence_mismatch' USING ERRCODE = '55000';
+  END IF;
+  IF v_evidence->>'baseline_global_profile' IS DISTINCT FROM v_global THEN
+    RAISE EXCEPTION 'binding_refused: eval_baseline_mismatch (evidence baseline %, active profile %)', v_evidence->>'baseline_global_profile', v_global
+      USING ERRCODE = '55000';
+  END IF;
+  IF v_evidence->>'baseline_binding_profile' IS DISTINCT FROM (CASE WHEN v_has_previous THEN v_previous.profile_id END) THEN
+    RAISE EXCEPTION 'binding_refused: eval_binding_baseline_mismatch (evidence baseline %, active binding profile %)',
+      v_evidence->>'baseline_binding_profile', CASE WHEN v_has_previous THEN v_previous.profile_id END
+      USING ERRCODE = '55000';
+  END IF;
+  IF v_evidence->'gate_passed' IS DISTINCT FROM 'true'::jsonb THEN
+    RAISE EXCEPTION 'binding_refused: eval_failed' USING ERRCODE = '55000';
+  END IF;
+
+  v_slice := v_evidence->'doc_type_slice';
+  IF pg_catalog.jsonb_typeof(v_slice) = 'object'
+     AND pg_catalog.jsonb_typeof(v_slice->'real_n') = 'number' AND pg_catalog.jsonb_typeof(v_slice->'n') = 'number' THEN
+    v_real := (v_slice->>'real_n')::numeric;
+    v_total := (v_slice->>'n')::numeric;
+  END IF;
+  IF v_real IS NULL OR v_real < c_min_real_items OR v_real > v_total THEN
+    RAISE EXCEPTION 'binding_refused: eval_insufficient_real_items (% real of % items, % required)', v_real, v_total, c_min_real_items
+      USING ERRCODE = '55000';
+  END IF;
+  IF v_slice->'passed' IS DISTINCT FROM 'true'::jsonb THEN
+    RAISE EXCEPTION 'binding_refused: eval_failed (doc type slice)' USING ERRCODE = '55000';
+  END IF;
+  IF pg_catalog.jsonb_typeof(v_slice->'by_language') IS DISTINCT FROM 'object' OR v_slice->'by_language' = '{}'::jsonb THEN
+    RAISE EXCEPTION 'binding_refused: eval_language_regression (no language sub-slice)' USING ERRCODE = '55000';
+  END IF;
+  FOR v_lang IN SELECT l.key, l.value FROM pg_catalog.jsonb_each(v_slice->'by_language') l ORDER BY l.key LOOP
+    IF v_lang.value IS DISTINCT FROM 'true'::jsonb THEN
+      RAISE EXCEPTION 'binding_refused: eval_language_regression (%)', v_lang.key USING ERRCODE = '55000';
+    END IF;
+  END LOOP;
+  IF v_evidence->'other_slices_passed' IS DISTINCT FROM 'true'::jsonb THEN
+    RAISE EXCEPTION 'binding_refused: eval_other_slices' USING ERRCODE = '55000';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM public.embedding_backfill_runs r
+    WHERE r.id::text = v_evidence->>'backfill_run_id' AND r.profile_id = v_profile.id AND r.status = 'completed'
+      AND (r.tenant_key IS NULL OR (v_row.tenant_key IS NOT NULL AND r.tenant_key = v_row.tenant_key))
+  ) THEN
+    RAISE EXCEPTION 'binding_refused: eval_run_mismatch' USING ERRCODE = '55000';
+  END IF;
+
+  SELECT max(e.embedded_at) INTO v_last
+  FROM public.chunk_embeddings e
+  JOIN public.document_chunks c ON c.id = e.chunk_id
+  JOIN public.documents d ON d.id = c.document_id
+  WHERE e.profile_id = v_profile.id AND COALESCE(c.doc_type, d.doc_type) = v_row.doc_type
+    AND (v_row.tenant_key IS NULL OR c.tenant_key = v_row.tenant_key);
+  BEGIN
+    v_recorded := (v_evidence->>'recorded_at')::timestamptz;
+  EXCEPTION WHEN others THEN
+    v_recorded := NULL;
+  END;
+  IF v_recorded IS NULL OR (v_last IS NOT NULL AND v_recorded < v_last) THEN
+    RAISE EXCEPTION 'binding_refused: eval_stale (evidence recorded %, data embedded %)', v_recorded, v_last USING ERRCODE = '55000';
+  END IF;
+
+  IF v_has_previous THEN
+    UPDATE public.embedding_profile_bindings b SET status = 'available' WHERE b.id = v_previous.id;
+  END IF;
+  UPDATE public.embedding_profile_bindings b
+  SET status = 'active', previous_binding_id = CASE WHEN v_has_previous THEN v_previous.id END, activated_at = pg_catalog.now(), activated_by = p_actor
+  WHERE b.id = v_row.id;
+
+  RETURN QUERY SELECT v_row.id, CASE WHEN v_has_previous THEN v_previous.id END;
+END
+$$;
+
+-- Rollback (D-10): restores the previous binding of the key when its index is still complete; a pointer flip, no vector deleted.
+
+CREATE OR REPLACE FUNCTION public.rag_rollback_embedding_binding(p_doc_type text, p_tenant_key text, p_actor text)
+RETURNS TABLE(restored_binding uuid, rolled_back_binding uuid)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+SET statement_timeout = '120s'
+AS $$
+DECLARE
+  v_active public.embedding_profile_bindings%ROWTYPE;
+  v_previous public.embedding_profile_bindings%ROWTYPE;
+  v_profile public.embedding_profiles%ROWTYPE;
+  v_missing bigint;
+  v_bad bigint;
+BEGIN
+  IF p_actor IS NULL OR pg_catalog.btrim(p_actor) = '' THEN
+    RAISE EXCEPTION 'binding_refused: actor_required' USING ERRCODE = '22023';
+  END IF;
+  IF p_tenant_key IS NOT NULL THEN
+    PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  END IF;
+
+  LOCK TABLE public.embedding_profile_bindings IN SHARE ROW EXCLUSIVE MODE;
+
+  SELECT * INTO v_active FROM public.embedding_profile_bindings b
+  WHERE b.status = 'active' AND b.doc_type = p_doc_type AND COALESCE(b.tenant_key, '') = COALESCE(p_tenant_key, '');
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'binding_refused: no_active' USING ERRCODE = '55000';
+  END IF;
+  IF v_active.previous_binding_id IS NULL THEN
+    RAISE EXCEPTION 'binding_refused: no_previous' USING ERRCODE = '55000';
+  END IF;
+  SELECT * INTO v_previous FROM public.embedding_profile_bindings b WHERE b.id = v_active.previous_binding_id;
+  IF NOT FOUND OR v_previous.status <> 'available' THEN
+    RAISE EXCEPTION 'binding_refused: no_previous' USING ERRCODE = '55000';
+  END IF;
+  SELECT * INTO v_profile FROM public.embedding_profiles p WHERE p.id = v_previous.profile_id;
+
+  SELECT count(*) INTO v_missing
+  FROM public.document_chunks c JOIN public.documents d ON d.id = c.document_id
+  WHERE c.is_current AND c.status = 'ready' AND COALESCE(c.doc_type, d.doc_type) = v_previous.doc_type
+    AND (v_previous.tenant_key IS NULL OR c.tenant_key = v_previous.tenant_key)
+    AND NOT EXISTS (SELECT 1 FROM public.chunk_embeddings e WHERE e.chunk_id = c.id AND e.profile_id = v_profile.id);
+  SELECT count(*) INTO v_bad
+  FROM public.chunk_embeddings e
+  JOIN public.document_chunks c ON c.id = e.chunk_id
+  JOIN public.documents d ON d.id = c.document_id
+  WHERE e.profile_id = v_profile.id AND c.is_current AND c.status = 'ready' AND COALESCE(c.doc_type, d.doc_type) = v_previous.doc_type
+    AND (v_previous.tenant_key IS NULL OR c.tenant_key = v_previous.tenant_key)
+    AND (e.embedding_model <> v_profile.model OR e.dims <> v_profile.dims);
+  IF v_missing > 0 OR v_bad > 0 THEN
+    RAISE EXCEPTION 'binding_refused: previous_incomplete (% chunks without a vector, % rows of another model for profile %)', v_missing, v_bad, v_profile.id
+      USING ERRCODE = '55000';
+  END IF;
+
+  UPDATE public.embedding_profile_bindings b SET status = 'available' WHERE b.id = v_active.id;
+  UPDATE public.embedding_profile_bindings b
+  SET status = 'active', previous_binding_id = NULL, activated_at = pg_catalog.now(), activated_by = p_actor
+  WHERE b.id = v_previous.id;
+
+  RETURN QUERY SELECT v_previous.id, v_active.id;
+END
+$$;
+
+-- Deactivate (D-10): the key falls back to the global profile alone, which is always complete (D-08); no gate.
+
+CREATE OR REPLACE FUNCTION public.rag_deactivate_embedding_binding(p_doc_type text, p_tenant_key text, p_actor text)
+RETURNS TABLE(deactivated_binding uuid)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_active uuid;
+BEGIN
+  IF p_actor IS NULL OR pg_catalog.btrim(p_actor) = '' THEN
+    RAISE EXCEPTION 'binding_refused: actor_required' USING ERRCODE = '22023';
+  END IF;
+  IF p_tenant_key IS NOT NULL THEN
+    PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  END IF;
+
+  LOCK TABLE public.embedding_profile_bindings IN SHARE ROW EXCLUSIVE MODE;
+
+  SELECT b.id INTO v_active FROM public.embedding_profile_bindings b
+  WHERE b.status = 'active' AND b.doc_type = p_doc_type AND COALESCE(b.tenant_key, '') = COALESCE(p_tenant_key, '');
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'binding_refused: no_active' USING ERRCODE = '55000';
+  END IF;
+
+  UPDATE public.embedding_profile_bindings b SET status = 'available' WHERE b.id = v_active;
+
+  RETURN QUERY SELECT v_active;
+END
+$$;
+
+REVOKE ALL ON FUNCTION
+  public.rag_activate_embedding_binding(uuid, text),
+  public.rag_rollback_embedding_binding(text, text, text),
+  public.rag_deactivate_embedding_binding(text, text, text)
+FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION
+  public.rag_activate_embedding_binding(uuid, text),
+  public.rag_rollback_embedding_binding(text, text, text),
+  public.rag_deactivate_embedding_binding(text, text, text)
+TO service_role;
+
+COMMIT;
+
+-- >>> supabase/migrations/0442_reembed_scope.sql
+-- 0442: re-embed scoped to a profile's doc types (Phase 3.1.1, D-14, D-27). A scoped profile (embedding_profiles.doc_types, 0440) is filled
+-- only for current ready chunks whose COALESCE(chunk.doc_type, document.doc_type) is in its scope, with the predicate
+--   (p.doc_types IS NULL OR COALESCE(c.doc_type, d.doc_type) = ANY (p.doc_types))
+-- and its status is never moved: a scoped profile can never be 'backfilling' or 'active' (0440 scope trigger). Instead a run of a scoped
+-- profile needs a binding of that profile in status 'backfilling' or 'active' (0441) whose tenant scope is the run's: a deployment-wide
+-- binding (tenant_key NULL) covers a run for every tenant, a tenant binding covers a run for that tenant only. An active binding is accepted
+-- so chunks written outside ingest dual-write can be topped up; rolling back a run is refused while an active binding of the profile
+-- overlaps the run's tenant scope, since deleting its vectors would break the completeness the gate checked. Deriving (MRL truncation) a
+-- scoped profile is refused. For an unscoped profile (doc_types NULL) every function returns and changes exactly what its 0425 body does.
+--
+-- Replaced, each starting from its body in 0425_search_path_empty.sql (the newest definition; 0315 and 0410 are older and nothing numbered
+-- after 0425 redefines them), and differing from it only by the scope predicate and the scoped-profile branches:
+--   rag_reembed_pick (predicate; next_batch, missing_batch and preview_batch select through it and are not replaced),
+--   rag_reembed_count and rag_reembed_remaining (predicate, LEFT JOIN documents),
+--   rag_reembed_start_run (predicate in the total; scoped: binding required, no status change, derive refused),
+--   rag_reembed_resume_run (scoped: binding required, no status change),
+--   rag_reembed_derive_batch (scoped: refused),
+--   rag_reembed_rollback_run (scoped: refused under an active binding, no status change).
+-- Signatures, return types, volatility, SECURITY DEFINER, the empty search_path, refusal prefixes and grants are unchanged (CREATE OR
+-- REPLACE keeps the ACL and 0425 issued none, so 0410's grants stand). New: public.rag_reembed_require_binding(text, text), a plain
+-- (invoker) helper the definer functions call; service_role only. write_batch, get_run, finish_run and the legacy guard are untouched: the
+-- 0440 guard refuses an out-of-scope vector, and finish_run counts through rag_reembed_remaining.
+--
+-- Live upgrade: run this read-only dry run first. No rows means every live body is the 0425 one; for any row, compare pg_get_functiondef
+-- with the repository before applying (the hashes are the same in both deployment modes).
+--   SELECT x.sig, x.md5 AS expected, pg_catalog.md5(p.prosrc) AS live
+--     FROM (VALUES
+--       ('public.rag_reembed_count(text,text)', 'a573147095b3e58dc07c3933c4edac4f'),
+--       ('public.rag_reembed_derive_batch(uuid,integer)', '39ea31daba0cfb81e06aea20990d6332'),
+--       ('public.rag_reembed_pick(text,text,uuid,integer)', '1dff08e1c5088bc2939f54d985e21218'),
+--       ('public.rag_reembed_remaining(uuid)', '4217c273d90319eca11334b371e64ef8'),
+--       ('public.rag_reembed_resume_run(uuid,text)', 'f236ebb70cd2b6ea6d38c78a18ccdf7e'),
+--       ('public.rag_reembed_rollback_run(uuid,text)', 'f6acfc5f24cac122f20848ef1edf494b'),
+--       ('public.rag_reembed_start_run(text,text,text,text)', '36346f04a9f2012c4905b3ae0d5cb7c8')) AS x(sig, md5)
+--     LEFT JOIN pg_catalog.pg_proc p ON p.oid = pg_catalog.to_regprocedure(x.sig)
+--    WHERE p.oid IS NULL OR pg_catalog.md5(p.prosrc) <> x.md5;
+-- Re-running 0425 after this file puts back the unscoped bodies, so re-run 0442 after it. Idempotent: CREATE OR REPLACE only.
+
+BEGIN;
+
+DO $reembed_scope_precheck$
+DECLARE
+  v_missing text[];
+BEGIN
+  SELECT pg_catalog.array_agg(s.sig ORDER BY s.sig) INTO v_missing
+  FROM pg_catalog.unnest(ARRAY[
+    'public.rag_reembed_count(text,text)',
+    'public.rag_reembed_derive_batch(uuid,integer)',
+    'public.rag_reembed_pick(text,text,uuid,integer)',
+    'public.rag_reembed_remaining(uuid)',
+    'public.rag_reembed_resume_run(uuid,text)',
+    'public.rag_reembed_rollback_run(uuid,text)',
+    'public.rag_reembed_start_run(text,text,text,text)'
+  ]) AS s(sig)
+  WHERE pg_catalog.to_regprocedure(s.sig) IS NULL;
+  IF v_missing IS NOT NULL OR pg_catalog.to_regclass('public.embedding_profile_bindings') IS NULL THEN
+    RAISE EXCEPTION '0442: apply the earlier migrations first (0315, 0425, 0440, 0441); missing: %', COALESCE(v_missing::text, 'public.embedding_profile_bindings')
+      USING ERRCODE = '55000';
+  END IF;
+END
+$reembed_scope_precheck$;
+
+-- The binding a run of a scoped profile needs: one of this profile in status backfilling or active whose tenant is the run's (NULL for a
+-- run over every tenant). The row is share-locked until the caller's transaction ends, so it cannot be retired under a starting run.
+CREATE OR REPLACE FUNCTION public.rag_reembed_require_binding(p_profile_id text, p_tenant_key text)
+ RETURNS void
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+BEGIN
+  PERFORM 1 FROM public.embedding_profile_bindings b
+  WHERE b.profile_id = p_profile_id AND b.status IN ('backfilling', 'active') AND b.tenant_key IS NOT DISTINCT FROM p_tenant_key
+  FOR SHARE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'reembed_refused: no_backfilling_binding' USING ERRCODE = '55000';
+  END IF;
+END
+$function$;
+
+REVOKE ALL ON FUNCTION public.rag_reembed_require_binding(text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_reembed_require_binding(text, text) TO service_role;
+
+CREATE OR REPLACE FUNCTION public.rag_reembed_pick(p_profile_id text, p_tenant_key text, p_after uuid, p_limit integer)
+ RETURNS TABLE(id uuid, document_id uuid, tenant_key text, content text, section_path text[], chunk_kind text, doc_type text, template_row jsonb, has_gap boolean)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+  SELECT c.id, c.document_id, c.tenant_key, c.content, c.section_path, c.chunk_kind,
+         COALESCE(c.doc_type, d.doc_type),
+         jsonb_build_object(
+           'invoice_number', d.invoice_number,
+           'supplier_name', d.supplier_name,
+           'supplier_tax_id', d.supplier_tax_id,
+           'issue_date', d.issue_date::text,
+           'gross_total', d.gross_total::text,
+           'currency', d.currency),
+         EXISTS (SELECT 1 FROM public.embedding_backfill_gaps g WHERE g.chunk_id = c.id AND g.profile_id = p.id)
+  FROM public.embedding_profiles p
+  JOIN public.document_chunks c ON c.is_current AND c.status = 'ready'
+  JOIN public.documents d ON d.id = c.document_id
+  WHERE p.id = p_profile_id
+    AND (p_tenant_key IS NULL OR c.tenant_key = p_tenant_key)
+    AND (p.doc_types IS NULL OR COALESCE(c.doc_type, d.doc_type) = ANY (p.doc_types))
+    AND (p_after IS NULL OR c.id > p_after)
+    AND NOT EXISTS (
+      SELECT 1 FROM public.chunk_embeddings e
+      WHERE e.chunk_id = c.id AND e.profile_id = p.id AND e.embedding_model = p.model AND e.dims = p.dims)
+  ORDER BY c.id
+  LIMIT p_limit
+$function$;
+
+CREATE OR REPLACE FUNCTION public.rag_reembed_count(p_profile_id text, p_tenant_key text)
+ RETURNS TABLE(tenant_key text, chunks bigint, chunks_missing bigint, content_chars bigint)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+#variable_conflict use_column
+BEGIN
+  IF p_tenant_key IS NOT NULL AND p_tenant_key !~ '^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$' THEN
+    RAISE EXCEPTION 'reembed_refused: invalid_tenant_key' USING ERRCODE = '22023';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.embedding_profiles p WHERE p.id = p_profile_id) THEN
+    RAISE EXCEPTION 'reembed_refused: unknown_profile' USING ERRCODE = '22023';
+  END IF;
+  RETURN QUERY
+    SELECT c.tenant_key,
+           count(*)::bigint,
+           (count(*) FILTER (WHERE e.chunk_id IS NULL))::bigint,
+           COALESCE(sum(length(c.content)) FILTER (WHERE e.chunk_id IS NULL), 0)::bigint
+    FROM public.embedding_profiles p
+    JOIN public.document_chunks c ON c.is_current AND c.status = 'ready'
+    LEFT JOIN public.documents d ON d.id = c.document_id
+    LEFT JOIN public.chunk_embeddings e
+      ON e.chunk_id = c.id AND e.profile_id = p.id AND e.embedding_model = p.model AND e.dims = p.dims
+    WHERE p.id = p_profile_id AND (p_tenant_key IS NULL OR c.tenant_key = p_tenant_key)
+      AND (p.doc_types IS NULL OR COALESCE(c.doc_type, d.doc_type) = ANY (p.doc_types))
+    GROUP BY c.tenant_key
+    ORDER BY c.tenant_key;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION public.rag_reembed_remaining(p_run_id uuid)
+ RETURNS TABLE(chunks_missing bigint)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+#variable_conflict use_column
+DECLARE
+  v_run public.embedding_backfill_runs%ROWTYPE;
+  v_count bigint;
+BEGIN
+  SELECT * INTO v_run FROM public.embedding_backfill_runs r WHERE r.id = p_run_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'reembed_refused: run_not_found' USING ERRCODE = '22023';
+  END IF;
+  SELECT count(*) INTO v_count
+  FROM public.embedding_profiles p
+  JOIN public.document_chunks c ON c.is_current AND c.status = 'ready'
+  LEFT JOIN public.documents d ON d.id = c.document_id
+  WHERE p.id = v_run.profile_id
+    AND (v_run.tenant_key IS NULL OR c.tenant_key = v_run.tenant_key)
+    AND (p.doc_types IS NULL OR COALESCE(c.doc_type, d.doc_type) = ANY (p.doc_types))
+    AND NOT EXISTS (
+      SELECT 1 FROM public.chunk_embeddings e
+      WHERE e.chunk_id = c.id AND e.profile_id = p.id AND e.embedding_model = p.model AND e.dims = p.dims);
+  RETURN QUERY SELECT v_count;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION public.rag_reembed_start_run(p_profile_id text, p_tenant_key text, p_actor text, p_derived_from text DEFAULT NULL::text)
+ RETURNS TABLE(run_id uuid, profile_id text, tenant_key text, chunks_total bigint, derived_from text)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+#variable_conflict use_column
+DECLARE
+  v_profile public.embedding_profiles%ROWTYPE;
+  v_source public.embedding_profiles%ROWTYPE;
+  v_total bigint;
+  v_run uuid;
+BEGIN
+  IF p_actor IS NULL OR btrim(p_actor) = '' THEN
+    RAISE EXCEPTION 'reembed_refused: actor_required' USING ERRCODE = '22023';
+  END IF;
+  IF p_tenant_key IS NOT NULL AND p_tenant_key !~ '^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$' THEN
+    RAISE EXCEPTION 'reembed_refused: invalid_tenant_key' USING ERRCODE = '22023';
+  END IF;
+
+  LOCK TABLE public.embedding_profiles IN SHARE ROW EXCLUSIVE MODE;
+
+  SELECT * INTO v_profile FROM public.embedding_profiles p WHERE p.id = p_profile_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'reembed_refused: unknown_profile' USING ERRCODE = '22023';
+  END IF;
+  IF v_profile.status = 'active' THEN
+    RAISE EXCEPTION 'reembed_refused: profile_is_active' USING ERRCODE = '55000';
+  END IF;
+  IF v_profile.storage = 'legacy_column' THEN
+    RAISE EXCEPTION 'reembed_refused: legacy_storage' USING ERRCODE = '55000';
+  END IF;
+  IF v_profile.status = 'retired' THEN
+    RAISE EXCEPTION 'reembed_refused: profile_retired' USING ERRCODE = '55000';
+  END IF;
+
+  IF v_profile.doc_types IS NOT NULL THEN
+    IF p_derived_from IS NOT NULL THEN
+      RAISE EXCEPTION 'reembed_refused: derive_unsupported' USING ERRCODE = '22023';
+    END IF;
+    PERFORM public.rag_reembed_require_binding(v_profile.id, p_tenant_key);
+  END IF;
+
+  IF p_derived_from IS NOT NULL THEN
+    SELECT * INTO v_source FROM public.embedding_profiles p WHERE p.id = p_derived_from;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'reembed_refused: unknown_derive_source' USING ERRCODE = '22023';
+    END IF;
+    IF v_source.id = v_profile.id OR v_source.storage <> 'halfvec' THEN
+      RAISE EXCEPTION 'reembed_refused: derive_source_invalid' USING ERRCODE = '22023';
+    END IF;
+    IF v_source.provider <> v_profile.provider OR v_source.model <> v_profile.model THEN
+      RAISE EXCEPTION 'reembed_refused: derive_model_mismatch' USING ERRCODE = '22023';
+    END IF;
+    IF v_source.dims <= v_profile.dims THEN
+      RAISE EXCEPTION 'reembed_refused: derive_dims_not_smaller' USING ERRCODE = '22023';
+    END IF;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM public.embedding_backfill_runs r
+    WHERE r.profile_id = p_profile_id AND r.status = 'running'
+      AND (r.tenant_key IS NULL OR p_tenant_key IS NULL OR r.tenant_key = p_tenant_key)
+  ) THEN
+    RAISE EXCEPTION 'reembed_refused: run_in_progress' USING ERRCODE = '55000';
+  END IF;
+
+  SELECT count(*) INTO v_total
+  FROM public.embedding_profiles p
+  JOIN public.document_chunks c ON c.is_current AND c.status = 'ready'
+  LEFT JOIN public.documents d ON d.id = c.document_id
+  WHERE p.id = p_profile_id AND (p_tenant_key IS NULL OR c.tenant_key = p_tenant_key)
+    AND (p.doc_types IS NULL OR COALESCE(c.doc_type, d.doc_type) = ANY (p.doc_types));
+
+  IF v_profile.doc_types IS NULL THEN
+    UPDATE public.embedding_profiles SET status = 'backfilling' WHERE id = p_profile_id AND status = 'available';
+  END IF;
+
+  INSERT INTO public.embedding_backfill_runs AS r (profile_id, tenant_key, chunks_total, derived_from)
+  VALUES (p_profile_id, p_tenant_key, v_total, p_derived_from)
+  RETURNING r.id INTO v_run;
+
+  RETURN QUERY SELECT v_run, p_profile_id, p_tenant_key, v_total, p_derived_from;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION public.rag_reembed_resume_run(p_run_id uuid, p_actor text)
+ RETURNS TABLE(run_id uuid, profile_id text, tenant_key text, cursor_chunk_id uuid, chunks_total bigint, chunks_done bigint, tokens bigint, status text, derived_from text, provider text, model text, dims integer, storage text, profile_status text, updated_at timestamp with time zone)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+#variable_conflict use_column
+DECLARE
+  v_run public.embedding_backfill_runs%ROWTYPE;
+  v_status text;
+  v_scope text[];
+BEGIN
+  IF p_actor IS NULL OR btrim(p_actor) = '' THEN
+    RAISE EXCEPTION 'reembed_refused: actor_required' USING ERRCODE = '22023';
+  END IF;
+  LOCK TABLE public.embedding_profiles IN SHARE ROW EXCLUSIVE MODE;
+  SELECT * INTO v_run FROM public.embedding_backfill_runs r WHERE r.id = p_run_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'reembed_refused: run_not_found' USING ERRCODE = '22023';
+  END IF;
+  IF v_run.status = 'completed' THEN
+    RAISE EXCEPTION 'reembed_refused: run_completed' USING ERRCODE = '55000';
+  END IF;
+  IF v_run.status = 'rolled_back' THEN
+    RAISE EXCEPTION 'reembed_refused: run_rolled_back' USING ERRCODE = '55000';
+  END IF;
+  SELECT p.status, p.doc_types INTO v_status, v_scope FROM public.embedding_profiles p WHERE p.id = v_run.profile_id;
+  IF v_status = 'active' THEN
+    RAISE EXCEPTION 'reembed_refused: profile_is_active' USING ERRCODE = '55000';
+  END IF;
+  IF v_status = 'retired' THEN
+    RAISE EXCEPTION 'reembed_refused: profile_retired' USING ERRCODE = '55000';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM public.embedding_backfill_runs o
+    WHERE o.id <> v_run.id AND o.profile_id = v_run.profile_id AND o.status = 'running'
+      AND (o.tenant_key IS NULL OR v_run.tenant_key IS NULL OR o.tenant_key = v_run.tenant_key)
+  ) THEN
+    RAISE EXCEPTION 'reembed_refused: run_in_progress' USING ERRCODE = '55000';
+  END IF;
+
+  IF v_scope IS NOT NULL THEN
+    PERFORM public.rag_reembed_require_binding(v_run.profile_id, v_run.tenant_key);
+  ELSE
+    UPDATE public.embedding_profiles SET status = 'backfilling' WHERE id = v_run.profile_id AND status = 'available';
+  END IF;
+  UPDATE public.embedding_backfill_runs SET status = 'running', updated_at = now() WHERE id = v_run.id;
+  RETURN QUERY SELECT * FROM public.rag_reembed_get_run(p_run_id);
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION public.rag_reembed_derive_batch(p_run_id uuid, p_limit integer)
+ RETURNS TABLE(chunks_derived integer, chunks_done bigint, cursor_chunk_id uuid)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+#variable_conflict use_column
+DECLARE
+  v_run public.embedding_backfill_runs%ROWTYPE;
+  v_target public.embedding_profiles%ROWTYPE;
+  v_source public.embedding_profiles%ROWTYPE;
+  v_ids uuid[];
+  v_last uuid;
+  derived integer;
+  v_done bigint;
+  v_cursor uuid;
+BEGIN
+  SELECT * INTO v_run FROM public.embedding_backfill_runs r WHERE r.id = p_run_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'reembed_refused: run_not_found' USING ERRCODE = '22023';
+  END IF;
+  IF v_run.status <> 'running' THEN
+    RAISE EXCEPTION 'reembed_refused: run_not_running' USING ERRCODE = '55000';
+  END IF;
+  IF v_run.derived_from IS NULL THEN
+    RAISE EXCEPTION 'reembed_refused: not_a_derive_run' USING ERRCODE = '22023';
+  END IF;
+  IF p_limit IS NULL OR p_limit < 1 OR p_limit > 1000 THEN
+    RAISE EXCEPTION 'reembed_refused: invalid_limit' USING ERRCODE = '22023';
+  END IF;
+  SELECT * INTO v_target FROM public.embedding_profiles p WHERE p.id = v_run.profile_id;
+  IF v_target.doc_types IS NOT NULL THEN
+    RAISE EXCEPTION 'reembed_refused: derive_unsupported' USING ERRCODE = '22023';
+  END IF;
+  SELECT * INTO v_source FROM public.embedding_profiles p WHERE p.id = v_run.derived_from;
+
+  WITH picked AS (
+    SELECT c.id, c.tenant_key, s.embedding AS source_vector
+    FROM public.document_chunks c
+    JOIN public.chunk_embeddings s
+      ON s.chunk_id = c.id AND s.profile_id = v_source.id AND s.embedding_model = v_source.model AND s.dims = v_source.dims
+    WHERE c.is_current AND c.status = 'ready'
+      AND (v_run.tenant_key IS NULL OR c.tenant_key = v_run.tenant_key)
+      AND NOT EXISTS (
+        SELECT 1 FROM public.chunk_embeddings t
+        WHERE t.chunk_id = c.id AND t.profile_id = v_target.id AND t.embedding_model = v_target.model AND t.dims = v_target.dims)
+    ORDER BY c.id
+    LIMIT p_limit
+  ), written AS (
+    INSERT INTO public.chunk_embeddings AS ce (chunk_id, profile_id, tenant_key, embedding, embedding_model, dims, embedding_host)
+    SELECT p.id, v_target.id, p.tenant_key, public.l2_normalize(public.subvector(p.source_vector, 1, v_target.dims)), v_target.model, v_target.dims, 'derived'
+    FROM picked p
+    ON CONFLICT (chunk_id, profile_id) DO UPDATE SET
+      embedding = EXCLUDED.embedding,
+      embedding_model = EXCLUDED.embedding_model,
+      dims = EXCLUDED.dims,
+      embedding_host = EXCLUDED.embedding_host,
+      embedded_at = now()
+    RETURNING ce.chunk_id
+  )
+  SELECT count(*)::integer, array_agg(w.chunk_id) INTO derived, v_ids FROM written w;
+
+  IF derived > 0 THEN
+    DELETE FROM public.embedding_backfill_gaps g WHERE g.profile_id = v_target.id AND g.chunk_id = ANY (v_ids);
+    SELECT u.id INTO v_last FROM unnest(v_ids) AS u(id) ORDER BY u.id DESC LIMIT 1;
+  END IF;
+
+  UPDATE public.embedding_backfill_runs AS r SET
+    chunks_done = r.chunks_done + derived,
+    cursor_chunk_id = CASE
+      WHEN v_last IS NOT NULL AND (r.cursor_chunk_id IS NULL OR v_last > r.cursor_chunk_id) THEN v_last
+      ELSE r.cursor_chunk_id END,
+    updated_at = now()
+  WHERE r.id = p_run_id
+  RETURNING r.chunks_done, r.cursor_chunk_id INTO v_done, v_cursor;
+
+  RETURN QUERY SELECT derived, v_done, v_cursor;
+END
+$function$;
+
+CREATE OR REPLACE FUNCTION public.rag_reembed_rollback_run(p_run_id uuid, p_actor text)
+ RETURNS TABLE(rows_deleted bigint, profile_status text)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+#variable_conflict use_column
+DECLARE
+  v_run public.embedding_backfill_runs%ROWTYPE;
+  v_profile public.embedding_profiles%ROWTYPE;
+  v_deleted bigint;
+  v_status text;
+BEGIN
+  IF p_actor IS NULL OR btrim(p_actor) = '' THEN
+    RAISE EXCEPTION 'rollback_refused: actor_required' USING ERRCODE = '22023';
+  END IF;
+  LOCK TABLE public.embedding_profiles IN SHARE ROW EXCLUSIVE MODE;
+  SELECT * INTO v_run FROM public.embedding_backfill_runs r WHERE r.id = p_run_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'rollback_refused: run_not_found' USING ERRCODE = '22023';
+  END IF;
+  IF v_run.status = 'rolled_back' THEN
+    RAISE EXCEPTION 'rollback_refused: already_rolled_back' USING ERRCODE = '55000';
+  END IF;
+  IF v_run.status = 'running' AND v_run.updated_at > now() - interval '10 minutes' THEN
+    RAISE EXCEPTION 'rollback_refused: run_in_progress' USING ERRCODE = '55000';
+  END IF;
+  SELECT * INTO v_profile FROM public.embedding_profiles p WHERE p.id = v_run.profile_id;
+  IF v_profile.status = 'active' THEN
+    RAISE EXCEPTION 'rollback_refused: profile_is_active' USING ERRCODE = '55000';
+  END IF;
+  IF v_profile.activated_at IS NOT NULL
+     AND (SELECT max(p.activated_at) FROM public.embedding_profiles p) > now() - interval '10 minutes' THEN
+    RAISE EXCEPTION 'rollback_refused: recently_active' USING ERRCODE = '55000';
+  END IF;
+  IF v_profile.doc_types IS NOT NULL AND EXISTS (
+    SELECT 1 FROM public.embedding_profile_bindings b
+    WHERE b.profile_id = v_profile.id AND b.status = 'active'
+      AND (b.tenant_key IS NULL OR v_run.tenant_key IS NULL OR b.tenant_key = v_run.tenant_key)
+  ) THEN
+    RAISE EXCEPTION 'reembed_refused: binding_active' USING ERRCODE = '55000';
+  END IF;
+
+  DELETE FROM public.chunk_embeddings e
+  WHERE e.profile_id = v_run.profile_id
+    AND e.embedded_at >= v_run.started_at
+    AND e.embedded_at <= v_run.updated_at
+    AND (v_run.tenant_key IS NULL OR e.tenant_key = v_run.tenant_key);
+  GET DIAGNOSTICS v_deleted = ROW_COUNT;
+  DELETE FROM public.embedding_backfill_gaps g WHERE g.run_id = v_run.id;
+  UPDATE public.embedding_backfill_runs AS r SET status = 'rolled_back', updated_at = now() WHERE r.id = v_run.id;
+
+  IF v_profile.doc_types IS NULL AND v_profile.status = 'backfilling' AND NOT EXISTS (
+    SELECT 1 FROM public.embedding_backfill_runs o WHERE o.profile_id = v_run.profile_id AND o.status = 'running' AND o.id <> v_run.id
+  ) THEN
+    UPDATE public.embedding_profiles SET status = 'available' WHERE id = v_run.profile_id;
+  END IF;
+  SELECT p.status INTO v_status FROM public.embedding_profiles p WHERE p.id = v_run.profile_id;
+
+  RETURN QUERY SELECT v_deleted, v_status;
+END
+$function$;
+
+COMMIT;
+
+------------------------------------------
 -- Phase 5: Answer records (migrations 0501-0502, plan 05-25, after 0425 in migration order)
 ------------------------------------------
 

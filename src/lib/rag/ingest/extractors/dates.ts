@@ -67,17 +67,27 @@ const PATTERNS: readonly DatePattern[] = [
   },
 ];
 
-/** Full calendar dates in the text, highest confidence first, then earliest position. Years-only, quarters and months are not full dates. */
-export function findDateCandidates(content: string): DateCandidate[] {
-  const found: DateCandidate[] = [];
+export interface DateSpan extends DateCandidate {
+  /** Length of the matched date expression in the text. */
+  length: number;
+}
+
+/** Full calendar dates in the text with their span, highest confidence first, then earliest position. */
+export function findDateSpans(content: string): DateSpan[] {
+  const found: DateSpan[] = [];
   for (const pattern of PATTERNS) {
     for (const match of content.matchAll(pattern.regex)) {
       const iso = pattern.read(match);
-      if (iso) found.push({ iso, confidence: pattern.confidence, position: match.index ?? 0 });
+      if (iso) found.push({ iso, confidence: pattern.confidence, position: match.index ?? 0, length: match[0].length });
       if (found.length >= MAX_CANDIDATES_PER_CHUNK) break;
     }
   }
   return found.sort((a, b) => b.confidence - a.confidence || a.position - b.position).slice(0, MAX_CANDIDATES_PER_CHUNK);
+}
+
+/** Full calendar dates in the text, highest confidence first, then earliest position. Years-only, quarters and months are not full dates. */
+export function findDateCandidates(content: string): DateCandidate[] {
+  return findDateSpans(content).map(({ iso, confidence, position }) => ({ iso, confidence, position }));
 }
 
 export const extractDates: ChunkExtractor = ({ content, enhanced }) => ({

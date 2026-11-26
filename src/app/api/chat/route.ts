@@ -16,6 +16,8 @@ import {
   buildHistoryWindow,
   createCitationSession,
   createEnhancedRAGPrompt,
+  answerLanguageOptions,
+  appendAnswerLanguage,
   errorStatusOf,
   firstTokenGate,
   createTraceCollector,
@@ -29,6 +31,8 @@ import {
   noKnowledgeBaseResponseLanguage,
   mintAnswerId,
   parseRetrievalFilters,
+  resolveScopesFilter,
+  ScopeFilterError,
   readFeedbackLoopConfig,
   readGenerationConfig,
   repairOwnerMembership,
@@ -1237,6 +1241,12 @@ export async function POST(req: Request) {
     if (value !== null) logOutcome.value = value;
     if (answerLanguage !== undefined) logOutcome.answerLanguage = answerLanguage;
   };
+  // D-08: only when a log row will exist to vote on; read before finishRagTrace clears ragTrace
+  const refusalStartMetadata = (): { ragTraceId: string; refusal: true } | null => {
+    if (!ragTrace || !ragLogContext || ragLogContext.skip) return null;
+    if (!readFeedbackLoopConfig().refusalFeedback) return null;
+    return { ragTraceId: ragTrace.collector.traceId, refusal: true };
+  };
 
   try {
     const requestBody = await req.json();
@@ -1328,6 +1338,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ error }, { status: tenant.status });
     }
     const scope: TenantScope | null = tenant.scope;
+
+    // D-39: a scopes filter narrows only the verified tenant, and only with values of that tenant's vocabulary
+    if (retrievalFilters?.scopes) {
+      try {
+        retrievalFilters = await resolveScopesFilter(retrievalFilters, { scope, signal: req.signal });
+      } catch (error) {
+        if (!(error instanceof ScopeFilterError)) throw error;
+        return NextResponse.json({ success: false, error: error.code, details: error.details }, { status: error.status });
+      }
+    }
 
     // Extract WhatsApp-specific overrides
     const systemPromptOverride = data?.systemPromptOverride;
@@ -2275,10 +2295,12 @@ IMPORTANT:
 
       if (strictWithoutWebSearch) {
         setRagLogOutcome('kb_unavailable', knowledgeBaseUnavailableLanguage(fallbackLanguage));
+        const refusalMetadata = refusalStartMetadata();
         finishRagTrace();
         const errorText = knowledgeBaseUnavailableMessage(fallbackLanguage);
         const stream = createUIMessageStream({
           execute: async ({ writer }) => {
+            if (refusalMetadata) writer.write({ type: 'start', messageMetadata: refusalMetadata });
             writer.write({ type: 'error', errorText });
           }
         });
@@ -2308,9 +2330,11 @@ IMPORTANT:
       const responseText = noKnowledgeBaseResponse(fallbackLanguage);
       ragTrace?.collector.setReviewContent({ answer: responseText, context });
       setRagLogOutcome('refused_no_context', noKnowledgeBaseResponseLanguage(fallbackLanguage));
+      const refusalMetadata = refusalStartMetadata();
       finishRagTrace();
       const stream = createUIMessageStream({
         execute: async ({ writer }) => {
+          if (refusalMetadata) writer.write({ type: 'start', messageMetadata: refusalMetadata });
           const textId = `text-${Date.now()}`;
           writer.write({ type: 'text-start', id: textId });
           writer.write({ type: 'text-delta', id: textId, delta: responseText });
@@ -2432,10 +2456,11 @@ Context:
       console.log('[RAG SYSTEM] ✅ Using optimized system prompt with context');
       console.log('[RAG SYSTEM] Creating enhanced prompt with context length:', context.length);
       console.log('[RAG SYSTEM] Using RAG mode:', ragMode);
-      systemPrompt = citationSession.decorateSystemPrompt(createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode));
+      const answerLanguage = answerLanguageOptions(retrievalResult);
+      systemPrompt = citationSession.decorateSystemPrompt(createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode, answerLanguage));
       if (citationSession.strategy === 'claude-citations') {
         claudeSystemText = [
-          citationSession.claudeSystemPrompt(ragSystemPrompt),
+          appendAnswerLanguage(citationSession.claudeSystemPrompt(ragSystemPrompt), answerLanguage),
           String(formattingSystemMessage.content),
           String(ctaSystemMessage.content),
         ].join('\n\n');
