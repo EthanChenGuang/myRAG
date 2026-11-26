@@ -52,6 +52,8 @@ export interface ChatUploadFormDataInput {
   organizationId?: string | null;
   pickerEnabled: boolean;
   docType?: string | null;
+  scopes?: readonly string[];
+  replacesDocumentId?: string | null;
 }
 
 /** Builds the process-document FormData; legacy mode stays byte-identical (no doc_type). */

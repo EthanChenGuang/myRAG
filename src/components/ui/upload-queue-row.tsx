@@ -4,6 +4,22 @@ import * as React from 'react';
 import { Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DocTypePicker, type DocTypePickerValue } from '@/components/ui/doc-type-picker';
+import type { ReplaceCandidate } from '@/components/ui/replaces-picker';
+import type { ScopeTagVocabularyEntry } from '@/components/ui/scope-tag-picker';
+
+export interface UploadQueueRowTags {
+  vocabulary: ScopeTagVocabularyEntry[];
+  value: string[];
+  onChange: (value: string[]) => void;
+  error: string | null;
+}
+
+export interface UploadQueueRowReplaces {
+  confirmedAtOnce: boolean;
+  candidates: ReplaceCandidate[];
+  value: ReplaceCandidate | null;
+  onChange: (value: ReplaceCandidate | null) => void;
+}
 
 export interface UploadQueueRowProps {
   fileName: string;
@@ -11,6 +27,8 @@ export interface UploadQueueRowProps {
   language: string;
   disabled: boolean;
   docType: { value: DocTypePickerValue; onChange: (value: DocTypePickerValue) => void } | null;
+  tags?: UploadQueueRowTags | null;
+  replaces?: UploadQueueRowReplaces | null;
   onRemove: () => void;
 }
 
