@@ -1,7 +1,7 @@
 import { enrichChunkWithURLs } from '@/lib/url-extractor';
 import { detectLanguage } from '../../lang/detect';
 import { getLanguageSettings } from '../../lang/settings';
-import { detectChunkLanguages, documentLanguages, type ChunkLanguageOptions } from '../lang/chunk-language';
+import { UND, detectChunkLanguages, documentLanguages, type ChunkLanguage, type ChunkLanguageOptions } from '../lang/chunk-language';
 import { tableRowLanguage, tableRowSeparator } from '../text/table-rows';
 import { countTokens } from '../text/tokens';
 import { chunkLexicalText } from '../../lexical/chunk-text';
@@ -27,12 +27,33 @@ async function writeChunkLanguages(ctx: StageContext, documentId: string, option
     draft.language = results[index]!.language;
     draft.language_confidence = results[index]!.confidence;
   });
-  const { language, languages } = documentLanguages(
-    results,
-    drafts.map((draft) => countTokens(draft.content)),
-  );
+  const tokenCounts = drafts.map((draft) => countTokens(draft.content));
+  const { language, languages } = documentLanguages(results, tokenCounts);
+  ctx.state.traceFacts = { ...ctx.state.traceFacts, ...languageTraceFacts(results, tokenCounts) };
   await ctx.writer.setFields(documentId, language === null ? { languages } : { language, languages });
   return language;
+}
+
+/** D-51: each detected language's token share (2 decimals) and the number of und chunks; codes and numbers only. */
+export function languageTraceFacts(
+  results: readonly ChunkLanguage[],
+  tokenCounts: readonly number[],
+): { language_shares: Record<string, number>; und_count: number } {
+  const tokens = new Map<string, number>();
+  let total = 0;
+  let undCount = 0;
+  results.forEach((result, index) => {
+    if (result.language === UND) {
+      undCount += 1;
+      return;
+    }
+    const count = Math.max(0, Math.trunc(tokenCounts[index] ?? 0));
+    tokens.set(result.language, (tokens.get(result.language) ?? 0) + count);
+    total += count;
+  });
+  const shares: Record<string, number> = {};
+  if (total > 0) for (const code of [...tokens.keys()].sort()) shares[code] = Math.round(((tokens.get(code) ?? 0) / total) * 100) / 100;
+  return { language_shares: shares, und_count: undCount };
 }
 
 /**
