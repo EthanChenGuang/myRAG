@@ -6042,20 +6042,50 @@
         ]
       },
       "texts": {
-        "attached_documents": "与本问题相关的参考文档已附在对话中。",
-        "citation_instruction": "请使用 [S<编号>] 标记引用你所依据的来源，编号只能取自上方带标签的来源，例如 [S1] 或 [S1][S3]。不要引用标签中不存在的编号。",
-        "groundedness_badges": {
-          "not_checked": "未核验",
-          "possibly_unreliable": "可能不可靠",
-          "verified": "已核验"
+        "instructions": {
+          "attached_documents": "与本问题相关的参考文档已附在对话中。",
+          "calculation": "当回答需要计算时，不要心算。从问题和所引用的段落中取出操作数和规则，传给 calculate 工具，并在总计之前列出每一项的计算步骤。事实工具返回的数值优先于文档中的数值。",
+          "citation": "请使用 [S<编号>] 标记引用你所依据的来源，编号只能取自上方带标签的来源，例如 [S1] 或 [S1][S3]。不要引用标签中不存在的编号。",
+          "citation_per_sentence": "每个陈述事实的句子都要在句末标注支持它的带标签来源的 [S<编号>] 标记，编号只能取自上方带标签的来源，例如 [S1] 或 [S1][S3]。不要引用标签中不存在的编号。",
+          "concise": "先给出答案，再只补充问题所需的支撑细节。保留所有引用。",
+          "general_knowledge": "凡是不是来自文档的内容，都要以标签 **{general_knowledge}** 引出，标签单独占一行并使用粗体。",
+          "partial_answer": "只回答上下文涵盖的那部分问题。对上下文没有涵盖的每个部分，写出该部分并注明“{not_covered}”。不要用通用知识或看似合理的数值填补空缺。如果上下文没有涵盖问题的任何部分，只输出 {sentinel}，不要输出其他任何内容。\n\n示例。问题：A 和 B 分别是什么？上下文：A 是 X；没有关于 B 的内容。回答：\nA 是 X。\nB：{not_covered}。",
+          "relevance": "如果上下文讲的是与所问内容相关但不同的主题，它就不能回答这个问题。这种情况下只输出 {sentinel}，不要输出其他任何内容。",
+          "relevance_open": "如果上下文讲的是与所问内容相关但不同的主题，不要把它当作答案。如果改用通用知识回答，这部分要以标签 **{general_knowledge}** 开头，标签单独占一行并使用粗体。",
+          "relevance_web": "如果上下文讲的是与所问内容相关但不同的主题，它就不能回答这个问题。这种情况下请使用 webSearch 工具。如果网络搜索也没有找到能回答问题的内容，只输出 {sentinel}，不要输出其他任何内容。",
+          "version": "当不同来源对同一事项给出不同的数值时，采用生效日期最新的来源；没有日期时采用版本最高的来源，并在回答中写明它的版本。不要把两个数值作为可选项并列。只有当问题询问过去的情况或变化时，才提及旧版本。",
+          "web_separation": "把文档中的内容和网络上的内容分成两个独立部分。第一部分以 **{from_documents}** 开头，第二部分以 **{from_web}** 开头，每个标签单独占一行并使用粗体。"
         },
-        "groundedness_tooltips": {
-          "not_checked": "这条回答无法与你的文档进行核对。",
-          "possibly_unreliable": "自动检查发现这条回答的部分内容可能没有文档支持。",
-          "verified": "自动检查认为这条回答有你的文档支持。"
+        "labels": {
+          "badge_not_checked": "未核验",
+          "badge_possibly_unreliable": "可能不可靠",
+          "badge_tooltip_not_checked": "这条回答无法与你的文档进行核对。",
+          "badge_tooltip_possibly_unreliable": "自动检查发现这条回答的部分内容可能没有文档支持。",
+          "badge_tooltip_verified": "自动检查认为这条回答有你的文档支持。",
+          "badge_verified": "已核验",
+          "effective_from": "自 {date} 起生效",
+          "from_documents": "来自文档",
+          "from_web": "来自网络",
+          "general_knowledge": "通用知识（非文档内容）",
+          "not_covered": "文档中没有说明",
+          "older_version": "旧版本",
+          "version": "版本 {version}"
         },
-        "knowledge_base_unavailable": "知识库暂时无法访问，请稍后再试。",
-        "strict_refusal": "# Information Not Available\n\n## Knowledge Base Status\n- I couldn’t find this information in your knowledge base.\n- Web search is turned off, so I can’t look it up online.\n\nWould you like me to turn on web search and check? Do you want to upload a document that contains this information? Is there a specific detail you want me to focus on?"
+        "notices": {
+          "answer_truncated": "回答已达到长度上限，内容未完。可以再发一条消息获取其余部分。",
+          "calc_corrected": "计算已复核：正确结果为 {value}。",
+          "calc_not_verified": "计算未核实：无法对照文档复核此回答中的数字。",
+          "credential_request_blocked": "回答中一句索取登录信息的内容已被移除。",
+          "credential_request_warning": "注意：此回答提到了登录信息。使用本助手从不需要这类信息。",
+          "document_updated_or_removed": "该文档此后已被更新或删除。上方引文是回答当时使用的内容。",
+          "kb_unavailable": "知识库暂时无法访问，请稍后再试。",
+          "link_removed": "（链接已移除）",
+          "no_information": "# 暂无相关信息\n\n## 知识库状态\n- 我在知识库中没有找到这项信息。\n- 网络搜索已关闭，因此我无法在线查找。\n\n需要我开启网络搜索来查找吗？你想上传包含这项信息的文档吗？或者有需要我重点查找的具体细节吗？",
+          "no_information_web": "# 暂无相关信息\n\n- 我在知识库和网络上都没有找到这项信息。\n\n你想上传包含这项信息的文档吗？或者有需要我重点查找的具体细节吗？",
+          "not_confirmed": "文档未证实",
+          "prompt_too_long": "这个问题太长，无法回答。请缩短后重新发送。",
+          "uncited": "未注明来源"
+        }
       },
       "version_markers": [
         "(?:19|20)\\d{2}\\s*年?",
@@ -6134,20 +6164,50 @@
             ]
           },
           "texts": {
-            "attached_documents": "与本问题相关的参考文档已附在对话中。",
-            "citation_instruction": "请使用 [S<编号>] 标记引用你所依据的来源，编号只能取自上方带标签的来源，例如 [S1] 或 [S1][S3]。不要引用标签中不存在的编号。",
-            "groundedness_badges": {
-              "not_checked": "未核验",
-              "possibly_unreliable": "可能不可靠",
-              "verified": "已核验"
+            "instructions": {
+              "attached_documents": "与本问题相关的参考文档已附在对话中。",
+              "calculation": "当回答需要计算时，不要心算。从问题和所引用的段落中取出操作数和规则，传给 calculate 工具，并在总计之前列出每一项的计算步骤。事实工具返回的数值优先于文档中的数值。",
+              "citation": "请使用 [S<编号>] 标记引用你所依据的来源，编号只能取自上方带标签的来源，例如 [S1] 或 [S1][S3]。不要引用标签中不存在的编号。",
+              "citation_per_sentence": "每个陈述事实的句子都要在句末标注支持它的带标签来源的 [S<编号>] 标记，编号只能取自上方带标签的来源，例如 [S1] 或 [S1][S3]。不要引用标签中不存在的编号。",
+              "concise": "先给出答案，再只补充问题所需的支撑细节。保留所有引用。",
+              "general_knowledge": "凡是不是来自文档的内容，都要以标签 **{general_knowledge}** 引出，标签单独占一行并使用粗体。",
+              "partial_answer": "只回答上下文涵盖的那部分问题。对上下文没有涵盖的每个部分，写出该部分并注明“{not_covered}”。不要用通用知识或看似合理的数值填补空缺。如果上下文没有涵盖问题的任何部分，只输出 {sentinel}，不要输出其他任何内容。\n\n示例。问题：A 和 B 分别是什么？上下文：A 是 X；没有关于 B 的内容。回答：\nA 是 X。\nB：{not_covered}。",
+              "relevance": "如果上下文讲的是与所问内容相关但不同的主题，它就不能回答这个问题。这种情况下只输出 {sentinel}，不要输出其他任何内容。",
+              "relevance_open": "如果上下文讲的是与所问内容相关但不同的主题，不要把它当作答案。如果改用通用知识回答，这部分要以标签 **{general_knowledge}** 开头，标签单独占一行并使用粗体。",
+              "relevance_web": "如果上下文讲的是与所问内容相关但不同的主题，它就不能回答这个问题。这种情况下请使用 webSearch 工具。如果网络搜索也没有找到能回答问题的内容，只输出 {sentinel}，不要输出其他任何内容。",
+              "version": "当不同来源对同一事项给出不同的数值时，采用生效日期最新的来源；没有日期时采用版本最高的来源，并在回答中写明它的版本。不要把两个数值作为可选项并列。只有当问题询问过去的情况或变化时，才提及旧版本。",
+              "web_separation": "把文档中的内容和网络上的内容分成两个独立部分。第一部分以 **{from_documents}** 开头，第二部分以 **{from_web}** 开头，每个标签单独占一行并使用粗体。"
             },
-            "groundedness_tooltips": {
-              "not_checked": "这条回答无法与你的文档进行核对。",
-              "possibly_unreliable": "自动检查发现这条回答的部分内容可能没有文档支持。",
-              "verified": "自动检查认为这条回答有你的文档支持。"
+            "labels": {
+              "badge_not_checked": "未核验",
+              "badge_possibly_unreliable": "可能不可靠",
+              "badge_tooltip_not_checked": "这条回答无法与你的文档进行核对。",
+              "badge_tooltip_possibly_unreliable": "自动检查发现这条回答的部分内容可能没有文档支持。",
+              "badge_tooltip_verified": "自动检查认为这条回答有你的文档支持。",
+              "badge_verified": "已核验",
+              "effective_from": "自 {date} 起生效",
+              "from_documents": "来自文档",
+              "from_web": "来自网络",
+              "general_knowledge": "通用知识（非文档内容）",
+              "not_covered": "文档中没有说明",
+              "older_version": "旧版本",
+              "version": "版本 {version}"
             },
-            "knowledge_base_unavailable": "知识库暂时无法访问，请稍后再试。",
-            "strict_refusal": "# Information Not Available\n\n## Knowledge Base Status\n- I couldn’t find this information in your knowledge base.\n- Web search is turned off, so I can’t look it up online.\n\nWould you like me to turn on web search and check? Do you want to upload a document that contains this information? Is there a specific detail you want me to focus on?"
+            "notices": {
+              "answer_truncated": "回答已达到长度上限，内容未完。可以再发一条消息获取其余部分。",
+              "calc_corrected": "计算已复核：正确结果为 {value}。",
+              "calc_not_verified": "计算未核实：无法对照文档复核此回答中的数字。",
+              "credential_request_blocked": "回答中一句索取登录信息的内容已被移除。",
+              "credential_request_warning": "注意：此回答提到了登录信息。使用本助手从不需要这类信息。",
+              "document_updated_or_removed": "该文档此后已被更新或删除。上方引文是回答当时使用的内容。",
+              "kb_unavailable": "知识库暂时无法访问，请稍后再试。",
+              "link_removed": "（链接已移除）",
+              "no_information": "# 暂无相关信息\n\n## 知识库状态\n- 我在知识库中没有找到这项信息。\n- 网络搜索已关闭，因此我无法在线查找。\n\n需要我开启网络搜索来查找吗？你想上传包含这项信息的文档吗？或者有需要我重点查找的具体细节吗？",
+              "no_information_web": "# 暂无相关信息\n\n- 我在知识库和网络上都没有找到这项信息。\n\n你想上传包含这项信息的文档吗？或者有需要我重点查找的具体细节吗？",
+              "not_confirmed": "文档未证实",
+              "prompt_too_long": "这个问题太长，无法回答。请缩短后重新发送。",
+              "uncited": "未注明来源"
+            }
           },
           "version_markers": [
             "(?:19|20)\\d{2}\\s*年?",
@@ -6298,20 +6358,50 @@
             ]
           },
           "texts": {
-            "attached_documents": "The reference documents for this question are attached to the conversation.",
-            "citation_instruction": "Cite the sources you use with [S<number>] markers taken only from the labelled sources above, for example [S1] or [S1][S3]. Never cite a number that is not in a label.",
-            "groundedness_badges": {
-              "not_checked": "Not Checked",
-              "possibly_unreliable": "Possibly Unreliable",
-              "verified": "Verified"
+            "instructions": {
+              "attached_documents": "The reference documents for this question are attached to the conversation.",
+              "calculation": "When the answer needs a calculation, do not compute it mentally. Take the operands and the rule from the question and the cited passages, pass them to the calculate tool, and list each item’s step before the total. A value returned by a fact tool takes precedence over a value from the documents.",
+              "citation": "Cite the sources you use with [S<number>] markers taken only from the labelled sources above, for example [S1] or [S1][S3]. Never cite a number that is not in a label.",
+              "citation_per_sentence": "End every factual sentence with the [S<number>] marker of the labelled source that supports it, taken only from the labelled sources above, for example [S1] or [S1][S3]. Never cite a number that is not in a label.",
+              "concise": "Give the answer first, then only the supporting detail the question needs. Keep every citation.",
+              "general_knowledge": "Introduce anything that is not taken from the documents with the label **{general_knowledge}** alone on its own line, in bold.",
+              "partial_answer": "Answer only the parts of the question that the context covers. For each part the context does not cover, name the part and write “{not_covered}” for it. Never fill a gap with general knowledge or with a plausible value. If the context covers no part of the question, write only {sentinel} and nothing else.\n\nExample. Question: what are A and B? Context: A is X; nothing about B. Answer:\nA is X.\nB: {not_covered}.",
+              "relevance": "If the context is about a related but different subject than the one asked, it does not answer the question. In that case write only {sentinel} and nothing else.",
+              "relevance_open": "If the context is about a related but different subject than the one asked, do not present it as the answer. If you answer from general knowledge instead, start that part with the label **{general_knowledge}** alone on its own line, in bold.",
+              "relevance_web": "If the context is about a related but different subject than the one asked, it does not answer the question. In that case use the webSearch tool. If the web search finds nothing that answers the question, write only {sentinel} and nothing else.",
+              "version": "When sources give different values for the same thing, use the source with the latest effective date, or the highest version when dates are missing, and name its version in the answer. Do not present the two values as alternatives. Mention an older version only when the question asks about the past or about changes.",
+              "web_separation": "Keep what the documents say and what the web says in two separate parts. Start the first part with **{from_documents}** and the second with **{from_web}**, each label alone on its own line, in bold."
             },
-            "groundedness_tooltips": {
-              "not_checked": "This answer could not be checked against your documents.",
-              "possibly_unreliable": "An automatic check found parts of this answer that your documents may not support.",
-              "verified": "An automatic check found this answer supported by your documents."
+            "labels": {
+              "badge_not_checked": "Not Checked",
+              "badge_possibly_unreliable": "Possibly Unreliable",
+              "badge_tooltip_not_checked": "This answer could not be checked against your documents.",
+              "badge_tooltip_possibly_unreliable": "An automatic check found parts of this answer that your documents may not support.",
+              "badge_tooltip_verified": "An automatic check found this answer supported by your documents.",
+              "badge_verified": "Verified",
+              "effective_from": "Effective from {date}",
+              "from_documents": "From the documents",
+              "from_web": "From the web",
+              "general_knowledge": "General knowledge, not from the documents",
+              "not_covered": "The documents do not say",
+              "older_version": "Older version",
+              "version": "Version {version}"
             },
-            "knowledge_base_unavailable": "The knowledge base is temporarily unavailable. Please try again in a moment.",
-            "strict_refusal": "# Information Not Available\n\n## Knowledge Base Status\n- I couldn’t find this information in your knowledge base.\n- Web search is turned off, so I can’t look it up online.\n\nWould you like me to turn on web search and check? Do you want to upload a document that contains this information? Is there a specific detail you want me to focus on?"
+            "notices": {
+              "answer_truncated": "This answer reached its length limit and stops early. Ask for the rest in a new message.",
+              "calc_corrected": "The calculation was rechecked: the correct result is {value}.",
+              "calc_not_verified": "Calculation not verified: the numbers in this answer could not be rechecked against the documents.",
+              "credential_request_blocked": "A sentence that asked for sign-in details was removed from this answer.",
+              "credential_request_warning": "Caution: this answer mentions sign-in details. This assistant never needs them.",
+              "document_updated_or_removed": "This document has since been updated or removed. The quote above is the text the answer used.",
+              "kb_unavailable": "The knowledge base is temporarily unavailable. Please try again in a moment.",
+              "link_removed": "(link removed)",
+              "no_information": "# Information Not Available\n\n## Knowledge Base Status\n- I couldn’t find this information in your knowledge base.\n- Web search is turned off, so I can’t look it up online.\n\nWould you like me to turn on web search and check? Do you want to upload a document that contains this information? Is there a specific detail you want me to focus on?",
+              "no_information_web": "# Information Not Available\n\n- I couldn’t find this information in the knowledge base or on the web.\n\nDo you want to upload a document that contains this information? Is there a specific detail you want me to focus on?",
+              "not_confirmed": "Not confirmed by the documents",
+              "prompt_too_long": "This question is too long to answer. Shorten it and send it again.",
+              "uncited": "No source cited"
+            }
           },
           "version_markers": [
             "\\b(?:19|20)\\d{2}\\b",
@@ -6468,20 +6558,50 @@
             ]
           },
           "texts": {
-            "attached_documents": "I documenti di riferimento per questa domanda sono allegati alla conversazione.",
-            "citation_instruction": "Cita le fonti che usi con i marcatori [S<numero>] presi solo dalle fonti etichettate qui sopra, per esempio [S1] o [S1][S3]. Non citare mai un numero che non compare in un'etichetta.",
-            "groundedness_badges": {
-              "not_checked": "Non verificata",
-              "possibly_unreliable": "Forse inaffidabile",
-              "verified": "Verificata"
+            "instructions": {
+              "attached_documents": "I documenti di riferimento per questa domanda sono allegati alla conversazione.",
+              "calculation": "Quando la risposta richiede un calcolo, non farlo a mente. Prendi gli operandi e la regola dalla domanda e dai passaggi citati, passali allo strumento calculate ed elenca il passaggio di ogni voce prima del totale. Un valore restituito da uno strumento di fatti prevale su un valore dei documenti.",
+              "citation": "Cita le fonti che usi con i marcatori [S<numero>] presi solo dalle fonti etichettate qui sopra, per esempio [S1] o [S1][S3]. Non citare mai un numero che non compare in un'etichetta.",
+              "citation_per_sentence": "Termina ogni frase che afferma un fatto con il marcatore [S<numero>] della fonte etichettata che la supporta, preso solo dalle fonti etichettate qui sopra, per esempio [S1] o [S1][S3]. Non citare mai un numero che non compare in un'etichetta.",
+              "concise": "Dai prima la risposta, poi solo i dettagli di supporto che servono alla domanda. Mantieni tutte le citazioni.",
+              "general_knowledge": "Introduci tutto ciò che non proviene dai documenti con l'etichetta **{general_knowledge}** da sola su una riga, in grassetto.",
+              "partial_answer": "Rispondi solo alle parti della domanda coperte dal contesto. Per ogni parte che il contesto non copre, nomina la parte e scrivi “{not_covered}”. Non colmare mai una lacuna con conoscenze generali o con un valore plausibile. Se il contesto non copre nessuna parte della domanda, scrivi solo {sentinel} e nient'altro.\n\nEsempio. Domanda: che cosa sono A e B? Contesto: A è X; niente su B. Risposta:\nA è X.\nB: {not_covered}.",
+              "relevance": "Se il contesto riguarda un argomento collegato ma diverso da quello richiesto, non risponde alla domanda. In quel caso scrivi solo {sentinel} e nient'altro.",
+              "relevance_open": "Se il contesto riguarda un argomento collegato ma diverso da quello richiesto, non presentarlo come la risposta. Se invece rispondi con conoscenze generali, inizia quella parte con l'etichetta **{general_knowledge}** da sola su una riga, in grassetto.",
+              "relevance_web": "Se il contesto riguarda un argomento collegato ma diverso da quello richiesto, non risponde alla domanda. In quel caso usa lo strumento webSearch. Se la ricerca web non trova nulla che risponda alla domanda, scrivi solo {sentinel} e nient'altro.",
+              "version": "Quando le fonti danno valori diversi per la stessa cosa, usa la fonte con la data di entrata in vigore più recente, o la versione più alta se mancano le date, e indica la sua versione nella risposta. Non presentare i due valori come alternative. Cita una versione precedente solo quando la domanda riguarda il passato o le modifiche.",
+              "web_separation": "Tieni ciò che dicono i documenti e ciò che dice il web in due parti separate. Inizia la prima parte con **{from_documents}** e la seconda con **{from_web}**, ogni etichetta da sola su una riga, in grassetto."
             },
-            "groundedness_tooltips": {
-              "not_checked": "Non è stato possibile verificare questa risposta sui tuoi documenti.",
-              "possibly_unreliable": "Un controllo automatico ha trovato parti di questa risposta che i tuoi documenti potrebbero non supportare.",
-              "verified": "Un controllo automatico ha trovato questa risposta supportata dai tuoi documenti."
+            "labels": {
+              "badge_not_checked": "Non verificata",
+              "badge_possibly_unreliable": "Forse inaffidabile",
+              "badge_tooltip_not_checked": "Non è stato possibile verificare questa risposta sui tuoi documenti.",
+              "badge_tooltip_possibly_unreliable": "Un controllo automatico ha trovato parti di questa risposta che i tuoi documenti potrebbero non supportare.",
+              "badge_tooltip_verified": "Un controllo automatico ha trovato questa risposta supportata dai tuoi documenti.",
+              "badge_verified": "Verificata",
+              "effective_from": "In vigore dal {date}",
+              "from_documents": "Dai documenti",
+              "from_web": "Dal web",
+              "general_knowledge": "Conoscenza generale, non dai documenti",
+              "not_covered": "I documenti non specificano",
+              "older_version": "Versione precedente",
+              "version": "Versione {version}"
             },
-            "knowledge_base_unavailable": "La base di conoscenza non è al momento disponibile. Riprova tra poco.",
-            "strict_refusal": "# Information Not Available\n\n## Knowledge Base Status\n- I couldn’t find this information in your knowledge base.\n- Web search is turned off, so I can’t look it up online.\n\nWould you like me to turn on web search and check? Do you want to upload a document that contains this information? Is there a specific detail you want me to focus on?"
+            "notices": {
+              "answer_truncated": "La risposta ha raggiunto il limite di lunghezza e si interrompe prima della fine. Chiedi il resto con un nuovo messaggio.",
+              "calc_corrected": "Il calcolo è stato ricontrollato: il risultato corretto è {value}.",
+              "calc_not_verified": "Calcolo non verificato: non è stato possibile ricontrollare sui documenti i numeri di questa risposta.",
+              "credential_request_blocked": "Una frase che chiedeva dati di accesso è stata rimossa da questa risposta.",
+              "credential_request_warning": "Attenzione: questa risposta menziona dati di accesso. Questo assistente non ne ha mai bisogno.",
+              "document_updated_or_removed": "Questo documento è stato aggiornato o rimosso. La citazione qui sopra è il testo usato dalla risposta.",
+              "kb_unavailable": "La base di conoscenza non è al momento disponibile. Riprova tra poco.",
+              "link_removed": "(link rimosso)",
+              "no_information": "# Informazione non disponibile\n\n## Stato della base di conoscenza\n- Non ho trovato questa informazione nella base di conoscenza.\n- La ricerca web è disattivata, quindi non posso cercarla online.\n\nVuoi che attivi la ricerca web per verificare? Vuoi caricare un documento che contiene questa informazione? C'è un dettaglio specifico su cui devo concentrarmi?",
+              "no_information_web": "# Informazione non disponibile\n\n- Non ho trovato questa informazione né nella base di conoscenza né sul web.\n\nVuoi caricare un documento che contiene questa informazione? C'è un dettaglio specifico su cui devo concentrarmi?",
+              "not_confirmed": "Non confermato dai documenti",
+              "prompt_too_long": "Questa domanda è troppo lunga per ricevere risposta. Accorciala e inviala di nuovo.",
+              "uncited": "Nessuna fonte citata"
+            }
           },
           "version_markers": [
             "\\b(?:19|20)\\d{2}\\b",
@@ -18485,20 +18605,50 @@
               ]
             },
             "texts": {
-              "attached_documents": "与本问题相关的参考文档已附在对话中。",
-              "citation_instruction": "请使用 [S<编号>] 标记引用你所依据的来源，编号只能取自上方带标签的来源，例如 [S1] 或 [S1][S3]。不要引用标签中不存在的编号。",
-              "groundedness_badges": {
-                "not_checked": "未核验",
-                "possibly_unreliable": "可能不可靠",
-                "verified": "已核验"
+              "instructions": {
+                "attached_documents": "与本问题相关的参考文档已附在对话中。",
+                "calculation": "当回答需要计算时，不要心算。从问题和所引用的段落中取出操作数和规则，传给 calculate 工具，并在总计之前列出每一项的计算步骤。事实工具返回的数值优先于文档中的数值。",
+                "citation": "请使用 [S<编号>] 标记引用你所依据的来源，编号只能取自上方带标签的来源，例如 [S1] 或 [S1][S3]。不要引用标签中不存在的编号。",
+                "citation_per_sentence": "每个陈述事实的句子都要在句末标注支持它的带标签来源的 [S<编号>] 标记，编号只能取自上方带标签的来源，例如 [S1] 或 [S1][S3]。不要引用标签中不存在的编号。",
+                "concise": "先给出答案，再只补充问题所需的支撑细节。保留所有引用。",
+                "general_knowledge": "凡是不是来自文档的内容，都要以标签 **{general_knowledge}** 引出，标签单独占一行并使用粗体。",
+                "partial_answer": "只回答上下文涵盖的那部分问题。对上下文没有涵盖的每个部分，写出该部分并注明“{not_covered}”。不要用通用知识或看似合理的数值填补空缺。如果上下文没有涵盖问题的任何部分，只输出 {sentinel}，不要输出其他任何内容。\n\n示例。问题：A 和 B 分别是什么？上下文：A 是 X；没有关于 B 的内容。回答：\nA 是 X。\nB：{not_covered}。",
+                "relevance": "如果上下文讲的是与所问内容相关但不同的主题，它就不能回答这个问题。这种情况下只输出 {sentinel}，不要输出其他任何内容。",
+                "relevance_open": "如果上下文讲的是与所问内容相关但不同的主题，不要把它当作答案。如果改用通用知识回答，这部分要以标签 **{general_knowledge}** 开头，标签单独占一行并使用粗体。",
+                "relevance_web": "如果上下文讲的是与所问内容相关但不同的主题，它就不能回答这个问题。这种情况下请使用 webSearch 工具。如果网络搜索也没有找到能回答问题的内容，只输出 {sentinel}，不要输出其他任何内容。",
+                "version": "当不同来源对同一事项给出不同的数值时，采用生效日期最新的来源；没有日期时采用版本最高的来源，并在回答中写明它的版本。不要把两个数值作为可选项并列。只有当问题询问过去的情况或变化时，才提及旧版本。",
+                "web_separation": "把文档中的内容和网络上的内容分成两个独立部分。第一部分以 **{from_documents}** 开头，第二部分以 **{from_web}** 开头，每个标签单独占一行并使用粗体。"
               },
-              "groundedness_tooltips": {
-                "not_checked": "这条回答无法与你的文档进行核对。",
-                "possibly_unreliable": "自动检查发现这条回答的部分内容可能没有文档支持。",
-                "verified": "自动检查认为这条回答有你的文档支持。"
+              "labels": {
+                "badge_not_checked": "未核验",
+                "badge_possibly_unreliable": "可能不可靠",
+                "badge_tooltip_not_checked": "这条回答无法与你的文档进行核对。",
+                "badge_tooltip_possibly_unreliable": "自动检查发现这条回答的部分内容可能没有文档支持。",
+                "badge_tooltip_verified": "自动检查认为这条回答有你的文档支持。",
+                "badge_verified": "已核验",
+                "effective_from": "自 {date} 起生效",
+                "from_documents": "来自文档",
+                "from_web": "来自网络",
+                "general_knowledge": "通用知识（非文档内容）",
+                "not_covered": "文档中没有说明",
+                "older_version": "旧版本",
+                "version": "版本 {version}"
               },
-              "knowledge_base_unavailable": "知识库暂时无法访问，请稍后再试。",
-              "strict_refusal": "# Information Not Available\n\n## Knowledge Base Status\n- I couldn’t find this information in your knowledge base.\n- Web search is turned off, so I can’t look it up online.\n\nWould you like me to turn on web search and check? Do you want to upload a document that contains this information? Is there a specific detail you want me to focus on?"
+              "notices": {
+                "answer_truncated": "回答已达到长度上限，内容未完。可以再发一条消息获取其余部分。",
+                "calc_corrected": "计算已复核：正确结果为 {value}。",
+                "calc_not_verified": "计算未核实：无法对照文档复核此回答中的数字。",
+                "credential_request_blocked": "回答中一句索取登录信息的内容已被移除。",
+                "credential_request_warning": "注意：此回答提到了登录信息。使用本助手从不需要这类信息。",
+                "document_updated_or_removed": "该文档此后已被更新或删除。上方引文是回答当时使用的内容。",
+                "kb_unavailable": "知识库暂时无法访问，请稍后再试。",
+                "link_removed": "（链接已移除）",
+                "no_information": "# 暂无相关信息\n\n## 知识库状态\n- 我在知识库中没有找到这项信息。\n- 网络搜索已关闭，因此我无法在线查找。\n\n需要我开启网络搜索来查找吗？你想上传包含这项信息的文档吗？或者有需要我重点查找的具体细节吗？",
+                "no_information_web": "# 暂无相关信息\n\n- 我在知识库和网络上都没有找到这项信息。\n\n你想上传包含这项信息的文档吗？或者有需要我重点查找的具体细节吗？",
+                "not_confirmed": "文档未证实",
+                "prompt_too_long": "这个问题太长，无法回答。请缩短后重新发送。",
+                "uncited": "未注明来源"
+              }
             },
             "version_markers": [
               "(?:19|20)\\d{2}\\s*年?",
@@ -18649,20 +18799,50 @@
               ]
             },
             "texts": {
-              "attached_documents": "The reference documents for this question are attached to the conversation.",
-              "citation_instruction": "Cite the sources you use with [S<number>] markers taken only from the labelled sources above, for example [S1] or [S1][S3]. Never cite a number that is not in a label.",
-              "groundedness_badges": {
-                "not_checked": "Not Checked",
-                "possibly_unreliable": "Possibly Unreliable",
-                "verified": "Verified"
+              "instructions": {
+                "attached_documents": "The reference documents for this question are attached to the conversation.",
+                "calculation": "When the answer needs a calculation, do not compute it mentally. Take the operands and the rule from the question and the cited passages, pass them to the calculate tool, and list each item’s step before the total. A value returned by a fact tool takes precedence over a value from the documents.",
+                "citation": "Cite the sources you use with [S<number>] markers taken only from the labelled sources above, for example [S1] or [S1][S3]. Never cite a number that is not in a label.",
+                "citation_per_sentence": "End every factual sentence with the [S<number>] marker of the labelled source that supports it, taken only from the labelled sources above, for example [S1] or [S1][S3]. Never cite a number that is not in a label.",
+                "concise": "Give the answer first, then only the supporting detail the question needs. Keep every citation.",
+                "general_knowledge": "Introduce anything that is not taken from the documents with the label **{general_knowledge}** alone on its own line, in bold.",
+                "partial_answer": "Answer only the parts of the question that the context covers. For each part the context does not cover, name the part and write “{not_covered}” for it. Never fill a gap with general knowledge or with a plausible value. If the context covers no part of the question, write only {sentinel} and nothing else.\n\nExample. Question: what are A and B? Context: A is X; nothing about B. Answer:\nA is X.\nB: {not_covered}.",
+                "relevance": "If the context is about a related but different subject than the one asked, it does not answer the question. In that case write only {sentinel} and nothing else.",
+                "relevance_open": "If the context is about a related but different subject than the one asked, do not present it as the answer. If you answer from general knowledge instead, start that part with the label **{general_knowledge}** alone on its own line, in bold.",
+                "relevance_web": "If the context is about a related but different subject than the one asked, it does not answer the question. In that case use the webSearch tool. If the web search finds nothing that answers the question, write only {sentinel} and nothing else.",
+                "version": "When sources give different values for the same thing, use the source with the latest effective date, or the highest version when dates are missing, and name its version in the answer. Do not present the two values as alternatives. Mention an older version only when the question asks about the past or about changes.",
+                "web_separation": "Keep what the documents say and what the web says in two separate parts. Start the first part with **{from_documents}** and the second with **{from_web}**, each label alone on its own line, in bold."
               },
-              "groundedness_tooltips": {
-                "not_checked": "This answer could not be checked against your documents.",
-                "possibly_unreliable": "An automatic check found parts of this answer that your documents may not support.",
-                "verified": "An automatic check found this answer supported by your documents."
+              "labels": {
+                "badge_not_checked": "Not Checked",
+                "badge_possibly_unreliable": "Possibly Unreliable",
+                "badge_tooltip_not_checked": "This answer could not be checked against your documents.",
+                "badge_tooltip_possibly_unreliable": "An automatic check found parts of this answer that your documents may not support.",
+                "badge_tooltip_verified": "An automatic check found this answer supported by your documents.",
+                "badge_verified": "Verified",
+                "effective_from": "Effective from {date}",
+                "from_documents": "From the documents",
+                "from_web": "From the web",
+                "general_knowledge": "General knowledge, not from the documents",
+                "not_covered": "The documents do not say",
+                "older_version": "Older version",
+                "version": "Version {version}"
               },
-              "knowledge_base_unavailable": "The knowledge base is temporarily unavailable. Please try again in a moment.",
-              "strict_refusal": "# Information Not Available\n\n## Knowledge Base Status\n- I couldn’t find this information in your knowledge base.\n- Web search is turned off, so I can’t look it up online.\n\nWould you like me to turn on web search and check? Do you want to upload a document that contains this information? Is there a specific detail you want me to focus on?"
+              "notices": {
+                "answer_truncated": "This answer reached its length limit and stops early. Ask for the rest in a new message.",
+                "calc_corrected": "The calculation was rechecked: the correct result is {value}.",
+                "calc_not_verified": "Calculation not verified: the numbers in this answer could not be rechecked against the documents.",
+                "credential_request_blocked": "A sentence that asked for sign-in details was removed from this answer.",
+                "credential_request_warning": "Caution: this answer mentions sign-in details. This assistant never needs them.",
+                "document_updated_or_removed": "This document has since been updated or removed. The quote above is the text the answer used.",
+                "kb_unavailable": "The knowledge base is temporarily unavailable. Please try again in a moment.",
+                "link_removed": "(link removed)",
+                "no_information": "# Information Not Available\n\n## Knowledge Base Status\n- I couldn’t find this information in your knowledge base.\n- Web search is turned off, so I can’t look it up online.\n\nWould you like me to turn on web search and check? Do you want to upload a document that contains this information? Is there a specific detail you want me to focus on?",
+                "no_information_web": "# Information Not Available\n\n- I couldn’t find this information in the knowledge base or on the web.\n\nDo you want to upload a document that contains this information? Is there a specific detail you want me to focus on?",
+                "not_confirmed": "Not confirmed by the documents",
+                "prompt_too_long": "This question is too long to answer. Shorten it and send it again.",
+                "uncited": "No source cited"
+              }
             },
             "version_markers": [
               "\\b(?:19|20)\\d{2}\\b",
@@ -18819,20 +18999,50 @@
               ]
             },
             "texts": {
-              "attached_documents": "I documenti di riferimento per questa domanda sono allegati alla conversazione.",
-              "citation_instruction": "Cita le fonti che usi con i marcatori [S<numero>] presi solo dalle fonti etichettate qui sopra, per esempio [S1] o [S1][S3]. Non citare mai un numero che non compare in un'etichetta.",
-              "groundedness_badges": {
-                "not_checked": "Non verificata",
-                "possibly_unreliable": "Forse inaffidabile",
-                "verified": "Verificata"
+              "instructions": {
+                "attached_documents": "I documenti di riferimento per questa domanda sono allegati alla conversazione.",
+                "calculation": "Quando la risposta richiede un calcolo, non farlo a mente. Prendi gli operandi e la regola dalla domanda e dai passaggi citati, passali allo strumento calculate ed elenca il passaggio di ogni voce prima del totale. Un valore restituito da uno strumento di fatti prevale su un valore dei documenti.",
+                "citation": "Cita le fonti che usi con i marcatori [S<numero>] presi solo dalle fonti etichettate qui sopra, per esempio [S1] o [S1][S3]. Non citare mai un numero che non compare in un'etichetta.",
+                "citation_per_sentence": "Termina ogni frase che afferma un fatto con il marcatore [S<numero>] della fonte etichettata che la supporta, preso solo dalle fonti etichettate qui sopra, per esempio [S1] o [S1][S3]. Non citare mai un numero che non compare in un'etichetta.",
+                "concise": "Dai prima la risposta, poi solo i dettagli di supporto che servono alla domanda. Mantieni tutte le citazioni.",
+                "general_knowledge": "Introduci tutto ciò che non proviene dai documenti con l'etichetta **{general_knowledge}** da sola su una riga, in grassetto.",
+                "partial_answer": "Rispondi solo alle parti della domanda coperte dal contesto. Per ogni parte che il contesto non copre, nomina la parte e scrivi “{not_covered}”. Non colmare mai una lacuna con conoscenze generali o con un valore plausibile. Se il contesto non copre nessuna parte della domanda, scrivi solo {sentinel} e nient'altro.\n\nEsempio. Domanda: che cosa sono A e B? Contesto: A è X; niente su B. Risposta:\nA è X.\nB: {not_covered}.",
+                "relevance": "Se il contesto riguarda un argomento collegato ma diverso da quello richiesto, non risponde alla domanda. In quel caso scrivi solo {sentinel} e nient'altro.",
+                "relevance_open": "Se il contesto riguarda un argomento collegato ma diverso da quello richiesto, non presentarlo come la risposta. Se invece rispondi con conoscenze generali, inizia quella parte con l'etichetta **{general_knowledge}** da sola su una riga, in grassetto.",
+                "relevance_web": "Se il contesto riguarda un argomento collegato ma diverso da quello richiesto, non risponde alla domanda. In quel caso usa lo strumento webSearch. Se la ricerca web non trova nulla che risponda alla domanda, scrivi solo {sentinel} e nient'altro.",
+                "version": "Quando le fonti danno valori diversi per la stessa cosa, usa la fonte con la data di entrata in vigore più recente, o la versione più alta se mancano le date, e indica la sua versione nella risposta. Non presentare i due valori come alternative. Cita una versione precedente solo quando la domanda riguarda il passato o le modifiche.",
+                "web_separation": "Tieni ciò che dicono i documenti e ciò che dice il web in due parti separate. Inizia la prima parte con **{from_documents}** e la seconda con **{from_web}**, ogni etichetta da sola su una riga, in grassetto."
               },
-              "groundedness_tooltips": {
-                "not_checked": "Non è stato possibile verificare questa risposta sui tuoi documenti.",
-                "possibly_unreliable": "Un controllo automatico ha trovato parti di questa risposta che i tuoi documenti potrebbero non supportare.",
-                "verified": "Un controllo automatico ha trovato questa risposta supportata dai tuoi documenti."
+              "labels": {
+                "badge_not_checked": "Non verificata",
+                "badge_possibly_unreliable": "Forse inaffidabile",
+                "badge_tooltip_not_checked": "Non è stato possibile verificare questa risposta sui tuoi documenti.",
+                "badge_tooltip_possibly_unreliable": "Un controllo automatico ha trovato parti di questa risposta che i tuoi documenti potrebbero non supportare.",
+                "badge_tooltip_verified": "Un controllo automatico ha trovato questa risposta supportata dai tuoi documenti.",
+                "badge_verified": "Verificata",
+                "effective_from": "In vigore dal {date}",
+                "from_documents": "Dai documenti",
+                "from_web": "Dal web",
+                "general_knowledge": "Conoscenza generale, non dai documenti",
+                "not_covered": "I documenti non specificano",
+                "older_version": "Versione precedente",
+                "version": "Versione {version}"
               },
-              "knowledge_base_unavailable": "La base di conoscenza non è al momento disponibile. Riprova tra poco.",
-              "strict_refusal": "# Information Not Available\n\n## Knowledge Base Status\n- I couldn’t find this information in your knowledge base.\n- Web search is turned off, so I can’t look it up online.\n\nWould you like me to turn on web search and check? Do you want to upload a document that contains this information? Is there a specific detail you want me to focus on?"
+              "notices": {
+                "answer_truncated": "La risposta ha raggiunto il limite di lunghezza e si interrompe prima della fine. Chiedi il resto con un nuovo messaggio.",
+                "calc_corrected": "Il calcolo è stato ricontrollato: il risultato corretto è {value}.",
+                "calc_not_verified": "Calcolo non verificato: non è stato possibile ricontrollare sui documenti i numeri di questa risposta.",
+                "credential_request_blocked": "Una frase che chiedeva dati di accesso è stata rimossa da questa risposta.",
+                "credential_request_warning": "Attenzione: questa risposta menziona dati di accesso. Questo assistente non ne ha mai bisogno.",
+                "document_updated_or_removed": "Questo documento è stato aggiornato o rimosso. La citazione qui sopra è il testo usato dalla risposta.",
+                "kb_unavailable": "La base di conoscenza non è al momento disponibile. Riprova tra poco.",
+                "link_removed": "(link rimosso)",
+                "no_information": "# Informazione non disponibile\n\n## Stato della base di conoscenza\n- Non ho trovato questa informazione nella base di conoscenza.\n- La ricerca web è disattivata, quindi non posso cercarla online.\n\nVuoi che attivi la ricerca web per verificare? Vuoi caricare un documento che contiene questa informazione? C'è un dettaglio specifico su cui devo concentrarmi?",
+                "no_information_web": "# Informazione non disponibile\n\n- Non ho trovato questa informazione né nella base di conoscenza né sul web.\n\nVuoi caricare un documento che contiene questa informazione? C'è un dettaglio specifico su cui devo concentrarmi?",
+                "not_confirmed": "Non confermato dai documenti",
+                "prompt_too_long": "Questa domanda è troppo lunga per ricevere risposta. Accorciala e inviala di nuovo.",
+                "uncited": "Nessuna fonte citata"
+              }
             },
             "version_markers": [
               "\\b(?:19|20)\\d{2}\\b",
