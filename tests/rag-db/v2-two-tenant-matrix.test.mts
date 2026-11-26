@@ -42,6 +42,30 @@ const D01_ENV: Record<string, string> = {
   RAG_REFUSAL_FLOOR: 'legacy_rule',
 };
 
+/** A fixture-corpus question the legacy pipeline answers in the smoke tier (golden item en-compound-001). */
+const LEGACY_ANSWERABLE_QUERY = 'What are the refund windows for annual plans and for monthly plans?';
+const CI_LANGUAGES: Record<string, string> = { RAG_SUPPORTED_LANGUAGES: 'zh,en,it', RAG_PRIMARY_LANGUAGE: 'en' };
+
+/** Sets (CI values) or removes the two language variables the Phase 3.2 reader takes from process.env. */
+async function withLanguages<T>(configured: boolean, body: () => Promise<T>): Promise<T> {
+  const settings = await import('@/lib/rag/lang/settings');
+  const saved = Object.fromEntries(Object.keys(CI_LANGUAGES).map((name) => [name, process.env[name]]));
+  for (const [name, value] of Object.entries(CI_LANGUAGES)) {
+    if (configured) process.env[name] = value;
+    else delete process.env[name];
+  }
+  settings.resetLanguageSettingsForTests();
+  try {
+    return await body();
+  } finally {
+    for (const [name, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+    settings.resetLanguageSettingsForTests();
+  }
+}
+
 interface RerankBody {
   model: string;
   query: string;
@@ -546,6 +570,45 @@ describe('every v2 retrieval path stays inside the caller tenant, for every entr
     }
   });
 
+  test('two-tenant matrix under the implicit defaults: multi-tenant, nothing set, with and without the CI languages, every profile serves legacy inside the caller tenant', async () => {
+    const hybrid = () => rpcCalls().filter((call) => call.path.endsWith('/rpc/hybrid_search_chunks')).length;
+    let ownCandidates = 0;
+    try {
+      for (const languages of [true, false]) {
+        await withLanguages(languages, async () => {
+          for (const profile of PROFILES) {
+            for (const label of LABELS) {
+              const where = `implicit defaults, languages ${languages ? 'set' : 'unset'}, ${profile}/${label}`;
+              const scope = await scopeFor(profile, label);
+              depsModule.setRagDepsForTests({ ragEnv: () => ({ RAG_PIPELINE: 'legacy' }) });
+              configModule.resetRagConfigForTests();
+              const { result: expected } = await retrieve(scope, profile, V2_EXACT_QUERY);
+              depsModule.setRagDepsForTests({ ragEnv: () => ({}) });
+              configModule.resetRagConfigForTests();
+              const before = hybrid();
+              const { result, rerank } = await retrieve(scope, profile, V2_EXACT_QUERY);
+              assert.ok(['ok', 'empty'].includes(result.status), `${where}: status ${result.status} (${result.reason})`);
+              assert.equal(hybrid(), before, `${where}: the shipped default is legacy, hybrid_search_chunks is not called`);
+              assert.equal(rerank.length, 0, `${where}: no rerank request`);
+              assert.deepEqual(
+                { status: result.status, reason: result.reason, chunks: chunkIdsOf(result).sort(), documents: documentIdsOf(result).sort() },
+                { status: expected.status, reason: expected.reason, chunks: chunkIdsOf(expected).sort(), documents: documentIdsOf(expected).sort() },
+                `${where}: equals explicit legacy for the same scope`,
+              );
+              await assertOwnRows(label, result, where, { parents: false });
+              assertNoForeignText(label, { result, stages: result.stages }, where);
+              ownCandidates += chunkIdsOf(result).length;
+            }
+          }
+        });
+      }
+      assert.ok(ownCandidates > 0, 'the legacy default returned the callers their own chunks');
+    } finally {
+      depsModule.setRagDepsForTests({ ragEnv: () => allOnEnv });
+      configModule.resetRagConfigForTests();
+    }
+  });
+
   test('the fixture edge saw no unsupported request', () => {
     assert.deepEqual(edge.errors, []);
   });
@@ -599,8 +662,8 @@ describe('single-tenant deployment accepts only the default tenant key', () => {
     Object.assign(process.env, previousEnv);
   });
 
-  const run = (scope: TenantScope) =>
-    rag.runRetrieval({ scope, query: 'what is the refund policy', profile: 'eval', options: OPTIONS, signal: new AbortController().signal });
+  const run = (scope: TenantScope, query = 'what is the refund policy') =>
+    rag.runRetrieval({ scope, query, profile: 'eval', options: OPTIONS, signal: new AbortController().signal });
 
   test('the single scope retrieves, a personal and an organization key raise and surface as backend_error', async () => {
     const single = await run(scopeModule.mintScope('single', null, null));
@@ -653,6 +716,47 @@ describe('single-tenant deployment accepts only the default tenant key', () => {
       }
     } finally {
       selectModule.resetRerankerFactoryForTests();
+      depsModule.setRagDepsForTests({ ragEnv: () => ({ RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'true' }) });
+      configModule.resetRagConfigForTests();
+    }
+  });
+
+  test('two-tenant matrix under the implicit defaults: single-tenant, nothing set, with and without the CI languages, the default tenant gets legacy and only its own chunks', async () => {
+    const hybrid = () => edge.calls.filter((call) => call.path.endsWith('/rpc/hybrid_search_chunks')).length;
+    const scopes = [
+      scopeModule.mintScope('single', null, null),
+      scopeModule.mintScope('personal', TWO_TENANT_IDS.userA, null),
+      scopeModule.mintScope('org', null, TWO_TENANT_IDS.orgO),
+    ];
+    try {
+      for (const languages of [true, false]) {
+        await withLanguages(languages, async () => {
+          for (const scope of scopes) {
+            const where = `implicit defaults single-tenant, languages ${languages ? 'set' : 'unset'}, ${scopeModule.scopeKey(scope)}`;
+            depsModule.setRagDepsForTests({ ragEnv: () => ({ RAG_PIPELINE: 'legacy' }) });
+            configModule.resetRagConfigForTests();
+            const expected = await run(scope, LEGACY_ANSWERABLE_QUERY);
+            depsModule.setRagDepsForTests({ ragEnv: () => ({}) });
+            configModule.resetRagConfigForTests();
+            const before = hybrid();
+            const result = await run(scope, LEGACY_ANSWERABLE_QUERY);
+            assert.equal(hybrid(), before, `${where}: hybrid_search_chunks is not called`);
+            assert.deepEqual(
+              { status: result.status, reason: result.reason, chunks: result.candidates.map((row) => row.chunk_id) },
+              { status: expected.status, reason: expected.reason, chunks: expected.candidates.map((row) => row.chunk_id) },
+              `${where}: equals explicit legacy`,
+            );
+            if (result.candidates.length > 0) {
+              const keys = await fixture.db.query<{ tenant_key: string }>('SELECT DISTINCT tenant_key FROM document_chunks WHERE id = ANY($1::uuid[])', [
+                result.candidates.map((row) => row.chunk_id),
+              ]);
+              assert.deepEqual(keys.rows.map((row) => row.tenant_key), ['s:default'], `${where}: only default-tenant chunks`);
+            }
+            if (scope.kind === 'single') assert.ok(result.candidates.length > 0, `${where}: the default tenant has its corpus`);
+          }
+        });
+      }
+    } finally {
       depsModule.setRagDepsForTests({ ragEnv: () => ({ RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'true' }) });
       configModule.resetRagConfigForTests();
     }
