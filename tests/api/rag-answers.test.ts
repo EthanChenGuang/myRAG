@@ -17,6 +17,7 @@ const state = {
   tables: {} as Record<string, Row[]>,
   sessionQueries: [] as Array<{ table: string; op: string }>,
   adminQueries: [] as Array<{ table: string; op: string; payload?: Row; filters: Array<[string, string, unknown]> }>,
+  selects: [] as Array<{ table: string; columns: string }>,
 };
 
 function visibleToSession(table: string, row: Row): boolean {
@@ -32,6 +33,8 @@ function builder(kind: 'session' | 'admin', table: string) {
   let payload: Row = {};
   let limit = Infinity;
   let order: { column: string; ascending: boolean } | null = null;
+  let columns: string[] | null = null;
+  const project = (row: Row): Row => (columns ? Object.fromEntries(Object.entries(row).filter(([key]) => columns!.includes(key))) : row);
   const run = (): Row[] => {
     if (kind === 'session') state.sessionQueries.push({ table, op });
     else state.adminQueries.push({ table, op, payload: op === 'update' ? payload : undefined, filters: described });
@@ -45,10 +48,16 @@ function builder(kind: 'session' | 'admin', table: string) {
       const { column, ascending } = order;
       hit = [...hit].sort((x, y) => String(x[column]).localeCompare(String(y[column])) * (ascending ? 1 : -1));
     }
-    return hit.slice(0, limit).map((row) => structuredClone(row));
+    return hit.slice(0, limit).map((row) => structuredClone(project(row)));
   };
   const b = {
-    select: () => b,
+    select(list?: string) {
+      if (typeof list === 'string') {
+        columns = list.split(',');
+        state.selects.push({ table, columns: list });
+      }
+      return b;
+    },
     update(next: Row) {
       op = 'update';
       payload = next;
@@ -153,6 +162,21 @@ function getList(query: string) {
   return new NextRequest(`http://localhost/api/rag/answers${query}`, { method: 'GET' });
 }
 
+const PHASE52_SWITCHES = ['RAG_REGISTRY_TEXTS', 'RAG_CITATION_PER_SENTENCE', 'RAG_OUTPUT_GUARD', 'RAG_VERSION_LABELS', 'RAG_MAX_OUTPUT_TOKENS'];
+const SENTENCE = {
+  index: 0,
+  part: 0,
+  start: 0,
+  end: 24,
+  kind: 'sentence',
+  cited: true,
+  factual: true,
+  support: 'not_checked',
+  reason: null,
+  scorer: null,
+  text_hash: crypto.createHash('sha256').update('The sample value is two.').digest('hex'),
+};
+
 const params = (answerId: string) => ({ params: Promise.resolve({ answerId }) });
 
 describe('/api/rag/answers routes', () => {
@@ -164,7 +188,9 @@ describe('/api/rag/answers routes', () => {
     state.tables = { rag_answer_records: [], chats: [], documents: [], document_chunks: [] };
     state.sessionQueries = [];
     state.adminQueries = [];
+    state.selects = [];
     logs.length = 0;
+    for (const name of PHASE52_SWITCHES) delete process.env[name];
     delete process.env.RAG_ANSWER_FEEDBACK;
     for (const method of ['log', 'warn', 'error', 'info', 'debug'] as const) {
       vi.spyOn(console, method).mockImplementation((...args: unknown[]) => {
@@ -179,6 +205,7 @@ describe('/api/rag/answers routes', () => {
     vi.doUnmock('@/lib/supabase');
     vi.doUnmock('@/lib/supabase/server');
     delete process.env.RAG_ANSWER_FEEDBACK;
+    for (const name of PHASE52_SWITCHES) delete process.env[name];
   });
 
   it('answers 401 without a session on both routes', async () => {
@@ -381,5 +408,78 @@ describe('/api/rag/answers routes', () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ records: [] });
     expect(state.adminQueries).toHaveLength(0);
+  });
+  describe('checks and textsSource (D-23)', () => {
+    it('returns stored checks and textsSource while a Phase 5.2 switch is on; the body passes AnswerRecordSchema', async () => {
+      process.env.RAG_REGISTRY_TEXTS = 'true';
+      const row = record({ checks: { sentences: [SENTENCE], truncated: false, finish_reason: 'stop', text_language: 'en' }, texts_source: 'registry' });
+      state.tables.rag_answer_records.push(row);
+      const { one } = await loadRoutes();
+      const response = await one.GET(getOne(String(row.id)), params(String(row.id)));
+      expect(response.status).toBe(200);
+      const raw = await response.json();
+      const body = AnswerRecordSchema.parse(raw);
+      expect(body.textsSource).toBe('registry');
+      expect(body.checks?.sentences).toHaveLength(1);
+      expect(body.checks?.finish_reason).toBe('stop');
+      expect(body.checks?.text_language).toBe('en');
+      expect(state.selects.find((entry) => entry.table === 'rag_answer_records')?.columns).toContain(',checks,texts_source');
+    });
+
+    it("returns an old row's checks '{}' as an empty checks object and no textsSource", async () => {
+      process.env.RAG_REGISTRY_TEXTS = 'true';
+      const row = record({ checks: {}, texts_source: null });
+      state.tables.rag_answer_records.push(row);
+      const { one } = await loadRoutes();
+      const response = await one.GET(getOne(String(row.id)), params(String(row.id)));
+      expect(response.status).toBe(200);
+      const raw = await response.json();
+      const body = AnswerRecordSchema.parse(raw);
+      expect(body.checks).toBeDefined();
+      expect(body.checks?.sentences).toBeUndefined();
+      expect(body.checks?.truncated).toBe(false);
+      expect('textsSource' in raw).toBe(false);
+    });
+
+    it('with every switch off selects the Phase 5 columns and returns neither field', async () => {
+      const row = record({ checks: { truncated: true }, texts_source: 'legacy' });
+      state.tables.rag_answer_records.push(row);
+      const { one } = await loadRoutes();
+      const raw = await (await one.GET(getOne(String(row.id)), params(String(row.id)))).json();
+      AnswerRecordSchema.parse(raw);
+      expect('checks' in raw).toBe(false);
+      expect('textsSource' in raw).toBe(false);
+      const columns = state.selects.find((entry) => entry.table === 'rag_answer_records')?.columns ?? '';
+      expect(columns).not.toContain('checks');
+      expect(columns).not.toContain('texts_source');
+    });
+
+    it("answers the same 404 for another user's answer with checks", async () => {
+      process.env.RAG_REGISTRY_TEXTS = 'true';
+      const foreign = record({ user_id: USER_B, checks: { sentences: [SENTENCE] }, texts_source: 'registry' });
+      state.tables.rag_answer_records.push(foreign);
+      const { one } = await loadRoutes();
+      const missingId = crypto.randomUUID();
+      const missing = await one.GET(getOne(missingId), params(missingId));
+      const other = await one.GET(getOne(String(foreign.id)), params(String(foreign.id)));
+      expect(other.status).toBe(404);
+      expect(await other.json()).toEqual(await missing.json());
+    });
+
+    it('lists checks for the records of an owned chat while a switch is on', async () => {
+      process.env.RAG_REGISTRY_TEXTS = 'true';
+      const chatId = crypto.randomUUID();
+      state.tables.chats.push({ id: chatId, user_id: USER_A, organization_id: null, messages: [] });
+      const row = record({ chat_id: chatId, checks: { truncated: true }, texts_source: 'legacy' });
+      state.tables.rag_answer_records.push(row);
+      const { list } = await loadRoutes();
+      const response = await list.GET(getList(`?chatId=${chatId}`));
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      const records = (body.records ?? body) as unknown[];
+      const parsed = AnswerRecordSchema.parse(records[0]);
+      expect(parsed.checks?.truncated).toBe(true);
+      expect(parsed.textsSource).toBe('legacy');
+    });
   });
 });
