@@ -4062,8 +4062,9 @@ ChatMessage = function ({
         return null;
       }
 
-      // Inline code rendering - clean and minimal
-      if (inline) {
+      // react-markdown 9 no longer passes `inline`; a fenced block spans several source lines.
+      const isInline = inline ?? (node?.position ? node.position.start.line === node.position.end.line && !match : !value.includes('\n'));
+      if (isInline) {
         return (
           <code className={cn(
             // Light mode colors
@@ -4436,15 +4437,15 @@ ChatMessage = function ({
       >
         <style dangerouslySetInnerHTML={{ __html: styles }} />
 
-        <div className={cn(
-          "max-w-5xl mx-auto flex gap-6 px-6 py-4",
+        <div data-role={isAI ? 'assistant' : 'user'} className={cn(
+          "chat-row max-w-5xl mx-auto flex gap-6 px-6 py-4",
           !isAI && "flex-row-reverse",
           isFirstMessage && "pt-20" // Add extra padding to first message
         )}>
           {isAI && (
             <div
               className={cn(
-                "shrink-0 flex items-center justify-center rounded-full text-black dark:text-white",
+                "chat-assistant-avatar shrink-0 flex items-center justify-center rounded-full text-black dark:text-white",
                 // Remove fixed border from className
                 "bg-transparent transition-all duration-300" // Add transition
               )}
@@ -4488,7 +4489,7 @@ ChatMessage = function ({
           {isAI ? (
             (<div
               className={cn(
-                "inline-block max-w-[95%] w-full chat-message",
+                "chat-answer inline-block max-w-[95%] w-full chat-message",
                 textSizeClasses[textSize].base,
                 fontClasses[fontFamily],
                 isLastMessage && "mb-8"
