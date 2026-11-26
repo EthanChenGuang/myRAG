@@ -13,6 +13,28 @@ import { useShallow } from 'zustand/react/shallow';
 import { useLanguage } from '../providers/language-provider';
 import { useChatStore } from '@/lib/chat-store';
 import { useCitationFocusStore } from '@/lib/stores/citation-focus-store';
+import { useGhostModeStore } from '@/lib/ghost-mode-store';
+import { postSourceOpened, sourceKeyOf, sourcesMessage, traceForMessage } from '@/lib/chat/refusal-feedback-client';
+
+/**
+ * D-12: a source link opened from the panel (click, Enter or middle click) sends one source-open signal for the message whose
+ * sources the panel lists. Navigation and event propagation are untouched; any failure is swallowed.
+ */
+export function sourceOpenHandlers(source: Source) {
+  const signal = () => {
+    if (useGhostModeStore.getState().isGhostMode || useChatStore.getState().currentChatId?.startsWith('ghost-')) return;
+    const messageId = source.citation?.messageId ?? sourcesMessage();
+    const traceId = messageId ? traceForMessage(messageId) : undefined;
+    const sourceKey = sourceKeyOf(source);
+    if (traceId && sourceKey) postSourceOpened(traceId, sourceKey);
+  };
+  return {
+    onClick: (_event: React.MouseEvent<HTMLAnchorElement>) => signal(),
+    onAuxClick: (event: React.MouseEvent<HTMLAnchorElement>) => {
+      if (event.button === 1) signal();
+    },
+  };
+}
 
 export interface CitationSourceEntryProps {
   source: Source;
@@ -397,10 +419,12 @@ export function SourcesSidebar({
                                 href={source.url}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="flex-shrink-0 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                                {...sourceOpenHandlers(source)}
+                                className="flex-shrink-0 rounded-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6417]/60"
                                 title={`Open source: ${source.url}`}
+                                aria-label={`Open source: ${source.url}`}
                               >
-                                <ExternalLink className="w-4 h-4" />
+                                <ExternalLink className="w-4 h-4" aria-hidden="true" />
                               </a>
                             )}
                           </div>
@@ -434,7 +458,8 @@ export function SourcesSidebar({
                             href={source.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="block rounded-2xl bg-white/25 hover:bg-white/40 dark:bg-black/20 dark:hover:bg-black/30 backdrop-blur-sm border border-[#FFE0D0]/60 hover:border-[#FFE0D0]/80 dark:border-white/10 dark:hover:border-white/20 p-5 hover:scale-[1.02] transition-all duration-300 cursor-pointer group"
+                            {...sourceOpenHandlers(source)}
+                            className="block rounded-2xl bg-white/25 hover:bg-white/40 dark:bg-black/20 dark:hover:bg-black/30 backdrop-blur-sm border border-[#FFE0D0]/60 hover:border-[#FFE0D0]/80 dark:border-white/10 dark:hover:border-white/20 p-5 hover:scale-[1.02] motion-reduce:hover:scale-100 transition-[transform,background-color,border-color] duration-300 motion-reduce:transition-none cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6417]/60"
                           >
                             {sourceContent}
                           </a>
@@ -484,8 +509,3 @@ export function SourcesSidebar({
     </>
   );
 } 
-
-/** D-12 stub. */
-export function sourceOpenHandlers(_source: Source): { onClick: (event: React.MouseEvent<HTMLAnchorElement>) => void; onAuxClick: (event: React.MouseEvent<HTMLAnchorElement>) => void } {
-  return { onClick: () => {}, onAuxClick: () => {} };
-}
