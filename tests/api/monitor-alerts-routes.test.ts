@@ -393,4 +393,76 @@ describe('monitor alert routes (05.3-29, D-22, D-25, D-26, UI-SPEC 6.6, 6.7, 8.1
       },
     );
   });
+
+  describe('POST /api/rag/admin/monitor/alerts/{id}/{action}', () => {
+    it('acknowledge moves an open alert of the admin tenant to acknowledged with the actor and time', async () => {
+      const row = seedAlert(TENANT_A);
+      const { action } = await routes();
+      const response = await action.POST(post(String(row.id), 'acknowledge'), ctx(String(row.id), 'acknowledge'));
+      expect(response.status).toBe(200);
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      const body = await response.json();
+      expect(body.alert.status).toBe('acknowledged');
+      expect(body.alert.acknowledged_at).toBe('2026-11-25T14:02:00.000Z');
+      expect(MonitorAlertSchema.safeParse(body.alert).success).toBe(true);
+      expect(state.setStatusCalls).toEqual([{ p_id: row.id, p_status: 'acknowledged', p_actor: ADMIN_A }]);
+      expect(row.acknowledged_by).toBe(ADMIN_A);
+    });
+
+    it('resolve moves an acknowledged alert to resolved; a second resolve answers 409', async () => {
+      const row = seedAlert(TENANT_A, { status: 'acknowledged' });
+      const { action } = await routes();
+      const first = await action.POST(post(String(row.id), 'resolve'), ctx(String(row.id), 'resolve'));
+      expect(first.status).toBe(200);
+      expect((await first.json()).alert.status).toBe('resolved');
+      expect(row.resolved_by).toBe(ADMIN_A);
+      const second = await action.POST(post(String(row.id), 'resolve'), ctx(String(row.id), 'resolve'));
+      expect(second.status).toBe(409);
+    });
+
+    it('acknowledge of an acknowledged or resolved alert answers 409 and changes nothing', async () => {
+      const acked = seedAlert(TENANT_A, { status: 'acknowledged' });
+      const resolved = seedAlert(TENANT_A, { status: 'resolved' });
+      const { action } = await routes();
+      expect((await action.POST(post(String(acked.id), 'acknowledge'), ctx(String(acked.id), 'acknowledge'))).status).toBe(409);
+      expect((await action.POST(post(String(resolved.id), 'acknowledge'), ctx(String(resolved.id), 'acknowledge'))).status).toBe(409);
+      expect(acked.status).toBe('acknowledged');
+      expect(resolved.status).toBe('resolved');
+    });
+
+    it('an alert of another tenant answers 404 and is never changed', async () => {
+      const other = seedAlert(TENANT_B);
+      const { action } = await routes();
+      for (const verb of ['acknowledge', 'resolve']) {
+        expect((await action.POST(post(String(other.id), verb), ctx(String(other.id), verb))).status).toBe(404);
+      }
+      expect(other.status).toBe('open');
+      expect(state.setStatusCalls).toEqual([]);
+    });
+
+    it('an unknown id answers 404, an action other than the two 404, a malformed id 400', async () => {
+      const row = seedAlert(TENANT_A);
+      const { action } = await routes();
+      const missing = uuid(0xdead);
+      expect((await action.POST(post(missing, 'acknowledge'), ctx(missing, 'acknowledge'))).status).toBe(404);
+      expect((await action.POST(post(String(row.id), 'delete'), ctx(String(row.id), 'delete'))).status).toBe(404);
+      expect((await action.POST(post('not-a-uuid', 'resolve'), ctx('not-a-uuid', 'resolve'))).status).toBe(400);
+      expect(row.status).toBe('open');
+      expect(state.setStatusCalls).toEqual([]);
+    });
+
+    it('RAG_MONITOR off answers 404 without a query; a denied caller gets the guard status', async () => {
+      const row = seedAlert(TENANT_A);
+      process.env.RAG_MONITOR = 'false';
+      const off = await routes();
+      expect((await off.action.POST(post(String(row.id), 'acknowledge'), ctx(String(row.id), 'acknowledge'))).status).toBe(404);
+      expect(state.queries).toEqual([]);
+      process.env.RAG_MONITOR = 'true';
+      state.guard = { ok: false, status: 401 };
+      const on = await routes();
+      expect((await on.action.POST(post(String(row.id), 'resolve'), ctx(String(row.id), 'resolve'))).status).toBe(401);
+      expect(state.queries).toEqual([]);
+      expect(row.status).toBe('open');
+    });
+  });
 });
