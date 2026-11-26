@@ -1,6 +1,8 @@
 import crypto from 'node:crypto';
 import type { PGlite } from '@electric-sql/pglite';
+import type { RpcClient, RpcRequest, RpcResponse } from '../../src/lib/rag/backend/supabase-rpc';
 import { chunkLexicalText } from '../../src/lib/rag/lexical/chunk-text';
+import type { TenantScope } from '../../src/lib/rag/tenant/scope';
 import { embedText } from './fixture-embedder.mts';
 import { runFixtureRelex } from './pglite-supabase.mts';
 import { TWO_TENANT_IDS, createTwoTenantDatabase, type TwoTenantDatabase } from './two-tenant.mts';
@@ -24,6 +26,34 @@ export interface V2TenantMarkers {
   exact: string;
   image: string;
   translated: string;
+  /** Prefix of every cell value of the tenant's lookup table. */
+  tableCell: string;
+  /** The tenant's two identifiers: one asked in the identifier path, one a single-edit neighbour that is a suggestion when the first is missing. */
+  identifier: string;
+  identifierSibling: string;
+  /** Superseded and current revision words of the tenant's versioned document. */
+  supersededVersion: string;
+  currentVersion: string;
+  /** Prefix of the per-copy word that makes each pasted copy of the shared passage a near duplicate. */
+  dupCopy: string;
+}
+
+/** Ids of the rows the Phase 4.2 paths (table lookup, identifiers, versions, duplicate clusters) need, per tenant. */
+export interface V2LookupSeed {
+  tableDocumentId: string;
+  tableChunkId: string;
+  identifierDocumentId: string;
+  identifierChunkId: string;
+  siblingDocumentId: string;
+  siblingChunkId: string;
+  supersededDocumentId: string;
+  supersededChunkId: string;
+  currentDocumentId: string;
+  currentChunkId: string;
+  dupDocumentIds: string[];
+  dupChunkIds: string[];
+  /** Filled after clustering: the one cluster the tenant's pasted copies form. */
+  dupClusterId: string;
 }
 
 export interface TwoTenantV2Tenant {
@@ -41,6 +71,7 @@ export interface TwoTenantV2Tenant {
   translatedDocumentId: string;
   translatedChunkId: string;
   markers: V2TenantMarkers;
+  lookup: V2LookupSeed;
   /** Profile children of the canary document, filled after the profile write. */
   childChunkIds: string[];
   /** Parents of the canary document, filled after the profile write. */
@@ -93,6 +124,10 @@ interface TenantSeedSpec {
   canaryDocumentId: string;
   legacyChunkId: string;
   base: number;
+  /** Base of the fixture ids of the Phase 4.2 lookup rows. */
+  lookupBase: number;
+  /** The digits of the tenant's identifier: one shared shape, different characters per tenant. */
+  identifierDigits: string;
 }
 
 const SPECS: TenantSeedSpec[] = [
@@ -105,6 +140,8 @@ const SPECS: TenantSeedSpec[] = [
     canaryDocumentId: TWO_TENANT_IDS.docA,
     legacyChunkId: TWO_TENANT_IDS.chunkA,
     base: 0x10,
+    lookupBase: 0x1000,
+    identifierDigits: '41071',
   },
   {
     label: 'b',
@@ -115,6 +152,8 @@ const SPECS: TenantSeedSpec[] = [
     canaryDocumentId: TWO_TENANT_IDS.docB,
     legacyChunkId: TWO_TENANT_IDS.chunkB,
     base: 0x20,
+    lookupBase: 0x1100,
+    identifierDigits: '52683',
   },
   {
     label: 'o',
@@ -125,6 +164,8 @@ const SPECS: TenantSeedSpec[] = [
     canaryDocumentId: TWO_TENANT_IDS.docO,
     legacyChunkId: TWO_TENANT_IDS.chunkO,
     base: 0x30,
+    lookupBase: 0x1200,
+    identifierDigits: '73925',
   },
 ];
 
@@ -149,9 +190,303 @@ function tenantOf(spec: TenantSeedSpec): TwoTenantV2Tenant {
       exact: `v2exact${spec.tag}`,
       image: `v2image${spec.tag}`,
       translated: `v2italian${spec.tag}`,
+      ...lookupMarkers(spec.tag, spec.identifierDigits),
     },
+    lookup: lookupIds(spec.lookupBase),
     childChunkIds: [],
     parentIds: [],
+  };
+}
+
+export const V2_DUP_COPIES = 4;
+
+const DUP_SYLLABLES = ['ka', 'lo', 'mi', 'ne', 'su', 'ta', 'vo', 'ri', 'pe', 'du', 'zo', 'fa', 'gi', 'ho', 'ju', 'be', 'qa', 'wy'];
+
+function inventedWord(seed: number): string {
+  let n = (seed * 2654435761) >>> 0;
+  let out = '';
+  for (let i = 0; i < 3; i += 1) {
+    out += DUP_SYLLABLES[n % DUP_SYLLABLES.length];
+    n = Math.floor(n / DUP_SYLLABLES.length) + 11 * (i + 1);
+  }
+  return `${out}${seed % 89}`;
+}
+
+/** One passage of invented words that every tenant pastes into several of its own documents. */
+const DUP_WORDS = Array.from({ length: 40 }, (_, i) => inventedWord(80_000 + i));
+const DUP_COPY_SLOT = 23;
+
+/** The duplicate-cluster question: the same words for every tenant, so a cross-tenant cluster or source list would show. */
+export const V2_DUP_QUERY = `${DUP_WORDS.slice(0, 22).join(' ')}?`;
+
+function lookupMarkers(tag: string, digits: string): Pick<
+  V2TenantMarkers,
+  'tableCell' | 'identifier' | 'identifierSibling' | 'supersededVersion' | 'currentVersion' | 'dupCopy'
+> {
+  const sibling = `${digits.slice(0, -1)}${(Number(digits.slice(-1)) + 1) % 10}`;
+  return {
+    tableCell: `v2cell${tag}`,
+    identifier: `QX-${digits}`,
+    identifierSibling: `QX-${sibling}`,
+    supersededVersion: `v2older${tag}`,
+    currentVersion: `v2newer${tag}`,
+    dupCopy: `v2dup${tag}`,
+  };
+}
+
+function lookupIds(base: number): V2LookupSeed {
+  return {
+    tableDocumentId: fixtureId(base + 1),
+    tableChunkId: fixtureId(base + 2),
+    identifierDocumentId: fixtureId(base + 3),
+    identifierChunkId: fixtureId(base + 4),
+    siblingDocumentId: fixtureId(base + 5),
+    siblingChunkId: fixtureId(base + 6),
+    supersededDocumentId: fixtureId(base + 7),
+    supersededChunkId: fixtureId(base + 8),
+    currentDocumentId: fixtureId(base + 9),
+    currentChunkId: fixtureId(base + 10),
+    dupDocumentIds: Array.from({ length: V2_DUP_COPIES }, (_, copy) => fixtureId(base + 0x20 + 2 * copy)),
+    dupChunkIds: Array.from({ length: V2_DUP_COPIES }, (_, copy) => fixtureId(base + 0x21 + 2 * copy)),
+    dupClusterId: '',
+  };
+}
+
+export function tableText(markers: Pick<V2TenantMarkers, 'tableCell'>): string {
+  const cell = markers.tableCell;
+  return [
+    'Register of synthetic entries.',
+    '',
+    '| Kolvar | Brisen | Tamuth |',
+    '| --- | --- | --- |',
+    `| ${cell}k1 | ${cell}k2 | ${cell}k3 |`,
+    `| ${cell}k4 | ${cell}k2 | ${cell}k5 |`,
+  ].join('\n');
+}
+
+/** Names two cell values of the first row of the tenant's table. */
+export function tableQuery(markers: Pick<V2TenantMarkers, 'tableCell'>): string {
+  return `Which register row pairs ${markers.tableCell}k1 with ${markers.tableCell}k3?`;
+}
+
+export function identifierText(identifier: string, wing: string): string {
+  return `Plover register entry ${identifier} lists the quandle settings of the ${wing} wing.`;
+}
+
+export function identifierQuery(markers: Pick<V2TenantMarkers, 'identifier'>): string {
+  return `Plover register entry ${markers.identifier}: which quandle settings does it list for the wing?`;
+}
+
+export function versionText(revision: string, count: string): string {
+  return `Ledger revision ${revision}: the plimset count is ${count} per cycle.`;
+}
+
+/** Names the superseded revision word, which only the lexical and exact-id legs can reach under a widened version scope. */
+export function versionQuery(markers: Pick<V2TenantMarkers, 'supersededVersion'>): string {
+  return `What plimset count does ledger revision ${markers.supersededVersion} give?`;
+}
+
+export function dupPassage(markers: Pick<V2TenantMarkers, 'dupCopy'>, copy: number): string {
+  const words = DUP_WORDS.slice();
+  words[DUP_COPY_SLOT] = `${markers.dupCopy}c${copy}`;
+  return words.join(' ');
+}
+
+/** The owner of seeded rows: a two-tenant fixture tenant, or the default tenant of a single-tenant database. */
+export interface V2LookupOwner {
+  label: string;
+  userId: string | null;
+  organizationId: string | null;
+  markers: V2TenantMarkers;
+  lookup: V2LookupSeed;
+}
+
+function sqlState(error: unknown): string {
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === 'string' ? code : '';
+}
+
+/** Service-role RPC access over PGlite for the product indexers and the dedupe service: named arguments, JSON objects serialised. */
+export function serviceRoleRpc(db: PGlite): RpcClient {
+  return {
+    rpc(fn, args) {
+      const keys = Object.keys(args);
+      const sql = `SELECT * FROM public.${fn}(${keys.map((key, index) => `${key} => $${index + 1}`).join(', ')})`;
+      const values = keys.map((key) => {
+        const value = args[key];
+        return value !== null && typeof value === 'object' && !Array.isArray(value) ? JSON.stringify(value) : value;
+      });
+      const run = db
+        .transaction(async (tx) => {
+          await tx.exec('SET LOCAL ROLE service_role');
+          return (await tx.query<Record<string, unknown>>(sql, values)).rows;
+        })
+        .then((rows): RpcResponse => ({ data: rows as unknown[], error: null }))
+        .catch((error: unknown): RpcResponse => ({ data: null, error: { code: sqlState(error) || 'P0001', message: error instanceof Error ? error.message : String(error) } }));
+      const request: RpcRequest = { abortSignal: () => request, then: (onFulfilled, onRejected) => run.then(onFulfilled, onRejected) };
+      return request;
+    },
+  };
+}
+
+/** The product modules load the app environment, so they are imported only when a seed runs (after the caller set it). */
+async function ownerScope(owner: V2LookupOwner): Promise<TenantScope> {
+  const { mintScope } = await import('../../src/lib/rag/tenant/scope');
+  if (owner.organizationId) return mintScope('org', owner.userId, owner.organizationId);
+  if (owner.userId) return mintScope('personal', owner.userId, null);
+  return mintScope('single', null, null);
+}
+
+async function insertOwnedDocument(db: PGlite, owner: V2LookupOwner, documentId: string, filename: string, content: string): Promise<void> {
+  await db.query(
+    'INSERT INTO documents (id, filename, content, metadata, user_id, organization_id, created_at, doc_type) VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8)',
+    [documentId, filename, content, JSON.stringify({ relpath: `two-tenant-v2/${filename}` }), owner.userId, owner.organizationId, CREATED_AT, V2_CANARY_DOC_TYPE],
+  );
+}
+
+async function insertOwnedChunk(db: PGlite, owner: V2LookupOwner, documentId: string, chunkId: string, content: string, filename: string, chunkKind = 'text'): Promise<void> {
+  await db.query(
+    `INSERT INTO document_chunks (id, document_id, content, embedding, lexical_text, chunk_index, metadata, organization_id, created_at, chunk_kind, content_hash)
+     VALUES ($1, $2, $3, $4::vector, $5, 0, $6::jsonb, $7, $8, $9, $10)`,
+    [
+      chunkId,
+      documentId,
+      content,
+      vectorLiteral(embedText(content)),
+      chunkLexicalText({ sectionPath: [], content }),
+      JSON.stringify({ name: filename }),
+      owner.organizationId,
+      CREATED_AT,
+      chunkKind,
+      crypto.createHash('sha256').update(content, 'utf8').digest('hex'),
+    ],
+  );
+}
+
+/** A lineage with a superseded version 1 (no vector: publish deletes it) and a current version 2. */
+async function insertVersions(db: PGlite, owner: V2LookupOwner): Promise<void> {
+  const { lookup, markers } = owner;
+  const lineage = lookup.currentDocumentId;
+  const filename = `v2-ledger-${owner.label}.md`;
+  const versions = [
+    { doc: lookup.currentDocumentId, chunk: lookup.currentChunkId, text: versionText(markers.currentVersion, 'nine'), version: 2, current: true, supersededBy: null },
+    { doc: lookup.supersededDocumentId, chunk: lookup.supersededChunkId, text: versionText(markers.supersededVersion, 'seven'), version: 1, current: false, supersededBy: lookup.currentDocumentId },
+  ];
+  for (const v of versions) {
+    await db.query(
+      `INSERT INTO documents (id, filename, content, metadata, user_id, organization_id, created_at, doc_type, lineage_id, version, is_current, status, superseded_by, provisional, content_hash)
+       VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10, $11, 'ready', $12, false, $13)`,
+      [
+        v.doc,
+        filename,
+        v.text,
+        JSON.stringify({ relpath: `two-tenant-v2/${filename}` }),
+        owner.userId,
+        owner.organizationId,
+        CREATED_AT,
+        V2_CANARY_DOC_TYPE,
+        lineage,
+        v.version,
+        v.current,
+        v.supersededBy,
+        crypto.createHash('sha256').update(v.text, 'utf8').digest('hex'),
+      ],
+    );
+    await db.query(
+      `INSERT INTO document_chunks (id, document_id, content, embedding, lexical_text, chunk_index, metadata, organization_id, created_at, chunk_kind, is_current, status, provisional)
+       VALUES ($1, $2, $3, $4::vector, $5, 0, $6::jsonb, $7, $8, 'text', $9, 'ready', false)`,
+      [
+        v.chunk,
+        v.doc,
+        v.text,
+        v.current ? vectorLiteral(embedText(v.text)) : null,
+        chunkLexicalText({ sectionPath: [], content: v.text }),
+        JSON.stringify({ name: filename }),
+        owner.organizationId,
+        CREATED_AT,
+        v.current,
+      ],
+    );
+  }
+}
+
+/**
+ * Seeds for one owner the rows of the four Phase 4.2 paths: a Markdown table indexed into rag_table_rows by the write-time indexer,
+ * two identifier documents indexed by the same indexer, a superseded and a current version of one lineage, and copies of the shared
+ * passage. Clustering runs separately ({@link clusterLookupCopies}) once every owner is seeded, so a cross-tenant pair would be a candidate.
+ */
+export async function seedLookupRows(db: PGlite, owner: V2LookupOwner): Promise<void> {
+  const { lookup, markers } = owner;
+  const tableName = `v2-register-${owner.label}.md`;
+  await insertOwnedDocument(db, owner, lookup.tableDocumentId, tableName, tableText(markers));
+  await insertOwnedChunk(db, owner, lookup.tableDocumentId, lookup.tableChunkId, tableText(markers), tableName, 'table');
+
+  const identifierName = `v2-plover-${owner.label}.md`;
+  await insertOwnedDocument(db, owner, lookup.identifierDocumentId, identifierName, identifierText(markers.identifier, 'north'));
+  await insertOwnedChunk(db, owner, lookup.identifierDocumentId, lookup.identifierChunkId, identifierText(markers.identifier, 'north'), identifierName);
+  const siblingName = `v2-plover-${owner.label}-2.md`;
+  await insertOwnedDocument(db, owner, lookup.siblingDocumentId, siblingName, identifierText(markers.identifierSibling, 'south'));
+  await insertOwnedChunk(db, owner, lookup.siblingDocumentId, lookup.siblingChunkId, identifierText(markers.identifierSibling, 'south'), siblingName);
+
+  await insertVersions(db, owner);
+
+  for (let copy = 0; copy < V2_DUP_COPIES; copy += 1) {
+    const name = `v2-pasted-${owner.label}-${copy}.md`;
+    const text = dupPassage(markers, copy);
+    await insertOwnedDocument(db, owner, lookup.dupDocumentIds[copy] as string, name, text);
+    await insertOwnedChunk(db, owner, lookup.dupDocumentIds[copy] as string, lookup.dupChunkIds[copy] as string, text, name);
+  }
+
+  const { createIngestWriter } = await import('../../src/lib/rag/ingest/writer');
+  const { indexDocumentForLookup } = await import('../../src/lib/rag/ingest/write-indexers');
+  const scope = await ownerScope(owner);
+  const rpc = serviceRoleRpc(db);
+  const signal = new AbortController().signal;
+  const noPatterns = async () => ({ expressions: Object.freeze([]) as readonly RegExp[], patternIds: Object.freeze([]) as readonly string[], loadFailed: false });
+  const writer = createIngestWriter({ db: rpc, scope, signal });
+  const indexed = [
+    { documentId: lookup.tableDocumentId, tables: true, identifiers: false },
+    { documentId: lookup.identifierDocumentId, tables: false, identifiers: true },
+    { documentId: lookup.siblingDocumentId, tables: false, identifiers: true },
+  ];
+  for (const entry of indexed) {
+    const report = await indexDocumentForLookup({ writer, scope, signal, loadPatterns: noPatterns, ...entry });
+    if (report.warnings.length > 0) throw new Error(`[Two-tenant v2] indexing ${owner.label} warned: ${report.warnings.join(',')}`);
+  }
+}
+
+/** Clusters each owner's pasted copies with the product dedupe service; every owner must end with exactly one cluster of its own copies. */
+export async function clusterLookupCopies(db: PGlite, owners: V2LookupOwner[]): Promise<void> {
+  const { clusterChunks } = await import('../../src/lib/rag/dedupe/cluster');
+  const rpc = serviceRoleRpc(db);
+  for (const owner of owners) {
+    const report = await clusterChunks(await ownerScope(owner), owner.lookup.dupChunkIds, { db: rpc, threshold: 0.95 });
+    if (report.clusters !== 1) throw new Error(`[Two-tenant v2] ${owner.label}: expected one duplicate cluster, got ${report.clusters}`);
+    const rows = await db.query<{ cluster: string | null }>('SELECT DISTINCT dup_cluster_id::text AS cluster FROM document_chunks WHERE id = ANY($1::uuid[])', [
+      owner.lookup.dupChunkIds,
+    ]);
+    const clusters = rows.rows.map((row) => row.cluster);
+    if (clusters.length !== 1 || !clusters[0]) throw new Error(`[Two-tenant v2] ${owner.label}: copies are not in one cluster (${clusters.join(',')})`);
+    owner.lookup.dupClusterId = clusters[0];
+  }
+}
+
+/** The single-tenant owner of the four Phase 4.2 paths, for a single-tenant fixture database. */
+export function singleTenantLookupOwner(): V2LookupOwner {
+  const tag = 'xsolo1';
+  return {
+    label: 's',
+    userId: null,
+    organizationId: null,
+    markers: {
+      child: `v2child${tag}`,
+      parent: `v2parent${tag}`,
+      exact: `v2exact${tag}`,
+      image: `v2image${tag}`,
+      translated: `v2italian${tag}`,
+      ...lookupMarkers(tag, '86214'),
+    },
+    lookup: lookupIds(0x1300),
   };
 }
 
@@ -299,6 +634,16 @@ export async function seedTwoTenantV2(db: PGlite): Promise<TwoTenantV2Seed> {
   );
 
   return { tenants, profileId: V2_CANARY_PROFILE_ID, docType: V2_CANARY_DOC_TYPE, typeOnly };
+}
+
+/**
+ * Adds the Phase 4.2 lookup rows (table, identifiers, versions, pasted copies; seedLookupRows) for the three tenants, then clusters the
+ * copies. It runs the product indexer and dedupe service, which load the app environment, so the caller runs it after setting that.
+ */
+export async function seedTwoTenantV2Lookups(fixture: TwoTenantV2Database): Promise<void> {
+  const owners = Object.values(fixture.seed.tenants);
+  for (const owner of owners) await seedLookupRows(fixture.db, owner);
+  await clusterLookupCopies(fixture.db, owners);
 }
 
 export async function createTwoTenantV2Database(options: { corpusDir?: string } = {}): Promise<TwoTenantV2Database> {
