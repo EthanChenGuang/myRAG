@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[2]
 PR = ROOT / ".github" / "workflows" / "pr-smoke.yml"
 NIGHTLY = ROOT / ".github" / "workflows" / "nightly.yml"
 RAY_OPTIONAL = ROOT / ".github" / "workflows" / "ray-optional.yml"
+MEASUREMENT = ROOT / "eval" / "reports" / "phase-05.3" / "absolute-gate-measurement.json"
 DOCKERFILE = ROOT / "rag-sidecar" / "Dockerfile"
 SIDECAR_CONFIG_DIR = ROOT / "rag-sidecar" / "config" / "rag"
 SIDECAR_TEST_EXTRAS = ("chunking", "preflight", "hidden-text")
@@ -752,6 +753,14 @@ def check_ray_optional(data: dict, text: str, errors: list[str]) -> None:
 def check_no_ray_extra(name: str, text: str, errors: list[str]) -> None:
     if "--extra ray" in text:
         errors.append(f"{name}: must not install the ray extra (it runs only in ray-optional.yml)")
+
+
+def report_only_outs(measurement_path: Path = MEASUREMENT) -> set[str]:
+    return set()
+
+
+def check_absolute_gates(pr: dict | None, nightly: dict | None, errors: list[str], measurement_path: Path = MEASUREMENT) -> None:
+    return None
 
 
 def main() -> int:
