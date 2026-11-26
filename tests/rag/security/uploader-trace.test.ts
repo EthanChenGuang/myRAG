@@ -89,13 +89,14 @@ function blocksOf(documents: Map<string, AssemblyDocumentRow>, overrides: Partia
   return (assembleContext(input(documents, overrides)) as { blocks: ContextBlock[] }).blocks;
 }
 
+function omit<T extends object>(value: T, key: string): T {
+  const copy = { ...value } as Record<string, unknown>;
+  delete copy[key];
+  return copy as T;
+}
+
 function withoutUserId(rows: Map<string, AssemblyDocumentRow>): Map<string, AssemblyDocumentRow> {
-  return new Map(
-    [...rows].map(([id, row]) => {
-      const { user_id: _drop, ...rest } = row as AssemblyDocumentRow & { user_id?: unknown };
-      return [id, rest as AssemblyDocumentRow];
-    }),
-  );
+  return new Map([...rows].map(([id, row]) => [id, omit(row, 'user_id')]));
 }
 
 afterEach(() => vi.unstubAllEnvs());
@@ -130,7 +131,7 @@ describe('uploader on context blocks (D-44)', () => {
     vi.stubEnv('RAG_SECURITY_EVENTS', 'true');
     const { client } = fakeAdmin(data());
     const rows = await fetchAssemblyRows(CANDIDATES, { adminClient: client, signal: new AbortController().signal });
-    const on = blocksOf(rows.documents).map(({ uploaderId: _uploader, ...rest }) => rest);
+    const on = blocksOf(rows.documents).map((block) => omit(block, 'uploaderId'));
     expect(on).toEqual(blocksOf(withoutUserId(rows.documents)));
   });
 
