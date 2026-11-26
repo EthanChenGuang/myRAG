@@ -450,3 +450,13 @@ export function scheduleAnswerFinish(input: AnswerFinishInput, deps: Partial<Ans
   }
   return handle;
 }
+
+export interface PendingStepParts {
+  groundedness: (context: AnswerPendingContext) => Promise<AnswerGroundedness | null>;
+  claims: (context: AnswerPendingContext, options?: { deadlineAt?: number }) => Promise<{ groundedness?: AnswerGroundedness } | null>;
+  timeoutMs: () => number;
+}
+
+export function createPendingStep(parts: PendingStepParts): (context: AnswerPendingContext) => Promise<AnswerGroundedness | null> {
+  return parts.groundedness;
+}
