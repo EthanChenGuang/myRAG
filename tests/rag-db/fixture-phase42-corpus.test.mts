@@ -204,8 +204,20 @@ for (const mode of MODES) {
         split: 'dev',
       };
       fs.writeFileSync(golden, `${JSON.stringify(item)}\n`);
-      const { runEval } = await import('../../eval/harness/run-eval.mts');
-      const result = await runEval({ goldenPath: golden, corpusDir: dir, outDir: path.join(work, 'out'), deploymentMode: mode });
+      // A child process per mode: the app reads the deployment mode once at import, so two modes cannot share one module graph.
+      const script = [
+        "const { runEval } = await import('./eval/harness/run-eval.mts');",
+        'const [golden, corpus, out, mode] = process.argv.slice(1);',
+        'const result = await runEval({ goldenPath: golden, corpusDir: corpus, outDir: out, deploymentMode: mode });',
+        'console.log(JSON.stringify({ tracesPath: result.tracesPath, edgeErrors: result.edgeErrors }));',
+      ].join('\n');
+      const child = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script, golden, dir, path.join(work, 'out'), mode], {
+        cwd: REPO_ROOT,
+        encoding: 'utf8',
+        maxBuffer: 16 * 1024 * 1024,
+      });
+      assert.equal(child.status, 0, child.stderr);
+      const result = JSON.parse(child.stdout.trim().split('\n').pop() as string) as { tracesPath: string; edgeErrors: number };
       assert.equal(result.edgeErrors, 0);
       const traces = fs
         .readFileSync(result.tracesPath, 'utf8')
