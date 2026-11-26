@@ -592,6 +592,7 @@ def _parser() -> argparse.ArgumentParser:
     measure.add_argument("--wall-time", action="append", metavar="NAME=SECONDS", help="wall time of a tier's run")
     measure.add_argument("--gate-exit", action="append", metavar="NAME=CODE", help="exit code of a tier's gate run")
     measure.add_argument("--markdown", type=Path, help="also write the Markdown twin of the whole record")
+    measure.add_argument("--not-measured", action="append", metavar="NAME=REASON", help="a tier recorded without a run")
     return parser
 
 
