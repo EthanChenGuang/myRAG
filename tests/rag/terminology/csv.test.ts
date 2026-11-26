@@ -159,7 +159,7 @@ describe('serializeTerminologyCsv (D-23, OWASP CSV injection)', () => {
     const line = text.split('\r\n')[1]!;
     expect(line).toBe(`'=SUM(A1),'-1,${LATIN},synonym,one_way,true,'@x,,`);
     expect(serializeTerminologyCsv([row({ canonical: '+x' })])).toContain("'+x,");
-    expect(serializeTerminologyCsv([row({ canonical: '\tx' })])).toContain(`"'\tx"`);
+    expect(serializeTerminologyCsv([row({ canonical: '\tx' })])).toContain(`'\tx,`);
     expect(serializeTerminologyCsv([row({ canonical: '\rx' })])).toContain(`"'\rx"`);
   });
 
