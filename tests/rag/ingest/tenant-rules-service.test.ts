@@ -40,7 +40,7 @@ interface Log {
 
 let log: Log[];
 let now: number;
-let answers: Map<string, (args: Record<string, unknown>) => RpcResponse | Promise<RpcResponse>>;
+let answers: Map<string, (_args: Record<string, unknown>) => RpcResponse | Promise<RpcResponse>>;
 
 function request(produce: () => RpcResponse | Promise<RpcResponse>): RpcRequest {
   const req: RpcRequest = {
