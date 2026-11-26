@@ -646,3 +646,14 @@ export { runDaily } from './monitor/daily';
 export type { RunDailyOptions, RunDailyResult } from './monitor/daily';
 export { deliverAlerts, deliverStoredAlerts, signWebhookBody, WEBHOOK_SIGNATURE_HEADER, WEBHOOK_TIMESTAMP_HEADER } from './monitor/deliver';
 export type { DeliveryReport, StoredDeliverySummary } from './monitor/deliver';
+export {
+  addPilotUser,
+  decodePilotCursor,
+  listPilotUsers,
+  maskEmail,
+  pilotSamplingParams,
+  PilotUsersError,
+  removePilotUser,
+  PILOT_PAGE_SIZE,
+} from './monitor/pilot-users';
+export type { AddPilotUserResult, PilotUserEntry, PilotUserPage, PilotSamplingParams } from './monitor/pilot-users';
