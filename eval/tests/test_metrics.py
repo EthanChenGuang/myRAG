@@ -548,3 +548,44 @@ def test_report_without_table_split_items_has_no_table_split_key():
     report = build_report(_manifest(), score_items(traces, golden), golden, traces)
     assert report.table_split is None
     assert "table_split" not in report.model_dump(mode="json")
+
+
+def test_table_split_answer_correct_rate_counts_ambiguous_and_empty_as_not_correct():
+    items = [_table_item(f"t-en-{index}", ROW_A) for index in range(1, 6)]
+    answers = {
+        "t-en-1": "The first value is 42.5 cm.",
+        "t-en-2": "The first value is 42,50.",
+        "t-en-3": "It is 42.5 or 17.25.",
+        "t-en-4": "It is 17.25.",
+        "t-en-5": "",
+    }
+    traces = [_table_trace(item_id, [(TABLE_DOC, ROW_A)], answer=answer) for item_id, answer in answers.items()]
+    report = table_split_report(traces, items)
+    assert report is not None and report.answer_mode is True
+    verdicts = {row.item_id: row.answer_verdict for row in report.items}
+    assert verdicts == {"t-en-1": "correct", "t-en-2": "correct", "t-en-3": "ambiguous", "t-en-4": "wrong", "t-en-5": "wrong"}
+    assert report.overall.answer_correct_rate is not None
+    assert report.overall.answer_correct_rate.value == 0.4 and report.overall.answer_correct_rate.n == 5
+
+
+def test_table_split_answer_mode_scores_a_refused_or_unanswered_item_as_wrong():
+    items = [_table_item("t-en-1", ROW_A), _table_item("t-en-2", ROW_A), _table_item("t-en-3", ROW_A)]
+    traces = [
+        _table_trace("t-en-1", [(TABLE_DOC, ROW_A)], answer="42.5"),
+        _table_trace("t-en-2", [(TABLE_DOC, ROW_A)], answer="42.5", refused=True),
+        _table_trace("t-en-3", [(TABLE_DOC, ROW_A)]),
+    ]
+    report = table_split_report(traces, items)
+    assert report is not None and report.answer_mode is True
+    assert [row.answer_verdict for row in report.items] == ["correct", "wrong", "wrong"]
+    assert report.overall.answer_correct_rate == report.by_language["en"].answer_correct_rate
+    assert report.by_language["it"].answer_correct_rate is not None
+    assert report.by_language["it"].answer_correct_rate.value is None and report.by_language["it"].answer_correct_rate.n == 0
+
+
+def test_table_split_without_answers_reports_the_answer_check_as_not_run():
+    item = _table_item("t-en-1", ROW_A)
+    report = table_split_report([_table_trace("t-en-1", [(TABLE_DOC, ROW_A)])], [item])
+    assert report is not None and report.answer_mode is False
+    assert report.overall.answer_correct_rate is None
+    assert all(row.answer_verdict is None for row in report.items)
