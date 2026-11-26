@@ -618,8 +618,8 @@ function scopeTagsBadge(doc, tone, icon, word) {
   const ui = scopeTagsUiLib();
   const classes =
     tone === 'ghost'
-      ? 'badge badge-sm badge-ghost gap-1 shrink-0'
-      : 'badge badge-sm badge-outline border-' + tone + ' text-base-content gap-1 shrink-0';
+      ? 'badge badge-sm badge-ghost gap-1 shrink-0 whitespace-nowrap'
+      : 'badge badge-sm badge-outline border-' + tone + ' text-base-content gap-1 shrink-0 whitespace-nowrap';
   return ui.ragUiEl(doc, 'span', { className: classes }, [
     icon ? ui.ragUiIcon(doc, icon, tone === 'ghost' ? null : 'text-' + tone) : null,
     ui.ragUiEl(doc, 'span', { text: word }),
@@ -1161,7 +1161,7 @@ class ScopeTagsPanel {
   }
 
   valueCell(entry) {
-    return this.el('td', { className: 'align-top' }, [this.el('code', { className: 'font-mono text-xs break-all', text: entry.value, attrs: { translate: 'no' } })]);
+    return this.el('td', { className: 'align-top' }, [this.el('code', { className: 'font-mono text-xs break-all lg:break-normal lg:whitespace-nowrap', text: entry.value, attrs: { translate: 'no' } })]);
   }
 
   stateCell(entry) {
@@ -1188,11 +1188,14 @@ class ScopeTagsPanel {
     });
     toggle.addEventListener('click', () => (entry.active ? this.retireTag(entry, toggle, edit) : this.restoreTag(entry, toggle, edit)));
     return this.el('tr', { attrs: { 'data-scope-tags-entry': entry.id } }, [
-      this.el('th', { className: 'align-top font-normal text-sm break-words [overflow-wrap:anywhere] min-w-32', text: entry.label, attrs: { scope: 'row' } }),
+      this.el('th', { className: 'align-top font-normal text-sm break-words [overflow-wrap:anywhere] min-w-32', attrs: { scope: 'row' } }, [
+        this.el('span', { className: 'block', text: entry.label }),
+        entry.aliases.length ? this.el('span', { className: 'md:hidden block text-xs text-base-content/70 mt-1', text: entry.aliases.join(', ') }) : null,
+      ]),
       this.valueCell(entry),
       this.el('td', { className: 'align-top hidden md:table-cell text-sm break-words [overflow-wrap:anywhere] min-w-40', text: entry.aliases.join(', ') }),
       this.stateCell(entry),
-      this.el('td', { className: 'align-top' }, [this.el('div', { className: 'flex flex-wrap gap-2' }, [edit, toggle])]),
+      this.el('td', { className: 'align-top' }, [this.el('div', { className: 'flex flex-wrap gap-2 md:min-w-max' }, [edit, toggle])]),
     ]);
   }
 
@@ -1201,9 +1204,13 @@ class ScopeTagsPanel {
     const labelId = 'rag-scope-tags-edit-label';
     const aliasId = 'rag-scope-tags-edit-aliases';
     const findingsId = 'rag-scope-tags-edit-findings';
-    const label = this.el('input', { className: 'input input-bordered input-sm w-full', id: labelId, attrs: { type: 'text', autocomplete: 'off', maxlength: '200' } });
+    const label = this.el('input', { className: 'input input-bordered input-sm w-full', id: labelId, attrs: { type: 'text', name: 'scope-tag-label-edit', autocomplete: 'off', maxlength: '200' } });
     label.value = editing.label;
-    const aliases = this.el('input', { className: 'input input-bordered input-sm w-full', id: aliasId, attrs: { type: 'text', autocomplete: 'off', 'aria-describedby': 'rag-scope-tags-edit-alias-help' } });
+    const aliases = this.el('input', {
+      className: 'input input-bordered input-sm w-full',
+      id: aliasId,
+      attrs: { type: 'text', name: 'scope-tag-aliases-edit', autocomplete: 'off', 'aria-describedby': 'rag-scope-tags-edit-alias-help' },
+    });
     aliases.value = editing.aliases;
     const save = this.el('button', { className: 'btn btn-primary md:btn-sm', text: this.t('action.saveTag'), attrs: { type: 'button' } });
     const cancel = this.el('button', { className: 'btn md:btn-sm', text: this.t('action.cancelEdit'), attrs: { type: 'button' } });
@@ -1245,7 +1252,7 @@ class ScopeTagsPanel {
         this.el('p', { className: 'text-xs text-base-content/70 mt-1', id: 'rag-scope-tags-edit-alias-help', text: this.t('vocab.aliasHelp') }),
       ]),
       this.stateCell(entry),
-      this.el('td', { className: 'align-top' }, [this.el('div', { className: 'flex flex-wrap gap-2' }, [save, cancel])]),
+      this.el('td', { className: 'align-top' }, [this.el('div', { className: 'flex flex-wrap gap-2 md:min-w-max' }, [save, cancel])]),
     ]);
     row.addEventListener('keydown', (event) => {
       if (event.key === 'Escape') {
@@ -1584,7 +1591,7 @@ class ScopeTagsPanel {
       : this.el('span', { className: 'text-base-content/70', text: this.t('tags.none') });
     const suggested = this.el('div', { className: 'flex flex-col gap-2' }, row.suggestions.map((pair) => this.suggestionLine(pair)));
     const edit = this.el('button', {
-      className: 'btn btn-outline md:btn-sm',
+      className: 'btn btn-outline md:btn-sm whitespace-nowrap',
       text: this.t('action.editTags'),
       attrs: { type: 'button', 'aria-label': this.t('action.editTagsAria', { file: row.file }), 'aria-expanded': this.editor && this.editor.docId === row.id ? 'true' : 'false', 'data-scope-tags-edit-doc': row.id },
     });
@@ -1677,7 +1684,7 @@ class ScopeTagsPanel {
         );
       }
       for (const pair of suggestions) {
-        const line = this.el('div', { className: 'flex flex-wrap items-center gap-2 mt-2 min-w-0' });
+        const line = this.el('div', { className: 'flex flex-col gap-1 mt-4 min-w-0' });
         const add = this.el('button', {
           className: 'btn btn-outline btn-sm',
           text: this.t('action.addSuggested'),
@@ -1704,7 +1711,11 @@ class ScopeTagsPanel {
           this.announce(this.t('suggest.dismissed', { label: pair.label }));
           this.focus(this.root.querySelector('[data-scope-tags-save]'));
         });
-        line.append(scopeTagsBadge(this.doc, 'info', 'lightbulb', this.t('suggest.badge')), this.pairNode(pair), this.el('span', { className: 'text-xs text-base-content/70' }, [this.sourceNode(pair.source)]), add, dismiss);
+        line.append(
+          this.el('div', { className: 'flex flex-wrap items-center gap-2 min-w-0' }, [scopeTagsBadge(this.doc, 'info', 'lightbulb', this.t('suggest.badge')), this.pairNode(pair)]),
+          this.el('span', { className: 'text-xs text-base-content/70' }, [this.sourceNode(pair.source)]),
+          this.el('div', { className: 'flex flex-wrap gap-2' }, [add, dismiss]),
+        );
         children.push(line);
       }
       fieldsets.push(this.el('fieldset', { className: 'min-w-0 mb-4' }, children));
@@ -1801,7 +1812,7 @@ function scopeTagsQueueTagControl(item, options, locale) {
       scopeTagsQueueEl('fieldset', { className: 'mb-2 min-w-0' }, [
         scopeTagsQueueEl('legend', { className: 'text-xs font-semibold', text: scopeTagsDimensionName(dimension.id, locale) }),
         ...dimension.entries.map((entry) => {
-          const box = scopeTagsQueueEl('input', { className: 'checkbox checkbox-sm', attrs: { type: 'checkbox', value: entry.key } });
+          const box = scopeTagsQueueEl('input', { className: 'checkbox checkbox-sm', attrs: { type: 'checkbox', name: 'queue-scope-tag', value: entry.key } });
           box.checked = selected.has(entry.key);
           box.addEventListener('change', (event) => {
             scopeTagsStop(event);
@@ -1822,12 +1833,24 @@ function scopeTagsQueueTagControl(item, options, locale) {
   const content = scopeTagsQueueEl(
     'div',
     {
-      className: 'dropdown-content z-10 bg-base-100 rounded-box shadow p-4 w-72 max-w-full max-h-72 overflow-y-auto',
+      className: 'dropdown-content z-10 bg-base-100 rounded-box shadow p-4 w-72 max-h-72 overflow-y-auto overscroll-contain',
       attrs: { role: 'group', 'aria-label': t('queue.tagsGroup', { file }) },
     },
     groups,
   );
   const details = scopeTagsQueueEl('details', { className: 'dropdown' }, [summary, content]);
+  const outside = (event) => {
+    if (!details.isConnected || !details.open) {
+      if (typeof document !== 'undefined') document.removeEventListener('click', outside);
+      return;
+    }
+    if (event && event.target && typeof details.contains === 'function' && !details.contains(event.target)) details.open = false;
+  };
+  details.addEventListener('toggle', () => {
+    if (typeof document === 'undefined') return;
+    if (details.open) document.addEventListener('click', outside);
+    else document.removeEventListener('click', outside);
+  });
   details.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape' || !details.open) return;
     if (typeof event.preventDefault === 'function') event.preventDefault();
@@ -1882,7 +1905,7 @@ function scopeTagsOpenChooser(item, options, context, opener, onChosen) {
   const search = scopeTagsQueueEl('input', {
     className: 'input input-bordered input-sm w-full',
     id: searchId,
-    attrs: { type: 'search', autocomplete: 'off', spellcheck: 'false', maxlength: '200' },
+    attrs: { type: 'search', name: 'replaces-document-search', autocomplete: 'off', spellcheck: 'false', maxlength: '200' },
   });
   const list = scopeTagsQueueEl('ul', { className: 'flex flex-col gap-1', attrs: { role: 'radiogroup', 'aria-labelledby': titleId } });
   const note = scopeTagsQueueEl('p', { className: 'text-sm text-base-content/70 py-2 break-words', attrs: { role: 'status', 'aria-live': 'polite' } });
@@ -1897,7 +1920,7 @@ function scopeTagsOpenChooser(item, options, context, opener, onChosen) {
         scopeTagsQueueEl('label', { className: 'label', attrs: { for: searchId } }, [scopeTagsQueueEl('span', { className: 'label-text', text: t('replaces.search') })]),
         search,
       ]),
-      scopeTagsQueueEl('div', { className: 'mt-4 max-h-72 overflow-y-auto' }, [list, note]),
+      scopeTagsQueueEl('div', { className: 'mt-4 max-h-72 overflow-y-auto overscroll-contain' }, [list, note]),
       scopeTagsQueueEl('div', { className: 'modal-action flex-wrap gap-2' }, [close, choose]),
     ]),
     scopeTagsQueueEl('form', { className: 'modal-backdrop', attrs: { method: 'dialog' } }, [
