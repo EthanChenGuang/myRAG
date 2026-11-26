@@ -284,7 +284,8 @@ const GoldenEvidenceSchema = z
 /**
  * One golden export line: the review item fields the promotion needs (never user, chat, trace or log ids, the expert's id or the
  * candidate snapshot), the ExpertLabel, and per evidence span the current chunk text under the item's tenant (null when the chunk is
- * no longer current, ready and non-quarantined in that tenant) with quote_verified.
+ * no longer current, ready and non-quarantined in that tenant) with quote_verified. Channel and reasons keep the Phase 5.1.1 shape of
+ * the Python twin (_GoldenExportLine); Phase 5.3 sampled or imported items are mapped by plan 05.3-37.
  */
 export const GoldenExportLineSchema = ReviewItemSchema.pick({
   id: true,
@@ -301,7 +302,14 @@ export const GoldenExportLineSchema = ReviewItemSchema.pick({
   mining_window: true,
   mined_at: true,
 })
-  .extend({ label: ExpertLabelSchema, evidence: z.array(GoldenEvidenceSchema).max(20) })
+  .extend({
+    channel: z.enum(['chat', 'embed', 'voice']),
+    reasons: z.array(
+      z.enum(['feedback_negative', 'refusal_disputed', 'groundedness_flagged', 'refused_high_score', 'zero_results', 'low_score', 'no_source_opened']),
+    ),
+    label: ExpertLabelSchema,
+    evidence: z.array(GoldenEvidenceSchema).max(20),
+  })
   .strict();
 export type GoldenExportLine = z.infer<typeof GoldenExportLineSchema>;
 

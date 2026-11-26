@@ -726,3 +726,17 @@ def test_samples_use_codes_and_placeholders():
     assert len(item["tags"]) == 1
     assert item["chunk_languages"] and item["query_language"]
     assert all("document_id" not in span for span in samples["GoldenItem"]["gold_evidence"])
+
+
+def test_review_item_phase53_source_reasons_and_optional_trace_and_channel():
+    item = ReviewItem.model_validate(
+        _review_item(reasons=["representative", "re_review"], source="historical", trace_id=None, channel=None)
+    )
+    assert item.source == "historical"
+    assert item.trace_id is None and item.channel is None
+    assert ReviewItem.model_validate(_review_item()).source is None
+    for source in ("representative", "pilot", "drift_fill"):
+        assert ReviewItem.model_validate(_review_item(source=source)).source == source
+    for bad in ({"source": "mined"}, {"reasons": ["sampled"]}, {"trace_id": ""}):
+        with pytest.raises(ValidationError):
+            ReviewItem.model_validate(_review_item(**bad))
