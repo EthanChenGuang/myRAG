@@ -82,6 +82,7 @@
     <script src="rag-panels/chunking-profiles.js"></script>
     <script src="rag-panels/refusal-calibration.js"></script>
     <script src="rag-panels/injection-defense.js"></script>
+    <script src="rag-panels/query-layer.js"></script>
 
     <style>
         /* Tab content visibility */
@@ -6714,6 +6715,7 @@
                                                     <option value="llamaindex" selected>llamaindex</option>
                                                     <option value="langchain">langchain</option>
                                                 </select>
+                                                <p id="query-layer-framework-warning" class="text-sm text-warning mt-2 min-w-0" role="status" hidden></p>
                                             </div>
                                             <div class="form-control">
                                                 <label class="label" for="RAG_QUERY_LLM_MODEL"><span class="label-text">Query model</span></label>
@@ -6829,6 +6831,22 @@
                                                 <label class="label pl-8">
                                                     <span class="label-text-alt min-w-0" id="rag-cache-embed-help">embed widget answers are only read from the cache unless this is on.</span>
                                                 </label>
+                                            </div>
+
+                                            <div id="query-layer-status" class="rounded-box bg-base-100 p-4 space-y-3" aria-live="polite">
+                                                <p class="text-sm text-base-content/70">Loading query layer status…</p>
+                                            </div>
+
+                                            <div class="rounded-box bg-base-100 p-4 space-y-2">
+                                                <h4 class="font-semibold text-sm text-balance">Clear cache for tenant</h4>
+                                                <p class="text-sm text-base-content/70 min-w-0">Deletes every cached answer of one tenant in the running app. Needs an admin sign-in in the main app. Use <span translate="no">s:default</span> in single-tenant mode, <span translate="no">o:&lt;organization id&gt;</span> or <span translate="no">u:&lt;user id&gt;</span> in multi-tenant mode.</p>
+                                                <div class="flex flex-col sm:flex-row gap-2">
+                                                    <label class="sr-only" for="query-layer-clear-tenant">Tenant key</label>
+                                                    <input type="text" id="query-layer-clear-tenant" placeholder="s:default…" autocomplete="off" spellcheck="false" translate="no"
+                                                        class="input input-bordered w-full sm:flex-1 min-w-0">
+                                                    <button type="button" id="query-layer-clear-button" class="btn btn-outline btn-warning">Clear cache for tenant</button>
+                                                </div>
+                                                <p id="query-layer-clear-result" class="text-sm min-w-0" role="status" aria-live="polite"></p>
                                             </div>
                                         </div>
                                     </div>
