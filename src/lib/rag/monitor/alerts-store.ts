@@ -120,6 +120,7 @@ export function toUpsertPayload(alert: MonitorAlert): Record<string, unknown> {
     breakdown: alert.breakdown ?? {},
     companions,
     sample_trace_ids: alert.sample_trace_ids ?? [],
+    cluster_ids: alert.cluster_ids ?? [],
     config_changes: alert.config_changes ?? [],
     suggestion: alert.suggestion,
     delivered: alert.delivered ?? {},

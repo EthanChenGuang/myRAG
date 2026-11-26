@@ -657,6 +657,9 @@ export {
   PILOT_PAGE_SIZE,
 } from './monitor/pilot-users';
 export type { AddPilotUserResult, PilotUserEntry, PilotUserPage, PilotSamplingParams } from './monitor/pilot-users';
+export { loadMonitorAlertsConfig } from './monitor/alerts-config';
+export { driftLimits, isoWeekMonday, latestDrift, storeDriftReport } from './monitor/drift-store';
+export type { DriftView, StoreDriftReportResult } from './monitor/drift-store';
 export { driftInputs, DRIFT_WINDOW_DAYS } from './monitor/drift-inputs';
 export type { DriftInputs, DriftInputSlice, DriftInputCluster } from './monitor/drift-inputs';
 export { assignTestItems, MAX_ASSIGN_ITEMS, MAX_ASSIGN_QUESTION_CHARS } from './monitor/clusters';
