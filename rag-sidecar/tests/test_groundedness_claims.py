@@ -1,10 +1,16 @@
 import asyncio
+import importlib
+import json
 import threading
+import time
 
 import httpx
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
+from rag_sidecar.contracts import ClaimCheckRequest, ClaimCheckResult, SidecarError
 from rag_sidecar.groundedness import LOCAL_SCORER, VECTARA_SCORER, StubScorer
 from rag_sidecar.groundedness.local_hhem import LocalHhemScorer
 from rag_sidecar.groundedness.vectara import VectaraScorer
@@ -148,8 +154,6 @@ def test_vectara_score_many_failed_request_is_none_without_retry():
     requests: list[str] = []
 
     async def handler(request: httpx.Request) -> httpx.Response:
-        import json
-
         hypothesis = json.loads(request.content)["generated_text"]
         requests.append(hypothesis)
         if hypothesis == "Claim number 1.":
@@ -173,15 +177,6 @@ def test_both_scorer_names_are_unchanged():
 
 
 # Task 2: the claims router with routing, premises and deadline (D-22, D-94).
-
-import importlib  # noqa: E402
-import time  # noqa: E402
-
-from fastapi import FastAPI  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
-
-from rag_sidecar.contracts import ClaimCheckRequest, ClaimCheckResult, SidecarError  # noqa: E402
-
 
 def _claims_module():
     try:
