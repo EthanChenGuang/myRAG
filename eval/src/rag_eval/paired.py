@@ -53,13 +53,13 @@ def _baseline_value(runs: list[float | None] | None) -> float | None:
     return math.fsum(present) / len(present)
 
 
-def _bootstrap_interval(differences: list[float]) -> tuple[float, float]:
+def _bootstrap_interval(differences: list[float], seed: int = SEED, resamples: int = RESAMPLES) -> tuple[float, float]:
     if all(d == 0 for d in differences):
         return 0.0, 0.0
-    rng = random.Random(SEED)
+    rng = random.Random(seed)
     n = len(differences)
-    means = sorted(math.fsum(differences[i] for i in rng.choices(range(n), k=n)) / n for _ in range(RESAMPLES))
-    return means[math.ceil(RESAMPLES * 0.025) - 1], means[math.ceil(RESAMPLES * 0.975) - 1]
+    means = sorted(math.fsum(differences[i] for i in rng.choices(range(n), k=n)) / n for _ in range(resamples))
+    return means[math.ceil(resamples * 0.025) - 1], means[math.ceil(resamples * 0.975) - 1]
 
 
 def _stat(differences: list[float]) -> PairedStat:
