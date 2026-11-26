@@ -399,6 +399,8 @@ export type { ChangeDocumentTypeFailure, ChangeDocumentTypeInput, ChangeDocument
 export { scopeForAdminDocument, AdminDocumentScopeError } from './tenant/ingest-scope';
 export type { AdminDocumentScopeInput } from './tenant/ingest-scope';
 export { softDeleteLineage } from './ingest/soft-delete';
+export { recomputeDirtyDupClusters } from './dedupe/cluster';
+export type { RecomputeOutcome } from './dedupe/cluster';
 export { removeDocumentObjects } from './ingest/remove-document-objects';
 export type { DocumentObjectRow } from './ingest/remove-document-objects';
 export type { SoftDeleteResult, SoftDeleteFailure } from './ingest/soft-delete';
