@@ -1,3 +1,4 @@
+import re
 import unicodedata
 from datetime import datetime
 from typing import Annotated, Any, Literal
@@ -5,6 +6,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from rag_sidecar.contracts.eval_run import ConversationTurn
+from rag_sidecar.contracts.ingest import has_backreference
 from rag_sidecar.contracts.retrieval import RetrievalFilters
 
 from .languages import Language
@@ -33,10 +35,15 @@ Category = Literal[
     "identifier_near_miss",
     "templated_collection",
     "implicit_condition",
+    "partial_answer",
+    "stale_version",
+    "off_topic_context",
 ]
 INJECTION_CATEGORIES = frozenset({"injection", "injection_evasive"})
 CACHE_PAIR_CATEGORIES = frozenset({"cache_paraphrase", "cache_near_miss"})
-UNANSWERABLE_CATEGORIES = frozenset({"no_answer", "small_talk"})
+ANSWER_RULE_CATEGORIES = frozenset({"partial_answer", "stale_version", "off_topic_context"})
+UNANSWERABLE_CATEGORIES = frozenset({"no_answer", "small_talk", "off_topic_context"})
+OffTopicScoreBand = Literal["below_threshold", "above_threshold"]
 ITEM_ID_PATTERN = r"^[a-z0-9][a-z0-9._-]{2,63}$"
 UUID_PATTERN = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
 ReviewStatus = Literal["draft", "approved", "rejected"]
@@ -120,6 +127,83 @@ class AttackSpec(_Contract):
         return self
 
 
+def _no_repeats(values: list, what: str) -> None:
+    if len(set(values)) != len(values):
+        raise ValueError(f"{what} must not repeat")
+
+
+class PartialSpec(_Contract):
+    """D-53: what a partial_answer item's answer must use, what the documents leave open and what it must not claim."""
+
+    covered: list[GoldSpan] = Field(min_length=1)
+    uncovered_aspects: list[Annotated[str, Field(min_length=1, max_length=200)]] = Field(min_length=1)
+    forbidden_claims: list[Annotated[str, Field(max_length=200)]] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _check_partial(self) -> "PartialSpec":
+        _no_repeats(self.covered, "covered spans")
+        if any(not aspect.strip() for aspect in self.uncovered_aspects):
+            raise ValueError("uncovered_aspects must be non-empty descriptions")
+        _no_repeats(self.uncovered_aspects, "uncovered_aspects")
+        for claim in self.forbidden_claims:
+            if not claim.strip():
+                raise ValueError("forbidden_claims must be non-empty patterns")
+            if has_backreference(claim):
+                raise ValueError("forbidden_claims must not use a back-reference")
+            try:
+                re.compile(claim)
+            except re.error as error:
+                raise ValueError(f"forbidden_claims pattern does not compile: {error}") from None
+        _no_repeats(self.forbidden_claims, "forbidden_claims")
+        return self
+
+
+class VersionedValue(_Contract):
+    """One version's evidence span, the value string it states and its version label (D-53)."""
+
+    span: GoldSpan
+    value: str = Field(min_length=1, max_length=200)
+    version_label: str = Field(min_length=1, max_length=64)
+
+    @model_validator(mode="after")
+    def _value_in_quote(self) -> "VersionedValue":
+        if not self.value.strip() or not self.version_label.strip():
+            raise ValueError("value and version_label must be non-empty")
+        if _fold(self.value) not in _fold(self.span.quote):
+            raise ValueError("a versioned value must occur in its span quote")
+        return self
+
+
+class VersionsSpec(_Contract):
+    """D-53: the current and the stale version of one rule; `historical` marks a question about the past."""
+
+    current: VersionedValue
+    stale: VersionedValue
+    historical: bool = False
+
+    @model_validator(mode="after")
+    def _check_versions(self) -> "VersionsSpec":
+        if _fold(self.current.value) == _fold(self.stale.value):
+            raise ValueError("current and stale need distinct values")
+        if _fold(self.current.version_label) == _fold(self.stale.version_label):
+            raise ValueError("current and stale need distinct version labels")
+        if self.current.span.document == self.stale.span.document:
+            raise ValueError("current and stale must come from different documents")
+        return self
+
+
+class OffTopicSpec(_Contract):
+    """D-53: neighbouring-subject spans an off_topic_context answer must not use, and where they score."""
+
+    adjacent_quotes: list[GoldSpan] = Field(min_length=1)
+    score_band: OffTopicScoreBand
+
+    @model_validator(mode="after")
+    def _check_quotes(self) -> "OffTopicSpec":
+        _no_repeats(self.adjacent_quotes, "adjacent_quotes")
+        return self
+
+
 class GoldenItem(_Contract):
     id: str = Field(pattern=ITEM_ID_PATTERN)
     question: str
@@ -152,6 +236,21 @@ class GoldenItem(_Contract):
         exclude_if=lambda value: value is None,
         json_schema_extra=_optional_object_schema,
     )
+    partial: PartialSpec | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        json_schema_extra=_optional_object_schema,
+    )
+    versions: VersionsSpec | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        json_schema_extra=_optional_object_schema,
+    )
+    off_topic: OffTopicSpec | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        json_schema_extra=_optional_object_schema,
+    )
 
     @model_validator(mode="after")
     def _check_evidence_groups(self) -> "GoldenItem":
@@ -176,14 +275,14 @@ class GoldenItem(_Contract):
         if self.category in INJECTION_CATEGORIES and not self.answerable:
             raise ValueError("injection items must be answerable")
         if (self.category in UNANSWERABLE_CATEGORIES) == self.answerable:
-            raise ValueError("category no_answer or small_talk if and only if answerable is false")
+            raise ValueError("category no_answer, small_talk or off_topic_context if and only if answerable is false")
         if self.answerable:
             if not self.gold_evidence:
                 raise ValueError("answerable items need at least one gold_evidence span")
             if not (self.expected_answer and self.expected_answer.strip()):
                 raise ValueError("answerable items need a non-empty expected_answer")
         elif self.gold_evidence:
-            raise ValueError("no_answer and small_talk items must have no gold_evidence spans")
+            raise ValueError("no_answer, small_talk and off_topic_context items must have no gold_evidence spans")
         if self.category == "multi_turn" and not self.conversation:
             raise ValueError("multi_turn items need a non-empty conversation")
         if len(set(self.gold_evidence)) != len(self.gold_evidence):
@@ -199,7 +298,25 @@ class GoldenItem(_Contract):
             raise ValueError("table_answer is required exactly for table_split items")
         self._check_pair()
         self._check_attack()
+        self._check_answer_rules()
         return self
+
+    def _check_answer_rules(self) -> None:
+        if (self.category == "partial_answer") != (self.partial is not None):
+            raise ValueError("partial is required exactly for partial_answer items")
+        if (self.category == "stale_version") != (self.versions is not None):
+            raise ValueError("versions is required exactly for stale_version items")
+        if (self.category == "off_topic_context") != (self.off_topic is not None):
+            raise ValueError("off_topic is required exactly for off_topic_context items")
+        gold = set(self.gold_evidence)
+        if self.partial is not None and any(span not in gold for span in self.partial.covered):
+            raise ValueError("partial covered spans must be gold_evidence spans")
+        if self.versions is not None:
+            if self.versions.historical:
+                if self.versions.stale.span not in gold:
+                    raise ValueError("a historical item's stale span must be a gold_evidence span")
+            elif self.versions.current.span not in gold:
+                raise ValueError("the current span must be a gold_evidence span")
 
     def _check_pair(self) -> None:
         if (self.category in CACHE_PAIR_CATEGORIES) != (self.pair_of is not None):
