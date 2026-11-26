@@ -17,9 +17,11 @@ function problem(key: string, message: string, data: Record<string, unknown>): v
   console.warn(`[RAG Config] ${message}`, data);
 }
 
-function cellsFromFile(parsed: RefusalThresholds): ThresholdCells {
+/** D-18: a cell recorded with another embedding model is skipped, so the gate takes its no-cell path; a cell without the field loads. */
+function cellsFromFile(parsed: RefusalThresholds, embeddingModel: string): ThresholdCells {
   const cells: ThresholdCells = new Map();
   for (const cell of parsed.cells ?? []) {
+    if (cell.embedding_model !== undefined && cell.embedding_model !== embeddingModel) continue;
     cells.set(cell.key, {
       key: cell.key,
       ...(cell.mode ? { mode: cell.mode } : {}),
@@ -52,14 +54,17 @@ export function parseThresholds(data: unknown): RefusalThresholds | null {
   return parsed.success && consistent(parsed.data) ? parsed.data : null;
 }
 
-export function loadThresholdsFromData(data: unknown): { cells: ThresholdCells; configHash: string | null } {
+export function loadThresholdsFromData(
+  data: unknown,
+  embeddingModel: string = runningEmbeddingModel(),
+): { cells: ThresholdCells; configHash: string | null } {
   const parsed = parseThresholds(data);
   if (!parsed) {
     problem('refusal-thresholds-invalid', 'Invalid refusal-thresholds.json, refusal thresholds disabled', {});
     return { cells: new Map(), configHash: null };
   }
   return {
-    cells: cellsFromFile(parsed),
+    cells: cellsFromFile(parsed, embeddingModel),
     configHash: parsed.config_hash ?? null,
   };
 }
