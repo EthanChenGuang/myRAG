@@ -38,6 +38,18 @@ export {
   terminologyEnabledLanguages,
   updateEntry as updateTerminologyEntry,
 } from './terminology/admin';
+export { exportTerminology, importKey as terminologyImportKey, importTerminology } from './terminology/import';
+export type {
+  TerminologyExportResult,
+  TerminologyImportFormat,
+  TerminologyImportInput,
+  TerminologyImportMode,
+  TerminologyImportResult,
+} from './terminology/import';
+export { previewTerminology } from './terminology/preview';
+export type { TerminologyPreviewInput, TerminologyPreviewResult } from './terminology/preview';
+export { TERMINOLOGY_CSV_COLUMNS, parseTerminologyCsv, serializeTerminologyCsv } from './terminology/csv';
+export type { TerminologyCsvError, TerminologyCsvParseResult, TerminologyCsvRow } from './terminology/csv';
 export type {
   TerminologyAdminEntry,
   TerminologyAdminFailed,

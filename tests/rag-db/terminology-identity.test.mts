@@ -115,6 +115,8 @@ before(async () => {
     corpusDir: CORPUS_DIR,
     deploymentMode: 'multi-tenant',
     allowedScopes: [`user:${USER_B}`, `user:${USER_C}`],
+    // The baseline is taken on a database without any dictionary row; the fixture dictionary (04.1.1-10) is not seeded here.
+    terminologySeed: [],
     // D-36: pipeline and languages set explicitly, never the shipped default.
     envOverrides: {
       RAG_PIPELINE: 'v2',

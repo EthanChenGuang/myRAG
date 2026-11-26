@@ -131,7 +131,7 @@ export type ListTerminologyAuditResult =
 type Row = Record<string, unknown>;
 type Call = { ok: true; rows: Row[] } | TerminologyAdminFailed;
 
-const SHARED = 'shared';
+export const SHARED = 'shared';
 const PAGE = 100;
 const DEFAULT_LIMIT = 50;
 const PARALLEL_PAGES = 8;
@@ -146,7 +146,7 @@ const SQL_REASONS = new Map<string, TerminologyAdminFailure>([
   ['invalid_entry', 'invalid'],
 ]);
 
-const UNAVAILABLE: TerminologyAdminFailed = { ok: false, reason: 'unavailable' };
+export const UNAVAILABLE: TerminologyAdminFailed = { ok: false, reason: 'unavailable' };
 
 /** D-35: the enabled registry codes, read only through the Phase 3.2 settings module; empty while the languages are not chosen. */
 export function terminologyEnabledLanguages(): string[] {
@@ -179,7 +179,7 @@ function failureOf(error: { message?: unknown; details?: unknown }): Terminology
 }
 
 /** One RPC on the service-role client. Logs carry the function name and the error code only, never dictionary text. */
-async function call(rpc: string, args: Record<string, unknown>, signal: AbortSignal): Promise<Call> {
+export async function callTerminologyRpc(rpc: string, args: Record<string, unknown>, signal: AbortSignal): Promise<Call> {
   const db = client() as unknown as RpcClient | null;
   if (!db) return UNAVAILABLE;
   try {
@@ -200,12 +200,12 @@ async function call(rpc: string, args: Record<string, unknown>, signal: AbortSig
   }
 }
 
-function text(row: Row, key: string): string | null {
+export function text(row: Row, key: string): string | null {
   const value = row[key];
   return typeof value === 'string' ? value : null;
 }
 
-function count(row: Row | undefined, key: string): number {
+export function count(row: Row | undefined, key: string): number {
   const value = row?.[key];
   const parsed = typeof value === 'string' ? Number(value) : value;
   return typeof parsed === 'number' && Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
@@ -292,7 +292,7 @@ async function layerState(layerKey: string, signal: AbortSignal): Promise<{ ok: 
   }
 }
 
-interface LoadedLayer {
+export interface LoadedLayer {
   version: number;
   entries: TerminologyAdminEntry[];
 }
@@ -301,8 +301,8 @@ interface LoadedLayer {
  * Every entry of one layer, page by page through rag_term_list_entries (which checks the actor), for the validator. All pages must carry
  * the version the layer row holds; a write in between answers version_conflict so the caller retries on a consistent snapshot.
  */
-async function loadLayer(actor: string, layerKey: string, signal: AbortSignal): Promise<{ ok: true; layer: LoadedLayer } | TerminologyAdminFailed> {
-  const first = await call('rag_term_list_entries', listArgs(actor, layerKey, PAGE, 0, null), signal);
+export async function loadLayer(actor: string, layerKey: string, signal: AbortSignal): Promise<{ ok: true; layer: LoadedLayer } | TerminologyAdminFailed> {
+  const first = await callTerminologyRpc('rag_term_list_entries', listArgs(actor, layerKey, PAGE, 0, null), signal);
   if (!first.ok) return first;
   const state = await layerState(layerKey, signal);
   if (!state.ok) return state;
@@ -313,7 +313,7 @@ async function loadLayer(actor: string, layerKey: string, signal: AbortSignal): 
   for (let offset = PAGE; offset < total; offset += PAGE) offsets.push(offset);
   for (let index = 0; index < offsets.length; index += PARALLEL_PAGES) {
     const batch = await Promise.all(
-      offsets.slice(index, index + PARALLEL_PAGES).map((offset) => call('rag_term_list_entries', listArgs(actor, layerKey, PAGE, offset, null), signal)),
+      offsets.slice(index, index + PARALLEL_PAGES).map((offset) => callTerminologyRpc('rag_term_list_entries', listArgs(actor, layerKey, PAGE, offset, null), signal)),
     );
     for (const page of batch) {
       if (!page.ok) return page;
@@ -328,7 +328,7 @@ async function loadLayer(actor: string, layerKey: string, signal: AbortSignal): 
   return { ok: true, layer: { version, entries: entriesOf(rows) } };
 }
 
-function layerOf(layerKey: string): TerminologyEntry['layer'] {
+export function layerOf(layerKey: string): TerminologyEntry['layer'] {
   return layerKey === SHARED ? 'shared' : 'workspace';
 }
 
@@ -349,7 +349,7 @@ function candidateOf(input: TerminologyEntryInput, layer: TerminologyEntry['laye
   };
 }
 
-function storedCandidate(entry: TerminologyAdminEntry): TerminologyEntry {
+export function storedCandidate(entry: TerminologyAdminEntry): TerminologyEntry {
   return {
     ...candidateOf(inputOf(entry), layerOf(entry.layer_key), entry.id),
     suppresses_entry_id: entry.suppresses_entry_id,
@@ -371,7 +371,7 @@ function inputOf(entry: TerminologyAdminEntry): TerminologyEntryInput {
 }
 
 /** D-24 rule 4: the validator warns about a variant equal to the canonical or listed twice; the writer drops it. */
-function withoutDuplicates(candidate: TerminologyEntry): TerminologyEntry {
+export function withoutDuplicates(candidate: TerminologyEntry): TerminologyEntry {
   const identifier = candidate.kind === 'identifier';
   const canonicalKey = termKey(candidate.canonical, identifier);
   const seen = new Set<string>();
@@ -385,13 +385,13 @@ function withoutDuplicates(candidate: TerminologyEntry): TerminologyEntry {
   return { ...candidate, variants };
 }
 
-const errorsOf = (issues: TerminologyValidationIssue[]) => issues.filter((issue) => issue.severity === 'error');
+export const errorsOf = (issues: TerminologyValidationIssue[]) => issues.filter((issue) => issue.severity === 'error');
 
 function definedOnly(patch: Partial<TerminologyEntryInput>): Partial<TerminologyEntryInput> {
   return Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined)) as Partial<TerminologyEntryInput>;
 }
 
-function invalidate(layerKey: string): void {
+export function invalidateLayer(layerKey: string): void {
   // D-22: a shared write reaches every tenant's effective dictionary, a workspace write only its own.
   invalidateTerminologyCache(layerKey === SHARED ? 'all' : layerKey);
 }
@@ -453,7 +453,7 @@ async function writeEntry(
     source_language: cleaned.source_language,
     target_language: cleaned.target_language,
   };
-  const written = await call(
+  const written = await callTerminologyRpc(
     'rag_term_upsert_entry',
     { p_actor: input.actorUserId, p_layer_key: input.layerKey, p_entry: entry, p_expected_version: input.expectedVersion },
     input.signal,
@@ -465,7 +465,7 @@ async function writeEntry(
     console.error('[RAG Admin] terminology call failed', { rpc: 'rag_term_upsert_entry', code: 'empty_result' });
     return UNAVAILABLE;
   }
-  invalidate(input.layerKey);
+  invalidateLayer(input.layerKey);
   return {
     ok: true,
     entryId: writtenId,
@@ -483,7 +483,7 @@ export async function listEntries(
   const limit = clampLimit(input.limit);
   const offset = clampOffset(input.offset);
   const search = typeof input.search === 'string' && input.search.trim() !== '' ? input.search.trim() : null;
-  const page = await call('rag_term_list_entries', listArgs(input.actorUserId, input.layerKey, limit, offset, search), input.signal);
+  const page = await callTerminologyRpc('rag_term_list_entries', listArgs(input.actorUserId, input.layerKey, limit, offset, search), input.signal);
   if (!page.ok) return page;
   const state = await layerState(input.layerKey, input.signal);
   if (!state.ok) return state;
@@ -518,13 +518,13 @@ export async function deleteEntry(
   input: LayerInput & { entryId: string; expectedVersion: number },
 ): Promise<DeleteTerminologyEntryResult> {
   if (!UUID.test(input.entryId)) return { ok: false, reason: 'not_found' };
-  const result = await call(
+  const result = await callTerminologyRpc(
     'rag_term_delete_entry',
     { p_actor: input.actorUserId, p_layer_key: input.layerKey, p_entry_id: input.entryId, p_expected_version: input.expectedVersion },
     input.signal,
   );
   if (!result.ok) return result;
-  invalidate(input.layerKey);
+  invalidateLayer(input.layerKey);
   const row = result.rows[0];
   return { ok: true, layerVersion: count(row, 'layer_version'), entriesSha256: row ? text(row, 'entries_sha256') : null };
 }
@@ -534,7 +534,7 @@ export async function setSuppression(
   input: LayerInput & { sharedEntryId: string; suppressed: boolean; expectedVersion: number },
 ): Promise<SetTerminologySuppressionResult> {
   if (!UUID.test(input.sharedEntryId)) return { ok: false, reason: 'not_found' };
-  const result = await call(
+  const result = await callTerminologyRpc(
     'rag_term_set_suppression',
     {
       p_actor: input.actorUserId,
@@ -546,7 +546,7 @@ export async function setSuppression(
     input.signal,
   );
   if (!result.ok) return result;
-  invalidate(input.layerKey);
+  invalidateLayer(input.layerKey);
   const row = result.rows[0];
   return {
     ok: true,
@@ -563,7 +563,7 @@ export async function getVersions(input: {
   signal: AbortSignal;
 }): Promise<TerminologyVersionsResult> {
   const versionOf = async (layerKey: string) => {
-    const check = await call('rag_term_list_entries', listArgs(input.actorUserId, layerKey, 1, 0, null), input.signal);
+    const check = await callTerminologyRpc('rag_term_list_entries', listArgs(input.actorUserId, layerKey, 1, 0, null), input.signal);
     if (!check.ok) return check;
     return layerState(layerKey, input.signal);
   };
@@ -579,7 +579,7 @@ export async function getVersions(input: {
 export async function listAudit(input: LayerInput & { limit?: number; offset?: number }): Promise<ListTerminologyAuditResult> {
   const limit = clampLimit(input.limit);
   const offset = clampOffset(input.offset);
-  const result = await call(
+  const result = await callTerminologyRpc(
     'rag_term_list_audit',
     { p_actor: input.actorUserId, p_layer_key: input.layerKey, p_limit: limit, p_offset: offset },
     input.signal,
