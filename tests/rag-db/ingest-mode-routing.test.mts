@@ -247,7 +247,8 @@ describe('the re-recorded ingest baseline (T-03.1-104)', () => {
   const ROOT = process.cwd();
   /** The ingest baseline as it was before the parse fixtures joined the corpus (03-41 shape, recorded at 925beab2). */
   const PREVIOUS = path.join(ROOT, 'eval/baselines/history/fixture-ingest-baseline.pre-03.1-47.json');
-  const CURRENT = path.join(ROOT, 'eval/baselines/fixture-ingest-baseline.json');
+  // The last baseline of this lineage before plan 05.3-15 re-recorded it with answers on and the 05.3 fixture items.
+  const CURRENT = path.join(ROOT, 'eval/baselines/history/fixture-ingest-baseline.pre-05.3-15.json');
   type Baseline = { corpus_sha256: string; runs: unknown[]; items: Record<string, Record<string, Array<number | null>>> };
   const read = (file: string) => JSON.parse(fs.readFileSync(file, 'utf8')) as Baseline;
 
