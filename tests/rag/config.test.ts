@@ -879,6 +879,9 @@ describe('Phase 4.2 tuning switches (D-04, D-40, D-42, D-53)', () => {
       hasCohereKey: false,
       hasVoyageKey: false,
       domainEmbeddings: { enabled: false, maxLegs: 2, timeoutMs: 800 },
+      terminology: false,
+      terminologyDense: false,
+      terminologyMining: false,
     });
   });
 
