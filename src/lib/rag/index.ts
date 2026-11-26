@@ -596,3 +596,16 @@ export type {
   ListAttributeDefinitionsResult,
   UpsertAttributeDefinitionResult,
 } from './ingest/attributes/schema';
+export {
+  adminTenantKeys,
+  claimEvalRunRequests,
+  closeEvalRunRequest,
+  decodeEvalRunCursor,
+  EVAL_RUN_CLAIM_MAX,
+  EVAL_RUN_PAGE_MAX,
+  EvalRunResultSummarySchema,
+  listEvalRunRequests,
+  ReasonCodeSchema,
+  requestTenantNightly,
+  type EvalRunRequest,
+} from './config-gate/eval-run-requests';

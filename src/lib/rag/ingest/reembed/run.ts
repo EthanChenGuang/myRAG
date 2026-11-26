@@ -1,4 +1,5 @@
 import type { RpcClient } from '../../backend/supabase-rpc';
+import { requestTenantNightly } from '../../config-gate/eval-run-requests';
 import { getBackfillingProfiles, isEmbeddingProfilesEnabled, listEmbeddingProfiles, refreshAfterOperation } from '../../embeddings/active-profile';
 import { EmbeddingProfileMismatch } from '../../embeddings/mrl';
 import { canonicalModelId, getEmbeddingProviderFor } from '../../embeddings/registry';
@@ -278,7 +279,18 @@ export async function runReembed(input: RunReembedInput): Promise<ReembedReport>
     missing = done.missing;
     await refreshPointer();
     await readProfileStatus();
-    return build('completed', null);
+    const report = build('completed', null);
+    await requestNightlies(report);
+    return report;
+  }
+
+  /** D-19: one tenant nightly request per tenant this run embedded (or the run's own tenant); never fails the run. */
+  async function requestNightlies(report: ReembedReport): Promise<void> {
+    const keys = new Set(Object.keys(report.tenants));
+    if (run.tenantKey) keys.add(run.tenantKey);
+    for (const key of [...keys].sort()) {
+      await requestTenantNightly(input.db, { tenantKey: key, reason: 'reembed_completed', refId: run.runId });
+    }
   }
 
   function progress(): void {
