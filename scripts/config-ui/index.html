@@ -74,6 +74,7 @@
     <script src="rag-panels/rag-ui.js"></script>
     <script src="rag-panels/languages.js"></script>
     <script src="rag-panels/ingest-impact.js"></script>
+    <script src="rag-panels/upload-approvals.js"></script>
     <script src="rag-panels/doc-types.js"></script>
     <script src="rag-panels/quarantine.js"></script>
     <script src="rag-panels/embedding-profiles.js"></script>
@@ -9585,6 +9586,19 @@
                                             <div data-rag-quarantine-list></div>
                                         </div>
                                     </section>
+
+                                    <!-- rag-upload-approvals:start -->
+                                    <section id="rag-administration-approvals" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-upload-approvals-title">
+                                        <div class="card-body">
+                                            <h3 id="rag-upload-approvals-title" class="text-lg font-semibold mb-2 text-balance rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" tabindex="-1" data-upload-approvals-title>Upload approvals</h3>
+                                            <p class="text-sm text-base-content/70 max-w-prose" data-upload-approvals-description>Uploads that wait for an admin before they can be searched. A waiting upload is fully processed and held out of answers. Follows the workspace chosen under Document Processing.</p>
+                                            <p class="text-xs text-base-content/70 mt-1 mb-4 break-words" data-upload-approvals-workspace></p>
+                                            <div data-upload-approvals-alert class="flex flex-col gap-2 mb-4 empty:mb-0"></div>
+                                            <div data-upload-approvals-content></div>
+                                            <div data-upload-approvals-status class="text-sm mt-4" role="status" aria-live="polite" tabindex="-1"></div>
+                                        </div>
+                                    </section>
+                                    <!-- rag-upload-approvals:end -->
 
                                     <section id="rag-administration-profiles" class="card bg-base-200 shadow-md">
                                         <div class="card-body">
