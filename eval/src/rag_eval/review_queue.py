@@ -8,8 +8,19 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from pydantic import ValidationError
-from rag_sidecar.contracts.golden import GoldenItem
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from rag_sidecar.contracts.cache import TENANT_KEY_PATTERN
+from rag_sidecar.contracts.feedback_loop import (
+    Channel,
+    ChunkId,
+    ExpertLabel,
+    LanguageCode,
+    LogOutcome,
+    MiningReason,
+    TenantKey,
+    UuidStr,
+)
+from rag_sidecar.contracts.golden import GoldenItem, GoldSpan, Split
 from rag_sidecar.contracts.languages import LANGUAGE_CODES
 from rag_sidecar.contracts.review import ReviewQueueItem
 
@@ -17,8 +28,15 @@ from rag_eval.draft import writer
 from rag_eval.draft.writer import PrivatePathError, assert_private_path
 from rag_eval.golden_io import load_golden, write_golden
 from rag_eval.matching import normalize_text
+from rag_eval.near_dup import matches as near_duplicate_matches
 from rag_eval.paths import resolve_cli_path
-from rag_eval.split import assign_split, freeze_splits, load_manifest
+from rag_eval.split import (
+    assign_split,
+    freeze_splits,
+    load_manifest,
+    plan_group_splits,
+    write_group_manifest,
+)
 
 EXIT_OK, EXIT_INPUT, EXIT_API, EXIT_PRIVATE = 0, 2, 4, 6
 SKIP_NOTICE = "::notice::langfuse keys not configured, skipping review queue"
@@ -29,6 +47,13 @@ DEFAULT_TOKEN_ENV = "RAG_ADMIN_BEARER"
 SOURCES = ("langfuse", "db", "both")
 _REASONS = ("sampled", "feedback_negative", "groundedness_flagged")
 PROMOTED_NAME = "promoted.jsonl"
+EXPORT_ROUTE = "/api/rag/admin/feedback-loop/export"
+MARK_ROUTE = "/api/rag/admin/feedback-loop/export/mark"
+DOMAIN_SUBDIR = "domain"
+DOMAIN_GOLDEN_NAME = "golden.jsonl"
+DOMAIN_MANIFEST_NAME = "split-manifest.json"
+TENANT_HASH_LENGTH = 16
+MARK_BATCH = 500
 LANGUAGES: tuple[str, ...] = LANGUAGE_CODES
 
 # Python twin of src/lib/rag/trace/mask.ts; keep the patterns and their order identical.
@@ -195,7 +220,7 @@ def _pull_db(from_time: str, to_time: str, base_url: str, token: str) -> list[Re
     try:
         with _http_client() as client:
             response = client.get(url, params={"from": from_time, "to": to_time}, headers={"Authorization": f"Bearer {token}"})
-    except Exception as exc:  # noqa: BLE001 - transport errors never carry the token
+    except Exception as exc:
         raise _DbSourceError(f"review-candidates request failed: {type(exc).__name__}") from None
     if response.status_code != 200:
         raise _DbSourceError(f"review-candidates answered HTTP {response.status_code}")
@@ -402,6 +427,258 @@ def promote(
     return EXIT_OK
 
 
+# --- promote-db (Phase 5.1.1 D-20, D-21, D-22, D-29) ---
+
+
+class _ExportEvidence(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    chunk_id: ChunkId
+    document_id: UuidStr
+    document_name: str = Field(min_length=1, max_length=512)
+    section: str = Field(max_length=512)
+    quote: str = Field(min_length=2, max_length=2000)
+    chunk_text: str | None
+    quote_verified: bool
+
+
+class _GoldenExportLine(BaseModel):
+    """Python twin of GoldenExportLineSchema in src/lib/rag/feedback-loop/exports.ts (plan 05.1.1-14)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    id: UuidStr
+    tenant_key: TenantKey
+    query_masked: str | None = None
+    query_language: LanguageCode | None = None
+    channel: Channel
+    outcome: LogOutcome
+    reasons: list[MiningReason] = Field(default_factory=list)
+    occurrences: int = Field(ge=1)
+    labelled_at: str | None = None
+    split: Split | None = None
+    split_group: str | None = Field(default=None, min_length=1, max_length=128)
+    mining_window: str | None = None
+    mined_at: str
+    label: ExpertLabel
+    evidence: list[_ExportEvidence] = Field(default_factory=list, max_length=20)
+
+
+class _ExportError(Exception):
+    pass
+
+
+def tenant_hash(tenant_key: str) -> str:
+    """Same hash as tenantHash() in src/lib/rag/feedback-loop/mining.ts."""
+    return hashlib.sha256(tenant_key.encode("utf-8")).hexdigest()[:TENANT_HASH_LENGTH]
+
+
+def _item_ref(review_item_id: str) -> str:
+    return hashlib.sha256(review_item_id.encode("utf-8")).hexdigest()[:12]
+
+
+def _read_token(token_env: str) -> str | None:
+    token = os.environ.get(token_env, "").strip()
+    return token or None
+
+
+def fetch_export(base_url: str, token: str, kind: str, tenant: str) -> list[str]:
+    """NDJSON lines of one export kind; raises _ExportError without the token or any body text."""
+    url = base_url.rstrip("/") + EXPORT_ROUTE
+    try:
+        with _http_client() as client:
+            response = client.get(url, params={"kind": kind, "tenant": tenant}, headers={"Authorization": f"Bearer {token}"})
+    except Exception as exc:
+        raise _ExportError(f"export request failed: {type(exc).__name__}") from None
+    if response.status_code != 200:
+        raise _ExportError(f"export answered HTTP {response.status_code}")
+    return [line for line in response.text.split("\n") if line.strip()]
+
+
+def _parse_golden_lines(lines: list[str], tenant: str) -> list[_GoldenExportLine]:
+    parsed: list[_GoldenExportLine] = []
+    for number, line in enumerate(lines, start=1):
+        try:
+            item = _GoldenExportLine.model_validate_json(line)
+        except ValidationError as exc:
+            raise _ExportError(f"export line {number} fails the golden export contract ({exc.error_count()} error(s))") from None
+        if item.tenant_key != tenant:
+            raise _ExportError(f"export line {number} belongs to another tenant")
+        parsed.append(item)
+    return parsed
+
+
+def _post_marks(base_url: str, token: str, tenant: str, entries: list[dict[str, str]]) -> None:
+    url = base_url.rstrip("/") + MARK_ROUTE
+    for start in range(0, len(entries), MARK_BATCH):
+        body = {"tenant": tenant, "items": entries[start : start + MARK_BATCH]}
+        try:
+            with _http_client() as client:
+                response = client.post(url, json=body, headers={"Authorization": f"Bearer {token}"})
+        except Exception as exc:
+            raise _ExportError(f"mark request failed: {type(exc).__name__}") from None
+        if response.status_code != 200:
+            raise _ExportError(f"mark answered HTTP {response.status_code}")
+
+
+def _golden_id(line: _GoldenExportLine) -> str:
+    return f"prod-{line.label.language}-{_item_ref(line.id)}"
+
+
+def _quote_problem(line: _GoldenExportLine) -> str | None:
+    for index, span in enumerate(line.evidence, start=1):
+        quote = normalize_text(span.quote)
+        if not span.quote_verified:
+            return f"evidence span {index}: the server could not verify the quote against the current chunk"
+        if span.chunk_text is None or not quote or quote not in normalize_text(span.chunk_text):
+            return f"evidence span {index}: the quote is no longer in its current chunk"
+    labelled = [(span.chunk_id, span.document_id, span.quote) for span in line.label.evidence]
+    exported = [(span.chunk_id, span.document_id, span.quote) for span in line.evidence]
+    if labelled != exported:
+        return "the exported evidence does not match the label's evidence"
+    return None
+
+
+def _build_item(line: _GoldenExportLine, question: str, tags: list[str]) -> GoldenItem:
+    label = line.label
+    return GoldenItem(
+        id=_golden_id(line),
+        question=question,
+        language=label.language,
+        category=label.category,
+        answerable=label.answerable,
+        expected_answer=label.expected_answer if label.answerable else None,
+        gold_evidence=[
+            GoldSpan(document=span.document_name, section=span.section, quote=span.quote, document_id=span.document_id.lower())
+            for span in label.evidence
+        ],
+        review_status="approved",
+        provenance="human" if label.paraphrased_question else "production",
+        split="dev",
+        tags=tags,
+    )
+
+
+def _candidate(line: _GoldenExportLine, accepted: list[GoldenItem]) -> tuple[GoldenItem | None, str | None]:
+    """The golden item for one export line, or the reason it is refused (ids and codes only, never text)."""
+    ref = _item_ref(line.id)
+    if "golden" not in line.label.triage or not line.label.pii_checked:
+        return None, f"review item {ref}: not triaged golden with pii_checked"
+    question = (line.label.paraphrased_question or line.query_masked or "").strip()
+    if not question:
+        return None, f"review item {ref}: no question to promote"
+    if mask_text(question) != question:
+        return None, f"review item {ref}: the question still changes under masking; paraphrase it before promotion"
+    problem = _quote_problem(line)
+    if problem:
+        return None, f"review item {ref}: {problem}"
+    found = near_duplicate_matches(question, [(item.id, item.question) for item in accepted])
+    confirmed = line.label.confirm_near_duplicate_of
+    tags: list[str] = []
+    if confirmed is not None:
+        if confirmed not in {item.id for item in accepted}:
+            return None, f"review item {ref}: confirm_near_duplicate_of names {confirmed}, which is not in the domain set"
+        tags.append(f"near_duplicate_confirmed:{confirmed}")
+    if found and confirmed not in {item_id for item_id, _ in found}:
+        names = ", ".join(item_id for item_id, _ in found)
+        return None, f"review item {ref}: near-duplicate of {names}; set confirm_near_duplicate_of to promote it"
+    try:
+        return _build_item(line, question, tags), None
+    except ValidationError as exc:
+        first = exc.errors()[0]
+        return None, f"review item {ref}: the label cannot form a golden item ({first.get('msg', 'invalid')})"
+
+
+def promote_db(
+    tenant: str,
+    *,
+    base_url: str,
+    token_env: str = DEFAULT_TOKEN_ENV,
+    out_dir: Path | str | None = None,
+) -> int:
+    """D-20: promote one tenant's labelled golden candidates; all or nothing, then mark them exported with their splits."""
+    if not re.fullmatch(TENANT_KEY_PATTERN, tenant):
+        print("error: --tenant must be s:default, u:<uuid> or o:<uuid>", file=sys.stderr)
+        return EXIT_INPUT
+    try:
+        directory = resolve_cli_path(out_dir) if out_dir is not None else writer.PRIVATE_DIR / DOMAIN_SUBDIR / tenant_hash(tenant)
+        golden_path = assert_private_path(Path(directory) / DOMAIN_GOLDEN_NAME)
+        manifest_path = assert_private_path(Path(directory) / DOMAIN_MANIFEST_NAME)
+    except PrivatePathError as exc:
+        print(str(exc), file=sys.stderr)
+        return EXIT_PRIVATE
+    token = _read_token(token_env)
+    if token is None:
+        print(f"error: set {token_env} to an admin access token for promote-db", file=sys.stderr)
+        return EXIT_INPUT
+
+    try:
+        lines = _parse_golden_lines(fetch_export(base_url, token, "golden", tenant), tenant)
+    except _ExportError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_API
+
+    try:
+        existing = load_golden(golden_path) if golden_path.exists() else []
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_INPUT
+    existing_ids = {item.id for item in existing}
+    accepted = list(existing)
+    new_items: list[GoldenItem] = []
+    review_of: dict[str, str] = {}
+    refusals: list[str] = []
+    for line in sorted(lines, key=lambda entry: entry.id):
+        golden_id = _golden_id(line)
+        review_of[golden_id] = line.id
+        if golden_id in existing_ids:
+            continue
+        item, reason = _candidate(line, accepted)
+        if reason is not None:
+            refusals.append(reason)
+            continue
+        assert item is not None
+        accepted.append(item)
+        new_items.append(item)
+    if refusals:
+        print(f"error: {len(refusals)} of {len(lines)} golden candidate(s) refused; nothing written:", file=sys.stderr)
+        for reason in refusals:
+            print(f"  {reason}", file=sys.stderr)
+        return EXIT_INPUT
+
+    try:
+        plan = plan_group_splits(accepted, manifest_path)
+    except ValueError as exc:
+        print(f"error: cannot freeze the domain set splits: {exc}", file=sys.stderr)
+        return EXIT_INPUT
+    by_id = {item.id: item for item in plan.items}
+    for line in lines:
+        frozen = by_id.get(_golden_id(line))
+        if frozen is not None and line.split is not None and line.split != frozen.split:
+            print(f"error: review item {_item_ref(line.id)} is frozen {line.split} on the server but {frozen.split} here", file=sys.stderr)
+            return EXIT_INPUT
+    if new_items:
+        write_golden(golden_path, plan.items)
+    if plan.changed and plan.items:
+        write_group_manifest(manifest_path, plan.assignments, plan.group_assignments)
+
+    marks = [
+        {"id": review_of[golden_id], "split": by_id[golden_id].split, "split_group": plan.item_groups[golden_id]}
+        for golden_id in sorted(review_of)
+    ]
+    if marks:
+        try:
+            _post_marks(base_url, token, tenant, marks)
+        except _ExportError as exc:
+            print(f"error: {exc}; the domain set is written, run promote-db again to mark the items", file=sys.stderr)
+            return EXIT_API
+    print(
+        f"[Review Queue] domain set {tenant_hash(tenant)}: {len(new_items)} promoted, "
+        f"{len(marks) - len(new_items)} already present, {len(marks)} marked exported"
+    )
+    return EXIT_OK
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="rag_eval.review_queue", description="myRAG production review queue")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -423,7 +700,22 @@ def main(argv: list[str] | None = None) -> int:
     promote_cmd.add_argument("--out", type=Path, help="golden JSONL inside eval/golden/private/")
     promote_cmd.add_argument("--language", choices=LANGUAGES)
 
+    db_cmd = commands.add_parser(
+        "promote-db",
+        help="promote expert-approved golden candidates of one tenant into its private domain set (docgroup split)",
+    )
+    db_cmd.add_argument("--tenant", required=True, help="tenant key (s:default, u:<uuid> or o:<uuid>)")
+    db_cmd.add_argument("--base-url", required=True, help="app origin, e.g. https://app.example.com")
+    db_cmd.add_argument(
+        "--token-env", default=DEFAULT_TOKEN_ENV, help=f"environment variable holding the admin access token (default {DEFAULT_TOKEN_ENV})"
+    )
+    db_cmd.add_argument(
+        "--out-dir", type=Path, help="domain set directory inside eval/golden/private/ (default: domain/<tenant_hash>/)"
+    )
+
     args = parser.parse_args(argv)
+    if args.command == "promote-db":
+        return promote_db(args.tenant, base_url=args.base_url, token_env=args.token_env, out_dir=args.out_dir)
     if args.command == "pull":
         return pull(
             args.from_time,
