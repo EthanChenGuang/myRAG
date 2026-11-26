@@ -949,3 +949,55 @@ The combined live SQL (the eighteen files verbatim in the order above, each afte
   - `tests/rag-db/phase32-migrations-apply.test.mts` (05.3-09 vs 03.3-03): kept the main check (below 0900 only 0811-0899 follow), which already admits every 09xx and 10xx file; the 05.3-09 helper it no longer needs was removed.
   - `tests/eval-env-pin.test.ts`, `tests/rag/config.test.ts`, `scripts/rag/env-manifest.json` (03.3-12, -16, -18): criss-cross merge bases only; the 03.3 branches add nothing to these files, so the train version was kept (checked: no test name or manifest entry only on the branch side).
 - Fix commit on the train: 17978092, `npm run typecheck:new` type fixes in `tests/rag-db/lexical-dictionary-e2e.test.mts` (04.2-22): the backend spy passes `scope` to `isReady`, and the seed rows type `kind` and `mode` as literals.
+
+## Train 30: 0969, 1006 and 0410 r14 (to apply after train 30 reaches `origin/main`)
+
+Branch `ci/merge-train-30`, built on `origin/main` 8329b80a (train 29, PR #114). Nothing below has been applied live yet. Production is multi-tenant.
+
+### Merged plans
+| Branch | Plan | Migration |
+|---|---|---|
+| `exec/05.2-28` | 05.2-28 Phase 5.2 fixture documents and corpus version fields | none |
+| `exec/05.2-08` (contains 05.2-04) | 05.2-08 no-answer sentinel; 05.2-04 typed registry texts | none |
+| `exec/05.2-05` | 05.2-05 answer language, registry texts, notice emitter | none |
+| `exec/05.2-27` | 05.2-27 eval contracts for answer rules | none |
+| `exec/05.2-12` | 05.2-12 credential and account-request handling in the output guard | none |
+| `exec/05.3-12` | 05.3-12 golden evidence index and the phase migration gate | 0969; 0410 entries (r14) |
+| `exec/05.3-17` | 05.3-17 stats and judge calibration | none |
+| `exec/05.3-18` | 05.3-18 judge calibration seed set | none |
+| `exec/05.3-19` | 05.3-19 answer check, judge calibration status and export routes | none |
+| `exec/05.3-25` | 05.3-25 tenant nightly requests on import and re-embed completion | none |
+| `exec/05.3-26` | 05.3-26 monitor rule engine, statistics, rule-kind registry | none |
+| `exec/05.3-13` | 05.3-13 absolute gate in `rag_eval.gate` | none |
+| `exec/05.3-24` | 05.3-24 refusal cells that stopped applying after a change | none |
+| `exec/05.3-31` | 05.3-31 query topic clusters | none |
+| `exec/04.2-37` | 04.2-37 Phase 4.2 fixture documents and golden items | none |
+| `exec/04.2-29` (contains 04.2-37) | 04.2-29 fixture feature seeding, eval-only duplicate threshold and MMR lambda | none |
+| `exec/03.3-17` (contains 03.3-15) | 03.3-15 attribute header storage; 03.3-17 attribute header in embedding and lexical text | 1006 |
+| `exec/05.3-21` (contains 05.3-04) | 05.3-21 shared setting-check core and the config-changes route | none |
+| `exec/06-44` | 06-44 Phase 6 final comparison | none |
+| `fix/phase6-gate` (contains 06-44) | Phase 6 gate fix: compound anchor fusion, static imports, conversational small_talk | none |
+
+### Migrations to apply live, in order
+| # | File | Notes |
+|---|---|---|
+| 1 | `0969_rag_golden_evidence_index.sql` | Needs `rag_assert_tenant_key` and `documents`. Table `rag_golden_evidence_index` (RLS on, no policy), three SECURITY INVOKER functions and two SECURITY DEFINER statement-level trigger functions on `public.documents` (transition tables, empty search_path); service_role only. Sorts before the live 0970/0971; depends on neither. **DROP:** `DROP TRIGGER IF EXISTS` twice on `public.documents` before re-creating them. |
+| 2 | `1006_attribute_header.sql` | Needs 1001 (`rag_attribute_header_templates`, header columns) and 1003 (`rag_attribute_definition_upsert`); a precheck stops with 55000 otherwise. Eight SECURITY INVOKER functions (template get/for/set, header writer, batched read, pending, stale) and the `document_chunks` stamp row trigger; service_role only. Sorts before the live 1007/1008; depends on neither. **DROP:** `DROP TRIGGER IF EXISTS rag_chunk_attribute_header_stamp ON public.document_chunks` before re-creating it. |
+| 3 | `0410_security_definer_rpc_grants.sql` (r14) | Changed since r13 by +8 lines only: guarded REVOKE/GRANT (service_role only) for the two 0969 trigger functions (`rag_golden_evidence_on_documents_update`, `rag_golden_evidence_on_documents_delete`). Grants only; run it last. |
+
+Numbers are unique across `supabase/migrations` (the repeated numbers are the existing common plus `.single-tenant`/`.multi-tenant` variants). 0969 is the free slot of the 5.3 block (0960-0979) and 1006 the free slot of the Phase 3.3 block; nothing was renumbered. No 4.2 (0850-0899) or 5.2 (0940-0959) migration in this train. Neither new file has a mode variant or is folded into the setup files. Both are idempotent (CREATE ... IF NOT EXISTS, CREATE OR REPLACE, DROP TRIGGER IF EXISTS before CREATE TRIGGER, guarded precheck). Sections with DROP statements, which need the owner present: 0969, 1006.
+
+The combined live SQL (the two files verbatim in the order above, each after a `-- ==== <file>` line, then the 0410 r14 delta as a `DO $r14$` block with only the added lines, then the list of DROP sections) was written to the orchestrator scratchpad as `train30-live.sql`.
+
+### Operator actions
+- Apply train 29 first, then the table above; apply 0969 and 1006 with the owner present (trigger re-creation on `documents` and `document_chunks`).
+- 03.3-15/03.3-17: after saving an attribute header template, the documents whose stamp is behind are listed by `rag_attribute_header_pending`; follow `.planning/phases/*/handoffs/03.3-17-operations.md`.
+- Every new Phase 3.3, 5.2 and 5.3 switch ships off.
+
+### Deviations
+- Fixture corpus and baselines: 05.2-28 (Phase 5.2 documents), 04.2-37/04.2-29 (Phase 4.2 documents and 36 golden items, merged with the 04.1.1-10 term items) and `fix/phase6-gate` (six small_talk items marked conversational) each re-recorded both fixture baselines on their own base. Golden items, split assignments and counts keep every side; both baselines were re-recorded once more on the merged tree (`rag_eval.baseline record --runs 3`, prechunked and ingest). Every item of each parent baseline (main, 05.2-28, 04.2-29, fix/phase6-gate) scores exactly as before (283 prechunked, 344 ingest items, 0 moved). The corpus hash (`eval/tests/test_corpus.py`, `tests/rag-db/fixture-phase42-corpus.test.mts`) and both dump digests were re-pinned.
+- Golden-set manifests (05.3-06): bumped with `rag_eval.golden_set bump` to version 2 (the 36 phase42 items added) and version 3 (the six conversational small_talk items changed), in both `golden.manifest.json` and `golden-ingest.manifest.json`; `test_golden_set` pins this history.
+- Fix: `rag_eval.golden_set.corpus_documents` kept only the last version of a fixture-meta lineage (the versions share a filename), so the stale scan reported en-general-007, it-general-007 and zh-general-008 as `quote_not_found`; it now joins every version (new test).
+- Merge conflicts (both intents kept): `src/lib/rag/index.ts` (05.3-24, 03.3-17, 05.3-21 exports, union); fixture tests (`test_fixture_coverage`, `test_draft_sources`, `test_fixture_pii`, `tests/eval-corpus.test.ts`, `ingest-mode-routing`, `relex`, `schema-migrations`: counts and expectations for all three fixture sets; `relex` 614 stale rows, schema-migrations expects lineage versions and fixture-meta versions); `eval/src/rag_eval/phase_compare.py` and `eval/tests/test_phase_compare.py` (06-44 equal_runs, slice_hold, cache-pair checks and verdicts kept next to main's `latency_budget` check and schema-3 arm comparison; a latency reference must be an earlier item run); `rag-sidecar` golden/report contracts (Phase 5.2 answer-rule categories and `false_answer_rate` kept next to `expected_behavior`/`conversational_rate`), schemas and `contracts.generated.ts` regenerated with `npm run gen:schemas` (no diff afterwards).
+- Test reconciliations: `test_golden_contract` admits `evidence_groups` and the `versions` filter on phase42 items; `test_metrics` 04.1.1-10 check restores the 04.2-29 resolution, also removes the 05.2-28 files, and lets the small_talk slice move; `test_corpus` drops the lone-`version` malformed case (valid since 05.2-28); `test_golden_phase42` admits four common words shared with the concurrent 05.2-28 documents.
+- Not green locally: `tests/rag/p52-corpus.test.ts` "every planned off_topic_context question lands on its adjacent section": with the Phase 4.2 duplicate copies in the corpus, three planned below-threshold questions ('Can warming mats crack?', '垫子会烫手吗？', '桨叶会生锈吗？') have an Italian dup-passage chunk with an empty section as nearest chunk, two of them above the fixture threshold (0.139 against 0.116). The questions are the 05.2-29 plan's future golden items; no current item moved. Left for the 05.2-28/29 owner (reword the questions or the generated copies).
