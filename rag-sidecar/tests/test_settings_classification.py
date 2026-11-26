@@ -33,6 +33,17 @@ D47 = {
 }
 
 
+# D-03: the six variables of Phase 3.3; RAG_DOC_ATTRIBUTES is query-side because the contract has no "no rebuild" mechanism.
+D03_PHASE33 = {
+    "RAG_SECTION_RULES": ("ingestion", "rechunk"),
+    "RAG_PAGE_BOILERPLATE": ("ingestion", "rechunk"),
+    "RAG_DOC_ATTRIBUTES": ("query", None),
+    "RAG_ATTRIBUTE_HEADER": ("ingestion", "rechunk"),
+    "RAG_ATTRIBUTE_FILTER": ("query", None),
+    "RAG_LEXICAL_QUANTITY": ("both", "relex"),
+}
+
+
 def _raw() -> dict:
     return json.loads(CLASSIFICATION_PATH.read_text(encoding="utf-8"))
 
@@ -61,6 +72,14 @@ def test_every_rag_variable_of_the_manifest_is_classified_and_nothing_else():
 @pytest.mark.parametrize("name", sorted(D47))
 def test_phase_32_variables_follow_d47(name):
     side, mechanism = D47[name]
+    entry = _entries()[name]
+    assert entry["side"] == side
+    assert entry.get("mechanism") == mechanism
+
+
+@pytest.mark.parametrize("name", sorted(D03_PHASE33))
+def test_phase_33_variables_follow_d03(name):
+    side, mechanism = D03_PHASE33[name]
     entry = _entries()[name]
     assert entry["side"] == side
     assert entry.get("mechanism") == mechanism

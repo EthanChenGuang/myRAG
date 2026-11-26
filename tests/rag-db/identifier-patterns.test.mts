@@ -171,7 +171,19 @@ for (const mode of MODES) {
       assert.equal(first.flags, 'u');
       assert.equal(first.enabled, true);
       assert.match(first.id, /^[0-9a-f-]{36}$/);
+      // created_at is clock_timestamp(); PGlite's clock can repeat within a millisecond, and a tie would leave the order to the
+      // random id. Each create starts once the clock has passed the newest stored created_at, so creation order is unambiguous.
+      const clockPast = async (): Promise<void> => {
+        for (;;) {
+          const result = await db.query<{ past: boolean }>(
+            'SELECT clock_timestamp() > (SELECT max(created_at) FROM rag_identifier_patterns) AS past',
+          );
+          if (result.rows[0]?.past) return;
+        }
+      };
+      await clockPast();
       const second = await create(db, tenantA, 'shape two', '[0-9]{2}/[0-9]{4}', 'iu', false);
+      await clockPast();
       const third = await create(db, tenantA, 'shape three');
       assert.deepEqual(
         (await list(db, tenantA)).map((row) => row.id),

@@ -1,0 +1,9 @@
+{
+  "id": "langchain.decompose",
+  "version": 1,
+  "source": "LangChain JS docs, query analysis decomposition technique (https://github.com/langchain-ai/langchainjs/blob/v0.1/docs/core_docs/docs/use_cases/query_analysis/techniques/decomposition.ipynb, published at js.langchain.com/docs/use_cases/query_analysis/techniques/decomposition), retrieved 2026-11-26",
+  "license": "MIT",
+  "attribution": "Copyright (c) LangChain, Inc. Prompt text reused under the MIT License. The two opening lines that describe the docs' example database are left out (domain neutrality); the decomposition instructions are verbatim.",
+  "template": "Perform query decomposition. Given a user question, break it down into distinct sub questions that\nyou need to answer in order to answer the original question.\n\nIf there are acronyms or words you are not familiar with, do not try to rephrase them.\nIf the query is already well formed, do not try to decompose it further.",
+  "placeholders": []
+}

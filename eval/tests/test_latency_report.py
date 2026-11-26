@@ -169,13 +169,18 @@ QUERY_CHAT_STAGES = {"condense": 600, "translate": 600, "expand": 700, "decompos
 QUERY_VOICE_STAGES = {"condense": 300}
 TERMINOLOGY_CHAT_STAGES = {"terminology": 5}
 TERMINOLOGY_VOICE_STAGES = {"terminology": 3}
+# 04.2-20 (D-48): max(5 ms, measured p95 of 50 runs over a 100-candidate mmr input, rounded up).
+DIVERSIFY_STAGES = {"diversify": 10}
+# 04.2-24: table_lookup stage budgets (report-only), chat and embed 60 ms, voice 40 ms.
+TABLE_LOOKUP_CHAT_STAGES = {"table_lookup": 60}
+TABLE_LOOKUP_VOICE_STAGES = {"table_lookup": 40}
 
 
 def test_committed_budgets_carry_the_v2_stage_p95_targets():
     profiles = load_latency_budgets(BUDGETS_PATH).profiles
-    assert profiles["chat"].stages == {**V2_CHAT_STAGES, **QUERY_CHAT_STAGES, **TERMINOLOGY_CHAT_STAGES}
-    assert profiles["embed"].stages == {**V2_CHAT_STAGES, **QUERY_CHAT_STAGES, **TERMINOLOGY_CHAT_STAGES}
-    assert profiles["voice"].stages == {**V2_VOICE_STAGES, **QUERY_VOICE_STAGES, **TERMINOLOGY_VOICE_STAGES}
+    assert profiles["chat"].stages == {**V2_CHAT_STAGES, **QUERY_CHAT_STAGES, **TERMINOLOGY_CHAT_STAGES, **DIVERSIFY_STAGES, **TABLE_LOOKUP_CHAT_STAGES}
+    assert profiles["embed"].stages == {**V2_CHAT_STAGES, **QUERY_CHAT_STAGES, **TERMINOLOGY_CHAT_STAGES, **DIVERSIFY_STAGES, **TABLE_LOOKUP_CHAT_STAGES}
+    assert profiles["voice"].stages == {**V2_VOICE_STAGES, **QUERY_VOICE_STAGES, **TERMINOLOGY_VOICE_STAGES, **DIVERSIFY_STAGES, **TABLE_LOOKUP_VOICE_STAGES}
     assert profiles["chat"].stages["rerank"] == 600 and profiles["voice"].stages["rerank"] == 250
 
 

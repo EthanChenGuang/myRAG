@@ -183,6 +183,10 @@ def _stats_lines(report: WeeklyReport) -> list[str]:
         )
         triage = ", ".join(f"{name} {count}" for name, count in tenant.triage.model_dump().items())
         lines.append(f"| {tenant.tenant_hash} | {kinds} | {triage} |")
+    if any(tenant.topk_redundancy_mean is not None for tenant in stats.tenants):
+        lines.extend(["", "| Tenant | Mean top-k redundancy |", "|---|---|"])
+        for tenant in stats.tenants:
+            lines.append(f"| {tenant.tenant_hash} | {_rate(tenant.topk_redundancy_mean)} |")
     return [*lines, ""]
 
 

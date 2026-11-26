@@ -33,6 +33,7 @@ export const OPTIONAL_STAGES = [
   'identifier_resolve',
   'identifier_guard',
   'terminology',
+  'attribute_resolve',
 ] as const;
 
 /** Phase 6 query-layer stages (D-05); translate is the shared Phase 4 slot and is not listed here. */
@@ -78,6 +79,7 @@ const V2_STANDARD: StageTimeouts = {
   diversify: 1000,
   identifier_resolve: 1000,
   identifier_guard: 1000,
+  attribute_resolve: 1000,
 };
 
 const V2_VOICE: StageTimeouts = {
@@ -93,6 +95,7 @@ const V2_VOICE: StageTimeouts = {
   diversify: 300,
   identifier_resolve: 500,
   identifier_guard: 300,
+  attribute_resolve: 500,
 };
 
 const V2_EVAL: StageTimeouts = {
@@ -216,6 +219,10 @@ export const RESULT_DIVERSITY_MODES = ['off', 'collapse', 'mmr'] as const;
 
 export type ResultDiversityMode = (typeof RESULT_DIVERSITY_MODES)[number];
 
+export const ATTRIBUTE_FILTER_MODES = ['off', 'hard', 'soft'] as const;
+
+export type AttributeFilterMode = (typeof ATTRIBUTE_FILTER_MODES)[number];
+
 export interface V2Config {
   lexicalSearch: boolean;
   reranker: RerankerSetting;
@@ -251,7 +258,10 @@ export interface V2Config {
   identifierIndex: boolean;
   /** Effective: false while RAG_IDENTIFIER_INDEX is off (D-04). */
   identifierFilter: boolean;
-  /** D-42: LEXICAL_VERSION plus 1 for the dictionary and 2 for Italian stemming. */
+  /** Effective: 'off' unless RAG_DOC_ATTRIBUTES=true and the effective pipeline is v2. */
+  attributeFilter: AttributeFilterMode;
+  lexicalQuantity: boolean;
+  /** D-42: LEXICAL_VERSION plus 1 for the dictionary, 2 for Italian stemming and 4 for quantity tokens. */
   lexicalVersion: number;
 }
 
@@ -326,6 +336,9 @@ export interface RagEnvInput {
   RAG_RESULT_DIVERSITY?: string;
   RAG_IDENTIFIER_INDEX?: string;
   RAG_IDENTIFIER_FILTER?: string;
+  RAG_ATTRIBUTE_FILTER?: string;
+  RAG_LEXICAL_QUANTITY?: string;
+  RAG_DOC_ATTRIBUTES?: string;
   RAG_TERMINOLOGY?: string;
   RAG_TERMINOLOGY_DENSE?: string;
   RAG_TERMINOLOGY_MINING?: string;
@@ -343,6 +356,8 @@ export interface RagEnvInput {
   RAG_DOMAIN_EMBEDDING_TIMEOUT_MS?: string;
   RAG_QUERY_LAYER?: string;
   RAG_QUERY_FRAMEWORK?: string;
+  /** Third-party LangChain/LangSmith tracing switches (research P-10); read only to keep the langchain framework off. */
+  [tracing: `LANGSMITH_${string}` | `LANGCHAIN_TRACING${string}`]: string | undefined;
   RAG_QUERY_LLM_MODEL?: string;
   RAG_QUERY_CONDENSE?: string;
   RAG_QUERY_EXPAND?: string;
@@ -389,6 +404,8 @@ export interface RagConfig {
   v2: V2Config;
   effectiveDates: boolean;
   scopeTags: boolean;
+  /** The raw RAG_DOC_ATTRIBUTES flag; v2.attributeFilter carries the effective filter. */
+  docAttributes: boolean;
   docTranslation: 'off' | 'on';
   bgeM3Serving: BgeM3Serving;
   /** Raw comma-separated domains; the output link filter parses it. */
@@ -792,6 +809,70 @@ function parseTranslateDisabledProfiles(raw: string | undefined, warnings: strin
   return out;
 }
 
+/** The packages the LangChain adapter imports; the framework falls back to llamaindex when any cannot be resolved (D-44). */
+const LANGCHAIN_PACKAGES = ['@langchain/core/retrievers', '@langchain/classic/retrievers/ensemble', '@langchain/openai'] as const;
+/** Any of these set to true turns LangChain's env-driven LangSmith tracer on, whatever callbacks are passed (research P-10). */
+const LANGCHAIN_TRACING_VARIABLE = /^(?:LANGSMITH_[A-Z0-9_]+|LANGCHAIN_TRACING[A-Z0-9_]*)$/u;
+
+let langchainResolverOverride: (() => boolean) | null = null;
+let langchainResolvable: boolean | null = null;
+
+/** Resolved once per process from the app root; the module loader is fetched at run time so no bundler follows it. */
+function defaultLangChainResolver(): boolean {
+  try {
+    const nodeModule = process.getBuiltinModule?.('node:module') as typeof import('node:module') | undefined;
+    if (!nodeModule) return true;
+    const resolve = nodeModule.createRequire(`${process.cwd()}/package.json`).resolve;
+    for (const name of LANGCHAIN_PACKAGES) resolve(name);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function langchainPackagesResolvable(): boolean {
+  if (langchainResolverOverride) return langchainResolverOverride();
+  langchainResolvable ??= defaultLangChainResolver();
+  return langchainResolvable;
+}
+
+/** Names of the tracing variables set to true; values are never read beyond that test and never logged. */
+function enabledTracingVariables(env: RagEnvInput): string[] {
+  return Object.entries(env)
+    .filter(([name, value]) => LANGCHAIN_TRACING_VARIABLE.test(name) && typeof value === 'string' && value.trim().toLowerCase() === 'true')
+    .map(([name]) => name)
+    .sort();
+}
+
+/**
+ * D-44 / research P-10: the langchain framework runs only when its packages resolve and no LangSmith tracing variable is
+ * on (the tracer would send queries and history to LangSmith); otherwise llamaindex, with one [Query Layer] warning.
+ */
+function checkLangChainFramework(env: RagEnvInput, warnings: string[]): QueryFramework {
+  const tracing = enabledTracingVariables(env);
+  if (tracing.length > 0) {
+    problem(
+      warnings,
+      `query-framework-tracing:${tracing.join(',')}`,
+      'RAG_QUERY_FRAMEWORK=langchain with LangSmith tracing on would send query text to LangSmith; using llamaindex',
+      { variables: tracing.join(',') },
+      '[Query Layer]',
+    );
+    return 'llamaindex';
+  }
+  if (!langchainPackagesResolvable()) {
+    problem(
+      warnings,
+      'query-framework-unresolvable',
+      'RAG_QUERY_FRAMEWORK=langchain but the @langchain packages cannot be resolved; using llamaindex',
+      { packages: '@langchain/core,@langchain/classic,@langchain/openai' },
+      '[Query Layer]',
+    );
+    return 'llamaindex';
+  }
+  return 'langchain';
+}
+
 function parseQueryLayer(env: RagEnvInput, pipeline: 'legacy' | 'v2', warnings: string[]): QueryLayerConfig {
   const requested = parsePrefixedBoolean('RAG_QUERY_LAYER', env.RAG_QUERY_LAYER, false, '[Query Layer]', warnings);
   if (requested && pipeline !== 'v2') {
@@ -799,7 +880,7 @@ function parseQueryLayer(env: RagEnvInput, pipeline: 'legacy' | 'v2', warnings: 
   }
   const frameworkRaw = (env.RAG_QUERY_FRAMEWORK ?? '').trim().toLowerCase();
   let framework: QueryFramework = 'llamaindex';
-  if (frameworkRaw === 'langchain') framework = 'langchain';
+  if (frameworkRaw === 'langchain') framework = checkLangChainFramework(env, warnings);
   else if (frameworkRaw !== '' && frameworkRaw !== 'llamaindex') {
     problem(warnings, `query-framework:${frameworkRaw}`, 'Unsupported RAG_QUERY_FRAMEWORK value, using llamaindex', { value: frameworkRaw.slice(0, 32) }, '[Query Layer]');
   }
@@ -902,11 +983,12 @@ function applyV2DisabledStages(v2: V2Config, disabled: Set<StageName>): void {
     disabled.add('identifier_guard');
   }
   if (!v2.terminology) disabled.add('terminology');
+  if (v2.attributeFilter === 'off') disabled.add('attribute_resolve');
 }
 
 /** D-42: the version stored with lexical text and refusal cells; LEXICAL_VERSION (2) itself never changes. */
-export function lexicalVersionFor(dictionary: boolean, stemIt: boolean): number {
-  return LEXICAL_VERSION + (dictionary ? 1 : 0) + (stemIt ? 2 : 0);
+export function lexicalVersionFor(dictionary: boolean, stemIt: boolean, quantity = false): number {
+  return LEXICAL_VERSION + (dictionary ? 1 : 0) + (stemIt ? 2 : 0) + (quantity ? 4 : 0);
 }
 
 export function effectiveLexicalVersion(config: Pick<RagConfig, 'v2'>): number {
@@ -923,6 +1005,7 @@ interface TuningSwitches {
   resultDiversity: ResultDiversityMode;
   identifierIndex: boolean;
   identifierFilter: boolean;
+  lexicalQuantity: boolean;
   lexicalVersion: number;
 }
 
@@ -937,6 +1020,7 @@ function parseTuningSwitches(env: RagEnvInput, lexicalSearch: boolean, warnings:
   const resultDiversity = parseNamedChoice('RAG_RESULT_DIVERSITY', env.RAG_RESULT_DIVERSITY, RESULT_DIVERSITY_MODES, 'off', warnings);
   const identifierIndex = parseBooleanSwitch(env.RAG_IDENTIFIER_INDEX, false, 'identifier-index', warnings);
   const filterRequested = parseBooleanSwitch(env.RAG_IDENTIFIER_FILTER, false, 'identifier-filter', warnings);
+  const lexicalQuantity = parseNamedFlag('RAG_LEXICAL_QUANTITY', env.RAG_LEXICAL_QUANTITY, warnings);
 
   if (filterRequested && !identifierIndex) {
     problem(warnings, 'identifier-filter-needs-index', 'RAG_IDENTIFIER_FILTER needs RAG_IDENTIFIER_INDEX=true; retrieval runs unfiltered', {
@@ -973,8 +1057,31 @@ function parseTuningSwitches(env: RagEnvInput, lexicalSearch: boolean, warnings:
     resultDiversity,
     identifierIndex,
     identifierFilter: filterRequested && identifierIndex,
-    lexicalVersion: lexicalVersionFor(lexicalDictionary, lexicalStemIt),
+    lexicalQuantity,
+    lexicalVersion: lexicalVersionFor(lexicalDictionary, lexicalStemIt, lexicalQuantity),
   };
+}
+
+/** D-03: the filter needs stored attributes and the v2 graph; each unmet need logs once and the filter is off. */
+function parseAttributeFilter(env: RagEnvInput, pipeline: 'legacy' | 'v2', docAttributes: boolean, warnings: string[]): AttributeFilterMode {
+  const requested = parseNamedChoice('RAG_ATTRIBUTE_FILTER', env.RAG_ATTRIBUTE_FILTER, ATTRIBUTE_FILTER_MODES, 'off', warnings);
+  if (requested === 'off') return 'off';
+  let met = true;
+  if (!docAttributes) {
+    problem(warnings, 'attribute-filter-needs-attributes', 'RAG_ATTRIBUTE_FILTER needs RAG_DOC_ATTRIBUTES=true; the filter stays off', {
+      RAG_ATTRIBUTE_FILTER: requested,
+      RAG_DOC_ATTRIBUTES: (env.RAG_DOC_ATTRIBUTES ?? '').trim() || 'false',
+    });
+    met = false;
+  }
+  if (pipeline !== 'v2') {
+    problem(warnings, 'attribute-filter-needs-v2', 'RAG_ATTRIBUTE_FILTER needs RAG_PIPELINE=v2; the filter stays off', {
+      RAG_ATTRIBUTE_FILTER: requested,
+      RAG_PIPELINE: pipeline,
+    });
+    met = false;
+  }
+  return met ? requested : 'off';
 }
 
 
@@ -1020,6 +1127,9 @@ function memoKey(env: RagEnvInput): string {
     env.RAG_RESULT_DIVERSITY ?? '',
     env.RAG_IDENTIFIER_INDEX ?? '',
     env.RAG_IDENTIFIER_FILTER ?? '',
+    env.RAG_ATTRIBUTE_FILTER ?? '',
+    env.RAG_LEXICAL_QUANTITY ?? '',
+    env.RAG_DOC_ATTRIBUTES ?? '',
     env.RAG_TERMINOLOGY ?? '',
     env.RAG_TERMINOLOGY_DENSE ?? '',
     env.RAG_TERMINOLOGY_MINING ?? '',
@@ -1037,6 +1147,7 @@ function memoKey(env: RagEnvInput): string {
     env.RAG_DOMAIN_EMBEDDING_TIMEOUT_MS ?? '',
     env.RAG_QUERY_LAYER ?? '',
     env.RAG_QUERY_FRAMEWORK ?? '',
+    enabledTracingVariables(env).join(','),
     env.RAG_QUERY_LLM_MODEL ?? '',
     env.RAG_QUERY_CONDENSE ?? '',
     env.RAG_QUERY_EXPAND ?? '',
@@ -1108,6 +1219,7 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
   const terminology = parseBooleanSwitch(env.RAG_TERMINOLOGY, false, 'terminology', warnings);
 
   const lexicalSearch = parseBooleanSwitch(env.RAG_LEXICAL_SEARCH, false, 'lexical-search', warnings);
+  const docAttributes = parseNamedFlag('RAG_DOC_ATTRIBUTES', env.RAG_DOC_ATTRIBUTES, warnings);
   const v2: V2Config = {
     lexicalSearch,
     reranker: parseReranker(env.RAG_RERANKER, warnings),
@@ -1133,6 +1245,7 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
     hasVoyageKey: (env.VOYAGE_API_KEY ?? '').trim() !== '',
     domainEmbeddings: parseDomainEmbeddings(env, warnings),
     ...parseTuningSwitches(env, lexicalSearch, warnings),
+    attributeFilter: parseAttributeFilter(env, pipeline, docAttributes, warnings),
   };
 
   const operatorDisabledStages: ReadonlySet<StageName> = new Set(disabledStages);
@@ -1152,6 +1265,7 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
     v2,
     effectiveDates: parseNamedFlag('RAG_EFFECTIVE_DATES', env.RAG_EFFECTIVE_DATES, warnings),
     scopeTags: parseNamedFlag('RAG_SCOPE_TAGS', env.RAG_SCOPE_TAGS, warnings),
+    docAttributes,
     docTranslation: parseNamedChoice('RAG_DOC_TRANSLATION', env.RAG_DOC_TRANSLATION, ['off', 'on'], 'off', warnings),
     bgeM3Serving: parseNamedChoice('RAG_BGE_M3_SERVING', env.RAG_BGE_M3_SERVING, ['hosted', 'sidecar'], 'hosted', warnings),
     outputLinkAllowlist: (env.RAG_OUTPUT_LINK_ALLOWLIST ?? '').trim(),
@@ -1203,5 +1317,12 @@ export function terminologyDenseFor(config: RagConfig, profile: Profile): boolea
 
 export function resetRagConfigForTests(): void {
   loggedProblems.clear();
+  memo.clear();
+}
+
+/** Test-only: replace the @langchain package check; null restores the shipped resolver. Clears the memo. */
+export function setLangChainResolverForTests(resolver: (() => boolean) | null): void {
+  langchainResolverOverride = resolver;
+  langchainResolvable = null;
   memo.clear();
 }

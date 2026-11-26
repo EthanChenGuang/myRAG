@@ -169,6 +169,7 @@ class TraceKeptChunk(_Contract):
     identifiers_norm: list[Annotated[str, Field(min_length=1, max_length=200)]] | None = Field(
         default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema
     )
+    variant_index: int | None = Field(default=None, ge=0, exclude_if=_omit_none, json_schema_extra=omit_none_schema)
 
 
 class TraceUsedDocument(_Contract):
@@ -270,6 +271,18 @@ class TraceIdentifier(_Contract):
     suggestions: list[Annotated[str, Field(min_length=1, max_length=200)]] = Field(default_factory=list, max_length=3)
 
 
+class TraceAttributeFilter(_Contract):
+    """Phase 3.3 D-29, D-30, F-25: attribute filter counts and flags; never an attribute key or value."""
+
+    mode: Literal["hard", "soft"]
+    explicit: bool
+    matched_attributes: int = Field(ge=0)
+    resolved_documents: int = Field(ge=0)
+    applied: bool
+    fallback: bool
+    too_broad: bool
+
+
 class RagTrace(_Contract):
     schema_version: Literal[1] = 1
     item_id: str | None = None
@@ -317,6 +330,9 @@ class RagTrace(_Contract):
         default=None, ge=0, le=1, exclude_if=_omit_none, json_schema_extra=omit_none_schema
     )
     identifier: TraceIdentifier | None = Field(
+        default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema
+    )
+    attribute_filter: TraceAttributeFilter | None = Field(
         default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema
     )
 

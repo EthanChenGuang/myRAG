@@ -83,6 +83,17 @@ test('retrieval-rpc: unrelated rpc names are not flagged under src', () => {
   assert.deepEqual(rulesFor({ 'src/lib/a.ts': "await db.rpc('increment_counter', {});\n" }), []);
 });
 
+test('finetune-export-rpc: rag_finetune_export_vectors is callable only under src/lib/rag', () => {
+  const code = "const r = await db.rpc('rag_finetune_export_vectors', { p_tenant_key: 's:default' });\n";
+  const multi = 'const r = await db.rpc(\n  `rag_finetune_export_vectors`,\n  args,\n);\n';
+  assert.deepEqual(rulesFor({ 'src/app/x/route.ts': code, 'scripts/x.mjs': multi }).sort(), [
+    'scripts/x.mjs:finetune-export-rpc',
+    'src/app/x/route.ts:finetune-export-rpc',
+  ]);
+  assert.deepEqual(rulesFor({ 'src/lib/rag/finetune/export-vectors.ts': code }), []);
+  assert.deepEqual(rulesFor({ 'src/lib/a.ts': "await db.rpc('rag_finetune_list_consent', {});\n" }), []);
+});
+
 test('retired-module: alias and relative imports fail', () => {
   const files = {
     'src/app/a.ts': "import { x } from '@/lib/enhanced-rag-retrieval';\n",
@@ -679,4 +690,44 @@ test('terminology-rpc: rag_term_* RPCs and table access fail under src outside s
   assert.deepEqual(rulesFor({ 'tests/rag-db/x.test.mts': rpc + table }), []);
   assert.deepEqual(rulesFor({ 'eval/harness/x.mts': rpc + table }), []);
   assert.deepEqual(rulesFor({ 'src/lib/c.ts': "// db.rpc('rag_term_effective')\nconst x = 'rag_term_entries';\n" }), []);
+});
+
+test('table-lookup-rpc: the deterministic lookup RPCs fail outside src/lib/rag and pass inside', () => {
+  assert.ok(RULES.some((r) => r.id === 'table-lookup-rpc'));
+  const names = ['rag_table_lookup', 'rag_identifier_resolve', 'rag_identifier_candidates', 'rag_document_versions', 'rag_dup_cluster_sources'];
+  for (const name of names) {
+    const call = `await db.rpc('${name}', { p_tenant_key: key });\n`;
+    assert.deepEqual(onlyRule({ 'src/app/api/x/route.ts': call }, 'table-lookup-rpc'), ['src/app/api/x/route.ts:table-lookup-rpc'], name);
+    assert.deepEqual(onlyRule({ 'scripts/rag/x.mjs': call.replace(/'/g, '`') }, 'table-lookup-rpc'), ['scripts/rag/x.mjs:table-lookup-rpc'], name);
+    assert.deepEqual(onlyRule({ 'src/lib/rag/retrieval/x.ts': call }, 'table-lookup-rpc'), [], name);
+  }
+  assert.deepEqual(onlyRule({ 'tests/rag-db/x.test.mts': "await db.rpc('rag_table_lookup', args);\n" }, 'table-lookup-rpc'), []);
+  assert.deepEqual(onlyRule({ 'src/lib/x.ts': "// db.rpc('rag_table_lookup')\nawait db.rpc('rag_table_lookups', args);\n" }, 'table-lookup-rpc'), []);
+});
+
+test('table-lookup-sql: SQL text, query builders and model imports fail in the lookup module only', () => {
+  assert.ok(RULES.some((r) => r.id === 'table-lookup-sql'));
+  const module = 'src/lib/rag/retrieval/table-lookup.ts';
+  const clean = "import { queryLexicalTokens } from '../lexical/tokenize';\nconst RPC = 'rag_table_lookup';\nawait client.rpc(RPC, { p_tokens: tokens });\n";
+  assert.deepEqual(onlyRule({ [module]: clean }, 'table-lookup-sql'), []);
+  const bad = [
+    "const q = 'SELECT * FROM rag_table_rows';\n",
+    'const q = `select id\n  from public.rag_table_rows where tenant_key = ${key}`;\n',
+    "const where = \"cell_norm && tokens WHERE x\";\n",
+    "await admin.from('rag_table_rows').select('*');\n",
+    'await db.query(text);\n',
+    "import { generateText } from 'ai';\n",
+    "import OpenAI from 'openai';\n",
+    "import { rewrite } from '@/lib/rag/query/llm';\n",
+    "import { answer } from '../generation/answer';\n",
+  ];
+  for (const text of bad) assert.deepEqual(onlyRule({ [module]: clean + text }, 'table-lookup-sql'), [`${module}:table-lookup-sql`], text);
+  assert.deepEqual(onlyRule({ 'src/lib/rag/retrieval/other.ts': clean + bad[0] }, 'table-lookup-sql'), []);
+  assert.deepEqual(onlyRule({ [module]: clean + "// SELECT * FROM t\n/* import x from 'ai' */\n" }, 'table-lookup-sql'), []);
+});
+
+test('the current tree passes the table lookup rules', () => {
+  const ids = new Set(checkBoundary().map((v) => v.rule));
+  assert.ok(!ids.has('table-lookup-rpc'));
+  assert.ok(!ids.has('table-lookup-sql'));
 });

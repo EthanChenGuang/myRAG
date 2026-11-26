@@ -4,6 +4,7 @@ import type { RetrievalLogEntry } from '@/lib/rag-eval/contracts.generated';
 import { getRagDeps } from '../deps';
 import { detectLanguageWithConfidence, type LanguageDetection } from '../lang/detect';
 import { maskPII } from '../trace/mask';
+import { topkRedundancy } from '../v2/diversify';
 import type { Candidate, LogChannel, LogContext, LogOutcomeValue, RagMode, RetrievalResult } from '../types';
 import type { RetrievalLogLevel } from './config';
 import { effectiveLogMode, type EffectiveLogModeDeps } from './settings';
@@ -144,6 +145,7 @@ export function buildRetrievalLogRow(input: BuildRetrievalLogRowInput): Retrieva
   const channel = logContext.channel && CHANNELS.includes(logContext.channel) ? logContext.channel : 'chat';
   const ragMode = logContext.ragMode && RAG_MODES.includes(logContext.ragMode) ? logContext.ragMode : null;
   const configHash = typeof result.retrievalConfigHash === 'string' && result.retrievalConfigHash.length <= 128 ? result.retrievalConfigHash : null;
+  const redundancy = topkRedundancy(result.kept);
 
   return {
     trace_id: result.traceId,
@@ -175,6 +177,7 @@ export function buildRetrievalLogRow(input: BuildRetrievalLogRowInput): Retrieva
     feedback_reasons: [],
     feedback_at: null,
     source_opened_count: 0,
+    ...(redundancy !== null ? { topk_redundancy: redundancy } : {}),
   };
 }
 

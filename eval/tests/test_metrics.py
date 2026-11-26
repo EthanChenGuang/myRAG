@@ -610,7 +610,11 @@ def test_table_split_is_gated_and_the_re_recorded_ingest_baseline_leaves_every_o
     previous = Baseline.model_validate_json(
         (root / "baselines" / "history" / "fixture-ingest-baseline.pre-03.2-32.json").read_text(encoding="utf-8")
     )
-    current = Baseline.model_validate_json((root / "baselines" / "fixture-ingest-baseline.json").read_text(encoding="utf-8"))
+    # The 03.2-67 record, kept in history when plan 04.1.1-10 added the term items; test_the_04_1_1_10_baseline_adds_only_term_items_and_moves_no_old_item
+    # compares it with the committed baseline.
+    current = Baseline.model_validate_json(
+        (root / "baselines" / "history" / "fixture-ingest-baseline.pre-04.1.1-10.json").read_text(encoding="utf-8")
+    )
     assert len(current.runs) >= 3
     assert {run.run_id for run in current.runs}.isdisjoint({run.run_id for run in previous.runs}), "not re-recorded"
     assert current.corpus_sha256 == previous.corpus_sha256
@@ -929,7 +933,11 @@ def test_the_03_2_67_baseline_moves_only_table_split_items_and_none_drops():
     previous = Baseline.model_validate_json(
         (root / "baselines" / "history" / "fixture-ingest-baseline.pre-03.2-67.json").read_text(encoding="utf-8")
     )
-    current = Baseline.model_validate_json((root / "baselines" / "fixture-ingest-baseline.json").read_text(encoding="utf-8"))
+    # The 03.2-67 record, kept in history when plan 04.1.1-10 added the term items; test_the_04_1_1_10_baseline_adds_only_term_items_and_moves_no_old_item
+    # compares it with the committed baseline.
+    current = Baseline.model_validate_json(
+        (root / "baselines" / "history" / "fixture-ingest-baseline.pre-04.1.1-10.json").read_text(encoding="utf-8")
+    )
     decision = json.loads((root / "decisions" / "03.2-table-header-default.json").read_text(encoding="utf-8"))
     assert decision["decision"] == "always"
     assert {run.run_id for run in current.runs}.isdisjoint({run.run_id for run in previous.runs}), "not re-recorded"
@@ -949,4 +957,60 @@ def test_the_03_2_67_baseline_moves_only_table_split_items_and_none_drops():
                     assert new <= old, (item_id, metric)
                 else:
                     assert new >= old, (item_id, metric)
+    assert all(stat.spread == 0.0 for stats in current.slices.values() for stat in stats.values())
+
+
+# The prechunked corpus hash before plan 04.1.1-10 added the three synthetic-terms files.
+PRE_TERMS_CORPUS_SHA256 = "2d1e198f73a6aba71d94eac166fc21f92853113267cfe00be6659e6c6010ca04"
+TERM_CORPUS_FILES = {"en/synthetic-terms.en.md", "it/synthetic-terms.it.md", "zh/synthetic-terms.zh.md"}
+
+
+def test_the_04_1_1_10_baseline_adds_only_term_items_and_moves_no_old_item(tmp_path):
+    """Plan 04.1.1-10: the ingest baseline re-recorded with the term fixtures; every earlier item and slice is unchanged."""
+    import shutil
+    from pathlib import Path
+
+    from rag_sidecar.contracts.baseline import Baseline
+
+    from rag_eval.corpus import corpus_sha256
+
+    root = Path(__file__).resolve().parents[1]
+    previous = Baseline.model_validate_json(
+        (root / "baselines" / "history" / "fixture-ingest-baseline.pre-04.1.1-10.json").read_text(encoding="utf-8")
+    )
+    current = Baseline.model_validate_json((root / "baselines" / "fixture-ingest-baseline.json").read_text(encoding="utf-8"))
+    assert len(current.runs) >= 3
+    assert {run.run_id for run in current.runs}.isdisjoint({run.run_id for run in previous.runs}), "not re-recorded"
+
+    corpus = root / "fixtures" / "corpus"
+    for relpath in TERM_CORPUS_FILES:
+        assert (corpus / relpath).is_file(), relpath
+    without_terms = tmp_path / "corpus"
+    shutil.copytree(corpus, without_terms)
+    for relpath in TERM_CORPUS_FILES:
+        (without_terms / relpath).unlink()
+    assert corpus_sha256(without_terms) == PRE_TERMS_CORPUS_SHA256
+    assert current.corpus_sha256 != previous.corpus_sha256 and current.golden_sha256 != previous.golden_sha256
+
+    assert previous.items is not None and current.items is not None
+    assert {item_id: current.items[item_id] for item_id in previous.items} == previous.items
+    golden = {
+        item.id: item
+        for item in (
+            GoldenItem.model_validate_json(line)
+            for line in (root / "fixtures" / "golden.jsonl").read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        )
+    }
+    added = set(current.items) - set(previous.items)
+    assert added and all("-term-" in item_id for item_id in added), sorted(added)
+    added_categories = {golden[item_id].category for item_id in added}
+    assert added_categories == {"colloquial", "no_answer"}
+    moved = {"overall"} | {name for name in previous.slices if name.startswith("language:")}
+    moved |= {f"category:{category}" for category in added_categories}
+    assert set(current.slices) == set(previous.slices)
+    for name, stats in previous.slices.items():
+        if name in moved:
+            continue
+        assert current.slices[name] == stats, name
     assert all(stat.spread == 0.0 for stats in current.slices.values() for stat in stats.values())

@@ -1,4 +1,7 @@
 import { rpcRows, type RpcError } from '../backend/supabase-rpc';
+import { loadRagConfig, type BgeM3Serving } from '../config';
+import { getRagDeps } from '../deps';
+import { embeddingProfileDeclaration } from './catalog';
 import { createReembedWriter } from '../ingest/writer';
 import type { EmbeddingProfile, StartupVerdict } from './active-profile';
 import {
@@ -25,6 +28,28 @@ export interface EmbeddingProfileStatus {
   active: EmbeddingProfile;
   profiles: EmbeddingProfile[];
   startup: StartupVerdict;
+}
+
+export interface EmbeddingProfileListFacts {
+  /** The languages the profile's model declares in the catalog; empty for a model outside the catalog (D-07). */
+  supportedLanguages: string[];
+  /** Only on a BGE-M3 profile: how it is served right now (D-26). */
+  servingMode?: BgeM3Serving;
+}
+
+/** What the admin list adds per profile (D-50): declared languages, and for BGE-M3 the configured serving mode. */
+export function embeddingProfileListFacts(profiles: readonly EmbeddingProfile[]): Map<string, EmbeddingProfileListFacts> {
+  let serving: BgeM3Serving | undefined;
+  const facts = new Map<string, EmbeddingProfileListFacts>();
+  for (const profile of profiles) {
+    const entry: EmbeddingProfileListFacts = { supportedLanguages: embeddingProfileDeclaration(profile).supportedLanguages };
+    if (profile.provider === 'bge-m3') {
+      serving ??= loadRagConfig(getRagDeps().ragEnv()).bgeM3Serving;
+      entry.servingMode = serving;
+    }
+    facts.set(profile.id, entry);
+  }
+  return facts;
 }
 
 /** How many current ready chunks hold a vector of a profile. The legacy column is counted by the gate itself, not here. */

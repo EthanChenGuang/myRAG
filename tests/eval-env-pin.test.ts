@@ -125,6 +125,22 @@ describe('pinned eval env', () => {
     expect(RUN_CONFIG_ENV_ALLOWLIST).not.toContain('RAG_EMBED_VERSION_SCOPE');
   });
 
+  test('pins the six Phase 3.3 templated-collection switches off (D-03)', () => {
+    const expected = {
+      RAG_SECTION_RULES: 'off',
+      RAG_PAGE_BOILERPLATE: 'off',
+      RAG_DOC_ATTRIBUTES: 'false',
+      RAG_ATTRIBUTE_HEADER: 'false',
+      RAG_ATTRIBUTE_FILTER: 'off',
+      RAG_LEXICAL_QUANTITY: 'false',
+    };
+    const pinned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'eval/config/rag-eval-env.json'), 'utf8'));
+    for (const [name, value] of Object.entries(expected)) {
+      expect(pinned, `${name} is pinned`).toHaveProperty(name);
+      expect(pinned[name], name).toBe(value);
+    }
+  });
+
   test('eval-env --check exits 0', () => {
     const result = spawnSync('npx', ['tsx', 'eval/harness/eval-env.mts', '--check'], { cwd: REPO_ROOT, encoding: 'utf8' });
     expect(result.status).toBe(0);

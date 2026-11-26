@@ -14,6 +14,7 @@ from rag_sidecar.contracts.ingest import DocType
 from .languages import Language
 from .omit import omit_none_schema
 from .scopes import ScopeFilter
+from .templated import AttributeFilter
 
 FilterLanguage = Language
 
@@ -310,6 +311,11 @@ class RetrievalFilters(_Contract):
         default=False,
         exclude_if=lambda value: value is False,
         json_schema_extra=_optional_boolean_schema,
+    )
+    attributes: AttributeFilter | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        json_schema_extra=_optional_object_schema,
     )
 
     @model_validator(mode="after")

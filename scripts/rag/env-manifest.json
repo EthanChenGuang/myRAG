@@ -1273,6 +1273,36 @@
       "status": "managed",
       "knownGaps": [],
       "description": "Host for the OpenAI embedding model: openai or openrouter (same model, same vectors; no Batch API through OpenRouter)"
+    },
+    {
+      "name": "RAG_SECTION_RULES",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_PAGE_BOILERPLATE",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_DOC_ATTRIBUTES",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_ATTRIBUTE_HEADER",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_ATTRIBUTE_FILTER",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_LEXICAL_QUANTITY",
+      "status": "managed",
+      "knownGaps": []
     }
   ]
 }

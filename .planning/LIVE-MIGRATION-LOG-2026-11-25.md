@@ -744,3 +744,90 @@ Branch `ci/merge-train-26`, built on `origin/ci/merge-train-25` 5bfb58f8 (train 
   - d7dfe29e: `rag-sidecar/tests/test_phase42_contracts.py` (04.2-01) asserted the committed latency budgets have no `ttft`/`pre_generation`; 04.2-10 committed them. The test keeps the optional-section check on the file without them and round-trips the committed file.
 - Merge of `origin/main` (PR #110, `RAG_OPENAI_EMBEDDINGS_VIA`) conflicted with 06.1-04 (`RAG_FINETUNE`, `RAG_FT_*`) in `scripts/config-server.js`, `scripts/init-env.js`, `src/lib/env.ts` and `scripts/config-ui/index.html`: all variables kept; in the Config UI the embedding-host select stays with the embedding fields above the new Fine-Tuned Slots section. `node scripts/check-config.mjs` passes (225 variables).
 - No migration renumbering.
+
+## Train 27: 0651-0653, 0811, 0861-0865, 1001-1003 and 0410 r12 (to apply after train 27 reaches `origin/main`)
+
+Branch `ci/merge-train-27`, built on `origin/ci/merge-train-26` 4220f0cd (train 26, PR #111), then `origin/main` d21a1a57 (PR #111 merged; same tree) merged in with `--no-ff`. Nothing below has been applied live yet. Production is multi-tenant.
+
+### Merged plans
+| Branch | Plan | Migration |
+|---|---|---|
+| `fix/claim-resume-stage-status` | requeued ingestion job claimable again (claim functions resume through `rag_ingest_job_status_for_stage`) | 0865_claim_resume_status_for_stage (renumbered from 0864 on the train) |
+| `fix/advance-callback-read-timeout` | sidecar advance/parse-external callbacks read with 55 s (app slice is 40 s, route maxDuration 60 s) | none |
+| `exec/03.2.1-01` | 03.2.1-01 BGE-M3 hosted profile, catalog language declarations | 0811_bge_m3_profile |
+| `exec/03.2.1-04` (contains 03.2.1-01) | 03.2.1-04 declared languages and BGE-M3 serving in the Embedding profiles panel | (0811) |
+| `exec/03.3-01` | 03.3-01 Phase 3.3 contracts | none |
+| `exec/03.3-02` | 03.3-02 six Phase 3.3 switches (all off), version bit, stage name, Config UI | none |
+| `exec/03.3-03` | 03.3-03 Phase 3.3 schema | 1001_phase33_schema |
+| `exec/03.3-04` | 03.3-04 tenant line pattern module | none |
+| `exec/03.3-05` | 03.3-05 page boilerplate cleaner (pure half) | none |
+| `exec/03.3-06` | 03.3-06 `rule_sections` chunker | none |
+| `exec/03.3-07` (contains 03.3-03) | 03.3-07 tenant rule functions | 1002_tenant_rule_functions |
+| `exec/03.3-08` (contains 03.3-03) | 03.3-08 attribute definition functions | 1003_attribute_definitions |
+| `exec/03.3-09` | 03.3-09 quantity tokens (pure half) | none |
+| `exec/04.1.1-10` | 04.1.1-10 synthetic term fixtures, term golden items, run configs | none |
+| `exec/04.1.1-11` (contains 04.1.1-10) | 04.1.1-11 terminology CSV import/export and expansion preview | none |
+| `exec/04.1.1-12` (contains 04.1.1-10/-11) | 04.1.1-12 terminology candidate mining and review | none |
+| `exec/04.2-20` | 04.2-20 result diversity (collapse / mmr), `topk_redundancy` | 0863_retrieval_log_redundancy |
+| `exec/04.2-21` (contains 04.2-20) | 04.2-21 duplicate-cluster sources (`alsoIn`) | 0862_dup_cluster_sources |
+| `exec/04.2-24` (contains 04.2-21) | 04.2-24 structured table lookup leg | 0861_table_lookup |
+| `exec/04.2-38` (contains 04.2-21) | 04.2-38 Phase 4.2 purge hooks | 0864_purge_hooks; 0410 entry (r12) |
+| `exec/06-30` | 06-30 RedisVL semantic-cache backend in the sidecar | none |
+| `exec/06-35` | 06-35 LangChain adapter part 1 | none |
+| `exec/06-37` (contains 06-35) | 06-37 LangChain adapter part 2, framework switch | none |
+| `exec/06.1-02` | 06.1-02 fine-tune contracts (JSON Schema, Zod) | none |
+| `exec/06.1-03` | 06.1-03 consent and model registry | 0651_finetune_registry; 0410 entries (r12) |
+| `exec/06.1-05` (contains 06.1-03) | 06.1-05 two fine-tune slots | 0652_finetune_slots; 0410 entries (r12) |
+| `exec/06.1-06`..`-09` (contain 06.1-03) | 06.1-06 export, -07 synthetic query generation, -08 filters, -09 mined pair import | none |
+| `exec/06.1-10` (contains 06.1-05) | 06.1-10 vector export | 0653_finetune_export; 0410 entry (r12) |
+| `exec/06.1-14` (contains 06.1-05) | 06.1-14 fine-tune slot provider and probe check | none |
+
+No branch was ejected.
+
+### Migrations to apply live, in order
+| # | File | Notes |
+|---|---|---|
+| 1 | `0651_finetune_registry.sql` | Needs `rag_assert_tenant_key` (live). Two server-only tables (RLS on, no policies) and six SECURITY DEFINER functions, empty search_path, service_role only. |
+| 2 | `0652_finetune_slots.sql` | Needs 0651 and 0440 (prechecks). Seeds slot profiles `ft-a-1024`/`ft-b-1024` (model `unbound`, available) with two partial HNSW indexes on `chunk_embeddings` (empty slots, cheap build), bind/clear/release functions and the slot guard and taint triggers. |
+| 3 | `0653_finetune_export.sql` | Needs 0651 and 0652. One SECURITY DEFINER export function, service_role only. |
+| 4 | `0811_bge_m3_profile.sql` | Needs 0801-0810 (live). Seeds `bge-m3-1024` (available, activates nothing) and its partial HNSW indexes on `chunk_embeddings` and `chunk_translation_embeddings`. No function or grant change. (03.2.1-02 owns the live push; it is included here so the train's live state matches the code.) |
+| 5 | `0861_table_lookup.sql` | Needs 0852 (`rag_table_rows`), 0854 and 0856 (train 26: `rag_version_history_ok`, `rag_version_period_ok`). SECURITY INVOKER, service_role only. |
+| 6 | `0862_dup_cluster_sources.sql` | Needs 0853 and 0857 (train 26). SECURITY INVOKER, service_role only. Apply with the 04.2-21 code (otherwise diversity-on requests degrade to `also_in_sources_unavailable`). |
+| 7 | `0863_retrieval_log_redundancy.sql` | Needs 0531 (live; skipped otherwise). Adds nullable `rag_retrieval_log.topk_redundancy`. Apply with the 04.2-20 code (the loop stats route selects the column). |
+| 8 | `0864_purge_hooks.sql` | Needs 0852, 0853 and 0857 (`rag_dup_clusters_recompute`). Redefines `rag_purge_hook_table_rows` (0852 body) and adds `rag_purge_hook_duplicate_clusters`. Re-run rule: after re-running 0852 or 0853, re-run 0864. |
+| 9 | `0865_claim_resume_status_for_stage.sql` | Needs 0810 (last definition of both claim functions; 0865 sorts after it). The eval database already holds the same body as `eval_0855_claim_resume_status_for_stage`. Re-run rule: re-running 0810 requires re-running 0865. |
+| 10 | `1001_phase33_schema.sql` | Needs 0854 (stops with 55000 otherwise), 0853 (tenant key guard) and 0320 (column guard). Five server-only tenant tables; nullable `attributes`/`attribute_header`/`attribute_header_stamp` columns on `documents` and `document_chunks` (GIN index on `document_chunks.attributes`: plain `CREATE INDEX`, apply in a quiet window). |
+| 11 | `1002_tenant_rule_functions.sql` | Needs 1001 and `rag_upload_approval_keys` (0814, live). SECURITY INVOKER, service_role only (own REVOKE/GRANT). |
+| 12 | `1003_attribute_definitions.sql` | Needs 1001 and `rag_upload_approval_keys`. SECURITY INVOKER, service_role only. 1002 and 1003 are independent of each other. |
+| 13 | `0410_security_definer_rpc_grants.sql` (r12) | Changed since r11 by +52 lines only: guarded REVOKE/GRANT (service_role only) for `rag_purge_hook_duplicate_clusters(text, uuid, uuid[])` (0864) and the twelve 0651-0653 functions (`rag_finetune_set_consent`, `_list_consent`, `_consent_for_export`, `_register_model`, `_list_models`, `_set_model_status`, `_bind_slot`, `_clear_slot`, `_release_rollback`, `_slot_guard`, `_version_taint_guard`, `_export_vectors`). Grants only; run it last. |
+
+Numbers are unique (0864 purge hooks vs. the claim fix: the claim fix was renamed to 0865 on the train, with its test `tests/rag-db/claim-resume-stage.test.mts`). On a fresh setup the files apply in number order; 0651-0653 sort before 0811 and depend on nothing above 0651, 1001-1003 sort after every 08xx file. None has a `.single-tenant`/`.multi-tenant` variant and none is folded into the setup files. Every new file is idempotent (CREATE OR REPLACE, IF NOT EXISTS, ON CONFLICT DO NOTHING).
+
+The combined live SQL (the twelve files verbatim in the order above, then the 0410 r12 delta as a `DO $r12$` block with only the added lines) was written to the orchestrator scratchpad as `train27-live.sql`.
+
+### Operator actions
+- Apply train 26 first (0855-0857, 0859, 0860, 0473, 0410 r11), then the table above.
+- Deploy the sidecar with this train (`fix/advance-callback-read-timeout`: the 55 s callback read timeout; `fix/claim-resume-stage-status` needs 0865 live).
+- 03.2.1-01/-02: 0811 above seeds `bge-m3-1024` only; a live hosted BGE-M3 call (D-54) remains an operator item. 03.2.1-04: `/gsd-ui-review` human check of the profile cards at 360px and 1024px in en, zh and it.
+- 04.1.1-12: schedule `npm run rag:terms:mine` (nightly, `--dry-run` first) where the service-role key is set; `RAG_TERMINOLOGY_MINING` stays off until PO-3.
+- 06-30: set `REDIS_URL` only on the sidecar and build with the `cache` extra when `RAG_SEMANTIC_CACHE=redisvl`; live Redis 8 check is 06-46.
+- 06-37: live LangChain/OpenRouter check and `next build` smoke in langchain mode (06-46).
+- 06.1-07/-08: set `prices.generator` and `prices.judge` in `eval/config/finetune.json` before a real run; live runs are 06.1-19. `RAG_FINETUNE` stays off.
+- Phase 3.3 switches all ship off; 1001-1003 are inert until plan 03.3-26.
+- 04.1.1-10/-11, 04.2-24, 06-35, 06.1-02/-06/-09/-14, 03.3-01/-02/-04/-05/-06/-09: none.
+
+### Deviations
+- Renumbering: `0864_claim_resume_status_for_stage.sql` (fix branch) collided with 04.2-38's `0864_purge_hooks.sql`; renamed to `0865_claim_resume_status_for_stage.sql` (header and `tests/rag-db/claim-resume-stage.test.mts` updated; 1721fd40).
+- Merge conflicts (both intents kept):
+  - `scripts/rag/env-manifest.json`, `tests/eval-env-pin.test.ts`, `tests/rag/config.test.ts` (03.3-02 vs `RAG_OPENAI_EMBEDDINGS_VIA`/`RAG_EMBED_VERSION_SCOPE`): all entries and test blocks kept.
+  - `src/lib/rag/lexical/tokenize.ts` (03.3-09 vs 04.2-19 identifiers): query additive tokens are dictionary, identifiers, quantity, then context additive.
+  - `src/lib/rag-eval/contracts.generated.ts`, `tests/fixtures/contracts/samples.json`, `rag-sidecar/schemas/*` (04.2-20, 06.1-02): regenerated with `npm run gen:schemas` (181 schemas); `samples.py` and `export_schemas.py` keep the Phase 3.3 and fine-tune contracts and `build_samples` registers both.
+  - `0410_security_definer_rpc_grants.sql` (06.1-03 vs 04.2-38): union of the guarded IF blocks.
+  - `tests/rag-db/embedding-profiles.test.mts` (06.1-05 vs 03.2.1-01): expected profiles and counts include `bge-m3-1024` and both fine-tune slots.
+  - `src/lib/rag/embeddings/{catalog,registry,types}.ts`, `tests/rag/embeddings/catalog.test.ts` (06.1-14 vs 03.2.1-01): providers `bge-m3`, `ft_slot_a`, `ft_slot_b`; slot entries take their languages from `config/rag/embedding-model-languages.json` like every catalog model (entries `ft_slot_a`/`ft_slot_b` `unbound`, zh/en/it added), since 03.2.1-01 requires one declaration per catalog model.
+  - `eval/baselines/fixture-ingest-baseline.json` (03.2-67 vs 04.1.1-10/-11): both baselines re-recorded on the merged train (`RAG_PIPELINE=legacy`, three runs); only `run_config_hash` and run metadata changed, no item differs (9e3e95af).
+- Fix commits on the train:
+  - 301eebbf: `npm run typecheck:new` type fixes in three tests (04.2-24 `table-lookup` passed `{ mode: 'all' }` instead of `'all'`; 04.2-21 `embed-version-scope` `unref` on the DOM timer type; 04.1.1-12 `terminology-mining-two-tenant` builder type).
+  - dd041937: `tests/rag-db/ingestion-ledger-claim.test.mts` stored stage `'chunking'` (a status name); with 0865 an unknown stage resumes at preflight. The test stores the real stage `'chunk'` and still checks resume at the stored stage.
+  - 4eccde6a: `tests/rag-db/fixture-phase42-corpus.test.mts` and `eval/tests/test_corpus.py` (04.2-28) pinned the corpus hash and dump digests before 04.1.1-10 added the synthetic-terms fixtures; updated to the merged corpus (hash `4d9bd021...`, the one both baselines record).
+- Merge of `origin/main` d21a1a57 (PR #111) is tree-identical to train 26.

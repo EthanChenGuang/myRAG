@@ -307,6 +307,10 @@
           "title": "Answerable",
           "type": "boolean"
         },
+        "attribute_filter_fallback": {
+          "title": "Attribute Filter Fallback",
+          "type": "boolean"
+        },
         "category": {
           "enum": [
             "multi_turn",
@@ -328,7 +332,8 @@
             "small_talk",
             "table_split",
             "duplicate_flood",
-            "identifier_near_miss"
+            "identifier_near_miss",
+            "templated_collection"
           ],
           "title": "Category",
           "type": "string"
@@ -418,6 +423,10 @@
           "default": null,
           "title": "Lexical Hit At 10"
         },
+        "named_document_hit": {
+          "title": "Named Document Hit",
+          "type": "boolean"
+        },
         "ndcg_at_context_k": {
           "maximum": 1,
           "minimum": 0,
@@ -438,6 +447,10 @@
           ],
           "title": "Provenance",
           "type": "string"
+        },
+        "quantity_matched": {
+          "title": "Quantity Matched",
+          "type": "boolean"
         },
         "question_kind": {
           "anyOf": [
@@ -505,6 +518,14 @@
           "minimum": 0,
           "title": "Topk Redundancy",
           "type": "number"
+        },
+        "variant_correct": {
+          "title": "Variant Correct",
+          "type": "boolean"
+        },
+        "wrong_document_at_1": {
+          "title": "Wrong Document At 1",
+          "type": "boolean"
         }
       },
       "required": [
@@ -1239,6 +1260,24 @@
     "RetrievalFilters": {
       "additionalProperties": false,
       "properties": {
+        "attributes": {
+          "maxProperties": 30,
+          "minProperties": 1,
+          "patternProperties": {
+            "^[a-z][a-z0-9_]{0,39}$": {
+              "items": {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 50,
+              "minItems": 1,
+              "type": "array"
+            }
+          },
+          "title": "Attributes",
+          "type": "object"
+        },
         "current_only": {
           "const": true,
           "default": true,
@@ -1662,6 +1701,12 @@
     "SliceMetrics": {
       "additionalProperties": false,
       "properties": {
+        "attribute_filter_fallback_rate": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "boilerplate_token_share": {
+          "$ref": "#/$defs/MetricValue"
+        },
         "correct_refusal_rate": {
           "$ref": "#/$defs/MetricValue"
         },
@@ -1694,10 +1739,16 @@
         "mrr": {
           "$ref": "#/$defs/MetricValue"
         },
+        "named_document_recall": {
+          "$ref": "#/$defs/MetricValue"
+        },
         "ndcg_at_context_k": {
           "$ref": "#/$defs/MetricValue"
         },
         "near_miss_leakage": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "quantity_match_rate": {
           "$ref": "#/$defs/MetricValue"
         },
         "recall_at_10": {
@@ -1707,6 +1758,12 @@
           "$ref": "#/$defs/MetricValue"
         },
         "topk_redundancy": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "variant_accuracy": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "wrong_document_at_1": {
           "$ref": "#/$defs/MetricValue"
         }
       },

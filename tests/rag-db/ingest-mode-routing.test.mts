@@ -301,13 +301,22 @@ describe('the re-recorded ingest baseline (T-03.1-104)', () => {
       .map((line) => JSON.parse(line) as { id: string; category: string })
       .filter((item) => item.category === 'cache_paraphrase' || item.category === 'cache_near_miss')
       .map((item) => item.id);
+    // Plan 04.1.1-10 added the colloquial and no_answer term items to golden.jsonl.
+    const termIds = fs
+      .readFileSync(path.join(ROOT, 'eval/fixtures/golden.jsonl'), 'utf8')
+      .split('\n')
+      .filter((line) => line.trim() !== '')
+      .map((line) => JSON.parse(line) as { id: string })
+      .filter((item) => /^[a-z]+-(colloquial|no_answer)-term-\d{3}$/.test(item.id))
+      .map((item) => item.id);
     const added = Object.keys(current.items).filter((id) => !(id in previous.items)).sort();
     assert.ok(parseIds.length >= 30);
     assert.equal(phase6Ids.length, 38);
     assert.equal(cachePairIds.length, 27);
     assert.equal(injectionIds.length, 18);
     assert.equal(tableSplitIds.length, 15);
-    assert.deepEqual(added, [...parseIds, ...injectionIds, ...tableSplitIds, ...phase6Ids, ...cachePairIds].sort());
+    assert.equal(termIds.length, 18);
+    assert.deepEqual(added, [...parseIds, ...injectionIds, ...tableSplitIds, ...phase6Ids, ...cachePairIds, ...termIds].sort());
     assert.notEqual(current.corpus_sha256, previous.corpus_sha256, 'the parse fixtures are part of the ingest corpus hash');
   });
 });
