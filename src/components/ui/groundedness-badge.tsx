@@ -23,6 +23,12 @@ const STATE_STYLES: Record<GroundednessBadgeState, string> = {
   not_checked: 'bg-gray-100 text-gray-700 ring-gray-200 dark:bg-[#2A2A2A] dark:text-gray-300 dark:ring-[#3A3A3A]',
 };
 
+/** The tooltip content box shared by the badge and the sentence marks, so the tooltips of one answer look the same. */
+export const ANSWER_TOOLTIP_CONTENT_CLASSES = cn(
+  'z-[99999] max-w-64 rounded-md px-2.5 py-1.5 text-xs leading-snug text-pretty shadow-md',
+  'bg-gray-900 text-white dark:bg-[#1A1A1A] dark:text-[#E6E6E6] dark:ring-1 dark:ring-[#3A3A3A]',
+);
+
 const STATE_ICONS = {
   verified: ShieldCheck,
   possibly_unreliable: AlertTriangle,
@@ -77,10 +83,7 @@ export function GroundednessBadge({ answerId, fallback, className }: Groundednes
             side="bottom"
             sideOffset={6}
             collisionPadding={12}
-            className={cn(
-              'z-[99999] max-w-64 rounded-md px-2.5 py-1.5 text-xs leading-snug text-pretty shadow-md',
-              'bg-gray-900 text-white dark:bg-[#1A1A1A] dark:text-[#E6E6E6] dark:ring-1 dark:ring-[#3A3A3A]',
-            )}
+            className={ANSWER_TOOLTIP_CONTENT_CLASSES}
           >
             {tooltip}
           </TooltipPrimitive.Content>
