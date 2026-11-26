@@ -78,7 +78,7 @@ export async function guardAppEnvWrite(input: GuardAppEnvWriteInput): Promise<Gu
   try {
     before = readEnvFile();
   } catch {
-    // The env writer fails on the same file; off stays a pass-through, warn and enforce fail closed.
+    // The env writer fails on the same file; off and warn pass through, enforce fails closed.
     if (mode === 'off') return { ok: true, ragGate: null };
     console.error('[Config Gate] env file unreadable', { route: input.route, mode });
     return mode === 'enforce' ? required() : { ok: true, ragGate: null };
