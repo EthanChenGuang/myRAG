@@ -477,7 +477,7 @@ describe('Config UI upload queue: tags and "Replaces…" (UI-SPEC 6.11)', () => 
     expect(on).toContain('data-queue-extras="7"');
   });
 
-  function queuePage(picker: Json, replies: Parameters<typeof loadScopeTagsPage>[0]['replies'] = {}) {
+  function queuePage(picker: Json, replies: NonNullable<Parameters<typeof loadScopeTagsPage>[0]>['replies'] = {}) {
     const page = loadScopeTagsPage({ queueOnly: true, replies });
     const container = page.doc.createElement('div');
     container.id = 'queue-items';
