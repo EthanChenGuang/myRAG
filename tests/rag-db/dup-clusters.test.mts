@@ -449,7 +449,6 @@ describe('duplicate clusters through ingestion, supersession and deletes (D-19, 
   let ragDeps: typeof import('@/lib/rag/deps');
   let rag: typeof import('@/lib/rag');
   let scopeModule: typeof import('@/lib/rag/tenant/scope');
-  let supabaseModule: typeof import('@/lib/supabase');
   let switchValue: 'true' | 'false' = 'true';
   const db = lifecycleFixture.db;
   const sources = new Map<string, string>();
@@ -488,7 +487,6 @@ describe('duplicate clusters through ingestion, supersession and deletes (D-19, 
     ragDeps = await import('@/lib/rag/deps');
     rag = await import('@/lib/rag');
     scopeModule = await import('@/lib/rag/tenant/scope');
-    supabaseModule = await import('@/lib/supabase');
     objectStoreModule.setObjectStoreForTests(fakeStoreModule.createFakeObjectStore());
     ingestConfig.resetIngestConfigForTests();
     ingestDeps.setIngestDepsForTests({ ingestEnv: () => ({ RAG_INJECTION_SCAN: 'quarantine' }) });
@@ -545,11 +543,9 @@ describe('duplicate clusters through ingestion, supersession and deletes (D-19, 
   test('a hard delete as the documents route does it, then the tenant recompute, updates the cluster', async () => {
     switchValue = 'true';
     const id = sources.get('dup/0/1') as string;
-    const admin = supabaseModule.getSupabaseAdmin() as unknown as {
-      from: (table: string) => { delete: () => { in: (c: string, v: string[]) => Promise<{ error: unknown }>; eq: (c: string, v: string) => { eq: (c: string, v: string) => Promise<{ error: unknown }> } } };
-    };
-    assert.equal((await admin.from('document_chunks').delete().in('document_id', [id])).error, null);
-    assert.equal((await admin.from('documents').delete().eq('lineage_id', id).eq('tenant_key', KEY_A)).error, null);
+    // The route's two statements (the fake edge serves no REST DELETE): chunks of every version, then the lineage's documents.
+    await db.query('DELETE FROM document_chunks WHERE document_id = ANY($1::uuid[])', [[id]]);
+    await db.query('DELETE FROM documents WHERE lineage_id = $1 AND tenant_key = $2', [id, KEY_A]);
     const outcome = await rag.recomputeDirtyDupClusters(scopeA(), { signal: new AbortController().signal });
     assert.equal(outcome.ok, true);
     const [only] = await clustersOf(KEY_A);
