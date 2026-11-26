@@ -233,3 +233,142 @@ describe('npm run rag:monitor -- drift-inputs (D-43)', () => {
     expect(capture.out.join('\n')).toContain('RAG_REPRESENTATIVE_SAMPLE');
   });
 });
+
+const ORG = '00000000-0000-4000-8000-0000000033b0';
+
+const REPORT = {
+  week: '2026-W47',
+  state: 'ok',
+  divergence: 0.24,
+  null_p95: 0.07,
+  limits: { warn: 0.1, alert: 0.2, gap: 0.15 },
+  clusters: [
+    { id: 'c-07', production_share: 0.22, test_share: 0.04, test_items: 3, state: 'ok' },
+    { id: 'c-03', production_share: 0.78, test_share: 0.96, test_items: 64, state: 'ok' },
+  ],
+};
+
+type WorkspaceGuard =
+  | { ok: true; userId: string; via: 'deployment_admin' | 'organization_admin'; tenantKey: string; organizationId: string | null }
+  | { ok: false; status: number; reason: string };
+
+const workspace = { guard: { ok: true, userId: ADMIN_ID, via: 'organization_admin', tenantKey: TENANT, organizationId: ORG } as WorkspaceGuard, calls: 0 };
+
+function driftStore(admin: FakeAdmin): FakeAdmin {
+  admin.tables.rag_drift_weekly = admin.tables.rag_drift_weekly ?? [];
+  admin.tables.rag_monitor_alerts = admin.tables.rag_monitor_alerts ?? [];
+  admin.rpcs.rag_drift_weekly_upsert = (args) => {
+    const rows = admin.tables.rag_drift_weekly as Array<Record<string, unknown>>;
+    const report = args.p_report as Record<string, unknown>;
+    const existing = rows.find((row) => row.tenant_key === args.p_tenant_key && row.week === args.p_week);
+    const values = { divergence: report.divergence, null_p95: report.null_p95 ?? null, state: report.state, report };
+    if (existing) Object.assign(existing, values);
+    else rows.push({ tenant_key: args.p_tenant_key, week: args.p_week, ...values });
+    return { data: !existing, error: null };
+  };
+  admin.rpcs.rag_monitor_alert_upsert = (args) => {
+    const rows = admin.tables.rag_monitor_alerts as Array<Record<string, unknown>>;
+    const alert = args.p_alert as Record<string, unknown>;
+    const existing = rows.find((row) => row.tenant_key === alert.tenant_key && row.dedup_key === alert.dedup_key);
+    if (existing) return { data: existing.id, error: null };
+    rows.push({ ...alert, id: `alert-${rows.length + 1}`, status: 'open' });
+    return { data: `alert-${rows.length}`, error: null };
+  };
+  return admin;
+}
+
+async function loadDriftRoute() {
+  mockCommon();
+  vi.doMock('@/lib/admin-route-auth', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('@/lib/admin-route-auth')>()),
+    checkAdmin: async () => {
+      state.guardCalls += 1;
+      return state.guard;
+    },
+    checkAdminOrOrgAdmin: async () => {
+      workspace.calls += 1;
+      return workspace.guard;
+    },
+  }));
+  return import('@/app/api/rag/admin/monitor/drift/route');
+}
+
+const postDrift = (body: unknown) =>
+  new Request('http://localhost/api/rag/admin/monitor/drift', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', authorization: 'Bearer test-token' },
+    body: JSON.stringify(body),
+  });
+
+const getDrift = (query = `?organizationId=${ORG}`) => new Request(`http://localhost/api/rag/admin/monitor/drift${query}`, { method: 'GET' });
+
+describe('GET|POST /api/rag/admin/monitor/drift (D-44, D-45, UI-SPEC 8.1)', () => {
+  beforeEach(() => {
+    state.admin = driftStore(seed());
+    workspace.guard = { ok: true, userId: ADMIN_ID, via: 'organization_admin', tenantKey: TENANT, organizationId: ORG };
+    workspace.calls = 0;
+  });
+
+  it('answers 404 on both methods while RAG_REPRESENTATIVE_SAMPLE is off, even with RAG_MONITOR on', async () => {
+    vi.stubEnv('RAG_MONITOR', 'true');
+    const route = await loadDriftRoute();
+    expect((await route.POST(postDrift({ tenant: TENANT, report: REPORT }))).status).toBe(404);
+    expect((await route.GET(getDrift())).status).toBe(404);
+    expect(state.guardCalls + workspace.calls).toBe(0);
+    expect(state.admin?.rpcCalls).toEqual([]);
+  });
+
+  it('POST stores the recomputed report and raises the alert only with RAG_MONITOR on', async () => {
+    vi.stubEnv('RAG_REPRESENTATIVE_SAMPLE', 'true');
+    let route = await loadDriftRoute();
+    let response = await route.POST(postDrift({ tenant: TENANT, report: REPORT }));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ success: true, week: '2026-W47', state: 'alert', inserted: true, alerts: { opened: 0, updated: 0 } });
+    expect(state.admin?.tables.rag_monitor_alerts).toEqual([]);
+
+    vi.stubEnv('RAG_MONITOR', 'true');
+    route = await loadDriftRoute();
+    response = await route.POST(postDrift({ tenant: TENANT, report: REPORT }));
+    expect(await response.json()).toMatchObject({ success: true, state: 'alert', inserted: false, alerts: { opened: 1 } });
+    const alerts = state.admin?.tables.rag_monitor_alerts as Array<Record<string, unknown>>;
+    expect(alerts.map((a) => [a.rule, a.cluster_ids])).toEqual([['test_set_not_representative', ['c-07']]]);
+  });
+
+  it('POST answers 403 for a tenant the admin does not administer and 400 with the shared shape for an invalid report', async () => {
+    vi.stubEnv('RAG_REPRESENTATIVE_SAMPLE', 'true');
+    const route = await loadDriftRoute();
+    expect((await route.POST(postDrift({ tenant: OTHER_TENANT, report: REPORT }))).status).toBe(403);
+    for (const body of [{ tenant: TENANT, report: { ...REPORT, divergence: 2 } }, { tenant: TENANT, report: REPORT, extra: 1 }, { tenant: TENANT }]) {
+      const response = await route.POST(postDrift(body));
+      expect(response.status).toBe(400);
+      const json = await response.json();
+      expect(json).toMatchObject({ success: false, error: 'Invalid request data' });
+      expect(json.details.length).toBeGreaterThan(0);
+    }
+    expect(state.admin?.rpcCalls.map((call) => call.name)).not.toContain('rag_drift_weekly_upsert');
+  });
+
+  it('GET returns the coverage view of the workspace the guard resolved', async () => {
+    vi.stubEnv('RAG_REPRESENTATIVE_SAMPLE', 'true');
+    const route = await loadDriftRoute();
+    await route.POST(postDrift({ tenant: TENANT, report: REPORT }));
+    const response = await route.GET(getDrift(`?organizationId=${ORG}&tenantKey=${encodeURIComponent(OTHER_TENANT)}`));
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    const body = await response.json();
+    expect(body).toMatchObject({ success: true, week: '2026-W47', state: 'alert', limits: { warn: 0.1, alert: 0.2, gap: 0.15 } });
+    expect(body.trend).toEqual([{ week: '2026-W47', divergence: 0.24, state: 'alert' }]);
+    expect(body.clusters.map((c: { id: string; state: string }) => [c.id, c.state])).toEqual([
+      ['c-03', 'off'],
+      ['c-07', 'under'],
+    ]);
+  });
+
+  it("GET passes the workspace guard's denial through", async () => {
+    vi.stubEnv('RAG_REPRESENTATIVE_SAMPLE', 'true');
+    workspace.guard = { ok: false, status: 403, reason: 'not_admin' };
+    const route = await loadDriftRoute();
+    expect((await route.GET(getDrift())).status).toBe(403);
+    expect(state.admin?.calls).toEqual([]);
+  });
+});
