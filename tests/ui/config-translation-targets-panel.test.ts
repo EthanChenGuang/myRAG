@@ -286,7 +286,9 @@ describe('Translation targets panel', () => {
     expect(text).toContain('Chunk text is sent to the translation model set under Settings.');
     expect(text).not.toContain(MODEL);
     expect(text).not.toContain(TRANSLATED);
-    expect(text).not.toContain('o:' + ORG);
+    const outsideCommands = page.root.querySelectorAll('*').filter((el) => el.tagName !== 'code' && el.childNodes.some((n) => n.nodeType === 3 && String((n as unknown as { data: string }).data).includes('o:' + ORG)));
+    expect(outsideCommands).toHaveLength(0);
+    for (const code of page.root.querySelectorAll('code').filter((c) => c.textContent.includes('o:' + ORG))) expect(code.textContent.startsWith('npm run rag:translate')).toBe(true);
   });
 
   it('Save targets is disabled with its reason on screen until something changed', async () => {

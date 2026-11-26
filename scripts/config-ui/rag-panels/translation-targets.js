@@ -32,6 +32,30 @@ const TRANSLATION_TARGETS_LABELS = {
     'action.saveTargets': 'Save targets',
     'action.saving': 'Saving targets…',
     'error.targetNotSupported': 'Not saved. {language} is not one of the supported languages.',
+    'targets.monolingual': 'This deployment supports one language, so there is nothing to translate into.',
+    'targets.stale': 'The embedding profile changed, so stored translations are not used for search. Run {command} to use them again.',
+    'coverage.staleBadge': 'Not used for search',
+    'coverage.gaps': 'Some chunks were left untranslated because a name, number or code would not have stayed exactly as written. They are still found in their original language.',
+    'backfill.help': 'Saving translates nothing by itself. New documents are translated after they are published; for existing ones run:',
+    'backfill.dryRun': 'Report first, nothing is translated:',
+    'backfill.run': 'Then translate, stopping at the budget you set in USD:',
+    'command.dryRun': 'report',
+    'command.run': 'translate',
+    'command.reembed': 'reuse stored translations',
+    'action.copy': 'Copy command',
+    'action.copyAria': 'Copy command: {name}',
+    'copy.done': 'Command copied.',
+    'copy.failed': 'The command could not be copied. Select it and copy it by hand.',
+    'settings.title': 'Settings',
+    'settings.affectsStored': 'Changing this affects documents already stored; saving shows how many.',
+    'RAG_DOC_TRANSLATION.label': 'Document translation',
+    'RAG_DOC_TRANSLATION.help': 'Allows workspaces to store search-only translations of their chunks.',
+    'RAG_DOC_TRANSLATION_MODEL.label': 'Translation model',
+    'RAG_DOC_TRANSLATION_MODEL.help': 'Empty uses the query model.',
+    'onOff.opt.off': 'Off',
+    'onOff.opt.on': 'On',
+    'warn.needsLanguages': 'This setting has no effect until the supported languages are chosen in the Languages panel.',
+    'warn.monolingualTranslation': 'One language is supported, so document translation stays off.',
   },
   zh: {
     'panel.title': '翻译目标语言',
@@ -58,6 +82,30 @@ const TRANSLATION_TARGETS_LABELS = {
     'action.saveTargets': '保存目标语言',
     'action.saving': '正在保存目标语言…',
     'error.targetNotSupported': '未保存。{language}不在支持的语言之内。',
+    'targets.monolingual': '此部署只支持一种语言，因此没有可翻译的目标语言。',
+    'targets.stale': 'Embedding 配置已更换，已保存的译文暂不用于检索。运行 {command} 后可恢复使用。',
+    'coverage.staleBadge': '暂不用于检索',
+    'coverage.gaps': '部分切块未翻译，因为其中的名称、数字或代码无法保持原样。这些切块仍可按原文语言被检索到。',
+    'backfill.help': '保存本身不会触发翻译。新文档在发布后翻译；已有文档请运行：',
+    'backfill.dryRun': '先查看报告，不会翻译任何内容：',
+    'backfill.run': '然后执行翻译，达到你设定的美元预算时停止：',
+    'command.dryRun': '报告',
+    'command.run': '翻译',
+    'command.reembed': '恢复使用已保存的译文',
+    'action.copy': '复制命令',
+    'action.copyAria': '复制命令：{name}',
+    'copy.done': '命令已复制。',
+    'copy.failed': '无法复制命令。请手动选择并复制。',
+    'settings.title': '设置',
+    'settings.affectsStored': '更改此项会影响已入库的文档；保存时会显示数量。',
+    'RAG_DOC_TRANSLATION.label': '文档翻译',
+    'RAG_DOC_TRANSLATION.help': '允许各工作区为切块保存仅用于检索的译文。',
+    'RAG_DOC_TRANSLATION_MODEL.label': '翻译模型',
+    'RAG_DOC_TRANSLATION_MODEL.help': '留空则使用查询模型。',
+    'onOff.opt.off': '关闭',
+    'onOff.opt.on': '开启',
+    'warn.needsLanguages': '在“语言”面板中选择支持的语言之前，此设置不会生效。',
+    'warn.monolingualTranslation': '只支持一种语言，因此文档翻译保持关闭。',
   },
   it: {
     'panel.title': 'Lingue di traduzione',
@@ -86,11 +134,37 @@ const TRANSLATION_TARGETS_LABELS = {
     'action.saveTargets': 'Salva le lingue di traduzione',
     'action.saving': 'Salvataggio delle lingue…',
     'error.targetNotSupported': 'Non salvato. {language} non è tra le lingue supportate.',
+    'targets.monolingual': "Questa installazione supporta una sola lingua, quindi non c'è nulla in cui tradurre.",
+    'targets.stale': 'Il profilo di embedding è cambiato, quindi le traduzioni salvate non vengono usate nella ricerca. Esegui {command} per riutilizzarle.',
+    'coverage.staleBadge': 'Non usate nella ricerca',
+    'coverage.gaps': 'Alcuni chunk non sono stati tradotti perché un nome, un numero o un codice non sarebbe rimasto identico. Vengono comunque trovati nella lingua originale.',
+    'backfill.help': 'Il salvataggio non traduce nulla. I nuovi documenti vengono tradotti dopo la pubblicazione; per quelli esistenti esegui:',
+    'backfill.dryRun': 'Prima il resoconto, senza tradurre nulla:',
+    'backfill.run': 'Poi traduci, fermandoti al budget in USD che imposti:',
+    'command.dryRun': 'resoconto',
+    'command.run': 'traduzione',
+    'command.reembed': 'riuso delle traduzioni salvate',
+    'action.copy': 'Copia il comando',
+    'action.copyAria': 'Copia il comando: {name}',
+    'copy.done': 'Comando copiato.',
+    'copy.failed': 'Non è stato possibile copiare il comando. Selezionalo e copialo a mano.',
+    'settings.title': 'Impostazioni',
+    'settings.affectsStored': 'La modifica riguarda i documenti già archiviati; al salvataggio vedrai quanti.',
+    'RAG_DOC_TRANSLATION.label': 'Traduzione dei documenti',
+    'RAG_DOC_TRANSLATION.help': 'Permette agli spazi di lavoro di salvare traduzioni dei chunk solo per la ricerca.',
+    'RAG_DOC_TRANSLATION_MODEL.label': 'Modello di traduzione',
+    'RAG_DOC_TRANSLATION_MODEL.help': 'Vuoto usa il modello delle query.',
+    'onOff.opt.off': 'Disattivato',
+    'onOff.opt.on': 'Attivo',
+    'warn.needsLanguages': 'Questa impostazione non ha effetto finché non scegli le lingue supportate nel pannello Lingue.',
+    'warn.monolingualTranslation': 'È supportata una sola lingua, quindi la traduzione dei documenti resta disattivata.',
   },
 };
 
 const TRANSLATION_TARGETS_PATH = '/api/rag/admin/translation-settings';
 const TRANSLATION_TARGETS_CODE = /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})*$/;
+const TRANSLATION_TARGETS_ORG_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const TRANSLATION_TARGETS_SETTINGS = ['RAG_DOC_TRANSLATION', 'RAG_SUPPORTED_LANGUAGES'];
 
 let translationTargetsUi = null;
 if (typeof require !== 'undefined') {
@@ -174,6 +248,39 @@ function translationTargetsView(body) {
   };
 }
 
+/** Combination warnings of the translation group, read from the page's own inputs (UI-SPEC 6.3). */
+function translationTargetsSettingsWarnings(values) {
+  const v = values || {};
+  if (translationTargetsText(v.RAG_DOC_TRANSLATION).trim() !== 'on') return [];
+  const languages = translationTargetsText(v.RAG_SUPPORTED_LANGUAGES)
+    .split(',')
+    .map((code) => code.trim())
+    .filter(Boolean);
+  if (languages.length === 0) return ['warn.needsLanguages'];
+  if (languages.length === 1) return ['warn.monolingualTranslation'];
+  return [];
+}
+
+/**
+ * The --tenant value of the commands: o:<id> for an organization workspace; for the default workspace s:default in single-tenant mode
+ * and a placeholder in multi-tenant mode (the personal workspace's key holds a user id the page does not know).
+ */
+function translationTargetsTenantKey(organizationId, multiTenant) {
+  if (organizationId) return TRANSLATION_TARGETS_ORG_ID.test(organizationId) ? 'o:' + organizationId.toLowerCase() : 'o:<organization-id>';
+  return multiTenant ? 'u:<user-id>' : 's:default';
+}
+
+/** D-29 commands; the dry run comes first. Saving never runs one. */
+function translationTargetsCommands(tenantKey) {
+  const base = 'npm run rag:translate -- --tenant ' + tenantKey;
+  return { dryRun: base + ' --dry-run', run: base + ' --budget <USD>', reembed: base + ' --reembed --budget <USD>' };
+}
+
+function translationTargetsIsMultiTenant() {
+  const config = typeof window !== 'undefined' && window.currentConfig && typeof window.currentConfig === 'object' ? window.currentConfig : {};
+  return (config.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE || config.MYRAG_DEPLOYMENT_MODE) === 'multi-tenant';
+}
+
 class TranslationTargetsPanel {
   constructor(root) {
     this.root = root;
@@ -188,6 +295,8 @@ class TranslationTargetsPanel {
     this.saving = false;
     this.formHost = null;
     this.coverageHost = null;
+    this.backfillHost = null;
+    this.settingsHost = null;
     this.controls = null;
   }
 
@@ -226,9 +335,22 @@ class TranslationTargetsPanel {
     const description = this.root.querySelector('[data-translation-targets-description]');
     if (description) description.textContent = this.t('panel.description');
     this.formHost = this.el('div', { className: 'flex flex-col gap-4 min-w-0' });
-    this.coverageHost = this.el('div', { className: 'min-w-0 mt-6' });
+    this.coverageHost = this.el('div', { className: 'min-w-0 mt-6 empty:mt-0' });
+    this.backfillHost = this.el('div', { className: 'min-w-0 mt-4 empty:mt-0' });
+    this.settingsHost = this.el('div', { className: 'min-w-0 mt-8 border-t border-base-300 pt-6' }, [
+      this.el('h4', { className: 'text-base font-semibold mb-4 text-balance', text: this.t('settings.title') }),
+    ]);
+    const group = this.doc.querySelector('[data-rag-settings-group="translation"]');
+    if (group) {
+      this.settingsHost.appendChild(group);
+      this.localizeSettings(group);
+    }
     const content = this.root.querySelector('[data-translation-targets-content]');
-    if (content) content.replaceChildren(this.formHost, this.coverageHost);
+    if (content) content.replaceChildren(this.formHost, this.coverageHost, this.backfillHost, this.settingsHost);
+    for (const id of TRANSLATION_TARGETS_SETTINGS) {
+      const control = this.doc.getElementById(id);
+      if (control) control.addEventListener('change', () => this.renderAlerts());
+    }
     this.bindWorkspace();
     this.renderAlerts();
     await this.load('first');
@@ -237,6 +359,25 @@ class TranslationTargetsPanel {
   async refresh() {
     this.readWorkspace();
     await this.load('panel');
+  }
+
+  /** zh and it through data-rag-i18n; English is the static markup (UI-SPEC 6.3). */
+  localizeSettings(group) {
+    if (this.locale === 'en') return;
+    const table = TRANSLATION_TARGETS_LABELS[this.locale] || {};
+    for (const node of Array.from(group.querySelectorAll('[data-rag-i18n]'))) {
+      const text = table[node.getAttribute('data-rag-i18n')];
+      if (text !== undefined) node.textContent = text;
+    }
+  }
+
+  controlValue(id) {
+    const control = this.doc.getElementById(id);
+    return control ? translationTargetsText(control.value) : '';
+  }
+
+  commands() {
+    return translationTargetsCommands(translationTargetsTenantKey(this.organizationId, translationTargetsIsMultiTenant()));
   }
 
   selector() {
@@ -279,6 +420,7 @@ class TranslationTargetsPanel {
     if (hadContent) ui.ragUiListBusy(this.formHost, true);
     else {
       this.coverageHost.replaceChildren();
+      this.backfillHost.replaceChildren();
       ui.ragUiListLoading(this.doc, this.formHost, this.t('targets.loading'));
     }
     const result = await ui.ragUiRagRequest(TRANSLATION_TARGETS_PATH + this.query(), { method: 'GET' });
@@ -313,11 +455,13 @@ class TranslationTargetsPanel {
           : ui.ragUiAlert(this.doc, { tone: 'warning', icon: 'person-lock', body: [mapped.message], actions: [ui.ragUiReloadButton(this.doc, this.locale, reload)] });
       this.formHost.replaceChildren(alert);
       this.coverageHost.replaceChildren();
+      this.backfillHost.replaceChildren();
     } else {
       if (hadContent) ui.ragUiListBusy(this.formHost, true, true);
       else {
         this.formHost.replaceChildren();
         this.coverageHost.replaceChildren();
+        this.backfillHost.replaceChildren();
       }
       this.loadAlert = ui.ragUiUnavailableAlert(this.doc, this.locale, mapped.message, reload);
     }
@@ -329,12 +473,25 @@ class TranslationTargetsPanel {
     const host = this.root.querySelector('[data-translation-targets-alert]');
     if (!host) return;
     const ui = this.ui();
-    const nodes = [];
+    const values = {};
+    for (const id of TRANSLATION_TARGETS_SETTINGS) values[id] = this.controlValue(id);
+    const nodes = translationTargetsSettingsWarnings(values).map((key) => ui.ragUiAlert(this.doc, { tone: 'warning', icon: 'exclamation-triangle', body: [this.t(key)] }));
     const view = this.view;
     if (view && !view.languagesConfigured) {
       nodes.push(ui.ragUiAlert(this.doc, { tone: 'info', icon: 'info-circle', body: [ui.ragUiLabel('error.languagesNotConfigured', this.locale)] }));
     } else if (view && !view.deploymentOn) {
       nodes.push(ui.ragUiAlert(this.doc, { tone: 'info', icon: 'info-circle', body: [this.t('targets.deploymentOff')] }));
+    }
+    if (view && view.languagesConfigured && !view.monolingual && view.stale === true) {
+      const command = this.commands().reembed;
+      nodes.push(
+        ui.ragUiAlert(this.doc, {
+          tone: 'warning',
+          icon: 'exclamation-triangle',
+          body: [this.el('p', { className: 'text-sm' }, ui.ragUiTemplateNodes(this.doc, this.t('targets.stale'), { command }, ['command']))],
+          actions: [this.copyButton(command, 'command.reembed')],
+        }),
+      );
     }
     if (this.loadAlert) nodes.push(this.loadAlert);
     host.replaceChildren(...nodes);
@@ -344,6 +501,7 @@ class TranslationTargetsPanel {
     this.renderAlerts();
     this.renderForm();
     this.renderCoverage();
+    this.renderBackfill();
   }
 
   renderForm() {
@@ -352,6 +510,10 @@ class TranslationTargetsPanel {
     this.controls = null;
     if (!view || !view.languagesConfigured) {
       this.formHost.replaceChildren();
+      return;
+    }
+    if (view.monolingual) {
+      this.formHost.replaceChildren(ui.ragUiAlert(this.doc, { tone: 'info', icon: 'info-circle', body: [this.t('targets.monolingual')] }));
       return;
     }
     const enable = this.el('input', {
@@ -506,7 +668,7 @@ class TranslationTargetsPanel {
 
   renderCoverage() {
     const view = this.view;
-    if (!view || !view.languagesConfigured) {
+    if (!view || !view.languagesConfigured || view.monolingual) {
       this.coverageHost.replaceChildren();
       return;
     }
@@ -518,7 +680,12 @@ class TranslationTargetsPanel {
     const th = (text) => this.el('th', { className: 'font-semibold', text, attrs: { scope: 'col' } });
     const rows = view.coverage.map((row) =>
       this.el('tr', {}, [
-        this.el('td', {}, [this.el('span', { text: row.name, attrs: { lang: row.language } })]),
+        this.el('td', {}, [
+          this.el('div', { className: 'flex flex-wrap items-center gap-2' }, [
+            this.el('span', { text: row.name, attrs: { lang: row.language } }),
+            view.stale === true ? this.staleBadge() : null,
+          ]),
+        ]),
         this.el('td', {
           className: 'tabular-nums whitespace-nowrap',
           text: this.t('coverage.value', { done: ui.ragUiFormatNumber(row.done, this.locale), total: ui.ragUiFormatNumber(row.total, this.locale) }),
@@ -538,7 +705,66 @@ class TranslationTargetsPanel {
       },
       [table],
     );
-    this.coverageHost.replaceChildren(region);
+    const nodes = [region];
+    if (view.coverage.some((row) => row.gaps !== null && row.gaps > 0)) {
+      nodes.push(this.el('p', { className: 'text-sm text-base-content/70 mt-2 max-w-prose', text: this.t('coverage.gaps') }));
+    }
+    this.coverageHost.replaceChildren(...nodes);
+  }
+
+  staleBadge() {
+    const ui = this.ui();
+    return this.el('span', { className: 'badge badge-sm badge-outline border-warning text-base-content gap-1 shrink-0 whitespace-nowrap' }, [
+      ui.ragUiIcon(this.doc, 'exclamation-triangle', 'text-warning'),
+      this.el('span', { text: this.t('coverage.staleBadge') }),
+    ]);
+  }
+
+  /** backfill.help and the two commands, the dry run first; shown once a target is saved. */
+  renderBackfill() {
+    const view = this.view;
+    if (!view || !view.languagesConfigured || view.monolingual || view.targets.length === 0) {
+      this.backfillHost.replaceChildren();
+      return;
+    }
+    const commands = this.commands();
+    this.backfillHost.replaceChildren(
+      this.el('div', { className: 'flex flex-col gap-2 min-w-0' }, [
+        this.el('p', { className: 'text-sm max-w-prose', text: this.t('backfill.help') }),
+        this.commandLine('backfill.dryRun', commands.dryRun, 'command.dryRun'),
+        this.commandLine('backfill.run', commands.run, 'command.run'),
+      ]),
+    );
+  }
+
+  commandLine(labelKey, command, nameKey) {
+    return this.el('div', { className: 'flex flex-col gap-1 min-w-0' }, [
+      this.el('p', { className: 'text-xs text-base-content/70', text: this.t(labelKey) }),
+      this.el('div', { className: 'flex flex-wrap items-center gap-2 min-w-0' }, [
+        this.el('code', { className: 'font-mono text-xs break-all min-w-0 bg-base-100 rounded px-2 py-1', text: command, attrs: { translate: 'no' } }),
+        this.copyButton(command, nameKey),
+      ]),
+    ]);
+  }
+
+  /** Copy command, only where the clipboard exists; the command stays selectable text either way. */
+  copyButton(command, nameKey) {
+    const clipboard = typeof navigator !== 'undefined' && navigator ? navigator.clipboard : null;
+    if (!clipboard || typeof clipboard.writeText !== 'function') return null;
+    const button = this.el('button', {
+      className: 'btn btn-ghost btn-sm',
+      text: this.t('action.copy'),
+      attrs: { type: 'button', 'aria-label': this.t('action.copyAria', { name: this.t(nameKey) }) },
+    });
+    button.addEventListener('click', async () => {
+      try {
+        await clipboard.writeText(command);
+        this.announce(this.t('copy.done'));
+      } catch {
+        this.announce(this.t('copy.failed'), true);
+      }
+    });
+    return button;
   }
 
   /** An em dash with a visually hidden word for a missing value. */
@@ -590,6 +816,9 @@ if (typeof module !== 'undefined' && module.exports) {
     translationTargetsLabel,
     translationTargetsLanguageName,
     translationTargetsView,
+    translationTargetsSettingsWarnings,
+    translationTargetsTenantKey,
+    translationTargetsCommands,
     TranslationTargetsPanel,
     initTranslationTargetsPanel,
   };
