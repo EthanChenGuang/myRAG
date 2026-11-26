@@ -1341,7 +1341,9 @@ def _atomic_write(path: Path, text: str) -> None:
     os.replace(tmp, path)
 
 
-def write_report(report: EvalReport, out_dir: Path, budgets: LatencyBudgets | None = None) -> tuple[Path, Path]:
+def write_report(
+    report: EvalReport, out_dir: Path, budgets: LatencyBudgets | None = None, set_dir: Path | None = None
+) -> tuple[Path, Path]:
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     json_path = out_dir / "report.json"
