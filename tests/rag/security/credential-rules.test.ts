@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import fixture from '../../fixtures/output-guard/answers.json';
 import { OutputGuardRulesSchema } from '@/lib/rag-eval/contracts.generated';
 import { createOutputLinkPolicy } from '@/lib/rag/security/link-targets';
 import { createOutputGuard, guardWholeText, type OutputGuardPolicy } from '@/lib/rag/security/output-guard';
@@ -254,4 +255,21 @@ describe('output guard credential sentences (D-39)', () => {
     expect(guard.push('t', '. Next')).toBe(BLOCKED + ' ');
     expect(guard.flush('t')).toBe('Next');
   });
+});
+
+describe('clean-answer gate (D-39)', () => {
+  const clean = (fixture.answers as { id: string; language: string; text: string; expect: { removed: string[]; credential?: unknown } }[]).filter(
+    (answer) => answer.expect.removed.length === 0 && !answer.expect.credential,
+  );
+
+  it('has clean answers in zh, en and it', () => {
+    for (const language of LANGUAGES) expect(clean.filter((answer) => answer.language === language).length).toBeGreaterThan(0);
+  });
+
+  for (const answer of clean) {
+    it(`${answer.id}: zero credential matches`, () => {
+      expect(matchCredentialSentence(answer.text, answer.language)).toEqual([]);
+      expect(matchCredentialSentence(answer.text)).toEqual([]);
+    });
+  }
 });
