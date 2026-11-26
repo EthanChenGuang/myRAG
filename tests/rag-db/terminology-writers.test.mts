@@ -459,6 +459,16 @@ describe('terminology import and admin reads 0472 (multi-tenant)', () => {
       await rejectsCode(db, () => importRows(db, ADMIN_A, LAYER_A, rows, 'merge', 1), 'invalid_entry');
       await rejectsCode(db, () => importRows(db, ADMIN_A, LAYER_A, [entry({ canonical: 'term new' }), entry({ target_language: LANG_2 })], 'replace', 1), 'invalid_entry');
       await rejectsCode(db, () => importRows(db, ADMIN_A, LAYER_A, [entry(), entry()], 'merge', 1), 'invalid_entry');
+      await db.exec('SAVEPOINT row_detail');
+      await assert.rejects(
+        () => importRows(db, ADMIN_A, LAYER_A, [entry({ canonical: 'term new' }), entry({ canonical: 'term other', target_language: LANG_2 })], 'merge', 1),
+        (error: unknown) => {
+          assert.equal((error as Error).message, 'invalid_entry');
+          assert.deepEqual(JSON.parse(String((error as { detail?: string }).detail)), { row: 2 });
+          return true;
+        },
+      );
+      await db.exec('ROLLBACK TO SAVEPOINT row_detail');
       await rejectsCode(db, () => importRows(db, ADMIN_A, LAYER_A, three(), 'append', 1), 'invalid_entry');
       await rejectsCode(db, () => importRows(db, ADMIN_A, LAYER_A, { rows: [] }, 'merge', 1), 'invalid_entry');
       assert.equal(await versionOf(db, LAYER_A), 1);
@@ -587,7 +597,7 @@ describe('terminology import and admin reads 0472 (multi-tenant)', () => {
     });
   });
 
-  test('anon and authenticated cannot execute any 0472 function; the internal helpers have no grant at all', async () => {
+  test('anon and authenticated cannot execute any 0472 function; the internal helpers are invokers with no grant at all', async () => {
     const helpers = await db.query<{ sig: string }>(
       "SELECT p.oid::regprocedure::text AS sig FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND p.proname LIKE 'rag\\_term\\_\\_%'",
     );
@@ -602,11 +612,11 @@ describe('terminology import and admin reads 0472 (multi-tenant)', () => {
       assert.deepEqual(privileges.rows[0], { anon: false, authenticated: false, service: true, definer: true, config: ['search_path=""'] }, signature);
     }
     for (const { sig } of helpers.rows) {
-      const privileges = await db.query<{ anon: boolean; authenticated: boolean; service: boolean }>(
-        "SELECT has_function_privilege('anon', $1, 'EXECUTE') AS anon, has_function_privilege('authenticated', $1, 'EXECUTE') AS authenticated, has_function_privilege('service_role', $1, 'EXECUTE') AS service",
+      const privileges = await db.query<{ anon: boolean; authenticated: boolean; service: boolean; definer: boolean }>(
+        "SELECT has_function_privilege('anon', $1, 'EXECUTE') AS anon, has_function_privilege('authenticated', $1, 'EXECUTE') AS authenticated, has_function_privilege('service_role', $1, 'EXECUTE') AS service, p.prosecdef AS definer FROM pg_catalog.pg_proc p WHERE p.oid = $1::regprocedure",
         [`public.${sig.replace(/^public\./, '')}`],
       );
-      assert.deepEqual(privileges.rows[0], { anon: false, authenticated: false, service: false }, sig);
+      assert.deepEqual(privileges.rows[0], { anon: false, authenticated: false, service: false, definer: false }, sig);
     }
 
     let edge: FakeEdge | undefined;
