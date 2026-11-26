@@ -280,3 +280,76 @@ describe('rag-panels/languages.js and rag-ui.js render server data as text (XSS)
     expect(doc.body.textContent).toContain(XSS_PAYLOAD);
   });
 });
+
+describe('rag-panels/ingest-impact.js renders server data and setting values as text (XSS)', () => {
+  it('mechanisms, doc types, commands, states and changed values create no element and no inline handler', async () => {
+    const doc = new FakeDocument();
+    const section = host(doc, 'rag-administration-ingest-impact', 'section');
+    for (const attr of ['data-ingest-impact-title', 'data-ingest-impact-description', 'data-ingest-impact-alert', 'data-ingest-impact-content', 'data-ingest-impact-status']) {
+      const el = doc.createElement('div');
+      el.setAttribute(attr, '');
+      section.appendChild(el);
+    }
+    const coverage = {
+      success: true,
+      pending: [
+        { mechanism: XSS_PAYLOAD, affected: 3, start: 'cli', command: JS_BREAKOUT },
+        { mechanism: 'reparse', affected: 2, start: 'needs_async', command: XSS_PAYLOAD },
+        { mechanism: 'rechunk', affected: 1, start: JS_BREAKOUT, command: XSS_PAYLOAD },
+      ],
+      without_fingerprint: { count: 2, command: XSS_PAYLOAD },
+      rebuilds: [
+        { id: XSS_PAYLOAD, mechanism: JS_BREAKOUT, done: 1, total: 2, gaps: 1, state: XSS_PAYLOAD, started: JS_BREAKOUT, activation: 'rebuild_batch' },
+        { id: 'r2', mechanism: 'reparse', done: 2, total: 2, gaps: 0, state: 'built', started: XSS_PAYLOAD, activation: 'rebuild_batch' },
+      ],
+    };
+    const impact = {
+      ingestion_keys: ['RAG_TABLE_HEADER_REPEAT', XSS_PAYLOAD],
+      by_mechanism: [
+        { mechanism: XSS_PAYLOAD, doc_type: JS_BREAKOUT, affected: 4 },
+        { mechanism: 'rechunk', doc_type: XSS_PAYLOAD, affected: 5 },
+      ],
+      without_fingerprint: 1,
+    };
+    const context: Record<string, unknown> = {
+      document: doc,
+      console: { log() {}, error() {}, warn() {}, info() {}, debug() {} },
+      navigator: { language: 'en-US', clipboard: { writeText: async () => {} } },
+      location: { origin: 'http://config.local' },
+      setTimeout,
+      clearTimeout,
+      AbortController,
+      Intl,
+      showToast() {},
+      ragFetch: async (apiPath: string, init: { method?: string } = {}) => {
+        if (apiPath.endsWith('/impact')) return { ok: true, status: 200, body: impact };
+        if (init.method === 'POST') return { ok: false, status: 409, body: { success: false, error: 'activation_refused', reason: XSS_PAYLOAD } };
+        return { ok: true, status: 200, body: coverage };
+      },
+    };
+    context.window = context;
+    vm.createContext(context);
+    for (const file of ['rag-panels/rag-ui.js', 'rag-panels/ingest-impact.js']) {
+      new vm.Script(fs.readFileSync(path.join(configUiDir, file), 'utf8'), { filename: file }).runInContext(context);
+    }
+    const flushAll = async () => {
+      for (let i = 0; i < 25; i += 1) await new Promise((resolve) => setImmediate(resolve));
+    };
+    await (context.initIngestImpactPanel as () => Promise<void>)();
+    await flushAll();
+    const activate = doc.body.querySelectorAll('button').find((b) => b.textContent === 'Activate rebuild')!;
+    activate.click();
+    await flushAll();
+    doc.body.querySelectorAll('dialog').find((d) => d.open)!.querySelectorAll('button').find((b) => b.textContent === 'Activate rebuild')!.click();
+    await flushAll();
+    const guard = context.ragIngestImpactGuard as (next: Record<string, string>, saved: Record<string, string>) => Promise<unknown>;
+    const pending = guard({ RAG_TABLE_HEADER_REPEAT: XSS_PAYLOAD }, { RAG_TABLE_HEADER_REPEAT: JS_BREAKOUT });
+    await flushAll();
+    expectSafe(doc);
+    expect(doc.innerHtmlWrites).toBe(0);
+    expect(doc.body.textContent).toContain(XSS_PAYLOAD);
+    expect(doc.body.textContent).toContain(JS_BREAKOUT);
+    doc.body.querySelectorAll('dialog').find((d) => d.open)!.close('keep');
+    await pending;
+  });
+});
