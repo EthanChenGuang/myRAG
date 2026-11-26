@@ -93,7 +93,6 @@ const QUESTION_SOURCES_LABELS = {
     'pilot.explain.plain': 'Questions from pilot users are sampled more often than others. Use this while there is little real traffic.',
     'pilot.field.label': 'User e-mail or user ID',
     'action.addPilot': 'Add pilot user',
-    'pilot.adding': 'Adding pilot user…',
     'pilot.empty.field': 'Enter an e-mail address or a user ID.',
     'pilot.added': 'Pilot user added.',
     'pilot.notFound': 'No user with that e-mail or ID belongs to this workspace.',
@@ -105,7 +104,6 @@ const QUESTION_SOURCES_LABELS = {
     'pilot.col.actions': 'Actions',
     'pilot.shown': 'Pilot users shown: {count}',
     'action.removePilot': 'Remove pilot user',
-    'pilot.removing': 'Removing pilot user…',
     'action.removeAria': 'Remove pilot user {user}',
     'action.morePilot': 'Load more pilot users',
     'confirm.remove.title': 'Remove this pilot user?',
@@ -186,7 +184,6 @@ const QUESTION_SOURCES_LABELS = {
     'pilot.explain.plain': '试点用户的问题比其他用户的问题更容易被抽中。适合在真实流量较少时使用。',
     'pilot.field.label': '用户邮箱或用户 ID',
     'action.addPilot': '添加试点用户',
-    'pilot.adding': '正在添加试点用户…',
     'pilot.empty.field': '请输入邮箱地址或用户 ID。',
     'pilot.added': '已添加试点用户。',
     'pilot.notFound': '该工作区中没有使用此邮箱或 ID 的用户。',
@@ -198,7 +195,6 @@ const QUESTION_SOURCES_LABELS = {
     'pilot.col.actions': '操作',
     'pilot.shown': '已显示的试点用户：{count}',
     'action.removePilot': '移除试点用户',
-    'pilot.removing': '正在移除试点用户…',
     'action.removeAria': '移除试点用户 {user}',
     'action.morePilot': '加载更多试点用户',
     'confirm.remove.title': '移除此试点用户？',
@@ -279,7 +275,6 @@ const QUESTION_SOURCES_LABELS = {
     'pilot.explain.plain': 'Le domande degli utenti pilota vengono campionate più spesso delle altre. Utile finché il traffico reale è scarso.',
     'pilot.field.label': "E-mail o ID dell'utente",
     'action.addPilot': 'Aggiungi utente pilota',
-    'pilot.adding': 'Aggiunta dell’utente pilota…',
     'pilot.empty.field': 'Inserisci un indirizzo e-mail o un ID utente.',
     'pilot.added': 'Utente pilota aggiunto.',
     'pilot.notFound': "Nessun utente con questa e-mail o questo ID appartiene a quest'area di lavoro.",
@@ -291,7 +286,6 @@ const QUESTION_SOURCES_LABELS = {
     'pilot.col.actions': 'Azioni',
     'pilot.shown': 'Utenti pilota mostrati: {count}',
     'action.removePilot': 'Rimuovi utente pilota',
-    'pilot.removing': 'Rimozione dell’utente pilota…',
     'action.removeAria': 'Rimuovi utente pilota {user}',
     'action.morePilot': 'Carica altri utenti pilota',
     'confirm.remove.title': 'Rimuovere questo utente pilota?',
@@ -416,6 +410,24 @@ function questionSourcesSampleView(body, locale) {
     novel: questionSourcesCountText('sample.novel', clusters.novel, locale),
     languages,
   };
+}
+
+/** Pure: the Pilot users view, named fields only: the masked e-mail the route returns, else the user id in code (UI-SPEC 11 rule 7). */
+function questionSourcesPilotView(body, locale) {
+  const { gatesUiDate, gatesUiNumber, gatesUiPercent } = QUESTION_SOURCES_GATES;
+  const b = body && typeof body === 'object' ? body : {};
+  const rows = (Array.isArray(b.users) ? b.users : [])
+    .filter((u) => u && typeof u === 'object' && typeof u.user_id === 'string')
+    .map((u) => {
+      const masked = typeof u.masked_email === 'string' && u.masked_email !== '' ? u.masked_email : null;
+      return { userId: u.user_id, label: masked || u.user_id, mono: !masked, added: gatesUiDate(typeof u.added_at === 'string' ? u.added_at : '', locale) };
+    });
+  const finite = (v) => typeof v === 'number' && Number.isFinite(v);
+  const explain =
+    finite(b.weight) && finite(b.cap_share)
+      ? questionSourcesLabel('pilot.explain', locale, { weight: gatesUiNumber(b.weight, locale), share: gatesUiPercent(b.cap_share, locale) })
+      : questionSourcesLabel('pilot.explain.plain', locale);
+  return { rows, explain };
 }
 
 /** Pure: the combination notes of UI-SPEC 6.12 for the sample group, read from the page's own inputs. */
@@ -764,9 +776,220 @@ class QuestionSourcesPanel {
   // -------------------------------------------------------------------------------------------------------------------------------------
   // Pilot users (UI-SPEC 6.10.2)
 
-  buildPilotView() {}
+  buildPilotView() {
+    const view = this.views.pilot;
+    const inputId = 'rag-question-sources-pilot-user';
+    const helpId = 'rag-question-sources-pilot-help';
+    this.pilot = { users: [], next: null, loading: false, adding: false, data: false, weight: null, cap: null, seq: 0 };
+    this.pilotAlert = this.el('div', { className: 'mb-4 empty:mb-0' });
+    this.pilotExplain = this.el('p', { className: 'text-sm max-w-prose mb-4', text: this.t('pilot.explain.plain') });
+    this.pilotInput = this.el('input', {
+      className: 'input input-bordered input-sm w-full sm:w-80 min-w-0',
+      attrs: { type: 'text', id: inputId, name: 'pilot-user', autocomplete: 'off', spellcheck: 'false', 'aria-describedby': helpId },
+      on: { input: () => this.pilotFieldMessage(null) },
+    });
+    this.pilotAdd = this.el('button', { className: 'btn btn-primary btn-sm', attrs: { type: 'submit' } }, [this.t('action.addPilot')]);
+    this.pilotHelp = this.el('p', { className: 'text-xs mt-1 min-h-4 empty:min-h-0', attrs: { id: helpId, 'data-question-sources-pilot-help': '' } });
+    this.pilotForm = this.el(
+      'form',
+      { className: 'form-control mb-6 max-w-xl', attrs: { novalidate: true }, on: { submit: (event) => this.addPilot(event) } },
+      [
+        this.el('label', { className: 'label', attrs: { for: inputId } }, [this.el('span', { className: 'label-text', text: this.t('pilot.field.label') })]),
+        this.el('div', { className: 'flex flex-wrap items-center gap-2' }, [this.pilotInput, this.pilotAdd]),
+        this.pilotHelp,
+      ],
+    );
+    this.pilotBody = this.el('div', { className: 'flex flex-col gap-4 min-w-0' });
+    view.replaceChildren(this.pilotAlert, this.pilotExplain, this.pilotForm, this.pilotBody);
+  }
 
-  async loadPilot() {}
+  pilotFieldMessage(key) {
+    this.pilotHelp.textContent = key ? this.t(key) : '';
+    this.pilotHelp.classList.toggle('text-error', Boolean(key));
+    if (key) {
+      this.pilotInput.setAttribute('aria-invalid', 'true');
+      this.pilotInput.classList.add('input-error');
+    } else {
+      this.pilotInput.removeAttribute('aria-invalid');
+      this.pilotInput.classList.remove('input-error');
+    }
+  }
+
+  async loadPilot(cursor) {
+    if (!this.pilotBody || this.pilot.loading) return;
+    const { gatesUiLoadingBlock, gatesUiSetBusy, gatesUiErrorAlert, gatesUiSpinner } = QUESTION_SOURCES_GATES;
+    const seq = (this.pilot.seq += 1);
+    this.pilot.loading = true;
+    if (cursor && this.pilotMore) {
+      this.pilotMore.disabled = true;
+      this.pilotMore.replaceChildren(gatesUiSpinner(), this.t('action.morePilot'));
+    } else if (this.pilot.data) gatesUiSetBusy(this.pilotBody, true);
+    else {
+      this.pilotBody.replaceChildren(gatesUiLoadingBlock(this.t('pilot.loading')));
+      this.setStatus(this.t('pilot.loading'));
+    }
+    const result = await this.request(QUESTION_SOURCES_PILOT_API + this.query(cursor ? { cursor } : null), { method: 'GET' });
+    this.pilot.loading = false;
+    gatesUiSetBusy(this.pilotBody, false);
+    if (seq !== this.pilot.seq) return;
+    if (!result.ok) {
+      const mapped = this.mapError(result, 'tab.pilot');
+      this.pilotAlert.replaceChildren(gatesUiErrorAlert(mapped, this.locale, () => this.loadPilot()));
+      const signIn = mapped.kind === 'signIn';
+      this.pilotForm.hidden = signIn;
+      this.pilotExplain.hidden = signIn;
+      if (signIn || !this.pilot.data) {
+        this.pilot.data = false;
+        this.pilotBody.replaceChildren();
+      } else {
+        this.renderPilot();
+        gatesUiSetBusy(this.pilotBody, true);
+      }
+      this.setStatus(mapped, true);
+      return;
+    }
+    this.pilotAlert.replaceChildren();
+    this.pilotForm.hidden = false;
+    this.pilotExplain.hidden = false;
+    const body = result.body && typeof result.body === 'object' ? result.body : {};
+    const users = (Array.isArray(body.users) ? body.users : []).filter((u) => u && typeof u === 'object' && typeof u.user_id === 'string');
+    this.pilot.users = cursor ? this.pilot.users.concat(users) : users;
+    this.pilot.next = typeof body.next_cursor === 'string' && body.next_cursor !== '' ? body.next_cursor : null;
+    this.pilot.weight = typeof body.weight === 'number' && Number.isFinite(body.weight) ? body.weight : null;
+    this.pilot.cap = typeof body.cap_share === 'number' && Number.isFinite(body.cap_share) ? body.cap_share : null;
+    this.pilot.data = true;
+    this.loadedFor.pilot = this.organizationId;
+    this.renderPilot();
+    this.setStatus(this.t('pilot.shown', { count: questionSourcesCount(this.pilot.users.length, this.locale) }));
+  }
+
+  renderPilot() {
+    const { gatesUiEmptyBlock } = QUESTION_SOURCES_GATES;
+    const view = questionSourcesPilotView({ users: this.pilot.users, weight: this.pilot.weight, cap_share: this.pilot.cap }, this.locale);
+    this.pilotExplain.textContent = view.explain;
+    if (view.rows.length === 0) {
+      this.pilotMore = null;
+      this.pilotBody.replaceChildren(gatesUiEmptyBlock(this.t('pilot.empty.title'), this.t('pilot.empty.body')));
+      return;
+    }
+    const caption = this.t('pilot.caption');
+    const col = (key, cls) => this.el('th', { className: 'text-xs font-semibold' + (cls ? ' ' + cls : ''), text: this.t(key), attrs: { scope: 'col' } });
+    const body = this.el('tbody');
+    view.rows.forEach((row) => {
+      const user = row.mono
+        ? this.el('code', { className: 'font-mono text-xs break-all', text: row.label, attrs: { translate: 'no' } })
+        : this.el('span', { className: 'break-all', text: row.label });
+      const remove = this.el('button', {
+        className: 'btn btn-outline md:btn-sm',
+        text: this.t('action.removePilot'),
+        attrs: { type: 'button', 'aria-label': this.t('action.removeAria', { user: row.label }), 'data-question-sources-user': row.userId },
+      });
+      remove.addEventListener('click', () => this.removePilot(row, remove));
+      body.appendChild(
+        this.el('tr', null, [
+          this.el('th', { className: 'font-normal text-sm align-top min-w-0', attrs: { scope: 'row' } }, [user]),
+          this.el('td', { className: 'text-sm align-top whitespace-nowrap' }, row.added ? [this.el('time', { text: row.added.text, attrs: { datetime: row.added.iso } })] : ['—']),
+          this.el('td', { className: 'align-top' }, [remove]),
+        ]),
+      );
+    });
+    const region = this.el(
+      'div',
+      {
+        className: 'overflow-x-auto rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2',
+        attrs: { tabindex: '0', role: 'region', 'aria-label': caption },
+      },
+      [
+        this.el('table', { className: 'table table-sm' }, [
+          this.el('caption', { className: 'sr-only', text: caption }),
+          this.el('thead', null, [this.el('tr', null, [col('pilot.col.user'), col('pilot.col.added'), col('pilot.col.actions')])]),
+          body,
+        ]),
+      ],
+    );
+    const nodes = [region];
+    this.pilotMore = null;
+    if (this.pilot.next) {
+      const next = this.pilot.next;
+      this.pilotMore = this.el('button', { className: 'btn btn-outline btn-sm self-start', text: this.t('action.morePilot'), attrs: { type: 'button' }, on: { click: () => this.loadPilot(next) } });
+      nodes.push(this.pilotMore);
+    }
+    this.pilotBody.replaceChildren(...nodes);
+  }
+
+  async addPilot(event) {
+    if (event && typeof event.preventDefault === 'function') event.preventDefault();
+    if (this.pilot.adding) return;
+    const { gatesUiSpinner, gatesUiErrorAlert } = QUESTION_SOURCES_GATES;
+    const value = String(this.pilotInput.value || '').trim();
+    if (value === '') {
+      this.pilotFieldMessage('pilot.empty.field');
+      this.pilotInput.focus();
+      return;
+    }
+    this.pilot.adding = true;
+    this.pilotAdd.disabled = true;
+    this.pilotAdd.replaceChildren(gatesUiSpinner(), this.t('action.addPilot'));
+    const result = await this.request(QUESTION_SOURCES_PILOT_API + this.query(), { method: 'POST', body: JSON.stringify({ user: value }) });
+    this.pilot.adding = false;
+    this.pilotAdd.disabled = false;
+    this.pilotAdd.replaceChildren(this.t('action.addPilot'));
+    const code = result && result.body && typeof result.body === 'object' ? result.body.error : null;
+    if (result.ok) {
+      this.pilotInput.value = '';
+      this.pilotFieldMessage(null);
+      await this.loadPilot();
+      this.setStatus(this.t('pilot.added'));
+      this.pilotInput.focus();
+      return;
+    }
+    if (result.status === 404 && (code === 'user_not_found' || !code)) this.pilotFieldMessage('pilot.notFound');
+    else if (result.status === 409) this.pilotFieldMessage('pilot.exists');
+    else {
+      const mapped = this.mapError(result, 'tab.pilot');
+      this.pilotAlert.replaceChildren(gatesUiErrorAlert(mapped, this.locale, () => this.loadPilot()));
+      this.setStatus(mapped, true);
+    }
+    this.pilotInput.focus();
+  }
+
+  async removePilot(row, button) {
+    const { gatesUiConfirm, gatesUiSpinner, gatesUiErrorAlert } = QUESTION_SOURCES_GATES;
+    const confirmed = await gatesUiConfirm({
+      title: this.t('confirm.remove.title'),
+      body: this.m('confirm.remove.body', { user: row.label }),
+      keepLabel: this.t('confirm.remove.keep'),
+      confirmLabel: this.t('action.removePilot'),
+      opener: button,
+      fallbackFocus: this.pilotInput,
+      locale: this.locale,
+    });
+    if (!confirmed) return;
+    const index = this.pilot.users.findIndex((u) => u.user_id === row.userId);
+    button.disabled = true;
+    button.replaceChildren(gatesUiSpinner(), this.t('action.removePilot'));
+    const result = await this.request(QUESTION_SOURCES_PILOT_API + this.query({ user_id: row.userId }), { method: 'DELETE' });
+    if (result.ok) {
+      this.pilot.users = this.pilot.users.filter((u) => u.user_id !== row.userId);
+      this.renderPilot();
+      this.setStatus(this.t('pilot.removed'));
+      const buttons = this.pilotBody.querySelectorAll('tbody button');
+      const next = buttons[Math.min(Math.max(index, 0), buttons.length - 1)];
+      (next || this.pilotInput).focus();
+      return;
+    }
+    if (result.status === 404) {
+      await this.loadPilot();
+      this.setStatus(this.t('pilot.gone'));
+      this.pilotInput.focus();
+      return;
+    }
+    button.disabled = false;
+    button.replaceChildren(this.t('action.removePilot'));
+    const mapped = this.mapError(result, 'tab.pilot');
+    this.pilotAlert.replaceChildren(gatesUiErrorAlert(mapped, this.locale, () => this.loadPilot()));
+    this.setStatus(mapped, true);
+  }
 
   // -------------------------------------------------------------------------------------------------------------------------------------
   // Import questions (UI-SPEC 6.10.3)
@@ -859,6 +1082,7 @@ if (typeof module !== 'undefined' && module.exports) {
     questionSourcesMessage,
     questionSourcesSwitches,
     questionSourcesSampleView,
+    questionSourcesPilotView,
     questionSourcesSettingsWarnings,
     QuestionSourcesPanel,
     initQuestionSourcesPanel,
