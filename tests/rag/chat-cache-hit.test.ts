@@ -10,8 +10,33 @@ import { hit } from './fusion/helpers';
 
 const h = await vi.hoisted(async () => {
   const fakes = await import('../helpers/chat-route-fakes');
+  const { MockLanguageModelV3, convertArrayToReadableStream } = await import('ai/test');
+  const real = { on: false, deltas: ['ok'] as string[], calls: 0 };
+  /** A real AI SDK model so the citation stream transform runs (the capture fake skips transforms). */
+  const model = (modelId: string) =>
+    new MockLanguageModelV3({
+      modelId,
+      doStream: async () => {
+        real.calls += 1;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start' as const, warnings: [] },
+            { type: 'text-start' as const, id: 't1' },
+            ...real.deltas.map((delta) => ({ type: 'text-delta' as const, id: 't1', delta })),
+            { type: 'text-end' as const, id: 't1' },
+            {
+              type: 'finish' as const,
+              finishReason: { unified: 'stop' as const, raw: 'stop' },
+              usage: { inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 }, outputTokens: { total: 1, text: 1, reasoning: 0 } },
+            },
+          ]),
+        };
+      },
+    });
   return {
     ...fakes.createChatRouteHarness(),
+    real,
+    model,
     scope: { current: null as unknown },
     runRetrieval: vi.fn(),
     answerFinish: vi.fn(),
@@ -20,10 +45,14 @@ const h = await vi.hoisted(async () => {
   };
 });
 
-vi.mock('ai', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('ai')>()),
-  streamText: h.capture.streamText,
-}));
+vi.mock('ai', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('ai')>();
+  return {
+    ...actual,
+    streamText: (params: Parameters<typeof actual.streamText>[0]) =>
+      h.real.on ? actual.streamText(params) : h.capture.streamText(params as unknown as Record<string, unknown>),
+  };
+});
 vi.mock('@/lib/document-processor', () => ({ getQueryEmbedding: vi.fn(async () => []) }));
 vi.mock('@/lib/supabase', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/supabase')>()),
@@ -32,7 +61,7 @@ vi.mock('@/lib/supabase', async (importOriginal) => ({
 }));
 vi.mock('@/lib/supabase/server', () => ({ createClient: async () => h.ssr }));
 vi.mock('@openrouter/ai-sdk-provider', () => ({
-  createOpenRouter: () => (modelId: string) => ({ specificationVersion: 'v3', provider: 'fake', modelId }),
+  createOpenRouter: () => (modelId: string) => (h.real.on ? h.model(modelId) : { specificationVersion: 'v3', provider: 'fake', modelId }),
 }));
 vi.mock('exa-js', () => ({ default: h.exa.Exa }));
 
@@ -103,20 +132,6 @@ function memoryCache() {
 
 let memory = memoryCache();
 
-function chunkRow(documentId: string) {
-  return {
-    chunk_id: `${documentId.slice(0, 30)}c1`,
-    document_id: documentId,
-    content: 'Chunk 1 of 1. A neutral placeholder sentence about the section.',
-    similarity: 0.92,
-    metadata: null,
-    temporal_score: 0,
-    financial_score: 0,
-    final_score: 0.92,
-    match_reason: 'similarity',
-  };
-}
-
 function seedDocuments() {
   h.supabase.store.documents = [DOC_X, DOC_Y].map((id, index) => ({
     id,
@@ -125,7 +140,7 @@ function seedDocuments() {
     content: 'A neutral placeholder sentence about the section.',
     metadata: {},
   }));
-  h.supabase.store.document_chunks = [DOC_X, DOC_Y].map((id) => ({ id: chunkRow(id).chunk_id, document_id: id, metadata: null }));
+  h.supabase.store.document_chunks = [DOC_X, DOC_Y].map((id) => ({ id: `${id.slice(0, 30)}c0`, document_id: id, metadata: null }));
 }
 
 async function loadRoute(ragEnv: Record<string, string>) {
@@ -252,6 +267,8 @@ describe('chat route semantic cache (CACHE-01, D-32, D-33, A-3)', () => {
     h.scope.current = SINGLE;
     h.capture.reset();
     h.capture.setDeltas(['A neutral placeholder answer.']);
+    h.real.on = false;
+    h.real.calls = 0;
     h.retrieval.mockReset();
     h.retrieval.mockImplementation(async () => retrievalWith([]));
     h.denseRows.mockReset();
@@ -266,7 +283,7 @@ describe('chat route semantic cache (CACHE-01, D-32, D-33, A-3)', () => {
     delete process.env.RAG_GROUNDEDNESS;
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
-    vi.spyOn(console, 'error').mockImplementation((...args) => { if (process.env.DBG) process.stderr.write('ERR ' + args.map(String).join(' ') + '\n'); });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -435,7 +452,7 @@ describe('chat route semantic cache (CACHE-01, D-32, D-33, A-3)', () => {
 
     const checksBefore = memory.checks.length;
     h.capture.reset();
-    await readSse(await ask(route, { content: '' }));
+    await readSse(await ask(route, { content: '', data: { ragMode: 'balanced' } }));
     expect(lastInput().options?.generalOverview).toBe(true);
     expect(memory.checks).toHaveLength(checksBefore);
     expect(h.capture.streamText).toHaveBeenCalledTimes(1);
@@ -472,11 +489,13 @@ describe('chat route semantic cache (CACHE-01, D-32, D-33, A-3)', () => {
 
   it('a hit writes the Phase 5 answer record: answerId in the start metadata, the cached text, current document names and the cached groundedness', async () => {
     process.env.RAG_CITATIONS = 'true';
-    h.capture.setDeltas(['A neutral placeholder answer [S1].']);
+    h.real.on = true;
+    h.real.deltas = ['A neutral placeholder answer [S1].'];
     h.answerFinish.mockImplementation(() => Promise.resolve({ status: 'not_checked', label: 'not_checked', reason: 'disabled' }));
     const route = await loadRoute(CACHE_ON);
     const data = { chatId: CHAT_ID, capabilities: { citations: true } };
     await readSse(await ask(route, { data }));
+    expect(h.real.calls).toBe(1);
     await stored(1);
     expect(memory.stores[0].answer.citations?.length).toBeGreaterThan(0);
     const cachedGroundedness = memory.stores[0].answer.groundedness;
@@ -484,6 +503,7 @@ describe('chat route semantic cache (CACHE-01, D-32, D-33, A-3)', () => {
     h.answerFinish.mockClear();
     h.renamed = { name: 'placeholder-renamed-again.md', version: 2 };
     const body = await readSse(await ask(route, { data }));
+    expect(h.real.calls).toBe(1);
     const start = startMetadata(body);
     expect(start).toMatchObject({ cache: 'hit', answerId: expect.stringMatching(/^[0-9a-f-]{36}$/) });
     await vi.waitFor(() => expect(h.answerFinish).toHaveBeenCalledTimes(1));

@@ -30,6 +30,12 @@ import {
   noKnowledgeBaseResponse,
   noKnowledgeBaseResponseLanguage,
   mintAnswerId,
+  cacheSourcesFromResult,
+  hashSystemPromptTemplate,
+  isCacheHitResult,
+  isSemanticCacheActive,
+  scheduleCacheStore,
+  streamCachedAnswer,
   parseRetrievalFilters,
   resolveScopesFilter,
   ScopeFilterError,
@@ -2022,6 +2028,111 @@ IMPORTANT:
     }
     console.log('[RAG SYSTEM] ================================================');
 
+    // Prepare system prompt with context
+    // Built once per request; the semantic cache hashes the template before {{context}} substitution (06-36)
+    let ragSystemPromptBuild: Promise<{ ragSystemPrompt: string; workspacePromptUsed: boolean }> | null = null;
+    const buildRagSystemPrompt = async (): Promise<{ ragSystemPrompt: string; workspacePromptUsed: boolean }> => {
+      // Check if there's a custom system prompt in environment variables (with fallback)
+      const defaultSystemPrompt = `You are a helpful AI assistant with access to a knowledge base. When answering questions:
+
+1. If the context contains relevant information, use it to provide accurate and specific answers
+2. If information is not available in the context, say so clearly and suggest alternative approaches
+3. Always cite your sources when referencing specific documents
+4. Provide balanced, objective information rather than opinions
+5. For technical topics, include practical steps or examples when appropriate
+
+Context:
+{{context}}`;
+
+      // Get system prompt using the new SystemPromptManager with language support
+      let ragSystemPrompt = defaultSystemPrompt;
+
+      // Extract language and template settings from request
+      const templateKey = data?.settings?.systemPromptTemplate || 'helpful';
+
+      // NEW: Check for workspace-level system prompt override (highest priority after WhatsApp override)
+      let workspacePromptUsed = false;
+      // The organization comes from the verified scope, never from the request body
+      const workspaceOrgId = scope?.organizationId ?? null;
+
+      if (isMultiTenant() && workspaceOrgId) {
+        console.log('[System Prompt] Checking workspace-level prompt override...');
+
+        const { data: org } = await supabase
+          .from('organizations')
+          .select('settings')
+          .eq('id', workspaceOrgId)
+          .single();
+
+        if (org?.settings?.systemPrompt?.enabled) {
+          const wsPrompt = org.settings.systemPrompt;
+
+          if (wsPrompt.useFullPrompt && wsPrompt.fullPrompt) {
+            // Use full workspace prompt
+            ragSystemPrompt = wsPrompt.fullPrompt.replace(/\\n/g, '\n');
+            workspacePromptUsed = true;
+            console.log('[System Prompt] Using workspace full prompt');
+          } else if (wsPrompt.preContext || wsPrompt.postContext) {
+            // Assemble from pre + post
+            const pre = (wsPrompt.preContext || '').replace(/\\n/g, '\n');
+            const post = (wsPrompt.postContext || '').replace(/\\n/g, '\n');
+            ragSystemPrompt = `${pre}\n\n{{context}}\n\n${post}`;
+            workspacePromptUsed = true;
+            console.log('[System Prompt] Using workspace pre/post context');
+          }
+        }
+      }
+
+      // Use system prompt override if provided (for WhatsApp)
+      if (systemPromptOverride) {
+        // console.log('[WHATSAPP DEBUG] Using system prompt override from request');
+        ragSystemPrompt = systemPromptOverride;
+      } else if (workspacePromptUsed) {
+        // Already set workspace prompt above, skip other sources
+        console.log('[System Prompt] Workspace prompt applied, skipping global defaults');
+      } else if (data?.settings?.systemPromptTemplate) {
+        // Use localized system prompt template if specified
+        console.log(`[System Prompt] Using localized template: ${templateKey} in language: ${userLanguage}`);
+        ragSystemPrompt = SystemPromptManager.getAssembledPrompt(templateKey, userLanguage);
+      } else if (env.RAG_PRE_CONTEXT || env.RAG_POST_CONTEXT || env.RAG_SYSTEM_PROMPT) {
+        // Check if using split context (pre/post) or single prompt
+        if (env.RAG_PRE_CONTEXT || env.RAG_POST_CONTEXT) {
+          // Assemble prompt from pre and post context
+          const preContext = (env.RAG_PRE_CONTEXT || '').replace(/\\n/g, '\n');
+          const postContext = (env.RAG_POST_CONTEXT || '').replace(/\\n/g, '\n');
+          ragSystemPrompt = preContext + '\n\nContext:\n{{context}}\n\n' + postContext;
+          console.log('[System Prompt] Using RAG_PRE_CONTEXT/RAG_POST_CONTEXT from env object');
+        } else if (env.RAG_SYSTEM_PROMPT) {
+          // Use single RAG_SYSTEM_PROMPT with proper newline unescaping
+          ragSystemPrompt = env.RAG_SYSTEM_PROMPT.replace(/\\n/g, '\n');
+          console.log('[System Prompt] Using RAG_SYSTEM_PROMPT from env object');
+        }
+      } else {
+        console.log('[System Prompt] Using DEFAULT system prompt (no env vars found)');
+      }
+
+      // Always validate and ensure {{context}} placeholder exists
+      ragSystemPrompt = SystemPromptManager.ensureContextPlaceholder(ragSystemPrompt);
+      return { ragSystemPrompt, workspacePromptUsed };
+    };
+    const resolveRagSystemPrompt = () => (ragSystemPromptBuild ??= buildRagSystemPrompt());
+
+    // CACHE-01: passed only while the semantic cache can run, so with it off the runRetrieval input is today's. A turn with an
+    // attached image never reads or writes the cache: the image is not part of the key.
+    const cacheContext =
+      !effectiveDisableRAG && !hasAttachedImage && isSemanticCacheActive()
+        ? {
+            generatorModel: model || 'openai/gpt-4o-mini',
+            // The template before {{context}} substitution; the citation strategy changes the answer format, so it is hashed with it
+            systemPromptHash: hashSystemPromptTemplate(
+              `${(await resolveRagSystemPrompt()).ragSystemPrompt}\u0000citations:${citationSession.strategy ?? 'none'}`,
+            ),
+            webSearch: webSearchEnabled,
+            mcpTools: useMcpForRequest || isHandlingMultiStep || lastAssistantHasToolCall(rawMessages),
+            chatId: typeof data?.chatId === 'string' ? data.chatId : null,
+          }
+        : undefined;
+
     // Initialize variables for RAG
     let context = '';
     let retrievalResult: RetrievalResult | null = null;
@@ -2101,6 +2212,7 @@ IMPORTANT:
           ...(retrievalFilters ? { retrievalFilters } : {}),
           ...(citationSession.labeler ? { citationLabeler: citationSession.labeler } : {}),
           ...queryLayerInputs,
+          ...(cacheContext ? { cacheContext } : {}),
         });
         ragTrace = { collector, result };
         if (ragLogContext) ragLogQuery = queryText;
@@ -2130,6 +2242,7 @@ IMPORTANT:
           trace: collector,
           ...(citationSession.labeler ? { citationLabeler: citationSession.labeler } : {}),
           ...queryLayerInputs,
+          ...(cacheContext ? { cacheContext } : {}),
         });
         ragTrace = { collector, result };
         retrievalResult = result;
@@ -2267,6 +2380,52 @@ IMPORTANT:
 
     } // End of RAG processing (skipped when disableRAG is true)
 
+    // D-32: a semantic-cache hit streams the cached answer through the normal UI stream, with no generation call
+    const cacheHit = retrievalResult && isCacheHitResult(retrievalResult) ? retrievalResult.cacheHit : undefined;
+    if (cacheHit) {
+      const cached = cacheHit.answer;
+      ragTrace?.collector.setReviewContent({ answer: cached.answer_text });
+      setRagLogOutcome(cached.is_refusal ? 'refused_no_context' : 'answered', cached.answer_language);
+      finishRagTrace();
+      // W6: a hit writes its own Phase 5 answer record when a fresh answer would; refusals never carry one
+      const hitAnswerId = cached.is_refusal ? null : answerId;
+      const answerFields = hitAnswerId ? { answerId: hitAnswerId } : {};
+      const stream = createUIMessageStream({
+        execute: async ({ writer }) => {
+          streamCachedAnswer(cacheHit, {
+            writer,
+            startMetadata: { ...answerFields, ...(cached.is_refusal ? { refusal: true } : {}) },
+            finishMetadata: answerFields,
+          });
+        },
+        onFinish: ({ isAborted }) => {
+          if (!hitAnswerId || !scope || !answerUserId) return;
+          const citations = cached.citations ?? [];
+          void scheduleAnswerFinish({
+            answerId: hitAnswerId,
+            scope,
+            userId: answerUserId,
+            chatId: typeof data?.chatId === 'string' ? data.chatId : null,
+            traceId: cached.trace_id,
+            modelId: model || 'openai/gpt-4o-mini',
+            ragMode,
+            queryText: getLastUserText(rawMessages),
+            citations,
+            citationStrategy: citations[0]?.strategy ?? null,
+            invalidCitations: 0,
+            answerText: cached.answer_text,
+            aborted: isAborted || req.signal.aborted,
+            groundednessEligible: false,
+            toolOutputUsed: false,
+            premise: { blocks: [], webSearchTexts: [] },
+            requestLanguage: userLanguage,
+            groundedness: cached.groundedness,
+          });
+        },
+      });
+      return createUIMessageStreamResponse({ stream });
+    }
+
     // A-8/A-14: one per-turn YOLO decision after retrieval; flagged content kept in the context (flag or downweight) suspends it
     const injectionSummary = retrievalResult?.injection;
     const injectionFlagged = injectionSummary ? injectionSummary.flagged && injectionSummary.mode !== 'drop' : undefined;
@@ -2331,7 +2490,23 @@ IMPORTANT:
       ragTrace?.collector.setReviewContent({ answer: responseText, context });
       setRagLogOutcome('refused_no_context', noKnowledgeBaseResponseLanguage(fallbackLanguage));
       const refusalMetadata = refusalStartMetadata();
+      const refusalTraceId = ragTrace?.collector.traceId;
       finishRagTrace();
+      if (retrievalResult?.cacheTicket && refusalTraceId) {
+        // Spec rule 5: refusals are cached with the short refusal TTL, after the response
+        scheduleCacheStore({
+          scope,
+          ticket: retrievalResult.cacheTicket,
+          traceId: refusalTraceId,
+          facts: {
+            chatId: typeof data?.chatId === 'string' ? data.chatId : null,
+            sourceImages: false,
+            retrievalStatus: retrievalResult.status,
+            answerText: responseText,
+            isRefusal: true,
+          },
+        });
+      }
       const stream = createUIMessageStream({
         execute: async ({ writer }) => {
           if (refusalMetadata) writer.write({ type: 'start', messageMetadata: refusalMetadata });
@@ -2347,88 +2522,9 @@ IMPORTANT:
 
     citationSession.attach(retrievalFailed || effectiveDisableRAG || smallTalkTurn ? null : retrievalResult);
 
-    // Prepare system prompt with context
-    // Check if there's a custom system prompt in environment variables (with fallback)
-    const defaultSystemPrompt = `You are a helpful AI assistant with access to a knowledge base. When answering questions:
-
-1. If the context contains relevant information, use it to provide accurate and specific answers
-2. If information is not available in the context, say so clearly and suggest alternative approaches
-3. Always cite your sources when referencing specific documents
-4. Provide balanced, objective information rather than opinions
-5. For technical topics, include practical steps or examples when appropriate
-
-Context:
-{{context}}`;
-
-    // Get system prompt using the new SystemPromptManager with language support
-    let ragSystemPrompt = defaultSystemPrompt;
-
-    // Extract language and template settings from request
-    const templateKey = data?.settings?.systemPromptTemplate || 'helpful';
-
-    // NEW: Check for workspace-level system prompt override (highest priority after WhatsApp override)
-    let workspacePromptUsed = false;
-    // The organization comes from the verified scope, never from the request body
-    const workspaceOrgId = scope?.organizationId ?? null;
-
-    if (isMultiTenant() && workspaceOrgId) {
-      console.log('[System Prompt] Checking workspace-level prompt override...');
-
-      const { data: org } = await supabase
-        .from('organizations')
-        .select('settings')
-        .eq('id', workspaceOrgId)
-        .single();
-
-      if (org?.settings?.systemPrompt?.enabled) {
-        const wsPrompt = org.settings.systemPrompt;
-
-        if (wsPrompt.useFullPrompt && wsPrompt.fullPrompt) {
-          // Use full workspace prompt
-          ragSystemPrompt = wsPrompt.fullPrompt.replace(/\\n/g, '\n');
-          workspacePromptUsed = true;
-          console.log('[System Prompt] Using workspace full prompt');
-        } else if (wsPrompt.preContext || wsPrompt.postContext) {
-          // Assemble from pre + post
-          const pre = (wsPrompt.preContext || '').replace(/\\n/g, '\n');
-          const post = (wsPrompt.postContext || '').replace(/\\n/g, '\n');
-          ragSystemPrompt = `${pre}\n\n{{context}}\n\n${post}`;
-          workspacePromptUsed = true;
-          console.log('[System Prompt] Using workspace pre/post context');
-        }
-      }
-    }
-
-    // Use system prompt override if provided (for WhatsApp)
-    if (systemPromptOverride) {
-      // console.log('[WHATSAPP DEBUG] Using system prompt override from request');
-      ragSystemPrompt = systemPromptOverride;
-    } else if (workspacePromptUsed) {
-      // Already set workspace prompt above, skip other sources
-      console.log('[System Prompt] Workspace prompt applied, skipping global defaults');
-    } else if (data?.settings?.systemPromptTemplate) {
-      // Use localized system prompt template if specified
-      console.log(`[System Prompt] Using localized template: ${templateKey} in language: ${userLanguage}`);
-      ragSystemPrompt = SystemPromptManager.getAssembledPrompt(templateKey, userLanguage);
-    } else if (env.RAG_PRE_CONTEXT || env.RAG_POST_CONTEXT || env.RAG_SYSTEM_PROMPT) {
-      // Check if using split context (pre/post) or single prompt
-      if (env.RAG_PRE_CONTEXT || env.RAG_POST_CONTEXT) {
-        // Assemble prompt from pre and post context
-        const preContext = (env.RAG_PRE_CONTEXT || '').replace(/\\n/g, '\n');
-        const postContext = (env.RAG_POST_CONTEXT || '').replace(/\\n/g, '\n');
-        ragSystemPrompt = preContext + '\n\nContext:\n{{context}}\n\n' + postContext;
-        console.log('[System Prompt] Using RAG_PRE_CONTEXT/RAG_POST_CONTEXT from env object');
-      } else if (env.RAG_SYSTEM_PROMPT) {
-        // Use single RAG_SYSTEM_PROMPT with proper newline unescaping
-        ragSystemPrompt = env.RAG_SYSTEM_PROMPT.replace(/\\n/g, '\n');
-        console.log('[System Prompt] Using RAG_SYSTEM_PROMPT from env object');
-      }
-    } else {
-      console.log('[System Prompt] Using DEFAULT system prompt (no env vars found)');
-    }
-
-    // Always validate and ensure {{context}} placeholder exists
-    ragSystemPrompt = SystemPromptManager.ensureContextPlaceholder(ragSystemPrompt);
+    const resolvedSystemPrompt = await resolveRagSystemPrompt();
+    let ragSystemPrompt = resolvedSystemPrompt.ragSystemPrompt;
+    const workspacePromptUsed = resolvedSystemPrompt.workspacePromptUsed;
 
     // Log prompt source and preview for debugging
     console.log('[System Prompt] Prompt source:',
@@ -4131,7 +4227,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
 
       let answerRecordPending = answerId !== null;
       const finishAnswerRecord = (responseText: string, aborted: boolean, failed: boolean) => {
-        if (!answerRecordPending || !answerId || !scope || !answerUserId) return;
+        if (!answerRecordPending || !answerId || !scope || !answerUserId) return null;
         answerRecordPending = false;
         const records = citationSession.fullRecords();
         const premiseBlocks =
@@ -4140,7 +4236,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             : [];
         const knowledgeBaseContext =
           premiseBlocks.length > 0 && (retrievalResult?.status === 'ok' || retrievalResult?.status === 'degraded');
-        scheduleAnswerFinish({
+        return scheduleAnswerFinish({
           answerId,
           scope,
           userId: answerUserId,
@@ -4289,11 +4385,31 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             });
           }
           finishRagTrace();
-          if (answerRecordPending) {
-            const responseText = responseMessage.parts
-              .map((part) => (part.type === 'text' ? part.text : ''))
-              .join('');
-            finishAnswerRecord(responseText, isAborted || req.signal.aborted, generationFailed || finishReason === 'error');
+          const responseText = responseMessage.parts
+            .map((part) => (part.type === 'text' ? part.text : ''))
+            .join('');
+          const turnAborted = isAborted || req.signal.aborted;
+          const turnFailed = generationFailed || finishReason === 'error';
+          const groundednessHandle = answerRecordPending ? finishAnswerRecord(responseText, turnAborted, turnFailed) : null;
+          const cacheTicket = retrievalResult?.cacheTicket;
+          if (cacheTicket && ragTraceId && !turnAborted && !turnFailed) {
+            // D-32/D-33: stored after the response, chained to this request's Phase 5 groundedness label
+            scheduleCacheStore({
+              scope,
+              ticket: cacheTicket,
+              traceId: ragTraceId,
+              facts: {
+                chatId: typeof data?.chatId === 'string' ? data.chatId : null,
+                sourceImages: precomputedSourceImages.length > 0,
+                retrievalStatus: retrievalFailed ? 'degraded' : (retrievalResult?.status ?? 'error'),
+                answerText: responseText,
+                isRefusal: false,
+                toolsUsed: answerToolOutputUsed || webSearchResults.length > 0,
+              },
+              citations: citationSession.fullRecords()?.citations ?? [],
+              sources: retrievalResult ? cacheSourcesFromResult(retrievalResult) : [],
+              groundedness: groundednessHandle,
+            });
           }
         },
         // Handle tool-related errors in the stream
