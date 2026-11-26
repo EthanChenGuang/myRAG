@@ -266,6 +266,155 @@ function cliActor(): string {
   return `cli:${safe || 'operator'}`;
 }
 
+export interface EmbeddingCliDeps {
+  /** The RAG_FINETUNE switch; defaults to the environment. */
+  finetuneEnabled?: () => boolean;
+  /** Runs an external command (the retention prune) and resolves its exit code. */
+  runCommand?: (argv: string[]) => Promise<number>;
+}
+
+async function spawnCommand(argv: string[]): Promise<number> {
+  const { spawn } = await import('node:child_process');
+  const [command, ...args] = argv;
+  return new Promise((resolve) => {
+    const child = spawn(command as string, args, { stdio: 'inherit', cwd: process.cwd() });
+    child.once('error', () => resolve(127));
+    child.once('close', (code) => resolve(code ?? 1));
+  });
+}
+
+const FT_LISTS: readonly string[] = ['ft-consent-list', 'ft-models-list'];
+
+/**
+ * The ft-* commands (06.1-15). Every command except the two lists refuses while RAG_FINETUNE is off, before any request. Prints ids,
+ * statuses, counts, refusal reasons and the commands to run next: never a key, a probe vector or stored text.
+ */
+async function runFinetuneCommand(parsed: FinetuneParsedArgs, io: CliIo, deps: EmbeddingCliDeps): Promise<number> {
+  const ops = await import('./finetune-ops');
+  const { ProfileUnavailableError } = await import('./active-profile');
+  const enabled = deps.finetuneEnabled ?? ops.isFinetuneEnabled;
+  if (!FT_LISTS.includes(parsed.command) && !enabled()) {
+    io.err(`[Embedding] refused: ${ops.FINETUNE_OFF_MESSAGE}`);
+    return 1;
+  }
+  const refused = (result: { reason: string; detail: string }): number => {
+    io.err(`[Embedding] refused: ${result.reason}`);
+    if (result.detail !== result.reason) io.err(`[Embedding] detail: ${result.detail.slice(0, 300)}`);
+    return 1;
+  };
+  try {
+    switch (parsed.command) {
+      case 'ft-consent-list': {
+        const rows = await ops.listConsent();
+        if (rows.length === 0) io.out('[Embedding] no fine-tune consent recorded (no row means none)');
+        for (const row of rows) {
+          io.out(
+            `[Embedding] consent ${row.tenantKey} scope=${row.scope} evidence_ref=${row.evidenceRef ?? '-'} granted_at=${row.grantedAt ?? '-'} revoked_at=${row.revokedAt ?? '-'}`,
+          );
+        }
+        return 0;
+      }
+      case 'ft-consent-grant': {
+        const result = await ops.grantConsent(parsed.tenantKey, parsed.scope, parsed.evidenceRef, cliActor());
+        if (!result.ok) return refused(result);
+        io.out(`[Embedding] consent ${result.tenantKey} is now ${result.scope}`);
+        if (result.taintedVersions.length > 0) io.out(`[Embedding] tainted (deployment-scope versions no longer covered): ${result.taintedVersions.join(', ')}`);
+        return 0;
+      }
+      case 'ft-consent-revoke': {
+        const result = await ops.revokeConsent(parsed.tenantKey, cliActor());
+        if (!result.ok) return refused(result);
+        io.out(`[Embedding] consent ${result.tenantKey} revoked (scope none)`);
+        io.out(`[Embedding] tainted: ${result.taintedVersions.length > 0 ? result.taintedVersions.join(', ') : 'none'}`);
+        for (const slot of result.slots) {
+          if (slot.active) {
+            io.out(`[Embedding] warning: ${slot.versionId} is bound to ${slot.slot}, the ACTIVE profile: it keeps serving until you roll back`);
+            io.out('[Embedding] next: npm run rag:embedding -- rollback');
+          } else {
+            io.out(`[Embedding] ${slot.versionId} is bound to ${slot.slot}; its evidence was dropped, so it cannot be activated`);
+            if (slot.rollbackTarget) io.out('[Embedding] next: npm run rag:embedding -- ft-release-rollback --ack drop-rollback');
+          }
+          io.out(`[Embedding] next: npm run rag:embedding -- ft-clear ${slot.slot}`);
+        }
+        for (const uri of result.artifactUris) io.out(`[Embedding] next: delete the weights at ${uri} (an operator step outside this command)`);
+        const prune = ops.pruneCommand(parsed.tenantKey, parsed.pruneRoot);
+        io.out(`[Embedding] retention: ${parsed.pruneRoot ? prune.join(' ') : `${prune.join(' ')} [--root <bundles dir>]`}`);
+        if (!parsed.pruneRoot) return 0;
+        const code = await (deps.runCommand ?? spawnCommand)(prune);
+        io.out(`[Embedding] prune exited with ${code}`);
+        return code === 0 ? 0 : 1;
+      }
+      case 'ft-models-list': {
+        const models = await ops.listModels();
+        if (models.length === 0) io.out('[Embedding] no fine-tuned model versions registered');
+        for (const model of models) {
+          io.out(
+            `[Embedding] model ${model.id} base=${model.baseModel} scope=${model.scope} tenants=${model.tenantKeys.join(',')} status=${model.status} slot=${model.boundSlot ?? '-'}`,
+          );
+        }
+        return 0;
+      }
+      case 'ft-models-register': {
+        const { readFileSync } = await import('node:fs');
+        let raw: unknown;
+        try {
+          raw = JSON.parse(readFileSync(parsed.cardPath, 'utf8')) as unknown;
+        } catch {
+          io.err('[Embedding] the model card cannot be read as JSON');
+          return 2;
+        }
+        try {
+          const result = await ops.registerModel(raw, cliActor());
+          if (!result.ok) return refused(result);
+          io.out(`[Embedding] registered ${result.versionId} (status ${result.status})`);
+          return 0;
+        } catch (error) {
+          if (!(error instanceof ops.FinetuneCardInvalidError)) throw error;
+          io.err(`[Embedding] refused: ${error.message}`);
+          return 2;
+        }
+      }
+      case 'ft-models-retire': {
+        const result = await ops.retireModel(parsed.versionId, cliActor());
+        if (!result.ok) return refused(result);
+        io.out(`[Embedding] ${result.versionId} is now ${result.status}`);
+        return 0;
+      }
+      case 'ft-bind': {
+        const result = await ops.bindSlot(parsed.slot, parsed.versionId, cliActor());
+        if (!result.ok) return refused(result);
+        io.out(`[Embedding] bound ${result.version.id} to ${result.slot} (no vector written; the slot is unscoped and uses the global EMB-05 path)`);
+        return 0;
+      }
+      case 'ft-clear': {
+        const result = await ops.clearSlot(parsed.slot, cliActor(), parsed.batch);
+        if (!result.ok) return refused(result);
+        io.out(`[Embedding] cleared ${result.slot}: ${result.deleted} vectors deleted in ${result.batches} batches; the slot is unbound`);
+        return 0;
+      }
+      case 'ft-release-rollback': {
+        const result = await ops.releaseRollback(cliActor(), 'drop-rollback');
+        if (!result.ok) return refused(result);
+        io.out(
+          result.droppedPrevious
+            ? `[Embedding] active profile ${result.activeProfile} no longer rolls back to ${result.droppedPrevious}; that profile is free`
+            : `[Embedding] active profile ${result.activeProfile} has no rollback target; nothing changed`,
+        );
+        return 0;
+      }
+      case 'ft-check':
+        io.err('[Embedding] ft-check is not available in this build');
+        return 2;
+    }
+  } catch (error) {
+    if (error instanceof ProfileUnavailableError) {
+      io.err(error.message);
+      return 1;
+    }
+    throw error;
+  }
+}
+
 function describeCompleteness(entry: import('./profile-ops').ProfileCompleteness | undefined): string {
   if (!entry || entry.state === 'unavailable') return 'unavailable';
   if (entry.state === 'legacy_column') return 'legacy column, counted by the gate at activation';
@@ -276,17 +425,19 @@ function describeCompleteness(entry: import('./profile-ops').ProfileCompleteness
  * The CLI body. Prints profile ids, statuses, counts and the gate's refusal words only: never a key and never stored text. Returns the exit
  * code: 0 done, 1 refused by the gate or the registry cannot be reached, 2 the arguments were wrong. The environment must already be loaded.
  */
-export async function main(argv: string[] = process.argv.slice(2), io: CliIo = consoleIo, signal?: AbortSignal): Promise<number> {
+export async function main(
+  argv: string[] = process.argv.slice(2),
+  io: CliIo = consoleIo,
+  signal?: AbortSignal,
+  deps: EmbeddingCliDeps = {},
+): Promise<number> {
   const parsed = parseEmbeddingArgs(argv);
   if (!parsed.ok) {
     io.err(`[Embedding] ${parsed.error}`);
     io.err(USAGE);
     return 2;
   }
-  if (isFinetuneCommand(parsed)) {
-    io.err('[Embedding] the ft-* commands are not available in this build');
-    return 2;
-  }
+  if (isFinetuneCommand(parsed)) return runFinetuneCommand(parsed, io, deps);
   const ops = await import('./profile-ops');
   const bindingOps = await import('./binding-ops');
   const { ProfileUnavailableError, isEmbeddingProfilesEnabled } = await import('./active-profile');
