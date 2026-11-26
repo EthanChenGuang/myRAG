@@ -305,11 +305,11 @@ describe('stored header in embedding text and lexical_text (two tenants, plan 03
         maxInputTokens: 8000,
         supportedDims: [1024, 2048],
         normalize: true,
-        async embedDocuments(texts, opts) {
+        async embedDocuments(texts: string[], opts: { dims: number }) {
           seen.push(...texts);
-          return { vectors: texts.map((_, index) => Array.from({ length: opts.dims }, (_, dim) => (dim === index % opts.dims ? 1 : 0))), model, host: 'fake-host', usage: { tokens: texts.length } };
+          return { vectors: texts.map((_: string, index: number) => Array.from({ length: opts.dims }, (_: unknown, dim: number) => (dim === index % opts.dims ? 1 : 0))), model, host: 'fake-host', usage: { tokens: texts.length } };
         },
-        async embedQuery(_text, opts) {
+        async embedQuery(_text: string, opts: { dims: number }) {
           return { vectors: [Array.from({ length: opts.dims }, () => 0)], model, host: 'fake-host', usage: { tokens: 1 } };
         },
       },
