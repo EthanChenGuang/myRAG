@@ -42,3 +42,24 @@ export interface JudgeClaimsInput {
 export async function judgeClaims(input: JudgeClaimsInput): Promise<JudgeClaimsResult> {
   return { status: 'not_checked', reason: 'judge_not_configured', judgeModel: input.judgeModel || null, judgeVersion: null, usage: null };
 }
+
+export const JUDGE_PROMPT = '';
+export const JUDGE_RUBRIC_VERSION = '';
+export type ClaimJudgeCall = (input: { modelId: string; system: string; prompt: string; signal?: AbortSignal }) => Promise<{
+  object: unknown;
+  usage?: { inputTokens?: number; outputTokens?: number };
+}>;
+export function modelFamily(_modelId: string): string | null {
+  return null;
+}
+export function judgeVersion(_modelId: string, _parts?: { prompt: string; rubricVersion: string }): string {
+  return '';
+}
+export function setClaimJudgeForTests(_call: ClaimJudgeCall | null): void {}
+export function estimateJudgeCost(
+  _modelId: string,
+  _usage: { inputTokens: number | null; outputTokens: number | null },
+  _prices?: Record<string, { input_usd_per_mtok: number; output_usd_per_mtok: number }>,
+): number | null {
+  return -1;
+}

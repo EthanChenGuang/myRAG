@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "provider_families": {
+    "anthropic": "anthropic",
+    "openai": "openai",
+    "google": "google",
+    "meta-llama": "meta-llama",
+    "mistralai": "mistralai",
+    "qwen": "qwen",
+    "deepseek": "deepseek",
+    "x-ai": "x-ai",
+    "cohere": "cohere"
+  },
+  "router_prefixes": ["openrouter"],
+  "name_patterns": [
+    { "pattern": "claude", "family": "anthropic" },
+    { "pattern": "^(gpt-|gpt\\d|chatgpt|o\\d(\\b|-|$)|davinci)", "family": "openai" },
+    { "pattern": "^(gemini|gemma)", "family": "google" },
+    { "pattern": "^(llama|meta-llama)", "family": "meta-llama" },
+    { "pattern": "^(mistral|mixtral|codestral|ministral|pixtral|magistral|devstral)", "family": "mistralai" },
+    { "pattern": "^(qwen|qwq)", "family": "qwen" },
+    { "pattern": "^deepseek", "family": "deepseek" },
+    { "pattern": "^grok", "family": "x-ai" },
+    { "pattern": "^(command|c4ai)", "family": "cohere" }
+  ],
+  "judge_prices": {}
+}
