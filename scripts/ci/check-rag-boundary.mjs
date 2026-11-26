@@ -341,9 +341,9 @@ export const RULES = [
   },
   {
     id: 'retrieval-rpc',
-    description: 'retrieval RPC (match_*, hybrid_*, search_chunks*) called outside the pipeline',
+    description: 'retrieval RPC (match_*, hybrid_*, search_chunks*, the attribute resolver) called outside the pipeline',
     appliesTo: outsideRag,
-    find: (text) => regexMatches(/\.rpc\s*\(\s*(['"`])(?:match_|hybrid_|search_chunks)/g, text),
+    find: (text) => regexMatches(/\.rpc\s*\(\s*(['"`])(?:match_|hybrid_|search_chunks|rag_attribute_documents|rag_attribute_filter_values)/g, text),
   },
   {
     id: 'voice-agent-rpc',

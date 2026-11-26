@@ -3,6 +3,8 @@ import type { RetrievalFilterInput, RetrievalFilters, VersionScope } from '@/lib
 import type { Profile } from '@/lib/rag/types';
 import { RetrievalFiltersSchema } from '@/lib/rag-eval/contracts.generated';
 import { getLanguageRegistry } from '@/lib/rag/lang/registry';
+import { loadRagConfig, type AttributeFilterMode } from '@/lib/rag/config';
+import { getRagDeps } from '@/lib/rag/deps';
 
 const DOC_TYPE_VALUES = [
   'general',
@@ -68,7 +70,16 @@ const retrievalFilterBodySchema = z
   })
   .strict();
 
-type BodyShape = z.infer<typeof retrievalFilterBodySchema>;
+/** D-12: limits of an explicit attributes filter (the contract's AttributeFilter). */
+const ATTRIBUTE_KEY = /^[a-z][a-z0-9_]{0,39}$/;
+const MAX_ATTRIBUTE_KEYS = 30;
+const MAX_ATTRIBUTE_VALUES = 50;
+const MAX_ATTRIBUTE_VALUE_LENGTH = 200;
+
+/** Accepted only while RAG_ATTRIBUTE_FILTER is effectively on; entries are checked by attributeFilterIssues for their paths. */
+const retrievalFilterBodyWithAttributesSchema = retrievalFilterBodySchema.extend({ attributes: z.unknown().optional() });
+
+type BodyShape = z.infer<typeof retrievalFilterBodySchema> & { attributes?: Record<string, string[]> };
 type ContractFilters = z.infer<typeof RetrievalFiltersSchema>;
 
 const LIST_FIELDS: { body: keyof BodyShape; path: string }[] = [
@@ -102,8 +113,49 @@ function scopeTags(scopes: Partial<Record<ScopeDimension, string[]>>): string[] 
   return [...tags].sort();
 }
 
+function attributeFilterIssues(raw: unknown): { path: string; message: string }[] {
+  if (raw === undefined) return [];
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return [issue('attributes', 'attributes must be an object')];
+  const entries = Object.entries(raw as Record<string, unknown>);
+  if (entries.length > MAX_ATTRIBUTE_KEYS) return [issue('attributes', `attributes allows at most ${MAX_ATTRIBUTE_KEYS} keys`)];
+  const issues: { path: string; message: string }[] = [];
+  for (const [key, values] of entries) {
+    const path = `attributes.${key}`;
+    if (!ATTRIBUTE_KEY.test(key)) {
+      issues.push(issue(path, 'attribute key must match ^[a-z][a-z0-9_]{0,39}$'));
+      continue;
+    }
+    if (!Array.isArray(values)) {
+      issues.push(issue(path, 'attribute values must be a list'));
+      continue;
+    }
+    if (values.length > MAX_ATTRIBUTE_VALUES) {
+      issues.push(issue(path, `an attribute allows at most ${MAX_ATTRIBUTE_VALUES} values`));
+      continue;
+    }
+    values.forEach((value, index) => {
+      if (typeof value !== 'string' || value.length === 0 || [...value].length > MAX_ATTRIBUTE_VALUE_LENGTH) {
+        issues.push(issue(`${path}.${index}`, `an attribute value is a string of 1 to ${MAX_ATTRIBUTE_VALUE_LENGTH} characters`));
+      }
+    });
+  }
+  return issues;
+}
+
+/** Keys sorted, values sorted and de-duplicated; a key with an empty list is no filter for it. */
+function canonicalAttributes(raw: unknown): Record<string, string[]> | undefined {
+  if (raw === undefined) return undefined;
+  const out: Record<string, string[]> = {};
+  for (const key of Object.keys(raw as Record<string, string[]>).sort()) {
+    const values = [...new Set((raw as Record<string, string[]>)[key])].sort();
+    if (values.length > 0) out[key] = values;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 function bodyToContract(body: BodyShape): Record<string, unknown> {
   const out: Record<string, unknown> = { current_only: true };
+  if (body.attributes) out.attributes = body.attributes;
   const scopes = nonEmptyScopes(body.scopes);
   if (scopes) {
     out.scopes = scopes;
@@ -128,6 +180,9 @@ function bodyToContract(body: BodyShape): Record<string, unknown> {
 
 function contractToFilterInput(contract: ContractFilters): RetrievalFilterInput {
   const out: RetrievalFilterInput = {};
+  if (contract.attributes && Object.keys(contract.attributes).length > 0) {
+    out.attributes = Object.fromEntries(Object.entries(contract.attributes).map(([key, values]) => [key, [...values]]));
+  }
   if (contract.date_range) {
     out.dateRange = { from: contract.date_range.from, to: contract.date_range.to };
   }
@@ -180,16 +235,28 @@ function hasFilterFields(filters: RetrievalFilterInput): boolean {
     filters.languages !== undefined ||
     filters.invoice !== undefined ||
     filters.scopes !== undefined ||
-    filters.versionScope !== undefined
+    filters.versionScope !== undefined ||
+    filters.attributes !== undefined
   );
 }
 
+function effectiveAttributeFilter(): AttributeFilterMode {
+  return loadRagConfig(getRagDeps().ragEnv()).v2.attributeFilter;
+}
+
+/**
+ * D-12, D-30: `attributes` is a recognized key only while RAG_ATTRIBUTE_FILTER is effectively on (`options.attributeFilter`, else the
+ * effective switch); while it is off a body carrying it gets today's unrecognized-key answer.
+ */
 export function parseRetrievalFilters(
-  body: unknown
+  body: unknown,
+  options: { attributeFilter?: AttributeFilterMode } = {},
 ): { ok: true; filters?: RetrievalFilterInput } | { ok: false; details: { path: string; message: string }[] } {
   if (body === undefined) return { ok: true };
 
-  const parsed = retrievalFilterBodySchema.safeParse(body);
+  const attributesOn =
+    typeof body === 'object' && body !== null && 'attributes' in body && (options.attributeFilter ?? effectiveAttributeFilter()) !== 'off';
+  const parsed = (attributesOn ? retrievalFilterBodyWithAttributesSchema : retrievalFilterBodySchema).safeParse(body);
   if (!parsed.success) {
     return {
       ok: false,
@@ -202,20 +269,29 @@ export function parseRetrievalFilters(
     };
   }
 
+  const data: BodyShape = { ...parsed.data, attributes: undefined };
+  if (attributesOn) {
+    const raw = (parsed.data as { attributes?: unknown }).attributes;
+    const attributeIssues = attributeFilterIssues(raw);
+    if (attributeIssues.length > 0) return { ok: false, details: attributeIssues };
+    data.attributes = canonicalAttributes(raw);
+  }
+  if (data.attributes === undefined) delete data.attributes;
+
   for (const { body: field, path } of LIST_FIELDS) {
-    const value = parsed.data[field];
+    const value = data[field];
     if (Array.isArray(value) && value.length === 0) {
       return { ok: false, details: [issue(path, `${path} must not be an empty list`)] };
     }
   }
 
-  if (parsed.data.dateRange && parsed.data.dateRange.from > parsed.data.dateRange.to) {
+  if (data.dateRange && data.dateRange.from > data.dateRange.to) {
     return { ok: false, details: [issue('dateRange', 'dateRange.from must be on or before dateRange.to')] };
   }
 
-  if (parsed.data.invoice) {
-    const min = Number(parsed.data.invoice.amountMin);
-    const max = Number(parsed.data.invoice.amountMax);
+  if (data.invoice) {
+    const min = Number(data.invoice.amountMin);
+    const max = Number(data.invoice.amountMax);
     if (min > max) {
       return {
         ok: false,
@@ -224,12 +300,12 @@ export function parseRetrievalFilters(
     }
   }
 
-  const versions = parsed.data.versions;
+  const versions = data.versions;
   if (typeof versions === 'object' && versions.from !== undefined && versions.to !== undefined && versions.from > versions.to) {
     return { ok: false, details: [issue('versions', 'versions.from must be on or before versions.to')] };
   }
 
-  const contractPayload = bodyToContract(parsed.data);
+  const contractPayload = bodyToContract(data);
   const validated = RetrievalFiltersSchema.safeParse(contractPayload);
   if (!validated.success) {
     return {
@@ -254,6 +330,8 @@ export function buildRetrievalFilters(input: {
   referencedDocumentIds: string[];
   /** From effectiveOnFor, never from the request body. */
   effectiveOn?: string;
+  /** D-30: documents the attribute stage resolved; intersected last, an empty result matches nothing. */
+  attributeDocumentIds?: readonly string[];
 }): RetrievalFilters {
   const explicit = input.explicit ?? {};
   const result: RetrievalFilters = { currentOnly: true };
@@ -281,6 +359,12 @@ export function buildRetrievalFilters(input: {
     result.documentIds = [...referenced];
   } else if (explicitIds && explicitIds.length > 0) {
     result.documentIds = [...explicitIds];
+  }
+
+  if (input.attributeDocumentIds !== undefined) {
+    const attributeIds = new Set(input.attributeDocumentIds);
+    const narrowed = result.documentIds ? result.documentIds.filter((id) => attributeIds.has(id)) : [...input.attributeDocumentIds];
+    result.documentIds = narrowed.length > 0 ? narrowed : [NO_DOCUMENT_ID];
   }
 
   if (input.effectiveOn) result.effectiveOn = input.effectiveOn;
