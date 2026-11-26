@@ -31,8 +31,8 @@ describe('simhash64', () => {
     const text = passage(1).join(' ');
     const first = simhash64(text);
     expect(first).toBe(simhash64(text));
-    expect(first).not.toBe(0n);
-    expect(first >= 0n && first < 1n << 64n).toBe(true);
+    expect(first).not.toBe(BigInt(0));
+    expect(first >= BigInt(0) && first < BigInt(1) << BigInt(64)).toBe(true);
   });
 
   test('texts that differ in one word out of about eighty differ in few bits', () => {
@@ -56,24 +56,24 @@ describe('simhash64', () => {
   test('Han text is hashed from the tokenizer bigrams and stays stable', () => {
     const text = '仓库收货手册规定夜班人员扫描托盘并暂放货位';
     expect(simhash64(text)).toBe(simhash64(text));
-    expect(simhash64(text)).not.toBe(0n);
+    expect(simhash64(text)).not.toBe(BigInt(0));
   });
 
   test('empty or stopword-only text hashes to zero', () => {
-    expect(simhash64('')).toBe(0n);
+    expect(simhash64('')).toBe(BigInt(0));
   });
 });
 
 describe('int64 round trip', () => {
   test('a value above 2^53 keeps every bit through the signed string form', () => {
-    const values = [(1n << 64n) - 1n, (1n << 63n) + 12345n, (1n << 53n) + 1n, 0n, 1n];
+    const values = [(BigInt(1) << BigInt(64)) - BigInt(1), (BigInt(1) << BigInt(63)) + BigInt(12345), (BigInt(1) << BigInt(53)) + BigInt(1), BigInt(0), BigInt(1)];
     for (const value of values) {
       const text = toInt64String(value);
-      expect(BigInt(text) >= -(1n << 63n) && BigInt(text) < 1n << 63n).toBe(true);
+      expect(BigInt(text) >= -(BigInt(1) << BigInt(63)) && BigInt(text) < BigInt(1) << BigInt(63)).toBe(true);
       expect(fromInt64(text)).toBe(value);
       expect(fromInt64(BigInt(text))).toBe(value);
     }
-    expect(toInt64String((1n << 64n) - 1n)).toBe('-1');
+    expect(toInt64String((BigInt(1) << BigInt(64)) - BigInt(1))).toBe('-1');
   });
 
   test('rejects malformed values', () => {
@@ -85,7 +85,7 @@ describe('int64 round trip', () => {
 describe('simhashBands', () => {
   test('returns 8 values of 8 bits, low band first', () => {
     expect(SIMHASH_BAND_COUNT * SIMHASH_BAND_BITS).toBe(64);
-    const hash = 0x0123456789abcdefn;
+    const hash = BigInt('0x0123456789abcdef');
     expect(simhashBands(hash)).toEqual([0xef, 0xcd, 0xab, 0x89, 0x67, 0x45, 0x23, 0x01]);
     for (const value of simhashBands(simhash64(passage(3).join(' ')))) {
       expect(Number.isInteger(value) && value >= 0 && value <= 255).toBe(true);
@@ -102,7 +102,7 @@ describe('simhashBands', () => {
       [63, 62, 54, 46, 38, 30],
     ];
     for (const bits of flips) {
-      const other = bits.reduce((value, bit) => value ^ (1n << BigInt(bit)), base);
+      const other = bits.reduce((value, bit) => value ^ (BigInt(1) << BigInt(bit)), base);
       expect(hammingDistance64(base, other)).toBe(6);
       const a = simhashBands(base);
       const b = simhashBands(other);

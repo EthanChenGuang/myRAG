@@ -7,7 +7,7 @@ export const SIMHASH_SHINGLE_SIZE = 3;
 export const SIMHASH_BAND_COUNT = 8;
 export const SIMHASH_BAND_BITS = 8;
 
-const UINT64 = (1n << 64n) - 1n;
+const UINT64 = (BigInt(1) << BigInt(64)) - BigInt(1);
 const INT64_TEXT = /^-?\d{1,20}$/;
 
 function shingles(text: string): Map<string, number> {
@@ -31,7 +31,7 @@ function shingles(text: string): Map<string, number> {
  */
 export function simhash64(text: string): bigint {
   const counts = shingles(text);
-  if (counts.size === 0) return 0n;
+  if (counts.size === 0) return BigInt(0);
   const weights = new Array<number>(64).fill(0);
   for (const [shingle, weight] of counts) {
     const digest = createHash('sha256').update(shingle, 'utf8').digest();
@@ -42,9 +42,9 @@ export function simhash64(text: string): bigint {
       weights[bit + 32] = (weights[bit + 32] as number) + ((high >>> bit) & 1 ? weight : -weight);
     }
   }
-  let hash = 0n;
+  let hash = BigInt(0);
   for (let bit = 63; bit >= 0; bit -= 1) {
-    hash = (hash << 1n) | ((weights[bit] as number) > 0 ? 1n : 0n);
+    hash = (hash << BigInt(1)) | ((weights[bit] as number) > 0 ? BigInt(1) : BigInt(0));
   }
   return hash;
 }
@@ -54,7 +54,7 @@ export function simhashBands(hash: bigint): number[] {
   const value = BigInt.asUintN(64, hash);
   const bands: number[] = [];
   for (let band = 0; band < SIMHASH_BAND_COUNT; band += 1) {
-    bands.push(Number((value >> BigInt(band * SIMHASH_BAND_BITS)) & 0xffn));
+    bands.push(Number((value >> BigInt(band * SIMHASH_BAND_BITS)) & BigInt('0xff')));
   }
   return bands;
 }
@@ -62,8 +62,8 @@ export function simhashBands(hash: bigint): number[] {
 export function hammingDistance64(a: bigint, b: bigint): number {
   let diff = BigInt.asUintN(64, a ^ b);
   let count = 0;
-  while (diff > 0n) {
-    diff &= diff - 1n;
+  while (diff > BigInt(0)) {
+    diff &= diff - BigInt(1);
     count += 1;
   }
   return count;

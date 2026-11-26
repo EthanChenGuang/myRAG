@@ -241,7 +241,7 @@ for (const mode of MODES) {
     test('the SQL band split equals simhashBands for a value above 2^53', async () => {
       const tenant = tenants[0] as Tenant;
       const chunkId = (seeded.get(tenant.key) as { unique: string[] }).unique[0] as string;
-      const value = (1n << 63n) + (1n << 54n) + 0xa5n;
+      const value = (BigInt(1) << BigInt(63)) + (BigInt(1) << BigInt(54)) + BigInt('0xa5');
       const written = await rpc.rpc('rag_dup_write_hashes', { p_tenant_key: tenant.key, p_rows: [{ id: chunkId, simhash: simhash.toInt64String(value) }] });
       assert.equal(written.error, null, JSON.stringify(written.error));
       const [stored] = await rows('SELECT simhash::text AS h FROM document_chunks WHERE id = $1', [chunkId]);
@@ -304,8 +304,8 @@ for (const mode of MODES) {
       const write = await rpc.rpc('rag_dup_write_hashes', {
         p_tenant_key: tenant.key,
         p_rows: [
-          { id: a, simhash: simhash.toInt64String(0x0123456789abcdefn) },
-          { id: b, simhash: simhash.toInt64String(0xfedcba9876543210n) },
+          { id: a, simhash: simhash.toInt64String(BigInt('0x0123456789abcdef')) },
+          { id: b, simhash: simhash.toInt64String(BigInt('0xfedcba9876543210')) },
         ],
       });
       assert.equal(write.error, null, JSON.stringify(write.error));
@@ -328,7 +328,7 @@ for (const mode of MODES) {
       const b = uuid('0f000000');
       await insertChunks(db, first, [{ id: a, content: uniqueParagraph(9, 910) }]);
       await insertChunks(db, second, [{ id: b, content: uniqueParagraph(9, 911) }]);
-      const same = simhash.toInt64String(0x1111222233334444n);
+      const same = simhash.toInt64String(BigInt('0x1111222233334444'));
       await rpc.rpc('rag_dup_write_hashes', { p_tenant_key: tenant.key, p_rows: [{ id: a, simhash: same }, { id: b, simhash: same }] });
       const candidates = await rpc.rpc('rag_dup_candidates', { p_tenant_key: tenant.key, p_chunk_ids: [a], p_max_hamming: 16, p_threshold: THRESHOLD, p_limit: 50 });
       assert.equal(candidates.error, null, JSON.stringify(candidates.error));
@@ -695,7 +695,10 @@ describe('backfill command rag:dup-clusters (D-20)', () => {
     const result = await run(['--tenant', KEY_O, '--dry-run']);
     assert.equal(result.code, 0, result.err.join('\n'));
     assert.ok(result.out.some((line) => line.includes('dry run')));
-    assert.ok(result.out.some((line) => line.includes(`${KEY_O}: would hash ${COPIES * 2}`)), result.out.join('\n'));
+    // The generated copies plus the two-tenant fixture's own organization chunk.
+    const [eligible] = await rows("SELECT count(*)::int AS n FROM document_chunks WHERE tenant_key = $1 AND is_current AND status = 'ready'", [KEY_O]);
+    assert.equal(eligible?.n, COPIES * 2 + 1);
+    assert.ok(result.out.some((line) => line.includes(`${KEY_O}: would hash ${COPIES * 2 + 1} chunks`)), result.out.join('\n'));
     assert.deepEqual(await counts(), [{ bands: 0, clusters: 0, hashed: 0 }]);
   });
 
@@ -720,13 +723,27 @@ describe('backfill command rag:dup-clusters (D-20)', () => {
     assert.equal(Number(clusters[0]?.member_count), COPIES);
     assert.equal(new Set(clusters[0]?.source_document_ids as string[]).size, COPIES);
     const [after] = await counts();
-    assert.equal(after?.hashed, COPIES * 2);
+    assert.equal(after?.hashed, COPIES * 2 + 1);
+  });
+
+  test('the backfill repairs a document whose publish-time clustering failed', async () => {
+    const KEY_A = `u:${TWO_TENANT_IDS.userA}`;
+    const [failed] = await rows("SELECT id FROM documents WHERE tenant_key = $1 AND source_key = 'dup/0/fail' AND is_current", [KEY_A]);
+    assert.ok(failed, 'the failed-publish document from the lifecycle cases exists');
+    const before = await rows('SELECT count(*)::int AS n FROM document_chunks WHERE document_id = $1 AND dup_cluster_id IS NOT NULL', [failed.id]);
+    assert.equal(before[0]?.n, 0);
+    const result = await run(['--tenant', KEY_A]);
+    assert.equal(result.code, 0, result.err.join('\n'));
+    const after = await rows('SELECT count(*)::int AS n FROM document_chunks WHERE document_id = $1 AND dup_cluster_id IS NOT NULL', [failed.id]);
+    assert.equal(after[0]?.n, 1, 'its shared passage joined the cluster');
+    const clusters = await rows('SELECT member_count FROM rag_dup_clusters WHERE tenant_key = $1 ORDER BY member_count DESC', [KEY_A]);
+    assert.equal(clusters.length, 1);
   });
 
   test('running it again reports zero to do and changes nothing', async () => {
     const before = await rows('SELECT id, member_count, source_document_ids, updated_at FROM rag_dup_clusters WHERE tenant_key = $1', [KEY_O]);
     const dry = await run(['--tenant', KEY_O, '--dry-run']);
-    assert.ok(dry.out.some((line) => line.includes(`${KEY_O}: would hash 0`)), dry.out.join('\n'));
+    assert.ok(dry.out.some((line) => line.includes(`${KEY_O}: would hash 0 chunks`)), dry.out.join('\n'));
     const again = await run(['--tenant', KEY_O]);
     assert.equal(again.code, 0);
     assert.ok(again.out.some((line) => /hashed 0/.test(line)), again.out.join('\n'));
