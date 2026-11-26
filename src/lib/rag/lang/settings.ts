@@ -5,6 +5,7 @@ import {
   type LanguageValidationResult,
   type NormalizedLanguageSettings,
 } from '../../../../config/rag/validate-language-settings.cjs';
+import { defaultEmbeddingProfileDeclaration, embeddingProfileDeclaration } from '../embeddings/catalog';
 import { parseRerankProviderId, rerankerSupportedLanguages } from '../rerank/languages';
 import { getLanguageRegistry } from './registry';
 
@@ -49,7 +50,7 @@ export function activeRerankerDeclaration(): LanguageDeclaration | null {
 }
 
 export interface ValidateConfiguredLanguagesOptions {
-  /** Phase 3.2.1 (03.2.1-01) passes the active embedding profile; null means not verified against it. */
+  /** The embedding profile's declaration (see validateConfiguredLanguagesAgainstActiveProfile); null means not verified against it. */
   embeddingProfile?: LanguageDeclaration | null;
 }
 
@@ -63,6 +64,48 @@ export function validateConfiguredLanguages(options: ValidateConfiguredLanguages
   );
 }
 
+interface ProfileRef {
+  id: string;
+  provider: string;
+  model: string;
+}
+
+let activeProfileReader: (() => Promise<ProfileRef>) | null = null;
+
+async function readActiveProfile(): Promise<ProfileRef> {
+  if (activeProfileReader) return activeProfileReader();
+  // Loaded on call: active-profile.ts reaches the ingest config, which imports this module.
+  const { getActiveProfile } = await import('../embeddings/active-profile');
+  return getActiveProfile();
+}
+
+export interface ActiveEmbeddingDeclaration {
+  declaration: LanguageDeclaration;
+  /** False when the active profile could not be read and the default profile was checked instead. */
+  verified: boolean;
+}
+
+/** D-07: the active profile's declaration from the catalog; the default profile's when the registry cannot be read. */
+export async function activeEmbeddingDeclaration(): Promise<ActiveEmbeddingDeclaration> {
+  try {
+    return { declaration: embeddingProfileDeclaration(await readActiveProfile()), verified: true };
+  } catch {
+    return { declaration: defaultEmbeddingProfileDeclaration(), verified: false };
+  }
+}
+
+/** D-07 for the app entry point with the active embedding profile (Phase 3.2.1); never throws for an unreachable registry. */
+export async function validateConfiguredLanguagesAgainstActiveProfile(): Promise<LanguageValidationResult> {
+  const { declaration, verified } = await activeEmbeddingDeclaration();
+  const result = validateConfiguredLanguages({ embeddingProfile: declaration });
+  return verified ? result : { ...result, verifiedAgainstActiveProfile: false };
+}
+
+/** Test seam for the active profile pointer; null restores the registry read. */
+export function setActiveEmbeddingProfileReaderForTests(reader: (() => Promise<ProfileRef>) | null): void {
+  activeProfileReader = reader;
+}
+
 export function resetLanguageSettingsForTests(): void {
   cached = null;
 }
@@ -72,8 +115,3 @@ export function setLanguageSettingsTrapForTests(next: (() => never) | null): voi
   trap = next;
 }
 
-export function setActiveEmbeddingProfileReaderForTests(_reader: unknown): void {}
-
-export async function validateConfiguredLanguagesAgainstActiveProfile(): Promise<LanguageValidationResult> {
-  return validateConfiguredLanguages();
-}

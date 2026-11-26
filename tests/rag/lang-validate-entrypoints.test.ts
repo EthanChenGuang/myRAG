@@ -311,8 +311,8 @@ describe('app startup check against the active embedding profile', () => {
     vi.restoreAllMocks();
   });
 
-  function languageWarnings(spy: ReturnType<typeof vi.spyOn>): unknown[][] {
-    return spy.mock.calls.filter((call) => String(call[0]).startsWith('[RAG Languages]'));
+  function languageWarnings(spy: { mock: { calls: unknown[][] } }): unknown[][] {
+    return spy.mock.calls.filter((call: unknown[]) => String(call[0]).startsWith('[RAG Languages]'));
   }
 
   it('warns once, naming the language and the profile, when the active profile does not declare a chosen language', async () => {

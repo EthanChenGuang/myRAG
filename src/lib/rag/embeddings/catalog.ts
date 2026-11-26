@@ -1,3 +1,4 @@
+import rawDeclarations from '../../../../config/rag/embedding-model-languages.json';
 import type { EmbeddingProviderId } from './types';
 import {
   BGE_M3_MODEL_ID,
@@ -42,7 +43,7 @@ export interface EmbeddingModelEntry {
   /** True when our cl100k_base count differs from the vendor's billed count. */
   readonly tokensAreEstimates: boolean;
   readonly freeTokensNote: string | null;
-  /** Lower-case language codes the vendor documents for the model. */
+  /** Language-pack codes the model declares, from config/rag/embedding-model-languages.json (D-07). */
   readonly supportedLanguages: readonly string[];
   readonly languagesNote: string;
   readonly servingModes: readonly EmbeddingServingMode[];
@@ -63,7 +64,32 @@ const DEEPINFRA_HOSTED: EmbeddingHostedEndpoint = {
 
 const VOYAGE_INPUT_TYPES: readonly string[] = ['query', 'document'];
 
-function freezeEntry(entry: EmbeddingModelEntry): EmbeddingModelEntry {
+interface ModelLanguages {
+  provider: string;
+  model: string;
+  supported_languages: string[];
+}
+
+interface LanguageDeclarationsFile {
+  schema_version: number;
+  default_profile: { id: string; provider: string; model: string };
+  models: ModelLanguages[];
+}
+
+const DECLARATIONS = rawDeclarations as LanguageDeclarationsFile;
+
+function declaredLanguages(provider: string, model: string): readonly string[] {
+  const found = DECLARATIONS.models.find((entry) => entry.provider === provider && entry.model === model);
+  if (!found || !Array.isArray(found.supported_languages) || found.supported_languages.length === 0) {
+    throw new Error(`[Embedding Profile] config/rag/embedding-model-languages.json declares no languages for ${provider}:${model}`);
+  }
+  return [...found.supported_languages];
+}
+
+type CatalogFacts = Omit<EmbeddingModelEntry, 'supportedLanguages'>;
+
+function freezeEntry(facts: CatalogFacts): EmbeddingModelEntry {
+  const entry: EmbeddingModelEntry = { ...facts, supportedLanguages: declaredLanguages(facts.provider, facts.model) };
   Object.freeze(entry.supportedDims);
   Object.freeze(entry.inputTypes);
   Object.freeze(entry.supportedLanguages);
@@ -73,7 +99,7 @@ function freezeEntry(entry: EmbeddingModelEntry): EmbeddingModelEntry {
 }
 
 /** Bumped whenever a model fact below changes; comparisons record it (D-23). */
-export const EMBEDDING_CATALOG_VERSION = 1;
+export const EMBEDDING_CATALOG_VERSION = 2;
 
 export const EMBEDDING_MODEL_CATALOG: readonly EmbeddingModelEntry[] = Object.freeze(
   [
@@ -89,7 +115,6 @@ export const EMBEDDING_MODEL_CATALOG: readonly EmbeddingModelEntry[] = Object.fr
       usdPerMillionTokens: 0.02,
       tokensAreEstimates: false,
       freeTokensNote: null,
-      supportedLanguages: ['zh', 'en', 'it'],
       languagesNote: 'Multilingual; evaluated on the zh, en and it slices.',
       servingModes: ['hosted'],
       hostedEndpoint: OPENAI_HOSTED,
@@ -109,7 +134,6 @@ export const EMBEDDING_MODEL_CATALOG: readonly EmbeddingModelEntry[] = Object.fr
       usdPerMillionTokens: 0.12,
       tokensAreEstimates: true,
       freeTokensNote: 'First 200M tokens free per account.',
-      supportedLanguages: ['zh', 'en', 'it'],
       languagesNote: 'Vendor markets it as multilingual; evaluated on the zh, en and it slices.',
       servingModes: ['hosted'],
       hostedEndpoint: VOYAGE_HOSTED,
@@ -129,7 +153,6 @@ export const EMBEDDING_MODEL_CATALOG: readonly EmbeddingModelEntry[] = Object.fr
       usdPerMillionTokens: 0.12,
       tokensAreEstimates: true,
       freeTokensNote: 'First 50M tokens free per account.',
-      supportedLanguages: ['en', 'zh', 'de'],
       languagesNote: 'Vendor evaluation sets cover English, Chinese and German; none covers Italian; not marketed as multilingual.',
       servingModes: ['hosted'],
       hostedEndpoint: VOYAGE_HOSTED,
@@ -149,7 +172,6 @@ export const EMBEDDING_MODEL_CATALOG: readonly EmbeddingModelEntry[] = Object.fr
       usdPerMillionTokens: 0.12,
       tokensAreEstimates: true,
       freeTokensNote: 'First 50M tokens free per account.',
-      supportedLanguages: ['en'],
       languagesNote: 'Vendor evaluation sets are English only.',
       servingModes: ['hosted'],
       hostedEndpoint: VOYAGE_HOSTED,
@@ -169,7 +191,6 @@ export const EMBEDDING_MODEL_CATALOG: readonly EmbeddingModelEntry[] = Object.fr
       usdPerMillionTokens: 0.01,
       tokensAreEstimates: true,
       freeTokensNote: null,
-      supportedLanguages: ['zh', 'en', 'it'],
       languagesNote: 'Multilingual open-weights model; queries carry an instruction prefix instead of an input_type.',
       servingModes: ['hosted'],
       hostedEndpoint: DEEPINFRA_HOSTED,
@@ -189,7 +210,6 @@ export const EMBEDDING_MODEL_CATALOG: readonly EmbeddingModelEntry[] = Object.fr
       usdPerMillionTokens: 0.01,
       tokensAreEstimates: true,
       freeTokensNote: null,
-      supportedLanguages: ['zh', 'en', 'it'],
       languagesNote: 'Multilingual open-weights model (MIT licence); dense output only, no query instruction.',
       servingModes: ['hosted'],
       hostedEndpoint: DEEPINFRA_HOSTED,
@@ -197,7 +217,7 @@ export const EMBEDDING_MODEL_CATALOG: readonly EmbeddingModelEntry[] = Object.fr
       vendorDomainNote: 'General purpose and multilingual.',
       readOn: '2026-11-26',
     },
-  ].map((entry) => freezeEntry(entry as EmbeddingModelEntry)),
+  ].map((entry) => freezeEntry(entry as CatalogFacts)),
 );
 
 const DEFAULT_MODELS: Readonly<Record<EmbeddingProviderId, string>> = Object.freeze({
@@ -218,10 +238,18 @@ export function defaultModelFor(provider: string): string | undefined {
   return Object.prototype.hasOwnProperty.call(DEFAULT_MODELS, provider) ? DEFAULT_MODELS[provider as EmbeddingProviderId] : undefined;
 }
 
-export function defaultEmbeddingProfileDeclaration(): { id: string; supportedLanguages: string[] } {
-  return { id: '', supportedLanguages: [] };
+
+export interface EmbeddingLanguageDeclaration {
+  id: string;
+  supportedLanguages: string[];
 }
 
-export function embeddingProfileDeclaration(_profile: { id: string; provider: string; model: string }): { id: string; supportedLanguages: string[] } {
-  return { id: '', supportedLanguages: [] };
+/** D-07: the languages a profile declares are those of its model's catalog entry; a model outside the catalog declares none. */
+export function embeddingProfileDeclaration(profile: { id: string; provider: string; model: string }): EmbeddingLanguageDeclaration {
+  return { id: profile.id, supportedLanguages: [...(catalogEntry(profile.provider, profile.model)?.supportedLanguages ?? [])] };
+}
+
+/** The declaration of the default profile named in the declarations file, checked when the active profile cannot be read. */
+export function defaultEmbeddingProfileDeclaration(): EmbeddingLanguageDeclaration {
+  return embeddingProfileDeclaration(DECLARATIONS.default_profile);
 }
