@@ -711,6 +711,7 @@ def _parser() -> argparse.ArgumentParser:
         "relabel": "store an edited item's new hash and return it to active",
         "stale-scan": "mark items whose evidence is gone from the corpus as stale",
         "register": "register real-set evidence hashes in the evidence index",
+        "re-review": "queue real-set items due for re-review into the expert queue",
     }
     for name, help_text in specs.items():
         cmd = sub.add_parser(name, help=help_text)
@@ -742,6 +743,7 @@ COMMANDS: dict[str, Callable[[argparse.Namespace], int]] = {
     "relabel": _cmd_relabel,
     "stale-scan": _cmd_stale_scan,
     "register": _cmd_register,
+    "re-review": _cmd_re_review,
 }
 
 
