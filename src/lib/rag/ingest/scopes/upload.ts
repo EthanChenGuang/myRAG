@@ -120,7 +120,7 @@ export async function validateUploadScopes(
 const SQL_REASONS = new Set(['unknown_scope_value', 'too_many_scopes', 'not_found', 'invalid_argument']);
 
 /**
- * Writes the upload's tags on a version that is still being ingested (rag_set_upload_scopes, 0817), which checks them again against the
+ * Writes the upload's tags on a version that is still being ingested (rag_set_upload_scopes, 0818), which checks them again against the
  * tenant's active vocabulary. Used by file_hash_dedup and by the progressive final begin; the tenant key is the scope's own.
  */
 export async function writeUploadScopes(

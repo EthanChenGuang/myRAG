@@ -1,4 +1,4 @@
--- 0817: Scope tags chosen at upload (plan 03.2-43; D-40; DATA-18).
+-- 0818: Scope tags chosen at upload (plan 03.2-43; D-40; DATA-18).
 -- The ingest pipeline sets the uploader's tags on the version it has just begun, before any chunk is written, so the chunk writers (0801)
 -- copy them onto every chunk. rag_set_document_scopes (0805) cannot serve this path: it admits a tenant admin or the document's user_id,
 -- and a single-tenant document has no user_id, so a member's upload there could never carry its tags.

@@ -1,4 +1,4 @@
--- 0536: rag_mine_failed_queries_report, the run report around rag_mine_failed_queries (Phase 5.1.1, FBK-05, D-15).
+-- 0537: rag_mine_failed_queries_report, the run report around rag_mine_failed_queries (Phase 5.1.1, FBK-05, D-15).
 -- rag_mine_failed_queries counts an item under each of its reasons, so its rows cannot give the number of items a tenant got.
 -- This wrapper runs it, then counts per tenant the review items that the same transaction inserted (mined_at = now(), the
 -- transaction start, in the mining window of p_until), and returns the reason rows with that per-tenant total. The count runs in a

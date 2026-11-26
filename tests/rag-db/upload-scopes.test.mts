@@ -10,12 +10,12 @@ import { createEmptyFixtureDatabase } from '../../eval/harness/pglite-supabase.m
 import { TWO_TENANT_IDS, createTwoTenantDatabase } from '../../eval/harness/two-tenant.mts';
 
 /**
- * Plan 03.2-43 (D-40, DATA-18): rag_set_upload_scopes (0817) puts the uploader's tags on the version being ingested, before its chunks
+ * Plan 03.2-43 (D-40, DATA-18): rag_set_upload_scopes (0818) puts the uploader's tags on the version being ingested, before its chunks
  * are written, so every chunk the writers add carries them, through a publish hold and approval. Only a processing, not-current version of
  * the named tenant can be tagged this way; values must be active entries of that tenant's vocabulary. Neutral synthetic slugs only.
  */
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const MIGRATION = 'supabase/migrations/0817_upload_scopes.sql';
+const MIGRATION = 'supabase/migrations/0818_upload_scopes.sql';
 const LEGACY_PROFILE = 'openai-3-small-1536';
 const HALFVEC_PROFILE = 'voyage-4-large-1024';
 
@@ -121,7 +121,7 @@ describe('upload tags in single-tenant mode', () => {
 
   test("a member's upload (no user_id on the row) ends as a published document whose every chunk carries exactly its tag", async () => {
     const id = await begin(db, workspace, 'member');
-    // rag_set_document_scopes admits only an admin or the row's user_id, which a single-tenant row does not have: the reason for 0817.
+    // rag_set_document_scopes admits only an admin or the row's user_id, which a single-tenant row does not have: the reason for 0818.
     assert.match((await failure(db, 'SELECT * FROM rag_set_document_scopes($1, $2, $3::text[], $4)', [id, SINGLE_KEY, ['region:a1'], SINGLE_MEMBER])) ?? '', /^not_found/);
     const set = (await rows(db, UPLOAD_SQL, [id, SINGLE_KEY, ['region:a1', 'region:a1']]))[0];
     assert.deepEqual(set?.scopes, ['region:a1']);

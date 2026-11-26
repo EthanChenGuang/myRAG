@@ -6,7 +6,7 @@ import { loadFeedbackMiningConfig, readFeedbackLoopConfig, type FeedbackLoopEnvS
 import { purgeRetrievalLog, PurgeError, type PurgeCounts } from './purge';
 
 export const MAX_MINING_WINDOW_DAYS = 31;
-/** The run report around public.rag_mine_failed_queries (0536): its reason rows plus the items each tenant got. */
+/** The run report around public.rag_mine_failed_queries (0537): its reason rows plus the items each tenant got. */
 export const MINING_RPC = 'rag_mine_failed_queries_report';
 export const TENANT_HASH_LENGTH = 16;
 
