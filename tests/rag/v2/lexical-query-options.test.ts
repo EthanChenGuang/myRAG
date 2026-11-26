@@ -107,7 +107,7 @@ beforeEach(() => {
   resetRagConfigForTests();
   resetV2StartupForTests();
   resetLexicalOptionsForTests();
-  searchStages.resetLexicalStaleCountForTests?.();
+  searchStages.resetLexicalStaleCountForTests();
   vi.spyOn(console, 'warn').mockImplementation(() => undefined);
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
 });
@@ -204,13 +204,23 @@ describe('query-side lexical options (04.2-22, D-08, D-09, D-55)', () => {
     install({ RAG_LEXICAL_DICTIONARY: 'true' }, failing);
     expect(searchDetail(await retrieve('neutral sample question')) ?? '').toContain(`dict=${DICT_VERSION} stale_chunks=unknown`);
 
-    searchStages.resetLexicalStaleCountForTests?.();
+    searchStages.resetLexicalStaleCountForTests();
     const counting = staleRpc(okStale);
     install({ RAG_LEXICAL_DICTIONARY: 'true' }, counting);
     await retrieve('neutral sample question');
     const second = await retrieve('another neutral sample question');
     expect(searchDetail(second) ?? '').toContain('stale_chunks=4');
     expect(counting.calls.filter((call) => call.fn === 'rag_lexical_stale_count')).toHaveLength(1);
+  });
+
+  it('reads the stale count from a one-row result as well as from a scalar (bigint as text)', async () => {
+    const { resolver } = resolverReturning({ options: { dictionary: stubDictionary() }, stamp: { dictVersion: DICT_VERSION, patterns: null }, warnings: [] });
+    setLexicalOptionsResolverForTests(resolver);
+    install({ RAG_LEXICAL_DICTIONARY: 'true' }, staleRpc(() => Promise.resolve<RpcResponse>({ data: [{ rag_lexical_stale_count: '5' }], error: null })));
+    expect(searchDetail(await retrieve('neutral sample question')) ?? '').toContain('stale_chunks=5');
+    searchStages.resetLexicalStaleCountForTests();
+    install({ RAG_LEXICAL_DICTIONARY: 'true' }, staleRpc(() => Promise.resolve<RpcResponse>({ data: '6', error: null })));
+    expect(searchDetail(await retrieve('neutral sample question')) ?? '').toContain('stale_chunks=6');
   });
 
   it('a stale count that never answers reads unknown within the stage budget', async () => {
