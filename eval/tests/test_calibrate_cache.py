@@ -92,7 +92,7 @@ def test_the_fit_never_reads_test_pairs():
 def test_no_paraphrase_within_a_safe_distance_keeps_the_default():
     rows = [
         _row("dev-para-1", "cache_paraphrase", "dev", 0.12),
-        _row("dev-near-1", "cache_near_miss", "dev", 0.05),
+        _row("dev-near-1", "cache_near_miss", "dev", 0.08),
         _row("test-para-1", "cache_paraphrase", "test"),
         _row("test-near-1", "cache_near_miss", "test"),
     ]
@@ -104,7 +104,7 @@ def test_no_paraphrase_within_a_safe_distance_keeps_the_default():
 
 
 def test_check_gates_the_effective_threshold_of_the_config_file(tmp_path):
-    pairs = _write(tmp_path, _synthetic(test_near_miss=0.045))
+    pairs = _write(tmp_path, _synthetic(test_near_miss=0.0705))
     config = tmp_path / "semantic-cache.json"
     config.write_text(json.dumps({"schema_version": 1, "profiles": []}), encoding="utf-8")
     assert calibrate_cli.main(["cache", "--pairs", str(pairs), "--out", str(tmp_path / "o1"), "--config", str(config), "--check"]) == 0
@@ -112,7 +112,7 @@ def test_check_gates_the_effective_threshold_of_the_config_file(tmp_path):
         ["cache", "--pairs", str(pairs), "--out", str(tmp_path / "o2"), "--config", str(config), "--check", "--default-distance", "0.05"]
     ) == 0
     assert calibrate_cli.main(
-        ["cache", "--pairs", str(pairs), "--out", str(tmp_path / "o3"), "--config", str(config), "--check", "--default-distance", "0.1"]
+        ["cache", "--pairs", str(pairs), "--out", str(tmp_path / "o3"), "--config", str(config), "--check", "--default-distance", "0.071"]
     ) == 1
 
 
