@@ -350,7 +350,7 @@ describe('driftAlerts (D-44, D-45, research Pitfall 18)', () => {
       divergence: 0.02,
       gaps: [
         { slice: 'language:it', offline: 0.85, online: 0.65, online_n: 80, gap: 0, result: 'passed' },
-        { slice: 'language:zh', offline: 0.9, online: 0.5, online_n: 10, result: 'insufficient_n' },
+        { slice: 'language:zh', offline: 0.9, online: 0.5, online_n: 10, gap: null, result: 'insufficient_n' },
       ],
     });
     const candidates = driftAlerts({ tenantKey: TENANT_A, report, config });

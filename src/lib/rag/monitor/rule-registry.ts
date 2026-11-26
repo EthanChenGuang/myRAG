@@ -6,6 +6,7 @@ import type {
   MonitorAlertsConfig,
   MonitorDailyCell,
 } from '@/lib/rag-eval/contracts.generated';
+import { evaluateDistribution, evaluateJudgeMean, evaluateLatency, evaluateRate } from './rule-kinds';
 
 export type MonitorRule = MonitorAlertsConfig['rules'][number];
 export type MonitorRuleKind = MonitorRule['kind'];
@@ -91,13 +92,18 @@ export type RuleKindRegistry = Partial<Record<MonitorRuleKind, RuleKindEntry>>;
  * One entry per rule kind. Phase 7 plan 07-46 adds `language_drop` (a context entry, evaluateLanguageDrop);
  * a configured kind without an entry is skipped and counted as rules_unregistered.
  */
-export const RULE_KIND_REGISTRY: RuleKindRegistry = {};
+export const RULE_KIND_REGISTRY: RuleKindRegistry = {
+  rate: { input: 'daily_cells', evaluate: evaluateRate },
+  distribution: { input: 'daily_cells', evaluate: evaluateDistribution },
+  latency: { input: 'daily_cells', evaluate: evaluateLatency },
+  judge_mean: { input: 'daily_cells', evaluate: evaluateJudgeMean },
+  drift: { input: 'report' },
+  offline_online_gap: { input: 'report' },
+};
 
 export function registryEntryFor(
   kind: string,
   registry: RuleKindRegistry = RULE_KIND_REGISTRY,
 ): RuleKindEntry | undefined {
-  void kind;
-  void registry;
-  return undefined;
+  return Object.prototype.hasOwnProperty.call(registry, kind) ? registry[kind as MonitorRuleKind] : undefined;
 }
