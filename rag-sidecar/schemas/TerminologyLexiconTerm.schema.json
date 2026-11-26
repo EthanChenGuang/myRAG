@@ -1,0 +1,40 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "kind": {
+      "enum": [
+        "synonym",
+        "abbreviation",
+        "alias",
+        "identifier",
+        "translation",
+        "misspelling"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "language": {
+      "enum": [
+        "zh",
+        "en",
+        "it",
+        "any"
+      ],
+      "title": "Language",
+      "type": "string"
+    },
+    "normalized": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Normalized",
+      "type": "string"
+    }
+  },
+  "required": [
+    "normalized",
+    "language",
+    "kind"
+  ],
+  "title": "TerminologyLexiconTerm",
+  "type": "object"
+}

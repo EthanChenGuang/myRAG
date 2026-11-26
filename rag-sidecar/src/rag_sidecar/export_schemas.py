@@ -141,6 +141,21 @@ from rag_sidecar.contracts.feedback_loop import (
     WeeklyReport,
 )
 from rag_sidecar.contracts.samples import build_samples
+from rag_sidecar.contracts.terminology import (
+    TerminologyCandidate,
+    TerminologyEntry,
+    TerminologyExpansion,
+    TerminologyImportReport,
+    TerminologyImportRow,
+    TerminologyLexicon,
+    TerminologyLexiconTerm,
+    TerminologyMatch,
+    TerminologyParams,
+    TerminologyPreviewRequest,
+    TerminologyPreviewResponse,
+    TerminologyTranslationPair,
+    TerminologyValidationIssue,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCHEMAS_DIR = REPO_ROOT / "rag-sidecar" / "schemas"
@@ -279,6 +294,19 @@ CONTRACTS: list[tuple[type[BaseModel], Mode]] = [
     (ShipCheckResult, "serialization"),
     (VectorSyncSliceReport, "serialization"),
     (ReconcileReport, "serialization"),
+    (TerminologyEntry, "validation"),
+    (TerminologyParams, "serialization"),
+    (TerminologyMatch, "serialization"),
+    (TerminologyExpansion, "serialization"),
+    (TerminologyPreviewRequest, "validation"),
+    (TerminologyPreviewResponse, "serialization"),
+    (TerminologyImportRow, "validation"),
+    (TerminologyImportReport, "serialization"),
+    (TerminologyValidationIssue, "serialization"),
+    (TerminologyCandidate, "serialization"),
+    (TerminologyLexiconTerm, "serialization"),
+    (TerminologyTranslationPair, "serialization"),
+    (TerminologyLexicon, "serialization"),
 ]
 
 

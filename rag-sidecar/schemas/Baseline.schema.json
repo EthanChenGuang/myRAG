@@ -500,11 +500,12 @@
                   "expand",
                   "hyde",
                   "decompose",
+                  "terminology",
                   "semantic_cache"
                 ],
                 "type": "string"
               },
-              "maxItems": 17,
+              "maxItems": 18,
               "type": "array"
             },
             {
@@ -1267,6 +1268,20 @@
           ],
           "default": null,
           "title": "Semantic Cache"
+        },
+        "terminology": {
+          "anyOf": [
+            {
+              "maximum": 60000,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Terminology"
         },
         "voice_keyword_fallback": {
           "anyOf": [
