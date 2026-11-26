@@ -83,8 +83,8 @@ describe('DEFAULT_PIPELINE and pipelineSource', () => {
     expect(getRagDeps().ragEnv().pipelineSourceHint).toBe('explicit');
   });
 
-  it('the language seam reports no reader by default', () => {
-    expect(getRagDeps().languagesConfigured()).toBeNull();
+  it('the language seam reads the Phase 3.2 settings by default', () => {
+    expect(getRagDeps().languagesConfigured()).toBe(true);
   });
 });
 

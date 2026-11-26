@@ -1,7 +1,7 @@
 import type { Profile } from './types';
 import { RETRIEVAL_BACKEND_IDS, type BackendId } from './backend/types';
 import { getLanguageSettings } from './lang/settings';
-import { LANGUAGES_NOT_CONFIGURED, resolvePipelines, type LanguagesNotConfigured, type PipelineSource } from './lang/resolve';
+import { LANGUAGES_NOT_CONFIGURED, pipelineSourceOf, resolvePipelines, type LanguagesNotConfigured, type PipelineSource } from './lang/resolve';
 
 export const CORE_STAGES = ['embed', 'search', 'fuse'] as const;
 export const OPTIONAL_STAGES = [
@@ -390,10 +390,7 @@ export function setDefaultPipelineForTests(next: 'legacy' | 'v2' | null): void {
   memo.clear();
 }
 
-/** D-07: an empty or whitespace-only value counts as unset. */
-export function pipelineSourceOf(raw: string | undefined): PipelineSource {
-  return (raw ?? '').trim() === '' ? 'default' : 'explicit';
-}
+export { pipelineSourceOf };
 
 function pipelineSource(env: RagEnvInput): PipelineSource {
   return env.pipelineSourceHint ?? pipelineSourceOf(env.RAG_PIPELINE);
