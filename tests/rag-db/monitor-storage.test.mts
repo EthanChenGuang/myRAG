@@ -1,9 +1,13 @@
 import { after, before, beforeEach, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { PGlite } from '@electric-sql/pglite';
 import { createEmptyFixtureDatabase, type DeploymentMode } from '../../eval/harness/pglite-supabase.mts';
 
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const MODES: DeploymentMode[] = ['single-tenant', 'multi-tenant'];
 const BROWSER_ROLES = ['anon', 'authenticated'] as const;
 const TABLES = ['rag_monitor_daily', 'rag_monitor_alerts'];
@@ -519,6 +523,176 @@ for (const mode of MODES) {
         const policies = (await db.query<{ n: number }>("SELECT count(*)::int AS n FROM pg_catalog.pg_policies WHERE schemaname = 'public' AND tablename = $1", [table])).rows[0];
         assert.equal(policies?.n, 0, table);
       }
+    });
+  });
+}
+
+type RecordResult = { stored: number; dropped: number };
+
+async function recordScores(db: PGlite, scores: unknown): Promise<RecordResult> {
+  const result = await asRole(db, 'service_role', () =>
+    db.query<RecordResult>('SELECT stored, dropped FROM public.rag_online_judge_scores_record($1::jsonb)', [JSON.stringify(scores)]),
+  );
+  return result.rows[0] as RecordResult;
+}
+
+async function insertLogRow(db: PGlite, userId: string, organizationId: string | null): Promise<{ traceId: string; tenantKey: string }> {
+  const traceId = crypto.randomBytes(16).toString('hex');
+  const row = await db.query<{ tenant_key: string }>(
+    `INSERT INTO public.rag_retrieval_log (trace_id, user_id, organization_id, channel, pipeline, status)
+     VALUES ($1, $2, $3, 'chat', 'legacy', 'ok') RETURNING tenant_key`,
+    [traceId, userId, organizationId],
+  );
+  return { traceId, tenantKey: row.rows[0]?.tenant_key as string };
+}
+
+for (const mode of MODES) {
+  describe(`monitor storage: rag_online_judge_scores (${mode})`, () => {
+    let db: PGlite;
+    let traceA: { traceId: string; tenantKey: string };
+    let traceB: { traceId: string; tenantKey: string };
+
+    before(async () => {
+      db = (await createEmptyFixtureDatabase({ deploymentMode: mode })).db;
+      const userA = crypto.randomUUID();
+      const userB = crypto.randomUUID();
+      await db.query('INSERT INTO auth.users (id, email) VALUES ($1, $2), ($3, $4)', [userA, 'a@example.invalid', userB, 'b@example.invalid']);
+      let organizationId: string | null = null;
+      if (mode === 'multi-tenant') {
+        organizationId = crypto.randomUUID();
+        await db.query('INSERT INTO organizations (id, name, slug, owner_id) VALUES ($1, $2, $3, $4)', [organizationId, 'Org A', `org-${organizationId.slice(0, 8)}`, userA]);
+      }
+      traceA = await insertLogRow(db, userA, organizationId);
+      traceB = await insertLogRow(db, userB, null);
+    });
+
+    after(async () => {
+      await db?.close();
+    });
+
+    beforeEach(async () => {
+      if ((await db.query<{ t: string | null }>("SELECT to_regclass('public.rag_online_judge_scores')::text AS t")).rows[0]?.t) {
+        await db.exec('DELETE FROM public.rag_online_judge_scores');
+      }
+    });
+
+    test('two scores of a trace are stored under the tenant of its log row', async () => {
+      const result = await recordScores(db, [
+        { trace_id: traceA.traceId, metric: 'faithfulness', score: 0.9, judge_id: 'judge-model-a' },
+        { trace_id: traceA.traceId, metric: 'answer_relevance', score: 0.7, judge_id: 'judge-model-a' },
+      ]);
+      assert.deepEqual(result, { stored: 2, dropped: 0 });
+      const rows = (await db.query<{ tenant_key: string; metric: string }>('SELECT tenant_key, metric FROM public.rag_online_judge_scores ORDER BY metric')).rows;
+      assert.deepEqual(rows, [
+        { tenant_key: traceA.tenantKey, metric: 'answer_relevance' },
+        { tenant_key: traceA.tenantKey, metric: 'faithfulness' },
+      ]);
+    });
+
+    test('a score for an unknown trace is dropped and counted; a tenant_key in the payload is ignored', async () => {
+      const result = await recordScores(db, [
+        { trace_id: crypto.randomBytes(16).toString('hex'), metric: 'faithfulness', score: 0.5, judge_id: 'judge-model-a' },
+        { trace_id: traceB.traceId, metric: 'faithfulness', score: 0.4, judge_id: 'judge-model-a', tenant_key: traceA.tenantKey },
+      ]);
+      assert.deepEqual(result, { stored: 1, dropped: 1 });
+      const rows = (await db.query<{ tenant_key: string; trace_id: string }>('SELECT tenant_key, trace_id FROM public.rag_online_judge_scores')).rows;
+      assert.deepEqual(rows, [{ tenant_key: traceB.tenantKey, trace_id: traceB.traceId }]);
+    });
+
+    test('the same trace, metric and judge sent twice keeps one row with the later score', async () => {
+      await recordScores(db, [{ trace_id: traceA.traceId, metric: 'faithfulness', score: 0.2, judge_id: 'judge-model-a' }]);
+      const result = await recordScores(db, [
+        { trace_id: traceA.traceId, metric: 'faithfulness', score: 0.3, judge_id: 'judge-model-a' },
+        { trace_id: traceA.traceId, metric: 'faithfulness', score: 0.8, judge_id: 'judge-model-a' },
+      ]);
+      assert.deepEqual(result, { stored: 2, dropped: 0 });
+      const rows = (await db.query<{ score: number }>('SELECT score FROM public.rag_online_judge_scores')).rows;
+      assert.equal(rows.length, 1);
+      assert.ok(Math.abs((rows[0]?.score ?? 0) - 0.8) < 1e-6);
+    });
+
+    test('a score outside 0 to 1, an unknown metric or a malformed payload is rejected and nothing is stored', async () => {
+      for (const bad of [
+        [{ trace_id: traceA.traceId, metric: 'faithfulness', score: 1.5, judge_id: 'judge-model-a' }],
+        [{ trace_id: traceA.traceId, metric: 'faithfulness', score: -0.1, judge_id: 'judge-model-a' }],
+        [{ trace_id: traceA.traceId, metric: 'context_recall', score: 0.5, judge_id: 'judge-model-a' }],
+        [
+          { trace_id: traceA.traceId, metric: 'answer_relevance', score: 0.5, judge_id: 'judge-model-a' },
+          { trace_id: traceA.traceId, metric: 'faithfulness', score: 0.5, judge_id: 'a judge with spaces' },
+        ],
+        [{ trace_id: traceA.traceId, metric: 'faithfulness', judge_id: 'judge-model-a' }],
+        { trace_id: traceA.traceId },
+      ]) {
+        await rejectsWith('22023', () => recordScores(db, bad));
+      }
+      const count = (await db.query<{ n: number }>('SELECT count(*)::int AS n FROM public.rag_online_judge_scores')).rows[0]?.n;
+      assert.equal(count, 0);
+    });
+
+    test('deleting the log row keeps the scores; rag_monitor_purge removes scores older than its window', async () => {
+      const extra = await insertLogRow(db, (await db.query<{ id: string }>('SELECT id FROM auth.users LIMIT 1')).rows[0]?.id as string, null);
+      await recordScores(db, [{ trace_id: extra.traceId, metric: 'faithfulness', score: 0.6, judge_id: 'judge-model-a' }]);
+      await db.query('DELETE FROM public.rag_retrieval_log WHERE trace_id = $1', [extra.traceId]);
+      let count = (await db.query<{ n: number }>('SELECT count(*)::int AS n FROM public.rag_online_judge_scores WHERE trace_id = $1', [extra.traceId])).rows[0]?.n;
+      assert.equal(count, 1);
+
+      await recordScores(db, [{ trace_id: traceA.traceId, metric: 'faithfulness', score: 0.6, judge_id: 'judge-model-old' }]);
+      await db.query("UPDATE public.rag_online_judge_scores SET created_at = now() - interval '401 days' WHERE judge_id = 'judge-model-old'");
+      const purged = (await asRole(db, 'service_role', () => db.query<{ n: number }>('SELECT public.rag_monitor_purge(400) AS n'))).rows[0]?.n;
+      assert.equal(purged, 1);
+      count = (await db.query<{ n: number }>('SELECT count(*)::int AS n FROM public.rag_online_judge_scores')).rows[0]?.n;
+      assert.equal(count, 1);
+    });
+
+    for (const role of BROWSER_ROLES) {
+      test(`${role} is refused with 42501 on the table and the function`, async () => {
+        await rejectsWith('42501', () => asRole(db, role, () => db.query('SELECT 1 FROM public.rag_online_judge_scores LIMIT 1')));
+        await rejectsWith('42501', () =>
+          asRole(db, role, () => db.query("INSERT INTO public.rag_online_judge_scores (tenant_key, trace_id, metric, score, judge_id) VALUES ('s:default', 'x', 'faithfulness', 0.5, 'j')")),
+        );
+        await rejectsWith('42501', () => asRole(db, role, () => db.query("SELECT * FROM public.rag_online_judge_scores_record('[]'::jsonb)")));
+      });
+    }
+
+    test('the record function is SECURITY INVOKER with an empty search_path, executable by service_role only; RLS on, no policy', async () => {
+      const row = (
+        await db.query<{ definer: boolean; config: string[] | null; pub: boolean; anon: boolean; auth: boolean; svc: boolean }>(
+          `SELECT p.prosecdef AS definer, p.proconfig AS config,
+                  has_function_privilege('public', p.oid, 'EXECUTE') AS pub,
+                  has_function_privilege('anon', p.oid, 'EXECUTE') AS anon,
+                  has_function_privilege('authenticated', p.oid, 'EXECUTE') AS auth,
+                  has_function_privilege('service_role', p.oid, 'EXECUTE') AS svc
+             FROM pg_catalog.pg_proc p WHERE p.oid = to_regprocedure('public.rag_online_judge_scores_record(jsonb)')`,
+        )
+      ).rows[0];
+      assert.ok(row, 'rag_online_judge_scores_record(jsonb) is missing');
+      assert.equal(row.definer, false);
+      assert.ok((row.config ?? []).some((entry) => entry === 'search_path=""' || entry === 'search_path='));
+      assert.deepEqual([row.pub, row.anon, row.auth, row.svc], [false, false, false, true]);
+      const rls = (await db.query<{ on: boolean }>("SELECT relrowsecurity AS on FROM pg_catalog.pg_class WHERE oid = 'public.rag_online_judge_scores'::regclass")).rows[0];
+      assert.equal(rls?.on, true);
+      const policies = (await db.query<{ n: number }>("SELECT count(*)::int AS n FROM pg_catalog.pg_policies WHERE schemaname = 'public' AND tablename = 'rag_online_judge_scores'")).rows[0];
+      assert.equal(policies?.n, 0);
+    });
+  });
+
+  describe(`monitor storage: 0964 without the retrieval log (${mode})`, () => {
+    let db: PGlite;
+
+    before(async () => {
+      db = (await createEmptyFixtureDatabase({ deploymentMode: mode })).db;
+    });
+
+    after(async () => {
+      await db?.close();
+    });
+
+    test('the migration applies on a database without rag_retrieval_log and the function stores nothing', async () => {
+      await db.exec('DROP TABLE IF EXISTS public.rag_retrieval_log CASCADE');
+      await db.exec('DROP TABLE IF EXISTS public.rag_online_judge_scores CASCADE');
+      await db.exec(fs.readFileSync(path.join(REPO_ROOT, 'supabase/migrations/0964_rag_online_judge_scores.sql'), 'utf8'));
+      const result = await recordScores(db, [{ trace_id: crypto.randomBytes(16).toString('hex'), metric: 'faithfulness', score: 0.5, judge_id: 'judge-model-a' }]);
+      assert.deepEqual(result, { stored: 0, dropped: 1 });
     });
   });
 }
