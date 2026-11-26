@@ -31,8 +31,9 @@ PRE_EXISTING_COUNT = 126
 # test_golden_phase6.py cover them.
 LATER_PHASE_CATEGORIES = frozenset({"injection", "injection_evasive", "small_talk", "cache_paraphrase", "cache_near_miss"})
 # Plan 06-38 adds Phase 6 items under these tags (and small_talk); test_golden_phase6.py covers them.
+# Plan 04.2-37 adds Phase 4.2 items under the tag phase42; test_golden_phase42.py covers them.
 LATER_PHASE_TAGS = frozenset(
-    {"phase6_protected_followup", "phase6_elliptical", "phase6_relative_time", "phase6_compound", "phase6_cross_lingual"}
+    {"phase6_protected_followup", "phase6_elliptical", "phase6_relative_time", "phase6_compound", "phase6_cross_lingual", "phase42"}
 )
 PRE_EXISTING_SHA256 = "78d15c174a16d1aad33814318f67cf1c9d71530813f80b777fd907e6307618dd"
 

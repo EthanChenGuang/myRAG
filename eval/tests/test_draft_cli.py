@@ -18,6 +18,12 @@ from rag_eval.golden_io import load_golden
 from rag_eval.paths import REPO_ROOT
 
 CORPUS = REPO_ROOT / "eval" / "fixtures" / "corpus"
+# Plan 04.2-37 documents; the stub answers every batch with the same items, so the batch-count tests keep to the older corpus.
+PHASE42_STEMS = ("dup-passage", "dup-solo", "versioned-note", "grid-reference", "coded-list", "morphology-note")
+
+
+def _pre_phase42_documents():
+    return [doc for doc in DirectoryWorkspaceSource(CORPUS).documents() if not doc.filename.startswith(PHASE42_STEMS)]
 GOOD_QUOTE = "The annual plans refund window is 45 days from the purchase date"
 CATEGORIES = ("multi_turn", "compound", "exact_term", "table", "scanned", "no_answer", "general")
 
@@ -157,7 +163,7 @@ def test_draft_json_validates_with_the_planned_values():
 
 def test_claude_stub_proposals_keep_only_valid_unique_verified_items(private_out):
     out, manifest = private_out
-    docs = DirectoryWorkspaceSource(CORPUS).documents()
+    docs = _pre_phase42_documents()
     client = StubClaude(_default_claude_items())
     outcome = draft_with_claude(docs, 5, ["en"], client, load_draft_config())
     assert len(outcome.entries) == 5
@@ -208,7 +214,7 @@ def test_claude_batches_fit_the_character_budget(monkeypatch):
 
 
 def test_claude_salvages_valid_items_and_reports_invalid_ones():
-    docs = DirectoryWorkspaceSource(CORPUS).documents()
+    docs = _pre_phase42_documents()
     items = [_claude_item("A valid question?"), {"question": "broken item"}]
     outcome = draft_with_claude(docs, 5, ["en"], StubClaude(items), load_draft_config())
     assert len(outcome.entries) == 1 and len(outcome.rejected) == 1
@@ -224,7 +230,7 @@ def test_claude_refusal_and_missing_tool_call_are_reported_not_raised():
 
 
 def test_claude_drops_items_in_languages_outside_the_request():
-    docs = DirectoryWorkspaceSource(CORPUS).documents()
+    docs = _pre_phase42_documents()
     items = [_claude_item("question in english"), _claude_item("domanda in italiano", language="it")]
     outcome = draft_with_claude(docs, 5, ["en"], StubClaude(items), load_draft_config())
     assert [e.proposal.language for e in outcome.entries] == ["en"]
