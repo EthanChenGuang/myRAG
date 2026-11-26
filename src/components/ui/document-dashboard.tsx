@@ -27,7 +27,7 @@ import { PortalTooltip } from "./portal-tooltip"
 import { useOrganizationStore } from "@/lib/stores/organization-store"
 import { isMultiTenant } from "@/lib/deployment-mode"
 import { useShallow } from "zustand/react/shallow"
-import type { IngestJobState } from "@/lib/hooks/use-ingest-job-status"
+import { INITIAL_INGEST_JOB_STATE, type IngestJobState } from "@/lib/hooks/use-ingest-job-status"
 import { IngestStatusBadge, TrackedIngestStatusBadge } from "@/components/ui/ingest-status-badge"
 import { uploadErrorMessage } from "@/components/ui/ingest-status-labels"
 import {
@@ -737,6 +737,10 @@ export function DocumentDashboard({
     settledJobsRef.current.add(jobId);
     const queuedDoc = storedDocuments.find(d => d.jobId === jobId);
     setStoredDocuments(prev => settleQueuedRow(prev, jobId, state));
+    if (state.status === 'pending_review') {
+      void refreshDocuments();
+      return;
+    }
     if (state.status === 'ready' || state.status === 'skipped_duplicate' || state.status === 'needs_review') {
       void refreshDocuments();
       if (queuedDoc) onProcessingComplete?.({ ...queuedDoc, status: 'ready', ingest: state });
@@ -847,6 +851,7 @@ export function DocumentDashboard({
           }
         }
 
+        const heldForApproval = ingestStatus === 'pending_review';
         const uiStatus: ProcessedDocument['status'] =
           ingestStatus === 'failed'
             ? 'failed'
@@ -862,6 +867,7 @@ export function DocumentDashboard({
                 ...d,
                 id: resolvedId ?? d.id,
                 status: uiStatus,
+                ...(heldForApproval ? { ingest: { ...INITIAL_INGEST_JOB_STATE, status: 'pending_review' } } : {}),
                 // Update additional fields that may have changed
                 pages: result.pages,
                 text: result.text || d.text,
@@ -873,6 +879,8 @@ export function DocumentDashboard({
               : d
           );
         });
+
+        if (heldForApproval) continue;
 
         onProcessingComplete?.({
           ...doc,
@@ -1614,18 +1622,18 @@ export function DocumentDashboard({
                                     </div>
                                   </TableCell>
                                   <TableCell className="pl-2 pr-2 whitespace-nowrap" style={{ width: '80px' }}>
-                                    {doc.jobId ? (
+                                    {doc.jobId || doc.ingest ? (
                                       <div className="flex items-center overflow-hidden">
                                         {doc.ingest ? (
                                           <IngestStatusBadge state={doc.ingest} language={language} />
-                                        ) : (
+                                        ) : doc.jobId ? (
                                           <TrackedIngestStatusBadge
                                             jobId={doc.jobId}
                                             organizationId={doc.jobOrganizationId}
                                             language={language}
                                             onSettled={(state) => handleIngestSettled(doc.jobId as string, state)}
                                           />
-                                        )}
+                                        ) : null}
                                       </div>
                                     ) : (
                                       <div className="flex items-center gap-1.5 overflow-hidden">

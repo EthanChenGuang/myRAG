@@ -16,8 +16,8 @@ export type UploadOutcome =
   | { kind: 'poll'; documentId: string }
   | { kind: 'inline' };
 
-const SETTLED_OK = new Set(['ready', 'skipped_duplicate', 'needs_review']);
-const SETTLED_ALL = new Set(['ready', 'skipped_duplicate', 'needs_review', 'failed', 'quarantined', 'not_found', 'unavailable']);
+const SETTLED_OK = new Set(['ready', 'skipped_duplicate', 'needs_review', 'pending_review']);
+const SETTLED_ALL = new Set(['ready', 'skipped_duplicate', 'needs_review', 'pending_review', 'failed', 'quarantined', 'not_found', 'unavailable']);
 
 function nonEmptyString(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
@@ -62,7 +62,12 @@ export function failStalledProcessingRows<T extends IngestRow>(rows: T[]): T[] {
   return rows.map((row) => (row.status === 'processing' && !row.jobId ? { ...row, status: 'failed' as const } : row));
 }
 
+function isHeldForApproval(row: IngestRow): boolean {
+  return row.ingest?.status === 'pending_review';
+}
+
 function isKeptJobRow(row: IngestRow): boolean {
+  if (isHeldForApproval(row)) return true;
   return Boolean(row.jobId && row.ingest && row.ingest.status !== 'ready' && row.ingest.status !== 'skipped_duplicate');
 }
 
@@ -71,12 +76,12 @@ const uploadTimestamp = (row: IngestRow) => row.uploadedAt?.getTime() ?? 0;
 /**
  * Merges a fresh document list into the rows on screen. Processing rows stay until they complete; a row that
  * carries a job id is never replaced by its same-named document while the job runs, and needs_review or failed
- * job rows stay visible. Settled ready rows are replaced by the normal document row.
+ * job rows stay visible, as do uploads awaiting approval. Settled ready rows are replaced by the normal document row.
  */
 export function mergeRefreshedDocuments<T extends IngestRow>(previous: T[], fetched: T[]): T[] {
   const pinned = previous.filter((row) => row.status === 'processing' || isKeptJobRow(row));
   const kept = pinned.map((row) => {
-    if (row.jobId) return row;
+    if (row.jobId || isHeldForApproval(row)) return row;
     return fetched.find((candidate) => candidate.name === row.name) ?? row;
   });
   const genuinelyNew = fetched.filter((candidate) => !pinned.some((row) => row.name === candidate.name));

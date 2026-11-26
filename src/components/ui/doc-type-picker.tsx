@@ -71,7 +71,7 @@ export const INGEST_POLL_INITIAL_MS = 1000;
 export const INGEST_POLL_MAX_MS = 8000;
 export const INGEST_POLL_TIMEOUT_MS = 10 * 60 * 1000;
 
-const TERMINAL_STATUSES = new Set(['ready', 'quarantined', 'failed']);
+const TERMINAL_STATUSES = new Set(['ready', 'quarantined', 'pending_review', 'failed']);
 
 export function ingestPollDelayMs(attempt: number): number {
   const delay = INGEST_POLL_INITIAL_MS * 2 ** attempt;
@@ -89,7 +89,7 @@ export interface PollIngestOptions {
   startedAt?: number;
 }
 
-/** Polls GET /api/rag/ingest/{id} with 1s-doubling backoff (cap 8s) until ready, quarantined, failed or timeout. */
+/** Polls GET /api/rag/ingest/{id} with 1s-doubling backoff (cap 8s) until ready, quarantined, pending_review, failed or timeout. */
 export async function pollIngestUntilTerminal(
   documentId: string,
   options: PollIngestOptions,
