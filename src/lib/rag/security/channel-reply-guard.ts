@@ -79,7 +79,9 @@ export async function guardChannelReply(input: ChannelReplyGuardInput): Promise<
 
   let text = result.text;
   if (mode === 'enforce' && result.summary.credential_warned > 0) {
-    text += renderNoticeAsText(emitNotice('credential_request_warning', { language }));
+    // The chat stream's guard (05.2-13) already appends the warning on the whatsapp channel; it is added once
+    const warning = emitNotice('credential_request_warning', { language });
+    if (!text.includes(warning.text)) text += renderNoticeAsText(warning);
   }
   if (hasFindings(result.summary)) await recordFindings(result.summary, input);
   return { text, linkPreviewOff: true };

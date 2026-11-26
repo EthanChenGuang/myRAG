@@ -136,6 +136,9 @@ describe('WhatsApp reply output guard: enforce', () => {
     const text = calls[0]![2] as string;
     expect(text.split(warning)).toHaveLength(2);
     expect(text.endsWith(warning)).toBe(true);
+    const truncated = fixedText('notices.answer_truncated', 'en');
+    const cut = (await send(`Please enter your password here to continue.\n\n${warning}\n\n${truncated}`)).at(-1)![2] as string;
+    expect(cut.split(warning)).toHaveLength(2);
   });
 
   it('records the handler findings for channel whatsapp', async () => {
