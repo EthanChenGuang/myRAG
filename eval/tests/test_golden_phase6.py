@@ -192,11 +192,16 @@ def _longest_common_cjk_run(a: str, b: str) -> int:
 
 
 def test_cross_lingual_items_ask_about_zh_only_documents_and_translate_to_corpus_terms(items, entries):
-    documents = {doc.filename: doc for doc in load_corpus(CORPUS_DIR)}
+    corpus = load_corpus(CORPUS_DIR)
+    documents = {doc.filename: doc for doc in corpus}
+    stem_languages = collections.defaultdict(set)
+    for doc in corpus:
+        stem_languages[doc.filename.split(".", 1)[0]].add(doc.language)
     for item in _tagged(items, CROSS_TAG):
         assert item.evidence_language == "zh", item.id
         for span in item.gold_evidence:
             assert documents[span.document].language == "zh", item.id
+            assert stem_languages[span.document.split(".", 1)[0]] == {"zh"}, (item.id, span.document)
         translated = [entry for entry in entries[("translate", _normalize_query(item.question))]
                       if entry["output"]["target_language"] == "zh"]
         assert translated, item.id

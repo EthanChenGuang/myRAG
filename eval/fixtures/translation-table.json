@@ -234,6 +234,78 @@
           "text": "Within how many days of delivery must a damaged parcel be reported?"
         }
       ]
+    },
+    {
+      "question": "Under the maintenance contract between 示例化工有限公司 and 绿谷仪器股份有限公司, how often is the inspection carried out?",
+      "translations": [
+        {
+          "language": "zh",
+          "text": "示例化工有限公司与绿谷仪器股份有限公司的维护合同中，巡检多久进行一次？"
+        }
+      ]
+    },
+    {
+      "question": "How many temperature loggers and standard thermometers does the equipment maintenance service contract cover?",
+      "translations": [
+        {
+          "language": "zh",
+          "text": "设备维护服务合同涵盖多少台温度记录仪和标准温度计？"
+        }
+      ]
+    },
+    {
+      "question": "What is the daily late-payment penalty in maintenance contract GV-MS-2024-0057?",
+      "translations": [
+        {
+          "language": "zh",
+          "text": "合同 GV-MS-2024-0057 中逾期付款每日的违约金是多少？"
+        }
+      ]
+    },
+    {
+      "question": "For how many years does the confidentiality duty last after the maintenance contract ends?",
+      "translations": [
+        {
+          "language": "zh",
+          "text": "维护合同终止后保密期限是几年？"
+        }
+      ]
+    },
+    {
+      "question": "Qual è il canone annuo complessivo del contratto di manutenzione tra 示例化工有限公司 e 绿谷仪器股份有限公司?",
+      "translations": [
+        {
+          "language": "zh",
+          "text": "示例化工有限公司与绿谷仪器股份有限公司维护合同的年度服务费合计是多少？"
+        }
+      ]
+    },
+    {
+      "question": "Quanto dura il contratto di manutenzione delle apparecchiature e di quanto si rinnova automaticamente?",
+      "translations": [
+        {
+          "language": "zh",
+          "text": "设备维护服务合同的有效期是多久，自动续期多久？"
+        }
+      ]
+    },
+    {
+      "question": "Entro quanti giorni dalla firma il committente deve pagare il 50% del canone di manutenzione?",
+      "translations": [
+        {
+          "language": "zh",
+          "text": "甲方应在合同签订后多少日内支付全部服务费的 50%？"
+        }
+      ]
+    },
+    {
+      "question": "Qual è il tetto massimo del risarcimento per ritardo nelle ispezioni nel contratto GV-MS-2024-0057?",
+      "translations": [
+        {
+          "language": "zh",
+          "text": "合同 GV-MS-2024-0057 中延误巡检的赔偿总额上限是多少？"
+        }
+      ]
     }
   ]
 }
