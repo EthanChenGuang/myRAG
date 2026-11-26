@@ -2328,6 +2328,7 @@ def _phase42_models() -> dict[str, Any]:
     from rag_sidecar.contracts.retrieval import (
         DiversityParams,
         DupClusterParams,
+        DupClusterParamsFile,
         IdentifierIndexEntry,
         IdentifierPattern,
         TableLookupParams,
@@ -2347,6 +2348,7 @@ def _phase42_models() -> dict[str, Any]:
         "TableLookupParams": TableLookupParams(),
         "DiversityParams": DiversityParams(),
         "DupClusterParams": DupClusterParams(),
+        "DupClusterParamsFile": DupClusterParamsFile(),
         "IdentifierPattern": IdentifierPattern(name="reference-code", pattern="[A-Z]{2}-[0-9]{4}"),
         "IdentifierIndexEntry": IdentifierIndexEntry(raw="AB-0012", normalized="ab0012"),
         "VersionRange": VersionRange.model_validate({"from": "2024-01-01", "to": "2024-12-31"}),

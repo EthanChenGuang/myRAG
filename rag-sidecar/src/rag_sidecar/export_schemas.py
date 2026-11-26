@@ -145,6 +145,7 @@ from rag_sidecar.contracts.feedback_loop import (
 from rag_sidecar.contracts.retrieval import (
     DiversityParams,
     DupClusterParams,
+    DupClusterParamsFile,
     IdentifierIndexEntry,
     IdentifierPattern,
     TableLookupParams,
@@ -312,6 +313,7 @@ CONTRACTS: list[tuple[type[BaseModel], Mode]] = [
     (TableLookupParams, "validation"),
     (DiversityParams, "validation"),
     (DupClusterParams, "validation"),
+    (DupClusterParamsFile, "validation"),
     (IdentifierPattern, "validation"),
     (IdentifierIndexEntry, "serialization"),
     (TerminologyEntry, "validation"),
