@@ -19,11 +19,42 @@ export interface FetchAssemblyRowsOptions {
 
 const DOCUMENT_BASE_SELECT = 'id, filename, created_at, content, metadata';
 
-/** The base columns, plus user_id (the uploader, D-44) only while RAG_SECURITY_EVENTS is on, so the all-off request is unchanged. */
-export function assemblyDocumentSelect(): string {
+/** D-49: read only while RAG_VERSION_LABELS is on; effective_from needs 0801 and version_label 0941. */
+export const VERSION_LABEL_COLUMNS = ['version', 'doc_type', 'doc_date', 'effective_from', 'version_label'] as const;
+
+export const VERSION_LABELS_MIGRATION_WARNING =
+  '[Answer Rules] RAG_VERSION_LABELS is on but the documents table lacks a version column; apply migrations 0801 and 0941. Context is assembled without version labels.';
+
+let versionColumnsWarned = false;
+
+/**
+ * The base columns, plus user_id (the uploader, D-44) only while RAG_SECURITY_EVENTS is on and the version columns only while
+ * RAG_VERSION_LABELS is on, so the all-off request is unchanged.
+ */
+export function assemblyDocumentSelect(options: { versionColumns?: boolean } = {}): string {
+  const config = readAnswerConfig();
   const optional: string[] = [];
-  if (readAnswerConfig().securityEvents) optional.push('user_id');
+  if (config.securityEvents) optional.push('user_id');
+  if ((options.versionColumns ?? true) && config.versionLabels) optional.push(...VERSION_LABEL_COLUMNS);
   return optional.length > 0 ? `${DOCUMENT_BASE_SELECT}, ${optional.join(', ')}` : DOCUMENT_BASE_SELECT;
+}
+
+/** PostgREST and Postgres report a column the database does not have as 42703 or "column ... does not exist". */
+export function isUnknownColumnError(error: { code?: string | null; message?: string | null } | null | undefined): boolean {
+  if (!error) return false;
+  if (error.code === '42703' || error.code === 'PGRST204') return true;
+  return /column [^ ]+ does not exist/i.test(error.message ?? '');
+}
+
+/** One warning per process (RESEARCH Pitfall 15); it names the migrations, never a value. */
+export function warnVersionColumnsMissing(): void {
+  if (versionColumnsWarned) return;
+  versionColumnsWarned = true;
+  console.warn(VERSION_LABELS_MIGRATION_WARNING);
+}
+
+export function resetVersionColumnsWarningForTests(): void {
+  versionColumnsWarned = false;
 }
 
 function unique(values: string[]): string[] {
@@ -41,12 +72,15 @@ export async function fetchAssemblyRows(
   const documentIds = unique(candidates.map((candidate) => candidate.document_id));
   const chunkIds = unique(candidates.map((candidate) => candidate.chunk_id));
 
-  const documentResult = await adminClient
-    .from('documents')
-    .select(assemblyDocumentSelect())
-    .in('id', documentIds)
-    .abortSignal(signal);
+  const select = assemblyDocumentSelect();
+  let documentResult = await adminClient.from('documents').select(select).in('id', documentIds).abortSignal(signal);
   signal.throwIfAborted();
+  const fallback = assemblyDocumentSelect({ versionColumns: false });
+  if (documentResult.error && select !== fallback && isUnknownColumnError(documentResult.error)) {
+    warnVersionColumnsMissing();
+    documentResult = await adminClient.from('documents').select(fallback).in('id', documentIds).abortSignal(signal);
+    signal.throwIfAborted();
+  }
   if (documentResult.error) throw new Error(`[RAG Assemble] documents lookup failed: ${documentResult.error.message}`);
 
   const chunkResult = await adminClient.from('document_chunks').select('id, metadata').in('id', chunkIds).abortSignal(signal);
@@ -62,7 +96,3 @@ export async function fetchAssemblyRows(
 
   return { documents, chunkMetadata };
 }
-
-export const VERSION_LABELS_MIGRATION_WARNING = '';
-
-export function resetVersionColumnsWarningForTests(): void {}
