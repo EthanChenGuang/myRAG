@@ -19,6 +19,10 @@ const { runAttributesImport } = await import('@/lib/rag/ingest/attributes/import
 const { main } = await import('@/lib/rag/ingest/attributes/cli');
 const { resetAttributeSchemaCacheForTests } = await import('@/lib/rag/ingest/attributes/schema');
 const { resetIngestDepsForTests, setIngestDepsForTests } = await import('@/lib/rag/ingest/deps');
+const { resetIngestConfigForTests } = await import('@/lib/rag/ingest/config');
+const { indexDocumentForLookup } = await import('@/lib/rag/ingest/write-indexers');
+const { createIngestWriter } = await import('@/lib/rag/ingest/writer');
+const { backfillIdentifiers } = await import('@/lib/rag/identifiers/backfill');
 const { backfillScope } = await import('@/lib/rag/tenant/backfill-scope');
 const { mintScope } = await import('@/lib/rag/tenant/scope');
 
@@ -379,6 +383,169 @@ for (const mode of ['multi-tenant', 'single-tenant'] as const) {
           assert.deepEqual(rpc.calls, []);
           assert.ok(err.some((line) => /tenant refused: invalid_tenant/.test(line)));
         }
+      });
+    }
+  });
+}
+
+// --- TPL-04 identifier feed (plan 03.3-16; D-25, F-13) ---------------------------------------------------------------------------------
+
+const FEED_ON = { RAG_INGEST_PIPELINE: 'unified', RAG_DOC_ATTRIBUTES: 'true' };
+const FEED_OFF = { RAG_INGEST_PIPELINE: 'unified' };
+const NO_PATTERNS = async () => ({ expressions: [], patternIds: [], loadFailed: false });
+
+async function withIngest<T>(rpc: RpcClient, env: Record<string, string>, run: () => Promise<T>): Promise<T> {
+  resetAttributeSchemaCacheForTests();
+  resetIngestConfigForTests();
+  setIngestDepsForTests({ db: () => rpc, ingestEnv: () => env });
+  try {
+    return await run();
+  } finally {
+    resetIngestDepsForTests();
+    resetIngestConfigForTests();
+    resetAttributeSchemaCacheForTests();
+  }
+}
+
+async function flag(db: PGlite, tenantKey: string, key: string, on: boolean): Promise<void> {
+  await rows(db, 'UPDATE public.rag_attribute_definitions SET in_identifier_index = $3 WHERE tenant_key = $1 AND key = $2', [tenantKey, key, on]);
+}
+
+async function setAttributes(db: PGlite, tenantKey: string, id: string, values: Record<string, unknown>): Promise<void> {
+  await rows(db, 'SELECT * FROM rag_set_document_attributes(p_tenant_key => $1, p_document_id => $2, p_attributes => $3::jsonb)', [tenantKey, id, JSON.stringify(values)]);
+}
+
+async function indexOne(rpc: RpcClient, tenant: Tenant, id: string, env: Record<string, string>) {
+  return withIngest(rpc, env, () => {
+    const signal = new AbortController().signal;
+    return indexDocumentForLookup({
+      writer: createIngestWriter({ db: rpc, scope: tenant.scope, signal }),
+      scope: tenant.scope,
+      documentId: id,
+      tables: false,
+      identifiers: true,
+      signal,
+      loadPatterns: NO_PATTERNS,
+    });
+  });
+}
+
+async function identifiersOf(db: PGlite, id: string): Promise<{ document: Row; chunks: Row[] }> {
+  return {
+    document: (await rows(db, 'SELECT identifiers_raw, identifiers_norm FROM documents WHERE id = $1', [id]))[0] ?? {},
+    chunks: await rows(db, 'SELECT identifiers_raw, identifiers_norm FROM document_chunks WHERE document_id = $1 ORDER BY chunk_index', [id]),
+  };
+}
+
+async function capturedLogs<T>(run: () => Promise<T>): Promise<{ value: T; text: string }> {
+  const lines: string[] = [];
+  const saved = { log: console.log, info: console.info, warn: console.warn, error: console.error, debug: console.debug };
+  for (const level of ['log', 'info', 'warn', 'error', 'debug'] as const) {
+    console[level] = (...args: unknown[]) => void lines.push(args.map((arg) => (typeof arg === 'string' ? arg : JSON.stringify(arg))).join(' '));
+  }
+  try {
+    return { value: await run(), text: lines.join('\n') };
+  } finally {
+    Object.assign(console, saved);
+  }
+}
+
+const FEED_MARKER = 'QX-7731-MK';
+
+for (const mode of ['multi-tenant', 'single-tenant'] as const) {
+  describe(`attribute identifier feed (${mode})`, () => {
+    let db: PGlite;
+    let a: Tenant;
+    let b: Tenant | null;
+
+    before(async () => {
+      ({ db, a, b } = await database(mode));
+      await flag(db, a.key, 'alpha_code', true);
+    });
+
+    after(async () => {
+      await db?.close();
+    });
+
+    test('both switches on: every chunk and the document union carry the flagged value, normalised and as spelled', async () => {
+      const id = await publishedDocument(db, a, `set-f/${next('item')}`);
+      await setAttributes(db, a.key, id, { alpha_code: FEED_MARKER, gamma_text: 'neutral words' });
+      const { value: report, text } = await capturedLogs(() => indexOne(pgliteRpc(db), a, id, FEED_ON));
+      assert.deepEqual(report.warnings, []);
+      assert.equal(report.identifiers?.attributeEntries, 1);
+      const stored = await identifiersOf(db, id);
+      assert.equal(stored.chunks.length, 2);
+      for (const chunk of stored.chunks) {
+        const norm = chunk.identifiers_norm as string[];
+        const raw = chunk.identifiers_raw as string[];
+        assert.ok(norm.includes('qx7731mk'));
+        assert.equal(raw[norm.indexOf('qx7731mk')], FEED_MARKER);
+      }
+      assert.ok((stored.document.identifiers_norm as string[]).includes('qx7731mk'));
+      assert.ok((stored.document.identifiers_raw as string[]).includes(FEED_MARKER));
+      assert.ok(!text.includes(FEED_MARKER) && !text.includes('qx7731mk'), 'no identifier in a log line');
+    });
+
+    test('two spellings that differ only by separators or case give one normalised value', async () => {
+      await rows(db, "INSERT INTO public.rag_attribute_definitions (tenant_key, key, type, in_identifier_index) VALUES ($1, 'beta_code', 'code', true) ON CONFLICT (tenant_key, key) DO UPDATE SET in_identifier_index = true", [a.key]);
+      const id = await publishedDocument(db, a, `set-f/${next('item')}`);
+      await setAttributes(db, a.key, id, { alpha_code: 'zk-40.2', beta_code: 'ZK 40/2' });
+      await indexOne(pgliteRpc(db), a, id, FEED_ON);
+      for (const chunk of (await identifiersOf(db, id)).chunks) assert.equal((chunk.identifiers_norm as string[]).filter((value) => value === 'zk402').length, 1);
+    });
+
+    test('RAG_DOC_ATTRIBUTES off: the rows equal the indexer without the feed and no attribute function is called', async () => {
+      const id = await publishedDocument(db, a, `set-f/${next('item')}`);
+      const plain = await publishedDocument(db, a, `set-f/${next('item')}`);
+      await setAttributes(db, a.key, id, { alpha_code: 'OF-1' });
+      const rpc = pgliteRpc(db);
+      await indexOne(rpc, a, id, FEED_OFF);
+      await indexOne(pgliteRpc(db), a, plain, FEED_ON);
+      assert.ok(!rpc.calls.some((call) => /attribute/.test(call.fn)), rpc.calls.map((call) => call.fn).join(','));
+      const off = await identifiersOf(db, id);
+      for (const chunk of off.chunks) assert.ok(!(chunk.identifiers_norm as string[]).includes('of1'));
+      assert.deepEqual(
+        off.chunks.map((chunk) => (chunk.identifiers_norm as string[]).length),
+        (await identifiersOf(db, plain)).chunks.map((chunk) => (chunk.identifiers_norm as string[]).length),
+      );
+    });
+
+    test('rag:identifiers keeps the attribute entries; a second run has nothing to do and changes nothing', async () => {
+      const id = await publishedDocument(db, a, `set-f/${next('item')}`);
+      await setAttributes(db, a.key, id, { alpha_code: 'BF-77' });
+      const rpc = pgliteRpc(db);
+      const first = await withIngest(rpc, FEED_ON, () => backfillIdentifiers({ db: rpc, scope: a.scope, loadPatterns: NO_PATTERNS }));
+      assert.ok(first.documents >= 1);
+      assert.equal(first.failed, 0);
+      const stored = await identifiersOf(db, id);
+      for (const chunk of stored.chunks) assert.ok((chunk.identifiers_norm as string[]).includes('bf77'));
+      const second = await withIngest(rpc, FEED_ON, () => backfillIdentifiers({ db: rpc, scope: a.scope, loadPatterns: NO_PATTERNS }));
+      assert.equal(second.documents, 0);
+      assert.deepEqual(await identifiersOf(db, id), stored);
+    });
+
+    if (mode === 'multi-tenant') {
+      test("tenant A's chunks never receive an entry from tenant B's attributes or definitions", async () => {
+        assert.ok(b);
+        await flag(db, b.key, 'gamma_text', false);
+        await rows(db, "UPDATE public.rag_attribute_definitions SET in_identifier_index = true WHERE tenant_key = $1 AND key = 'alpha_code'", [b.key]);
+        await flag(db, a.key, 'alpha_code', false);
+        const shared = `set-g/${next('item')}`;
+        const docA = await publishedDocument(db, a, shared);
+        const docB = await publishedDocument(db, b, shared);
+        await setAttributes(db, a.key, docA, { alpha_code: 'TA-1' });
+        await setAttributes(db, b.key, docB, { alpha_code: 'TB-2' });
+        await indexOne(pgliteRpc(db), a, docA, FEED_ON);
+        for (const chunk of (await identifiersOf(db, docA)).chunks) {
+          assert.ok(!(chunk.identifiers_norm as string[]).includes('tb2'));
+          assert.ok(!(chunk.identifiers_norm as string[]).includes('ta1'), "tenant B's flag does not apply to tenant A");
+        }
+        await indexOne(pgliteRpc(db), b, docB, FEED_ON);
+        for (const chunk of (await identifiersOf(db, docB)).chunks) {
+          assert.ok((chunk.identifiers_norm as string[]).includes('tb2'));
+          assert.ok(!(chunk.identifiers_norm as string[]).includes('ta1'));
+        }
+        await flag(db, a.key, 'alpha_code', true);
       });
     }
   });
