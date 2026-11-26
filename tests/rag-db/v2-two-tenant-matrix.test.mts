@@ -98,6 +98,83 @@ async function withLanguages<T>(configured: boolean, body: () => Promise<T>): Pr
   }
 }
 
+const ZERO_UUID = '00000000-0000-4000-8000-000000000000';
+/**
+ * Every Phase 4.2 service-role function that takes a tenant key (migrations 0852 to 0862), called with valid other arguments so the only
+ * reason to raise is the key. Write functions name no existing row and run inside a rolled-back transaction.
+ */
+const TENANT_KEY_FUNCTIONS: Array<{ fn: string; sql: string; args?: unknown[]; /** The error a key of the right mode meets next, if any. */ ownError?: RegExp }> = [
+  { fn: 'rag_purge_hook_table_rows', sql: 'SELECT public.rag_purge_hook_table_rows($1, $2::uuid, ARRAY[]::uuid[])', args: [ZERO_UUID] },
+  { fn: 'rag_purge_hook_dup_clusters', sql: 'SELECT public.rag_purge_hook_dup_clusters($1, $2::uuid, ARRAY[]::uuid[])', args: [ZERO_UUID] },
+  { fn: 'rag_purge_hook_identifiers', sql: 'SELECT public.rag_purge_hook_identifiers($1, $2::uuid, ARRAY[]::uuid[])', args: [ZERO_UUID] },
+  { fn: 'rag_document_versions', sql: 'SELECT * FROM public.rag_document_versions($1, ARRAY[]::uuid[])' },
+  {
+    fn: 'rag_exact_id_documents',
+    sql: `SELECT * FROM public.rag_exact_id_documents($1, ARRAY['qx41071'], 5, NULL, NULL)`,
+  },
+  { fn: 'rag_dup_write_hashes', sql: `SELECT * FROM public.rag_dup_write_hashes($1, '[]'::jsonb)` },
+  { fn: 'rag_dup_candidates', sql: 'SELECT * FROM public.rag_dup_candidates($1, ARRAY[]::uuid[], 16, 0.95, 10)' },
+  { fn: 'rag_dup_clusters_recompute', sql: 'SELECT * FROM public.rag_dup_clusters_recompute($1, ARRAY[]::uuid[])' },
+  { fn: 'rag_dup_assign', sql: 'SELECT * FROM public.rag_dup_assign($1, ARRAY[]::uuid[], NULL)' },
+  { fn: 'rag_dup_backfill_candidates', sql: 'SELECT * FROM public.rag_dup_backfill_candidates($1, NULL, 10, NULL, NULL)' },
+  { fn: 'rag_purge_hook_dup_chunk_bands', sql: 'SELECT public.rag_purge_hook_dup_chunk_bands($1, $2::uuid, ARRAY[]::uuid[])', args: [ZERO_UUID] },
+  { fn: 'rag_identifier_patterns_list', sql: 'SELECT * FROM public.rag_identifier_patterns_list($1)' },
+  {
+    fn: 'rag_identifier_pattern_create',
+    sql: `SELECT * FROM public.rag_identifier_pattern_create($1, 'neutral-shape', '[A-Z]{2}-[0-9]{5}', 'u', true, NULL)`,
+  },
+  {
+    fn: 'rag_identifier_pattern_update',
+    sql: `SELECT * FROM public.rag_identifier_pattern_update($1, $2::uuid, 'neutral-shape', '[A-Z]{2}-[0-9]{5}', 'u', true)`,
+    args: [ZERO_UUID],
+    ownError: /^pattern_not_found$/,
+  },
+  { fn: 'rag_identifier_pattern_delete', sql: 'SELECT * FROM public.rag_identifier_pattern_delete($1, $2::uuid)', args: [ZERO_UUID], ownError: /^pattern_not_found$/ },
+  { fn: 'rag_identifier_resolve', sql: `SELECT * FROM public.rag_identifier_resolve($1, ARRAY['qx41071'])` },
+  { fn: 'rag_identifier_candidates', sql: `SELECT * FROM public.rag_identifier_candidates($1, 'qx41071', 3)` },
+  { fn: 'rag_relex_candidates_stamped', sql: `SELECT * FROM public.rag_relex_candidates_stamped(NULL, 1, 10, $1, 'v0', '', false)` },
+  { fn: 'rag_relex_batch_stamped', sql: `SELECT * FROM public.rag_relex_batch_stamped('[]'::jsonb, 1, $1)` },
+  { fn: 'rag_lexical_stale_count', sql: `SELECT * FROM public.rag_lexical_stale_count($1, 'v0')` },
+  { fn: 'rag_index_document_chunks', sql: 'SELECT * FROM public.rag_index_document_chunks($1, $2::uuid, NULL, 10)', args: [ZERO_UUID] },
+  {
+    fn: 'rag_write_chunk_identifiers',
+    sql: `SELECT * FROM public.rag_write_chunk_identifiers($1, $2::uuid, '[]'::jsonb)`,
+    args: [ZERO_UUID],
+    ownError: /^tenant_mismatch: document not found in tenant$/,
+  },
+  {
+    fn: 'rag_write_table_rows',
+    sql: `SELECT * FROM public.rag_write_table_rows($1, $2::uuid, 'legacy', '[]'::jsonb)`,
+    args: [ZERO_UUID],
+    ownError: /^tenant_mismatch: document not found in tenant$/,
+  },
+  { fn: 'rag_index_backfill_documents', sql: `SELECT * FROM public.rag_index_backfill_documents($1, 'tables', NULL, 10)` },
+  { fn: 'rag_table_lookup', sql: `SELECT * FROM public.rag_table_lookup($1, ARRAY['v2cellk1', 'v2cellk3'], 2, 5, NULL, NULL)` },
+  { fn: 'rag_dup_cluster_sources', sql: 'SELECT * FROM public.rag_dup_cluster_sources($1, ARRAY[]::uuid[], 5)' },
+];
+const WRONG_MODE = /tenant key not valid for this deployment mode/;
+
+/** A key of the right mode passes the key check: the call succeeds or meets only the function's next, expected error. */
+function assertKeyAccepted(entry: (typeof TENANT_KEY_FUNCTIONS)[number], tenantKey: string, message: string | null): void {
+  if (message === null) return;
+  assert.ok(entry.ownError?.test(message), `${entry.fn} refused ${tenantKey}: ${message}`);
+}
+
+/** The error message of one call as the service role, inside a transaction that is always rolled back; null when it succeeds. */
+async function callWithKey(db: PGlite, entry: (typeof TENANT_KEY_FUNCTIONS)[number], tenantKey: string): Promise<string | null> {
+  let message: string | null = null;
+  await db.exec('BEGIN');
+  try {
+    await db.exec('SET LOCAL ROLE service_role');
+    await db.query(entry.sql, [tenantKey, ...(entry.args ?? [])]);
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+  } finally {
+    await db.exec('ROLLBACK');
+  }
+  return message;
+}
+
 interface RerankBody {
   model: string;
   query: string;
@@ -630,6 +707,15 @@ describe('every v2 retrieval path stays inside the caller tenant, for every entr
     assert.equal(await call(`u:${TWO_TENANT_IDS.userA}`), null);
   });
 
+  for (const entry of TENANT_KEY_FUNCTIONS) {
+    test(`${entry.fn} raises for the s:default key in multi-tenant mode and accepts a personal and an organization key`, async () => {
+      assert.match((await callWithKey(db(), entry, 's:default')) ?? 'accepted', WRONG_MODE, `${entry.fn} accepted s:default`);
+      for (const own of [tenant('a').scopeKey, tenant('o').scopeKey]) {
+        assertKeyAccepted(entry, own, await callWithKey(db(), entry, own));
+      }
+    });
+  }
+
   test('a scope minted with upper-case UUIDs retrieves exactly what its lower-case form retrieves', async () => {
     const lowerScope = scopeModule.mintScope('personal', TWO_TENANT_IDS.userA, null);
     const upperScope = scopeModule.mintScope('personal', TWO_TENANT_IDS.userA.toUpperCase(), null);
@@ -968,6 +1054,15 @@ describe('single-tenant deployment accepts only the default tenant key', () => {
       configModule.resetRagConfigForTests();
     }
   });
+
+  for (const entry of TENANT_KEY_FUNCTIONS) {
+    test(`${entry.fn} raises for u: and o: keys in single-tenant mode and accepts s:default`, async () => {
+      for (const foreign of [`u:${TWO_TENANT_IDS.userA}`, `o:${TWO_TENANT_IDS.orgO}`]) {
+        assert.match((await callWithKey(fixture.db, entry, foreign)) ?? 'accepted', WRONG_MODE, `${entry.fn} accepted ${foreign}`);
+      }
+      assertKeyAccepted(entry, 's:default', await callWithKey(fixture.db, entry, 's:default'));
+    });
+  }
 
   test('hybrid_search_chunks raises for u: and o: keys and accepts s:default', async () => {
     const vector = `[${embedText('refund policy').join(',')}]`;
