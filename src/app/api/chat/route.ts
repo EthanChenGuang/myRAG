@@ -16,6 +16,8 @@ import {
   buildHistoryWindow,
   createCitationSession,
   createEnhancedRAGPrompt,
+  answerLanguageOptions,
+  appendAnswerLanguage,
   errorStatusOf,
   firstTokenGate,
   createTraceCollector,
@@ -2454,10 +2456,11 @@ Context:
       console.log('[RAG SYSTEM] ✅ Using optimized system prompt with context');
       console.log('[RAG SYSTEM] Creating enhanced prompt with context length:', context.length);
       console.log('[RAG SYSTEM] Using RAG mode:', ragMode);
-      systemPrompt = citationSession.decorateSystemPrompt(createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode));
+      const answerLanguage = answerLanguageOptions(retrievalResult);
+      systemPrompt = citationSession.decorateSystemPrompt(createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode, answerLanguage));
       if (citationSession.strategy === 'claude-citations') {
         claudeSystemText = [
-          citationSession.claudeSystemPrompt(ragSystemPrompt),
+          appendAnswerLanguage(citationSession.claudeSystemPrompt(ragSystemPrompt), answerLanguage),
           String(formattingSystemMessage.content),
           String(ctaSystemMessage.content),
         ].join('\n\n');

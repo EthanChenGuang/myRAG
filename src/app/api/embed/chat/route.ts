@@ -9,6 +9,8 @@ import { classifyQuery } from '@/lib/query-classifier';
 import {
   buildHistoryWindow,
   createEnhancedRAGPrompt,
+  answerLanguageOptions,
+  type AnswerLanguageOptions,
   createTraceCollector,
   detectLanguage,
   effectiveLogMode,
@@ -269,6 +271,7 @@ export async function POST(request: NextRequest) {
 
     let context = '';
     let smallTalkTurn = false;
+    let answerLanguage: AnswerLanguageOptions | undefined;
 
     if (queryText.trim().length > 0) {
       const isGPTModel = model.includes('gpt-4') || model.includes('o1') || model.includes('chatgpt');
@@ -330,6 +333,7 @@ export async function POST(request: NextRequest) {
       // D-10: small talk under the query layer skipped retrieval and is answered without knowledge-base context
       smallTalkTurn = isSmallTalkResult(result);
       context = smallTalkTurn ? '' : result.context;
+      answerLanguage = smallTalkTurn ? undefined : answerLanguageOptions(result);
     } else {
       console.log('[Document Search] Embed request has no query text, skipping retrieval');
     }
@@ -390,7 +394,7 @@ Context:
     const finalSystemPrompt = smallTalkTurn
       ? createEnhancedRAGPrompt(systemPrompt, '', 'bypass')
       : context.length > 0
-        ? createEnhancedRAGPrompt(systemPrompt, context)
+        ? createEnhancedRAGPrompt(systemPrompt, context, 'strict', answerLanguage)
         : systemPrompt.replace('{{context}}', context);
 
     console.log('[EMBED RAG] Final system prompt preview (first 300 chars):', finalSystemPrompt.substring(0, 300));
