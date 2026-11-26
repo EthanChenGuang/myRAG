@@ -106,6 +106,13 @@ async function fetchDocumentVersions(scope: TenantScope, documentIds: string[], 
   return out;
 }
 
+export const ALSO_IN_SOURCES_UNAVAILABLE = 'also_in_sources_unavailable';
+export const ALSO_IN_MAX = 30;
+
+export function mergeAlsoIn(_ownDocumentId: string, _lists: ReadonlyArray<readonly AlsoIn[] | undefined>, _cap: number = ALSO_IN_MAX): AlsoIn[] {
+  return [];
+}
+
 export interface ContextStagesOutput {
   assembly: AssembleOutput<Candidate> | null;
   candidates: Candidate[];
