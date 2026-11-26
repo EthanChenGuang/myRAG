@@ -361,7 +361,7 @@ const INGEST_IMPACT_ACTIVATIONS = ['rebuild_batch', 'chunking_profiles', 'embedd
 const INGEST_IMPACT_GATES = ['eval_missing', 'eval_failed', 'incomplete'];
 const INGEST_IMPACT_STATE_RANK = { running: 0, incomplete: 1, built: 2, active: 3 };
 const INGEST_IMPACT_STATE_BADGES = {
-  running: { classes: 'badge-info badge-outline', icon: 'arrow-repeat', key: 'state.running' },
+  running: { classes: 'badge-outline border-info', icon: 'arrow-repeat', iconClass: 'text-info', key: 'state.running' },
   incomplete: { classes: 'badge-warning', icon: 'exclamation-triangle', key: 'state.incomplete' },
   built: { classes: 'badge-info', icon: 'hourglass', key: 'state.built' },
   active: { classes: 'badge-success', icon: 'check-circle-fill', key: 'state.active' },
@@ -648,7 +648,7 @@ function ingestImpactOpenDialog(doc, locale, options) {
   const notes = (view) => {
     const nodes = [
       ui.ragUiEl(doc, 'p', { className: 'flex items-start gap-2', id: warningId }, [
-        ui.ragUiIcon(doc, 'exclamation-triangle', 'text-warning mt-0.5'),
+        ui.ragUiIcon(doc, 'exclamation-triangle', 'text-warning'),
         ui.ragUiEl(doc, 'span', { text: t('impact.warning') }),
       ]),
     ];
@@ -1254,7 +1254,7 @@ class IngestImpactPanel {
         this.el('span', { className: 'font-mono', text: state, attrs: { translate: 'no' } }),
       ]);
     }
-    return this.el('span', { className: 'badge badge-sm gap-1 whitespace-nowrap ' + badge.classes }, [ui.ragUiIcon(this.doc, badge.icon), this.el('span', { text: this.t(badge.key) })]);
+    return this.el('span', { className: 'badge badge-sm gap-1 whitespace-nowrap ' + badge.classes }, [ui.ragUiIcon(this.doc, badge.icon, badge.iconClass), this.el('span', { text: this.t(badge.key) })]);
   }
 
   rebuildsTable(rows) {
@@ -1272,7 +1272,14 @@ class IngestImpactPanel {
         );
       }
       documents.push(this.el('span', { className: 'text-sm tabular-nums', text: progressText }));
-      if (row.gaps > 0) documents.push(this.el('p', { className: 'text-xs text-warning mt-1', text: this.t('rebuild.gaps', { count: ui.ragUiFormatNumber(row.gaps, this.locale) }) }));
+      if (row.gaps > 0) {
+        documents.push(
+          this.el('p', { className: 'flex items-start gap-1 text-xs mt-1' }, [
+            ui.ragUiIcon(this.doc, 'exclamation-triangle', 'text-warning'),
+            this.el('span', { text: this.t('rebuild.gaps', { count: ui.ragUiFormatNumber(row.gaps, this.locale) }) }),
+          ]),
+        );
+      }
       const started = row.started
         ? this.el('time', { text: this.formatTime(new Date(row.started), true), attrs: { datetime: row.started } })
         : this.el('span', { text: '—' });
