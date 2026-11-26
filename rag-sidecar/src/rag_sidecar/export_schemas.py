@@ -118,26 +118,6 @@ from rag_sidecar.contracts import (
     ReconcileReport,
     VectorSyncSliceReport,
 )
-from rag_sidecar.contracts.finetune import (
-    AnswerabilityVerdict,
-    ChunkVectorRow,
-    DatasetManifest,
-    ExportedChunk,
-    FilterReport,
-    FinetuneConfig,
-    FinetunePair,
-    IrMetrics,
-    MiningReport,
-    ModelVersionCard,
-    OfflineEvalReport,
-    ProbeSet,
-    QueryVectorRow,
-    SyntheticQuery,
-    SyntheticQueryBatch,
-    TrainingRunConfig,
-    TrainingRunReport,
-    VectorFileHeader,
-)
 from rag_sidecar.contracts.feedback_loop import (
     DictionaryCandidate,
     DictionaryTerm,
@@ -161,6 +141,26 @@ from rag_sidecar.contracts.feedback_loop import (
     TrainingPair,
     TrainingPositive,
     WeeklyReport,
+)
+from rag_sidecar.contracts.finetune import (
+    AnswerabilityVerdict,
+    ChunkVectorRow,
+    DatasetManifest,
+    ExportedChunk,
+    FilterReport,
+    FinetuneConfig,
+    FinetunePair,
+    IrMetrics,
+    MiningReport,
+    ModelVersionCard,
+    OfflineEvalReport,
+    ProbeSet,
+    QueryVectorRow,
+    SyntheticQuery,
+    SyntheticQueryBatch,
+    TrainingRunConfig,
+    TrainingRunReport,
+    VectorFileHeader,
 )
 from rag_sidecar.contracts.retrieval import (
     DiversityParams,

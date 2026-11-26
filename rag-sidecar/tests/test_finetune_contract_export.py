@@ -1,3 +1,5 @@
+import re
+
 import pytest
 
 from rag_sidecar.contracts import finetune as ft
@@ -51,3 +53,20 @@ def test_finetune_samples_use_placeholder_tenants():
         assert samples[name]["tenant_key"] == "s:default"
     assert samples["ModelVersionCard"]["tenant_keys"] == ["s:default"]
     assert samples["DatasetManifest"]["tenant_keys"] == ["s:default"]
+
+
+def test_model_card_schema_states_the_uri_and_tenant_scope_rules():
+    schema = ft.ModelVersionCard.model_json_schema(mode="serialization")
+    assert schema["properties"]["artifact_uri"]["pattern"] == ft.ARTIFACT_URI_PATTERN
+    branches = {branch["properties"]["scope"]["const"]: branch for branch in schema["anyOf"]}
+    assert set(branches) == {"deployment", "tenant"}
+    assert branches["tenant"]["properties"]["tenant_keys"]["maxItems"] == 1
+
+
+@pytest.mark.parametrize(
+    "uri",
+    ["s3://bucket/path/model", "https://host.example/models/ft-1", "file:///srv/models/ft-1"],
+)
+def test_artifact_uri_pattern_admits_what_the_validator_admits(uri):
+    assert re.fullmatch(ft.ARTIFACT_URI_PATTERN, uri)
+    assert ft._check_artifact_uri(uri) == uri

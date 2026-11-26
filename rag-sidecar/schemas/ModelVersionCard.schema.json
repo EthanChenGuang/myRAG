@@ -257,10 +257,40 @@
     }
   },
   "additionalProperties": false,
+  "anyOf": [
+    {
+      "properties": {
+        "scope": {
+          "const": "deployment"
+        }
+      },
+      "required": [
+        "scope"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "scope": {
+          "const": "tenant"
+        },
+        "tenant_keys": {
+          "maxItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "scope",
+        "tenant_keys"
+      ],
+      "type": "object"
+    }
+  ],
   "properties": {
     "artifact_uri": {
       "maxLength": 2048,
       "minLength": 3,
+      "pattern": "^[a-z][a-z0-9+.-]*:[^@?#]+$",
       "title": "Artifact Uri",
       "type": "string"
     },
