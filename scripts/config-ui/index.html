@@ -6623,6 +6623,27 @@
                                                     <input type="checkbox" id="RAG_LEXICAL_TRANSLATION" name="RAG_LEXICAL_TRANSLATION" class="checkbox checkbox-primary">
                                                     <span class="label-text">Lexical query translation</span>
                                                 </label>
+                                                <div class="flex flex-col gap-1">
+                                                    <label class="flex items-center gap-2 cursor-pointer">
+                                                        <input type="checkbox" id="RAG_TERMINOLOGY" name="RAG_TERMINOLOGY" class="checkbox checkbox-primary" aria-describedby="RAG_TERMINOLOGY-help">
+                                                        <span class="label-text">Terminology query expansion</span>
+                                                    </label>
+                                                    <span id="RAG_TERMINOLOGY-help" class="label-text-alt text-base-content/70 pl-8">Expands queries with the terminology dictionary (v2 only)</span>
+                                                </div>
+                                                <div class="flex flex-col gap-1">
+                                                    <label class="flex items-center gap-2 cursor-pointer">
+                                                        <input type="checkbox" id="RAG_TERMINOLOGY_DENSE" name="RAG_TERMINOLOGY_DENSE" class="checkbox checkbox-primary" aria-describedby="RAG_TERMINOLOGY_DENSE-help">
+                                                        <span class="label-text">Terminology dense variant</span>
+                                                    </label>
+                                                    <span id="RAG_TERMINOLOGY_DENSE-help" class="label-text-alt text-base-content/70 pl-8">Adds a dense query variant with canonical terms</span>
+                                                </div>
+                                                <div class="flex flex-col gap-1">
+                                                    <label class="flex items-center gap-2 cursor-pointer">
+                                                        <input type="checkbox" id="RAG_TERMINOLOGY_MINING" name="RAG_TERMINOLOGY_MINING" class="checkbox checkbox-primary" aria-describedby="RAG_TERMINOLOGY_MINING-help">
+                                                        <span class="label-text">Terminology mining</span>
+                                                    </label>
+                                                    <span id="RAG_TERMINOLOGY_MINING-help" class="label-text-alt text-base-content/70 pl-8">Records masked missed queries for term mining</span>
+                                                </div>
                                             </div>
                                             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                                 <div class="form-control">

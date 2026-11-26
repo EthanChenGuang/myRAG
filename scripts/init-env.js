@@ -395,6 +395,10 @@ RAG_RESULT_DIVERSITY=off
 RAG_IDENTIFIER_INDEX=false
 # Limit retrieval to passages carrying a named identifier (needs RAG_IDENTIFIER_INDEX=true)
 RAG_IDENTIFIER_FILTER=false
+# Terminology dictionary (v2 only): query expansion, dense variant, missed-query mining
+RAG_TERMINOLOGY=false
+RAG_TERMINOLOGY_DENSE=false
+RAG_TERMINOLOGY_MINING=false
 # Emergency override for pool/cap/topk (operator only)
 RAG_RETRIEVAL_PARAMS_OVERRIDE=
 # Tenant for embedded chat: s:default | o:<uuid> | u:<uuid> (empty means s:default in single-tenant, fails closed in multi-tenant)

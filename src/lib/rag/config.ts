@@ -32,6 +32,7 @@ export const OPTIONAL_STAGES = [
   'diversify',
   'identifier_resolve',
   'identifier_guard',
+  'terminology',
 ] as const;
 
 /** Phase 6 query-layer stages (D-05); translate is the shared Phase 4 slot and is not listed here. */
@@ -66,6 +67,7 @@ const LEGACY_STANDARD: StageTimeouts = {
 
 const V2_STANDARD: StageTimeouts = {
   translate: 1000,
+  terminology: 50,
   fuse: 1000,
   dedupe: 1000,
   rerank: 600,
@@ -80,6 +82,7 @@ const V2_STANDARD: StageTimeouts = {
 
 const V2_VOICE: StageTimeouts = {
   translate: 300,
+  terminology: 30,
   fuse: 300,
   dedupe: 300,
   rerank: 250,
@@ -151,6 +154,7 @@ export const PROFILE_STAGE_DEFAULTS: Record<Profile, StageTimeouts> = {
   eval: mergeProfileDefaults(LEGACY_STANDARD, V2_STANDARD, {
     ...V2_EVAL,
     translate: 1000,
+    terminology: 1000,
     fuse: 1000,
     dedupe: 1000,
     refusal: 1000,
@@ -226,6 +230,11 @@ export interface V2Config {
   iterativeScan: IterativeScanMode;
   exactScanCutoff: number;
   lexicalTranslation: boolean;
+  /** D-15: the terminology stage; acts only inside the v2 graph. */
+  terminology: boolean;
+  /** D-18: the dense terminology variant; requires terminology, never in voice (see terminologyDenseFor). */
+  terminologyDense: boolean;
+  terminologyMining: boolean;
   paramsOverride: RetrievalParamsOverride;
   hasCohereKey: boolean;
   hasVoyageKey: boolean;
@@ -314,6 +323,9 @@ export interface RagEnvInput {
   RAG_RESULT_DIVERSITY?: string;
   RAG_IDENTIFIER_INDEX?: string;
   RAG_IDENTIFIER_FILTER?: string;
+  RAG_TERMINOLOGY?: string;
+  RAG_TERMINOLOGY_DENSE?: string;
+  RAG_TERMINOLOGY_MINING?: string;
   RAG_RETRIEVAL_PARAMS_OVERRIDE?: string;
   VOYAGE_API_KEY?: string;
   VOYAGE_BASE_URL?: string;
@@ -886,6 +898,7 @@ function applyV2DisabledStages(v2: V2Config, disabled: Set<StageName>): void {
     disabled.add('identifier_resolve');
     disabled.add('identifier_guard');
   }
+  if (!v2.terminology) disabled.add('terminology');
 }
 
 /** D-42: the version stored with lexical text and refusal cells; LEXICAL_VERSION (2) itself never changes. */
@@ -949,6 +962,16 @@ function parseTuningSwitches(env: RagEnvInput, lexicalSearch: boolean, warnings:
   };
 }
 
+
+function parseTerminologyDense(env: RagEnvInput, terminology: boolean, warnings: string[]): boolean {
+  const dense = parseBooleanSwitch(env.RAG_TERMINOLOGY_DENSE, false, 'terminology-dense', warnings);
+  if (dense && !terminology) {
+    problem(warnings, 'terminology-dense:requires-terminology', 'RAG_TERMINOLOGY_DENSE needs RAG_TERMINOLOGY=true, using false', { RAG_TERMINOLOGY_DENSE: 'true' });
+    return false;
+  }
+  return dense;
+}
+
 function memoKey(env: RagEnvInput): string {
   return JSON.stringify([
     env.RAG_PIPELINE ?? '',
@@ -981,6 +1004,9 @@ function memoKey(env: RagEnvInput): string {
     env.RAG_RESULT_DIVERSITY ?? '',
     env.RAG_IDENTIFIER_INDEX ?? '',
     env.RAG_IDENTIFIER_FILTER ?? '',
+    env.RAG_TERMINOLOGY ?? '',
+    env.RAG_TERMINOLOGY_DENSE ?? '',
+    env.RAG_TERMINOLOGY_MINING ?? '',
     env.RAG_RETRIEVAL_PARAMS_OVERRIDE ?? '',
     (env.VOYAGE_API_KEY ?? '').trim() !== '',
     env.VOYAGE_BASE_URL ?? '',
@@ -1063,6 +1089,7 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
   }
 
   const exactIdLookup = parseExactIdSwitch(env.RAG_EXACT_ID_LOOKUP, warnings);
+  const terminology = parseBooleanSwitch(env.RAG_TERMINOLOGY, false, 'terminology', warnings);
 
   const lexicalSearch = parseBooleanSwitch(env.RAG_LEXICAL_SEARCH, false, 'lexical-search', warnings);
   const v2: V2Config = {
@@ -1082,6 +1109,9 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
     iterativeScan: parseIterativeScan(env.RAG_HNSW_ITERATIVE_SCAN, warnings),
     exactScanCutoff: parseNonNegativeInt(env.RAG_EXACT_SCAN_CUTOFF, 0, 100_000, 'exact-scan-cutoff', warnings),
     lexicalTranslation: gate.monolingual ? false : parseBooleanSwitch(env.RAG_LEXICAL_TRANSLATION, false, 'lexical-translation', warnings),
+    terminology,
+    terminologyDense: parseTerminologyDense(env, terminology, warnings),
+    terminologyMining: parseBooleanSwitch(env.RAG_TERMINOLOGY_MINING, false, 'terminology-mining', warnings),
     paramsOverride: parseParamsOverride(env.RAG_RETRIEVAL_PARAMS_OVERRIDE, warnings),
     hasCohereKey: (env.COHERE_API_KEY ?? '').trim() !== '',
     hasVoyageKey: (env.VOYAGE_API_KEY ?? '').trim() !== '',
@@ -1148,6 +1178,11 @@ export function warnInjectionCheckDisabled(config: RagConfig, injectionCheck: st
     mode: injectionCheck,
   });
   return true;
+}
+
+/** D-18, D-19: the dense terminology variant never runs in voice and needs the stage switch. */
+export function terminologyDenseFor(config: RagConfig, profile: Profile): boolean {
+  return config.v2.terminology && config.v2.terminologyDense && profile !== 'voice';
 }
 
 export function resetRagConfigForTests(): void {
