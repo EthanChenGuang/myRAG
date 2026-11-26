@@ -454,7 +454,12 @@ for (const mode of MODES) {
         await db.query('DELETE FROM public.document_chunks WHERE id = ANY($1::uuid[])', [b.ids.slice(0, 2)]);
         expected += 2;
       }
-      assert.equal(Number(await rpc(db, 'public.rag_lexstats_compact_all(2)')), expected);
+      // One batch of at most p_max_rows per enabled tenant per call.
+      const first = Number(await rpc(db, 'public.rag_lexstats_compact_all(2)'));
+      assert.equal(first, tenantB ? 4 : 2);
+      let total = first;
+      for (let n = first; n > 0; total += n) n = Number(await rpc(db, 'public.rag_lexstats_compact_all(2)'));
+      assert.equal(total, expected);
       assert.equal(Number(await rpc(db, 'public.rag_lexstats_compact_all(2)')), 0);
       assertClean(await check(db, tenantA), 'A after compact_all');
       if (tenantB) assertClean(await check(db, tenantB), 'B after compact_all');
