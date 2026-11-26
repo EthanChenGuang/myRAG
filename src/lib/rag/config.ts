@@ -340,6 +340,8 @@ export interface RagEnvInput {
   RAG_DOMAIN_EMBEDDING_TIMEOUT_MS?: string;
   RAG_QUERY_LAYER?: string;
   RAG_QUERY_FRAMEWORK?: string;
+  /** Third-party LangChain/LangSmith tracing switches (research P-10); read only to keep the langchain framework off. */
+  [tracing: `LANGSMITH_${string}` | `LANGCHAIN_TRACING${string}`]: string | undefined;
   RAG_QUERY_LLM_MODEL?: string;
   RAG_QUERY_CONDENSE?: string;
   RAG_QUERY_EXPAND?: string;
@@ -1189,3 +1191,6 @@ export function resetRagConfigForTests(): void {
   loggedProblems.clear();
   memo.clear();
 }
+
+/** RED stub (plan 06-37 Task 3). */
+export function setLangChainResolverForTests(_resolver: (() => boolean) | null): void {}

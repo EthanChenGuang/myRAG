@@ -6,6 +6,7 @@ import {
   QUERY_LAYER_STAGES,
   loadRagConfig,
   resetRagConfigForTests,
+  setLangChainResolverForTests,
   resolveFinalResultCount,
   terminologyDenseFor,
   warnInjectionCheckDisabled,
@@ -706,6 +707,61 @@ describe('query layer', () => {
     expect(config.queryLayer.framework).toBe('llamaindex');
     expect(queryLayerWarnings('[Query Layer]')).toHaveLength(1);
     expect(config.warnings).toHaveLength(1);
+  });
+
+  test('langchain with resolvable packages and no tracing variable is kept without a warning', () => {
+    setLangChainResolverForTests(() => true);
+    const config = loadRagConfig({ RAG_PIPELINE: 'v2', RAG_QUERY_LAYER: 'true', RAG_QUERY_FRAMEWORK: 'langchain', LANGSMITH_TRACING: 'false' });
+    expect(config.queryLayer.framework).toBe('langchain');
+    expect(config.warnings).toEqual([]);
+    expect(queryLayerWarnings('[Query Layer]')).toEqual([]);
+  });
+
+  test.each([['LANGSMITH_TRACING'], ['LANGSMITH_TRACING_V2'], ['LANGCHAIN_TRACING'], ['LANGCHAIN_TRACING_V2']] as const)(
+    'langchain with %s=true warns once naming the variable, never a value, and falls back to llamaindex (P-10)',
+    (name) => {
+      setLangChainResolverForTests(() => true);
+      const env = {
+        RAG_PIPELINE: 'v2',
+        RAG_QUERY_LAYER: 'true',
+        RAG_QUERY_FRAMEWORK: 'langchain',
+        LANGSMITH_API_KEY: 'sentinel-langsmith-value-7f3a',
+        LANGSMITH_ENDPOINT: 'https://sentinel-endpoint.invalid',
+        [name]: 'true',
+      };
+      const first = loadRagConfig(env);
+      const second = loadRagConfig({ ...env, RAG_RERANK_TIER_CHAT: 'quality' });
+      for (const config of [first, second]) expect(config.queryLayer.framework).toBe('llamaindex');
+      const logged = queryLayerWarnings('[Query Layer]');
+      expect(logged).toHaveLength(1);
+      expect(logged[0]).toContain(name);
+      expect(JSON.stringify([logged, first.warnings])).not.toMatch(/sentinel/u);
+      expect(first.warnings).toHaveLength(1);
+    },
+  );
+
+  test('a tracing variable does not change the llamaindex framework and logs nothing', () => {
+    setLangChainResolverForTests(() => true);
+    const config = loadRagConfig({ RAG_PIPELINE: 'v2', RAG_QUERY_LAYER: 'true', LANGSMITH_TRACING: 'true' });
+    expect(config.queryLayer.framework).toBe('llamaindex');
+    expect(config.warnings).toEqual([]);
+    expect(queryLayerWarnings('[Query Layer]')).toEqual([]);
+  });
+
+  test('langchain whose packages cannot be resolved falls back to llamaindex with one warning (D-44)', () => {
+    setLangChainResolverForTests(() => false);
+    const env = { RAG_PIPELINE: 'v2', RAG_QUERY_LAYER: 'true', RAG_QUERY_FRAMEWORK: 'langchain' };
+    const config = loadRagConfig(env);
+    expect(config.queryLayer.framework).toBe('llamaindex');
+    expect(loadRagConfig({ ...env, RAG_RERANK_TIER_CHAT: 'quality' }).queryLayer.framework).toBe('llamaindex');
+    const logged = queryLayerWarnings('[Query Layer]');
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toContain('@langchain');
+  });
+
+  test('the shipped resolver finds the installed @langchain packages', () => {
+    setLangChainResolverForTests(null);
+    expect(loadRagConfig({ RAG_PIPELINE: 'v2', RAG_QUERY_LAYER: 'true', RAG_QUERY_FRAMEWORK: 'langchain' }).queryLayer.framework).toBe('langchain');
   });
 
   test('expand, hyde and decompose are dropped from the voice allow-list with one warning naming them', () => {
