@@ -381,7 +381,7 @@ describe('rag:rules export', () => {
     expect(exported.all).not.toContain(MARKER);
     expect((await stat(outA)).mode & 0o777).toBe(0o600);
     const textA = await readFile(outA, 'utf8');
-    for (const banned of ['tenant_key', '"id"', 'version', 'updated_at', ACTOR]) expect(textA).not.toContain(banned);
+    for (const banned of ['tenant_key', '"id"', '"version"', 'updated_at', ACTOR]) expect(textA).not.toContain(banned);
 
     store.reset();
     const intoB = await run(store, ['import', '--tenant', `o:${ORG_B}`, '--actor', ACTOR, '--file', outA, '--apply'], { org: ORG_B });

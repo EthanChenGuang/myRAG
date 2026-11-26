@@ -14,6 +14,7 @@
     "reprocess-docs": "node scripts/rag/reprocess-documents.js",
     "rag:backfill": "tsx src/lib/rag/ingest/backfill/cli.ts",
     "rag:attributes": "tsx src/lib/rag/ingest/attributes/cli.ts",
+    "rag:rules": "tsx src/lib/rag/ingest/rules/cli.ts",
     "rag:backfill-hashes": "tsx src/lib/rag/ingest/backfill-hashes.ts",
     "rag:reembed": "tsx src/lib/rag/ingest/reembed/cli.ts",
     "rag:finetune": "tsx src/lib/rag/finetune/cli.ts",
