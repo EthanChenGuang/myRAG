@@ -6,13 +6,14 @@ import { formatURLsForContext, type ExtractedURL } from '@/lib/url-extractor';
 import { buildClaudeContextReplacement, docsFromBlocks } from '../../context/wrap';
 import { readSecurityConfig } from '../../security/config';
 import type { CitationLabeler, ContextBlock, UsedDocument } from '../../types';
+import type { TextsSource } from '../answer-turn';
 import type { GenerationConfig } from '../config';
 import { createEnhancedRAGPrompt } from '../prompt';
 import { createMarkerParser, type MarkerParser } from './marker-parser';
 import { buildAliasMap, createCitationLabeler, type AliasMap } from './blocks';
 import { createClaudeProvider, startClaudeCitationStream, type ClaudeCitationStream } from './claude';
 import type { FallbackReason } from './fallback';
-import { attachedDocumentsSentence, citationInstruction } from './instructions';
+import { attachedDocumentsText, citationInstructionText } from './instructions';
 import { anthropicIdFor } from './models';
 import { buildCitationRecords, capQuotes } from './record';
 import {
@@ -34,6 +35,8 @@ export interface CitationSessionInput {
   ragMode: CitationRagMode;
   modelId: string;
   language: string;
+  /** D-10: `registry` reads the instruction texts from the language registry in `language`; absent means legacy. */
+  textsSource?: TextsSource;
   config: CitationStrategyConfig & Partial<Pick<GenerationConfig, 'anthropicBaseUrl'>>;
   /** Absent: the direct Claude path is never chosen. */
   facts?: ClaudeTurnFacts;
@@ -199,18 +202,18 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
     },
     decorateSystemPrompt(prompt) {
       if (strategy !== 'chunk-alias' && strategy !== 'claude-citations') return prompt;
-      return `${prompt}\n\n${citationInstruction(input.language)}`;
+      return `${prompt}\n\n${citationInstructionText(input.language, input.textsSource)}`;
     },
     claudeSystemPrompt(basePrompt) {
       const tagging = input.contextTagging ?? readSecurityConfig().contextTagging;
       if (tagging) {
         const context = buildClaudeContextReplacement({
-          attachedSentence: attachedDocumentsSentence(input.language),
+          attachedSentence: attachedDocumentsText(input.language, input.textsSource),
           docs: docsFromBlocks(sideBlocks, { links }),
         });
         return createEnhancedRAGPrompt(basePrompt, context, input.ragMode);
       }
-      const context = [attachedDocumentsSentence(input.language), ...sideBlocks.map((block) => block.text), formatURLsForContext(links)]
+      const context = [attachedDocumentsText(input.language, input.textsSource), ...sideBlocks.map((block) => block.text), formatURLsForContext(links)]
         .filter((part) => part.trim().length > 0)
         .join('\n\n');
       return createEnhancedRAGPrompt(basePrompt, context, input.ragMode);

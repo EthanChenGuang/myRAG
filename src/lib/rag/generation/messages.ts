@@ -1,3 +1,6 @@
+import { fixedText } from '../lang/texts';
+import type { TextsSource } from './answer-turn';
+
 const UNAVAILABLE_MESSAGES: Record<string, string> = {
   en: 'The knowledge base is temporarily unavailable. Please try again in a moment.',
   zh: '知识库暂时无法访问，请稍后再试。',
@@ -19,25 +22,59 @@ export function noKnowledgeBaseResponseLanguage(language: string): string {
   return language === 'es' ? 'es' : 'en';
 }
 
-/** The strict-mode "information not available" answer (knowledge base empty for the query, web search off). */
-export function noKnowledgeBaseResponse(language: string): string {
-  if (noKnowledgeBaseResponseLanguage(language) === 'es') {
-    return `# Información no disponible
-
-## Estado de la base de conocimiento
-- No encontré esta información en tu base de conocimiento.
-- La búsqueda web está desactivada, así que no puedo consultarla en línea.
-
-¿Quieres que active la búsqueda web para verificarlo? ¿Prefieres subir un documento con esa información? ¿Hay algún detalle específico que deba buscar?`;
-  }
-
-  return `# Information Not Available
+/** Today's English strict refusal (moved verbatim from the chat route); registry `notices.no_information` (en) equals it (D-10). */
+export const LEGACY_NO_INFORMATION_EN = `# Information Not Available
 
 ## Knowledge Base Status
 - I couldn’t find this information in your knowledge base.
 - Web search is turned off, so I can’t look it up online.
 
 Would you like me to turn on web search and check? Do you want to upload a document that contains this information? Is there a specific detail you want me to focus on?`;
+
+/** Today's Spanish strict refusal; the registry has no Spanish pack, so it serves only the legacy text source (D-10). */
+export const LEGACY_NO_INFORMATION_ES = `# Información no disponible
+
+## Estado de la base de conocimiento
+- No encontré esta información en tu base de conocimiento.
+- La búsqueda web está desactivada, así que no puedo consultarla en línea.
+
+¿Quieres que active la búsqueda web para verificarlo? ¿Prefieres subir un documento con esa información? ¿Hay algún detalle específico que deba buscar?`;
+
+/** The strict-mode "information not available" answer (knowledge base empty for the query, web search off). */
+export function noKnowledgeBaseResponse(language: string): string {
+  return noKnowledgeBaseResponseLanguage(language) === 'es' ? LEGACY_NO_INFORMATION_ES : LEGACY_NO_INFORMATION_EN;
+}
+
+/** The part of an AnswerTurn the fixed texts read; `answerLanguage` is set whenever `textsSource` is `registry`. */
+export interface FixedTextTurn {
+  readonly textsSource: TextsSource;
+  readonly answerLanguage: string | null;
+}
+
+function registryLanguage(turn: FixedTextTurn | null | undefined): string | null {
+  return turn?.textsSource === 'registry' && turn.answerLanguage ? turn.answerLanguage : null;
+}
+
+/** D-10: the strict refusal; legacy source keeps today's UI-language and Spanish-heuristic choice, registry reads the answer language. */
+export function noInformationText(turn: FixedTextTurn | null | undefined, legacyLanguage: string): string {
+  const language = registryLanguage(turn);
+  return language ? fixedText('notices.no_information', language) : noKnowledgeBaseResponse(legacyLanguage);
+}
+
+/** The language code noInformationText renders. */
+export function noInformationLanguage(turn: FixedTextTurn | null | undefined, legacyLanguage: string): string {
+  return registryLanguage(turn) ?? noKnowledgeBaseResponseLanguage(legacyLanguage);
+}
+
+/** D-10: the knowledge-base-unavailable message, by the same rule as noInformationText. */
+export function kbUnavailableText(turn: FixedTextTurn | null | undefined, legacyLanguage: string): string {
+  const language = registryLanguage(turn);
+  return language ? fixedText('notices.kb_unavailable', language) : knowledgeBaseUnavailableMessage(legacyLanguage);
+}
+
+/** The language code kbUnavailableText renders. */
+export function kbUnavailableLanguage(turn: FixedTextTurn | null | undefined, legacyLanguage: string): string {
+  return registryLanguage(turn) ?? knowledgeBaseUnavailableLanguage(legacyLanguage);
 }
 
 const IDENTIFIER_SUGGESTION_MESSAGES: Record<string, (list: string) => string> = {

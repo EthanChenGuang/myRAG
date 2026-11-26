@@ -184,11 +184,20 @@ export {
   type AnswerLanguageOptions,
 } from './generation/answer-language';
 export {
+  kbUnavailableLanguage,
+  kbUnavailableText,
   knowledgeBaseUnavailableLanguage,
   knowledgeBaseUnavailableMessage,
+  LEGACY_NO_INFORMATION_EN,
+  LEGACY_NO_INFORMATION_ES,
+  noInformationLanguage,
+  noInformationText,
   noKnowledgeBaseResponse,
   noKnowledgeBaseResponseLanguage,
 } from './generation/messages';
+export { readAnswerConfig, type AnswerConfig } from './generation/answer-config';
+export { createAnswerTurn, type AnswerChannel, type AnswerTurn, type TextsSource } from './generation/answer-turn';
+export { resolveAnswerLanguage, previousTurnLanguage, type AnswerLanguageSource } from './lang/answer-language';
 export { identifierSuggestionMessage } from './generation/messages';
 export { IDENTIFIER_NOT_FOUND } from './v2/result';
 export type { IdentifierFilterSummary } from './types';
