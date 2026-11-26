@@ -146,7 +146,7 @@ export function sphericalKMeans(vectors: readonly Float32Array[], options: KMean
   const n = units.length;
   const dim = units[0]?.length ?? 0;
   const seeds = kmeansPlusPlus(units, options.k, seededRandom(options.seed, 'spherical-kmeans'));
-  const centroids = seeds.map((i) => Float32Array.from(units[i] as Float32Array));
+  const centroids: Float32Array[] = seeds.map((i) => Float32Array.from(units[i] as Float32Array));
   const assignments = new Int32Array(n).fill(-1);
   if (centroids.length === 0) return { centroids, assignments, iterations: 0 };
 
