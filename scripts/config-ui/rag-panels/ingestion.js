@@ -87,7 +87,7 @@ const INGESTION_LABELS = {
     "filter.failed": "Failed",
     "filter.legend": "Status",
     "filter.needs_review": "Needs review",
-    "filter.other": "Quarantined or skipped",
+    "filter.other": "Held or skipped",
     "filter.ready": "Ready",
     "jobs.caption": "Ingestion jobs, newest first",
     "jobs.col.actions": "Actions",
@@ -322,7 +322,7 @@ const INGESTION_LABELS = {
     "filter.failed": "失败",
     "filter.legend": "状态",
     "filter.needs_review": "待审核",
-    "filter.other": "已隔离或已跳过",
+    "filter.other": "已暂缓或跳过",
     "filter.ready": "已就绪",
     "jobs.caption": "入库任务（最新在前）",
     "jobs.col.actions": "操作",
@@ -557,7 +557,7 @@ const INGESTION_LABELS = {
     "filter.failed": "Non riusciti",
     "filter.legend": "Stato",
     "filter.needs_review": "Da rivedere",
-    "filter.other": "In quarantena o saltati",
+    "filter.other": "Trattenuti o saltati",
     "filter.ready": "Pronti",
     "jobs.caption": "Job di acquisizione, dal più recente",
     "jobs.col.actions": "Azioni",
@@ -763,6 +763,15 @@ const NON_TERMINAL = new Set(['queued', 'preflight', 'parsing', 'checking', 'chu
 function tierLabel(tier, locale) {
   return tier ? ingestionLabel('tier.' + tier, locale) : '—';
 }
+
+/** Status filter radios to the job statuses each one asks for. 'other' holds every held or skipped status (UI-SPEC decision 16). */
+const INGESTION_STATUS_FILTERS = {
+  failed: ['failed'],
+  needs_review: ['needs_review'],
+  active: ['queued', 'preflight', 'parsing', 'checking', 'chunking', 'embedding'],
+  ready: ['ready'],
+  other: ['quarantined', 'skipped_duplicate', 'pending_review'],
+};
 
 function statusBadgeKey(job) {
   const status = String(job.status || '');
@@ -1051,13 +1060,7 @@ class IngestionPanel {
     this.listController = typeof AbortController !== 'undefined' ? new AbortController() : null;
     const params = new URLSearchParams({ limit: '50' });
     if (this.organizationId) params.set('organizationId', this.organizationId);
-    const statusMap = {
-      failed: ['failed'],
-      needs_review: ['needs_review'],
-      active: ['queued', 'preflight', 'parsing', 'checking', 'chunking', 'embedding'],
-      ready: ['ready'],
-      other: ['quarantined', 'skipped_duplicate'],
-    };
+    const statusMap = INGESTION_STATUS_FILTERS;
     if (this.filters.status !== 'all' && statusMap[this.filters.status]) {
       for (const s of statusMap[this.filters.status]) params.append('status', s);
     }
@@ -1092,7 +1095,19 @@ class IngestionPanel {
         fileTd.appendChild(fileBtn);
         tr.appendChild(fileTd);
         const statusTd = document.createElement('td');
-        statusTd.textContent = view.statusLabel;
+        if (view.status === 'pending_review') {
+          const badge = document.createElement('span');
+          badge.className = 'badge badge-sm badge-info badge-outline gap-1';
+          const icon = document.createElement('i');
+          icon.className = 'bi bi-hourglass';
+          icon.setAttribute('aria-hidden', 'true');
+          const word = document.createElement('span');
+          word.textContent = view.statusLabel;
+          badge.append(icon, word);
+          statusTd.appendChild(badge);
+        } else {
+          statusTd.textContent = view.statusLabel;
+        }
         tr.appendChild(statusTd);
         const actionsTd = document.createElement('td');
         if (view.showRetry) {
@@ -1240,6 +1255,10 @@ class IngestionPanel {
   }
 
   applySettingsI18n() {
+    this.root.querySelectorAll('input[name="ingestion-status"]').forEach((input) => {
+      const value = input.getAttribute('value');
+      if (value) input.setAttribute('aria-label', ingestionLabel('filter.' + value, this.locale));
+    });
     this.root.querySelectorAll('[data-ingestion-i18n]').forEach((el) => {
       const key = el.getAttribute('data-ingestion-i18n');
       if (key) el.textContent = ingestionLabel(key, this.locale);
@@ -1288,6 +1307,7 @@ if (typeof window !== 'undefined') {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     INGESTION_LABELS,
+    INGESTION_STATUS_FILTERS,
     ingestionLabel,
     buildJobRowView,
     buildJobDetailView,
