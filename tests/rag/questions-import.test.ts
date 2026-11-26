@@ -143,7 +143,7 @@ describe('importQuestions', () => {
   it('enqueues historical representative rows in the import week and returns counts only', async () => {
     const admin = fakeAdmin();
     const prepared = prepareQuestions(['question-0001', 'question-0001', 'question-0002', '', RESIDUAL, 'b'.repeat(2100)]);
-    const counts = await importQuestions(admin, { tenantKey: 's:default', prepared, dryRun: false, now: NOW });
+    const counts = await importQuestions(admin as never, { tenantKey: 's:default', prepared, dryRun: false, now: NOW });
     expect(counts).toEqual({ read: 6, added: 3, duplicates: 1, rejected_pii: 1, truncated: 1, empty: 1, by_language: { und: 3 } });
     const rpc = admin.calls.find((call) => call.kind === 'rpc')!;
     expect(rpc.args.fn).toBe('rag_review_items_enqueue');
@@ -165,21 +165,21 @@ describe('importQuestions', () => {
   it('adds nothing when the same file is imported again', async () => {
     const admin = fakeAdmin();
     const prepared = prepareQuestions(['question-0001', 'question-0002']);
-    await importQuestions(admin, { tenantKey: 's:default', prepared, dryRun: false, now: NOW });
-    const again = await importQuestions(admin, { tenantKey: 's:default', prepared, dryRun: false, now: new Date('2026-12-10T10:00:00Z') });
+    await importQuestions(admin as never, { tenantKey: 's:default', prepared, dryRun: false, now: NOW });
+    const again = await importQuestions(admin as never, { tenantKey: 's:default', prepared, dryRun: false, now: new Date('2026-12-10T10:00:00Z') });
     expect(again).toMatchObject({ added: 0, duplicates: 2 });
   });
 
   it('a dry run computes the counts against the queue and calls no writer', async () => {
     const admin = fakeAdmin({ 's:default': new Set([queryFingerprint('question-0001')]) });
     const prepared = prepareQuestions(['question-0001', 'question-0002', 'question-0002']);
-    const counts = await importQuestions(admin, { tenantKey: 's:default', prepared, dryRun: true, now: NOW });
+    const counts = await importQuestions(admin as never, { tenantKey: 's:default', prepared, dryRun: true, now: NOW });
     expect(counts).toMatchObject({ read: 3, added: 1, duplicates: 2 });
     expect(admin.calls.some((call) => call.kind === 'rpc')).toBe(false);
   });
 
   it('refuses a tenant key that is not one of the deployment forms', async () => {
-    await expect(importQuestions(fakeAdmin(), { tenantKey: 'tenant-a', prepared: prepareQuestions(['question-0001']), dryRun: true })).rejects.toThrow(
+    await expect(importQuestions(fakeAdmin() as never, { tenantKey: 'tenant-a', prepared: prepareQuestions(['question-0001']), dryRun: true })).rejects.toThrow(
       'invalid_tenant_key',
     );
   });
