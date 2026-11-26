@@ -454,3 +454,202 @@ def test_bootstrap_interval_is_seeded():
     low, high = evaluate.bootstrap_interval(differences, seed=42, resamples=1000)
     assert low < float(np.mean(differences)) < high
     assert evaluate.bootstrap_interval([0.0, 0.0], seed=42, resamples=1000) == (0.0, 0.0)
+
+
+# --- Task 2: model card ----------------------------------------------------------------------------------------
+
+
+def _probe(spec, *, query_prompt=None):
+    from rag_sidecar.contracts.finetune import PROBE_TEXTS, ProbeSet
+
+    vectors = []
+    for slot in range(3):
+        vector = [0.0] * 1024
+        vector[slot] = 1.0
+        vectors.append(vector)
+    return ProbeSet(
+        texts=list(PROBE_TEXTS),
+        query_prompt=spec.query_prompt if query_prompt is None else query_prompt,
+        document_prompt=spec.document_prompt,
+        vectors=vectors,
+    )
+
+
+def _training_report():
+    from rag_sidecar.contracts.finetune import TrainingRunReport
+
+    return TrainingRunReport(
+        run_id="run-1",
+        training_config_sha256="c" * 64,
+        examples={"ntuple": 3, "pairs": 1},
+        steps=5,
+        duration_seconds=1.5,
+        device="cpu",
+    )
+
+
+def _evaluated(tmp_path, *, tenants=(TENANT_A,), finetuned=None, probe_prompt=None, extra=None):
+    run_dir, chunks = _write_bundle(tmp_path, tenants=tenants)
+    _write_production_vectors(run_dir, chunks, _hit_if(lambda i: i % 2 == 0), tenants=tenants)
+    config = load_finetune_config()
+    spec = next(m for m in config.base_models if m.default)
+    model_dir = tmp_path / "model"
+    model_dir.mkdir()
+    (model_dir / "model.safetensors").write_bytes(b"fake weights")
+    (model_dir / "probe.json").write_text(_probe(spec, query_prompt=probe_prompt).model_dump_json())
+    (model_dir / "training-report.json").write_text(_training_report().model_dump_json())
+    for name, payload in (extra or {}).items():
+        (model_dir / name).write_text(payload)
+    encoders = {str(model_dir): finetuned or ALWAYS, spec.id: NEVER}
+    code = evaluate.main(
+        ["--bundle", str(run_dir), "--finetuned", str(model_dir)],
+        config=config,
+        encoder_factory=lambda ref: encoders[ref],
+    )
+    assert code == 0
+    return run_dir, model_dir, spec
+
+
+def _card_args(run_dir, model_dir, *, uri="s3://models-bucket/ft/run-1", version="ft-qwen3-run-1"):
+    return ["--bundle", str(run_dir), "--model", str(model_dir), "--artifact-uri", uri, "--version", version]
+
+
+def test_card_passed_report_is_a_tenant_candidate(tmp_path, capsys):
+    from rag_sidecar.contracts.finetune import ModelVersionCard
+
+    from rag_eval.finetune import card
+
+    run_dir, model_dir, spec = _evaluated(tmp_path)
+    assert card.main(_card_args(run_dir, model_dir)) == 0
+    written = ModelVersionCard.model_validate_json((run_dir / "card.json").read_text())
+    assert written.status == "candidate"
+    assert written.scope == "tenant"
+    assert written.tenant_keys == [TENANT_A]
+    assert written.id == "ft-qwen3-run-1"
+    assert written.base_model == spec.id and written.base_revision == spec.revision
+    assert written.query_prompt == spec.query_prompt and written.document_prompt == spec.document_prompt
+    assert written.dataset_manifest_sha256 == bundle.sha256_file(run_dir / "manifest.json")
+    assert written.training_config_sha256 == "c" * 64
+    assert written.offline == OfflineEvalReport.model_validate_json((run_dir / "offline-eval.json").read_text())
+    assert written.probe == _probe(spec)
+    assert written.artifact_uri == "s3://models-bucket/ft/run-1"
+    out = capsys.readouterr().out
+    assert "candidate" in out and "s3://" not in out
+
+
+def test_card_failed_report_is_rejected_offline(tmp_path):
+    from rag_sidecar.contracts.finetune import ModelVersionCard
+
+    from rag_eval.finetune import card
+
+    run_dir, model_dir, _ = _evaluated(tmp_path, finetuned=NEVER)
+    assert card.main(_card_args(run_dir, model_dir)) == 0
+    written = ModelVersionCard.model_validate_json((run_dir / "card.json").read_text())
+    assert written.status == "rejected_offline"
+    assert written.offline.passed is False
+
+
+def test_card_two_tenant_bundle_has_deployment_scope(tmp_path):
+    from rag_sidecar.contracts.finetune import ModelVersionCard
+
+    from rag_eval.finetune import card
+
+    run_dir, model_dir, _ = _evaluated(tmp_path, tenants=(TENANT_A, TENANT_B))
+    assert card.main(_card_args(run_dir, model_dir)) == 0
+    written = ModelVersionCard.model_validate_json((run_dir / "card.json").read_text())
+    assert written.scope == "deployment"
+    assert written.tenant_keys == sorted([TENANT_A, TENANT_B])
+
+
+@pytest.mark.parametrize(
+    "uri",
+    [
+        "s3://operator:hunter2secret@models-bucket/ft/run-1",
+        "https://models.example.test/ft/run-1?token=hunter2secret",
+        "https://models.example.test/ft/run-1#hunter2secret",
+    ],
+)
+def test_card_artifact_uri_with_credentials_is_refused(tmp_path, capsys, uri):
+    from rag_eval.finetune import card
+
+    run_dir, model_dir, _ = _evaluated(tmp_path)
+    capsys.readouterr()
+    assert card.main(_card_args(run_dir, model_dir, uri=uri)) == 2
+    captured = capsys.readouterr()
+    assert "artifact_uri_invalid" in captured.err
+    assert "hunter2secret" not in captured.out + captured.err
+    assert not (run_dir / "card.json").exists()
+
+
+def test_card_refuses_a_bad_version_id(tmp_path, capsys):
+    from rag_eval.finetune import card
+
+    run_dir, model_dir, _ = _evaluated(tmp_path)
+    assert card.main(_card_args(run_dir, model_dir, version="Qwen run")) == 2
+    assert "version_invalid" in capsys.readouterr().err
+
+
+def test_card_refuses_a_report_made_for_another_model(tmp_path, capsys):
+    from rag_eval.finetune import card
+
+    run_dir, model_dir, _ = _evaluated(tmp_path)
+    (model_dir / "model.safetensors").write_bytes(b"other weights")
+    assert card.main(_card_args(run_dir, model_dir)) == 1
+    assert "offline_report_other_model" in capsys.readouterr().err
+    assert not (run_dir / "card.json").exists()
+
+
+def test_card_refuses_a_modified_offline_report(tmp_path, capsys):
+    from rag_eval.finetune import card
+
+    run_dir, model_dir, _ = _evaluated(tmp_path, finetuned=NEVER)
+    report = json.loads((run_dir / "offline-eval.json").read_text())
+    report["passed"], report["reasons"] = True, []
+    (run_dir / "offline-eval.json").write_text(json.dumps(report))
+    assert card.main(_card_args(run_dir, model_dir)) == 1
+    assert "offline_report_modified" in capsys.readouterr().err
+
+
+def test_card_refuses_probe_with_other_prompts_and_missing_inputs(tmp_path, capsys):
+    from rag_eval.finetune import card
+
+    run_dir, model_dir, _ = _evaluated(tmp_path, probe_prompt="query: ")
+    assert card.main(_card_args(run_dir, model_dir)) == 1
+    assert "probe_prompt_mismatch" in capsys.readouterr().err
+    assert card.main(_card_args(run_dir, model_dir) + ["--probe", str(tmp_path / "none.json")]) == 2
+    assert "probe_missing" in capsys.readouterr().err
+    (run_dir / "offline-eval.json").unlink()
+    assert card.main(_card_args(run_dir, model_dir)) == 2
+    assert "offline_report_missing" in capsys.readouterr().err
+
+
+def test_card_checks_the_training_config_against_the_bundle(tmp_path, capsys):
+    from rag_sidecar.contracts.finetune import LibraryVersions, TrainingRunConfig
+
+    from rag_eval.finetune import card
+
+    config = load_finetune_config()
+    spec = next(m for m in config.base_models if m.default)
+    training = TrainingRunConfig(
+        run_id="run-1",
+        base_model=spec.id,
+        base_revision=spec.revision,
+        dataset_manifest_sha256="d" * 64,
+        config_sha256="e" * 64,
+        seed=42,
+        git_commit="abcdef1",
+        library_versions=LibraryVersions(
+            torch="2.5.1", transformers="4.57.0", sentence_transformers="6.2.0", datasets="3.1.0"
+        ),
+        recipe=config.training,
+    )
+    run_dir, model_dir, _ = _evaluated(tmp_path, extra={"training-config.json": training.model_dump_json()})
+    assert card.main(_card_args(run_dir, model_dir)) == 1
+    assert "training_config_mismatch" in capsys.readouterr().err
+
+
+def test_card_command_is_dispatched():
+    from rag_eval.finetune import card
+
+    assert cli.COMMANDS["card"] == "rag_eval.finetune.card:main"
+    assert callable(card.run_card)
