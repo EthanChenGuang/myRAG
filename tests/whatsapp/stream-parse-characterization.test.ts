@@ -64,7 +64,7 @@ describe('WhatsApp reply path against the chat route UI message stream (D-91)', 
   it('collects no streamed text and sends only the fixed fallback sentence', async () => {
     const { sendWhatsAppResponse } = await runWithChatStream(['The synthetic note ', 'lists three items.']);
     expect(sendWhatsAppResponse).toHaveBeenCalledTimes(1);
-    expect(sendWhatsAppResponse).toHaveBeenCalledWith(SESSION_ID, JID, FALLBACK);
+    expect(sendWhatsAppResponse.mock.calls[0]!.slice(0, 3)).toEqual([SESSION_ID, JID, FALLBACK]);
     expect(h.sendTextMessage).toHaveBeenCalledTimes(1);
     expect(h.sendTextMessage).toHaveBeenCalledWith(SESSION_ID, JID, FALLBACK);
   });

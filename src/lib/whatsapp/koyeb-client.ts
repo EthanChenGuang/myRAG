@@ -4,6 +4,7 @@ import {
   KoyebSessionRequest,
   KoyebSessionResponse,
   KoyebMessagePayload,
+  TextMessageOptions,
   WhatsAppError,
   WhatsAppErrorCodes,
   WhatsAppMediaUploadResponse
@@ -382,7 +383,12 @@ export class KoyebWhatsAppClient extends BaseWhatsAppClient {
   /**
    * Send text message helper
    */
-  async sendTextMessage(sessionId: string, to: string, text: string): Promise<{ messageId: string; status: string }> {
+  async sendTextMessage(
+    sessionId: string,
+    to: string,
+    text: string,
+    options?: TextMessageOptions
+  ): Promise<{ messageId: string; status: string }> {
     // Baileys server expects 'message' field as a string, not 'text'
     // logger.info('KoyebWhatsAppClient', 'Sending text message with correct format');
     
@@ -400,7 +406,8 @@ export class KoyebWhatsAppClient extends BaseWhatsAppClient {
     const payload = {
       sessionId,
       to,
-      message: text  // Send text as-is, JSON.stringify will handle encoding
+      message: text,  // Send text as-is, JSON.stringify will handle encoding
+      ...(options?.linkPreview === false ? { linkPreview: false as const } : {})
     };
     
     // Create the JSON string to see what we're actually sending
