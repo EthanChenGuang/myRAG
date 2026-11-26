@@ -303,3 +303,51 @@ def test_calibration_rejects_wide_distance_and_near_miss_hits():
         SemanticCacheCalibration.model_validate({"profiles": [_cell(), _cell(max_distance=0.04)]})
     with pytest.raises(ValidationError):
         SemanticCacheCalibration.model_validate({"profiles": [_cell(dev=_split(paraphrase_hit_rate=1.2))]})
+
+
+def _pair(**overrides):
+    row = {
+        "pair_id": "en-cache-paraphrase-009",
+        "anchor_id": "en-general-009",
+        "category": "cache_paraphrase",
+        "split": "dev",
+        "language": "en",
+        "outcome": "hit",
+        "hit": True,
+        "distance": 0.02,
+    }
+    row.update(overrides)
+    return row
+
+
+def test_cache_pairs_run_validates_rows():
+    from rag_sidecar.contracts import CachePairsRun
+
+    run = CachePairsRun.model_validate({"source": "fixture", "probe_max_distance": 0.2, "pairs": [_pair()]})
+    assert run.pairs[0].hit is True
+    bypass = _pair(outcome="bypass", hit=False, distance=None, bypass_reason="protected_tokens", category="cache_near_miss")
+    assert CachePairsRun.model_validate({"source": "fixture", "probe_max_distance": 0.2, "pairs": [bypass]}).pairs[0].bypass_reason
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        _pair(hit=False),
+        _pair(distance=None),
+        _pair(outcome="bypass", hit=False, distance=None),
+        _pair(outcome="miss", hit=False, distance=None, bypass_reason="tools"),
+        _pair(distance=0.15),
+    ],
+)
+def test_cache_pairs_run_rejects_inconsistent_rows(row):
+    from rag_sidecar.contracts import CachePairsRun
+
+    with pytest.raises(ValidationError):
+        CachePairsRun.model_validate({"source": "fixture", "probe_max_distance": 0.1, "pairs": [row]})
+
+
+def test_cache_pairs_run_rejects_duplicate_pairs():
+    from rag_sidecar.contracts import CachePairsRun
+
+    with pytest.raises(ValidationError):
+        CachePairsRun.model_validate({"source": "fixture", "probe_max_distance": 0.2, "pairs": [_pair(), _pair()]})

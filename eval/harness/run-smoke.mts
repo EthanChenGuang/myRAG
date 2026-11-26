@@ -52,6 +52,8 @@ async function main(): Promise<number> {
       groundedness: { type: 'boolean', default: false },
       'table-split-doc-type': { type: 'string' },
       'table-header-repeat': { type: 'string' },
+      'cache-pairs': { type: 'boolean', default: false },
+      'allow-live-cache': { type: 'boolean', default: false },
     },
     strict: true,
   });
@@ -139,6 +141,7 @@ async function main(): Promise<number> {
     if (tableHeaderRepeat !== 'profile' && tableHeaderRepeat !== 'always') throw new Error('--table-header-repeat must be profile or always');
   }
 
+  if (values['allow-live-cache'] && !values['cache-pairs']) throw new Error('--allow-live-cache needs --cache-pairs');
   let gate = !values['no-gate'];
   if (tableSplitDocType !== undefined || tableHeaderRepeat !== undefined) gate = false;
   if (embeddingProfileId) gate = false;
@@ -181,7 +184,15 @@ async function main(): Promise<number> {
     // Either flag implies include_answer; fixture runs answer with the fake citation generator and score against the fake sidecar.
     ...(values.citations ? { citations: true } : {}),
     ...(values.groundedness ? { groundedness: true } : {}),
+    // D-37: the golden cache pairs instead of the item run; cache-pairs.json feeds python -m rag_eval.calibrate cache.
+    ...(values['cache-pairs'] ? { cachePairs: true } : {}),
+    ...(values['allow-live-cache'] ? { allowLiveCache: true } : {}),
   });
+
+  if (result.cachePairsPath) {
+    console.log(`[Eval Harness] wrote cache pairs to ${result.cachePairsPath}`);
+    return 0;
+  }
 
   console.log(`[Eval Harness] wrote ${result.itemCount} trace(s) to ${result.tracesPath} (${result.skippedCount} golden item(s) not approved, skipped)`);
 

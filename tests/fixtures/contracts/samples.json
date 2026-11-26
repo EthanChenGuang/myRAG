@@ -1006,6 +1006,26 @@
     "CacheInvalidateResponse": {
       "deleted": 3
     },
+    "CachePairsRun": {
+      "embedding_profile_id": "fixture-ngram",
+      "pairs": [
+        {
+          "anchor_id": "en-general-001",
+          "anchor_outcome": "miss",
+          "bypass_reason": null,
+          "category": "cache_paraphrase",
+          "distance": 0.03,
+          "hit": true,
+          "language": "en",
+          "outcome": "hit",
+          "pair_id": "en-cache-paraphrase-001",
+          "split": "dev"
+        }
+      ],
+      "probe_max_distance": 0.2,
+      "schema_version": 1,
+      "source": "fixture"
+    },
     "CacheStoreRequest": {
       "answer": {
         "answer_language": "en",
