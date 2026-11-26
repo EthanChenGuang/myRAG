@@ -227,7 +227,7 @@ if (MODE === undefined) {
         return legs;
       },
       health: () => real.health(),
-      isReady: () => real.isReady(),
+      isReady: (scope) => real.isReady(scope),
     };
     registry.setRetrievalBackendForTests(spy);
 
@@ -246,8 +246,8 @@ if (MODE === undefined) {
       });
     }
     await seedTerminology(db, [
-      { layer: multi ? tenants[0]!.key : 'shared', canonical: TERM_A, variants: [TERM_A], language: 'zh', kind: 'synonym', mode: 'equivalent' },
-      ...(multi ? [{ layer: tenants[1]!.key, canonical: TERM_B, variants: [TERM_B], language: 'zh', kind: 'synonym', mode: 'equivalent' as const }] : []),
+      { layer: multi ? tenants[0]!.key : 'shared', canonical: TERM_A, variants: [TERM_A], language: 'zh', kind: 'synonym' as const, mode: 'equivalent' as const },
+      ...(multi ? [{ layer: tenants[1]!.key, canonical: TERM_B, variants: [TERM_B], language: 'zh', kind: 'synonym' as const, mode: 'equivalent' as const }] : []),
     ]);
   });
 
