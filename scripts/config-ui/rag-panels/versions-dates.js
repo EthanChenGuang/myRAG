@@ -1,4 +1,9 @@
-/** Versions and dates panel (UI-SPEC 6.8). Stub: filled in by the next commit. */
+/**
+ * Versions and dates panel (UI-SPEC 6.8; DATA-19, DATA-20, D-41 to D-44, D-50). Follows #workspace-selector. Possible older
+ * versions are decided here (confirm, dismiss, undo) and effective dates are applied, dismissed or edited. Every server value is
+ * set with textContent through ragUiEl; no document text other than the evidence quote of a date is shown, and that quote only
+ * in the inert evidence block. No score, raw signal object, run id or tenant key is rendered.
+ */
 
 const VERSIONS_DATES_LABELS = {
   en: {
@@ -399,25 +404,1301 @@ const VERSIONS_DATES_LABELS = {
   },
 };
 
-function versionsDatesCandidateView() {
-  return { title: '', directed: false, older: {}, newer: {}, signals: [], origin: null };
+const VERSIONS_DATES_SUPERSESSION_PATH = '/api/rag/admin/supersession';
+const VERSIONS_DATES_DATES_PATH = '/api/rag/admin/effective-dates';
+const VERSIONS_DATES_PAGE = 50;
+const VERSIONS_DATES_SEARCH_DELAY_MS = 400;
+const VERSIONS_DATES_SEARCH_MAX = 200;
+const VERSIONS_DATES_ORIGINS = { detected: 'search', uploader: 'person', answer_conflict: 'chat-dots' };
+const VERSIONS_DATES_ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+const VERSIONS_DATES_SETTINGS = ['RAG_SUPERSESSION_DETECT', 'RAG_EFFECTIVE_DATES', 'RAG_PIPELINE', 'RAG_INGEST_PIPELINE'];
+
+let versionsDatesUi = null;
+if (typeof require !== 'undefined') {
+  try {
+    versionsDatesUi = require('./rag-ui.js');
+  } catch {
+    versionsDatesUi = null;
+  }
 }
-function versionsDatesEffect() {
-  return { key: '', date: null, hides: false };
+
+/** The rag-ui.js helpers: the page's globals in the browser, the module under vitest. */
+function versionsDatesUiLib() {
+  if (versionsDatesUi) return versionsDatesUi;
+  return typeof window !== 'undefined' ? window : globalThis;
 }
-function versionsDatesDateRowView() {
-  return { awaiting: false, window: {}, confidence: null, quote: null, effect: {}, origin: null };
+
+function versionsDatesLabel(key, locale, vars) {
+  const ui = versionsDatesUiLib();
+  const text = ui.ragUiLookup(VERSIONS_DATES_LABELS, key, locale, vars);
+  return text === undefined ? ui.ragUiLabel(key, locale, vars) : text;
 }
-function versionsDatesSettingsWarnings() {
-  return [];
+
+function versionsDatesText(value) {
+  return typeof value === 'string' ? value : value === null || value === undefined ? '' : String(value);
 }
-class VersionsDatesPanel {}
+
+/** An ISO calendar day (YYYY-MM-DD) or null. */
+function versionsDatesDay(value) {
+  const text = versionsDatesText(value).slice(0, 10);
+  return VERSIONS_DATES_ISO_DAY.test(text) ? text : null;
+}
+
+/** Today's date in UTC as YYYY-MM-DD; retrieval compares effective windows with it (UI-SPEC 6.8, dates.utc). */
+function versionsDatesTodayUtc(now) {
+  const date = now instanceof Date ? now : new Date();
+  return date.toISOString().slice(0, 10);
+}
+
+/**
+ * The effect of a window today, bounds inclusive: a start after today hides the document until then, an end before today hides it
+ * for good, a window around today keeps it in use, no dates at all mean always used.
+ */
+function versionsDatesEffect(from, to, today) {
+  const start = versionsDatesDay(from);
+  const end = versionsDatesDay(to);
+  const day = versionsDatesDay(today) || versionsDatesTodayUtc();
+  if (start && start > day) return { key: 'effect.future', date: start, hides: true };
+  if (end && end < day) return { key: 'effect.expired', date: end, hides: true };
+  if (!start && !end) return { key: 'effect.open', date: null, hides: false };
+  return { key: 'effect.inForce', date: null, hides: false };
+}
+
+function versionsDatesDocTypeLabel(docType, locale) {
+  if (!docType) return '';
+  if (typeof window !== 'undefined' && typeof window.docTypeLabelForLocale === 'function') return window.docTypeLabelForLocale(docType, locale);
+  return docType;
+}
+
+/** One document of a candidate or link: named fields only. */
+function versionsDatesDocumentView(value, locale) {
+  if (!value || typeof value !== 'object') return null;
+  const id = versionsDatesText(value.id);
+  if (!id) return null;
+  const docType = versionsDatesText(value.doc_type);
+  const uploader = value.uploader && typeof value.uploader === 'object' ? versionsDatesText(value.uploader.display) : '';
+  return {
+    id,
+    file: versionsDatesText(value.file_name),
+    docType,
+    docTypeLabel: versionsDatesDocTypeLabel(docType, locale),
+    docDate: versionsDatesDay(value.document_date),
+    from: versionsDatesDay(value.effective_from),
+    to: versionsDatesDay(value.effective_to),
+    uploadedAt: versionsDatesText(value.uploaded_at),
+    uploader,
+  };
+}
+
+/**
+ * The signal sentences of a candidate: the origin first (uploader, answer conflict), then the rules that matched. The overlap
+ * percentage and the count of differing numbers decide whether the content sentence shows; neither is ever displayed.
+ */
+function versionsDatesSignals(origin, signals) {
+  const out = [];
+  if (origin === 'uploader') out.push({ key: 'signal.uploader' });
+  else if (origin === 'answer_conflict') out.push({ key: 'signal.answer_conflict' });
+  else if (origin !== 'detected') out.push({ key: 'signal.other', code: origin });
+  const s = signals && typeof signals === 'object' ? signals : {};
+  if (s.title_match === true) out.push({ key: 'signal.title_match' });
+  if (Number(s.content_overlap_percent) > 0 && Number(s.conflicting_numbers) > 0) out.push({ key: 'signal.content_overlap' });
+  return out;
+}
+
+/**
+ * A pending candidate as the block shows it. direction document_newer: the published document is newer; candidate_newer: the
+ * matched document is newer; null: the admin chooses (columns A and B).
+ */
+function versionsDatesCandidateView(item, locale) {
+  const data = item && typeof item === 'object' ? item : {};
+  const documentView = versionsDatesDocumentView(data.document, locale);
+  const candidateView = versionsDatesDocumentView(data.candidate_document, locale);
+  const origin = versionsDatesText(data.origin) || 'detected';
+  const direction = data.direction === 'document_newer' || data.direction === 'candidate_newer' ? data.direction : null;
+  let older = null;
+  let newer = null;
+  if (direction === 'document_newer') {
+    older = candidateView;
+    newer = documentView;
+  } else if (direction === 'candidate_newer') {
+    older = documentView;
+    newer = candidateView;
+  }
+  const directed = direction !== null && Boolean(older) && Boolean(newer);
+  const name = (view) => (view ? view.file : versionsDatesLabel('doc.unavailable', locale));
+  const title = directed
+    ? versionsDatesLabel('candidate.title', locale, { older: name(older), newer: name(newer) })
+    : versionsDatesLabel('candidate.titleUnknown', locale, { a: name(documentView), b: name(candidateView) });
+  return {
+    id: versionsDatesText(data.id),
+    origin: Object.prototype.hasOwnProperty.call(VERSIONS_DATES_ORIGINS, origin) ? origin : null,
+    signals: versionsDatesSignals(origin, data.signals),
+    stale: data.stale === true,
+    directed,
+    older: directed ? older : null,
+    newer: directed ? newer : null,
+    a: documentView,
+    b: candidateView,
+    title,
+  };
+}
+
+/** A confirmed replacement (kind link). */
+function versionsDatesLinkView(item, locale) {
+  const data = item && typeof item === 'object' ? item : {};
+  return {
+    id: versionsDatesText(data.id),
+    older: versionsDatesDocumentView(data.older_document, locale),
+    newer: versionsDatesDocumentView(data.newer_document, locale),
+    decidedAt: versionsDatesText(data.decided_at),
+    decidedBy: data.decided_by && typeof data.decided_by === 'object' ? versionsDatesText(data.decided_by.display) : '',
+  };
+}
+
+/** The GET supersession answer: candidates and confirmed links, named fields only. */
+function versionsDatesSupersessionView(body, locale) {
+  const data = body && typeof body === 'object' ? body : {};
+  const candidates = [];
+  const links = [];
+  let rows = 0;
+  for (const item of Array.isArray(data.items) ? data.items : []) {
+    if (!item || typeof item !== 'object' || !versionsDatesText(item.id)) continue;
+    rows += 1;
+    if (item.kind === 'link') links.push(versionsDatesLinkView(item, locale));
+    else if (item.kind === 'candidate') candidates.push(versionsDatesCandidateView(item, locale));
+  }
+  const total = Number(data.total);
+  return { detect: data.detect === 'on' ? 'on' : 'off', total: Number.isFinite(total) ? Math.max(total, rows) : rows, rows, candidates, links };
+}
+
+/** One row of the Effective dates table: the proposed window while a proposal is stored, otherwise the stored window. */
+function versionsDatesDateRowView(item, today) {
+  const data = item && typeof item === 'object' ? item : {};
+  const p = data.proposal && typeof data.proposal === 'object' ? data.proposal : null;
+  const stored = { from: versionsDatesDay(data.effective_from), to: versionsDatesDay(data.effective_to) };
+  const proposal = p
+    ? {
+        from: versionsDatesDay(p.from),
+        to: versionsDatesDay(p.to),
+        awaiting: p.awaiting === true,
+      }
+    : null;
+  const range = proposal ? { from: proposal.from, to: proposal.to } : stored;
+  const rawConfidence = proposal ? Number(p.confidence) : data.origin === 'extracted' ? Number(data.confidence) : NaN;
+  const confidence = Number.isFinite(rawConfidence) && rawConfidence >= 0 && rawConfidence <= 1 ? rawConfidence : null;
+  const quote = proposal && typeof p.evidence_quote === 'string' && p.evidence_quote !== '' ? p.evidence_quote : null;
+  const origin = data.origin === 'admin' || data.origin === 'extracted' ? data.origin : null;
+  return {
+    id: versionsDatesText(data.id),
+    file: versionsDatesText(data.file_name),
+    origin,
+    stored,
+    proposal,
+    awaiting: Boolean(proposal && proposal.awaiting),
+    window: range,
+    confidence,
+    quote,
+    effect: versionsDatesEffect(range.from, range.to, today),
+  };
+}
+
+/** The GET effective-dates answer. */
+function versionsDatesDatesView(body, today) {
+  const data = body && typeof body === 'object' ? body : {};
+  const rows = [];
+  for (const item of Array.isArray(data.items) ? data.items : []) {
+    if (!item || typeof item !== 'object' || !versionsDatesText(item.id)) continue;
+    rows.push(versionsDatesDateRowView(item, today));
+  }
+  const total = Number(data.total);
+  return { total: Number.isFinite(total) ? Math.max(total, rows.length) : rows.length, rows };
+}
+
+/** Combination warnings of the versions group, read from the page's own inputs (UI-SPEC 6.3). */
+function versionsDatesSettingsWarnings(values) {
+  const v = values || {};
+  const out = [];
+  if (versionsDatesText(v.RAG_SUPERSESSION_DETECT).trim() === 'on' && versionsDatesText(v.RAG_INGEST_PIPELINE).trim() !== 'unified') out.push('warn.needsUnified');
+  if (versionsDatesText(v.RAG_EFFECTIVE_DATES).trim() === 'true' && versionsDatesText(v.RAG_PIPELINE).trim() !== 'v2') out.push('warn.datesNeedV2');
+  return out;
+}
+
+/** Badge with base-content text and a coloured border and icon (contrast call of plans 56 to 60). */
+function versionsDatesBadge(doc, tone, icon, word) {
+  const ui = versionsDatesUiLib();
+  const classes =
+    tone === 'ghost'
+      ? 'badge badge-sm badge-ghost gap-1 shrink-0 whitespace-nowrap'
+      : 'badge badge-sm badge-outline border-' + tone + ' text-base-content gap-1 shrink-0 whitespace-nowrap';
+  return ui.ragUiEl(doc, 'span', { className: classes }, [
+    icon ? ui.ragUiIcon(doc, icon, tone === 'ghost' ? null : 'text-' + tone) : null,
+    ui.ragUiEl(doc, 'span', { text: word }),
+  ]);
+}
+
+function versionsDatesStop(event) {
+  if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+}
+
+class VersionsDatesPanel {
+  constructor(root) {
+    this.root = root;
+    this.doc = typeof document !== 'undefined' ? document : null;
+    this.locale = versionsDatesUiLib().ragUiBrowserLocale();
+    this.organizationId = null;
+    this.tabs = null;
+    this.supHost = null;
+    this.datesHost = null;
+    this.sup = null;
+    this.supSeq = 0;
+    this.supAlert = null;
+    this.supUpdatedAt = null;
+    this.supRefresh = null;
+    this.picks = {};
+    this.dates = null;
+    this.datesSeq = 0;
+    this.datesAlert = null;
+    this.datesUpdatedAt = null;
+    this.datesRefresh = null;
+    this.datesFilter = 'awaiting';
+    this.datesQuery = '';
+    this.awaitingCount = null;
+    this.datesToolbar = null;
+    this.datesList = null;
+    this.searchTimer = null;
+    this.editor = null;
+  }
+
+  t(key, vars) {
+    return versionsDatesLabel(key, this.locale, vars);
+  }
+
+  ui() {
+    return versionsDatesUiLib();
+  }
+
+  el(tag, options, children) {
+    return this.ui().ragUiEl(this.doc, tag, options, children);
+  }
+
+  statusEl() {
+    return this.root.querySelector('[data-versions-dates-status]');
+  }
+
+  announce(text, isError) {
+    const host = this.statusEl();
+    if (!host) return;
+    host.classList.toggle('text-error', Boolean(isError));
+    if (isError) host.replaceChildren(this.ui().ragUiIcon(this.doc, 'exclamation-circle', 'mr-1'), this.el('span', { text }));
+    else host.textContent = text;
+  }
+
+  focus(target) {
+    if (target && typeof target.focus === 'function') target.focus();
+  }
+
+  query(extra) {
+    const params = new URLSearchParams();
+    if (this.organizationId) params.set('organizationId', this.organizationId);
+    for (const [key, value] of Object.entries(extra || {})) {
+      if (value === null || value === undefined || value === '') continue;
+      params.set(key, String(value));
+    }
+    const text = params.toString();
+    return text ? '?' + text : '';
+  }
+
+  today() {
+    return versionsDatesTodayUtc(new Date());
+  }
+
+  async mount() {
+    const ui = this.ui();
+    this.root.setAttribute('lang', this.locale);
+    const title = this.root.querySelector('[data-versions-dates-title]');
+    if (title) title.textContent = this.t('panel.title');
+    const description = this.root.querySelector('[data-versions-dates-description]');
+    if (description) description.textContent = this.t('panel.description');
+    this.tabs = ui.ragUiSubTabs(this.doc, {
+      label: this.t('tabs.label'),
+      idPrefix: 'rag-versions-dates',
+      tabs: [
+        { id: 'candidates', label: this.t('tab.candidates', { count: '…' }) },
+        { id: 'dates', label: this.t('tab.dates', { count: '…' }) },
+        { id: 'settings', label: this.t('tab.settings') },
+      ],
+      selected: 'candidates',
+    });
+    this.supHost = this.el('div', { className: 'min-w-0' });
+    this.datesHost = this.el('div', { className: 'min-w-0' });
+    this.tabs.panels.candidates.appendChild(this.supHost);
+    this.tabs.panels.dates.appendChild(this.datesHost);
+    const group = this.doc.querySelector('[data-rag-settings-group="versions"]');
+    if (group) {
+      this.tabs.panels.settings.appendChild(group);
+      this.localizeSettings(group);
+    }
+    const content = this.root.querySelector('[data-versions-dates-content]');
+    if (content) content.replaceChildren(this.tabs.tablist, this.tabs.panels.candidates, this.tabs.panels.dates, this.tabs.panels.settings);
+    for (const id of VERSIONS_DATES_SETTINGS) {
+      const control = this.doc.getElementById(id);
+      if (control) {
+        control.addEventListener('change', () => {
+          this.renderAlerts();
+          if (id === 'RAG_EFFECTIVE_DATES' && this.dates) this.renderDates();
+        });
+      }
+    }
+    this.bindWorkspace();
+    this.renderAlerts();
+    await Promise.all([this.loadCandidates('first'), this.loadDates('first')]);
+  }
+
+  async refresh() {
+    this.readWorkspace();
+    this.renderAlerts();
+    await Promise.all([this.loadCandidates('refresh'), this.loadDates('refresh')]);
+  }
+
+  /** zh and it through data-rag-i18n; English is the static markup (UI-SPEC 6.3). */
+  localizeSettings(group) {
+    if (this.locale === 'en') return;
+    const table = VERSIONS_DATES_LABELS[this.locale] || {};
+    for (const node of Array.from(group.querySelectorAll('[data-rag-i18n]'))) {
+      const text = table[node.getAttribute('data-rag-i18n')];
+      if (text !== undefined) node.textContent = text;
+    }
+  }
+
+  selector() {
+    return this.doc.getElementById('workspace-selector');
+  }
+
+  readWorkspace() {
+    const selector = this.selector();
+    this.organizationId = selector && selector.value ? String(selector.value) : null;
+    const line = this.root.querySelector('[data-versions-dates-workspace]');
+    if (line) line.textContent = this.ui().ragUiLabel('panel.workspace', this.locale, { name: this.workspaceName() });
+  }
+
+  workspaceName() {
+    const selector = this.selector();
+    if (!selector || !selector.value) return this.t('panel.workspaceDefault');
+    const option = Array.from(selector.querySelectorAll('option')).find((o) => o.getAttribute('value') === selector.value);
+    const name = option ? option.textContent.trim() : '';
+    return name || this.t('panel.workspaceDefault');
+  }
+
+  bindWorkspace() {
+    const selector = this.selector();
+    this.readWorkspace();
+    if (!selector) return;
+    selector.addEventListener('change', async () => {
+      this.readWorkspace();
+      this.sup = null;
+      this.dates = null;
+      this.picks = {};
+      this.editor = null;
+      this.awaitingCount = null;
+      this.datesQuery = '';
+      this.datesToolbar = null;
+      await Promise.all([this.loadCandidates('first'), this.loadDates('first')]);
+    });
+  }
+
+  controlValue(id) {
+    const control = this.doc.getElementById(id);
+    return control ? versionsDatesText(control.value) : '';
+  }
+
+  renderAlerts() {
+    const host = this.root.querySelector('[data-versions-dates-alert]');
+    if (!host) return;
+    const values = {};
+    for (const id of VERSIONS_DATES_SETTINGS) values[id] = this.controlValue(id);
+    const nodes = versionsDatesSettingsWarnings(values).map((key) => this.ui().ragUiAlert(this.doc, { tone: 'warning', icon: 'exclamation-triangle', body: [this.t(key)] }));
+    if (this.supAlert) nodes.push(this.supAlert);
+    if (this.datesAlert && this.datesAlert !== this.supAlert) nodes.push(this.datesAlert);
+    host.replaceChildren(...nodes);
+  }
+
+  setTabCount(id, key, count) {
+    const tab = this.doc.getElementById('rag-versions-dates-tab-' + id);
+    if (tab) tab.textContent = this.t(key, { count: this.ui().ragUiFormatNumber(count, this.locale) });
+  }
+
+  formatTime(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return versionsDatesText(value);
+    try {
+      return new Intl.DateTimeFormat(this.locale, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+    } catch {
+      return date.toISOString();
+    }
+  }
+
+  /** A timestamp in a time element. */
+  timeNode(value) {
+    if (!value) return this.missing('date.none');
+    return this.el('time', { className: 'tabular-nums', text: this.formatTime(value), attrs: { datetime: value } });
+  }
+
+  /** A calendar day the admin can edit: shown as YYYY-MM-DD (UI-SPEC 12) in a time element. */
+  dayNode(day, missingKey) {
+    if (!day) return this.missing(missingKey || 'date.none');
+    return this.el('time', { className: 'tabular-nums whitespace-nowrap', text: day, attrs: { datetime: day } });
+  }
+
+  /** An em dash with a visually hidden word for a missing value. */
+  missing(key) {
+    return this.el('span', {}, [this.el('span', { text: '—', attrs: { 'aria-hidden': 'true' } }), this.el('span', { className: 'sr-only', text: this.t(key) })]);
+  }
+
+  updatedLine(at) {
+    return this.el('p', { className: 'text-xs text-base-content/70', text: at ? this.ui().ragUiLabel('panel.updated', this.locale, { time: this.formatTime(at) }) : '' });
+  }
+
+  emptyBlock(title, body) {
+    return this.el('div', { className: 'py-8 text-center' }, [
+      this.el('p', { className: 'text-base font-semibold text-balance', text: title }),
+      this.el('p', { className: 'text-sm text-base-content/70 mt-2 max-w-prose mx-auto', text: body }),
+    ]);
+  }
+
+  tableRegion(label, table) {
+    return this.el(
+      'div',
+      {
+        className: 'overflow-x-auto rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2',
+        attrs: { tabindex: '0', role: 'region', 'aria-label': label },
+      },
+      [table],
+    );
+  }
+
+  th(text, extra) {
+    return this.el('th', { className: 'font-semibold' + (extra ? ' ' + extra : ''), text, attrs: { scope: 'col' } });
+  }
+
+  actionButton(label, aria, tone) {
+    return this.el('button', {
+      className: 'btn ' + (tone === 'primary' ? 'btn-primary' : 'btn-outline') + ' md:btn-sm whitespace-nowrap',
+      text: label,
+      attrs: { type: 'button', 'aria-label': aria || null },
+    });
+  }
+
+  /** A failed load: sign-in or workspace alerts replace the view; anything else becomes the unavailable alert in the alert host. */
+  loadFailure(result, host, hadContent) {
+    const ui = this.ui();
+    const mapped = ui.ragUiMapError(result, this.locale, { unavailable: this.t('versions.unavailable') });
+    if (mapped.kind === 'signIn') {
+      host.replaceChildren(ui.ragUiSignInAlert(this.doc, this.locale, () => this.refresh()));
+      return { mapped, replaced: true };
+    }
+    if (mapped.kind === 'workspace') {
+      host.replaceChildren(
+        ui.ragUiAlert(this.doc, { tone: 'warning', icon: 'person-lock', body: [mapped.message], actions: [ui.ragUiReloadButton(this.doc, this.locale, () => this.refresh())] }),
+      );
+      return { mapped, replaced: true };
+    }
+    if (hadContent) ui.ragUiListBusy(host, true, true);
+    else host.replaceChildren();
+    return { mapped, replaced: false, alert: ui.ragUiUnavailableAlert(this.doc, this.locale, mapped.message, () => this.refresh()) };
+  }
+
+  /**
+   * A failed action: 404 and 409 mean someone else changed the item (error.changed, reload); no answer on confirm or undo means the
+   * outcome is unknown (reload). Returns the mapped error.
+   */
+  async actionFailed(result, action, reload) {
+    const ui = this.ui();
+    const mapped = ui.ragUiMapError(result, this.locale, { unavailable: this.t('versions.unavailable'), action });
+    const conflict = result && !result.thrown && result.status === 409;
+    const message = conflict ? ui.ragUiLabel('error.changed', this.locale) : mapped.message;
+    this.announce(message, true);
+    if (conflict || mapped.reload) await reload();
+    return mapped;
+  }
+
+  // ---- Possible older versions
+
+  async loadCandidates(source, offset) {
+    if (!this.supHost) return;
+    const ui = this.ui();
+    const seq = ++this.supSeq;
+    const more = Number(offset) > 0;
+    const hadContent = Boolean(this.sup);
+    if (hadContent) ui.ragUiListBusy(this.supHost, true);
+    else if (source !== 'action') ui.ragUiListLoading(this.doc, this.supHost, this.t('versions.loading'));
+    let restore = null;
+    if (source === 'refresh' && this.supRefresh && this.supRefresh.isConnected !== false) restore = ui.ragUiButtonBusy(this.doc, this.supRefresh, this.t('versions.loading'));
+    let result;
+    try {
+      result = await ui.ragUiRagRequest(VERSIONS_DATES_SUPERSESSION_PATH + this.query({ limit: VERSIONS_DATES_PAGE, offset: more ? offset : null }), { method: 'GET' });
+    } finally {
+      if (restore) restore();
+    }
+    if (seq !== this.supSeq) return;
+    ui.ragUiListBusy(this.supHost, false);
+    if (result && result.ok && result.body && typeof result.body === 'object') {
+      const view = versionsDatesSupersessionView(result.body, this.locale);
+      if (more && this.sup) {
+        view.candidates = this.sup.candidates.concat(view.candidates);
+        view.links = this.sup.links.concat(view.links);
+        view.rows = this.sup.rows + view.rows;
+      }
+      this.sup = view;
+      this.supUpdatedAt = new Date();
+      this.supAlert = null;
+      this.renderAlerts();
+      this.renderCandidates();
+      if (source === 'first' || source === 'refresh') this.announce(this.t('candidates.loaded', { count: ui.ragUiFormatNumber(view.candidates.length, this.locale) }));
+      return;
+    }
+    const failure = this.loadFailure(result, this.supHost, hadContent);
+    if (failure.replaced) this.sup = null;
+    this.supAlert = failure.alert || null;
+    this.renderAlerts();
+    this.announce(failure.mapped.message, true);
+  }
+
+  renderCandidates() {
+    const view = this.sup;
+    if (!view || !this.supHost) return;
+    this.setTabCount('candidates', 'tab.candidates', view.candidates.length);
+    this.supRefresh = this.el('button', { className: 'btn btn-outline btn-sm', text: this.t('action.refreshCandidates'), attrs: { type: 'button' } });
+    this.supRefresh.addEventListener('click', () => this.loadCandidates('refresh'));
+    const nodes = [this.el('div', { className: 'flex flex-wrap items-center justify-end gap-2 mb-4' }, [this.updatedLine(this.supUpdatedAt), this.supRefresh])];
+    if (view.detect === 'off') nodes.push(this.el('p', { className: 'text-sm text-base-content/70 mb-4 max-w-prose', text: this.t('candidates.detectOff') }));
+    if (!view.candidates.length) nodes.push(this.emptyBlock(this.t('candidates.empty.title'), this.t('candidates.empty.body')));
+    for (const candidate of view.candidates) nodes.push(this.renderCandidate(candidate));
+    if (view.rows < view.total) {
+      const more = this.el('button', { className: 'btn btn-outline btn-sm', text: this.t('action.loadMoreVersions'), attrs: { type: 'button' } });
+      more.addEventListener('click', () => this.loadCandidates('more', view.rows));
+      nodes.push(this.el('div', { className: 'mb-4' }, [more]));
+    }
+    nodes.push(this.renderConfirmed(view.links));
+    this.supHost.replaceChildren(...nodes);
+  }
+
+  /** The older and newer document of a candidate: the known direction, or the admin's choice among A and B. */
+  pair(candidate) {
+    if (candidate.directed) return { older: candidate.older, newer: candidate.newer };
+    const pick = this.picks[candidate.id];
+    if (!pick || !candidate.a || !candidate.b) return null;
+    if (pick === candidate.a.id) return { older: candidate.a, newer: candidate.b };
+    if (pick === candidate.b.id) return { older: candidate.b, newer: candidate.a };
+    return null;
+  }
+
+  renderCandidate(candidate) {
+    const ui = this.ui();
+    const article = this.el('article', { className: 'border border-base-300 rounded-lg p-4 mb-4 min-w-0' });
+    article.appendChild(this.el('h4', { className: 'text-base font-semibold mb-2 break-words text-balance', text: candidate.title }));
+    article.appendChild(ui.ragUiHoldLine(this.doc, { tone: 'info', icon: 'files', word: this.t('status.bothCurrent'), reason: this.t('hold.candidate') }));
+    const signals = this.el('div', { className: 'flex flex-wrap items-start gap-2 mt-2' });
+    if (candidate.origin) signals.appendChild(this.el('span', { className: 'badge badge-outline badge-sm gap-1 shrink-0 whitespace-nowrap' }, [ui.ragUiIcon(this.doc, VERSIONS_DATES_ORIGINS[candidate.origin]), this.el('span', { text: this.t('origin.' + candidate.origin) })]));
+    const lines = this.el('ul', { className: 'text-sm min-w-0 flex-1 space-y-1' });
+    for (const signal of candidate.signals) {
+      if (signal.key === 'signal.other') lines.appendChild(this.el('li', {}, [ui.ragUiCodeSentence(this.doc, this.locale, signal.code, this.t('signal.other'))]));
+      else lines.appendChild(this.el('li', { text: this.t(signal.key) }));
+    }
+    signals.appendChild(lines);
+    article.appendChild(signals);
+    if (candidate.stale) article.appendChild(this.el('p', { className: 'text-sm mt-2 max-w-prose', text: this.t('candidate.stale') }));
+
+    const columns = candidate.directed
+      ? [
+          { header: this.t('col.older'), doc: candidate.older },
+          { header: this.t('col.newer'), doc: candidate.newer },
+        ]
+      : [
+          { header: this.t('col.docA'), doc: candidate.a },
+          { header: this.t('col.docB'), doc: candidate.b },
+        ];
+    const compare = this.el('div', { className: 'grid gap-4 md:grid-cols-2 mt-4 min-w-0', attrs: { role: 'group', 'aria-label': this.t('compare.caption') } });
+    for (const column of columns) compare.appendChild(this.renderDocumentColumn(column.header, column.doc));
+    article.appendChild(compare);
+
+    const reasonId = 'rag-versions-dates-pick-' + candidate.id;
+    const pair = this.pair(candidate);
+    if (!candidate.directed) article.appendChild(this.renderDirectionChoice(candidate, reasonId, Boolean(pair)));
+    const targetName = (pair && pair.older ? pair.older.file : candidate.a ? candidate.a.file : '') || '';
+    const confirm = this.actionButton(this.t('action.confirmReplacement'), this.t('action.confirmReplacementAria', { file: targetName }), 'primary');
+    const dismiss = this.actionButton(this.t('action.dismissCandidate'), this.t('action.dismissCandidateAria', { file: targetName }));
+    if (!pair) {
+      confirm.disabled = true;
+      confirm.setAttribute('aria-describedby', reasonId);
+    }
+    confirm.addEventListener('click', () => this.confirmCandidate(candidate, confirm));
+    dismiss.addEventListener('click', () => this.dismissCandidate(candidate, dismiss, confirm));
+    article.appendChild(this.el('div', { className: 'flex flex-col md:flex-row md:flex-wrap gap-2 mt-4' }, [confirm, dismiss]));
+    return article;
+  }
+
+  renderDocumentColumn(header, view) {
+    const section = this.el('section', { className: 'border border-base-300 rounded-lg p-3 min-w-0' });
+    section.appendChild(this.el('h5', { className: 'text-sm font-semibold mb-2', text: header }));
+    if (!view) {
+      section.appendChild(this.el('p', { className: 'text-sm', text: this.t('doc.unavailable') }));
+      return section;
+    }
+    const dl = this.el('dl', { className: 'grid grid-cols-[minmax(0,8rem)_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm' });
+    const row = (label, value) => {
+      dl.appendChild(this.el('dt', { className: 'text-base-content/70', text: label }));
+      dl.appendChild(this.el('dd', { className: 'min-w-0 break-words' }, Array.isArray(value) ? value : [value]));
+    };
+    row(this.t('row.file'), this.el('span', { className: 'font-medium break-all', text: view.file }));
+    row(this.t('row.docType'), view.docTypeLabel ? this.el('span', { text: view.docTypeLabel }) : this.missing('date.none'));
+    row(this.t('row.docDate'), this.dayNode(view.docDate));
+    row(this.t('row.effective'), this.effectiveNodes(view.from, view.to));
+    const uploaded = [this.timeNode(view.uploadedAt)];
+    if (view.uploader) uploaded.push(' ', this.el('span', { className: 'break-all', text: this.t('doc.uploadedBy', { name: view.uploader }) }));
+    row(this.t('row.uploaded'), uploaded);
+    section.appendChild(dl);
+    return section;
+  }
+
+  /** "from <time> until <time>", one side only, or "No dates". */
+  effectiveNodes(from, to) {
+    if (!from && !to) return [this.el('span', { text: this.t('effective.none') })];
+    const nodes = [];
+    if (from) nodes.push(...this.dayPhrase('effective.from', from));
+    if (from && to) nodes.push(' ');
+    if (to) nodes.push(...this.dayPhrase('effective.to', to));
+    return nodes;
+  }
+
+  /** A sentence with a {date} placeholder whose date becomes a time element. */
+  dayPhrase(key, day) {
+    const template = this.t(key, { date: '\u0000' });
+    const [before, after] = template.split('\u0000');
+    return [before || '', this.dayNode(day), after || ''].filter((n) => n !== '');
+  }
+
+  renderDirectionChoice(candidate, reasonId, chosen) {
+    const name = 'rag-versions-dates-older-' + candidate.id;
+    const fieldset = this.el('fieldset', { className: 'mt-4 min-w-0' }, [this.el('legend', { className: 'text-sm font-semibold mb-2', text: this.t('candidate.whichOlder') })]);
+    for (const view of [candidate.a, candidate.b]) {
+      if (!view) continue;
+      const id = name + '-' + view.id;
+      const input = this.el('input', { className: 'radio radio-sm', id, attrs: { type: 'radio', name, value: view.id, required: true } });
+      input.checked = this.picks[candidate.id] === view.id;
+      input.addEventListener('input', versionsDatesStop);
+      input.addEventListener('change', (event) => {
+        versionsDatesStop(event);
+        this.picks[candidate.id] = view.id;
+        this.renderCandidates();
+        this.focus(this.doc.getElementById(id));
+      });
+      fieldset.appendChild(
+        this.el('div', { className: 'flex items-center gap-2 py-1 min-w-0' }, [input, this.el('label', { className: 'text-sm break-all cursor-pointer', text: view.file, attrs: { for: id } })]),
+      );
+    }
+    if (!chosen) fieldset.appendChild(this.el('p', { className: 'text-sm text-base-content/70 mt-1', id: reasonId, text: this.t('candidate.pickFirst') }));
+    return fieldset;
+  }
+
+  async confirmCandidate(candidate, button) {
+    const pair = this.pair(candidate);
+    if (!pair || !pair.older || !pair.newer) {
+      this.announce(this.t('candidate.pickFirst'), true);
+      return;
+    }
+    const ui = this.ui();
+    const names = { older: pair.older.file, newer: pair.newer.file };
+    await ui.ragUiConfirmDialog(this.doc, {
+      title: this.t('replace.title', names),
+      body: [this.t('replace.body', names)],
+      keepLabel: this.t('action.keepBoth'),
+      confirmLabel: this.t('action.confirmReplacement'),
+      runningLabel: this.t('action.confirming'),
+      opener: button,
+      fallbackFocus: this.statusEl(),
+      onConfirm: async () => {
+        const result = await ui.ragUiRagRequest(VERSIONS_DATES_SUPERSESSION_PATH + '/' + encodeURIComponent(candidate.id) + '/confirm' + this.query(), {
+          method: 'POST',
+          body: JSON.stringify({ olderDocumentId: pair.older.id }),
+        });
+        if (result && result.ok) {
+          delete this.picks[candidate.id];
+          await this.loadCandidates('action');
+          this.announce(this.t('replace.done', names));
+          return;
+        }
+        if (result && !result.thrown && result.status === 400 && result.body && result.body.error === 'direction_required') {
+          this.announce(this.t('candidate.pickFirst'), true);
+          return;
+        }
+        await this.actionFailed(result, 'confirm', () => this.loadCandidates('action'));
+      },
+    });
+  }
+
+  async dismissCandidate(candidate, button, sibling) {
+    const ui = this.ui();
+    const restore = ui.ragUiButtonBusy(this.doc, button, this.t('action.dismissing'), [sibling]);
+    let result;
+    try {
+      result = await ui.ragUiRagRequest(VERSIONS_DATES_SUPERSESSION_PATH + '/' + encodeURIComponent(candidate.id) + '/dismiss' + this.query(), { method: 'POST' });
+    } finally {
+      restore();
+    }
+    if (result && result.ok) {
+      delete this.picks[candidate.id];
+      await this.loadCandidates('action');
+      this.announce(this.t('candidate.dismissed'));
+      return;
+    }
+    await this.actionFailed(result, 'dismiss', () => this.loadCandidates('action'));
+  }
+
+  renderConfirmed(links) {
+    const ui = this.ui();
+    const details = this.el('details', { className: 'mt-6 min-w-0' });
+    details.appendChild(
+      this.el('summary', {
+        className: 'text-sm font-semibold cursor-pointer rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2',
+        text: this.t('confirmed.summary', { count: ui.ragUiFormatNumber(links.length, this.locale) }),
+      }),
+    );
+    if (!links.length) {
+      details.appendChild(this.el('p', { className: 'text-sm text-base-content/70 mt-2', text: this.t('confirmed.empty') }));
+      return details;
+    }
+    const table = this.el('table', { className: 'table table-sm' }, [
+      this.el('caption', { className: 'sr-only', text: this.t('confirmed.caption') }),
+      this.el('thead', {}, [this.el('tr', {}, [this.th(this.t('col.older')), this.th(this.t('col.newer')), this.th(this.t('confirmed.col.when')), this.th(this.t('confirmed.col.actions'))])]),
+    ]);
+    const body = this.el('tbody');
+    for (const link of links) body.appendChild(this.renderLinkRow(link));
+    table.appendChild(body);
+    details.appendChild(this.el('div', { className: 'mt-2' }, [this.tableRegion(this.t('confirmed.caption'), table)]));
+    return details;
+  }
+
+  renderLinkRow(link) {
+    const name = (view) => (view ? view.file : this.t('doc.unavailable'));
+    const when = [this.timeNode(link.decidedAt)];
+    if (link.decidedBy) when.push(' ', this.el('span', { className: 'break-all', text: this.t('confirmed.by', { name: link.decidedBy }) }));
+    const undo = this.actionButton(this.t('action.undo'), this.t('action.undoAria', { file: name(link.older) }));
+    undo.addEventListener('click', () => this.undoLink(link, undo));
+    return this.el('tr', {}, [
+      this.el('th', { className: 'font-normal break-all min-w-[10rem]', text: name(link.older), attrs: { scope: 'row' } }),
+      this.el('td', { className: 'break-all min-w-[10rem]', text: name(link.newer) }),
+      this.el('td', { className: 'min-w-[10rem]' }, when),
+      this.el('td', {}, [undo]),
+    ]);
+  }
+
+  async undoLink(link, button) {
+    const ui = this.ui();
+    const names = { older: link.older ? link.older.file : this.t('doc.unavailable'), newer: link.newer ? link.newer.file : this.t('doc.unavailable') };
+    await ui.ragUiConfirmDialog(this.doc, {
+      title: this.t('undo.title', names),
+      body: [this.t('undo.body', names)],
+      keepLabel: this.t('action.keepReplacement'),
+      confirmLabel: this.t('action.undo'),
+      runningLabel: this.t('action.undoing'),
+      opener: button,
+      fallbackFocus: this.statusEl(),
+      onConfirm: async () => {
+        const result = await ui.ragUiRagRequest(VERSIONS_DATES_SUPERSESSION_PATH + '/' + encodeURIComponent(link.id) + '/undo' + this.query(), { method: 'POST' });
+        if (result && result.ok) {
+          await this.loadCandidates('action');
+          this.announce(this.t('undo.done'));
+          return;
+        }
+        await this.actionFailed(result, 'undo', () => this.loadCandidates('action'));
+      },
+    });
+  }
+
+  // ---- Effective dates
+
+  async loadDates(source, offset) {
+    if (!this.datesHost) return;
+    const ui = this.ui();
+    const seq = ++this.datesSeq;
+    const more = Number(offset) > 0;
+    const hadContent = Boolean(this.dates);
+    if (hadContent && this.datesList) ui.ragUiListBusy(this.datesList, true);
+    else if (!hadContent && source !== 'action') ui.ragUiListLoading(this.doc, this.datesHost, this.t('dates.loading'));
+    let restore = null;
+    if (source === 'refresh' && this.datesRefresh && this.datesRefresh.isConnected !== false) restore = ui.ragUiButtonBusy(this.doc, this.datesRefresh, this.t('dates.loading'));
+    const queryText = this.datesQuery.trim();
+    let result;
+    try {
+      result = await ui.ragUiRagRequest(VERSIONS_DATES_DATES_PATH + this.query({ query: queryText, limit: VERSIONS_DATES_PAGE, offset: more ? offset : null }), { method: 'GET' });
+    } finally {
+      if (restore) restore();
+    }
+    if (seq !== this.datesSeq) return;
+    if (this.datesList) ui.ragUiListBusy(this.datesList, false);
+    if (result && result.ok && result.body && typeof result.body === 'object') {
+      const view = versionsDatesDatesView(result.body, this.today());
+      view.query = queryText;
+      if (more && this.dates) view.rows = this.dates.rows.concat(view.rows);
+      this.dates = view;
+      if (!queryText) this.awaitingCount = view.rows.filter((r) => r.awaiting).length;
+      if (this.editor && !view.rows.some((r) => r.id === this.editor.id)) this.editor = null;
+      this.datesUpdatedAt = new Date();
+      this.datesAlert = null;
+      this.renderAlerts();
+      this.renderDates();
+      if (source === 'first' || source === 'refresh') this.announce(this.t('dates.loaded', { count: ui.ragUiFormatNumber(this.awaitingCount || 0, this.locale) }));
+      return;
+    }
+    const failure = this.loadFailure(result, this.datesHost, hadContent);
+    if (failure.replaced) {
+      this.dates = null;
+      this.datesToolbar = null;
+      this.datesList = null;
+    }
+    this.datesAlert = failure.alert || null;
+    this.renderAlerts();
+    this.announce(failure.mapped.message, true);
+  }
+
+  /** The toolbar is built once per load cycle so the search field keeps its focus and value while the rows change. */
+  ensureDatesLayout() {
+    if (this.datesToolbar && this.datesList && this.datesHost.contains(this.datesToolbar)) return;
+    this.datesToolbar = this.renderDatesToolbar();
+    this.datesOffNote = this.el('div', { className: 'empty:hidden mb-4' });
+    this.datesList = this.el('div', { className: 'min-w-0' });
+    this.datesHost.replaceChildren(this.datesToolbar, this.datesOffNote, this.datesList);
+  }
+
+  renderDatesToolbar() {
+    const group = 'rag-versions-dates-filter';
+    const filters = this.el('fieldset', { className: 'flex flex-wrap items-center gap-x-4 gap-y-2 min-w-0' }, [this.el('legend', { className: 'sr-only', text: this.t('dates.filterLabel') })]);
+    for (const [value, key] of [
+      ['awaiting', 'dates.filter.awaiting'],
+      ['all', 'dates.filter.all'],
+    ]) {
+      const id = group + '-' + value;
+      const input = this.el('input', { className: 'radio radio-sm', id, attrs: { type: 'radio', name: group, value } });
+      input.checked = this.datesFilter === value;
+      input.addEventListener('input', versionsDatesStop);
+      input.addEventListener('change', (event) => {
+        versionsDatesStop(event);
+        this.datesFilter = value;
+        this.editor = null;
+        this.renderDates();
+      });
+      filters.appendChild(this.el('div', { className: 'flex items-center gap-2' }, [input, this.el('label', { className: 'text-sm cursor-pointer', text: this.t(key), attrs: { for: id } })]));
+    }
+    const searchId = 'rag-versions-dates-search';
+    const search = this.el('input', {
+      className: 'input input-bordered input-sm w-full md:w-64',
+      id: searchId,
+      attrs: { type: 'search', name: 'versions-dates-search', autocomplete: 'off', spellcheck: 'false', maxlength: String(VERSIONS_DATES_SEARCH_MAX) },
+    });
+    search.value = this.datesQuery;
+    const run = () => {
+      if (this.searchTimer) clearTimeout(this.searchTimer);
+      this.searchTimer = null;
+      const next = versionsDatesText(search.value).slice(0, VERSIONS_DATES_SEARCH_MAX);
+      if (next.trim() === this.datesQuery.trim() && this.dates && this.dates.query === next.trim()) return;
+      this.datesQuery = next;
+      this.editor = null;
+      this.loadDates('search');
+    };
+    search.addEventListener('input', (event) => {
+      versionsDatesStop(event);
+      if (this.searchTimer) clearTimeout(this.searchTimer);
+      this.searchTimer = setTimeout(run, VERSIONS_DATES_SEARCH_DELAY_MS);
+    });
+    search.addEventListener('change', versionsDatesStop);
+    search.addEventListener('keydown', (event) => {
+      if (event && event.key === 'Enter') {
+        if (typeof event.preventDefault === 'function') event.preventDefault();
+        run();
+      }
+    });
+    this.datesRefresh = this.el('button', { className: 'btn btn-outline btn-sm', text: this.t('action.refreshDates'), attrs: { type: 'button' } });
+    this.datesRefresh.addEventListener('click', () => this.loadDates('refresh'));
+    return this.el('div', { className: 'flex flex-col lg:flex-row lg:flex-wrap lg:items-end gap-3 mb-4 min-w-0' }, [
+      filters,
+      this.el('div', { className: 'form-control min-w-0' }, [
+        this.el('label', { className: 'label py-1', attrs: { for: searchId } }, [this.el('span', { className: 'label-text', text: this.t('dates.search') })]),
+        search,
+      ]),
+      this.el('div', { className: 'flex flex-wrap items-center gap-2 lg:ml-auto' }, [this.updatedLine(this.datesUpdatedAt), this.datesRefresh]),
+    ]);
+  }
+
+  visibleDateRows() {
+    if (!this.dates) return [];
+    if (this.datesFilter === 'awaiting') return this.dates.rows.filter((r) => r.awaiting);
+    return this.dates.rows;
+  }
+
+  renderDates() {
+    if (!this.dates || !this.datesHost) return;
+    const ui = this.ui();
+    this.setTabCount('dates', 'tab.dates', this.awaitingCount || 0);
+    this.ensureDatesLayout();
+    const updated = this.datesToolbar.querySelector('p');
+    if (updated) updated.textContent = this.datesUpdatedAt ? ui.ragUiLabel('panel.updated', this.locale, { time: this.formatTime(this.datesUpdatedAt) }) : '';
+    this.datesOffNote.replaceChildren(
+      ...(this.controlValue('RAG_EFFECTIVE_DATES').trim() === 'true' ? [] : [ui.ragUiAlert(this.doc, { tone: 'info', icon: 'info-circle', body: [this.t('dates.off')] })]),
+    );
+    const rows = this.visibleDateRows();
+    const nodes = [];
+    const searching = this.dates.query !== '';
+    if (!rows.length) {
+      if (searching) nodes.push(this.el('p', { className: 'text-sm py-4', text: this.t('dates.noMatch') }));
+      else if (this.datesFilter === 'all') nodes.push(this.el('p', { className: 'text-sm py-4 max-w-prose', text: this.t('dates.searchHint') }));
+      else nodes.push(this.emptyBlock(this.t('dates.empty.title'), this.t('dates.empty.body')));
+    } else {
+      if (this.datesFilter === 'all' && !searching) nodes.push(this.el('p', { className: 'text-sm text-base-content/70 mb-2 max-w-prose', text: this.t('dates.searchHint') }));
+      nodes.push(this.tableRegion(this.t('dates.caption'), this.renderDatesTable(rows)));
+      if (this.dates.rows.length < this.dates.total) {
+        const more = this.el('button', { className: 'btn btn-outline btn-sm mt-4', text: this.t('action.loadMoreDates'), attrs: { type: 'button' } });
+        more.addEventListener('click', () => this.loadDates('more', this.dates.rows.length));
+        nodes.push(more);
+      }
+    }
+    nodes.push(this.el('p', { className: 'text-xs text-base-content/70 mt-2', text: this.t('dates.utc') }));
+    this.datesList.replaceChildren(...nodes);
+  }
+
+  renderDatesTable(rows) {
+    const table = this.el('table', { className: 'table table-sm' }, [
+      this.el('caption', { className: 'sr-only', text: this.t('dates.caption') }),
+      this.el('thead', {}, [
+        this.el('tr', {}, [
+          this.th(this.t('row.file')),
+          this.th(this.t('dates.col.from')),
+          this.th(this.t('dates.col.to')),
+          this.th(this.t('dates.col.confidence'), 'hidden lg:table-cell'),
+          this.th(this.t('dates.col.effect')),
+          this.th(this.t('dates.col.actions')),
+        ]),
+      ]),
+    ]);
+    const body = this.el('tbody');
+    for (const row of rows) {
+      body.appendChild(this.renderDateRow(row));
+      if (row.quote) {
+        body.appendChild(
+          this.el('tr', {}, [
+            this.el('td', { attrs: { colspan: '6' } }, [this.ui().ragUiEvidence(this.doc, { tone: 'quote', caption: this.t('dates.quote'), text: row.quote, locale: this.locale })]),
+          ]),
+        );
+      }
+      if (this.editor && this.editor.id === row.id) body.appendChild(this.renderEditorRow(row));
+    }
+    table.appendChild(body);
+    return table;
+  }
+
+  confidenceText(value) {
+    try {
+      return new Intl.NumberFormat(this.locale, { style: 'percent', maximumFractionDigits: 0 }).format(value);
+    } catch {
+      return Math.round(value * 100) + '%';
+    }
+  }
+
+  stateBadge(row) {
+    if (row.awaiting) return versionsDatesBadge(this.doc, 'warning', 'calendar-event', this.t('status.datesToConfirm'));
+    if (row.proposal) return versionsDatesBadge(this.doc, 'ghost', null, this.t('dates.lowConfidence'));
+    if (row.origin === 'extracted') return versionsDatesBadge(this.doc, 'ghost', null, this.t('dates.origin.extracted'));
+    if (row.origin === 'admin') return versionsDatesBadge(this.doc, 'ghost', null, this.t('dates.origin.admin'));
+    return null;
+  }
+
+  renderDateRow(row) {
+    const confidence = row.confidence === null ? this.missing('date.none') : this.el('span', { className: 'tabular-nums', text: this.confidenceText(row.confidence) });
+    const effect = row.effect;
+    const actions = this.el('div', { className: 'flex flex-col md:flex-row md:flex-wrap gap-2' });
+    const buttons = [];
+    let apply = null;
+    if (row.proposal) {
+      apply = this.actionButton(this.t('action.applyDates'), this.t('action.applyDatesAria', { file: row.file }), 'primary');
+      buttons.push(apply);
+    }
+    const edit = this.actionButton(this.t('action.editDates'), this.t('action.editDatesAria', { file: row.file }));
+    buttons.push(edit);
+    let dismiss = null;
+    if (row.proposal) {
+      dismiss = this.actionButton(this.t('action.dismissDates'), this.t('action.dismissDatesAria', { file: row.file }));
+      buttons.push(dismiss);
+    }
+    if (apply) apply.addEventListener('click', () => this.applyDates(row, apply, buttons.filter((b) => b !== apply)));
+    edit.addEventListener('click', () => this.openEditor(row));
+    if (dismiss) dismiss.addEventListener('click', () => this.dismissDates(row, dismiss, buttons.filter((b) => b !== dismiss)));
+    for (const b of buttons) actions.appendChild(b);
+    const badge = this.stateBadge(row);
+    return this.el('tr', {}, [
+      this.el('th', { className: 'font-normal min-w-[10rem]', attrs: { scope: 'row' } }, [
+        this.el('span', { className: 'block font-medium break-all', text: row.file }),
+        badge ? this.el('span', { className: 'block mt-1' }, [badge]) : null,
+      ]),
+      this.el('td', {}, [this.dayNode(row.window.from, 'date.noStart'), row.confidence === null ? null : this.el('span', { className: 'block text-xs text-base-content/70 lg:hidden tabular-nums', text: this.t('dates.col.confidence') + ': ' + this.confidenceText(row.confidence) })]),
+      this.el('td', {}, [this.dayNode(row.window.to, 'date.noEnd')]),
+      this.el('td', { className: 'hidden lg:table-cell' }, [confidence]),
+      this.el('td', { className: 'min-w-[10rem]' }, this.effectNodes(effect)),
+      this.el('td', {}, [actions]),
+    ]);
+  }
+
+  effectNodes(effect) {
+    if (!effect.date) return [this.el('span', { text: this.t(effect.key) })];
+    return [this.el('span', {}, this.dayPhrase(effect.key, effect.date))];
+  }
+
+  async applyDates(row, button, siblings) {
+    if (!row.proposal) return;
+    const ui = this.ui();
+    const range = { from: row.proposal.from, to: row.proposal.to };
+    const effect = versionsDatesEffect(range.from, range.to, this.today());
+    const send = async () => {
+      const result = await this.putDates(row, range);
+      if (result && result.ok) {
+        await this.loadDates('action');
+        this.announce(this.t('dates.applied', { file: row.file }));
+        return true;
+      }
+      await this.actionFailed(result, 'apply', () => this.loadDates('action'));
+      return false;
+    };
+    if (!effect.hides) {
+      const restore = ui.ragUiButtonBusy(this.doc, button, this.t('action.applying'), siblings);
+      try {
+        await send();
+      } finally {
+        restore();
+      }
+      return;
+    }
+    await ui.ragUiConfirmDialog(this.doc, {
+      title: this.t('applyDates.title', { file: row.file }),
+      body: [this.t(effect.key === 'effect.future' ? 'applyDates.bodyFuture' : 'applyDates.bodyExpired', { date: effect.date })],
+      keepLabel: this.t('action.keepWithoutDates'),
+      confirmLabel: this.t('action.applyDates'),
+      runningLabel: this.t('action.applying'),
+      opener: button,
+      fallbackFocus: this.statusEl(),
+      onConfirm: send,
+    });
+  }
+
+  putDates(row, range) {
+    return this.ui().ragUiRagRequest(VERSIONS_DATES_DATES_PATH + '/' + encodeURIComponent(row.id) + this.query(), {
+      method: 'PUT',
+      body: JSON.stringify({ from: range.from || null, to: range.to || null }),
+    });
+  }
+
+  async dismissDates(row, button, siblings) {
+    const ui = this.ui();
+    const restore = ui.ragUiButtonBusy(this.doc, button, this.t('action.dismissing'), siblings);
+    let result;
+    try {
+      result = await ui.ragUiRagRequest(VERSIONS_DATES_DATES_PATH + '/' + encodeURIComponent(row.id) + '/dismiss' + this.query(), { method: 'POST' });
+    } finally {
+      restore();
+    }
+    if (result && result.ok) {
+      await this.loadDates('action');
+      this.announce(this.t('dates.dismissed', { file: row.file }));
+      return;
+    }
+    await this.actionFailed(result, 'dismiss', () => this.loadDates('action'));
+  }
+
+  openEditor(row) {
+    const start = row.proposal ? row.proposal : row.stored;
+    this.editor = { id: row.id, from: start.from || '', to: start.to || '', error: null };
+    this.renderDates();
+    this.focus(this.doc.getElementById('rag-versions-dates-edit-from'));
+  }
+
+  closeEditor(row) {
+    this.editor = null;
+    this.renderDates();
+    const opener = this.datesList
+      ? this.datesList.querySelectorAll('button').find((b) => b.getAttribute('aria-label') === this.t('action.editDatesAria', { file: row.file }))
+      : null;
+    this.focus(opener || this.statusEl());
+  }
+
+  editorOrderError() {
+    const e = this.editor;
+    return Boolean(e && e.from && e.to && e.from > e.to);
+  }
+
+  renderEditorRow(row) {
+    const e = this.editor;
+    const ids = { from: 'rag-versions-dates-edit-from', to: 'rag-versions-dates-edit-to', order: 'rag-versions-dates-edit-order', hint: 'rag-versions-dates-edit-hint', error: 'rag-versions-dates-edit-error' };
+    const orderError = this.editorOrderError();
+    const field = (key, label) => {
+      const invalid = (orderError && key === 'to') || Boolean(e.error);
+      const input = this.el('input', {
+        className: 'input input-bordered input-sm w-full' + (invalid ? ' input-error' : ''),
+        id: ids[key],
+        attrs: {
+          type: 'date',
+          name: 'versions-dates-' + key,
+          autocomplete: 'off',
+          min: key === 'to' && e.from ? e.from : null,
+          max: key === 'from' && e.to ? e.to : null,
+          'aria-describedby': ids.hint + (orderError && key === 'to' ? ' ' + ids.order : '') + (e.error ? ' ' + ids.error : ''),
+          'aria-invalid': invalid ? 'true' : null,
+        },
+      });
+      input.value = e[key];
+      input.addEventListener('input', (event) => {
+        versionsDatesStop(event);
+        this.editor[key] = versionsDatesDay(input.value) || '';
+        this.editor.error = null;
+        this.updateEditor();
+      });
+      input.addEventListener('change', versionsDatesStop);
+      return this.el('div', { className: 'form-control min-w-0' }, [
+        this.el('label', { className: 'label py-1', attrs: { for: ids[key] } }, [this.el('span', { className: 'label-text', text: label })]),
+        input,
+      ]);
+    };
+    const save = this.el('button', { className: 'btn btn-primary md:btn-sm', text: this.t('action.saveDates'), attrs: { type: 'button', 'data-versions-dates-save': '' } });
+    const cancel = this.el('button', { className: 'btn btn-outline md:btn-sm', text: this.t('action.cancelEdit'), attrs: { type: 'button' } });
+    save.disabled = orderError;
+    if (orderError) save.setAttribute('aria-describedby', ids.order);
+    save.addEventListener('click', () => this.saveEditor(row, save, cancel));
+    cancel.addEventListener('click', () => this.closeEditor(row));
+    const fieldset = this.el('fieldset', { className: 'min-w-0' }, [
+      this.el('legend', { className: 'text-sm font-semibold mb-2 break-all', text: this.t('dates.editLegend', { file: row.file }) }),
+      this.el('div', { className: 'grid gap-3 md:grid-cols-2 max-w-xl' }, [field('from', this.t('dates.col.from')), field('to', this.t('dates.col.to'))]),
+      this.el('p', { className: 'text-xs text-base-content/70 mt-2', id: ids.hint, text: this.t('dates.clearHint') }),
+      this.el('p', { className: 'text-sm text-error mt-2', id: ids.order, text: orderError ? this.t('dates.order') : '', attrs: { 'data-versions-dates-order': '' } }),
+      e.error ? this.el('p', { className: 'text-sm text-error mt-2', id: ids.error, text: e.error, attrs: { role: 'alert' } }) : null,
+      this.el('div', { className: 'flex flex-col md:flex-row gap-2 mt-3' }, [save, cancel]),
+    ]);
+    fieldset.addEventListener('keydown', (event) => {
+      if (event && event.key === 'Escape') {
+        if (typeof event.preventDefault === 'function') event.preventDefault();
+        this.closeEditor(row);
+      }
+    });
+    return this.el('tr', { attrs: { 'data-versions-dates-editor': row.id } }, [this.el('td', { attrs: { colspan: '6' } }, [fieldset])]);
+  }
+
+  /** Updates the order finding and Save dates in place, so typing keeps the focus in the date field. */
+  updateEditor() {
+    const save = this.datesList ? this.datesList.querySelector('[data-versions-dates-save]') : null;
+    const order = this.datesList ? this.datesList.querySelector('[data-versions-dates-order]') : null;
+    const from = this.doc.getElementById('rag-versions-dates-edit-from');
+    const to = this.doc.getElementById('rag-versions-dates-edit-to');
+    const bad = this.editorOrderError();
+    if (order) order.textContent = bad ? this.t('dates.order') : '';
+    if (save) {
+      save.disabled = bad;
+      if (bad) save.setAttribute('aria-describedby', 'rag-versions-dates-edit-order');
+      else save.removeAttribute('aria-describedby');
+    }
+    const errorLine = this.doc.getElementById('rag-versions-dates-edit-error');
+    if (errorLine) errorLine.remove();
+    if (to) {
+      if (this.editor.from) to.setAttribute('min', this.editor.from);
+      else to.removeAttribute('min');
+      if (bad) to.setAttribute('aria-invalid', 'true');
+      else to.removeAttribute('aria-invalid');
+      to.classList.toggle('input-error', bad);
+      to.setAttribute('aria-describedby', 'rag-versions-dates-edit-hint' + (bad ? ' rag-versions-dates-edit-order' : ''));
+    }
+    if (from) {
+      if (this.editor.to) from.setAttribute('max', this.editor.to);
+      else from.removeAttribute('max');
+      from.removeAttribute('aria-invalid');
+      from.classList.remove('input-error');
+      from.setAttribute('aria-describedby', 'rag-versions-dates-edit-hint');
+    }
+  }
+
+  async saveEditor(row, button, sibling) {
+    if (!this.editor || this.editorOrderError()) return;
+    const ui = this.ui();
+    const range = { from: this.editor.from || null, to: this.editor.to || null };
+    const restore = ui.ragUiButtonBusy(this.doc, button, this.t('action.savingDates'), [sibling]);
+    let result;
+    try {
+      result = await this.putDates(row, range);
+    } finally {
+      restore();
+    }
+    if (result && result.ok) {
+      this.editor = null;
+      await this.loadDates('action');
+      this.announce(this.t('dates.applied', { file: row.file }));
+      return;
+    }
+    if (result && !result.thrown && result.status === 400) {
+      const body = result.body && typeof result.body === 'object' ? result.body : {};
+      const message = body.error === 'invalid_window' ? this.t('dates.order') : ui.ragUiMapError(result, this.locale).message;
+      this.editor.error = message;
+      this.renderDates();
+      this.focus(this.doc.getElementById('rag-versions-dates-edit-from'));
+      this.announce(message, true);
+      return;
+    }
+    this.editor = null;
+    await this.actionFailed(result, 'apply', () => this.loadDates('action'));
+  }
+}
+
+let versionsDatesPanelInstance = null;
+
 function initVersionsDatesPanel() {
-  return null;
+  if (typeof document === 'undefined') return null;
+  const root = document.getElementById('rag-administration-versions');
+  if (!root) return null;
+  if (!versionsDatesPanelInstance) {
+    versionsDatesPanelInstance = new VersionsDatesPanel(root);
+    if (typeof window !== 'undefined') window.versionsDatesPanel = versionsDatesPanelInstance;
+    return versionsDatesPanelInstance.mount();
+  }
+  return versionsDatesPanelInstance.refresh();
 }
+
+function versionsDatesBindPanel() {
+  document.querySelectorAll('[data-tab="rag-administration"]').forEach((link) => {
+    if (link.getAttribute('data-versions-dates-bound')) return;
+    link.setAttribute('data-versions-dates-bound', '1');
+    link.addEventListener('click', () => initVersionsDatesPanel());
+  });
+}
+
 if (typeof window !== 'undefined') {
-  window.initVersionsDatesPanel = initVersionsDatesPanel;
+  window.VERSIONS_DATES_LABELS = VERSIONS_DATES_LABELS;
 }
+
+if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+  window.initVersionsDatesPanel = initVersionsDatesPanel;
+  versionsDatesBindPanel();
+  document.addEventListener('DOMContentLoaded', () => {
+    versionsDatesBindPanel();
+    const active = document.getElementById('rag-administration');
+    if (active && active.classList.contains('active')) initVersionsDatesPanel();
+  });
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { VERSIONS_DATES_LABELS, versionsDatesCandidateView, versionsDatesEffect, versionsDatesDateRowView, versionsDatesSettingsWarnings, VersionsDatesPanel, initVersionsDatesPanel };
+  module.exports = {
+    VERSIONS_DATES_LABELS,
+    versionsDatesLabel,
+    versionsDatesEffect,
+    versionsDatesTodayUtc,
+    versionsDatesCandidateView,
+    versionsDatesLinkView,
+    versionsDatesSupersessionView,
+    versionsDatesDateRowView,
+    versionsDatesDatesView,
+    versionsDatesSettingsWarnings,
+    VersionsDatesPanel,
+    initVersionsDatesPanel,
+  };
 }

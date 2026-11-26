@@ -515,3 +515,85 @@ describe('rag-panels/scope-tags.js renders server data as text (XSS)', () => {
     doc.body.querySelectorAll('dialog').find((d) => d.open)!.close('keep');
   });
 });
+
+describe('rag-panels/versions-dates.js renders server data as text (XSS)', () => {
+  it('file names, uploader names, origins, signals and evidence quotes create no element and no inline handler', async () => {
+    const doc = new FakeDocument();
+    const section = host(doc, 'rag-administration-versions', 'section');
+    for (const attr of ['data-versions-dates-title', 'data-versions-dates-description', 'data-versions-dates-workspace', 'data-versions-dates-alert', 'data-versions-dates-content', 'data-versions-dates-status']) {
+      const el = doc.createElement('div');
+      el.setAttribute(attr, '');
+      section.appendChild(el);
+    }
+    const selector = host(doc, 'workspace-selector', 'select');
+    const option = doc.createElement('option');
+    option.setAttribute('value', 'org-1');
+    option.textContent = XSS_PAYLOAD;
+    selector.appendChild(option);
+    selector.value = 'org-1';
+    const docOf = (id: string) => ({
+      id,
+      file_name: XSS_PAYLOAD,
+      doc_type: JS_BREAKOUT,
+      document_date: JS_BREAKOUT,
+      effective_from: '2026-01-01',
+      effective_to: null,
+      uploaded_at: JS_BREAKOUT,
+      uploader: { id: 'u', display: XSS_PAYLOAD },
+    });
+    const list = {
+      success: true,
+      detect: 'on',
+      total: 2,
+      items: [
+        { kind: 'candidate', id: 'c1', origin: JS_BREAKOUT, direction: null, stale: true, signals: { title_match: true, content_overlap_percent: 80, conflicting_numbers: 2 }, document: docOf('d1'), candidate_document: docOf('d2') },
+        { kind: 'link', id: 'c2', origin: 'detected', older_document: docOf('d3'), newer_document: docOf('d4'), decided_at: JS_BREAKOUT, decided_by: { id: 'x', display: JS_BREAKOUT } },
+      ],
+    };
+    const dates = {
+      success: true,
+      total: 1,
+      items: [{ id: 'd5', file_name: JS_BREAKOUT, effective_from: null, effective_to: null, origin: null, proposal: { from: '2099-01-01', to: null, confidence: 0.9, evidence_quote: XSS_PAYLOAD + ' ' + JS_BREAKOUT, awaiting: true } }],
+    };
+    const context: Record<string, unknown> = {
+      document: doc,
+      console: { log() {}, error() {}, warn() {}, info() {}, debug() {} },
+      navigator: { language: 'en-US' },
+      location: { origin: 'http://config.local' },
+      setTimeout,
+      clearTimeout,
+      AbortController,
+      URLSearchParams,
+      Intl,
+      ragFetch: async (apiPath: string, init: { method?: string } = {}) => {
+        if (init.method === 'POST' || init.method === 'PUT') return { ok: false, status: 400, body: { success: false, error: XSS_PAYLOAD, details: [{ path: 'from', message: JS_BREAKOUT }] } };
+        if (apiPath.startsWith('/api/rag/admin/supersession')) return { ok: true, status: 200, body: list };
+        return { ok: true, status: 200, body: dates };
+      },
+    };
+    context.window = context;
+    vm.createContext(context);
+    for (const file of ['rag-panels/rag-ui.js', 'rag-panels/versions-dates.js']) {
+      new vm.Script(fs.readFileSync(path.join(configUiDir, file), 'utf8'), { filename: file }).runInContext(context);
+    }
+    const flushAll = async () => {
+      for (let i = 0; i < 25; i += 1) await new Promise((resolve) => setImmediate(resolve));
+    };
+    await (context.initVersionsDatesPanel as () => Promise<void>)();
+    await flushAll();
+    doc.body.querySelectorAll('button').find((b) => b.textContent === 'Dismiss candidate')!.click();
+    await flushAll();
+    doc.getElementById('rag-versions-dates-tab-dates')!.click();
+    doc.body.querySelectorAll('button').find((b) => b.textContent === 'Edit dates')!.click();
+    doc.body.querySelectorAll('button').find((b) => b.textContent === 'Save dates')!.click();
+    await flushAll();
+    doc.body.querySelectorAll('button').find((b) => b.textContent === 'Apply dates')!.click();
+    await flushAll();
+    expectSafe(doc);
+    expect(doc.innerHtmlWrites).toBe(0);
+    expect(doc.body.querySelectorAll('a')).toHaveLength(0);
+    expect(doc.body.textContent).toContain(XSS_PAYLOAD);
+    expect(doc.body.textContent).toContain(JS_BREAKOUT);
+    doc.body.querySelectorAll('dialog').find((d) => d.open)!.close('keep');
+  });
+});
