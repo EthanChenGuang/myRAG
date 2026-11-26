@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "description": "Generic patterns for a system-prompt instruction to say that the documents do not answer (Phase 5.3 D-13). Read by the eval harness only. Patterns describe the instruction, never a subject; matched case-insensitively with the u flag. A prompt carries the directive when a refusal_directive pattern of any language matches and no negation pattern does.",
+  "refusal_directive": {
+    "en": [
+      "\\b(?:if|when|whenever)\\b[^.\\n]{0,120}?\\b(?:not (?:available|found|present|contained|included|mentioned|covered|known)|(?:does|do|did)(?: not|n't) (?:contain|include|answer|cover|mention|say|provide|support)|(?:is|are) (?:missing|absent|insufficient|unavailable)|no (?:relevant )?(?:information|answer|context))\\b[^.\\n]{0,120}?\\b(?:say|state|tell|reply|respond|answer|admit|explain|indicate|acknowledge)\\b",
+      "\\b(?:say|state|tell|reply|respond|answer|admit|acknowledge)\\b[^.\\n]{0,60}?\\b(?:you (?:do not|don't) know|(?:it|this|the (?:information|answer)) is not (?:in|available|contained|known)|the (?:documents|context|sources?) (?:do(?: not|n't)|does(?: not|n't)) (?:contain|answer|say|include|cover))\\b",
+      "\\b(?:refuse|decline) to answer\\b"
+    ],
+    "it": [
+      "\\b(?:se|quando|qualora)\\b[^.\\n]{0,120}?\\b(?:non (?:è|e'|sono|c'è|ci sono|contiene|contengono|riporta|riportano|risponde|rispondono|include|includono|menziona|menzionano|copre|coprono|si trova|si trovano|presente|presenti|disponibile|disponibili)|manca|mancano|assente|assenti|insufficiente|insufficienti)[^.\\n]{0,120}?(?<![\\p{L}])(?:d[iì]llo|d[iì]|dichiara|dichiaralo|rispondi|ammetti|ammettilo|indica|spiega|afferma|comunica|segnala)(?![\\p{L}])",
+      "(?<![\\p{L}])(?:d[iì]|rispondi|dichiara|ammetti|afferma)(?![\\p{L}])[^.\\n]{0,40}?\\bnon (?:lo )?sai\\b",
+      "(?<![\\p{L}])(?:d[iì]|rispondi|dichiara|afferma|indica)(?![\\p{L}])[^.\\n]{0,60}?\\b(?:l'informazione|la risposta|questa informazione) non (?:è|e') (?:presente|disponibile|nei documenti|nel contesto)",
+      "\\brifiuta(?:ti)? di rispondere\\b"
+    ],
+    "zh": [
+      "(?:如果|若|假如|倘若|当|如)[^。\\n]{0,60}?(?:没有|未|不包含|不含|无法|找不到|不存在|缺少|不足以|不能回答|未提及|没有提及)[^。\\n]{0,60}?(?:说明|告知|说|回答|表示|指出|承认|明确)",
+      "(?:回答|说|表示|承认|告知)[^。\\n]{0,20}?(?:不知道|不清楚|无法回答|没有(?:这项|相关)?信息)",
+      "拒绝回答"
+    ]
+  },
+  "negation": {
+    "en": [
+      "\\b(?:always|still) (?:answer|respond|reply)\\b[^.\\n]{0,120}?\\b(?:even (?:if|when)|regardless)\\b",
+      "\\bnever (?:say|state|admit|reply|respond|answer)\\b[^.\\n]{0,80}?\\b(?:you (?:do not|don't) know|not (?:in|available|contained)|(?:do|does)(?: not|n't) (?:contain|answer))\\b",
+      "\\b(?:do not|don't|never) (?:refuse|decline)\\b"
+    ],
+    "it": [
+      "\\brispondi sempre\\b[^.\\n]{0,120}?\\b(?:anche (?:se|quando)|in ogni caso|comunque)\\b",
+      "\\bnon (?:rifiutare|dire mai|dichiarare mai|ammettere mai)\\b",
+      "\\bmai (?:dire|ammettere|dichiarare)\\b[^.\\n]{0,60}?\\bnon (?:lo )?sai\\b"
+    ],
+    "zh": [
+      "(?:总是|始终|一律|永远)(?:要)?(?:回答|作答)[^。\\n]{0,60}?(?:即使|就算|哪怕|无论|不管)",
+      "(?:即使|就算|哪怕|无论|不管)[^。\\n]{0,60}?(?:也|都)(?:要)?(?:回答|作答)",
+      "(?:不要|不得|切勿|绝不|不可)(?:说|表示|承认)[^。\\n]{0,10}?(?:不知道|不清楚|无法回答)",
+      "(?:不要|不得|切勿|绝不|不可)拒绝"
+    ]
+  }
+}

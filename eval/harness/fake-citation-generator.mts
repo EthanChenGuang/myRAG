@@ -2,12 +2,20 @@ import crypto from 'node:crypto';
 import type { LanguageModel } from 'ai';
 import type { LanguageModelV3CallOptions, LanguageModelV3StreamPart } from '@ai-sdk/provider';
 import { MockLanguageModelV3, convertArrayToReadableStream } from 'ai/test';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { findCitationMarkers } from '../../src/lib/citations/marker-grammar.ts';
+import { hasRefusalDirective } from './prompt-directives.mts';
 
 /**
  * Harness-only deterministic generator for the chunk-alias path (D-24). It reads the "[S<k>] <title>" labels from the
  * system prompt, cites one or two of them with the first sentence of each cited block, adds an unknown alias for about
  * one question in five, and streams the answer with every marker split across chunks. Never imported by src/.
+ *
+ * Instruction-sensitive mode (Phase 5.3 D-13), only for the questions in `noAnswerQuestions` that reach the generator with
+ * context: the refusal text of the question's language when the prompt template carries a refusal directive, else a fixed
+ * unsupported answer. Every other question is answered exactly as without the option.
  */
 export const FAKE_CITATION_GENERATOR_MODEL = 'fake/citation-alias-v1';
 export const FAKE_INVALID_ALIAS = 'S99';
@@ -20,11 +28,41 @@ const FIRST_SENTENCE_RE = /^[\s\S]*?[.!?。！？](?=\s|$)/;
 const MAX_SENTENCE_CHARS = 300;
 const STREAM_PIECE_CHARS = 12;
 const NO_CONTEXT_ANSWER = 'The provided documents do not contain this information.';
-export const FAKE_UNSUPPORTED_ANSWERS: Readonly<Record<string, string>> = {};
+const REFUSAL_TEXTS_PATH = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../fixtures/refusal-texts.json');
+
+/** One neutral answer per language that cites no block and that no refusal text matches. */
+export const FAKE_UNSUPPORTED_ANSWERS: Readonly<Record<string, string>> = {
+  en: 'Based on general knowledge, the answer is yes.',
+  it: 'In base alle conoscenze generali, la risposta è sì.',
+  zh: '根据一般常识，答案是肯定的。',
+};
 
 export interface FakeCitationGeneratorOptions {
+  /** Question text to the item's language code, for the golden items with answerable false. */
   noAnswerQuestions?: ReadonlyMap<string, string>;
+  /** The assembled template of resolveEvalPromptTemplate; the directive is read from it, not from the wrapped system prompt. */
   promptTemplate?: string;
+}
+
+let refusalTexts: Record<string, string[]> | null = null;
+
+/** The refusal texts the Python scorer recognises (eval/fixtures/refusal-texts.json, read once). */
+function loadRefusalTexts(): Record<string, string[]> {
+  refusalTexts ??= JSON.parse(fs.readFileSync(REFUSAL_TEXTS_PATH, 'utf8')) as Record<string, string[]>;
+  return refusalTexts;
+}
+
+function refusalTextFor(language: string): string {
+  const text = loadRefusalTexts()[language]?.[0];
+  if (!text) throw new Error(`[Fake Generator] no refusal text for language ${language}`);
+  return text;
+}
+
+function hasContext(system: string, blockCount: number, template: string | undefined): boolean {
+  if (blockCount > 0) return true;
+  if (template === undefined) return false;
+  // An empty retrieval injects nothing into the template; anything else in the system prompt is context.
+  return system.trim() !== '' && system.trim() !== template.replace('{{context}}', '').trim();
 }
 
 const USAGE = {
@@ -79,6 +117,13 @@ function digest(seed: string, question: string): Buffer {
 /** The answer for one question: a pure function of the system prompt, the question and the seed. */
 export function fakeCitationAnswer(input: { system: string; question: string; seed?: string } & FakeCitationGeneratorOptions): string {
   const blocks = labelledBlocks(input.system);
+  const noAnswerLanguage = input.noAnswerQuestions?.get(input.question);
+  if (noAnswerLanguage !== undefined && hasContext(input.system, blocks.length, input.promptTemplate)) {
+    if (hasRefusalDirective(input.promptTemplate ?? input.system)) return refusalTextFor(noAnswerLanguage);
+    const unsupported = FAKE_UNSUPPORTED_ANSWERS[noAnswerLanguage];
+    if (!unsupported) throw new Error(`[Fake Generator] no unsupported answer for language ${noAnswerLanguage}`);
+    return unsupported;
+  }
   if (blocks.length === 0) return NO_CONTEXT_ANSWER;
   const bytes = digest(input.seed ?? DEFAULT_FAKE_CITATION_SEED, input.question);
   const count = blocks.length;
@@ -129,14 +174,20 @@ function promptParts(options: LanguageModelV3CallOptions): { system: string; que
 /** Returns the language-model factory the harness installs with setEvalLanguageModelFactory. */
 export function installFakeCitationGenerator(
   seed: string = DEFAULT_FAKE_CITATION_SEED,
-  _options: FakeCitationGeneratorOptions = {},
+  options: FakeCitationGeneratorOptions = {},
 ): FakeLanguageModelFactory {
+  for (const language of new Set(options.noAnswerQuestions?.values() ?? [])) {
+    refusalTextFor(language);
+    if (!FAKE_UNSUPPORTED_ANSWERS[language]) throw new Error(`[Fake Generator] no unsupported answer for language ${language}`);
+  }
+  const answer = (callOptions: LanguageModelV3CallOptions): string =>
+    fakeCitationAnswer({ ...promptParts(callOptions), seed, ...options });
   return (modelId) =>
     new MockLanguageModelV3({
       provider: 'fake',
       modelId: modelId || FAKE_CITATION_GENERATOR_MODEL,
       doGenerate: async (options) => {
-        const text = fakeCitationAnswer({ ...promptParts(options), seed });
+        const text = answer(options);
         return {
           content: [{ type: 'text' as const, text }],
           finishReason: { unified: 'stop' as const, raw: 'stop' },
@@ -145,7 +196,7 @@ export function installFakeCitationGenerator(
         };
       },
       doStream: async (options) => {
-        const text = fakeCitationAnswer({ ...promptParts(options), seed });
+        const text = answer(options);
         const parts: LanguageModelV3StreamPart[] = [
           { type: 'stream-start', warnings: [] },
           { type: 'text-start', id: 'fake-text' },
