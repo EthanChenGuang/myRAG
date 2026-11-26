@@ -74,6 +74,7 @@
     <script src="rag-panels/rag-ui.js"></script>
     <script src="rag-panels/languages.js"></script>
     <script src="rag-panels/ingest-impact.js"></script>
+    <script src="rag-panels/upload-approvals.js"></script>
     <script src="rag-panels/doc-types.js"></script>
     <script src="rag-panels/quarantine.js"></script>
     <script src="rag-panels/embedding-profiles.js"></script>
@@ -84,6 +85,8 @@
     <script src="rag-panels/refusal-calibration.js"></script>
     <script src="rag-panels/injection-defense.js"></script>
     <script src="rag-panels/review-labelling.js"></script>
+    <script src="rag-panels/review-admin.js"></script>
+    <script src="rag-panels/query-layer.js"></script>
 
     <style>
         /* Tab content visibility */
@@ -6693,6 +6696,136 @@
                                     </div>
                                 </div>
 
+                                <!-- Vector backends -->
+                                <div class="card bg-base-200 shadow-md mt-6" id="vector-backends-card">
+                                    <div class="card-body">
+                                        <h3 class="text-lg font-semibold mb-2 text-balance">Vector backends</h3>
+                                        <p class="text-base-content/70 mb-4">Where retrieval runs. Leave both on <span translate="no">pgvector</span> to keep the current behaviour; an external backend applies only with <span translate="no">RAG_PIPELINE=v2</span> and falls back to <span translate="no">pgvector</span> while its index is not ready.</p>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label" for="RAG_RETRIEVAL_BACKEND">
+                                                <span class="label-text">Chat retrieval backend</span>
+                                            </label>
+                                            <select id="RAG_RETRIEVAL_BACKEND" name="RAG_RETRIEVAL_BACKEND" class="select select-bordered w-full" translate="no"
+                                                aria-describedby="rag-retrieval-backend-help">
+                                                <option value="pgvector" selected>pgvector</option>
+                                                <option value="weaviate">weaviate</option>
+                                                <option value="qdrant">qdrant</option>
+                                            </select>
+                                            <label class="label">
+                                                <span class="label-text-alt" id="rag-retrieval-backend-help">Backend for chat and embedded chat retrieval.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label" for="RAG_RETRIEVAL_BACKEND_VOICE">
+                                                <span class="label-text">Voice retrieval backend</span>
+                                            </label>
+                                            <select id="RAG_RETRIEVAL_BACKEND_VOICE" name="RAG_RETRIEVAL_BACKEND_VOICE" class="select select-bordered w-full" translate="no"
+                                                aria-describedby="rag-retrieval-backend-voice-help">
+                                                <option value="pgvector" selected>pgvector</option>
+                                                <option value="weaviate">weaviate</option>
+                                                <option value="qdrant">qdrant</option>
+                                            </select>
+                                            <label class="label">
+                                                <span class="label-text-alt" id="rag-retrieval-backend-voice-help">Set separately from chat; voice has a lower latency budget.</span>
+                                            </label>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label" for="RAG_VECTOR_SYNC_SECRET">
+                                                <span class="label-text">Vector sync secret</span>
+                                            </label>
+                                            <div class="flex gap-2">
+                                                <input type="password" id="RAG_VECTOR_SYNC_SECRET" name="RAG_VECTOR_SYNC_SECRET" autocomplete="off"
+                                                    placeholder="At least 32 characters"
+                                                    class="input input-bordered flex-1 w-full">
+                                                <button type="button" class="btn btn-square btn-outline"
+                                                    data-for="RAG_VECTOR_SYNC_SECRET" aria-label="Show or hide vector sync secret">👁️</button>
+                                            </div>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label" for="RAG_VECTOR_SYNC_MAX_LAG_SECONDS">
+                                                <span class="label-text">Max sync lag (seconds)</span>
+                                            </label>
+                                            <input type="text" inputmode="numeric" id="RAG_VECTOR_SYNC_MAX_LAG_SECONDS" name="RAG_VECTOR_SYNC_MAX_LAG_SECONDS" autocomplete="off" spellcheck="false"
+                                                placeholder="300"
+                                                class="input input-bordered w-full">
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label" for="WEAVIATE_URL">
+                                                <span class="label-text">Weaviate URL</span>
+                                            </label>
+                                            <input type="url" id="WEAVIATE_URL" name="WEAVIATE_URL" autocomplete="off" spellcheck="false"
+                                                placeholder="https://weaviate.example.com"
+                                                class="input input-bordered w-full">
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label" for="WEAVIATE_API_KEY">
+                                                <span class="label-text">Weaviate write API key</span>
+                                            </label>
+                                            <div class="flex gap-2">
+                                                <input type="password" id="WEAVIATE_API_KEY" name="WEAVIATE_API_KEY" autocomplete="off"
+                                                    placeholder="Used by sync only"
+                                                    class="input input-bordered flex-1 w-full">
+                                                <button type="button" class="btn btn-square btn-outline"
+                                                    data-for="WEAVIATE_API_KEY" aria-label="Show or hide weaviate write api key">👁️</button>
+                                            </div>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label" for="WEAVIATE_READ_API_KEY">
+                                                <span class="label-text">Weaviate read API key</span>
+                                            </label>
+                                            <div class="flex gap-2">
+                                                <input type="password" id="WEAVIATE_READ_API_KEY" name="WEAVIATE_READ_API_KEY" autocomplete="off"
+                                                    placeholder="Used by retrieval"
+                                                    class="input input-bordered flex-1 w-full">
+                                                <button type="button" class="btn btn-square btn-outline"
+                                                    data-for="WEAVIATE_READ_API_KEY" aria-label="Show or hide weaviate read api key">👁️</button>
+                                            </div>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label" for="QDRANT_URL">
+                                                <span class="label-text">Qdrant URL</span>
+                                            </label>
+                                            <input type="url" id="QDRANT_URL" name="QDRANT_URL" autocomplete="off" spellcheck="false"
+                                                placeholder="https://qdrant.example.com"
+                                                class="input input-bordered w-full">
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label" for="QDRANT_API_KEY">
+                                                <span class="label-text">Qdrant write API key</span>
+                                            </label>
+                                            <div class="flex gap-2">
+                                                <input type="password" id="QDRANT_API_KEY" name="QDRANT_API_KEY" autocomplete="off"
+                                                    placeholder="Used by sync only"
+                                                    class="input input-bordered flex-1 w-full">
+                                                <button type="button" class="btn btn-square btn-outline"
+                                                    data-for="QDRANT_API_KEY" aria-label="Show or hide qdrant write api key">👁️</button>
+                                            </div>
+                                        </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label" for="QDRANT_READ_API_KEY">
+                                                <span class="label-text">Qdrant read API key</span>
+                                            </label>
+                                            <div class="flex gap-2">
+                                                <input type="password" id="QDRANT_READ_API_KEY" name="QDRANT_READ_API_KEY" autocomplete="off"
+                                                    placeholder="Used by retrieval"
+                                                    class="input input-bordered flex-1 w-full">
+                                                <button type="button" class="btn btn-square btn-outline"
+                                                    data-for="QDRANT_READ_API_KEY" aria-label="Show or hide qdrant read api key">👁️</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <!-- Query layer -->
                                 <div class="card bg-base-200 shadow-md mt-6" id="query-layer-card">
                                     <div class="card-body">
@@ -6716,6 +6849,7 @@
                                                     <option value="llamaindex" selected>llamaindex</option>
                                                     <option value="langchain">langchain</option>
                                                 </select>
+                                                <p id="query-layer-framework-warning" class="text-sm text-warning mt-2 min-w-0" role="status" hidden></p>
                                             </div>
                                             <div class="form-control">
                                                 <label class="label" for="RAG_QUERY_LLM_MODEL"><span class="label-text">Query model</span></label>
@@ -6831,6 +6965,22 @@
                                                 <label class="label pl-8">
                                                     <span class="label-text-alt min-w-0" id="rag-cache-embed-help">embed widget answers are only read from the cache unless this is on.</span>
                                                 </label>
+                                            </div>
+
+                                            <div id="query-layer-status" class="rounded-box bg-base-100 p-4 space-y-3" aria-live="polite">
+                                                <p class="text-sm text-base-content/70">Loading query layer status…</p>
+                                            </div>
+
+                                            <div class="rounded-box bg-base-100 p-4 space-y-2">
+                                                <h4 class="font-semibold text-sm text-balance">Clear cache for tenant</h4>
+                                                <p class="text-sm text-base-content/70 min-w-0">Deletes every cached answer of one tenant in the running app. Needs an admin sign-in in the main app. Use <span translate="no">s:default</span> in single-tenant mode, <span translate="no">o:&lt;organization id&gt;</span> or <span translate="no">u:&lt;user id&gt;</span> in multi-tenant mode.</p>
+                                                <div class="flex flex-col sm:flex-row gap-2">
+                                                    <label class="sr-only" for="query-layer-clear-tenant">Tenant key</label>
+                                                    <input type="text" id="query-layer-clear-tenant" placeholder="s:default…" autocomplete="off" spellcheck="false" translate="no"
+                                                        class="input input-bordered w-full sm:flex-1 min-w-0">
+                                                    <button type="button" id="query-layer-clear-button" class="btn btn-outline btn-warning">Clear cache for tenant</button>
+                                                </div>
+                                                <p id="query-layer-clear-result" class="text-sm min-w-0" role="status" aria-live="polite"></p>
                                             </div>
                                         </div>
                                     </div>
@@ -9133,7 +9283,7 @@
                                                         <input type="radio" class="btn btn-sm" name="ingestion-status" value="needs_review" aria-label="Needs review">
                                                         <input type="radio" class="btn btn-sm" name="ingestion-status" value="active" aria-label="In progress">
                                                         <input type="radio" class="btn btn-sm" name="ingestion-status" value="ready" aria-label="Ready">
-                                                        <input type="radio" class="btn btn-sm" name="ingestion-status" value="other" aria-label="Quarantined or skipped">
+                                                        <input type="radio" class="btn btn-sm" name="ingestion-status" value="other" aria-label="Held or skipped">
                                                     </div>
                                                 </fieldset>
                                                 <div class="flex gap-2 mb-4">
@@ -9587,6 +9737,19 @@
                                         </div>
                                     </section>
 
+                                    <!-- rag-upload-approvals:start -->
+                                    <section id="rag-administration-approvals" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-upload-approvals-title">
+                                        <div class="card-body">
+                                            <h3 id="rag-upload-approvals-title" class="text-lg font-semibold mb-2 text-balance rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" tabindex="-1" data-upload-approvals-title>Upload approvals</h3>
+                                            <p class="text-sm text-base-content/70 max-w-prose" data-upload-approvals-description>Uploads that wait for an admin before they can be searched. A waiting upload is fully processed and held out of answers. Follows the workspace chosen under Document Processing.</p>
+                                            <p class="text-xs text-base-content/70 mt-1 mb-4 break-words" data-upload-approvals-workspace></p>
+                                            <div data-upload-approvals-alert class="flex flex-col gap-2 mb-4 empty:mb-0"></div>
+                                            <div data-upload-approvals-content></div>
+                                            <div data-upload-approvals-status class="text-sm mt-4" role="status" aria-live="polite" tabindex="-1"></div>
+                                        </div>
+                                    </section>
+                                    <!-- rag-upload-approvals:end -->
+
                                     <section id="rag-administration-profiles" class="card bg-base-200 shadow-md">
                                         <div class="card-body">
                                             <h3 class="text-lg font-semibold mb-2">Embedding profiles</h3>
@@ -9645,6 +9808,16 @@
                                             <div data-review-alert class="mb-4 empty:mb-0"></div>
                                             <div data-review-content></div>
                                             <div data-review-status class="text-sm mt-4" role="status" aria-live="polite"></div>
+                                        </div>
+                                    </section>
+
+                                    <section id="rag-administration-feedback-loop" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-feedback-loop-title">
+                                        <div class="card-body">
+                                            <h3 id="rag-feedback-loop-title" class="text-lg font-semibold mb-2 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" tabindex="-1" data-review-admin-title>Feedback loop</h3>
+                                            <p class="text-sm text-base-content/70 mb-4 max-w-prose" data-review-admin-description></p>
+                                            <div data-review-admin-alert class="mb-4 empty:mb-0"></div>
+                                            <div data-review-admin-content></div>
+                                            <div data-review-admin-status class="text-sm mt-4" role="status" aria-live="polite"></div>
                                         </div>
                                     </section>
                                 </div>
@@ -10790,7 +10963,7 @@
                     this.showSaveIndicator();
                     console.log('Config saved successfully');
 
-                    const shortSecrets = ['RAG_EVAL_SECRET', 'RAG_SIDECAR_SECRET', 'RAG_VOICE_TOKEN_SECRET', 'VOYAGE_API_KEY', 'DEEPINFRA_API_KEY', 'COHERE_API_KEY', 'LAKERA_GUARD_API_KEY'].filter((name) => {
+                    const shortSecrets = ['RAG_EVAL_SECRET', 'RAG_SIDECAR_SECRET', 'RAG_VOICE_TOKEN_SECRET', 'VOYAGE_API_KEY', 'DEEPINFRA_API_KEY', 'COHERE_API_KEY', 'LAKERA_GUARD_API_KEY', 'RAG_VECTOR_SYNC_SECRET'].filter((name) => {
                         const value = this.config[name];
                         return typeof value === 'string' && value.length > 0 && value.length < 32;
                     });

@@ -513,6 +513,14 @@
       "side": "query"
     },
     {
+      "name": "RAG_RETRIEVAL_BACKEND",
+      "side": "query"
+    },
+    {
+      "name": "RAG_RETRIEVAL_BACKEND_VOICE",
+      "side": "query"
+    },
+    {
       "name": "RAG_RETRIEVAL_LOG",
       "side": "query"
     },
@@ -617,6 +625,14 @@
     },
     {
       "name": "RAG_UPLOAD_APPROVAL",
+      "side": "query"
+    },
+    {
+      "name": "RAG_VECTOR_SYNC_MAX_LAG_SECONDS",
+      "side": "query"
+    },
+    {
+      "name": "RAG_VECTOR_SYNC_SECRET",
       "side": "query"
     },
     {

@@ -407,3 +407,109 @@ class TsJobsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+WEEKLY_CRON = "23 4 * * 1"
+
+
+def weekly_fixture() -> dict:
+    gate = "env.HAS_PRIVATE_EVAL == 'true'"
+    return {
+        "on": {"schedule": [{"cron": "0 3 * * *"}, {"cron": WEEKLY_CRON}], "workflow_dispatch": None},
+        "jobs": {
+            "weekly-report": {
+                "if": f"github.event_name == 'workflow_dispatch' || github.event.schedule == '{WEEKLY_CRON}'",
+                "runs-on": "ubuntu-latest",
+                "steps": [
+                    {
+                        "name": "Detect private eval data",
+                        "run": (
+                            'if [ -d eval/golden/private ] && [ -n "$(ls -A eval/golden/private)" ]; then\n'
+                            '  echo "HAS_PRIVATE_EVAL=true" >> "$GITHUB_ENV"\n'
+                            "else\n"
+                            '  echo "HAS_PRIVATE_EVAL=false" >> "$GITHUB_ENV"\n'
+                            '  echo "::notice::no private eval data on this runner, skipping weekly report"\n'
+                            "fi\n"
+                        ),
+                    },
+                    {"uses": "actions/checkout@" + "a" * 40, "if": gate, "with": {"clean": False}},
+                    {"name": "Sync eval project", "if": gate, "run": "uv sync --directory eval --locked --all-extras"},
+                    {"name": "Failure report", "if": gate, "run": "uv run --directory eval python -m rag_eval.failure_report --since x"},
+                    {
+                        "name": "Weekly report",
+                        "if": gate,
+                        "env": {"RAG_ADMIN_BEARER": "${{ secrets.RAG_ADMIN_BEARER }}"},
+                        "run": "uv run --directory eval python -m rag_eval.weekly_report --since x",
+                    },
+                ],
+            }
+        },
+    }
+
+
+class WeeklyReportJobTest(unittest.TestCase):
+    def errors_for(self, data: dict) -> list[str]:
+        errors: list[str] = []
+        check_workflows.check_weekly_report(data, errors)
+        return errors
+
+    def steps(self, data: dict) -> list[dict]:
+        return data["jobs"]["weekly-report"]["steps"]
+
+    def test_the_fixture_is_valid(self):
+        self.assertEqual(self.errors_for(weekly_fixture()), [])
+
+    def test_repository_nightly_has_a_valid_weekly_job(self):
+        self.assertEqual(self.errors_for(check_workflows.load(check_workflows.NIGHTLY)[0]), [])
+
+    def test_missing_job_is_reported(self):
+        data = weekly_fixture()
+        del data["jobs"]["weekly-report"]
+        self.assertTrue(any("'weekly-report' missing" in e for e in self.errors_for(data)))
+
+    def test_missing_notice_step_is_reported(self):
+        data = weekly_fixture()
+        del self.steps(data)[0]
+        self.assertTrue(any("first step" in e for e in self.errors_for(data)))
+
+    def test_a_first_step_without_the_notice_is_reported(self):
+        data = weekly_fixture()
+        self.steps(data)[0]["run"] = self.steps(data)[0]["run"].replace("::notice::", "")
+        self.assertTrue(any("first step" in e for e in self.errors_for(data)))
+
+    def test_an_ungated_step_is_reported(self):
+        data = weekly_fixture()
+        del self.steps(data)[3]["if"]
+        self.assertTrue(any("HAS_PRIVATE_EVAL == 'true'" in e for e in self.errors_for(data)))
+
+    def test_an_upload_artifact_step_is_reported(self):
+        data = weekly_fixture()
+        self.steps(data).append(
+            {"uses": "actions/upload-artifact@" + "b" * 40, "if": "env.HAS_PRIVATE_EVAL == 'true'", "with": {"path": "eval/golden/private"}}
+        )
+        self.assertTrue(any("upload" in e for e in self.errors_for(data)))
+
+    def test_a_secret_interpolated_in_a_run_script_is_reported(self):
+        data = weekly_fixture()
+        self.steps(data)[4]["run"] += ' --base-url "${{ secrets.RAG_APP_BASE_URL }}"'
+        self.assertTrue(any("not interpolated into run" in e for e in self.errors_for(data)))
+
+    def test_both_reports_must_run(self):
+        data = weekly_fixture()
+        del self.steps(data)[3]
+        self.assertTrue(any("rag_eval.failure_report" in e for e in self.errors_for(data)))
+
+    def test_the_job_runs_only_on_the_weekly_schedule_or_dispatch(self):
+        data = weekly_fixture()
+        del data["jobs"]["weekly-report"]["if"]
+        self.assertTrue(any("weekly schedule" in e for e in self.errors_for(data)))
+
+    def test_the_weekly_cron_must_be_scheduled(self):
+        data = weekly_fixture()
+        data["on"]["schedule"] = [{"cron": "0 3 * * *"}]
+        self.assertTrue(any("weekly schedule" in e for e in self.errors_for(data)))
+
+    def test_checkout_must_keep_the_private_data(self):
+        data = weekly_fixture()
+        del self.steps(data)[1]["with"]
+        self.assertTrue(any("clean: false" in e for e in self.errors_for(data)))

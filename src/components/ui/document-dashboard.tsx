@@ -27,8 +27,9 @@ import { PortalTooltip } from "./portal-tooltip"
 import { useOrganizationStore } from "@/lib/stores/organization-store"
 import { isMultiTenant } from "@/lib/deployment-mode"
 import { useShallow } from "zustand/react/shallow"
-import type { IngestJobState } from "@/lib/hooks/use-ingest-job-status"
+import { INITIAL_INGEST_JOB_STATE, type IngestJobState } from "@/lib/hooks/use-ingest-job-status"
 import { IngestStatusBadge, TrackedIngestStatusBadge } from "@/components/ui/ingest-status-badge"
+import { uploadErrorMessage } from "@/components/ui/ingest-status-labels"
 import {
   attachQueuedJob,
   classifyUploadResponse,
@@ -36,12 +37,23 @@ import {
   mergeRefreshedDocuments,
   settleQueuedRow,
 } from "@/components/ui/ingest-document-rows"
+import { UploadQueueRow } from "@/components/ui/upload-queue-row"
+import type { ReplaceCandidate } from "@/components/ui/replaces-picker"
+import {
+  UPLOAD_REPLACES_OFF,
+  UPLOAD_TAGS_OFF,
+  readUploadReplaces,
+  readUploadTags,
+  replaceCandidatesFrom,
+  withoutKey,
+  type UploadReplacesConfig,
+  type UploadTagsConfig,
+} from "@/components/ui/upload-queue-config"
 import { ConnectorGrid } from "@/components/ui/nango"
 import { useConnectorConfig } from "@/lib/hooks/use-connector-config"
 import { useFirecrawlConfig } from "@/lib/hooks/use-firecrawl-config"
 import { UrlScraper } from "@/components/ui/scrapers/url-scraper"
 import {
-  DocTypePicker,
   buildChatUploadFormData,
   pollIngestUntilTerminal,
   type DocTypePickerValue,
@@ -273,6 +285,12 @@ export function DocumentDashboard({
   const [tenantDocTypeDefault, setTenantDocTypeDefault] = React.useState<DocTypePickerValue>("auto")
   const [fileDocTypes, setFileDocTypes] = React.useState<Record<string, DocTypePickerValue>>({})
   const docTypeDefaultsLoadedRef = React.useRef<string | null>(null)
+  const [uploadTags, setUploadTags] = React.useState<UploadTagsConfig>(UPLOAD_TAGS_OFF)
+  const [uploadReplaces, setUploadReplaces] = React.useState<UploadReplacesConfig>(UPLOAD_REPLACES_OFF)
+  const [fileScopes, setFileScopes] = React.useState<Record<string, string[]>>({})
+  const [fileReplaces, setFileReplaces] = React.useState<Record<string, ReplaceCandidate>>({})
+  const [tagError, setTagError] = React.useState<string | null>(null)
+  const [defaultsReload, setDefaultsReload] = React.useState(0)
   const [isTabSwitching, setIsTabSwitching] = React.useState(false)
   const [isLoading, setIsLoading] = React.useState(false)
   const [showSkeleton, setShowSkeleton] = React.useState(false)
@@ -462,10 +480,11 @@ export function DocumentDashboard({
       : null
 
   React.useEffect(() => {
-    if (!docTypeDefaultsKey || docTypeDefaultsLoadedRef.current === docTypeDefaultsKey) {
+    const loadKey = docTypeDefaultsKey ? `${docTypeDefaultsKey}#${defaultsReload}` : null
+    if (!loadKey || docTypeDefaultsLoadedRef.current === loadKey) {
       return
     }
-    docTypeDefaultsLoadedRef.current = docTypeDefaultsKey
+    docTypeDefaultsLoadedRef.current = loadKey
     let cancelled = false
     const params = new URLSearchParams({ source: "chat_upload" })
     if (isMultiTenant() && !isPersonalMode && currentOrganization) {
@@ -475,7 +494,7 @@ export function DocumentDashboard({
       try {
         const response = await fetch(`/api/rag/doc-type-defaults?${params.toString()}`)
         if (!response.ok || cancelled) return
-        const data = (await response.json()) as { enabled?: boolean; docType?: DocTypePickerValue }
+        const data = (await response.json()) as { enabled?: boolean; docType?: DocTypePickerValue; tags?: unknown; replaces?: unknown }
         if (cancelled) return
         if (data.enabled) {
           const defaultType: DocTypePickerValue = data.docType ?? "auto"
@@ -484,6 +503,8 @@ export function DocumentDashboard({
         } else {
           setDocTypePickerEnabled(false)
         }
+        setUploadTags(data.enabled ? readUploadTags(data.tags) : UPLOAD_TAGS_OFF)
+        setUploadReplaces(data.enabled ? readUploadReplaces(data.replaces) : UPLOAD_REPLACES_OFF)
       } catch (error) {
         console.error("[DocumentDashboard] doc-type defaults fetch failed", error)
       }
@@ -491,7 +512,7 @@ export function DocumentDashboard({
     return () => {
       cancelled = true
     }
-  }, [docTypeDefaultsKey, currentOrganization?.id, isPersonalMode])
+  }, [docTypeDefaultsKey, defaultsReload, currentOrganization?.id, isPersonalMode])
 
   React.useEffect(() => {
     if (!docTypePickerEnabled) return
@@ -512,6 +533,8 @@ export function DocumentDashboard({
     isMultiTenant() && !isPersonalMode && currentOrganization
       ? `?organizationId=${encodeURIComponent(currentOrganization.id)}`
       : ''
+
+  const replaceCandidates = replaceCandidatesFrom(storedDocuments)
 
   const mergeDocTypesForFiles = React.useCallback(
     (incoming: File[]) => {
@@ -734,6 +757,8 @@ export function DocumentDashboard({
           delete next[removed.name]
           return next
         })
+        setFileScopes((scopes) => withoutKey(scopes, removed.name))
+        setFileReplaces((choices) => withoutKey(choices, removed.name))
       }
       return prev.filter((_, i) => i !== index)
     })
@@ -746,6 +771,10 @@ export function DocumentDashboard({
     settledJobsRef.current.add(jobId);
     const queuedDoc = storedDocuments.find(d => d.jobId === jobId);
     setStoredDocuments(prev => settleQueuedRow(prev, jobId, state));
+    if (state.status === 'pending_review') {
+      void refreshDocuments();
+      return;
+    }
     if (state.status === 'ready' || state.status === 'skipped_duplicate' || state.status === 'needs_review') {
       void refreshDocuments();
       if (queuedDoc) onProcessingComplete?.({ ...queuedDoc, status: 'ready', ingest: state });
@@ -804,6 +833,8 @@ export function DocumentDashboard({
           organizationId,
           pickerEnabled: docTypePickerEnabled,
           docType: pickedType,
+          scopes: uploadTags.enabled ? fileScopes[file.name] ?? [] : [],
+          replacesDocumentId: uploadReplaces.enabled ? fileReplaces[file.name]?.id ?? null : null,
         });
         if (organizationId) {
           console.log('[DocumentDashboard] Added organization_id to formData:', organizationId);
@@ -819,14 +850,11 @@ export function DocumentDashboard({
         const result = await response.json();
 
         if (!response.ok) {
-          let errorMessage = result.error || 'Unknown error occurred';
-
-          // Special handling for timeout errors
-          if (response.status === 504 || errorMessage.includes('timed out') || errorMessage.includes('taking longer')) {
-            errorMessage = 'Document processing is taking longer than expected. Please try with a smaller document or try again later.';
+          if (response.status === 400 && result?.error === 'unknown_scope_value') {
+            setTagError(uploadErrorMessage(response.status, result, language));
+            setDefaultsReload((n) => n + 1);
           }
-
-          throw new Error(errorMessage);
+          throw new Error(uploadErrorMessage(response.status, result, language));
         }
 
         if (result.error) {
@@ -886,6 +914,7 @@ export function DocumentDashboard({
           }
         }
 
+        const heldForApproval = ingestStatus === 'pending_review';
         const uiStatus: ProcessedDocument['status'] =
           ingestStatus === 'failed'
             ? 'failed'
@@ -901,6 +930,7 @@ export function DocumentDashboard({
                 ...d,
                 id: resolvedId ?? d.id,
                 status: uiStatus,
+                ...(heldForApproval ? { ingest: { ...INITIAL_INGEST_JOB_STATE, status: 'pending_review' } } : {}),
                 // Update additional fields that may have changed
                 pages: result.pages,
                 text: result.text || d.text,
@@ -912,6 +942,8 @@ export function DocumentDashboard({
               : d
           );
         });
+
+        if (heldForApproval) continue;
 
         onProcessingComplete?.({
           ...doc,
@@ -945,6 +977,8 @@ export function DocumentDashboard({
     setIsProcessing(false);
     setFiles([]);
     setFileDocTypes({});
+    setFileScopes({});
+    setFileReplaces({});
 
     // Check if any documents failed
     const failedCount = storedDocuments.filter(doc =>
@@ -954,7 +988,7 @@ export function DocumentDashboard({
     if (failedCount > 0) {
       console.warn(`${failedCount} document(s) failed to process.`);
     }
-  }, [files, fileDocTypes, docTypePickerEnabled, tenantDocTypeDefault, onProcessingStart, onProcessingComplete, onProcessingError, setActiveTab, storedDocuments, currentOrganization?.id, isPersonalMode, workspaceQuery]);
+  }, [files, fileDocTypes, docTypePickerEnabled, tenantDocTypeDefault, onProcessingStart, onProcessingComplete, onProcessingError, setActiveTab, storedDocuments, currentOrganization?.id, isPersonalMode, workspaceQuery, language, uploadTags.enabled, uploadReplaces.enabled, fileScopes, fileReplaces]);
 
   // Create a function to handle tab switching with better visual feedback
   const handleTabChange = (tab: string) => {
@@ -1463,34 +1497,48 @@ export function DocumentDashboard({
                           >
                             <div>
                               {files.map((file, index) => (
-                                <div
+                                <UploadQueueRow
                                   key={index}
-                                  className="group flex items-center justify-between gap-2 px-4 py-2 hover:bg-white/50 dark:hover:bg-[#212121]"
-                                >
-                                  <div className="grid gap-0.5 min-w-0 flex-1 mr-2">
-                                    <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{file.name}</p>
-                                    <p className="text-xs text-gray-600 dark:text-gray-400">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
-                                  </div>
-                                  {docTypePickerEnabled ? (
-                                    <DocTypePicker
-                                      value={fileDocTypes[file.name] ?? tenantDocTypeDefault}
-                                      language={language}
-                                      disabled={isProcessing}
-                                      onChange={(value) =>
-                                        setFileDocTypes((prev) => ({ ...prev, [file.name]: value }))
-                                      }
-                                    />
-                                  ) : null}
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-6 w-6 flex-shrink-0 rounded-full opacity-0 transition-opacity group-hover:opacity-100 hover:bg-white dark:hover:bg-[#212121]"
-                                    onClick={() => removeFile(index)}
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5 text-gray-600 dark:text-gray-400" />
-                                    <span className="sr-only">Remove file</span>
-                                  </Button>
-                                </div>
+                                  fileName={file.name}
+                                  fileSize={file.size}
+                                  language={language}
+                                  disabled={isProcessing}
+                                  docType={
+                                    docTypePickerEnabled
+                                      ? {
+                                          value: fileDocTypes[file.name] ?? tenantDocTypeDefault,
+                                          onChange: (value) => setFileDocTypes((prev) => ({ ...prev, [file.name]: value })),
+                                        }
+                                      : null
+                                  }
+                                  tags={
+                                    uploadTags.enabled
+                                      ? {
+                                          vocabulary: uploadTags.vocabulary,
+                                          value: fileScopes[file.name] ?? [],
+                                          error: tagError,
+                                          onChange: (value) => {
+                                            setTagError(null)
+                                            setFileScopes((prev) => ({ ...prev, [file.name]: value }))
+                                          },
+                                        }
+                                      : null
+                                  }
+                                  replaces={
+                                    uploadReplaces.enabled
+                                      ? {
+                                          confirmedAtOnce: uploadReplaces.confirmedAtOnce,
+                                          candidates: replaceCandidates,
+                                          value: fileReplaces[file.name] ?? null,
+                                          onChange: (value) =>
+                                            setFileReplaces((prev) =>
+                                              value ? { ...prev, [file.name]: value } : withoutKey(prev, file.name)
+                                            ),
+                                        }
+                                      : null
+                                  }
+                                  onRemove={() => removeFile(index)}
+                                />
                               ))}
                             </div>
                           </ScrollArea>
@@ -1653,18 +1701,18 @@ export function DocumentDashboard({
                                     </div>
                                   </TableCell>
                                   <TableCell className="pl-2 pr-2 whitespace-nowrap" style={{ width: '80px' }}>
-                                    {doc.jobId ? (
+                                    {doc.jobId || doc.ingest ? (
                                       <div className="flex items-center overflow-hidden">
                                         {doc.ingest ? (
                                           <IngestStatusBadge state={doc.ingest} language={language} />
-                                        ) : (
+                                        ) : doc.jobId ? (
                                           <TrackedIngestStatusBadge
                                             jobId={doc.jobId}
                                             organizationId={doc.jobOrganizationId}
                                             language={language}
                                             onSettled={(state) => handleIngestSettled(doc.jobId as string, state)}
                                           />
-                                        )}
+                                        ) : null}
                                       </div>
                                     ) : (
                                       <div className="flex items-center gap-1.5 overflow-hidden">

@@ -85,6 +85,21 @@ describe('pinned eval env', () => {
     }
   });
 
+  test('pins the Phase 7 backend defaults on pgvector with the sync secret empty and no vendor URL or key (D-24)', () => {
+    const expected = {
+      RAG_RETRIEVAL_BACKEND: 'pgvector',
+      RAG_RETRIEVAL_BACKEND_VOICE: 'pgvector',
+      RAG_VECTOR_SYNC_MAX_LAG_SECONDS: '300',
+      RAG_VECTOR_SYNC_SECRET: '',
+    };
+    const pinned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'eval/config/rag-eval-env.json'), 'utf8'));
+    for (const [name, value] of Object.entries(expected)) {
+      expect(pinned, `${name} is pinned`).toHaveProperty(name);
+      expect(pinned[name], name).toBe(value);
+    }
+    for (const name of Object.keys(pinned)) expect(name).not.toMatch(/^(WEAVIATE|QDRANT)_/);
+  });
+
   test('eval-env --check exits 0', () => {
     const result = spawnSync('npx', ['tsx', 'eval/harness/eval-env.mts', '--check'], { cwd: REPO_ROOT, encoding: 'utf8' });
     expect(result.status).toBe(0);

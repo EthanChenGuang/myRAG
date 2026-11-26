@@ -12,7 +12,8 @@ import {
   type IngestRealtimeClientLike,
 } from '@/lib/hooks/use-ingest-job-status';
 import { IngestStatusBadge } from '@/components/ui/ingest-status-badge';
-import { describeIngestStatus } from '@/components/ui/ingest-status-labels';
+import { describeIngestStatus, uploadErrorMessage } from '@/components/ui/ingest-status-labels';
+import { pollIngestUntilTerminal } from '@/components/ui/doc-type-picker';
 import {
   attachQueuedJob,
   classifyUploadResponse,
@@ -597,5 +598,125 @@ describe('mergeRefreshedDocuments', () => {
       [apiRow('doc-1', 'old.pdf', '2026-11-20T00:00:00.000Z'), apiRow('doc-2', 'new.pdf', '2026-11-23T00:00:00.000Z')],
     );
     expect(merged.map((d) => d.id)).toEqual(['doc-2', 'doc-1']);
+  });
+});
+
+describe('pending_review (awaiting approval)', () => {
+  const pending = (extra: Partial<IngestJobState> = {}): IngestJobState => ({ ...INITIAL_INGEST_JOB_STATE, status: 'pending_review', ...extra });
+  const render = (state: IngestJobState, language: string) => renderToStaticMarkup(createElement(IngestStatusBadge, { state, language }));
+
+  it.each([
+    ['en', 'Awaiting approval'],
+    ['zh', '等待批准'],
+    ['it', 'In attesa di approvazione'],
+  ])('has the %s label with the pending tone', (language, label) => {
+    expect(describeIngestStatus(pending(), language)).toEqual({ label, tone: 'pending' });
+  });
+
+  it('falls back to English for another locale', () => {
+    expect(describeIngestStatus(pending(), 'xx').label).toBe('Awaiting approval');
+  });
+
+  it('is not shown as the provisional text even when a provisional flag arrives', () => {
+    expect(describeIngestStatus(pending({ provisional: true }), 'en').label).toBe('Awaiting approval');
+  });
+
+  it('renders a static hourglass next to the text and the hint in the title', () => {
+    const html = render(pending(), 'en');
+    expect(html).toContain('lucide-hourglass');
+    expect(html).toMatch(/<svg[^>]*aria-hidden="true"[^>]*lucide-hourglass|<svg[^>]*lucide-hourglass[^>]*aria-hidden="true"/);
+    expect(html).not.toContain('animate-spin');
+    expect(html).toContain('text-sky-700');
+    expect(html).toContain('title="Awaiting approval. An admin must approve this upload before it can be searched."');
+    expect(html).toContain('class="truncate"');
+  });
+
+  it.each([
+    ['zh', '需由管理员批准后，此上传才能被检索。'],
+    ['it', 'Un amministratore deve approvare questo caricamento prima che sia ricercabile.'],
+  ])('puts the %s hint in the title', (language, hint) => {
+    expect(render(pending(), language)).toContain(hint);
+  });
+
+  it('never names an approver or a rejection reason, even when the server sends a reason', () => {
+    const html = render(pending({ reason: 'rejected_by_admin_example' }), 'en');
+    expect(html).not.toContain('rejected_by_admin_example');
+    expect(html.toLowerCase()).not.toMatch(/approved by|rejected/);
+  });
+
+  it('is terminal for the job tracker, so polling stops after the first answer', async () => {
+    expect(isTerminalIngestStatus('pending_review')).toBe(true);
+    const fetcher = scriptedFetch([pollBody('pending_review')]);
+    const { updates } = startTracker(fetcher.impl);
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(fetcher.calls).toHaveLength(1);
+    expect(updates.at(-1)?.status).toBe('pending_review');
+  });
+
+  it('is terminal for the document status poll of the upload dialog', async () => {
+    let calls = 0;
+    const result = await pollIngestUntilTerminal('doc-1', {
+      fetchStatus: async () => {
+        calls += 1;
+        return { status: 'pending_review' };
+      },
+      sleep: async () => undefined,
+      now: () => (calls > 3 ? Number.MAX_SAFE_INTEGER : 0),
+      startedAt: 0,
+    });
+    expect(result.status).toBe('pending_review');
+    expect(calls).toBe(1);
+  });
+
+  it('settles a queued row as present with its own state, and keeps it on refresh', () => {
+    const [settled] = settleQueuedRow([row('doc-1', 'a.pdf', { jobId: JOB_ID })], JOB_ID, pending());
+    expect(settled).toMatchObject({ status: 'ready', ingest: { status: 'pending_review' } });
+    const merged = mergeRefreshedDocuments([settled as IngestRow], [apiRow('doc-1', 'a.pdf')]);
+    expect(merged).toEqual([settled]);
+  });
+
+  it('keeps an inline pending_review row without a job id on refresh', () => {
+    const held = row('doc-3', 'c.pdf', { status: 'ready', ingest: pending() });
+    expect(mergeRefreshedDocuments([held], [apiRow('doc-3', 'c.pdf')])).toEqual([held]);
+  });
+});
+
+describe('uploadErrorMessage', () => {
+  it.each([
+    ['en', 'Not uploaded. Upload approval is on and needs the unified ingest pipeline, which is off. Ask an admin to turn it on.'],
+    ['zh', '未上传。上传审批已开启，但它需要统一入库流程，而该流程目前关闭。请联系管理员开启。'],
+    ['it', 'Non caricato. L\'approvazione dei caricamenti è attiva e richiede la pipeline di ingestione unificata, che è disattivata. Chiedi a un amministratore di attivarla.'],
+  ])('maps upload_approval_requires_unified_pipeline in %s', (language, text) => {
+    expect(uploadErrorMessage(503, { error: 'upload_approval_requires_unified_pipeline' }, language)).toBe(text);
+  });
+
+  it.each([
+    ['en', 'The supported languages are not chosen, so this is unavailable. Choose them in the Languages panel.'],
+    ['zh', '尚未选择支持的语言，因此此功能不可用。请在“语言”面板中选择。'],
+    ['it', 'Le lingue supportate non sono scelte, quindi questa funzione non è disponibile. Sceglile nel pannello Lingue.'],
+  ])('maps languages_not_configured in %s', (language, text) => {
+    expect(uploadErrorMessage(503, { error: 'languages_not_configured' }, language)).toBe(text);
+  });
+
+  it('maps unknown_scope_value to the tag sentence', () => {
+    expect(uploadErrorMessage(400, { success: false, error: 'unknown_scope_value' }, 'en')).toBe(
+      'A chosen tag no longer exists. The tag list was reloaded; choose again.',
+    );
+  });
+
+  it('falls back to English for another locale', () => {
+    expect(uploadErrorMessage(503, { error: 'languages_not_configured' }, 'xx')).toBe(
+      uploadErrorMessage(503, { error: 'languages_not_configured' }, 'en'),
+    );
+  });
+
+  it('keeps today\'s messages for every other error', () => {
+    expect(uploadErrorMessage(500, { error: 'Failed to process document' }, 'zh')).toBe('Failed to process document');
+    expect(uploadErrorMessage(500, {}, 'en')).toBe('Unknown error occurred');
+    expect(uploadErrorMessage(504, { error: 'x' }, 'en')).toBe(
+      'Document processing is taking longer than expected. Please try with a smaller document or try again later.',
+    );
+    expect(uploadErrorMessage(500, { error: 'request timed out' }, 'en')).toContain('taking longer than expected');
+    expect(uploadErrorMessage(500, null, 'en')).toBe('Unknown error occurred');
   });
 });

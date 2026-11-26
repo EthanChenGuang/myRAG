@@ -733,3 +733,60 @@ describe('query layer', () => {
     expect(loadRagConfig({ RAG_PIPELINE: 'v2', RAG_QUERY_LAYER: 'true', RAG_QUERY_HYDE: 'true' })).not.toBe(on);
   });
 });
+
+describe('retrieval backend (D-11, D-24)', () => {
+  test('an empty env input gives pgvector for chat and voice and a 300 s lag bound', () => {
+    expect(loadRagConfig({}).backend).toEqual({ default: 'pgvector', voice: 'pgvector', maxLagSeconds: 300 });
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test('parses the chat and voice backends separately, normalising case and spaces', () => {
+    const config = loadRagConfig({ RAG_RETRIEVAL_BACKEND: 'qdrant', RAG_RETRIEVAL_BACKEND_VOICE: 'weaviate' });
+    expect(config.backend.default).toBe('qdrant');
+    expect(config.backend.voice).toBe('weaviate');
+    const mixed = loadRagConfig({ RAG_RETRIEVAL_BACKEND: '  Weaviate ', RAG_RETRIEVAL_BACKEND_VOICE: ' QDRANT' });
+    expect(mixed.backend).toMatchObject({ default: 'weaviate', voice: 'qdrant' });
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test('an unknown backend falls back to pgvector with one [RAG Config] warning naming the variable', () => {
+    const env = { RAG_RETRIEVAL_BACKEND: 'milvus', QDRANT_READ_API_KEY: 'placeholder-read-key' };
+    const config = loadRagConfig(env);
+    expect(config.backend.default).toBe('pgvector');
+    expect(config.backend.voice).toBe('pgvector');
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('RAG_RETRIEVAL_BACKEND');
+    expect(JSON.stringify(warn.mock.calls)).not.toContain('placeholder-read-key');
+    loadRagConfig({ ...env });
+    expect(configWarnings()).toHaveLength(1);
+  });
+
+  test('an unknown voice backend falls back to pgvector without touching the chat backend', () => {
+    const config = loadRagConfig({ RAG_RETRIEVAL_BACKEND: 'qdrant', RAG_RETRIEVAL_BACKEND_VOICE: 'faiss' });
+    expect(config.backend).toMatchObject({ default: 'qdrant', voice: 'pgvector' });
+    expect(configWarnings()).toHaveLength(1);
+    expect(configWarnings()[0]).toContain('RAG_RETRIEVAL_BACKEND_VOICE');
+  });
+
+  test.each(['0', '-5', 'abc', '1.5', ''])('a lag of %j falls back to 300', (value) => {
+    expect(loadRagConfig({ RAG_VECTOR_SYNC_MAX_LAG_SECONDS: value }).backend.maxLagSeconds).toBe(300);
+  });
+
+  test('a positive integer lag is kept', () => {
+    expect(loadRagConfig({ RAG_VECTOR_SYNC_MAX_LAG_SECONDS: ' 120 ' }).backend.maxLagSeconds).toBe(120);
+  });
+
+  test('RAG_PIPELINE=legacy still parses the backend values (the factory applies the legacy rule)', () => {
+    const config = loadRagConfig({ RAG_PIPELINE: 'legacy', RAG_RETRIEVAL_BACKEND: 'qdrant', RAG_VECTOR_SYNC_MAX_LAG_SECONDS: '60' });
+    expect(config.pipeline).toBe('legacy');
+    expect(config.backend).toEqual({ default: 'qdrant', voice: 'pgvector', maxLagSeconds: 60 });
+  });
+
+  test('the backend values are part of the memo key', () => {
+    const base = loadRagConfig({});
+    expect(loadRagConfig({ RAG_RETRIEVAL_BACKEND: 'qdrant' })).not.toBe(base);
+    expect(loadRagConfig({ RAG_RETRIEVAL_BACKEND_VOICE: 'qdrant' })).not.toBe(base);
+    expect(loadRagConfig({ RAG_VECTOR_SYNC_MAX_LAG_SECONDS: '60' })).not.toBe(base);
+  });
+});

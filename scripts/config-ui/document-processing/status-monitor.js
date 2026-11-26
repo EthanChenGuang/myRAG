@@ -366,6 +366,7 @@ const INGEST_STATUS_LABELS = {
     'status.quarantined': 'Quarantined',
     'status.needs_review': 'Needs review',
     'status.skipped_duplicate': 'Skipped, unchanged',
+    'status.pending_review': 'Awaiting approval',
     'status.dryRunReady': 'Dry run complete',
     'status.deleteReady': 'Removed',
     'status.provisional': 'Searchable, still improving',
@@ -414,6 +415,7 @@ const INGEST_STATUS_LABELS = {
     'status.quarantined': '已隔离',
     'status.needs_review': '待审核',
     'status.skipped_duplicate': '已跳过（未变化）',
+    'status.pending_review': '等待批准',
     'status.dryRunReady': '试运行完成',
     'status.deleteReady': '已移除',
     'status.provisional': '可检索，仍在优化',
@@ -462,6 +464,7 @@ const INGEST_STATUS_LABELS = {
     'status.quarantined': 'In quarantena',
     'status.needs_review': 'Da rivedere',
     'status.skipped_duplicate': 'Saltato, invariato',
+    'status.pending_review': 'In attesa di approvazione',
     'status.dryRunReady': 'Prova completata',
     'status.deleteReady': 'Rimosso',
     'status.provisional': 'Ricercabile, in miglioramento',
@@ -500,7 +503,7 @@ const INGEST_STATUS_LABELS = {
   },
 };
 
-const INGEST_TERMINAL_STATUSES = new Set(['ready', 'failed', 'needs_review', 'quarantined', 'skipped_duplicate']);
+const INGEST_TERMINAL_STATUSES = new Set(['ready', 'failed', 'needs_review', 'quarantined', 'skipped_duplicate', 'pending_review']);
 const INGEST_NON_TERMINAL = new Set(['queued', 'preflight', 'parsing', 'checking', 'chunking', 'embedding']);
 
 function fillIngestTemplate(text, vars) {
@@ -593,6 +596,9 @@ function ingestJobStatusView(job, locale) {
       terminal: true,
       showRetry: false,
     };
+  } else if (status === 'pending_review') {
+    icon = 'bi-hourglass';
+    colorClass = 'text-info';
   } else if (INGEST_NON_TERMINAL.has(status)) {
     icon = 'bi-arrow-repeat';
     colorClass = 'text-info';

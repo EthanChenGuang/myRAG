@@ -391,6 +391,30 @@ RAG_VOICE_TOKEN_TTL_SECONDS=3600
 VOICE_MAX_ACTIVE_ROOMS=4
 
 # -----------------------------
+# VECTOR BACKENDS (Phase 7)
+# -----------------------------
+# Where chat retrieval runs: pgvector | weaviate | qdrant (external backends apply only with RAG_PIPELINE=v2)
+RAG_RETRIEVAL_BACKEND=pgvector
+# Where voice retrieval runs: pgvector | weaviate | qdrant (set separately from chat)
+RAG_RETRIEVAL_BACKEND_VOICE=pgvector
+# Shared secret for the vector sync drain and reconcile calls (at least 32 characters)
+RAG_VECTOR_SYNC_SECRET=
+# Largest sync lag in seconds before an external index counts as not ready
+RAG_VECTOR_SYNC_MAX_LAG_SECONDS=300
+# Weaviate endpoint URL
+WEAVIATE_URL=
+# Weaviate write API key (sync only, never logged)
+WEAVIATE_API_KEY=
+# Weaviate read-only API key used by retrieval
+WEAVIATE_READ_API_KEY=
+# Qdrant endpoint URL
+QDRANT_URL=
+# Qdrant write API key (sync only, never logged)
+QDRANT_API_KEY=
+# Qdrant read-only API key used by retrieval
+QDRANT_READ_API_KEY=
+
+# -----------------------------
 # LANGFUSE TRACING
 # -----------------------------
 LANGFUSE_ENABLED=false
