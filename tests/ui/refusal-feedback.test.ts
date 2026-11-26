@@ -92,7 +92,7 @@ function findElement(node: unknown, match: (element: ReactElement<Record<string,
 }
 
 function fakeEvent(extra: Record<string, unknown> = {}) {
-  return { preventDefault: vi.fn(), stopPropagation: vi.fn(), button: 0, ...extra };
+  return { preventDefault: vi.fn(), stopPropagation: vi.fn(), button: 0, defaultPrevented: false, ...extra };
 }
 
 beforeEach(() => {
@@ -207,7 +207,7 @@ describe('source-open signal wiring', () => {
   }
 
   test('a citation chip of a traced message sends one signal per citation and still opens the panel', () => {
-    const fetch = vi.fn(async (_url: string, _init?: RequestInit) => new Response(null, { status: 204 }));
+    const fetch = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(async () => new Response(null, { status: 204 }));
     vi.stubGlobal('fetch', fetch);
     client.registerMessageTrace('m1', TRACE);
     const event = fakeEvent();

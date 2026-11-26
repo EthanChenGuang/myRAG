@@ -29,7 +29,9 @@ export function sourceOpenHandlers(source: Source) {
     if (traceId && sourceKey) postSourceOpened(traceId, sourceKey);
   };
   return {
-    onClick: (_event: React.MouseEvent<HTMLAnchorElement>) => signal(),
+    onClick: (event: React.MouseEvent<HTMLAnchorElement>) => {
+      if (!event.defaultPrevented) signal();
+    },
     onAuxClick: (event: React.MouseEvent<HTMLAnchorElement>) => {
       if (event.button === 1) signal();
     },
