@@ -83,6 +83,7 @@ export async function writeDocumentAttributes(
   documentId: string,
   explicit: IngestAttributeValues | undefined,
   signal: AbortSignal,
+  _options: { config?: IngestConfig } = {},
 ): Promise<{ origin: AttributeOrigin; keyCount: number }> {
   signal.throwIfAborted();
   const response = await db
@@ -201,7 +202,7 @@ export async function importAttributeRows(
   db: RpcClient,
   tenantKey: string,
   rows: readonly AttributeRowInput[],
-  options: { dryRun: boolean; signal: AbortSignal },
+  options: { dryRun: boolean; signal: AbortSignal; config?: IngestConfig },
 ): Promise<ImportAttributeRowsResult | AttributeCallFailure> {
   const result = await call(
     db,
@@ -260,4 +261,14 @@ export function uploadAttributesRefusal(result: Exclude<ValidateUploadAttributes
 export function attributesFormField(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   return typeof value === 'string' ? value : '';
+}
+
+/** Not implemented yet (plan 03.3-15 RED). */
+export async function renderDocumentHeaders(_db: RpcClient, _tenantKey: string, _documentIds: readonly string[], _signal: AbortSignal): Promise<{ ok: true; rendered: number }> {
+  return { ok: true, rendered: 0 };
+}
+
+/** Not implemented yet (plan 03.3-15 RED). */
+export async function renderPendingHeaders(_db: RpcClient, _tenantKey: string, _options: { signal: AbortSignal; deadlineMs: number }): Promise<{ ok: true; rendered: number; more: boolean }> {
+  return { ok: true, rendered: 0, more: false };
 }

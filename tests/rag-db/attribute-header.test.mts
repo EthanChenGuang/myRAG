@@ -474,3 +474,120 @@ describe('migration 1006 catalog and idempotence', () => {
     });
   }
 });
+
+// ---------------------------------------------------------------------------------------------------------------------------------------
+// Apply path (Task 3): the TypeScript re-render against the 1006 functions.
+// ---------------------------------------------------------------------------------------------------------------------------------------
+
+process.env.OPENAI_API_KEY ||= 'placeholder-openai-key';
+process.env.SUPABASE_SERVICE_ROLE_KEY ||= 'placeholder-service-role-key';
+process.env.NEXT_PUBLIC_SUPABASE_URL ||= 'http://127.0.0.1:9';
+process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||= 'placeholder-anon-key';
+
+const asParam = (value: unknown): unknown =>
+  value !== null && typeof value === 'object' && !(Array.isArray(value) && value.every((item) => typeof item !== 'object' || item === null))
+    ? JSON.stringify(value)
+    : value;
+
+function pgliteRpc(db: PGlite) {
+  return {
+    rpc(fn: string, args: Record<string, unknown>) {
+      const keys = Object.keys(args);
+      const sql = `SELECT * FROM ${fn}(${keys.map((key, index) => `${key} => $${index + 1}`).join(', ')})`;
+      const run = db
+        .query<Row>(sql, keys.map((key) => asParam(args[key])))
+        .then((result) => ({ data: result.rows, error: null }))
+        .catch((error: unknown) => {
+          const code = (error as { code?: unknown } | null)?.code;
+          return { data: null, error: { code: typeof code === 'string' ? code : 'P0001', message: messageOf(error) } };
+        });
+      const request = {
+        abortSignal: () => request,
+        then: (onFulfilled: (value: unknown) => unknown, onRejected?: (reason: unknown) => unknown) => run.then(onFulfilled, onRejected),
+      };
+      return request;
+    },
+  };
+}
+
+describe('apply path renders and stores headers (multi-tenant)', () => {
+  let db: PGlite;
+  let a: Tenant;
+  let b: Tenant;
+  const signal = new AbortController().signal;
+
+  before(async () => {
+    const setup = await setupDatabase('multi-tenant');
+    db = setup.db;
+    a = setup.a;
+    b = setup.b as Tenant;
+  });
+
+  after(async () => {
+    await db?.close();
+  });
+
+  test('apply, import and template change keep every document of the tenant stamped with the current version', async () => {
+    const { loadIngestConfig } = await import('@/lib/rag/ingest/config');
+    const { writeDocumentAttributes, importAttributeRows, renderPendingHeaders } = await import('@/lib/rag/ingest/attributes/apply');
+    const { resetHeaderTemplateCacheForTests } = await import('@/lib/rag/ingest/attributes/header');
+    const { resetIngestDepsForTests, setIngestDepsForTests } = await import('@/lib/rag/ingest/deps');
+    const rpc = pgliteRpc(db) as never;
+    setIngestDepsForTests({ db: () => rpc });
+    resetHeaderTemplateCacheForTests();
+    try {
+      const on = loadIngestConfig({ RAG_INGEST_PIPELINE: 'unified', RAG_DOC_ATTRIBUTES: 'true', RAG_ATTRIBUTE_HEADER: 'true' });
+      const off = loadIngestConfig({ RAG_INGEST_PIPELINE: 'unified', RAG_DOC_ATTRIBUTES: 'true' });
+
+      const quiet = await beginVersion(db, a, 'quiet-key');
+      await writeDocumentAttributes(rpc, a.key, quiet, { alpha_code: 'K-0' }, signal, { config: on });
+      assert.deepEqual(await documentHeader(db, quiet), { header: null, stamp: null }, 'no template: nothing stored');
+
+      await rows(db, SET_SQL, [a.admin, a.key, TEMPLATE]);
+      await rows(db, SET_SQL, [b.admin, b.key, '{alpha_code}']);
+      resetHeaderTemplateCacheForTests();
+
+      const offDoc = await beginVersion(db, a, 'off-key');
+      await writeDocumentAttributes(rpc, a.key, offDoc, { alpha_code: 'K-9' }, signal, { config: off });
+      assert.deepEqual(await documentHeader(db, offDoc), { header: null, stamp: null }, 'switch off: nothing stored');
+
+      const docA = await beginVersion(db, a, 'apply-key');
+      await writeDocumentAttributes(rpc, a.key, docA, { alpha_code: 'K-1', beta_list: ['b1', 'b2'] }, signal, { config: on });
+      const stored = await documentHeader(db, docA);
+      assert.equal(stored.header, 'A K-1 | B b1, b2');
+      assert.match(String(stored.stamp), /^t1\.[0-9a-f]{12}$/);
+
+      const bare = await beginVersion(db, a, 'bare-key');
+      await writeDocumentAttributes(rpc, a.key, bare, undefined, signal, { config: on });
+      const bareStored = await documentHeader(db, bare);
+      assert.equal(bareStored.header, '');
+      assert.match(String(bareStored.stamp), /^t1\./);
+
+      const imported = await importAttributeRows(rpc, a.key, [{ source: SOURCE, sourceKey: 'apply-key', attributes: { alpha_code: 'K-2' } }], {
+        dryRun: false,
+        signal,
+        config: on,
+      });
+      assert.equal(imported.ok, true);
+      assert.equal((await documentHeader(db, docA)).header, 'A K-2');
+
+      const docB = await beginVersion(db, b, 'apply-key-b');
+      await writeDocumentAttributes(rpc, b.key, docB, { alpha_code: 'K-B' }, signal, { config: on });
+      const stampB = (await documentHeader(db, docB)).stamp;
+      assert.match(String(stampB), /^t1\./);
+
+      await rows(db, SET_SQL, [a.admin, a.key, '{beta_list} | {alpha_code}']);
+      resetHeaderTemplateCacheForTests();
+      const result = await renderPendingHeaders(rpc, a.key, { signal, deadlineMs: 20_000 });
+      assert.deepEqual([result.ok, (result as { more?: boolean }).more], [true, false]);
+      const tenantStamps = await rows(db, "SELECT attribute_header_stamp AS s FROM documents WHERE tenant_key = $1 AND status <> 'deleted'", [a.key]);
+      assert.ok(tenantStamps.length >= 4);
+      assert.ok(tenantStamps.every((row) => /^t2\./.test(String(row.s))), 'every document of A carries version 2');
+      assert.equal((await documentHeader(db, docB)).stamp, stampB, "B's document is untouched");
+      assert.equal((await documentHeader(db, docA)).header, 'K-2');
+    } finally {
+      resetIngestDepsForTests();
+      resetHeaderTemplateCacheForTests();
+    }
+  });
+});
