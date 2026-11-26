@@ -85,6 +85,15 @@ function createTokenBasedChunks(text: string, maxTokens: number = 600, overlapTo
   return chunks;
 }
 
+function plainTitle(text: string): string {
+  return text
+    .replace(/^\s*(#{1,6}\s+|[-*+>]\s+|\d+\.\s+)/gm, '')
+    .replace(/[*_`~]+/g, '')
+    .replace(/^["'\u201c\u2018]+|["'\u201d\u2019]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 // Generate a title using OpenAI
 async function generateTitle(content: string): Promise<string> {
   try {
@@ -104,13 +113,15 @@ async function generateTitle(content: string): Promise<string> {
       temperature: 0.7,
     });
 
-    const title = response.choices[0]?.message?.content?.trim() || 'AI Response';
-    return title;
+    return plainTitle(response.choices[0]?.message?.content ?? '') || 'AI Response';
   } catch (error) {
     console.error('[AI to RAG] Title generation failed:', error instanceof Error ? error.message : 'unknown error');
     // Fallback: Extract first sentence or use default
-    const firstSentence = content.match(/^[^.!?]+[.!?]/)?.[0]?.trim();
-    return firstSentence ? firstSentence.substring(0, 50) + '...' : 'AI Response';
+    const firstLine = content.split('\n').find((line) => plainTitle(line) !== '') ?? '';
+    const plain = plainTitle(firstLine);
+    const firstSentence = plain.match(/^[^.!?]+[.!?]?/)?.[0]?.trim();
+    if (!firstSentence) return 'AI Response';
+    return firstSentence.length > 50 ? firstSentence.substring(0, 50).trim() + '...' : firstSentence;
   }
 }
 
