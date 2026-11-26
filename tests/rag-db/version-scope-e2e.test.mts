@@ -61,15 +61,20 @@ if (MODE === undefined) {
   describe('version scope end to end in both deployment modes', () => {
     for (const mode of ['single-tenant', 'multi-tenant'] as const) {
       test(mode, () => {
-        const result = spawnSync(process.execPath, ['--import', 'tsx', '--test', '--test-reporter=spec', SELF], {
+        // NODE_TEST_CONTEXT makes a nested node --test skip its files, so the child must not inherit it.
+        const { NODE_TEST_CONTEXT: _context, ...parentEnv } = process.env;
+        const result = spawnSync(process.execPath, ['--import', 'tsx', '--test', '--test-reporter=tap', SELF], {
           cwd: REPO_ROOT,
           encoding: 'utf8',
-          env: { ...process.env, [MODE_ENV]: mode },
+          env: { ...parentEnv, [MODE_ENV]: mode },
           timeout: 600_000,
         });
         const output = `${result.stdout}\n${result.stderr}`;
-        assert.equal(result.status, 0, output.split('\n').filter((line) => /✖|not ok|Error|assert|expected|actual/i.test(line)).slice(0, 80).join('\n'));
-        assert.ok(!/# tests 0\b/.test(output), 'the child ran no tests');
+        const failures = output.split('\n').filter((line) => /not ok|AssertionError|expected|actual|found|Error/.test(line)).slice(0, 80).join('\n');
+        assert.equal(result.status, 0, failures || output.slice(-2000));
+        const passed = Number(/^# pass (\d+)$/m.exec(output)?.[1] ?? '0');
+        assert.ok(passed > 0, `the child ran no tests:\n${output.slice(-2000)}`);
+        assert.match(output, /^# fail 0$/m);
       });
     }
   });
