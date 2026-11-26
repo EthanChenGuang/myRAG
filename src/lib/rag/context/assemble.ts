@@ -61,6 +61,12 @@ export interface AssembleInput<C extends AssemblyCandidate = AssemblyCandidate> 
   versionLabels?: ReadonlyMap<string, string>;
 }
 
+/** D-17: a matched table row as the table leg found it; header names key the cells. */
+export interface TableRowAttachment {
+  header: string[];
+  cells: Record<string, string>;
+}
+
 export interface FilteredCandidates<C extends AssemblyCandidate = AssemblyCandidate> {
   hasQuery: boolean;
   queryTerms: string[];

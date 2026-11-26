@@ -7,7 +7,7 @@ import type { FusedHit } from '../fusion/rrf';
 import type { ChunkWithScore } from '../rerank/local-hybrid';
 import { assembleDisabledStatus, deriveStatus, failure, injectionFilteredAll, injectionReason } from '../pipeline';
 import type { VoiceResults } from '../context/voice';
-import { evalRetrievalOverrides, hashedChunkingProfiles } from './overrides';
+import { evalRetrievalOverrides, evalTuningOverrides, hashedChunkingProfiles } from './overrides';
 import { loadThresholds } from '../refusal/thresholds';
 import type { RefusalRecord } from '../refusal/types';
 import { describeReranker } from '../rerank/select';
@@ -119,7 +119,10 @@ export async function requestRetrievalConfigHash(ctx: RequestConfigHashInput): P
       ...(config.monolingual ? { monolingual: true as const } : {}),
     },
     security: securityHashComponent(security, { multiTenant: isMultiTenant() }),
-    tuning: tuningHashComponent(config, effectiveTuningParams(profile, config, undefined, { embeddingProfileId: ctx.embeddingProfileId })),
+    tuning: tuningHashComponent(
+      config,
+      effectiveTuningParams(profile, config, evalTuningOverrides(profile, input.stageOverrides?.retrievalOverrides), { embeddingProfileId: ctx.embeddingProfileId }),
+    ),
     ...(ctx.bindingHash ?? {}),
     ...(ctx.translationHash ?? {}),
     ...(ctx.queryLayerHash ? { queryLayer: ctx.queryLayerHash } : {}),
