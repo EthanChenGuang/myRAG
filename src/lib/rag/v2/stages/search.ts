@@ -21,6 +21,7 @@ import type { TenantScope } from '../../tenant/scope';
 import type { TraceCollector } from '../../trace/collector';
 import type { Profile, QueryVariant, RunRetrievalInput, StageOverrides } from '../../types';
 import { getV2StartupVerdict } from '../startup';
+import { terminologyParams } from '../../terminology/expand';
 import { evalChunkingOverride } from '../overrides';
 import { createRetrievalPort, listsFromLegs, variantSearchRequest, type RetrievalPortHandle } from '../port';
 import { bindingFailureDetail, hasBindingWork, runBindingLegs, type BindingEmbed, type BindingLegsOutput, type BindingLegsPlan } from './binding-legs';
@@ -309,6 +310,9 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
   const icuSkipLexical = lexicalEnabled && !verdict.icuAvailable;
   const chunkingOverride = evalChunkingOverride(profile, stageOverrides?.retrievalOverrides);
   const bindings = ctx.bindings && hasBindingWork(ctx.bindings.plan) ? ctx.bindings : null;
+  // D-18, D-34: the terminology variant's dense list weighs dense_weight × the dense leg weight in force, read at run time.
+  const terminologyDenseWeight = ctx.terminologyDenseWeight ?? terminologyParams().dense_weight;
+  const denseFactor = (index: number): number => (variants[index]?.kind === 'terminology' ? terminologyDenseWeight : 1);
   const searchSpec = spec('search', 'throw');
   const bindingTimeoutMs = Math.max(
     1,
@@ -388,6 +392,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       embed: async () => variants.map((_variant, index) => ctx.variantEmbeddings?.[index] ?? embedding),
       lexicalEnabled: lexicalEnabled && verdict.icuAvailable,
       ...(chunkingOverride ? { chunkingProfileOverride: chunkingOverride } : {}),
+      terminologyDenseWeight,
     });
     let order: unknown;
     try {
@@ -575,7 +580,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
         if (delegated) {
           fusedHits = delegatedFusion(delegated, extraLists, params.rrf_k);
         } else {
-          const lists = searchValue.flatMap((legs, index) => listsFromLegs(index, legs.dense, legs.lexical, params));
+          const lists = searchValue.flatMap((legs, index) => listsFromLegs(index, legs.dense, legs.lexical, params, denseFactor(index)));
           lists.push(...extraLists);
           fusedHits = rrf(lists, params.rrf_k);
         }

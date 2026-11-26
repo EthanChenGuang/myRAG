@@ -28,7 +28,8 @@ function recordingBackend(): { backend: RetrievalBackend; requests: BackendSearc
     async search(req): Promise<BackendLegs> {
       requests.push(req);
       if (req.denseVector === null) return { dense: [], lexical: [hit('gold', { rank: 1, lexicalScore: 1 })] };
-      return { dense: [hit('a', { rank: 1, similarity: 0.9 }), hit('gold', { rank: 2, similarity: 0.8 })], lexical: [hit('a', { rank: 1, lexicalScore: 1 })] };
+      const lexical = req.lexicalTokens.length > 0 ? [hit('a', { rank: 1, lexicalScore: 1 })] : [];
+      return { dense: [hit('a', { rank: 1, similarity: 0.9 }), hit('gold', { rank: 2, similarity: 0.8 })], lexical };
     },
     health: async () => ({ ok: true }),
     isReady: async () => true,
