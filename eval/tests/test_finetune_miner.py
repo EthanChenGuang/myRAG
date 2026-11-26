@@ -537,3 +537,283 @@ def test_vectors_run_refuses_a_kept_file_changed_after_the_manifest(tmp_path):
     kept = run_dir / "queries.kept.jsonl"
     kept.write_text("\n".join(kept.read_text().splitlines()[:-1]) + "\n")
     assert miner.run_mine(run_dir, fixture=True, skip_audit=True).exit_code == 1
+
+
+# --- Task 3: false-negative audit, report, round trip, st backend --------------------------------------------
+
+import os  # noqa: E402
+import textwrap  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+from finetune_fakes import FakeQueryLLM  # noqa: E402
+
+from rag_eval.finetune import cli  # noqa: E402
+
+PRICED = {"input_usd_per_mtok": 1.0, "output_usd_per_mtok": 5.0}
+
+
+def _priced_config(**mining):
+    config = load_finetune_config()
+    prices = config.prices.model_copy(update={"judge": config.prices.judge.model_validate(PRICED)})
+    return config.model_copy(update={"prices": prices, "mining": _params(**mining)})
+
+
+def _counting_judge(answerable_first: int):
+    seen = []
+
+    def rule(item):
+        seen.append((item.query, item.chunk_text))
+        return (len(seen) <= answerable_first, 0.9)
+
+    return FakeQueryLLM(judge_rule=rule), seen
+
+
+def _audit_bundle(tmp_path):
+    return _write_bundle(tmp_path, n_chunks=40, n_queries=20)
+
+
+def test_fn_audit_zero_of_fifty_answerable_passes(tmp_path, capsys):
+    run_dir, chunks = _audit_bundle(tmp_path)
+    llm, seen = _counting_judge(0)
+    config = _priced_config(relative_margin=0.05, num_negatives=5, range_max=20)
+    result = miner.run_mine(run_dir, budget_usd=5.0, config=config, llm=llm)
+    assert result.exit_code == 0
+    audit = result.report.fn_audit
+    assert (audit.sampled, audit.answerable, audit.skipped, audit.passed) == (50, 0, False, True)
+    assert 0.05 < audit.upper_95 < 0.08
+    assert len(seen) == 50 and llm.judge_calls >= 1
+    report = MiningReport.model_validate_json((run_dir / "mining-report.json").read_text())
+    assert report == result.report
+    out = capsys.readouterr().out
+    assert "fn_audit=passed sampled=50 answerable=0" in out
+    assert all(c.text not in out for c in chunks)
+
+
+def test_fn_audit_twelve_of_fifty_answerable_exits_6(tmp_path, capsys):
+    run_dir, _ = _audit_bundle(tmp_path)
+    (run_dir / "train_ntuple.jsonl").write_text("stale\n")
+    llm, _ = _counting_judge(12)
+    config = _priced_config(relative_margin=0.05, num_negatives=5, range_max=20)
+    result = miner.run_mine(run_dir, budget_usd=5.0, config=config, llm=llm)
+    assert result.exit_code == 6
+    audit = result.report.fn_audit
+    assert (audit.sampled, audit.answerable, audit.passed) == (50, 12, False)
+    assert audit.upper_95 > 0.15
+    report = MiningReport.model_validate_json((run_dir / "mining-report.json").read_text())
+    assert not report.fn_audit.passed
+    for name in ("train_ntuple.jsonl", "train_pairs.jsonl", "dev.jsonl"):
+        assert not (run_dir / name).exists()
+        assert name not in bundle.read_manifest(run_dir).files
+    err = capsys.readouterr().err
+    assert "relative_margin" in err and "range_min" in err
+
+
+def test_fn_audit_sample_is_seeded(tmp_path):
+    run_dir, _ = _audit_bundle(tmp_path)
+    config = _priced_config(relative_margin=0.05, num_negatives=5, range_max=20)
+    first_llm, first = _counting_judge(0)
+    second_llm, second = _counting_judge(0)
+    third_llm, third = _counting_judge(0)
+    assert miner.run_mine(run_dir, budget_usd=5.0, config=config, llm=first_llm, seed=3).exit_code == 0
+    assert miner.run_mine(run_dir, budget_usd=5.0, config=config, llm=second_llm, seed=3).exit_code == 0
+    assert miner.run_mine(run_dir, budget_usd=5.0, config=config, llm=third_llm, seed=4).exit_code == 0
+    assert first == second and first != third
+
+
+def test_fn_audit_refusals_budget_prices_and_skip_rules(tmp_path, capsys):
+    run_dir, _ = _audit_bundle(tmp_path)
+    priced = _priced_config(relative_margin=0.05, num_negatives=5, range_max=20)
+    llm = FakeQueryLLM()
+    assert miner.run_mine(run_dir, config=priced, llm=llm).exit_code == 2
+    assert miner.run_mine(run_dir, skip_audit=True, config=priced, llm=llm).exit_code == 2
+    assert miner.run_mine(run_dir, budget_usd=5.0, config=load_finetune_config(), llm=llm).exit_code == 2
+    assert miner.run_mine(run_dir, budget_usd=5.0, config=_priced_config(fn_audit_sample=0), llm=llm).exit_code == 2
+    assert miner.run_mine(run_dir, model="some/model", fixture=True, skip_audit=True).exit_code == 2
+    assert llm.judge_calls == 0
+    assert not (run_dir / "mining-report.json").exists()
+    err = capsys.readouterr().err
+    assert "budget_required" in err and "prices_unknown" in err
+
+
+def test_fn_audit_budget_stop_exits_5_and_writes_nothing(tmp_path):
+    run_dir, _ = _audit_bundle(tmp_path)
+    llm = FakeQueryLLM()
+    config = _priced_config(relative_margin=0.05, num_negatives=5, range_max=20)
+    assert miner.run_mine(run_dir, budget_usd=1e-9, config=config, llm=llm).exit_code == 5
+    assert llm.judge_calls == 0
+    for name in ("train_ntuple.jsonl", "mining-report.json"):
+        assert not (run_dir / name).exists()
+
+
+def test_fn_audit_skipped_in_fixture_mode_is_recorded(tmp_path):
+    run_dir, _ = _audit_bundle(tmp_path)
+    llm = FakeQueryLLM()
+    result = miner.run_mine(run_dir, fixture=True, skip_audit=True, llm=llm)
+    assert result.exit_code == 0 and llm.judge_calls == 0
+    audit = MiningReport.model_validate_json((run_dir / "mining-report.json").read_text()).fn_audit
+    assert audit.skipped and audit.upper_95 is None and audit.sampled == 0
+
+
+def test_report_records_the_parameters_used(tmp_path):
+    run_dir, _ = _audit_bundle(tmp_path)
+    config = load_finetune_config().model_copy(
+        update={"mining": _params(relative_margin=0.1, num_negatives=4, range_min=1, range_max=15, sampling_strategy="random")}
+    )
+    assert miner.run_mine(run_dir, fixture=True, skip_audit=True, config=config).exit_code == 0
+    report = MiningReport.model_validate_json((run_dir / "mining-report.json").read_text())
+    assert report.params == config.mining
+    assert report.round_trip_k is None and report.round_trip_miss == 0
+    assert report.with_full_negatives + report.pairs_only == report.pairs
+    text = (run_dir / "mining-report.json").read_text()
+    assert "record " not in text and "entry " not in text
+
+
+def test_round_trip_k_drops_pairs_whose_positive_is_outside_the_top_k(tmp_path):
+    run_dir, chunks = _audit_bundle(tmp_path)
+    encoder = StoredVectorsEncoder.from_bundle(run_dir, TENANT_A, PROFILE)
+    train = [c for c in chunks if c.tenant_key == TENANT_A]
+    documents = encoder.encode_documents([TextItem(c.chunk_id, c.text) for c in train])
+    expected = set()
+    for i in range(20):
+        query = encoder.encode_queries([TextItem(f"a-q{i}", "")])[0]
+        scores = documents @ query
+        if int(np.count_nonzero(scores > scores[i])) >= 1:
+            expected.add(f"a-q{i}")
+    assert expected, "the fixture must contain at least one round-trip miss"
+    result = miner.run_mine(run_dir, fixture=True, skip_audit=True, round_trip_k=1)
+    assert result.exit_code == 0
+    report = result.report
+    assert report.round_trip_k == 1 and report.params.round_trip_k == 1
+    assert report.round_trip_miss == len(expected)
+    assert {p.pair_id for p in result.pairs}.isdisjoint(expected)
+    assert report.pairs == 20 - len(expected)
+
+
+def test_cli_dispatches_mine(tmp_path):
+    run_dir, _ = _audit_bundle(tmp_path)
+    assert cli.main(["mine", "--bundle", str(run_dir), "--fixture", "--skip-audit"]) == 0
+    assert (run_dir / "train_ntuple.jsonl").is_file()
+    assert cli.main(["mine", "--bundle", str(run_dir), "--round-trip-k", "0", "--fixture", "--skip-audit"]) == 2
+    assert cli.main(["mine", "--bundle", str(tmp_path / "missing"), "--fixture", "--skip-audit"]) == 2
+
+
+def test_session_runs_hugging_face_offline():
+    for name in ("HF_HUB_OFFLINE", "HF_DATASETS_OFFLINE", "TRANSFORMERS_OFFLINE"):
+        assert os.environ.get(name) == "1"
+
+
+def test_finetune_train_required_turns_a_skip_into_a_failure(tmp_path):
+    tests_dir = Path(__file__).parent
+    (tmp_path / "conftest.py").write_text(
+        f"import sys\nsys.path.insert(0, {str(tests_dir)!r})\nfrom _finetune_guard import pytest_runtest_makereport\n"
+    )
+    (tmp_path / "pytest.ini").write_text("[pytest]\nmarkers =\n    finetune_train: tiny training\n")
+    (tmp_path / "test_probe.py").write_text(
+        textwrap.dedent(
+            """
+            import pytest
+
+            @pytest.mark.finetune_train
+            def test_needs_the_extra():
+                pytest.importorskip("a_module_that_is_not_installed")
+
+            def test_plain_skip():
+                pytest.skip("unrelated")
+            """
+        )
+    )
+    command = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", str(tmp_path)]
+    env = {k: v for k, v in os.environ.items() if k != "FINETUNE_TRAIN_REQUIRED"}
+    relaxed = subprocess.run(command, cwd=tmp_path, env=env, capture_output=True, text=True)
+    assert relaxed.returncode == 0, relaxed.stdout
+    assert "2 skipped" in relaxed.stdout
+    strict = subprocess.run(command, cwd=tmp_path, env={**env, "FINETUNE_TRAIN_REQUIRED": "1"}, capture_output=True, text=True)
+    assert strict.returncode == 1, strict.stdout
+    assert "1 failed" in strict.stdout and "1 skipped" in strict.stdout
+
+
+# --- finetune_train: the st backend on a tiny in-test StaticEmbedding model -----------------------------------
+
+
+def _tiny_model(texts, dims=24, seed=3):
+    sentence_transformers = pytest.importorskip("sentence_transformers")
+    from sentence_transformers.sentence_transformer.modules import StaticEmbedding
+    from tokenizers import Tokenizer, models, pre_tokenizers
+
+    vocab = {"[UNK]": 0}
+    for text in texts:
+        for word in text.lower().split():
+            vocab.setdefault(word, len(vocab))
+    tokenizer = Tokenizer(models.WordLevel(vocab=vocab, unk_token="[UNK]"))
+    tokenizer.pre_tokenizer = pre_tokenizers.Whitespace()
+    weights = np.random.default_rng(seed).normal(size=(len(vocab), dims)).astype(np.float32)
+    module = StaticEmbedding(tokenizer, embedding_weights=weights)
+    return sentence_transformers.SentenceTransformer(modules=[module], device="cpu")
+
+
+def _st_fixture(tenant=TENANT_A, prefix="c-", split_of=lambda i: "train"):
+    texts = _fixture_texts(20)
+    chunks = [_chunk(f"{prefix}{i}", text, doc=i + 1, tenant=tenant, split=split_of(i)) for i, text in enumerate(texts)]
+    pairs = [
+        _pair(f"{prefix}q{i}", f"{WORDS[i % 12]} {WORDS[(i * 5 + 3) % 12]} entry {i}", chunks[i], split=chunks[i].split)
+        for i in range(8)
+    ]
+    return chunks, pairs
+
+
+@pytest.mark.finetune_train
+def test_st_signature_has_every_parameter_used():
+    pytest.importorskip("sentence_transformers")
+    import inspect as inspect_module
+
+    from sentence_transformers.util import mine_hard_negatives
+
+    parameters = inspect_module.signature(mine_hard_negatives).parameters
+    assert set(miner.ST_PARAMETERS) <= set(parameters)
+    assert miner._st_function() is mine_hard_negatives
+
+
+@pytest.mark.finetune_train
+def test_st_parity_both_miners_pick_the_same_negatives():
+    chunks, pairs = _st_fixture()
+    model = _tiny_model([c.text for c in chunks] + [p.anchor for p in pairs])
+    for overrides in (
+        {"relative_margin": 0.05, "num_negatives": 3, "range_max": 10},
+        {"relative_margin": None, "absolute_margin": 0.02, "num_negatives": 4, "range_min": 1, "range_max": 12},
+        {"relative_margin": 0.05, "num_negatives": 3, "range_max": 10, "sampling_strategy": "random"},
+    ):
+        params = _params(**overrides)
+        by_vectors = miner.mine_vectors(pairs, chunks, encoders.SentenceTransformerEncoder(model), params, seed=5)
+        by_st = miner.mine_st(pairs, chunks, model, params, seed=5)
+        assert [[n.chunk_id for n in p.negatives] for p in by_st] == [[n.chunk_id for n in p.negatives] for p in by_vectors]
+        assert sum(len(p.negatives) for p in by_st) > 0
+
+
+@pytest.mark.finetune_train
+def test_st_two_tenants_and_split_rule():
+    split_of = lambda i: ("train", "train", "dev", "test")[i % 4]  # noqa: E731
+    a_chunks, a_pairs = _st_fixture(TENANT_A, "a-", split_of)
+    b_chunks, b_pairs = _st_fixture(TENANT_B, "b-", split_of)
+    chunks = a_chunks + b_chunks
+    pairs = [p for p in a_pairs + b_pairs if p.split != "test"]
+    model = _tiny_model([c.text for c in chunks] + [p.anchor for p in pairs])
+    mined = miner.mine_st(pairs, chunks, model, _params(relative_margin=None, num_negatives=3, range_max=10))
+    by_id = {(c.tenant_key, c.chunk_id): c for c in chunks}
+    assert any(p.negatives for p in mined)
+    for pair in mined:
+        prefix = "a-" if pair.tenant_key == TENANT_A else "b-"
+        assert all(n.chunk_id.startswith(prefix) for n in pair.negatives)
+        splits = {by_id[(pair.tenant_key, n.chunk_id)].split for n in pair.negatives}
+        assert splits <= ({"train"} if pair.split == "train" else {"train", "dev"})
+
+
+@pytest.mark.finetune_train
+def test_st_run_writes_the_same_outputs_shape(tmp_path):
+    run_dir, chunks = _write_bundle(tmp_path, n_chunks=20, n_queries=10, vectors=False)
+    model = _tiny_model([c.text for c in chunks] + [f"{WORDS[i % 12]} {WORDS[(i * 5 + 3) % 12]} entry {i}" for i in range(10)])
+    config = load_finetune_config().model_copy(update={"mining": _params(relative_margin=0.05, num_negatives=3, range_max=10)})
+    result = miner.run_mine(run_dir, miner="st", fixture=True, skip_audit=True, config=config, st_model=model)
+    assert result.exit_code == 0
+    report = MiningReport.model_validate_json((run_dir / "mining-report.json").read_text())
+    assert report.miner == "st" and report.pairs == 10
+    assert (run_dir / "train_ntuple.jsonl").is_file() and (run_dir / "train_pairs.jsonl").is_file()
