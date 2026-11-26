@@ -1,5 +1,6 @@
 import type { QueryFramework } from '../config';
 import { getRagDeps } from '../deps';
+import { DEFAULT_POST_CHECK_LIMITS, type PostCheckLimits } from './post-checks';
 import type { CondensedQuery } from '@/lib/rag-eval/contracts.generated';
 import { finishCondense, llamaindexCondense, type CondenseInput, type CondenseResult } from './llamaindex/condense';
 import { finishDecompose, nativeDecompose, type DecomposeInput, type DecomposeResult, type FinishDecomposeInput } from './llamaindex/decompose';
@@ -74,6 +75,8 @@ export interface QueryTransformFinishers {
   /** The translate calls to make: targets picked and the shared prompt rendered (research A-6). */
   translateRequests(input: TranslateRequestInput): TranslateRequest[];
   translate(input: TranslateRequestInput, outcomes: readonly TranslateCallOutcome[]): NativeTranslateResult;
+  /** The D-15 limits a transform uses when its input carries none. */
+  readonly defaultLimits: Readonly<PostCheckLimits>;
 }
 
 export const QUERY_TRANSFORM_FINISHERS: QueryTransformFinishers = Object.freeze({
@@ -83,4 +86,5 @@ export const QUERY_TRANSFORM_FINISHERS: QueryTransformFinishers = Object.freeze(
   decompose: finishDecompose,
   translateRequests,
   translate: finishTranslate,
+  defaultLimits: DEFAULT_POST_CHECK_LIMITS,
 });
