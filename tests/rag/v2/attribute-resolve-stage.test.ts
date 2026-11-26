@@ -249,7 +249,7 @@ describe('attribute_resolve stage (03.3-19, D-29, D-30)', () => {
   it('soft: no automatic id is intersected; the hard-eligible ids become soft ids', async () => {
     resolverState.mode = 'hard';
     const { requests, record } = await run({ filter: 'soft' });
-    expect(requests[0]!.filters.documentIds).toBeUndefined();
+    expect(requests.map((req) => req.filters.documentIds)).toEqual(expect.arrayContaining([undefined, [DOC(1), DOC(2)]]));
     expect(record?.counts).toMatchObject({ hard_ids: 2, soft_ids: 2 });
   });
 
@@ -258,7 +258,8 @@ describe('attribute_resolve stage (03.3-19, D-29, D-30)', () => {
     const hard = await run({ explicit: { alpha_code: ['zeta-17'] } });
     expect(hard.requests[0]!.filters.documentIds).toEqual([DOC(1)]);
     const soft = await run({ filter: 'soft', explicit: { alpha_code: ['zeta-17'] } });
-    expect(soft.requests[0]!.filters.documentIds).toEqual([DOC(1), DOC(7)]);
+    expect(soft.requests.map((req) => req.filters.documentIds)).toEqual(expect.arrayContaining([[DOC(1), DOC(7)], [DOC(1)]]));
+    for (const req of soft.requests) expect([DOC(1), DOC(7)]).toEqual(expect.arrayContaining(req.filters.documentIds ?? ['unfiltered']));
   });
 
   it('an explicit filter above the cap still narrows to its capped ids', async () => {
@@ -271,7 +272,7 @@ describe('attribute_resolve stage (03.3-19, D-29, D-30)', () => {
   it('too broad: nothing is intersected, the ids are soft and the detail carries the code', async () => {
     resolverState.mode = 'too_broad';
     const { requests, record } = await run();
-    expect(requests[0]!.filters.documentIds).toBeUndefined();
+    expect(requests.map((req) => req.filters.documentIds)).toEqual(expect.arrayContaining([undefined, [DOC(5), DOC(6)]]));
     expect(record?.counts).toMatchObject({ too_broad: 1, soft_ids: 2 });
     expect(record?.detail).toContain('attribute_filter_too_broad');
   });
