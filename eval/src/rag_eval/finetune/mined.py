@@ -127,7 +127,8 @@ class _Candidate:
 
 
 def strictest_split(splits: Iterable[FinetuneSplit]) -> FinetuneSplit:
-    return "train"
+    """test > dev > train."""
+    return max(splits, key=SPLIT_ORDER.index, default="train")
 
 
 def cluster_queries(
@@ -136,7 +137,28 @@ def cluster_queries(
     ngram: int = filters.DEFAULT_NEAR_DUP_NGRAM,
     threshold: float = filters.DEFAULT_NEAR_DUP_JACCARD,
 ) -> list[int]:
-    return list(range(len(rows)))
+    """Cluster id per (tenant_key, query) row: union-find over pairs of one tenant whose normalised character n-gram
+    Jaccard is >= threshold. The id is the index of the cluster's first member."""
+    parent = list(range(len(rows)))
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    by_tenant: dict[str, list[int]] = {}
+    for index, (tenant_key, _) in enumerate(rows):
+        by_tenant.setdefault(tenant_key, []).append(index)
+    grams = [char_ngrams(normalize(query), ngram) for _, query in rows]
+    for indices in by_tenant.values():
+        for position, i in enumerate(indices):
+            for j in indices[position + 1 :]:
+                if grams[i] and grams[j] and jaccard(grams[i], grams[j]) >= threshold:
+                    root_i, root_j = find(i), find(j)
+                    if root_i != root_j:
+                        parent[max(root_i, root_j)] = min(root_i, root_j)
+    return [find(i) for i in range(len(rows))]
 
 
 def _read_rows(path: Path) -> tuple[int, list[TrainingPair | None]]:
@@ -289,7 +311,7 @@ def run_import_mined(
     chunks_by_key = {(chunk.tenant_key, chunk.chunk_id): chunk for chunk in chunks}
     candidates, dropped = _check_rows(rows, set(manifest.tenant_keys), chunks_by_key)
     held_out = sum(1 for c in candidates if c.pair.split == "held_out")
-    promoted = 0
+    promoted = _apply_clusters(candidates, config)
     _apply_filters(candidates, golden, config)
     for candidate in candidates:
         if candidate.reason is not None:
