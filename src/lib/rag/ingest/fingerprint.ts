@@ -263,7 +263,8 @@ export function expectedFingerprintFor(
     }
   }
 
-  const { chunk_prep: _storedChunkPrep, ...rest } = stored;
+  const rest: Partial<IngestFingerprintParts> = { ...stored };
+  delete rest.chunk_prep;
   const next = IngestFingerprintPartsSchema.parse({
     ...rest,
     embedding_text_version: embeddingTextVersionFor(stored, switches),
