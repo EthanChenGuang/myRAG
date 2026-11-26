@@ -618,6 +618,11 @@
           "$ref": "#/$defs/NoticeTexts"
         }
       },
+      "required": [
+        "notices",
+        "labels",
+        "instructions"
+      ],
       "title": "LanguageTexts",
       "type": "object"
     },

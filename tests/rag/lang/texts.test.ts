@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { getLanguageRegistry, resetLanguageRegistryForTests, setLanguageRegistryForTests } from '@/lib/rag/lang/registry';
+import { getLanguageRegistry, resetLanguageRegistryForTests, setLanguageRegistryForTests, TEXT_KEYS } from '@/lib/rag/lang/registry';
+import { LanguagePackSchema } from '@/lib/rag-eval/contracts.generated';
 import { resetLanguageSettingsForTests } from '@/lib/rag/lang/settings';
 import { fixedText, MissingTextParameterError, registryPackVersion, type TextKey } from '@/lib/rag/lang/texts';
 
@@ -100,6 +101,12 @@ describe('fixedText (D-08)', () => {
         for (const pack of rest) expect(placeholders(pack.texts[group][name]), `${pack.code} ${group}.${name}`).toEqual(placeholders(text));
       }
     }
+  });
+
+  it('TEXT_KEYS lists exactly the keys of the generated contract', () => {
+    const groups = LanguagePackSchema.shape.texts.shape;
+    const fromSchema = Object.entries(groups).flatMap(([group, schema]) => Object.keys(schema.shape).map((name) => `${group}.${name}`));
+    expect([...TEXT_KEYS].sort()).toEqual(fromSchema.sort());
   });
 
   it('registryPackVersion joins each pack version in registry order', () => {

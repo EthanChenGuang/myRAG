@@ -149,9 +149,9 @@ class InstructionTexts(_TextGroup):
 
 
 class LanguageTexts(_Contract):
-    notices: NoticeTexts = Field(default_factory=NoticeTexts)
-    labels: LabelTexts = Field(default_factory=LabelTexts)
-    instructions: InstructionTexts = Field(default_factory=InstructionTexts)
+    notices: NoticeTexts
+    labels: LabelTexts
+    instructions: InstructionTexts
 
 
 _TEXT_GROUPS: tuple[tuple[str, type[_TextGroup]], ...] = (
