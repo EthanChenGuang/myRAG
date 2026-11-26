@@ -22,6 +22,12 @@ const LANGUAGE_VALUES = registryCodes();
 
 const amountPattern = /^-?\d+(\.\d{1,4})?$/;
 
+/** D-38: the three fixed scope dimensions; values are slugs checked against the contract and then the tenant vocabulary. */
+export const SCOPE_DIMENSIONS = ['region', 'legal_entity', 'department'] as const;
+type ScopeDimension = (typeof SCOPE_DIMENSIONS)[number];
+
+const scopeValuesSchema = z.array(z.string()).max(50).optional();
+
 const retrievalFilterBodySchema = z
   .object({
     dateRange: z
@@ -44,6 +50,11 @@ const retrievalFilterBodySchema = z
       })
       .strict()
       .optional(),
+    scopes: z
+      .object({ region: scopeValuesSchema, legal_entity: scopeValuesSchema, department: scopeValuesSchema })
+      .strict()
+      .optional(),
+    includeUntagged: z.boolean().optional(),
   })
   .strict();
 
@@ -61,8 +72,33 @@ function issue(path: string, message: string): { path: string; message: string }
   return { path, message };
 }
 
+/** An empty object or a dimension with an empty list is no filter for that dimension (DATA-18 empty edge). */
+function nonEmptyScopes(scopes: BodyShape['scopes']): Partial<Record<ScopeDimension, string[]>> | undefined {
+  if (!scopes) return undefined;
+  const out: Partial<Record<ScopeDimension, string[]>> = {};
+  for (const dimension of SCOPE_DIMENSIONS) {
+    const values = scopes[dimension];
+    if (values && values.length > 0) out[dimension] = values;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/** Sorted, de-duplicated dimension:value tags, so neither dimension nor value order reaches the request or the cache key. */
+function scopeTags(scopes: Partial<Record<ScopeDimension, string[]>>): string[] {
+  const tags = new Set<string>();
+  for (const dimension of SCOPE_DIMENSIONS) {
+    for (const value of scopes[dimension] ?? []) tags.add(`${dimension}:${value}`);
+  }
+  return [...tags].sort();
+}
+
 function bodyToContract(body: BodyShape): Record<string, unknown> {
   const out: Record<string, unknown> = { current_only: true };
+  const scopes = nonEmptyScopes(body.scopes);
+  if (scopes) {
+    out.scopes = scopes;
+    if (body.includeUntagged === true) out.include_untagged = true;
+  }
   if (body.dateRange) out.date_range = { from: body.dateRange.from, to: body.dateRange.to };
   if (body.sources) out.sources = body.sources;
   if (body.documentIds) out.document_ids = body.documentIds;
@@ -96,6 +132,13 @@ function contractToFilterInput(contract: ContractFilters): RetrievalFilterInput 
       currency: contract.invoice.currency,
     };
   }
+  if (contract.scopes) {
+    const tags = scopeTags(contract.scopes);
+    if (tags.length > 0) {
+      out.scopes = tags;
+      if (contract.include_untagged === true) out.scopesIncludeUntagged = true;
+    }
+  }
   return out;
 }
 
@@ -106,7 +149,8 @@ function snakePathToCamel(path: readonly (string | number)[]): string {
     .replace(/^document_ids/, 'documentIds')
     .replace(/^doc_types/, 'docTypes')
     .replace(/^amount_min/, 'amountMin')
-    .replace(/^amount_max/, 'amountMax');
+    .replace(/^amount_max/, 'amountMax')
+    .replace(/^include_untagged/, 'includeUntagged');
 }
 
 function hasFilterFields(filters: RetrievalFilterInput): boolean {
@@ -116,7 +160,8 @@ function hasFilterFields(filters: RetrievalFilterInput): boolean {
     filters.documentIds !== undefined ||
     filters.docTypes !== undefined ||
     filters.languages !== undefined ||
-    filters.invoice !== undefined
+    filters.invoice !== undefined ||
+    filters.scopes !== undefined
   );
 }
 
@@ -131,7 +176,7 @@ export function parseRetrievalFilters(
       ok: false,
       details: parsed.error.errors.map((e) => {
         if (e.code === 'unrecognized_keys' && 'keys' in e && Array.isArray(e.keys) && e.keys[0]) {
-          return issue(String(e.keys[0]), e.message);
+          return issue([...e.path, String(e.keys[0])].join('.'), e.message);
         }
         return issue(e.path.join('.') || 'retrievalFilters', e.message);
       }),
@@ -183,6 +228,8 @@ const NO_DOCUMENT_ID = '00000000-0000-0000-0000-000000000000';
 export function buildRetrievalFilters(input: {
   explicit?: RetrievalFilterInput;
   referencedDocumentIds: string[];
+  /** From effectiveOnFor, never from the request body. */
+  effectiveOn?: string;
 }): RetrievalFilters {
   const explicit = input.explicit ?? {};
   const result: RetrievalFilters = { currentOnly: true };
@@ -194,6 +241,10 @@ export function buildRetrievalFilters(input: {
   if (explicit.docTypes) result.docTypes = [...explicit.docTypes];
   if (explicit.languages) result.languages = [...explicit.languages];
   if (explicit.invoice) result.invoice = { ...explicit.invoice };
+  if (explicit.scopes && explicit.scopes.length > 0) {
+    result.scopes = [...explicit.scopes];
+    if (explicit.scopesIncludeUntagged === true) result.scopesIncludeUntagged = true;
+  }
 
   const explicitIds = explicit.documentIds;
   const referenced = input.referencedDocumentIds;
@@ -208,5 +259,11 @@ export function buildRetrievalFilters(input: {
     result.documentIds = [...explicitIds];
   }
 
+  if (input.effectiveOn) result.effectiveOn = input.effectiveOn;
   return result;
+}
+/** D-44: today's UTC date while RAG_EFFECTIVE_DATES is on; the zone is always UTC, never the server's. */
+export function effectiveOnFor(config: { effectiveDates: boolean }, nowMs: number): string | undefined {
+  if (!config.effectiveDates) return undefined;
+  return new Date(nowMs).toISOString().slice(0, 10);
 }

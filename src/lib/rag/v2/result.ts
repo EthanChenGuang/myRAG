@@ -50,6 +50,8 @@ export interface BuildV2ResultInput {
   queryPlan?: QueryPlan | null;
   /** True when the query layer served the translate stage (D-24): its record is then soft like the other layer stages. */
   layerTranslate?: boolean;
+  /** D-44: the effective date the search used; absent while RAG_EFFECTIVE_DATES is off. */
+  effectiveOn?: string;
 }
 
 export function fusedHitsToVoiceChunks(hits: FusedHit[], scoreByChunk?: Map<string, number>): ChunkWithScore[] {
@@ -202,6 +204,7 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
     },
     security: securityHashComponent(security, { multiTenant: isMultiTenant() }),
     ...(ctx.bindingHash ?? {}),
+    ...(ctx.effectiveOn ? { effectiveOn: ctx.effectiveOn } : {}),
   });
 
   const base = {

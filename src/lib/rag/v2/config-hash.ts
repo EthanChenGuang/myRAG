@@ -82,6 +82,8 @@ export interface RetrievalConfigHashInput {
   embeddingBindings?: Record<string, string> | null;
   /** Eval only: the doc type of the control leg. */
   domainControlLeg?: string | null;
+  /** D-44: the effective date passed to retrieval; absent or null while RAG_EFFECTIVE_DATES is off. */
+  effectiveOn?: string | null;
 }
 
 function sortKeys(value: unknown): unknown {
@@ -125,6 +127,7 @@ function buildPayload(input: RetrievalConfigHashInput): Record<string, unknown> 
     ...(input.security ? { security: input.security } : {}),
     ...(input.embeddingBindings && Object.keys(input.embeddingBindings).length > 0 ? { embedding_bindings: input.embeddingBindings } : {}),
     ...(input.domainControlLeg ? { domain_control_leg: input.domainControlLeg } : {}),
+    ...(input.effectiveOn ? { effective_on: input.effectiveOn } : {}),
   };
 }
 

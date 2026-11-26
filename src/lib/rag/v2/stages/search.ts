@@ -86,6 +86,8 @@ export function hasNarrowingFilters(filters: RetrievalFilters): boolean {
     nonEmpty(filters.documentIds) ||
     nonEmpty(filters.docTypes) ||
     nonEmpty(filters.languages) ||
+    nonEmpty(filters.scopes) ||
+    filters.effectiveOn !== undefined ||
     (invoice !== undefined && Object.values(invoice).some((value) => value !== undefined))
   );
 }

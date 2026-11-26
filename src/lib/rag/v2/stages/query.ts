@@ -1,7 +1,8 @@
 import type { RetrievalFilters } from '../../backend/types';
 import type { RagConfig, StageName } from '../../config';
 import { legacyAnalyze } from '../../legacy/enhanced-retrieval';
-import { buildRetrievalFilters } from '../../query/filters';
+import { buildRetrievalFilters, effectiveOnFor } from '../../query/filters';
+import { getRagDeps } from '../../deps';
 import { mergeLayerDateRange } from '../../query/layer-filters';
 import { queryLanguage } from '../../query/language';
 import { getTranslator, NONE_TRANSLATOR, NONE_TRANSLATOR_NAME } from '../../query/translate';
@@ -98,6 +99,7 @@ export async function runQueryStages(ctx: QueryStagesInput): Promise<QueryStages
   const built = buildRetrievalFilters({
     explicit: input.retrievalFilters,
     referencedDocumentIds: referencedDocumentIds(referenced),
+    ...(config.effectiveDates ? { effectiveOn: effectiveOnFor(config, getRagDeps().now()) } : {}),
   });
   const filters = queryLayer?.dateRange ? mergeLayerDateRange(built, queryLayer.dateRange) : built;
 
