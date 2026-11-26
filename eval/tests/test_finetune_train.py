@@ -1,5 +1,6 @@
 import hashlib
 import json
+from typing import ClassVar
 
 import pytest
 from rag_sidecar.contracts.finetune import (
@@ -385,7 +386,7 @@ class FakeState:
 
 
 class FakeTrainer(_Recorder):
-    instances: list = []
+    instances: ClassVar[list] = []
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -621,7 +622,16 @@ def test_tiny_cpu_training_smoke(tmp_path):
     from rag_sidecar.contracts.finetune import ProbeSet, TrainingRunReport
 
     cfg = load_finetune_config()
-    small = cfg.training.model_copy(update={"per_device_train_batch_size": 6, "mini_batch_size": 3, "eval_steps": 2})
+    # StaticEmbedding cannot be split into GradCache mini-batches, so the smoke run uses the uncached loss; the cached
+    # default is covered by the fake-trainer tests and runs on the real base model in 06.1-19.
+    small = cfg.training.model_copy(
+        update={
+            "loss": "MultipleNegativesRankingLoss",
+            "per_device_train_batch_size": 6,
+            "mini_batch_size": 3,
+            "eval_steps": 2,
+        }
+    )
     cfg = cfg.model_copy(update={"training": small})
     run_dir = make_bundle(tmp_path, n_ntuple=18, n_pairs=12, n_dev=4)
     out = build(run_dir, tmp_path, config=cfg, library_versions=train.installed_versions())
