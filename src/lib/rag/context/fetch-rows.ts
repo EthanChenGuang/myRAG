@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { readAnswerConfig } from '../generation/answer-config';
 import type { AssemblyCandidate, AssemblyDocumentRow } from './assemble';
 
 export interface AssemblyRows {
@@ -14,6 +15,15 @@ export interface AssemblyRows {
 export interface FetchAssemblyRowsOptions {
   adminClient: SupabaseClient;
   signal: AbortSignal;
+}
+
+const DOCUMENT_BASE_SELECT = 'id, filename, created_at, content, metadata';
+
+/** The base columns, plus user_id (the uploader, D-44) only while RAG_SECURITY_EVENTS is on, so the all-off request is unchanged. */
+function documentSelect(): string {
+  const optional: string[] = [];
+  if (readAnswerConfig().securityEvents) optional.push('user_id');
+  return optional.length > 0 ? `${DOCUMENT_BASE_SELECT}, ${optional.join(', ')}` : DOCUMENT_BASE_SELECT;
 }
 
 function unique(values: string[]): string[] {
@@ -33,7 +43,7 @@ export async function fetchAssemblyRows(
 
   const documentResult = await adminClient
     .from('documents')
-    .select('id, filename, created_at, content, metadata')
+    .select(documentSelect())
     .in('id', documentIds)
     .abortSignal(signal);
   signal.throwIfAborted();

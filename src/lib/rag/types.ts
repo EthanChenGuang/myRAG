@@ -138,6 +138,8 @@ export interface ContextBlock {
   text: string;
   isImage: boolean;
   alias: string | null;
+  /** The document's documents.user_id; present only while RAG_SECURITY_EVENTS is on (D-44), null for a document without owner. */
+  uploaderId?: string | null;
 }
 
 export interface CitationLabel {
