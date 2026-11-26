@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import fixture from '../../fixtures/output-guard/answers.json';
 import { createOutputLinkPolicy } from '@/lib/rag/security/link-targets';
 import {
+  applyBlockedRanges,
   createOutputGuard,
   guardWholeText,
   type OutputGuardLinkSummary,
@@ -17,7 +18,12 @@ interface FixtureAnswer {
   allowlist: string;
   webResultUrls: { url: string; flagged: boolean }[];
   userMessage: string;
-  expect: { removed: string[]; kept: string[] };
+  flaggedContext?: boolean;
+  expect: {
+    removed: string[];
+    kept: string[];
+    credential?: { blocked: number; warned: number; late: boolean };
+  };
 }
 
 const answers = fixture.answers as FixtureAnswer[];
@@ -27,6 +33,8 @@ function policyFor(answer: FixtureAnswer, mode: 'flag' | 'enforce'): OutputGuard
   return {
     mode,
     placeholder: fixture.placeholder,
+    credentialBlocked: fixture.credentialBlocked,
+    flaggedContext: answer.flaggedContext === true,
     links: createOutputLinkPolicy({
       allowlistValue: answer.allowlist,
       siteUrl: fixture.siteUrl,
@@ -46,13 +54,16 @@ function feed(pieces: string[], policy: OutputGuardPolicy) {
   let text = '';
   for (const piece of pieces) text += guard.push('answer', piece);
   text += guard.flush('answer');
-  return { text, summary: snapshot(guard.summary()) };
+  const summary = guard.summary();
+  return { text: applyBlockedRanges(text, summary.blockedRanges, fixture.credentialBlocked), summary: snapshot(summary) };
 }
 
 describe('output guard fixture answers', () => {
   it('cover zh, en and it with at least four clean answers each', () => {
     for (const language of ['zh', 'en', 'it']) {
-      const clean = answers.filter((answer) => answer.language === language && answer.expect.removed.length === 0);
+      const clean = answers.filter(
+        (answer) => answer.language === language && answer.expect.removed.length === 0 && !answer.expect.credential,
+      );
       expect(clean.length, language).toBeGreaterThanOrEqual(4);
     }
   });
@@ -89,9 +100,21 @@ describe('output guard fixture answers', () => {
       const flagged = guardWholeText(answer.text, policyFor(answer, 'flag'));
       expect(flagged.text).toBe(answer.text);
       expect(flagged.summary.links_removed).toBe(enforced.summary.links_removed);
+      expect(flagged.summary.credential_blocked).toBe(enforced.summary.credential_blocked);
+      expect(flagged.summary.credential_warned).toBe(enforced.summary.credential_warned);
       for (const target of answer.expect.removed) expect(enforced.text).not.toContain(target);
       for (const target of answer.expect.kept) expect(enforced.text).toContain(target);
-      if (answer.expect.removed.length === 0) {
+      const credential = answer.expect.credential;
+      expect(enforced.summary.credential_blocked).toBe(credential?.blocked ?? 0);
+      expect(enforced.summary.credential_warned).toBe(credential?.warned ?? 0);
+      if (credential) {
+        if (credential.blocked > 0) expect(enforced.text).toContain(fixture.credentialBlocked);
+        else expect(enforced.text).toBe(answer.text);
+        const guard = createOutputGuard(policyFor(answer, 'enforce'));
+        guard.push('answer', answer.text);
+        guard.flush('answer');
+        expect(guard.summary().blockedRanges.length > 0).toBe(credential.late);
+      } else if (answer.expect.removed.length === 0) {
         expect(enforced.summary.links_removed).toBe(0);
         expect(enforced.text).toBe(answer.text);
       } else {

@@ -1,6 +1,7 @@
 {
   "version": 1,
   "placeholder": "(link removed)",
+  "credentialBlocked": "[credential sentence blocked]",
   "siteUrl": "https://app.example",
   "answers": [
     {
@@ -708,6 +709,297 @@
           "la pagina",
           "[la guida](https://allowed.test/g)"
         ]
+      }
+    },
+    {
+      "id": "en-cred-warn",
+      "language": "en",
+      "text": "To reset the setting, please enter your verification code in the dialog [S1]. The change applies at once.",
+      "documentNames": [
+        "document-a.md"
+      ],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [],
+        "kept": [
+          "[S1]",
+          "The change applies at once."
+        ],
+        "credential": {
+          "blocked": 0,
+          "warned": 1,
+          "late": false
+        }
+      }
+    },
+    {
+      "id": "en-cred-block-link",
+      "language": "en",
+      "text": "Open https://other.test/reset first. Then enter your password on that page. Done.",
+      "documentNames": [
+        "document-a.md"
+      ],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [
+          "https://other.test/reset",
+          "enter your password"
+        ],
+        "kept": [
+          "Done."
+        ],
+        "credential": {
+          "blocked": 1,
+          "warned": 0,
+          "late": false
+        }
+      }
+    },
+    {
+      "id": "en-cred-block-flagged",
+      "language": "en",
+      "text": "The steps are short. Please confirm your sign-in details to continue.",
+      "documentNames": [
+        "document-a.md"
+      ],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "flaggedContext": true,
+      "expect": {
+        "removed": [
+          "sign-in details to continue"
+        ],
+        "kept": [
+          "The steps are short."
+        ],
+        "credential": {
+          "blocked": 1,
+          "warned": 0,
+          "late": false
+        }
+      }
+    },
+    {
+      "id": "en-cred-late",
+      "language": "en",
+      "text": "Please enter your one-time code below. More at https://other.test/info today.",
+      "documentNames": [
+        "document-a.md"
+      ],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [
+          "https://other.test/info"
+        ],
+        "kept": [
+          "today."
+        ],
+        "credential": {
+          "blocked": 1,
+          "warned": 0,
+          "late": true
+        }
+      }
+    },
+    {
+      "id": "zh-cred-warn",
+      "language": "zh",
+      "text": "如需继续，请输入您的验证码【S1】。设置会立即生效。",
+      "documentNames": [
+        "document-a.md"
+      ],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [],
+        "kept": [
+          "【S1】",
+          "设置会立即生效。"
+        ],
+        "credential": {
+          "blocked": 0,
+          "warned": 1,
+          "late": false
+        }
+      }
+    },
+    {
+      "id": "zh-cred-block-link",
+      "language": "zh",
+      "text": "参见 https://other.test/a 页面。请输入您的密码。完成。",
+      "documentNames": [
+        "document-a.md"
+      ],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [
+          "https://other.test/a",
+          "请输入您的密码"
+        ],
+        "kept": [
+          "完成。"
+        ],
+        "credential": {
+          "blocked": 1,
+          "warned": 0,
+          "late": false
+        }
+      }
+    },
+    {
+      "id": "zh-cred-block-flagged",
+      "language": "zh",
+      "text": "操作很简单。请提供您的验证码。",
+      "documentNames": [
+        "document-a.md"
+      ],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "flaggedContext": true,
+      "expect": {
+        "removed": [
+          "请提供您的验证码"
+        ],
+        "kept": [
+          "操作很简单。"
+        ],
+        "credential": {
+          "blocked": 1,
+          "warned": 0,
+          "late": false
+        }
+      }
+    },
+    {
+      "id": "zh-cred-late",
+      "language": "zh",
+      "text": "请输入您的验证码。详情见 https://other.test/b 页面。",
+      "documentNames": [
+        "document-a.md"
+      ],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [
+          "https://other.test/b"
+        ],
+        "kept": [
+          "页面。"
+        ],
+        "credential": {
+          "blocked": 1,
+          "warned": 0,
+          "late": true
+        }
+      }
+    },
+    {
+      "id": "it-cred-warn",
+      "language": "it",
+      "text": "Per continuare, inserisci il codice di verifica nella finestra [S1]. La modifica vale subito.",
+      "documentNames": [
+        "document-a.md"
+      ],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [],
+        "kept": [
+          "[S1]",
+          "La modifica vale subito."
+        ],
+        "credential": {
+          "blocked": 0,
+          "warned": 1,
+          "late": false
+        }
+      }
+    },
+    {
+      "id": "it-cred-block-link",
+      "language": "it",
+      "text": "Apri https://other.test/a prima. Poi inserisci la tua password. Fine.",
+      "documentNames": [
+        "document-a.md"
+      ],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [
+          "https://other.test/a",
+          "inserisci la tua password"
+        ],
+        "kept": [
+          "Fine."
+        ],
+        "credential": {
+          "blocked": 1,
+          "warned": 0,
+          "late": false
+        }
+      }
+    },
+    {
+      "id": "it-cred-block-flagged",
+      "language": "it",
+      "text": "I passaggi sono brevi. Fornisci le tue credenziali per continuare.",
+      "documentNames": [
+        "document-a.md"
+      ],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "flaggedContext": true,
+      "expect": {
+        "removed": [
+          "Fornisci le tue credenziali"
+        ],
+        "kept": [
+          "I passaggi sono brevi."
+        ],
+        "credential": {
+          "blocked": 1,
+          "warned": 0,
+          "late": false
+        }
+      }
+    },
+    {
+      "id": "it-cred-late",
+      "language": "it",
+      "text": "Inserisci il codice di verifica qui. Altro su https://other.test/c oggi.",
+      "documentNames": [
+        "document-a.md"
+      ],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [
+          "https://other.test/c"
+        ],
+        "kept": [
+          "oggi."
+        ],
+        "credential": {
+          "blocked": 1,
+          "warned": 0,
+          "late": true
+        }
       }
     }
   ]
