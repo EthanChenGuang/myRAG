@@ -5,15 +5,23 @@ const UNAVAILABLE_MESSAGES: Record<string, string> = {
   es: 'La base de conocimiento no está disponible temporalmente. Inténtalo de nuevo en un momento.',
 };
 
+/** The language code knowledgeBaseUnavailableMessage renders for a requested language; never the requested string itself. */
+export function knowledgeBaseUnavailableLanguage(language: string): string {
+  return Object.prototype.hasOwnProperty.call(UNAVAILABLE_MESSAGES, language) ? language : 'en';
+}
+
 export function knowledgeBaseUnavailableMessage(language: string): string {
-  return Object.prototype.hasOwnProperty.call(UNAVAILABLE_MESSAGES, language)
-    ? UNAVAILABLE_MESSAGES[language]
-    : UNAVAILABLE_MESSAGES.en;
+  return UNAVAILABLE_MESSAGES[knowledgeBaseUnavailableLanguage(language)];
+}
+
+/** The language code noKnowledgeBaseResponse renders for a requested language; never the requested string itself. */
+export function noKnowledgeBaseResponseLanguage(language: string): string {
+  return language === 'es' ? 'es' : 'en';
 }
 
 /** The strict-mode "information not available" answer (knowledge base empty for the query, web search off). */
 export function noKnowledgeBaseResponse(language: string): string {
-  if (language === 'es') {
+  if (noKnowledgeBaseResponseLanguage(language) === 'es') {
     return `# Información no disponible
 
 ## Estado de la base de conocimiento

@@ -1,4 +1,5 @@
 import { UploadApprovalSchema } from '@/lib/rag-eval/contracts.generated';
+import { validHiddenTextReport } from '../security/hidden-text';
 import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
 import { isTerminal } from './callbacks/common';
 import { loadIngestConfig } from './config';
@@ -13,6 +14,7 @@ import {
   INGEST_SOURCES,
   emptyIngestState,
   type DocTypeOrigin,
+  type HiddenTextState,
   type IngestResult,
   type IngestSource,
   type IngestState,
@@ -209,7 +211,18 @@ function typeChangeOf(value: unknown): TypeChangeState | null {
     parser && REUSED_PARSERS.some((name) => name === parser.parser) && typeof parser.version === 'string' && parser.version !== ''
       ? { parser: parser.parser as (typeof REUSED_PARSERS)[number], version: parser.version }
       : null;
-  return { reuseParseOfVersion: version, reusedParser: reused };
+  return { reuseParseOfVersion: version, reusedParser: reused, ...(slice.sanitizedParse === true ? { sanitizedParse: true } : {}) };
+}
+
+/** The hidden-text slice of a saved state; a report that does not validate is dropped, so a retried scan asks the sidecar again. */
+function hiddenTextOf(value: unknown): HiddenTextState | null {
+  const slice = objectOf<Record<string, unknown>>(value);
+  if (!slice || typeof slice.fileSha256 !== 'string') return null;
+  const report = slice.report === null ? null : validHiddenTextReport(slice.report);
+  if (slice.report !== null && report === null) return null;
+  const removedSpans = Array.isArray(slice.removedSpans) ? slice.removedSpans.filter((span): span is string => typeof span === 'string') : [];
+  const unlocated = typeof slice.unlocated === 'number' && Number.isInteger(slice.unlocated) && slice.unlocated >= 0 ? slice.unlocated : 0;
+  return { fileSha256: slice.fileSha256, report, removedSpans, unlocated, sanitized: slice.sanitized === true };
 }
 
 /** A persisted state record (a document row's processing_state or a ledger row's stage_state), with every slice checked for shape; anything unreadable falls back to its empty value. */
@@ -235,6 +248,8 @@ export function ingestStateFromRecord(raw: Record<string, unknown>): IngestState
       ? approval.data
       : { mode: 'all', required: true, reason: 'unknown_uploader', uploader_id: null, decided_at: new Date(0).toISOString() };
   }
+  const hiddenText = hiddenTextOf(raw.hiddenText);
+  if (hiddenText) state.hiddenText = hiddenText;
   const hold = objectOf<{ batchId?: unknown }>(raw.publishHold);
   if (hold && typeof hold.batchId === 'string' && hold.batchId !== '') state.publishHold = { batchId: hold.batchId };
   return state;

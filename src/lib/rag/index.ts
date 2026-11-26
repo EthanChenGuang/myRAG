@@ -5,7 +5,10 @@ export type { RetrievalFilterInput } from './backend/types';
 export { LEXICAL_VERSION } from './lexical/chunk-text';
 export { RERANK_TEXT_VERSION } from './rerank/types';
 export { countTokens } from './ingest/text/tokens';
-export { isV2Pipeline } from './v2/switch';
+export { isQueryLayerEnabled, isV2Pipeline, voiceServerCondenses } from './v2/switch';
+export { isSmallTalkResult } from './v2/result';
+export { buildHistoryWindow } from './query/history';
+export type { HistoryWindowLimits } from './query/history';
 export { loadRagConfig, CORE_STAGES, OPTIONAL_STAGES, PROFILE_STAGE_DEFAULTS } from './config';
 export type { RagConfig, StageName } from './config';
 export { createTraceCollector } from './trace/collector';
@@ -78,6 +81,7 @@ export { refusalCalibrationStatus, currentRefusalCalibrationStatus } from './ref
 export type { RefusalCalibrationStatus } from './refusal/status';
 export type {
   Candidate,
+  HistoryTurn,
   LogChannel,
   LogContext,
   LogOutcome,
@@ -130,7 +134,13 @@ export type {
 export type { VoiceResult, VoiceResults, VoiceSourceImage } from './context/voice';
 export { deriveVoiceKeywords } from './voice/keyword-fallback';
 export { createEnhancedRAGPrompt } from './generation/prompt';
-export { knowledgeBaseUnavailableMessage, noKnowledgeBaseResponse } from './generation/messages';
+export {
+  knowledgeBaseUnavailableLanguage,
+  knowledgeBaseUnavailableMessage,
+  noKnowledgeBaseResponse,
+  noKnowledgeBaseResponseLanguage,
+} from './generation/messages';
+export { readFeedbackLoopConfig } from './feedback-loop/config';
 export { readGenerationConfig } from './generation/config';
 export { detectLanguage } from './lang/detect';
 export type { Language } from './lang/registry';
@@ -203,6 +213,15 @@ export {
   legacyWriteRefused,
 } from './ingest/approval/legacy-refusal';
 export { assertCloudAllowed, CloudRefused } from './ingest/guard/cloud-budget';
+export { legacyLlamaparseLanguages } from './ingest/routing/effective-settings';
+export {
+  LANGUAGE_AWARE_REQUIRES_UNIFIED,
+  LanguageAwareIngestError,
+  assertLegacySplitterAllowed,
+  currentLegacyUploadRoute,
+  legacyUploadRoute,
+} from './ingest/routing/language-aware-routing';
+export type { LegacyUploadRoute } from './ingest/routing/language-aware-routing';
 export { findInvoices } from './retrieval/invoices';
 export type { FindInvoicesDeps, InvoiceFilters, InvoiceHit } from './retrieval/invoices';
 export { runChunkingBuildStep } from './ingest/rechunk/build-step';
@@ -249,6 +268,61 @@ export type {
   UploadExemption,
   UserDisplay,
 } from './ingest/approval/admin';
+export {
+  createVocabularyEntry,
+  DOCUMENT_VIEWS,
+  listDocumentsWithScopes,
+  listVocabulary,
+  MAX_DOCUMENT_SCOPES,
+  normalizeScopeValue,
+  SCOPE_DIMENSIONS,
+  scopeTagsEnabled,
+  setDocumentScopes,
+  updateVocabularyEntry,
+} from './ingest/scopes/admin';
+export type {
+  DocumentView,
+  ListDocumentsWithScopesResult,
+  ListVocabularyResult,
+  ScopeDimension,
+  ScopeSuggestionItem,
+  TaggedDocument,
+  ScopeFailure,
+  SetDocumentScopesResult,
+  VocabularyEntry,
+  VocabularyEntryResult,
+} from './ingest/scopes/admin';
+export {
+  AUTO_APPLY_MIN_CONFIDENCE,
+  MAX_QUERY_LENGTH as MAX_EFFECTIVE_DATES_QUERY_LENGTH,
+  applyEffectiveDates,
+  decideEffectiveDateProposal,
+  dismissEffectiveDateProposal,
+  listEffectiveDateProposals,
+  recordExtractedEffectiveDates,
+  todayUtc as effectiveDatesTodayUtc,
+} from './ingest/versions/effective-dates';
+export type {
+  ApplyEffectiveDatesResult,
+  CurrentEffectiveDates,
+  DismissEffectiveDateProposalResult,
+  EffectiveDateDecision,
+  EffectiveDateProposalInput,
+  EffectiveDatesFailure,
+  EffectiveDatesItem,
+  ListEffectiveDateProposalsResult,
+  RecordExtractedEffectiveDatesResult,
+  StoredEffectiveDateProposal,
+} from './ingest/versions/effective-dates';
+export { getTranslationSettings, languageDocumentCounts, setTranslationSettings, translationCoverage, validateTranslationTargets, MAX_TRANSLATION_TARGETS } from './ingest/translate/settings';
+export type {
+  LanguageDocumentCount,
+  SetTranslationSettingsInput,
+  TranslationCoverageRow,
+  TranslationSettingsError,
+  TranslationSettingsFailure,
+  TranslationSettingsView,
+} from './ingest/translate/settings';
 export { docTypePickerEnabled, resolvePickerDefault, listDocTypeDefaults, setDocTypeDefault, DocTypeDefaultsError, DOC_TYPE_DEFAULT_SOURCE_KINDS, DOC_TYPE_IDS, DOC_TYPE_CHOICES } from './ingest/profiles/doc-type-defaults';
 export type { DocTypeChoice, DocTypeDefaultRow, DocTypeDefaultSourceKind, PickerDefault, SetDocTypeDefaultInput } from './ingest/profiles/doc-type-defaults';
 export { getEmbeddingProfileCompleteness } from './embeddings/profile-ops';
@@ -298,3 +372,28 @@ export { readSecurityConfig } from './security/config';
 export { injectionTraceVersions } from './security/injection-check';
 export type { ToolResultGuardMode } from './security/config';
 export { escapeToolOutput, scanToolOutput, wrapToolResultsForPrompt } from './security/tool-results';
+export { FingerprintImpactError, computeFingerprintCoverage, computeFingerprintImpact, isSettingName } from './ingest/fingerprint/impact';
+export type { FingerprintCoverage, PendingRebuild, RebuildStart } from './ingest/fingerprint/impact';
+export {
+  effectiveLogMode,
+  readTenantFeedbackSettings,
+  setTenantFeedbackSettings,
+  TENANT_RETRIEVAL_LOG_LEVELS,
+} from './feedback-loop/settings';
+export type { TenantFeedbackSettingsRow, TenantRetrievalLog } from './feedback-loop/settings';
+export { purgeRetrievalLog, PurgeError } from './feedback-loop/purge';
+export type { PurgeCounts } from './feedback-loop/purge';
+export {
+  getReviewItem,
+  getReviewItemChunks,
+  grantDomainExpert,
+  isReviewItemId,
+  listDomainExperts,
+  listReviewItems,
+  REVIEW_PAGE_SIZE,
+  ReviewListQuerySchema,
+  revokeDomainExpert,
+  validateGrantTenantKey,
+} from './feedback-loop/review-access';
+export type { DomainExpertGrant, ReviewChunk, ReviewListQuery } from './feedback-loop/review-access';
+export { openReviewSession, REVIEW_NO_STORE, reviewNotFound, reviewUnavailable } from './feedback-loop/review-route';

@@ -1,6 +1,7 @@
 import type { ExtractedURL } from '@/lib/url-extractor';
 import type { QueryClassification } from '@/lib/query-classifier';
-import type { QueryPlan, RagRunRequest } from '@/lib/rag-eval/contracts.generated';
+import type { QueryPlan } from '@/lib/rag-eval/contracts.generated';
+import type { QueryParamsOverrides } from './query/query-params';
 import type { RetrievalFilterInput } from './backend/types';
 import type { VoiceResults } from './context/voice';
 import type { QueryFramework, QueryTransformSwitches, SemanticCacheBackend, StageName, StageTimeouts } from './config';
@@ -194,7 +195,7 @@ export interface RetrievalOverrides {
   chunkingProfileByDocType?: Record<string, string>;
 }
 
-export type QueryParamsOverrides = NonNullable<NonNullable<NonNullable<RagRunRequest['options']>['query_params']>>;
+export type { QueryParamsOverrides } from './query/query-params';
 
 /** D-38 eval-only query-layer overrides; ignored for every other profile. They can only narrow what the environment enables. */
 export interface QueryLayerOverrides {

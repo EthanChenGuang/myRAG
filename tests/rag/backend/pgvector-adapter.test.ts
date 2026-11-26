@@ -160,6 +160,55 @@ describe('createPgvectorBackend', () => {
     expect(legs.meta?.denseMode).toBe('ann');
   });
 
+  it('passes p_include_undated true only when the date filter asks to keep undated rows (D-11)', async () => {
+    const { client, calls } = recordingClient();
+    const backend = createPgvectorBackend({ adminClient: () => client, getConfig: () => config() });
+    await backend.search(
+      baseRequest({ filters: { currentOnly: true, dateRange: { from: '2025-01-01', to: '2025-12-31', includeUndated: true } } }),
+    );
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.args.p_date_from).toBe('2025-01-01');
+    expect(calls[0]?.args.p_date_to).toBe('2025-12-31');
+    expect(calls[0]?.args.p_include_undated).toBe(true);
+  });
+
+  it('keeps the Phase 4 argument object when undated rows are not requested', async () => {
+    const phase4Args = (from: string | null, to: string | null) => ({
+      p_tenant_key: `u:${USER_A}`,
+      p_profile_id: PROFILE,
+      p_query_embedding: [0.1, 0.2, 0.3],
+      p_lexical_tokens: ['term'],
+      p_dense_limit: 5,
+      p_lexical_limit: 5,
+      p_date_from: from,
+      p_date_to: to,
+      p_sources: null,
+      p_document_ids: null,
+      p_doc_types: null,
+      p_languages: null,
+      p_iterative_scan: 'off',
+      p_exact_scan_cutoff: 0,
+      p_lexical_languages: null,
+      p_supplier: null,
+      p_amount_min: null,
+      p_amount_max: null,
+      p_currency: null,
+      p_chunking_override: null,
+    });
+    const { client, calls } = recordingClient();
+    const backend = createPgvectorBackend({ adminClient: () => client, getConfig: () => config() });
+    await backend.search(baseRequest());
+    await backend.search(baseRequest({ filters: { currentOnly: true, dateRange: { from: '2025-01-01', to: '2025-12-31' } } }));
+    await backend.search(
+      baseRequest({ filters: { currentOnly: true, dateRange: { from: '2025-01-01', to: '2025-12-31', includeUndated: false } } }),
+    );
+    expect(calls).toHaveLength(3);
+    expect(calls[0]?.args).toStrictEqual(phase4Args(null, null));
+    expect(calls[1]?.args).toStrictEqual(phase4Args('2025-01-01', '2025-12-31'));
+    expect(calls[2]?.args).toStrictEqual(phase4Args('2025-01-01', '2025-12-31'));
+    for (const call of calls) expect(Object.keys(call.args)).not.toContain('p_include_undated');
+  });
+
   it('throws admin_unavailable when the admin client is null', async () => {
     const backend = createPgvectorBackend({ adminClient: () => null, getConfig: () => config() });
     await expect(backend.search(baseRequest())).rejects.toMatchObject({

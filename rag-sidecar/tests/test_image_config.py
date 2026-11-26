@@ -23,6 +23,7 @@ REQUIRED_CONFIG_FILES = (
     "processing-profiles.json",
     "language-packs.json",
     "hidden-text-rules.json",
+    "table-header-rules.json",
 )
 CONFIG_FILES = tuple(sorted(path.name for path in SHIPPED_CONFIG_DIR.glob("*.json")))
 

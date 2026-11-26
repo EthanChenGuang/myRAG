@@ -1,8 +1,8 @@
-import { legacyKeepReason, type LegacyKeepCandidate } from '../context/relevance';
+import { LEGACY_KEEP_FLOORS, legacyKeepReason, type LegacyKeepCandidate } from '../context/relevance';
 import type { RefusalRecord } from './types';
 
-export const LEGACY_TEXT_FLOOR = 0.65;
-export const LEGACY_IMAGE_FLOOR = 0.25;
+export const LEGACY_TEXT_FLOOR = LEGACY_KEEP_FLOORS.text;
+export const LEGACY_IMAGE_FLOOR = LEGACY_KEEP_FLOORS.image;
 
 export interface SimilarityFloors {
   text: number;
@@ -90,6 +90,18 @@ export function resetEvalScoreCalibration(): void {
 
 export function evalFloorCalibration(profile: string): Record<string, number> | null {
   return profile === 'eval' ? evalScoreCalibration : null;
+}
+
+/** Refusal when the legacy pool holds no candidate at all: what legacy answers for an empty search. */
+export function emptyLegacyPool(topScore: number | null): RefusalRecord {
+  return {
+    decision: 'refuse',
+    basis: 'similarity_floor',
+    reason: 'below_similarity_floor',
+    topScore,
+    threshold: LEGACY_KEEP_FLOORS.text,
+    cellKey: null,
+  };
 }
 
 /** Legacy refusal semantics: answer when any candidate passes the legacy keep rule (similarity, query term, image). */

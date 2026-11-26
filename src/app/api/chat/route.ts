@@ -13,17 +13,23 @@ import { ContentPart, APIMessage, ExtendedMessage, fromAPIMessages, toMessage } 
 import { ReasoningConfig, REASONING_MODELS } from '@/lib/types';
 import {
   CLAUDE_FIRST_TOKEN_TIMEOUT_MS,
+  buildHistoryWindow,
   createCitationSession,
   createEnhancedRAGPrompt,
   errorStatusOf,
   firstTokenGate,
   createTraceCollector,
+  detectLanguage,
   finishTrace,
+  isSmallTalkResult,
   isV2Pipeline,
+  knowledgeBaseUnavailableLanguage,
   knowledgeBaseUnavailableMessage,
   noKnowledgeBaseResponse,
+  noKnowledgeBaseResponseLanguage,
   mintAnswerId,
   parseRetrievalFilters,
+  readFeedbackLoopConfig,
   readGenerationConfig,
   repairOwnerMembership,
   resolveTenantScope,
@@ -31,6 +37,8 @@ import {
   scheduleAnswerFinish,
   scopeKey,
   shouldPersistAnswer,
+  type LogContext,
+  type LogOutcomeValue,
   type RetrievalFilterInput,
   type RetrievalResult,
   type TenantScope,
@@ -1207,11 +1215,27 @@ export async function POST(req: Request) {
   console.log('API ROUTE: Starting POST request handler');
 
   let ragTrace: { collector: TraceCollector; result: RetrievalResult } | null = null;
+  // Set only while RAG_RETRIEVAL_LOG is on; off leaves finishTrace's arguments as they were
+  let ragLogContext: LogContext | null = null;
+  let ragLogQuery: string | undefined;
+  let finishedLogOutcome: RetrievalResult['logOutcome'];
   const finishRagTrace = () => {
     if (!ragTrace) return;
     const pending = ragTrace;
     ragTrace = null;
-    finishTrace(pending.collector, pending.result);
+    finishedLogOutcome = pending.result.logOutcome;
+    if (ragLogContext) {
+      finishTrace(pending.collector, pending.result, { logContext: ragLogContext, ...(ragLogQuery !== undefined ? { logQuery: ragLogQuery } : {}) });
+    } else {
+      finishTrace(pending.collector, pending.result);
+    }
+  };
+  // D-07, D-03a: the holder is read after the response, so set it before finishRagTrace runs for that path
+  const setRagLogOutcome = (value: LogOutcomeValue | null, answerLanguage?: string | null) => {
+    const logOutcome = ragLogContext ? (ragTrace?.result.logOutcome ?? finishedLogOutcome) : undefined;
+    if (!logOutcome) return;
+    if (value !== null) logOutcome.value = value;
+    if (answerLanguage !== undefined) logOutcome.answerLanguage = answerLanguage;
   };
 
   try {
@@ -1257,6 +1281,10 @@ export async function POST(req: Request) {
       }
       retrievalFilters = filtersParsed.filters;
     }
+
+    // D-11: the client's IANA zone, read only by the query layer; an unknown zone resolves to UTC there
+    const clientTimeZone =
+      typeof requestBody?.timeZone === 'string' && requestBody.timeZone.length <= 64 ? requestBody.timeZone : undefined;
 
     // Initialize Supabase client
     const supabase = getSupabaseAdmin();
@@ -1372,6 +1400,17 @@ export async function POST(req: Request) {
     // Extract chatId and sessionId from data
     const chatId = data?.chatId;
     const sessionId = (data as any)?.data?.sessionId || data?.sessionId || crypto.randomUUID();
+
+    if (readFeedbackLoopConfig().retrievalLog !== 'off') {
+      ragLogContext = {
+        channel: 'chat',
+        userId: scope?.userId ?? (await resolveToolOwnerId()),
+        organizationId: scope?.organizationId ?? null,
+        chatId: typeof chatId === 'string' ? chatId : null,
+        ragMode,
+        skip: effectiveDisableRAG || (typeof chatId === 'string' && chatId.startsWith('ghost-')),
+      };
+    }
 
     console.log('API ROUTE: Using chatId:', chatId);
     console.log('API ROUTE: Using sessionId:', sessionId);
@@ -1966,6 +2005,7 @@ IMPORTANT:
     // Initialize variables for RAG
     let context = '';
     let retrievalResult: RetrievalResult | null = null;
+    let smallTalkTurn = false;
     let ragStartTime = 0;
     let ragDuration = 0;
 
@@ -2012,6 +2052,12 @@ IMPORTANT:
       }
 
       const documentRefs = { mentions: mentionNames, documentParts };
+      // D-09/D-16: the one classification of this request and a bounded history from the body; unused with the layer off
+      const queryLayerInputs = {
+        history: buildHistoryWindow(originalMessages),
+        classification: queryClassification,
+        ...(clientTimeZone ? { timeZone: clientTimeZone } : {}),
+      };
 
       // Then perform semantic search for the query text
       if (queryText) {
@@ -2034,8 +2080,10 @@ IMPORTANT:
           trace: collector,
           ...(retrievalFilters ? { retrievalFilters } : {}),
           ...(citationSession.labeler ? { citationLabeler: citationSession.labeler } : {}),
+          ...queryLayerInputs,
         });
         ragTrace = { collector, result };
+        if (ragLogContext) ragLogQuery = queryText;
         collector.setReviewContent({ query: queryText });
         retrievalResult = result;
 
@@ -2061,6 +2109,7 @@ IMPORTANT:
           signal: req.signal,
           trace: collector,
           ...(citationSession.labeler ? { citationLabeler: citationSession.labeler } : {}),
+          ...queryLayerInputs,
         });
         ragTrace = { collector, result };
         retrievalResult = result;
@@ -2076,8 +2125,11 @@ IMPORTANT:
         usedDocuments = result.usedDocuments;
       }
 
+      // D-10: small talk under the query layer skipped retrieval and is answered without knowledge-base context
+      smallTalkTurn = isSmallTalkResult(retrievalResult);
+
       // Use a fallback if we have no context
-      if (!context.trim()) {
+      if (!context.trim() && !smallTalkTurn) {
         context = 'No relevant context found.';
       }
 
@@ -2222,6 +2274,7 @@ IMPORTANT:
       });
 
       if (strictWithoutWebSearch) {
+        setRagLogOutcome('kb_unavailable', knowledgeBaseUnavailableLanguage(fallbackLanguage));
         finishRagTrace();
         const errorText = knowledgeBaseUnavailableMessage(fallbackLanguage);
         const stream = createUIMessageStream({
@@ -2236,6 +2289,7 @@ IMPORTANT:
       if (ragTrace) {
         ragTrace.result = { ...ragTrace.result, status: 'degraded' };
       }
+      setRagLogOutcome('degraded_answer');
       context = 'No relevant context found.';
       usedDocuments = [];
       precomputedSourceImages = [];
@@ -2243,6 +2297,7 @@ IMPORTANT:
 
     const shouldBlockNoContextResponse =
       !effectiveDisableRAG &&
+      !smallTalkTurn &&
       ragMode === 'strict' &&
       !webSearchEnabled &&
       (retrievalResult === null || retrievalResult.status === 'empty') &&
@@ -2252,6 +2307,7 @@ IMPORTANT:
     if (shouldBlockNoContextResponse) {
       const responseText = noKnowledgeBaseResponse(fallbackLanguage);
       ragTrace?.collector.setReviewContent({ answer: responseText, context });
+      setRagLogOutcome('refused_no_context', noKnowledgeBaseResponseLanguage(fallbackLanguage));
       finishRagTrace();
       const stream = createUIMessageStream({
         execute: async ({ writer }) => {
@@ -2265,7 +2321,7 @@ IMPORTANT:
       return createUIMessageStreamResponse({ stream });
     }
 
-    citationSession.attach(retrievalFailed || effectiveDisableRAG ? null : retrievalResult);
+    citationSession.attach(retrievalFailed || effectiveDisableRAG || smallTalkTurn ? null : retrievalResult);
 
     // Prepare system prompt with context
     // Check if there's a custom system prompt in environment variables (with fallback)
@@ -2370,7 +2426,9 @@ Context:
     console.log('[RAG SYSTEM DEBUG] context.length:', context.length);
     console.log('[RAG SYSTEM DEBUG] Context preview (first 200 chars):', context.substring(0, 200));
 
-    if (context.length > 0) {
+    if (smallTalkTurn) {
+      systemPrompt = createEnhancedRAGPrompt(ragSystemPrompt, '', 'bypass');
+    } else if (context.length > 0) {
       console.log('[RAG SYSTEM] ✅ Using optimized system prompt with context');
       console.log('[RAG SYSTEM] Creating enhanced prompt with context length:', context.length);
       console.log('[RAG SYSTEM] Using RAG mode:', ragMode);
@@ -3921,6 +3979,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
         onFinish: async (event) => {
           console.log('API ROUTE: streamText finished, keeping MCP client open for user approval');
           ragTrace?.collector.setReviewContent({ answer: event.text ?? '', context, model: safeModelId });
+          if (ragLogContext) setRagLogOutcome(null, detectLanguage(event.text ?? ''));
 
           // 🕐 END TIMING: AI generation and total request
           const aiEndTime = Date.now();
@@ -4040,6 +4099,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
         citationSession.fallback('error');
       }
       let result = claudeStream ? null : await startOpenRouterStream();
+      if (ragTrace?.result.logOutcome?.value === 'unknown') setRagLogOutcome('answered');
 
       const ragTraceId = ragTrace?.collector.traceId;
       let generationFailed = false;
@@ -4189,7 +4249,9 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           if (claudeStream) {
             const directText = responseMessage.parts.map((part) => (part.type === 'text' ? part.text : '')).join('');
             ragTrace?.collector.setReviewContent({ answer: directText, context, model: safeModelId });
+            if (ragLogContext) setRagLogOutcome(null, detectLanguage(directText));
           }
+          if (ragLogContext && (isAborted || generationFailed || finishReason === 'error')) setRagLogOutcome(null, null);
           if (ragTrace) {
             const status = isAborted ? 'aborted' : generationFailed || finishReason === 'error' ? 'error' : 'ok';
             const fallbackReason = citationSession.fallbackReason;

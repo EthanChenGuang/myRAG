@@ -1,4 +1,6 @@
-import type { RagConfig, RerankerKind, StageName } from '../../config';
+import { env } from '@/lib/env';
+import type { RawChunk } from '../../backend/supabase-rpc';
+import { resolveFinalResultCount, validResultCount, type RagConfig, type RerankerKind, type StageName } from '../../config';
 import { getRagDeps } from '../../deps';
 import { LEGACY_PROFILE } from '../../embeddings/active-profile';
 import type { QueryEmbedding } from '../../embeddings/query-embedding';
@@ -7,8 +9,17 @@ import { LEXICAL_VERSION } from '../../lexical/chunk-text';
 import { runStage, StageError, stageSpec, type StageSpec } from '../../pipeline';
 import type { DedupeCounts } from '../../fusion/dedupe';
 import { decideRefusal, type GateCandidate, type GateInput, type QueryLanguage } from '../../refusal/gate';
-import { legacyQueryTerms } from '../../context/relevance';
-import { evalFloorCalibration, floorsFromCalibration, legacyRuleFloor, similarityFloor } from '../../refusal/floor';
+import { LEGACY_KEEP_FLOORS, legacyQueryTerms } from '../../context/relevance';
+import {
+  LEGACY_VOICE_DEFAULT_MATCH_COUNT,
+  legacyPoolFromRows,
+  legacyPoolRule,
+  legacyVoicePoolRule,
+  searchThresholdsFor,
+  type LegacyPoolRule,
+} from '../../legacy/enhanced-retrieval';
+import { defaultQueryContext, type TemporalQueryContext } from '../../query/temporal-query-detector';
+import { emptyLegacyPool, evalFloorCalibration, floorsFromCalibration, legacyRuleFloor, similarityFloor } from '../../refusal/floor';
 import { loadThresholds } from '../../refusal/thresholds';
 import type { RefusalRecord } from '../../refusal/types';
 import { describeReranker, resolveReranker } from '../../rerank/select';
@@ -16,7 +27,9 @@ import { rerankText } from '../../rerank/text';
 import { RERANK_TEXT_VERSION, type RerankScore, type RerankSpan } from '../../rerank/types';
 import type { TraceCollector } from '../../trace/collector';
 import type { Profile, QueryVariant, ReferencedState, RunRetrievalInput, StageOverrides } from '../../types';
+import type { QueryPlan } from '@/lib/rag-eval/contracts.generated';
 import { v2ProfileSettings } from '../profiles';
+import { reserveSubQuestionCoverage } from '../subq-coverage';
 import type { ContextRerankInput } from './context';
 
 export interface RankStagesInput {
@@ -32,6 +45,12 @@ export interface RankStagesInput {
   stageOverrides?: StageOverrides;
   variants?: QueryVariant[];
   dedupeCounts?: DedupeCounts;
+  /** The query analysis of the query stage; the legacy_rule floor replays the legacy search with it (default context when absent). */
+  queryContext?: TemporalQueryContext;
+  /** Query layer only (D-06): rerank and refusal read the plan's standalone query and Candidate.standaloneSimilarity. */
+  queryPlan?: QueryPlan | null;
+  /** D-07: sub-question coverage over the final top-k (retrieval-params `sub_question_coverage`). */
+  coverage?: { enabled: boolean; topK: number };
 }
 
 export interface RankRerankOutput extends ContextRerankInput {
@@ -78,15 +97,80 @@ function gateLanguage(language: string | null): QueryLanguage | null {
   return language !== null && GATE_LANGUAGES.includes(language) ? (language as QueryLanguage) : null;
 }
 
+interface RefusalOutcome {
+  record: RefusalRecord;
+  gate: RefusalRecord;
+  /** legacy_rule only: how many fused hits the legacy pool rule admitted. */
+  poolSize?: number;
+}
+
+function denseLegIndex(variants: QueryVariant[] | undefined): number {
+  const original = (variants ?? []).findIndex((variant) => variant.kind === 'original');
+  return original >= 0 ? original : 0;
+}
+
+/**
+ * The fused hits legacy would have judged: rows the original query's dense leg returned (never a lexical-only or a
+ * synthetic-similarity row), replayed through the legacy search rule of the entry point (chat and embed: thresholds,
+ * match counts, fallback, eval override; voice: the legacy voice search).
+ */
+function legacyPoolMembers(ctx: RankStagesInput, hits: FusedHit[]): FusedHit[] {
+  const leg = `dense:${denseLegIndex(ctx.variants)}`;
+  const byChunk = new Map<string, FusedHit>();
+  const rows: RawChunk[] = [];
+  for (const row of hits) {
+    const similarity = row.hit.similarity;
+    if (row.ranks[leg] === undefined || similarity === null || !Number.isFinite(similarity)) continue;
+    if (byChunk.has(row.hit.chunkId)) continue;
+    byChunk.set(row.hit.chunkId, row);
+    rows.push({
+      chunk_id: row.hit.chunkId,
+      document_id: row.hit.documentId,
+      content: row.hit.content,
+      similarity,
+      metadata: row.hit.metadata,
+    });
+  }
+  const options = ctx.input.options;
+  const evalProfileId = ctx.profile === 'eval' ? options?.embeddingProfile : undefined;
+  const queryContext = ctx.queryContext ?? defaultQueryContext();
+  const thresholds = searchThresholdsFor(ctx.embedding.profile);
+  const rule: LegacyPoolRule =
+    ctx.profile === 'voice'
+      ? legacyVoicePoolRule(thresholds, validResultCount(options?.maxResults) ?? LEGACY_VOICE_DEFAULT_MATCH_COUNT)
+      : legacyPoolRule({
+          queryContext,
+          thresholds,
+          maxResults: resolveFinalResultCount(options?.maxResults, env.RAG_FINAL_RESULT_COUNT),
+          fallbackToLowerThreshold: options?.fallbackToLowerThreshold ?? true,
+          profileRequireActive: !evalProfileId,
+        });
+  const pool = new Set(legacyPoolFromRows(rule, queryContext, rows).map((candidate) => candidate.chunk_id));
+  return hits.filter((row) => pool.has(row.hit.chunkId) && byChunk.get(row.hit.chunkId) === row);
+}
+
+function bestDenseSimilarity(hits: FusedHit[]): number | null {
+  let best: number | null = null;
+  for (const row of hits) {
+    const sim = row.hit.similarity;
+    if (sim !== null && Number.isFinite(sim) && (best === null || sim > best)) best = sim;
+  }
+  return best;
+}
+
+/** D-06: under the query layer the floor reads the standalone variant's similarity, never a HyDE, expanded or translated list. */
+function floorSimilarity(row: FusedHit, standalone: boolean): number | null {
+  return standalone ? (row.standaloneSimilarity ?? 0) : row.hit.similarity;
+}
+
 function applyRefusal(
-  config: RagConfig,
-  profile: Profile,
-  embedding: QueryEmbedding,
-  queryLanguage: QueryLanguage | null,
+  ctx: RankStagesInput,
   fusedHits: FusedHit[],
   rerankGate: RerankGateState,
-  query: string,
-): { record: RefusalRecord; gate: RefusalRecord } {
+): RefusalOutcome {
+  const { config, profile, embedding, queryLanguage } = ctx;
+  const standalone = Boolean(ctx.queryPlan);
+  const query = ctx.queryPlan ? ctx.queryPlan.standalone : ctx.input.query;
   const { cells } = loadThresholds();
   const gate = decideRefusal({
     enabled: config.v2.refusalThreshold,
@@ -100,26 +184,31 @@ function applyRefusal(
   });
   if (gate.decision !== 'not_applied') return { record: gate, gate };
 
+  if (config.v2.refusalFloor === 'legacy_rule') {
+    const members = legacyPoolMembers(ctx, fusedHits);
+    const record =
+      members.length === 0 && fusedHits.length > 0
+        ? emptyLegacyPool(bestDenseSimilarity(fusedHits))
+        : legacyRuleFloor({
+            floors: LEGACY_KEEP_FLOORS,
+            terms: legacyQueryTerms(query),
+            candidates: members.map((row) => ({
+              similarity: floorSimilarity(row, standalone),
+              hasImage: hitHasImage(row.hit),
+              filename: row.hit.document.filename,
+              text: `${row.hit.content} ${row.hit.document.contentPreview}`,
+            })),
+          });
+    return { record, gate, poolSize: members.length };
+  }
+
   const calibration =
     evalFloorCalibration(profile) ?? embedding.profile?.scoreCalibration ?? LEGACY_PROFILE.scoreCalibration;
   const floors = floorsFromCalibration(calibration as Record<string, unknown>);
-  if (config.v2.refusalFloor === 'legacy_rule') {
-    const record = legacyRuleFloor({
-      floors,
-      terms: legacyQueryTerms(query),
-      candidates: fusedHits.map((row) => ({
-        similarity: row.hit.similarity,
-        hasImage: hitHasImage(row.hit),
-        filename: row.hit.document.filename,
-        text: `${row.hit.content} ${row.hit.document.contentPreview}`,
-      })),
-    });
-    return { record, gate };
-  }
   const record = similarityFloor({
     floors,
     candidates: fusedHits.map((row) => ({
-      similarity: row.hit.similarity,
+      similarity: floorSimilarity(row, standalone),
       hasImage: hitHasImage(row.hit),
     })),
   });
@@ -210,7 +299,11 @@ async function runRerankStage(ctx: RankStagesInput): Promise<RerankStageResult> 
 
   const wantSpans = settings.compression;
   const texts = hits.map((row) => rerankText({ sectionPath: row.hit.sectionPath, content: row.hit.content }));
-  const variants = ctx.variants ?? [{ text: input.query, language: queryLanguage, kind: 'original' as const }];
+  const rerankQuery = ctx.queryPlan ? ctx.queryPlan.standalone : input.query;
+  // D-06: under the layer every document is scored against the standalone query, never a generated or translated text.
+  const queryByDoc = ctx.queryPlan
+    ? hits.map(() => rerankQuery)
+    : queryByDocument(hits, ctx.variants ?? [{ text: input.query, language: queryLanguage, kind: 'original' as const }], input.query);
   const capturedFrom = ctx.dedupeCounts?.capped_from ?? hits.length;
 
   const outcome = await runStage(
@@ -219,13 +312,13 @@ async function runRerankStage(ctx: RankStagesInput): Promise<RerankStageResult> 
     async (stageSignal) => {
       if (hits.length === 0) return { scores: [] as RerankScore[], usage: undefined };
       const response = await reranker.rerank(
-        input.query,
+        rerankQuery,
         texts.map((entry) => entry.text),
         {
           signal: stageSignal,
           timeoutMs,
           wantSpans,
-          ...(reranker.id === 'local_bm25' ? { queryByDoc: queryByDocument(hits, variants, input.query) } : {}),
+          ...(reranker.id === 'local_bm25' ? { queryByDoc } : {}),
         },
       );
       if (response.scores.length !== hits.length) {
@@ -284,36 +377,54 @@ async function runRerankStage(ctx: RankStagesInput): Promise<RerankStageResult> 
 }
 
 export async function runRankStages(ctx: RankStagesInput): Promise<RankStagesOutput> {
-  const { config, profile, embedding, queryLanguage, signal, collector, stageOverrides } = ctx;
+  const { config, profile, signal, collector, stageOverrides } = ctx;
   const spec = (name: StageName, onFail: StageSpec['onFail']) => stageSpec(config, profile, name, onFail, stageOverrides);
 
   const reranked = await runRerankStage(ctx);
   const rankedHits = reranked.hits;
   const preRefusalHits = rankedHits;
+  const variants = ctx.variants ?? [];
+  // D-07: only when decomposition produced sub-questions; otherwise the stage output is exactly Phase 4's.
+  const coverageActive =
+    ctx.coverage !== undefined &&
+    (ctx.queryPlan?.sub_questions?.length ?? 0) > 0 &&
+    variants.some((variant) => variant.subQuestionIndex !== undefined);
+
+  const decide = () => {
+    const refusal = applyRefusal(ctx, rankedHits, reranked.gate);
+    if (refusal.record.decision === 'refuse') return { ...refusal, survivors: [] as FusedHit[], reserved: 0 };
+    if (!coverageActive || !ctx.coverage) return { ...refusal, survivors: rankedHits, reserved: 0 };
+    const topK = Math.max(0, ctx.coverage.topK);
+    const covered = reserveSubQuestionCoverage(rankedHits.slice(0, topK), rankedHits.slice(topK), variants, {
+      enabled: ctx.coverage.enabled,
+      max: 4,
+    });
+    return { ...refusal, survivors: [...covered.topK, ...covered.pool], reserved: covered.reserved };
+  };
 
   const refused = await runStage(
     spec('refusal', 'skip'),
     signal,
-    async () => applyRefusal(config, profile, embedding, queryLanguage, rankedHits, reranked.gate, ctx.input.query),
+    async () => decide(),
     collector,
     {
       candidatesIn: rankedHits.length,
-      counts: ({ record }): Record<string, number> => {
-        if (record.decision === 'refuse') return { refused: 1 };
-        if (record.decision === 'answer') return { answered: 1 };
-        return { not_applied: 1 };
+      counts: ({ record, reserved }): Record<string, number> => {
+        const extra: Record<string, number> = coverageActive ? { subq_reserved: reserved } : {};
+        if (record.decision === 'refuse') return { refused: 1, ...extra };
+        if (record.decision === 'answer') return { answered: 1, ...extra };
+        return { not_applied: 1, ...extra };
       },
-      detail: ({ record, gate }) => {
+      detail: ({ record, gate, poolSize }) => {
         const base = record.basis !== 'none' ? record.basis : record.reason;
-        return record !== gate && config.v2.refusalFloor !== 'similarity' ? `${base} floor=${config.v2.refusalFloor}` : base;
+        if (record === gate || config.v2.refusalFloor === 'similarity') return base;
+        return poolSize === undefined
+          ? `${base} floor=${config.v2.refusalFloor}`
+          : `${base} floor=${config.v2.refusalFloor} pool=${poolSize}`;
       },
     },
   );
 
-  const { record: decision, gate } = refused.skipped
-    ? applyRefusal(config, profile, embedding, queryLanguage, rankedHits, reranked.gate, ctx.input.query)
-    : refused.value;
-
-  const survivors = decision.decision === 'refuse' ? [] : rankedHits;
+  const { record: decision, gate, survivors } = refused.skipped ? decide() : refused.value;
   return { decision, gate, survivors, preRefusalHits, rerank: reranked.output };
 }

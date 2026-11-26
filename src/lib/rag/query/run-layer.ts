@@ -1,19 +1,25 @@
-import type { QueryPlan } from '@/lib/rag-eval/contracts.generated';
+import { QueryTranslationSchema, type QueryPlan } from '@/lib/rag-eval/contracts.generated';
 import { logger } from '@/lib/logger';
 import type { QueryLayerConfig, QueryTransformSwitches, RagConfig, StageName } from '../config';
 import { getRagDeps } from '../deps';
 import { runStage, stageSpec, StageError, type StageSpec } from '../pipeline';
+import type { TenantScope } from '../tenant/scope';
 import type { TraceCollector } from '../trace/collector';
 import type { HistoryTurn, Profile, QueryLayerOverrides, QueryVariant, RunRetrievalInput, StageOverrides } from '../types';
 import { normalizeRelativeDates, type NormalizedDates, type RelativeDateRange } from './dates';
 import { groupDeadlineMs, groupDeadlineSignal, transformAbortReason, transformSignal } from './deadline';
 import type { NativeTransformSkip } from './llamaindex/call';
 import type { PostCheckLimits, PostCheckSkip, PostCheckSkipReason } from './post-checks';
+import { getKbLanguageShares, translationTargets, type KbLanguageShares } from './kb-languages';
+import type { TranslateSkip } from './llamaindex/translate';
 import { buildQueryPlan, planToVariants, type SkippedTransform } from './plan';
 import { effectiveQueryParams } from './query-params';
-import { needsRewrite, type GateResult } from './rewrite-gate';
+import { needsRewrite, type GateResult, type Lang } from './rewrite-gate';
 import { routeTransforms, type RoutedTransform, type RoutedTransforms } from './router';
 import { getQueryTransformer, type CondenseResult, type DecomposeResult, type ExpandResult, type HydeResult, type QueryTransformer } from './transformer';
+import { queryLayerTranslator, type QueryLayerTranslateContext } from './translate';
+import type { TranslatedQuery } from './variants';
+import { getActiveProfile } from '../embeddings/active-profile';
 
 export type QueryLayerShortCircuit = { kind: 'small_talk' } | { kind: 'cache_hit' };
 
@@ -36,6 +42,8 @@ export interface QueryLayerInput {
   signal: AbortSignal;
   collector: TraceCollector;
   stageOverrides?: StageOverrides;
+  /** The request's minted scope: the only tenant input for the KB language shares (D-23). */
+  scope?: TenantScope;
 }
 
 const NO_LAYER_OUTCOME: Readonly<QueryLayerOutcome> = Object.freeze({
@@ -195,6 +203,37 @@ export function expandAllowance(budget: number, condensed: boolean, hyde: boolea
   return Math.max(0, budget - (condensed ? 1 : 0) - (hyde ? 1 : 0));
 }
 
+/** The embedding profile the request searches with (D-24 per-profile switch): the eval option, else the active profile. */
+async function requestEmbeddingProfileId(input: RunRetrievalInput, profile: Profile): Promise<string> {
+  const evalProfile = profile === 'eval' ? input.options?.embeddingProfile : undefined;
+  if (evalProfile) return evalProfile;
+  try {
+    return (await getActiveProfile()).id;
+  } catch {
+    return '';
+  }
+}
+
+/** D-24: the layer owns translation when its switch is on, the stage is not operator- or request-disabled, and voice allows it. */
+function layerTranslates(layer: QueryLayerConfig, config: RagConfig, profile: Profile, requestDisabled: ReadonlySet<string>): boolean {
+  if (!layer.enabled || !layer.transforms.translate || config.monolingual) return false;
+  if (config.operatorDisabledStages?.has('translate') || requestDisabled.has('translate')) return false;
+  if (profile === 'voice' && !layer.voiceTransforms.includes('translate')) return false;
+  return true;
+}
+
+const PLAN_LANGUAGES: readonly string[] = QueryTranslationSchema.shape.target_language.options;
+
+function isPlanLanguage(language: string): language is Lang {
+  return PLAN_LANGUAGES.includes(language);
+}
+
+function translateSkipReason(reason: TranslateSkip['reason']): SkippedTransform['reason'] {
+  if (reason === 'protected_token_lost' || reason === 'length' || reason === 'cap') return reason;
+  if (reason === 'aborted') return 'timeout';
+  return 'error';
+}
+
 export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOutcome> {
   const { input, config, profile, signal, collector, stageOverrides } = ctx;
   const deps = getRagDeps();
@@ -217,12 +256,29 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
   };
   const history = usableHistory(input.history);
 
-  // A-7: the parallel-group deadline is anchored here, at the gate start.
+  // A-7: the parallel-group deadline is anchored here, at the gate start (the KB shares are the gate's R8 input).
   const gateStartedAt = deps.now();
+
+  // D-23/D-24: the layer serves translation; the KB shares are read (cached per tenant) only when it may translate.
+  const translateSpec: StageSpec = { ...spec('translate', 'skip'), enabled: true };
+  const handledTranslate = layerTranslates(layer, config, profile, requestDisabled);
+  const embeddingProfileId =
+    handledTranslate && layer.translateDisabledProfiles.length > 0 ? await requestEmbeddingProfileId(input, profile) : '';
+  const translateForProfile = handledTranslate && !layer.translateDisabledProfiles.includes(embeddingProfileId);
+  let kbShares: KbLanguageShares | null = null;
+  if (translateForProfile) {
+    kbShares = ctx.scope ? await getKbLanguageShares(ctx.scope, { signal: transformSignal(signal, null, translateSpec.timeoutMs) }) : null;
+  }
+
   const gated = await runStage(
     spec('query_gate', 'skip'),
     signal,
-    () => needsRewrite(input.query, { hasHistory: history.length > 0, now: new Date(deps.now()) }),
+    () =>
+      needsRewrite(input.query, {
+        hasHistory: history.length > 0,
+        now: new Date(deps.now()),
+        ...(kbShares ? { kbShares } : {}),
+      }),
     collector,
     { rules: (value) => [...value.reasons], detail: gateDetail },
   );
@@ -234,7 +290,7 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
     classification: input.classification ?? null,
     config: layer,
     profile,
-    embeddingProfileId: (profile === 'eval' ? input.options?.embeddingProfile : undefined) ?? '',
+    embeddingProfileId,
   });
   const transformer: QueryTransformer = getQueryTransformer(route.framework);
   const skipped: SkippedTransform[] = [];
@@ -244,10 +300,12 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
 
   if (route.skipRetrieval) {
     const plan = buildQueryPlan({ original: input.query, gate, framework: transformer.framework, skipped });
-    return { plan, variants: planToVariants(plan), dateRange: null, handledTranslate: false, shortCircuit: { kind: 'small_talk' } };
+    return { plan, variants: planToVariants(plan), dateRange: null, handledTranslate, shortCircuit: { kind: 'small_talk' } };
   }
+  if (handledTranslate && !translateForProfile) skip('translate', 'disabled_for_profile');
+  else if (translateForProfile && kbShares === null) skip('translate', 'error');
 
-  // Router decisions are configuration: recorded disabled, never degraded (D-28). Translate stays with the Phase 4 slot.
+  // Router decisions are configuration: recorded disabled, never degraded (D-28). The translate record is the Phase 4 slot's.
   for (const entry of route.skipped) {
     if (entry.transform === 'translate') continue;
     const at = collector.now();
@@ -307,11 +365,16 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
   });
   const base = { query: standalone, language: gate.lang, protectedTokens: gate.protectedTokens, limits };
 
+  const translateSkips: TranslateSkip[] = [];
+  const runTranslate = handledTranslate && routed.has('translate');
+  const translateTargets: Lang[] = runTranslate ? translationTargets(gate.lang, kbShares) : [];
+
   const tasks: [
     Promise<TransformOutcome<NormalizedDates>> | null,
     Promise<TransformOutcome<ExpandResult>> | null,
     Promise<TransformOutcome<HydeResult>> | null,
     Promise<TransformOutcome<DecomposeResult>> | null,
+    Promise<TransformOutcome<TranslatedQuery[]>> | null,
   ] = [
     routed.has('normalize_dates')
       ? runTransform(transformRun<NormalizedDates>('normalize_dates', { detail: (value) => (value.range ? `range=${value.range.from}..${value.range.to} tz=${value.timeZone}` : 'no_range') }), () => {
@@ -338,15 +401,40 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
           (stageSignal) => transformer.decompose({ ...base, signal: stageSignal }),
         )
       : null,
+    runTranslate
+      ? runTransform<TranslatedQuery[]>(
+          {
+            spec: translateSpec,
+            request: signal,
+            group,
+            collector,
+            detail: (value) => (translateTargets.length === 0 ? 'no_targets' : `targets=${translateTargets.join(',')} variants=${value.length}`),
+          },
+          (stageSignal) => {
+            const translateCtx: QueryLayerTranslateContext = {
+              signal: stageSignal,
+              sourceLanguage: gate.lang,
+              targets: translateTargets,
+              protectedTokens: gate.protectedTokens,
+              maxItems: params.max_translations,
+              limits,
+              transformer,
+              onSkip: (entry) => translateSkips.push(entry),
+            };
+            return queryLayerTranslator.translate(standalone, translateCtx);
+          },
+        )
+      : null,
   ];
   const settled = await Promise.allSettled(tasks.map((task) => task ?? Promise.resolve(null)));
   const rejected = settled.find((result): result is PromiseRejectedResult => result.status === 'rejected');
   if (rejected) throw rejected.reason;
-  const [dates, expand, hyde, decompose] = settled.map((result) => (result as PromiseFulfilledResult<unknown>).value) as [
+  const [dates, expand, hyde, decompose, translation] = settled.map((result) => (result as PromiseFulfilledResult<unknown>).value) as [
     TransformOutcome<NormalizedDates> | null,
     TransformOutcome<ExpandResult> | null,
     TransformOutcome<HydeResult> | null,
     TransformOutcome<DecomposeResult> | null,
+    TransformOutcome<TranslatedQuery[]> | null,
   ];
 
   const recordOutcome = <T extends { skipped: ReadonlyArray<PostCheckSkip | NativeTransformSkip> }>(
@@ -367,6 +455,11 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
   const expanded = recordOutcome('expand', expand);
   const hypothetical = recordOutcome('hyde', hyde);
   const subQuestions = recordOutcome('decompose', decompose);
+  if (translation && !translation.ran && translation.reason !== 'disabled') skip('translate', translation.reason === 'timeout' ? 'timeout' : 'error');
+  if (translation?.ran) for (const entry of translateSkips) skip('translate', translateSkipReason(entry.reason));
+  const translated = translation?.ran
+    ? translation.value.flatMap((item) => (isPlanLanguage(item.language) ? [{ text: item.text, language: item.language }] : []))
+    : [];
 
   const plan = buildQueryPlan({
     original: input.query,
@@ -375,6 +468,7 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
     condensed,
     skipped,
     dateRange: normalized ? rangeContract(normalized) : null,
+    translated,
     expanded: expanded?.variants.map((variant) => variant.text) ?? [],
     hyde: hypothetical?.variant ? { text: hypothetical.variant.text, protectedOk: hypothetical.variant.protectedOk } : null,
     subQuestions: subQuestions?.variants.map((variant) => variant.text) ?? [],
@@ -383,7 +477,7 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
     plan,
     variants: planToVariants(plan),
     dateRange: normalized?.range ?? null,
-    handledTranslate: false,
+    handledTranslate,
     shortCircuit: null,
   };
 }

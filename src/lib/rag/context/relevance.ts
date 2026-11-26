@@ -14,7 +14,8 @@ export interface LegacyKeepCandidate {
 
 export type LegacyKeepReason = Extract<KeptBy, 'similarity' | 'name' | 'image'>;
 
-const LEGACY_KEEP_FLOORS: LegacyKeepFloors = { text: 0.65, image: 0.25 };
+/** The floors filterCandidates keeps a chunk by; the legacy_rule refusal floor uses these and nothing else. */
+export const LEGACY_KEEP_FLOORS: LegacyKeepFloors = { text: 0.65, image: 0.25 };
 
 export function normalizeQueryText(input: unknown): string {
   if (typeof input === 'string') {

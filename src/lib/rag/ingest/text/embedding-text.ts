@@ -1,9 +1,13 @@
+import { serializeTableRows } from './table-rows';
+
 export const EMBEDDING_TEXT_VERSION = 1;
 
 export interface EmbeddingTextInput {
   section_path: string[];
   content: string;
   template_header?: string;
+  /** D-21: the list separator of the block's language, set only for a table chunk while RAG_TABLE_ROW_SERIALIZATION is on. */
+  table_row_separator?: string | null;
 }
 
 export type TemplateRow = Record<string, string | number | null | undefined>;
@@ -12,12 +16,15 @@ const PLACEHOLDER = /\{([^{}]*)\}/g;
 const PLACEHOLDER_NAME = /^[a-z][a-z0-9_]*$/;
 
 /**
- * The text that gets embedded, rebuilt from stored columns only: section path, optional type header, content.
+ * The text that gets embedded, rebuilt from stored columns only: section path, optional type header, content, and for a table chunk under
+ * RAG_TABLE_ROW_SERIALIZATION one column=value line per data row after it (D-21).
  */
 export function buildEmbeddingText(input: EmbeddingTextInput): string {
   const prefix = input.section_path.length > 0 ? `${input.section_path.join(' > ')}\n\n` : '';
   const header = input.template_header ? `${input.template_header}\n` : '';
-  return `${prefix}${header}${input.content}`;
+  const text = `${prefix}${header}${input.content}`;
+  const rows = input.table_row_separator ? serializeTableRows(input.content, { list_separator: input.table_row_separator }) : [];
+  return rows.length === 0 ? text : `${text}\n\n${rows.join('\n')}`;
 }
 
 /**

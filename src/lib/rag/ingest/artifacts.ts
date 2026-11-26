@@ -9,6 +9,12 @@ export const PARSE_CHUNKS_ARTIFACT = 'chunks.json';
 /** The pictures the parser found, kept (with RAG_PDF_IMAGE_CHUNKS on) so a resumed run selects and captions the same ones. */
 export const PICTURES_ARTIFACT = 'pictures.json';
 
+/**
+ * documents.metadata key set once a version's hidden spans were removed and its parse.md and chunks.json overwritten (D-34, F-17). A
+ * later rebuild of such a document (a type change, a re-chunk) reads only the sanitized parse output, never docling.json or the original.
+ */
+export const HIDDEN_TEXT_SANITIZED_KEY = 'hidden_text_sanitized';
+
 const TENANT_KEY = /^[a-z]:[a-z0-9-]{1,64}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const EXTENSION = /^[a-z0-9]{1,8}$/;
@@ -69,6 +75,21 @@ export async function saveArtifact(ctx: ArtifactContext, name: string, bytes: Ui
   await getObjectStore().put(key, bytes, { contentType: safeContentType(contentType), signal: ctx.signal });
   ctx.state.artifacts[name] = key;
   return key;
+}
+
+/**
+ * Overwrites the stored parse output of the run's version with the sanitized text and parser chunks (F-17), so nothing that rebuilds the
+ * version later reads the hidden spans again. chunks.json is rewritten only when the run stored one. Returns the names rewritten.
+ */
+export async function rewriteSanitizedArtifacts(ctx: ArtifactContext, sanitized: { parseText: string; parseChunks: unknown[] | null | undefined }): Promise<string[]> {
+  const rewritten: string[] = [];
+  if (ctx.state.artifacts[PARSE_CHUNKS_ARTIFACT] !== undefined || (sanitized.parseChunks && sanitized.parseChunks.length > 0)) {
+    await saveArtifact(ctx, PARSE_CHUNKS_ARTIFACT, new TextEncoder().encode(JSON.stringify(sanitized.parseChunks ?? [])), 'application/json');
+    rewritten.push(PARSE_CHUNKS_ARTIFACT);
+  }
+  await saveArtifact(ctx, PARSE_ARTIFACT, new TextEncoder().encode(sanitized.parseText), 'text/markdown');
+  rewritten.push(PARSE_ARTIFACT);
+  return rewritten;
 }
 
 /** One artifact of the run's version, or null when it was never stored. */

@@ -317,6 +317,8 @@ export interface RagConfig {
   /** D-03: exactly one supported language; the translate stage and lexical translation are then no-ops. */
   monolingual: boolean;
   disabledStages: ReadonlySet<StageName>;
+  /** Only the stages RAG_DISABLED_STAGES lists (disabledStages also holds stages turned off by their own switches). */
+  operatorDisabledStages?: ReadonlySet<StageName>;
   timeouts: Record<Profile, StageTimeouts>;
   exactIdLookup: boolean;
   v2: V2Config;
@@ -942,6 +944,7 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
     domainEmbeddings: parseDomainEmbeddings(env, warnings),
   };
 
+  const operatorDisabledStages: ReadonlySet<StageName> = new Set(disabledStages);
   applyV2DisabledStages(v2, disabledStages);
   applyQueryLayerDisabledStages(queryLayer, semanticCache, disabledStages);
 
@@ -952,6 +955,7 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
     pipelineBlocked: gate.blocked,
     monolingual: gate.monolingual,
     disabledStages,
+    operatorDisabledStages,
     timeouts,
     exactIdLookup,
     v2,

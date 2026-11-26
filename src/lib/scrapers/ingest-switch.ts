@@ -1,4 +1,4 @@
-import { currentIngestConfig } from '@/lib/rag';
+import { currentIngestConfig, legacyUploadRoute } from '@/lib/rag';
 
 export type ScraperPipeline = 'legacy' | 'unified';
 
@@ -8,7 +8,9 @@ export type ScraperPipeline = 'legacy' | 'unified';
  */
 export function scraperPipeline(): ScraperPipeline {
     try {
-        return currentIngestConfig().pipeline === 'unified' ? 'unified' : 'legacy';
+        const config = currentIngestConfig();
+        // D-16: language-aware ingestion sends scrapes to the unified pipeline even under RAG_INGEST_PIPELINE=legacy.
+        return config.pipeline === 'unified' || legacyUploadRoute(config) === 'unified' ? 'unified' : 'legacy';
     } catch {
         console.warn('[Scraper] ingest switch unavailable, using the legacy pipeline');
         return 'legacy';
