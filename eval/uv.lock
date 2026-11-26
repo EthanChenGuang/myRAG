@@ -1779,6 +1779,8 @@ requires-dist = [
     { name = "python-multipart", specifier = "==0.0.34" },
     { name = "python-stdnum", specifier = "==2.2" },
     { name = "ray", extras = ["data"], marker = "extra == 'ray'", specifier = "==2.60.1" },
+    { name = "redis", marker = "extra == 'cache'", specifier = "==8.1.0" },
+    { name = "redisvl", marker = "extra == 'cache'", specifier = "==0.32.0" },
     { name = "tiktoken", marker = "extra == 'chunking'", specifier = "==0.14.0" },
     { name = "tiktoken", marker = "extra == 'docling'", specifier = "==0.14.0" },
     { name = "torch", marker = "extra == 'docling'", specifier = "==2.15.0", index = "https://download.pytorch.org/whl/cpu" },
@@ -1787,7 +1789,7 @@ requires-dist = [
     { name = "transformers", marker = "extra == 'hhem'", specifier = "==5.23.0" },
     { name = "uvicorn", specifier = "==0.54.0" },
 ]
-provides-extras = ["chunking", "preflight", "hidden-text", "docling", "ray", "hhem"]
+provides-extras = ["chunking", "preflight", "hidden-text", "docling", "ray", "hhem", "cache"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = "==9.2.0" }]
