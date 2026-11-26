@@ -158,6 +158,21 @@ function identifierKeys(surface: string): string[] {
   return [...keys];
 }
 
+/**
+ * The key two dictionary terms share exactly when the matcher treats them as the same surface: the joined lookup form for an
+ * identifier, else the folded word units. The validator compares terms with it (D-24).
+ */
+export function termKey(term: string, identifier = false): string {
+  const normalized = normalizeLexical(term).trim();
+  if (identifier) {
+    const key = identifierKeys(normalized)[0];
+    if (key) return key;
+  }
+  return unitsOf(normalized)
+    .map((unit) => unit.text)
+    .join(' ');
+}
+
 function addEntry(list: TermEntry[], entry: TermEntry): void {
   if (!list.includes(entry)) list.push(entry);
 }
