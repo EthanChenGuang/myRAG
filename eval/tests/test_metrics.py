@@ -612,26 +612,31 @@ def test_table_split_is_gated_and_the_re_recorded_ingest_baseline_leaves_every_o
     current = Baseline.model_validate_json((root / "baselines" / "fixture-ingest-baseline.json").read_text(encoding="utf-8"))
     assert len(current.runs) >= 3
     assert {run.run_id for run in current.runs}.isdisjoint({run.run_id for run in previous.runs}), "not re-recorded"
-    assert current.corpus_sha256 == previous.corpus_sha256
     assert previous.items is not None and current.items is not None
     # Plan 06-39 later added the cache pair golden items: they bring their own category slices and move only
     # the overall and language slices, so those are compared only while the golden set is the one 03.2-32 recorded.
     cache_categories = {"cache_paraphrase", "cache_near_miss"}
-    golden_categories = {
-        item.id: item.category
-        for item in (
-            GoldenItem.model_validate_json(line)
-            for line in (root / "fixtures" / "golden.jsonl").read_text(encoding="utf-8").splitlines()
-            if line.strip()
-        )
-    }
+    # Plan 04.2-37 added the Phase 4.2 documents and items (tag phase42): the corpus hash moves, and so do the slices of the
+    # categories those items join; every old item is still compared below.
+    golden_items = [
+        GoldenItem.model_validate_json(line)
+        for line in (root / "fixtures" / "golden.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    golden_categories = {item.id: item.category for item in golden_items}
+    phase42 = {item.id for item in golden_items if "phase42" in item.tags}
     added = set(current.items) - set(previous.items)
     golden_grew = current.golden_sha256 != previous.golden_sha256
     if golden_grew:
-        assert added and {golden_categories.get(item_id) for item_id in added} <= cache_categories
+        assert added and {golden_categories.get(item_id) for item_id in added - phase42} <= cache_categories
     else:
         assert not added
+    if added & phase42:
+        assert current.corpus_sha256 != previous.corpus_sha256
+    else:
+        assert current.corpus_sha256 == previous.corpus_sha256
     moved = {"overall"} | {name for name in previous.slices if name.startswith("language:")}
+    moved |= {f"category:{golden_categories[item_id]}" for item_id in added & phase42}
     for name, stats in previous.slices.items():
         if golden_grew and name in moved:
             continue

@@ -218,6 +218,11 @@ export function latestLineageVersions(documents: readonly CorpusDocument[]): Map
   return latest;
 }
 
+/** Without lineage columns every version is an ordinary document, as two uploads were before document versions existed. */
+export function versionsAsPlainDocuments(documents: readonly CorpusDocument[]): CorpusDocument[] {
+  return documents.map((doc) => (doc.lineage ? { ...doc, lineage: undefined } : doc));
+}
+
 /**
  * The prechunked writer: inserts one corpus document and its pre-cut chunks as ready rows of the fixture tenant, bypassing ingest()
  * and its quarantine. Ingest mode uses it for the documents that simulate legacy or pre-scan content (D-13). A document with a fixture
@@ -415,14 +420,17 @@ export async function createFixtureDatabase(options: {
   const corpus = loadCorpus(corpusDir);
   const { db, sqlSha256 } = await createEmptyFixtureDatabase(options);
   try {
-    const writer = await prechunkedWriter(db, deploymentMode, latestLineageVersions(corpus.documents));
-    for (const doc of corpus.documents) await writer(doc);
+    // A setup from before document versions (no documents.lineage_id) holds every version as a plain document.
+    const versioned = await hasPublicColumn(db, 'documents', 'lineage_id');
+    const seeded = versioned ? corpus.documents : versionsAsPlainDocuments(corpus.documents);
+    const writer = await prechunkedWriter(db, deploymentMode, versioned ? latestLineageVersions(corpus.documents) : undefined);
+    for (const doc of seeded) await writer(doc);
     if (options.terminologySeed?.length) await seedTerminology(db, options.terminologySeed);
     if (options.relex ?? (options.migrations !== false)) {
       await runFixtureRelex(db);
       sqlSha256[LEXICAL_SHA_KEY] = crypto.createHash('sha256').update(String(LEXICAL_VERSION)).digest('hex');
     }
-    await supersedeFixtureLineages(db, corpus.documents);
+    if (versioned) await supersedeFixtureLineages(db, corpus.documents);
   } catch (error) {
     await db.close().catch(() => undefined);
     throw error;
