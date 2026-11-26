@@ -18,3 +18,4 @@ export interface LexicalOptions {
 /** Natural tokens start with a letter, a digit or a Han character, so these prefixes cannot collide. */
 export const DICT_TOKEN_PREFIX = '_t_';
 export const STEM_TOKEN_PREFIX = '_s_';
+export const QUANTITY_TOKEN_PREFIX = '_q_';
