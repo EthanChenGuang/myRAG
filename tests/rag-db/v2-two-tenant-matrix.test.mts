@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { PGlite } from '@electric-sql/pglite';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from '../../eval/harness/fake-edge.mts';
-import { createFixtureDatabase, type FixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
+import { createFixtureDatabase, runFixtureRelex, type FixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
 import { embedText } from '../../eval/harness/fixture-embedder.mts';
 import { TWO_TENANT_IDS } from '../../eval/harness/two-tenant.mts';
 import {
@@ -22,6 +22,8 @@ import {
   type V2TenantLabel,
 } from '../../eval/harness/two-tenant-v2.mts';
 import { hit } from '../rag/fusion/helpers.ts';
+import type { FakeQueryLlm } from '../../eval/harness/fake-query-llm.mts';
+import type { FakeLangChainChatModel } from '@/lib/rag/query/langchain/fake';
 
 type Profile = 'chat' | 'embed' | 'voice' | 'eval';
 type Path = 'all' | 'exact_id' | 'translated';
@@ -89,6 +91,10 @@ describe('every v2 retrieval path stays inside the caller tenant, for every entr
   let contextModule: typeof import('@/lib/rag/v2/stages/context');
   let collectorModule: typeof import('@/lib/rag/trace/collector');
   let paramsModule: typeof import('@/lib/rag/v2/retrieval-params');
+  let transformerModule: typeof import('@/lib/rag/query/transformer');
+  let kbModule: typeof import('@/lib/rag/query/kb-languages');
+  let langchainFakeModule: typeof import('@/lib/rag/query/langchain/fake');
+  let fakeQueryLlmModule: typeof import('../../eval/harness/fake-query-llm.mts');
   let allOnEnv: Record<string, string>;
   let adminClient: SupabaseClient;
   const rerankBodies: RerankBody[] = [];
@@ -116,6 +122,10 @@ describe('every v2 retrieval path stays inside the caller tenant, for every entr
     contextModule = await import('@/lib/rag/v2/stages/context');
     collectorModule = await import('@/lib/rag/trace/collector');
     paramsModule = await import('@/lib/rag/v2/retrieval-params');
+    transformerModule = await import('@/lib/rag/query/transformer');
+    kbModule = await import('@/lib/rag/query/kb-languages');
+    langchainFakeModule = await import('@/lib/rag/query/langchain/fake');
+    fakeQueryLlmModule = await import('../../eval/harness/fake-query-llm.mts');
     const { createCohereReranker } = await import('@/lib/rag/rerank/cohere');
     const { createLocalBm25Reranker } = await import('@/lib/rag/rerank/local-bm25');
 
@@ -606,6 +616,197 @@ describe('every v2 retrieval path stays inside the caller tenant, for every entr
     } finally {
       depsModule.setRagDepsForTests({ ragEnv: () => allOnEnv });
       configModule.resetRagConfigForTests();
+    }
+  });
+
+  type Framework = 'llamaindex' | 'langchain';
+  type LayerCase = 'condensed' | 'expanded' | 'hyde' | 'sub_question' | 'translated';
+  const FRAMEWORKS: Framework[] = ['llamaindex', 'langchain'];
+  const LAYER_PROFILES: Profile[] = ['chat', 'embed', 'eval'];
+  const LAYER_CASES: LayerCase[] = ['condensed', 'expanded', 'hyde', 'sub_question', 'translated'];
+  const LAYER_HISTORY = [
+    { role: 'user' as const, content: 'Tell me about the two tenant isolation canary handbook.' },
+    { role: 'assistant' as const, content: 'The handbook lists its canary clauses.' },
+  ];
+  const LAYER_QUERY: Record<LayerCase, string> = {
+    condensed: 'Which clause does it list first?',
+    expanded: 'isolation canary handbook',
+    hyde: 'isolation canary handbook',
+    sub_question: 'What does the canary handbook clause say? Which catalogue item carries the canary phrase?',
+    translated: V2_TRANSLATED_QUESTION,
+  };
+  const LAYER_TABLE = {
+    version: 1 as const,
+    entries: [
+      {
+        transform: 'condense' as const,
+        query: LAYER_QUERY.condensed,
+        output: { standalone: 'Which clause does the two tenant isolation canary handbook list first?', unchanged: false },
+      },
+      { transform: 'expand' as const, query: LAYER_QUERY.expanded, output: { queries: ['two tenant isolation canary phrase clause'] } },
+      { transform: 'hyde' as const, query: LAYER_QUERY.hyde, output: { passage: 'Two tenant isolation canary phrase: clause one of the handbook.' } },
+      {
+        transform: 'decompose' as const,
+        query: LAYER_QUERY.sub_question,
+        output: { questions: ['What does the two tenant isolation canary clause say?', 'Which catalogue item carries the canary phrase?'] },
+      },
+      { transform: 'translate' as const, query: LAYER_QUERY.translated, output: { target_language: 'it', text: V2_TRANSLATED_TEXT } },
+    ],
+  };
+
+  async function withQueryLayer<T>(framework: Framework, body: (fakes: { native: FakeQueryLlm; langchain: FakeLangChainChatModel }) => Promise<T>): Promise<T> {
+    const native = fakeQueryLlmModule.createFakeQueryLlm({ table: LAYER_TABLE });
+    const langchain = langchainFakeModule.createFakeLangChainChatModel({ table: LAYER_TABLE });
+    const layerEnv: Record<string, string> = {
+      ...allOnEnv,
+      RAG_QUERY_LAYER: 'true',
+      RAG_QUERY_FRAMEWORK: framework,
+      RAG_QUERY_CONDENSE: 'true',
+      RAG_QUERY_EXPAND: 'true',
+      RAG_QUERY_HYDE: 'true',
+      RAG_QUERY_DECOMPOSE: 'true',
+      RAG_QUERY_TRANSLATE: 'true',
+    };
+    depsModule.setRagDepsForTests({ ragEnv: () => layerEnv, queryLlm: () => native });
+    transformerModule.setLangChainChatModelFactoryForTests(() => langchain);
+    configModule.resetRagConfigForTests();
+    kbModule.resetKbLanguageCacheForTests();
+    try {
+      return await body({ native, langchain });
+    } finally {
+      transformerModule.setLangChainChatModelFactoryForTests(null);
+      depsModule.setRagDepsForTests({ ragEnv: () => allOnEnv, queryLlm: () => fakeQueryLlmModule.createFakeQueryLlm({ table: { version: 1, entries: [] } }) });
+      configModule.resetRagConfigForTests();
+      kbModule.resetKbLanguageCacheForTests();
+    }
+  }
+
+  for (const framework of FRAMEWORKS) {
+    for (const profile of LAYER_PROFILES) {
+      for (const label of LABELS) {
+        for (const kind of LAYER_CASES) {
+          test(`RAG_QUERY_LAYER on, ${framework}, ${profile} scope ${label}, ${kind} variant: only the caller's chunks and text`, async () => {
+            const where = `layer/${framework}/${profile}/${label}/${kind}`;
+            await withQueryLayer(framework, async (fakes) => {
+              const scope = await scopeFor(profile, label);
+              const history = kind === 'condensed' ? LAYER_HISTORY : undefined;
+              const { result, rerank } = await retrieve(scope, profile, LAYER_QUERY[kind], history ? { history } : {});
+              assert.ok(['ok', 'degraded'].includes(result.status), `${where}: status ${result.status} (${result.reason})`);
+              const plan = result.queryPlan;
+              assert.ok(plan, `${where}: a query plan`);
+              assert.equal(plan.framework, framework, `${where}: framework`);
+              assert.ok(
+                plan.variants.some((variant) => variant.kind === kind),
+                `${where}: plan variants ${plan.variants.map((variant) => variant.kind).join(',')}`,
+              );
+              const used = framework === 'langchain' ? fakes.langchain.calls.length : fakes.native.calls.length;
+              const unused = framework === 'langchain' ? fakes.native.calls.length : fakes.langchain.calls.length;
+              assert.ok(used > 0, `${where}: the ${framework} model wrote the variants`);
+              assert.equal(unused, 0, `${where}: the other framework stays unused`);
+              if (framework === 'langchain') {
+                assert.equal(stage(result, 'framework_import')?.status, 'ok', `${where}: LangChain loaded`);
+                assert.equal(stage(result, 'fuse')?.counts?.delegated, 1, `${where}: EnsembleRetriever fused the variant lists through the port`);
+              }
+              const index = plan.variants.findIndex((variant) => variant.kind === kind);
+              const viaVariant = result.candidates.filter((row) => Object.keys(row.legs ?? {}).some((leg) => leg.endsWith(`:${index}`)));
+              assert.ok(viaVariant.length > 0, `${where}: the ${kind} variant (index ${index}) found candidates`);
+              await assertOwnRows(label, result, where);
+              assertNoForeignText(label, { result, stages: result.stages, plan, rerankRequests: rerank }, where);
+              assert.ok(chunkIdsOf(result).length > 0, `${where}: the caller's own chunks come back`);
+            });
+          });
+        }
+      }
+    }
+  }
+
+  test('a langchain request in A, with B holding an identical-text chunk, returns only A chunk id through the port', async () => {
+    const a = tenant('a');
+    const b = tenant('b');
+    const twinText = 'Shared twin sentence about the isolation canary handbook clause';
+    const twinA = crypto.randomUUID();
+    const twinB = crypto.randomUUID();
+    const embedding = `[${embedText(twinText).join(',')}]`;
+    for (const [owner, id] of [
+      [a, twinA],
+      [b, twinB],
+    ] as const) {
+      await db().query(
+        `INSERT INTO document_chunks (id, document_id, content, embedding, chunk_index, metadata, organization_id, chunk_kind)
+         VALUES ($1, $2, $3, $4::vector, 9, '{}'::jsonb, $5, 'text')`,
+        [id, owner.exactDocumentId, twinText, embedding, owner.organizationId],
+      );
+    }
+    await runFixtureRelex(db());
+    try {
+      await withQueryLayer('langchain', async () => {
+        const { result } = await retrieve(await scopeFor('chat', 'a'), 'chat', LAYER_QUERY.expanded);
+        assert.equal(result.queryPlan?.framework, 'langchain');
+        assert.equal(stage(result, 'fuse')?.counts?.delegated, 1, 'the EnsembleRetriever delegate fused the lists');
+        const ids = chunkIdsOf(result);
+        assert.ok(ids.includes(twinA), 'own twin chunk comes back');
+        assert.ok(!ids.includes(twinB), 'the other tenant twin chunk never comes back');
+        await assertOwnRows('a', result, 'langchain twin');
+      });
+    } finally {
+      await db().query('DELETE FROM document_chunks WHERE id = ANY($1::uuid[])', [[twinA, twinB]]);
+    }
+  });
+
+  test('language shares feed translation per tenant: zh-heavy A translates an English query, en B does not, each reads its own shares', async () => {
+    const a = tenant('a');
+    const b = tenant('b');
+    const question = 'Which clause of the isolation handbook names the canary phrase?';
+    const translation = '隔离手册 金丝雀 条款';
+    const table = { version: 1 as const, entries: [{ transform: 'translate' as const, query: question, output: { target_language: 'zh', text: translation } }] };
+    const saved = await db().query<{ id: string; language: string | null }>(
+      'SELECT id::text AS id, language FROM documents WHERE tenant_key = ANY($1::text[])',
+      [[a.scopeKey, b.scopeKey]],
+    );
+    await db().query("UPDATE documents SET language = 'zh' WHERE tenant_key = $1", [a.scopeKey]);
+    await db().query("UPDATE documents SET language = 'en' WHERE tenant_key = $1", [b.scopeKey]);
+    const sharesCalls: Array<Record<string, unknown>> = [];
+    const recordingAdmin = new Proxy(adminClient, {
+      get(target, prop, receiver) {
+        if (prop !== 'rpc') return Reflect.get(target, prop, receiver);
+        return (fn: string, args: Record<string, unknown>, ...rest: unknown[]) => {
+          if (fn === 'rag_tenant_language_shares') sharesCalls.push(args);
+          return (target.rpc as (...params: unknown[]) => unknown)(fn, args, ...rest);
+        };
+      },
+    }) as SupabaseClient;
+    try {
+      for (const framework of FRAMEWORKS) {
+        await withQueryLayer(framework, async () => {
+          const native = fakeQueryLlmModule.createFakeQueryLlm({ table });
+          const langchain = langchainFakeModule.createFakeLangChainChatModel({ table });
+          depsModule.setRagDepsForTests({ queryLlm: () => native, adminClient: () => recordingAdmin });
+          transformerModule.setLangChainChatModelFactoryForTests(() => langchain);
+          try {
+            sharesCalls.length = 0;
+            const inA = (await retrieve(await scopeFor('chat', 'a'), 'chat', question)).result;
+            assert.deepEqual(sharesCalls, [{ p_tenant_key: a.scopeKey }], `${framework}: A reads only its own shares`);
+            assert.ok(inA.queryPlan?.gate.reasons.includes('R8_LANGUAGE_MISMATCH'), `${framework}: A gate ${inA.queryPlan?.gate.reasons.join(',')}`);
+            const translatedA = inA.queryPlan?.variants.find((variant) => variant.kind === 'translated');
+            assert.deepEqual({ text: translatedA?.text, language: translatedA?.language }, { text: translation, language: 'zh' }, `${framework}: A translated into zh`);
+            await assertOwnRows('a', inA, `${framework} shares A`);
+
+            sharesCalls.length = 0;
+            const translateCallsBefore = framework === 'langchain' ? langchain.calls.length : native.calls.length;
+            const inB = (await retrieve(await scopeFor('chat', 'b'), 'chat', question)).result;
+            assert.deepEqual(sharesCalls, [{ p_tenant_key: b.scopeKey }], `${framework}: B reads only its own shares`);
+            assert.ok(!inB.queryPlan?.gate.reasons.includes('R8_LANGUAGE_MISMATCH'), `${framework}: B does not translate`);
+            assert.equal(inB.queryPlan?.variants.some((variant) => variant.kind === 'translated'), false);
+            const translateCallsAfter = framework === 'langchain' ? langchain.calls.length : native.calls.length;
+            assert.equal(translateCallsAfter, translateCallsBefore, `${framework}: no translate call for B`);
+            await assertOwnRows('b', inB, `${framework} shares B`);
+          } finally {
+            depsModule.setRagDepsForTests({ adminClient: () => adminClient });
+          }
+        });
+      }
+    } finally {
+      for (const row of saved.rows) await db().query('UPDATE documents SET language = $1 WHERE id = $2', [row.language, row.id]);
     }
   });
 
