@@ -760,6 +760,50 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_purge_hook_identifiers(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_purge_hook_identifiers(text, uuid, uuid[]) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_finetune_set_consent(text, text, text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_set_consent(text, text, text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_set_consent(text, text, text, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_finetune_list_consent()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_list_consent() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_list_consent() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_finetune_consent_for_export(text[], text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_consent_for_export(text[], text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_consent_for_export(text[], text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_finetune_register_model(jsonb, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_register_model(jsonb, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_register_model(jsonb, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_finetune_list_models(boolean)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_list_models(boolean) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_list_models(boolean) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_finetune_set_model_status(text, text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_set_model_status(text, text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_set_model_status(text, text, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_finetune_bind_slot(text, text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_bind_slot(text, text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_bind_slot(text, text, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_finetune_clear_slot(text, text, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_clear_slot(text, text, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_clear_slot(text, text, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_finetune_release_rollback(text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_release_rollback(text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_release_rollback(text, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_finetune_slot_guard()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_slot_guard() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_slot_guard() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_finetune_version_taint_guard()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_version_taint_guard() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_version_taint_guard() TO service_role;
+  END IF;
 END
 $service_role_only$;
 
