@@ -1,0 +1,816 @@
+{
+  "description": "Phase 5.3 D-10, D-15: save decisions shared by gate-core.cjs (node --test) and gate-core.ts (vitest).",
+  "names": [
+    "RAG_PIPELINE",
+    "RAG_RERANKER",
+    "RAG_SYSTEM_PROMPT",
+    "COHERE_API_KEY"
+  ],
+  "settings": {
+    "before": {
+      "RAG_PIPELINE": "legacy",
+      "RAG_RERANKER": "none",
+      "RAG_SYSTEM_PROMPT": "Answer from the context. {{context}}",
+      "COHERE_API_KEY": "",
+      "THEME_ACCENT": "blue"
+    },
+    "after": {
+      "RAG_PIPELINE": "legacy",
+      "RAG_RERANKER": "local_bm25",
+      "RAG_SYSTEM_PROMPT": "Answer from the context. {{context}}",
+      "COHERE_API_KEY": "",
+      "THEME_ACCENT": "blue"
+    },
+    "themeOnly": {
+      "RAG_PIPELINE": "legacy",
+      "RAG_RERANKER": "none",
+      "RAG_SYSTEM_PROMPT": "Answer from the context. {{context}}",
+      "COHERE_API_KEY": "",
+      "THEME_ACCENT": "green"
+    }
+  },
+  "hashes": {
+    "before": "f342ad958212eb2dc89a7438d96d05a2827792a0adb7bbe9c5650f03bacfda05",
+    "after": "e37f2ab4b9337897b53f0219db3a9db6a70225edde4d4c57bf817a1e00a2451b"
+  },
+  "checks": {
+    "11111111-1111-4111-8111-111111111111": {
+      "check_id": "11111111-1111-4111-8111-111111111111",
+      "status": "done",
+      "stage": null,
+      "started_at": "2026-11-26T10:00:00Z",
+      "finished_at": "2026-11-26T10:05:00Z",
+      "mode": "enforce",
+      "cached": false,
+      "rag_settings_hash": "e37f2ab4b9337897b53f0219db3a9db6a70225edde4d4c57bf817a1e00a2451b",
+      "changed_keys": [
+        "RAG_RERANKER"
+      ],
+      "result": "pass",
+      "error_reason": null,
+      "layers": [
+        {
+          "layer": "deterministic",
+          "set_hash": null,
+          "result": "pass",
+          "reason": null,
+          "checks": [
+            {
+              "check": "context_recall",
+              "slice": "overall",
+              "measured": 0.9,
+              "numerator": null,
+              "denominator": null,
+              "limit": 0.8,
+              "limit_kind": "min",
+              "result": "passed",
+              "reason": null
+            },
+            {
+              "check": "refusal_rate",
+              "slice": "overall",
+              "measured": 0.9,
+              "numerator": null,
+              "denominator": null,
+              "limit": 0.8,
+              "limit_kind": "min",
+              "result": "passed",
+              "reason": null
+            }
+          ]
+        },
+        {
+          "layer": "live",
+          "set_hash": null,
+          "result": "skipped",
+          "reason": "switch_off",
+          "checks": []
+        },
+        {
+          "layer": "real_set",
+          "set_hash": null,
+          "result": "skipped",
+          "reason": "real_set_too_small",
+          "checks": []
+        }
+      ],
+      "not_evaluated_on_real_set": [],
+      "not_evaluated": [],
+      "uncalibrated_cells": [],
+      "saved_as": null
+    },
+    "22222222-2222-4222-8222-222222222222": {
+      "check_id": "22222222-2222-4222-8222-222222222222",
+      "status": "done",
+      "stage": null,
+      "started_at": "2026-11-26T10:00:00Z",
+      "finished_at": "2026-11-26T10:05:00Z",
+      "mode": "enforce",
+      "cached": false,
+      "rag_settings_hash": "e37f2ab4b9337897b53f0219db3a9db6a70225edde4d4c57bf817a1e00a2451b",
+      "changed_keys": [
+        "RAG_RERANKER"
+      ],
+      "result": "fail",
+      "error_reason": null,
+      "layers": [
+        {
+          "layer": "deterministic",
+          "set_hash": null,
+          "result": "fail",
+          "reason": null,
+          "checks": [
+            {
+              "check": "context_recall",
+              "slice": "overall",
+              "measured": 0.4,
+              "numerator": null,
+              "denominator": null,
+              "limit": 0.8,
+              "limit_kind": "min",
+              "result": "failed",
+              "reason": null
+            },
+            {
+              "check": "refusal_rate",
+              "slice": "overall",
+              "measured": 0.9,
+              "numerator": null,
+              "denominator": null,
+              "limit": 0.8,
+              "limit_kind": "min",
+              "result": "passed",
+              "reason": null
+            }
+          ]
+        },
+        {
+          "layer": "live",
+          "set_hash": null,
+          "result": "skipped",
+          "reason": "switch_off",
+          "checks": []
+        },
+        {
+          "layer": "real_set",
+          "set_hash": null,
+          "result": "skipped",
+          "reason": "real_set_too_small",
+          "checks": []
+        }
+      ],
+      "not_evaluated_on_real_set": [],
+      "not_evaluated": [],
+      "uncalibrated_cells": [],
+      "saved_as": null
+    },
+    "33333333-3333-4333-8333-333333333333": {
+      "check_id": "33333333-3333-4333-8333-333333333333",
+      "status": "done",
+      "stage": null,
+      "started_at": "2026-11-26T10:00:00Z",
+      "finished_at": "2026-11-26T10:05:00Z",
+      "mode": "enforce",
+      "cached": false,
+      "rag_settings_hash": "f342ad958212eb2dc89a7438d96d05a2827792a0adb7bbe9c5650f03bacfda05",
+      "changed_keys": [
+        "RAG_RERANKER"
+      ],
+      "result": "pass",
+      "error_reason": null,
+      "layers": [
+        {
+          "layer": "deterministic",
+          "set_hash": null,
+          "result": "pass",
+          "reason": null,
+          "checks": [
+            {
+              "check": "context_recall",
+              "slice": "overall",
+              "measured": 0.9,
+              "numerator": null,
+              "denominator": null,
+              "limit": 0.8,
+              "limit_kind": "min",
+              "result": "passed",
+              "reason": null
+            },
+            {
+              "check": "refusal_rate",
+              "slice": "overall",
+              "measured": 0.9,
+              "numerator": null,
+              "denominator": null,
+              "limit": 0.8,
+              "limit_kind": "min",
+              "result": "passed",
+              "reason": null
+            }
+          ]
+        },
+        {
+          "layer": "live",
+          "set_hash": null,
+          "result": "skipped",
+          "reason": "switch_off",
+          "checks": []
+        },
+        {
+          "layer": "real_set",
+          "set_hash": null,
+          "result": "skipped",
+          "reason": "real_set_too_small",
+          "checks": []
+        }
+      ],
+      "not_evaluated_on_real_set": [],
+      "not_evaluated": [],
+      "uncalibrated_cells": [],
+      "saved_as": null
+    },
+    "44444444-4444-4444-8444-444444444444": {
+      "check_id": "44444444-4444-4444-8444-444444444444",
+      "status": "running",
+      "stage": "deterministic",
+      "started_at": "2026-11-26T10:00:00Z",
+      "finished_at": null,
+      "mode": "enforce",
+      "cached": false,
+      "rag_settings_hash": "e37f2ab4b9337897b53f0219db3a9db6a70225edde4d4c57bf817a1e00a2451b",
+      "changed_keys": [
+        "RAG_RERANKER"
+      ],
+      "result": null,
+      "error_reason": null,
+      "layers": [
+        {
+          "layer": "deterministic",
+          "set_hash": null,
+          "result": "skipped",
+          "reason": "not_started",
+          "checks": []
+        },
+        {
+          "layer": "live",
+          "set_hash": null,
+          "result": "skipped",
+          "reason": "switch_off",
+          "checks": []
+        },
+        {
+          "layer": "real_set",
+          "set_hash": null,
+          "result": "skipped",
+          "reason": "real_set_too_small",
+          "checks": []
+        }
+      ],
+      "not_evaluated_on_real_set": [],
+      "not_evaluated": [],
+      "uncalibrated_cells": [],
+      "saved_as": null
+    },
+    "55555555-5555-4555-8555-555555555555": {
+      "check_id": "55555555-5555-4555-8555-555555555555",
+      "status": "done",
+      "stage": null,
+      "started_at": "2026-11-26T10:00:00Z",
+      "finished_at": "2026-11-26T10:05:00Z",
+      "mode": "enforce",
+      "cached": false,
+      "rag_settings_hash": "e37f2ab4b9337897b53f0219db3a9db6a70225edde4d4c57bf817a1e00a2451b",
+      "changed_keys": [
+        "RAG_RERANKER"
+      ],
+      "result": "error",
+      "error_reason": "smoke_timeout",
+      "layers": [
+        {
+          "layer": "deterministic",
+          "set_hash": null,
+          "result": "error",
+          "reason": "smoke_timeout",
+          "checks": []
+        },
+        {
+          "layer": "live",
+          "set_hash": null,
+          "result": "skipped",
+          "reason": "switch_off",
+          "checks": []
+        },
+        {
+          "layer": "real_set",
+          "set_hash": null,
+          "result": "skipped",
+          "reason": "real_set_too_small",
+          "checks": []
+        }
+      ],
+      "not_evaluated_on_real_set": [],
+      "not_evaluated": [],
+      "uncalibrated_cells": [],
+      "saved_as": null
+    }
+  },
+  "cases": [
+    {
+      "name": "off writes without a check, even with a check id",
+      "mode": "off",
+      "before": "before",
+      "after": "after",
+      "ragGate": {
+        "check_id": "22222222-2222-4222-8222-222222222222"
+      },
+      "expect": {
+        "kind": "write",
+        "gateResult": "not_required",
+        "checkId": null,
+        "overrideReason": null
+      },
+      "readsCheck": false
+    },
+    {
+      "name": "off with no gate body",
+      "mode": "off",
+      "before": "before",
+      "after": "after",
+      "ragGate": null,
+      "expect": {
+        "kind": "write",
+        "gateResult": "not_required",
+        "checkId": null,
+        "overrideReason": null
+      },
+      "readsCheck": false
+    },
+    {
+      "name": "unset mode counts as off",
+      "mode": "",
+      "before": "before",
+      "after": "after",
+      "ragGate": null,
+      "expect": {
+        "kind": "write",
+        "gateResult": "not_required",
+        "checkId": null,
+        "overrideReason": null
+      },
+      "readsCheck": false
+    },
+    {
+      "name": "enforce with no RAG-affecting change",
+      "mode": "enforce",
+      "before": "before",
+      "after": "themeOnly",
+      "ragGate": null,
+      "expect": {
+        "kind": "write",
+        "gateResult": "not_required",
+        "checkId": null,
+        "overrideReason": null
+      },
+      "readsCheck": false
+    },
+    {
+      "name": "warn with no RAG-affecting change",
+      "mode": "warn",
+      "before": "before",
+      "after": "themeOnly",
+      "ragGate": {
+        "skipped": true
+      },
+      "expect": {
+        "kind": "write",
+        "gateResult": "not_required",
+        "checkId": null,
+        "overrideReason": null
+      },
+      "readsCheck": false
+    },
+    {
+      "name": "enforce with a passing check of the same hash",
+      "mode": "enforce",
+      "before": "before",
+      "after": "after",
+      "ragGate": {
+        "check_id": "11111111-1111-4111-8111-111111111111"
+      },
+      "expect": {
+        "kind": "write",
+        "gateResult": "pass",
+        "checkId": "11111111-1111-4111-8111-111111111111",
+        "overrideReason": null
+      },
+      "readsCheck": true
+    },
+    {
+      "name": "enforce with a passing check of another hash",
+      "mode": "enforce",
+      "before": "before",
+      "after": "after",
+      "ragGate": {
+        "check_id": "33333333-3333-4333-8333-333333333333"
+      },
+      "expect": {
+        "kind": "refuse",
+        "status": 409,
+        "error": "rag_gate_required"
+      },
+      "readsCheck": true
+    },
+    {
+      "name": "enforce with a failed check and no reason",
+      "mode": "enforce",
+      "before": "before",
+      "after": "after",
+      "ragGate": {
+        "check_id": "22222222-2222-4222-8222-222222222222"
+      },
+      "expect": {
+        "kind": "refuse",
+        "status": 409,
+        "error": "rag_gate_required"
+      },
+      "readsCheck": true
+    },
+    {
+      "name": "enforce with a running check",
+      "mode": "enforce",
+      "before": "before",
+      "after": "after",
+      "ragGate": {
+        "check_id": "44444444-4444-4444-8444-444444444444"
+      },
+      "expect": {
+        "kind": "refuse",
+        "status": 409,
+        "error": "rag_gate_required"
+      },
+      "readsCheck": true
+    },
+    {
+      "name": "enforce with an error check",
+      "mode": "enforce",
+      "before": "before",
+      "after": "after",
+      "ragGate": {
+        "check_id": "55555555-5555-4555-8555-555555555555"
+      },
+      "expect": {
+        "kind": "refuse",
+        "status": 409,
+        "error": "rag_gate_required"
+      },
+      "readsCheck": true
+    },
+    {
+      "name": "enforce with an unknown check id",
+      "mode": "enforce",
+      "before": "before",
+      "after": "after",
+      "ragGate": {
+        "check_id": "66666666-6666-4666-8666-666666666666"
+      },
+      "expect": {
+        "kind": "refuse",
+        "status": 409,
+        "error": "rag_gate_required"
+      },
+      "readsCheck": true
+    },
+    {
+      "name": "enforce with a check id that is not a uuid",
+      "mode": "enforce",
+      "before": "before",
+      "after": "after",
+      "ragGate": {
+        "check_id": "../../etc/passwd"
+      },
+      "expect": {
+        "kind": "refuse",
+        "status": 409,
+        "error": "rag_gate_required"
+      },
+      "readsCheck": true
+    },
+    {
+      "name": "enforce with skipped",
+      "mode": "enforce",
+      "before": "before",
+      "after": "after",
+      "ragGate": {
+        "skipped": true
+      },
+      "expect": {
+        "kind": "refuse",
+        "status": 409,
+        "error": "rag_gate_required"
+      },
+      "readsCheck": false
+    },
+    {
+      "name": "enforce with no gate body",
+      "mode": "enforce",
+      "before": "before",
+      "after": "after",
+      "ragGate": null,
+      "expect": {
+        "kind": "refuse",
+        "status": 409,
+        "error": "rag_gate_required"
+      },
+      "readsCheck": false
+    },
+    {
+      "name": "enforce with a reason of 9 characters after trimming",
+      "mode": "enforce",
+      "before": "before",
+      "after": "after",
+      "ragGate": {
+        "override": {
+          "reason": "  Nine char  "
+        },
+        "check_id": "22222222-2222-4222-8222-222222222222"
+      },
+      "expect": {
+        "kind": "refuse",
+        "status": 400,
+        "error": "invalid_reason"
+      },
+      "readsCheck": false
+    },
+    {
+      "name": "enforce with a reason of 501 characters",
+      "mode": "enforce",
+      "before": "before",
+      "after": "after",
+      "ragGate": {
+        "override": {
+          "reason": "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr"
+        }
+      },
+      "expect": {
+        "kind": "refuse",
+        "status": 400,
+        "error": "invalid_reason"
+      },
+      "readsCheck": false
+    },
+    {
+      "name": "enforce with an empty reason",
+      "mode": "enforce",
+      "before": "before",
+      "after": "after",
+      "ragGate": {
+        "override": {
+          "reason": "   "
+        }
+      },
+      "expect": {
+        "kind": "refuse",
+        "status": 400,
+        "error": "invalid_reason"
+      },
+      "readsCheck": false
+    },
+    {
+      "name": "enforce with a reason of 10 characters and no check",
+      "mode": "enforce",
+      "before": "before",
+      "after": "after",
+      "ragGate": {
+        "override": {
+          "reason": "Ten chars!"
+        }
+      },
+      "expect": {
+        "kind": "write",
+        "gateResult": "skipped",
+        "checkId": null,
+        "overrideReason": "Ten chars!"
+      },
+      "readsCheck": false
+    },
+    {
+      "name": "enforce with a reason of 500 characters",
+      "mode": "enforce",
+      "before": "before",
+      "after": "after",
+      "ragGate": {
+        "override": {
+          "reason": "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr"
+        }
+      },
+      "expect": {
+        "kind": "write",
+        "gateResult": "skipped",
+        "checkId": null,
+        "overrideReason": "rrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrrr"
+      },
+      "readsCheck": false
+    },
+    {
+      "name": "enforce with a reason and a failed check",
+      "mode": "enforce",
+      "before": "before",
+      "after": "after",
+      "ragGate": {
+        "override": {
+          "reason": "  Operator reviewed the failed slice and accepts it.  "
+        },
+        "check_id": "22222222-2222-4222-8222-222222222222"
+      },
+      "expect": {
+        "kind": "write",
+        "gateResult": "fail",
+        "checkId": "22222222-2222-4222-8222-222222222222",
+        "overrideReason": "Operator reviewed the failed slice and accepts it."
+      },
+      "readsCheck": true
+    },
+    {
+      "name": "enforce with a reason and a check of another hash",
+      "mode": "enforce",
+      "before": "before",
+      "after": "after",
+      "ragGate": {
+        "override": {
+          "reason": "  Operator reviewed the failed slice and accepts it.  "
+        },
+        "check_id": "33333333-3333-4333-8333-333333333333"
+      },
+      "expect": {
+        "kind": "write",
+        "gateResult": "skipped",
+        "checkId": null,
+        "overrideReason": "Operator reviewed the failed slice and accepts it."
+      },
+      "readsCheck": true
+    },
+    {
+      "name": "warn with skipped",
+      "mode": "warn",
+      "before": "before",
+      "after": "after",
+      "ragGate": {
+        "skipped": true
+      },
+      "expect": {
+        "kind": "write",
+        "gateResult": "skipped",
+        "checkId": null,
+        "overrideReason": null
+      },
+      "readsCheck": false
+    },
+    {
+      "name": "warn with a failed check",
+      "mode": "warn",
+      "before": "before",
+      "after": "after",
+      "ragGate": {
+        "check_id": "22222222-2222-4222-8222-222222222222"
+      },
+      "expect": {
+        "kind": "write",
+        "gateResult": "fail",
+        "checkId": "22222222-2222-4222-8222-222222222222",
+        "overrideReason": null
+      },
+      "readsCheck": true
+    },
+    {
+      "name": "warn with an error check",
+      "mode": "warn",
+      "before": "before",
+      "after": "after",
+      "ragGate": {
+        "check_id": "55555555-5555-4555-8555-555555555555"
+      },
+      "expect": {
+        "kind": "write",
+        "gateResult": "error",
+        "checkId": "55555555-5555-4555-8555-555555555555",
+        "overrideReason": null
+      },
+      "readsCheck": true
+    },
+    {
+      "name": "warn with a passing check",
+      "mode": "warn",
+      "before": "before",
+      "after": "after",
+      "ragGate": {
+        "check_id": "11111111-1111-4111-8111-111111111111"
+      },
+      "expect": {
+        "kind": "write",
+        "gateResult": "pass",
+        "checkId": "11111111-1111-4111-8111-111111111111",
+        "overrideReason": null
+      },
+      "readsCheck": true
+    },
+    {
+      "name": "warn with a check of another hash",
+      "mode": "warn",
+      "before": "before",
+      "after": "after",
+      "ragGate": {
+        "check_id": "33333333-3333-4333-8333-333333333333"
+      },
+      "expect": {
+        "kind": "write",
+        "gateResult": "skipped",
+        "checkId": null,
+        "overrideReason": null
+      },
+      "readsCheck": true
+    },
+    {
+      "name": "warn with no gate body",
+      "mode": "warn",
+      "before": "before",
+      "after": "after",
+      "ragGate": null,
+      "expect": {
+        "kind": "write",
+        "gateResult": "skipped",
+        "checkId": null,
+        "overrideReason": null
+      },
+      "readsCheck": false
+    },
+    {
+      "name": "warn keeps a valid reason",
+      "mode": "warn",
+      "before": "before",
+      "after": "after",
+      "ragGate": {
+        "override": {
+          "reason": "  Operator reviewed the failed slice and accepts it.  "
+        },
+        "check_id": "22222222-2222-4222-8222-222222222222"
+      },
+      "expect": {
+        "kind": "write",
+        "gateResult": "fail",
+        "checkId": "22222222-2222-4222-8222-222222222222",
+        "overrideReason": "Operator reviewed the failed slice and accepts it."
+      },
+      "readsCheck": true
+    },
+    {
+      "name": "warn drops a reason outside the bounds and still writes",
+      "mode": "warn",
+      "before": "before",
+      "after": "after",
+      "ragGate": {
+        "override": {
+          "reason": "  Nine char  "
+        },
+        "check_id": "22222222-2222-4222-8222-222222222222"
+      },
+      "expect": {
+        "kind": "write",
+        "gateResult": "fail",
+        "checkId": "22222222-2222-4222-8222-222222222222",
+        "overrideReason": null
+      },
+      "readsCheck": true
+    },
+    {
+      "name": "an unknown mode fails closed as enforce",
+      "mode": "Enforce-ish",
+      "before": "before",
+      "after": "after",
+      "ragGate": {
+        "skipped": true
+      },
+      "expect": {
+        "kind": "refuse",
+        "status": 409,
+        "error": "rag_gate_required"
+      },
+      "readsCheck": false
+    },
+    {
+      "name": "mode is trimmed and case-insensitive",
+      "mode": " ENFORCE ",
+      "before": "before",
+      "after": "after",
+      "ragGate": {
+        "check_id": "11111111-1111-4111-8111-111111111111"
+      },
+      "expect": {
+        "kind": "write",
+        "gateResult": "pass",
+        "checkId": "11111111-1111-4111-8111-111111111111",
+        "overrideReason": null
+      },
+      "readsCheck": true
+    }
+  ]
+}

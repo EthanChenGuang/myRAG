@@ -132,6 +132,21 @@ test('deep-import: a path below @/lib/rag fails, the public index passes', () =>
   assert.deepEqual(rulesFor({ 'src/app/c.ts': "import { x } from '@/lib/rag/index';\n" }), []);
 });
 
+test('deep-import: the shared config-gate CommonJS files may be required, nothing else below them', () => {
+  assert.deepEqual(
+    rulesFor({ 'scripts/a.js': "const { isSecretName } = require('../src/lib/rag/config-gate/secret-name.cjs');\n" }),
+    [],
+  );
+  assert.deepEqual(
+    rulesFor({ 'src/app/b.ts': "import { ragSettingsHash } from '@/lib/rag/config-gate/settings-hash';\n" }),
+    ['src/app/b.ts:deep-import'],
+  );
+  assert.deepEqual(
+    rulesFor({ 'scripts/c.js': "const x = require('../src/lib/rag/config-gate/nested/other.cjs');\n" }),
+    ['scripts/c.js:deep-import'],
+  );
+});
+
 test('vector-or-rerank-client: client packages and AI SDK embed/embedMany/rerank fail', () => {
   const files = {
     'src/lib/a.ts': "import weaviate from 'weaviate-client';\n",
