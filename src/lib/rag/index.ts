@@ -581,3 +581,5 @@ export type {
   ListAttributeDefinitionsResult,
   UpsertAttributeDefinitionResult,
 } from './ingest/attributes/schema';
+export { isSecretName, RAG_AFFECTING_NAMES, ragAffectingDiff, ragSettingsCanonical, ragSettingsHash } from './config-gate/settings-hash';
+export type { SettingValues } from './config-gate/settings-hash';
