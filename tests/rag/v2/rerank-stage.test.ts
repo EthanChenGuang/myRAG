@@ -112,6 +112,7 @@ interface RunOptions {
   dedupeCounts?: { candidates_in: number; deduped: number; rerank_input: number; capped_from: number };
   clock?: { t: number };
   elapsedMs?: number;
+  ragMode?: 'strict' | 'balanced' | 'flexible' | 'bypass';
 }
 
 function rankRun(env: Record<string, string>, options: RunOptions = {}) {
@@ -122,7 +123,7 @@ function rankRun(env: Record<string, string>, options: RunOptions = {}) {
   if (options.clock && options.elapsedMs !== undefined) options.clock.t = collector.startedAt + options.elapsedMs;
   const config = loadRagConfig(env);
   const promise = runRankStages({
-    input: { scope, query: 'refund policy', profile, signal },
+    input: { scope, query: 'refund policy', profile, signal, ...(options.ragMode ? { options: { ragMode: options.ragMode } } : {}) },
     config,
     profile,
     embedding: { vector: [0.1], profile: null },
@@ -368,6 +369,35 @@ describe('v2 rerank stage in the rank group', () => {
     expect(out.decision).toMatchObject({ decision, reason, topScore: top, threshold: 0.6 });
     expect(out.survivors).toHaveLength(survivors);
     expect(ids(out.preRefusalHits)[0]).toBe('c1');
+  });
+
+  it('a strict request uses the base|strict cell and other modes fall back to the base cell (D-24)', async () => {
+    const { env } = setup();
+    const base = cellsWith(0.6);
+    const strictKey = `${cellKey('cohere', 'fake-quality-v1', 'en', 'same')}|strict`;
+    const baseCell = [...base.values()][0]!;
+    const cells: ThresholdCells = new Map([...base, [strictKey, { ...baseCell, key: strictKey, mode: 'strict', threshold: 0.8 }]]);
+    vi.spyOn(thresholds, 'loadThresholds').mockReturnValue({ cells, configHash: null });
+    useFactory(recordingReranker((docs) => docs.map((_, index) => (index === 1 ? 0.7 : 0.5))).reranker);
+    const strict = await rankRun(env, { hits: fusedHits(3), stageOverrides: EVAL_FAKE_MODEL, ragMode: 'strict' }).promise;
+    expect(strict.decision).toMatchObject({ decision: 'refuse', threshold: 0.8, cellKey: strictKey });
+    for (const ragMode of ['balanced', 'bypass', undefined] as const) {
+      const out = await rankRun(env, { hits: fusedHits(3), stageOverrides: EVAL_FAKE_MODEL, ragMode }).promise;
+      expect(out.decision).toMatchObject({ decision: 'answer', threshold: 0.6, cellKey: baseCell.key });
+    }
+  });
+
+  it('judges a cell against the effective lexical version: stale once a lexical switch is on (D-42)', async () => {
+    const off = setup();
+    vi.spyOn(thresholds, 'loadThresholds').mockReturnValue({ cells: cellsWith(0.6), configHash: null });
+    useFactory(recordingReranker((docs) => docs.map((_, index) => (index === 1 ? 0.4 : 0.2))).reranker);
+    const before = await rankRun(off.env, { hits: fusedHits(3), stageOverrides: EVAL_FAKE_MODEL }).promise;
+    expect(before.decision).toMatchObject({ decision: 'refuse', reason: 'below_threshold' });
+    const on = setup({ RAG_LEXICAL_SEARCH: 'true', RAG_LEXICAL_DICTIONARY: 'true' });
+    useFactory(recordingReranker((docs) => docs.map((_, index) => (index === 1 ? 0.4 : 0.2))).reranker);
+    const after = await rankRun(on.env, { hits: fusedHits(3), stageOverrides: EVAL_FAKE_MODEL }).promise;
+    expect(after.gate).toMatchObject({ decision: 'not_applied', reason: 'cell_stale' });
+    expect(after.decision.basis).not.toBe('rerank_threshold');
   });
 
   it('carries rerank_score and kept_by rerank through the v2 pipeline', async () => {
