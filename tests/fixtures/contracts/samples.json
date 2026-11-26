@@ -1257,6 +1257,14 @@
       "by_profile": {},
       "threshold": 0.95
     },
+    "DupClusterParamsFile": {
+      "by_profile": {},
+      "config_hash": null,
+      "provenance": {
+        "source": "defaults"
+      },
+      "threshold": 0.95
+    },
     "EffectiveDateExtraction": {
       "confidence": 0.9,
       "effective_from": "2026-01-01",

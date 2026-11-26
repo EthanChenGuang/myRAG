@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import type { PGlite } from '@electric-sql/pglite';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from '../../eval/harness/fake-edge.mts';
 import { createEmptyFixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
+import { PHASE_32_VARIABLES } from './phase32-all-off-probe.mts';
 
 // D-47 step 14: with every Phase 3.1 switch at its default, each write path stores what Phase 3 stored and the queue stays empty.
 // The reference was recorded once on the Phase 3 tip (84753a33) with the same inputs; see recorded_from in the fixture.
@@ -72,7 +73,7 @@ describe('defaults equal Phase 3: every write path with all Phase 3.1 switches a
   const saved = new Map<string, string | undefined>();
 
   before(async () => {
-    for (const name of [...PHASE_31_SWITCHES, 'RAG_INGEST_PIPELINE', 'RAG_INGEST_WORKER']) {
+    for (const name of [...PHASE_31_SWITCHES, ...PHASE_32_VARIABLES, 'RAG_INGEST_PIPELINE', 'RAG_INGEST_WORKER']) {
       saved.set(name, process.env[name]);
       delete process.env[name];
     }
@@ -83,8 +84,10 @@ describe('defaults equal Phase 3: every write path with all Phase 3.1 switches a
     process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = 'single-tenant';
     // The unified pipeline is the Phase 3 write path under test; everything Phase 3.1 added stays unset.
     process.env.RAG_INGEST_PIPELINE = 'unified';
+    // D-19 (03.2-67): the default of RAG_TABLE_HEADER_REPEAT is always; Phase 3 chunking is the explicit profile value.
+    process.env.RAG_TABLE_HEADER_REPEAT = 'profile';
     const { INGEST_MODE_ENV, fixtureAdminClient, installIngestFakes } = await import('../../eval/harness/ingest-fakes.mts');
-    const fakes = await installIngestFakes({ db: fixtureAdminClient(edge.url), env: INGEST_MODE_ENV });
+    const fakes = await installIngestFakes({ db: fixtureAdminClient(edge.url), env: { ...INGEST_MODE_ENV, RAG_TABLE_HEADER_REPEAT: 'profile' } });
     uninstall = fakes.uninstall;
     rag = await import('@/lib/rag');
     queueConfig = await import('@/lib/rag/ingest/queue-config');
@@ -126,6 +129,34 @@ describe('defaults equal Phase 3: every write path with all Phase 3.1 switches a
     assert.equal(config.embedBatchMode, 'sync');
     assert.equal(config.ingestRealtime, false);
     assert.deepEqual(config.warnings, []);
+  });
+
+  test('the Phase 3.2 switches resolve to their off values when unset (D-47)', () => {
+    const ingest = rag.loadIngestConfig({ RAG_INGEST_PIPELINE: 'unified' });
+    assert.equal(ingest.languageAwareIngest, 'off');
+    // Unset, header repetition is always (eval/decisions/03.2-table-header-default.json); profile restores Phase 3 chunking.
+    assert.equal(ingest.tableHeaderRepeat, 'always');
+    assert.equal(rag.loadIngestConfig({ RAG_INGEST_PIPELINE: 'unified', RAG_TABLE_HEADER_REPEAT: 'profile' }).tableHeaderRepeat, 'profile');
+    assert.equal(ingest.tableRowSerialization, false);
+    assert.equal(ingest.captionLanguage, 'en');
+    assert.equal(ingest.docTranslation, 'off');
+    assert.equal(ingest.docTranslationModel, '');
+    assert.equal(ingest.hiddenTextCheck, 'off');
+    assert.equal(ingest.ingestLinkCheck, 'off');
+    assert.equal(ingest.outputLinkAllowlist, '');
+    assert.equal(ingest.uploadApproval, 'off');
+    assert.equal(ingest.scopeTags, false);
+    assert.equal(ingest.scopeTagSuggest, false);
+    assert.equal(ingest.supersessionDetect, 'off');
+    assert.equal(ingest.effectiveDateLlmExtract, false);
+    assert.deepEqual(ingest.warnings, []);
+    const query = rag.loadRagConfig({});
+    assert.equal(query.pipeline, 'legacy');
+    assert.equal(query.effectiveDates, false);
+    assert.equal(query.scopeTags, false);
+    assert.equal(query.docTranslation, 'off');
+    assert.equal(query.bgeM3Serving, 'hosted');
+    assert.equal(query.outputLinkAllowlist, '');
   });
 
   test('the legacy pipeline never reaches the queue, even with RAG_INGEST_ASYNC=on or tiered routing asked for', () => {

@@ -118,6 +118,9 @@ const TABLE_COLUMNS: Record<string, string[]> = {
   organizations: ['id', 'name', 'slug', 'owner_id', 'is_personal', 'subscription_tier', 'created_at'],
   // Read by effectiveTierBounds when a job is enqueued (D-13); the ingest mode's --force-tier writes it in the database directly.
   rag_parse_tier_overrides: ['doc_type', 'min_tier', 'max_tier'],
+  // The admin guard (isAdminUser) and the terminology admin versions read (D-05).
+  admin_users: ['id'],
+  rag_term_layers: ['layer_key', 'version', 'entries_sha256'],
 };
 
 type FilterOperator = 'eq' | 'in' | 'is.null';
@@ -138,6 +141,8 @@ const TABLE_FILTERS: Record<string, Record<string, FilterOperator[]>> = {
   organization_members: { id: ['eq'], organization_id: ['eq'], user_id: ['eq'] },
   organizations: { id: ['eq'] },
   rag_parse_tier_overrides: { doc_type: ['eq'] },
+  admin_users: { id: ['eq'] },
+  rag_term_layers: { layer_key: ['eq'] },
 };
 
 /** Value type of a filtered column; a column that is not listed holds a uuid. */
@@ -147,6 +152,7 @@ const FILTER_VALUE_TYPES: Record<string, 'boolean' | 'integer' | 'text'> = {
   status: 'text',
   tenant_key: 'text',
   doc_type: 'text',
+  layer_key: 'text',
 };
 const BOOLEAN_FILTER_RE = /^(true|false)$/;
 const INTEGER_FILTER_RE = /^-?\d{1,9}$/;

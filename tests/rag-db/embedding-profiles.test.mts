@@ -15,6 +15,7 @@ const HALFVEC_PROFILES = ['voyage-4-large-2048', 'voyage-4-large-1024', 'qwen3-8
 const SERVICE_TABLES = ['embedding_profiles', 'chunk_embeddings', 'embedding_backfill_runs', 'embedding_backfill_gaps'];
 /** Scoped domain candidates seeded by 0440 (Phase 3.1.1); they never take part in the Phase 3 global registry behaviour. */
 const SCOPED_PROFILES = ['voyage-4-large-1024-domain', 'voyage-finance-2-1024', 'voyage-law-2-1024'];
+const FINETUNE_SLOTS = ['ft-a-1024', 'ft-b-1024'];
 
 function halfvecLiteral(dims: number, value = 0.1): string {
   return `[${Array.from({ length: dims }, () => value).join(',')}]`;
@@ -109,7 +110,7 @@ for (const mode of MODES) {
         query_instruction: string | null;
       }>('SELECT id, provider, model, dims, storage, status, score_calibration, query_instruction FROM embedding_profiles ORDER BY id');
       const byId = new Map(result.rows.map((row) => [row.id, row]));
-      assert.deepEqual([...byId.keys()].sort(), [LEGACY, ...HALFVEC_PROFILES, ...SCOPED_PROFILES].sort());
+      assert.deepEqual([...byId.keys()].sort(), [LEGACY, ...HALFVEC_PROFILES, ...SCOPED_PROFILES, ...FINETUNE_SLOTS].sort());
 
       const legacy = byId.get(LEGACY);
       assert.equal(legacy?.provider, 'openai');
@@ -317,7 +318,7 @@ for (const mode of MODES) {
 
       await db.query("UPDATE embedding_profiles SET eval_evidence = '{\"gate_passed\": true}'::jsonb WHERE id = 'voyage-4-large-1024'");
       const list = await db.query<Record<string, unknown>>('SELECT * FROM rag_list_embedding_profiles()');
-      assert.equal(list.rows.length, 5 + SCOPED_PROFILES.length);
+      assert.equal(list.rows.length, 5 + SCOPED_PROFILES.length + FINETUNE_SLOTS.length);
       assert.ok(!('eval_evidence' in (list.rows[0] ?? {})), 'the list must not return evidence bodies');
       const withEvidence = list.rows.filter((row) => row.has_evidence === true).map((row) => row.id);
       assert.deepEqual(withEvidence, ['voyage-4-large-1024']);

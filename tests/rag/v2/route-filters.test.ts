@@ -128,6 +128,38 @@ describe('retrievalFilters on the chat and embed bodies', () => {
       expect(calls[0].retrievalFilters).toEqual({ languages: ['it'] });
     });
 
+    it('passes a versions filter through the shared parser as versionScope (D-12)', async () => {
+      const { POST } = await loadRoute('chat', 'v2');
+      const response = await POST(chatBody({ retrievalFilters: { versions: 'all' } }));
+      await response.text();
+
+      expect(response.status).toBe(200);
+      const calls = retrievalCalls('chat');
+      expect(calls).toHaveLength(1);
+      expect(calls[0].retrievalFilters).toEqual({ versionScope: 'all' });
+    });
+
+    it('answers 400 with path versions for a malformed versions value', async () => {
+      const { POST } = await loadRoute('chat', 'v2');
+      const response = await POST(chatBody({ retrievalFilters: { versions: 'latest' } }));
+
+      expect(response.status).toBe(400);
+      const payload = (await response.json()) as { details: Array<{ path: string }> };
+      expect(payload.details[0].path).toBe('versions');
+      expect(h.runSpy).not.toHaveBeenCalled();
+    });
+
+    it('treats versions current as no filter', async () => {
+      const { POST } = await loadRoute('chat', 'v2');
+      const response = await POST(chatBody({ retrievalFilters: { versions: 'current' } }));
+      await response.text();
+
+      expect(response.status).toBe(200);
+      const calls = retrievalCalls('chat');
+      expect(calls).toHaveLength(1);
+      expect(calls[0].retrievalFilters).toBeUndefined();
+    });
+
     it('returns 400 JSON before any stream for an invalid retrievalFilters under v2', async () => {
       const { POST } = await loadRoute('chat', 'v2');
       const response = await POST(chatBody({ retrievalFilters: { documentIds: [] } }));
@@ -266,6 +298,38 @@ describe('retrievalFilters on the chat and embed bodies', () => {
       const calls = retrievalCalls('embed');
       expect(calls).toHaveLength(1);
       expect(calls[0].retrievalFilters).toEqual({ languages: ['it'] });
+    });
+
+    it('passes a versions filter through the shared parser as versionScope (D-12)', async () => {
+      const { POST } = await loadRoute('embed/chat', 'v2');
+      const response = await POST(embedBody({ retrievalFilters: { versions: 'all' } }));
+      await response.text();
+
+      expect(response.status).toBe(200);
+      const calls = retrievalCalls('embed');
+      expect(calls).toHaveLength(1);
+      expect(calls[0].retrievalFilters).toEqual({ versionScope: 'all' });
+    });
+
+    it('answers 400 with path versions for a malformed versions value', async () => {
+      const { POST } = await loadRoute('embed/chat', 'v2');
+      const response = await POST(embedBody({ retrievalFilters: { versions: 'latest' } }));
+
+      expect(response.status).toBe(400);
+      const payload = (await response.json()) as { details: Array<{ path: string }> };
+      expect(payload.details[0].path).toBe('versions');
+      expect(h.runSpy).not.toHaveBeenCalled();
+    });
+
+    it('treats versions current as no filter', async () => {
+      const { POST } = await loadRoute('embed/chat', 'v2');
+      const response = await POST(embedBody({ retrievalFilters: { versions: 'current' } }));
+      await response.text();
+
+      expect(response.status).toBe(200);
+      const calls = retrievalCalls('embed');
+      expect(calls).toHaveLength(1);
+      expect(calls[0].retrievalFilters).toBeUndefined();
     });
 
     it('returns 400 JSON before any stream for an invalid retrievalFilters under v2', async () => {

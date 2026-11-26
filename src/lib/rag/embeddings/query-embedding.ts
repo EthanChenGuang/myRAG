@@ -41,7 +41,8 @@ function assertConfiguredModel(profile: EmbeddingProfile): void {
 }
 
 function fromProviderMismatch(profile: EmbeddingProfile, error: EmbeddingProfileMismatch): EmbeddingProfileMismatchError {
-  if (error.kind === 'model') return mismatchError('model', profile, error.actual);
+  // A failed probe means the endpoint serves other weights or prompts than the bound version: a model mismatch.
+  if (error.kind === 'model' || error.kind === 'probe') return mismatchError('model', profile, error.actual);
   if (error.kind === 'zero_norm') return mismatchError('vector', profile, error.actual);
   return mismatchError('dims', profile, error.actual);
 }
@@ -109,7 +110,13 @@ async function embedManyWithProfile(
   deps: RagDeps,
 ): Promise<QueryEmbedding[]> {
   if (profile.storage !== 'legacy_column' && deps.profileBatchEmbedder) {
-    const outputs = await deps.profileBatchEmbedder(texts, { signal, profile });
+    let outputs;
+    try {
+      outputs = await deps.profileBatchEmbedder(texts, { signal, profile });
+    } catch (error) {
+      if (error instanceof EmbeddingProfileMismatch) throw fromProviderMismatch(profile, error);
+      throw error;
+    }
     if (outputs) {
       if (outputs.length !== texts.length) throw mismatchError('vector', profile, outputs.length);
       return outputs.map((output) => {

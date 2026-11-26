@@ -179,8 +179,16 @@ describe('Phase 3.2 settings block in the Config UI (UI-SPEC 6.3, 12.9)', () => 
     }
     for (const [id, options] of Object.entries(SELECT_OPTIONS)) {
       for (const [value] of options) {
-        expect(formControl(id), `${id} ${value}`).toMatch(new RegExp(`<option value="${value}" data-rag-i18n="[^"]+">`));
+        expect(formControl(id), `${id} ${value}`).toMatch(new RegExp(`<option value="${value}" data-rag-i18n="[^"]+"( selected)?>`));
       }
+    }
+  });
+
+  it('RAG_TABLE_HEADER_REPEAT preselects always, the default decided in eval/decisions/03.2-table-header-default.json', () => {
+    const selected = [...formControl('RAG_TABLE_HEADER_REPEAT').matchAll(/<option value="([^"]*)"[^>]* selected>/g)].map((m) => m[1]);
+    expect(selected).toEqual(['always']);
+    for (const id of Object.keys(SELECT_OPTIONS).filter((name) => name !== 'RAG_TABLE_HEADER_REPEAT')) {
+      expect(formControl(id), id).not.toMatch(/<option [^>]* selected>/);
     }
   });
 

@@ -243,6 +243,8 @@ export interface V2Config {
   lexicalStemIt: boolean;
   /** Effective: false while RAG_LEXICAL_SEARCH is off (D-40). */
   versionScope: boolean;
+  /** Effective: true only while RAG_EMBED_VERSION_SCOPE and the effective versionScope are both on (D-58). */
+  embedVersionScope: boolean;
   tableLookup: boolean;
   dupClusters: boolean;
   resultDiversity: ResultDiversityMode;
@@ -318,6 +320,7 @@ export interface RagEnvInput {
   RAG_LEXICAL_DICTIONARY?: string;
   RAG_LEXICAL_STEM_IT?: string;
   RAG_VERSION_SCOPE?: string;
+  RAG_EMBED_VERSION_SCOPE?: string;
   RAG_TABLE_LOOKUP?: string;
   RAG_DUP_CLUSTERS?: string;
   RAG_RESULT_DIVERSITY?: string;
@@ -914,6 +917,7 @@ interface TuningSwitches {
   lexicalDictionary: boolean;
   lexicalStemIt: boolean;
   versionScope: boolean;
+  embedVersionScope: boolean;
   tableLookup: boolean;
   dupClusters: boolean;
   resultDiversity: ResultDiversityMode;
@@ -927,6 +931,7 @@ function parseTuningSwitches(env: RagEnvInput, lexicalSearch: boolean, warnings:
   const lexicalDictionary = parseBooleanSwitch(env.RAG_LEXICAL_DICTIONARY, false, 'lexical-dictionary', warnings);
   const lexicalStemIt = parseBooleanSwitch(env.RAG_LEXICAL_STEM_IT, false, 'lexical-stem-it', warnings);
   const versionRequested = parseBooleanSwitch(env.RAG_VERSION_SCOPE, false, 'version-scope', warnings);
+  const embedRequested = parseBooleanSwitch(env.RAG_EMBED_VERSION_SCOPE, false, 'embed-version-scope', warnings);
   const tableLookup = parseBooleanSwitch(env.RAG_TABLE_LOOKUP, false, 'table-lookup', warnings);
   const dupClusters = parseBooleanSwitch(env.RAG_DUP_CLUSTERS, false, 'dup-clusters', warnings);
   const resultDiversity = parseNamedChoice('RAG_RESULT_DIVERSITY', env.RAG_RESULT_DIVERSITY, RESULT_DIVERSITY_MODES, 'off', warnings);
@@ -943,6 +948,15 @@ function parseTuningSwitches(env: RagEnvInput, lexicalSearch: boolean, warnings:
       RAG_LEXICAL_SEARCH: (env.RAG_LEXICAL_SEARCH ?? '').trim() || 'false',
     });
   }
+  const versionScope = versionRequested && lexicalSearch;
+  if (embedRequested && !versionScope) {
+    problem(
+      warnings,
+      'embed-version-scope-needs-version-scope',
+      'RAG_EMBED_VERSION_SCOPE needs an effective RAG_VERSION_SCOPE=true; embedded chat scopes to current versions only',
+      { RAG_VERSION_SCOPE: (env.RAG_VERSION_SCOPE ?? '').trim() || 'false', RAG_LEXICAL_SEARCH: (env.RAG_LEXICAL_SEARCH ?? '').trim() || 'false' },
+    );
+  }
   if (resultDiversity === 'collapse' && !dupClusters) {
     problem(warnings, 'diversity-collapse-needs-clusters', 'RAG_RESULT_DIVERSITY=collapse has no clusters to act on while RAG_DUP_CLUSTERS is off', {
       RAG_DUP_CLUSTERS: (env.RAG_DUP_CLUSTERS ?? '').trim() || 'false',
@@ -952,7 +966,8 @@ function parseTuningSwitches(env: RagEnvInput, lexicalSearch: boolean, warnings:
   return {
     lexicalDictionary,
     lexicalStemIt,
-    versionScope: versionRequested && lexicalSearch,
+    versionScope,
+    embedVersionScope: embedRequested && versionScope,
     tableLookup,
     dupClusters,
     resultDiversity,
@@ -999,6 +1014,7 @@ function memoKey(env: RagEnvInput): string {
     env.RAG_LEXICAL_DICTIONARY ?? '',
     env.RAG_LEXICAL_STEM_IT ?? '',
     env.RAG_VERSION_SCOPE ?? '',
+    env.RAG_EMBED_VERSION_SCOPE ?? '',
     env.RAG_TABLE_LOOKUP ?? '',
     env.RAG_DUP_CLUSTERS ?? '',
     env.RAG_RESULT_DIVERSITY ?? '',

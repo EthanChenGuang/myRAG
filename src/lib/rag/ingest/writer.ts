@@ -225,6 +225,32 @@ export function chunkIdFor(documentId: string, chunkIndex: number): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
 
+/** One chunk of a document as the lookup indexers read it back (rag_index_document_chunks), every chunking profile. */
+export interface IndexChunkRow {
+  id: string;
+  chunkingProfileId: string;
+  chunkIndex: number;
+  sectionPath: string[];
+  content: string;
+}
+
+export interface ChunkIdentifierWrite {
+  chunkId: string;
+  raw: string[];
+  norm: string[];
+}
+
+/** One rag_table_rows row as rag_write_table_rows takes it. */
+export interface TableRowWrite {
+  table_key: string;
+  row_index: number;
+  header: string[];
+  cells: Record<string, string>;
+  cell_tokens: string[][];
+  cell_norm: string[];
+  chunk_ids: string[];
+}
+
 export interface IngestWriter {
   begin(args: BeginArgs): Promise<BeginResult>;
   findContentDuplicate(contentHash: string, documentId: string | null): Promise<string | null>;
@@ -259,6 +285,12 @@ export interface IngestWriter {
   tenantLanguageShares?(): Promise<Array<{ language: string; share: number }>>;
   /** RAG_CAPTION_LANGUAGE=document: the language detected on each written picture caption, by image URL, onto this version's image chunks. */
   setImageChunkLanguages?(documentId: string, items: Array<{ imageUrl: string; language: string }>): Promise<number>;
+  /** RET-12, RET-15: a keyset page (id order) of this version's chunks of every chunking profile, for the lookup indexers. */
+  listDocumentChunksForIndex?(documentId: string, after: string | null, limit: number): Promise<IndexChunkRow[]>;
+  /** RET-15: identifiers of a batch of this version's chunks, then the document union (rewritten only when it changed). */
+  writeChunkIdentifiers?(documentId: string, rows: ChunkIdentifierWrite[]): Promise<{ chunksWritten: number; documentChanged: boolean }>;
+  /** RET-12: replaces the table rows of this version and one chunking profile. */
+  writeTableRows?(documentId: string, chunkingProfileId: string, rows: TableRowWrite[]): Promise<{ rowsWritten: number; rowsDeleted: number }>;
 }
 
 export interface CreateIngestWriterInput {
@@ -616,6 +648,48 @@ export function createIngestWriter(input: CreateIngestWriterInput): IngestWriter
         p_items: items.map((item) => ({ image_url: item.imageUrl, language: item.language })),
       });
       return integer(row, 'chunks_updated') ?? 0;
+    },
+
+    async listDocumentChunksForIndex(documentId, after, limit) {
+      const rows = await call('rag_index_document_chunks', {
+        p_tenant_key: identity().tenantKey,
+        p_document_id: documentId,
+        p_after: after,
+        p_limit: limit,
+      });
+      const chunks: IndexChunkRow[] = [];
+      for (const row of rows) {
+        const id = text(row, 'id');
+        if (id === null) throw new IngestWriterError('rag_index_document_chunks', 'bad_response');
+        const path = row.section_path;
+        chunks.push({
+          id,
+          chunkingProfileId: text(row, 'chunking_profile_id') ?? 'legacy',
+          chunkIndex: integer(row, 'chunk_index') ?? 0,
+          sectionPath: Array.isArray(path) ? path.filter((part): part is string => typeof part === 'string') : [],
+          content: text(row, 'content') ?? '',
+        });
+      }
+      return chunks;
+    },
+
+    async writeChunkIdentifiers(documentId, rows) {
+      const row = await callOne('rag_write_chunk_identifiers', {
+        p_tenant_key: identity().tenantKey,
+        p_document_id: documentId,
+        p_rows: rows.map((entry) => ({ chunk_id: entry.chunkId, raw: entry.raw, norm: entry.norm })),
+      });
+      return { chunksWritten: integer(row, 'chunks_written') ?? 0, documentChanged: row.document_changed === true };
+    },
+
+    async writeTableRows(documentId, chunkingProfileId, rows) {
+      const row = await callOne('rag_write_table_rows', {
+        p_tenant_key: identity().tenantKey,
+        p_document_id: documentId,
+        p_chunking_profile_id: chunkingProfileId,
+        p_rows: rows,
+      });
+      return { rowsWritten: integer(row, 'rows_written') ?? 0, rowsDeleted: integer(row, 'rows_deleted') ?? 0 };
     },
   };
 }

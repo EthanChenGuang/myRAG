@@ -145,6 +145,10 @@
       "side": "query"
     },
     {
+      "name": "RAG_EMBED_VERSION_SCOPE",
+      "side": "query"
+    },
+    {
       "name": "RAG_ENABLE_ADJACENT_CHUNKS",
       "side": "query"
     },
@@ -203,6 +207,55 @@
     {
       "name": "RAG_FINANCIAL_CONFIDENCE_MIN",
       "side": "query"
+    },
+    {
+      "name": "RAG_FINETUNE",
+      "side": "both",
+      "mechanism": "reembed"
+    },
+    {
+      "name": "RAG_FT_EMBED_API_KEY",
+      "side": "query"
+    },
+    {
+      "name": "RAG_FT_SLOT_A_BASE_URL",
+      "side": "both",
+      "mechanism": "reembed"
+    },
+    {
+      "name": "RAG_FT_SLOT_A_DOCUMENT_PROMPT",
+      "side": "both",
+      "mechanism": "reembed"
+    },
+    {
+      "name": "RAG_FT_SLOT_A_MODEL",
+      "side": "both",
+      "mechanism": "reembed"
+    },
+    {
+      "name": "RAG_FT_SLOT_A_QUERY_PROMPT",
+      "side": "both",
+      "mechanism": "reembed"
+    },
+    {
+      "name": "RAG_FT_SLOT_B_BASE_URL",
+      "side": "both",
+      "mechanism": "reembed"
+    },
+    {
+      "name": "RAG_FT_SLOT_B_DOCUMENT_PROMPT",
+      "side": "both",
+      "mechanism": "reembed"
+    },
+    {
+      "name": "RAG_FT_SLOT_B_MODEL",
+      "side": "both",
+      "mechanism": "reembed"
+    },
+    {
+      "name": "RAG_FT_SLOT_B_QUERY_PROMPT",
+      "side": "both",
+      "mechanism": "reembed"
     },
     {
       "name": "RAG_GROUNDEDNESS",
@@ -359,6 +412,10 @@
     },
     {
       "name": "RAG_MULTI_PASS",
+      "side": "query"
+    },
+    {
+      "name": "RAG_OPENAI_EMBEDDINGS_VIA",
       "side": "query"
     },
     {

@@ -12,14 +12,40 @@ export { buildHistoryWindow } from './query/history';
 export type { HistoryWindowLimits } from './query/history';
 export { loadRagConfig, effectiveLexicalVersion, CORE_STAGES, OPTIONAL_STAGES, PROFILE_STAGE_DEFAULTS } from './config';
 export type { RagConfig, StageName } from './config';
+export { currentLexicalVersion } from './deps';
 export { createTraceCollector } from './trace/collector';
 export type { TraceCollector, StageEntry } from './trace/collector';
+export { isTraceId } from './trace/collector';
+export type { TraceCacheState, TraceTiming } from './trace/collector';
+export { withFirstTextDelta, awaitPreGenerationDelay, setPreGenerationDelayForTests, resetPreGenerationDelayForTests, traceCacheState } from './trace/ttft';
+export { postLangfuseScores } from './trace/scores';
+export type { LangfuseScoreInput, PostScoresResult } from './trace/scores';
 export { finishTrace } from './trace/finish';
 export type { FinishTraceOptions } from './trace/finish';
 export { isTenantScope, scopeKey } from './tenant/scope';
 export { evalScope } from './tenant/eval';
 export type { EvalScopeInput, EvalScopeOutcome } from './tenant/eval';
 export type { TenantScope } from './tenant/scope';
+export { getTerminologyLexicon, TerminologyUnavailableError } from './terminology/lexicon';
+export type { TerminologyLexicon, TerminologyLexiconOptions } from './terminology/lexicon';
+export {
+  createEntry as createTerminologyEntry,
+  deleteEntry as deleteTerminologyEntry,
+  getVersions as getTerminologyVersions,
+  listAudit as listTerminologyAudit,
+  listEntries as listTerminologyEntries,
+  setSuppression as setTerminologySuppression,
+  terminologyEnabledLanguages,
+  updateEntry as updateTerminologyEntry,
+} from './terminology/admin';
+export type {
+  TerminologyAdminEntry,
+  TerminologyAdminFailed,
+  TerminologyAdminFailure,
+  TerminologyAuditItem,
+  TerminologyEntryInput,
+  TerminologyLayerVersion,
+} from './terminology/admin';
 export { RetrievalBackendError } from './backend/supabase-rpc';
 export { getRetrievalBackend, resetRetrievalBackendForTests, setRetrievalBackendForTests } from './backend/registry';
 export { createPgvectorBackend } from './backend/pgvector';
@@ -393,6 +419,26 @@ export type { ChangeDocumentTypeFailure, ChangeDocumentTypeInput, ChangeDocument
 export { scopeForAdminDocument, AdminDocumentScopeError } from './tenant/ingest-scope';
 export type { AdminDocumentScopeInput } from './tenant/ingest-scope';
 export { softDeleteLineage } from './ingest/soft-delete';
+export { recomputeDirtyDupClusters } from './dedupe/cluster';
+export type { RecomputeOutcome } from './dedupe/cluster';
+export {
+  createIdentifierPattern,
+  deleteIdentifierPattern,
+  IDENTIFIER_PATTERN_LIMITS,
+  IdentifierPatternError,
+  listIdentifierPatterns,
+  testIdentifierPatterns,
+  updateIdentifierPattern,
+} from './identifiers/patterns';
+export type {
+  IdentifierPatternDraft,
+  IdentifierPatternErrorCode,
+  IdentifierPatternFinding,
+  IdentifierPatternFindingCode,
+  IdentifierPatternRow,
+  IdentifierTestMatch,
+  IdentifierTestResult,
+} from './identifiers/patterns';
 export { removeDocumentObjects } from './ingest/remove-document-objects';
 export type { DocumentObjectRow } from './ingest/remove-document-objects';
 export type { SoftDeleteResult, SoftDeleteFailure } from './ingest/soft-delete';

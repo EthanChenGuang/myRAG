@@ -1,11 +1,17 @@
-import type { Profile } from '../types';
+import type { Profile, RagMode } from '../types';
 import type { RefusalRecord } from './types';
 import type { RerankProviderId, RerankScoreSemantics } from '../rerank/types';
 
 export type QueryLanguage = 'zh' | 'en' | 'it';
 
+export type CellMode = 'strict' | 'balanced' | 'flexible';
+
+const CELL_MODES: ReadonlySet<string> = new Set<CellMode>(['strict', 'balanced', 'flexible']);
+
 export interface ThresholdCell {
   key: string;
+  /** D-24: a per-mode cell; absent on the shared cell that every other request uses. */
+  mode?: CellMode;
   provider: string;
   model: string;
   query_language: QueryLanguage;
@@ -32,7 +38,10 @@ export interface GateInput {
   reranked: GateCandidate[];
   queryLanguage: QueryLanguage | null;
   cells: ThresholdCells;
+  /** The effective lexical version (D-42) and the rerank text version of the running code. */
   versions: { lexical: number; rerankText: number };
+  /** The request's RAG mode from RetrievalOptions; voice passes none, so it and bypass use the shared cell. */
+  ragMode?: RagMode;
 }
 
 export function cellKey(
@@ -40,8 +49,18 @@ export function cellKey(
   model: string,
   queryLanguage: QueryLanguage,
   pairing: 'same' | 'cross',
+  mode?: CellMode,
 ): string {
-  return `${provider}|${model}|${queryLanguage}|${pairing}`;
+  const base = `${provider}|${model}|${queryLanguage}|${pairing}`;
+  return mode ? `${base}|${mode}` : base;
+}
+
+function lookupCell(cells: ThresholdCells, key: string, ragMode: RagMode | undefined): ThresholdCell | undefined {
+  if (ragMode && CELL_MODES.has(ragMode)) {
+    const modeCell = cells.get(`${key}|${ragMode}`);
+    if (modeCell) return modeCell;
+  }
+  return cells.get(key);
 }
 
 function notApplied(
@@ -75,7 +94,7 @@ export function decideRefusal(input: GateInput): RefusalRecord {
   const pairing: 'same' | 'cross' =
     top.language !== null && top.language !== input.queryLanguage ? 'cross' : 'same';
   const key = cellKey(input.reranker.id, input.reranker.model, input.queryLanguage, pairing);
-  const cell = input.cells.get(key);
+  const cell = lookupCell(input.cells, key, input.ragMode);
 
   if (!cell || cell.status !== 'calibrated') {
     const reason = cell ? (`cell_${cell.status}` as RefusalRecord['reason']) : 'cell_uncalibrated';

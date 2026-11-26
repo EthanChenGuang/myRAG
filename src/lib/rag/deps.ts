@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { env } from '@/lib/env';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { loadRagConfig, pipelineSourceOf, type RagEnvInput } from './config';
+import { effectiveLexicalVersion, loadRagConfig, pipelineSourceOf, type RagEnvInput } from './config';
 import type { RawPipelineEnv } from './lang/resolve';
 import { getLanguageSettings } from './lang/settings';
 import type { EmbeddingProfile } from './embeddings/active-profile';
@@ -96,6 +96,7 @@ function readRagEnvInput(): RagEnvInput {
     RAG_LEXICAL_DICTIONARY: process.env.RAG_LEXICAL_DICTIONARY ?? env.RAG_LEXICAL_DICTIONARY,
     RAG_LEXICAL_STEM_IT: process.env.RAG_LEXICAL_STEM_IT ?? env.RAG_LEXICAL_STEM_IT,
     RAG_VERSION_SCOPE: process.env.RAG_VERSION_SCOPE ?? env.RAG_VERSION_SCOPE,
+    RAG_EMBED_VERSION_SCOPE: process.env.RAG_EMBED_VERSION_SCOPE ?? env.RAG_EMBED_VERSION_SCOPE,
     RAG_TABLE_LOOKUP: process.env.RAG_TABLE_LOOKUP ?? env.RAG_TABLE_LOOKUP,
     RAG_DUP_CLUSTERS: process.env.RAG_DUP_CLUSTERS ?? env.RAG_DUP_CLUSTERS,
     RAG_RESULT_DIVERSITY: process.env.RAG_RESULT_DIVERSITY ?? env.RAG_RESULT_DIVERSITY,
@@ -197,4 +198,8 @@ export function setRagDepsForTests(partial: Partial<RagDeps>): void {
 export function resetRagDepsForTests(): void {
   overrides = {};
   defaultQueryLlm = null;
+}
+/** D-42: the effective lexical version of the configuration this process loads, the value the search stage uses. */
+export function currentLexicalVersion(): number {
+  return effectiveLexicalVersion(loadRagConfig(getRagDeps().ragEnv()));
 }

@@ -1,9 +1,8 @@
 import { getRetrievalBackend } from '../backend/registry';
-import { CORE_STAGES, QUERY_LAYER_STAGES, type RagConfig } from '../config';
+import { CORE_STAGES, QUERY_LAYER_STAGES, effectiveLexicalVersion, terminologyDenseFor, type RagConfig } from '../config';
 import { getActiveChunkingProfiles } from '../chunking/active';
 import { LEGACY_PROFILE } from '../embeddings/active-profile';
 import type { QueryEmbedding } from '../embeddings/query-embedding';
-import { LEXICAL_VERSION } from '../lexical/chunk-text';
 import type { FusedHit } from '../fusion/rrf';
 import type { ChunkWithScore } from '../rerank/local-hybrid';
 import { assembleDisabledStatus, deriveStatus, failure, injectionFilteredAll, injectionReason } from '../pipeline';
@@ -20,8 +19,17 @@ import type { TemporalQueryContext } from '../query/temporal-query-detector';
 import { isMultiTenant } from '@/lib/deployment-mode';
 import { getRagDeps } from '../deps';
 import type { SecurityConfig } from '../security/config';
-import { computeRetrievalConfigHash, securityHashComponent, type RetrievalConfigHashQueryLayer } from './config-hash';
+import {
+  computeRetrievalConfigHash,
+  securityHashComponent,
+  terminologyHashBlock,
+  type RetrievalConfigHashQueryLayer,
+  type TerminologyHashStage,
+} from './config-hash';
+import { terminologyParams } from '../terminology/expand';
+import { recordMiss } from '../terminology/miss-log';
 import { effectiveRetrievalParams } from './retrieval-params';
+import { effectiveTuningParams, tuningHashComponent } from './tuning-params';
 import type { TranslationHashField } from './translation-legs';
 import type { AssembleOutput } from '../context/assemble';
 import type { QueryPlan, RetrievalParams } from '@/lib/rag-eval/contracts.generated';
@@ -60,6 +68,8 @@ export interface BuildV2ResultInput {
   queryLayerHash?: RetrievalConfigHashQueryLayer;
   /** The semantic_cache stage's store ticket (D-32). */
   cacheTicket?: CacheTicket;
+  /** D-21: how the terminology stage ended; absent reads as disabled. */
+  terminology?: TerminologyHashStage;
 }
 
 export interface RequestConfigHashInput {
@@ -74,6 +84,8 @@ export interface RequestConfigHashInput {
   translationHash?: TranslationHashField;
   queryLayerHash?: RetrievalConfigHashQueryLayer;
   effectiveOn?: string;
+  /** D-21: how the terminology stage ended; absent reads as disabled, so the hash is the pre-terminology value. */
+  terminology?: TerminologyHashStage;
 }
 
 /** The request's retrieval-config hash; the result and the semantic-cache key both use it, so they never disagree. */
@@ -81,10 +93,11 @@ export async function requestRetrievalConfigHash(ctx: RequestConfigHashInput): P
   const { input, config, profile, queryLanguage, security } = ctx;
   const { configHash: thresholdsConfigHash } = loadThresholds();
   const chunking = await getActiveChunkingProfiles();
+  const terminology = terminologyHashBlock(ctx.terminology ?? { enabled: false }, terminologyParams(), terminologyDenseFor(config, profile));
   return computeRetrievalConfigHash({
     backendId: getRetrievalBackend().id,
     embeddingProfileId: ctx.embeddingProfileId,
-    lexicalVersion: LEXICAL_VERSION,
+    lexicalVersion: effectiveLexicalVersion(config),
     rerankTextVersion: RERANK_TEXT_VERSION,
     params: effectiveRetrievalParams(profile, config, evalRetrievalOverrides(profile, input.stageOverrides?.retrievalOverrides)),
     reranker: describeReranker(config, profile, queryLanguage ?? '', input.stageOverrides?.retrievalOverrides),
@@ -106,10 +119,12 @@ export async function requestRetrievalConfigHash(ctx: RequestConfigHashInput): P
       ...(config.monolingual ? { monolingual: true as const } : {}),
     },
     security: securityHashComponent(security, { multiTenant: isMultiTenant() }),
+    tuning: tuningHashComponent(config, effectiveTuningParams(profile, config, undefined, { embeddingProfileId: ctx.embeddingProfileId })),
     ...(ctx.bindingHash ?? {}),
     ...(ctx.translationHash ?? {}),
     ...(ctx.queryLayerHash ? { queryLayer: ctx.queryLayerHash } : {}),
     ...(ctx.effectiveOn ? { effectiveOn: ctx.effectiveOn } : {}),
+    ...(terminology ? { terminology } : {}),
   });
 }
 
@@ -270,6 +285,7 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
     ...(ctx.translationHash ? { translationHash: ctx.translationHash } : {}),
     ...(ctx.queryLayerHash ? { queryLayerHash: ctx.queryLayerHash } : {}),
     ...(ctx.effectiveOn ? { effectiveOn: ctx.effectiveOn } : {}),
+    ...(ctx.terminology ? { terminology: ctx.terminology } : {}),
   });
 
   const base = {
@@ -279,8 +295,9 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
     ...(ctx.cacheTicket && profile !== 'voice' ? { cacheTicket: ctx.cacheTicket } : {}),
   };
 
+  let result: RetrievalResult;
   if (profile === 'voice') {
-    return {
+    result = {
       ...base,
       candidates: outputCandidates,
       voice: voice ?? { results: [], source_images: [] },
@@ -288,26 +305,42 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
       refusal,
       queryLanguage,
     };
+  } else if (!assembly) {
+    result = { ...base, candidates: outputCandidates, retrievalConfigHash, refusal, queryLanguage };
+  } else {
+    result = {
+      ...base,
+      candidates: outputCandidates,
+      context: assembly.context,
+      usedDocuments: assembly.usedDocuments,
+      sourceImages: assembly.sourceImages,
+      links: assembly.links,
+      relevantChunks: assembly.relevantChunks,
+      kept: assembly.kept,
+      queryTerms: assembly.queryTerms,
+      refusalCandidate: assembly.refusalCandidate,
+      blocks: assembly.blocks,
+      retrievalConfigHash,
+      refusal,
+      queryLanguage,
+    };
   }
 
-  if (!assembly) {
-    return { ...base, candidates: outputCandidates, retrievalConfigHash, refusal, queryLanguage };
-  }
-
-  return {
-    ...base,
-    candidates: outputCandidates,
-    context: assembly.context,
-    usedDocuments: assembly.usedDocuments,
-    sourceImages: assembly.sourceImages,
-    links: assembly.links,
-    relevantChunks: assembly.relevantChunks,
-    kept: assembly.kept,
-    queryTerms: assembly.queryTerms,
-    refusalCandidate: assembly.refusalCandidate,
-    blocks: assembly.blocks,
-    retrievalConfigHash,
-    refusal,
+  // D-25: fire-and-forget; the response never waits on the miss log.
+  void recordMiss({
+    enabled: config.v2.terminologyMining,
+    profile,
+    scope: input.scope,
+    query: input.query,
     queryLanguage,
-  };
+    status,
+    reason,
+    refusal,
+    candidates: outputCandidates,
+    scoredCandidates: refusal?.decision === 'refuse' ? (preRefusalCandidates ?? candidates) : outputCandidates,
+    ...(ctx.terminology ? { terminology: ctx.terminology } : {}),
+    retrievalConfigHash,
+  });
+
+  return result;
 }

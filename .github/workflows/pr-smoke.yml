@@ -136,6 +136,10 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Node runtime check
         run: node scripts/ci/check-node-runtime.mjs
+      - name: Zod isolation check (zod 4 stays nested under LangChain)
+        run: |
+          node scripts/ci/check-zod-isolation.mjs
+          node --test scripts/tests/check-zod-isolation.node-test.mjs
       - run: uv sync --directory eval --locked --all-extras
       - name: Config drift check
         run: node scripts/check-config.mjs
@@ -256,13 +260,12 @@ jobs:
           python-version: '3.12'
           enable-cache: true
           cache-dependency-glob: '**/uv.lock'
-      - run: uv sync --directory rag-sidecar --locked --extra chunking
-      - run: uv sync --directory rag-sidecar --locked --extra preflight --extra hidden-text
+      - run: uv sync --directory rag-sidecar --locked --extra chunking --extra preflight --extra hidden-text
       - run: uv sync --directory eval --locked --all-extras
       - name: Fill the tiktoken encoding cache (tests never download it)
         run: python3 scripts/ci/fill-tiktoken-cache.py
       - name: rag-sidecar pytest
-        run: uv run --directory rag-sidecar --extra chunking pytest -q
+        run: uv run --directory rag-sidecar --locked --extra chunking --extra preflight --extra hidden-text pytest -q
       - name: eval pytest
         run: uv run --directory eval pytest -q
 
@@ -369,11 +372,11 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - name: Build the sidecar image
         run: docker build -t rag-sidecar:ci rag-sidecar
-      - name: Routing data and processing profiles ship in the image
+      - name: Routing data, processing profiles, language packs and security rules ship in the image
         shell: bash
         run: |
           set -euo pipefail
-          for name in parse-routing.json processing-profiles.json; do
+          for name in parse-routing.json processing-profiles.json language-packs.json hidden-text-rules.json table-header-rules.json; do
             docker run --rm rag-sidecar:ci cat "/app/config/rag/$name" | cmp - "config/rag/$name"
           done
           docker run --rm rag-sidecar:ci python -c 'from rag_sidecar.preflight.config import default_routing_config_path, load_processing_profiles, load_routing_config; assert str(default_routing_config_path()) == "/app/config/rag/parse-routing.json"; load_routing_config(); load_processing_profiles()'
