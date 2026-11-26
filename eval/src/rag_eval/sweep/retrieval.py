@@ -7,7 +7,7 @@ import math
 import os
 import sys
 from pathlib import Path
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, NamedTuple, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from rag_sidecar.contracts.baseline import NoiseConfig
@@ -81,6 +81,8 @@ class SweepCell(_Model):
     mean_context_tokens: float = Field(ge=0)
     latency_p95_ms: float = Field(ge=0)
     n_items: int = Field(ge=0)
+    ndcg_at_context_k: float | None = None
+    k_zero: int | None = Field(default=None, ge=0)
     run_config_hash: str | None = None
     out_dir: str | None = None
 
@@ -165,7 +167,15 @@ def _first_hit_ranks(trace: RagTrace, item: GoldenItem) -> list[int | None]:
     return ranks
 
 
-def cell_scores(traces: Sequence[RagTrace], golden: Sequence[GoldenItem], top_k: int) -> tuple[float, float, int]:
+class CellScores(NamedTuple):
+    recall_at_k: float
+    mrr: float
+    n_items: int
+    ndcg_at_context_k: float | None = None
+    k_zero: int | None = None
+
+
+def cell_scores(traces: Sequence[RagTrace], golden: Sequence[GoldenItem], top_k: int) -> CellScores:
     """Recall of gold spans inside the final top-k and MRR over answerable items; a refused item scores zero."""
     by_id = {trace.item_id: trace for trace in traces if trace.item_id is not None}
     recalls: list[float] = []
@@ -181,7 +191,7 @@ def cell_scores(traces: Sequence[RagTrace], golden: Sequence[GoldenItem], top_k:
         reciprocals.append(1 / min(hits) if hits else 0.0)
     if not recalls:
         raise SweepUsageError("the dev split holds no answerable item to score")
-    return sum(recalls) / len(recalls), sum(reciprocals) / len(reciprocals), len(recalls)
+    return CellScores(sum(recalls) / len(recalls), sum(reciprocals) / len(reciprocals), len(recalls))
 
 
 def _nearest_rank(values: list[float], quantile: float) -> float:
@@ -347,7 +357,7 @@ def run_retrieval_sweep(
             items = load_golden(run.golden_path)
             _require_dev_only(items)
             golden_hashes.add(golden_sha256(run.golden_path))
-            recall, mrr, n_items = cell_scores(run.traces, items, top_k)
+            recall, mrr, n_items, _, _ = cell_scores(run.traces, items, top_k)
             cells.append(
                 SweepCell(
                     candidate_pool_size=pool,
