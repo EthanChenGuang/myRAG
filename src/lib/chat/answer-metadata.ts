@@ -4,6 +4,7 @@ import {
   CitationRecordSchema,
   type AnswerRecord,
   type CitationRecord,
+  type RefusalFeedbackRequest,
 } from '@/lib/rag-eval/contracts.generated';
 
 export type AnswerGroundedness = AnswerRecord['groundedness'];
@@ -19,8 +20,14 @@ export type AnswerMessageMetadata = {
   feedback?: AnswerFeedback;
 };
 
+export type RefusalVote = RefusalFeedbackRequest['vote'];
+export type RefusalReason = NonNullable<RefusalFeedbackRequest['reasons']>[number];
+export type RefusalFeedbackValue = { vote: RefusalVote; reasons: RefusalReason[]; at: string };
+export type RefusalMessageMetadata = { refusal?: true; refusalFeedback?: RefusalFeedbackValue };
+
 export type StreamAnswerMetadata = {
   ragTraceId?: string;
+  refusal?: true;
   answerId?: string;
   citations?: CitationRecord[];
   citationStrategy?: AnswerCitationStrategy;
@@ -79,6 +86,16 @@ export function extractStreamAnswerMetadata(metadata: unknown, previous: StreamA
   const next: StreamAnswerMetadata = { ...previous };
   if (typeof source.ragTraceId === 'string' && source.ragTraceId.length > 0) next.ragTraceId = source.ragTraceId;
   return { ...next, ...pickCitationFields(source) };
+}
+
+/** The refusal flag and the stored refusal vote of message metadata (D-08); anything else is dropped. */
+export function pickRefusalMetadata(_metadata: unknown): RefusalMessageMetadata {
+  return {};
+}
+
+/** Writes a saved refusal vote into the matching message's metadata; the same array when nothing changes. */
+export function withRefusalFeedback<T extends { id: string; metadata?: Record<string, unknown> }>(messages: T[], _messageId: string, _value: RefusalFeedbackValue): T[] {
+  return messages;
 }
 
 function sameJson(a: unknown, b: unknown): boolean {

@@ -19,6 +19,12 @@ export interface AnswerQualityStrings {
   feedbackSaved: string;
   feedbackFailed: string;
   relatedHeading: string;
+  refusalGroupLabel: string;
+  refusalExpectedAnswer: string;
+  refusalCorrect: string;
+  refusalReasons: Record<'answer_exists' | 'wrong_language' | 'other', string>;
+  refusalFailed: string;
+  refusalRetry: string;
 }
 
 const STRINGS: Record<string, AnswerQualityStrings> = {
@@ -46,6 +52,12 @@ const STRINGS: Record<string, AnswerQualityStrings> = {
     feedbackSaved: 'Thanks for your feedback.',
     feedbackFailed: 'Feedback could not be saved. Try again.',
     relatedHeading: 'Related',
+    refusalGroupLabel: 'Was This Refusal Right?',
+    refusalExpectedAnswer: 'I Expected an Answer',
+    refusalCorrect: 'Correct, Not in My Documents',
+    refusalReasons: { answer_exists: 'The Answer Is in My Documents', wrong_language: 'Wrong Language', other: 'Other' },
+    refusalFailed: 'Your feedback was not saved.',
+    refusalRetry: 'Try Again',
   },
   zh: {
     citationsHeading: '本回答引用的内容',
@@ -71,6 +83,12 @@ const STRINGS: Record<string, AnswerQualityStrings> = {
     feedbackSaved: '感谢你的反馈。',
     feedbackFailed: '反馈未能保存，请重试。',
     relatedHeading: '相关问题',
+    refusalGroupLabel: '这次拒答对吗？',
+    refusalExpectedAnswer: '我认为应该有答案',
+    refusalCorrect: '没错，我的文档里没有',
+    refusalReasons: { answer_exists: '答案就在我的文档里', wrong_language: '语言不对', other: '其他' },
+    refusalFailed: '反馈未能保存。',
+    refusalRetry: '重试',
   },
   it: {
     citationsHeading: 'Citato in questa risposta',
@@ -96,6 +114,12 @@ const STRINGS: Record<string, AnswerQualityStrings> = {
     feedbackSaved: 'Grazie per il feedback.',
     feedbackFailed: 'Non è stato possibile salvare il feedback. Riprova.',
     relatedHeading: 'Domande correlate',
+    refusalGroupLabel: 'Questo rifiuto era giusto?',
+    refusalExpectedAnswer: 'Mi aspettavo una risposta',
+    refusalCorrect: 'Corretto, non è nei miei documenti',
+    refusalReasons: { answer_exists: 'La risposta è nei miei documenti', wrong_language: 'Lingua sbagliata', other: 'Altro' },
+    refusalFailed: 'Il feedback non è stato salvato.',
+    refusalRetry: 'Riprova',
   },
 };
 

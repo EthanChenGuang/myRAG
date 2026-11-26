@@ -484,3 +484,8 @@ export function SourcesSidebar({
     </>
   );
 } 
+
+/** D-12 stub. */
+export function sourceOpenHandlers(_source: Source): { onClick: (event: React.MouseEvent<HTMLAnchorElement>) => void; onAuxClick: (event: React.MouseEvent<HTMLAnchorElement>) => void } {
+  return { onClick: () => {}, onAuxClick: () => {} };
+}
