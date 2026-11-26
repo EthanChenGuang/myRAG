@@ -236,6 +236,7 @@ if (MODE === undefined) {
       assert.deepEqual(absentRest, plainRest);
       assert.deepEqual(comparable(current), { ...absentRest, retrieval_config_hash: absentHash });
       assert.equal(current.retrieval_strategy.includes('versions_'), false, current.retrieval_strategy);
+      assert.equal(/superseded/i.test(current.context), false);
     });
 
     test('switch on, versions all: both versions of the own tenant, the superseded one through the lexical leg only', async () => {
@@ -247,6 +248,11 @@ if (MODE === undefined) {
       const legs = Object.keys(superseded.legs ?? {});
       assert.ok(legs.length > 0 && legs.every((leg) => leg.startsWith('lexical') || leg === 'exact_id'), JSON.stringify(legs));
       assert.ok(json.retrieval_strategy.split(';').includes('superseded_dense_unavailable'), json.retrieval_strategy);
+      const { versionLabelLine } = await import('../../src/lib/rag/context/version-label.ts');
+      const oldLine = versionLabelLine({ version: 1, isCurrent: false, effectiveFrom: '2026-01-01', effectiveTo: '2026-03-31' }, 'en');
+      const newLine = versionLabelLine({ version: 2, isCurrent: true, effectiveFrom: '2026-04-01', effectiveTo: null }, 'en');
+      assert.ok(oldLine.length > 0 && json.context.includes(`${oldLine}\n${OLD_TEXT}`), json.context.slice(0, 1200));
+      assert.ok(newLine.length > 0 && json.context.includes(`${newLine}\n${NEW_TEXT}`), json.context.slice(0, 1200));
       if (foreign) {
         for (const id of [foreign.oldChunk, foreign.newChunk]) assert.ok(!candidateIds(json).has(id), `foreign chunk ${id}`);
         assert.ok(!json.context.includes('eleven units'));
