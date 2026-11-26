@@ -415,7 +415,9 @@ async function writeEntry(
 
   let shared: TerminologyEntry[] | undefined;
   if (layer === 'workspace') {
-    const loaded = await loadLayer(input.actorUserId, SHARED, input.signal);
+    // The shared layer is context only: a shared write between its pages is read again once, never reported as this layer's conflict.
+    let loaded = await loadLayer(input.actorUserId, SHARED, input.signal);
+    if (!loaded.ok && loaded.reason === 'version_conflict') loaded = await loadLayer(input.actorUserId, SHARED, input.signal);
     if (!loaded.ok) return loaded.reason === 'version_conflict' ? UNAVAILABLE : loaded;
     shared = loaded.layer.entries.map(storedCandidate);
   }
