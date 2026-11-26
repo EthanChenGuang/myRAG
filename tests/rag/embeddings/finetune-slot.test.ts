@@ -167,6 +167,7 @@ describe('fine-tune slot provider requests (06.1 D-23)', () => {
   });
 
   it('returns unit-length vectors', async () => {
+    registryRows = [versionRow({ bound_slot: 'ft-b-1024' })];
     const out = await createFinetuneSlotProvider('b', { config: config() }).embedDocuments(['one', 'two', 'three'], OPTS);
     for (const vector of out.vectors) expect(norm(vector)).toBeCloseTo(1, 10);
   });
