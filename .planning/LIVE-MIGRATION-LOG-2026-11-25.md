@@ -862,3 +862,90 @@ No branch was ejected.
 No 0410 change in this train (1004 and 1005 carry their own grants), so there is no 0410 delta. Numbers 1004 and 1005 are unique across every `origin` branch; both sort after 1003, which they follow. Neither has a `.single-tenant`/`.multi-tenant` variant and neither is folded into the setup files. Both are idempotent (CREATE OR REPLACE, DROP TRIGGER IF EXISTS before CREATE TRIGGER).
 
 The combined live SQL (the two files verbatim in the order above, each after a `-- ==== <file>` line) was written to the orchestrator scratchpad as `train28-live.sql`.
+
+## Train 29: 0654, 0940-0943, 0960-0968, 0970, 0971, 1007, 1008 and 0410 r13 (to apply after train 29 reaches `origin/main`)
+
+Branch `ci/merge-train-29`, built on `origin/main` f890cdfc (train 28, PR #113). Nothing below has been applied live yet. Production is multi-tenant.
+
+### Merged plans
+| Branch | Plan | Migration |
+|---|---|---|
+| `exec/05.1.1-22` | 05.1.1-22 feedback-loop schema folded into the setup files, guide, closing comparison | none |
+| `exec/05.2-01` | 05.2-01 answer-side and safety contracts | none |
+| `exec/05.2-02` | 05.2-02 fourteen Phase 5.2 switches (all off), reader, Config UI inputs | none |
+| `exec/05.2-03` | 05.2-03 answer checks, version label, security events, alerts and holds | 0940-0943; 0410 entries (r13) |
+| `exec/05.2-21` (contains 05.2-03) | 05.2-21 version label in the dates editor and from the title | (0940-0943) |
+| `exec/05.2-23` | 05.2-23 sidecar claims endpoint | none |
+| `exec/05.3-01` | 05.3-01 gate and golden-set lifecycle contracts | none |
+| `exec/05.3-02` | 05.3-02 Phase 5.3 switches and settings reader | none |
+| `exec/05.3-03` | 05.3-03 monitor, judge-calibration, release-gate and config-change contracts | none |
+| `exec/05.3-05` | 05.3-05 `false_answer_rate`, answer-aware refusal, absolute gate | none |
+| `exec/05.3-06` | 05.3-06 golden-set manifests | none |
+| `exec/05.3-07` | 05.3-07 change records, eval run requests, pilot users | 0960, 0961, 0970 |
+| `exec/05.3-08` | 05.3-08 monitor storage | 0962-0964 |
+| `exec/05.3-09` | 05.3-09 judge labels and review-item strata | 0965, 0967 |
+| `exec/05.3-10` | 05.3-10 query clusters and weekly drift storage | 0966, 0968 |
+| `exec/05.3-11` (contains 05.3-08) | 05.3-11 daily monitor aggregation | 0971 |
+| `exec/04.2-22` | 04.2-22 query-side lexical dictionary, stems, identifier patterns | none |
+| `exec/04.2-30` | 04.2-30 two-tenant v2 matrix for the Phase 4.2 paths | none |
+| `exec/04.2-36` | 04.2-36 identifier not-found in the routes | none |
+| `exec/06.1-12` | 06.1-12 training kit, trainer, image | none |
+| `exec/06.1-13` | 06.1-13 offline evaluation, model card, prune | none |
+| `exec/06.1-16` | 06.1-16 fixture pipeline end to end with leakage invariants | none |
+| `exec/06.1-20` | 06.1-20 fine-tuned slots through 3.1.1 bindings | 0654; 0410 entries (r13) |
+| `exec/03.3-12` | 03.3-12 section rules in ingestion | (1004, already on main, unchanged) |
+| `exec/03.3-14` | 03.3-14 tenant rule-data writers | (1005, already on main, unchanged) |
+| `exec/03.3-16` | 03.3-16 attribute identifiers through the 4.2 indexer | 1007 |
+| `exec/03.3-18` | 03.3-18 attribute resolver | 1008 |
+
+Ejected: `exec/04.2-37` (Phase 4.2 fixture documents, golden items and both fixture baselines re-recorded). It was cut before 04.1.1-10 reached main, and both re-record the same fixture set: `eval/baselines/fixture-baseline.json`, `eval/baselines/fixture-ingest-baseline.json`, `eval/fixtures/golden.jsonl`, `eval/fixtures/split-manifest.json`, the corpus hash and dump digests (`eval/tests/test_corpus.py`, `tests/rag-db/fixture-phase42-corpus.test.mts`), chunk counts (`tests/rag-db/relex.test.mts`, `tests/eval-corpus.test.ts`) and added-item lists (`tests/rag-db/ingest-mode-routing.test.mts`, `eval/tests/test_metrics.py` and four other eval tests) conflict. A text merge cannot produce a valid recorded baseline. The fix is to rebase 04.2-37 on `origin/main`, then re-record both baselines and re-pin the hashes on the combined corpus. No other branch in this train contains 04.2-37. Not merged on purpose: `exec/06-44` (its Phase 6 gate fails; a fix is in progress).
+
+### Migrations to apply live, in order
+| # | File | Notes |
+|---|---|---|
+| 1 | `0654_finetune_binding_guard.sql` | Needs 0440 (scoped profiles), 0441/0442 (bindings, `rag_reembed_require_binding`), 0651 and 0652 (train 27). Replaces the 0652 slot guard and version-taint triggers and `rag_finetune_clear_slot`; adds `rag_finetune_bind_scoped_slot`, `rag_finetune_scope_slot`, `rag_finetune_normalize_doc_types` and the binding and backfill-run guard triggers. SECURITY DEFINER, empty search_path, service_role only. **DROP:** `DROP TRIGGER IF EXISTS` twice before re-creating them. |
+| 2 | `0940_rag_answer_checks.sql` | Needs 0501. Adds `rag_answer_records.checks` (jsonb, default `{}`) and `texts_source`. Access unchanged. |
+| 3 | `0941_documents_version_label.sql` | Needs `rag_assert_tenant_key`. Adds nullable `documents.version_label` and `rag_set_document_version_label` (SECURITY INVOKER, service_role only). |
+| 4 | `0942_rag_security_events.sql` | No dependency inside this train. Server-only table (RLS on, no policy). |
+| 5 | `0943_rag_security_alerts_holds.sql` | Needs 0942 and `rag_assert_tenant_key`. Alerts and uploader-hold tables and nine SECURITY INVOKER functions, service_role only. |
+| 6 | `0960_rag_config_change_records.sql` | None. Deployment-wide server-only table. |
+| 7 | `0961_rag_eval_run_requests.sql` | Needs `rag_assert_tenant_key`. Table and enqueue function, service_role only. |
+| 8 | `0962_rag_monitor_daily.sql` | None. Daily aggregate table and `rag_monitor_purge`. |
+| 9 | `0963_rag_monitor_alerts.sql` | Needs `rag_assert_tenant_key`. Alerts table, upsert and set-status functions. |
+| 10 | `0964_rag_online_judge_scores.sql` | Needs 0962 (replaces `rag_monitor_purge`) and 0531 `rag_retrieval_log` (guarded with to_regclass). |
+| 11 | `0965_rag_judge_labels.sql` | Needs 0533 `rag_review_items` and 0534 `rag_is_domain_expert` (no-op without them). Adds unique `(id, tenant_key)` on `rag_review_items`; authenticated RLS policies gated by domain expert. **DROP:** `DROP POLICY IF EXISTS` three times before re-creating them. |
+| 12 | `0966_rag_query_clusters.sql` | Needs 0531 `rag_retrieval_log` (assignments cascade with it). Cluster sets, clusters and assignments, service_role only. |
+| 13 | `0967_rag_review_item_strata.sql` | Needs `rag_review_items` (no-op without it). **DROP:** drops and re-creates the `rag_review_items` reasons CHECK constraint with `representative` and `re_review` added, and drops NOT NULL on `rag_review_items.trace_id` where it is still set. Adds `rag_review_item_strata` and `rag_review_items_enqueue`. Owner present. |
+| 14 | `0968_rag_drift_weekly.sql` | Needs `rag_assert_tenant_key`. Table and upsert, service_role only. |
+| 15 | `0970_rag_pilot_users.sql` | Needs `rag_assert_tenant_key`. Table, add and remove functions, service_role only. |
+| 16 | `0971_rag_monitor_aggregate.sql` | Needs 0962 and 0964; reads `rag_retrieval_log`, `rag_answer_records`, `documents` (guarded with to_regclass). |
+| 17 | `1007_attribute_identifier_feed.sql` | Needs 1001 (attribute columns, train 27). One SECURITY INVOKER listing function, service_role only. |
+| 18 | `1008_attribute_resolver.sql` | Needs 1001 and 1003 (`rag_attribute_definitions`). Creates `idx_documents_attributes` (GIN `jsonb_path_ops` on `documents.attributes`), a plain `CREATE INDEX IF NOT EXISTS`, so apply it in a quiet window. Two SECURITY INVOKER functions, service_role only. |
+| 19 | `0410_security_definer_rpc_grants.sql` (r13) | Changed since r12 by +49 lines only: guarded REVOKE/GRANT (service_role only) for the ten 0941/0943 functions (`rag_set_document_version_label`, `rag_record_security_events`, `rag_hold_uploader`, `rag_release_uploader_hold`, `rag_acknowledge_security_alert`, `rag_uploader_hold_active`, `rag_active_uploader_holds`, `rag_list_security_events`, `rag_list_security_alerts`, `rag_list_security_uploaders`) and the two 0654 functions (`rag_finetune_bind_scoped_slot`, `rag_finetune_scope_slot`). Grants only; run it last. |
+
+Numbers are unique across `supabase/migrations` (the repeated numbers 0301, 0306, 0316, 0353, 0403, 0405, 0425, 0502 and 0532 are the existing common plus `.single-tenant`/`.multi-tenant` variants). Nothing had to be renumbered: the 5.2 block is 0940-0943 and the 5.3 block is 0960-0968, 0970 and 0971 (0969 unused). Every file sorts after what it depends on. None has a mode variant and none is folded into the setup files. Every new file is idempotent (CREATE ... IF NOT EXISTS, CREATE OR REPLACE, DROP ... IF EXISTS before CREATE, to_regclass guards). Sections with DROP statements, which need the owner present: 0654, 0965, 0967.
+
+The combined live SQL (the eighteen files verbatim in the order above, each after a `-- ==== <file>` line, then the 0410 r13 delta as a `DO $r13$` block with only the added lines, then the list of DROP sections) was written to the orchestrator scratchpad as `train29-live.sql`.
+
+### Operator actions
+- Apply train 28 first (1004, 1005), then the table above. Apply 0967 and the other DROP sections (0654, 0965) with the owner present. Apply 1008 in a quiet window (plain GIN index build on `documents`).
+- 05.3-11: the daily runner calls `rag_monitor_days_to_aggregate(7)` and aggregates each day before any retrieval-log purge in a shared schedule. The 09xx live push is tracked as H-4 (plan 05.3-49).
+- 03.3-16: after turning a definition's `in_identifier_index` on or off, run `npm run rag:attributes -- --tenant <key> --reindex-identifiers --apply`.
+- 06.1-20: before clearing a scoped slot, deactivate its bindings (`deactivate-binding`); the clear now refuses otherwise.
+- 06.1-12/-13: GPU training image build and real `evaluate` runs stay with 06.1-19.
+- 05.1.1-22: live verification (D-28 step 11) with the switches on against a real project.
+- 05.2-23: live latency of 40-claim answers on the HHEM sidecar image is unmeasured (live check).
+- 04.2-22: measure `rag_lexical_stale_count` on the largest production tenant.
+- Every Phase 5.2 and 5.3 switch ships off.
+- 04.2-37 (ejected): rebase on `origin/main`, re-record both fixture baselines and re-pin the corpus hashes, then put it on a later train.
+
+### Deviations
+- Merge conflicts (both intents kept):
+  - `rag-sidecar/src/rag_sidecar/contracts/{samples,__init__,golden,report,review}.py`, `export_schemas.py` (05.2-01, 05.3-01, 05.3-03 vs Phase 3.3 and fine-tune contracts): union of models, imports, literals and variants; `build_samples` registers Phase 3.3, fine-tune, 5.2 and 5.3 models. `rag-sidecar/schemas/*`, `src/lib/rag-eval/contracts.generated.ts` and `tests/fixtures/contracts/samples.json` regenerated with `npm run gen:schemas` (223 schemas); 1211 sidecar contract tests pass.
+  - `config/rag/settings-classification.json`, `eval/config/rag-eval-env.json`, `scripts/rag/env-manifest.json` (05.2-02, 05.3-02 vs Phase 3.3): three-way JSON merge, every entry of both sides kept.
+  - `eval/harness/run-config.mts` and `tests/rag-db/eval-v2-overlay.test.mts` (05.2-02 vs 03.3-02): the allow-list spreads both `PHASE33_SWITCH_VALUES` and `PHASE52_SWITCH_VALUES`, both are value-checked, and the test lists both sets.
+  - `0410_security_definer_rpc_grants.sql` and `tests/helpers/security-definer-allow-list.ts` (05.2-03 and 06.1-20 vs fine-tune r12): union of the guarded IF blocks and the comment paragraphs.
+  - `eval/tests/test_metrics.py` (05.3-05 vs 04.1.1-10): both test groups kept.
+  - `tests/rag-db/phase32-migrations-apply.test.mts` (05.3-09 vs 03.3-03): kept the main check (below 0900 only 0811-0899 follow), which already admits every 09xx and 10xx file; the 05.3-09 helper it no longer needs was removed.
+  - `tests/eval-env-pin.test.ts`, `tests/rag/config.test.ts`, `scripts/rag/env-manifest.json` (03.3-12, -16, -18): criss-cross merge bases only; the 03.3 branches add nothing to these files, so the train version was kept (checked: no test name or manifest entry only on the branch side).
+- Fix commit on the train: 17978092, `npm run typecheck:new` type fixes in `tests/rag-db/lexical-dictionary-e2e.test.mts` (04.2-22): the backend spy passes `scope` to `isReady`, and the seed rows type `kind` and `mode` as literals.
