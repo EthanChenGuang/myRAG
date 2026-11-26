@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "set_id": "fixture-ingest",
-  "version": 3,
+  "version": 4,
   "items": [
     {
       "id": "en-ambiguous-001",
@@ -364,6 +364,42 @@
       "last_reviewed_at": "2026-11-26"
     },
     {
+      "id": "en-implicit-condition-001",
+      "item_sha256": "56b5ee91210a02299cd62515fd444ba43062d3966649962adf7420c59d5b250f",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-26"
+    },
+    {
+      "id": "en-implicit-condition-002",
+      "item_sha256": "b503a714b6f3469458ef39d4160dab5830a48648bd4019861df64e735050bde9",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-26"
+    },
+    {
+      "id": "en-implicit-condition-003",
+      "item_sha256": "1dd18b61996bb864919189c454020c5cb5de08d4265453ed472521d6d54eafeb",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-26"
+    },
+    {
+      "id": "en-implicit-condition-004",
+      "item_sha256": "5d04e89739f9d7552f26cff52eedb622e9ba042604329606213e886f3237649a",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-26"
+    },
+    {
       "id": "en-injection-001",
       "item_sha256": "a1f1846e478acc8eeb4e7bc0928de0d8bd87ba1d5350e3d9e303c3c55a14c78f",
       "status": "active",
@@ -600,6 +636,51 @@
     {
       "id": "en-no-answer-012",
       "item_sha256": "42109366ddada3f0ce7f2bc7a6a8b3c1581632e829dfda7d39259675110a1710",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-26"
+    },
+    {
+      "id": "en-no-answer-013",
+      "item_sha256": "66ffd7ad91ea39b9282995eb716e36fd85235c7e382be537a05fc56092554130",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-26"
+    },
+    {
+      "id": "en-no-answer-014",
+      "item_sha256": "6632c1c29f108fe1806eae405831708c5e4d2fe8a9678e755c4242fada2f70fe",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-26"
+    },
+    {
+      "id": "en-no-answer-015",
+      "item_sha256": "b9a4509ee53493b0b7aeeb7394a168dc29d97be66fe7517d97bf34599a159ddf",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-26"
+    },
+    {
+      "id": "en-no-answer-016",
+      "item_sha256": "1b803e4596ea461ab05cd82087b9868abcc440999b234f7347556d813e870028",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-26"
+    },
+    {
+      "id": "en-no-answer-017",
+      "item_sha256": "227da4598fee122042cd16cfd5607f5eec1d0cd7d1602b84766f746028c9ba95",
       "status": "active",
       "stale_reason": null,
       "stale_since": null,
@@ -1408,6 +1489,42 @@
       "last_reviewed_at": "2026-11-26"
     },
     {
+      "id": "it-implicit-condition-001",
+      "item_sha256": "8cf758b00ff2236061c978dd1f986fe9e2c955dbe2749d737038be31146bef92",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-26"
+    },
+    {
+      "id": "it-implicit-condition-002",
+      "item_sha256": "ef43822e6d40bab069c31e9da9d02fcdc19a06d1b1fd25f3a699496030058c94",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-26"
+    },
+    {
+      "id": "it-implicit-condition-003",
+      "item_sha256": "2ca78003fd22c812d140a9bca7d3c2e73faa4de1901f9716abffa307a6240690",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-26"
+    },
+    {
+      "id": "it-implicit-condition-004",
+      "item_sha256": "109d5ae05067aae5bd400214ed99a8b778a93910668869cb5675e8faf0bc498d",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-26"
+    },
+    {
       "id": "it-injection-001",
       "item_sha256": "421c10afabb0e104aeda0bfe5c867dcbd21b44b3769a778f2711410f96dd1a9d",
       "status": "active",
@@ -1644,6 +1761,42 @@
     {
       "id": "it-no-answer-012",
       "item_sha256": "4fa3c88d74ea317ba2d8e58e33cc8efd81ebe11b38a18f0a7476a889c6c34787",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-26"
+    },
+    {
+      "id": "it-no-answer-014",
+      "item_sha256": "5097fbbadf6771fbea2fc0c83974e1ece59c17896ed94bf1d5d708b7e0762071",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-26"
+    },
+    {
+      "id": "it-no-answer-015",
+      "item_sha256": "8b3c933acf05903a37c4cbffa2532fffc5fd8d1348a0c47ea32d6dba6125141c",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-26"
+    },
+    {
+      "id": "it-no-answer-016",
+      "item_sha256": "9493cb565a1c337b960273b95005f4d77e5c1a271413bab4885162c3c18962a7",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-26"
+    },
+    {
+      "id": "it-no-answer-017",
+      "item_sha256": "b4d4fbc5d7381ca77783656b11893cf329f0823b814eff7e2c3ab2c457f2365d",
       "status": "active",
       "stale_reason": null,
       "stale_since": null,
@@ -2722,6 +2875,42 @@
       "last_reviewed_at": "2026-11-26"
     },
     {
+      "id": "zh-implicit-condition-001",
+      "item_sha256": "d23354cc56da948b3481ab75043c187285edb3fcb9bd9247971766cedba8da7b",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-26"
+    },
+    {
+      "id": "zh-implicit-condition-002",
+      "item_sha256": "203905e03ef89a5b80d870ac7ec151b7dcb33cf2cb5203343aa03f2c09dc2881",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-26"
+    },
+    {
+      "id": "zh-implicit-condition-003",
+      "item_sha256": "d7bf7cdc86fe96412cd06040f81ff49357925f3f83d781787e462bfc09b64244",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-26"
+    },
+    {
+      "id": "zh-implicit-condition-004",
+      "item_sha256": "6d0b2f05b64cafbcd862077407703ca54b0d8328c6f055686943079223bb396d",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-26"
+    },
+    {
       "id": "zh-injection-001",
       "item_sha256": "b86c70aedd0b4541167cc31d449896abfcc70f03cd5d4c69785b51655fc236d5",
       "status": "active",
@@ -2956,8 +3145,44 @@
       "last_reviewed_at": "2026-11-26"
     },
     {
+      "id": "zh-no-answer-012",
+      "item_sha256": "6e15e8a1e28bcdc12f2c95df2be561f8a7099e54306b30dc06f692a6c4bc7ebc",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-26"
+    },
+    {
       "id": "zh-no-answer-013",
       "item_sha256": "4a0052b8e531f0894ab61e0a9d40d48df72ce5ef68b5fc88ae5216eae4c7f035",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-26"
+    },
+    {
+      "id": "zh-no-answer-015",
+      "item_sha256": "84e837c9f1cc426c7b594d10384cf8c18a5c4c03225deb8e1b17509522cd4221",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-26"
+    },
+    {
+      "id": "zh-no-answer-016",
+      "item_sha256": "2366f74c8d8adb3f35754a4d689d716d12d01872cbf282122334a812ffd6467c",
+      "status": "active",
+      "stale_reason": null,
+      "stale_since": null,
+      "retire_reason": null,
+      "last_reviewed_at": "2026-11-26"
+    },
+    {
+      "id": "zh-no-answer-017",
+      "item_sha256": "6bb4dd3f744242b578a0df35e66fd79fc16b0cb3cd27d362247fd83e3e6b3a62",
       "status": "active",
       "stale_reason": null,
       "stale_since": null,
@@ -3477,7 +3702,41 @@
       ],
       "retired": [],
       "stale": []
+    },
+    {
+      "version": 4,
+      "date": "2026-11-26",
+      "added": [
+        "en-implicit-condition-001",
+        "en-implicit-condition-002",
+        "en-implicit-condition-003",
+        "en-implicit-condition-004",
+        "en-no-answer-013",
+        "en-no-answer-014",
+        "en-no-answer-015",
+        "en-no-answer-016",
+        "en-no-answer-017",
+        "it-implicit-condition-001",
+        "it-implicit-condition-002",
+        "it-implicit-condition-003",
+        "it-implicit-condition-004",
+        "it-no-answer-014",
+        "it-no-answer-015",
+        "it-no-answer-016",
+        "it-no-answer-017",
+        "zh-implicit-condition-001",
+        "zh-implicit-condition-002",
+        "zh-implicit-condition-003",
+        "zh-implicit-condition-004",
+        "zh-no-answer-012",
+        "zh-no-answer-015",
+        "zh-no-answer-016",
+        "zh-no-answer-017"
+      ],
+      "changed": [],
+      "retired": [],
+      "stale": []
     }
   ],
-  "manifest_sha256": "025c61a6a8a76c1834957ef2028588981a79395cd4eb14761f7b9b6791a4fe44"
+  "manifest_sha256": "75a5d1f0cd7e831c1f99a96d09fab41c5e1e097de3480139950c18dced76d5d6"
 }

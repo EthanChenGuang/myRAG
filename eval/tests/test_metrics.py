@@ -1008,6 +1008,10 @@ P52_CORPUS_FILES_05_2_28 = {
     for language in ("en", "it", "zh")
     for name in ("p52-answers", "p52-rules-v1", "p52-rules-v2", "sec-links")
 }
+# Plan 05.3-15 added these later; they are removed too before the pre-terms hash is compared.
+PHASE53_CORPUS_FILES = {
+    f"{language}/{name}.{language}.md" for language in ("en", "it", "zh") for name in ("access-rules", "instrument-catalog")
+}
 
 
 def test_the_04_1_1_10_baseline_adds_only_term_items_and_moves_no_old_item(tmp_path):
@@ -1036,9 +1040,9 @@ def test_the_04_1_1_10_baseline_adds_only_term_items_and_moves_no_old_item(tmp_p
         assert (corpus / relpath).is_file(), relpath
     without_terms = tmp_path / "corpus"
     shutil.copytree(corpus, without_terms)
-    # Without the term files, the Phase 4.2 files (04.2-37) and the 05.2-28 Phase 5.2 documents (train 30) the corpus is the one
-    # 04.1.1-10 started from.
-    for relpath in TERM_CORPUS_FILES | PHASE42_CORPUS_FILES | P52_CORPUS_FILES_05_2_28:
+    # Without the term files, the Phase 4.2 files (04.2-37), the 05.2-28 Phase 5.2 documents (train 30) and the 05.3-15
+    # documents (train 31) the corpus is the one 04.1.1-10 started from.
+    for relpath in TERM_CORPUS_FILES | PHASE42_CORPUS_FILES | P52_CORPUS_FILES_05_2_28 | PHASE53_CORPUS_FILES:
         (without_terms / relpath).unlink()
     assert corpus_sha256(without_terms) == PRE_TERMS_CORPUS_SHA256
     assert current.corpus_sha256 != previous.corpus_sha256 and current.golden_sha256 != previous.golden_sha256

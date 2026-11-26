@@ -64,6 +64,7 @@ async function main(): Promise<number> {
       'gates-mode': { type: 'string' },
       'golden-manifest': { type: 'string' },
       answers: { type: 'boolean', default: false },
+      'no-answers': { type: 'boolean', default: false },
       'env-overlay': { type: 'string' },
     },
     strict: true,
@@ -100,10 +101,16 @@ async function main(): Promise<number> {
     console.error('[Eval Harness] --env-overlay applies to in-process runs only; omit --base-url');
     return 2;
   }
+  if (values.answers && values['no-answers']) {
+    console.error('[Eval Harness] --answers and --no-answers exclude each other');
+    return 2;
+  }
   if (values.answers && values['base-url']) {
     console.error('[Eval Harness] --answers answers with the fake generator; omit --base-url');
     return 2;
   }
+  // O-1, D-54: in-process runs answer by default so false answers are scored at answer level; --no-answers is retrieval-only.
+  const answers = !values['no-answers'] && (values.answers || !values['base-url']);
   let envOverlay: EnvOverlay | undefined;
   if (envOverlayFlag !== undefined) {
     try {
@@ -264,7 +271,7 @@ async function main(): Promise<number> {
     // D-37: the golden cache pairs instead of the item run; cache-pairs.json feeds python -m rag_eval.calibrate cache.
     ...(values['cache-pairs'] ? { cachePairs: true } : {}),
     ...(values['allow-live-cache'] ? { allowLiveCache: true } : {}),
-    ...(values.answers ? { answers: true } : {}),
+    ...(answers ? { answers: true } : {}),
     ...(envOverlay && Object.keys(envOverlay.env).length > 0 ? { envOverlay: envOverlay.env } : {}),
   });
 
