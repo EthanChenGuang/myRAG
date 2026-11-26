@@ -218,3 +218,30 @@ describe('UploadQueueRow with "Replaces…"', () => {
     expect(html.indexOf('Replaces: alpha-notes.pdf')).toBeLessThan(html.indexOf('aria-haspopup="dialog"'));
   });
 });
+
+describe('upload queue config from the picker-defaults answer', () => {
+  it('shows "Replaces…" only on an explicit enabled flag and reads confirmedAtOnce', async () => {
+    const { readUploadReplaces } = await import('@/components/ui/upload-queue-config');
+    expect(readUploadReplaces(undefined)).toEqual({ enabled: false, confirmedAtOnce: false });
+    expect(readUploadReplaces({ enabled: 'true' })).toEqual({ enabled: false, confirmedAtOnce: false });
+    expect(readUploadReplaces({ enabled: true })).toEqual({ enabled: true, confirmedAtOnce: false });
+    expect(readUploadReplaces({ enabled: true, confirmedAtOnce: true })).toEqual({ enabled: true, confirmedAtOnce: true });
+  });
+
+  it('offers only ready documents, once each', async () => {
+    const { replaceCandidatesFrom } = await import('@/components/ui/upload-queue-config');
+    const at = new Date('2026-11-20T10:00:00.000Z');
+    const candidates = replaceCandidatesFrom([
+      { id: 'd1', name: 'one.pdf', status: 'ready', uploadedAt: at },
+      { id: 'd1', name: 'one.pdf', status: 'ready', uploadedAt: at },
+      { id: 'd2', name: 'two.pdf', status: 'processing' },
+      { id: 'd3', name: 'three.pdf', status: 'failed' },
+      { id: 'd4', name: 'four.pdf', status: 'ready', ingest: { status: 'pending_review' } },
+      { id: 'd5', name: 'five.pdf', status: 'ready', ingest: { status: 'ready' } },
+    ]);
+    expect(candidates).toEqual([
+      { id: 'd1', name: 'one.pdf', uploadedAt: at },
+      { id: 'd5', name: 'five.pdf', uploadedAt: null },
+    ]);
+  });
+});

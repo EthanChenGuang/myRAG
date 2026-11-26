@@ -38,6 +38,17 @@ import {
   settleQueuedRow,
 } from "@/components/ui/ingest-document-rows"
 import { UploadQueueRow } from "@/components/ui/upload-queue-row"
+import type { ReplaceCandidate } from "@/components/ui/replaces-picker"
+import {
+  UPLOAD_REPLACES_OFF,
+  UPLOAD_TAGS_OFF,
+  readUploadReplaces,
+  readUploadTags,
+  replaceCandidatesFrom,
+  withoutKey,
+  type UploadReplacesConfig,
+  type UploadTagsConfig,
+} from "@/components/ui/upload-queue-config"
 import { ConnectorGrid } from "@/components/ui/nango"
 import { useConnectorConfig } from "@/lib/hooks/use-connector-config"
 import { useFirecrawlConfig } from "@/lib/hooks/use-firecrawl-config"
@@ -267,6 +278,12 @@ export function DocumentDashboard({
   const [tenantDocTypeDefault, setTenantDocTypeDefault] = React.useState<DocTypePickerValue>("auto")
   const [fileDocTypes, setFileDocTypes] = React.useState<Record<string, DocTypePickerValue>>({})
   const docTypeDefaultsLoadedRef = React.useRef<string | null>(null)
+  const [uploadTags, setUploadTags] = React.useState<UploadTagsConfig>(UPLOAD_TAGS_OFF)
+  const [uploadReplaces, setUploadReplaces] = React.useState<UploadReplacesConfig>(UPLOAD_REPLACES_OFF)
+  const [fileScopes, setFileScopes] = React.useState<Record<string, string[]>>({})
+  const [fileReplaces, setFileReplaces] = React.useState<Record<string, ReplaceCandidate>>({})
+  const [tagError, setTagError] = React.useState<string | null>(null)
+  const [defaultsReload, setDefaultsReload] = React.useState(0)
   const [isTabSwitching, setIsTabSwitching] = React.useState(false)
   const [isLoading, setIsLoading] = React.useState(false)
   const [showSkeleton, setShowSkeleton] = React.useState(false)
@@ -453,10 +470,11 @@ export function DocumentDashboard({
       : null
 
   React.useEffect(() => {
-    if (!docTypeDefaultsKey || docTypeDefaultsLoadedRef.current === docTypeDefaultsKey) {
+    const loadKey = docTypeDefaultsKey ? `${docTypeDefaultsKey}#${defaultsReload}` : null
+    if (!loadKey || docTypeDefaultsLoadedRef.current === loadKey) {
       return
     }
-    docTypeDefaultsLoadedRef.current = docTypeDefaultsKey
+    docTypeDefaultsLoadedRef.current = loadKey
     let cancelled = false
     const params = new URLSearchParams({ source: "chat_upload" })
     if (isMultiTenant() && !isPersonalMode && currentOrganization) {
@@ -466,7 +484,7 @@ export function DocumentDashboard({
       try {
         const response = await fetch(`/api/rag/doc-type-defaults?${params.toString()}`)
         if (!response.ok || cancelled) return
-        const data = (await response.json()) as { enabled?: boolean; docType?: DocTypePickerValue }
+        const data = (await response.json()) as { enabled?: boolean; docType?: DocTypePickerValue; tags?: unknown; replaces?: unknown }
         if (cancelled) return
         if (data.enabled) {
           const defaultType: DocTypePickerValue = data.docType ?? "auto"
@@ -475,6 +493,8 @@ export function DocumentDashboard({
         } else {
           setDocTypePickerEnabled(false)
         }
+        setUploadTags(data.enabled ? readUploadTags(data.tags) : UPLOAD_TAGS_OFF)
+        setUploadReplaces(data.enabled ? readUploadReplaces(data.replaces) : UPLOAD_REPLACES_OFF)
       } catch (error) {
         console.error("[DocumentDashboard] doc-type defaults fetch failed", error)
       }
@@ -482,7 +502,7 @@ export function DocumentDashboard({
     return () => {
       cancelled = true
     }
-  }, [docTypeDefaultsKey, currentOrganization?.id, isPersonalMode])
+  }, [docTypeDefaultsKey, defaultsReload, currentOrganization?.id, isPersonalMode])
 
   React.useEffect(() => {
     if (!docTypePickerEnabled) return
@@ -503,6 +523,8 @@ export function DocumentDashboard({
     isMultiTenant() && !isPersonalMode && currentOrganization
       ? `?organizationId=${encodeURIComponent(currentOrganization.id)}`
       : ''
+
+  const replaceCandidates = replaceCandidatesFrom(storedDocuments)
 
   const mergeDocTypesForFiles = React.useCallback(
     (incoming: File[]) => {
@@ -725,6 +747,8 @@ export function DocumentDashboard({
           delete next[removed.name]
           return next
         })
+        setFileScopes((scopes) => withoutKey(scopes, removed.name))
+        setFileReplaces((choices) => withoutKey(choices, removed.name))
       }
       return prev.filter((_, i) => i !== index)
     })
@@ -799,6 +823,8 @@ export function DocumentDashboard({
           organizationId,
           pickerEnabled: docTypePickerEnabled,
           docType: pickedType,
+          scopes: uploadTags.enabled ? fileScopes[file.name] ?? [] : [],
+          replacesDocumentId: uploadReplaces.enabled ? fileReplaces[file.name]?.id ?? null : null,
         });
         if (organizationId) {
           console.log('[DocumentDashboard] Added organization_id to formData:', organizationId);
@@ -814,6 +840,10 @@ export function DocumentDashboard({
         const result = await response.json();
 
         if (!response.ok) {
+          if (response.status === 400 && result?.error === 'unknown_scope_value') {
+            setTagError(uploadErrorMessage(response.status, result, language));
+            setDefaultsReload((n) => n + 1);
+          }
           throw new Error(uploadErrorMessage(response.status, result, language));
         }
 
@@ -914,6 +944,8 @@ export function DocumentDashboard({
     setIsProcessing(false);
     setFiles([]);
     setFileDocTypes({});
+    setFileScopes({});
+    setFileReplaces({});
 
     // Check if any documents failed
     const failedCount = storedDocuments.filter(doc =>
@@ -923,7 +955,7 @@ export function DocumentDashboard({
     if (failedCount > 0) {
       console.warn(`${failedCount} document(s) failed to process.`);
     }
-  }, [files, fileDocTypes, docTypePickerEnabled, tenantDocTypeDefault, onProcessingStart, onProcessingComplete, onProcessingError, setActiveTab, storedDocuments, currentOrganization?.id, isPersonalMode, workspaceQuery, language]);
+  }, [files, fileDocTypes, docTypePickerEnabled, tenantDocTypeDefault, onProcessingStart, onProcessingComplete, onProcessingError, setActiveTab, storedDocuments, currentOrganization?.id, isPersonalMode, workspaceQuery, language, uploadTags.enabled, uploadReplaces.enabled, fileScopes, fileReplaces]);
 
   // Create a function to handle tab switching with better visual feedback
   const handleTabChange = (tab: string) => {
@@ -1443,6 +1475,32 @@ export function DocumentDashboard({
                                       ? {
                                           value: fileDocTypes[file.name] ?? tenantDocTypeDefault,
                                           onChange: (value) => setFileDocTypes((prev) => ({ ...prev, [file.name]: value })),
+                                        }
+                                      : null
+                                  }
+                                  tags={
+                                    uploadTags.enabled
+                                      ? {
+                                          vocabulary: uploadTags.vocabulary,
+                                          value: fileScopes[file.name] ?? [],
+                                          error: tagError,
+                                          onChange: (value) => {
+                                            setTagError(null)
+                                            setFileScopes((prev) => ({ ...prev, [file.name]: value }))
+                                          },
+                                        }
+                                      : null
+                                  }
+                                  replaces={
+                                    uploadReplaces.enabled
+                                      ? {
+                                          confirmedAtOnce: uploadReplaces.confirmedAtOnce,
+                                          candidates: replaceCandidates,
+                                          value: fileReplaces[file.name] ?? null,
+                                          onChange: (value) =>
+                                            setFileReplaces((prev) =>
+                                              value ? { ...prev, [file.name]: value } : withoutKey(prev, file.name)
+                                            ),
                                         }
                                       : null
                                   }

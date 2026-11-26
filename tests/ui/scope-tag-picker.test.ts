@@ -196,3 +196,14 @@ describe('UploadQueueRow with the tag picker', () => {
     expect(html).toMatch(new RegExp(`<p class="[^"]*truncate[^"]*" title="${name}">${name}</p>`));
   });
 });
+
+describe('tags block of the picker-defaults answer', () => {
+  it('keeps the picker hidden unless tags are enabled with at least one well-formed value', async () => {
+    const { readUploadTags } = await import('@/components/ui/upload-queue-config');
+    expect(readUploadTags(undefined).enabled).toBe(false);
+    expect(readUploadTags({ enabled: false, vocabulary: VOCABULARY }).enabled).toBe(false);
+    expect(readUploadTags({ enabled: true, vocabulary: [] }).enabled).toBe(false);
+    expect(readUploadTags({ enabled: true, vocabulary: [{ dimension: 'region', value: 1, label: 'x' }] }).enabled).toBe(false);
+    expect(readUploadTags({ enabled: true, vocabulary: VOCABULARY })).toEqual({ enabled: true, vocabulary: VOCABULARY });
+  });
+});
