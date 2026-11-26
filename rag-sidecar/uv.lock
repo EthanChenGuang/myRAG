@@ -12,16 +12,22 @@ resolution-markers = [
 exclude-newer = "2026-11-25T00:00:00Z"
 
 [options.exclude-newer-package]
-torchvision = false
+tenacity = "2026-11-19T00:00:00Z"
 torch = false
+jsonpath-ng = "2026-11-19T00:00:00Z"
+pydantic-core = "2026-11-25T00:00:00Z"
+pydantic = "2026-11-25T00:00:00Z"
+torchvision = false
 fastapi = "2026-11-25T00:00:00Z"
+python-ulid = "2026-11-19T00:00:00Z"
 pdfminer-six = "2026-11-25T00:00:00Z"
 ray = "2026-11-25T00:00:00Z"
 certifi = "2026-11-25T00:00:00Z"
-pydantic-core = "2026-11-25T00:00:00Z"
-pydantic = "2026-11-25T00:00:00Z"
+redis = "2026-11-19T00:00:00Z"
 annotated-doc = "2026-11-25T00:00:00Z"
+ml-dtypes = "2026-11-19T00:00:00Z"
 pdfplumber = "2026-11-25T00:00:00Z"
+redisvl = "2026-11-19T00:00:00Z"
 
 [manifest]
 constraints = [
@@ -624,6 +630,15 @@ wheels = [
 ]
 
 [[package]]
+name = "jsonpath-ng"
+version = "1.16.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ca/15/bfb28139fc18edbc8a360aff4bd98be981065410eeabdf10b8d3ea8f982f/jsonpath_ng-1.16.0.tar.gz", hash = "sha256:a81066736e00d47d0c2b5c510d12b78d09b40fd1ec954e7beff1954a55606099", size = 124800, upload-time = "2026-11-04T14:37:02.513Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/59/a7/189b9c567504a84670cac5375bac7a1a1e2e2de260caae4298bbfc9b3168/jsonpath_ng-1.16.0-py3-none-any.whl", hash = "sha256:c5e28ddd70ebcaeba9af3c2b880933fbfeb108b5e68c9edb84e1b57803091218", size = 86201, upload-time = "2026-11-04T14:37:00.784Z" },
+]
+
+[[package]]
 name = "jsonref"
 version = "1.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -763,6 +778,22 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/d6/54/cfe61301667036ec958cb99bd3efefba235e65cdeb9c84d24a8293ba1d90/mdurl-0.1.2.tar.gz", hash = "sha256:bb413d29f5eea38f31dd4754dd7377d4465116fb207585f97bf925588687c1ba", size = 8729, upload-time = "2022-08-14T12:40:10.846Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b3/38/89ba8ad64ae25be8de66a6d463314cf1eb366222074cfda9ee839c56a4b4/mdurl-0.1.2-py3-none-any.whl", hash = "sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8", size = 9979, upload-time = "2022-08-14T12:40:09.779Z" },
+]
+
+[[package]]
+name = "ml-dtypes"
+version = "0.7.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/bc/2d/4ce5532f433dfae6dc96ed4abd7a0e18106a63666bce8eb878d9ffdc0610/ml_dtypes-0.7.0.tar.gz", hash = "sha256:67fd890fb09d1e068cfe1b4dc8e204430ae7632102b4a4f854b093b6f02b3950", size = 4353024, upload-time = "2026-11-16T16:21:26.657Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6c/e4/5c1579cfac55dab603df1870be84fc270df32c1e81b96314976bf5814b26/ml_dtypes-0.7.0-cp312-cp312-macosx_10_13_universal2.whl", hash = "sha256:3cfe29fc79a00f4555c5319a32c549c10ec075ec888974ab4c0a59598e1f0f48", size = 738779, upload-time = "2026-11-16T16:20:39.543Z" },
+    { url = "https://files.pythonhosted.org/packages/9b/7c/39dd1b5b4458ea1c6d52f5161d92e78e723c05a33c172359dd420ca388be/ml_dtypes-0.7.0-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:7366e3ac8630e2bb35e67945391889225e2221c581c0831ec01a8cf50de3461a", size = 436741, upload-time = "2026-11-16T16:20:41.443Z" },
+    { url = "https://files.pythonhosted.org/packages/98/cc/d6949ae90ff708e8b9f1889f4e6bdb74c31b2603fa29936a97b52dd784fa/ml_dtypes-0.7.0-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:3c4e47f553a04d33886160a9600e2313e5bee8c1c3da997baa23c8fecbfab189", size = 463670, upload-time = "2026-11-16T16:20:42.875Z" },
+    { url = "https://files.pythonhosted.org/packages/60/21/3ca0cb91c528d6250d356e62645d868dc3276cb701cc194a2ae40ca99a83/ml_dtypes-0.7.0-cp312-cp312-win_amd64.whl", hash = "sha256:0b1d09c91aaa6f38052521d5377cecb1523f50d4aee7783183a955a6544b8ad6", size = 463335, upload-time = "2026-11-16T16:20:44.317Z" },
+    { url = "https://files.pythonhosted.org/packages/61/e0/6d97837f234b658a4f553b59b95e24799a4bd8e544e536435d8e85e0f005/ml_dtypes-0.7.0-cp312-cp312-win_arm64.whl", hash = "sha256:b29d506d51d994efce5e1f214a6cab77d96b796c5ab59a63f23d9a8c5b20e4dd", size = 587991, upload-time = "2026-11-16T16:20:45.95Z" },
 ]
 
 [[package]]
@@ -1314,6 +1345,15 @@ wheels = [
 ]
 
 [[package]]
+name = "python-ulid"
+version = "4.2.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f4/5a/ccca42a406a2b71cb359371c2692a326511b870c6b09ce12b6ee58c143a8/python_ulid-4.2.0.tar.gz", hash = "sha256:b935122d37ccb12afc45314019a0c0a59dba46a9e7ac722764c9be2540378c58", size = 126331, upload-time = "2026-11-17T12:14:09.878Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a1/ca/f205496fe60dc8fe0981eecb53b06079f4a229bcc150d8a233d81e8b378e/python_ulid-4.2.0-py3-none-any.whl", hash = "sha256:3411984a53c5f80d75784153b9ea0f116bd2b719423104ca9e948d08c3abcaaf", size = 18047, upload-time = "2026-11-17T12:14:08.515Z" },
+]
+
+[[package]]
 name = "pywin32"
 version = "312"
 source = { registry = "https://pypi.org/simple" }
@@ -1355,6 +1395,10 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+cache = [
+    { name = "redis" },
+    { name = "redisvl" },
+]
 chunking = [
     { name = "docling-core", extra = ["chunking-openai"] },
     { name = "huggingface-hub" },
@@ -1417,6 +1461,8 @@ requires-dist = [
     { name = "python-multipart", specifier = "==0.0.34" },
     { name = "python-stdnum", specifier = "==2.2" },
     { name = "ray", extras = ["data"], marker = "extra == 'ray'", specifier = "==2.60.1" },
+    { name = "redis", marker = "extra == 'cache'", specifier = "==8.1.0" },
+    { name = "redisvl", marker = "extra == 'cache'", specifier = "==0.32.0" },
     { name = "tiktoken", marker = "extra == 'chunking'", specifier = "==0.14.0" },
     { name = "tiktoken", marker = "extra == 'docling'", specifier = "==0.14.0" },
     { name = "torch", marker = "extra == 'docling'", specifier = "==2.15.0", index = "https://download.pytorch.org/whl/cpu" },
@@ -1425,7 +1471,7 @@ requires-dist = [
     { name = "transformers", marker = "extra == 'hhem'", specifier = "==5.23.0" },
     { name = "uvicorn", specifier = "==0.54.0" },
 ]
-provides-extras = ["chunking", "preflight", "hidden-text", "docling", "ray", "hhem"]
+provides-extras = ["chunking", "preflight", "hidden-text", "docling", "ray", "hhem", "cache"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = "==9.2.0" }]
@@ -1478,6 +1524,34 @@ data = [
     { name = "numpy" },
     { name = "pandas" },
     { name = "pyarrow" },
+]
+
+[[package]]
+name = "redis"
+version = "8.1.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a8/99/604f0b666d4c616d891cf77ebb9db6bb21601344c051aebf1b72b9ff915f/redis-8.1.0.tar.gz", hash = "sha256:6e1a19beef9225c83efd689c7e6b7da2d5215b1f42cd13b7fc3714d0a09c7b25", size = 5254356, upload-time = "2026-07-30T08:51:00.269Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/66/9d/c5731f6e3608663d4d3656fd8d3aecee8b509c3082818f5a13eae925baea/redis-8.1.0-py3-none-any.whl", hash = "sha256:a4fe1aac3d3b3cc791d4b3d5931c5a956045dc951ee74d1c913ee3ac4d2ee9fb", size = 560618, upload-time = "2026-07-30T08:50:58.497Z" },
+]
+
+[[package]]
+name = "redisvl"
+version = "0.32.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "jsonpath-ng" },
+    { name = "ml-dtypes" },
+    { name = "numpy" },
+    { name = "pydantic" },
+    { name = "python-ulid" },
+    { name = "pyyaml" },
+    { name = "redis" },
+    { name = "tenacity" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/83/1d/3680b4f736f37288246885f19a32bf15648dbe4fdb7bf1a3b8b8bdc6d675/redisvl-0.32.0.tar.gz", hash = "sha256:8f8b587da238d16fc77af8b9b0961d76359402ca6661540ec376b895a1d4c3bf", size = 1465248, upload-time = "2026-11-11T10:22:58.704Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/86/97/a0195e6cd7205ad6a89ffa8106114a58b34649ccb8907ec27394f4286794/redisvl-0.32.0-py3-none-any.whl", hash = "sha256:5affc519949ef260ec4ff786c36bb6c15f1527de2b5da089ef53efcfd72f5d83", size = 467734, upload-time = "2026-11-11T10:22:56.655Z" },
 ]
 
 [[package]]
@@ -1750,6 +1824,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/46/58/8c37dea7bbf769b20d58e7ace7e5edfe65b849442b00ffcdd56be88697c6/tabulate-0.10.0.tar.gz", hash = "sha256:e2cfde8f79420f6deeffdeda9aaec3b6bc5abce947655d17ac662b126e48a60d", size = 91754, upload-time = "2026-03-04T18:55:34.402Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/99/55/db07de81b5c630da5cbf5c7df646580ca26dfaefa593667fc6f2fe016d2e/tabulate-0.10.0-py3-none-any.whl", hash = "sha256:f0b0622e567335c8fabaaa659f1b33bcb6ddfe2e496071b743aa113f8774f2d3", size = 39814, upload-time = "2026-03-04T18:55:31.284Z" },
+]
+
+[[package]]
+name = "tenacity"
+version = "9.2.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/82/9e/497c1c8ebe5a5b5d1d4a7511aea22c0bb1a97e3170d98abdef0e1b34265a/tenacity-9.2.1.tar.gz", hash = "sha256:a606b5c808d0cded4a359d5b9932d867ff2a6a6b64d37350260fd01bbdf83839", size = 58261, upload-time = "2026-10-07T12:13:01.633Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d6/26/1ff2b0721ac66a3ec5b1402b333110b352ab0a8724052ac279a7b82d40c4/tenacity-9.2.1-py3-none-any.whl", hash = "sha256:9e56f17539296baab7beabb08b92f6ee3d7be92d8be72d763360677c2ad6580e", size = 32310, upload-time = "2026-10-07T12:13:00.102Z" },
 ]
 
 [[package]]

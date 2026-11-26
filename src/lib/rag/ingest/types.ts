@@ -2,6 +2,7 @@ import type { DocTypeDetection, HiddenTextReport, ParseResult, UploadApproval } 
 import type { TenantScope } from '../tenant/scope';
 import type { TraceCollector } from '../trace/collector';
 import type { IngestConfig } from './config';
+import type { IngestLexical } from './lexical-options';
 import type { IngestDeps } from './deps';
 import type { DocType, ProcessingProfile } from './profiles/load';
 import type { StateStore } from './state-store';
@@ -158,6 +159,23 @@ export interface IngestState {
   uploaderId?: string;
   /** An embed stage that yielded between batches: where a resumed run continues, valid only for the same targets and chunk total. */
   embedProgress?: EmbedProgress;
+  /** D-51: the Phase 3.2 span facts (codes, counts and one hash, never text); absent while every switch that produces one is off. */
+  traceFacts?: IngestTraceFacts;
+}
+
+/**
+ * D-51: what the trace shows of the Phase 3.2 stages. enrich sets the language shares and the und count, scan_injection the outcome and
+ * count of each check, publish the fingerprint hash and the approval state. Kept in the state so a queued job's trace reads them too.
+ */
+export interface IngestTraceFacts {
+  /** Registry code to its token share of the document's detected chunks, rounded to 2 decimals. */
+  language_shares?: Record<string, number>;
+  und_count?: number;
+  /** `<outcome>:<count>` per check, or `off`. */
+  scan?: { injection: string; hidden_text: string; links: string };
+  ingest_fingerprint?: string;
+  /** `required`: approval applies but a scan quarantined the version, so it is not held for review. */
+  approval_state?: 'not_required' | 'pending_review' | 'required';
 }
 
 export interface EmbedProgress {
@@ -309,6 +327,8 @@ export interface IngestWork {
   documentLanguage?: string | null;
   /** RAG_CAPTION_LANGUAGE=document: the caption target language, resolved once per run (null: no target, English prompt). */
   captionTarget?: { language: string | null };
+  /** The document's lexical options and version, resolved once by enrich (plan 04.2-19); absent on a run resumed after enrich. */
+  lexical?: IngestLexical;
 }
 
 export interface StageContext {

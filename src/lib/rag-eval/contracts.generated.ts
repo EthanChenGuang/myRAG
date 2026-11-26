@@ -175,6 +175,9 @@ export type DraftedItemBatch = z.infer<typeof DraftedItemBatchSchema>
 export const DupClusterParamsSchema = z.object({ "by_profile": z.record(z.string(), z.object({ "source": z.enum(["fixture","live"]), "threshold": z.number().gt(0).lte(1) }).strict().describe("D-49: a duplicate threshold for one embedding profile; a fixture-fitted value applies in eval only.")).optional(), "threshold": z.number().gt(0).lte(1).default(0.95) }).strict()
 export type DupClusterParams = z.infer<typeof DupClusterParamsSchema>
 
+export const DupClusterParamsFileSchema = z.object({ "by_profile": z.record(z.string(), z.object({ "source": z.enum(["fixture","live"]), "threshold": z.number().gt(0).lte(1) }).strict().describe("D-49: a duplicate threshold for one embedding profile; a fixture-fitted value applies in eval only.")).optional(), "config_hash": z.union([z.string().regex(new RegExp("^[a-f0-9]{64}$")), z.null()]).default(null), "provenance": z.object({ "source": z.enum(["defaults","sweep","calibration","fixture","live"]) }).strict().optional(), "threshold": z.number().gt(0).lte(1).default(0.95) }).strict().describe("D-49: eval/config/dup-cluster-params.json, written only by `rag_eval.calibrate dup-clusters`.")
+export type DupClusterParamsFile = z.infer<typeof DupClusterParamsFileSchema>
+
 export const EffectiveDateExtractionSchema = z.object({ "confidence": z.number().gte(0).lte(1), "effective_from": z.union([z.string().date(), z.null()]).default(null), "effective_to": z.union([z.string().date(), z.null()]).default(null), "evidence_quote": z.string().min(1).max(2000) }).strict().describe("Structured model output for effective dates (D-43); accepted only when evidence_quote is found verbatim.")
 export type EffectiveDateExtraction = z.infer<typeof EffectiveDateExtractionSchema>
 

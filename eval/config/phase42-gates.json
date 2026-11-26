@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "phase": "04.2",
+  "noise": "eval/config/noise.json",
+  "baselines": {
+    "prechunked": "eval/baselines/fixture-baseline.json",
+    "ingest": "eval/baselines/fixture-ingest-baseline.json"
+  },
+  "calibration_result": "eval/reports/refusal-calibration-fixture/refusal-calibration-result.json",
+  "phase42_off_env": {
+    "RAG_LEXICAL_DICTIONARY": "false",
+    "RAG_LEXICAL_STEM_IT": "false",
+    "RAG_VERSION_SCOPE": "false",
+    "RAG_TABLE_LOOKUP": "false",
+    "RAG_DUP_CLUSTERS": "false",
+    "RAG_RESULT_DIVERSITY": "off",
+    "RAG_IDENTIFIER_INDEX": "false",
+    "RAG_IDENTIFIER_FILTER": "false"
+  },
+  "runs": [
+    {"name": "off-prechunked", "base": null, "fixture_mode": "prechunked", "phase42_off": true},
+    {"name": "off-ingest", "base": null, "fixture_mode": "ingest", "phase42_off": true},
+    {"name": "v2-default", "base": "eval/config/runs/v2-default.json", "fixture_mode": "prechunked"},
+    {"name": "v2-default-phase42-off", "base": "eval/config/runs/v2-default.json", "fixture_mode": "prechunked", "phase42_off": true},
+    {"name": "v2-diversity-collapse", "base": "eval/config/runs/v2-diversity-collapse.json", "fixture_mode": "prechunked"},
+    {"name": "v2-diversity-mmr", "base": "eval/config/runs/v2-diversity-mmr.json", "fixture_mode": "prechunked"},
+    {"name": "v2-identifier-on", "base": "eval/config/runs/v2-identifier-on.json", "fixture_mode": "prechunked"},
+    {"name": "v2-table-lookup-on", "base": "eval/config/runs/v2-table-lookup-on.json", "fixture_mode": "prechunked"},
+    {"name": "v2-version-scope-on", "base": "eval/config/runs/v2-version-scope-on.json", "fixture_mode": "prechunked"},
+    {"name": "v2-lexical-dict-on", "base": "eval/config/runs/v2-lexical-dict-on.json", "fixture_mode": "prechunked"},
+    {"name": "v2-lexical-stem-it-on", "base": "eval/config/runs/v2-lexical-stem-it-on.json", "fixture_mode": "prechunked"}
+  ],
+  "gates": {
+    "off_identity": {
+      "decision": "D-37",
+      "description": "Every Phase 4.2 switch explicitly off: zero paired differences (retrieval and refusal) against the committed baseline of each fixture mode, and against the Phase 4.1 default run config on the same data",
+      "against_baseline": ["off-prechunked", "off-ingest"],
+      "against_run": [{"run": "v2-default-phase42-off", "reference": "v2-default"}]
+    },
+    "diversity": {
+      "decision": "D-22",
+      "description": "duplicate_flood: intent coverage 1.0 on the slice, every item's topk_redundancy at most 1/k (k = the item's context_k), no other slice drops beyond the noise band against the Phase 4.1 default run",
+      "runs": ["v2-diversity-collapse", "v2-diversity-mmr"],
+      "reference": "v2-default",
+      "slice": "category:duplicate_flood",
+      "intent_coverage_min": 1.0,
+      "max_chunks_per_cluster": 1,
+      "no_slice_drop_exclude": ["category:duplicate_flood"]
+    },
+    "identifier": {
+      "decision": "D-32",
+      "description": "identifier_near_miss: identifier precision 1.0 and near-miss leakage 0.0 measured on every item of the slice; the descriptive slice and every other slice within the noise band against the Phase 4.1 default run",
+      "run": "v2-identifier-on",
+      "reference": "v2-default",
+      "slice": "category:identifier_near_miss",
+      "identifier_precision_min": 1.0,
+      "near_miss_leakage_max": 0.0,
+      "descriptive": {
+        "definition": "gated items whose trace in the identifier run has an identifier block with zero asked identifiers (pipeline's own extraction); compared on the same item ids in the reference run",
+        "max_asked": 0,
+        "min_items": 1,
+        "metrics": ["recall_at_5", "recall_at_10", "mrr"]
+      },
+      "no_slice_drop_exclude": ["category:identifier_near_miss"]
+    },
+    "table": {
+      "decision": "ROADMAP-4.2-SC3",
+      "description": "Every item tagged feature:table_lookup keeps a chunk for every gold unit and its gold candidate carries the table:0 list in its fused ranks; no slice drops",
+      "run": "v2-table-lookup-on",
+      "reference": "v2-default",
+      "tag": "feature:table_lookup",
+      "leg": "table:0",
+      "min_items": 1,
+      "no_slice_drop_exclude": []
+    },
+    "versions": {
+      "decision": "ROADMAP-4.2-SC5",
+      "description": "Every item tagged feature:versions hits every evidence group; its superseded kept chunks carry is_current false and a document_version (at least one superseded chunk kept); in the reference run those items keep no superseded chunk; no slice drops",
+      "run": "v2-version-scope-on",
+      "reference": "v2-default",
+      "tag": "feature:versions",
+      "min_items": 1,
+      "min_superseded_kept": 1,
+      "no_slice_drop_exclude": []
+    },
+    "dictionary": {
+      "decision": "D-09",
+      "description": "Lexical dictionary on: no slice drops beyond the noise band against the Phase 4.1 default run",
+      "run": "v2-lexical-dict-on",
+      "reference": "v2-default",
+      "no_slice_drop_exclude": []
+    }
+  },
+  "rules": {
+    "stem_it": {
+      "decision": "D-10",
+      "description": "flip only when the language:it Recall@10 gain over the reference exceeds the noise band (max(k * spread, floor) of the reference) and no slice drops beyond the band; otherwise keep_off",
+      "run": "v2-lexical-stem-it-on",
+      "reference": "v2-default",
+      "slice": "language:it",
+      "metric": "recall_at_10",
+      "outcomes": ["flip", "keep_off"]
+    },
+    "refusal_mode_cells": {
+      "decision": "D-23, D-24",
+      "description": "commit the per-mode fixture cells only when every mode cell is calibrated on dev (fit_status fitted, threshold set), passes its holdout check (status calibrated), and every strict cell's threshold is not below its base cell's; otherwise keep. Base cells whose shared and mode cells all have insufficient_data are skipped: no cell of that base would be committed",
+      "modes": ["strict", "balanced", "flexible"],
+      "dev_fit_status": "fitted",
+      "holdout_status": "calibrated",
+      "strict_mode": "strict",
+      "strict_not_below_base": true,
+      "skip_insufficient_data": true,
+      "outcomes": ["commit", "keep"]
+    }
+  },
+  "report_only": [
+    {"metric": "ndcg_at_context_k", "note": "reported per run, never gated (D-07)"},
+    {"metric": "ttft", "note": "reported per run by cache state, never gated (D-26)"}
+  ]
+}

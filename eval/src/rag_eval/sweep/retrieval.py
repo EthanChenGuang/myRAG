@@ -7,7 +7,7 @@ import math
 import os
 import sys
 from pathlib import Path
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, NamedTuple, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from rag_sidecar.contracts.baseline import NoiseConfig
@@ -18,7 +18,7 @@ from rag_sidecar.contracts.retrieval import RetrievalParams
 from rag_eval.config_files import finalize_config, write_config_atomically
 from rag_eval.golden_io import golden_sha256, load_golden
 from rag_eval.harness_runner import HarnessError, HarnessRun, run_harness
-from rag_eval.matching import chunk_matches_span
+from rag_eval.ndcg import gold_unit_first_hits, ndcg_at_context_k
 from rag_eval.paths import REPO_ROOT, repo_relative, resolve_cli_path
 from rag_eval.split import assign_split
 
@@ -37,6 +37,11 @@ EPSILON = 1e-9
 SELECTION_RULE = (
     "Smallest candidate pool whose Recall@k and MRR are both within the noise band of the best cell; "
     "ties on pool size go to the lower mean context tokens, then the lower latency p95."
+)
+NDCG_NOTE = (
+    "nDCG@k: k is the number of chunks kept in the context of each item; one credit per gold unit (span or "
+    "evidence group); a refused item or an empty context scores 0 and is counted in k = 0. Report-only: not a "
+    "selection criterion (D-07)."
 )
 DEV_ONLY_RULE = "Scope: dev split only; the test split is never read (D-14)."
 
@@ -81,6 +86,8 @@ class SweepCell(_Model):
     mean_context_tokens: float = Field(ge=0)
     latency_p95_ms: float = Field(ge=0)
     n_items: int = Field(ge=0)
+    ndcg_at_context_k: float | None = None
+    k_zero: int | None = Field(default=None, ge=0)
     run_config_hash: str | None = None
     out_dir: str | None = None
 
@@ -153,35 +160,48 @@ def choose_configuration(cells: Sequence[SweepCell], noise: NoiseConfig, spread:
 
 
 def _first_hit_ranks(trace: RagTrace, item: GoldenItem) -> list[int | None]:
-    ranked = sorted(trace.kept, key=lambda chunk: chunk.rank)
-    ranks: list[int | None] = []
-    for span in item.gold_evidence:
-        found = None
-        for position, chunk in enumerate(ranked, start=1):
-            if chunk_matches_span(chunk.document_name or "", chunk.content, span):
-                found = position
-                break
-        ranks.append(found)
-    return ranks
+    return gold_unit_first_hits(trace, item)
 
 
-def cell_scores(traces: Sequence[RagTrace], golden: Sequence[GoldenItem], top_k: int) -> tuple[float, float, int]:
-    """Recall of gold spans inside the final top-k and MRR over answerable items; a refused item scores zero."""
+class CellScores(NamedTuple):
+    recall_at_k: float
+    mrr: float
+    n_items: int
+    ndcg_at_context_k: float | None = None
+    k_zero: int | None = None
+
+
+def cell_scores(traces: Sequence[RagTrace], golden: Sequence[GoldenItem], top_k: int) -> CellScores:
+    """Recall of gold units inside the final top-k, MRR and nDCG at context k over answerable items.
+
+    A gold unit is a span, or an evidence group when the item has groups. A refused item scores zero;
+    a refused item or one with an empty context also counts in k_zero (nDCG is report-only, D-07).
+    """
     by_id = {trace.item_id: trace for trace in traces if trace.item_id is not None}
     recalls: list[float] = []
     reciprocals: list[float] = []
+    ndcgs: list[float] = []
+    k_zero = 0
     for item in golden:
         if not item.answerable or not item.gold_evidence:
             continue
         trace = by_id.get(item.id)
         if trace is None:
             raise SweepUsageError(f"the harness returned no trace for dev item {item.id!r}")
-        hits = [] if trace.refused else [rank for rank in _first_hit_ranks(trace, item) if rank is not None and rank <= top_k]
-        recalls.append(len(hits) / len(item.gold_evidence))
+        units = _first_hit_ranks(trace, item)
+        hits = [] if trace.refused else [rank for rank in units if rank is not None and rank <= top_k]
+        recalls.append(len(hits) / len(units))
         reciprocals.append(1 / min(hits) if hits else 0.0)
+        context_k = 0 if trace.refused else len(trace.kept)
+        if context_k == 0:
+            k_zero += 1
+            ndcgs.append(0.0)
+        else:
+            ndcgs.append(ndcg_at_context_k(units, context_k))
     if not recalls:
         raise SweepUsageError("the dev split holds no answerable item to score")
-    return sum(recalls) / len(recalls), sum(reciprocals) / len(reciprocals), len(recalls)
+    count = len(recalls)
+    return CellScores(sum(recalls) / count, sum(reciprocals) / count, count, sum(ndcgs) / count, k_zero)
 
 
 def _nearest_rank(values: list[float], quantile: float) -> float:
@@ -252,6 +272,10 @@ def _write_text(path: Path, text: str) -> None:
     os.replace(tmp, path)
 
 
+def _optional(value: float | None) -> str:
+    return "" if value is None else f"{value:.4f}"
+
+
 def render_markdown(result: SweepResult) -> str:
     lines = ["# Retrieval sweep", ""]
     live = result.mode == "live"
@@ -275,13 +299,18 @@ def render_markdown(result: SweepResult) -> str:
     selection = result.selection
     in_band = set(selection.within_band) if selection is not None else set()
     chosen = (selection.chosen.candidate_pool_size, selection.chosen.final_top_k) if selection is not None else None
-    lines.append("| Pool | Cap | Top-k | Recall@k | MRR | Context tokens | Latency p95 (ms) | In band | Chosen |")
-    lines.append("| --- | --- | --- | --- | --- | --- | --- | --- | --- |")
+    lines.append(NDCG_NOTE)
+    lines.append("")
+    lines.append(
+        "| Pool | Cap | Top-k | Recall@k | MRR | nDCG@k | k = 0 | Context tokens | Latency p95 (ms) | In band | Chosen |"
+    )
+    lines.append("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |")
     for cell in result.cells:
         key = (cell.candidate_pool_size, cell.final_top_k)
         lines.append(
             f"| {cell.candidate_pool_size} | {cell.rerank_input_cap} | {cell.final_top_k} | {cell.recall_at_k:.4f} | "
-            f"{cell.mrr:.4f} | {cell.mean_context_tokens:.1f} | {cell.latency_p95_ms:.1f} | "
+            f"{cell.mrr:.4f} | {_optional(cell.ndcg_at_context_k)} | {'' if cell.k_zero is None else cell.k_zero} | "
+            f"{cell.mean_context_tokens:.1f} | {cell.latency_p95_ms:.1f} | "
             f"{'yes' if key in in_band else 'no'} | {'chosen' if key == chosen else ''} |"
         )
     lines.append("")
@@ -347,17 +376,19 @@ def run_retrieval_sweep(
             items = load_golden(run.golden_path)
             _require_dev_only(items)
             golden_hashes.add(golden_sha256(run.golden_path))
-            recall, mrr, n_items = cell_scores(run.traces, items, top_k)
+            scores = cell_scores(run.traces, items, top_k)
             cells.append(
                 SweepCell(
                     candidate_pool_size=pool,
                     rerank_input_cap=overrides["rerank_input_cap"],
                     final_top_k=top_k,
-                    recall_at_k=recall,
-                    mrr=mrr,
+                    recall_at_k=scores.recall_at_k,
+                    mrr=scores.mrr,
                     mean_context_tokens=_mean_context_tokens(run.traces),
                     latency_p95_ms=_latency_p95(run.traces),
-                    n_items=n_items,
+                    n_items=scores.n_items,
+                    ndcg_at_context_k=scores.ndcg_at_context_k,
+                    k_zero=scores.k_zero,
                     run_config_hash=run.report.run_config_hash if run.report is not None else None,
                     out_dir=repo_relative(cell_dir),
                 )
@@ -461,6 +492,9 @@ def main(argv: list[str] | None = None) -> int:
     from rag_eval.sweep.chunking import register as register_chunking
 
     register_chunking(commands)
+    from rag_eval.sweep.diversity import register as register_diversity
+
+    register_diversity(commands)
     args = parser.parse_args(argv)
     return args.handler(args)
 

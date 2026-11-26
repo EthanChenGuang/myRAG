@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { evalScope } from '@/lib/rag';
+import { backendForRequest, resetRetrievalBackendForTests, setRetrievalBackendForTests } from '@/lib/rag/backend/registry';
 import type { RetrievalBackend, RetrievalFilters } from '@/lib/rag/backend/types';
 import type { TenantScope } from '@/lib/rag/tenant/scope';
 import { mintScope } from '@/lib/rag/tenant/scope';
@@ -15,6 +16,11 @@ export interface ConformanceContext {
   profileId: string;
   embed: (text: string) => number[];
   queryTokens: (text: string) => string[];
+  /**
+   * Seeds, in tenant A, one lineage whose earlier version is superseded (no vector, different content) and whose current version carries
+   * `identifier` in identifiers_norm. Required when the backend declares versionScope or identifierFilter.
+   */
+  seedVersionHistory?: () => Promise<{ token: string; identifier: string; supersededChunkId: string; currentChunkId: string }>;
   close: () => Promise<void>;
 }
 
@@ -176,6 +182,69 @@ export function runConformance(name: string, factory: ConformanceFactory): void 
       });
       if (!outcome.ok) throw new Error('scope expected');
       await expect(searchLexical(ctx, outcome.scope, QUERIES.en)).resolves.toBeDefined();
+    });
+
+    it('a declared versionScope or identifierFilter is honoured; an undeclared one is never handed to the backend', async () => {
+      const caps = ctx.backend.capabilities ?? {};
+      if (caps.versionScope || caps.identifierFilter) {
+        expect(ctx.seedVersionHistory, 'a backend that declares a field provides seedVersionHistory').toBeDefined();
+        const seeded = await (ctx.seedVersionHistory as NonNullable<ConformanceContext['seedVersionHistory']>)();
+        const run = async (over: { versionScope?: 'all'; identifiersNorm?: string[] }) => {
+          const legs = await ctx.backend.search({
+            scope: ctx.scopes.tenantA,
+            embeddingProfileId: ctx.profileId,
+            denseVector: ctx.embed(seeded.token),
+            lexicalTokens: ctx.queryTokens(seeded.token),
+            lexicalLanguages: null,
+            filters: { currentOnly: true },
+            denseLimit: 20,
+            lexicalLimit: 20,
+            signal: new AbortController().signal,
+            ...over,
+          });
+          return { dense: legs.dense.map((h) => h.chunkId), lexical: legs.lexical.map((h) => h.chunkId), hits: [...legs.dense, ...legs.lexical] };
+        };
+        const base = await run({});
+        expect(base.lexical).toContain(seeded.currentChunkId);
+        expect(base.lexical).not.toContain(seeded.supersededChunkId);
+        if (caps.versionScope) {
+          const all = await run({ versionScope: 'all' });
+          expect(all.lexical).toContain(seeded.supersededChunkId);
+          expect(all.dense).not.toContain(seeded.supersededChunkId);
+          expect(all.hits.find((h) => h.chunkId === seeded.supersededChunkId)?.isCurrent).toBe(false);
+          const other = await ctx.backend.search({
+            scope: ctx.scopes.tenantB,
+            embeddingProfileId: ctx.profileId,
+            denseVector: ctx.embed(seeded.token),
+            lexicalTokens: ctx.queryTokens(seeded.token),
+            lexicalLanguages: null,
+            filters: { currentOnly: true },
+            denseLimit: 20,
+            lexicalLimit: 20,
+            versionScope: 'all',
+            signal: new AbortController().signal,
+          });
+          const foreign = new Set([...other.dense, ...other.lexical].map((h) => h.chunkId));
+          expect(foreign.has(seeded.supersededChunkId) || foreign.has(seeded.currentChunkId)).toBe(false);
+        }
+        if (caps.identifierFilter) {
+          const only = await run({ identifiersNorm: [seeded.identifier] });
+          expect(new Set([...only.dense, ...only.lexical])).toEqual(new Set([seeded.currentChunkId]));
+          const none = await run({ identifiersNorm: [`${seeded.identifier}-absent`] });
+          expect(none.dense.length + none.lexical.length).toBe(0);
+        }
+      }
+      if (!caps.versionScope || !caps.identifierFilter) {
+        setRetrievalBackendForTests(ctx.backend);
+        try {
+          const request = { ...(caps.versionScope ? {} : { versionScope: 'all' as const }), ...(caps.identifierFilter ? {} : { identifiersNorm: ['x'] }) };
+          const routed = backendForRequest(request);
+          expect(routed.backend).not.toBe(ctx.backend);
+          expect(routed.reason).toBe('backend_field_unsupported');
+        } finally {
+          resetRetrievalBackendForTests();
+        }
+      }
     });
 
     it('closes the factory cleanly', async () => {

@@ -1,5 +1,6 @@
 import rawRegistry from '../../../../config/rag/language-packs.json';
-import { splitAtIdentifiers } from '../ids/shapes';
+import { normalizeIdentifier } from '../ids/normalize';
+import { splitAtIdentifiers, type IdentifierSplit } from '../ids/shapes';
 import { parseLanguageRegistry } from '../lang/registry';
 import { DICT_TOKEN_PREFIX, STEM_TOKEN_PREFIX, type LexicalOptions } from './options';
 import rules from './rules.json';
@@ -22,7 +23,7 @@ const ZH_STOP = new Set<string>(
 
 const MAX_TOKEN_CHARS = 64;
 const MAX_QUERY_TOKENS = 64;
-/** D-55: dictionary and stem tokens lead the query list, at most this many. */
+/** D-55: dictionary, identifier and stem tokens lead the query list, at most this many. */
 export const MAX_ADDITIVE_QUERY_TOKENS = 16;
 const JOINED_SEP = /[-_./]/g;
 
@@ -56,6 +57,11 @@ function foldLatin(text: string): string {
 
 function normalize(text: string): string {
   return foldLatin(mapApostrophe(text.normalize('NFKC')).toLowerCase());
+}
+
+/** D-09: the tokenizer's normalization (NFKC, lower case, apostrophes, accent folding); the one normalizer for dictionary text. */
+export function normalizeLexical(text: string): string {
+  return normalize(text);
 }
 
 function joinedForm(code: string): string {
@@ -114,6 +120,10 @@ const LATIN_WORD = /[\p{L}\p{N}]+(?:'[\p{L}\p{N}]+)?/gu;
 /** Additive-token state of one call; null when no option is active (the default path). */
 interface TokenizeContext {
   stem: ((word: string) => string) | null;
+  /** Tenant identifier patterns (D-30); null when none are passed. */
+  patterns: readonly RegExp[] | null;
+  /** Normalized identifier forms for the query's additive group. */
+  identifiers: string[];
   /** Folded word -> unfolded spellings in order of appearance, so the stemmer reads accents (D-55). */
   unfolded: Map<string, string[]>;
   /** Chunk side keeps stem tokens next to their word; the query side lists them first. */
@@ -199,14 +209,33 @@ function pushToken(token: string, out: string[]): boolean {
 const FORBIDDEN = /['\\\s]/;
 const SINGLE_LATIN_LETTER = /^[a-z]$/u;
 
+const HAS_WHITESPACE = /\s/u;
+
+/**
+ * D-30: the normalized form joins the tokens when no whole or joined form already equals it; a tenant match is
+ * always listed for the query's additive group. Pitfall 12: a match with whitespace has no other form.
+ */
+function emitNormalizedIdentifier(piece: IdentifierSplit, out: string[], start: number, ctx: TokenizeContext): void {
+  const norm = normalizeIdentifier(piece.text);
+  if (!acceptsToken(norm)) return;
+  const already = out.indexOf(norm, start) !== -1;
+  if (!already) out.push(norm);
+  if (!ctx.interleave && (piece.extra || !already)) ctx.identifiers.push(norm);
+}
+
 function tokenizeNormalized(text: string, ctx: TokenizeContext | null = null): string[] {
   const out: string[] = [];
-  for (const piece of splitAtIdentifiers(text)) {
+  const patterns = ctx?.patterns ?? undefined;
+  for (const piece of splitAtIdentifiers(text, patterns)) {
     if (piece.identifier) {
-      extractCodeTokens(piece.text, out);
-      if (piece.text.length <= 128 && /[-_./]/u.test(piece.text) && CODE_LIKE.test(piece.text)) {
-        for (const part of segmentCodeParts(piece.text)) out.push(part);
+      const start = out.length;
+      if (!(piece.extra && HAS_WHITESPACE.test(piece.text))) {
+        extractCodeTokens(piece.text, out);
+        if (piece.text.length <= 128 && /[-_./]/u.test(piece.text) && CODE_LIKE.test(piece.text)) {
+          for (const part of segmentCodeParts(piece.text)) out.push(part);
+        }
       }
+      if (ctx?.patterns) emitNormalizedIdentifier(piece, out, start, ctx);
     } else {
       for (const part of segmentNonCode(piece.text, ctx)) out.push(part);
     }
@@ -243,8 +272,10 @@ function stemmerFor(options: LexicalOptions | undefined): ((word: string) => str
 
 function contextFor(text: string, options: LexicalOptions | undefined, interleave: boolean): TokenizeContext | null {
   const stem = stemmerFor(options);
-  if (!stem) return null;
-  return { stem, unfolded: unfoldedWords(mapApostrophe(text.normalize('NFKC')).toLowerCase()), interleave, additive: [] };
+  const patterns = options?.identifierPatterns && options.identifierPatterns.length > 0 ? options.identifierPatterns : null;
+  if (!stem && !patterns) return null;
+  const unfolded = stem ? unfoldedWords(mapApostrophe(text.normalize('NFKC')).toLowerCase()) : new Map<string, string[]>();
+  return { stem, patterns, identifiers: [], unfolded, interleave, additive: [] };
 }
 
 /** Shared tokenizer for index-side lexical_text (order and duplicates kept by lexicalText). */
@@ -268,7 +299,7 @@ export function queryLexicalTokens(text: string, options?: LexicalOptions): stri
   const natural = tokenizeNormalized(normalized, ctx);
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const token of [...dictionaryTokens(normalized, options), ...(ctx?.additive ?? [])]) {
+  for (const token of [...dictionaryTokens(normalized, options), ...(ctx?.identifiers ?? []), ...(ctx?.additive ?? [])]) {
     if (out.length >= MAX_ADDITIVE_QUERY_TOKENS) break;
     if (seen.has(token)) continue;
     seen.add(token);

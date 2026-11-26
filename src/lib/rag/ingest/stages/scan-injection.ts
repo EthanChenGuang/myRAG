@@ -82,6 +82,8 @@ export type ScanCheckResult =
       metadata?: Record<string, unknown>;
       /** documents.hidden_text_check of the version (D-34). */
       hiddenTextCheck?: HiddenTextCheckValue;
+      /** D-51: how many findings the outcome counts (rule ids, hidden spans, link targets); the trace shows the number only. */
+      count?: number;
     }
   | { fail: string }
   | { yield: string };
@@ -106,7 +108,7 @@ const injectionRulesCheck: ScanCheck = {
     }
     if (!result.matched) return { outcome: 'scan_clean' };
     const reason = injectionRuleReason(result.rule_ids);
-    return { outcome: 'quarantined', reasons: reason ? [reason] : [], injection: result };
+    return { outcome: 'quarantined', reasons: reason ? [reason] : [], injection: result, count: result.rule_ids.length };
   },
 };
 
@@ -314,6 +316,7 @@ const hiddenTextCheck: ScanCheck = {
         outcome: merged.status === 'hidden_found' ? 'flagged' : merged.status,
         metadata: { hidden_text_report: merged },
         hiddenTextCheck: merged.status,
+        count: merged.spans?.length ?? 0,
       };
     }
 
@@ -336,13 +339,20 @@ const hiddenTextCheck: ScanCheck = {
     const reason = hiddenTextReason(report, finding, zeroWidthQuarantines, unlocated, rules);
     if (reason) {
       console.warn('[RAG Security] hidden text removed', { spans: sidecarSpans.length, zeroWidth: finding.total, unlocated });
-      return { outcome: 'quarantined', reasons: [reason], hiddenTextCheck: 'hidden_found', ...(marker ? { metadata: marker } : {}) };
+      return {
+        outcome: 'quarantined',
+        reasons: [reason],
+        hiddenTextCheck: 'hidden_found',
+        count: sidecarSpans.length + finding.total,
+        ...(marker ? { metadata: marker } : {}),
+      };
     }
     if (finding.total > 0) console.warn('[RAG Security] zero-width characters stripped below the quarantine threshold', { count: finding.total });
     const check = report?.status === 'clean' ? 'clean' : 'not_checked';
     return {
       outcome: finding.total > 0 ? 'zero_width_stripped' : check,
       hiddenTextCheck: check,
+      count: finding.total,
       ...(marker ? { metadata: marker } : {}),
     };
   },
@@ -410,9 +420,9 @@ const linksCheck: ScanCheck = {
     const metadata = { link_check: result };
     if (found === 0) return { outcome: 'clean', ...(mode === 'flag' ? { metadata } : {}) };
     console.warn('[RAG Security] link targets outside the allowlist', { mode, targets: found + result.dropped, released: released.length });
-    if (mode === 'flag') return { outcome: 'flagged', metadata };
+    if (mode === 'flag') return { outcome: 'flagged', metadata, count: found + result.dropped };
     const reason = untrustedLinkReason(result);
-    return { outcome: 'quarantined', reasons: reason ? [reason] : [], metadata };
+    return { outcome: 'quarantined', reasons: reason ? [reason] : [], metadata, count: found + result.dropped };
   },
 };
 
@@ -436,11 +446,13 @@ export async function runScanChecks(ctx: StageContext, checks: readonly ScanChec
   const recorded: Record<string, unknown> = {};
   let injection: InjectionScanResult | null = null;
   let hiddenTextCheckValue: HiddenTextCheckValue | null = null;
+  const facts: Record<ScanCheckName, string> = { injection_rules: 'off', hidden_text: 'off', links: 'off' };
   for (const check of enabled) {
     const result = await check.run(ctx);
     if ('fail' in result) return { kind: 'fail', reason: result.fail };
     if ('yield' in result) return { kind: 'yield', reason: result.yield };
     outcomes.push(`${check.name}:${result.outcome}`);
+    facts[check.name] = `${result.outcome}:${Math.max(0, Math.trunc(result.count ?? 0))}`;
     if (result.injection) injection = result.injection;
     if (result.hiddenTextCheck) hiddenTextCheckValue = result.hiddenTextCheck;
     if (result.reasons) reasons.push(...result.reasons);
@@ -449,6 +461,8 @@ export async function runScanChecks(ctx: StageContext, checks: readonly ScanChec
 
   const quarantined = reasons.length > 0 || injection !== null;
   const legacy = !newChecksOn(ctx.config);
+  // D-51: the outcome and count of each check, only while a Phase 3.2 check is on, so today's trace is unchanged.
+  if (!legacy) ctx.state.traceFacts = { ...ctx.state.traceFacts, scan: { injection: facts.injection_rules, hidden_text: facts.hidden_text, links: facts.links } };
   const unquarantinedCheck = !quarantined && hiddenTextCheckValue !== null ? hiddenTextCheckValue : null;
   const fields = {
     ...(unquarantinedCheck !== null ? { hidden_text_check: unquarantinedCheck } : {}),

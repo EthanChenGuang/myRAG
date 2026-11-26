@@ -24,6 +24,8 @@ export interface QueryVariantSet {
   variants: QueryVariant[];
   /** Every variant left out by the cap or a group limit, in preference order (reason cap). */
   cuts: SkippedTransform[];
+  /** D-31: the terminology variant was offered and left out by the cap or the multi-query limit (never a plan cut). */
+  terminologyCut: boolean;
 }
 
 export const PHASE4_VARIANT_LIMITS: Readonly<VariantLimits> = Object.freeze({ cap: MAX_QUERY_VARIANTS, order: null });
@@ -33,6 +35,8 @@ export const QUERY_LAYER_VARIANT_ORDER: readonly QueryVariantKind[] = Object.fre
   'condensed',
   'translated',
   'sub_question',
+  // D-31: the deterministic terminology variant stands first in the multi-query group.
+  'terminology',
   'expanded',
   'hyde',
 ]);
@@ -52,7 +56,7 @@ export function queryLayerVariantLimits(
   };
 }
 
-const CUT_TRANSFORM: Record<Exclude<QueryVariantKind, 'original'>, SkippedTransform['transform']> = {
+const CUT_TRANSFORM: Record<Exclude<QueryVariantKind, 'original' | 'terminology'>, SkippedTransform['transform']> = {
   condensed: 'condense_history',
   translated: 'translate',
   sub_question: 'decompose',
@@ -63,7 +67,7 @@ const CUT_TRANSFORM: Record<Exclude<QueryVariantKind, 'original'>, SkippedTransf
 function capGroup(kind: QueryVariantKind): VariantCapGroup | null {
   if (kind === 'translated') return 'translated';
   if (kind === 'sub_question') return 'sub_question';
-  if (kind === 'expanded' || kind === 'hyde') return 'generated';
+  if (kind === 'expanded' || kind === 'hyde' || kind === 'terminology') return 'generated';
   return null;
 }
 
@@ -80,7 +84,7 @@ function inPreferenceOrder(variants: QueryVariant[], order: readonly QueryVarian
     .map((entry) => entry.variant);
 }
 
-function textKey(text: string): string {
+export function textKey(text: string): string {
   return text.normalize('NFKC').toLowerCase().trim();
 }
 
@@ -90,13 +94,17 @@ export function buildQueryVariantSet(
   translated: readonly TranslatedQuery[] = [],
   provided: readonly QueryVariant[] = [],
   limits: VariantLimits = PHASE4_VARIANT_LIMITS,
+  terminology: QueryVariant | null = null,
 ): QueryVariantSet {
   const variants: QueryVariant[] = [{ text: query, language, kind: 'original' }];
   const seen = new Set([textKey(query)]);
+  // Only the terminology stage makes a terminology variant (D-18); without the layer it goes after the translations (D-31).
   const extras: QueryVariant[] = [
-    ...provided.filter((variant) => variant.kind !== 'original'),
+    ...provided.filter((variant) => variant.kind !== 'original' && variant.kind !== 'terminology'),
     ...translated.map((item): QueryVariant => ({ text: item.text, language: item.language, kind: 'translated' })),
+    ...(terminology && terminology.kind === 'terminology' ? [terminology] : []),
   ];
+  let terminologyCut = false;
   const cuts: SkippedTransform[] = [];
   const used: Partial<Record<VariantCapGroup, number>> = {};
   for (const variant of inPreferenceOrder(extras, limits.order)) {
@@ -105,14 +113,15 @@ export function buildQueryVariantSet(
     const group = capGroup(variant.kind);
     const groupLimit = group ? limits.groupLimits?.[group] : undefined;
     if (variants.length >= limits.cap || (group && groupLimit !== undefined && (used[group] ?? 0) >= groupLimit)) {
-      if (variant.kind !== 'original') cuts.push({ transform: CUT_TRANSFORM[variant.kind], reason: 'cap' });
+      if (variant.kind === 'terminology') terminologyCut = true;
+      else if (variant.kind !== 'original') cuts.push({ transform: CUT_TRANSFORM[variant.kind], reason: 'cap' });
       continue;
     }
     seen.add(key);
     if (group) used[group] = (used[group] ?? 0) + 1;
     variants.push({ ...variant, text: variant.text.trim() });
   }
-  return { variants, cuts };
+  return { variants, cuts, terminologyCut };
 }
 
 /**
@@ -125,8 +134,9 @@ export function buildQueryVariants(
   translated: readonly TranslatedQuery[] = [],
   provided: readonly QueryVariant[] = [],
   limits: VariantLimits = PHASE4_VARIANT_LIMITS,
+  terminology: QueryVariant | null = null,
 ): QueryVariant[] {
-  return buildQueryVariantSet(query, language, translated, provided, limits).variants;
+  return buildQueryVariantSet(query, language, translated, provided, limits, terminology).variants;
 }
 
 /** The texts the embed stage sends, index-aligned with the variants (D-06: one batch). */
