@@ -33,6 +33,7 @@ const stemOf = (file: string): string => path.basename(file).replace(/(\.(single
 const numberOf = (file: string): number => Number(stemOf(file).slice(0, 4));
 const isBlock = (file: string): boolean => BLOCK_NAMES.includes(stemOf(file));
 const isLaterPhase32 = (file: string): boolean => numberOf(file) >= 811 && numberOf(file) <= 899;
+const isLaterPlanningBlock = (file: string): boolean => numberOf(file) >= 900 && numberOf(file) <= 999;
 const readRepo = (relpath: string): string => fs.readFileSync(path.join(REPO_ROOT, relpath), 'utf8');
 
 function blockFiles(mode: DeploymentMode): string[] {
@@ -153,7 +154,7 @@ async function overloads(db: PGlite, name: string): Promise<number> {
 }
 
 describe('Phase 3.2 migration block files', () => {
-  test('the ten files 0801-0810 exist and only later Phase 3.2 files sort after them', () => {
+  test('the ten files 0801-0810 exist and only later 08xx and 09xx block files sort after them', () => {
     const listed = fs.readdirSync(path.join(REPO_ROOT, 'supabase/migrations'));
     for (const name of BLOCK_NAMES) assert.ok(listed.includes(`${name}.sql`), `supabase/migrations/${name}.sql is missing`);
     assert.ok(BLOCK_NAMES.includes('0810_chunk_translations'));
@@ -166,7 +167,7 @@ describe('Phase 3.2 migration block files', () => {
       const last = blockIndexes[blockIndexes.length - 1] as number;
       assert.equal(last - first + 1, BLOCK_NAMES.length, `${mode}: no other file sorts inside the block`);
       assert.deepEqual(files.slice(0, first).filter((file) => numberOf(file) >= 800), [], `${mode}: every earlier file is numbered below 0800`);
-      assert.deepEqual(files.slice(last + 1).filter((file) => !isLaterPhase32(file)), [], `${mode}: only Phase 3.2 files (0811-0899) follow`);
+      assert.deepEqual(files.slice(last + 1).filter((file) => !isLaterPhase32(file) && !isLaterPlanningBlock(file)), [], `${mode}: only later 08xx files and the 09xx planning blocks follow`);
     }
   });
 
