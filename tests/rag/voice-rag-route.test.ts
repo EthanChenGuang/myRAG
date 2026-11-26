@@ -68,11 +68,18 @@ type Turn = { role: string; content: string; binding?: string };
 const SECRET = crypto.randomBytes(24).toString('hex');
 const OTHER_SECRET = crypto.randomBytes(24).toString('hex');
 const QUERY = 'two tenant isolation canary phrase';
+const TRACE_ID_RE = /^[0-9a-f]{32}$/;
+
+function withoutTraceId(body: VoiceBody): Omit<VoiceBody, 'traceId'> {
+  const { traceId: _traceId, ...rest } = body;
+  return rest;
+}
 
 type VoiceBody = {
   results?: Array<{ chunk_id: string; content: string }>;
   source_images?: Array<{ url: string }>;
   context?: string;
+  traceId?: string;
   error?: string;
   reason?: string;
 };
@@ -244,7 +251,9 @@ describe('voice-rag route with signed scope tokens', () => {
       const nobody = '00000000-0000-4000-8000-0000000000ff';
       const response = await POST(request(QUERY, token(mintScope('personal', nobody, null))));
       expect(response.status).toBe(200);
-      expect(await response.json()).toEqual({ results: [] });
+      const emptyBody = (await response.json()) as VoiceBody;
+      expect(emptyBody.traceId).toMatch(TRACE_ID_RE);
+      expect(withoutTraceId(emptyBody)).toEqual({ results: [] });
     } finally {
       deps.resetRagDepsForTests();
     }
@@ -328,8 +337,11 @@ describe('voice-rag route with signed scope tokens', () => {
       const withHistory = await POST(request(QUERY, scopeToken, { history: turns(2, scopeToken) }));
       const a = (await without.json()) as VoiceBody;
       const b = (await withHistory.json()) as VoiceBody;
-      expect(Object.keys(a).sort()).toEqual(['results', 'source_images']);
-      expect(b).toEqual(a);
+      expect(Object.keys(a).sort()).toEqual(['results', 'source_images', 'traceId']);
+      expect(a.traceId).toMatch(TRACE_ID_RE);
+      expect(b.traceId).toMatch(TRACE_ID_RE);
+      expect(b.traceId).not.toBe(a.traceId);
+      expect(withoutTraceId(b)).toEqual(withoutTraceId(a));
       expect(without.headers.get('x-rag-server-query-rewrite')).toBeNull();
       expect(withHistory.headers.get('x-rag-server-query-rewrite')).toBeNull();
     });
@@ -365,7 +377,8 @@ describe('voice-rag route with signed scope tokens', () => {
       const response = await POST(request(QUERY, personalA()));
       expect(response.status).toBe(200);
       const body = (await response.json()) as VoiceBody;
-      expect(Object.keys(body).sort()).toEqual(['results', 'source_images']);
+      expect(Object.keys(body).sort()).toEqual(['results', 'source_images', 'traceId']);
+      expect(body.traceId).toMatch(TRACE_ID_RE);
     });
 
     it('with tagging on the body gains a tagged context and results and source_images are unchanged', async () => {
@@ -375,7 +388,7 @@ describe('voice-rag route with signed scope tokens', () => {
       const response = await POST(request(QUERY, personalA()));
       expect(response.status).toBe(200);
       const body = (await response.json()) as VoiceBody;
-      expect(Object.keys(body).sort()).toEqual(['context', 'results', 'source_images']);
+      expect(Object.keys(body).sort()).toEqual(['context', 'results', 'source_images', 'traceId']);
       expect(body.results).toEqual(off.results);
       expect(body.source_images).toEqual(off.source_images);
       const context = body.context ?? '';
@@ -412,7 +425,9 @@ describe('voice-rag route with signed scope tokens', () => {
         const nobody = '00000000-0000-4000-8000-0000000000ff';
         const response = await POST(request(QUERY, token(mintScope('personal', nobody, null))));
         expect(response.status).toBe(200);
-        expect(await response.json()).toEqual({ results: [] });
+        const emptyBody = (await response.json()) as VoiceBody;
+        expect(emptyBody.traceId).toMatch(TRACE_ID_RE);
+        expect(withoutTraceId(emptyBody)).toEqual({ results: [] });
       } finally {
         deps.resetRagDepsForTests();
       }
@@ -518,7 +533,7 @@ describe('voice-rag under the v2 query layer', () => {
     const withHistory = await post(POST, V2_CANARY_QUERY, scopeToken, [{ role: 'user', content: 'synthetic earlier question', binding: bindingOf(scopeToken) }]);
     expect(withHistory.status).toBe(200);
     expect(withHistory.headers.get('x-rag-server-query-rewrite')).toBe('1');
-    expect(Object.keys((await withHistory.json()) as VoiceBody).sort()).toEqual(['results', 'source_images']);
+    expect(Object.keys((await withHistory.json()) as VoiceBody).sort()).toEqual(['results', 'source_images', 'traceId']);
   });
 
   it('omits the header when condense_history is not allow-listed for voice', async () => {
@@ -549,7 +564,7 @@ describe('voice-rag under the v2 query layer', () => {
     const withHistory = await post(POST, V2_CANARY_QUERY, scopeToken, [{ role: 'user', content: 'synthetic earlier question', binding: bindingOf(scopeToken) }]);
     expect(without.headers.get('x-rag-server-query-rewrite')).toBeNull();
     expect(withHistory.headers.get('x-rag-server-query-rewrite')).toBeNull();
-    expect(await withHistory.json()).toEqual(await without.json());
+    expect(withoutTraceId((await withHistory.json()) as VoiceBody)).toEqual(withoutTraceId((await without.json()) as VoiceBody));
     expect(llmCalls).toEqual([]);
   });
 

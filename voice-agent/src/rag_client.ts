@@ -23,6 +23,17 @@ export interface RAGResponse {
         similarity: number;
     }>;
     source_images: SourceImage[];
+    /** Retrieval trace id of the app answer; absent from older apps. */
+    traceId?: string;
+}
+
+export interface VoiceTiming {
+    ttft_ms: number;
+    pre_generation_ms: number;
+}
+
+export interface RAGClientOptions {
+    timingTimeoutMs?: number;
 }
 
 export interface HistoryTurn {
@@ -34,6 +45,17 @@ export interface HistoryTurn {
 export const HISTORY_MAX_TURNS = 6;
 export const HISTORY_MAX_CHARS = 1000;
 const SERVER_QUERY_REWRITE_HEADER = 'x-rag-server-query-rewrite';
+const TRACE_ID_RE = /^[0-9a-f]{32}$/;
+const DEFAULT_TIMING_TIMEOUT_MS = 2000;
+
+function traceIdOf(data: unknown): { traceId: string } | Record<string, never> {
+    const value = data && typeof data === 'object' ? (data as Record<string, unknown>).traceId : undefined;
+    return typeof value === 'string' && TRACE_ID_RE.test(value) ? { traceId: value } : {};
+}
+
+function timingUrl(apiUrl: string): string {
+    return apiUrl.replace(/\/voice-rag(?=$|[?#])/, '/voice-timing');
+}
 
 export function scopeTokenBinding(token: string): string {
     return createHash('sha256').update(token, 'utf8').digest('base64url').slice(0, 22);
@@ -68,10 +90,35 @@ function classifyFailure(error: unknown): RAGFailureReason {
 export class RAGClient {
     private apiUrl: string;
     private apiKey: string;
+    private timingTimeoutMs: number;
+    private timingFailures = 0;
 
-    constructor(apiUrl: string, apiKey: string) {
+    constructor(apiUrl: string, apiKey: string, options: RAGClientOptions = {}) {
         this.apiUrl = apiUrl;
         this.apiKey = apiKey;
+        this.timingTimeoutMs = options.timingTimeoutMs && options.timingTimeoutMs > 0 ? options.timingTimeoutMs : DEFAULT_TIMING_TIMEOUT_MS;
+    }
+
+    /** Fire-and-forget: posts the voice text timing for a retrieval trace (D-39). Never throws. */
+    async reportTiming(traceId: string, timing: VoiceTiming, scopeToken?: string): Promise<void> {
+        try {
+            const headers: Record<string, string> = {
+                'x-api-key': this.apiKey,
+                'Content-Type': 'application/json'
+            };
+            if (scopeToken) {
+                headers['x-rag-scope-token'] = scopeToken;
+            }
+            await axios.post(
+                timingUrl(this.apiUrl),
+                { traceId, ttft_ms: timing.ttft_ms, pre_generation_ms: timing.pre_generation_ms },
+                { headers, timeout: this.timingTimeoutMs }
+            );
+        } catch (error) {
+            this.timingFailures++;
+            const status = axios.isAxiosError(error) ? error.response?.status ?? null : null;
+            console.debug('[RAG] Voice timing post failed', { status, failures: this.timingFailures });
+        }
     }
 
     async query(userQuery: string, scopeToken?: string, userId?: string, history?: HistoryTurn[]): Promise<RAGQueryResult> {
@@ -105,7 +152,7 @@ export class RAGClient {
                 // DEBUG: Print what we DID get
                 console.log(`[RAG] Response keys: ${Object.keys(response.data).join(', ')}`);
                 console.log(`[RAG] API URL used: ${this.apiUrl}`);
-                return { ok: true, context: '', sources: [], source_images: [], serverQueryRewrite };
+                return { ok: true, context: '', sources: [], source_images: [], serverQueryRewrite, ...traceIdOf(response.data) };
             }
 
             // DEBUG: Inspect raw response for images
@@ -150,7 +197,8 @@ export class RAGClient {
                 context: contextText,
                 sources: uniqueSources,
                 source_images: sourceImages,
-                serverQueryRewrite
+                serverQueryRewrite,
+                ...traceIdOf(response.data)
             };
 
         } catch (error) {
