@@ -112,14 +112,17 @@ describe('Phase 4.1 defaults-gate run configs', () => {
 });
 
 describe('run-config validation', () => {
-  test('the allow-list is RAG_PIPELINE, the Phase 4 RAG_ switches, the refusal floor, the eight Phase 4.2 tuning switches, the value-constrained vendor settings, the five Phase 5.1 SEC switches, the 16 Phase 6 names and the three terminology switches', () => {
+  test('the allow-list is RAG_PIPELINE, the Phase 4 RAG_ switches, the refusal floor, the eight Phase 4.2 tuning switches, the value-constrained vendor settings, the five Phase 5.1 SEC switches, the 16 Phase 6 names, the three terminology switches and the six Phase 3.3 switches', () => {
     assert.deepEqual([...RUN_CONFIG_ENV_ALLOWLIST].sort(), [
       'COHERE_API_KEY',
       'COHERE_BASE_URL',
+      'RAG_ATTRIBUTE_FILTER',
+      'RAG_ATTRIBUTE_HEADER',
       'RAG_CONTEXT_COMPRESSION',
       'RAG_CONTEXT_EDGE_ORDER',
       'RAG_CONTEXT_TAGGING',
       'RAG_CONTEXT_TOKEN_BUDGET',
+      'RAG_DOC_ATTRIBUTES',
       'RAG_DUP_CLUSTERS',
       'RAG_EXACT_SCAN_CUTOFF',
       'RAG_HNSW_ITERATIVE_SCAN',
@@ -129,9 +132,11 @@ describe('run-config validation', () => {
       'RAG_INJECTION_LAKERA',
       'RAG_INJECTION_PROMPT_GUARD',
       'RAG_LEXICAL_DICTIONARY',
+      'RAG_LEXICAL_QUANTITY',
       'RAG_LEXICAL_SEARCH',
       'RAG_LEXICAL_STEM_IT',
       'RAG_LEXICAL_TRANSLATION',
+      'RAG_PAGE_BOILERPLATE',
       'RAG_PARENT_CHILD',
       'RAG_PIPELINE',
       'RAG_QUERY_CONDENSE',
@@ -152,6 +157,7 @@ describe('run-config validation', () => {
       'RAG_RERANK_TIER_VOICE',
       'RAG_RERANK_VOYAGE_MODEL_BY_LANG',
       'RAG_RESULT_DIVERSITY',
+      'RAG_SECTION_RULES',
       'RAG_SEMANTIC_CACHE',
       'RAG_SEMANTIC_CACHE_EMBED_STORE',
       'RAG_SEMANTIC_CACHE_MAX_DISTANCE',
