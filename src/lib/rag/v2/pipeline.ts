@@ -32,7 +32,7 @@ import {
 import { buildCacheHitResult, buildSmallTalkResult, buildV2Result, fusedHitsToVoiceChunks, requestRetrievalConfigHash } from './result';
 import { buildRetrievalFilters, effectiveOnFor } from '../query/filters';
 import { queryLanguage as detectQueryLanguage } from '../query/language';
-import type { RetrievalConfigHashQueryLayer, TerminologyHashStage } from './config-hash';
+import { ATTRIBUTE_STATE_SKIPPED, type AttributeFilterHashStage, type RetrievalConfigHashQueryLayer, type TerminologyHashStage } from './config-hash';
 import { hasTranslationWork, planTranslationLegs, translationHashFields, type TranslationLegsPlan } from './translation-legs';
 import type { SemanticCacheSeam } from '../query/run-layer';
 import { variantDenseTexts } from '../query/variants';
@@ -110,6 +110,9 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
   let cacheTicket: RetrievalResult['cacheTicket'];
   // D-21: set by the terminology stage before semantic_cache builds its key; enabled but not reached reads as unavailable.
   let terminologyStage: TerminologyHashStage = spec('terminology', 'skip').enabled ? { enabled: true, version: null } : { enabled: false };
+  // D-30: set by the attribute stage before semantic_cache builds its key; enabled but not reached reads as skipped.
+  let attributeStage: AttributeFilterHashStage =
+    config.v2.attributeFilter !== 'off' && spec('attribute_resolve', 'skip').enabled ? { enabled: true, state: ATTRIBUTE_STATE_SKIPPED } : { enabled: false };
   const security = deps.securityConfig();
   if (security.injectionCheck !== 'off') warnInjectionCheckDisabled(config, security.injectionCheck);
 
@@ -182,6 +185,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
         ...(config.effectiveDates ? { effectiveOn: effectiveOnFor(config, deps.now()) } : {}),
         terminology: terminologyStage,
         ...(await lexicalStampFor()),
+        attributeFilter: attributeStage,
       }),
   };
 
@@ -197,6 +201,9 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
       cache: cacheSeam,
       onTerminology: (stage) => {
         terminologyStage = stage;
+      },
+      onAttributeFilter: (stage) => {
+        attributeStage = stage;
       },
     });
     queryContext = query.queryContext;
@@ -291,6 +298,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
         : {}),
       ...(query.terminology ? { terminologyDenseWeight: query.terminology.denseWeight } : {}),
       ...(queryLexical ? { lexical: queryLexical } : {}),
+      ...(query.attributes ? { attributes: query.attributes } : {}),
     });
 
     // D-31, D-51: strict with no asked identifier in the tenant answers nothing; rank and context are not run for it.
@@ -478,6 +486,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
     ...(identifierState ? { identifiers: identifierState } : {}),
     ...(identifierRefusal ? { identifierRefusal } : {}),
     ...(queryLexical ? { lexicalStamp: queryLexical.stamp } : {}),
+    attributeFilter: attributeStage,
   });
 }
 
