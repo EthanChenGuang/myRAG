@@ -33,6 +33,7 @@ export const OPTIONAL_STAGES = [
   'identifier_resolve',
   'identifier_guard',
   'terminology',
+  'attribute_resolve',
 ] as const;
 
 /** Phase 6 query-layer stages (D-05); translate is the shared Phase 4 slot and is not listed here. */
@@ -78,6 +79,7 @@ const V2_STANDARD: StageTimeouts = {
   diversify: 1000,
   identifier_resolve: 1000,
   identifier_guard: 1000,
+  attribute_resolve: 1000,
 };
 
 const V2_VOICE: StageTimeouts = {
@@ -93,6 +95,7 @@ const V2_VOICE: StageTimeouts = {
   diversify: 300,
   identifier_resolve: 500,
   identifier_guard: 300,
+  attribute_resolve: 500,
 };
 
 const V2_EVAL: StageTimeouts = {
@@ -216,6 +219,10 @@ export const RESULT_DIVERSITY_MODES = ['off', 'collapse', 'mmr'] as const;
 
 export type ResultDiversityMode = (typeof RESULT_DIVERSITY_MODES)[number];
 
+export const ATTRIBUTE_FILTER_MODES = ['off', 'hard', 'soft'] as const;
+
+export type AttributeFilterMode = (typeof ATTRIBUTE_FILTER_MODES)[number];
+
 export interface V2Config {
   lexicalSearch: boolean;
   reranker: RerankerSetting;
@@ -249,7 +256,10 @@ export interface V2Config {
   identifierIndex: boolean;
   /** Effective: false while RAG_IDENTIFIER_INDEX is off (D-04). */
   identifierFilter: boolean;
-  /** D-42: LEXICAL_VERSION plus 1 for the dictionary and 2 for Italian stemming. */
+  /** Effective: 'off' unless RAG_DOC_ATTRIBUTES=true and the effective pipeline is v2. */
+  attributeFilter: AttributeFilterMode;
+  lexicalQuantity: boolean;
+  /** D-42: LEXICAL_VERSION plus 1 for the dictionary, 2 for Italian stemming and 4 for quantity tokens. */
   lexicalVersion: number;
 }
 
@@ -323,6 +333,9 @@ export interface RagEnvInput {
   RAG_RESULT_DIVERSITY?: string;
   RAG_IDENTIFIER_INDEX?: string;
   RAG_IDENTIFIER_FILTER?: string;
+  RAG_ATTRIBUTE_FILTER?: string;
+  RAG_LEXICAL_QUANTITY?: string;
+  RAG_DOC_ATTRIBUTES?: string;
   RAG_TERMINOLOGY?: string;
   RAG_TERMINOLOGY_DENSE?: string;
   RAG_TERMINOLOGY_MINING?: string;
@@ -386,6 +399,8 @@ export interface RagConfig {
   v2: V2Config;
   effectiveDates: boolean;
   scopeTags: boolean;
+  /** The raw RAG_DOC_ATTRIBUTES flag; v2.attributeFilter carries the effective filter. */
+  docAttributes: boolean;
   docTranslation: 'off' | 'on';
   bgeM3Serving: BgeM3Serving;
   /** Raw comma-separated domains; the output link filter parses it. */
@@ -899,11 +914,12 @@ function applyV2DisabledStages(v2: V2Config, disabled: Set<StageName>): void {
     disabled.add('identifier_guard');
   }
   if (!v2.terminology) disabled.add('terminology');
+  if (v2.attributeFilter === 'off') disabled.add('attribute_resolve');
 }
 
 /** D-42: the version stored with lexical text and refusal cells; LEXICAL_VERSION (2) itself never changes. */
-export function lexicalVersionFor(dictionary: boolean, stemIt: boolean): number {
-  return LEXICAL_VERSION + (dictionary ? 1 : 0) + (stemIt ? 2 : 0);
+export function lexicalVersionFor(dictionary: boolean, stemIt: boolean, quantity = false): number {
+  return LEXICAL_VERSION + (dictionary ? 1 : 0) + (stemIt ? 2 : 0) + (quantity ? 4 : 0);
 }
 
 export function effectiveLexicalVersion(config: Pick<RagConfig, 'v2'>): number {
@@ -919,6 +935,7 @@ interface TuningSwitches {
   resultDiversity: ResultDiversityMode;
   identifierIndex: boolean;
   identifierFilter: boolean;
+  lexicalQuantity: boolean;
   lexicalVersion: number;
 }
 
@@ -932,6 +949,7 @@ function parseTuningSwitches(env: RagEnvInput, lexicalSearch: boolean, warnings:
   const resultDiversity = parseNamedChoice('RAG_RESULT_DIVERSITY', env.RAG_RESULT_DIVERSITY, RESULT_DIVERSITY_MODES, 'off', warnings);
   const identifierIndex = parseBooleanSwitch(env.RAG_IDENTIFIER_INDEX, false, 'identifier-index', warnings);
   const filterRequested = parseBooleanSwitch(env.RAG_IDENTIFIER_FILTER, false, 'identifier-filter', warnings);
+  const lexicalQuantity = parseNamedFlag('RAG_LEXICAL_QUANTITY', env.RAG_LEXICAL_QUANTITY, warnings);
 
   if (filterRequested && !identifierIndex) {
     problem(warnings, 'identifier-filter-needs-index', 'RAG_IDENTIFIER_FILTER needs RAG_IDENTIFIER_INDEX=true; retrieval runs unfiltered', {
@@ -958,8 +976,31 @@ function parseTuningSwitches(env: RagEnvInput, lexicalSearch: boolean, warnings:
     resultDiversity,
     identifierIndex,
     identifierFilter: filterRequested && identifierIndex,
-    lexicalVersion: lexicalVersionFor(lexicalDictionary, lexicalStemIt),
+    lexicalQuantity,
+    lexicalVersion: lexicalVersionFor(lexicalDictionary, lexicalStemIt, lexicalQuantity),
   };
+}
+
+/** D-03: the filter needs stored attributes and the v2 graph; each unmet need logs once and the filter is off. */
+function parseAttributeFilter(env: RagEnvInput, pipeline: 'legacy' | 'v2', docAttributes: boolean, warnings: string[]): AttributeFilterMode {
+  const requested = parseNamedChoice('RAG_ATTRIBUTE_FILTER', env.RAG_ATTRIBUTE_FILTER, ATTRIBUTE_FILTER_MODES, 'off', warnings);
+  if (requested === 'off') return 'off';
+  let met = true;
+  if (!docAttributes) {
+    problem(warnings, 'attribute-filter-needs-attributes', 'RAG_ATTRIBUTE_FILTER needs RAG_DOC_ATTRIBUTES=true; the filter stays off', {
+      RAG_ATTRIBUTE_FILTER: requested,
+      RAG_DOC_ATTRIBUTES: (env.RAG_DOC_ATTRIBUTES ?? '').trim() || 'false',
+    });
+    met = false;
+  }
+  if (pipeline !== 'v2') {
+    problem(warnings, 'attribute-filter-needs-v2', 'RAG_ATTRIBUTE_FILTER needs RAG_PIPELINE=v2; the filter stays off', {
+      RAG_ATTRIBUTE_FILTER: requested,
+      RAG_PIPELINE: pipeline,
+    });
+    met = false;
+  }
+  return met ? requested : 'off';
 }
 
 
@@ -1004,6 +1045,9 @@ function memoKey(env: RagEnvInput): string {
     env.RAG_RESULT_DIVERSITY ?? '',
     env.RAG_IDENTIFIER_INDEX ?? '',
     env.RAG_IDENTIFIER_FILTER ?? '',
+    env.RAG_ATTRIBUTE_FILTER ?? '',
+    env.RAG_LEXICAL_QUANTITY ?? '',
+    env.RAG_DOC_ATTRIBUTES ?? '',
     env.RAG_TERMINOLOGY ?? '',
     env.RAG_TERMINOLOGY_DENSE ?? '',
     env.RAG_TERMINOLOGY_MINING ?? '',
@@ -1092,6 +1136,7 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
   const terminology = parseBooleanSwitch(env.RAG_TERMINOLOGY, false, 'terminology', warnings);
 
   const lexicalSearch = parseBooleanSwitch(env.RAG_LEXICAL_SEARCH, false, 'lexical-search', warnings);
+  const docAttributes = parseNamedFlag('RAG_DOC_ATTRIBUTES', env.RAG_DOC_ATTRIBUTES, warnings);
   const v2: V2Config = {
     lexicalSearch,
     reranker: parseReranker(env.RAG_RERANKER, warnings),
@@ -1117,6 +1162,7 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
     hasVoyageKey: (env.VOYAGE_API_KEY ?? '').trim() !== '',
     domainEmbeddings: parseDomainEmbeddings(env, warnings),
     ...parseTuningSwitches(env, lexicalSearch, warnings),
+    attributeFilter: parseAttributeFilter(env, pipeline, docAttributes, warnings),
   };
 
   const operatorDisabledStages: ReadonlySet<StageName> = new Set(disabledStages);
@@ -1136,6 +1182,7 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
     v2,
     effectiveDates: parseNamedFlag('RAG_EFFECTIVE_DATES', env.RAG_EFFECTIVE_DATES, warnings),
     scopeTags: parseNamedFlag('RAG_SCOPE_TAGS', env.RAG_SCOPE_TAGS, warnings),
+    docAttributes,
     docTranslation: parseNamedChoice('RAG_DOC_TRANSLATION', env.RAG_DOC_TRANSLATION, ['off', 'on'], 'off', warnings),
     bgeM3Serving: parseNamedChoice('RAG_BGE_M3_SERVING', env.RAG_BGE_M3_SERVING, ['hosted', 'sidecar'], 'hosted', warnings),
     outputLinkAllowlist: (env.RAG_OUTPUT_LINK_ALLOWLIST ?? '').trim(),

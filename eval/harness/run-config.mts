@@ -33,6 +33,16 @@ const SEC_SWITCH_VALUES: Readonly<Record<string, readonly string[]>> = {
   RAG_TOOL_RESULT_GUARD: ['off', 'tag', 'tag_and_flag'],
 };
 
+/** The Phase 3.3 templated-collection switches (D-03) and the values each accepts. */
+const PHASE33_SWITCH_VALUES: Readonly<Record<string, readonly string[]>> = {
+  RAG_SECTION_RULES: ['off', 'on'],
+  RAG_PAGE_BOILERPLATE: ['off', 'detect', 'rules', 'both'],
+  RAG_DOC_ATTRIBUTES: ['true', 'false'],
+  RAG_ATTRIBUTE_HEADER: ['true', 'false'],
+  RAG_ATTRIBUTE_FILTER: ['off', 'hard', 'soft'],
+  RAG_LEXICAL_QUANTITY: ['true', 'false'],
+};
+
 /**
  * The Phase 6 query-layer and semantic-cache switches (D-38). The enumerated ones must carry a value the app accepts; the others
  * are numbers, a model id or lists the app validates and falls back on. RAG_QUERY_ENHANCEMENT and RAG_CACHE_ENABLED are legacy
@@ -104,6 +114,7 @@ export const RUN_CONFIG_ENV_ALLOWLIST: readonly string[] = [
   ...Object.keys(RUN_CONFIG_CONSTRAINED_VALUES),
   ...Object.keys(SEC_SWITCH_VALUES),
   ...Object.keys(PHASE6_SWITCH_VALUES),
+  ...Object.keys(PHASE33_SWITCH_VALUES),
 ];
 
 export const RUN_CONFIG_REJECT_MESSAGE =
@@ -154,9 +165,9 @@ export function parseRunConfig(raw: unknown, source: string): RunConfig {
   if (env.RAG_PIPELINE !== undefined && !PIPELINE_VALUES.has(env.RAG_PIPELINE)) {
     throw new RunConfigError(`[Eval Harness] run-config ${source} RAG_PIPELINE must be legacy or v2`);
   }
-  for (const [name, allowed] of Object.entries({ ...SEC_SWITCH_VALUES, ...PHASE6_SWITCH_VALUES })) {
+  for (const [name, allowed] of Object.entries({ ...SEC_SWITCH_VALUES, ...PHASE6_SWITCH_VALUES, ...PHASE33_SWITCH_VALUES })) {
     if (!allowed) continue;
-    // A malformed SEC or Phase 6 value would silently fall back to off in the app; the run config fails instead (the value is never echoed).
+    // A malformed SEC, Phase 6 or Phase 3.3 value would silently fall back to off in the app; the run config fails instead (the value is never echoed).
     if (env[name] !== undefined && !allowed.includes(env[name])) {
       throw new RunConfigError(`[Eval Harness] run-config ${source} ${name} must be one of ${allowed.join(', ')}`);
     }
