@@ -53,6 +53,7 @@ export const VOYAGE_MODEL_ID = 'voyage-4-large';
 export const VOYAGE_LAW_MODEL_ID = 'voyage-law-2';
 export const VOYAGE_FINANCE_MODEL_ID = 'voyage-finance-2';
 export const QWEN_MODEL_ID = 'Qwen/Qwen3-Embedding-8B';
+export const BGE_M3_MODEL_ID = 'BAAI/bge-m3';
 
 const VOYAGE_MODEL_IDS: readonly string[] = [VOYAGE_MODEL_ID, VOYAGE_LAW_MODEL_ID, VOYAGE_FINANCE_MODEL_ID];
 
@@ -102,4 +103,15 @@ export function toProviderError(error: unknown, host: string, signal: AbortSigna
   if (isAbortError(error, signal)) return error;
   if (error instanceof Error && error.name === 'EmbeddingProfileMismatch') return error;
   return new EmbeddingProviderError(host, statusOf(error));
+}
+
+export type EmbeddingInputErrorCode = 'embedding_input_empty' | 'embedding_input_too_long';
+
+export class EmbeddingInputError extends Error {
+  readonly code: EmbeddingInputErrorCode;
+
+  constructor(code: EmbeddingInputErrorCode) {
+    super(code);
+    this.code = code;
+  }
 }
