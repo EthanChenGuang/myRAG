@@ -1,4 +1,4 @@
-export type EmbeddingProviderId = 'openai' | 'voyage' | 'qwen3';
+export type EmbeddingProviderId = 'openai' | 'voyage' | 'qwen3' | 'bge-m3';
 
 export type EmbeddingStorage = 'legacy_column' | 'halfvec';
 
@@ -47,6 +47,7 @@ export type ProfileShapeResult = { ok: true } | { ok: false; reason: ProfileShap
 
 export const OPENAI_NATIVE_DIMS = 1536;
 export const QWEN_NATIVE_DIMS = 4096;
+export const BGE_M3_NATIVE_DIMS = 1024;
 export const VOYAGE_SUPPORTED_DIMS: readonly number[] = [256, 512, 1024, 2048];
 export const QWEN_SUPPORTED_DIMS: readonly number[] = [256, 512, 1024, 1536, 2048, QWEN_NATIVE_DIMS];
 export const VOYAGE_MODEL_ID = 'voyage-4-large';
@@ -64,6 +65,7 @@ export function canonicalModelId(model: string): string {
   const id = model.trim();
   const lower = id.toLowerCase();
   if (lower === QWEN_MODEL_ID.toLowerCase()) return QWEN_MODEL_ID;
+  if (lower === BGE_M3_MODEL_ID.toLowerCase()) return BGE_M3_MODEL_ID;
   for (const voyage of VOYAGE_MODEL_IDS) {
     if (lower === voyage || lower === `mongodb/${voyage}`) return voyage;
   }
@@ -107,11 +109,13 @@ export function toProviderError(error: unknown, host: string, signal: AbortSigna
 
 export type EmbeddingInputErrorCode = 'embedding_input_empty' | 'embedding_input_too_long';
 
+/** An input the provider refuses before or instead of embedding it; inputs are never truncated and never embedded as empty. */
 export class EmbeddingInputError extends Error {
   readonly code: EmbeddingInputErrorCode;
 
   constructor(code: EmbeddingInputErrorCode) {
-    super(code);
+    super(`[Embedding Profile] ${code}`);
+    this.name = 'EmbeddingInputError';
     this.code = code;
   }
 }

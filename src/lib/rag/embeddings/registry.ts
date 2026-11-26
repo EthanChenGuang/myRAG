@@ -1,3 +1,4 @@
+import { createBgeM3Provider } from './bge-m3';
 import { createOpenAiProvider } from './openai-provider';
 import { createQwenProvider } from './qwen';
 import type {
@@ -17,7 +18,7 @@ export { canonicalModelId };
 const MAX_HALFVEC_DIMS = 4000;
 const MAX_VECTOR_DIMS = 2000;
 const STORAGES: readonly string[] = ['legacy_column', 'halfvec'];
-const PROVIDER_IDS: readonly EmbeddingProviderId[] = ['openai', 'voyage', 'qwen3'];
+const PROVIDER_IDS: readonly EmbeddingProviderId[] = ['openai', 'voyage', 'qwen3', 'bge-m3'];
 
 function isProviderId(id: string): id is EmbeddingProviderId {
   return (PROVIDER_IDS as readonly string[]).includes(id);
@@ -37,7 +38,14 @@ let modelProviders = new Map<string, EmbeddingProvider>();
 let overrides: Partial<Record<string, EmbeddingProvider>> = {};
 
 function defaultProviders(): Partial<Record<EmbeddingProviderId, EmbeddingProvider>> {
-  if (!defaults) defaults = { openai: createOpenAiProvider(), voyage: createVoyageProvider(), qwen3: createQwenProvider() };
+  if (!defaults) {
+    defaults = {
+      openai: createOpenAiProvider(),
+      voyage: createVoyageProvider(),
+      qwen3: createQwenProvider(),
+      'bge-m3': createBgeM3Provider(),
+    };
+  }
   return defaults;
 }
 

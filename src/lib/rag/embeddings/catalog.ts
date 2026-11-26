@@ -1,5 +1,7 @@
 import type { EmbeddingProviderId } from './types';
 import {
+  BGE_M3_MODEL_ID,
+  BGE_M3_NATIVE_DIMS,
   OPENAI_NATIVE_DIMS,
   QWEN_MODEL_ID,
   QWEN_NATIVE_DIMS,
@@ -175,6 +177,26 @@ export const EMBEDDING_MODEL_CATALOG: readonly EmbeddingModelEntry[] = Object.fr
       vendorDomainNote: 'General purpose and multilingual.',
       readOn: '2026-11-24',
     },
+    {
+      provider: 'bge-m3',
+      model: BGE_M3_MODEL_ID,
+      nativeDims: BGE_M3_NATIVE_DIMS,
+      supportedDims: [BGE_M3_NATIVE_DIMS],
+      sendsOutputDimension: false,
+      maxInputTokens: 8192,
+      maxTokensPerRequest: null,
+      inputTypes: [],
+      usdPerMillionTokens: 0.01,
+      tokensAreEstimates: true,
+      freeTokensNote: null,
+      supportedLanguages: ['zh', 'en', 'it'],
+      languagesNote: 'Multilingual open-weights model (MIT licence); dense output only, no query instruction.',
+      servingModes: ['hosted'],
+      hostedEndpoint: DEEPINFRA_HOSTED,
+      sidecarPath: null,
+      vendorDomainNote: 'General purpose and multilingual.',
+      readOn: '2026-11-26',
+    },
   ].map((entry) => freezeEntry(entry as EmbeddingModelEntry)),
 );
 
@@ -182,6 +204,7 @@ const DEFAULT_MODELS: Readonly<Record<EmbeddingProviderId, string>> = Object.fre
   openai: 'text-embedding-3-small',
   voyage: VOYAGE_MODEL_ID,
   qwen3: QWEN_MODEL_ID,
+  'bge-m3': BGE_M3_MODEL_ID,
 });
 
 /** The catalog entry for a provider and model (host-specific spellings accepted); undefined when not listed. */
