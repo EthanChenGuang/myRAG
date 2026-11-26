@@ -49,10 +49,15 @@ function fakeDb(initial: StoredRow[] = []) {
   const calls: Call[] = [];
   const failures = new Map<string, { message: string; code: string }>();
   let seq = 0;
-  const visible = (row: StoredRow) => {
-    const { tenant_key: _tenant, ...rest } = row;
-    return rest;
-  };
+  const visible = (row: StoredRow) => ({
+    id: row.id,
+    name: row.name,
+    pattern: row.pattern,
+    flags: row.flags,
+    enabled: row.enabled,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  });
   const answer = (fn: string, args: Record<string, unknown>): RpcResponse => {
     calls.push({ fn, args });
     const failure = failures.get(fn);
@@ -99,7 +104,7 @@ function fakeDb(initial: StoredRow[] = []) {
     rpc: (fn, args) => {
       const request = {
         abortSignal: () => request,
-        then: <A, B>(resolve?: (value: RpcResponse) => A, reject?: (reason: unknown) => B) => Promise.resolve(answer(fn, args)).then(resolve, reject),
+        then: <A, B>(resolve?: (_response: RpcResponse) => A, reject?: (_error: unknown) => B) => Promise.resolve(answer(fn, args)).then(resolve, reject),
       };
       return request as never;
     },
