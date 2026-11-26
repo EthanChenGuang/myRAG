@@ -780,6 +780,18 @@ async function gatesUiFetch(apiPath, init, deps) {
   }
 }
 
+function gatesUiBannerPlan() {
+  return { alerts: null, uncal: null };
+}
+
+async function gatesUiMountBanner() {
+  return null;
+}
+
+async function gatesUiRefreshBanner() {
+  return null;
+}
+
 if (typeof window !== 'undefined') {
   window.GATES_UI_LABELS = GATES_UI_LABELS;
   window.gatesUiLocale = gatesUiLocale;
@@ -834,5 +846,8 @@ if (typeof module !== 'undefined' && module.exports) {
     gatesUiConfirm,
     gatesUiMapError,
     gatesUiFetch,
+    gatesUiBannerPlan,
+    gatesUiMountBanner,
+    gatesUiRefreshBanner,
   };
 }
