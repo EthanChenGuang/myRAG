@@ -167,13 +167,15 @@ V2_VOICE_STAGES = {
 # lookup's 5 ms to the query-layer translate timeout, voice keeps 5 ms because voice translate has no D-27 timeout.
 QUERY_CHAT_STAGES = {"condense": 600, "translate": 600, "expand": 700, "decompose": 800, "hyde": 900, "semantic_cache": 150}
 QUERY_VOICE_STAGES = {"condense": 300}
+TERMINOLOGY_CHAT_STAGES = {"terminology": 5}
+TERMINOLOGY_VOICE_STAGES = {"terminology": 3}
 
 
 def test_committed_budgets_carry_the_v2_stage_p95_targets():
     profiles = load_latency_budgets(BUDGETS_PATH).profiles
-    assert profiles["chat"].stages == {**V2_CHAT_STAGES, **QUERY_CHAT_STAGES}
-    assert profiles["embed"].stages == {**V2_CHAT_STAGES, **QUERY_CHAT_STAGES}
-    assert profiles["voice"].stages == {**V2_VOICE_STAGES, **QUERY_VOICE_STAGES}
+    assert profiles["chat"].stages == {**V2_CHAT_STAGES, **QUERY_CHAT_STAGES, **TERMINOLOGY_CHAT_STAGES}
+    assert profiles["embed"].stages == {**V2_CHAT_STAGES, **QUERY_CHAT_STAGES, **TERMINOLOGY_CHAT_STAGES}
+    assert profiles["voice"].stages == {**V2_VOICE_STAGES, **QUERY_VOICE_STAGES, **TERMINOLOGY_VOICE_STAGES}
     assert profiles["chat"].stages["rerank"] == 600 and profiles["voice"].stages["rerank"] == 250
 
 
