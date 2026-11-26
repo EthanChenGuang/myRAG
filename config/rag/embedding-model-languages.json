@@ -12,6 +12,8 @@
     { "provider": "voyage", "model": "voyage-law-2", "supported_languages": ["en", "zh"] },
     { "provider": "voyage", "model": "voyage-finance-2", "supported_languages": ["en"] },
     { "provider": "qwen3", "model": "Qwen/Qwen3-Embedding-8B", "supported_languages": ["zh", "en", "it"] },
-    { "provider": "bge-m3", "model": "BAAI/bge-m3", "supported_languages": ["zh", "en", "it"] }
+    { "provider": "bge-m3", "model": "BAAI/bge-m3", "supported_languages": ["zh", "en", "it"] },
+    { "provider": "ft_slot_a", "model": "unbound", "supported_languages": ["zh", "en", "it"] },
+    { "provider": "ft_slot_b", "model": "unbound", "supported_languages": ["zh", "en", "it"] }
   ]
 }

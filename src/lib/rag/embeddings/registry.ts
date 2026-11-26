@@ -1,4 +1,6 @@
+import { env } from '@/lib/env';
 import { createBgeM3Provider } from './bge-m3';
+import { createFinetuneSlotProvider } from './finetune-slot';
 import { createOpenAiProvider } from './openai-provider';
 import { createQwenProvider } from './qwen';
 import type {
@@ -10,7 +12,7 @@ import type {
 } from './types';
 import { catalogEntry, defaultModelFor } from './catalog';
 import type { EmbeddingModelEntry } from './catalog';
-import { canonicalModelId } from './types';
+import { FT_SLOT_SUPPORTED_DIMS, canonicalModelId, isFinetuneSlotProvider } from './types';
 import { createVoyageProvider } from './voyage';
 
 export { canonicalModelId };
@@ -18,7 +20,7 @@ export { canonicalModelId };
 const MAX_HALFVEC_DIMS = 4000;
 const MAX_VECTOR_DIMS = 2000;
 const STORAGES: readonly string[] = ['legacy_column', 'halfvec'];
-const PROVIDER_IDS: readonly EmbeddingProviderId[] = ['openai', 'voyage', 'qwen3', 'bge-m3'];
+const PROVIDER_IDS: readonly EmbeddingProviderId[] = ['openai', 'voyage', 'qwen3', 'bge-m3', 'ft_slot_a', 'ft_slot_b'];
 
 function isProviderId(id: string): id is EmbeddingProviderId {
   return (PROVIDER_IDS as readonly string[]).includes(id);
@@ -37,6 +39,7 @@ let defaults: Partial<Record<EmbeddingProviderId, EmbeddingProvider>> | null = n
 let modelProviders = new Map<string, EmbeddingProvider>();
 let overrides: Partial<Record<string, EmbeddingProvider>> = {};
 
+/** The fine-tune slot providers exist only while RAG_FINETUNE is on (06.1 D-02). */
 function defaultProviders(): Partial<Record<EmbeddingProviderId, EmbeddingProvider>> {
   if (!defaults) {
     defaults = {
@@ -45,6 +48,10 @@ function defaultProviders(): Partial<Record<EmbeddingProviderId, EmbeddingProvid
       qwen3: createQwenProvider(),
       'bge-m3': createBgeM3Provider(),
     };
+    if (env.RAG_FINETUNE === 'on') {
+      defaults.ft_slot_a = createFinetuneSlotProvider('a');
+      defaults.ft_slot_b = createFinetuneSlotProvider('b');
+    }
   }
   return defaults;
 }
@@ -84,6 +91,12 @@ function createForModel(entry: EmbeddingModelEntry): EmbeddingProvider {
 export function getEmbeddingProviderFor(provider: string, model: string): EmbeddingProvider {
   const unknown = () => new Error(`[Embedding Profile] unknown embedding model for provider ${provider}`);
   if (!isProviderId(provider)) throw unknown();
+  if (isFinetuneSlotProvider(provider)) {
+    // A slot serves whichever version its env names; the caller's model check catches a version other than the profile's.
+    const slot = overrides[`${provider}:${model.trim()}`] ?? findProvider(provider);
+    if (!slot) throw unknown();
+    return slot;
+  }
   const entry = catalogEntry(provider, model);
   const canonical = entry ? entry.model : canonicalModelId(model);
   const keyed = overrides[`${provider}:${canonical}`];
@@ -102,6 +115,7 @@ export function getEmbeddingProviderFor(provider: string, model: string): Embedd
 
 function supportedDimsFor(id: string, model?: string): readonly number[] | undefined {
   if (!isProviderId(id)) return undefined;
+  if (isFinetuneSlotProvider(id)) return FT_SLOT_SUPPORTED_DIMS;
   if (model !== undefined) {
     const registered = findProvider(id);
     if (registered && sameModel(registered.model, model)) return registered.supportedDims;
@@ -131,6 +145,9 @@ export function validateProfileShape(shape: ProfileShape): ProfileShapeResult {
   const supported = supportedDimsFor(shape.provider, shape.model);
   if (!supported) return reject('model_unknown', `${shape.provider} does not serve model ${shape.model}`);
   if (!STORAGES.includes(shape.storage)) return reject('storage_unknown', `unknown storage ${shape.storage}`);
+  if (isFinetuneSlotProvider(shape.provider) && shape.storage !== 'halfvec') {
+    return reject('storage_unknown', `${shape.provider} profiles use halfvec storage, got ${shape.storage}`);
+  }
   if (!Number.isInteger(shape.dims) || shape.dims < 1) return reject('dims_invalid', `dims ${shape.dims} is not a positive integer`);
   if (shape.dims > MAX_HALFVEC_DIMS) return reject('dims_above_limit', `dims ${shape.dims} exceeds ${MAX_HALFVEC_DIMS}`);
   if (shape.storage === 'legacy_column' && shape.dims > MAX_VECTOR_DIMS) {

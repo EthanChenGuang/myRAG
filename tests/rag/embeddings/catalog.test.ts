@@ -18,6 +18,8 @@ const EXPECTED_MODELS = [
   'voyage:voyage-finance-2',
   'qwen3:Qwen/Qwen3-Embedding-8B',
   'bge-m3:BAAI/bge-m3',
+  'ft_slot_a:unbound',
+  'ft_slot_b:unbound',
 ];
 
 function entry(provider: string, model: string): EmbeddingModelEntry {
@@ -27,7 +29,7 @@ function entry(provider: string, model: string): EmbeddingModelEntry {
 }
 
 describe('embedding model catalog (EMB-06, D-01)', () => {
-  it('lists exactly the five Phase 3.1.1 models plus BGE-M3 (Phase 3.2.1) and is frozen', () => {
+  it('lists exactly the five Phase 3.1.1 models, BGE-M3 (Phase 3.2.1) and the two fine-tune slots, and is frozen', () => {
     expect(EMBEDDING_MODEL_CATALOG.map((item) => `${item.provider}:${item.model}`).sort()).toEqual([...EXPECTED_MODELS].sort());
     expect(Object.isFrozen(EMBEDDING_MODEL_CATALOG)).toBe(true);
     for (const item of EMBEDDING_MODEL_CATALOG) expect(Object.isFrozen(item)).toBe(true);
@@ -88,6 +90,18 @@ describe('embedding model catalog (EMB-06, D-01)', () => {
     expect(defaultModelFor('voyage')).toBe('voyage-4-large');
     expect(defaultModelFor('qwen3')).toBe('Qwen/Qwen3-Embedding-8B');
     expect(defaultModelFor('cohere')).toBeUndefined();
+    expect(defaultModelFor('ft_slot_a')).toBe('unbound');
+    expect(defaultModelFor('ft_slot_b')).toBe('unbound');
+  });
+
+  it('resolves any version id of a fine-tune slot to the slot entry (1024 dims, no list price)', () => {
+    for (const [provider, slot] of [['ft_slot_a', 'A'], ['ft_slot_b', 'B']]) {
+      const found = entry(provider, 'ft-neutral-v1');
+      expect(found).toBe(entry(provider, 'unbound'));
+      expect([...found.supportedDims]).toEqual([1024]);
+      expect(found.usdPerMillionTokens).toBe(0);
+      expect(found.hostedEndpoint).toEqual({ host: 'operator-configured', apiKeyEnv: 'RAG_FT_EMBED_API_KEY', baseUrlEnv: `RAG_FT_SLOT_${slot}_BASE_URL` });
+    }
   });
 
   it('declares languages as lower-case codes; domain models only the languages the vendor names', () => {
