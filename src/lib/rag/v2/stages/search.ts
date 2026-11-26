@@ -7,7 +7,14 @@ import type { RagConfig, StageName } from '../../config';
 import { getRagDeps, type RagDeps } from '../../deps';
 import { dedupeAndCap, type DedupeCounts, type DedupeResult } from '../../fusion/dedupe';
 import { rrf, type FusedHit, type RankedList } from '../../fusion/rrf';
-import type { QueryEmbedding } from '../../embeddings/query-embedding';
+import { getEmbeddingProfileById } from '../../embeddings/active-profile';
+import {
+  embedQueries,
+  embedQueriesForEvalProfile,
+  embedQuery,
+  embedQueryForEvalProfile,
+  type QueryEmbedding,
+} from '../../embeddings/query-embedding';
 import { requireValue, runStage, StageError, stageSpec, type StageSpec } from '../../pipeline';
 import { exactIdStage, type ExactIdRow } from '../../retrieval/exact-id';
 import type { TenantScope } from '../../tenant/scope';
@@ -40,6 +47,40 @@ export interface SearchStagesInput {
   bindings?: { plan: BindingLegsPlan; embeds: readonly Promise<BindingEmbed>[] };
   /** A query framework fusing the variant lists through a scope-bound port (D-18); absent means native RRF. */
   searchDelegate?: SearchDelegate;
+}
+
+function evalEmbeddingProfileId(input: RunRetrievalInput): string | undefined {
+  return input.profile === 'eval' ? input.options?.embeddingProfile : undefined;
+}
+
+/** Embeds texts for the request's dense legs: the eval embedding profile when set, else the active one. */
+export async function embedForRetrieval(input: RunRetrievalInput, texts: string[], signal: AbortSignal): Promise<QueryEmbedding[]> {
+  const profileId = evalEmbeddingProfileId(input);
+  if (texts.length === 1) {
+    const [text] = texts;
+    if (profileId) return [await embedQueryForEvalProfile(text!, signal, await getEmbeddingProfileById(profileId))];
+    return [await embedQuery(text!, signal)];
+  }
+  if (profileId) return embedQueriesForEvalProfile(texts, signal, await getEmbeddingProfileById(profileId));
+  return embedQueries(texts, signal);
+}
+
+/**
+ * The embed step's batch (research A-2): texts with a precomputed vector (the semantic_cache stage's standalone) are left out
+ * of the batch and filled in place, so the standalone is never embedded twice.
+ */
+export async function embedVariantTexts(
+  input: RunRetrievalInput,
+  texts: string[],
+  signal: AbortSignal,
+  precomputed?: ReadonlyMap<string, QueryEmbedding>,
+): Promise<QueryEmbedding[]> {
+  if (!precomputed || precomputed.size === 0) return embedForRetrieval(input, texts, signal);
+  const missing = [...new Set(texts.filter((text) => !precomputed.has(text)))];
+  const fresh = missing.length > 0 ? await embedForRetrieval(input, missing, signal) : [];
+  const byText = new Map<string, QueryEmbedding>(precomputed);
+  missing.forEach((text, index) => byText.set(text, fresh[index]!));
+  return texts.map((text) => byText.get(text)!);
 }
 
 export const SEARCH_DELEGATE_ERROR = 'search_delegate_error';

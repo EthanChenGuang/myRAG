@@ -12,7 +12,7 @@ import { runRefsStage, runStage, stageSpec, type StageSpec } from '../../pipelin
 import type { TenantScope } from '../../tenant/scope';
 import type { TraceCollector } from '../../trace/collector';
 import type { Profile, QueryVariant, ReferencedState, RunRetrievalInput, StageOverrides } from '../../types';
-import type { QueryLayerOutcome } from '../../query/run-layer';
+import type { QueryLayerOutcome, SemanticCacheSeam } from '../../query/run-layer';
 import type { QueryLanguage } from '../../refusal/gate';
 
 export interface QueryStagesInput {
@@ -23,6 +23,8 @@ export interface QueryStagesInput {
   signal: AbortSignal;
   collector: TraceCollector;
   stageOverrides?: StageOverrides;
+  /** Lent to the query layer's semantic_cache stage. */
+  cache?: SemanticCacheSeam;
 }
 
 export interface QueryStagesOutput {
@@ -73,7 +75,7 @@ export async function runQueryStages(ctx: QueryStagesInput): Promise<QueryStages
   let queryLayer: QueryLayerOutcome | undefined;
   if (queryLayerActive(config, profile, stageOverrides)) {
     const { runQueryLayer } = await import('../../query/run-layer');
-    queryLayer = await runQueryLayer({ input, config, profile, signal, collector, stageOverrides, scope });
+    queryLayer = await runQueryLayer({ input, config, profile, signal, collector, stageOverrides, scope, ...(ctx.cache ? { cache: ctx.cache } : {}) });
   }
 
   let translated: TranslatedQuery[] = [];

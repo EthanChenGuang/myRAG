@@ -10,6 +10,7 @@ import type { CacheHit, CacheQuery, SemanticCache } from '@/lib/rag/cache/types'
 import { resetActiveChunkingProfilesForTests } from '@/lib/rag/chunking/active';
 import { loadRagConfig, resetRagConfigForTests } from '@/lib/rag/config';
 import { setRagDepsForTests } from '@/lib/rag/deps';
+import { LEGACY_PROFILE } from '@/lib/rag/embeddings/active-profile';
 import type { QueryEmbedding } from '@/lib/rag/embeddings/query-embedding';
 import { runQueryLayer, type QueryLayerOutcome } from '@/lib/rag/query/run-layer';
 import { scopeKey, type TenantScope } from '@/lib/rag/tenant/scope';
@@ -168,7 +169,7 @@ describe('semantic_cache stage in the query layer (D-05, D-32, D-33, D-36)', () 
     expect(memory.checks).toHaveLength(1);
     const check = memory.checks[0]!;
     expect(check.scope).toBe(SCOPE_SINGLE);
-    expect(check.embeddingProfileId).toBe('legacy');
+    expect(check.embeddingProfileId).toBe(LEGACY_PROFILE.id);
     expect(check.vector).toEqual(VECTOR);
     expect(check.standalone).toBe(QUESTION);
     expect(computeCacheKeyHash(check)).toBe(
@@ -184,7 +185,7 @@ describe('semantic_cache stage in the query layer (D-05, D-32, D-33, D-36)', () 
     );
     expect(record).toMatchObject({ status: 'ok', detail: 'miss' });
     expect(out.shortCircuit).toBeNull();
-    expect(out.cacheTicket).toMatchObject({ standalone: QUESTION, vector: VECTOR, embeddingProfileId: 'legacy' });
+    expect(out.cacheTicket).toMatchObject({ standalone: QUESTION, vector: VECTOR, embeddingProfileId: LEGACY_PROFILE.id });
     expect(out.cacheTicket?.key.entryProfile).toBe('chat');
     expect(out.cacheTicket && 'scope' in out.cacheTicket).toBe(false);
     expect(out.precomputed).toMatchObject({ text: QUESTION, embedding: { vector: VECTOR } });
@@ -308,8 +309,9 @@ describe('semantic_cache stage in the query layer (D-05, D-32, D-33, D-36)', () 
     const rpc = fakeRpc((fn) => (fn === 'rag_cache_resolve_sources' ? { data: [{ document_id: DOC_1, name: 'current-name.md', version: 2 }], error: null } : { data: [], error: null }));
 
     const { out, record } = await runLayer(memory.cache, { scope: SCOPE_A }, rpc.client);
-    expect(rpc.calls).toHaveLength(1);
-    expect(rpc.calls[0]).toMatchObject({ fn: 'rag_cache_resolve_sources', args: { p_tenant_key: scopeKey(SCOPE_A), p_document_ids: [DOC_1] } });
+    const resolves = rpc.calls.filter((call) => call.fn === 'rag_cache_resolve_sources');
+    expect(resolves).toHaveLength(1);
+    expect(resolves[0]).toMatchObject({ fn: 'rag_cache_resolve_sources', args: { p_tenant_key: scopeKey(SCOPE_A), p_document_ids: [DOC_1] } });
     expect(out.shortCircuit).toEqual({ kind: 'cache_hit' });
     expect(out.cacheHit?.answer.citations?.[0]).toMatchObject({ documentId: DOC_1, documentName: 'current-name.md', documentVersion: 2 });
     expect(record?.detail).toMatch(/^hit distance=/);
@@ -323,7 +325,7 @@ describe('semantic_cache stage in the query layer (D-05, D-32, D-33, D-36)', () 
     const rpc = fakeRpc(() => ({ data: [], error: null }));
 
     const { out, record } = await runLayer(memory.cache, {}, rpc.client);
-    expect(rpc.calls.map((call) => call.fn)).toEqual(['rag_cache_resolve_sources']);
+    expect(rpc.calls.filter((call) => call.fn === 'rag_cache_resolve_sources')).toHaveLength(1);
     expect(out.shortCircuit).toBeNull();
     expect(out.cacheHit).toBeUndefined();
     expect(record).toMatchObject({ status: 'ok', detail: 'miss citations_unresolved' });
@@ -338,7 +340,7 @@ describe('semantic_cache stage in the query layer (D-05, D-32, D-33, D-36)', () 
     const rpc = fakeRpc(() => ({ data: [], error: null }));
 
     const { out } = await runLayer(memory.cache, {}, rpc.client);
-    expect(rpc.calls).toEqual([]);
+    expect(rpc.calls.filter((call) => call.fn === 'rag_cache_resolve_sources')).toEqual([]);
     expect(out.shortCircuit).toEqual({ kind: 'cache_hit' });
   });
 
