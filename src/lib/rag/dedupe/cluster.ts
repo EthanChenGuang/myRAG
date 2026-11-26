@@ -36,6 +36,10 @@ export interface ClusterOptions {
   maxHamming?: number;
   /** false: cluster from the stored hashes without hashing the chunks again. */
   rehash?: boolean;
+  /** The embedding profile of the chunks; resolved from the active profile when a per-profile threshold exists. */
+  embeddingProfileId?: string | null;
+  /** Eval harness only: a fixture-fitted threshold applies. Production callers never set it. */
+  evalRun?: boolean;
 }
 
 export interface ClusterReport {

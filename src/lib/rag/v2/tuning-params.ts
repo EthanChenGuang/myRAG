@@ -112,6 +112,23 @@ export function tuningHashComponent(config: Pick<RagConfig, 'v2'>, params: Tunin
   return Object.keys(tuning).length > 0 ? tuning : null;
 }
 
+export interface DupClusterThresholdOptions {
+  /** True only in the eval harness: a fixture-fitted entry applies. */
+  evalRun?: boolean;
+}
+
+export function dupClusterThreshold(_embeddingProfileId: string | null, _options: DupClusterThresholdOptions = {}): number {
+  return DUP_CLUSTER_THRESHOLD_DEFAULT;
+}
+
+export function dupClusterParamsHaveProfileEntries(): boolean {
+  return false;
+}
+
+export function setDupClusterParamsForTests(_filePath: string): void {}
+
+export function resetDupClusterParamsForTests(): void {}
+
 export function resetTuningParamsForTests(): void {
   loggedProblems.clear();
 }
