@@ -118,8 +118,10 @@ export { validateChunkingProfile } from './chunking/validate';
 export type { ChunkingFinding, ChunkingValidationContext, ChunkingValidationResult } from './chunking/validate';
 export { getChunkingSweepReport, getChunkingDecisions, ChunkingReportInvalid } from './chunking/report';
 export type { ChunkingReportCode } from './chunking/report';
-export { refusalCalibrationStatus, currentRefusalCalibrationStatus } from './refusal/status';
+export { refusalCalibrationStatus, currentRefusalCalibrationStatus, currentRefusalCalibrationInputs } from './refusal/status';
 export type { RefusalCalibrationStatus } from './refusal/status';
+export { pendingCells, proposedPendingCells, PENDING_KEY_CATEGORIES, PENDING_KEYS } from './refusal/pending';
+export type { CellPending, PendingAlert, PendingChangeRecord, PendingCells } from './refusal/pending';
 export type {
   Candidate,
   HistoryTurn,
