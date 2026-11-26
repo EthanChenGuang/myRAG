@@ -374,3 +374,42 @@ describe('refusalCalibrationStatus with the effective lexical version and mode c
     expect(status.cells[1]?.mode).toBe('strict');
   });
 });
+
+describe('refusalCalibrationStatus pending input (D-18, D-24)', () => {
+  const pro = cell('cohere', 'rerank-v5.0-pro', 'en');
+  const zh = cell('cohere', 'rerank-v5.0-pro', 'zh');
+  const it2 = cell('cohere', 'rerank-v5.0-pro', 'it', { status: 'uncalibrated', threshold: null });
+  const file = thresholds([pro, zh, it2]);
+
+  it('adds no pending field and no new warning without the argument', () => {
+    const status = refusalCalibrationStatus(file, config(COHERE_ON));
+    expect(status.cells.every((entry) => !('pending' in entry))).toBe(true);
+    expect(codes(status)).not.toContain('uncalibrated_after_change');
+    expect(codes(status)).not.toContain('possibly_stale_scores');
+  });
+
+  it('carries each mark next to the stored status and stale flag and adds both warnings', () => {
+    const pending = new Map([
+      [pro.key, { reason: 'reranker_model' as const, since: '2026-11-26', changed_keys: ['RAG_RERANKER'] }],
+      [zh.key, { reason: 'score_shift' as const, since: '2026-11-25', alert_id: 'alert-zh' }],
+    ]);
+    const status = refusalCalibrationStatus(file, config(COHERE_ON), pending);
+    const byKey = new Map(status.cells.map((entry) => [entry.key, entry]));
+    expect(byKey.get(pro.key)).toMatchObject({ status: 'calibrated', stale: false, pending: pending.get(pro.key) });
+    expect(byKey.get(zh.key)?.pending).toEqual(pending.get(zh.key));
+    expect(byKey.get(it2.key)).toMatchObject({ status: 'uncalibrated', pending: null });
+    expect(status.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: 'uncalibrated_after_change', keys: [pro.key], changed_keys: ['RAG_RERANKER'] }),
+        expect.objectContaining({ code: 'possibly_stale_scores', keys: [zh.key], alert_id: 'alert-zh' }),
+      ]),
+    );
+  });
+
+  it('adds no new warning for an empty pending map', () => {
+    const status = refusalCalibrationStatus(file, config(COHERE_ON), new Map());
+    expect(status.cells.every((entry) => entry.pending === null)).toBe(true);
+    expect(codes(status)).not.toContain('uncalibrated_after_change');
+    expect(codes(status)).not.toContain('possibly_stale_scores');
+  });
+});
