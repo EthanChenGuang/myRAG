@@ -1,9 +1,10 @@
 """Absolute quality gates on top of the noise band (Phase 5.3 D-04 to D-09): the gate file and its result."""
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .golden import Category
 from .languages import Language
 from .retrieval import ConfigProvenance, RefusalMode
 
@@ -45,8 +46,8 @@ def _check_gateable_metrics(value: dict[str, float], where: str) -> dict[str, fl
 class QualityGatesComposition(_Contract):
     no_answer_share_min: float = _share()
     no_answer_share_target: float = _share()
-    excluded_categories: list[str] = Field(default_factory=list)
-    required_no_answer_kinds: list[str] = Field(default_factory=list)
+    excluded_categories: list[Category] = Field(default_factory=list)
+    required_no_answer_kinds: list[Annotated[str, Field(pattern=CODE_PATTERN)]] = Field(default_factory=list)
     min_items_per_language: int = Field(ge=0)
 
     @model_validator(mode="after")
@@ -147,7 +148,7 @@ class CompositionLanguageResult(_Contract):
 
 class CompositionResult(_Contract):
     languages: list[CompositionLanguageResult] = Field(default_factory=list)
-    missing_required_kinds: list[str] = Field(default_factory=list)
+    missing_required_kinds: list[Annotated[str, Field(pattern=CODE_PATTERN)]] = Field(default_factory=list)
 
 
 class AbsoluteGateResult(_Contract):
@@ -159,7 +160,7 @@ class AbsoluteGateResult(_Contract):
     stale_count: int = Field(default=0, ge=0)
     stale_share: float = Field(default=0.0, ge=0, le=1)
     stale_result: GateCheckResult
-    failed: list[str] = Field(default_factory=list)
+    failed: list[Annotated[str, Field(pattern=CODE_PATTERN)]] = Field(default_factory=list)
     exit_code: Literal[0, 11, 12]
 
     @model_validator(mode="after")
@@ -169,3 +170,35 @@ class AbsoluteGateResult(_Contract):
         if self.mode == "report" and self.exit_code != 0:
             raise ValueError("report mode always exits 0")
         return self
+
+
+def default_quality_gates() -> QualityGates:
+    """The D-04 values with provenance.source = defaults; live verification changes them through a pull request."""
+
+    return QualityGates(
+        composition=QualityGatesComposition(
+            no_answer_share_min=0.15,
+            no_answer_share_target=0.20,
+            excluded_categories=["small_talk"],
+            required_no_answer_kinds=[],
+            min_items_per_language=20,
+        ),
+        ceilings=QualityGatesCeilings(
+            false_answer_rate={"strict": 0.05, "balanced": None, "flexible": None},
+            false_refusal_rate={"strict": 0.25, "balanced": 0.25, "flexible": 0.25},
+            min_n=10,
+        ),
+        floors=QualityGatesFloors(smoke={}, nightly={"faithfulness": 0.85, "answer_relevance": 0.75}),
+        judge=QualityGatesJudge(
+            kappa_floor=0.6,
+            accuracy_floor=0.8,
+            min_labels_per_language=100,
+            seed_min_labels_per_language=50,
+            pass_threshold={"faithfulness": 0.8, "answer_relevance": 0.7},
+            length_bias_max_delta=0.1,
+            perturbation_max_delta=0.1,
+            max_age_days=35,
+        ),
+        lifecycle=QualityGatesLifecycle(max_stale_share=0.10, re_review_days=90),
+        provenance=ConfigProvenance(source="defaults"),
+    )

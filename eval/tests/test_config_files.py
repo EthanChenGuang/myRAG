@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from rag_sidecar.contracts.quality_gates import QualityGates
 from rag_sidecar.contracts.retrieval import (
     ChunkingSweepReport,
     RefusalCalibrationConfig,
@@ -127,6 +128,7 @@ def test_committed_query_params_matches_defaults():
         ("eval/config/retrieval-params.json", RetrievalParams),
         ("eval/config/refusal-thresholds.json", RefusalThresholds),
         ("eval/config/refusal-calibration.json", RefusalCalibrationConfig),
+        ("eval/config/quality-gates.json", QualityGates),
     ],
 )
 def test_committed_config_rewrites_byte_identical_with_its_hash(tmp_path: Path, rel: str, model_cls):
@@ -139,3 +141,28 @@ def test_committed_config_rewrites_byte_identical_with_its_hash(tmp_path: Path, 
     write_config_atomically(target, model)
     assert target.read_bytes() == source.read_bytes()
     assert model.config_hash == compute_config_hash(model)
+
+
+QUALITY_GATES_REL = "eval/config/quality-gates.json"
+
+
+def test_committed_quality_gates_hold_the_d04_defaults():
+    """Phase 5.3 D-02, D-04: the hand-edited gate file validates in pr-smoke and starts at the D-04 values."""
+    factories = {rel: (model, factory) for rel, model, factory in CONFIG_TARGETS}
+    assert QUALITY_GATES_REL in factories
+    model_cls, factory = factories[QUALITY_GATES_REL]
+    committed = model_cls.model_validate_json((REPO_ROOT / QUALITY_GATES_REL).read_text(encoding="utf-8"))
+    assert committed == finalize_config(factory())
+    assert committed.provenance.source == "defaults"
+    assert committed.composition.no_answer_share_min == 0.15
+    assert committed.composition.no_answer_share_target == 0.20
+    assert committed.composition.excluded_categories == ["small_talk"]
+    assert committed.composition.min_items_per_language == 20
+    assert committed.ceilings.false_answer_rate == {"strict": 0.05, "balanced": None, "flexible": None}
+    assert committed.ceilings.false_refusal_rate == {"strict": 0.25, "balanced": 0.25, "flexible": 0.25}
+    assert committed.ceilings.min_n == 10
+    assert committed.floors.smoke == {}
+    assert committed.floors.nightly == {"faithfulness": 0.85, "answer_relevance": 0.75}
+    assert committed.lifecycle.max_stale_share == 0.10
+    assert committed.lifecycle.re_review_days == 90
+    assert committed.judge.max_age_days == 35

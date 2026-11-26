@@ -185,6 +185,26 @@ from rag_sidecar.contracts.ingest_security import (
     UntrustedLinkQuarantineReason,
 )
 from rag_sidecar.contracts.embed import EmbedRequest, EmbedResponse
+from rag_sidecar.contracts.golden_lifecycle import (
+    GoldenSetChangelogEntry,
+    GoldenSetManifest,
+    GoldenSetManifestItem,
+    manifest_hash,
+)
+from rag_sidecar.contracts.quality_gates import (
+    METRIC_FORMS,
+    AbsoluteGateResult,
+    CompositionLanguageResult,
+    CompositionResult,
+    GateCheckRow,
+    QualityGates,
+    QualityGatesCeilings,
+    QualityGatesComposition,
+    QualityGatesFloors,
+    QualityGatesJudge,
+    QualityGatesLifecycle,
+    default_quality_gates,
+)
 from rag_sidecar.contracts.terminology import (
     TerminologyCandidate,
     TerminologyEntry,
@@ -556,4 +576,20 @@ __all__ = [
     "TerminologyTranslationPair",
     "TerminologyValidationIssue",
     "terminology_params_sha256",
+    "METRIC_FORMS",
+    "AbsoluteGateResult",
+    "CompositionLanguageResult",
+    "CompositionResult",
+    "GateCheckRow",
+    "GoldenSetChangelogEntry",
+    "GoldenSetManifest",
+    "GoldenSetManifestItem",
+    "QualityGates",
+    "QualityGatesCeilings",
+    "QualityGatesComposition",
+    "QualityGatesFloors",
+    "QualityGatesJudge",
+    "QualityGatesLifecycle",
+    "default_quality_gates",
+    "manifest_hash",
 ]

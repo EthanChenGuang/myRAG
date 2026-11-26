@@ -24,6 +24,7 @@
         },
         "failed": {
           "items": {
+            "pattern": "^[a-z0-9_]+$",
             "type": "string"
           },
           "title": "Failed",
@@ -175,6 +176,7 @@
         },
         "missing_required_kinds": {
           "items": {
+            "pattern": "^[a-z0-9_]+$",
             "type": "string"
           },
           "title": "Missing Required Kinds",

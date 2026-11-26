@@ -168,3 +168,12 @@ def test_gate_population_accepts_historical():
     assert "historical" in config.provenances
     with pytest.raises(ValidationError):
         GatePopulationConfig.model_validate({"provenances": ["paraphrased"]})
+
+
+def test_default_rag_mode_and_zero_stale_counts_are_omitted_so_old_reports_stay_byte_identical():
+    report = EvalReport.model_validate(SAMPLES["EvalReport"])
+    dumped = report.model_dump(mode="json")
+    assert not {"rag_mode", "stale_count", "stale_share"} & set(dumped)
+    balanced = EvalReport.model_validate({**SAMPLES["EvalReport"], "rag_mode": "balanced", "stale_count": 1, "stale_share": 0.1})
+    assert {"rag_mode", "stale_count", "stale_share"} <= set(balanced.model_dump(mode="json"))
+    assert "rag_mode" not in RunManifest.model_validate(SAMPLES["RunManifest"]).model_dump(mode="json")

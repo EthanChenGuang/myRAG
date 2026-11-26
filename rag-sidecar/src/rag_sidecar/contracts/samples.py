@@ -256,6 +256,14 @@ from rag_sidecar.contracts.routing import (
 from rag_sidecar.contracts.embed import EmbedRequest, EmbedResponse
 from rag_sidecar.contracts.retrieval import RetrievalLegWeights
 from rag_sidecar.contracts.vector_sync import ReconcileReport, VectorSyncSliceReport
+from rag_sidecar.contracts.golden_lifecycle import GoldenSetManifest, manifest_hash
+from rag_sidecar.contracts.quality_gates import (
+    AbsoluteGateResult,
+    CompositionLanguageResult,
+    CompositionResult,
+    GateCheckRow,
+    default_quality_gates,
+)
 from rag_sidecar.contracts.terminology import (
     TerminologyCandidate,
     TerminologyEntry,
@@ -2254,6 +2262,117 @@ def _term_issue() -> TerminologyValidationIssue:
     )
 
 
+def _composition_result() -> CompositionResult:
+    return CompositionResult(
+        languages=[
+            CompositionLanguageResult(
+                language="en",
+                items=40,
+                no_answer=8,
+                share=0.2,
+                min=0.15,
+                target=0.2,
+                result="passed",
+                kinds={"no_answer": 8},
+            ),
+            CompositionLanguageResult(
+                language="it", items=12, no_answer=2, share=None, min=0.15, target=0.2, result="insufficient_n"
+            ),
+        ],
+        missing_required_kinds=[],
+    )
+
+
+def _absolute_gate_result() -> AbsoluteGateResult:
+    return AbsoluteGateResult(
+        passed=True,
+        mode="enforce",
+        rag_mode="strict",
+        checks=[
+            GateCheckRow(
+                check="false_answer_rate",
+                slice="overall",
+                measured=0.0,
+                numerator=0,
+                denominator=20,
+                limit=0.05,
+                limit_kind="max",
+                result="passed",
+            ),
+            GateCheckRow(
+                check="false_answer_rate",
+                slice="language:it",
+                measured=0.0,
+                numerator=0,
+                denominator=4,
+                limit=0.05,
+                limit_kind="max",
+                result="insufficient_n",
+                reason="below_min_n",
+            ),
+            GateCheckRow(
+                check="faithfulness_floor",
+                slice="overall",
+                limit=0.85,
+                limit_kind="min",
+                result="skipped",
+                reason="no_judge_report",
+            ),
+            GateCheckRow(
+                check="false_answer_rate",
+                slice="overall",
+                limit=None,
+                limit_kind="max",
+                measured=0.0,
+                numerator=0,
+                denominator=20,
+                result="report_only",
+                reason="null_ceiling",
+            ),
+        ],
+        composition=_composition_result(),
+        stale_count=0,
+        stale_share=0.0,
+        stale_result="passed",
+        failed=[],
+        exit_code=0,
+    )
+
+
+def _golden_set_manifest() -> GoldenSetManifest:
+    data: dict[str, Any] = {
+        "schema_version": 1,
+        "set_id": "fixture",
+        "version": 2,
+        "items": [
+            {"id": "en-general-001", "item_sha256": "a" * 64, "status": "active", "last_reviewed_at": "2026-01-01"},
+            {
+                "id": "en-general-002",
+                "item_sha256": "b" * 64,
+                "status": "stale",
+                "stale_reason": "source_document_changed",
+                "stale_since": "2026-02-01",
+            },
+            {"id": "en-general-003", "item_sha256": "c" * 64, "status": "retired", "retire_reason": "duplicate_item"},
+        ],
+        "changelog": [
+            {"version": 1, "date": "2026-01-01", "added": ["en-general-001", "en-general-002", "en-general-003"]},
+            {"version": 2, "date": "2026-02-01", "stale": ["en-general-002"], "retired": ["en-general-003"]},
+        ],
+    }
+    data["manifest_sha256"] = manifest_hash(data)
+    return GoldenSetManifest.model_validate(data)
+
+
+def _phase53_models() -> dict[str, Any]:
+    return {
+        "QualityGates": default_quality_gates(),
+        "AbsoluteGateResult": _absolute_gate_result(),
+        "CompositionResult": _composition_result(),
+        "GoldenSetManifest": _golden_set_manifest(),
+    }
+
+
 def _terminology_models() -> dict[str, Any]:
     seen = datetime(2026, 1, 1, tzinfo=timezone.utc)
     return {
@@ -2555,7 +2674,13 @@ def _phase42_variants() -> dict[str, dict[str, Any]]:
 
 
 def build_samples() -> dict[str, dict[str, Any]]:
-    models = {**_models(), **_feedback_loop_models(), **_phase42_models(), **_terminology_models()}
+    models = {
+        **_models(),
+        **_feedback_loop_models(),
+        **_phase42_models(),
+        **_terminology_models(),
+        **_phase53_models(),
+    }
     samples = {name: model.model_dump(mode="json") for name, model in models.items()}
     variants: dict[str, dict[str, Any]] = {
         "AnswerRecord:pending_unlinked": {
