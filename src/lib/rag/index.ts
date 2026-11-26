@@ -120,6 +120,12 @@ export { getChunkingSweepReport, getChunkingDecisions, ChunkingReportInvalid } f
 export type { ChunkingReportCode } from './chunking/report';
 export { refusalCalibrationStatus, currentRefusalCalibrationStatus } from './refusal/status';
 export type { RefusalCalibrationStatus } from './refusal/status';
+export { judgeCalibrationStatus, currentJudgeCalibrationStatus } from './judge/calibration-status';
+export type { JudgeCalibrationStatus, JudgeCalibrationWarning, JudgeCalibrationCellView } from './judge/calibration-status';
+export { exportCalibrationCases } from './judge/calibration-export';
+export type { CalibrationCase, CalibrationExport, CalibrationExportResult } from './judge/calibration-export';
+export { AnswerCheckRequestSchema, readAnswerCheck, saveAnswerCheck } from './judge/answer-check';
+export type { AnswerCheck, AnswerCheckFailure, AnswerCheckResult, AnswerCheckVerdicts } from './judge/answer-check';
 export type {
   Candidate,
   HistoryTurn,
