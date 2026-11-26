@@ -43,7 +43,7 @@ describe('stored header in embedding text and lexical_text (two tenants, plan 03
   let embedded: string[] = [];
   const realFetch = globalThis.fetch;
   const savedEnv = { ...process.env };
-  const docs = { a: '', b: '' };
+  const docs = { a: '', b: '', off: '' };
   const keyA = () => `u:${ids.userA}`;
   const keyB = () => `u:${ids.userB}`;
 
@@ -84,13 +84,13 @@ describe('stored header in embedding text and lexical_text (two tenants, plan 03
     ].join('\n');
   }
 
-  async function upload(tenant: 'a' | 'b', label: string, attributes: Record<string, unknown>): Promise<string> {
+  async function upload(tenant: 'a' | 'b', label: string, attributes: Record<string, unknown>, text = body(label)): Promise<string> {
     const userId = tenant === 'a' ? ids.userA : ids.userB;
     const result = await ingestModule.ingest({
       scope: scopeModule.mintScope('personal', userId, null),
       source: 'config_upload',
       sourceKey: `root/${label}.md`,
-      text: body(label),
+      text,
       filename: `${label}.md`,
       mimeType: 'text/markdown',
       docType: 'contract_legal',
@@ -367,13 +367,110 @@ describe('stored header in embedding text and lexical_text (two tenants, plan 03
     }
   });
 
+  test('the text sent to the model never holds the header: content, parents, the assembled context and citation quotes', async () => {
+    useEnv(OFF_ENV);
+    docs.off = await upload('b', 'hdr-a1-off', { alpha_code: 'K-1' }, body('hdr-a1'));
+    useEnv(HEADER_ENV);
+    const withHeader = await legacyChunks(docs.a);
+    const without = await legacyChunks(docs.off);
+    assert.deepEqual(withHeader.map((chunk) => chunk.content), without.map((chunk) => chunk.content), 'content byte-equal with the switch on and off');
+    for (const chunk of without) {
+      assert.equal(chunk.lexical_text, await plainLexical(docs.off, chunk), 'switch off: the builders of today');
+      assert.ok(!Object.keys(chunk.metadata as Row).includes('attribute_header_stamp'));
+      assert.equal(chunk.stamp, null);
+    }
+
+    await resetProfile();
+    await rechunk.runRechunk({ db: ingestDb(), profileId: PROFILE, scopeFor });
+    const parentsOf = (documentId: string) => q('SELECT content FROM document_parents WHERE document_id = $1 AND chunking_profile_id = $2 ORDER BY parent_index', [documentId, PROFILE]);
+    const parentsA = await parentsOf(docs.a);
+    assert.ok(parentsA.length > 0);
+    assert.deepEqual(parentsA, await parentsOf(docs.off), 'parents byte-equal');
+
+    const { assembleContext } = await import('@/lib/rag/context/assemble');
+    const { createCitationLabeler, buildAliasMap } = await import('@/lib/rag/generation/citations/blocks');
+    const { buildCitationRecords } = await import('@/lib/rag/generation/citations/record');
+    const children = await profileChildren(docs.a);
+    const assembled = assembleContext({
+      queryText: 'first neutral probe sentence',
+      candidates: [...withHeader, ...children].map((chunk, index) => ({ chunk_id: String(chunk.id), document_id: docs.a, content: String(chunk.content), similarity: 0.9 - index * 0.01 })),
+      documents: new Map([[docs.a, { id: docs.a, filename: 'hdr-a1.md', created_at: '2026-01-01T00:00:00Z', content: null, metadata: null }]]),
+      chunkMetadata: new Map(),
+      referenced: null,
+      isGPTModel: false,
+      ragMode: 'strict',
+      webSearchEnabled: false,
+      applyRelevanceFilter: false,
+      citationLabeler: createCitationLabeler(),
+    });
+    assert.ok(assembled.context.includes('first neutral probe sentence'));
+    assert.ok(!assembled.context.includes(MARK_A), 'no header in the assembled context');
+    const aliases = buildAliasMap(assembled.blocks, assembled.usedDocuments);
+    const records = buildCitationRecords([...aliases.byAlias.keys()], aliases, 'chunk-alias');
+    assert.ok(records.length > 0);
+    for (const record of records) assert.ok(!record.quote.includes(MARK_A), 'no header in a citation quote');
+  });
+
+  test('rag:rebuild rechunk: a template change selects the stale documents and builds a side-by-side profile with the new header', async () => {
+    const rebuild = await import('@/lib/rag/ingest/rebuild/run');
+    const apply = await import('@/lib/rag/ingest/attributes/apply');
+    const signal = new AbortController().signal;
+    await q('UPDATE public.rag_attribute_header_templates SET template = $2, version = 2 WHERE tenant_key = $1', [keyA(), `${MARK_A} {alpha_code} v2`]);
+    headerModule.resetHeaderTemplateCacheForTests();
+    const rendered = await apply.renderPendingHeaders(ingestDb(), keyA(), { signal, deadlineMs: 20_000 });
+    assert.equal(rendered.ok, true);
+    const stampA = await docStamp(docs.a);
+    assert.match(stampA, /^t2\./);
+    const stampB = await docStamp(docs.b);
+
+    const deps = { db: ingestDb(), scopeFor, ingestAsync: () => false };
+    const dry = await rebuild.startRebuild({ mechanism: 'rechunk', dryRun: true, startedBy: null }, deps);
+    assert.equal(dry.status, 'dry_run');
+    assert.equal(dry.affected, 1, "A's stale document");
+    assert.equal(dry.plan.kind, 'chunking_profile');
+
+    const started = await rebuild.startRebuild({ mechanism: 'rechunk', startedBy: null }, deps);
+    assert.equal(started.status, 'started');
+    const profileId = started.plan.kind === 'chunking_profile' ? started.plan.profiles[0]!.profileId : '';
+    assert.match(profileId, /^rb-[0-9a-f]{12}$/);
+    const childrenIn = (documentId: string) =>
+      q('SELECT content, lexical_text, attribute_header_stamp AS stamp FROM document_chunks WHERE document_id = $1 AND chunking_profile_id = $2', [documentId, profileId]);
+    for (const child of await childrenIn(docs.a)) {
+      assert.ok(String(child.lexical_text).includes(MARK_A) && String(child.lexical_text).includes('v2'));
+      assert.equal(child.stamp, stampA);
+    }
+    for (const child of await childrenIn(docs.b)) {
+      assert.ok(String(child.lexical_text).includes(MARK_B) && !String(child.lexical_text).includes(MARK_A));
+      assert.equal(child.stamp, stampB);
+    }
+    for (const child of await childrenIn(docs.off)) {
+      assert.ok(!String(child.lexical_text).includes(MARK_A) && !String(child.lexical_text).includes(MARK_B));
+      assert.equal(child.stamp, null);
+    }
+
+    const again = await rebuild.startRebuild({ mechanism: 'rechunk', startedBy: null }, deps);
+    assert.equal(again.run?.id, started.run?.id, 'a second start in the same state finds the same run');
+
+    await q("UPDATE chunking_profiles SET status = 'ready' WHERE id = 'legacy' AND doc_type = 'contract_legal'");
+    await q("UPDATE chunking_profiles SET status = 'active' WHERE id = $1 AND doc_type = 'contract_legal'", [profileId]);
+    try {
+      const listed = await headerModule.listStaleHeaderDocuments(keyA(), { signal, db: ingestDb() });
+      assert.deepEqual(listed.ok ? listed.items : null, [], 'no stale document once the profile serves');
+      const after = await rebuild.startRebuild({ mechanism: 'rechunk', startedBy: null }, deps);
+      assert.equal(after.status, 'nothing');
+    } finally {
+      await q("UPDATE chunking_profiles SET status = 'retired' WHERE id = $1 AND doc_type = 'contract_legal'", [profileId]);
+      await q("UPDATE chunking_profiles SET status = 'active' WHERE id = 'legacy' AND doc_type = 'contract_legal'");
+    }
+  });
+
   test('switch off: re-chunk makes no header read and writes texts and stamps equal to today', async () => {
     useEnv(OFF_ENV);
     await resetProfile();
     const report = await rechunk.runRechunk({ db: ingestDb(), profileId: PROFILE, scopeFor });
-    assert.equal(report.documentsWritten, 2);
+    assert.equal(report.documentsWritten, docs.off ? 3 : 2);
     assert.equal(headerCalls().length, 0);
-    for (const documentId of [docs.a, docs.b]) {
+    for (const documentId of [docs.a, docs.b, docs.off].filter(Boolean)) {
       for (const child of await profileChildren(documentId)) {
         assert.ok(!String(child.lexical_text).includes(MARK_A) && !String(child.lexical_text).includes(MARK_B));
         assert.equal(child.stamp, null);

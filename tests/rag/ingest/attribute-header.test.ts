@@ -800,3 +800,88 @@ describe('recaption with the in-step header', () => {
     for (const text of embedded.values()) expect(text).not.toContain('hdr');
   });
 });
+
+// --- Plan 03.3-17 Task 4: rebuild selection from the stale listing (D-27, D-05) ------------------------------------------------------------
+
+describe('selectAffected and rebuildSettingsHash with stale-header inputs', () => {
+  const PROPOSAL = { RAG_TABLE_HEADER_REPEAT: 'always', RAG_LANGUAGE_AWARE_INGEST: 'off' };
+  const PINNED = '0a39141b007638be2c38073907b6dd618f40fe43cae48ba4296f4f3edaa27646';
+  const candidates = [
+    { documentId: DOC_1, tenantKey: TENANT_A, docType: 'general', fingerprint: null, parts: null },
+    { documentId: DOC_2, tenantKey: TENANT_B, docType: 'general', fingerprint: null, parts: null },
+  ];
+
+  it('without the stale set the selection equals today; rechunk adds the stale documents once, other mechanisms ignore them', async () => {
+    const { selectAffected } = await import('@/lib/rag/ingest/rebuild/plan');
+    const today = selectAffected(candidates, 'rechunk', PROPOSAL);
+    expect(selectAffected(candidates, 'rechunk', PROPOSAL, undefined)).toEqual(today);
+    expect(today.documents).toEqual([]);
+    const stale = new Set([DOC_1]);
+    const picked = selectAffected(candidates, 'rechunk', PROPOSAL, stale);
+    expect(picked.documents).toEqual([{ documentId: DOC_1, tenantKey: TENANT_A, docType: 'general' }]);
+    expect(selectAffected([...candidates, candidates[0]!], 'rechunk', PROPOSAL, stale).documents).toHaveLength(1);
+    for (const mechanism of ['reparse', 'relex', 'reembed', 'recaption', 'retranslate'] as const) {
+      expect(selectAffected(candidates, mechanism, PROPOSAL, stale)).toEqual(selectAffected(candidates, mechanism, PROPOSAL));
+    }
+  });
+
+  it('the hash without a digest is pinned to today; a digest changes it, equal digests give equal hashes', async () => {
+    const { rebuildSettingsHash } = await import('@/lib/rag/ingest/rebuild/plan');
+    expect(rebuildSettingsHash('rechunk', PROPOSAL)).toBe(PINNED);
+    expect(rebuildSettingsHash('rechunk', PROPOSAL, undefined)).toBe(PINNED);
+    const one = rebuildSettingsHash('rechunk', PROPOSAL, 'digest-1');
+    expect(one).not.toBe(PINNED);
+    expect(rebuildSettingsHash('rechunk', PROPOSAL, 'digest-1')).toBe(one);
+    expect(rebuildSettingsHash('rechunk', PROPOSAL, 'digest-2')).not.toBe(one);
+  });
+});
+
+describe('startRebuild reads the stale listing only for rechunk while the switch is on', () => {
+  const candidateRows = [
+    { id: DOC_1, tenant_key: TENANT_A, doc_type: 'general', ingest_fingerprint: null, parts: null },
+    { id: DOC_2, tenant_key: TENANT_B, doc_type: 'general', ingest_fingerprint: null, parts: null },
+  ];
+
+  async function start(env: Record<string, string>, mechanism: string, stamp = 't2.0123456789ab') {
+    const { startRebuild } = await import('@/lib/rag/ingest/rebuild/run');
+    const db = fakeDb({
+      rag_rebuild_candidates: () => ok(candidateRows),
+      rag_list_chunking_profiles: () => ok([{ id: 'legacy', doc_type: 'general', child_tokens: 512 }]),
+    });
+    setIngestDepsForTests({ db: () => db, ingestEnv: () => env });
+    const listed: string[] = [];
+    const result = await startRebuild(
+      { mechanism, dryRun: true, startedBy: null },
+      {
+        db,
+        saved: {},
+        ingestAsync: () => false,
+        listStaleHeaders: async (tenantKey) => {
+          listed.push(tenantKey);
+          return { ok: true, items: tenantKey === TENANT_A ? [{ documentId: DOC_1, docType: 'general', stamp, staleChunks: 2 }] : [], more: false };
+        },
+      },
+    );
+    return { result, listed };
+  }
+
+  it('switch on, rechunk: one listing per tenant key of the candidates; the stale documents are affected and the plan builds one profile', async () => {
+    const { result, listed } = await start(HEADER_ENV, 'rechunk');
+    expect(listed.sort()).toEqual([TENANT_A, TENANT_B].sort());
+    expect(result.affected).toBe(1);
+    expect(result.plan.kind).toBe('chunking_profile');
+    const again = await start(HEADER_ENV, 'rechunk');
+    expect(again.result.plan).toEqual(result.plan);
+    const moved = await start(HEADER_ENV, 'rechunk', 't3.0123456789ab');
+    expect(moved.result.plan.kind === 'chunking_profile' && result.plan.kind === 'chunking_profile' && moved.result.plan.profiles[0]?.profileId !== result.plan.profiles[0]?.profileId).toBe(true);
+  });
+
+  it('switch off, or another mechanism: no listing, and the result equals today', async () => {
+    for (const [env, mechanism] of [[OFF_ENV, 'rechunk'], [HEADER_ENV, 'relex']] as const) {
+      const { result, listed } = await start(env, mechanism);
+      expect(listed).toEqual([]);
+      expect(result.affected).toBe(0);
+      expect(result.plan.kind).toBe('nothing');
+    }
+  });
+});
