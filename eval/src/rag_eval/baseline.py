@@ -197,6 +197,33 @@ def _record(args: argparse.Namespace) -> int:
     return 0
 
 
+def _record_reports(args: argparse.Namespace) -> int:
+    """A baseline from reports another harness already wrote (for example run-binding-compare.mts --record-baseline)."""
+    if len(args.report) < MIN_RUNS:
+        print(f"error: --report must be given at least {MIN_RUNS} times", file=sys.stderr)
+        return 2
+    reports: list[EvalReport] = []
+    for path in args.report:
+        try:
+            reports.append(EvalReport.model_validate_json(resolve_cli_path(path).read_text(encoding="utf-8")))
+        except (OSError, ValidationError, ValueError) as exc:
+            print(f"error: report {path} is unreadable: {exc}", file=sys.stderr)
+            return 3
+    sha = _git_head()
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    try:
+        baseline = record_baseline(
+            reports, allow_spread=args.allow_spread, git_shas=[sha] * len(reports), created_at=[stamp] * len(reports)
+        )
+    except NonDeterministicRunError as exc:
+        print(f"error: non-deterministic runs, baseline not written: {exc}", file=sys.stderr)
+        return 1
+    out = resolve_cli_path(args.out)
+    write_baseline(baseline, out)
+    print(f"[Eval Baseline] wrote {out} (run_config_hash {baseline.run_config_hash[:12]}, {len(baseline.runs)} runs)")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="rag_eval.baseline", description="myRAG eval baseline recorder")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -212,6 +239,11 @@ def main(argv: list[str] | None = None) -> int:
     record.add_argument("--user", help="user UUID to scope the run to (multi-tenant personal workspace)")
     record.add_argument("--include-drafts", action="store_true", help="also score review_status=draft items")
     record.set_defaults(handler=_record)
+    from_reports = commands.add_parser("record-reports", help="record a baseline from finished report.json files")
+    from_reports.add_argument("--report", action="append", default=[], type=Path)
+    from_reports.add_argument("--out", required=True, type=Path)
+    from_reports.add_argument("--allow-spread", action="store_true")
+    from_reports.set_defaults(handler=_record_reports)
     args = parser.parse_args(argv)
     return args.handler(args)
 

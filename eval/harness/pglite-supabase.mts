@@ -43,6 +43,11 @@ export interface FixtureDatabase {
   seededChunkingProfiles?: string[];
   /** Ingest mode with table_split items: the isolated tenants of the long-table documents; the caller closes their databases. */
   tableSplitTenants?: import('./table-split.mts').TableSplitTenant[];
+  /**
+   * Ingest mode only: the golden id of every corpus document (the prechunked derivation from its path) to the id of the document the
+   * build wrote from the same file, so item filters name the documents ingest mode actually wrote.
+   */
+  ingestDocumentIds?: Record<string, string>;
 }
 
 export const SUPABASE_SHIM_SQL = `

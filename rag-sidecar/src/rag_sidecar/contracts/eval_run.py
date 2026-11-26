@@ -143,9 +143,16 @@ class TraceUsedDocument(_Contract):
     image_url: str | None = None
 
 
+TraceTransformName = Literal["condense", "normalize_dates", "expand", "hyde", "decompose", "translate"]
+TraceTransformStatus = Literal["ok", "skipped", "disabled", "degraded", "error", "timeout", "aborted"]
+
+
 class TraceQueryTransform(_Contract):
     kind: str
     text: str
+    transform: TraceTransformName | None = None
+    status: TraceTransformStatus | None = None
+    reason: str | None = Field(default=None, max_length=64)
 
 
 TraceCitation = CitationRecord

@@ -117,6 +117,7 @@ describe('ingest mode routing flags', () => {
       ],
     );
     assert.ok(!fixtures.some((fixture) => fixture.class === 'bench'));
+    assert.ok(!fixtures.some((fixture) => fixture.class === 'scan_zh_it'), 'the character-exact scan fixture is not part of the retrieval corpus');
   });
 });
 

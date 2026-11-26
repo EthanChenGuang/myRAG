@@ -38,6 +38,12 @@ export interface EvalRequestOptions {
   >;
   citations?: boolean;
   groundedness?: boolean;
+  /** D-38 eval-only query-layer overrides, sent as they are. */
+  query_framework?: NonNullable<RagRunRequest['options']>['query_framework'];
+  query_layer?: NonNullable<RagRunRequest['options']>['query_layer'];
+  query_transforms?: NonNullable<RagRunRequest['options']>['query_transforms'];
+  semantic_cache?: NonNullable<RagRunRequest['options']>['semantic_cache'];
+  query_params?: NonNullable<RagRunRequest['options']>['query_params'];
 }
 
 /** 'fake' is the deterministic citation generator (D-24); it serves fixture runs with --citations or --groundedness. */
@@ -61,9 +67,12 @@ export interface InProcessEval {
   fixtureDb: import('@electric-sql/pglite').PGlite;
   /** Set when the session was prepared for table_split items (ingest mode only). */
   tableSplitTenants?: TableSplitTenant[];
+  /** Ingest mode only: golden corpus document id to the id of the document the build wrote from the same file. */
+  ingestDocumentIds?: ReadonlyMap<string, string>;
   fixtureUserId: string;
   corpusSha256: string;
   sqlSha256: Record<string, string>;
+  fakeQueryLlm?: import('./fake-query-llm.mts').FakeQueryLlm;
   close: () => Promise<void>;
 }
 
@@ -112,11 +121,45 @@ export interface RunEvalResult {
   manifest: RunManifest;
 }
 
-export function itemRequestOptions(base: EvalRequestOptions, item: GoldenItem): EvalRequestOptions {
+/** An item filter names a document id that ingest mode did not write from any corpus file: the run stops instead of dropping it. */
+export class UnmappedFilterDocumentIdError extends Error {
+  readonly itemId: string;
+  readonly documentId: string;
+  constructor(itemId: string, documentId: string) {
+    super(`[Eval Harness] item ${itemId}: retrieval filter document id ${documentId} has no document written by ingest mode`);
+    this.name = 'UnmappedFilterDocumentIdError';
+    this.itemId = itemId;
+    this.documentId = documentId;
+  }
+}
+
+/**
+ * The request options of one item. With `ingestDocumentIds` (ingest mode), every `retrieval_filters.document_ids` value is replaced by
+ * the id of the document ingest mode wrote from the same corpus file; an id without one throws, so a filter is never dropped and an item
+ * never runs unfiltered. Without it (prechunked mode) the golden ids are sent unchanged.
+ */
+export function itemRequestOptions(
+  base: EvalRequestOptions,
+  item: GoldenItem,
+  ingestDocumentIds?: ReadonlyMap<string, string>,
+): EvalRequestOptions {
   const options: EvalRequestOptions = { ...base };
-  if (item.retrieval_filters) options.retrieval_filters = item.retrieval_filters;
+  const filters = item.retrieval_filters;
+  if (!filters) return options;
+  if (ingestDocumentIds === undefined || !filters.document_ids) {
+    options.retrieval_filters = filters;
+    return options;
+  }
+  const documentIds = filters.document_ids.map((id) => {
+    const mapped = ingestDocumentIds.get(id);
+    if (mapped === undefined) throw new UnmappedFilterDocumentIdError(item.id, id);
+    return mapped;
+  });
+  options.retrieval_filters = { ...filters, document_ids: documentIds };
   return options;
 }
+
+const NO_INGEST_DOCUMENT_IDS: ReadonlyMap<string, string> = new Map();
 
 const INJECTION_CATEGORIES: ReadonlySet<string> = new Set(['injection', 'injection_evasive']);
 
@@ -177,6 +220,15 @@ export function shouldInstallFixtureTranslator(env: Record<string, string> | und
   return switchIsOn(env?.RAG_PIPELINE, 'v2') && switchIsOn(env?.RAG_LEXICAL_TRANSLATION, 'true');
 }
 
+/**
+ * D-39: an in-process v2 run whose overlay or request options turn the query layer on gets the deterministic fake query LLM, so
+ * no fixture run calls a live model. Legacy keeps the layer inert, so it never needs one.
+ */
+export function shouldInstallFakeQueryLlm(env: Record<string, string | undefined> | undefined, options: { queryLayer?: boolean } = {}): boolean {
+  if (!switchIsOn(env?.RAG_PIPELINE, 'v2')) return false;
+  return switchIsOn(env?.RAG_QUERY_LAYER, 'true') || options.queryLayer === true;
+}
+
 export async function prepareInProcessEval(options: {
   corpusDir: string;
   deploymentMode: DeploymentMode;
@@ -193,6 +245,8 @@ export async function prepareInProcessEval(options: {
   chunkingProfiles?: import('../../src/lib/rag-eval/contracts.generated.ts').ChunkingProfile[];
   /** Ingest mode: also load the isolated table_split tenants (table-split.mts). */
   tableSplit?: boolean;
+  /** The run's requests set options.query_layer=true (D-38); with the env overlay it decides the fake query LLM install (D-39). */
+  queryLayer?: boolean;
 }): Promise<InProcessEval> {
   const {
     corpusDir,
@@ -279,6 +333,19 @@ export async function prepareInProcessEval(options: {
     translatorModule.setTranslatorForTests(translatorModule.createFixtureTranslator(table));
   }
 
+  // The effective env: the pinned eval env with the overlay applied above.
+  let fakeQueryLlm: import('./fake-query-llm.mts').FakeQueryLlm | undefined;
+  let restoreQueryLlm: (() => void) | undefined;
+  if (shouldInstallFakeQueryLlm(process.env, { queryLayer: options.queryLayer })) {
+    const depsModule = await import('../../src/lib/rag/deps.ts');
+    const { createFakeQueryLlm } = await import('./fake-query-llm.mts');
+    const previous = depsModule.getRagDeps().queryLlm;
+    const fake = createFakeQueryLlm();
+    fakeQueryLlm = fake;
+    depsModule.setRagDepsForTests({ queryLlm: () => fake });
+    restoreQueryLlm = () => depsModule.setRagDepsForTests({ queryLlm: previous });
+  }
+
   const floorModule = await import('../../src/lib/rag/refusal/floor.ts');
   const { loadFixtureScoreCalibration } = await import('./fixture-floor.mts');
   floorModule.setEvalScoreCalibration(loadFixtureScoreCalibration(fixtureMode === 'ingest' ? 'ingest' : 'prechunked'));
@@ -289,10 +356,13 @@ export async function prepareInProcessEval(options: {
     edge: startedEdge,
     fixtureDb: fixture.db,
     ...(fixture.tableSplitTenants ? { tableSplitTenants: fixture.tableSplitTenants } : {}),
+    ...(fixtureMode === 'ingest' ? { ingestDocumentIds: new Map(Object.entries(fixture.ingestDocumentIds ?? {})) } : {}),
     fixtureUserId: fixture.fixtureUserId,
     corpusSha256: fixture.corpusSha256,
     sqlSha256: fixture.sqlSha256,
+    ...(fakeQueryLlm ? { fakeQueryLlm } : {}),
     close: async () => {
+      restoreQueryLlm?.();
       translatorModule?.resetTranslatorForTests();
       floorModule.resetEvalScoreCalibration();
       if (ownsEdge) await startedEdge.close();
@@ -513,6 +583,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
           ...(runConfig && Object.keys(runConfig.env).length > 0 ? { envOverrides: runConfig.env } : {}),
           ...(runConfig?.chunkingProfiles?.length ? { chunkingProfiles: runConfig.chunkingProfiles } : {}),
           ...(options.appEnv && Object.keys(options.appEnv).length > 0 ? { appEnv: options.appEnv } : {}),
+          ...(requestOptions.query_layer === true ? { queryLayer: true } : {}),
         });
         inProcess = prepared;
       }
@@ -559,7 +630,14 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     }
     // Ingest mode routes by category: the other items first, exactly as before, then each table_split item against its tenant.
     for (const item of [...routed.main, ...routed.tableSplit]) {
-      const options = itemRequestOptions(requestOptions, item);
+      // Ingest mode: filter ids name the documents the build wrote; the table_split tenants have no map, so their filters fail closed.
+      const documentIds =
+        fixtureMode === 'ingest'
+          ? isTableSplitItem(item)
+            ? NO_INGEST_DOCUMENT_IDS
+            : (inProcess?.ingestDocumentIds ?? NO_INGEST_DOCUMENT_IDS)
+          : undefined;
+      const options = itemRequestOptions(requestOptions, item, documentIds);
       if (inProcess && deploymentMode === 'multi-tenant' && !options.user_id) {
         options.user_id = inProcess.fixtureUserId;
       }

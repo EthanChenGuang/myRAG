@@ -137,7 +137,8 @@ async function reuseStoredParse(ctx: StageContext, previousVersion: number): Pro
       chunks = [];
     }
   }
-  const docling = await loadArtifact(earlier, DOCLING_ARTIFACT);
+  // A sanitized version's docling.json still holds the hidden spans (F-17): it is never carried over.
+  const docling = ctx.state.typeChange?.sanitizedParse ? null : await loadArtifact(earlier, DOCLING_ARTIFACT);
   const result: ParseResult = {
     markdown: new TextDecoder('utf-8').decode(markdown.bytes),
     chunks,
@@ -270,6 +271,8 @@ export async function parseToResult(ctx: StageContext): Promise<ParseToResult> {
     if (bytes === null) return { kind: 'stopped', outcome: { kind: 'fail', reason: 'no_parser_available' } };
     const previousVersion = ctx.state.typeChange?.reuseParseOfVersion ?? null;
     const reused = previousVersion === null ? null : await reuseStoredParse(ctx, previousVersion);
+    // The original of a sanitized version holds the hidden spans: without its sanitized parse output the run stops instead of parsing it.
+    if (reused === null && ctx.state.typeChange?.sanitizedParse) return { kind: 'stopped', outcome: { kind: 'fail', reason: 'sanitized_parse_unavailable' } };
     if (reused !== null) {
       parsed = reused;
     } else {
@@ -291,7 +294,7 @@ export async function parseToResult(ctx: StageContext): Promise<ParseToResult> {
   if (refined.changed) await persistRefinedType(ctx);
 
   // At most one re-parse, and only when a parser ran: plain text has no options to change.
-  if (refined.parserOptionsDiffer && parsed.result.parser !== 'text' && bytes !== null) {
+  if (refined.parserOptionsDiffer && parsed.result.parser !== 'text' && bytes !== null && !ctx.state.typeChange?.sanitizedParse) {
     if (ctx.state.docTypeDetection) ctx.state.docTypeDetection.reparsed = true;
     ctx.state.parseJob = null;
     const second = await runChain(ctx, bytes, null);

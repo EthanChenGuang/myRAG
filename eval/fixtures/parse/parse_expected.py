@@ -72,3 +72,13 @@ def parser_expected(spec: Any, ingest_specs: Any) -> dict[str, Any]:
         reading_order=reading_order,
     )
     return model.model_dump(mode="json")
+
+def exact_text(spec: Any, ingest_specs: Any) -> str:
+    """The character-exact text of a fixture whose facts set exact_text: its text blocks in reading order, one per line, NFC."""
+    import unicodedata
+
+    lines = [block.text for block in spec.blocks if isinstance(block, (ingest_specs.Heading, ingest_specs.Paragraph))]
+    text = "\n".join(lines) + "\n"
+    if not unicodedata.is_normalized("NFC", text):
+        raise ValueError(f"{spec.id}: the exact text must be NFC")
+    return text

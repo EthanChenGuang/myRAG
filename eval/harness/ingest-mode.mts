@@ -4,7 +4,14 @@ import os from 'node:os';
 import path from 'node:path';
 import { loadCorpus } from './corpus.mts';
 import { startFakeEdge, type FakeEdge } from './fake-edge.mts';
-import { createEmptyFixtureDatabase, prechunkedWriter, relexFixtureChunks, type DeploymentMode, type FixtureDatabase } from './pglite-supabase.mts';
+import {
+  createEmptyFixtureDatabase,
+  prechunkedWriter,
+  relexFixtureChunks,
+  type DeploymentMode,
+  type EmptyFixtureDatabase,
+  type FixtureDatabase,
+} from './pglite-supabase.mts';
 import { applyFixtureProcessEnv } from './process-env.mts';
 import { RunConfigError } from './run-config.mts';
 import { isTableSplitItem, loadTableSplitTenants, tableSplitCorpusParts, type TableSplitTenant } from './table-split.mts';
@@ -16,7 +23,8 @@ const MANIFEST_PATH = path.join('eval/fixtures/ingest/manifest.json');
 const PARSE_MANIFEST_PATH = path.join('eval/fixtures/parse/manifest.json');
 const PARSE_RECORDED_DIR = path.join('eval/fixtures/parse/recorded');
 /** The latency fixture is routed and timed, not retrieved from: 100 near-identical pages would only crowd the corpus. */
-const EXCLUDED_PARSE_CLASSES = new Set(['bench']);
+/** bench is the latency fixture; scan_zh_it (03.2-25) is a character-exact transport fixture, not part of the retrieval corpus. */
+const EXCLUDED_PARSE_CLASSES = new Set(['bench', 'scan_zh_it']);
 const RECORDED_PRESETS = ['fast', 'structured_layout', 'structured_full', 'structured_ocr'] as const;
 const QUEUE_SIDECAR_SECRET = 'ingest-mode-queue-sidecar-secret-0000';
 /** Large enough for every fixture page under --force-tier premium (D-40); the parse fixtures have 26 pages, the typed ones 14. */
@@ -329,6 +337,43 @@ function premiumPages(recordedRoot: string, sha: string, pageCount: number): Arr
   return pages;
 }
 
+const RANDOM_DOCUMENT_ID_DECLARATION = 'new_id uuid := gen_random_uuid();';
+/**
+ * A document id derived from stable inputs: the tenant, the source key, the file hash and how many versions of that source the tenant
+ * already holds, with the RFC 4122 version 4 and variant bits set (the ledger validates ids as UUIDs). Chunk ids are derived from the
+ * document id by the writer, so they follow.
+ */
+const DETERMINISTIC_DOCUMENT_ID_DECLARATION =
+  'new_id uuid := (SELECT substr(encode(set_byte(set_byte(h, 6, (get_byte(h, 6) & 15) | 64), 8, (get_byte(h, 8) & 63) | 128), ' +
+  "'hex'), 1, 32)::uuid FROM (SELECT sha256(convert_to(concat_ws(':', 'eval-ingest-document', p_tenant_key, p_source, p_source_key, " +
+  "COALESCE(p_file_sha256, ''), (SELECT count(*) FROM public.documents d WHERE d.tenant_key = p_tenant_key " +
+  "AND d.source_key = p_source_key)::text), 'UTF8')) AS h) s);";
+
+export class DeterministicIngestIdsError extends Error {
+  constructor(detail: string) {
+    super(`[Ingest Mode] cannot make document ids deterministic: ${detail}`);
+    this.name = 'DeterministicIngestIdsError';
+  }
+}
+
+/**
+ * Harness only: redefines rag_begin_document_version in this fixture database so a new document's id is derived from stable inputs
+ * instead of gen_random_uuid(). Random ids made repeated ingest runs differ wherever retrieval breaks a score tie by chunk id, and
+ * left no fixed id for item filters to name. Grants, owner and SECURITY DEFINER survive CREATE OR REPLACE.
+ */
+export async function installDeterministicDocumentIds(db: FixtureDatabase['db']): Promise<void> {
+  const { rows } = await db.query<{ def: string }>(
+    `SELECT pg_get_functiondef(p.oid) AS def FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = 'public' AND p.proname = 'rag_begin_document_version'`,
+  );
+  if (rows.length !== 1) throw new DeterministicIngestIdsError(`expected one rag_begin_document_version, found ${rows.length}`);
+  const def = rows[0]!.def;
+  if (def.split(RANDOM_DOCUMENT_ID_DECLARATION).length !== 2) {
+    throw new DeterministicIngestIdsError('rag_begin_document_version no longer declares its id with gen_random_uuid()');
+  }
+  await db.exec(def.replace(RANDOM_DOCUMENT_ID_DECLARATION, DETERMINISTIC_DOCUMENT_ID_DECLARATION));
+}
+
 /** The doc types an override must pin: every type a document of this build is uploaded with. */
 function docTypesOf(work: IngestWork[]): string[] {
   return [...new Set(work.map((item) => item.input.docType ?? 'general'))].sort();
@@ -400,7 +445,18 @@ export async function buildIngestFixtureDatabase(options: {
   const corpusSha256 = ingestCorpusSha256(corpus.corpusSha256, includeTyped ? allParseFixtures : [], routing, tableSplit);
   const parseById = new Map(allParseFixtures.map((fixture) => [fixture.id, fixture]));
 
-  const empty = options.continueFrom?.fixture ?? (await createEmptyFixtureDatabase(options));
+  const createIngestDatabase = async (): Promise<EmptyFixtureDatabase> => {
+    const created = await createEmptyFixtureDatabase(options);
+    try {
+      await installDeterministicDocumentIds(created.db);
+    } catch (error) {
+      await created.db.close().catch(() => undefined);
+      throw error;
+    }
+    return created;
+  };
+  const empty = options.continueFrom?.fixture ?? (await createIngestDatabase());
+  const ingestDocumentIds: Record<string, string> = { ...(options.continueFrom?.fixture.ingestDocumentIds ?? {}) };
   let edge: FakeEdge | undefined;
   let scope: import('@/lib/rag/tenant/scope').TenantScope | undefined;
   let uninstall: (() => Promise<void>) | undefined;
@@ -507,13 +563,14 @@ export async function buildIngestFixtureDatabase(options: {
         },
       }));
 
-    let run: (item: IngestWork) => Promise<void> = async (item) => {
+    let run: (item: IngestWork) => Promise<string | null> = async (item) => {
       const result = await ingest(item.input);
       if (result.status !== item.expected) {
         throw new Error(
           `[Ingest Mode] ${item.label} ended ${result.status} (expected ${item.expected}; ${result.reason ?? 'no reason'}; warnings: ${result.warnings.join(', ') || 'none'})`,
         );
       }
+      return result.documentId ?? result.duplicateOf ?? null;
     };
     let queuedSummary: (() => IngestRoutingSummary) | undefined;
     if (routing) {
@@ -537,8 +594,12 @@ export async function buildIngestFixtureDatabase(options: {
         if (isPrechunkedOnlyDocument(doc.relpath)) {
           await writePrechunked(doc);
           for (const chunk of doc.chunks) prechunkedIds.add(chunk.id);
+          ingestDocumentIds[doc.id] = doc.id;
         } else {
-          for (const item of corpusWork([doc])) await run(item);
+          for (const item of corpusWork([doc])) {
+            const documentId = await run(item);
+            if (documentId) ingestDocumentIds[doc.id] = documentId;
+          }
         }
       }
       // Lexical text for the pre-chunked rows only, as prechunked mode builds it; the rows ingest() wrote stay as written.
@@ -548,7 +609,7 @@ export async function buildIngestFixtureDatabase(options: {
     await fillCorpus(corpusSlice);
 
     if (options.onAfterCorpusSlice && edge !== undefined) {
-      const partialFixture = { ...empty, corpusSha256 } as FixtureDatabase;
+      const partialFixture = { ...empty, corpusSha256, ingestDocumentIds: { ...ingestDocumentIds } } as FixtureDatabase;
       await options.onAfterCorpusSlice({ fixture: partialFixture, edge, scope });
     }
 
@@ -579,7 +640,7 @@ export async function buildIngestFixtureDatabase(options: {
         edge,
         homeDb: empty.db,
         deploymentMode,
-        createDatabase: () => createEmptyFixtureDatabase(options),
+        createDatabase: createIngestDatabase,
         ingest,
         buildSourceKey,
         mintScope,
@@ -609,7 +670,7 @@ export async function buildIngestFixtureDatabase(options: {
   }
 
   if (edge === undefined || scope === undefined) throw new Error('[Ingest Mode] internal error: ingest did not finish');
-  const fixtureWithCorpus = { ...empty, corpusSha256 } as FixtureDatabase;
+  const fixtureWithCorpus = { ...empty, corpusSha256, ingestDocumentIds } as FixtureDatabase;
   const buildState: IngestFixtureBuildState = { fixture: fixtureWithCorpus, edge, scope };
   return {
     ...empty,
@@ -617,6 +678,7 @@ export async function buildIngestFixtureDatabase(options: {
     edge,
     ingestSidecarUploads: sidecarUploads,
     ingestLlamaParseAttempts: llamaAttempts,
+    ingestDocumentIds,
     ...(seeded.length > 0 ? { seededChunkingProfiles: seeded.map((profile) => profile.id) } : {}),
     buildState,
     ...(routingSummary ? { routingSummary } : {}),
@@ -672,7 +734,7 @@ async function startQueuedIngest(options: {
   parseFixtures: ParseFixtureDocument[];
   docTypes: string[];
   cleanups: Array<() => Promise<void> | void>;
-}): Promise<{ run: (item: IngestWork) => Promise<void>; summary: () => IngestRoutingSummary }> {
+}): Promise<{ run: (item: IngestWork) => Promise<string | null>; summary: () => IngestRoutingSummary }> {
   const { routing, edge, cleanups } = options;
   const { fixtureAdminClient } = await import('./ingest-fakes.mts');
   const { fixtureProcessEnv } = await import('./fake-edge.mts');
@@ -744,7 +806,7 @@ async function startQueuedIngest(options: {
   const needsReview: IngestRoutingSummary['needsReview'] = [];
   const ledger: IngestLedgerRow[] = [];
 
-  async function run(item: IngestWork): Promise<void> {
+  async function run(item: IngestWork): Promise<string | null> {
     const queued = await enqueueIngest(item.input, { queueConfig });
     if (queued.status === 'failed' || queued.jobId === null) {
       throw new Error(`[Ingest Mode] ${item.label} was not queued (${queued.reason ?? 'no reason'})`);
@@ -793,10 +855,11 @@ async function startQueuedIngest(options: {
       // unpublished, which is what retrieval on that tier sees.
       if (routing.forceTier && job?.status === 'needs_review') {
         needsReview.push({ filename: item.input.filename, reason: String(job.needs_review_reason ?? 'unknown') });
-        return;
+        return queued.documentId;
       }
       throw new Error(`[Ingest Mode] ${item.label} ended ${status} under ${routing.routing} routing (expected ${item.expected}; job ${JSON.stringify(job ?? null)})`);
     }
+    return queued.documentId;
   }
 
   return {

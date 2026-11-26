@@ -6319,6 +6319,21 @@
                                     </select>
                                 </div>
 
+                                <div class="form-control mb-6">
+                                    <label class="label" for="RAG_ANSWER_STYLE">
+                                        <span class="label-text font-semibold text-lg">Answer style</span>
+                                    </label>
+                                    <select id="RAG_ANSWER_STYLE" name="RAG_ANSWER_STYLE"
+                                        class="select select-bordered w-full max-w-md" translate="no"
+                                        aria-describedby="rag-answer-style-help">
+                                        <option value="classic" selected>classic</option>
+                                        <option value="concise">concise</option>
+                                    </select>
+                                    <label class="label">
+                                        <span class="label-text-alt" id="rag-answer-style-help"><span translate="no">classic</span> keeps the headed answer with a closing follow-up paragraph; <span translate="no">concise</span> gives a one-line answer, short fact bullets, then up to three follow-up questions below a separator.</span>
+                                    </label>
+                                </div>
+
                                 <!-- Mode Cards -->
                                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <!-- Strict Mode Card -->

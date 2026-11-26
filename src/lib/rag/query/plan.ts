@@ -1,6 +1,7 @@
 import type { QueryPlan } from '@/lib/rag-eval/contracts.generated';
 import type { QueryFramework } from '../config';
 import type { QueryVariant } from '../types';
+import { denseDateSuffix } from './dates';
 import type { GateResult } from './rewrite-gate';
 
 export type SkippedTransform = NonNullable<QueryPlan['skipped']>[number];
@@ -13,6 +14,8 @@ export interface BuildQueryPlanInput {
   condensed?: string | null;
   skipped?: readonly SkippedTransform[];
   dateRange?: QueryPlan['date_range'];
+  /** Translated variants in target order (D-23, at most two). */
+  translated?: ReadonlyArray<{ text: string; language: QueryPlan['language'] }>;
   /** Expansion variants in model order (D-08 budget already applied). */
   expanded?: readonly string[];
   /** The HyDE passage and whether it kept the protected tokens. */
@@ -41,7 +44,7 @@ function gateContract(gate: GateResult): QueryPlan['gate'] {
 
 /**
  * D-03: the original is always variant 0; the condensed standalone query follows when the rewrite changed it, then the
- * expansions, the HyDE passage and the sub-questions. Duplicates by text are dropped.
+ * translations, the expansions, the HyDE passage and the sub-questions. Duplicates by text are dropped.
  */
 export function buildQueryPlan(input: BuildQueryPlanInput): QueryPlan {
   const { original, gate } = input;
@@ -58,6 +61,9 @@ export function buildQueryPlan(input: BuildQueryPlanInput): QueryPlan {
     variants.push(variant);
     return true;
   };
+  for (const item of input.translated ?? []) {
+    add({ text: item.text, language: item.language, kind: 'translated', sub_question_index: null, protected_ok: true });
+  }
   for (const text of input.expanded ?? []) {
     add({ text, language: gate.lang, kind: 'expanded', sub_question_index: null, protected_ok: true });
   }
@@ -81,8 +87,13 @@ export function buildQueryPlan(input: BuildQueryPlanInput): QueryPlan {
   };
 }
 
-/** The plan's variants in plan order, in the shape of the Phase 4 queryVariants seam; HyDE searches the dense leg only (P-6). */
+/**
+ * The plan's variants in plan order, in the shape of the Phase 4 queryVariants seam; HyDE searches the dense leg only (P-6).
+ * D-11: with a relative-date range the original and condensed variants embed their text plus the absolute dates; text, and
+ * so the lexical tokens, stays unchanged.
+ */
 export function planToVariants(plan: QueryPlan): QueryVariant[] {
+  const suffix = plan.date_range ? denseDateSuffix(plan.date_range.from_date, plan.date_range.to_date) : null;
   return (plan.variants ?? []).map((variant) => ({
     text: variant.text,
     language: variant.language,
@@ -91,5 +102,6 @@ export function planToVariants(plan: QueryPlan): QueryVariant[] {
     ...(variant.sub_question_index !== null && variant.sub_question_index !== undefined
       ? { subQuestionIndex: variant.sub_question_index }
       : {}),
+    ...(suffix && (variant.kind === 'original' || variant.kind === 'condensed') ? { denseText: `${variant.text} ${suffix}` } : {}),
   }));
 }

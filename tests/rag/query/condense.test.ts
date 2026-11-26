@@ -41,7 +41,7 @@ function install(entries: FakeQueryLlmEntry[]) {
 
 function layerConfig(over: Record<string, string> = {}) {
   resetRagConfigForTests();
-  return loadRagConfig({ RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'false', RAG_RERANKER: 'none', RAG_QUERY_LAYER: 'true', ...over });
+  return loadRagConfig({ RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'false', RAG_RERANKER: 'none', RAG_QUERY_LAYER: 'true', RAG_QUERY_TRANSLATE: 'false', ...over });
 }
 
 async function run(query: string, options: { history?: HistoryTurn[]; profile?: Profile } = {}) {

@@ -26,7 +26,7 @@ interface TraceBody {
     variants: Array<{ kind: string; text: string; protected_ok: boolean }>;
     skipped: Array<{ transform: string; reason: string }>;
   };
-  query_transforms: Array<{ kind: string; text: string }>;
+  query_transforms: Array<{ kind: string; text: string; transform: string | null; status: string | null; reason: string | null }>;
   kept: Array<{ chunk_id: string; content: string }>;
   candidates: Array<{ chunk_id: string; content: string; legs?: Record<string, number> }>;
   stage_status: Record<string, string>;
@@ -94,7 +94,7 @@ describe('query-layer tracer through the eval route', () => {
       ['original', 'condensed'],
     );
     assert.deepEqual(plan.skipped, []);
-    assert.deepEqual(json.query_transforms, [{ kind: 'condensed', text: STANDALONE }]);
+    assert.deepEqual(json.query_transforms, [{ kind: 'condensed', text: STANDALONE, transform: 'condense', status: 'ok', reason: null }]);
 
     assert.deepEqual(
       fake.calls.map((call) => call.transform),

@@ -1,0 +1,8 @@
+{
+  "name": "query-layer-llamaindex",
+  "env": {
+    "RAG_PIPELINE": "v2",
+    "RAG_QUERY_LAYER": "true"
+  },
+  "overrides": null
+}

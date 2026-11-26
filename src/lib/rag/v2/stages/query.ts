@@ -73,13 +73,16 @@ export async function runQueryStages(ctx: QueryStagesInput): Promise<QueryStages
   let queryLayer: QueryLayerOutcome | undefined;
   if (queryLayerActive(config, profile, stageOverrides)) {
     const { runQueryLayer } = await import('../../query/run-layer');
-    queryLayer = await runQueryLayer({ input, config, profile, signal, collector, stageOverrides });
+    queryLayer = await runQueryLayer({ input, config, profile, signal, collector, stageOverrides, scope });
   }
 
   let translated: TranslatedQuery[] = [];
   if (queryLayer?.handledTranslate) {
-    const at = collector.now();
-    collector.record({ name: 'translate', status: 'disabled', reason: 'disabled', startedAt: at, endedAt: at, detail: HANDLED_BY_QUERY_LAYER });
+    // The trace keys stages by name: when the layer ran translate itself, its record is the one that stays.
+    if (!collector.stages().some((record) => record.name === 'translate')) {
+      const at = collector.now();
+      collector.record({ name: 'translate', status: 'disabled', reason: 'disabled', startedAt: at, endedAt: at, detail: HANDLED_BY_QUERY_LAYER });
+    }
   } else {
     const translator = config.monolingual ? NONE_TRANSLATOR : getTranslator();
     const translation = await runStage(

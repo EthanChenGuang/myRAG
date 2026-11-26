@@ -1,4 +1,5 @@
-import { HiddenTextReportSchema } from '@/lib/rag-eval/contracts.generated';
+import { HiddenTextReportSchema, type HiddenTextReport } from '@/lib/rag-eval/contracts.generated';
+import { hiddenTextMimeType, removeHiddenSpans, requestHiddenTextReport, type HiddenTextSpan, type SpanRemoval } from '../../security/hidden-text';
 import { scanText, type InjectionScanResult } from '../../security/injection-scan';
 import {
   injectionRuleReason,
@@ -6,16 +7,27 @@ import {
   zeroWidthReason,
   type QuarantineReason,
 } from '../../security/quarantine-reasons';
-import { findZeroWidth, loadHiddenTextRules, stripZeroWidth } from '../../security/zero-width';
+import { findZeroWidth, loadHiddenTextRules, stripZeroWidth, type ZeroWidthFinding } from '../../security/zero-width';
+import { HIDDEN_TEXT_SANITIZED_KEY, PARSE_ARTIFACT, isArtifactName, loadArtifact, originalName, rewriteSanitizedArtifacts, versionPrefix } from '../artifacts';
 import type { IngestConfig } from '../config';
-import { requireDocument, requireIdentity, type StageContext, type StageName, type StageOutcome, type StageSpec } from '../types';
+import { saveContextState } from '../state-store';
+import {
+  IngestStageError,
+  requireDocument,
+  requireIdentity,
+  type HiddenTextState,
+  type StageContext,
+  type StageName,
+  type StageOutcome,
+  type StageSpec,
+} from '../types';
 
 export interface QuarantineFindings {
   reasons: readonly QuarantineReason[];
   ruleIds: readonly string[];
   snippets: readonly string[];
-  /** Written as documents.hidden_text_check when a hidden-text reason quarantined the document. */
-  hiddenTextCheck?: 'hidden_found';
+  /** Written as documents.hidden_text_check with the quarantine. */
+  hiddenTextCheck?: HiddenTextCheckValue;
 }
 
 /**
@@ -57,17 +69,20 @@ function newChecksOn(config: IngestConfig): boolean {
 }
 
 export type ScanCheckName = 'injection_rules' | 'hidden_text' | 'links';
+export type HiddenTextCheckValue = 'clean' | 'hidden_found' | 'not_checked';
 
 export type ScanCheckResult =
   | {
       outcome: string;
       reasons?: QuarantineReason[];
       injection?: InjectionScanResult;
-      /** Top-level metadata keys recorded without quarantining (flag mode). */
+      /** Top-level metadata keys recorded on the document (the flag report, the sanitized marker). */
       metadata?: Record<string, unknown>;
-      hiddenTextCheck?: 'hidden_found';
+      /** documents.hidden_text_check of the version (D-34). */
+      hiddenTextCheck?: HiddenTextCheckValue;
     }
-  | { fail: string };
+  | { fail: string }
+  | { yield: string };
 
 export interface ScanCheck {
   name: ScanCheckName;
@@ -93,31 +108,173 @@ const injectionRulesCheck: ScanCheck = {
   },
 };
 
-function stripParseOutput(ctx: StageContext): void {
-  if (typeof ctx.work.parseText === 'string') ctx.work.parseText = stripZeroWidth(ctx.work.parseText);
+type TextMap = (text: string) => string;
+
+/** Applies one text transformation to every text field of the parser's chunks. */
+function mapParseChunks(ctx: StageContext, map: TextMap): void {
   if (Array.isArray(ctx.work.parseChunks)) {
     ctx.work.parseChunks = ctx.work.parseChunks.map((chunk) => ({
       ...chunk,
-      text: stripZeroWidth(chunk.text),
-      contextualized_text: stripZeroWidth(chunk.contextualized_text),
-      headings: chunk.headings.map(stripZeroWidth),
-      table_header: typeof chunk.table_header === 'string' ? stripZeroWidth(chunk.table_header) : chunk.table_header,
+      text: map(chunk.text),
+      contextualized_text: map(chunk.contextualized_text),
+      headings: chunk.headings.map(map),
+      table_header: typeof chunk.table_header === 'string' ? map(chunk.table_header) : chunk.table_header,
     }));
   }
 }
 
-/**
- * D-34 removal on a resumed run: the stored parse text still holds the characters, so a run past scan_injection under quarantine strips
- * them again before chunking. Deterministic, no report, no log.
- */
-export function reapplyHiddenTextRemoval(ctx: StageContext): void {
-  if (ctx.config.hiddenTextCheck === 'quarantine') stripParseOutput(ctx);
+function stripParseOutput(ctx: StageContext): void {
+  if (typeof ctx.work.parseText === 'string') ctx.work.parseText = stripZeroWidth(ctx.work.parseText);
+  mapParseChunks(ctx, stripZeroWidth);
+}
+
+/** Removes the spans from the parse text (the located and unlocated lists come from it) and from the parser's chunks. */
+function removeSpansFromParseOutput(ctx: StageContext, spans: readonly string[]): SpanRemoval {
+  const removal = removeHiddenSpans(ctx.work.parseText ?? '', spans);
+  if (typeof ctx.work.parseText === 'string') ctx.work.parseText = removal.text;
+  mapParseChunks(ctx, (text) => removeHiddenSpans(text, spans).text);
+  return removal;
 }
 
 /**
- * Hidden text (RAG_HIDDEN_TEXT_CHECK, D-33, D-34): zero-width characters on every parse text, checked here in TypeScript; the sidecar
- * report over the stored original joins this check in plan 37. flag records the report and changes nothing else. quarantine strips the
- * characters from the parse text and the parser's chunks before chunking; at or above the threshold the document is quarantined.
+ * D-34 removal on a resumed run: the stored parse text may still hold zero-width characters (and, after a crash before the artifacts were
+ * rewritten, hidden spans), so a run past scan_injection under quarantine removes them again before chunking. Deterministic, no report,
+ * no log; removing an already removed span changes nothing.
+ */
+export function reapplyHiddenTextRemoval(ctx: StageContext): void {
+  if (ctx.config.hiddenTextCheck !== 'quarantine') return;
+  stripParseOutput(ctx);
+  const spans = ctx.state.hiddenText?.removedSpans ?? [];
+  if (spans.length > 0) removeSpansFromParseOutput(ctx, spans);
+}
+
+/** The spans the write-time assertion checks: those removed under quarantine, none otherwise. */
+export function removedHiddenSpans(ctx: Pick<StageContext, 'state'>): string[] {
+  return ctx.state.hiddenText?.removedSpans ?? [];
+}
+
+/** Less than this left before the deadline: the run yields instead of calling the checker. */
+const MIN_CHECK_MS = 5000;
+/** Upper bound of one checker call; the sidecar stops its own check at 60 s. */
+const MAX_CHECK_MS = 65_000;
+const MAX_REPORT_SPANS = 200;
+
+type OriginalForCheck = { kind: 'unsupported' } | { kind: 'missing' } | { kind: 'file'; bytes: Uint8Array; mimeType: string };
+
+/**
+ * The stored original of a file the sidecar can check: the upload's bytes, or on a resumed run (no upload) the stored original object.
+ * Text input and formats without a checker are unsupported.
+ */
+async function originalForCheck(ctx: StageContext): Promise<OriginalForCheck> {
+  if (ctx.input.text !== undefined) return { kind: 'unsupported' };
+  const identity = requireIdentity(ctx, 'scan_injection');
+  const document = requireDocument(ctx, 'scan_injection');
+  if (identity.bytes && identity.bytes.byteLength > 0) {
+    const mimeType = hiddenTextMimeType(ctx.input.mimeType, identity.filename);
+    return mimeType === null ? { kind: 'unsupported' } : { kind: 'file', bytes: identity.bytes, mimeType };
+  }
+  // A resumed run carries no upload; a known media type that has no checker needs no read.
+  if (ctx.input.mimeType !== '' && hiddenTextMimeType(ctx.input.mimeType, identity.filename) === null) return { kind: 'unsupported' };
+  const prefix = versionPrefix(identity.tenantKey, document.lineageId, document.version);
+  const path = document.originalPath ?? null;
+  const name = path === null ? originalName(identity.filename) : path.startsWith(prefix) ? path.slice(prefix.length) : '';
+  if (!isArtifactName(name)) return { kind: 'missing' };
+  const stored = await loadArtifact(ctx, name);
+  if (!stored) return { kind: 'missing' };
+  const mimeType = hiddenTextMimeType(stored.contentType || ctx.input.mimeType, identity.filename);
+  return mimeType === null ? { kind: 'unsupported' } : { kind: 'file', bytes: stored.bytes, mimeType };
+}
+
+type SidecarResult = { kind: 'report'; report: HiddenTextReport } | { kind: 'not_checked'; failure: string | null } | { kind: 'yield' };
+
+/** The sidecar report of this version: reused from the state of an earlier attempt for the same original, or requested now. */
+async function sidecarReport(ctx: StageContext): Promise<SidecarResult> {
+  const identity = requireIdentity(ctx, 'scan_injection');
+  const saved = ctx.state.hiddenText;
+  if (saved && saved.fileSha256 === identity.fileSha256) return saved.report ? { kind: 'report', report: saved.report } : { kind: 'not_checked', failure: null };
+  const original = await originalForCheck(ctx);
+  if (original.kind === 'unsupported') return { kind: 'not_checked', failure: null };
+  if (original.kind === 'missing') return { kind: 'not_checked', failure: 'original_unavailable' };
+  const remaining = ctx.deadline - ctx.deps.now();
+  if (remaining < MIN_CHECK_MS) return { kind: 'yield' };
+  const outcome = await requestHiddenTextReport(
+    { bytes: original.bytes, mimeType: original.mimeType, filename: identity.filename },
+    { signal: ctx.signal, timeoutMs: Math.min(MAX_CHECK_MS, remaining - 2000) },
+  );
+  ctx.signal.throwIfAborted();
+  if (!outcome.ok) return { kind: 'not_checked', failure: outcome.error ?? outcome.reason };
+  return { kind: 'report', report: outcome.report };
+}
+
+function zeroWidthSpans(finding: ZeroWidthFinding): HiddenTextSpan[] {
+  return finding.byCodePoint.map((entry) => ({ page: null, text: entry.codePoint, reason: 'zero_width' as const, bbox: null }));
+}
+
+/** The report recorded under flag: the sidecar's spans, then the zero-width ones; status hidden_found, clean only when the sidecar checked it, else not_checked. */
+function mergedReport(report: HiddenTextReport | null, finding: ZeroWidthFinding, rulesVersion: string): HiddenTextReport {
+  const spans = [...(report?.status === 'hidden_found' ? (report.spans ?? []) : []), ...zeroWidthSpans(finding)];
+  const status = spans.length > 0 ? 'hidden_found' : report?.status === 'clean' ? 'clean' : 'not_checked';
+  return HiddenTextReportSchema.parse({
+    status,
+    spans: spans.slice(0, MAX_REPORT_SPANS),
+    link_targets: report?.link_targets ?? [],
+    checker_version: report?.checker_version ?? `zero-width/${rulesVersion}`,
+    dropped: (report?.dropped ?? 0) + Math.max(0, spans.length - MAX_REPORT_SPANS),
+  });
+}
+
+/** One hidden_text reason for the sidecar spans and the zero-width finding together; at most 200 spans, the rest counted as unlocated. */
+function hiddenTextReason(
+  report: HiddenTextReport | null,
+  finding: ZeroWidthFinding,
+  zeroWidthQuarantines: boolean,
+  unlocated: number,
+  rules: ReturnType<typeof loadHiddenTextRules>,
+): QuarantineReason | null {
+  const sidecarSpans = report?.status === 'hidden_found' ? (report.spans ?? []) : [];
+  if (sidecarSpans.length === 0) {
+    if (!zeroWidthQuarantines) return null;
+    const reason = zeroWidthReason(finding, rules.zero_width_threshold, rules.rules_version);
+    return reason && unlocated > 0 ? { ...reason, unlocated } : reason;
+  }
+  const spans = [...sidecarSpans.map((span) => ({ page: span.page, text: span.text, reason: span.reason })), ...(zeroWidthQuarantines ? zeroWidthSpans(finding).map(({ bbox: _bbox, ...span }) => span) : [])];
+  const kinds = [...new Set(sidecarSpans.map((span) => span.reason))].join(', ');
+  const parts = [`${sidecarSpans.length} hidden spans (${kinds})`];
+  if (zeroWidthQuarantines) parts.push(`${finding.total} zero-width characters (threshold ${rules.zero_width_threshold})`);
+  if (unlocated > 0) parts.push(`${unlocated} not located in the parsed text`);
+  const detail = parts.join('; ');
+  return {
+    kind: 'hidden_text',
+    detail: detail.length <= 500 ? detail : `${detail.slice(0, 499)}…`,
+    spans: spans.slice(0, MAX_REPORT_SPANS),
+    checker_version: report?.checker_version ?? `zero-width/${rules.rules_version}`,
+    unlocated: unlocated + Math.max(0, spans.length - MAX_REPORT_SPANS),
+  };
+}
+
+/**
+ * Overwrites parse.md and chunks.json with the sanitized parse output (F-17) once the state that makes a retry idempotent is saved. Only a
+ * run that stored its parse output has anything to rewrite.
+ */
+async function persistSanitized(ctx: StageContext, state: HiddenTextState): Promise<boolean> {
+  if (ctx.state.artifacts[PARSE_ARTIFACT] === undefined) return false;
+  ctx.state.hiddenText = { ...state, sanitized: true };
+  await saveContextState(ctx, 'processing');
+  try {
+    await rewriteSanitizedArtifacts(ctx, { parseText: ctx.work.parseText ?? '', parseChunks: ctx.work.parseChunks });
+  } catch (error) {
+    if (ctx.signal.aborted) throw error;
+    throw new IngestStageError('scan_injection', 'store_sanitized_output_failed');
+  }
+  return true;
+}
+
+/**
+ * Hidden text (RAG_HIDDEN_TEXT_CHECK, D-33, D-34). Zero-width characters are counted on every parse text here in TypeScript; PDF and Word
+ * originals are also sent to the sidecar's checker, whose report is reused from the state on a retry. flag records the merged report and
+ * documents.hidden_text_check and changes nothing else. quarantine strips the zero-width characters and removes the hidden spans from the
+ * parse text and the parser's chunks before chunking, rewrites the stored parse output, and quarantines the document with the spans as the
+ * reason; a checker that cannot answer fails the run closed. A format without a checker is not_checked, never clean.
  */
 const hiddenTextCheck: ScanCheck = {
   name: 'hidden_text',
@@ -131,28 +288,56 @@ const hiddenTextCheck: ScanCheck = {
       console.error('[RAG Security] hidden-text rules unavailable');
       return mode === 'quarantine' ? { fail: 'hidden_text_rules_unavailable' } : { outcome: 'rules_unavailable' };
     }
+    const identity = requireIdentity(ctx, 'scan_injection');
     const finding = findZeroWidth(ctx.work.parseText ?? '');
-    const checkerVersion = `zero-width/${rules.rules_version}`;
+    const sidecar = await sidecarReport(ctx);
+    if (sidecar.kind === 'yield') return { yield: 'deadline' };
+    if (sidecar.kind === 'not_checked' && sidecar.failure !== null) {
+      console.warn('[RAG Security] hidden-text checker unavailable', { mode, failure: sidecar.failure });
+      if (mode === 'quarantine') return { fail: 'hidden_text_checker_unavailable' };
+      if (!ctx.warnings.includes('hidden_text_not_checked')) ctx.warnings.push('hidden_text_not_checked');
+    }
+    const report = sidecar.kind === 'report' ? sidecar.report : null;
+    const saved = ctx.state.hiddenText?.fileSha256 === identity.fileSha256 ? ctx.state.hiddenText : undefined;
 
     if (mode === 'flag') {
-      const report = HiddenTextReportSchema.parse({
-        status: finding.total > 0 ? 'hidden_found' : 'clean',
-        spans: finding.byCodePoint.map((entry) => ({ page: null, text: entry.codePoint, reason: 'zero_width', bbox: null })),
-        link_targets: [],
-        checker_version: checkerVersion,
-        dropped: 0,
-      });
-      return { outcome: finding.total > 0 ? 'flagged' : 'clean', metadata: { hidden_text_report: report } };
+      const merged = mergedReport(report, finding, rules.rules_version);
+      ctx.state.hiddenText = { fileSha256: identity.fileSha256, report, removedSpans: [], unlocated: 0, sanitized: false };
+      return {
+        outcome: merged.status === 'hidden_found' ? 'flagged' : merged.status,
+        metadata: { hidden_text_report: merged },
+        hiddenTextCheck: merged.status,
+      };
     }
 
-    if (finding.total === 0) return { outcome: 'clean' };
-    stripParseOutput(ctx);
-    if (finding.total < rules.zero_width_threshold) {
-      console.warn('[RAG Security] zero-width characters stripped below the quarantine threshold', { count: finding.total });
-      return { outcome: 'zero_width_stripped' };
+    const sidecarSpans = report?.status === 'hidden_found' ? (report.spans ?? []).map((span) => span.text) : [];
+    if (finding.total > 0) stripParseOutput(ctx);
+    let unlocated = 0;
+    if (sidecarSpans.length > 0) {
+      const removal = removeSpansFromParseOutput(ctx, sidecarSpans);
+      // A retry reads the sanitized text, where every span is gone: the count of the first removal stands. So does a type change that
+      // reuses a sanitized parse output, whose spans were removed by the version before.
+      unlocated = saved?.sanitized ? saved.unlocated : ctx.state.typeChange?.sanitizedParse ? 0 : removal.unlocated.length + (report?.dropped ?? 0);
     }
-    const reason = zeroWidthReason(finding, rules.zero_width_threshold, rules.rules_version);
-    return { outcome: 'quarantined', reasons: reason ? [reason] : [], hiddenTextCheck: 'hidden_found' };
+    const state: HiddenTextState = { fileSha256: identity.fileSha256, report, removedSpans: sidecarSpans, unlocated, sanitized: saved?.sanitized ?? false };
+    ctx.state.hiddenText = state;
+    const changed = finding.total > 0 || sidecarSpans.length > 0;
+    const sanitized = changed ? await persistSanitized(ctx, state) : false;
+    const marker = sanitized ? { [HIDDEN_TEXT_SANITIZED_KEY]: true } : undefined;
+
+    const zeroWidthQuarantines = finding.total >= rules.zero_width_threshold;
+    const reason = hiddenTextReason(report, finding, zeroWidthQuarantines, unlocated, rules);
+    if (reason) {
+      console.warn('[RAG Security] hidden text removed', { spans: sidecarSpans.length, zeroWidth: finding.total, unlocated });
+      return { outcome: 'quarantined', reasons: [reason], hiddenTextCheck: 'hidden_found', ...(marker ? { metadata: marker } : {}) };
+    }
+    if (finding.total > 0) console.warn('[RAG Security] zero-width characters stripped below the quarantine threshold', { count: finding.total });
+    const check = report?.status === 'clean' ? 'clean' : 'not_checked';
+    return {
+      outcome: finding.total > 0 ? 'zero_width_stripped' : check,
+      hiddenTextCheck: check,
+      ...(marker ? { metadata: marker } : {}),
+    };
   },
 };
 
@@ -175,21 +360,27 @@ export async function runScanChecks(ctx: StageContext, checks: readonly ScanChec
   const reasons: QuarantineReason[] = [];
   const recorded: Record<string, unknown> = {};
   let injection: InjectionScanResult | null = null;
-  let hiddenTextFound = false;
+  let hiddenTextCheckValue: HiddenTextCheckValue | null = null;
   for (const check of enabled) {
     const result = await check.run(ctx);
     if ('fail' in result) return { kind: 'fail', reason: result.fail };
+    if ('yield' in result) return { kind: 'yield', reason: result.yield };
     outcomes.push(`${check.name}:${result.outcome}`);
     if (result.injection) injection = result.injection;
-    if (result.hiddenTextCheck) hiddenTextFound = true;
+    if (result.hiddenTextCheck) hiddenTextCheckValue = result.hiddenTextCheck;
     if (result.reasons) reasons.push(...result.reasons);
     if (result.metadata) Object.assign(recorded, result.metadata);
   }
 
   const quarantined = reasons.length > 0 || injection !== null;
   const legacy = !newChecksOn(ctx.config);
-  const document = Object.keys(recorded).length > 0 || quarantined ? requireDocument(ctx, 'scan_injection') : null;
-  if (document && Object.keys(recorded).length > 0) await ctx.writer.setFields(document.id, { metadata: recorded });
+  const unquarantinedCheck = !quarantined && hiddenTextCheckValue !== null ? hiddenTextCheckValue : null;
+  const fields = {
+    ...(unquarantinedCheck !== null ? { hidden_text_check: unquarantinedCheck } : {}),
+    ...(Object.keys(recorded).length > 0 ? { metadata: recorded } : {}),
+  };
+  const document = Object.keys(fields).length > 0 || quarantined ? requireDocument(ctx, 'scan_injection') : null;
+  if (document && Object.keys(fields).length > 0) await ctx.writer.setFields(document.id, fields);
   if (quarantined) {
     await writeQuarantine(
       ctx,
@@ -198,7 +389,7 @@ export async function runScanChecks(ctx: StageContext, checks: readonly ScanChec
         reasons,
         ruleIds: injection?.rule_ids ?? [],
         snippets: injection?.snippets ?? [],
-        ...(hiddenTextFound ? { hiddenTextCheck: 'hidden_found' as const } : {}),
+        ...(hiddenTextCheckValue !== null ? { hiddenTextCheck: hiddenTextCheckValue } : {}),
       },
       legacy,
     );

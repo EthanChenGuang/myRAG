@@ -385,3 +385,59 @@ Applied to `<live-project-ref>` from `origin/main` 17fe2938 (train 17, PR #90). 
 - 0532 depends on 0531's table; re-run them in order. 0533 only needs the table.
 - 0813 creates new objects only and does not replace any earlier body; it needs `rag_assert_tenant_key` (0403/0425) and the 0801 chunk columns.
 - 0531, 0533, 0812 and 0813 carry their own REVOKE/GRANT; re-run 0410 after any future migration that adds a definer function it lists.
+
+## 0534, 0535, 0804, 0814 and 0410 r7 (applied after train 18, 2026-11-25)
+
+Applied to `<live-project-ref>` from `origin/main` 0ded1157 (train 18, PR #93). None of the five files has a `.single-tenant`/`.multi-tenant` variant. For each file, only the top-level `BEGIN;` and `COMMIT;` (0814 has neither) and the leading header comment block were left out; every statement and every comment inside a function body is the exact file text. No statement failed, no call timed out and nothing was retried.
+
+### Preconditions
+- 0534: none of `rag_tenant_feedback_settings`, `rag_domain_experts` or `rag_review_items` existed. `rag_retrieval_log` (0531) and `public.admin_users` exist; `public.organizations` exists (multi-tenant, so experts need explicit grants). The live `rag_feedback_loop_on_chat_delete` was the 0531 body (8d66bb3b5fa98d0f223b7dab6a788e16), the one 0534 extends; only 0531 and 0534 define it.
+- 0535: `rag_mine_failed_queries` did not exist. Every `rag_retrieval_log` column it reads exists, and `rag_answer_records` has `trace_id`, `tenant_key`, `feedback` and `groundedness`.
+- 0804: of the four functions it defines, only `rag_release_quarantine` existed, with the 0425 body (11edc59c7d53481c0bb8331252baae65). No later live migration redefines it, and 0804 does not redefine anything 0806, 0810, 0812 or 0813 replaced: it calls `rag_publish_document_version` (still the 0806 body, 720fa4c9…) and leaves `rag_approve_upload` (0806 body, 08070087…) and `rag_list_quarantine` (0425 body, 4fc4f7f8…) unchanged. The columns it writes exist (`documents.approved_by`/`approved_at`/`hidden_text_check`/`processing_state`, `document_chunks.approved_by`), and `rag_admin_audit_action_check` already allows `release_quarantine`.
+- 0814: the live `rag_upload_approval_keys` was the 0803 body (c40d783e590d4e80181f82dcc5b4fc26), which the file says it starts from. Only 0803 and 0814 define it; 0806 did not touch it.
+- 0410: the repo file changed since r6 (17fe2938) by +20 lines only: guarded REVOKE/GRANT for the three new 0804 functions and `rag_mine_failed_queries` (section 1, service_role only) and for `rag_is_domain_expert` (section 2, authenticated and service_role, as an RLS helper). Grants only; the guarded `DROP` of the stale 4-argument `rag_fail_ingestion_job` was a no-op (one overload remains, bb57d170…).
+
+### Steps
+| # | Migration name | Result |
+|---|---|---|
+| 1 | 0534_rag_feedback_review | ok |
+| 2 | 0535_rag_feedback_mining | ok |
+| 3 | 0804_quarantine_reasons | ok |
+| 4 | 0814_upload_approval_org_admins | ok |
+| 5 | 0410_security_definer_rpc_grants_r7 | ok |
+
+### Verification
+- **Body md5 matches the repo (9/9)**, one overload each, `search_path=""`:
+  - 0534:
+    - `rag_is_domain_expert` 5a28557a001ba21e8d6eb5fce74ca77f, SECURITY DEFINER, EXECUTE for authenticated and service_role, anon refused (an RLS helper, by design).
+    - `rag_review_items_guard` faa4cfad3f1cd0a7df35a7ffd7f66eaa, SECURITY INVOKER trigger function; anon and authenticated refused.
+    - `rag_feedback_loop_on_chat_delete` 067f9d4f1146ff359acf7998c3b0d06b (replaces the 0531 body), SECURITY DEFINER, service_role only.
+  - 0535: `rag_mine_failed_queries` 53691d19da071c2caa47c862be444d94, SECURITY DEFINER, service_role only.
+  - 0804 (all SECURITY DEFINER, service_role only):
+    - rag_list_quarantine_reasons d00f1fb8aac37b5be3a42514118ea038
+    - rag_release_quarantine_reasons 9686686849a017b2e26a8ffccb1a7b04
+    - rag_release_quarantine 57bf57d5e543dbb4ac70342269896189 (now the wrapper; same 0425 signature and return type)
+    - rag_list_not_checked cf2b45fe11be8e1b7dd2ce7e2234b565
+  - 0814: `rag_upload_approval_keys` c3e41c6a705469ec2ced8535f071d28a (replaces the 0803 body), SECURITY DEFINER, service_role only.
+- **Unchanged neighbours:** `rag_publish_document_version` and `rag_approve_upload` still have the 0806 bodies, `rag_list_quarantine` the 0425 body.
+- **Purge hooks:** `rag_purge_hook_supersession`, `rag_purge_hook_chunk_translations`, `rag_purge_hook_recaption` and `rag_purge_retrieval_log` each still have one overload, `search_path=""`, and EXECUTE for service_role only.
+- **New tables** (RLS on, 0 rows):
+  - `rag_tenant_feedback_settings` and `rag_domain_experts`: no policies, no anon or authenticated grant; service_role full access.
+  - `rag_review_items`: no anon grant. authenticated has SELECT and column UPDATE on `status`, `triage`, `label` and `labelled_at` only, gated by the two policies `rag_review_items_expert_select`/`_expert_update` (`TO authenticated`, `rag_is_domain_expert(tenant_key)`), as the file grants. The `rag_review_items_guard` BEFORE UPDATE trigger exists.
+- **0410 r7 grants:** no `rag_*` or `hybrid_search*` function is executable by anon. authenticated can execute only `rag_ingest_realtime_topic_allowed` and `rag_is_domain_expert`, both by design (section 2).
+- **Whole database:**
+  - Public functions: 398 → 404 (+2 from 0534, +1 from 0535, +3 from 0804; 0534, 0804 and 0814 each also replaced one body).
+  - Public tables with RLS off: 0.
+  - Only one SECURITY DEFINER function lacks `search_path=""`: `rls_auto_enable()`, Supabase's own, as before.
+- **Security advisors:**
+  - No ERROR.
+  - Two new WARN findings, both intended: authenticated definers 13 → 14 (`rag_is_domain_expert`, the RLS helper of the review queue) and GraphQL 0027 25 → 26 (`rag_review_items`, which domain experts read through RLS). The rest are unchanged (function_search_path_mutable 4, extension_in_public 2, GraphQL 0026 24, anon definers 5, leaked password protection).
+  - INFO rls_enabled_no_policy 31 → 33 for the two new server-only tables.
+- **Data intact:** documents 1, document_chunks 15, chunk_embeddings 0 and ingestion_jobs 0, the same before and after (the changes since train 17 came from app use between trains, not from these migrations). All document and chunk statuses are `ready`.
+
+### Re-run and ordering notes
+- 0534 needs 0531's `rag_retrieval_log`; re-running 0531 puts back the old `rag_feedback_loop_on_chat_delete` body that does not clear review items, so re-run 0534 after it. 0535 needs 0534's `rag_review_items` and the 0501 `rag_answer_records`.
+- **0804 gap closed:** the live `rag_release_quarantine` now accepts publish's `superseded_lineage` outcome. Re-running 0425 puts back the old `rag_release_quarantine` body; re-run 0804 after it.
+- 0804 calls `rag_publish_document_version`; re-running 0803 restores the 0803 publish body, so re-run 0806 and then 0804 after it.
+- Re-running 0803 also restores the 0803 `rag_upload_approval_keys` body (deployment admins only); re-run 0814 after it.
+- All four files carry their own REVOKE/GRANT; re-run 0410 after any future migration that adds a definer function it lists.

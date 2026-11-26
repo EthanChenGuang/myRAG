@@ -182,6 +182,30 @@ def _cross_boundary() -> FixtureSpec:
     return FixtureSpec("cross-boundary", "en", "financial_report", "digital", blocks, facts)
 
 
+def _scan_zh_it() -> FixtureSpec:
+    """A character-exact zh/it scan (03.2-25, D-18): full-width Chinese punctuation and precomposed Italian grave accents."""
+    blocks = (
+        Heading("中文与意大利文混合扫描页", 1, 1),
+        Paragraph("本页用于检验扫描件的逐字识别：每个句子都使用全角标点，包括逗号，分号；以及句号。", 1),
+        Paragraph("第二段说明识别结果必须与预期文本完全一致。", 1),
+        Heading("Sezione in italiano", 2, 1),
+        Paragraph("La qualità del testo è verificata più volte; ciò vale per ogni unità di prova già registrata.", 1),
+    )
+    facts: dict[str, Any] = {
+        "parse_class": "scan_zh_it",
+        "headings": [
+            {"level": 1, "text": "中文与意大利文混合扫描页", "page": 1},
+            {"level": 2, "text": "Sezione in italiano", "page": 1},
+        ],
+        "page_count": 1,
+        "page_kinds": {1: "scanned"},
+        "vlm_disagreement_pages": [1],
+        "ocr_languages": ("zh", "it"),
+        "exact_text": True,
+    }
+    return FixtureSpec("scan-zh-it", "zh", "scanned_image", "scanned", blocks, facts)
+
+
 def _bench() -> BenchSpec:
     return BenchSpec("bench-100", "en", (10, 50, 90))
 
@@ -197,6 +221,7 @@ def all_specs() -> tuple[FixtureSpec | BenchSpec, ...]:
         _invoice_parse(),
         _mixed_routing(),
         _cross_boundary(),
+        _scan_zh_it(),
         _bench(),
     )
 

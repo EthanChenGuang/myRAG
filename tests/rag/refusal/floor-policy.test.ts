@@ -4,7 +4,13 @@ import { loadRagConfig, resetRagConfigForTests } from '@/lib/rag/config';
 import { legacyQueryTerms } from '@/lib/rag/context/relevance';
 import type { FusedHit } from '@/lib/rag/fusion/rrf';
 import { LEXICAL_VERSION } from '@/lib/rag/lexical/chunk-text';
-import { LEGACY_IMAGE_FLOOR, LEGACY_TEXT_FLOOR, legacyRuleFloor } from '@/lib/rag/refusal/floor';
+import {
+  LEGACY_IMAGE_FLOOR,
+  LEGACY_TEXT_FLOOR,
+  legacyRuleFloor,
+  resetEvalScoreCalibration,
+  setEvalScoreCalibration,
+} from '@/lib/rag/refusal/floor';
 import { cellKey, type ThresholdCells } from '@/lib/rag/refusal/gate';
 import * as thresholds from '@/lib/rag/refusal/thresholds';
 import { rerankerSupportedLanguages } from '@/lib/rag/rerank/languages';
@@ -12,7 +18,9 @@ import { resetRerankerFactoryForTests, setRerankerFactoryForTests } from '@/lib/
 import { RERANK_TEXT_VERSION, type Reranker } from '@/lib/rag/rerank/types';
 import { mintScope } from '@/lib/rag/tenant/scope';
 import { createTraceCollector } from '@/lib/rag/trace/collector';
-import type { Profile, StageOverrides } from '@/lib/rag/types';
+import type { Profile, RetrievalOptions, StageOverrides } from '@/lib/rag/types';
+import type { EmbeddingProfile } from '@/lib/rag/embeddings/active-profile';
+import { resetCalibrationWarningsForTests } from '@/lib/rag/legacy/enhanced-retrieval';
 import { runRankStages } from '@/lib/rag/v2/stages/rank';
 import { hit } from '../fusion/helpers';
 import { installDeps, uninstallDeps } from '../helpers/pipeline-fakes';
@@ -158,17 +166,22 @@ function doc(filename: string, contentPreview = ''): RankedHit['document'] {
 async function rank(
   env: Record<string, string>,
   hits: FusedHit[],
-  options: { profile?: Profile; stageOverrides?: StageOverrides } = {},
+  options: {
+    profile?: Profile;
+    stageOverrides?: StageOverrides;
+    embeddingProfile?: EmbeddingProfile | null;
+    inputOptions?: RetrievalOptions;
+  } = {},
 ) {
   installDeps({ ragEnv: () => env });
   const profile = options.profile ?? 'chat';
   const signal = new AbortController().signal;
   const collector = createTraceCollector({ profile, tenantKey: 's:default' });
   const out = await runRankStages({
-    input: { scope, query: QUERY, profile, signal },
+    input: { scope, query: QUERY, profile, signal, ...(options.inputOptions ? { options: options.inputOptions } : {}) },
     config: loadRagConfig(env),
     profile,
-    embedding: { vector: [0.1], profile: null },
+    embedding: { vector: [0.1], profile: options.embeddingProfile ?? null },
     queryLanguage: 'en',
     fusedHits: hits,
     referenced: null,
@@ -195,20 +208,17 @@ describe('v2 refusal stage floor policy', () => {
   });
 
   it('legacy rule answers on a term match', async () => {
-    const inText = pool([{ similarity: 0.2 }, { similarity: 0.25, content: 'The widget arrives in two parts.' }]);
+    const inText = pool([{ similarity: 0.4 }, { similarity: 0.45, content: 'The widget arrives in two parts.' }]);
     const a = await rank(LEGACY_RULE, inText);
-    expect(a.out.decision).toMatchObject({ decision: 'answer', reason: 'query_term_match', topScore: 0.25, threshold: 0.65 });
+    expect(a.out.decision).toMatchObject({ decision: 'answer', reason: 'query_term_match', topScore: 0.45, threshold: 0.65 });
     expect(a.out.survivors).toHaveLength(2);
     expect(a.refusalStage?.detail).toContain('floor=legacy_rule');
 
-    const inName = pool([{ similarity: 0.2, document: doc('Widget-Notes.md') }]);
+    const inName = pool([{ similarity: 0.4, document: doc('Widget-Notes.md') }]);
     expect((await rank(LEGACY_RULE, inName)).out.decision).toMatchObject({ decision: 'answer', reason: 'query_term_match' });
 
-    const inPreview = pool([{ similarity: 0.2, document: doc('notes.md', 'Overview of the manual layout') }]);
+    const inPreview = pool([{ similarity: 0.4, document: doc('notes.md', 'Overview of the manual layout') }]);
     expect((await rank(LEGACY_RULE, inPreview)).out.decision).toMatchObject({ decision: 'answer', reason: 'query_term_match' });
-
-    const lexicalOnly = pool([{ similarity: null, lexicalScore: 3, content: 'widget sample' }]);
-    expect((await rank(LEGACY_RULE, lexicalOnly)).out.decision).toMatchObject({ decision: 'answer', topScore: null });
   });
 
   it('legacy rule refuses a near miss', async () => {
@@ -223,7 +233,7 @@ describe('v2 refusal stage floor policy', () => {
       cellKey: null,
     });
     expect(a.out.survivors).toEqual([]);
-    expect(a.refusalStage?.detail).toBe('similarity_floor floor=legacy_rule');
+    expect(a.refusalStage?.detail).toBe('similarity_floor floor=legacy_rule pool=2');
   });
 
   it('similarity policy is unchanged and its stage detail names no policy', async () => {
@@ -287,5 +297,142 @@ describe('v2 refusal stage floor policy', () => {
     expect(a.out.decision).toMatchObject({ decision: 'refuse', basis: 'rerank_threshold', threshold: 0.6 });
     expect(a.out.survivors).toEqual([]);
     expect(a.refusalStage?.detail).toBe('rerank_threshold');
+  });
+});
+
+function profileWith(scoreCalibration: Record<string, number>): EmbeddingProfile {
+  return {
+    id: 'floor-test-profile',
+    provider: 'openai',
+    model: 'floor-test-model',
+    dims: 1,
+    storage: 'halfvec',
+    status: 'active',
+    queryInstruction: null,
+    scoreCalibration,
+    activatedAt: null,
+    activatedBy: null,
+    previousActiveId: null,
+    hasEvidence: false,
+  };
+}
+
+function only(ranks: Record<string, number>, over: Partial<RankedHit>): FusedHit {
+  return { hit: hit('x0', { rank: 1, documentId: 'dx', content: 'sample passage', ...over }), score: 1 / 61, ranks };
+}
+
+describe('legacy rule pool', () => {
+  beforeEach(() => {
+    resetCalibrationWarningsForTests();
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    uninstallDeps();
+    resetEvalScoreCalibration();
+    delete process.env.RAG_EVAL_RETRIEVAL_MIN_SIMILARITY;
+    vi.restoreAllMocks();
+  });
+
+  it('legacy rule uses the legacy keep floors', async () => {
+    setEvalScoreCalibration({ context_threshold: 0.2 });
+    const between = pool([{ similarity: 0.5 }]);
+    expect((await rank(LEGACY_RULE, between, { profile: 'eval' })).out.decision).toMatchObject({
+      decision: 'refuse',
+      threshold: 0.65,
+      topScore: 0.5,
+    });
+    expect((await rank(V2, between, { profile: 'eval' })).out.decision).toMatchObject({ decision: 'answer', threshold: 0.2 });
+
+    resetEvalScoreCalibration();
+    const calibrated = profileWith({ context_threshold: 0.2 });
+    expect((await rank(LEGACY_RULE, between, { embeddingProfile: calibrated })).out.decision).toMatchObject({
+      decision: 'refuse',
+      threshold: 0.65,
+    });
+    expect((await rank(V2, between, { embeddingProfile: calibrated })).out.decision).toMatchObject({ decision: 'answer', threshold: 0.2 });
+  });
+
+  it('lexical-only candidate cannot answer', async () => {
+    const lexicalOnly = only({ 'lexical:0': 1 }, { similarity: null, lexicalScore: 3, content: 'widget sample' });
+    const a = await rank(LEGACY_RULE, [lexicalOnly]);
+    expect(a.out.decision).toMatchObject({ decision: 'refuse', reason: 'below_similarity_floor' });
+    expect(a.refusalStage?.detail).toBe('similarity_floor floor=legacy_rule pool=0');
+
+    const scored = only({ 'lexical:0': 1 }, { similarity: 0.5, lexicalScore: 3, document: doc('Widget-Notes.md') });
+    expect((await rank(LEGACY_RULE, [scored])).out.decision).toMatchObject({ decision: 'refuse' });
+  });
+
+  it('synthetic similarity is not a pool member', async () => {
+    const exactOnly = only({ exact_id: 1 }, { similarity: 1, content: 'widget sample' });
+    expect((await rank(LEGACY_RULE, [exactOnly])).out.decision).toMatchObject({ decision: 'refuse' });
+    const exactAndDense = only({ 'dense:0': 1, exact_id: 1 }, { similarity: 0.7 });
+    expect((await rank(LEGACY_RULE, [exactAndDense])).out.decision).toMatchObject({ decision: 'answer' });
+  });
+
+  it('outside the legacy pool', async () => {
+    const below = pool([{ similarity: 0.3, content: 'The widget arrives in two parts.' }]);
+    expect((await rank(LEGACY_RULE, below)).out.decision).toMatchObject({ decision: 'refuse', topScore: 0.3 });
+    const above = pool([{ similarity: 0.36, content: 'The widget arrives in two parts.' }]);
+    expect((await rank(LEGACY_RULE, above)).out.decision).toMatchObject({ decision: 'answer', reason: 'query_term_match' });
+
+    const beyondCount = pool([
+      { similarity: 0.6 },
+      { similarity: 0.55 },
+      { similarity: 0.5, content: 'The widget arrives in two parts.' },
+    ]);
+    const capped = await rank(LEGACY_RULE, beyondCount, { inputOptions: { maxResults: 2 } });
+    expect(capped.out.decision).toMatchObject({ decision: 'refuse' });
+    expect(capped.refusalStage?.detail).toBe('similarity_floor floor=legacy_rule pool=2');
+  });
+
+  it('non-legacy profile scales the pool', async () => {
+    const termHit = (similarity: number) => pool([{ similarity, content: 'The widget arrives in two parts.' }]);
+    const scaled = profileWith({ retrieval_threshold: 0.35, fallback_threshold: 0.14 });
+    expect((await rank(LEGACY_RULE, termHit(0.18), { embeddingProfile: scaled })).out.decision).toMatchObject({ decision: 'answer' });
+    expect((await rank(LEGACY_RULE, termHit(0.17), { embeddingProfile: scaled })).out.decision).toMatchObject({ decision: 'refuse' });
+    const missing = profileWith({});
+    expect((await rank(LEGACY_RULE, termHit(0.18), { embeddingProfile: missing })).out.decision).toMatchObject({ decision: 'refuse' });
+  });
+
+  it('eval RPC threshold override applies as in legacy', async () => {
+    process.env.RAG_EVAL_RETRIEVAL_MIN_SIMILARITY = '0.1';
+    const termHit = pool([{ similarity: 0.2, content: 'The widget arrives in two parts.' }]);
+    const withProfile = await rank(LEGACY_RULE, termHit, { profile: 'eval', inputOptions: { embeddingProfile: 'eval-profile' } });
+    expect(withProfile.out.decision).toMatchObject({ decision: 'answer' });
+    expect((await rank(LEGACY_RULE, termHit, { profile: 'eval' })).out.decision).toMatchObject({ decision: 'refuse' });
+  });
+
+  it('voice replays the legacy voice search', async () => {
+    const termHit = (similarity: number) => pool([{ similarity, content: 'The widget arrives in two parts.' }]);
+    expect((await rank(LEGACY_RULE, termHit(0.2), { profile: 'voice' })).out.decision).toMatchObject({ decision: 'answer' });
+    expect((await rank(LEGACY_RULE, termHit(0.2))).out.decision).toMatchObject({ decision: 'refuse' });
+    expect((await rank(LEGACY_RULE, termHit(0.14), { profile: 'voice' })).out.decision).toMatchObject({ decision: 'refuse' });
+    const sixth = pool([
+      { similarity: 0.6 },
+      { similarity: 0.59 },
+      { similarity: 0.58 },
+      { similarity: 0.57 },
+      { similarity: 0.56 },
+      { similarity: 0.55, content: 'The widget arrives in two parts.' },
+    ]);
+    const voice = await rank(LEGACY_RULE, sixth, { profile: 'voice', inputOptions: { maxResults: 1 } });
+    expect(voice.out.decision).toMatchObject({ decision: 'refuse' });
+    expect(voice.refusalStage?.detail).toBe('similarity_floor floor=legacy_rule pool=5');
+  });
+
+  it('default unchanged: the similarity floor judges every fused hit', async () => {
+    const lexicalOnly = only({ 'lexical:0': 1 }, { similarity: 0.7 });
+    const a = await rank(V2, [lexicalOnly]);
+    expect(a.out.decision).toEqual({
+      decision: 'answer',
+      basis: 'none',
+      reason: 'above_similarity_floor',
+      topScore: 0.7,
+      threshold: 0.65,
+      cellKey: null,
+    });
+    expect(a.refusalStage?.detail).toBe('above_similarity_floor');
   });
 });

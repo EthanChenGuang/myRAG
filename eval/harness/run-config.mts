@@ -34,6 +34,31 @@ const SEC_SWITCH_VALUES: Readonly<Record<string, readonly string[]>> = {
 };
 
 /**
+ * The Phase 6 query-layer and semantic-cache switches (D-38). The enumerated ones must carry a value the app accepts; the others
+ * are numbers, a model id or lists the app validates and falls back on. RAG_QUERY_ENHANCEMENT and RAG_CACHE_ENABLED are legacy
+ * names and stay out of reach.
+ */
+const BOOLEAN_VALUES = ['true', 'false'] as const;
+const PHASE6_SWITCH_VALUES: Readonly<Record<string, readonly string[] | null>> = {
+  RAG_QUERY_LAYER: BOOLEAN_VALUES,
+  RAG_QUERY_FRAMEWORK: ['llamaindex', 'langchain'],
+  RAG_QUERY_LLM_MODEL: null,
+  RAG_QUERY_CONDENSE: BOOLEAN_VALUES,
+  RAG_QUERY_EXPAND: BOOLEAN_VALUES,
+  RAG_QUERY_DECOMPOSE: BOOLEAN_VALUES,
+  RAG_QUERY_TRANSLATE: BOOLEAN_VALUES,
+  RAG_QUERY_DATE_NORMALIZE: BOOLEAN_VALUES,
+  RAG_QUERY_HYDE: BOOLEAN_VALUES,
+  RAG_QUERY_TRANSLATE_DISABLED_PROFILES: null,
+  RAG_QUERY_VOICE_TRANSFORMS: null,
+  RAG_SEMANTIC_CACHE: ['off', 'pgvector', 'redisvl'],
+  RAG_SEMANTIC_CACHE_TTL: null,
+  RAG_SEMANTIC_CACHE_REFUSAL_TTL: null,
+  RAG_SEMANTIC_CACHE_MAX_DISTANCE: null,
+  RAG_SEMANTIC_CACHE_EMBED_STORE: BOOLEAN_VALUES,
+};
+
+/**
  * Vendor settings a run config may set, each only to one of the listed values (Phase 4.1 D-22): a key is empty, the proxy
  * placeholder or the token `fixture` (keep the fake edge's placeholder key); a base URL is empty or the vendor's own host.
  */
@@ -46,8 +71,8 @@ export const RUN_CONFIG_CONSTRAINED_VALUES: Readonly<Record<string, readonly str
 };
 
 /**
- * RAG_PIPELINE, the Phase 4 D-23 switch names, the Phase 4.1 refusal floor, the value-constrained vendor settings and the five
- * Phase 5.1 SEC switches. Every other variable stays out of reach of a run config.
+ * RAG_PIPELINE, the Phase 4 D-23 switch names, the Phase 4.1 refusal floor, the value-constrained vendor settings, the five
+ * Phase 5.1 SEC switches and the 16 Phase 6 query-layer and semantic-cache names. Every other variable stays out of reach.
  */
 export const RUN_CONFIG_ENV_ALLOWLIST: readonly string[] = [
   'RAG_PIPELINE',
@@ -67,9 +92,11 @@ export const RUN_CONFIG_ENV_ALLOWLIST: readonly string[] = [
   'RAG_REFUSAL_FLOOR',
   ...Object.keys(RUN_CONFIG_CONSTRAINED_VALUES),
   ...Object.keys(SEC_SWITCH_VALUES),
+  ...Object.keys(PHASE6_SWITCH_VALUES),
 ];
 
-export const RUN_CONFIG_REJECT_MESSAGE = '[Eval Harness] run-config may only set RAG_PIPELINE, Phase 4 RAG_* switches and the Phase 5.1 SEC switches';
+export const RUN_CONFIG_REJECT_MESSAGE =
+  '[Eval Harness] run-config may only set RAG_PIPELINE, Phase 4 RAG_* switches, the Phase 5.1 SEC switches and the Phase 6 query-layer and semantic-cache switches';
 
 const TOP_LEVEL_KEYS = new Set(['name', 'env', 'overrides', 'chunking_profiles']);
 const NAME_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
@@ -116,8 +143,9 @@ export function parseRunConfig(raw: unknown, source: string): RunConfig {
   if (env.RAG_PIPELINE !== undefined && !PIPELINE_VALUES.has(env.RAG_PIPELINE)) {
     throw new RunConfigError(`[Eval Harness] run-config ${source} RAG_PIPELINE must be legacy or v2`);
   }
-  for (const [name, allowed] of Object.entries(SEC_SWITCH_VALUES)) {
-    // A malformed SEC value would silently fall back to off in the app; the run config fails instead (the value is never echoed).
+  for (const [name, allowed] of Object.entries({ ...SEC_SWITCH_VALUES, ...PHASE6_SWITCH_VALUES })) {
+    if (!allowed) continue;
+    // A malformed SEC or Phase 6 value would silently fall back to off in the app; the run config fails instead (the value is never echoed).
     if (env[name] !== undefined && !allowed.includes(env[name])) {
       throw new RunConfigError(`[Eval Harness] run-config ${source} ${name} must be one of ${allowed.join(', ')}`);
     }

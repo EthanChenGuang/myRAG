@@ -1,11 +1,13 @@
 import type { ParseResult } from '@/lib/rag-eval/contracts.generated';
 import { blockSplitterForIngest, legacyBlockSplitter, type BlockSplitter } from '@/lib/rag/lang/sentences';
 import type { ProcessingProfile } from '../profiles/load';
+import { effectiveTableHeader } from '../routing/effective-settings';
 import type { ChunkDraft, ChunkResult } from '../types';
 import { chunkImageCaption } from './image-caption';
 import { chunkInvoice } from './invoice';
 import { chunkLegalClauses } from './legal-clauses';
 import { chunkMarkdownSections } from './markdown-sections';
+import { carryTableHeaders, markCarriedChunks } from './markdown-tables';
 import { chunkTableAware } from './table-aware';
 
 export type ChunkerConfig = ProcessingProfile['chunker'];
@@ -76,6 +78,14 @@ function fromDocling(chunks: readonly DoclingChunk[]): ChunkDraft[] {
 export interface ChunkDocumentOptions {
   /** RAG_LANGUAGE_AWARE_INGEST: `on` splits each block at its own language's sentence ends; off (or absent) is today's splitter. */
   languageAwareIngest?: 'off' | 'on';
+  /** RAG_TABLE_HEADER_REPEAT: `always` repeats every table's header and carries it onto header-less continuations; `profile` (or absent) reads the profile flag. */
+  tableHeaderRepeat?: 'profile' | 'always';
+}
+
+/** The chunker config with the effective header flag (D-19); the profile's own object when nothing changes, so profile mode is today's call. */
+export function withEffectiveHeader(chunker: ChunkerConfig, mode: ChunkDocumentOptions['tableHeaderRepeat']): ChunkerConfig {
+  const { repeatTableHeader } = effectiveTableHeader(mode, chunker);
+  return repeatTableHeader === chunker.repeat_table_header ? chunker : { ...chunker, repeat_table_header: repeatTableHeader };
 }
 
 /**
@@ -90,5 +100,11 @@ export function chunkDocument(chunker: ChunkerConfig, parse: ChunkSource, option
   if (DOCLING_KINDS.has(chunker.kind) && parse.chunks && parse.chunks.length > 0) {
     return { chunks: fromDocling(parse.chunks), warnings: [] };
   }
-  return chunk(parse.markdown, chunker, blockSplitterForIngest(options.languageAwareIngest));
+  const config = withEffectiveHeader(chunker, options.tableHeaderRepeat);
+  const sentences = blockSplitterForIngest(options.languageAwareIngest);
+  if (!effectiveTableHeader(options.tableHeaderRepeat, chunker).carryTableHeader) return chunk(parse.markdown, config, sentences);
+  // D-20: header-less continuation tables take the previous table's header before any chunker cuts them.
+  const carry = carryTableHeaders(parse.markdown);
+  const result = chunk(carry.markdown, config, sentences);
+  return { ...result, chunks: markCarriedChunks(result.chunks, carry) };
 }
