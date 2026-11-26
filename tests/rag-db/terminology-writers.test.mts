@@ -631,7 +631,7 @@ describe('terminology import and admin reads 0472 (multi-tenant)', () => {
         ['rag_term_list_audit', { p_actor: ADMIN_A, p_layer_key: 'shared', p_limit: 10, p_offset: 0 }],
       ];
       for (const [name, body] of calls) {
-        const res = await fetch(`${edge.url}/rest/v1/rpc/${name}`, {
+        const res: Response = await fetch(`${edge.url}/rest/v1/rpc/${name}`, {
           method: 'POST',
           headers: { apikey: ANON_KEY, 'content-type': 'application/json' },
           body: JSON.stringify(body),
