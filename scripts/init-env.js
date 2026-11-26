@@ -516,6 +516,38 @@ RAG_TOOL_RESULT_GUARD=off
 NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST=false
 
 # -----------------------------
+# ANSWER RULES AND OUTPUT SAFETY
+# -----------------------------
+# Refusal, notice and badge texts from the language registry (needs supported languages)
+RAG_REGISTRY_TEXTS=false
+# Answer the covered part and name what the documents do not cover
+RAG_PARTIAL_ANSWER_RULE=false
+# Do not answer from documents on a neighbouring subject
+RAG_CONTEXT_RELEVANCE_RULE=false
+# One citation per factual sentence and marks on uncited sentences (needs RAG_CITATIONS or RAG_CLAUDE_CITATIONS)
+RAG_CITATION_PER_SENTENCE=false
+# Check each sentence against the documents after the answer (needs RAG_GROUNDEDNESS)
+RAG_CLAIM_CHECK=false
+# Judge model for languages the groundedness scorer does not cover (needs RAG_GROUNDEDNESS_JUDGE_MODEL)
+RAG_GROUNDEDNESS_LLM_JUDGE=false
+# Judge model id; answer sentences and their document passages go to this model's provider
+RAG_GROUNDEDNESS_JUDGE_MODEL=
+# Output-length cap for knowledge-base answers: off | auto | a positive integer of at least 256
+RAG_MAX_OUTPUT_TOKENS=off
+# Links and sign-in requests in answers: off | flag | enforce
+RAG_OUTPUT_GUARD=off
+# Label each document's version and effective date, and answer from the latest
+RAG_VERSION_LABELS=false
+# Record security events with the document's uploader (ids only)
+RAG_SECURITY_EVENTS=false
+# Open an alert above this many events from one uploader; 0 means no alerts
+RAG_UPLOADER_ALERT_THRESHOLD=0
+# Alert window in hours (1 to 720)
+RAG_UPLOADER_ALERT_WINDOW_HOURS=24
+# Hold uploads of an alerted uploader: off | manual | auto
+RAG_UPLOADER_HOLD=off
+
+# -----------------------------
 # QUERY LAYER
 # -----------------------------
 # Query rewriting before retrieval; false keeps today's behaviour and every switch below is inert while it is false
