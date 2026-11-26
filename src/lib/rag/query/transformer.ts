@@ -1,6 +1,7 @@
 import type { QueryFramework } from '../config';
 import { getRagDeps } from '../deps';
 import { DEFAULT_POST_CHECK_LIMITS, type PostCheckLimits } from './post-checks';
+import type { SearchDelegate } from './port-types';
 import type { CondensedQuery } from '@/lib/rag-eval/contracts.generated';
 import { finishCondense, llamaindexCondense, type CondenseInput, type CondenseResult } from './llamaindex/condense';
 import { finishDecompose, nativeDecompose, type DecomposeInput, type DecomposeResult, type FinishDecomposeInput } from './llamaindex/decompose';
@@ -56,6 +57,22 @@ const TRANSFORMERS: Readonly<Record<QueryFramework, QueryTransformer | null>> = 
   // The LangChain adapter arrives with plan 06-37; until then that framework is served by the native port.
   langchain: null,
 });
+
+export interface QueryFrameworkRuntime {
+  transformer: QueryTransformer;
+  /** LangChain fuses the variant lists through EnsembleRetriever; null keeps native RRF. */
+  searchDelegate: SearchDelegate | null;
+  /** The adapter's cold import time in ms; null for the native framework. */
+  importMs: number | null;
+}
+
+/** RED stub (plan 06-37 Task 2). */
+export async function loadQueryFramework(_framework: QueryFramework, _settings: { model: string }): Promise<QueryFrameworkRuntime> {
+  return { transformer: NATIVE_TRANSFORMER, searchDelegate: null, importMs: null };
+}
+
+/** RED stub (plan 06-37 Task 2). */
+export function setLangChainChatModelFactoryForTests(_factory: unknown): void {}
 
 /** The transformer for a framework; the plan records the framework that actually ran. */
 export function getQueryTransformer(framework: QueryFramework = 'llamaindex'): QueryTransformer {
