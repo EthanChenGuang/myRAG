@@ -474,6 +474,203 @@ describe('review-admin.js: experts and logging level (D-06, D-16)', () => {
   });
 });
 
+function isoDay(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function shiftDays(day: string, days: number): string {
+  const [y, m, d] = day.split('-').map(Number);
+  const date = new Date(Date.UTC(y!, m! - 1, d! + days));
+  return date.toISOString().slice(0, 10);
+}
+
+describe('review-admin.js: mining and purge (D-15, D-06)', () => {
+  it('defaults the window to the last seven days and runs mining only after confirmation', async () => {
+    const panel = loadPanel();
+    await panel.init();
+    await flush();
+    const today = isoDay(new Date());
+    const since = q(panel.section, 'input[data-review-admin-since]');
+    const until = q(panel.section, 'input[data-review-admin-until]');
+    expect(since.getAttribute('type')).toBe('date');
+    expect(until.value).toBe(today);
+    expect(since.value).toBe(shiftDays(today, -7));
+    expect(panel.section.textContent).toContain('are starting values and are not calibrated');
+    const mine = q(panel.section, '[data-review-admin-mine]');
+    expect(mine.className).not.toContain('btn-primary');
+    mine.click();
+    await flush();
+    let dialog = q(panel.section, 'dialog[data-review-admin-dialog="mine"]');
+    expect(dialog.open).toBe(true);
+    expect(dialog.textContent).toContain('Run mining for');
+    expect(panel.doc.activeElement?.hasAttribute('data-review-admin-dialog-keep')).toBe(true);
+    q(dialog, '[data-review-admin-dialog-keep]').click();
+    await flush();
+    expect(panel.calls.some((c) => c.url.endsWith('/feedback-loop/mine'))).toBe(false);
+    q(panel.section, '[data-review-admin-mine]').click();
+    await flush();
+    dialog = q(panel.section, 'dialog[data-review-admin-dialog="mine"]');
+    q(dialog, '[data-review-admin-dialog-confirm]').click();
+    await flush();
+    const call = panel.calls.find((c) => c.url === '/api/rag/admin/feedback-loop/mine');
+    expect(call).toMatchObject({ method: 'POST', body: { since: shiftDays(today, -7), until: shiftDays(today, 1) } });
+  });
+
+  it('renders the mining result as hash, reason and count rows sorted by hash then reason priority, never tenant keys', async () => {
+    const panel = loadPanel();
+    await panel.init();
+    await flush();
+    q(panel.section, '[data-review-admin-mine]').click();
+    await flush();
+    q(q(panel.section, 'dialog[data-review-admin-dialog="mine"]'), '[data-review-admin-dialog-confirm]').click();
+    await flush();
+    const table = q(panel.section, 'table[data-review-admin-mine-result]');
+    expect(table.textContent).toContain('Mining result');
+    const rows = table.querySelectorAll('tbody tr');
+    expect(rows.map((r) => r.textContent)).toEqual([`${HASH_A}Marked not helpful3`, `${HASH_A}Weak matches only2`, `${HASH_B}Nothing retrieved1`]);
+    expect(rows[0]!.querySelector('th')!.className).toContain('font-mono');
+    expect(rows[0]!.querySelectorAll('td')[1]!.className).toContain('tabular-nums');
+    expect(panel.status.textContent).toContain('Mining finished. New cases: 6');
+    expect(panel.section.textContent).toContain('Workspaces are shown as hashes here');
+    expect(panel.section.textContent).not.toContain(`o:${ORG_A}`);
+    expect(panel.section.textContent).not.toContain('f'.repeat(64));
+  });
+
+  it('says nothing was found and shows no table when the run added nothing', async () => {
+    const panel = loadPanel({
+      route: (call) =>
+        call.url.endsWith('/feedback-loop/mine')
+          ? { status: 200, body: { success: true, result: { status: 'completed', since: 'a', until: 'b', total_inserted: 0, tenants: [{ tenant_hash: HASH_A, inserted: 0, by_reason: {} }] } } }
+          : undefined,
+    });
+    await panel.init();
+    await flush();
+    q(panel.section, '[data-review-admin-mine]').click();
+    await flush();
+    q(q(panel.section, 'dialog[data-review-admin-dialog="mine"]'), '[data-review-admin-dialog-confirm]').click();
+    await flush();
+    expect(panel.section.textContent).toContain('No new cases.');
+    expect(panel.section.querySelector('table[data-review-admin-mine-result]')).toBeNull();
+  });
+
+  it('shows the switched-off notice for a 404 and keeps the controls', async () => {
+    const panel = loadPanel({ route: (call) => (call.url.endsWith('/feedback-loop/mine') ? { status: 404, body: { error: 'Not found' } } : undefined) });
+    await panel.init();
+    await flush();
+    q(panel.section, '[data-review-admin-mine]').click();
+    await flush();
+    q(q(panel.section, 'dialog[data-review-admin-dialog="mine"]'), '[data-review-admin-dialog-confirm]').click();
+    await flush();
+    const notice = q(panel.section, '[data-review-admin-mine-notice]');
+    expect(notice.className).toContain('alert-info');
+    expect(notice.textContent).toContain('Mining is switched off.');
+    expect(notice.textContent).toContain('IDs, scores and the masked question');
+    expect(notice.textContent).toContain('RAG Modes');
+    expect(panel.section.querySelector('[data-review-admin-mine]')).not.toBeNull();
+    expect(panel.section.querySelector('input[data-review-admin-since]')).not.toBeNull();
+  });
+
+  it('refuses a window that ends before it starts or is longer than 31 days, sending nothing', async () => {
+    const panel = loadPanel();
+    await panel.init();
+    await flush();
+    const since = q(panel.section, 'input[data-review-admin-since]');
+    const until = q(panel.section, 'input[data-review-admin-until]');
+    for (const [from, to] of [
+      ['2026-11-20', '2026-11-10'],
+      ['2026-10-01', '2026-11-20'],
+      ['', '2026-11-20'],
+    ]) {
+      change(since, from);
+      change(until, to);
+      q(panel.section, '[data-review-admin-mine]').click();
+      await flush();
+      expect(panel.section.querySelector('dialog[data-review-admin-dialog="mine"]')).toBeNull();
+      expect(panel.section.textContent).toContain('Choose a start date before the end date, 31 days apart at most.');
+      expect(since.getAttribute('aria-invalid')).toBe('true');
+    }
+    change(since, '2026-11-01');
+    change(until, '2026-12-01');
+    q(panel.section, '[data-review-admin-mine]').click();
+    await flush();
+    expect(panel.section.querySelector('dialog[data-review-admin-dialog="mine"]')).not.toBeNull();
+    expect(panel.calls.some((c) => c.url.endsWith('/feedback-loop/mine'))).toBe(false);
+  });
+
+  it('says the outcome is unknown when mining gets no answer', async () => {
+    const panel = loadPanel({ route: (call) => (call.url.endsWith('/feedback-loop/mine') ? { status: 0, throws: true } : undefined) });
+    await panel.init();
+    await flush();
+    q(panel.section, '[data-review-admin-mine]').click();
+    await flush();
+    q(q(panel.section, 'dialog[data-review-admin-dialog="mine"]'), '[data-review-admin-dialog-confirm]').click();
+    await flush();
+    expect(panel.status.textContent).toContain('Mining may still be running');
+  });
+
+  it('purges only after the destructive confirmation and shows the two counts', async () => {
+    const panel = loadPanel({ retentionDays: '30' });
+    await panel.init();
+    await flush();
+    const purge = q(panel.section, '[data-review-admin-purge]');
+    expect(purge.className).toContain('btn-error');
+    expect(purge.className).toContain('btn-outline');
+    purge.click();
+    await flush();
+    const dialog = q(panel.section, 'dialog[data-review-admin-dialog="purge"]');
+    expect(dialog.textContent).toContain('Purge expired data?');
+    expect(dialog.textContent).toContain('Log rows older than 30 days');
+    expect(q(dialog, '[data-review-admin-dialog-confirm]').className).toContain('btn-error');
+    expect(panel.doc.activeElement?.hasAttribute('data-review-admin-dialog-keep')).toBe(true);
+    expect(panel.calls.some((c) => c.url.endsWith('/purge'))).toBe(false);
+    q(dialog, '[data-review-admin-dialog-confirm]').click();
+    await flush();
+    expect(panel.calls.find((c) => c.url === '/api/rag/admin/feedback-loop/purge')).toMatchObject({ method: 'POST' });
+    const table = q(panel.section, 'table[data-review-admin-purge-result]');
+    expect(table.querySelectorAll('tbody tr').map((r) => r.textContent)).toEqual(['Retrieval log rows12', 'Open review cases3']);
+    expect(panel.status.textContent).toContain('Purge finished.');
+  });
+
+  it('names the retention period generically when the page holds no valid number', async () => {
+    const panel = loadPanel({ retentionDays: '9999' });
+    await panel.init();
+    await flush();
+    q(panel.section, '[data-review-admin-purge]').click();
+    await flush();
+    expect(q(panel.section, 'dialog[data-review-admin-dialog="purge"]').textContent).toContain('older than the retention period');
+  });
+
+  it('says the purge outcome is unknown when there is no answer, and shows the sign-in alert for 401', async () => {
+    const offline = loadPanel({ route: (call) => (call.url.endsWith('/purge') ? { status: 0, throws: true } : undefined) });
+    await offline.init();
+    await flush();
+    q(offline.section, '[data-review-admin-purge]').click();
+    await flush();
+    q(q(offline.section, 'dialog[data-review-admin-dialog="purge"]'), '[data-review-admin-dialog-confirm]').click();
+    await flush();
+    expect(offline.status.textContent).toContain('The purge may still be running');
+    const denied = loadPanel({ route: (call) => (call.url.endsWith('/purge') ? { status: 401, body: { error: 'Unauthorized' } } : undefined) });
+    await denied.init();
+    await flush();
+    q(denied.section, '[data-review-admin-purge]').click();
+    await flush();
+    q(q(denied.section, 'dialog[data-review-admin-dialog="purge"]'), '[data-review-admin-dialog-confirm]').click();
+    await flush();
+    expect(q(denied.section, '[data-review-admin-alert]').textContent).toContain('Admin sign-in required');
+    expect(q(denied.section, '[data-review-admin-content]').childNodes).toHaveLength(0);
+    expect(denied.section.querySelector('dialog')).toBeNull();
+  });
+
+  it('shows the mining and purge blocks in multi-tenant mode before a workspace is chosen', async () => {
+    const panel = loadPanel({ mode: 'multi-tenant', workspaces: [] });
+    await panel.init();
+    await flush();
+    expect(panel.section.querySelector('[data-review-admin-mine]')).not.toBeNull();
+    expect(panel.section.querySelector('[data-review-admin-purge]')).not.toBeNull();
+  });
+});
+
 describe('review-admin.js: registration and static rules', () => {
   const source = fs.readFileSync(PANEL_FILE, 'utf8');
   const html = fs.readFileSync(path.join(configUiDir, 'index.html'), 'utf8');
