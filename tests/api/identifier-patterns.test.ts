@@ -57,7 +57,11 @@ function respond(data: Row[] | Row | string | null, error: { code: string; messa
   return request;
 }
 
-const publicRow = ({ tenant_key: _tenant, ...rest }: PatternRow) => rest as unknown as Row;
+function publicRow(row: PatternRow): Row {
+  const copy: Row = { ...row };
+  delete copy.tenant_key;
+  return copy;
+}
 
 function fakeRpc(): RpcClient {
   return {
@@ -216,7 +220,7 @@ afterEach(async () => {
   vi.doUnmock('@/lib/deployment-mode');
 });
 
-describe('list and create: admin guard', () => {
+describe('identifier-pattern routes: admin guard', () => {
   interface RouteCase {
     name: string;
     call: (loaded: Loaded, init?: ReqInit) => Promise<Response>;
@@ -247,7 +251,7 @@ describe('list and create: admin guard', () => {
     { name: 'POST test', call: (l, init) => l.tester.POST(req(`${BASE}/test`, { method: 'POST', body: { sample: 'ref QZ123' }, ...init })), okStatus: 200 },
   ];
 
-  describe.each(ROUTES)('$name /api/rag/admin/identifier-patterns', (route) => {
+  describe.each(ROUTES)('$name identifier-patterns route', (route) => {
     it('answers the adminDenied 401 without a credential and calls no function', async () => {
       const loaded = await load();
       const response = await route.call(loaded);
