@@ -1,0 +1,1006 @@
+{
+  "version": 1,
+  "placeholder": "(link removed)",
+  "credentialBlocked": "[credential sentence blocked]",
+  "siteUrl": "https://app.example",
+  "answers": [
+    {
+      "id": "en-clean-decimals",
+      "language": "en",
+      "text": "The limit is 3.5 units and rose to 1.234,56 in version v2.1.0 [S1].",
+      "documentNames": [
+        "document-a.md",
+        "document-b.pdf",
+        "Notes v2.zip"
+      ],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [],
+        "kept": [
+          "3.5",
+          "v2.1.0",
+          "1.234,56",
+          "[S1]"
+        ]
+      }
+    },
+    {
+      "id": "en-clean-filenames",
+      "language": "en",
+      "text": "Document-a.md and document-b.pdf both describe the second step [S2]. See Notes v2.zip as well.",
+      "documentNames": [
+        "document-a.md",
+        "document-b.pdf",
+        "Notes v2.zip"
+      ],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [],
+        "kept": [
+          "Document-a.md",
+          "Notes v2.zip"
+        ]
+      }
+    },
+    {
+      "id": "en-clean-markers",
+      "language": "en",
+      "text": "First point [S1], second point [S2, S3] and a third one 【S4】.\n\nThe end.",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [],
+        "kept": [
+          "[S2, S3]",
+          "【S4】"
+        ]
+      }
+    },
+    {
+      "id": "en-clean-punctuation",
+      "language": "en",
+      "text": "Short sentence. Another one! A question? Yes: it ends here... (In brackets.) \"Quoted.\"",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [],
+        "kept": [
+          "Yes: it ends"
+        ]
+      }
+    },
+    {
+      "id": "en-clean-markdown",
+      "language": "en",
+      "text": "## Steps\n\n1. Open the form.\n2. Fill in field A [S1].\n\n- item one\n- item two\n\n**Bold** and `code_value` stay.",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [],
+        "kept": [
+          "**Bold**",
+          "`code_value`"
+        ]
+      }
+    },
+    {
+      "id": "zh-clean-decimals",
+      "language": "zh",
+      "text": "根据文档，上限为 3.5，版本 v2.1.0 起生效。[S1]",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [],
+        "kept": [
+          "3.5",
+          "v2.1.0",
+          "[S1]"
+        ]
+      }
+    },
+    {
+      "id": "zh-clean-filename",
+      "language": "zh",
+      "text": "详见 document-a.md，其中第二节说明了流程【S2】。",
+      "documentNames": [
+        "document-a.md",
+        "document-b.pdf",
+        "Notes v2.zip"
+      ],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [],
+        "kept": [
+          "document-a.md",
+          "【S2】"
+        ]
+      }
+    },
+    {
+      "id": "zh-clean-markers",
+      "language": "zh",
+      "text": "第一点［S1］，第二点【S2、S3】，结束。",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [],
+        "kept": [
+          "［S1］",
+          "【S2、S3】"
+        ]
+      }
+    },
+    {
+      "id": "zh-clean-mixed",
+      "language": "zh",
+      "text": "字段A的值是1.5倍；字段B保持不变。参见步骤2。",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [],
+        "kept": [
+          "1.5"
+        ]
+      }
+    },
+    {
+      "id": "it-clean-decimals",
+      "language": "it",
+      "text": "Il valore è 3,5 per cento e arriva a 1.234,56 nella versione v2.1.0 [S1].",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [],
+        "kept": [
+          "3,5",
+          "1.234,56",
+          "v2.1.0"
+        ]
+      }
+    },
+    {
+      "id": "it-clean-filename",
+      "language": "it",
+      "text": "Secondo document-a.md, l'elenco comprende due voci [S2].",
+      "documentNames": [
+        "document-a.md",
+        "document-b.pdf",
+        "Notes v2.zip"
+      ],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [],
+        "kept": [
+          "document-a.md"
+        ]
+      }
+    },
+    {
+      "id": "it-clean-markers",
+      "language": "it",
+      "text": "Primo punto [S1]; secondo punto [S2, S3]. Fine.",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [],
+        "kept": [
+          "[S2, S3]"
+        ]
+      }
+    },
+    {
+      "id": "it-clean-punctuation",
+      "language": "it",
+      "text": "Frase breve. Un'altra frase! Una domanda? Sì: termina qui.",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [],
+        "kept": [
+          "Un'altra"
+        ]
+      }
+    },
+    {
+      "id": "en-url-removed",
+      "language": "en",
+      "text": "See https://other.test/a?b=1 now.",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [
+          "https://other.test/a?b=1"
+        ],
+        "kept": []
+      }
+    },
+    {
+      "id": "en-url-kept",
+      "language": "en",
+      "text": "Read https://docs.allowed.test/guide/step-1 first.",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [],
+        "kept": [
+          "https://docs.allowed.test/guide/step-1"
+        ]
+      }
+    },
+    {
+      "id": "en-site-kept",
+      "language": "en",
+      "text": "Open https://app.example/chat to continue.",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [],
+        "kept": [
+          "https://app.example/chat"
+        ]
+      }
+    },
+    {
+      "id": "en-md-removed",
+      "language": "en",
+      "text": "Use [the form](https://other.test/form) to apply.",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [
+          "https://other.test/form"
+        ],
+        "kept": [
+          "the form"
+        ]
+      }
+    },
+    {
+      "id": "en-md-kept",
+      "language": "en",
+      "text": "Use [the form](https://allowed.test/form) to apply.",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [],
+        "kept": [
+          "[the form](https://allowed.test/form)"
+        ]
+      }
+    },
+    {
+      "id": "en-image-removed",
+      "language": "en",
+      "text": "Diagram: ![chart](https://other.test/c.png) end.",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [
+          "https://other.test/c.png",
+          "chart"
+        ],
+        "kept": []
+      }
+    },
+    {
+      "id": "en-email-removed",
+      "language": "en",
+      "text": "Write to name@other.test for help.",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [
+          "name@other.test"
+        ],
+        "kept": []
+      }
+    },
+    {
+      "id": "en-email-kept",
+      "language": "en",
+      "text": "Write to name@allowed.test.",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [],
+        "kept": [
+          "name@allowed.test"
+        ]
+      }
+    },
+    {
+      "id": "en-bare-removed",
+      "language": "en",
+      "text": "Visit other.test or www.other.test today.",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [
+          "other.test"
+        ],
+        "kept": []
+      }
+    },
+    {
+      "id": "en-bare-kept",
+      "language": "en",
+      "text": "Visit allowed.test today.",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [],
+        "kept": [
+          "allowed.test"
+        ]
+      }
+    },
+    {
+      "id": "en-obfuscated",
+      "language": "en",
+      "text": "Try hxxp://example[.]test or example dot test instead.",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [
+          "example[.]test",
+          "example dot test",
+          "hxxp"
+        ],
+        "kept": []
+      }
+    },
+    {
+      "id": "en-lookalike",
+      "language": "en",
+      "text": "Go to https://аllowed.test/login now.",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [
+          "аllowed.test"
+        ],
+        "kept": []
+      }
+    },
+    {
+      "id": "en-userinfo",
+      "language": "en",
+      "text": "Go to https://user:pw@allowed.test/x now.",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [
+          "user:pw@"
+        ],
+        "kept": []
+      }
+    },
+    {
+      "id": "en-opaque",
+      "language": "en",
+      "text": "Click [here](javascript:alert(1)) or data:text/html,x now.",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [
+          "javascript:",
+          "data:text"
+        ],
+        "kept": [
+          "here"
+        ]
+      }
+    },
+    {
+      "id": "en-web-result",
+      "language": "en",
+      "text": "Source: https://web.example/result-a and https://web.example/result-z.",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [
+        {
+          "url": "https://web.example/result-a",
+          "flagged": false
+        }
+      ],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [
+          "result-z"
+        ],
+        "kept": [
+          "https://web.example/result-a"
+        ]
+      }
+    },
+    {
+      "id": "en-web-flagged",
+      "language": "en",
+      "text": "Source: https://flagged.example/result-b today.",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [
+        {
+          "url": "https://flagged.example/result-b",
+          "flagged": true
+        }
+      ],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [
+          "flagged.example"
+        ],
+        "kept": []
+      }
+    },
+    {
+      "id": "en-user-message",
+      "language": "en",
+      "text": "As you wrote, https://user.example/page is the place.",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "Is https://user.example/page the right place?",
+      "expect": {
+        "removed": [],
+        "kept": [
+          "https://user.example/page"
+        ]
+      }
+    },
+    {
+      "id": "en-document-only",
+      "language": "en",
+      "text": "The document says to open https://doc-only.test/page first [S1].",
+      "documentNames": [
+        "document-a.md",
+        "document-b.pdf",
+        "Notes v2.zip"
+      ],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [
+          "doc-only.test"
+        ],
+        "kept": []
+      }
+    },
+    {
+      "id": "en-scheme-filename",
+      "language": "en",
+      "text": "Not a file: https://document-a.md/x here.",
+      "documentNames": [
+        "document-a.md",
+        "document-b.pdf",
+        "Notes v2.zip"
+      ],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [
+          "https://document-a.md/x"
+        ],
+        "kept": []
+      }
+    },
+    {
+      "id": "en-long-url",
+      "language": "en",
+      "text": "Go https://other.test/pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp end.",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [
+          "other.test"
+        ],
+        "kept": []
+      }
+    },
+    {
+      "id": "en-autolink",
+      "language": "en",
+      "text": "Link <https://other.test/x> here.",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [
+          "other.test"
+        ],
+        "kept": []
+      }
+    },
+    {
+      "id": "zh-url-removed",
+      "language": "zh",
+      "text": "请访问https://other.test/a，然后返回。",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [
+          "other.test"
+        ],
+        "kept": []
+      }
+    },
+    {
+      "id": "zh-url-kept",
+      "language": "zh",
+      "text": "详情见 https://allowed.test/b。谢谢【S1】",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [],
+        "kept": [
+          "https://allowed.test/b。"
+        ]
+      }
+    },
+    {
+      "id": "zh-ideographic-dot",
+      "language": "zh",
+      "text": "请打开 https://allowed。other.test 页面。",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [
+          "https://allowed",
+          "other.test"
+        ],
+        "kept": [
+          "页面"
+        ]
+      }
+    },
+    {
+      "id": "zh-fullwidth",
+      "language": "zh",
+      "text": "请打开 ｅｘａｍｐｌｅ．test 页面。",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [
+          "ｅｘａｍｐｌｅ"
+        ],
+        "kept": []
+      }
+    },
+    {
+      "id": "zh-email",
+      "language": "zh",
+      "text": "请发邮件到 name@other.test，谢谢。",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [
+          "name@other.test"
+        ],
+        "kept": []
+      }
+    },
+    {
+      "id": "it-url-removed",
+      "language": "it",
+      "text": "Consultare https://other.test/pagina per i dettagli.",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [
+          "https://other.test/pagina"
+        ],
+        "kept": []
+      }
+    },
+    {
+      "id": "it-email-kept",
+      "language": "it",
+      "text": "Scrivere a nome@allowed.test.",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [],
+        "kept": [
+          "nome@allowed.test"
+        ]
+      }
+    },
+    {
+      "id": "it-obfuscated",
+      "language": "it",
+      "text": "Il sito esempio[.]test non va usato.",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [
+          "esempio[.]test"
+        ],
+        "kept": []
+      }
+    },
+    {
+      "id": "it-md-removed",
+      "language": "it",
+      "text": "Vedere [la pagina](https://other.test/p) e poi [la guida](https://allowed.test/g).",
+      "documentNames": [],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [
+          "https://other.test/p"
+        ],
+        "kept": [
+          "la pagina",
+          "[la guida](https://allowed.test/g)"
+        ]
+      }
+    },
+    {
+      "id": "en-cred-warn",
+      "language": "en",
+      "text": "To reset the setting, please enter your verification code in the dialog [S1]. The change applies at once.",
+      "documentNames": [
+        "document-a.md"
+      ],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [],
+        "kept": [
+          "[S1]",
+          "The change applies at once."
+        ],
+        "credential": {
+          "blocked": 0,
+          "warned": 1,
+          "late": false
+        }
+      }
+    },
+    {
+      "id": "en-cred-block-link",
+      "language": "en",
+      "text": "Open https://other.test/reset first. Then enter your password on that page. Done.",
+      "documentNames": [
+        "document-a.md"
+      ],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [
+          "https://other.test/reset",
+          "enter your password"
+        ],
+        "kept": [
+          "Done."
+        ],
+        "credential": {
+          "blocked": 1,
+          "warned": 0,
+          "late": false
+        }
+      }
+    },
+    {
+      "id": "en-cred-block-flagged",
+      "language": "en",
+      "text": "The steps are short. Please confirm your sign-in details to continue.",
+      "documentNames": [
+        "document-a.md"
+      ],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "flaggedContext": true,
+      "expect": {
+        "removed": [
+          "sign-in details to continue"
+        ],
+        "kept": [
+          "The steps are short."
+        ],
+        "credential": {
+          "blocked": 1,
+          "warned": 0,
+          "late": false
+        }
+      }
+    },
+    {
+      "id": "en-cred-late",
+      "language": "en",
+      "text": "Please enter your one-time code below. More at https://other.test/info today.",
+      "documentNames": [
+        "document-a.md"
+      ],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [
+          "https://other.test/info"
+        ],
+        "kept": [
+          "today."
+        ],
+        "credential": {
+          "blocked": 1,
+          "warned": 0,
+          "late": true
+        }
+      }
+    },
+    {
+      "id": "zh-cred-warn",
+      "language": "zh",
+      "text": "如需继续，请输入您的验证码【S1】。设置会立即生效。",
+      "documentNames": [
+        "document-a.md"
+      ],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [],
+        "kept": [
+          "【S1】",
+          "设置会立即生效。"
+        ],
+        "credential": {
+          "blocked": 0,
+          "warned": 1,
+          "late": false
+        }
+      }
+    },
+    {
+      "id": "zh-cred-block-link",
+      "language": "zh",
+      "text": "参见 https://other.test/a 页面。请输入您的密码。完成。",
+      "documentNames": [
+        "document-a.md"
+      ],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [
+          "https://other.test/a",
+          "请输入您的密码"
+        ],
+        "kept": [
+          "完成。"
+        ],
+        "credential": {
+          "blocked": 1,
+          "warned": 0,
+          "late": false
+        }
+      }
+    },
+    {
+      "id": "zh-cred-block-flagged",
+      "language": "zh",
+      "text": "操作很简单。请提供您的验证码。",
+      "documentNames": [
+        "document-a.md"
+      ],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "flaggedContext": true,
+      "expect": {
+        "removed": [
+          "请提供您的验证码"
+        ],
+        "kept": [
+          "操作很简单。"
+        ],
+        "credential": {
+          "blocked": 1,
+          "warned": 0,
+          "late": false
+        }
+      }
+    },
+    {
+      "id": "zh-cred-late",
+      "language": "zh",
+      "text": "请输入您的验证码。详情见 https://other.test/b 页面。",
+      "documentNames": [
+        "document-a.md"
+      ],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [
+          "https://other.test/b"
+        ],
+        "kept": [
+          "页面。"
+        ],
+        "credential": {
+          "blocked": 1,
+          "warned": 0,
+          "late": true
+        }
+      }
+    },
+    {
+      "id": "it-cred-warn",
+      "language": "it",
+      "text": "Per continuare, inserisci il codice di verifica nella finestra [S1]. La modifica vale subito.",
+      "documentNames": [
+        "document-a.md"
+      ],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [],
+        "kept": [
+          "[S1]",
+          "La modifica vale subito."
+        ],
+        "credential": {
+          "blocked": 0,
+          "warned": 1,
+          "late": false
+        }
+      }
+    },
+    {
+      "id": "it-cred-block-link",
+      "language": "it",
+      "text": "Apri https://other.test/a prima. Poi inserisci la tua password. Fine.",
+      "documentNames": [
+        "document-a.md"
+      ],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [
+          "https://other.test/a",
+          "inserisci la tua password"
+        ],
+        "kept": [
+          "Fine."
+        ],
+        "credential": {
+          "blocked": 1,
+          "warned": 0,
+          "late": false
+        }
+      }
+    },
+    {
+      "id": "it-cred-block-flagged",
+      "language": "it",
+      "text": "I passaggi sono brevi. Fornisci le tue credenziali per continuare.",
+      "documentNames": [
+        "document-a.md"
+      ],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "flaggedContext": true,
+      "expect": {
+        "removed": [
+          "Fornisci le tue credenziali"
+        ],
+        "kept": [
+          "I passaggi sono brevi."
+        ],
+        "credential": {
+          "blocked": 1,
+          "warned": 0,
+          "late": false
+        }
+      }
+    },
+    {
+      "id": "it-cred-late",
+      "language": "it",
+      "text": "Inserisci il codice di verifica qui. Altro su https://other.test/c oggi.",
+      "documentNames": [
+        "document-a.md"
+      ],
+      "allowlist": "allowed.test",
+      "webResultUrls": [],
+      "userMessage": "A neutral question.",
+      "expect": {
+        "removed": [
+          "https://other.test/c"
+        ],
+        "kept": [
+          "oggi."
+        ],
+        "credential": {
+          "blocked": 1,
+          "warned": 0,
+          "late": true
+        }
+      }
+    }
+  ]
+}

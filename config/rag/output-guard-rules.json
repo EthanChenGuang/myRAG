@@ -1,0 +1,253 @@
+{
+  "schema_version": 1,
+  "version": "2026-11-26.2",
+  "credential_rules": [
+    {
+      "id": "cred.en.request-secret",
+      "language": "en",
+      "request_terms": [
+        "enter your",
+        "please enter",
+        "re-enter your",
+        "type your",
+        "type in your",
+        "input your",
+        "provide your",
+        "submit your",
+        "send your",
+        "send me your",
+        "send us your",
+        "share your",
+        "confirm your",
+        "verify your",
+        "reply with your",
+        "give me your",
+        "tell me your",
+        "what is your",
+        "what's your"
+      ],
+      "secret_terms": [
+        "password",
+        "passcode",
+        "passphrase",
+        "pin",
+        "pin code",
+        "verification code",
+        "security code",
+        "one-time code",
+        "one-time password",
+        "otp",
+        "2fa code",
+        "authentication code",
+        "recovery code",
+        "login details",
+        "login credentials",
+        "sign-in details",
+        "sign-in code",
+        "credentials"
+      ]
+    },
+    {
+      "id": "cred.en.sign-in-again",
+      "language": "en",
+      "request_terms": [
+        "log in again",
+        "sign in again",
+        "log back in",
+        "sign back in"
+      ],
+      "secret_terms": [
+        "password",
+        "passcode",
+        "passphrase",
+        "pin",
+        "pin code",
+        "verification code",
+        "security code",
+        "one-time code",
+        "one-time password",
+        "otp",
+        "2fa code",
+        "authentication code",
+        "recovery code",
+        "login details",
+        "login credentials",
+        "sign-in details",
+        "sign-in code",
+        "credentials"
+      ]
+    },
+    {
+      "id": "cred.zh.request-secret",
+      "language": "zh",
+      "request_terms": [
+        "请输入",
+        "输入您的",
+        "输入你的",
+        "重新输入",
+        "请提供",
+        "提供您的",
+        "提供你的",
+        "请发送",
+        "发送您的",
+        "发送你的",
+        "发给我",
+        "发给我们",
+        "请告诉我",
+        "告诉我您的",
+        "告诉我你的",
+        "请确认您的",
+        "请确认你的",
+        "回复您的",
+        "回复你的",
+        "请填写"
+      ],
+      "secret_terms": [
+        "密码",
+        "验证码",
+        "校验码",
+        "动态码",
+        "口令",
+        "安全码",
+        "pin码",
+        "登录信息",
+        "登录凭证",
+        "登录凭据",
+        "账号密码",
+        "一次性密码"
+      ]
+    },
+    {
+      "id": "cred.zh.sign-in-again",
+      "language": "zh",
+      "request_terms": [
+        "重新登录",
+        "再次登录"
+      ],
+      "secret_terms": [
+        "密码",
+        "验证码",
+        "校验码",
+        "动态码",
+        "口令",
+        "安全码",
+        "pin码",
+        "登录信息",
+        "登录凭证",
+        "登录凭据",
+        "账号密码",
+        "一次性密码"
+      ]
+    },
+    {
+      "id": "cred.it.request-secret",
+      "language": "it",
+      "request_terms": [
+        "inserisci",
+        "inserisca",
+        "inserire",
+        "reinserisci",
+        "digita",
+        "digiti",
+        "fornisci",
+        "fornisca",
+        "inviami",
+        "inviaci",
+        "invia la tua",
+        "invia il tuo",
+        "invia le tue",
+        "invii la sua",
+        "invii il suo",
+        "comunicami",
+        "comunicaci",
+        "conferma la tua",
+        "conferma il tuo",
+        "conferma le tue",
+        "confermi la sua",
+        "confermi il suo",
+        "dimmi",
+        "rispondi con"
+      ],
+      "secret_terms": [
+        "password",
+        "passcode",
+        "pin",
+        "codice pin",
+        "codice di verifica",
+        "codice di sicurezza",
+        "codice di accesso",
+        "codice otp",
+        "otp",
+        "codice monouso",
+        "credenziali",
+        "dati di accesso"
+      ]
+    },
+    {
+      "id": "cred.it.sign-in-again",
+      "language": "it",
+      "request_terms": [
+        "accedi di nuovo",
+        "accedi nuovamente",
+        "effettua di nuovo l'accesso"
+      ],
+      "secret_terms": [
+        "password",
+        "passcode",
+        "pin",
+        "codice pin",
+        "codice di verifica",
+        "codice di sicurezza",
+        "codice di accesso",
+        "codice otp",
+        "otp",
+        "codice monouso",
+        "credenziali",
+        "dati di accesso"
+      ]
+    }
+  ],
+  "obfuscation_patterns": [
+    {
+      "id": "obf.scheme-hxxp",
+      "pattern": "^h(?:xx|__|\\*\\*)ps?://$"
+    },
+    {
+      "id": "obf.scheme-fxp",
+      "pattern": "^fxps?://$"
+    },
+    {
+      "id": "obf.bracket-dot",
+      "pattern": "^[\\[({]\\s*(?:\\.|dot)\\s*[\\])}]$"
+    },
+    {
+      "id": "obf.bracket-colon",
+      "pattern": "^[\\[({]\\s*:\\s*[\\])}]$"
+    },
+    {
+      "id": "obf.bracket-at",
+      "pattern": "^[\\[({]\\s*(?:@|at)\\s*[\\])}]$"
+    },
+    {
+      "id": "obf.spelled-dot",
+      "pattern": "^\\s+dot\\s+$"
+    }
+  ],
+  "opaque_schemes": [
+    "about",
+    "blob",
+    "callto",
+    "data",
+    "facetime",
+    "file",
+    "intent",
+    "itms-services",
+    "javascript",
+    "magnet",
+    "market",
+    "sms",
+    "smsto",
+    "tel",
+    "vbscript"
+  ]
+}
