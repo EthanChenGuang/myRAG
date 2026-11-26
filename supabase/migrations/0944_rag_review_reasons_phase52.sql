@@ -199,6 +199,21 @@ $fn$;
 REVOKE ALL ON FUNCTION public.rag_mine_failed_queries(timestamptz, timestamptz, jsonb) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rag_mine_failed_queries(timestamptz, timestamptz, jsonb) TO service_role;
 
+CREATE OR REPLACE FUNCTION public.rag_enqueue_review_item(p_tenant_key text, p_reason text, p_source jsonb, p_snapshot jsonb)
+RETURNS uuid
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+BEGIN
+  RETURN NULL;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_enqueue_review_item(text, text, jsonb, jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_enqueue_review_item(text, text, jsonb, jsonb) TO service_role;
+
 NOTIFY pgrst, 'reload schema';
 
 COMMIT;

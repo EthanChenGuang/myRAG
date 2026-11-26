@@ -147,6 +147,153 @@ for (const mode of MODES) {
       assert.deepEqual(await catalog(db), once);
     });
 
+    test('an item is enqueued once per reason, source ids and week; the snapshot holds ids only', async () => {
+      const source = await createSource(db);
+      const id = await enqueue(db, source.tenantKey, 'output_guard', sourceOf(source), { detector: 'rules', trace_id: 'trace-0001' });
+      assert.ok(id);
+      const again = await enqueue(db, source.tenantKey, 'output_guard', sourceOf(source, [...source.chunkIds].reverse()), { detector: 'rules', trace_id: 'trace-0002' });
+      assert.equal(again, id, 'same reason and ids in the same week returns the existing item');
+      const count = await db.query<{ n: number }>('SELECT count(*)::int AS n FROM rag_review_items WHERE tenant_key = $1 AND $2 = ANY(reasons)', [
+        source.tenantKey,
+        'output_guard',
+      ]);
+      assert.equal(count.rows[0]?.n, 1);
+
+      const item = (await itemById(db, id)) as Row;
+      assert.equal(item.tenant_key, source.tenantKey);
+      assert.deepEqual(item.reasons, ['output_guard']);
+      assert.equal(item.status, 'open');
+      assert.equal(item.query_masked, '');
+      assert.equal(item.user_id, null);
+      assert.equal(item.chat_id, null);
+      assert.equal(item.trace_id, 'trace-0001');
+      const sortedChunks = [...source.chunkIds].sort();
+      assert.equal(item.query_fingerprint, fingerprintOf(`output_guard\nchunks:${sortedChunks.join(',')}\ndocuments:${source.documentId}`));
+      const window = await db.query<{ same: boolean }>("SELECT $1::timestamptz = date_trunc('week', now(), 'UTC') AS same", [item.mining_window]);
+      assert.equal(window.rows[0]?.same, true);
+      assert.deepEqual(item.snapshot, {
+        reason: 'output_guard',
+        detector: 'rules',
+        trace_id: 'trace-0001',
+        chunk_ids: sortedChunks,
+        document_ids: [source.documentId],
+      });
+      assert.deepEqual(item.candidates, []);
+
+      const otherReason = await enqueue(db, source.tenantKey, 'version_conflict', { chunk_ids: [], document_ids: [source.documentId] });
+      assert.ok(otherReason);
+      assert.notEqual(otherReason, id);
+      const claim = await enqueue(db, source.tenantKey, 'claim_unsupported', sourceOf(source));
+      assert.ok(claim);
+      assert.notEqual(claim, id);
+    });
+
+    test('a text key, an unknown key or a malformed value in the snapshot or source is refused with 22023', async () => {
+      const source = await createSource(db);
+      await rejectsWith(() => enqueue(db, source.tenantKey, 'output_guard', sourceOf(source), { detector: 'rules', text: 'A neutral sentence.' }), '22023');
+      await rejectsWith(() => enqueue(db, source.tenantKey, 'output_guard', sourceOf(source), { detector: 'rules', quote: 'A neutral sentence.' }), '22023');
+      await rejectsWith(() => enqueue(db, source.tenantKey, 'output_guard', sourceOf(source), { detector: 'Two words' }), '22023');
+      await rejectsWith(() => enqueue(db, source.tenantKey, 'output_guard', { ...sourceOf(source), text: 'x' }), '22023');
+      await rejectsWith(() => enqueue(db, source.tenantKey, 'output_guard', { chunk_ids: ['not-a-uuid'], document_ids: [] }), '22023');
+      await rejectsWith(() => enqueue(db, source.tenantKey, 'output_guard', { chunk_ids: [], document_ids: [] }), '22023');
+      await rejectsWith(() => enqueue(db, source.tenantKey, 'low_score', sourceOf(source)), '22023');
+      await rejectsWith(() => enqueue(db, source.tenantKey, 'calc_mismatch', sourceOf(source)), '22023');
+      await rejectsWith(() => enqueue(db, 'bogus', 'output_guard', sourceOf(source)), '22023');
+    });
+
+    test('ids of another tenant or of no stored row are refused', async () => {
+      const source = await createSource(db);
+      await rejectsWith(() => enqueue(db, source.tenantKey, 'output_guard', { chunk_ids: [crypto.randomUUID()], document_ids: [] }), '22023');
+      await rejectsWith(() => enqueue(db, source.tenantKey, 'version_conflict', { chunk_ids: [], document_ids: [crypto.randomUUID()] }), '22023');
+      if (mode === 'multi-tenant') {
+        const other = await createSource(db);
+        assert.notEqual(other.tenantKey, source.tenantKey);
+        await rejectsWith(() => enqueue(db, source.tenantKey, 'output_guard', { chunk_ids: other.chunkIds, document_ids: [] }), '22023');
+        await rejectsWith(() => enqueue(db, source.tenantKey, 'version_conflict', { chunk_ids: [], document_ids: [source.documentId, other.documentId] }), '22023');
+      } else {
+        await rejectsWith(() => enqueue(db, `u:${crypto.randomUUID()}`, 'output_guard', sourceOf(source)), '22023');
+      }
+    });
+
+    test('a tenant that turned its feedback loop off gets no row and a null result', async () => {
+      const source = await createSource(db);
+      await db.query("INSERT INTO rag_tenant_feedback_settings (tenant_key, retrieval_log) VALUES ($1, 'off') ON CONFLICT (tenant_key) DO UPDATE SET retrieval_log = 'off'", [
+        source.tenantKey,
+      ]);
+      try {
+        const before = await db.query<{ n: number }>('SELECT count(*)::int AS n FROM rag_review_items WHERE tenant_key = $1', [source.tenantKey]);
+        assert.equal(await enqueue(db, source.tenantKey, 'output_guard', sourceOf(source)), null);
+        const afterRows = await db.query<{ n: number }>('SELECT count(*)::int AS n FROM rag_review_items WHERE tenant_key = $1', [source.tenantKey]);
+        assert.equal(afterRows.rows[0]?.n, before.rows[0]?.n);
+        await db.query("UPDATE rag_tenant_feedback_settings SET retrieval_log = 'ids' WHERE tenant_key = $1", [source.tenantKey]);
+        assert.ok(await enqueue(db, source.tenantKey, 'output_guard', sourceOf(source)), 'ids keeps id-only items');
+      } finally {
+        await db.query('DELETE FROM rag_tenant_feedback_settings WHERE tenant_key = $1', [source.tenantKey]);
+      }
+    });
+
+    test('experts of the item tenant see the item; experts of another tenant and other users do not', async () => {
+      const source = await createSource(db);
+      const id = (await enqueue(db, source.tenantKey, 'version_conflict', { chunk_ids: [], document_ids: [source.documentId] })) as string;
+      const visible = async (userId: string) =>
+        asRole(db, 'authenticated', userId, async () => (await db.query<{ id: string }>('SELECT id FROM rag_review_items WHERE id = $1', [id])).rows.length === 1);
+      const outsider = await createUser(db);
+      if (mode === 'single-tenant') {
+        const admin = await createUser(db);
+        await db.query('INSERT INTO admin_users (id) VALUES ($1)', [admin]);
+        assert.equal(await visible(admin), true);
+        assert.equal(await visible(outsider), false);
+      } else {
+        const expertA = await createUser(db);
+        const expertB = await createUser(db);
+        const other = await createSource(db);
+        await db.query('INSERT INTO rag_domain_experts (tenant_key, user_id) VALUES ($1, $2), ($3, $4)', [source.tenantKey, expertA, other.tenantKey, expertB]);
+        assert.equal(await visible(expertA), true);
+        assert.equal(await visible(expertB), false);
+        assert.equal(await visible(outsider), false);
+      }
+    });
+
+    test('the function is SECURITY INVOKER with an empty search_path, service_role only and absent from the allow-list', async () => {
+      const row = (
+        await db.query<{ anon: boolean; authenticated: boolean; service: boolean; definer: boolean; config: string[] | null }>(
+          `SELECT has_function_privilege('anon', p.oid, 'EXECUTE') AS anon, has_function_privilege('authenticated', p.oid, 'EXECUTE') AS authenticated,
+                  has_function_privilege('service_role', p.oid, 'EXECUTE') AS service, p.prosecdef AS definer, p.proconfig AS config
+           FROM pg_proc p WHERE p.oid = $1::regprocedure`,
+          [`public.${SIGNATURE}`],
+        )
+      ).rows[0];
+      assert.deepEqual(row, { anon: false, authenticated: false, service: true, definer: false, config: ['search_path=""'] });
+      assert.equal(AUTHENTICATED_ALLOW_LIST[normalizeSignature(SIGNATURE)], undefined);
+      const source = await createSource(db);
+      for (const role of ['anon', 'authenticated'] as const) {
+        await rejectsWith(
+          () =>
+            asRole(db, role, null, () =>
+              db.query('SELECT public.rag_enqueue_review_item($1, $2, $3::jsonb, $4::jsonb)', [source.tenantKey, 'output_guard', JSON.stringify(sourceOf(source)), '{}']),
+            ),
+          '42501',
+        );
+      }
+      await assertNoClientCallableRagFunctions(db);
+    });
+
+    test('re-running 0410 after a stray grant restores the lock', async () => {
+      await db.query(`GRANT EXECUTE ON FUNCTION public.${SIGNATURE} TO authenticated, anon`);
+      await db.exec(fs.readFileSync(path.join(REPO_ROOT, GRANTS_MIGRATION), 'utf8'));
+      const row = (
+        await db.query<{ anon: boolean; authenticated: boolean }>(
+          `SELECT has_function_privilege('anon', $1::regprocedure, 'EXECUTE') AS anon, has_function_privilege('authenticated', $1::regprocedure, 'EXECUTE') AS authenticated`,
+          [`public.${SIGNATURE}`],
+        )
+      ).rows[0];
+      assert.deepEqual(row, { anon: false, authenticated: false });
+      const sql = fs.readFileSync(path.join(REPO_ROOT, GRANTS_MIGRATION), 'utf8');
+      const key = SIGNATURE;
+      assert.ok(sql.includes(`to_regprocedure('public.${key}')`));
+      assert.ok(sql.includes(`REVOKE ALL ON FUNCTION public.${key} FROM PUBLIC, anon, authenticated;`));
+      assert.ok(sql.includes(`GRANT EXECUTE ON FUNCTION public.${key} TO service_role;`));
+    });
   });
 }
 
