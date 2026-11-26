@@ -336,6 +336,12 @@ function prerequisites(env: SampleEnv): { enabled: boolean; missing: SamplePrere
   return { enabled: monitorSettings(env).representativeSample, missing };
 }
 
+/** Every missing prerequisite of a draw: the switch (sample), the masked_query log (log) and expert review (review). */
+export function missingSamplePrerequisites(env: SampleEnv = process.env as SampleEnv): SamplePrerequisite[] {
+  const check = prerequisites(env);
+  return [...(check.enabled ? [] : (['sample'] as const)), ...check.missing];
+}
+
 class SampleError extends Error {
   constructor(readonly operation: string, readonly code: string) {
     super(`[Monitor] sample ${operation} failed (${code})`);
@@ -531,8 +537,7 @@ export async function drawWeeklySample(admin: SupabaseClient, options: DrawWeekl
   const { tenantKey } = options;
   if (!TENANT_KEY_RE.test(tenantKey)) throw new Error('[Monitor] the sample needs one valid tenant key');
   const env = options.env ?? (process.env as SampleEnv);
-  const check = prerequisites(env);
-  const missing: SamplePrerequisite[] = [...(check.enabled ? [] : (['sample'] as const)), ...check.missing];
+  const missing = missingSamplePrerequisites(env);
   if (missing.length > 0) return { written: false, missing };
 
   const now = options.now ?? new Date();

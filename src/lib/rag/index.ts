@@ -657,5 +657,5 @@ export {
   PILOT_PAGE_SIZE,
 } from './monitor/pilot-users';
 export type { AddPilotUserResult, PilotUserEntry, PilotUserPage, PilotSamplingParams } from './monitor/pilot-users';
-export { allocateStrata, drawWeeklySample, loadSampleConfig, planWeeklySample, sampleStatus, sampleTenants, sampleWindow } from './monitor/sample';
+export { allocateStrata, drawWeeklySample, loadSampleConfig, missingSamplePrerequisites, planWeeklySample, sampleStatus, sampleTenants, sampleWindow } from './monitor/sample';
 export type { DrawWeeklySampleResult, SamplePrerequisite, SampleStatus, WeeklySampleConfig } from './monitor/sample';
