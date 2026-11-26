@@ -8,7 +8,13 @@ import { createLinkUsageInstructions } from '@/lib/url-extractor';
 import { classifyQuery } from '@/lib/query-classifier';
 import {
   buildHistoryWindow,
+  cacheSourcesFromResult,
   createEnhancedRAGPrompt,
+  hashSystemPromptTemplate,
+  isCacheHitResult,
+  isSemanticCacheActive,
+  scheduleCacheStore,
+  streamCachedAnswer,
   answerLanguageOptions,
   type AnswerLanguageOptions,
   createTraceCollector,
@@ -132,12 +138,66 @@ function knowledgeBaseUnavailableResponse(request: NextRequest) {
   return createUIMessageStreamResponse({ stream, headers: CORS_HEADERS });
 }
 
+/** The embed system prompt template before {{context}} substitution. */
+function embedSystemPromptTemplate(): string {
+  // Use the same system prompt format as the main chat API
+  // Get the RAG system prompt from environment (same as main chat)
+  let systemPrompt = `You are a helpful AI assistant with access to a knowledge base. When answering questions:
+
+1. If the context contains relevant information, use it to provide accurate and specific answers
+2. If information is not available in the context, say so clearly and suggest alternative approaches
+3. Always cite your sources when referencing specific documents
+4. Provide balanced, objective information rather than opinions
+5. For technical topics, include practical steps or examples when appropriate
+
+${createLinkUsageInstructions()}
+
+Context:
+{{context}}`;
+
+  // Use the custom RAG system prompt if available
+  if (env.RAG_SYSTEM_PROMPT) {
+    try {
+      // Safe decode function to handle multiple layers of URL encoding
+      let ragPrompt = env.RAG_SYSTEM_PROMPT;
+      let previous = '';
+      let iterations = 0;
+      const maxIterations = 10; // Prevent infinite loops
+
+      // Recursively decode until no more encoding detected
+      while (ragPrompt !== previous && ragPrompt.includes('%') && iterations < maxIterations) {
+        previous = ragPrompt;
+        try {
+          ragPrompt = decodeURIComponent(ragPrompt);
+          iterations++;
+        } catch (e) {
+          console.warn('Decoding iteration failed:', e);
+          break;
+        }
+      }
+
+      if (iterations > 0) {
+        console.log(`[Embed API] Successfully decoded system prompt after ${iterations} iterations`);
+      }
+
+      systemPrompt = ragPrompt;
+    } catch (e) {
+      console.log('EMBED API: Could not decode RAG_SYSTEM_PROMPT, using default');
+    }
+  }
+  return systemPrompt;
+}
+
 export async function POST(request: NextRequest) {
   let pendingTrace: { collector: TraceCollector; result: RetrievalResult } | null = null;
   // Set only while RAG_RETRIEVAL_LOG is on; off leaves finishTrace's arguments as they were
   let logContext: LogContext | null = null;
   let logQuery: string | undefined;
   let feedbackTraceId: string | null = null;
+  let embedTemplateValue: string | null = null;
+  const embedTemplate = () => (embedTemplateValue ??= embedSystemPromptTemplate());
+  // Set only when the semantic_cache stage handed out a ticket; the answer is stored after the response (06-36)
+  let cacheStore: { result: RetrievalResult; traceId: string } | null = null;
   const finishPendingTrace = () => {
     if (!pendingTrace) return;
     const pending = pendingTrace;
@@ -248,6 +308,27 @@ export async function POST(request: NextRequest) {
       return knowledgeBaseUnavailableResponse(request);
     }
 
+    const streamHeaders = (): Record<string, string> => ({
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+      'Vary': 'Origin',
+      'X-Content-Type-Options': 'nosniff',
+      'X-RateLimit-Limit': env.EMBED_RATE_LIMIT,
+      'X-RateLimit-Remaining': rateLimit.remaining.toString(),
+      'X-RateLimit-Reset': new Date(rateLimit.resetTime).toISOString(),
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'POST',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    });
+    const embedFeedbackToken = async (): Promise<string | null> => {
+      if (!feedbackTraceId || !readFeedbackLoopConfig().embedFeedbackEnabled) return null;
+      const tenantKey = scopeKey(embedScope.scope);
+      if ((await effectiveLogMode(tenantKey)) === 'off') return null;
+      return mintEmbedFeedbackToken({ traceId: feedbackTraceId, tenantKey });
+    };
+
     // D-39: a scopes filter narrows only the configured embed tenant, and only with values of its vocabulary
     if (retrievalFilters?.scopes) {
       try {
@@ -283,6 +364,16 @@ export async function POST(request: NextRequest) {
             ...(clientTimeZone ? { timeZone: clientTimeZone } : {}),
           }
         : {};
+      // CACHE-01: passed only while the semantic cache can run; the pipeline derives the embed entry profile
+      const cacheContext = isSemanticCacheActive()
+        ? {
+            generatorModel: model || 'openai/gpt-4o-mini',
+            systemPromptHash: hashSystemPromptTemplate(embedTemplate()),
+            webSearch: false,
+            mcpTools: false,
+            chatId: null,
+          }
+        : undefined;
       const collector = createTraceCollector({ profile: 'embed', tenantKey: scopeKey(embedScope.scope) });
       const result = await runRetrieval({
         scope: embedScope.scope,
@@ -299,6 +390,7 @@ export async function POST(request: NextRequest) {
         trace: collector,
         ...(retrievalFilters ? { retrievalFilters } : {}),
         ...queryLayerInputs,
+        ...(cacheContext ? { cacheContext } : {}),
       });
       collector.setReviewContent({ query: queryText, context: result.context, model });
       pendingTrace = { collector, result };
@@ -330,6 +422,26 @@ export async function POST(request: NextRequest) {
         return knowledgeBaseUnavailableResponse(request);
       }
 
+      // D-32: a hit streams the cached answer with no generation call
+      if (isCacheHitResult(result) && result.cacheHit) {
+        const cacheHit = result.cacheHit;
+        collector.setReviewContent({ answer: cacheHit.answer.answer_text });
+        const logOutcome = logContext ? result.logOutcome : undefined;
+        if (logOutcome) {
+          logOutcome.value = cacheHit.answer.is_refusal ? 'refused_no_context' : 'answered';
+          logOutcome.answerLanguage = cacheHit.answer.answer_language;
+        }
+        const feedbackToken = await embedFeedbackToken();
+        finishPendingTrace();
+        const stream = createUIMessageStream({
+          execute: async ({ writer }) => {
+            streamCachedAnswer(cacheHit, { writer, startMetadata: feedbackToken ? { feedbackToken } : {} });
+          },
+        });
+        return createUIMessageStreamResponse({ stream, headers: streamHeaders() });
+      }
+      if (result.cacheTicket) cacheStore = { result, traceId: collector.traceId };
+
       // D-10: small talk under the query layer skipped retrieval and is answered without knowledge-base context
       smallTalkTurn = isSmallTalkResult(result);
       context = smallTalkTurn ? '' : result.context;
@@ -338,51 +450,7 @@ export async function POST(request: NextRequest) {
       console.log('[Document Search] Embed request has no query text, skipping retrieval');
     }
 
-    // Use the same system prompt format as the main chat API
-    // Get the RAG system prompt from environment (same as main chat)
-    let systemPrompt = `You are a helpful AI assistant with access to a knowledge base. When answering questions:
-
-1. If the context contains relevant information, use it to provide accurate and specific answers
-2. If information is not available in the context, say so clearly and suggest alternative approaches
-3. Always cite your sources when referencing specific documents
-4. Provide balanced, objective information rather than opinions
-5. For technical topics, include practical steps or examples when appropriate
-
-${createLinkUsageInstructions()}
-
-Context:
-{{context}}`;
-
-    // Use the custom RAG system prompt if available
-    if (env.RAG_SYSTEM_PROMPT) {
-      try {
-        // Safe decode function to handle multiple layers of URL encoding
-        let ragPrompt = env.RAG_SYSTEM_PROMPT;
-        let previous = '';
-        let iterations = 0;
-        const maxIterations = 10; // Prevent infinite loops
-
-        // Recursively decode until no more encoding detected
-        while (ragPrompt !== previous && ragPrompt.includes('%') && iterations < maxIterations) {
-          previous = ragPrompt;
-          try {
-            ragPrompt = decodeURIComponent(ragPrompt);
-            iterations++;
-          } catch (e) {
-            console.warn('Decoding iteration failed:', e);
-            break;
-          }
-        }
-
-        if (iterations > 0) {
-          console.log(`[Embed API] Successfully decoded system prompt after ${iterations} iterations`);
-        }
-
-        systemPrompt = ragPrompt;
-      } catch (e) {
-        console.log('EMBED API: Could not decode RAG_SYSTEM_PROMPT, using default');
-      }
-    }
+    const systemPrompt = embedTemplate();
 
     // Use enhanced RAG prompt for strict RAG-only behavior (same as main chat)
     console.log('[EMBED RAG] Injecting context into system prompt...');
@@ -438,6 +506,22 @@ Context:
           const logOutcome = logContext ? pendingTrace?.result.logOutcome : undefined;
           if (logOutcome) logOutcome.answerLanguage = detectLanguage(event.text ?? '');
           finishPendingTrace();
+          if (cacheStore && event.finishReason !== 'error') {
+            // A-3: embed is check-only unless RAG_SEMANTIC_CACHE_EMBED_STORE is on; the store applies that rule after the response
+            scheduleCacheStore({
+              scope: embedScope.scope,
+              ticket: cacheStore.result.cacheTicket,
+              traceId: cacheStore.traceId,
+              facts: {
+                chatId: null,
+                sourceImages: cacheStore.result.sourceImages.length > 0,
+                retrievalStatus: cacheStore.result.status,
+                answerText: event.text ?? '',
+                isRefusal: false,
+              },
+              sources: cacheSourcesFromResult(cacheStore.result),
+            });
+          }
         },
         onAbort: () => finishPendingTrace(),
         onError: () => finishPendingTrace(),
@@ -448,33 +532,14 @@ Context:
       if (answeredOutcome && answeredOutcome.value === 'unknown') answeredOutcome.value = 'answered';
 
       // D-11: only with the embed rating enabled and a logged row to rate; otherwise the stream is unchanged
-      let feedbackToken: string | null = null;
-      if (feedbackTraceId && readFeedbackLoopConfig().embedFeedbackEnabled) {
-        const tenantKey = scopeKey(embedScope.scope);
-        if ((await effectiveLogMode(tenantKey)) !== 'off') {
-          feedbackToken = mintEmbedFeedbackToken({ traceId: feedbackTraceId, tenantKey });
-        }
-      }
+      const feedbackToken = await embedFeedbackToken();
 
       // Return the AI SDK stream directly (SAME AS MAIN CHAT API)
       return result.toUIMessageStreamResponse({
         ...(feedbackToken
           ? { messageMetadata: ({ part }) => (part.type === 'start' ? { feedbackToken } : undefined) }
           : {}),
-        headers: {
-          'Content-Type': 'text/plain; charset=utf-8',
-          'Cache-Control': 'no-cache, no-transform',
-          'Connection': 'keep-alive',
-          'X-Accel-Buffering': 'no',
-          'Vary': 'Origin',
-          'X-Content-Type-Options': 'nosniff',
-          'X-RateLimit-Limit': env.EMBED_RATE_LIMIT,
-          'X-RateLimit-Remaining': rateLimit.remaining.toString(),
-          'X-RateLimit-Reset': new Date(rateLimit.resetTime).toISOString(),
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'POST',
-          'Access-Control-Allow-Headers': 'Content-Type',
-        }
+        headers: streamHeaders(),
       });
 
     } catch (streamError) {
