@@ -4,12 +4,14 @@ import type { RetrievalLogEntry } from '@/lib/rag-eval/contracts.generated';
 import { getRagDeps } from '../deps';
 import { detectLanguageWithConfidence, type LanguageDetection } from '../lang/detect';
 import { maskPII } from '../trace/mask';
+import { queryFingerprint, toLanguageCode } from './query-codes';
 import { topkRedundancy } from '../v2/diversify';
 import type { Candidate, LogChannel, LogContext, LogOutcomeValue, RagMode, RetrievalResult } from '../types';
 import type { RetrievalLogLevel } from './config';
 import { effectiveLogMode, type EffectiveLogModeDeps } from './settings';
 
 export type { LogContext } from '../types';
+export { queryFingerprint, toLanguageCode } from './query-codes';
 
 export type RetrievalLogRow = Omit<RetrievalLogEntry, 'id' | 'tenant_key' | 'created_at'>;
 type LogCandidate = NonNullable<RetrievalLogRow['candidates']>[number];
@@ -31,7 +33,6 @@ export const MAX_QUERY_LENGTH = 2000;
 export const WRITE_TIMEOUT_MS = 2000;
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-const LANGUAGE_CODE = /^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$/;
 const TENANT_KEY = /^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
 const SHORT_CODE = /^[a-z][a-z0-9_]{0,63}$/;
 const STAGE_KEY = /^[a-z][a-z0-9_]{0,63}$/;
@@ -40,11 +41,6 @@ const CHANNELS: readonly LogChannel[] = ['chat', 'embed', 'voice'];
 const RAG_MODES: readonly RagMode[] = ['strict', 'balanced', 'flexible', 'bypass'];
 const OUTCOMES: readonly LogOutcomeValue[] = ['answered', 'refused_no_context', 'kb_unavailable', 'degraded_answer', 'unknown'];
 const UNDETERMINED = 'und';
-
-/** The value when it is a language code, else null; text is never passed through. */
-export function toLanguageCode(value: unknown): string | null {
-  return typeof value === 'string' && LANGUAGE_CODE.test(value) ? value : null;
-}
 
 /** The single mapping from the detector to a stored confidence; Phase 7 may replace it with a calibrated score. */
 export function queryLanguageConfidence(detection: LanguageDetection, storedLanguage: string | null): number | null {
@@ -63,10 +59,6 @@ function finite(value: unknown): value is number {
 
 function shortCodeOrNull(value: unknown): string | null {
   return typeof value === 'string' && SHORT_CODE.test(value) ? value : null;
-}
-
-function normaliseForFingerprint(text: string): string {
-  return text.normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
 function logCandidate(item: Candidate, rank: number, keptIds: ReadonlySet<string>): LogCandidate | null {
@@ -133,11 +125,11 @@ export function buildRetrievalLogRow(input: BuildRetrievalLogRowInput): Retrieva
   const queryLanguage = toLanguageCode(result.queryLanguage) ?? toLanguageCode(detection.language);
 
   let queryMasked: string | null = null;
-  let queryFingerprint: string | null = null;
+  let fingerprint: string | null = null;
   if (mode === 'masked_query' && query.length > 0) {
     const masked = maskPII(query);
     queryMasked = masked.slice(0, MAX_QUERY_LENGTH);
-    queryFingerprint = createHash('sha256').update(normaliseForFingerprint(masked)).digest('hex');
+    fingerprint = queryFingerprint(masked);
   }
 
   const holder = result.logOutcome;
@@ -162,7 +154,7 @@ export function buildRetrievalLogRow(input: BuildRetrievalLogRowInput): Retrieva
     chunk_languages: chunkLanguages(result),
     answer_language: toLanguageCode(holder?.answerLanguage),
     query_masked: queryMasked,
-    query_fingerprint: queryFingerprint,
+    query_fingerprint: fingerprint,
     status: result.status,
     refusal_decision: shortCodeOrNull(result.refusal?.decision),
     refusal_reason: shortCodeOrNull(result.refusal?.reason),
