@@ -97,3 +97,18 @@ describe('rag:embedding ft-* argument parsing', () => {
     }
   });
 });
+
+describe('post-bind guidance', () => {
+  it('names the global re-embed for an unscoped slot and the tenant-filtered binding backfill for a scoped one', async () => {
+    const { bindGuidance } = await import('@/lib/rag/embeddings/finetune-ops');
+    const version = { id: VERSION, queryPrompt: 'query: ', documentPrompt: 'passage: ' };
+    const unscoped = bindGuidance('ft-b-1024', version).join('\n');
+    expect(unscoped).toContain(`RAG_FT_SLOT_B_MODEL=${VERSION}`);
+    expect(unscoped).toContain('RAG_FT_SLOT_B_QUERY_PROMPT="query: "');
+    expect(unscoped).toContain('npm run rag:reembed -- --profile ft-b-1024');
+    expect(unscoped).not.toContain('--tenant');
+    const scoped = bindGuidance('ft-a-1024', version, TENANT).join('\n');
+    expect(scoped).toContain(`npm run rag:reembed -- --profile ft-a-1024 --tenant ${TENANT}`);
+    expect(scoped).toContain('binding backfill');
+  });
+});

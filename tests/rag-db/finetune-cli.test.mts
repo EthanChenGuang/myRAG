@@ -284,6 +284,42 @@ describe('rag:embedding ft-* commands over the fine-tune registry', () => {
     assert.match(released.text, /active profile openai-3-small-1536 has no rollback target/);
   });
 
+  test('ft-bind prints the env lines for the slot and the ft-check reminder, and no secret', async () => {
+    assert.equal((await run('ft-consent', 'grant', TENANT_A, '--scope', 'deployment', '--ref', 'TICKET-1007')).code, 0);
+    assert.equal((await run('ft-models', 'register', writeCard(card(VERSION_A, 'deployment', [TENANT_A])))).code, 0);
+    const bound = await run('ft-bind', SLOT_A, VERSION_A);
+    assert.equal(bound.code, 0, bound.text);
+    assert.ok(bound.text.includes(`RAG_FT_SLOT_A_MODEL=${VERSION_A}`), bound.text);
+    assert.ok(bound.text.includes(`RAG_FT_SLOT_A_QUERY_PROMPT=${JSON.stringify(QUERY_PROMPT)}`), bound.text);
+    assert.ok(bound.text.includes(`RAG_FT_SLOT_A_DOCUMENT_PROMPT=${JSON.stringify(DOCUMENT_PROMPT)}`), bound.text);
+    assert.ok(bound.text.includes(`ft-check ${SLOT_A}`) && bound.text.includes(`npm run rag:reembed -- --profile ${SLOT_A}`), bound.text);
+    assert.ok(bound.text.indexOf(`ft-check ${SLOT_A}`) < bound.text.indexOf('npm run rag:reembed'), 'the check comes before the re-embed');
+    assert.ok(!bound.text.includes(String(process.env.RAG_FT_EMBED_API_KEY)), 'the endpoint key is never printed');
+    assert.ok(!bound.text.includes(endpoints.urls.ft), 'the base URL is not printed');
+    assert.ok(!/sk-|service-role/i.test(bound.text));
+  });
+
+  test('ft-check passes when the endpoint serves the registered weights and fails with other weights', async () => {
+    await registerAndBind();
+    const ok = await run('ft-check', SLOT_A);
+    assert.equal(ok.code, 0, ok.text);
+    assert.match(ok.text, /probe ok/);
+    assert.match(ok.text, /minCosine=0?\.99\d+|minCosine=1\.0+/);
+
+    slotModule.resetFinetuneProbeCacheForTests();
+    endpoints.setFtSalt('other weights behind the same url');
+    const mismatch = await run('ft-check', SLOT_A);
+    assert.equal(mismatch.code, 1, mismatch.text);
+    assert.match(mismatch.text, /probe failed: mismatch/);
+    assert.match(mismatch.text, /minCosine=/);
+
+    slotModule.resetFinetuneProbeCacheForTests();
+    endpoints.setFtSalt('');
+    const other = await run('ft-check', SLOT_B);
+    assert.equal(other.code, 1, other.text);
+    assert.match(other.text, /probe failed: unconfigured/);
+  });
+
   test('with RAG_FINETUNE off every ft-* command except the two lists refuses before any RPC', async () => {
     switchOn = false;
     for (const argv of [
