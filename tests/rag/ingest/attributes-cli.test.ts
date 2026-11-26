@@ -291,3 +291,54 @@ describe('dry-run report', () => {
     expect(imports(result.calls).filter((call) => call.args.p_dry_run === false)).toEqual([]);
   });
 });
+
+describe('apply pass', () => {
+  it('with --apply: the dry-run pass first, then every batch without the flag, one progress line per batch, the totals and the outbox line', async () => {
+    const target = await file('ok.jsonl', Array.from({ length: 401 }, (_, index) => row(index + 1)));
+    const result = await run(['--tenant', TENANT, '--import', target, '--apply']);
+    expect(result.code).toBe(0);
+    const calls = imports(result.calls);
+    expect(calls.map((call) => call.args.p_dry_run)).toEqual([true, true, true, false, false, false]);
+    expect(calls.map((call) => (call.args.p_rows as unknown[]).length)).toEqual([200, 200, 1, 200, 200, 1]);
+    const text = result.out.join('\n');
+    expect(result.out.filter((line) => /batch \d of 3:/.test(line))).toHaveLength(3);
+    expect(text).toMatch(/documents changed: 398/);
+    expect(text).toMatch(/rows staged: 3/);
+    expect(text).toMatch(/chunk rows updated: 796 in 3 batches/);
+    expect(text).toMatch(/vector sync outbox rows added: 0/);
+  });
+
+  it('a refusal at the second batch exits 1 and says how many batches were applied', async () => {
+    const target = await file('ok.jsonl', Array.from({ length: 401 }, (_, index) => row(index + 1)));
+    const result = await run(['--tenant', TENANT, '--import', target, '--apply'], { failImportAt: 1 });
+    expect(result.code).toBe(1);
+    expect(imports(result.calls).filter((call) => call.args.p_dry_run === false)).toHaveLength(2);
+    expect(result.err.join('\n')).toMatch(/failed at batch 2 of 3: unknown_attribute; 1 of 3 batches applied/);
+  });
+
+  it('runAttributesImport returns the changed document ids of the apply pass only', async () => {
+    vi.resetModules();
+    const fakes = await import('../../helpers/ingest-fakes');
+    const { db } = fakes.fakeIngestDb({
+      answers: {
+        rag_attribute_definitions_for: () => DEFINITIONS,
+        rag_import_document_attributes: (args) => [
+          { documents_changed: 1, documents_unchanged: 0, chunks_updated: 1, staged: 0, staged_unchanged: 0, changed_document_ids: args.p_dry_run ? [] : ['00000000-0000-4000-8000-00000000d001'], outbox_rows: 0 },
+        ],
+      },
+    });
+    fakes.installIngestDeps({ db, env: ON });
+    try {
+      const { mintScope } = await import('@/lib/rag/tenant/scope');
+      const { runAttributesImport } = await import('@/lib/rag/ingest/attributes/import');
+      const target = await file('one.jsonl', [row(1)]);
+      const outcome = await runAttributesImport(
+        { scope: mintScope('org', null, ORG), file: target, apply: true },
+        { rpc: db, signal: new AbortController().signal, io: { out: () => undefined, err: () => undefined } },
+      );
+      expect(outcome).toMatchObject({ exitCode: 0, status: 'done', batches: 1, batchesApplied: 1, changedDocumentIds: ['00000000-0000-4000-8000-00000000d001'] });
+    } finally {
+      fakes.uninstallIngestDeps();
+    }
+  });
+});
