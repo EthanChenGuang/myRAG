@@ -129,4 +129,8 @@ describe('neutralLexicalCorpus', () => {
   });
 });
 
-const SNAPSHOT_SEED_7: string[][] = [];
+const SNAPSHOT_SEED_7: string[][] = [
+  ['w120', 'w20', 'w130', 'w0', 'w85', 'w4', 'w0', 'w0'],
+  ['w170', 'w12', 'w7', 'w13', 'w19', 'w53', 'w54', 'w6', 'w8', 'w83', 'w4', 'w9', 'w0', 'w45', 'w75', 'w4', 'w1', 'w179', 'w0', 'w7'],
+  ['w0', 'w0', 'w21', 'w52', 'w0', 'w19', 'w129', 'w2', 'w17', 'w3', 'w3', 'w10'],
+];
