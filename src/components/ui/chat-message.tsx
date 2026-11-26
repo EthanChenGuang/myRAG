@@ -4063,7 +4063,7 @@ ChatMessage = function ({
         <strong>
           <span
             data-part-label={label.key}
-            lang={clientTextLanguage(language) === label.language ? undefined : label.language}
+            lang={(language ?? '').split('-')[0]!.toLowerCase() === label.language ? undefined : label.language}
             className="inline-flex items-center gap-1"
           >
             <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />

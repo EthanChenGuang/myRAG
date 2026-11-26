@@ -9,6 +9,7 @@ import { groundednessBadgeState, type GroundednessBadgeState } from '@/lib/chat/
 import type { AnswerGroundedness } from '@/lib/chat/answer-metadata';
 import { useAnswerRecordsStore } from '@/lib/stores/answer-records-store';
 import { answerQualityStrings } from '@/translations/answer-quality';
+import { clientText, clientTextLanguage } from '@/lib/chat/answer-texts';
 
 export interface GroundednessBadgeProps {
   answerId: string;
@@ -29,6 +30,11 @@ export const ANSWER_TOOLTIP_CONTENT_CLASSES = cn(
   'bg-gray-900 text-white dark:bg-[#1A1A1A] dark:text-[#E6E6E6] dark:ring-1 dark:ring-[#3A3A3A]',
 );
 
+/** The primary subtag of the UI language, for deciding whether a text needs its own lang attribute. */
+function uiBase(language: string | null | undefined): string {
+  return (language ?? '').split('-')[0]!.toLowerCase();
+}
+
 const STATE_ICONS = {
   verified: ShieldCheck,
   possibly_unreliable: AlertTriangle,
@@ -38,7 +44,7 @@ const STATE_ICONS = {
 /** D-20: the three-state groundedness pill with a one-sentence tooltip. Renders nothing when the rule hides it. */
 export function GroundednessBadge({ answerId, fallback, className }: GroundednessBadgeProps) {
   const { language } = useLanguage();
-  const { status, label, reason, ragMode, hasRecord } = useAnswerRecordsStore(
+  const { status, label, reason, ragMode, hasRecord, textsSource, answerLanguage } = useAnswerRecordsStore(
     useShallow((s) => {
       const record = Object.prototype.hasOwnProperty.call(s.records, answerId) ? s.records[answerId] : undefined;
       const source = record?.groundedness ?? fallback;
@@ -48,6 +54,8 @@ export function GroundednessBadge({ answerId, fallback, className }: Groundednes
         reason: source?.reason ?? null,
         ragMode: record?.ragMode ?? null,
         hasRecord: record !== undefined,
+        textsSource: record?.textsSource ?? null,
+        answerLanguage: record?.answerLanguage ?? null,
       };
     }),
   );
@@ -56,8 +64,14 @@ export function GroundednessBadge({ answerId, fallback, className }: Groundednes
 
   const strings = answerQualityStrings(language);
   const Icon = STATE_ICONS[state];
-  const text = strings.badgeLabels[state];
-  const tooltip = strings.badgeTooltips[state];
+  // D-12 (UI-SPEC 6.8): registry texts in the answer language only when the record says they apply.
+  const registryLanguage = textsSource === 'registry' ? clientTextLanguage(answerLanguage) : null;
+  const registryText = registryLanguage ? clientText(`labels.badge_${state}`, registryLanguage) : '';
+  const registryTooltip = registryLanguage ? clientText(`labels.badge_tooltip_${state}`, registryLanguage) : '';
+  const fromRegistry = registryText.length > 0 && registryTooltip.length > 0;
+  const text = fromRegistry ? registryText : strings.badgeLabels[state];
+  const tooltip = fromRegistry ? registryTooltip : strings.badgeTooltips[state];
+  const pillLanguage = fromRegistry && registryLanguage !== uiBase(language) ? registryLanguage! : undefined;
 
   return (
     <TooltipPrimitive.Provider delayDuration={200}>
@@ -66,6 +80,7 @@ export function GroundednessBadge({ answerId, fallback, className }: Groundednes
           <span
             tabIndex={0}
             data-groundedness-badge={state}
+            lang={pillLanguage}
             className={cn(
               'inline-flex h-6 shrink-0 select-none whitespace-nowrap items-center gap-1 rounded-full px-2 text-xs font-medium ring-1 ring-inset',
               'cursor-default touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6417]/60',
@@ -84,6 +99,7 @@ export function GroundednessBadge({ answerId, fallback, className }: Groundednes
             sideOffset={6}
             collisionPadding={12}
             className={ANSWER_TOOLTIP_CONTENT_CLASSES}
+            lang={pillLanguage}
           >
             {tooltip}
           </TooltipPrimitive.Content>
