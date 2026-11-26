@@ -173,12 +173,12 @@ for (const mode of MODES) {
         );
       }
       const fn = (
-        await db.query<{ prosecdef: boolean; config: string | null }>(
-          "SELECT prosecdef, proconfig::text AS config FROM pg_proc WHERE oid = 'public.rag_set_document_version_label(text, uuid, text)'::regprocedure",
+        await db.query<{ prosecdef: boolean; config: string[] | null }>(
+          "SELECT prosecdef, proconfig AS config FROM pg_proc WHERE oid = 'public.rag_set_document_version_label(text, uuid, text)'::regprocedure",
         )
       ).rows[0];
       assert.equal(fn?.prosecdef, false);
-      assert.match(fn?.config ?? '', /search_path=""/);
+      assert.deepEqual(fn?.config, ['search_path=""']);
     });
 
     test('applying 0940 and 0941 a second time changes nothing', async () => {
