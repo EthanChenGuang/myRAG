@@ -583,3 +583,19 @@ export type {
 } from './ingest/attributes/schema';
 export { isSecretName, RAG_AFFECTING_NAMES, ragAffectingDiff, ragSettingsCanonical, ragSettingsHash } from './config-gate/settings-hash';
 export type { SettingValues } from './config-gate/settings-hash';
+export {
+  buildChangeRecord,
+  cachedCheck,
+  CHECK_CACHE_MS,
+  CHECK_DIR,
+  decideSave,
+  insertChangeRecord,
+  latestCheck,
+  listChangeRecords,
+  normaliseGateMode,
+  OVERRIDE_REASON_MAX,
+  OVERRIDE_REASON_MIN,
+  readCheck,
+  writeCheck,
+} from './config-gate/gate-core';
+export type { BuildChangeRecordInput, ChangeRecordClient, ChangeRecordRow, DecideSaveOptions, RagGateInput, SaveDecision } from './config-gate/gate-core';
