@@ -1244,3 +1244,69 @@ def test_a_snapshot_that_forbids_l3_sends_no_vision_request(tmp_path, settings):
 
     assert _vlm_calls(env) == []
     assert env.job.detect_counts is not None and env.job.detect_counts.L3 == 0
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Phase 3.2 D-22: the effective header flag in the chunk request and the merged version string
+# ---------------------------------------------------------------------------------------------------------------------
+
+
+def _header_env(tmp_path: Path, ledger: StrictLedger | None = None, **settings: Any) -> Env:
+    job = _job(sha=SHA["digital-text"], **settings)
+    env = Env(tmp_path, job, PDF["digital-text"].read_bytes(), converter=converters.RecordedRangeConverter(RECORDED))
+    if ledger is not None:
+        ledger.seed(job)
+        env.ledger = ledger
+        env.deps = dataclasses.replace(env.deps, ledger=ledger)
+        env.claim()
+    return env
+
+
+def _chunk_requests(monkeypatch) -> list:
+    requests: list = []
+    inner = tiered._chunk_job
+
+    def spy(doc, request, out_dir, version, text_layer_share):  # noqa: ANN001, ANN202
+        requests.append(request)
+        return inner(doc, request, out_dir, version, text_layer_share)
+
+    monkeypatch.setattr(tiered, "_chunk_job", spy)
+    return requests
+
+
+def test_an_unset_effective_flag_keeps_the_trunk_merged_version_and_chunk_request(tmp_path, monkeypatch):
+    requests = _chunk_requests(monkeypatch)
+    env = _header_env(tmp_path)
+
+    assert env.run() == JobOutcome(status="ready")
+
+    (merged,) = _merged_entries(env)
+    docling_version = _docling_entries(env)[0].parser_version
+    assert merged.parser_version == f"merged-v1/{docling_version}/mt512-rh0"
+    assert [(request.repeat_table_header, request.carry_table_header) for request in requests] == [(False, False)]
+
+
+def test_a_forced_flag_reuses_the_cached_conversion_and_rebuilds_the_chunks_under_a_new_version(tmp_path, monkeypatch):
+    requests = _chunk_requests(monkeypatch)
+    first = _header_env(tmp_path / "first")
+    assert first.run() == JobOutcome(status="ready")
+    (default_merged,) = _merged_entries(first)
+    conversions = {(entry.parser_version, entry.options_hash) for entry in _docling_entries(first)}
+    converted = converters.conversion_counter
+    assert converted > 0
+
+    second = _header_env(tmp_path / "second", ledger=first.ledger, repeat_table_header_effective=True, carry_table_header=True)
+    second.storage = first.storage
+    second.deps = dataclasses.replace(second.deps, storage=first.storage)
+    assert second.run() == JobOutcome(status="ready")
+
+    assert converters.conversion_counter == converted
+    assert {(entry.parser_version, entry.options_hash) for entry in _docling_entries(second)} == conversions
+    merged = {entry.parser_version: entry for entry in _merged_entries(second)}
+    assert len(merged) == 2
+    forced_version = next(version for version in merged if version != default_merged.parser_version)
+    assert forced_version.startswith(default_merged.parser_version.removesuffix("rh0"))
+    assert "rh1" in forced_version
+    assert merged[forced_version].options_hash == default_merged.options_hash
+    assert second.advance_calls()[-1]["parse_cache_id"] == merged[forced_version].id
+    assert [(request.repeat_table_header, request.carry_table_header) for request in requests] == [(False, False), (True, True)]

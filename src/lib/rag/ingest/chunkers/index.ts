@@ -69,7 +69,7 @@ function fromDocling(chunks: readonly DoclingChunk[]): ChunkDraft[] {
       chunk_kind: chunk.is_table ? 'table' : 'text',
       page_start: chunk.pages.length > 0 ? Math.min(...chunk.pages) : null,
       page_end: chunk.pages.length > 0 ? Math.max(...chunk.pages) : null,
-      metadata: {},
+      metadata: chunk.table_header_carried === true ? { table_header_carried: true } : {},
     });
   }
   return drafts;

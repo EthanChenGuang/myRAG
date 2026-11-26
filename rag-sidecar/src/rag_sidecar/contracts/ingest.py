@@ -4,6 +4,7 @@ from typing import Annotated, Literal, get_args
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .languages import LANGUAGE_CODES, Language, build_language_type
+from .omit import OmitNoneModel, omit_none_schema
 
 DocType = Literal[
     "general",
@@ -255,18 +256,24 @@ class ParseJobAccepted(_Contract):
     job_id: JobId
 
 
-class ParseChunk(_Contract):
+class ParseChunk(OmitNoneModel):
+    _omit_when_none = ("table_header_carried",)
+
     text: str
     contextualized_text: str
     headings: list[str]
     pages: list[Annotated[int, Field(ge=1)]]
     is_table: bool
     table_header: str | None = None
+    # D-20: true on a chunk of a table that took a carried header; left out of the serialised chunk otherwise.
+    table_header_carried: bool | None = Field(default=None, json_schema_extra=omit_none_schema)
 
     @model_validator(mode="after")
     def _only_table_chunks_have_a_header(self) -> "ParseChunk":
         if self.table_header is not None and not self.is_table:
             raise ValueError("table_header is only allowed on table chunks")
+        if self.table_header_carried is not None and not self.is_table:
+            raise ValueError("table_header_carried is only allowed on table chunks")
         return self
 
 

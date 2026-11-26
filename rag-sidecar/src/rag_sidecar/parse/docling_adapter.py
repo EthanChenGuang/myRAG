@@ -21,6 +21,7 @@ from rag_sidecar.contracts.languages import get_language_pack, language_codes, l
 from rag_sidecar.parse import probe
 from rag_sidecar.parse.converter import ConfigurationError, ConversionError, PageCapExceeded
 from rag_sidecar.parse.language_chunker import LanguageAwareHybridChunker
+from rag_sidecar.parse.table_carry import carry_table_headers
 from rag_sidecar.preflight.config import load_routing_config
 from rag_sidecar.settings import SidecarSettings, load_settings
 
@@ -110,7 +111,7 @@ def build_chunker(request: ParseJobRequest) -> HybridChunker:
     )
 
 
-def _chunks(doc: DoclingDocument, request: ParseJobRequest) -> list[ParseChunk]:
+def _chunks(doc: DoclingDocument, request: ParseJobRequest, carried: frozenset[str] = frozenset()) -> list[ParseChunk]:
     chunker = build_chunker(request)
     chunks: list[ParseChunk] = []
     for raw in chunker.chunk(dl_doc=doc):
@@ -127,6 +128,7 @@ def _chunks(doc: DoclingDocument, request: ParseJobRequest) -> list[ParseChunk]:
                 pages=pages,
                 is_table=is_table,
                 table_header=_table_header(raw.text) if is_table else None,
+                table_header_carried=True if is_table and any(item.self_ref in carried for item in items) else None,
             )
         )
     return chunks
@@ -192,9 +194,17 @@ def to_parse_result(
     partial: bool = False,
     text_layer_page_share: float | None = None,
 ) -> ParseResult:
-    """Chunks a DoclingDocument and writes docling.json plus one PNG per picture into out_dir."""
+    """Chunks a DoclingDocument and writes docling.json plus one PNG per picture into out_dir.
+
+    With carry_table_header (D-20) the chunks come from a copy with carried headers; docling.json, the Markdown and
+    the pictures come from the unmodified document.
+    """
     version = parser_version_text or parser_version()
-    chunks = _chunks(doc, request)
+    if request.carry_table_header:
+        carry = carry_table_headers(doc)
+        chunks = _chunks(carry.document, request, frozenset(carry.carried))
+    else:
+        chunks = _chunks(doc, request)
     pictures, picture_artifacts, picture_warnings = _pictures(doc, out_dir)
     write_docling_json(doc, out_dir, parser, version)
     merged_warnings = list(dict.fromkeys([*(warnings or []), *picture_warnings]))

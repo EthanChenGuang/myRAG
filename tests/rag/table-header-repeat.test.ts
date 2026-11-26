@@ -377,3 +377,26 @@ describe('header repetition edge cases under always (CHK-06)', () => {
     }
   });
 });
+
+describe('Docling chunks that took a carried header in the sidecar (D-20, 03.2-28)', () => {
+  const docling: ChunkerConfig = PROCESSING_PROFILES.find((profile) => profile.chunker.kind === 'table_aware')!.chunker;
+  const chunk = (carried?: boolean) => ({
+    text: '| Item | Value |\n|---|---|\n| Item 01 | 4.5 |',
+    contextualized_text: '| Item | Value |\n|---|---|\n| Item 01 | 4.5 |',
+    headings: [],
+    pages: [2],
+    is_table: true,
+    table_header: '| Item | Value |\n|---|---|',
+    ...(carried === undefined ? {} : { table_header_carried: carried }),
+  });
+
+  it('records metadata.table_header_carried on a sidecar chunk that reports it', () => {
+    const { chunks } = chunkDocument(docling, { markdown: 'unused', chunks: [chunk(true)] });
+    expect(chunks.map((draft) => draft.metadata)).toEqual([{ table_header_carried: true }]);
+  });
+
+  it('leaves the metadata empty on a sidecar chunk without the field, as before', () => {
+    const { chunks } = chunkDocument(docling, { markdown: 'unused', chunks: [chunk()] });
+    expect(chunks.map((draft) => draft.metadata)).toEqual([{}]);
+  });
+});
