@@ -31,3 +31,12 @@ describe('the terminology switches reach the RAG config through the default deps
     expect([config.v2.terminology, config.v2.terminologyDense, config.v2.terminologyMining]).toEqual([false, false, false]);
   });
 });
+
+describe('the config input with the switches unset', () => {
+  it('carries no terminology value, as before the switches were read', () => {
+    resetRagDepsForTests();
+    for (const name of NAMES) delete process.env[name];
+    const input = getRagDeps().ragEnv();
+    expect(NAMES.map((name) => input[name])).toEqual([undefined, undefined, undefined]);
+  });
+});
