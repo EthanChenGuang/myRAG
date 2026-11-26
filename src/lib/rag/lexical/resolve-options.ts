@@ -14,7 +14,16 @@ import { normalizeLexical } from './tokenize';
  * version strings and counts only (4.1.1 D-21).
  */
 
-export type LexicalSwitches = { v2: Pick<RagConfig['v2'], 'lexicalDictionary' | 'lexicalStemIt' | 'identifierIndex'> };
+export type LexicalSwitches = {
+  v2: Pick<RagConfig['v2'], 'lexicalDictionary' | 'lexicalStemIt' | 'identifierIndex'> & Partial<Pick<RagConfig['v2'], 'lexicalQuantity'>>;
+};
+
+/** The one off rule of every lexical option: false means no resolve, no load and today's text and version. */
+export function lexicalOptionsOn(config: LexicalSwitches | undefined): boolean {
+  if (!config) return false;
+  const { lexicalDictionary, lexicalStemIt, identifierIndex } = config.v2;
+  return lexicalDictionary || lexicalStemIt || identifierIndex;
+}
 
 export type LexicalOptionsWarning = 'lexical_dictionary_unavailable' | 'identifier_patterns_unavailable';
 
