@@ -128,12 +128,12 @@
   "absolute": {
     "ingest": {
       "overall": {
-        "recall_at_10_min": 0.7122834645669291,
+        "recall_at_10_min": 0.6854794520547945,
         "derivation": {
           "rule": "ingest_baseline_overall_recall_at_10_mean_minus_band",
           "baseline_path": "eval/baselines/fixture-ingest-baseline.json",
-          "baseline_sha256": "aedc5e57c955b1676ee590faa2404cd69df2a2ed8ece98b333e600bd72652ca0",
-          "baseline_mean": 0.7322834645669292,
+          "baseline_sha256": "b8d2064ef98d2846451f97ce98e947d0f5170e38c37d1bddfaca04d22d6580fa",
+          "baseline_mean": 0.7054794520547946,
           "baseline_spread": 0.0,
           "noise_k": 3.0,
           "noise_floor": 0.02,
