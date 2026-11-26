@@ -635,15 +635,64 @@ def _bound_cell(value: float | None) -> str:
     return "n/a" if value is None else f"{round(value, 3):.3f}"
 
 
+NDCG_LABEL = "nDCG@k"
+K_ZERO_LABEL = "k = 0"
+
+
+def _k_zero_cell(metric: MetricValue | None) -> str:
+    return "-" if metric is None or metric.value is None else str(int(metric.value))
+
+
 def _table(first_column: str, rows: dict[str, SliceMetrics]) -> list[str]:
     labels = [label for label, _ in _METRIC_COLUMNS] + [FALSE_REFUSAL_BOUND_LABEL]
+    with_ndcg = any(metrics.ndcg_at_context_k is not None for metrics in rows.values())
+    if with_ndcg:
+        labels += [NDCG_LABEL, K_ZERO_LABEL]
     header = "| " + " | ".join([first_column, *labels]) + " |"
     divider = "|" + "|".join(["---"] * (len(labels) + 1)) + "|"
     lines = [header, divider]
     for name, metrics in rows.items():
         cells = [_cell(getattr(metrics, field)) for _, field in _METRIC_COLUMNS]
         cells.append(_bound_cell(metrics.false_refusal_upper_95))
+        if with_ndcg:
+            cells.append(_optional_cell(metrics.ndcg_at_context_k))
+            cells.append(_k_zero_cell(metrics.k_zero))
         lines.append("| " + " | ".join([name, *cells]) + " |")
+    return lines
+
+
+DUPLICATE_FLOOD_CATEGORY = "duplicate_flood"
+NDCG_NOTE = (
+    "nDCG@k is report-only (D-07): k is the number of chunks sent to the model for each item, relevance is binary "
+    "by gold-span match, and the ideal DCG uses the gold unit count capped at k. k = 0 counts answerable items "
+    "whose context was empty or refused; they score 0."
+)
+DUPLICATE_FLOOD_NOTE = (
+    "Report-only (D-22): top-k redundancy is the largest share of kept chunks in one duplicate cluster (a chunk "
+    "without a cluster id is its own cluster); intent coverage is the share of items whose kept chunks hold gold "
+    "evidence of every intent (evidence group)."
+)
+
+
+def _per_language_rows(items: list[ItemResult]) -> dict[str, SliceMetrics]:
+    return {"overall": slices_by(items, lambda _r: "overall")["overall"], **slices_by(items, lambda r: r.language)}
+
+
+def _duplicate_flood_section(report: EvalReport) -> list[str]:
+    items = [item for item in report.items if item.category == DUPLICATE_FLOOD_CATEGORY]
+    if not items:
+        return []
+    lines = [
+        "## Duplicate flood (report-only)",
+        "",
+        DUPLICATE_FLOOD_NOTE,
+        "",
+        "| Slice | Top-k redundancy | Intent coverage |",
+        "|---|---|---|",
+    ]
+    for name, metrics in _per_language_rows(items).items():
+        lines.append(f"| {name} | {_optional_cell(metrics.topk_redundancy)} | {_optional_cell(metrics.intent_coverage)} |")
+    lines.append("")
     return lines
 
 
@@ -1099,6 +1148,7 @@ def _render_markdown(report: EvalReport, budgets: LatencyBudgets | None = None) 
         "",
         BOUND_NOTE,
         "",
+        *([NDCG_NOTE, ""] if report.overall.ndcg_at_context_k is not None else []),
         *_report_only_section(report),
     ]
     if budgets is None and (report.latency or report.groundedness_latency):
@@ -1110,6 +1160,7 @@ def _render_markdown(report: EvalReport, budgets: LatencyBudgets | None = None) 
     lines.extend(_groundedness_section(report, budgets))
     lines.extend(_injection_section(report))
     lines.extend(_table_split_section(report))
+    lines.extend(_duplicate_flood_section(report))
     lines.extend(_query_layer_section(report))
     lines.extend(_semantic_cache_section(report))
     lines.extend(_backlog_section(report))
