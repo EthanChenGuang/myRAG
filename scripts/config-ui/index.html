@@ -7270,6 +7270,19 @@
                                             </label>
                                         </div>
 
+                                        <div class="form-control mb-4">
+                                            <label class="label" for="RAG_OPENAI_EMBEDDINGS_VIA">
+                                                <span class="label-text">OpenAI embedding host</span>
+                                            </label>
+                                            <select id="RAG_OPENAI_EMBEDDINGS_VIA" class="select select-bordered w-full" aria-describedby="openai-embeddings-via-help">
+                                                <option value="openai">openai</option>
+                                                <option value="openrouter">openrouter</option>
+                                            </select>
+                                            <label class="label">
+                                                <span class="label-text-alt" id="openai-embeddings-via-help">openrouter sends the same embedding model through OpenRouter with the OpenRouter API key (same vectors, no re-embed); the OpenAI Batch API is then unavailable and backfills embed immediately.</span>
+                                            </label>
+                                        </div>
+
                                         <section id="rag-finetune-slots" class="mt-6 min-w-0" aria-labelledby="rag-finetune-slots-title">
                                             <h4 id="rag-finetune-slots-title" class="text-md font-semibold mb-2 text-balance">Fine-Tuned Slots</h4>
                                             <p class="text-sm text-base-content/70 mb-4 max-w-prose">Endpoints for up to two fine-tuned embedding models. These fields only store the settings: binding a model to a slot, recording consent and activating a slot happen in the CLI (<span translate="no">npm run rag:embedding</span>), not here.</p>

@@ -292,6 +292,7 @@ class EnvironmentConfig {
       RAG_FT_SLOT_B_MODEL: process.env.RAG_FT_SLOT_B_MODEL || '',
       RAG_FT_SLOT_B_QUERY_PROMPT: process.env.RAG_FT_SLOT_B_QUERY_PROMPT || '',
       RAG_FT_SLOT_B_DOCUMENT_PROMPT: process.env.RAG_FT_SLOT_B_DOCUMENT_PROMPT || '',
+      RAG_OPENAI_EMBEDDINGS_VIA: process.env.RAG_OPENAI_EMBEDDINGS_VIA || 'openai',
       RAG_PARSE_ROUTING: process.env.RAG_PARSE_ROUTING || 'fixed',
       RAG_PARSER_ALLOW_CLOUD: process.env.RAG_PARSER_ALLOW_CLOUD || 'true',
       RAG_PARSE_PREMIUM_PAGE_BUDGET: process.env.RAG_PARSE_PREMIUM_PAGE_BUDGET || '0',
