@@ -5,6 +5,7 @@ import { buildAnswerChecksInput, type AnswerChecksInput } from './answer-checks'
 import { createAnswerCollector, type AnswerCollector } from './answer-collector';
 import { composeAnswerRules } from './answer-rules';
 import { buildAnswerTransforms } from './answer-transforms';
+import { decideOutputCap as decideCap, effectiveMaxOutputTokens, type OutputCapDecision } from './output-cap';
 import { sentinelTransform } from './sentinel';
 import { fixedText } from '../lang/texts';
 import { readSecurityConfig } from '../security/config';
@@ -24,8 +25,14 @@ export interface AnswerTurn {
   readonly textsSource: TextsSource;
   readonly channel: AnswerChannel;
   readonly ragMode: string;
-  /** D-32; false until plan 05.2-10 sets it from the output-cap rules. */
+  /** D-32: the concise instruction is composed; false until decideOutputCap ran or when the cap does not apply. */
   readonly capApplies: boolean;
+  /** D-30: decides the output cap once per turn, before the composer runs; later calls return the first decision. */
+  decideOutputCap(context: OutputCapTurnContext): OutputCapDecision;
+  /** D-29: the limit for the model call, min(limit, cap) when the cap applies, else the limit unchanged. */
+  maxOutputTokens(limit: number): number;
+  /** The decision of this turn; null before decideOutputCap ran. */
+  outputCapDecision(): OutputCapDecision | null;
   /** D-04: appends the answer-rule block to the final system prompt; returns the prompt itself when no part applies. */
   composeSystemPrompt(prompt: string, options: ComposeSystemPromptOptions): string;
   /**
@@ -58,6 +65,15 @@ export function parseBodyChannel(raw: unknown): 'web' | 'whatsapp' | undefined {
   if (raw === undefined || raw === null) return undefined;
   const parsed = BodyChannelSchema.safeParse(raw);
   return parsed.success ? parsed.data : 'web';
+}
+
+export interface OutputCapTurnContext {
+  /** Defaults to the turn's RAG mode. */
+  mode?: string;
+  knowledgeContext: boolean;
+  userMaxTokens: boolean;
+  reasoning: boolean;
+  approvalContinuation: boolean;
 }
 
 export interface ComposeSystemPromptOptions {
@@ -98,7 +114,7 @@ export function createAnswerTurn(input: AnswerTurnInput): AnswerTurn {
       answerLanguageSource = resolved.source;
     }
   }
-  const capApplies = false;
+  let capDecision: OutputCapDecision | null = null;
   let logged = false;
   let chain: Array<StreamTextTransform<ToolSet>> | null = null;
   let collector: AnswerCollector | null = null;
@@ -110,7 +126,27 @@ export function createAnswerTurn(input: AnswerTurnInput): AnswerTurn {
     textsSource: input.config.registryTexts && answerLanguage !== null ? 'registry' : 'legacy',
     channel: input.channel,
     ragMode: input.ragMode,
-    capApplies,
+    get capApplies() {
+      return capDecision?.concise ?? false;
+    },
+    decideOutputCap(context: OutputCapTurnContext): OutputCapDecision {
+      capDecision ??= decideCap({
+        config: input.config,
+        mode: context.mode ?? input.ragMode,
+        knowledgeContext: context.knowledgeContext,
+        userMaxTokens: context.userMaxTokens,
+        reasoning: context.reasoning,
+        approvalContinuation: context.approvalContinuation,
+        channel: input.channel,
+      });
+      return capDecision;
+    },
+    maxOutputTokens(limit: number): number {
+      return capDecision?.applied ? effectiveMaxOutputTokens(limit, capDecision.cap) : limit;
+    },
+    outputCapDecision() {
+      return capDecision;
+    },
     composeSystemPrompt(prompt: string, options: ComposeSystemPromptOptions): string {
       const composed = composeAnswerRules(
         {
@@ -120,7 +156,7 @@ export function createAnswerTurn(input: AnswerTurnInput): AnswerTurn {
           config: input.config,
           channel: input.channel,
           webSearchOffered: options.webSearchOffered,
-          capApplies,
+          capApplies: capDecision?.concise ?? false,
           calcOffered: false,
           contextTagging: options.contextTagging ?? readSecurityConfig().contextTagging,
         },
@@ -196,12 +232,13 @@ const TRACE_KEY = /^[a-z][a-z0-9_-]{0,31}$/;
  */
 export function answerTraceFields(turn: AnswerTurn, truncatedMarkers = 0): { rules: string[]; counts?: Record<string, number> } {
   const collector = turn.collector();
-  if (!collector) return { rules: [] };
-  const rules: string[] = [];
+  const cap = outputCapTraceFields(turn);
+  if (!collector) return cap.rules.length > 0 ? cap : { rules: [] };
+  const rules: string[] = [...cap.rules];
   const reason = collector.finishReason();
   if (reason !== null) rules.push(`finish_reason:${TRACE_KEY.test(reason) ? reason : 'other'}`);
   if (collector.refusedByModel()) rules.push('refusal_origin:model_relevance');
-  const counts: Record<string, number> = {};
+  const counts: Record<string, number> = { ...cap.counts };
   for (const notice of collector.notices()) {
     const key = `notice_${notice.kind}`;
     counts[key] = (counts[key] ?? 0) + 1;
@@ -209,4 +246,12 @@ export function answerTraceFields(turn: AnswerTurn, truncatedMarkers = 0): { rul
   if (collector.strippedSentinels() > 0) counts.sentinel_stripped = collector.strippedSentinels();
   if (truncatedMarkers > 0) counts.truncated_markers = truncatedMarkers;
   return Object.keys(counts).length > 0 ? { rules, counts } : { rules };
+}
+
+/** The cap decision on the generation span (applied, cap, reason); nothing while every Phase 5.2 switch is off or undecided. */
+function outputCapTraceFields(turn: AnswerTurn): { rules: string[]; counts?: Record<string, number> } {
+  const decision = turn.outputCapDecision();
+  if (!turn.config.anyNonDefault || !decision) return { rules: [] };
+  const rules = [`output_cap:${decision.applied ? 'applied' : 'not_applied'}`, `output_cap_reason:${decision.reason}`];
+  return decision.cap !== null ? { rules, counts: { output_cap: decision.cap } } : { rules };
 }
