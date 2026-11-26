@@ -851,7 +851,7 @@ describe('terminology switches (D-15, D-18, D-19)', () => {
     const config = loadRagConfig({ RAG_TERMINOLOGY: 'true', RAG_DISABLED_STAGES: 'terminology' });
     expect(config.v2.terminology).toBe(true);
     expect(config.disabledStages.has('terminology')).toBe(true);
-    expect(config.operatorDisabledStages.has('terminology')).toBe(true);
+    expect(config.operatorDisabledStages?.has('terminology')).toBe(true);
   });
 
   test('RAG_STAGE_TIMEOUTS can set the terminology budget', () => {
