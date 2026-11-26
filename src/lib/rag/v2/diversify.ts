@@ -1,13 +1,9 @@
 import type { FusedHit } from '../fusion/rrf';
 import type { ResultDiversityMode } from '../config';
 import { lexicalTokens } from '../lexical/tokenize';
+import type { AlsoIn } from '../types';
 
-/** Another document of the kept chunk's duplicate cluster (D-21): the first dropped chunk of that document. */
-export interface AlsoIn {
-  documentId: string;
-  filename: string;
-  chunkId: string;
-}
+export type { AlsoIn } from '../types';
 
 export interface DiversifyOptions {
   mode: ResultDiversityMode;
@@ -147,4 +143,15 @@ export function diversify(hits: FusedHit[], options: DiversifyOptions): Diversif
     alsoIn: collapsed.alsoIn,
     counts: { in: hits.length, kept: out.length, collapsed: hits.length - collapsed.hits.length, mmr_moved: moved },
   };
+}
+
+/**
+ * D-22: the largest share of the kept chunks that sits in one duplicate cluster; a chunk without a cluster counts alone.
+ * Null when no kept chunk carries a cluster id.
+ */
+export function topkRedundancy(kept: ReadonlyArray<{ dupClusterId?: string }>): number | null {
+  if (kept.length === 0 || !kept.some((chunk) => chunk.dupClusterId)) return null;
+  const sizes = new Map<string, number>();
+  for (const chunk of kept) if (chunk.dupClusterId) sizes.set(chunk.dupClusterId, (sizes.get(chunk.dupClusterId) ?? 0) + 1);
+  return Math.max(1, ...sizes.values()) / kept.length;
 }

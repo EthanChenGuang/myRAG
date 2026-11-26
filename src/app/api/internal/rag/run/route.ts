@@ -52,6 +52,7 @@ import {
   type EvalConversationTurn,
 } from '@/lib/rag-eval/answer';
 import type { CitationRecord } from '@/lib/rag-eval/contracts.generated';
+import { topkRedundancy } from '@/lib/rag/v2/diversify';
 
 export const runtime = 'nodejs';
 
@@ -587,6 +588,7 @@ export async function POST(req: NextRequest) {
       const injection = injectionTraceOf(result, documentNames);
       const effectiveConfig = buildEffectiveConfig({ security: injectionTraceVersions() });
       effectiveConfig.generator_model = generatorModel;
+      const redundancy = topkRedundancy(result.kept);
       const trace = {
         schema_version: 1 as const,
         item_id: itemId ?? null,
@@ -616,7 +618,11 @@ export async function POST(req: NextRequest) {
           ...(chunk.legs !== undefined ? { legs: chunk.legs } : {}),
           ...(chunk.language !== undefined ? { language: chunk.language } : {}),
         })),
-        kept: result.kept,
+        kept: result.kept.map(({ dupClusterId, alsoIn: _alsoIn, ...chunk }) => ({
+          ...chunk,
+          ...(dupClusterId ? { dup_cluster_id: dupClusterId } : {}),
+        })),
+        ...(redundancy !== null ? { topk_redundancy: redundancy } : {}),
         used_documents: result.usedDocuments.map((doc) => ({
           document_id: doc.id,
           name: doc.name,
