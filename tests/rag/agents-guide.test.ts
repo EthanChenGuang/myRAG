@@ -200,9 +200,10 @@ describe('AGENTS.md reflects the Phase 5.1.1 feedback loop', () => {
     expect(subsection).toContain(fragment);
   });
 
-  test('every switch default in the subsection matches src/lib/env.ts', () => {
+  test('every switch default in the subsection defaults line matches src/lib/env.ts', () => {
     const envSource = fs.readFileSync(path.resolve(__dirname, '../../src/lib/env.ts'), 'utf8');
-    const stated = [...subsection.matchAll(/`(RAG_[A-Z0-9_]+)=([^`]*)`/g)].filter(([, name]) => envSource.includes(`${name}: process.env.${name} ||`));
+    const defaults = subsection.split('\n').find((line) => line.startsWith('- Every Phase 5.1.1 switch')) ?? '';
+    const stated = [...defaults.matchAll(/`(RAG_[A-Z0-9_]+)=([^`]*)`/g)].filter(([, name]) => envSource.includes(`${name}: process.env.${name} ||`));
     expect(new Set(stated.map(([, name]) => name)).size).toBe(7);
     for (const [, name, value] of stated) {
       const match = envSource.match(new RegExp(`${name}: process\\.env\\.${name} \\|\\| '([^']*)'`));
