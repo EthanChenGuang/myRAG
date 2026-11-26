@@ -6,6 +6,7 @@ import { fetchAssemblyRows } from '../../context/fetch-rows';
 import type { RagConfig, StageName } from '../../config';
 import { getRagDeps, type RagDeps } from '../../deps';
 import { dedupeAndCap, type DedupeCounts, type DedupeResult } from '../../fusion/dedupe';
+import { anchorToStandalone } from '../../fusion/anchor';
 import { rrf, type FusedHit, type RankedList } from '../../fusion/rrf';
 import { getEmbeddingProfileById, LEGACY_PROFILE } from '../../embeddings/active-profile';
 import {
@@ -288,6 +289,18 @@ function tableListRows(rows: TableLookupRow[]): { rows: TableLookupRow[]; attach
 function standaloneVariantIndex(variants: readonly QueryVariant[]): number {
   const condensed = variants.findIndex((variant) => variant.kind === 'condensed');
   return condensed >= 0 ? condensed : variants.findIndex((variant) => variant.kind === 'original');
+}
+
+/**
+ * Query layer on: the standalone variant's own RRF order (its dense and lexical lists only), interleaved ahead of the fused
+ * order, so variant lists never push the standalone query's best hits out of the top ranks. Null leaves the fused order.
+ */
+function standaloneAnchorOrder(variants: readonly QueryVariant[], legsByVariant: BackendLegs[], params: RetrievalParams): string[] | null {
+  const index = standaloneVariantIndex(variants);
+  if (index < 0 || variants.length < 2) return null;
+  const legs = legsByVariant[index];
+  if (!legs) return null;
+  return rrf(listsFromLegs(index, legs.dense, legs.lexical, params), params.rrf_k).map((row) => row.hit.chunkId);
 }
 
 function withStandaloneSimilarity(fused: FusedHit[], variants: readonly QueryVariant[], legsByVariant: BackendLegs[]): FusedHit[] {
@@ -675,7 +688,10 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
           lists.push(...extraLists);
           fusedHits = rrf(lists, params.rrf_k);
         }
-        return ctx.trackStandalone ? withStandaloneSimilarity(fusedHits, variants, searchValue) : fusedHits;
+        if (!ctx.trackStandalone) return fusedHits;
+        const anchorOrder = standaloneAnchorOrder(variants, searchValue, params);
+        const anchored = anchorOrder ? anchorToStandalone(fusedHits, anchorOrder) : fusedHits;
+        return withStandaloneSimilarity(anchored, variants, searchValue);
       },
       collector,
       // A framework delegate's fusion is marked in the trace; the native fuse record is unchanged.
