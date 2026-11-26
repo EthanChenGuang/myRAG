@@ -466,4 +466,97 @@ describe('chunk translation producer (plan 03.2-49, D-29)', () => {
       fixture.db.query('SELECT * FROM rag_translation_pending_scan($1, $2, NULL, NULL, 10)', ['u:not-a-tenant', 'en']),
     );
   });
+  // --- Task 3: npm run rag:translate --------------------------------------------------------------------------------------------------
+
+  const runCli = async (argv: string[]) => {
+    const cli = await import('@/lib/rag/ingest/translate/cli');
+    const out: string[] = [];
+    const err: string[] = [];
+    const code = await cli.main(argv, { out: (line) => out.push(line), err: (line) => err.push(line) });
+    return { code, out: out.join('\n'), err: err.join('\n') };
+  };
+
+  const stored = async () =>
+    Number((await fixture.db.query<Row>('SELECT (SELECT count(*) FROM chunk_translations) + (SELECT count(*) FROM chunk_translation_gaps) AS n')).rows[0]?.n);
+
+  test('rag:translate --dry-run prints chunks per target and a 4-decimal cost from integer tokens, writes nothing, exits 2', async () => {
+    withSwitches('off');
+    await upload(TWO_TENANT_IDS.userA, 'cli-dry.md', 'C-1');
+    withSwitches('on');
+    const model = taggingModel();
+    translator.setChunkTranslationModelForTests(model);
+    const before = await stored();
+    const estimate = await produce.estimateTranslation(TENANT_A);
+    assert.ok(estimate.ok);
+    const en = estimate.languages.find((entry) => entry.language === 'en')!;
+    assert.ok(en.chunks >= 1 && Number.isInteger(en.inputTokens) && Number.isInteger(en.outputTokens));
+    const expected = Math.round(((en.inputTokens * 0.1 + en.outputTokens * 0.4 + en.outputTokens * 0.02) / 1_000_000) * 10_000) / 10_000;
+    assert.equal(en.estimatedUsd, expected);
+    const result = await runCli(['--tenant', TENANT_A, '--dry-run']);
+    assert.equal(result.code, 2, result.err);
+    assert.match(result.out, new RegExp(`en: ${en.chunks} chunks, ${en.inputTokens} input tokens, ${en.outputTokens} output tokens, \\$${en.estimatedUsd.toFixed(4)}`));
+    assert.match(result.out, /total: \d+ chunks, estimated \$\d+\.\d{4}/);
+    assert.equal(await stored(), before, 'the dry run writes nothing');
+    assert.equal(model.calls.length, 0, 'the dry run calls no model');
+  });
+
+  test('rag:translate without --budget stops after the report; with --budget it stops before exceeding it, --resume continues', async () => {
+    withSwitches('off');
+    for (let i = 0; i < 3; i += 1) await upload(TWO_TENANT_IDS.userA, `cli-budget-${i}.md`, `C-B${i}`);
+    withSwitches('on');
+    const model = taggingModel();
+    translator.setChunkTranslationModelForTests(model);
+    const before = await stored();
+    const noBudget = await runCli(['--tenant', TENANT_A]);
+    assert.equal(noBudget.code, 2, noBudget.err);
+    assert.match(noBudget.out, /no --budget/);
+    assert.equal(model.calls.length, 0);
+    assert.equal(await stored(), before);
+
+    const estimate = await produce.estimateTranslation(TENANT_A);
+    assert.ok(estimate.ok && estimate.chunks >= 3);
+    const zero = await runCli(['--tenant', TENANT_A, '--budget', '0']);
+    assert.equal(zero.code, 3, zero.out + zero.err);
+    assert.equal(model.calls.length, 0, 'a zero budget starts no chunk');
+    assert.match(zero.out, new RegExp(`remaining ${estimate.chunks}`));
+
+    const small = await runCli(['--tenant', TENANT_A, '--budget', '0.0001']);
+    assert.ok(small.code === 3 || small.code === 0, small.out + small.err);
+    const spent = /estimated \$(\d+\.\d{4})/.exec(small.out.split('\n').filter((line) => line.startsWith('[Translation] translated')).join('\n'));
+    assert.ok(spent && Number(spent[1]) <= 0.0001, small.out);
+
+    const resume = await runCli(['--tenant', TENANT_A, '--resume', '--budget', '5']);
+    assert.equal(resume.code, 0, resume.out + resume.err);
+    assert.match(resume.out, /remaining 0/);
+    const done = await produce.estimateTranslation(TENANT_A);
+    assert.ok(done.ok && done.chunks === 0);
+  });
+
+  test('rag:translate --reembed runs the re-embed path; a tenant without the setting and a switched-off deployment are refused', async () => {
+    withSwitches('on');
+    const model = taggingModel();
+    translator.setChunkTranslationModelForTests(model);
+    const reembed = await runCli(['--tenant', TENANT_A, '--reembed', '--budget', '1']);
+    assert.equal(reembed.code, 0, reembed.out + reembed.err);
+    assert.match(reembed.out, /re-embedded \d+ translations/);
+    assert.equal(model.calls.length, 0);
+
+    for (const argv of [['--tenant', TENANT_B, '--dry-run'], ['--tenant', TENANT_B, '--budget', '5'], ['--tenant', TENANT_B, '--reembed', '--budget', '5']]) {
+      const refused = await runCli(argv);
+      assert.equal(refused.code, 64, argv.join(' '));
+      assert.match(refused.err, /has not enabled translation/);
+    }
+    assert.equal(model.calls.length, 0, 'tenant B text never reaches the model');
+
+    withSwitches('off');
+    for (const argv of [['--tenant', TENANT_A, '--dry-run'], ['--tenant', TENANT_A, '--budget', '5'], ['--tenant', TENANT_A, '--reembed', '--budget', '5']]) {
+      const off = await runCli(argv);
+      assert.equal(off.code, 64, argv.join(' '));
+      assert.match(off.err, /RAG_DOC_TRANSLATION=off/);
+    }
+    assert.equal(model.calls.length, 0);
+
+    const usage = await runCli(['--tenant', 'not-a-key']);
+    assert.equal(usage.code, 64);
+  });
 });
