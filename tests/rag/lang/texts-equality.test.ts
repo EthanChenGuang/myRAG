@@ -54,3 +54,15 @@ describe('legacy refusal constants (05.2-05, D-10)', () => {
     expect(noKnowledgeBaseResponse('es')).toBe(LEGACY_NO_INFORMATION_ES);
   });
 });
+
+describe('source-aware instruction texts (05.2-05, D-10)', () => {
+  it('legacy source returns today\'s tables; registry source reads the registry', async () => {
+    const { attachedDocumentsText, citationInstructionText } = await import('@/lib/rag/generation/citations/instructions');
+    for (const code of ['en', 'zh', 'it', 'es']) {
+      expect(citationInstructionText(code)).toBe(citationInstruction(code));
+      expect(attachedDocumentsText(code, 'legacy')).toBe(attachedDocumentsSentence(code));
+    }
+    expect(citationInstructionText('it', 'registry')).toBe(fixedText('instructions.citation', 'it'));
+    expect(attachedDocumentsText('zh', 'registry')).toBe(fixedText('instructions.attached_documents', 'zh'));
+  });
+});
