@@ -217,3 +217,11 @@ export function catalogEntry(provider: string, model: string): EmbeddingModelEnt
 export function defaultModelFor(provider: string): string | undefined {
   return Object.prototype.hasOwnProperty.call(DEFAULT_MODELS, provider) ? DEFAULT_MODELS[provider as EmbeddingProviderId] : undefined;
 }
+
+export function defaultEmbeddingProfileDeclaration(): { id: string; supportedLanguages: string[] } {
+  return { id: '', supportedLanguages: [] };
+}
+
+export function embeddingProfileDeclaration(_profile: { id: string; provider: string; model: string }): { id: string; supportedLanguages: string[] } {
+  return { id: '', supportedLanguages: [] };
+}

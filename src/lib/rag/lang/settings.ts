@@ -71,3 +71,9 @@ export function resetLanguageSettingsForTests(): void {
 export function setLanguageSettingsTrapForTests(next: (() => never) | null): void {
   trap = next;
 }
+
+export function setActiveEmbeddingProfileReaderForTests(_reader: unknown): void {}
+
+export async function validateConfiguredLanguagesAgainstActiveProfile(): Promise<LanguageValidationResult> {
+  return validateConfiguredLanguages();
+}
