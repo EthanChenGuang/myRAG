@@ -21,6 +21,7 @@
     "rag:relex": "tsx src/lib/rag/ingest/relex/cli.ts",
     "rag:fingerprint": "tsx src/lib/rag/ingest/fingerprint/cli.ts",
     "rag:rebuild": "tsx src/lib/rag/ingest/rebuild/cli.ts",
+    "rag:translate": "tsx src/lib/rag/ingest/translate/cli.ts",
     "rag:embedding": "tsx src/lib/rag/embeddings/cli.ts",
     "test": "vitest run",
     "test-rag": "tsx eval/harness/run-smoke.mts",
