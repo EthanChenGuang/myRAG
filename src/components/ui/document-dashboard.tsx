@@ -37,12 +37,12 @@ import {
   mergeRefreshedDocuments,
   settleQueuedRow,
 } from "@/components/ui/ingest-document-rows"
+import { UploadQueueRow } from "@/components/ui/upload-queue-row"
 import { ConnectorGrid } from "@/components/ui/nango"
 import { useConnectorConfig } from "@/lib/hooks/use-connector-config"
 import { useFirecrawlConfig } from "@/lib/hooks/use-firecrawl-config"
 import { UrlScraper } from "@/components/ui/scrapers/url-scraper"
 import {
-  DocTypePicker,
   buildChatUploadFormData,
   pollIngestUntilTerminal,
   type DocTypePickerValue,
@@ -1432,34 +1432,22 @@ export function DocumentDashboard({
                           >
                             <div>
                               {files.map((file, index) => (
-                                <div
+                                <UploadQueueRow
                                   key={index}
-                                  className="group flex items-center justify-between gap-2 px-4 py-2 hover:bg-white/50 dark:hover:bg-[#212121]"
-                                >
-                                  <div className="grid gap-0.5 min-w-0 flex-1 mr-2">
-                                    <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{file.name}</p>
-                                    <p className="text-xs text-gray-600 dark:text-gray-400">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
-                                  </div>
-                                  {docTypePickerEnabled ? (
-                                    <DocTypePicker
-                                      value={fileDocTypes[file.name] ?? tenantDocTypeDefault}
-                                      language={language}
-                                      disabled={isProcessing}
-                                      onChange={(value) =>
-                                        setFileDocTypes((prev) => ({ ...prev, [file.name]: value }))
-                                      }
-                                    />
-                                  ) : null}
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-6 w-6 flex-shrink-0 rounded-full opacity-0 transition-opacity group-hover:opacity-100 hover:bg-white dark:hover:bg-[#212121]"
-                                    onClick={() => removeFile(index)}
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5 text-gray-600 dark:text-gray-400" />
-                                    <span className="sr-only">Remove file</span>
-                                  </Button>
-                                </div>
+                                  fileName={file.name}
+                                  fileSize={file.size}
+                                  language={language}
+                                  disabled={isProcessing}
+                                  docType={
+                                    docTypePickerEnabled
+                                      ? {
+                                          value: fileDocTypes[file.name] ?? tenantDocTypeDefault,
+                                          onChange: (value) => setFileDocTypes((prev) => ({ ...prev, [file.name]: value })),
+                                        }
+                                      : null
+                                  }
+                                  onRemove={() => removeFile(index)}
+                                />
                               ))}
                             </div>
                           </ScrollArea>
