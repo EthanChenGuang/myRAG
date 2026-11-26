@@ -1,4 +1,5 @@
 import type { Profile } from './types';
+import { RETRIEVAL_BACKEND_IDS, type BackendId } from './backend/types';
 import { getLanguageSettings } from './lang/settings';
 import { LANGUAGES_NOT_CONFIGURED, resolvePipelines, type LanguagesNotConfigured, type PipelineSource } from './lang/resolve';
 
@@ -304,7 +305,19 @@ export interface RagEnvInput {
   RAG_SEMANTIC_CACHE_REFUSAL_TTL?: string;
   RAG_SEMANTIC_CACHE_MAX_DISTANCE?: string;
   RAG_SEMANTIC_CACHE_EMBED_STORE?: string;
+  RAG_RETRIEVAL_BACKEND?: string;
+  RAG_RETRIEVAL_BACKEND_VOICE?: string;
+  RAG_VECTOR_SYNC_MAX_LAG_SECONDS?: string;
 }
+
+/** D-11, D-24: where retrieval runs per profile, and the sync lag bound for index readiness. Keys never live here. */
+export interface BackendConfig {
+  default: BackendId;
+  voice: BackendId;
+  maxLagSeconds: number;
+}
+
+export const DEFAULT_MAX_LAG_SECONDS = 300;
 
 export interface RagConfig {
   pipeline: 'legacy' | 'v2';
@@ -330,6 +343,7 @@ export interface RagConfig {
   outputLinkAllowlist: string;
   queryLayer: QueryLayerConfig;
   semanticCache: SemanticCacheConfig;
+  backend: BackendConfig;
   warnings: string[];
 }
 
@@ -426,6 +440,23 @@ function parseNamedChoice<T extends string>(name: string, raw: string | undefine
   if (match !== undefined) return match;
   problem(warnings, `${name}:${value}`, `Unsupported ${name} value, using ${fallback}`, { value });
   return fallback;
+}
+
+function parsePositiveInt(name: string, raw: string | undefined, fallback: number, warnings: string[]): number {
+  const value = (raw ?? '').trim();
+  if (value === '') return fallback;
+  const n = /^\d+$/.test(value) ? Number(value) : NaN;
+  if (Number.isSafeInteger(n) && n > 0) return n;
+  problem(warnings, `${name}:${value}`, `Invalid ${name} value, using ${fallback}`, { value });
+  return fallback;
+}
+
+function parseBackend(env: RagEnvInput, warnings: string[]): BackendConfig {
+  return {
+    default: parseNamedChoice('RAG_RETRIEVAL_BACKEND', env.RAG_RETRIEVAL_BACKEND, RETRIEVAL_BACKEND_IDS, 'pgvector', warnings),
+    voice: parseNamedChoice('RAG_RETRIEVAL_BACKEND_VOICE', env.RAG_RETRIEVAL_BACKEND_VOICE, RETRIEVAL_BACKEND_IDS, 'pgvector', warnings),
+    maxLagSeconds: parsePositiveInt('RAG_VECTOR_SYNC_MAX_LAG_SECONDS', env.RAG_VECTOR_SYNC_MAX_LAG_SECONDS, DEFAULT_MAX_LAG_SECONDS, warnings),
+  };
 }
 
 function parseExactIdSwitch(raw: string | undefined, warnings: string[]): boolean {
@@ -869,6 +900,9 @@ function memoKey(env: RagEnvInput): string {
     env.RAG_SEMANTIC_CACHE_REFUSAL_TTL ?? '',
     env.RAG_SEMANTIC_CACHE_MAX_DISTANCE ?? '',
     env.RAG_SEMANTIC_CACHE_EMBED_STORE ?? '',
+    env.RAG_RETRIEVAL_BACKEND ?? '',
+    env.RAG_RETRIEVAL_BACKEND_VOICE ?? '',
+    env.RAG_VECTOR_SYNC_MAX_LAG_SECONDS ?? '',
   ]);
 }
 
@@ -966,6 +1000,7 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
     outputLinkAllowlist: (env.RAG_OUTPUT_LINK_ALLOWLIST ?? '').trim(),
     queryLayer,
     semanticCache,
+    backend: parseBackend(env, warnings),
     warnings,
   };
   memo.set(snapshot, config);
