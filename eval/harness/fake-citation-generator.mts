@@ -20,6 +20,12 @@ const FIRST_SENTENCE_RE = /^[\s\S]*?[.!?。！？](?=\s|$)/;
 const MAX_SENTENCE_CHARS = 300;
 const STREAM_PIECE_CHARS = 12;
 const NO_CONTEXT_ANSWER = 'The provided documents do not contain this information.';
+export const FAKE_UNSUPPORTED_ANSWERS: Readonly<Record<string, string>> = {};
+
+export interface FakeCitationGeneratorOptions {
+  noAnswerQuestions?: ReadonlyMap<string, string>;
+  promptTemplate?: string;
+}
 
 const USAGE = {
   inputTokens: { total: 0, noCache: 0, cacheRead: 0, cacheWrite: 0 },
@@ -71,7 +77,7 @@ function digest(seed: string, question: string): Buffer {
 }
 
 /** The answer for one question: a pure function of the system prompt, the question and the seed. */
-export function fakeCitationAnswer(input: { system: string; question: string; seed?: string }): string {
+export function fakeCitationAnswer(input: { system: string; question: string; seed?: string } & FakeCitationGeneratorOptions): string {
   const blocks = labelledBlocks(input.system);
   if (blocks.length === 0) return NO_CONTEXT_ANSWER;
   const bytes = digest(input.seed ?? DEFAULT_FAKE_CITATION_SEED, input.question);
@@ -121,7 +127,10 @@ function promptParts(options: LanguageModelV3CallOptions): { system: string; que
 }
 
 /** Returns the language-model factory the harness installs with setEvalLanguageModelFactory. */
-export function installFakeCitationGenerator(seed: string = DEFAULT_FAKE_CITATION_SEED): FakeLanguageModelFactory {
+export function installFakeCitationGenerator(
+  seed: string = DEFAULT_FAKE_CITATION_SEED,
+  _options: FakeCitationGeneratorOptions = {},
+): FakeLanguageModelFactory {
   return (modelId) =>
     new MockLanguageModelV3({
       provider: 'fake',
