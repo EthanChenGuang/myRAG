@@ -29,12 +29,12 @@ vi.mock('ai', async (importOriginal) => {
       const result = await h.capture.streamText(params);
       return {
         ...result,
-        toUIMessageStreamResponse: (options?: Record<string, unknown>) => {
+        // The embed route builds its response from toUIMessageStream, the composition toUIMessageStreamResponse uses (04.2-10)
+        toUIMessageStream: (options?: Record<string, unknown>) => {
           h.responseOptions.push(options);
           const stream = result.toUIMessageStream(options as never);
-          const response = actual.createUIMessageStreamResponse({ stream: stream as never, headers: options?.headers as HeadersInit });
           (params.onFinish as ((event: { text: string }) => void) | undefined)?.({ text: 'ok' });
-          return response;
+          return stream;
         },
       };
     },

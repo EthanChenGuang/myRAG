@@ -1,3 +1,5 @@
+import type { TraceCacheState } from './collector';
+
 /** D-25: observes a UI message stream and calls `onFirst` once, when the first `text-delta` chunk passes; chunks are never altered. */
 export function withFirstTextDelta<T extends { type: string }>(stream: ReadableStream<T>, onFirst: () => void): ReadableStream<T> {
   let seen = false;
@@ -34,4 +36,11 @@ export async function awaitPreGenerationDelay(): Promise<void> {
   const delay = preGenerationDelayMs;
   if (delay <= 0) return;
   await new Promise<void>((resolve) => setTimeout(resolve, delay));
+}
+
+/** D-25: `hit` when the semantic cache answered, `miss` when it checked and handed out a store ticket, `bypass` otherwise. */
+export function traceCacheState(result: { cacheHit?: unknown; cacheTicket?: unknown }): TraceCacheState {
+  if (result.cacheHit) return 'hit';
+  if (result.cacheTicket) return 'miss';
+  return 'bypass';
 }

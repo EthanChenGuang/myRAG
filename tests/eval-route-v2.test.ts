@@ -6,7 +6,7 @@ import { LEXICAL_VERSION } from '@/lib/rag/lexical/chunk-text';
 import { RERANK_TEXT_VERSION } from '@/lib/rag/rerank/types';
 
 const SECRET = 'a'.repeat(48);
-const ENV_NAMES = ['RAG_EVAL_SECRET', 'RAG_EVAL_ENDPOINT_ENABLED', 'NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE'] as const;
+const ENV_NAMES = ['RAG_EVAL_SECRET', 'RAG_EVAL_ENDPOINT_ENABLED', 'NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE', 'RAG_LEXICAL_DICTIONARY', 'RAG_LEXICAL_STEM_IT'] as const;
 const env = process.env as Record<string, string | undefined>;
 const DOC_ID = '11111111-1111-4111-8111-111111111111';
 
@@ -130,6 +130,8 @@ describe('eval route v2 overrides, filters and trace fields', () => {
     env.RAG_EVAL_SECRET = SECRET;
     env.RAG_EVAL_ENDPOINT_ENABLED = 'true';
     env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = 'single-tenant';
+    delete env.RAG_LEXICAL_DICTIONARY;
+    delete env.RAG_LEXICAL_STEM_IT;
     h.runSpy.mockReset();
     h.next.result = legacyResult();
     vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -346,5 +348,82 @@ describe('eval route v2 overrides, filters and trace fields', () => {
     expect(trace.candidates[0].fused_score).toBeNull();
     expect(trace.candidates[0].language).toBeNull();
     expect('legs' in trace.candidates[0]).toBe(false);
+  });
+
+  it('reports the effective lexical version: 2 with both lexical switches unset, 5 with both on (D-42)', async () => {
+    h.next.result = v2Result();
+    const unset = (await (await (await loadRoute()).POST(evalRequest())).json()) as Record<string, any>;
+    expect(unset.retrieval_versions.lexical).toBe(2);
+
+    env.RAG_LEXICAL_DICTIONARY = 'true';
+    const dictionary = (await (await (await loadRoute()).POST(evalRequest())).json()) as Record<string, any>;
+    expect(dictionary.retrieval_versions.lexical).toBe(3);
+
+    env.RAG_LEXICAL_STEM_IT = 'true';
+    const both = (await (await (await loadRoute()).POST(evalRequest())).json()) as Record<string, any>;
+    expect(both.retrieval_versions.lexical).toBe(5);
+  });
+
+  describe('timing fields (D-25)', () => {
+    async function generate(options: { includeAnswer: boolean; result?: unknown }) {
+      h.next.result = options.result ?? v2Result();
+      const route = await loadRoute();
+      const answer = await import('@/lib/rag-eval/answer');
+      const { MockLanguageModelV3 } = await import('ai/test');
+      answer.setEvalLanguageModelFactory(
+        () =>
+          new MockLanguageModelV3({
+            doGenerate: async () => ({
+              content: [{ type: 'text' as const, text: 'A neutral synthetic answer.' }],
+              finishReason: { unified: 'stop' as const, raw: 'stop' },
+              usage: {
+                inputTokens: { total: 1, noCache: 1, cacheRead: 0, cacheWrite: 0 },
+                outputTokens: { total: 1, text: 1, reasoning: 0 },
+              },
+              warnings: [],
+            }),
+          }),
+      );
+      try {
+        const response = await route.POST(
+          new NextRequest('http://localhost/api/internal/rag/run', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', 'x-rag-eval-secret': SECRET },
+            body: JSON.stringify({
+              schema_version: 1,
+              query: 'What does the alpha module do?',
+              rag_mode: 'strict',
+              ...(options.includeAnswer ? { include_answer: true, options: { generator_model: 'meta-llama/llama-3.3-70b-instruct' } } : {}),
+            }),
+          }),
+        );
+        expect(response.status).toBe(200);
+        return (await response.json()) as Record<string, any>;
+      } finally {
+        answer.setEvalLanguageModelFactory(null);
+      }
+    }
+
+    it('returns ttft_ms, pre_generation_ms and cache when an answer was generated', async () => {
+      const trace = await generate({ includeAnswer: true });
+      expect(trace.answer).toBe('A neutral synthetic answer.');
+      expect(typeof trace.ttft_ms).toBe('number');
+      expect(typeof trace.pre_generation_ms).toBe('number');
+      expect(trace.ttft_ms).toBeGreaterThanOrEqual(trace.pre_generation_ms);
+      expect(trace.cache).toBe('bypass');
+    });
+
+    it('reports cache miss when the semantic_cache stage handed out a ticket', async () => {
+      const trace = await generate({ includeAnswer: true, result: v2Result({ cacheTicket: { key: 'stub' } }) });
+      expect(trace.cache).toBe('miss');
+    });
+
+    it('omits the timing fields without include_answer', async () => {
+      const trace = await generate({ includeAnswer: false });
+      expect(trace.answer).toBeNull();
+      expect('ttft_ms' in trace).toBe(false);
+      expect('pre_generation_ms' in trace).toBe(false);
+      expect('cache' in trace).toBe(false);
+    });
   });
 });
