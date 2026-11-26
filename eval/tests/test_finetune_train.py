@@ -655,3 +655,29 @@ def test_tiny_cpu_training_smoke(tmp_path):
 
     reloaded = sentence_transformers.SentenceTransformer(str(model_dir), device="cpu")
     assert reloaded.get_embedding_dimension() == 1024
+
+
+# --- Task 3: training lock -----------------------------------------------------------------------------------
+
+
+def test_train_lock_pins_the_eval_lock_versions_with_hashes():
+    import re
+    import tomllib
+
+    from rag_eval.paths import REPO_ROOT
+
+    eval_lock = tomllib.loads((REPO_ROOT / "eval" / "uv.lock").read_text())
+    locked: dict[str, set[str]] = {}
+    for package in eval_lock["package"]:
+        locked.setdefault(package["name"], set()).add(package["version"].split("+", 1)[0])
+    text = kit.TRAIN_LOCK.read_text()
+    pins = dict(re.findall(r"^([a-z0-9._-]+)==(\S+) \\$", text, flags=re.MULTILINE))
+    assert pins["sentence-transformers"] == "6.2.0" and pins["torch"] == "2.15.0"
+    blocks = re.split(r"^(?=[a-z0-9._-]+==)", text, flags=re.MULTILINE)[1:]
+    assert len(blocks) == len(pins) and all("--hash=sha256:" in block for block in blocks)
+    added = {name for name in pins if name not in locked}
+    assert all(name.startswith(("nvidia-", "cuda-")) or name == "triton" for name in added), added
+    for name, version in pins.items():
+        if name in locked:
+            assert version in locked[name], (name, version, locked[name])
+    assert kit.lock_versions() == {k: pins[v] for k, v in kit.LOCK_PACKAGES.items()}

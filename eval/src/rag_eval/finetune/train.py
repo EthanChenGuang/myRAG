@@ -444,7 +444,10 @@ def _prepare_out(out: Path) -> None:
     if out.exists() and (not out.is_dir() or any(out.iterdir())):
         raise TrainRefused("out_exists")
     out.mkdir(parents=True, exist_ok=True)
-    os.chmod(out, 0o700)
+    try:
+        os.chmod(out, 0o700)
+    except OSError:
+        pass  # a mounted output directory owned by the host keeps its own mode
 
 
 def run_train(
