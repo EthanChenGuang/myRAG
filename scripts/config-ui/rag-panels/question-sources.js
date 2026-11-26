@@ -440,6 +440,14 @@ function questionSourcesSettingsWarnings(values) {
   return out;
 }
 
+function questionSourcesReadHeader() {
+  return [];
+}
+
+function questionSourcesBatches() {
+  return [];
+}
+
 class QuestionSourcesPanel {
   constructor(root, deps) {
     const d = deps || {};
@@ -1084,6 +1092,8 @@ if (typeof module !== 'undefined' && module.exports) {
     questionSourcesSampleView,
     questionSourcesPilotView,
     questionSourcesSettingsWarnings,
+    questionSourcesReadHeader,
+    questionSourcesBatches,
     QuestionSourcesPanel,
     initQuestionSourcesPanel,
   };
