@@ -153,10 +153,10 @@ for (const mode of MODES) {
       assert.ok(id);
       const again = await enqueue(db, source.tenantKey, 'output_guard', sourceOf(source, [...source.chunkIds].reverse()), { detector: 'rules', trace_id: 'trace-0002' });
       assert.equal(again, id, 'same reason and ids in the same week returns the existing item');
-      const count = await db.query<{ n: number }>('SELECT count(*)::int AS n FROM rag_review_items WHERE tenant_key = $1 AND $2 = ANY(reasons)', [
-        source.tenantKey,
-        'output_guard',
-      ]);
+      const count = await db.query<{ n: number }>(
+        'SELECT count(*)::int AS n FROM rag_review_items WHERE tenant_key = $1 AND query_fingerprint = (SELECT query_fingerprint FROM rag_review_items WHERE id = $2)',
+        [source.tenantKey, id],
+      );
       assert.equal(count.rows[0]?.n, 1);
 
       const item = (await itemById(db, id)) as Row;

@@ -801,6 +801,10 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_list_security_uploaders(text[], integer) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_list_security_uploaders(text[], integer) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_enqueue_review_item(text, text, jsonb, jsonb)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_enqueue_review_item(text, text, jsonb, jsonb) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_enqueue_review_item(text, text, jsonb, jsonb) TO service_role;
+  END IF;
 END
 $service_role_only$;
 
