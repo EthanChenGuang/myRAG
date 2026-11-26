@@ -144,6 +144,38 @@ const TERMINOLOGY_RPC_RE = /\.rpc\s*\(\s*(['"`])rag_term_/g;
 const TERMINOLOGY_TABLE_RE = new RegExp(String.raw`\.from\s*(?:<[^>()]*>)?\s*\(\s*(['"\`])rag_term_`, 'g');
 
 const inSrc = (rel) => rel.startsWith('src/');
+// D-16: the deterministic lookup RPCs run only inside the pipeline, and the lookup module never builds SQL or reaches a model.
+export const TABLE_LOOKUP_RPCS = [
+  'rag_table_lookup',
+  'rag_identifier_resolve',
+  'rag_identifier_candidates',
+  'rag_document_versions',
+  'rag_dup_cluster_sources',
+];
+export const TABLE_LOOKUP_MODULE = 'src/lib/rag/retrieval/table-lookup.ts';
+const TABLE_LOOKUP_RPC_RE = new RegExp(String.raw`\.rpc\s*\(\s*(['"\`])(?:${TABLE_LOOKUP_RPCS.join('|')})\1`, 'g');
+const STRING_LITERAL_RE = /'(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*"|`(?:\\.|[^`\\])*`/g;
+const SQL_KEYWORD_RE = /\b(?:select|insert|update|delete|drop|alter|truncate|union|execute|where|join|from|into|values)\b/i;
+const SQL_CALL_RE = /\.(?:from|query|sql|raw|unsafe)\s*(?:<[^>()]*>)?\s*\(|\bsql\s*`/g;
+const MODEL_PACKAGE_RE = /^(?:ai|openai|@ai-sdk\/|@openrouter\/|@anthropic-ai\/|@langchain\/|@modelcontextprotocol\/)/;
+const MODEL_MODULE_PREFIXES = ['src/lib/rag/generation/', 'src/lib/rag/query/llm', 'src/lib/rag/rerank/', 'src/lib/openrouter', 'src/lib/ai'];
+const isTableLookupModule = (rel) => rel === TABLE_LOOKUP_MODULE;
+
+function findTableLookupSql(text, rel) {
+  const out = [];
+  for (const m of text.matchAll(STRING_LITERAL_RE)) {
+    if (SQL_KEYWORD_RE.test(m[0])) out.push({ index: m.index, message: `SQL text in a string: ${m[0].slice(0, 60)}` });
+  }
+  out.push(...regexMatches(SQL_CALL_RE, text));
+  for (const imp of listImports(text)) {
+    const resolved = resolveSpec(rel, imp.spec);
+    const model =
+      resolved === null ? MODEL_PACKAGE_RE.test(imp.spec) : MODEL_MODULE_PREFIXES.some((prefix) => `${specBase(resolved)}`.startsWith(prefix));
+    if (model) out.push({ index: imp.index, message: `generation or model import ${imp.spec}` });
+  }
+  return out;
+}
+
 const outsideTerminologyDir = (rel) => inSrc(rel) && !rel.startsWith(TERMINOLOGY_DIR);
 const outsideLedgerClient = (rel) => inSrc(rel) && rel !== LEDGER_CLIENT;
 const outsideBudgetClient = (rel) => inSrc(rel) && rel !== BUDGET_CLIENT;
@@ -465,6 +497,18 @@ export const RULES = [
     description: 'rag_term_* RPC call or table access under src/ outside src/lib/rag/terminology/ (read through getTerminologyLexicon)',
     appliesTo: outsideTerminologyDir,
     find: (text) => [...regexMatches(TERMINOLOGY_RPC_RE, text), ...regexMatches(TERMINOLOGY_TABLE_RE, text)],
+  },
+  {
+    id: 'table-lookup-rpc',
+    description: `deterministic lookup RPC (${TABLE_LOOKUP_RPCS.join(', ')}) called outside src/lib/rag (go through runRetrieval)`,
+    appliesTo: outsideRag,
+    find: (text) => regexMatches(TABLE_LOOKUP_RPC_RE, text),
+  },
+  {
+    id: 'table-lookup-sql',
+    description: 'SQL text, a query builder call, or a generation or model import in the table lookup module (D-16: token arrays only)',
+    appliesTo: isTableLookupModule,
+    find: (text, rel) => findTableLookupSql(text, rel),
   },
   {
     id: 'rerank-http',

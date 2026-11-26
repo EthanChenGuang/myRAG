@@ -480,6 +480,20 @@ describe('the table_lookup stage and the table:0 list through runRetrieval (sing
     assert.ok(on.context.includes('drovask'), 'the row chunk text is in the context');
   });
 
+  test('the header is attached end to end only when the chunk text lacks it', async () => {
+    const withHeader = await run({ RAG_TABLE_LOOKUP: 'true' });
+    assert.ok(!withHeader.stages.some((stage) => stage.counts && 'table_row_attached' in stage.counts));
+    const bodyOnly = TABLE_TEXT.split('\n').slice(4).join('\n');
+    await db.query('UPDATE document_chunks SET content = $2 WHERE id = $1', [chunkId, bodyOnly]);
+    try {
+      const attached = await run({ RAG_TABLE_LOOKUP: 'true' });
+      assert.equal(attached.stages.find((stage) => stage.name === 'assemble')?.counts?.table_row_attached, 1);
+      assert.ok(attached.context.includes('| Brennik | Solvane | Mirtha |\n| --- | --- | --- |\n| drovask | quilmeno | yarrot |'), attached.context);
+    } finally {
+      await db.query('UPDATE document_chunks SET content = $2 WHERE id = $1', [chunkId, TABLE_TEXT]);
+    }
+  });
+
   test('a narrowing filter makes the stage stand down with the reason; a version scope alone does not', async () => {
     const narrowed = await run({ RAG_TABLE_LOOKUP: 'true' }, { retrievalFilters: { documentIds: [documentId] } });
     const stage = narrowed.stages.find((entry) => entry.name === 'table_lookup');

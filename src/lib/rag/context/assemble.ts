@@ -67,12 +67,27 @@ export interface TableRowAttachment {
   cells: Record<string, string>;
 }
 
-export function renderTableRowLines(_row: TableRowAttachment): string {
-  return '';
+function tableLine(values: readonly string[]): string {
+  return `| ${values.map((value) => value.replace(/\|/g, '\\|')).join(' | ')} |`;
 }
 
-export function attachTableRow(_content: string, _row: TableRowAttachment): string | null {
-  return null;
+/** The header row, the separator and the matched row as Markdown table lines; only the pipe is escaped. */
+export function renderTableRowLines(row: TableRowAttachment): string {
+  return [tableLine(row.header), tableLine(row.header.map(() => '---')), tableLine(row.header.map((name) => row.cells[name] ?? ''))].join('\n');
+}
+
+function normalizeTableText(text: string): string {
+  return text.replace(/\s+/g, ' ').replace(/ ?\| ?/g, '|').trim();
+}
+
+/**
+ * D-17: the chunk text with the header and matched row in front, or null when nothing is added: the row has no header, or the chunk
+ * already carries the header row (compared after whitespace normalization).
+ */
+export function attachTableRow(content: string, row: TableRowAttachment): string | null {
+  if (row.header.length === 0) return null;
+  if (normalizeTableText(content).includes(normalizeTableText(tableLine(row.header)))) return null;
+  return `${renderTableRowLines(row)}\n\n${content}`;
 }
 
 export interface FilteredCandidates<C extends AssemblyCandidate = AssemblyCandidate> {
