@@ -6690,6 +6690,14 @@
                                                     </label>
                                                     <p class="label-text-alt text-base-content/70 pl-8 max-w-prose" id="rag-lexical-stem-it-help" data-rag-i18n="RAG_LEXICAL_STEM_IT.help">In Italian text, singular and plural forms of a word match each other in keyword search. Other languages are not changed.</p>
                                                 </div>
+                                                <div class="flex flex-col gap-1">
+                                                    <label class="flex items-center gap-2 cursor-pointer">
+                                                        <input type="checkbox" id="RAG_LEXICAL_QUANTITY" name="RAG_LEXICAL_QUANTITY" autocomplete="off" class="checkbox checkbox-primary" aria-describedby="rag-lexical-quantity-help rag-lexical-quantity-stored">
+                                                        <span class="label-text"><span data-rag-i18n="RAG_LEXICAL_QUANTITY.label">Numbers with units as single search terms</span> (<span translate="no">RAG_LEXICAL_QUANTITY</span>)</span>
+                                                    </label>
+                                                    <p class="label-text-alt text-base-content/70 pl-8 max-w-prose" id="rag-lexical-quantity-help" data-rag-i18n="RAG_LEXICAL_QUANTITY.help">A number followed by a unit symbol also matches as one term in keyword search, whatever its spacing, digit grouping, decimal separator or letter case. Calibrated refusal thresholds belong to one tokenizer version; calibrate them again after the rebuild.</p>
+                                                    <p class="label-text-alt text-base-content/70 pl-8" id="rag-lexical-quantity-stored"><span data-rag-i18n="RAG_LEXICAL_QUANTITY.stored">Stored documents: rebuild their search text with</span> <code class="font-mono text-xs break-all" translate="no">npm run rag:relex -- --tenant &lt;key&gt;</code></p>
+                                                </div>
                                             </div>
                                             <div class="space-y-4 border-t border-base-300 pt-4">
                                                 <div class="flex flex-col gap-1">
@@ -6741,6 +6749,15 @@
                                                         <span class="label-text"><span data-rag-i18n="RAG_IDENTIFIER_FILTER.label">Identifier filter</span> (<span translate="no">RAG_IDENTIFIER_FILTER</span>)</span>
                                                     </label>
                                                     <p class="label-text-alt text-base-content/70 pl-8 max-w-prose" id="rag-identifier-filter-help" data-rag-i18n="RAG_IDENTIFIER_FILTER.help">When a question names an identifier this workspace has, retrieval is limited to the passages that carry it, and passages about a look-alike identifier are left out. Needs the identifier index.</p>
+                                                </div>
+                                                <div class="form-control">
+                                                    <label class="label" for="RAG_ATTRIBUTE_FILTER"><span class="label-text" data-rag-i18n="RAG_ATTRIBUTE_FILTER.label">Attribute filter</span></label>
+                                                    <select id="RAG_ATTRIBUTE_FILTER" name="RAG_ATTRIBUTE_FILTER" autocomplete="off" translate="no" aria-describedby="rag-attribute-filter-help" class="select select-bordered w-full max-w-xs">
+                                                        <option value="off" selected>off</option>
+                                                        <option value="hard">hard</option>
+                                                        <option value="soft">soft</option>
+                                                    </select>
+                                                    <p class="label-text-alt text-base-content/70 max-w-prose mt-1" id="rag-attribute-filter-help" data-rag-i18n="RAG_ATTRIBUTE_FILTER.help"><code class="font-mono text-xs" translate="no">off</code> ignores attributes. <code class="font-mono text-xs" translate="no">hard</code> limits retrieval to the documents whose attributes match a value named in the question or sent with the request, and searches again without the limit when that finds nothing. <code class="font-mono text-xs" translate="no">soft</code> keeps every document and ranks the matching ones higher. Needs document attributes and the v2 pipeline.</p>
                                                 </div>
                                             </div>
                                         </div>
@@ -9638,6 +9655,54 @@
                                                         <div class="label flex-wrap gap-1">
                                                             <span class="label-text-alt" id="rag-caption-language-help"><span data-rag-i18n="RAG_CAPTION_LANGUAGE.help">Captions of images are written in English or in the language of their document.</span> <span data-rag-i18n="settings.affectsStored">Changing this affects documents already stored; saving shows how many.</span></span>
                                                             <code class="font-mono text-xs break-all" translate="no">RAG_CAPTION_LANGUAGE</code>
+                                                        </div>
+                                                    </div>
+                                                    <div class="form-control mb-4">
+                                                        <label class="label" for="RAG_PAGE_BOILERPLATE">
+                                                            <span class="label-text" data-rag-i18n="RAG_PAGE_BOILERPLATE.label">Page boilerplate cleaning</span>
+                                                        </label>
+                                                        <select id="RAG_PAGE_BOILERPLATE" name="RAG_PAGE_BOILERPLATE" autocomplete="off" aria-describedby="rag-page-boilerplate-help" class="select select-bordered select-sm w-full">
+                                                            <option value="off" data-rag-i18n="RAG_PAGE_BOILERPLATE.opt.off">Off</option>
+                                                            <option value="detect" data-rag-i18n="RAG_PAGE_BOILERPLATE.opt.detect">Detect repeated lines</option>
+                                                            <option value="rules" data-rag-i18n="RAG_PAGE_BOILERPLATE.opt.rules">Workspace rules</option>
+                                                            <option value="both" data-rag-i18n="RAG_PAGE_BOILERPLATE.opt.both">Detect and workspace rules</option>
+                                                        </select>
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-page-boilerplate-help"><span data-rag-i18n="RAG_PAGE_BOILERPLATE.help">Before a document is split into chunks, removes lines that repeat at the top or bottom of its pages, lines that match the workspace’s rules, or both. The stored parse output is not changed. Needs the unified ingest pipeline.</span> <span id="rag-page-boilerplate-stored"><span data-rag-i18n="RAG_PAGE_BOILERPLATE.stored">Stored documents: they keep their current chunks until a chunking profile is rebuilt with</span> <code class="font-mono text-xs break-all" translate="no">npm run rag:rechunk -- --profile &lt;id&gt;</code></span></span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_PAGE_BOILERPLATE</code>
+                                                        </div>
+                                                    </div>
+                                                    <div class="form-control mb-4">
+                                                        <label class="label" for="RAG_SECTION_RULES">
+                                                            <span class="label-text" data-rag-i18n="RAG_SECTION_RULES.label">Section rule sets</span>
+                                                        </label>
+                                                        <select id="RAG_SECTION_RULES" name="RAG_SECTION_RULES" autocomplete="off" aria-describedby="rag-section-rules-help" class="select select-bordered select-sm w-full">
+                                                            <option value="off" data-rag-i18n="RAG_SECTION_RULES.opt.off">Off</option>
+                                                            <option value="on" data-rag-i18n="RAG_SECTION_RULES.opt.on">On</option>
+                                                        </select>
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-section-rules-help"><span data-rag-i18n="RAG_SECTION_RULES.help">Splits a document at the headings that its workspace’s rule set allows; other headings stay body text. A document that does not satisfy its rule set is split the usual way and marked for review. A workspace without a rule set is not changed. Needs the unified ingest pipeline.</span> <span id="rag-section-rules-stored"><span data-rag-i18n="RAG_SECTION_RULES.stored">Stored documents: they keep their current chunks until a chunking profile is rebuilt with</span> <code class="font-mono text-xs break-all" translate="no">npm run rag:rechunk -- --profile &lt;id&gt;</code></span></span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_SECTION_RULES</code>
+                                                        </div>
+                                                    </div>
+                                                    <div class="form-control mb-4">
+                                                        <label class="label cursor-pointer justify-start gap-2">
+                                                            <input type="checkbox" id="RAG_DOC_ATTRIBUTES" name="RAG_DOC_ATTRIBUTES" autocomplete="off" class="checkbox checkbox-primary" aria-describedby="rag-doc-attributes-help">
+                                                            <span class="label-text" data-rag-i18n="RAG_DOC_ATTRIBUTES.label">Document attributes</span>
+                                                        </label>
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-doc-attributes-help"><span data-rag-i18n="RAG_DOC_ATTRIBUTES.help">Stores attributes with each document and its chunks, checked against the workspace’s attribute schema. A value with an unknown key or the wrong type is rejected. Needs the unified ingest pipeline.</span></span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_DOC_ATTRIBUTES</code>
+                                                        </div>
+                                                    </div>
+                                                    <div class="form-control mb-4">
+                                                        <label class="label cursor-pointer justify-start gap-2">
+                                                            <input type="checkbox" id="RAG_ATTRIBUTE_HEADER" name="RAG_ATTRIBUTE_HEADER" autocomplete="off" class="checkbox checkbox-primary" aria-describedby="rag-attribute-header-help">
+                                                            <span class="label-text" data-rag-i18n="RAG_ATTRIBUTE_HEADER.label">Attribute header in search text</span>
+                                                        </label>
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-attribute-header-help"><span data-rag-i18n="RAG_ATTRIBUTE_HEADER.help">Adds one line, rendered from the workspace’s header template and the document’s attributes, to the text used for embedding and keyword search. The line is never sent to the answering model. Needs document attributes.</span> <span id="rag-attribute-header-stored"><span data-rag-i18n="RAG_ATTRIBUTE_HEADER.stored">Stored documents: their search text has no attribute header until a chunking profile is rebuilt with</span> <code class="font-mono text-xs break-all" translate="no">npm run rag:rechunk -- --profile &lt;id&gt;</code></span></span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_ATTRIBUTE_HEADER</code>
                                                         </div>
                                                     </div>
                                                 </div>
