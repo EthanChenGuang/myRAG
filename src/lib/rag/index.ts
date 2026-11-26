@@ -205,6 +205,15 @@ export {
 } from './generation/messages';
 export { readAnswerConfig, type AnswerConfig } from './generation/answer-config';
 export {
+  answerReserveTokens,
+  decideOutputCap,
+  effectiveMaxOutputTokens,
+  outputCapFloor,
+  resolveOutputCap,
+  type OutputCapDecision,
+} from './generation/output-cap';
+export { CLAUDE_MAX_OUTPUT_TOKENS } from './generation/citations/claude';
+export {
   answerFinishFields,
   answerTraceFields,
   createAnswerTurn,

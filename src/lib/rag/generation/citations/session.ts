@@ -54,6 +54,8 @@ export interface ClaudeStartInput {
   question: string;
   reasoning: boolean;
   abortSignal: AbortSignal;
+  /** Phase 5.2 D-29: the turn's output cap; absent keeps CLAUDE_MAX_OUTPUT_TOKENS. */
+  outputCap?: number | null;
   onError(error: unknown): void;
   fetch?: typeof fetch;
 }
@@ -253,6 +255,7 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
         question: start.question,
         anthropicId,
         reasoning: start.reasoning,
+        ...(typeof start.outputCap === 'number' ? { outputCap: start.outputCap } : {}),
         abortSignal: start.abortSignal,
         onError: start.onError,
       });

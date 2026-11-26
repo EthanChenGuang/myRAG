@@ -30,6 +30,7 @@ import {
   isV2Pipeline,
   answerFinishFields,
   answerTraceFields,
+  CLAUDE_MAX_OUTPUT_TOKENS,
   createAnswerTurn,
   parseBodyChannel,
   kbUnavailableLanguage,
@@ -1297,7 +1298,8 @@ export async function POST(req: Request) {
             exclude?: boolean
           },
           language?: Language, // Add language selection for system prompts
-          systemPromptTemplate?: SystemPromptTemplate // Add system prompt template selection
+          systemPromptTemplate?: SystemPromptTemplate, // Add system prompt template selection
+          maxOutputTokens?: unknown // The request's own output limit (WhatsApp sends WHATSAPP_MAX_TOKENS)
         },
         sessionId?: string, // Add optional sessionId for MCP tool persistence
         metadata?: any, // Add metadata field for debugging
@@ -2597,6 +2599,26 @@ Context:
     console.log('[RAG SYSTEM DEBUG] context.length:', context.length);
     console.log('[RAG SYSTEM DEBUG] Context preview (first 200 chars):', context.substring(0, 200));
 
+    // Phase 5.2 D-30: decided once, before the composer, so the concise part and the model limit follow the same rule
+    if (answerTurn.config.maxOutputTokens.kind !== 'off') {
+      const ownLimit = data?.settings?.maxOutputTokens;
+      answerTurn.decideOutputCap({
+        knowledgeContext:
+          !smallTalkTurn &&
+          !effectiveDisableRAG &&
+          !retrievalFailed &&
+          context.length > 0 &&
+          (retrievalResult?.status === 'ok' || retrievalResult?.status === 'degraded') &&
+          (retrievalResult?.blocks ?? []).some((block) => !block.isImage),
+        userMaxTokens: typeof ownLimit === 'number' && Number.isFinite(ownLimit) && ownLimit > 0,
+        reasoning:
+          reasoningRequested ||
+          prepareReasoningConfig(model, reasoningSettings) !== undefined ||
+          model.includes('gpt-5'),
+        approvalContinuation: lastAssistantHasToolCall(rawMessages),
+      });
+    }
+
     if (smallTalkTurn) {
       systemPrompt = createEnhancedRAGPrompt(ragSystemPrompt, '', 'bypass');
     } else if (context.length > 0) {
@@ -3811,7 +3833,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           safeModelId.includes('llama-3.1-70b')
         ),
         temperature: 0.1,
-        maxOutputTokens: getMaxTokensForModel(safeModelId),
+        maxOutputTokens: answerTurn.maxOutputTokens(getMaxTokensForModel(safeModelId)),
       };
 
       // For Claude Sonnet 4, DISABLE TOOLS to prevent truncation
@@ -3823,14 +3845,15 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
         streamParams.toolChoice = 'none'; // Explicitly disable tool usage
 
         // Ensure maximum token output
-        streamParams.maxOutputTokens = 16384;
-        streamParams.max_tokens = 16384; // Alternative parameter name
-        streamParams.maxCompletionTokens = 16384; // Another alternative
+        const sonnet4Limit = answerTurn.maxOutputTokens(16384);
+        streamParams.maxOutputTokens = sonnet4Limit;
+        streamParams.max_tokens = sonnet4Limit; // Alternative parameter name
+        streamParams.maxCompletionTokens = sonnet4Limit; // Another alternative
 
         // Add provider-specific metadata
         streamParams.experimental_providerMetadata = {
           openrouter: {
-            max_tokens: 16384,
+            max_tokens: sonnet4Limit,
             temperature: 0.1,
             stop: [] // No stop sequences
           }
@@ -4278,6 +4301,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             history,
             question: getLastUserText(rawMessages),
             reasoning: reasoningRequested,
+            ...(answerTurn.outputCapDecision()?.applied ? { outputCap: answerTurn.maxOutputTokens(CLAUDE_MAX_OUTPUT_TOKENS) } : {}),
             abortSignal: AbortSignal.any([req.signal, claudeAbort.signal]),
             onError: (error) => {
               claudeError = error;
