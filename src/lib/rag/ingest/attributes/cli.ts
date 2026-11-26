@@ -6,22 +6,30 @@ import type { BackfillScopeResult } from '@/lib/rag/tenant/backfill-scope';
 import type { RunnerIo } from '../backfill/runners';
 import type { AttributesImportDeps } from './import';
 
-export type ParsedAttributesArgs = { ok: true; tenantKey: string; file: string; apply: boolean } | { ok: false; error: string };
+export type ParsedAttributesArgs =
+  | { ok: true; tenantKey: string; file: string; apply: boolean }
+  | { ok: true; tenantKey: string; reindexIdentifiers: true; apply: boolean }
+  | { ok: false; error: string };
 
 export const USAGE = [
   'usage: npm run rag:attributes -- --tenant <key> --import <file> [--dry-run | --apply]',
+  '       npm run rag:attributes -- --tenant <key> --reindex-identifiers [--dry-run | --apply]',
   '  The file is JSON Lines: one { "source_key", "attributes", "source"? } object per line, at most 50,000 rows.',
+  '  --reindex-identifiers re-indexes the identifiers of every document of the tenant that carries attributes (after a flag change).',
   '  The dry-run report always runs first. Without --apply, or with --dry-run, the command stops after the report (exit 2).',
   '  Exit codes: 0 done, 1 failed, 2 report only, 3 file refused, 64 usage.',
 ].join('\n');
 
 const LOG = '[RAG Attributes]';
 const WITH_VALUE = new Set(['--tenant', '--import']);
-const FLAGS = new Set(['--dry-run', '--apply']);
+const FLAGS = new Set(['--dry-run', '--apply', '--reindex-identifiers']);
 
 export const SWITCH_OFF_LINE = `${LOG} RAG_DOC_ATTRIBUTES is off: it needs RAG_DOC_ATTRIBUTES=true and RAG_INGEST_PIPELINE=unified; nothing was read or written`;
 
-/** `--tenant <key>` and `--import <file>` are required; `--dry-run` and `--apply` take no value and exclude each other. */
+/**
+ * `--tenant <key>` and exactly one of `--import <file>` and `--reindex-identifiers` are required; `--dry-run` and `--apply` take no value
+ * and exclude each other.
+ */
 export function parseAttributesArgs(argv: string[]): ParsedAttributesArgs {
   const values = new Map<string, string>();
   const flags = new Set<string>();
@@ -43,7 +51,10 @@ export function parseAttributesArgs(argv: string[]): ParsedAttributesArgs {
   const tenantKey = values.get('--tenant');
   if (!tenantKey) return { ok: false, error: '--tenant is required' };
   const file = values.get('--import');
-  if (!file) return { ok: false, error: '--import is required' };
+  const reindex = flags.has('--reindex-identifiers');
+  if (file && reindex) return { ok: false, error: '--import and --reindex-identifiers exclude each other' };
+  if (reindex) return { ok: true, tenantKey, reindexIdentifiers: true, apply: flags.has('--apply') };
+  if (!file) return { ok: false, error: '--import or --reindex-identifiers is required' };
   return { ok: true, tenantKey, file, apply: flags.has('--apply') };
 }
 
@@ -95,6 +106,12 @@ export async function main(
     const deps: AttributesImportDeps = { signal, io };
     if (overrides.rpc !== undefined) deps.rpc = overrides.rpc;
     if (overrides.loadSchema) deps.loadSchema = overrides.loadSchema;
+    if (overrides.identifierIndex) deps.identifierIndex = overrides.identifierIndex;
+    if (overrides.loadPatterns) deps.loadPatterns = overrides.loadPatterns;
+    if ('reindexIdentifiers' in parsed) {
+      const { runAttributeIdentifierReindex } = await import('./identifier-feed');
+      return await runAttributeIdentifierReindex({ scope: scope.scope, apply: parsed.apply }, deps);
+    }
     const outcome = await runAttributesImport({ scope: scope.scope, file: parsed.file, apply: parsed.apply }, deps);
     return outcome.exitCode;
   } catch (error) {
