@@ -54,7 +54,6 @@ export function capPassage(passage: string, maxChars: number): { text: string; t
 /** LlamaIndex HyDEQueryTransform with a per-language HYDE_TMPL; the original query is kept by the caller. */
 export async function nativeHyde(input: HydeInput): Promise<HydeResult> {
   const { query, language, protectedTokens, signal, deps } = input;
-  const limits = input.limits ?? DEFAULT_POST_CHECK_LIMITS;
   const { id, file } = HYDE_PROMPTS[language];
   const prompt = renderPrompt(loadPrompt(id, { [id]: file }), { context_str: query }, { language, maxItems: 1, protectedTokens });
   const call = await callNative(deps, {
@@ -67,7 +66,16 @@ export async function nativeHyde(input: HydeInput): Promise<HydeResult> {
   });
   if (!call.ok) return { variant: null, truncated: false, skipped: [call.skip] };
 
-  const capped = capPassage(call.value.passage, limits.variantMaxChars);
+  return finishHyde(input, call.value.passage);
+}
+
+export type FinishHydeInput = Pick<HydeInput, 'query' | 'language' | 'protectedTokens' | 'limits'>;
+
+/** Caps the passage at a sentence end and applies the HyDE post-checks; shared by both frameworks (D-02). */
+export function finishHyde(input: FinishHydeInput, passage: string): HydeResult {
+  const { query, language, protectedTokens } = input;
+  const limits = input.limits ?? DEFAULT_POST_CHECK_LIMITS;
+  const capped = capPassage(passage, limits.variantMaxChars);
   const checked = checkVariant({ kind: 'hyde', text: capped.text, input: query, protectedTokens }, limits);
   if (!checked.ok) return { variant: null, truncated: capped.truncated, skipped: [checked.skip] };
   return {

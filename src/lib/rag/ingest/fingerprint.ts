@@ -13,10 +13,12 @@ import { LEGACY_PROFILE } from '../embeddings/active-profile';
 import { getLanguagePack, getLanguageRegistry, registryOrder } from '../lang/registry';
 import { getLanguageSettings, type LanguageSettings } from '../lang/settings';
 import { loadIngestConfig, type IngestConfig } from './config';
+import { CLEANER_VERSION } from './prepare/boilerplate';
+import { boilerplateConfig } from './prepare/boilerplate-config';
 import { loadProcessingProfiles } from './profiles/load';
 import { EMBEDDING_TEXT_VERSION } from './text/embedding-text';
 import { ROW_SERIALIZATION_VERSION_SUFFIX, effectiveEmbeddingTextVersion } from './text/table-rows';
-import { requireIdentity, type StageContext } from './types';
+import { requireIdentity, type ChunkPrepSnapshot, type StageContext } from './types';
 
 /** The chunks of document_chunks are always the legacy chunker's; other chunking profiles are rebuilt from parse.md (Phase 4 D-21). */
 export const FINGERPRINT_CHUNKING_PROFILE_ID = 'legacy';
@@ -122,6 +124,24 @@ function parserVersionOf(ctx: StageContext): string {
   return partText(ctx.state.parserVersion ?? ctx.state.typeChange?.reusedParser?.version ?? null);
 }
 
+type ChunkPrepPart = NonNullable<IngestFingerprintParts['chunk_prep']>;
+
+/** The optional chunk_prep part (D-13): only for a document prepared while a Phase 3.3 switch was on; absent otherwise. */
+function chunkPrepPartOf(snapshot: ChunkPrepSnapshot | undefined): ChunkPrepPart | null {
+  if (!snapshot) return null;
+  const part: ChunkPrepPart = {};
+  if (snapshot.boilerplate) {
+    part.boilerplate = {
+      mode: snapshot.boilerplate.mode,
+      cleaner_version: snapshot.boilerplate.cleanerVersion,
+      rules_version: snapshot.boilerplate.rulesVersion,
+      rule_fingerprint: snapshot.fingerprint,
+    };
+  }
+  if (snapshot.sectionRules) part.section_rules = { rule_set_id: snapshot.sectionRules.ruleSetId, version: snapshot.sectionRules.ruleSetVersion };
+  return part.boilerplate || part.section_rules ? part : null;
+}
+
 /** D-10: the parts of the version this run publishes, from the run's own state and configuration (no read). */
 export function collectFingerprintParts(ctx: StageContext): IngestFingerprintParts {
   const identity = requireIdentity(ctx, 'publish');
@@ -143,7 +163,48 @@ export function collectFingerprintParts(ctx: StageContext): IngestFingerprintPar
     embedding_profile_version: EMBEDDING_PROFILE_VERSION,
     language_pack_versions: languagePackVersions(used, settings, switches.language_aware_ingest),
     switches,
+    ...withChunkPrep(chunkPrepPartOf(ctx.state.chunkPrep)),
   });
+}
+
+const withChunkPrep = (part: ChunkPrepPart | null): { chunk_prep?: ChunkPrepPart } => (part ? { chunk_prep: part } : {});
+
+const PAGE_BOILERPLATE_MODES = ['detect', 'rules', 'both'] as const;
+/** Rule fingerprint of a sub-part a proposal adds: the tenant's rules are not known from stored parts. */
+const UNKNOWN_RULE_FINGERPRINT = '0'.repeat(64);
+
+/**
+ * D-13: the chunk_prep part under a proposed RAG_PAGE_BOILERPLATE or RAG_SECTION_RULES. A proposed cleaning mode adds or replaces the
+ * boilerplate sub-part (the stored mode again keeps it as stored), off removes it; RAG_SECTION_RULES=off removes the section_rules sub-part,
+ * while `on` cannot be computed from stored parts and leaves it as stored (the re-chunk dry run answers that). Neither left: no part.
+ */
+function chunkPrepFor(stored: IngestFingerprintParts, proposed: Record<string, string | undefined>): ChunkPrepPart | null {
+  const current = stored.chunk_prep ?? null;
+  let boilerplate = current?.boilerplate;
+  let sectionRules = current?.section_rules;
+  if (has(proposed, 'RAG_PAGE_BOILERPLATE')) {
+    const value = (proposed.RAG_PAGE_BOILERPLATE ?? '').trim().toLowerCase();
+    const mode = PAGE_BOILERPLATE_MODES.find((entry) => entry === value);
+    if (!mode) boilerplate = undefined;
+    else if (boilerplate?.mode !== mode) {
+      boilerplate = {
+        mode,
+        cleaner_version: CLEANER_VERSION,
+        rules_version: boilerplateConfig().rules_version,
+        rule_fingerprint: boilerplate?.rule_fingerprint ?? UNKNOWN_RULE_FINGERPRINT,
+      };
+    }
+  }
+  if (has(proposed, 'RAG_SECTION_RULES') && (proposed.RAG_SECTION_RULES ?? '').trim().toLowerCase() !== 'on') sectionRules = undefined;
+  const part: ChunkPrepPart = {};
+  if (boilerplate) part.boilerplate = boilerplate;
+  if (sectionRules) part.section_rules = sectionRules;
+  return part.boilerplate || part.section_rules ? part : null;
+}
+
+/** True when a proposal's effect on stored parts cannot be computed and needs the re-chunk dry run (RAG_SECTION_RULES=on). */
+export function needsRechunkDryRun(proposed: Record<string, string | undefined>): boolean {
+  return has(proposed, 'RAG_SECTION_RULES') && (proposed.RAG_SECTION_RULES ?? '').trim().toLowerCase() === 'on';
 }
 
 const SWITCH_VARIABLES = ['RAG_LANGUAGE_AWARE_INGEST', 'RAG_TABLE_HEADER_REPEAT', 'RAG_TABLE_ROW_SERIALIZATION', 'RAG_CAPTION_LANGUAGE'] as const;
@@ -202,12 +263,15 @@ export function expectedFingerprintFor(
     }
   }
 
+  const rest: Partial<IngestFingerprintParts> = { ...stored };
+  delete rest.chunk_prep;
   const next = IngestFingerprintPartsSchema.parse({
-    ...stored,
+    ...rest,
     embedding_text_version: embeddingTextVersionFor(stored, switches),
     ocr_engine_codes: ocrCodes,
     language_pack_versions: packs,
     switches,
+    ...withChunkPrep(chunkPrepFor(stored, proposed)),
   });
   return { parts: next, fingerprint: buildIngestFingerprint(next) };
 }

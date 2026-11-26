@@ -3,6 +3,7 @@ import type { BackfillDryRunReport } from '@/lib/rag-eval/contracts.generated';
 import type { RpcClient } from '@/lib/rag/backend/supabase-rpc';
 import { scopeKey, type TenantScope } from '@/lib/rag/tenant/scope';
 import { getRagDeps } from '../../deps';
+import { batchApiAllowed } from '../../embeddings/openai-client';
 import { estimateCostUsd } from '../../embeddings/prices';
 import { canonicalModelId, getEmbeddingProviderFor } from '../../embeddings/registry';
 import type { EmbeddingProviderId } from '../../embeddings/types';
@@ -511,6 +512,11 @@ async function publishDeferredJobs(ctx: RunContext, result: DeferredEmbedResult)
  * backfilling ones and the previous one: P3 dual-write), through the Batch API for OpenAI profiles and synchronously for the others,
  * then each job is published once its active-profile vectors are complete. Reading the registry only; nothing is activated.
  */
+/** OpenAI profiles use the Batch API, except while embeddings go through OpenRouter, which has none; then they embed synchronously. */
+export function deferredEmbedMode(provider: string): ProfileEmbedding['mode'] {
+  return provider === 'openai' && batchApiAllowed() ? 'batch_api' : 'sync';
+}
+
 async function embedDeferredJobs(ctx: RunContext): Promise<DeferredEmbedResult> {
   const { rpc, batch, deps } = ctx;
   const writer = createIngestWriter({ db: rpc, scope: batch.scope, signal: deps.signal });
@@ -518,7 +524,7 @@ async function embedDeferredJobs(ctx: RunContext): Promise<DeferredEmbedResult> 
   const result: DeferredEmbedResult = { profiles: [], published: 0, remaining: {} };
   let client: BatchApiClient | null = deps.embedBatch?.client ?? null;
   for (const target of targets) {
-    const mode: ProfileEmbedding['mode'] = target.profile.provider === 'openai' ? 'batch_api' : 'sync';
+    const mode = deferredEmbedMode(target.profile.provider);
     const entry: ProfileEmbedding = {
       profileId: target.profile.id,
       provider: target.profile.provider,
@@ -654,6 +660,7 @@ export async function runBackfill(request: BackfillRequest, deps: OrchestrateDep
 
   // D-33 step 1: inventory and dedupe; the opened streams are kept by source key for the enqueue.
   const openers = new Map<string, SourceItem['open']>();
+  const attributesByKey = new Map<string, NonNullable<SourceItem['attributes']>>();
   let rejected = 0;
   const sourceDeps: BackfillSourceDeps = {
     ...(deps.sourceDeps ?? (row.sourceKind === 'bucket' ? defaultSourceDeps() : {})),
@@ -673,11 +680,15 @@ export async function runBackfill(request: BackfillRequest, deps: OrchestrateDep
   async function* remembered(): AsyncGenerator<SourceItem> {
     for await (const item of listed) {
       openers.set(item.sourceKey, item.open.bind(item));
+      if (item.attributes !== undefined) attributesByKey.set(item.sourceKey, item.attributes);
       yield item;
     }
   }
   const inv = await inventory(batch, remembered(), { rpc, signal });
-  const entries: RunEntry[] = inv.entries.map((entry) => ({ ...entry, open: openers.get(entry.sourceKey) as SourceItem['open'] }));
+  const entries: RunEntry[] = inv.entries.map((entry) => {
+    const attributes = attributesByKey.get(entry.sourceKey);
+    return { ...entry, ...(attributes !== undefined ? { attributes } : {}), open: openers.get(entry.sourceKey) as SourceItem['open'] };
+  });
   io.out(
     `[Backfill] inventory: ${inv.totals.total} files, ${inv.totals.uniqueNew} new, ${inv.totals.inInventoryDuplicates} duplicates inside the source, ${inv.totals.existingDuplicates} already in the knowledge base, ${inv.totals.unreadable} unreadable${rejected > 0 ? `, ${rejected} refused` : ''}`,
   );
@@ -693,7 +704,7 @@ export async function runBackfill(request: BackfillRequest, deps: OrchestrateDep
       workerConcurrency: config.workerConcurrency,
       batchConcurrency: row.concurrency,
       runner: request.runner,
-      embedBatchMode: config.embedBatchMode,
+      embedBatchMode: batchApiAllowed() ? config.embedBatchMode : 'sync',
       profiles,
     };
     const willRun = row.budgetUsd !== null && !request.dryRun;

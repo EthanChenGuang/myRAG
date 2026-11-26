@@ -288,9 +288,34 @@ describe('embedding profile admin routes', () => {
       activated_at: null,
       activated_by: null,
       previous_active_id: null,
+      supportedLanguages: ['zh', 'en', 'it'],
     });
     expect(JSON.stringify(body)).not.toMatch(/eval_evidence|score_calibration|query_instruction/);
     expect(state.rpcCalls.map((call) => call.fn)).toEqual(['rag_list_embedding_profiles']);
+  });
+
+  it('adds the languages each profile model declares and, for the BGE-M3 profile only, the serving mode', async () => {
+    state.profiles.push(
+      profileRow('bge-m3-1024', 'available', { provider: 'bge-m3', model: 'BAAI/bge-m3', dims: 1024 }),
+      profileRow('voyage-finance-2-1024', 'available', { provider: 'voyage', model: 'voyage-finance-2', dims: 1024 }),
+      profileRow('unknown-model-512', 'available', { provider: 'openai', model: 'not-in-catalog', dims: 512 }),
+    );
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    const ragDeps = await import('@/lib/rag/deps');
+    for (const [serving, expected] of [[undefined, 'hosted'], ['sidecar', 'sidecar'], ['hosted', 'hosted']] as const) {
+      ragDeps.setRagDepsForTests({ ragEnv: () => (serving ? { RAG_BGE_M3_SERVING: serving } : {}) });
+      const response = await loaded.list.GET(req('/api/rag/admin/embedding-profiles'));
+      expect(response.status).toBe(200);
+      const byId = Object.fromEntries((await response.json()).profiles.map((profile: Row) => [profile.id, profile]));
+      expect(byId['bge-m3-1024'].supportedLanguages).toEqual(['zh', 'en', 'it']);
+      expect(byId['bge-m3-1024'].servingMode).toBe(expected);
+      expect(byId['voyage-finance-2-1024'].supportedLanguages).toEqual(['en']);
+      expect(byId['unknown-model-512'].supportedLanguages).toEqual([]);
+      for (const id of [LEGACY, VOYAGE, QWEN, 'voyage-finance-2-1024', 'unknown-model-512']) {
+        expect(byId[id]).not.toHaveProperty('servingMode');
+      }
+    }
   });
 
   it('adds the completeness per profile only when asked, and never calls the legacy column complete', async () => {

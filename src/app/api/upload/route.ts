@@ -193,6 +193,7 @@ export async function POST(request: NextRequest) {
     }
     const requestedScopes = formData.getAll('scopes');
     let uploadScopes: string[] | undefined;
+    let uploadAttributes: Record<string, string | string[]> | undefined;
     let uploadReplaces: string | undefined;
     if (pipeline === 'unified') {
       const resolved = await resolveUploadScope(request, formData, sessionUser);
@@ -208,6 +209,15 @@ export async function POST(request: NextRequest) {
           : NextResponse.json({ success: false, error: scopeCheck.reason }, { status: 400 });
       }
       uploadScopes = scopeCheck.scopes;
+      // D-22, D-23: attribute values go on every file of the request, checked before any file is stored.
+      const { attributesFormField, uploadAttributesRefusal, validateUploadAttributes } = await import('@/lib/rag');
+      const attributeCheck = await validateUploadAttributes(ingestScope, attributesFormField(formData.get('attributes')), { signal: request.signal });
+      if (!attributeCheck.ok) {
+        console.warn('[Ingest] upload attributes refused', { reason: attributeCheck.reason });
+        const refusal = uploadAttributesRefusal(attributeCheck);
+        return NextResponse.json(refusal.body, { status: refusal.status });
+      }
+      uploadAttributes = attributeCheck.attributes;
       // D-41: "Replaces…" names one current document of the same workspace; it applies to a single ingested file only.
       const requestedReplaces = formData.get('replaces_document_id');
       if (typeof requestedReplaces === 'string' && requestedReplaces.trim() !== '' && files.length > 1) {
@@ -223,7 +233,12 @@ export async function POST(request: NextRequest) {
           : NextResponse.json({ success: false, error: replacesCheck.reason }, { status: 400 });
       }
       uploadReplaces = replacesCheck.replacesDocumentId;
-    } else if (requestedScopes.length > 0) {
+    } else if (formData.get('attributes') !== null) {
+      // D-22a: attributes count only where the unified pipeline ingests; elsewhere they are refused, never dropped.
+      console.warn('[Ingest] upload attributes refused', { reason: 'attributes_not_enabled' });
+      return NextResponse.json({ success: false, error: 'attributes_not_enabled' }, { status: 400 });
+    }
+    if (pipeline !== 'unified' && requestedScopes.length > 0) {
       // Tags count only where the unified pipeline ingests; the legacy path loads nothing new for them.
       console.warn('[Ingest] upload scope tags ignored', { count: requestedScopes.length, reason: processRag ? 'legacy_pipeline' : 'not_ingested' });
     }
@@ -320,7 +335,7 @@ export async function POST(request: NextRequest) {
 
     let queuedIngest: EnqueueResult[] | null = null;
     if (ingestScope && pendingImages.length > 0) {
-      queuedIngest = await scheduleImageIngest(ingestScope, sessionUser.id, pendingImages, imageContext || undefined, startedAt, uploadScopes, uploadReplaces);
+      queuedIngest = await scheduleImageIngest(ingestScope, sessionUser.id, pendingImages, imageContext || undefined, startedAt, uploadScopes, uploadReplaces, uploadAttributes);
     }
 
     (async () => {
@@ -419,6 +434,7 @@ async function scheduleImageIngest(
   startedAt: number,
   scopes?: string[],
   replacesDocumentId?: string,
+  attributes?: Record<string, string | string[]>,
 ): Promise<EnqueueResult[] | null> {
   const deadlineAt = startedAt + INGEST_BUDGET_MS;
 
@@ -428,6 +444,7 @@ async function scheduleImageIngest(
     sourceKey: image.filePath,
     uploaderId,
     ...(scopes ? { scopes } : {}),
+    ...(attributes !== undefined ? { attributes } : {}),
     ...(replacesDocumentId ? { replacesDocumentId } : {}),
     file: image.bytes,
     filename: image.name,

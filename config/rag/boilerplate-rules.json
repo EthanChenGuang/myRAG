@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "rules_version": 1,
+  "page_share": 0.6,
+  "edge_lines": 3,
+  "max_line_tokens": 24,
+  "min_pages": 3,
+  "fragment_max_length": 12,
+  "fragment_page_share": 0.5,
+  "review_share": 0.2
+}

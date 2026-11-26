@@ -1,5 +1,11 @@
+import rawDeclarations from '../../../../config/rag/embedding-model-languages.json';
 import type { EmbeddingProviderId } from './types';
 import {
+  BGE_M3_MODEL_ID,
+  BGE_M3_NATIVE_DIMS,
+  FT_SLOT_DIMS,
+  FT_SLOT_SUPPORTED_DIMS,
+  FT_SLOT_UNBOUND_MODEL,
   OPENAI_NATIVE_DIMS,
   QWEN_MODEL_ID,
   QWEN_NATIVE_DIMS,
@@ -9,6 +15,7 @@ import {
   VOYAGE_MODEL_ID,
   VOYAGE_SUPPORTED_DIMS,
   canonicalModelId,
+  isFinetuneSlotProvider,
 } from './types';
 
 export type EmbeddingServingMode = 'hosted' | 'sidecar';
@@ -40,7 +47,7 @@ export interface EmbeddingModelEntry {
   /** True when our cl100k_base count differs from the vendor's billed count. */
   readonly tokensAreEstimates: boolean;
   readonly freeTokensNote: string | null;
-  /** Lower-case language codes the vendor documents for the model. */
+  /** Language-pack codes the model declares, from config/rag/embedding-model-languages.json (D-07). */
   readonly supportedLanguages: readonly string[];
   readonly languagesNote: string;
   readonly servingModes: readonly EmbeddingServingMode[];
@@ -59,9 +66,60 @@ const DEEPINFRA_HOSTED: EmbeddingHostedEndpoint = {
   baseUrlEnv: 'DEEPINFRA_BASE_URL',
 };
 
+function slotEndpoint(slot: 'A' | 'B'): EmbeddingHostedEndpoint {
+  return { host: 'operator-configured', apiKeyEnv: 'RAG_FT_EMBED_API_KEY', baseUrlEnv: `RAG_FT_SLOT_${slot}_BASE_URL` };
+}
+
+function slotEntry(provider: 'ft_slot_a' | 'ft_slot_b', slot: 'A' | 'B'): CatalogFacts {
+  return {
+    provider,
+    model: FT_SLOT_UNBOUND_MODEL,
+    nativeDims: FT_SLOT_DIMS,
+    supportedDims: [...FT_SLOT_SUPPORTED_DIMS],
+    sendsOutputDimension: false,
+    maxInputTokens: 8192,
+    maxTokensPerRequest: null,
+    inputTypes: [],
+    usdPerMillionTokens: 0,
+    tokensAreEstimates: true,
+    freeTokensNote: 'No list price: the operator runs or rents the endpoint.',
+    languagesNote: 'Depends on the fine-tuned base model; the fine-tune gate evaluates the zh, en and it slices.',
+    servingModes: ['hosted'],
+    hostedEndpoint: slotEndpoint(slot),
+    sidecarPath: null,
+    vendorDomainNote: 'Operator fine-tuned model behind an OpenAI-compatible endpoint; one entry serves every bound version.',
+    readOn: '2026-11-26',
+  };
+}
+
 const VOYAGE_INPUT_TYPES: readonly string[] = ['query', 'document'];
 
-function freezeEntry(entry: EmbeddingModelEntry): EmbeddingModelEntry {
+interface ModelLanguages {
+  provider: string;
+  model: string;
+  supported_languages: string[];
+}
+
+interface LanguageDeclarationsFile {
+  schema_version: number;
+  default_profile: { id: string; provider: string; model: string };
+  models: ModelLanguages[];
+}
+
+const DECLARATIONS = rawDeclarations as LanguageDeclarationsFile;
+
+function declaredLanguages(provider: string, model: string): readonly string[] {
+  const found = DECLARATIONS.models.find((entry) => entry.provider === provider && entry.model === model);
+  if (!found || !Array.isArray(found.supported_languages) || found.supported_languages.length === 0) {
+    throw new Error(`[Embedding Profile] config/rag/embedding-model-languages.json declares no languages for ${provider}:${model}`);
+  }
+  return [...found.supported_languages];
+}
+
+type CatalogFacts = Omit<EmbeddingModelEntry, 'supportedLanguages'>;
+
+function freezeEntry(facts: CatalogFacts): EmbeddingModelEntry {
+  const entry: EmbeddingModelEntry = { ...facts, supportedLanguages: declaredLanguages(facts.provider, facts.model) };
   Object.freeze(entry.supportedDims);
   Object.freeze(entry.inputTypes);
   Object.freeze(entry.supportedLanguages);
@@ -71,7 +129,7 @@ function freezeEntry(entry: EmbeddingModelEntry): EmbeddingModelEntry {
 }
 
 /** Bumped whenever a model fact below changes; comparisons record it (D-23). */
-export const EMBEDDING_CATALOG_VERSION = 1;
+export const EMBEDDING_CATALOG_VERSION = 2;
 
 export const EMBEDDING_MODEL_CATALOG: readonly EmbeddingModelEntry[] = Object.freeze(
   [
@@ -87,7 +145,6 @@ export const EMBEDDING_MODEL_CATALOG: readonly EmbeddingModelEntry[] = Object.fr
       usdPerMillionTokens: 0.02,
       tokensAreEstimates: false,
       freeTokensNote: null,
-      supportedLanguages: ['zh', 'en', 'it'],
       languagesNote: 'Multilingual; evaluated on the zh, en and it slices.',
       servingModes: ['hosted'],
       hostedEndpoint: OPENAI_HOSTED,
@@ -107,7 +164,6 @@ export const EMBEDDING_MODEL_CATALOG: readonly EmbeddingModelEntry[] = Object.fr
       usdPerMillionTokens: 0.12,
       tokensAreEstimates: true,
       freeTokensNote: 'First 200M tokens free per account.',
-      supportedLanguages: ['zh', 'en', 'it'],
       languagesNote: 'Vendor markets it as multilingual; evaluated on the zh, en and it slices.',
       servingModes: ['hosted'],
       hostedEndpoint: VOYAGE_HOSTED,
@@ -127,7 +183,6 @@ export const EMBEDDING_MODEL_CATALOG: readonly EmbeddingModelEntry[] = Object.fr
       usdPerMillionTokens: 0.12,
       tokensAreEstimates: true,
       freeTokensNote: 'First 50M tokens free per account.',
-      supportedLanguages: ['en', 'zh', 'de'],
       languagesNote: 'Vendor evaluation sets cover English, Chinese and German; none covers Italian; not marketed as multilingual.',
       servingModes: ['hosted'],
       hostedEndpoint: VOYAGE_HOSTED,
@@ -147,7 +202,6 @@ export const EMBEDDING_MODEL_CATALOG: readonly EmbeddingModelEntry[] = Object.fr
       usdPerMillionTokens: 0.12,
       tokensAreEstimates: true,
       freeTokensNote: 'First 50M tokens free per account.',
-      supportedLanguages: ['en'],
       languagesNote: 'Vendor evaluation sets are English only.',
       servingModes: ['hosted'],
       hostedEndpoint: VOYAGE_HOSTED,
@@ -167,7 +221,6 @@ export const EMBEDDING_MODEL_CATALOG: readonly EmbeddingModelEntry[] = Object.fr
       usdPerMillionTokens: 0.01,
       tokensAreEstimates: true,
       freeTokensNote: null,
-      supportedLanguages: ['zh', 'en', 'it'],
       languagesNote: 'Multilingual open-weights model; queries carry an instruction prefix instead of an input_type.',
       servingModes: ['hosted'],
       hostedEndpoint: DEEPINFRA_HOSTED,
@@ -175,17 +228,45 @@ export const EMBEDDING_MODEL_CATALOG: readonly EmbeddingModelEntry[] = Object.fr
       vendorDomainNote: 'General purpose and multilingual.',
       readOn: '2026-11-24',
     },
-  ].map((entry) => freezeEntry(entry as EmbeddingModelEntry)),
+    {
+      provider: 'bge-m3',
+      model: BGE_M3_MODEL_ID,
+      nativeDims: BGE_M3_NATIVE_DIMS,
+      supportedDims: [BGE_M3_NATIVE_DIMS],
+      sendsOutputDimension: false,
+      maxInputTokens: 8192,
+      maxTokensPerRequest: null,
+      inputTypes: [],
+      usdPerMillionTokens: 0.01,
+      tokensAreEstimates: true,
+      freeTokensNote: null,
+      languagesNote: 'Multilingual open-weights model (MIT licence); dense output only, no query instruction.',
+      servingModes: ['hosted'],
+      hostedEndpoint: DEEPINFRA_HOSTED,
+      sidecarPath: null,
+      vendorDomainNote: 'General purpose and multilingual.',
+      readOn: '2026-11-26',
+    },
+    slotEntry('ft_slot_a', 'A'),
+    slotEntry('ft_slot_b', 'B'),
+  ].map((entry) => freezeEntry(entry as CatalogFacts)),
 );
 
 const DEFAULT_MODELS: Readonly<Record<EmbeddingProviderId, string>> = Object.freeze({
   openai: 'text-embedding-3-small',
   voyage: VOYAGE_MODEL_ID,
   qwen3: QWEN_MODEL_ID,
+  'bge-m3': BGE_M3_MODEL_ID,
+  ft_slot_a: FT_SLOT_UNBOUND_MODEL,
+  ft_slot_b: FT_SLOT_UNBOUND_MODEL,
 });
 
-/** The catalog entry for a provider and model (host-specific spellings accepted); undefined when not listed. */
+/**
+ * The catalog entry for a provider and model (host-specific spellings accepted); undefined when not listed. A fine-tune slot has one
+ * entry for whatever version is bound, so any model id of a slot provider resolves to it.
+ */
 export function catalogEntry(provider: string, model: string): EmbeddingModelEntry | undefined {
+  if (isFinetuneSlotProvider(provider)) return EMBEDDING_MODEL_CATALOG.find((entry) => entry.provider === provider);
   const canonical = canonicalModelId(model);
   return EMBEDDING_MODEL_CATALOG.find((entry) => entry.provider === provider && entry.model === canonical);
 }
@@ -193,4 +274,20 @@ export function catalogEntry(provider: string, model: string): EmbeddingModelEnt
 /** The model a provider serves when no model is named; undefined for an unknown provider. */
 export function defaultModelFor(provider: string): string | undefined {
   return Object.prototype.hasOwnProperty.call(DEFAULT_MODELS, provider) ? DEFAULT_MODELS[provider as EmbeddingProviderId] : undefined;
+}
+
+
+export interface EmbeddingLanguageDeclaration {
+  id: string;
+  supportedLanguages: string[];
+}
+
+/** D-07: the languages a profile declares are those of its model's catalog entry; a model outside the catalog declares none. */
+export function embeddingProfileDeclaration(profile: { id: string; provider: string; model: string }): EmbeddingLanguageDeclaration {
+  return { id: profile.id, supportedLanguages: [...(catalogEntry(profile.provider, profile.model)?.supportedLanguages ?? [])] };
+}
+
+/** The declaration of the default profile named in the declarations file, checked when the active profile cannot be read. */
+export function defaultEmbeddingProfileDeclaration(): EmbeddingLanguageDeclaration {
+  return embeddingProfileDeclaration(DECLARATIONS.default_profile);
 }

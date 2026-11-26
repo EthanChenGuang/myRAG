@@ -1,7 +1,7 @@
 import type { RpcClient } from '../../backend/supabase-rpc';
 import { backendForRequest, getRetrievalBackend } from '../../backend/registry';
 import type { BackendLegs, RankedHit, RetrievalFilters, VersionScope } from '../../backend/types';
-import type { AssemblyDocumentRow } from '../../context/assemble';
+import type { AssemblyDocumentRow, TableRowAttachment } from '../../context/assemble';
 import { fetchAssemblyRows } from '../../context/fetch-rows';
 import type { RagConfig, StageName } from '../../config';
 import { getRagDeps, type RagDeps } from '../../deps';
@@ -16,12 +16,18 @@ import {
   type QueryEmbedding,
 } from '../../embeddings/query-embedding';
 import { requireValue, runStage, StageError, stageSpec, type StageSpec } from '../../pipeline';
-import { exactIdStage, type ExactIdRow } from '../../retrieval/exact-id';
+import { exactIdStage } from '../../retrieval/exact-id';
+import { identifierSuggestions, resolveQueryIdentifiers, type QueryIdentifiers } from '../../retrieval/identifiers';
+import { loadTenantIdentifierPatterns } from '../../identifiers/patterns';
+import { tableLookupStage, type TableLookupRow } from '../../retrieval/table-lookup';
 import type { TenantScope } from '../../tenant/scope';
 import type { TraceCollector } from '../../trace/collector';
 import type { Profile, QueryVariant, RunRetrievalInput, StageOverrides } from '../../types';
 import { getV2StartupVerdict } from '../startup';
-import { evalChunkingOverride } from '../overrides';
+import { terminologyParams } from '../../terminology/expand';
+import { reserveTerminologyHits } from '../../terminology/reserve';
+import { evalChunkingOverride, evalTuningOverrides } from '../overrides';
+import { effectiveTuningParams } from '../tuning-params';
 import { createRetrievalPort, listsFromLegs, variantSearchRequest, type RetrievalPortHandle } from '../port';
 import { bindingFailureDetail, hasBindingWork, runBindingLegs, type BindingEmbed, type BindingLegsOutput, type BindingLegsPlan } from './binding-legs';
 import {
@@ -59,7 +65,9 @@ export interface SearchStagesInput {
   /** Planned translation legs (XLG-04, D-30); absent or empty runs none. */
   translations?: TranslationLegsPlan;
   /** D-16: the terminology stage's expansion; non-empty tokens add one lexical-only term:0 list. */
-  terminology?: { tokens: readonly string[]; expansionWeight: number } | null;
+  terminology?: { tokens: readonly string[]; expansionWeight: number; reserveSlots?: number } | null;
+  /** D-18: factor on the dense leg weight for a variant of kind terminology; absent reads TerminologyParams.dense_weight. */
+  terminologyDenseWeight?: number;
 }
 
 /** D-16: the expansion list id; no dense/lexical prefix, so nothing that inspects list ids by prefix counts it as a leg. */
@@ -124,12 +132,40 @@ export interface SearchStagesOutput {
   dedupeCounts: DedupeCounts;
   /** D-12: the version scope this request read; the context stage and later legs read this one value. */
   versionScope: VersionScope;
+  /** D-17: the matched table row per chunk of the table:0 list; absent when the list is empty. */
+  tableRows?: ReadonlyMap<string, TableRowAttachment>;
+  /** D-31: the identifier_resolve outcome; absent while RAG_IDENTIFIER_FILTER is off or the stage did not run. */
+  identifiers?: SearchIdentifiers;
+}
+
+/** D-31, D-51: what the identifier_resolve stage found, for the rank (guard) and context (suggestion line) stages and the result. */
+export interface SearchIdentifiers {
+  /** Normalized forms the question names (at most 16). */
+  asked: string[];
+  found: string[];
+  missing: string[];
+  /** True when the legs were filtered to chunks carrying a found identifier. */
+  filtered: boolean;
+  /** True when the filtered search found nothing and the unfiltered search ran instead. */
+  fallback: boolean;
+  /** True when the question names identifiers and none exists in the tenant. */
+  notFound: boolean;
+  /** At most 3 raw spellings from the caller's tenant; set only when notFound. */
+  suggestions: string[];
+  /** The tenant's compiled patterns, so the guard reads candidates as ingestion indexed them. */
+  patterns: readonly RegExp[];
 }
 
 /** D-12, D-40: fixed trace codes of the search stage detail. */
 export const VERSIONS_IGNORED = 'versions_ignored';
 export const SUPERSEDED_DENSE_UNAVAILABLE = 'superseded_dense_unavailable';
 export const BACKEND_FIELD_UNSUPPORTED = 'backend_field_unsupported';
+/** D-45: the table_lookup stage detail when a narrowing filter makes it stand down. */
+export const TABLE_LOOKUP_NARROWED = 'narrowing_filters';
+export const TABLE_LIST_ID = 'table:0';
+/** D-31: fixed codes of the identifier_resolve and search stage details. */
+export const IDENTIFIER_FILTER_FALLBACK = 'identifier_filter_fallback';
+export const IDENTIFIER_RESOLVE_FAILED = 'identifier_resolve_failed';
 
 function buildFilters(input: RunRetrievalInput): RetrievalFilters {
   const { versionScope: _versionScope, ...extra } = input.retrievalFilters ?? {};
@@ -177,8 +213,16 @@ function legHitsByChunkId(legsByVariant: BackendLegs[]): Map<string, RankedHit> 
   return map;
 }
 
-function hitFromExactRow(
-  row: ExactIdRow,
+/** The fields a lookup leg's row shares with a search hit: exact-id and table rows alike. */
+interface LookupRow {
+  chunk_id: string;
+  document_id: string;
+  content: string;
+  metadata: Record<string, unknown> | null;
+}
+
+function hitFromLookupRow(
+  row: LookupRow,
   rank: number,
   doc: AssemblyDocumentRow | undefined,
   chunkMeta: Record<string, unknown> | null | undefined,
@@ -207,15 +251,16 @@ function hitFromExactRow(
   };
 }
 
-async function exactIdRankedList(
-  rows: ExactIdRow[],
+async function lookupRankedList(
+  id: string,
+  weight: number,
+  rows: LookupRow[],
   legsByVariant: BackendLegs[],
-  params: RetrievalParams,
   signal: AbortSignal,
 ): Promise<RankedList | null> {
   if (rows.length === 0) return null;
   const known = legHitsByChunkId(legsByVariant);
-  const missing: ExactIdRow[] = [];
+  const missing: LookupRow[] = [];
   const hits: RankedHit[] = [];
   for (let index = 0; index < rows.length; index++) {
     const row = rows[index]!;
@@ -226,7 +271,7 @@ async function exactIdRankedList(
       continue;
     }
     missing.push(row);
-    hits.push(hitFromExactRow(row, rank, undefined, row.metadata));
+    hits.push(hitFromLookupRow(row, rank, undefined, row.metadata));
   }
   if (missing.length > 0) {
     const adminClient = getRagDeps().adminClient();
@@ -246,11 +291,22 @@ async function exactIdRankedList(
       if (known.has(row.chunk_id)) continue;
       const hitIndex = hits.findIndex((entry) => entry.chunkId === row.chunk_id);
       if (hitIndex < 0) continue;
-      hits[hitIndex] = hitFromExactRow(row, index + 1, assembly.documents.get(row.document_id), assembly.chunkMetadata.get(row.chunk_id));
+      hits[hitIndex] = hitFromLookupRow(row, index + 1, assembly.documents.get(row.document_id), assembly.chunkMetadata.get(row.chunk_id));
     }
   }
-  const weight = params.leg_weights?.exact_id ?? 1;
-  return { id: 'exact_id', weight, hits };
+  return { id, weight, hits };
+}
+
+/** One hit per matched row, its first qualifying chunk; a chunk two rows share is listed once, with the better row. */
+function tableListRows(rows: TableLookupRow[]): { rows: TableLookupRow[]; attachments: Map<string, TableRowAttachment> } {
+  const attachments = new Map<string, TableRowAttachment>();
+  const kept: TableLookupRow[] = [];
+  for (const row of rows) {
+    if (attachments.has(row.chunk_id)) continue;
+    attachments.set(row.chunk_id, { header: row.header, cells: row.cells });
+    kept.push(row);
+  }
+  return { rows: kept, attachments };
 }
 
 /** D-06: the standalone variant is the condensed one when present, else the original; never hyde, expanded or translated. */
@@ -314,273 +370,364 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
   const spec = (name: StageName, onFail: StageSpec['onFail']) => stageSpec(config, profile, name, onFail, stageOverrides);
   const pool = params.candidate_pool_size;
   const filters = ctx.filters ?? buildFilters(input);
-  const versions = effectiveVersionScope(config, profile, input.retrievalFilters?.versionScope);
+  // D-58: the embed channel (set server-side by the embed route) also needs config.v2.embedVersionScope; the rule lives in effectiveVersionScope.
+  const versions = effectiveVersionScope(config, profile, input.retrievalFilters?.versionScope, input.channel);
   const historyScope = versions.scope === 'current' ? undefined : versions.scope;
-  const route = historyScope ? backendForRequest({ versionScope: historyScope }) : { backend: getRetrievalBackend() };
-  const backend = route.backend;
   const versionScopeArg = historyScope ? { versionScope: historyScope } : {};
-  const versionCodes = [
-    versions.ignored ? VERSIONS_IGNORED : undefined,
-    historyScope ? SUPERSEDED_DENSE_UNAVAILABLE : undefined,
-    route.reason === 'backend_field_unsupported' ? BACKEND_FIELD_UNSUPPORTED : undefined,
-  ];
-  const versionDegraded = route.reason === 'backend_field_unsupported';
-  const lexicalEnabled = config.v2.lexicalSearch;
-  const verdict = getV2StartupVerdict();
-  const icuSkipLexical = lexicalEnabled && !verdict.icuAvailable;
-  const chunkingOverride = evalChunkingOverride(profile, stageOverrides?.retrievalOverrides);
-  const bindings = ctx.bindings && hasBindingWork(ctx.bindings.plan) ? ctx.bindings : null;
-  const searchSpec = spec('search', 'throw');
-  const bindingTimeoutMs = Math.max(
-    1,
-    Math.min(config.v2.domainEmbeddings.timeoutMs, searchSpec.timeoutMs - BINDING_STAGE_MARGIN_MS),
-  );
+  // D-18, D-34: the terminology variant's dense list weighs dense_weight × the dense leg weight in force, read at run time.
+  const terminologyDenseWeight = ctx.terminologyDenseWeight ?? terminologyParams().dense_weight;
+  const denseFactor = (index: number): number => (variants[index]?.kind === 'terminology' ? terminologyDenseWeight : 1);
+  const identifiers = config.v2.identifierFilter ? await runIdentifierResolve(ctx) : null;
+  const filterIdentifiers = identifiers && identifiers.found.length > 0 ? identifiers.found : undefined;
 
-  const runDomainLegs = (stageSignal: AbortSignal): Promise<BindingLegsOutput | null> =>
-    bindings
-      ? runBindingLegs({
-          backend,
-          scope,
-          filters,
-          params,
-          plan: bindings.plan,
-          embeds: bindings.embeds,
-          globalEmbedding: embedding,
-          signal: stageSignal,
-          timeoutMs: bindingTimeoutMs,
-          ...(chunkingOverride ? { chunkingProfileOverride: chunkingOverride } : {}),
-        })
-      : Promise.resolve(null);
+  // D-31: with found identifiers every leg is first filtered to chunks carrying one; an empty filtered search reruns once without it.
+  const runLegs = async (identifiersNorm: string[] | undefined, legCodes: readonly string[]) => {
+    const identifierArg = identifiersNorm ? { identifiersNorm } : {};
+    const route =
+      historyScope || identifiersNorm
+        ? backendForRequest({ ...(historyScope ? { versionScope: historyScope } : {}), ...identifierArg })
+        : { backend: getRetrievalBackend() };
+    const backend = route.backend;
+    const versionCodes = [
+      versions.ignored ? VERSIONS_IGNORED : undefined,
+      historyScope ? SUPERSEDED_DENSE_UNAVAILABLE : undefined,
+      route.reason === 'backend_field_unsupported' ? BACKEND_FIELD_UNSUPPORTED : undefined,
+      ...legCodes,
+    ];
+    const versionDegraded = route.reason === 'backend_field_unsupported';
+    const lexicalEnabled = config.v2.lexicalSearch;
+    const verdict = getV2StartupVerdict();
+    const icuSkipLexical = lexicalEnabled && !verdict.icuAvailable;
+    const chunkingOverride = evalChunkingOverride(profile, stageOverrides?.retrievalOverrides);
+    const bindings = ctx.bindings && hasBindingWork(ctx.bindings.plan) ? ctx.bindings : null;
+    const searchSpec = spec('search', 'throw');
+    const bindingTimeoutMs = Math.max(
+      1,
+      Math.min(config.v2.domainEmbeddings.timeoutMs, searchSpec.timeoutMs - BINDING_STAGE_MARGIN_MS),
+    );
 
-  const translations = hasTranslationWork(ctx.translations) ? ctx.translations : null;
-  const originalText = variants.find((variant) => variant.kind === 'original')?.text ?? input.query;
-  const runTranslations = (stageSignal: AbortSignal): Promise<TranslationLegsOutput | null> =>
-    translations
-      ? runTranslationLegs({
-          backend,
-          scope,
-          plan: translations,
-          queryText: originalText,
-          queryEmbedding: embedding,
-          embeddingProfileId: embedding.profile?.id ?? LEGACY_PROFILE.id,
-          filters,
-          params,
-          lexicalEnabled: lexicalEnabled && verdict.icuAvailable,
-          signal: stageSignal,
-          timeoutMs: Math.max(1, searchSpec.timeoutMs - BINDING_STAGE_MARGIN_MS),
-          ...(chunkingOverride ? { chunkingProfileOverride: chunkingOverride } : {}),
-        })
-      : Promise.resolve(null);
-
-  // D-16: one lexical-only call (no vector, dense limit 0) under the same scope, filters and chunking override as the other legs.
-  const termTokens = ctx.terminology && lexicalEnabled && verdict.icuAvailable ? [...ctx.terminology.tokens] : [];
-  const runTermLeg = (stageSignal: AbortSignal): Promise<RankedHit[] | null> =>
-    termTokens.length > 0
-      ? backend
-          .search({
+    const runDomainLegs = (stageSignal: AbortSignal): Promise<BindingLegsOutput | null> =>
+      bindings
+        ? runBindingLegs({
+            backend,
             scope,
-            embeddingProfileId: embedding.profile?.id ?? LEGACY_PROFILE.id,
-            denseVector: null,
-            lexicalTokens: termTokens,
-            lexicalLanguages: null,
             filters,
-            denseLimit: 0,
-            lexicalLimit: pool,
+            params,
+            plan: bindings.plan,
+            embeds: bindings.embeds,
+            globalEmbedding: embedding,
             signal: stageSignal,
+            timeoutMs: bindingTimeoutMs,
             ...(chunkingOverride ? { chunkingProfileOverride: chunkingOverride } : {}),
-            ...versionScopeArg,
+            ...identifierArg,
           })
-          .then((legs) => legs.lexical)
-      : Promise.resolve(null);
+        : Promise.resolve(null);
 
-  const runDelegatedSearch = async (stageSignal: AbortSignal, delegate: SearchDelegate) => {
-    const domainPending = runDomainLegs(stageSignal);
-    const translationPending = runTranslations(stageSignal);
-    const termPending = runTermLeg(stageSignal);
-    // Awaited below; a delegate failure first must not leave the term call's rejection unhandled.
-    termPending.catch(() => undefined);
-    const handle = createRetrievalPort({
-      scope,
-      backend,
-      variants,
-      filters,
-      params,
-      signal: stageSignal,
-      // The embed stage already embedded every variant in one batch; the port reuses those vectors.
-      embed: async () => variants.map((_variant, index) => ctx.variantEmbeddings?.[index] ?? embedding),
-      lexicalEnabled: lexicalEnabled && verdict.icuAvailable,
-      ...(chunkingOverride ? { chunkingProfileOverride: chunkingOverride } : {}),
-      ...versionScopeArg,
-    });
-    let order: unknown;
-    try {
-      order = await delegate(handle.port);
-    } catch (error) {
-      throw new SearchDelegateError(error);
-    }
-    if (!Array.isArray(order) || order.some((id) => typeof id !== 'string')) {
-      throw new SearchDelegateError(new TypeError('search delegate must return chunk ids'));
-    }
-    const legsByVariant = handle.collectedLegs();
-    const domain = await domainPending;
-    const translation = await translationPending;
-    const term = await termPending;
-    return {
-      legsByVariant,
-      denseTotal: legsByVariant.reduce((total, legs) => total + legs.dense.length, 0),
-      lexicalTotal: legsByVariant.reduce((total, legs) => total + legs.lexical.length, 0),
-      domain,
-      translation,
-      term,
-      delegated: { handle, order: order as string[] } as DelegatedFusion | null,
-    };
-  };
-
-  const runBackendSearch = async (stageSignal: AbortSignal) => {
-    if (ctx.searchDelegate) return runDelegatedSearch(stageSignal, ctx.searchDelegate);
-    let denseTotal = 0;
-    let lexicalTotal = 0;
-    const domainPending = runDomainLegs(stageSignal);
-    const translationPending = runTranslations(stageSignal);
-    const [term, ...legsByVariant] = await Promise.all([
-      runTermLeg(stageSignal),
-      ...variants.map(async (variant, index) => {
-        const legs = await backend.search(
-          variantSearchRequest({
+    const translations = hasTranslationWork(ctx.translations) ? ctx.translations : null;
+    const originalText = variants.find((variant) => variant.kind === 'original')?.text ?? input.query;
+    const runTranslations = (stageSignal: AbortSignal): Promise<TranslationLegsOutput | null> =>
+      translations
+        ? runTranslationLegs({
+            backend,
             scope,
-            variant,
-            embedding: ctx.variantEmbeddings?.[index] ?? embedding,
+            plan: translations,
+            queryText: originalText,
+            queryEmbedding: embedding,
+            embeddingProfileId: embedding.profile?.id ?? LEGACY_PROFILE.id,
             filters,
-            pool,
+            params,
             lexicalEnabled: lexicalEnabled && verdict.icuAvailable,
             signal: stageSignal,
-            chunkingProfileOverride: chunkingOverride,
-            ...versionScopeArg,
-          }),
-        );
-        denseTotal += legs.dense.length;
-        lexicalTotal += legs.lexical.length;
-        return legs;
-      }),
-    ]) as [RankedHit[] | null, ...BackendLegs[]];
-    const domain = await domainPending;
-    const translation = await translationPending;
-    return { legsByVariant, denseTotal, lexicalTotal, domain, translation, term, delegated: null as DelegatedFusion | null };
-  };
+            timeoutMs: Math.max(1, searchSpec.timeoutMs - BINDING_STAGE_MARGIN_MS),
+            ...(chunkingOverride ? { chunkingProfileOverride: chunkingOverride } : {}),
+          })
+        : Promise.resolve(null);
 
-  type SearchResult = Awaited<ReturnType<typeof runBackendSearch>>;
+    // D-16: one lexical-only call (no vector, dense limit 0) under the same scope, filters and chunking override as the other legs.
+    const termTokens = ctx.terminology && lexicalEnabled && verdict.icuAvailable ? [...ctx.terminology.tokens] : [];
+    const runTermLeg = (stageSignal: AbortSignal): Promise<RankedHit[] | null> =>
+      termTokens.length > 0
+        ? backend
+            .search({
+              scope,
+              embeddingProfileId: embedding.profile?.id ?? LEGACY_PROFILE.id,
+              denseVector: null,
+              lexicalTokens: termTokens,
+              lexicalLanguages: null,
+              filters,
+              denseLimit: 0,
+              lexicalLimit: pool,
+              signal: stageSignal,
+              ...(chunkingOverride ? { chunkingProfileOverride: chunkingOverride } : {}),
+              ...versionScopeArg,
+              ...identifierArg,
+            })
+            .then((legs) => legs.lexical)
+        : Promise.resolve(null);
 
-  const searchCounts = (value: {
-    legsByVariant: BackendLegs[];
-    denseTotal: number;
-    lexicalTotal: number;
-    domain: BindingLegsOutput | null;
-    translation: TranslationLegsOutput | null;
-    term: RankedHit[] | null;
-  }) => ({
-    dense: value.denseTotal,
-    lexical: value.lexicalTotal,
-    ...(value.domain ? value.domain.counts : {}),
-    ...(value.translation ? value.translation.counts : {}),
-    ...(value.term ? { term: value.term.length } : {}),
-    ...(historyScope ? { superseded: supersededCount(value) } : {}),
-  });
+    const runDelegatedSearch = async (stageSignal: AbortSignal, delegate: SearchDelegate) => {
+      const domainPending = runDomainLegs(stageSignal);
+      const translationPending = runTranslations(stageSignal);
+      const termPending = runTermLeg(stageSignal);
+      // Awaited below; a delegate failure first must not leave the term call's rejection unhandled.
+      termPending.catch(() => undefined);
+      const handle = createRetrievalPort({
+        scope,
+        backend,
+        variants,
+        filters,
+        params,
+        signal: stageSignal,
+        // The embed stage already embedded every variant in one batch; the port reuses those vectors.
+        embed: async () => variants.map((_variant, index) => ctx.variantEmbeddings?.[index] ?? embedding),
+        lexicalEnabled: lexicalEnabled && verdict.icuAvailable,
+        ...(chunkingOverride ? { chunkingProfileOverride: chunkingOverride } : {}),
+        ...versionScopeArg,
+        ...identifierArg,
+        terminologyDenseWeight,
+      });
+      let order: unknown;
+      try {
+        const legWeights = params.leg_weights ?? { dense: 1, lexical: 1 };
+        order = await delegate(handle.port, {
+          signal: stageSignal,
+          rrfK: params.rrf_k,
+          legWeights: { dense: legWeights.dense, lexical: legWeights.lexical },
+        });
+      } catch (error) {
+        throw new SearchDelegateError(error);
+      }
+      if (!Array.isArray(order) || order.some((id) => typeof id !== 'string')) {
+        throw new SearchDelegateError(new TypeError('search delegate must return chunk ids'));
+      }
+      const legsByVariant = handle.collectedLegs();
+      const domain = await domainPending;
+      const translation = await translationPending;
+      const term = await termPending;
+      return {
+        legsByVariant,
+        denseTotal: legsByVariant.reduce((total, legs) => total + legs.dense.length, 0),
+        lexicalTotal: legsByVariant.reduce((total, legs) => total + legs.lexical.length, 0),
+        domain,
+        translation,
+        term,
+        delegated: { handle, order: order as string[] } as DelegatedFusion | null,
+      };
+    };
 
-  const extraFailed = (value: SearchResult): boolean =>
-    (value.domain !== null && value.domain.failures.length > 0) || (value.translation !== null && value.translation.failures.length > 0);
-  const extraDetail = (value: SearchResult): string | undefined =>
-    joinDetail([value.domain ? bindingFailureDetail(value.domain.failures) : undefined, translationDetail(value.translation)]);
-  const hasVersionCodes = versionCodes.some((code) => code !== undefined);
+    const runBackendSearch = async (stageSignal: AbortSignal) => {
+      if (ctx.searchDelegate) return runDelegatedSearch(stageSignal, ctx.searchDelegate);
+      let denseTotal = 0;
+      let lexicalTotal = 0;
+      const domainPending = runDomainLegs(stageSignal);
+      const translationPending = runTranslations(stageSignal);
+      const [term, ...legsByVariant] = await Promise.all([
+        runTermLeg(stageSignal),
+        ...variants.map(async (variant, index) => {
+          const legs = await backend.search(
+            variantSearchRequest({
+              scope,
+              variant,
+              embedding: ctx.variantEmbeddings?.[index] ?? embedding,
+              filters,
+              pool,
+              lexicalEnabled: lexicalEnabled && verdict.icuAvailable,
+              signal: stageSignal,
+              chunkingProfileOverride: chunkingOverride,
+              ...versionScopeArg,
+              ...identifierArg,
+            }),
+          );
+          denseTotal += legs.dense.length;
+          lexicalTotal += legs.lexical.length;
+          return legs;
+        }),
+      ]) as [RankedHit[] | null, ...BackendLegs[]];
+      const domain = await domainPending;
+      const translation = await translationPending;
+      return { legsByVariant, denseTotal, lexicalTotal, domain, translation, term, delegated: null as DelegatedFusion | null };
+    };
 
-  let searchValue: Awaited<ReturnType<typeof runBackendSearch>>['legsByVariant'];
-  let domainLists: RankedList[] = [];
-  let translationOutput: TranslationLegsOutput | null = null;
-  let delegated: DelegatedFusion | null = null;
-  let termHits: RankedHit[] | null = null;
-  if (icuSkipLexical) {
-    const startedAt = collector.now();
-    let searched: SearchResult;
-    try {
-      searched = await runAgainstSignal(signal, runBackendSearch);
-    } catch (error) {
-      if (!(error instanceof SearchDelegateError) || signal.aborted) throw error;
+    type SearchResult = Awaited<ReturnType<typeof runBackendSearch>>;
+
+    const searchCounts = (value: {
+      legsByVariant: BackendLegs[];
+      denseTotal: number;
+      lexicalTotal: number;
+      domain: BindingLegsOutput | null;
+      translation: TranslationLegsOutput | null;
+      term: RankedHit[] | null;
+    }) => ({
+      dense: value.denseTotal,
+      lexical: value.lexicalTotal,
+      ...(value.domain ? value.domain.counts : {}),
+      ...(value.translation ? value.translation.counts : {}),
+      ...(value.term ? { term: value.term.length } : {}),
+      ...(historyScope ? { superseded: supersededCount(value) } : {}),
+    });
+
+    const extraFailed = (value: SearchResult): boolean =>
+      (value.domain !== null && value.domain.failures.length > 0) || (value.translation !== null && value.translation.failures.length > 0);
+    const extraDetail = (value: SearchResult): string | undefined =>
+      joinDetail([value.domain ? bindingFailureDetail(value.domain.failures) : undefined, translationDetail(value.translation)]);
+    const hasVersionCodes = versionCodes.some((code) => code !== undefined);
+
+    let searchValue: Awaited<ReturnType<typeof runBackendSearch>>['legsByVariant'];
+    let domainLists: RankedList[] = [];
+    let translationOutput: TranslationLegsOutput | null = null;
+    let delegated: DelegatedFusion | null = null;
+    let termHits: RankedHit[] | null = null;
+    if (icuSkipLexical) {
+      const startedAt = collector.now();
+      let searched: SearchResult;
+      try {
+        searched = await runAgainstSignal(signal, runBackendSearch);
+      } catch (error) {
+        if (!(error instanceof SearchDelegateError) || signal.aborted) throw error;
+        collector.record({
+          name: 'search',
+          status: 'error',
+          reason: 'failed',
+          startedAt,
+          endedAt: collector.now(),
+          detail: SEARCH_DELEGATE_ERROR,
+        });
+        throw new StageError('search', 'failed', error);
+      }
+      searchValue = searched.legsByVariant;
+      domainLists = searched.domain?.lists ?? [];
+      translationOutput = searched.translation;
+      delegated = searched.delegated;
+      termHits = searched.term;
       collector.record({
         name: 'search',
-        status: 'error',
-        reason: 'failed',
+        status: 'degraded',
         startedAt,
         endedAt: collector.now(),
-        detail: SEARCH_DELEGATE_ERROR,
+        detail: joinDetail(['lexical_icu_unavailable', translationDetail(searched.translation), ...versionCodes])!,
+        counts: searchCounts(searched),
+        candidatesOut: searched.denseTotal + searched.lexicalTotal,
       });
-      throw new StageError('search', 'failed', error);
+    } else {
+      const searched = requireValue(
+        await runStage<SearchResult>(
+          searchSpec,
+          signal,
+          (stageSignal) => runBackendSearch(stageSignal),
+          collector,
+          {
+            candidatesOut: (value) => value.denseTotal + value.lexicalTotal,
+            counts: searchCounts,
+            ...(ctx.searchDelegate ? { failureDetail: delegateFailureDetail } : {}),
+            ...(bindings || translations || hasVersionCodes
+              ? {
+                  // D-19, D-30: a dropped binding or translation leg degrades the stage; the original legs and the answer continue.
+                  // D-12: a backend that cannot serve the version scope is replaced by pgvector and degrades the stage too.
+                  status: (value) => (extraFailed(value) || versionDegraded ? 'degraded' : 'ok'),
+                  detail: (value) => joinDetail([extraDetail(value), ...versionCodes]),
+                }
+              : {}),
+          },
+        ),
+        'search',
+      );
+      searchValue = searched.legsByVariant;
+      domainLists = searched.domain?.lists ?? [];
+      translationOutput = searched.translation;
+      delegated = searched.delegated;
+      termHits = searched.term;
     }
-    searchValue = searched.legsByVariant;
-    domainLists = searched.domain?.lists ?? [];
-    translationOutput = searched.translation;
-    delegated = searched.delegated;
-    termHits = searched.term;
-    collector.record({
-      name: 'search',
-      status: 'degraded',
-      startedAt,
-      endedAt: collector.now(),
-      detail: joinDetail(['lexical_icu_unavailable', translationDetail(searched.translation), ...versionCodes])!,
-      counts: searchCounts(searched),
-      candidatesOut: searched.denseTotal + searched.lexicalTotal,
-    });
-  } else {
-    const searched = requireValue(
-      await runStage<SearchResult>(
-        searchSpec,
+    // Mapped to source chunks before fusion; a chunk the original legs also found keeps the original hit (D-30).
+    // D-31: translation hits cannot be filtered in SQL; while filtered only chunks the filtered legs also found are kept.
+    const knownHits = legHitsByChunkId(searchValue);
+    const translationLists =
+      translationOutput && translationOutput.lists.length > 0
+        ? preferOriginalHits(translationOutput.lists, knownHits)
+            .map((list) => (identifiersNorm ? { ...list, hits: list.hits.filter((hit) => knownHits.has(hit.chunkId)) } : list))
+            .filter((list) => !identifiersNorm || list.hits.length > 0)
+        : [];
+
+    let exactList: RankedList | null = null;
+    if (config.exactIdLookup) {
+      // rag_exact_id_documents takes no filter arguments, so while a request narrows the search the leg stands down rather than widen it.
+      const exactSpec = spec('exact_id_lookup', 'skip');
+      const exact = await runStage(
+        hasNarrowingFilters(filters) ? { ...exactSpec, enabled: false } : exactSpec,
         signal,
-        (stageSignal) => runBackendSearch(stageSignal),
+        (stageSignal) =>
+          exactIdStage(input.query, scope, {
+            client: requireAdminSearchClient(getRagDeps()),
+            signal: stageSignal,
+            limit: pool,
+            ...versionScopeArg,
+            ...identifierArg,
+          }),
         collector,
         {
-          candidatesOut: (value) => value.denseTotal + value.lexicalTotal,
-          counts: searchCounts,
-          ...(ctx.searchDelegate ? { failureDetail: delegateFailureDetail } : {}),
-          ...(bindings || translations || hasVersionCodes
-            ? {
-                // D-19, D-30: a dropped binding or translation leg degrades the stage; the original legs and the answer continue.
-                // D-12: a backend that cannot serve the version scope is replaced by pgvector and degrades the stage too.
-                status: (value) => (extraFailed(value) || versionDegraded ? 'degraded' : 'ok'),
-                detail: (value) => joinDetail([extraDetail(value), ...versionCodes]),
-              }
-            : {}),
+          candidatesIn: searchValue.reduce((total, legs) => total + legs.dense.length + legs.lexical.length, 0),
+          candidatesOut: (value) => value.rows.length,
+          detail: (value) => `tokens=${value.tokenCount}`,
         },
-      ),
-      'search',
-    );
-    searchValue = searched.legsByVariant;
-    domainLists = searched.domain?.lists ?? [];
-    translationOutput = searched.translation;
-    delegated = searched.delegated;
-    termHits = searched.term;
-  }
-  // Mapped to source chunks before fusion; a chunk the original legs also found keeps the original hit (D-30).
-  const translationLists =
-    translationOutput && translationOutput.lists.length > 0 ? preferOriginalHits(translationOutput.lists, legHitsByChunkId(searchValue)) : [];
-
-  let exactList: RankedList | null = null;
-  if (config.exactIdLookup) {
-    // rag_exact_id_documents takes no filter arguments, so while a request narrows the search the leg stands down rather than widen it.
-    const exactSpec = spec('exact_id_lookup', 'skip');
-    const exact = await runStage(
-      hasNarrowingFilters(filters) ? { ...exactSpec, enabled: false } : exactSpec,
-      signal,
-      (stageSignal) =>
-        exactIdStage(input.query, scope, { client: requireAdminSearchClient(getRagDeps()), signal: stageSignal, limit: pool, ...versionScopeArg }),
-      collector,
-      {
-        candidatesIn: searchValue.reduce((total, legs) => total + legs.dense.length + legs.lexical.length, 0),
-        candidatesOut: (value) => value.rows.length,
-        detail: (value) => `tokens=${value.tokenCount}`,
-      },
-    );
-    if (!exact.skipped && exact.value.rows.length > 0) {
-      exactList = await exactIdRankedList(exact.value.rows, searchValue, params, signal);
+      );
+      if (!exact.skipped && exact.value.rows.length > 0) {
+        exactList = await lookupRankedList('exact_id', params.leg_weights?.exact_id ?? 1, exact.value.rows, searchValue, signal);
+      }
     }
+
+    // D-16, D-45: the structured table leg, one deterministic list of matched rows' chunks. It takes no filter arguments either, so a
+    // narrowing filter makes it stand down; the version scope is passed through.
+    let tableList: RankedList | null = null;
+    let tableRows: Map<string, TableRowAttachment> | undefined;
+    if (config.v2.tableLookup) {
+      const tableSpec = spec('table_lookup', 'skip');
+      const candidatesIn = searchValue.reduce((total, legs) => total + legs.dense.length + legs.lexical.length, 0);
+      if (tableSpec.enabled && hasNarrowingFilters(filters)) {
+        const at = collector.now();
+        collector.record({ name: 'table_lookup', status: 'disabled', reason: 'disabled', startedAt: at, endedAt: at, candidatesIn, detail: TABLE_LOOKUP_NARROWED });
+      } else {
+        const tuning = effectiveTuningParams(profile, config, evalTuningOverrides(profile, input.stageOverrides?.retrievalOverrides)).tableLookup;
+        const table = await runStage(
+          tableSpec,
+          signal,
+          (stageSignal) =>
+            tableLookupStage(input.query, scope, tuning, {
+              client: requireAdminSearchClient(getRagDeps()),
+              signal: stageSignal,
+              ...versionScopeArg,
+              ...identifierArg,
+            }),
+          collector,
+          {
+            candidatesIn,
+            candidatesOut: (value) => value.rows.length,
+            detail: (value) => `tokens=${value.tokenCount} rows=${value.rows.length}`,
+          },
+        );
+        if (!table.skipped && table.value.rows.length > 0) {
+          const listed = tableListRows(table.value.rows);
+          tableList = await lookupRankedList(TABLE_LIST_ID, tuning.weight, listed.rows, searchValue, signal);
+          if (tableList) tableRows = listed.attachments;
+        }
+      }
+    }
+
+    const found =
+      searchValue.reduce((total, legs) => total + legs.dense.length + legs.lexical.length, 0) +
+      (termHits?.length ?? 0) +
+      domainLists.reduce((total, list) => total + list.hits.length, 0) +
+      translationLists.reduce((total, list) => total + list.hits.length, 0) +
+      (exactList?.hits.length ?? 0) +
+      (tableList?.hits.length ?? 0);
+    return { searchValue, domainLists, translationLists, delegated, termHits, exactList, tableList, tableRows, found };
+  };
+
+  let legs = await runLegs(filterIdentifiers, []);
+  let fallback = false;
+  if (filterIdentifiers && legs.found === 0) {
+    fallback = true;
+    legs = await runLegs(undefined, [IDENTIFIER_FILTER_FALLBACK]);
   }
+  const { searchValue, domainLists, translationLists, delegated, termHits, exactList, tableList, tableRows } = legs;
 
   // D-16: weight = expansion_weight × the lexical leg weight in force, so the list stays a fraction of the lexical leg.
   const termList: RankedList | null =
@@ -593,27 +740,37 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       spec('fuse', 'throw'),
       signal,
       () => {
-        const extraLists = [...(exactList ? [exactList] : []), ...domainLists, ...translationLists, ...(termList ? [termList] : [])];
+        const extraLists = [...(exactList ? [exactList] : []), ...(tableList ? [tableList] : []), ...domainLists, ...translationLists, ...(termList ? [termList] : [])];
         let fusedHits: FusedHit[];
         if (delegated) {
           fusedHits = delegatedFusion(delegated, extraLists, params.rrf_k);
         } else {
-          const lists = searchValue.flatMap((legs, index) => listsFromLegs(index, legs.dense, legs.lexical, params));
+          const lists = searchValue.flatMap((legs, index) => listsFromLegs(index, legs.dense, legs.lexical, params, denseFactor(index)));
           lists.push(...extraLists);
           fusedHits = rrf(lists, params.rrf_k);
         }
         return ctx.trackStandalone ? withStandaloneSimilarity(fusedHits, variants, searchValue) : fusedHits;
       },
       collector,
-      { candidatesOut: (value) => value.length },
+      // A framework delegate's fusion is marked in the trace; the native fuse record is unchanged.
+      { candidatesOut: (value) => value.length, ...(delegated ? { counts: () => ({ delegated: 1 }) } : {}) },
     ),
     'fuse',
   );
 
+  // D-34: bounded rerank-input places for term:0-only hits; absent reserveSlots reads TerminologyParams.reserve_slots.
+  const reserve = (result: DedupeResult): DedupeResult =>
+    termList && ctx.terminology
+      ? reserveTerminologyHits(result, fused, termList.hits, {
+          reserveSlots: ctx.terminology.reserveSlots ?? terminologyParams().reserve_slots,
+          byParent: config.v2.parentChild,
+        })
+      : result;
+
   const deduped = await runStage(
     spec('dedupe', 'skip'),
     signal,
-    () => dedupeAndCap(fused, { byParent: config.v2.parentChild, cap: params.rerank_input_cap }),
+    () => reserve(dedupeAndCap(fused, { byParent: config.v2.parentChild, cap: params.rerank_input_cap })),
     collector,
     {
       candidatesIn: fused.length,
@@ -622,9 +779,73 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     },
   );
 
-  const capped = deduped.skipped ? sliceCap(fused, params.rerank_input_cap) : deduped.value;
+  const capped = deduped.skipped ? reserve(sliceCap(fused, params.rerank_input_cap)) : deduped.value;
 
-  return { fusedHits: capped.hits, dedupeCounts: capped.counts, versionScope: versions.scope };
+  return {
+    fusedHits: capped.hits,
+    dedupeCounts: capped.counts,
+    versionScope: versions.scope,
+    ...(tableRows ? { tableRows } : {}),
+    ...(identifiers ? { identifiers: { ...identifiers, filtered: filterIdentifiers !== undefined && !fallback, fallback } } : {}),
+  };
+}
+
+type ResolvedIdentifiers = Omit<SearchIdentifiers, 'filtered' | 'fallback'>;
+
+interface IdentifierResolveValue {
+  ok: boolean;
+  resolved: QueryIdentifiers;
+  patterns: readonly RegExp[];
+  suggestions: string[];
+}
+
+/**
+ * D-31: the optional identifier_resolve stage. The tenant's patterns and the resolve call use the scope only; a failure skips the filter
+ * and degrades the stage with a fixed code. Detail and counts carry numbers only, never an identifier (D-34).
+ */
+async function runIdentifierResolve(ctx: SearchStagesInput): Promise<ResolvedIdentifiers | null> {
+  const { input, scope, config, profile, signal, collector, stageOverrides } = ctx;
+  const outcome = await runStage(
+    stageSpec(config, profile, 'identifier_resolve', 'skip', stageOverrides),
+    signal,
+    async (stageSignal): Promise<IdentifierResolveValue> => {
+      const { expressions } = await loadTenantIdentifierPatterns(scope, { signal: stageSignal });
+      try {
+        const client = requireAdminSearchClient(getRagDeps());
+        const resolved = await resolveQueryIdentifiers(scope, input.query, expressions, { client, signal: stageSignal });
+        const notFound = resolved.asked.length > 0 && resolved.found.length === 0;
+        const suggestions = notFound ? await identifierSuggestions(scope, resolved.missing, { client, signal: stageSignal }) : [];
+        return { ok: true, resolved, patterns: expressions, suggestions };
+      } catch (error) {
+        if (stageSignal.aborted) throw error;
+        return { ok: false, resolved: { asked: [], found: [], missing: [] }, patterns: expressions, suggestions: [] };
+      }
+    },
+    collector,
+    {
+      status: (value) => (value.ok ? 'ok' : 'degraded'),
+      detail: (value) =>
+        value.ok
+          ? `asked=${value.resolved.asked.length} found=${value.resolved.found.length} filtered=${value.resolved.found.length > 0}`
+          : IDENTIFIER_RESOLVE_FAILED,
+      counts: (value) => ({
+        asked: value.resolved.asked.length,
+        found: value.resolved.found.length,
+        missing: value.resolved.missing.length,
+        suggestions: value.suggestions.length,
+      }),
+    },
+  );
+  if (outcome.skipped || !outcome.value.ok) return null;
+  const { resolved, patterns, suggestions } = outcome.value;
+  return {
+    asked: resolved.asked.map((entry) => entry.norm),
+    found: resolved.found,
+    missing: resolved.missing,
+    notFound: resolved.asked.length > 0 && resolved.found.length === 0,
+    suggestions,
+    patterns,
+  };
 }
 
 function supersededCount(value: { legsByVariant: BackendLegs[]; term: RankedHit[] | null }): number {

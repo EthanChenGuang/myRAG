@@ -19,7 +19,7 @@ import { effectiveRetrievalParams } from './retrieval-params';
 import { evalFinalTopK, evalResultCap, runContextStages } from './stages/context';
 import { runQueryStages } from './stages/query';
 import { runRankStages } from './stages/rank';
-import { embedForRetrieval, embedVariantTexts, runSearchStages } from './stages/search';
+import { embedForRetrieval, embedVariantTexts, runSearchStages, type SearchIdentifiers } from './stages/search';
 import {
   bindingHashFields,
   planBindingLegs,
@@ -31,10 +31,11 @@ import {
 import { buildCacheHitResult, buildSmallTalkResult, buildV2Result, fusedHitsToVoiceChunks, requestRetrievalConfigHash } from './result';
 import { buildRetrievalFilters, effectiveOnFor } from '../query/filters';
 import { queryLanguage as detectQueryLanguage } from '../query/language';
-import type { RetrievalConfigHashQueryLayer } from './config-hash';
+import type { RetrievalConfigHashQueryLayer, TerminologyHashStage } from './config-hash';
 import { hasTranslationWork, planTranslationLegs, translationHashFields, type TranslationLegsPlan } from './translation-legs';
 import type { SemanticCacheSeam } from '../query/run-layer';
 import { variantDenseTexts } from '../query/variants';
+import { identifierSuggestionMessage } from '../generation/messages';
 
 export const V2_PROFILES = ['chat', 'embed', 'eval', 'voice'] as const;
 
@@ -93,6 +94,8 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
   let assembly = null;
   let candidates: RetrievalResult['candidates'] = [];
   let refusal = null;
+  let identifierState: (SearchIdentifiers & { nearMissDropped: number }) | null = null;
+  let identifierRefusal = false;
   let queryLanguage: RetrievalResult['queryLanguage'] = null;
   let preRefusalCandidates: Candidate[] | undefined;
   let voice: VoiceResults | null = null;
@@ -104,6 +107,8 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
   let effectiveOn: string | undefined;
   let queryLayerHash: RetrievalConfigHashQueryLayer | undefined;
   let cacheTicket: RetrievalResult['cacheTicket'];
+  // D-21: set by the terminology stage before semantic_cache builds its key; enabled but not reached reads as unavailable.
+  let terminologyStage: TerminologyHashStage = spec('terminology', 'skip').enabled ? { enabled: true, version: null } : { enabled: false };
   const security = deps.securityConfig();
   if (security.injectionCheck !== 'off') warnInjectionCheckDisabled(config, security.injectionCheck);
 
@@ -153,6 +158,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
         translationHash: translationHashFields(await planTranslations(embedded.profile?.id ?? LEGACY_PROFILE.id), params),
         queryLayerHash: await layerHash(),
         ...(config.effectiveDates ? { effectiveOn: effectiveOnFor(config, deps.now()) } : {}),
+        terminology: terminologyStage,
       }),
   };
 
@@ -166,6 +172,9 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
       collector,
       stageOverrides: input.stageOverrides,
       cache: cacheSeam,
+      onTerminology: (stage) => {
+        terminologyStage = stage;
+      },
     });
     queryContext = query.queryContext;
     queryLanguage = query.queryLanguage;
@@ -242,129 +251,158 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
       variants: query.variants,
       variantEmbeddings,
       ...(query.queryLayer ? { trackStandalone: true } : {}),
+      ...(query.queryLayer?.searchDelegate ? { searchDelegate: query.queryLayer.searchDelegate } : {}),
       filters: query.filters,
       bindings: { plan: bindingPlan, embeds: bindingEmbeds },
       ...(hasTranslationWork(translationPlan) ? { translations: translationPlan } : {}),
-      ...(query.terminology && query.terminology.expansionTokens.length > 0
-        ? { terminology: { tokens: query.terminology.expansionTokens, expansionWeight: query.terminology.expansionWeight } }
-        : {}),
-    });
-
-    const rank = await runRankStages({
-      input,
-      config,
-      profile,
-      embedding,
-      queryLanguage: query.queryLanguage,
-      fusedHits: search.fusedHits,
-      referenced: query.referenced,
-      signal,
-      collector,
-      stageOverrides: input.stageOverrides,
-      variants: query.variants,
-      dedupeCounts: search.dedupeCounts,
-      queryContext: query.queryContext,
-      ...(query.queryLayer
+      // D-31: term:0 is searched only when the stage's accounting kept it.
+      ...(query.terminology && query.terminology.termSearch && query.terminology.expansionTokens.length > 0
         ? {
-            queryPlan,
-            coverage: {
-              enabled: params.sub_question_coverage,
-              topK:
-                profile === 'voice'
-                  ? (validResultCount(input.options?.maxResults) ?? VOICE_DEFAULT_MATCH_COUNT)
-                  : evalFinalTopK(profile, input, params.final_top_k),
+            terminology: {
+              tokens: query.terminology.expansionTokens,
+              expansionWeight: query.terminology.expansionWeight,
+              reserveSlots: query.terminology.reserveSlots,
             },
           }
         : {}),
+      ...(query.terminology ? { terminologyDenseWeight: query.terminology.denseWeight } : {}),
     });
-    refusal = rank.decision;
 
-    if (profile === 'voice') {
-      const matchCount = validResultCount(input.options?.maxResults) ?? VOICE_DEFAULT_MATCH_COUNT;
-      let chunks = fusedHitsToVoiceChunks(rank.survivors, rank.rerank.scoreByChunk);
-      let flaggedForRender: ReadonlySet<string> | undefined;
-      if (security.injectionCheck !== 'off') {
-        // Voice runs the rules only (injectionDetectorsFor); released ids come from the scoped search rows.
-        const run = await runInjectionStage({
-          spec: spec('injection_check', 'skip'),
-          signal,
-          collector,
-          scope,
-          profile,
-          security,
-          mode: security.injectionCheck,
-          items: injectionItems(chunks, null, null),
-          candidates: chunks,
-          referenced: null,
-          released: releasedRulesFromRows(documentRowsOf(rank.survivors)),
-        });
-        injectionStalled = run.stalled;
-        if (run.applied) {
-          injection = run.applied.summary;
-          if (injectionDropped(run.applied.summary)) chunks = run.applied.candidates;
-          if (run.applied.marks) {
-            flaggedForRender = run.applied.marks.chunkIds;
-            chunks = downweightOrder(chunks, flaggedForRender);
-          }
-        }
-      }
-      const voiceChunks = chunks;
-      const assembled = await runStage(
-        spec('assemble', 'skip'),
-        signal,
-        () => assembleVoiceResults({ query: input.query, chunks: voiceChunks, matchCount }),
-        collector,
-        { candidatesIn: voiceChunks.length, candidatesOut: (value) => value.results.length },
-      );
-      voice = assembled.skipped ? { results: [], source_images: [] } : assembled.value;
-      if (security.contextTagging && !assembled.skipped) {
-        const context = voiceContext(voice.results, flaggedForRender);
-        if (context !== null) voice = { ...voice, context };
-      }
-    } else {
-      const context = await runContextStages({
+    // D-31, D-51: strict with no asked identifier in the tenant answers nothing; rank and context are not run for it.
+    const searchIdentifiers = search.identifiers;
+    identifierRefusal = searchIdentifiers?.notFound === true && (input.options?.ragMode ?? 'strict') === 'strict';
+    if (searchIdentifiers) identifierState = { ...searchIdentifiers, nearMissDropped: 0 };
+    if (!identifierRefusal) {
+      const rank = await runRankStages({
         input,
         config,
         profile,
-        params,
-        fusedHits: rank.survivors,
+        embedding,
+        queryLanguage: query.queryLanguage,
+        fusedHits: search.fusedHits,
         referenced: query.referenced,
         signal,
         collector,
         stageOverrides: input.stageOverrides,
-        rerank: rank.rerank,
-        security,
-        versionScope: search.versionScope,
-        queryLanguage: query.queryLanguage,
-      });
-      assembly = context.assembly;
-      candidates = context.candidates;
-      injection = context.injection;
-      injectionStalled = context.injectionStalled ?? false;
-    }
-    if (profile === 'eval' && rank.decision.decision === 'refuse') {
-      const dropped = new Set(injection?.droppedChunkIds ?? []);
-      const cap = evalResultCap(profile, input);
-      const kept = rank.preRefusalHits.filter((row) => !dropped.has(row.hit.chunkId));
-      preRefusalCandidates = (cap === null ? kept : kept.slice(0, cap)).map((row) => ({
-        chunk_id: row.hit.chunkId,
-        document_id: row.hit.documentId,
-        content: row.hit.content,
-        similarity: row.hit.similarity ?? 0,
-        metadata: row.hit.metadata,
-        temporal_score: 0,
-        financial_score: 0,
-        final_score: row.score,
-        fused_score: row.score,
-        match_reason: `fused: ${row.score.toFixed(4)}`,
-        parent_id: row.hit.parentId,
-        legs: Object.fromEntries(Object.entries(row.ranks).map(([key, value]) => [key, value])),
-        language: row.hit.language,
-        ...(rank.rerank.scoreByChunk.has(row.hit.chunkId)
-          ? { rerank_score: rank.rerank.scoreByChunk.get(row.hit.chunkId) }
+        variants: query.variants,
+        dedupeCounts: search.dedupeCounts,
+        queryContext: query.queryContext,
+        finalTopK:
+          profile === 'voice'
+            ? (validResultCount(input.options?.maxResults) ?? VOICE_DEFAULT_MATCH_COUNT)
+            : evalFinalTopK(profile, input, params.final_top_k),
+        embeddingProfileId: embedding.profile?.id ?? LEGACY_PROFILE.id,
+        ...(searchIdentifiers && searchIdentifiers.asked.length > 0
+          ? { identifiers: { askedNorms: searchIdentifiers.asked, patterns: searchIdentifiers.patterns } }
           : {}),
-        ...(row.standaloneSimilarity !== undefined ? { standaloneSimilarity: row.standaloneSimilarity } : {}),
-      }));
+        ...(query.queryLayer
+          ? {
+              queryPlan,
+              coverage: {
+                enabled: params.sub_question_coverage,
+                topK:
+                  profile === 'voice'
+                    ? (validResultCount(input.options?.maxResults) ?? VOICE_DEFAULT_MATCH_COUNT)
+                    : evalFinalTopK(profile, input, params.final_top_k),
+              },
+            }
+          : {}),
+      });
+      refusal = rank.decision;
+      if (identifierState && rank.identifierGuard) identifierState = { ...identifierState, nearMissDropped: rank.identifierGuard.dropped };
+
+      if (profile === 'voice') {
+        const matchCount = validResultCount(input.options?.maxResults) ?? VOICE_DEFAULT_MATCH_COUNT;
+        let chunks = fusedHitsToVoiceChunks(rank.survivors, rank.rerank.scoreByChunk);
+        let flaggedForRender: ReadonlySet<string> | undefined;
+        if (security.injectionCheck !== 'off') {
+          // Voice runs the rules only (injectionDetectorsFor); released ids come from the scoped search rows.
+          const run = await runInjectionStage({
+            spec: spec('injection_check', 'skip'),
+            signal,
+            collector,
+            scope,
+            profile,
+            security,
+            mode: security.injectionCheck,
+            items: injectionItems(chunks, null, null),
+            candidates: chunks,
+            referenced: null,
+            released: releasedRulesFromRows(documentRowsOf(rank.survivors)),
+          });
+          injectionStalled = run.stalled;
+          if (run.applied) {
+            injection = run.applied.summary;
+            if (injectionDropped(run.applied.summary)) chunks = run.applied.candidates;
+            if (run.applied.marks) {
+              flaggedForRender = run.applied.marks.chunkIds;
+              chunks = downweightOrder(chunks, flaggedForRender);
+            }
+          }
+        }
+        const voiceChunks = chunks;
+        const assembled = await runStage(
+          spec('assemble', 'skip'),
+          signal,
+          () => assembleVoiceResults({ query: input.query, chunks: voiceChunks, matchCount }),
+          collector,
+          { candidatesIn: voiceChunks.length, candidatesOut: (value) => value.results.length },
+        );
+        voice = assembled.skipped ? { results: [], source_images: [] } : assembled.value;
+        if (security.contextTagging && !assembled.skipped) {
+          const context = voiceContext(voice.results, flaggedForRender);
+          if (context !== null) voice = { ...voice, context };
+        }
+      } else {
+        const context = await runContextStages({
+          input,
+          config,
+          profile,
+          params,
+          fusedHits: rank.survivors,
+          referenced: query.referenced,
+          signal,
+          collector,
+          stageOverrides: input.stageOverrides,
+          rerank: rank.rerank,
+          ...(rank.alsoIn ? { alsoIn: rank.alsoIn } : {}),
+          security,
+          versionScope: search.versionScope,
+          queryLanguage: query.queryLanguage,
+          ...(search.tableRows ? { tableRows: search.tableRows } : {}),
+          ...(searchIdentifiers?.notFound
+            ? { identifierSuggestionLine: identifierSuggestionMessage(query.queryLanguage ?? 'en', searchIdentifiers.suggestions) }
+            : {}),
+        });
+        assembly = context.assembly;
+        candidates = context.candidates;
+        injection = context.injection;
+        injectionStalled = context.injectionStalled ?? false;
+      }
+      if (profile === 'eval' && rank.decision.decision === 'refuse') {
+        const dropped = new Set(injection?.droppedChunkIds ?? []);
+        const cap = evalResultCap(profile, input);
+        const kept = rank.preRefusalHits.filter((row) => !dropped.has(row.hit.chunkId));
+        preRefusalCandidates = (cap === null ? kept : kept.slice(0, cap)).map((row) => ({
+          chunk_id: row.hit.chunkId,
+          document_id: row.hit.documentId,
+          content: row.hit.content,
+          similarity: row.hit.similarity ?? 0,
+          metadata: row.hit.metadata,
+          temporal_score: 0,
+          financial_score: 0,
+          final_score: row.score,
+          fused_score: row.score,
+          match_reason: `fused: ${row.score.toFixed(4)}`,
+          parent_id: row.hit.parentId,
+          legs: Object.fromEntries(Object.entries(row.ranks).map(([key, value]) => [key, value])),
+          language: row.hit.language,
+          ...(rank.rerank.scoreByChunk.has(row.hit.chunkId)
+            ? { rerank_score: rank.rerank.scoreByChunk.get(row.hit.chunkId) }
+            : {}),
+          ...(row.standaloneSimilarity !== undefined ? { standaloneSimilarity: row.standaloneSimilarity } : {}),
+        }));
+      }
     }
   } catch (error) {
     if (error instanceof StageError) {
@@ -411,6 +449,9 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
     ...(effectiveOn ? { effectiveOn } : {}),
     ...(queryLayerHash ? { queryLayerHash } : {}),
     ...(cacheTicket ? { cacheTicket } : {}),
+    terminology: terminologyStage,
+    ...(identifierState ? { identifiers: identifierState } : {}),
+    ...(identifierRefusal ? { identifierRefusal } : {}),
   });
 }
 

@@ -11,6 +11,7 @@ import { ingestStateFromRecord } from './status';
 import {
   INGEST_SOURCES,
   type DocTypeOrigin,
+  type IngestAttributeValues,
   type IngestInput,
   type IngestOptions,
   type IngestSource,
@@ -19,9 +20,16 @@ import {
   type TypeChangeState,
 } from './types';
 import { createIngestWriter } from './writer';
+import { ATTRIBUTE_KEY_PATTERN, ATTRIBUTE_LIMITS } from './attributes/validate';
 
 /** Written by enqueue next to the original: what the callbacks need of the upload and of the identify outcome, with no bytes. */
 export const QUEUED_INPUT_ARTIFACT = 'queued-input.json';
+
+const codePoints = (value: string): number => Array.from(value).length;
+const QueuedAttributeValueSchema = z.string().refine((value) => codePoints(value) <= ATTRIBUTE_LIMITS.maxValueLength);
+const QueuedAttributesSchema = z
+  .record(z.union([QueuedAttributeValueSchema, z.array(QueuedAttributeValueSchema).max(ATTRIBUTE_LIMITS.maxListValues)]))
+  .refine((values) => Object.keys(values).length <= ATTRIBUTE_LIMITS.maxDefinitions && Object.keys(values).every((key) => ATTRIBUTE_KEY_PATTERN.test(key)));
 
 const RecordSchema = z.object({
   v: z.literal(1),
@@ -32,6 +40,7 @@ const RecordSchema = z.object({
   kind: z.enum(['file', 'text']),
   docType: z.string().optional(),
   scopes: z.array(z.string().max(80)).max(20).optional(),
+  attributes: QueuedAttributesSchema.optional(),
   replacesDocumentId: z.string().uuid().optional(),
   options: z.record(z.unknown()).optional(),
   typeChange: z.record(z.unknown()).optional(),
@@ -48,6 +57,8 @@ export interface QueuedInputRecord {
   docType?: string;
   /** The upload's scope tags (D-40), for a version the progressive final begin starts. */
   scopes?: string[];
+  /** The upload's explicit attribute values (D-23), for a version the progressive final begin starts; never in the job snapshot. */
+  attributes?: IngestAttributeValues;
   /** The document the upload replaces (D-41), for the publish of a queued run. */
   replacesDocumentId?: string;
   options?: IngestOptions;
@@ -174,6 +185,7 @@ export async function buildQueuedContext(input: BuildQueuedContextInput): Promis
     mimeType: record.mimeType,
     ...(record.docType ? { docType: record.docType as DocType | 'auto' } : {}),
     ...(record.scopes && record.scopes.length > 0 ? { scopes: record.scopes } : {}),
+    ...(record.attributes !== undefined ? { attributes: record.attributes } : {}),
     ...(record.replacesDocumentId ? { replacesDocumentId: record.replacesDocumentId } : {}),
     ...(record.options !== undefined ? { options: record.options } : {}),
     ...(state.typeChange ? { typeChange: state.typeChange } : {}),

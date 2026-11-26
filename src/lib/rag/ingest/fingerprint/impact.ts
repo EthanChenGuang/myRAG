@@ -9,7 +9,7 @@ import { rpcRows, type RpcClient } from '../../backend/supabase-rpc';
 import { getLanguageSettings } from '../../lang/settings';
 import { loadIngestConfig, type IngestEnvInput } from '../config';
 import { getIngestDeps } from '../deps';
-import { expectedFingerprintFor, getSettingsClassification, ingestionKeysOf, switchesOf, type RebuildMechanism } from '../fingerprint';
+import { expectedFingerprintFor, getSettingsClassification, ingestionKeysOf, needsRechunkDryRun, switchesOf, type RebuildMechanism } from '../fingerprint';
 import { loadProcessingProfiles } from '../profiles/load';
 import { queueConfigFromProcessEnv } from '../queue-config';
 import { isTenantKey } from '../writer';
@@ -28,6 +28,7 @@ const FINGERPRINT_VARIABLES = [
   'RAG_TABLE_ROW_SERIALIZATION',
   'RAG_CAPTION_LANGUAGE',
   'RAG_SUPPORTED_LANGUAGES',
+  'RAG_PAGE_BOILERPLATE',
 ] as const;
 /** Query-side, but it travels with RAG_SUPPORTED_LANGUAGES when the language set is recomputed. */
 const LANGUAGE_COMPANION = 'RAG_PRIMARY_LANGUAGE';
@@ -138,6 +139,8 @@ export interface ImpactCounts {
   affected: Map<RebuildMechanism, Map<ImpactDocType, number>>;
   withoutFingerprint: number;
   totalCurrent: number;
+  /** Proposed keys whose effect stored parts cannot show (RAG_SECTION_RULES=on): the count comes from the `rag:rechunk` dry run. */
+  needsRechunkDryRun: string[];
 }
 
 /**
@@ -178,7 +181,7 @@ export function countImpact(groups: readonly FingerprintGroup[], proposed: Recor
       counts.set(docType, (counts.get(docType) ?? 0) + group.documents);
     }
   }
-  return { ingestionKeys, mechanisms, affected, withoutFingerprint, totalCurrent };
+  return { ingestionKeys, mechanisms, affected, withoutFingerprint, totalCurrent, needsRechunkDryRun: needsRechunkDryRun(proposed) ? ['RAG_SECTION_RULES'] : [] };
 }
 
 /** The FingerprintImpact answer (UI-SPEC 8.1): every mechanism of the proposal with every doc type, zero included; aggregates only. */
@@ -216,6 +219,7 @@ export function savedFingerprintValues(env: IngestEnvInput = process.env as Inge
     RAG_TABLE_ROW_SERIALIZATION: switches.table_row_serialization,
     RAG_CAPTION_LANGUAGE: switches.caption_language,
     RAG_SUPPORTED_LANGUAGES: languages.configured ? languages.languages.join(',') : '',
+    RAG_PAGE_BOILERPLATE: loadIngestConfig(env).pageBoilerplate,
   };
   if (languages.configured && languages.primary) values[LANGUAGE_COMPANION] = languages.primary;
   return values;

@@ -32,7 +32,8 @@ const nextConfig = {
     root: __dirname,
   },
   // tiktoken loads tiktoken_bg.wasm from its own package directory; bundled, the file is missing at runtime
-  serverExternalPackages: ['tiktoken'],
+  // LangChain carries its own zod 4 and openai 7; kept out of the bundle so they never meet the app's zod 3
+  serverExternalPackages: ['tiktoken', '@langchain/core', '@langchain/classic', '@langchain/openai', 'langsmith'],
   experimental: {
     serverActions: {
       allowedOrigins: ["localhost:3000"]

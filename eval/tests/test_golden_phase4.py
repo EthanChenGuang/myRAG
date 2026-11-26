@@ -10,6 +10,7 @@ language; a no-answer item is cross when it carries the cross_language tag.
 import collections
 import hashlib
 import json
+import re
 
 import pytest
 
@@ -35,6 +36,8 @@ LATER_PHASE_CATEGORIES = frozenset({"injection", "injection_evasive", "small_tal
 LATER_PHASE_TAGS = frozenset(
     {"phase6_protected_followup", "phase6_elliptical", "phase6_relative_time", "phase6_compound", "phase6_cross_lingual", "phase42"}
 )
+# Plan 04.1.1-10 adds colloquial and no_answer term items under these ids; test_golden_terminology.py covers them.
+LATER_PHASE_ID = re.compile(r"^[a-z]+-(colloquial|no_answer)-term-\d{3}$")
 PRE_EXISTING_SHA256 = "78d15c174a16d1aad33814318f67cf1c9d71530813f80b777fd907e6307618dd"
 
 NEW_NO_ANSWER_IDS = {
@@ -156,7 +159,9 @@ def test_pre_existing_items_are_byte_identical_and_new_items_only_add():
     later = [
         row
         for row in rows
-        if row["category"] in LATER_PHASE_CATEGORIES or set(row.get("tags") or ()) & LATER_PHASE_TAGS
+        if row["category"] in LATER_PHASE_CATEGORIES
+        or set(row.get("tags") or ()) & LATER_PHASE_TAGS
+        or LATER_PHASE_ID.match(row["id"])
     ]
     old = sorted((row for row in rows if row["id"] not in NEW_IDS and row not in later), key=lambda row: row["id"])
     assert len(old) == PRE_EXISTING_COUNT

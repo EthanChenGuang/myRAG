@@ -184,7 +184,8 @@
             "small_talk",
             "table_split",
             "duplicate_flood",
-            "identifier_near_miss"
+            "identifier_near_miss",
+            "templated_collection"
           ],
           "title": "Category",
           "type": "string"
@@ -529,6 +530,20 @@
           ],
           "default": null,
           "title": "Thumbs Down Rate"
+        },
+        "topk_redundancy_mean": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Topk Redundancy Mean"
         },
         "triage": {
           "$ref": "#/$defs/TriageCounts"

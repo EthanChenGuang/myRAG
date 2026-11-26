@@ -26,7 +26,7 @@ DocTypeChoice = Literal[
 ParserPreference = Literal["configured", "docling", "llamaparse"]
 TableMode = Literal["off", "fast", "accurate"]
 OcrLanguage = Language
-ChunkerKind = Literal["markdown_sections", "legal_clauses", "table_aware", "invoice", "image_caption"]
+ChunkerKind = Literal["markdown_sections", "legal_clauses", "table_aware", "invoice", "image_caption", "rule_sections"]
 Extractor = Literal["dates", "financial", "invoice", "urls"]
 Tier = Literal["fast", "structured", "premium"]
 RuleKind = Literal["phrase", "regex"]
@@ -102,6 +102,44 @@ class ParserSettings(_Contract):
         return _require_unique(value, "ocr_languages")
 
 
+SECTION_HIT_LINE_MAX_LENGTH = 1000
+SECTION_HITS_MAX = 5000
+RuleRowId = Annotated[str, Field(pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")]
+SectionName = Annotated[str, Field(min_length=1, max_length=80)]
+SectionLevel = Annotated[int, Field(ge=1, le=6)]
+SectionHitLine = Annotated[str, Field(min_length=1, max_length=SECTION_HIT_LINE_MAX_LENGTH)]
+
+
+def _omit_unset(value: object) -> bool:
+    return value is None
+
+
+class SectionHeadingHit(_Contract):
+    """Canonical heading a matched line opens (Phase 3.3 D-17)."""
+
+    name: SectionName
+    level: SectionLevel
+    restart: bool = False
+
+
+class ResolvedSectionRules(_Contract):
+    """Plain heading-hit data the `rule_sections` chunker reads (Phase 3.3 D-17, D-19); no pattern reaches a chunker."""
+
+    rule_set_id: RuleRowId
+    version: int = Field(ge=1)
+    skip_toc: bool = True
+    toc_min_run: int = Field(default=3, ge=2, le=20)
+    hits: dict[SectionHitLine, SectionHeadingHit] = Field(max_length=SECTION_HITS_MAX)
+
+    @field_validator("hits")
+    @classmethod
+    def _keys_are_trimmed(cls, value: dict[str, SectionHeadingHit]) -> dict[str, SectionHeadingHit]:
+        for key in value:
+            if key.strip() != key:
+                raise ValueError("hit keys must be trimmed line text")
+        return value
+
+
 class ChunkerSettings(_Contract):
     kind: ChunkerKind
     max_tokens: int = Field(ge=64, le=4096)
@@ -110,6 +148,9 @@ class ChunkerSettings(_Contract):
     min_chunk_tokens: int = Field(ge=0)
     clause_patterns: list[str] = Field(default_factory=list)
     lead_in_phrases: list[str] = Field(default_factory=list)
+    section_rules: ResolvedSectionRules | None = Field(
+        default=None, exclude_if=_omit_unset, json_schema_extra=omit_none_schema
+    )
 
     @model_validator(mode="after")
     def _budgets_are_consistent(self) -> "ChunkerSettings":

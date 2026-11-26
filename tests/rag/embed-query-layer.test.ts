@@ -184,9 +184,10 @@ describe('embed route query-layer inputs (D-09, D-10, D-11, D-16)', () => {
     expect(spies.classifyQuery).not.toHaveBeenCalled();
     const input = retrievalInput() as unknown as Record<string, unknown>;
     for (const field of NEW_FIELDS) expect(input).not.toHaveProperty(field);
-    expect(Object.keys(input).sort()).toEqual(['options', 'profile', 'query', 'scope', 'signal', 'trace']);
+    expect(Object.keys(input).sort()).toEqual(['channel', 'options', 'profile', 'query', 'scope', 'signal', 'trace']);
     expect(input.query).toBe('Which option controls the import format?');
     expect(input.profile).toBe('embed');
+    expect(input.channel).toBe('embed');
     expect(input.options).toEqual({
       maxResults: 25,
       fallbackToLowerThreshold: true,

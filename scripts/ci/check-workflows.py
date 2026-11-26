@@ -17,6 +17,8 @@ PR = ROOT / ".github" / "workflows" / "pr-smoke.yml"
 NIGHTLY = ROOT / ".github" / "workflows" / "nightly.yml"
 RAY_OPTIONAL = ROOT / ".github" / "workflows" / "ray-optional.yml"
 DOCKERFILE = ROOT / "rag-sidecar" / "Dockerfile"
+SIDECAR_CONFIG_DIR = ROOT / "rag-sidecar" / "config" / "rag"
+SIDECAR_TEST_EXTRAS = ("chunking", "preflight", "hidden-text")
 
 TESTS_DIR = ROOT / "tests"
 TSX_GLOB = "tests/*.test.mts"
@@ -42,6 +44,8 @@ TS_JOB_NEEDLES = {
         "scripts/tests/check-language-literals.node-test.mjs",
         "scripts/ci/check-settings-classification.mjs",
         "scripts/tests/check-settings-classification.node-test.mjs",
+        "scripts/ci/check-zod-isolation.mjs",
+        "scripts/tests/check-zod-isolation.node-test.mjs",
     ),
 }
 # job -> the shard flag its test command must take from matrix.shard
@@ -62,6 +66,9 @@ PRIVATE_FLAG = "HAS_PRIVATE_EVAL"
 WEEKLY_SKIP_NOTICE = "::notice::no private eval data on this runner, skipping weekly report"
 SEC_SMOKE_STEP = "npm run test-rag -- --run-config eval/config/runs/sec-recommended.json --out eval/out/smoke-sec"
 SEC_NIGHTLY_STEP = "run-nightly.mts --sec-matrix --generator live"
+FRAMEWORKS_STEP = "uv run --directory eval python -m rag_eval.compare frameworks --fixtures"
+CACHE_PAIRS_STEP = "npm run test-rag -- --run-config eval/config/runs/query-layer-llamaindex.json --cache-pairs"
+CACHE_CHECK_STEP = "python -m rag_eval.calibrate cache --check"
 LAKERA_SECRET = "LAKERA_GUARD_API_KEY"
 DOCLING_READY = "steps.docling.outputs.ready == 'true'"
 RAY_SYNC = "uv sync --directory rag-sidecar --locked --extra ray --extra chunking --extra preflight"
@@ -274,20 +281,7 @@ def check_pr(errors: list[str]) -> None:
             for step in all_steps(voice)
         ):
             errors.append("pr-smoke: job voice-agent must run npm test in the voice-agent working directory")
-    py_job = jobs.get("python")
-    if py_job is not None:
-        body = step_text(py_job)
-        for needle in (
-            "uv sync --directory rag-sidecar --locked --extra chunking",
-            "uv sync --directory rag-sidecar --locked --extra preflight",
-            "uv run --directory rag-sidecar --extra chunking pytest -q",
-        ):
-            if needle not in body:
-                errors.append(f"pr-smoke: job python is missing '{needle}'")
-        if "--extra docling" in body:
-            errors.append("pr-smoke: job python must not install the heavy docling extra")
-        if "--extra ray" in body:
-            errors.append("pr-smoke: job python must not install the ray extra")
+    check_python_job(jobs.get("python"), errors)
     sp = jobs.get("schema-parity")
     if sp is not None:
         body = step_text(sp)
@@ -298,21 +292,59 @@ def check_pr(errors: list[str]) -> None:
         if job is not None and "npm ci" not in step_text(job):
             errors.append(f"pr-smoke: job {jname} must install with npm ci")
     check_next_build(jobs.get("next-build"), errors)
-    docker = jobs.get("docker-build")
-    if docker is not None:
-        body = step_text(docker)
-        for needle in (
-            "docker build -t rag-sidecar:ci rag-sidecar",
-            "/app/config/rag/",
-            "load_routing_config()",
-            "load_processing_profiles()",
-            "/health",
-            "/ready",
-            "/v1/info",
-            "RAG_SIDECAR_SECRET",
-        ):
-            if needle not in body:
-                errors.append(f"pr-smoke: job docker-build is missing '{needle}'")
+    check_docker_build(jobs.get("docker-build"), errors)
+
+
+def check_python_job(job: dict | None, errors: list[str]) -> None:
+    """
+    The sidecar tests need the chunking, preflight and hidden-text extras at once. Each `uv sync` and `uv run --extra` installs exactly
+    the extras it names and removes the rest, so one sync and the pytest run must both name all three.
+    """
+    if job is None:
+        return
+    body = step_text(job)
+    syncs = [line for line in body.splitlines() if "uv sync --directory rag-sidecar" in line]
+    runs = [line for line in body.splitlines() if "uv run --directory rag-sidecar" in line and "pytest" in line]
+    for kind, lines in (("sync", syncs), ("pytest run", runs)):
+        if not lines:
+            errors.append(f"pr-smoke: job python has no rag-sidecar {kind}")
+            continue
+        for line in lines:
+            if "--locked" not in line:
+                errors.append(f"pr-smoke: job python rag-sidecar {kind} must use --locked: {line.strip()}")
+            missing = [extra for extra in SIDECAR_TEST_EXTRAS if f"--extra {extra}" not in line]
+            if missing:
+                errors.append(f"pr-smoke: job python rag-sidecar {kind} must name every test extra (missing {', '.join(missing)}): {line.strip()}")
+    if "--extra docling" in body:
+        errors.append("pr-smoke: job python must not install the heavy docling extra")
+    if "--extra ray" in body:
+        errors.append("pr-smoke: job python must not install the ray extra")
+
+
+def check_docker_build(job: dict | None, errors: list[str]) -> None:
+    """The sidecar image must ship every config copy under rag-sidecar/config/rag/, byte-equal to config/rag/."""
+    if job is None:
+        return
+    body = step_text(job)
+    for needle in (
+        "docker build -t rag-sidecar:ci rag-sidecar",
+        "/app/config/rag/",
+        "load_routing_config()",
+        "load_processing_profiles()",
+        "/health",
+        "/ready",
+        "/v1/info",
+        "RAG_SIDECAR_SECRET",
+    ):
+        if needle not in body:
+            errors.append(f"pr-smoke: job docker-build is missing '{needle}'")
+    for name in sidecar_config_copies():
+        if name not in body:
+            errors.append(f"pr-smoke: job docker-build does not compare the image copy of config/rag/{name}")
+
+
+def sidecar_config_copies() -> list[str]:
+    return sorted(p.name for p in SIDECAR_CONFIG_DIR.glob("*.json"))
 
 
 def check_shards(jname: str, job: dict, flag: str, errors: list[str]) -> None:
@@ -408,6 +440,51 @@ def check_eval_smoke(job: dict | None, errors: list[str]) -> None:
             errors.append("pr-smoke: the injection gate step must run after the all-off smoke step, which stays as it is")
     if not any("eval/out/smoke-sec" in str((step.get("with") or {}).get("path", "")) for step in uploads):
         errors.append("pr-smoke: job eval-smoke must upload eval/out/smoke-sec")
+    check_query_layer_gates(steps, runs, errors)
+
+
+def check_query_layer_gates(steps: list[dict], runs: list[str], errors: list[str]) -> None:
+    """D-40, D-42 e, T-06-92: the fixture framework comparison and the cache near-miss gate run on every PR and fail it."""
+    installs = [i for i, run in enumerate(runs) if "npm ci" in run or "uv sync --directory eval" in run]
+    last_install = max(installs) if installs else None
+
+    def soft(index: int) -> bool:
+        return "|| true" in runs[index] or bool(steps[index].get("continue-on-error"))
+
+    def after_installs(index: int, what: str) -> None:
+        if last_install is None or index < last_install:
+            errors.append(f"pr-smoke: the {what} step must run after npm ci and uv sync")
+
+    frameworks = next((i for i, run in enumerate(runs) if "rag_eval.compare frameworks" in run), None)
+    if frameworks is None:
+        errors.append(f"pr-smoke: job eval-smoke must run '{FRAMEWORKS_STEP}'")
+    else:
+        if FRAMEWORKS_STEP not in runs[frameworks]:
+            errors.append(f"pr-smoke: the framework comparison step must run '{FRAMEWORKS_STEP}'")
+        if soft(frameworks):
+            errors.append("pr-smoke: the framework comparison step must fail the job")
+        after_installs(frameworks, "framework comparison")
+
+    check = next((i for i, run in enumerate(runs) if CACHE_CHECK_STEP in run), None)
+    if check is None:
+        errors.append(f"pr-smoke: job eval-smoke must run '{CACHE_CHECK_STEP}' on a fresh pair run")
+        return
+    if soft(check):
+        errors.append("pr-smoke: the cache near-miss gate step must fail the job")
+    after_installs(check, "cache near-miss gate")
+    lines = runs[check].splitlines()
+    check_line = next(n for n, line in enumerate(lines) if CACHE_CHECK_STEP in line)
+    pair_line = next((n for n, line in enumerate(lines) if "--cache-pairs" in line), None)
+    if pair_line is None:
+        errors.append(f"pr-smoke: the cache near-miss gate step must run '{CACHE_PAIRS_STEP}' (--cache-pairs) before the check")
+        return
+    if pair_line > check_line:
+        errors.append(f"pr-smoke: '{CACHE_CHECK_STEP}' must check a fresh pair run, so the --cache-pairs run comes first")
+    if CACHE_PAIRS_STEP not in lines[pair_line]:
+        errors.append(f"pr-smoke: the cache pair run must be '{CACHE_PAIRS_STEP}'")
+    out = re.search(r"--out\s+(\S+)", lines[pair_line])
+    if out is None or f"--pairs {out.group(1)}/cache-pairs.json" not in lines[check_line]:
+        errors.append("pr-smoke: the cache check must read the cache-pairs.json of the fresh pair run in the same step")
 
 
 def check_online_judge(data: dict, errors: list[str]) -> None:

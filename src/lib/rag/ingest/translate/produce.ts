@@ -12,6 +12,7 @@ import { getIngestDeps } from '../deps';
 import type { PostPublishEvent } from '../post-publish';
 import { queueConfigFromProcessEnv } from '../queue-config';
 import { countTokens } from '../text/tokens';
+import { finishTranslationTrace } from '../trace';
 import { isTenantKey } from '../writer';
 import { glossaryFor, type Glossary } from './glossary';
 import {
@@ -618,7 +619,8 @@ export function registerTranslationHook(register: Register): void {
   register(
     TRANSLATION_HOOK,
     async (event, signal) => {
-      await translateDocumentChunks(event.documentId, event.tenantKey, { budgetMs: INLINE_TRANSLATION_BUDGET_MS, signal });
+      const result = await translateDocumentChunks(event.documentId, event.tenantKey, { budgetMs: INLINE_TRANSLATION_BUDGET_MS, signal });
+      if (result.ok) finishTranslationTrace({ tenantKey: event.tenantKey, documentId: event.documentId, translated: result.translated, gaps: result.gaps });
     },
     { timeoutMs: INLINE_TRANSLATION_BUDGET_MS + HOOK_MARGIN_MS },
   );

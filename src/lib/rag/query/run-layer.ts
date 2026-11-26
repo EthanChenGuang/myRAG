@@ -1,6 +1,6 @@
 import { QueryTranslationSchema, type QueryPlan } from '@/lib/rag-eval/contracts.generated';
 import { logger } from '@/lib/logger';
-import type { QueryLayerConfig, QueryTransformSwitches, RagConfig, StageName } from '../config';
+import type { QueryFramework, QueryLayerConfig, QueryTransformSwitches, RagConfig, StageName } from '../config';
 import { getRagDeps } from '../deps';
 import { runStage, stageSpec, StageError, type StageSpec } from '../pipeline';
 import type { TenantScope } from '../tenant/scope';
@@ -16,7 +16,17 @@ import { buildQueryPlan, planToVariants, type SkippedTransform } from './plan';
 import { effectiveQueryParams } from './query-params';
 import { needsRewrite, type GateResult, type Lang } from './rewrite-gate';
 import { routeTransforms, type RoutedTransform, type RoutedTransforms } from './router';
-import { getQueryTransformer, type CondenseResult, type DecomposeResult, type ExpandResult, type HydeResult, type QueryTransformer } from './transformer';
+import {
+  getQueryTransformer,
+  loadQueryFramework,
+  type CondenseResult,
+  type DecomposeResult,
+  type ExpandResult,
+  type HydeResult,
+  type QueryFrameworkRuntime,
+  type QueryTransformer,
+} from './transformer';
+import type { SearchDelegate } from './port-types';
 import { queryLayerTranslator, type QueryLayerTranslateContext } from './translate';
 import type { TranslatedQuery } from './variants';
 import { getActiveProfile, LEGACY_PROFILE } from '../embeddings/active-profile';
@@ -27,6 +37,7 @@ import type { QueryEmbedding } from '../embeddings/query-embedding';
 import { env } from '@/lib/env';
 import { checkBypassReason, type CacheRetrievalOptions, type TurnFacts } from '../cache/bypass';
 import { resolveHitSources } from '../cache/sources';
+import { effectiveCacheThreshold } from '../cache/threshold';
 import type { CacheHit, CacheKeyParts, CacheTicket, EntryProfile } from '../cache/types';
 import { resolveFinalResultCount } from '../config';
 import { effectiveVersionScope } from './filters';
@@ -50,6 +61,8 @@ export interface QueryLayerOutcome {
   cacheTicket?: CacheTicket;
   /** The standalone query's embedding from the cache stage; the embed stage reuses it instead of embedding the text again. */
   precomputed?: { text: string; embedding: QueryEmbedding };
+  /** LangChain (D-17): fuses the variant lists through EnsembleRetriever over the scope-bound port; absent keeps native RRF. */
+  searchDelegate?: SearchDelegate;
 }
 
 /** What the pipeline lends the semantic_cache stage, so its key and vector equal what the retrieval stages use. */
@@ -283,6 +296,11 @@ interface CacheStageResult {
 
 type CacheLookup = { kind: 'hit'; hit: CacheHit } | { kind: 'miss' } | { kind: 'unresolved' };
 
+/** D-37/D-42 e: hit (1 or 0) and, on a hit, its cosine distance; the eval report and the cache-pair run read them. */
+function lookupCounts(lookup: CacheLookup): Record<string, number> {
+  return lookup.kind === 'hit' ? { hit: 1, distance: lookup.hit.distance } : { hit: 0 };
+}
+
 function lookupDetail(lookup: CacheLookup): string {
   if (lookup.kind === 'hit') return `hit distance=${lookup.hit.distance.toFixed(4)}`;
   return lookup.kind === 'unresolved' ? 'miss citations_unresolved' : 'miss';
@@ -297,9 +315,17 @@ function lookupDetail(lookup: CacheLookup): string {
 async function runSemanticCacheStage(args: CacheStageInput): Promise<CacheStageResult> {
   const { ctx, gate, spec } = args;
   const { input, profile, signal, collector } = ctx;
-  const record = (status: 'disabled' | 'skipped', detail: string, reason?: 'disabled' | 'failed' | 'timeout') => {
+  const record = (status: 'disabled' | 'skipped', detail: string, reason?: 'disabled' | 'failed' | 'timeout', counts?: Record<string, number>) => {
     const at = collector.now();
-    collector.record({ name: 'semantic_cache', status, reason: reason ?? (status === 'disabled' ? 'disabled' : 'failed'), startedAt: at, endedAt: at, detail });
+    collector.record({
+      name: 'semantic_cache',
+      status,
+      reason: reason ?? (status === 'disabled' ? 'disabled' : 'failed'),
+      startedAt: at,
+      endedAt: at,
+      detail,
+      ...(counts ? { counts } : {}),
+    });
   };
 
   const evalOverride = profile === 'eval' && evalCacheOverride(args.layerOverrides);
@@ -324,11 +350,12 @@ async function runSemanticCacheStage(args: CacheStageInput): Promise<CacheStageR
     retrievalOptions: cacheRetrievalOptions(input),
     defaultMaxResults: resolveFinalResultCount(undefined, env.RAG_FINAL_RESULT_COUNT),
   };
-  const versionScope = effectiveVersionScope(ctx.config, profile, input.retrievalFilters?.versionScope).scope;
+  const versionScope = effectiveVersionScope(ctx.config, profile, input.retrievalFilters?.versionScope, input.channel).scope;
   if (versionScope !== 'current') facts.versionScope = versionScope;
   const bypass = checkBypassReason(facts);
   if (bypass !== null) {
-    record('disabled', `bypass=${bypass}`);
+    // D-42 e: the eval report reads bypass_<reason> from the stage counts.
+    record('disabled', `bypass=${bypass}`, undefined, { [`bypass_${bypass}`]: 1 });
     return {};
   }
 
@@ -373,16 +400,54 @@ async function runSemanticCacheStage(args: CacheStageInput): Promise<CacheStageR
     spec,
     signal,
     async (stageSignal) => {
-      const hit = await cache.check({ ...key, scope, standalone: args.standalone, vector: embedding.vector, embeddingProfileId, signal: stageSignal });
+      const hit = await cache.check({
+        ...key,
+        scope,
+        standalone: args.standalone,
+        vector: embedding.vector,
+        embeddingProfileId,
+        maxDistance: effectiveCacheThreshold(embeddingProfileId, ctx.config.semanticCache),
+        signal: stageSignal,
+      });
       if (!hit) return { kind: 'miss' };
       const client = getRagDeps().adminClient() as unknown as RpcClient | null;
       return resolveHitSources(scope, hit, { client, signal: stageSignal });
     },
     collector,
-    { detail: lookupDetail },
+    { detail: lookupDetail, counts: lookupCounts },
   );
   if (!looked.skipped && looked.value.kind === 'hit') return { hit: looked.value.hit, ticket, precomputed };
   return { ticket, precomputed };
+}
+
+let frameworkLoadFailureLogged = false;
+
+/**
+ * The framework the router chose (voice is always native, D-22). LangChain is loaded with a dynamic import and its wait
+ * and cold import time are traced as framework_import; if it cannot be loaded the request runs native, recorded skipped.
+ */
+async function frameworkRuntime(framework: QueryFramework, model: string, collector: TraceCollector): Promise<QueryFrameworkRuntime> {
+  if (framework === 'llamaindex') return { transformer: getQueryTransformer('llamaindex'), searchDelegate: null, importMs: null };
+  const startedAt = collector.now();
+  try {
+    const runtime = await loadQueryFramework(framework, { model });
+    collector.record({
+      name: 'framework_import',
+      status: 'ok',
+      startedAt,
+      endedAt: collector.now(),
+      detail: framework,
+      ...(runtime.importMs !== null ? { counts: { import_ms: runtime.importMs } } : {}),
+    });
+    return runtime;
+  } catch {
+    collector.record({ name: 'framework_import', status: 'skipped', reason: 'failed', startedAt, endedAt: collector.now(), detail: framework });
+    if (!frameworkLoadFailureLogged) {
+      frameworkLoadFailureLogged = true;
+      console.warn('[Query Layer] The LangChain adapter could not be loaded; the request runs the native framework', { framework });
+    }
+    return { transformer: getQueryTransformer('llamaindex'), searchDelegate: null, importMs: null };
+  }
 }
 
 export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOutcome> {
@@ -443,7 +508,8 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
     profile,
     embeddingProfileId,
   });
-  const transformer: QueryTransformer = getQueryTransformer(route.framework);
+  const runtime = await frameworkRuntime(route.framework, layer.model, collector);
+  const transformer: QueryTransformer = runtime.transformer;
   const skipped: SkippedTransform[] = [];
   const skip = (transform: PlanTransform, reason: SkippedTransform['reason']) => {
     if (!skipped.some((entry) => entry.transform === transform && entry.reason === reason)) skipped.push({ transform, reason });
@@ -649,5 +715,6 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
     ...(cached.hit ? { cacheHit: cached.hit } : {}),
     ...(cached.ticket ? { cacheTicket: cached.ticket } : {}),
     ...(cached.precomputed ? { precomputed: cached.precomputed } : {}),
+    ...(runtime.searchDelegate ? { searchDelegate: runtime.searchDelegate } : {}),
   };
 }

@@ -1,7 +1,11 @@
 import importlib.util
 import re
+import shutil
+import subprocess
 import tomllib
 from pathlib import Path
+
+import pytest
 
 SIDECAR_DIR = Path(__file__).resolve().parent.parent
 PYPROJECT = SIDECAR_DIR / "pyproject.toml"
@@ -153,3 +157,69 @@ def test_hhem_extra_is_locked_with_sha256_hashes():
 def test_default_environment_has_no_torch_or_transformers():
     assert importlib.util.find_spec("torch") is None
     assert importlib.util.find_spec("transformers") is None
+
+CACHE_PINS = {"redisvl": "0.32.0", "redis": "8.1.0"}
+CACHE_TRANSITIVES = {"jsonpath-ng", "ml-dtypes", "python-ulid", "tenacity"}
+CACHE_CUTOFF = "2026-11-19T00:00:00Z"
+
+
+def _uv_export(*extra_args: str) -> set[str]:
+    result = subprocess.run(
+        ["uv", "export", "--frozen", "--no-hashes", "--no-header", "--no-emit-project", *extra_args],
+        cwd=SIDECAR_DIR,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    lines = (line.split(";", 1)[0].strip() for line in result.stdout.splitlines())
+    return {line.lower() for line in lines if line and not line.startswith(("#", "-"))}
+
+
+def test_cache_extra_is_optional_with_exact_pins():
+    pyproject = _load_pyproject()
+    optional = pyproject["project"]["optional-dependencies"]
+    assert sorted(optional["cache"]) == sorted(f"{name}=={version}" for name, version in CACHE_PINS.items())
+    assert not _named_requirements(pyproject["project"]["dependencies"], set(CACHE_PINS))
+    for extra, reqs in optional.items():
+        if extra != "cache":
+            assert not _named_requirements(reqs, set(CACHE_PINS)), extra
+
+
+def test_cache_packages_have_exclude_newer_cutoffs():
+    per_package = _load_pyproject()["tool"]["uv"]["exclude-newer-package"]
+    for name in (*CACHE_PINS, *CACHE_TRANSITIVES):
+        assert per_package.get(name) == CACHE_CUTOFF, (name, per_package.get(name))
+
+
+def test_cache_extra_is_locked_from_pypi_with_sha256_hashes():
+    lock = _load_lock()
+    sidecar = _sidecar_lock_entry(lock)
+    assert "cache" in sidecar.get("metadata", {}).get("provides-extras", [])
+    cache_deps = sidecar.get("optional-dependencies", {}).get("cache", [])
+    assert {dep["name"] for dep in cache_deps} == set(CACHE_PINS)
+    index = _lock_index(lock)
+    for name, version in CACHE_PINS.items():
+        assert index[name]["version"] == version, (name, index[name]["version"])
+    for name in (*CACHE_PINS, *CACHE_TRANSITIVES):
+        entry = index[name]
+        assert _registry_source(entry), (name, entry.get("source"))
+        artifacts = _package_artifacts(entry)
+        assert artifacts, name
+        _sha256_hashes_only(artifacts)
+        for artifact in artifacts:
+            uploaded = artifact.get("upload-time", "")
+            assert uploaded and uploaded <= CACHE_CUTOFF, (name, uploaded)
+
+
+@pytest.mark.skipif(shutil.which("uv") is None, reason="uv is not installed")
+def test_default_export_excludes_the_cache_extra():
+    default = _uv_export()
+    names = {req.split("==", 1)[0] for req in default}
+    assert names.isdisjoint({*CACHE_PINS, *CACHE_TRANSITIVES}), names & {*CACHE_PINS, *CACHE_TRANSITIVES}
+
+
+@pytest.mark.skipif(shutil.which("uv") is None, reason="uv is not installed")
+def test_cache_export_lists_the_pinned_versions():
+    with_cache = _uv_export("--extra", "cache")
+    for name, version in CACHE_PINS.items():
+        assert f"{name}=={version}" in with_cache, name

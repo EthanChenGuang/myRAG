@@ -138,6 +138,7 @@ describe('chat, embed and voice routes keep tenants apart under legacy and v2 wi
   });
 
   afterEach(async () => {
+    for (const name of ['RAG_QUERY_LAYER', 'RAG_QUERY_FRAMEWORK', 'RAG_QUERY_HYDE']) delete processEnv[name];
     const deps = await import('@/lib/rag/deps');
     deps.resetRagDepsForTests();
     vi.restoreAllMocks();
@@ -320,6 +321,130 @@ describe('chat, embed and voice routes keep tenants apart under legacy and v2 wi
       expect(owners.length, 'one rerank request never mixes the Italian chunks of two tenants').toBeLessThanOrEqual(1);
     }
   });
+
+  type Framework = 'llamaindex' | 'langchain';
+  const FRAMEWORKS: Framework[] = ['llamaindex', 'langchain'];
+  const LAYER_KEYWORDS = 'isolation canary handbook';
+  const LAYER_HISTORY = [
+    { role: 'user' as const, content: 'Tell me about the two tenant isolation canary handbook.' },
+    { role: 'assistant' as const, content: 'The handbook lists its canary clauses.' },
+  ];
+  const LAYER_FOLLOW_UP = 'Which clause does it list first?';
+  const LAYER_TABLE = {
+    version: 1 as const,
+    entries: [
+      {
+        transform: 'condense' as const,
+        query: LAYER_FOLLOW_UP,
+        output: { standalone: 'Which clause does the two tenant isolation canary handbook list first?', unchanged: false },
+      },
+      { transform: 'expand' as const, query: LAYER_KEYWORDS, output: { queries: ['two tenant isolation canary phrase clause'] } },
+      { transform: 'hyde' as const, query: LAYER_KEYWORDS, output: { passage: 'Two tenant isolation canary phrase: clause one of the handbook.' } },
+    ],
+  };
+  const layerEnv = (framework: Framework): Record<string, string> => ({
+    RAG_QUERY_LAYER: 'true',
+    RAG_QUERY_FRAMEWORK: framework,
+    RAG_QUERY_HYDE: 'true',
+  });
+
+  interface LayerFakes {
+    calls: () => Array<{ transform: string }>;
+    other: () => number;
+  }
+
+  /** Loads a v2 route with the query layer on and installs, in that route's module registry, the fake query models. */
+  async function loadWithLayer<T>(path: string, framework: Framework): Promise<{ route: T; fakes: LayerFakes }> {
+    const route = await load<T>(path, 'v2');
+    const deps = await import('@/lib/rag/deps');
+    const transformer = await import('@/lib/rag/query/transformer');
+    const { createFakeLangChainChatModel } = await import('@/lib/rag/query/langchain/fake');
+    const { createFakeQueryLlm } = await import('../../../eval/harness/fake-query-llm.mts');
+    const native = createFakeQueryLlm({ table: LAYER_TABLE });
+    const langchain = createFakeLangChainChatModel({ table: LAYER_TABLE });
+    deps.setRagDepsForTests({ queryLlm: () => native });
+    transformer.setLangChainChatModelFactoryForTests(() => langchain);
+    const pick = (which: Framework) => (which === 'langchain' ? langchain.calls : native.calls);
+    return {
+      route,
+      fakes: {
+        calls: () => pick(framework),
+        other: () => pick(framework === 'langchain' ? 'llamaindex' : 'langchain').length,
+      },
+    };
+  }
+
+  for (const framework of FRAMEWORKS) {
+    for (const label of LABELS) {
+      it(`RAG_QUERY_LAYER on, ${framework}: chat with history in tenant ${label} condenses and keeps only the caller text`, async () => {
+        const where = `layer/${framework}/chat/${label}`;
+        h.capture.reset();
+        logs = [];
+        useEnv('v2', layerEnv(framework));
+        const { route, fakes } = await loadWithLayer<{ POST: (request: NextRequest) => Promise<Response> }>('chat', framework);
+        h.session.userId = tenant(label).userId;
+        const response = await route.POST(
+          chatRequest({
+            messages: [...LAYER_HISTORY, { role: 'user', content: LAYER_FOLLOW_UP }],
+            data: { ragMode: 'balanced', organizationId: tenant(label).organizationId, settings: { webSearch: false, model } },
+          }),
+        );
+        const observed: Observed = { prompt: h.capture.calls.length > 0 ? systemTextOf(h.capture.calls[0]) : '', body: await response.text(), logs: logs.join('\n') };
+        expectNoForeign(label, observed, where);
+        expect(fakes.calls().map((call) => call.transform), `${where}: the ${framework} model condensed`).toContain('condense');
+        expect(fakes.other(), `${where}: the other framework stays unused`).toBe(0);
+        expect(ownMarkers('v2', label).some((marker) => observed.prompt.toLowerCase().includes(marker.toLowerCase())), `${where}: own text`).toBe(true);
+      });
+
+      it(`RAG_QUERY_LAYER on, ${framework}: embed in tenant ${label} expands and keeps only the caller text`, async () => {
+        const where = `layer/${framework}/embed/${label}`;
+        h.capture.reset();
+        logs = [];
+        useEnv('v2', { ...layerEnv(framework), RAG_EMBED_TENANT: tenant(label).scopeKey });
+        const { route, fakes } = await loadWithLayer<{ POST: (request: NextRequest) => Promise<Response> }>('embed/chat', framework);
+        const response = await route.POST(
+          new NextRequest('http://localhost/api/embed/chat', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', 'x-forwarded-for': '203.0.113.9' },
+            body: JSON.stringify({ messages: [{ role: 'user', content: LAYER_KEYWORDS }] }),
+          }),
+        );
+        const observed: Observed = { prompt: h.capture.calls.length > 0 ? systemTextOf(h.capture.calls[0]) : '', body: await response.text(), logs: logs.join('\n') };
+        expectNoForeign(label, observed, where);
+        expect(fakes.calls().map((call) => call.transform), `${where}: the ${framework} model expanded`).toContain('expand');
+        expect(fakes.other(), `${where}: the other framework stays unused`).toBe(0);
+        expect(ownMarkers('v2', label).some((marker) => observed.prompt.toLowerCase().includes(marker.toLowerCase())), `${where}: own text`).toBe(true);
+      });
+    }
+  }
+
+  for (const label of LABELS) {
+    it(`RAG_QUERY_LAYER on: voice-rag with bound history in tenant ${label} condenses natively and returns only the caller text`, async () => {
+      const where = `layer/voice/${label}`;
+      logs = [];
+      useEnv('v2', layerEnv('langchain'));
+      const { route, fakes } = await loadWithLayer<{ POST: (request: NextRequest) => Promise<Response> }>('internal/voice-rag', 'llamaindex');
+      const t = tenant(label);
+      const minted = mintVoiceToken({ scope: mintScope(t.organizationId ? 'org' : 'personal', t.userId, t.organizationId), secret: VOICE_SECRET, ttlSeconds: 600 });
+      if (!minted.ok) throw new Error(`mint failed: ${minted.reason}`);
+      const binding = crypto.createHash('sha256').update(minted.token).digest('base64url').slice(0, 22);
+      const response = await route.POST(
+        new NextRequest('http://localhost/api/internal/voice-rag', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-api-key': INTERNAL_API_KEY, 'x-rag-scope-token': minted.token },
+          body: JSON.stringify({ query: LAYER_FOLLOW_UP, matchCount: 5, history: LAYER_HISTORY.map((turn) => ({ ...turn, binding })) }),
+        }),
+      );
+      const body = await response.text();
+      expect(response.status, `${where}: ${body.slice(0, 200)}`).toBe(200);
+      const json = JSON.parse(body) as { results?: Array<{ chunk_id: string; content: string }> };
+      expectNoForeign(label, { prompt: '', body, logs: logs.join('\n') }, where);
+      expect(fakes.calls().map((call) => call.transform), `${where}: voice condenses on the native model even with langchain configured`).toContain('condense');
+      expect(fakes.other(), `${where}: voice never loads LangChain`).toBe(0);
+      expect((json.results ?? []).length).toBeGreaterThan(0);
+      expect(ownMarkers('v2', label).some((marker) => body.toLowerCase().includes(marker.toLowerCase())), `${where}: own text`).toBe(true);
+    });
+  }
 
   it('every v2 rerank request carries the text of one tenant only', () => {
     expect(rerankBodies.length).toBeGreaterThan(0);

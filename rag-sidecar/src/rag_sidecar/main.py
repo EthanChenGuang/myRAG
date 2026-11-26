@@ -13,6 +13,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import ValidationError
 
 from rag_sidecar.auth import SharedSecretMiddleware
+from rag_sidecar.cache.router import build_cache_router
+from rag_sidecar.cache.service import CacheService
 from rag_sidecar.contracts import (
     InvoiceExtractRequest,
     InvoiceFields,
@@ -88,6 +90,7 @@ def create_app(
     converter: Converter | None = None,
     scorers: Mapping[str, Scorer] | None = None,
     injection_scorer: InjectionScorer | None = None,
+    cache_service: CacheService | None = None,
 ) -> FastAPI:
     resolved = settings if settings is not None else load_settings()
     active_converter = converter if converter is not None else default_converter()
@@ -351,6 +354,7 @@ def create_app(
     v1.include_router(build_groundedness_router(resolved, active_scorers))
     v1.include_router(build_injection_router(active_injection_scorer, prompt_guard_config))
     v1.include_router(build_hidden_text_router(resolved))
+    v1.include_router(build_cache_router(resolved, cache_service))
     app.include_router(v1)
     return app
 

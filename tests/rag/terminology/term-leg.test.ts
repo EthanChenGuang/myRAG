@@ -7,6 +7,7 @@ import { mintScope } from '@/lib/rag/tenant/scope';
 import { terminologyParams } from '@/lib/rag/terminology/expand';
 import { RetrievalOverridesSchema } from '@/lib/rag-eval/contracts.generated';
 import type { RetrievalFilters } from '@/lib/rag/backend/types';
+import type { QueryVariant } from '@/lib/rag/types';
 import { resetV2StartupForTests, verifyV2Startup } from '@/lib/rag/v2/startup';
 import { effectiveRetrievalParams } from '@/lib/rag/v2/retrieval-params';
 import { runSearchStages, TERMINOLOGY_LIST_ID } from '@/lib/rag/v2/stages/search';
@@ -27,7 +28,8 @@ function recordingBackend(): { backend: RetrievalBackend; requests: BackendSearc
     async search(req): Promise<BackendLegs> {
       requests.push(req);
       if (req.denseVector === null) return { dense: [], lexical: [hit('gold', { rank: 1, lexicalScore: 1 })] };
-      return { dense: [hit('a', { rank: 1, similarity: 0.9 }), hit('gold', { rank: 2, similarity: 0.8 })], lexical: [hit('a', { rank: 1, lexicalScore: 1 })] };
+      const lexical = req.lexicalTokens.length > 0 ? [hit('a', { rank: 1, lexicalScore: 1 })] : [];
+      return { dense: [hit('a', { rank: 1, similarity: 0.9 }), hit('gold', { rank: 2, similarity: 0.8 })], lexical };
     },
     health: async () => ({ ok: true }),
     isReady: async () => true,
@@ -35,10 +37,20 @@ function recordingBackend(): { backend: RetrievalBackend; requests: BackendSearc
   return { backend, requests };
 }
 
-async function search(terminology: { tokens: string[]; expansionWeight: number } | null, env: Record<string, string> = {}) {
+interface SearchOptions {
+  variants?: QueryVariant[];
+  terminologyDenseWeight?: number;
+  legWeights?: { dense: number; lexical: number };
+}
+
+async function search(
+  terminology: { tokens: string[]; expansionWeight: number } | null,
+  env: Record<string, string> = {},
+  options: SearchOptions = {},
+) {
   resetRagConfigForTests();
   const cfg = loadRagConfig({ RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'true', ...env });
-  const params = effectiveRetrievalParams('eval', cfg, RetrievalOverridesSchema.parse({ candidate_pool_size: POOL }));
+  const params = effectiveRetrievalParams('eval', cfg, RetrievalOverridesSchema.parse({ candidate_pool_size: POOL, ...(options.legWeights ? { leg_weights: options.legWeights } : {}) }));
   const { backend, requests } = recordingBackend();
   setRetrievalBackendForTests(backend);
   const { embedder } = fakeEmbedder();
@@ -57,6 +69,8 @@ async function search(terminology: { tokens: string[]; expansionWeight: number }
     filters: FILTERS,
     stageOverrides: { retrievalOverrides: { chunkingProfileByDocType: CHUNKING } as never },
     ...(terminology ? { terminology } : {}),
+    ...(options.variants ? { variants: options.variants, variantEmbeddings: options.variants.map(() => ({ vector: [0.1, 0.2, 0.3], profile: null })) } : {}),
+    ...(options.terminologyDenseWeight !== undefined ? { terminologyDenseWeight: options.terminologyDenseWeight } : {}),
   });
   return { output, requests, params, collector };
 }
@@ -115,5 +129,39 @@ describe('the term:0 list (D-16, D-34, T-0411-46)', () => {
     expect(lexicalOff.requests.every((req) => req.denseVector !== null)).toBe(true);
     const empty = await search({ tokens: [], expansionWeight: weight });
     expect(empty.requests).toHaveLength(1);
+  });
+
+  describe('the dense terminology variant (D-18, D-34)', () => {
+    const VARIANTS: QueryVariant[] = [
+      { text: 'what is termalpha', language: 'en', kind: 'original' },
+      { text: 'what is term alpha beta', language: 'en', kind: 'terminology', legs: 'dense' },
+    ];
+    /** D-34: the leg weights are passed explicitly and asserted against what was passed. */
+    const LEG_WEIGHTS = { dense: 1.6, lexical: 0.7 };
+
+    it('is searched dense-only, even without the legs field', async () => {
+      const dense = terminologyParams().dense_weight;
+      const withoutLegs = VARIANTS.map(({ legs: _legs, ...rest }) => rest);
+      const { requests } = await search(null, {}, { variants: withoutLegs, terminologyDenseWeight: dense });
+      expect(requests).toHaveLength(2);
+      expect(requests[0]!.lexicalTokens.length).toBeGreaterThan(0);
+      expect(requests[1]!.lexicalTokens).toEqual([]);
+      expect(requests[1]!.denseLimit).toBe(POOL);
+    });
+
+    it('gets dense_weight × the dense leg weight in force; the original lists keep their weights', async () => {
+      const dense = terminologyParams().dense_weight;
+      const { output, params } = await search(null, {}, { variants: VARIANTS, terminologyDenseWeight: dense, legWeights: LEG_WEIGHTS });
+      expect(params.leg_weights?.dense).toBe(LEG_WEIGHTS.dense);
+      const gold = output.fusedHits.find((row) => row.hit.chunkId === 'gold')!;
+      expect(gold.ranks).toEqual({ 'dense:0': 2, 'dense:1': 2 });
+      expect(Object.keys(gold.ranks)).not.toContain('lexical:1');
+      const k = params.rrf_k;
+      const expected = LEG_WEIGHTS.dense / (k + 2) + (dense * LEG_WEIGHTS.dense) / (k + 2);
+      expect(gold.score).toBeCloseTo(expected, 12);
+      expect(dense * LEG_WEIGHTS.dense).toBeLessThan(LEG_WEIGHTS.dense);
+      const top = output.fusedHits.find((row) => row.hit.chunkId === 'a')!;
+      expect(top.score).toBeCloseTo(LEG_WEIGHTS.dense / (k + 1) + LEG_WEIGHTS.lexical / (k + 1) + (dense * LEG_WEIGHTS.dense) / (k + 1), 12);
+    });
   });
 });

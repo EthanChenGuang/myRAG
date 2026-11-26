@@ -14,6 +14,7 @@ from rag_sidecar.contracts.ingest import DocType
 from .languages import Language
 from .omit import omit_none_schema
 from .scopes import ScopeFilter
+from .templated import AttributeFilter
 
 FilterLanguage = Language
 
@@ -132,6 +133,13 @@ class DupClusterParams(_Contract):
     by_profile: dict[Annotated[str, Field(min_length=1, max_length=128)], DupClusterProfileEntry] = Field(
         default_factory=dict
     )
+
+
+class DupClusterParamsFile(DupClusterParams):
+    """D-49: eval/config/dup-cluster-params.json, written only by `rag_eval.calibrate dup-clusters`."""
+
+    provenance: ConfigProvenance = Field(default_factory=lambda: ConfigProvenance(source="defaults"))
+    config_hash: str | None = Field(default=None, pattern=r"^[a-f0-9]{64}$")
 
 
 class TableRow(_Contract):
@@ -303,6 +311,11 @@ class RetrievalFilters(_Contract):
         default=False,
         exclude_if=lambda value: value is False,
         json_schema_extra=_optional_boolean_schema,
+    )
+    attributes: AttributeFilter | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        json_schema_extra=_optional_object_schema,
     )
 
     @model_validator(mode="after")

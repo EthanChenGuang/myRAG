@@ -19,7 +19,7 @@ export interface SubQuestionCoverageResult {
 const LIST_ID = /^(?:dense|lexical):(\d+)$/;
 
 /** Sub-question indexes whose dense or lexical list ranked this hit (list id `dense:i` / `lexical:i` → variants[i]). */
-function subQuestionsOf(row: FusedHit, variants: readonly QueryVariant[]): Set<number> {
+export function subQuestionsOf(row: FusedHit, variants: readonly QueryVariant[]): Set<number> {
   const found = new Set<number>();
   for (const listId of Object.keys(row.ranks)) {
     const match = LIST_ID.exec(listId);

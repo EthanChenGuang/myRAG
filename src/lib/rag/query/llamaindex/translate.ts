@@ -52,58 +52,89 @@ function failureReason(error: unknown, signal: AbortSignal): TranslateSkipReason
   return 'error';
 }
 
+export type TranslateRequestInput = Omit<NativeTranslateInput, 'deps' | 'signal'>;
+/** One translate call: the target and the rendered system and user text (the shared prompt, research A-6). */
+export interface TranslateRequest {
+  target: Lang;
+  system: string;
+  prompt: string;
+}
+/** A call's raw output, or the reason it failed (the same kinds for both frameworks). */
+export type TranslateCallOutcome = { target: Lang; output: unknown } | { target: Lang; failure: TranslateSkipReason };
+
+/** The calls a translate transform makes: one per picked target, at most two, with the shared prompt. */
+export function translateRequests(input: TranslateRequestInput): TranslateRequest[] {
+  const targets = pickTargets(input.language, input.targets, input.maxItems);
+  if (targets.length === 0) return [];
+  const prompt = loadPrompt(PROMPT_ID);
+  const tokens = input.protectedTokens.length > 0 ? escapeQueryTags(JSON.stringify(input.protectedTokens)) : 'none';
+  const query = escapeQueryTags(input.query);
+  return targets.map((target) => ({
+    target,
+    system: SYSTEM,
+    prompt: renderTemplate(prompt, {
+      target_language: LANGUAGE_NAMES[target],
+      protected_tokens: tokens,
+      target_code: target,
+      query,
+    }),
+  }));
+}
+
+/**
+ * The post-check step after the translate calls, shared by both frameworks (D-02): each output must parse as
+ * QueryTranslation for its target and pass the D-15 checks; anything else is a recorded skip. Order follows the calls.
+ */
+export function finishTranslate(input: TranslateRequestInput, outcomes: readonly TranslateCallOutcome[]): NativeTranslateResult {
+  const limits = input.limits ?? DEFAULT_POST_CHECK_LIMITS;
+  const variants: TranslatedVariant[] = [];
+  const skipped: TranslateSkip[] = [];
+  for (const outcome of outcomes) {
+    const { target } = outcome;
+    const skip = (reason: TranslateSkipReason) => skipped.push({ kind: 'translate', target, reason });
+    if ('failure' in outcome) {
+      skip(outcome.failure);
+      continue;
+    }
+    const parsed = QueryTranslationSchema.safeParse(outcome.output);
+    if (!parsed.success || parsed.data.target_language !== target) {
+      skip('invalid_output');
+      continue;
+    }
+    const checked = checkVariant({ kind: 'translate', text: parsed.data.text, input: input.query, protectedTokens: input.protectedTokens }, limits);
+    if (!checked.ok) skip(checked.skip.reason);
+    else variants.push({ kind: 'translated', language: target, text: checked.text });
+  }
+  return { variants, skipped };
+}
+
 /**
  * The native translate transform (D-23, D-24): one query-LLM call per target, all in parallel, with the shared translate
  * prompt (research A-6) and QueryTranslationSchema. Each output passes the D-15 post-checks; a translation that drops a
  * protected token, answers in another language or fails is skipped and recorded. Never more than two variants.
  */
 export async function nativeTranslate(input: NativeTranslateInput): Promise<NativeTranslateResult> {
-  const targets = pickTargets(input.language, input.targets, input.maxItems);
-  if (targets.length === 0) return { variants: [], skipped: [] };
+  const requests = translateRequests(input);
+  if (requests.length === 0) return { variants: [], skipped: [] };
 
-  const prompt = loadPrompt(PROMPT_ID);
   const llm = (input.deps ?? getRagDeps()).queryLlm();
-  const limits = input.limits ?? DEFAULT_POST_CHECK_LIMITS;
-  const tokens = input.protectedTokens.length > 0 ? escapeQueryTags(JSON.stringify(input.protectedTokens)) : 'none';
-  const query = escapeQueryTags(input.query);
-
   const outcomes = await Promise.all(
-    targets.map(async (target): Promise<TranslatedVariant | TranslateSkip> => {
-      const skip = (reason: TranslateSkipReason): TranslateSkip => ({ kind: 'translate', target, reason });
-      let output;
+    requests.map(async ({ target, system, prompt }): Promise<TranslateCallOutcome> => {
       try {
-        output = await llm.generate({
+        const output = await llm.generate({
           transform: 'translate',
           schema: QueryTranslationSchema,
-          system: SYSTEM,
-          prompt: renderTemplate(prompt, {
-            target_language: LANGUAGE_NAMES[target],
-            protected_tokens: tokens,
-            target_code: target,
-            query,
-          }),
+          system,
+          prompt,
           input: input.query,
           targetLanguage: target,
           signal: input.signal,
         });
+        return { target, output };
       } catch (error) {
-        return skip(failureReason(error, input.signal));
+        return { target, failure: failureReason(error, input.signal) };
       }
-      if (output.target_language !== target) return skip('invalid_output');
-      const checked = checkVariant(
-        { kind: 'translate', text: output.text, input: input.query, protectedTokens: input.protectedTokens },
-        limits,
-      );
-      if (!checked.ok) return skip(checked.skip.reason);
-      return { kind: 'translated', language: target, text: checked.text };
     }),
   );
-
-  const variants: TranslatedVariant[] = [];
-  const skipped: TranslateSkip[] = [];
-  for (const outcome of outcomes) {
-    if (outcome.kind === 'translated') variants.push(outcome);
-    else skipped.push(outcome);
-  }
-  return { variants, skipped };
+  return finishTranslate(input, outcomes);
 }

@@ -231,7 +231,7 @@ def test_http_failure_message_carries_no_key_or_content():
 def test_directory_source_matches_corpus_output_for_one_language():
     docs = DirectoryWorkspaceSource(REPO_ROOT / "eval" / "fixtures" / "corpus" / "en").documents()
     expected = [d for d in load_corpus(REPO_ROOT / "eval" / "fixtures" / "corpus") if d.language == "en"]
-    assert len(docs) == 7 + 36
+    assert len(docs) == 8 + 36
     assert sorted(d.id for d in docs) == sorted(d.relpath for d in expected)
     by_relpath = {d.relpath: d for d in expected}
     for doc in docs:
@@ -240,7 +240,7 @@ def test_directory_source_matches_corpus_output_for_one_language():
 
 def test_directory_source_reads_every_language_and_plain_files(tmp_path):
     docs = DirectoryWorkspaceSource(REPO_ROOT / "eval" / "fixtures" / "corpus").documents()
-    assert len(docs) == 19 + 36 + 36 + 37
+    assert len(docs) == 22 + 36 + 36 + 37
     (tmp_path / "notes.txt").write_text("A plain note about widgets.", encoding="utf-8")
     (tmp_path / "empty.md").write_text("  \n", encoding="utf-8")
     plain = DirectoryWorkspaceSource(tmp_path).documents()

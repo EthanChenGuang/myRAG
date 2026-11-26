@@ -2,6 +2,10 @@ import { createHash } from 'node:crypto';
 import type { QueryParams } from '@/lib/rag-eval/contracts.generated';
 import type { QueryLayerConfig } from '../config';
 import { canonicalJson, type RetrievalConfigHashQueryLayer } from '../v2/config-hash';
+import langchainContextualize from './prompts/langchain.contextualize.v1.json';
+import langchainDecompose from './prompts/langchain.decompose.v1.json';
+import langchainHyde from './prompts/langchain.hyde.v1.json';
+import langchainMultiQuery from './prompts/langchain.multi-query.v1.json';
 import llamaindexCondense from './prompts/llamaindex.condense.v1.json';
 import llamaindexFusion from './prompts/llamaindex.fusion.v1.json';
 import llamaindexHydeEn from './prompts/llamaindex.hyde.en.v1.json';
@@ -13,6 +17,10 @@ import sharedTranslate from './prompts/shared.translate.v1.json';
 
 /** Every query-layer prompt file; a test fails when a file in prompts/ is missing here. */
 const PROMPT_FILES: ReadonlyArray<{ id: string; version: number }> = [
+  langchainContextualize,
+  langchainDecompose,
+  langchainHyde,
+  langchainMultiQuery,
   llamaindexCondense,
   llamaindexFusion,
   llamaindexHydeEn,

@@ -62,3 +62,17 @@ export function expectedResult(entry: LangCase): LanguageValidationResult {
   const { settings: _settings, ...result } = entry.expect;
   return result;
 }
+
+export interface ActiveProfileCase {
+  name: string;
+  supported: string | null;
+  primary: string | null;
+  activeProfile: { id: string; provider: string; model: string };
+  database: 'reachable' | 'unreachable';
+  expect: LanguageValidationResult;
+}
+
+/** Phase 3.2.1 adapter-level cases: the declaration comes from the catalog of the active profile's model. */
+export function loadActiveProfileCases(): ActiveProfileCase[] {
+  return (JSON.parse(fs.readFileSync(CASES_PATH, 'utf8')) as { activeProfileCases: ActiveProfileCase[] }).activeProfileCases;
+}

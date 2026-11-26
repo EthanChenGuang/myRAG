@@ -1,0 +1,41 @@
+{
+  "additionalProperties": false,
+  "description": "Per-document cleaning report stored on the document (D-13); counts only, never removed text.",
+  "properties": {
+    "cleaner_version": {
+      "minimum": 1,
+      "title": "Cleaner Version",
+      "type": "integer"
+    },
+    "lines_removed": {
+      "minimum": 0,
+      "title": "Lines Removed",
+      "type": "integer"
+    },
+    "rules_version": {
+      "minimum": 1,
+      "title": "Rules Version",
+      "type": "integer"
+    },
+    "share": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Share",
+      "type": "number"
+    },
+    "tokens_removed": {
+      "minimum": 0,
+      "title": "Tokens Removed",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "cleaner_version",
+    "rules_version",
+    "lines_removed",
+    "tokens_removed",
+    "share"
+  ],
+  "title": "BoilerplateReport",
+  "type": "object"
+}

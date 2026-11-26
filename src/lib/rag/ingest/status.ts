@@ -15,6 +15,7 @@ import {
   type EmbedProgress,
   emptyIngestState,
   type DocTypeOrigin,
+  type ChunkPrepSnapshot,
   type HiddenTextState,
   type IngestResult,
   type IngestSource,
@@ -231,6 +232,37 @@ function hiddenTextOf(value: unknown): HiddenTextState | null {
   return { fileSha256: slice.fileSha256, report, removedSpans, unlocated, sanitized: slice.sanitized === true };
 }
 
+const BOILERPLATE_MODES = ['detect', 'rules', 'both'] as const;
+const isPositiveInt = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 1;
+const isStringList = (value: unknown): value is string[] => Array.isArray(value) && value.every((entry) => typeof entry === 'string');
+
+/** The chunk-preparation snapshot of a saved state (D-09); a slice that does not have the shape is dropped, so the stage prepares again. */
+function chunkPrepOf(value: unknown): ChunkPrepSnapshot | null {
+  const slice = objectOf<Record<string, unknown>>(value);
+  if (!slice || typeof slice.fingerprint !== 'string' || !isStringList(slice.warnings) || typeof slice.truncated !== 'boolean') return null;
+  const snapshot: ChunkPrepSnapshot = { fingerprint: slice.fingerprint, warnings: [...slice.warnings], truncated: slice.truncated };
+  if (slice.boilerplate !== undefined) {
+    const part = objectOf<Record<string, unknown>>(slice.boilerplate);
+    if (!part) return null;
+    const mode = BOILERPLATE_MODES.find((entry) => entry === part.mode);
+    if (!mode || !isPositiveInt(part.cleanerVersion) || !isPositiveInt(part.rulesVersion) || !isStringList(part.removedLineKeys)) return null;
+    if (!Array.isArray(part.ruleIds)) return null;
+    const ruleIds: Array<{ id: string; version: number }> = [];
+    for (const entry of part.ruleIds) {
+      const id = objectOf<Record<string, unknown>>(entry);
+      if (!id || typeof id.id !== 'string' || !isPositiveInt(id.version)) return null;
+      ruleIds.push({ id: id.id, version: id.version });
+    }
+    snapshot.boilerplate = { mode, cleanerVersion: part.cleanerVersion, rulesVersion: part.rulesVersion, ruleIds, removedLineKeys: [...part.removedLineKeys] };
+  }
+  if (slice.sectionRules !== undefined) {
+    const part = objectOf<Record<string, unknown>>(slice.sectionRules);
+    if (!part) return null;
+    snapshot.sectionRules = part as unknown as NonNullable<ChunkPrepSnapshot['sectionRules']>;
+  }
+  return snapshot;
+}
+
 const isCount = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 0;
 
 function embedProgressOf(value: unknown): EmbedProgress | null {
@@ -272,6 +304,8 @@ export function ingestStateFromRecord(raw: Record<string, unknown>): IngestState
   }
   const hiddenText = hiddenTextOf(raw.hiddenText);
   if (hiddenText) state.hiddenText = hiddenText;
+  const chunkPrep = chunkPrepOf(raw.chunkPrep);
+  if (chunkPrep) state.chunkPrep = chunkPrep;
   if (typeof raw.uploaderId === 'string' && UUID.test(raw.uploaderId)) state.uploaderId = raw.uploaderId.toLowerCase();
   const embedProgress = embedProgressOf(raw.embedProgress);
   if (embedProgress) state.embedProgress = embedProgress;

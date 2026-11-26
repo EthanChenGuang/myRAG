@@ -73,6 +73,7 @@ def _stats_payload() -> dict:
                     "items_skipped": 1,
                     "items_exported": 2,
                     "triage": {"dictionary": 1, "training": 0, "golden": 2, "kb_gap": 1, "not_a_failure": 0},
+                    "topk_redundancy_mean": 0.375,
                 }
             ],
         },
@@ -177,6 +178,7 @@ def test_stats_section_renders_per_tenant_hash_from_the_route(private_runs_root,
     assert report.stats is not None and report.stats_skipped_reason is None
     assert report.stats.tenants[0].tenant_hash == TENANT_HASH
     assert f"| {TENANT_HASH} | 40 |" in markdown
+    assert f"| {TENANT_HASH} | 0.375 |" in markdown
     assert report.failures is not None and len(report.failures.entries) == 6
     assert "placeholder-token" not in raw and "placeholder-token" not in markdown
 

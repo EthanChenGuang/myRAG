@@ -1,6 +1,6 @@
 import { z } from 'zod/v3';
 import type { RetrievalFilterInput, RetrievalFilters, VersionScope } from '@/lib/rag/backend/types';
-import type { Profile } from '@/lib/rag/types';
+import type { Profile, RunRetrievalInput } from '@/lib/rag/types';
 import { RetrievalFiltersSchema } from '@/lib/rag-eval/contracts.generated';
 import { getLanguageRegistry } from '@/lib/rag/lang/registry';
 
@@ -301,9 +301,11 @@ export function effectiveVersionScope(
   config: { v2: { versionScope: boolean; embedVersionScope: boolean } },
   profile: Profile,
   requested: VersionScope | undefined,
+  channel?: RunRetrievalInput['channel'],
 ): { scope: VersionScope; ignored: boolean } {
   if (requested === undefined || requested === 'current') return { scope: 'current', ignored: false };
-  const allowed = config.v2.versionScope && profile !== 'voice' && (profile !== 'embed' || config.v2.embedVersionScope);
+  const embed = profile === 'embed' || channel === 'embed';
+  const allowed = config.v2.versionScope && profile !== 'voice' && (!embed || config.v2.embedVersionScope);
   return allowed ? { scope: requested, ignored: false } : { scope: 'current', ignored: true };
 }
 

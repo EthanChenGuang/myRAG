@@ -1,6 +1,7 @@
 import { JobSettingsSnapshotSchema, type UploadApproval } from '@/lib/rag-eval/contracts.generated';
 import { JOB_SETTINGS_PHASE32_DEFAULTS, omitDefaultFields, type JobSettingsSnapshotWire } from '../wire-defaults';
 import { imageCaptionModelId } from '../captioner';
+import { batchApiAllowed } from '../../embeddings/openai-client';
 import type { IngestCheckMode } from '../config';
 import type { QueueConfig } from '../queue-config';
 import type { ProcessingProfile } from '../profiles/load';
@@ -51,7 +52,9 @@ export function buildJobSettings(input: BuildJobSettingsInput): JobSettingsSnaps
   // A held upload is never visible before approval, so a provisional version would only end the job before its routed run (D-30, D-36).
   const progressive = isBackfill || approval?.required === true ? false : queueConfig.parseProgressive;
   // D-35: batch_api only when the switch asks for it, only for backfill jobs and only for OpenAI profiles; everything else embeds in sync.
-  const embedMode = isBackfill && queueConfig.embedBatchMode === 'batch_api' && embedProfileProvider === 'openai' ? 'batch_api' : 'sync';
+  // RAG_OPENAI_EMBEDDINGS_VIA=openrouter has no Batch API, so those jobs embed in sync too.
+  const embedMode =
+    isBackfill && queueConfig.embedBatchMode === 'batch_api' && embedProfileProvider === 'openai' && batchApiAllowed() ? 'batch_api' : 'sync';
 
   const snapshot = {
     cloud_allowed: queueConfig.parserAllowCloud,

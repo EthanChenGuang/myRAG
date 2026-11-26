@@ -809,6 +809,24 @@
     "RetrievalFilters": {
       "additionalProperties": false,
       "properties": {
+        "attributes": {
+          "maxProperties": 30,
+          "minProperties": 1,
+          "patternProperties": {
+            "^[a-z][a-z0-9_]{0,39}$": {
+              "items": {
+                "maxLength": 200,
+                "minLength": 1,
+                "type": "string"
+              },
+              "maxItems": 50,
+              "minItems": 1,
+              "type": "array"
+            }
+          },
+          "title": "Attributes",
+          "type": "object"
+        },
         "current_only": {
           "const": true,
           "default": true,

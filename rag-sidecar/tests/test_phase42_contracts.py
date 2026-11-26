@@ -250,9 +250,14 @@ def _committed_latency() -> dict:
 
 
 def test_committed_latency_budgets_validate_and_dump_without_new_sections():
-    payload = _committed_latency()
+    # 04.2-10 committed the ttft and pre_generation budgets; the sections stay optional, so the file without them still
+    # validates and dumps without them, and the committed file round-trips with them.
+    committed = _committed_latency()
+    payload = {key: value for key, value in committed.items() if key not in ("ttft", "pre_generation")}
     dumped = latency.LatencyBudgets.model_validate(payload).model_dump(mode="json")
     assert "ttft" not in dumped and "pre_generation" not in dumped
+    round_trip = latency.LatencyBudgets.model_validate(committed).model_dump(mode="json")
+    assert round_trip["ttft"] == committed["ttft"] and round_trip["pre_generation"] == committed["pre_generation"]
 
 
 def test_latency_budgets_ttft_and_pre_generation():

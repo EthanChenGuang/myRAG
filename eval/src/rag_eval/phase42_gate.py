@@ -698,9 +698,11 @@ def run_phase42_gates(
     outputs: dict[str, RunOutput] = {}
     configs: dict[str, dict[str, Any]] = {}
     for run in spec.runs:
+        if run.name in needed:
+            configs[run.name] = run_config_for(spec, run)
+    for run in spec.runs:
         if run.name not in needed:
             continue
-        configs[run.name] = run_config_for(spec, run)
         if reuse is not None:
             outputs[run.name] = load_run(Path(reuse) / HARNESS_DIR / run.name)
             continue

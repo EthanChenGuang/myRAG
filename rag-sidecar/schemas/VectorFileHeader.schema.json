@@ -1,0 +1,51 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "dims": {
+      "minimum": 1,
+      "title": "Dims",
+      "type": "integer"
+    },
+    "dtype": {
+      "const": "float32-le",
+      "title": "Dtype",
+      "type": "string"
+    },
+    "model": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$",
+      "title": "Model",
+      "type": "string"
+    },
+    "profile_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+      "title": "Profile Id",
+      "type": "string"
+    },
+    "rows": {
+      "minimum": 0,
+      "title": "Rows",
+      "type": "integer"
+    },
+    "sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Sha256",
+      "type": "string"
+    },
+    "tenant_key": {
+      "pattern": "^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
+      "title": "Tenant Key",
+      "type": "string"
+    }
+  },
+  "required": [
+    "tenant_key",
+    "profile_id",
+    "model",
+    "dims",
+    "rows",
+    "dtype",
+    "sha256"
+  ],
+  "title": "VectorFileHeader",
+  "type": "object"
+}

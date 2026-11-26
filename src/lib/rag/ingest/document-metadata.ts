@@ -12,6 +12,9 @@ const PIPELINE_KEYS: ReadonlySet<string> = new Set([
   'doc_type_detection',
   'external_url',
   'supersession_replaces',
+  'boilerplate',
+  'review_reasons',
+  'section_rules',
 ]);
 
 /**

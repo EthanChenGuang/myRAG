@@ -1906,6 +1906,11 @@ class ArmSliceRow(_Model):
     direction: Direction
 
 
+class ArmRunIds(_Model):
+    off: str | None
+    on: str | None
+
+
 class ArmResult(_Model):
     name: str
     switch: str
@@ -1921,6 +1926,8 @@ class ArmResult(_Model):
     wiring_proof: bool
     recommendation: str | None
     notes: list[str] = Field(default_factory=list)
+    runs: ArmRunIds | None = None
+    gated_rows: list[ArmSliceRow] = Field(default_factory=list)
 
 
 class ArmComparison(_Model):
@@ -1941,6 +1948,7 @@ class ArmRun:
 
     items: list[ItemResult]
     embedder_id: str | None = None
+    run_id: str | None = None
 
 
 def _arm_members(items: list[ItemResult], groups: Mapping[str, re.Pattern[str]]) -> dict[str, list[ItemResult]]:
@@ -2074,17 +2082,32 @@ def compare_arm(
             notes.append(f"judged slice {judged} has no paired item in these runs")
 
     failures: list[str] = []
+    gated_rows: list[ArmSliceRow] = []
     counting = [item for item in off.items if counts_in_gated_slices(item)]
     counting_on = {item.item_id: item for item in on.items if counts_in_gated_slices(item)}
     for slice_name, slice_items in sorted(_arm_members(counting, {}).items()):
         if not is_gated_slice(slice_name, noise):
             continue
         for metric in ARM_METRICS:
-            _, _, differences = _paired_cell(slice_items, counting_on, metric)
+            offs, ons, differences = _paired_cell(slice_items, counting_on, metric)
             if not differences:
                 continue
             mean_d = math.fsum(differences) / len(differences)
             higher = noise.metrics.get(metric, "higher") == "higher"
+            stat = _rounded(_stat(differences))
+            gated_rows.append(
+                ArmSliceRow(
+                    slice=slice_name,
+                    metric=metric,
+                    n=len(differences),
+                    off=_arm_mean(offs),
+                    on=_arm_mean(ons),
+                    paired=stat,
+                    band=band,
+                    beyond_band=abs(mean_d) > band + RATE_TOLERANCE,
+                    direction=_direction(stat, higher),
+                )
+            )
             drop = -mean_d if higher else mean_d
             if drop > band + RATE_TOLERANCE:
                 failures.append(f"{slice_name}:{metric} dropped by {drop:.4f} (band {band:g}, n={len(differences)})")
@@ -2096,6 +2119,8 @@ def compare_arm(
         wiring_proof=wiring_proof,
         recommendation=None if wiring_proof else _arm_recommendation(rows, failures),
         notes=notes,
+        runs=ArmRunIds(off=off.run_id, on=on.run_id),
+        gated_rows=gated_rows,
     )
 
 
@@ -2183,7 +2208,12 @@ def load_arm_run(path: Path) -> ArmRun:
     if not isinstance(raw, dict) or not isinstance(raw.get("items"), list):
         raise ComparisonError(f"{path}: not an eval report (no items)")
     embedder = raw.get("embedder_id")
-    return ArmRun(items=[ItemResult.model_validate(item) for item in raw["items"]], embedder_id=embedder if isinstance(embedder, str) else None)
+    run_id = raw.get("run_id")
+    return ArmRun(
+        items=[ItemResult.model_validate(item) for item in raw["items"]],
+        embedder_id=embedder if isinstance(embedder, str) else None,
+        run_id=run_id if isinstance(run_id, str) else None,
+    )
 
 
 def run_arm_comparison(spec: ArmComparisonSpec | Path, runs_manifest: Path, out: Path) -> ArmComparison:

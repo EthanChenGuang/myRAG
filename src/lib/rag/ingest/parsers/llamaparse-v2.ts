@@ -2,6 +2,8 @@ import { z } from 'zod/v3';
 import { env } from '@/lib/env';
 import { ParseResultSchema, type ParseResult } from '@/lib/rag-eval/contracts.generated';
 import { isTenantScope } from '../../tenant/scope';
+import { PAGE_TEXTS_ARTIFACT } from '../artifacts';
+import { currentIngestConfig } from '../current-config';
 import { CloudRefused, assertCloudAllowed, reservePremium } from '../guard/cloud-budget';
 import {
   MAX_ARTIFACT_BYTES,
@@ -304,7 +306,12 @@ export function createLlamaParseParser(config: LlamaParseConfig): DocumentParser
     };
     const checked = ParseResultSchema.safeParse(candidate);
     if (!checked.success) throw new ParserError('llamaparse', 'invalid_response');
-    return { kind: 'done', result: checked.data, artifacts, warnings: [], pages: pageTexts };
+    // D-14: page cleaning by detection needs page structure; only then is the per-page text stored beside parse.md (no request change).
+    const cleaning = currentIngestConfig().pageBoilerplate;
+    const stored = cleaning === 'detect' || cleaning === 'both'
+      ? [...artifacts, { name: PAGE_TEXTS_ARTIFACT, bytes: new TextEncoder().encode(JSON.stringify({ pages: pageTexts })), contentType: 'application/json' }]
+      : artifacts;
+    return { kind: 'done', result: checked.data, artifacts: stored, warnings: [], pages: pageTexts };
   }
 
   return {
