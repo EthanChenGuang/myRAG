@@ -68,6 +68,14 @@
       "side": "query"
     },
     {
+      "name": "RAG_CONFIG_GATE",
+      "side": "query"
+    },
+    {
+      "name": "RAG_CONFIG_GATE_LIVE",
+      "side": "query"
+    },
+    {
       "name": "RAG_CONTEXT_COMPRESSION",
       "side": "query"
     },
@@ -453,6 +461,18 @@
       "side": "query"
     },
     {
+      "name": "RAG_MONITOR",
+      "side": "query"
+    },
+    {
+      "name": "RAG_MONITOR_WEBHOOK_SECRET",
+      "side": "query"
+    },
+    {
+      "name": "RAG_MONITOR_WEBHOOK_URL",
+      "side": "query"
+    },
+    {
       "name": "RAG_MULTI_PASS",
       "side": "query"
     },
@@ -626,6 +646,10 @@
     },
     {
       "name": "RAG_REGISTRY_TEXTS",
+      "side": "query"
+    },
+    {
+      "name": "RAG_REPRESENTATIVE_SAMPLE",
       "side": "query"
     },
     {

@@ -494,6 +494,22 @@ RAG_SOURCE_OPEN_SIGNAL=false
 RAG_DOMAIN_EXPERT_REVIEW=false
 
 # -----------------------------
+# EVALUATION GATES AND MONITORING
+# -----------------------------
+# Check RAG-affecting settings before a Config UI save: off | warn | enforce (off saves at once, as before)
+RAG_CONFIG_GATE=off
+# Add a live chat-model layer to the setting check (uses model credit; no effect while RAG_CONFIG_GATE=off)
+RAG_CONFIG_GATE_LIVE=false
+# Daily monitor of the retrieval log (needs RAG_RETRIEVAL_LOG at ids or masked_query; off runs nothing and stores nothing)
+RAG_MONITOR=false
+# Optional admin webhook for monitor alerts, https:// only (treated as a secret, never shown or logged)
+RAG_MONITOR_WEBHOOK_URL=
+# Optional HMAC-SHA256 signing secret for webhook deliveries, at least 32 characters (never logged)
+RAG_MONITOR_WEBHOOK_SECRET=
+# Weekly representative sample into the review queue (needs RAG_RETRIEVAL_LOG=masked_query and RAG_DOMAIN_EXPERT_REVIEW=true)
+RAG_REPRESENTATIVE_SAMPLE=false
+
+# -----------------------------
 # PROMPT-INJECTION DEFENSE
 # -----------------------------
 # Wrap retrieved chunks in tagged <doc> blocks with an untrusted-content notice

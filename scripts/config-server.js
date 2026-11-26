@@ -239,7 +239,7 @@ app.post('/api/config', (req, res) => {
       return res.status(400).json({ success: false, error: 'hidden_text_needs_sidecar' });
     }
 
-    for (const name of ['RAG_EVAL_SECRET', 'RAG_SIDECAR_SECRET', 'RAG_VOICE_TOKEN_SECRET', 'VOYAGE_API_KEY', 'DEEPINFRA_API_KEY', 'COHERE_API_KEY', 'LAKERA_GUARD_API_KEY', 'RAG_EMBED_FEEDBACK_SECRET', 'RAG_VECTOR_SYNC_SECRET']) {
+    for (const name of ['RAG_EVAL_SECRET', 'RAG_SIDECAR_SECRET', 'RAG_VOICE_TOKEN_SECRET', 'VOYAGE_API_KEY', 'DEEPINFRA_API_KEY', 'COHERE_API_KEY', 'LAKERA_GUARD_API_KEY', 'RAG_EMBED_FEEDBACK_SECRET', 'RAG_VECTOR_SYNC_SECRET', 'RAG_MONITOR_WEBHOOK_SECRET']) {
       const value = fullValues[name];
       if (typeof value === 'string' && value.length > 0 && value.length < 32) {
         console.warn(`[Config] ${name} is ${value.length} characters; at least 32 are required or the endpoint answers 503`);
@@ -652,6 +652,14 @@ ${fullValues.RAG_EMBED_FEEDBACK !== undefined ? `RAG_EMBED_FEEDBACK=${fullValues
 ${fullValues.RAG_EMBED_FEEDBACK_SECRET !== undefined ? `RAG_EMBED_FEEDBACK_SECRET=${fullValues.RAG_EMBED_FEEDBACK_SECRET}` : 'RAG_EMBED_FEEDBACK_SECRET='}
 ${fullValues.RAG_SOURCE_OPEN_SIGNAL !== undefined ? `RAG_SOURCE_OPEN_SIGNAL=${fullValues.RAG_SOURCE_OPEN_SIGNAL}` : 'RAG_SOURCE_OPEN_SIGNAL=false'}
 ${fullValues.RAG_DOMAIN_EXPERT_REVIEW !== undefined ? `RAG_DOMAIN_EXPERT_REVIEW=${fullValues.RAG_DOMAIN_EXPERT_REVIEW}` : 'RAG_DOMAIN_EXPERT_REVIEW=false'}
+
+# Evaluation gates and monitoring
+${fullValues.RAG_CONFIG_GATE !== undefined ? `RAG_CONFIG_GATE=${fullValues.RAG_CONFIG_GATE}` : 'RAG_CONFIG_GATE=off'}
+${fullValues.RAG_CONFIG_GATE_LIVE !== undefined ? `RAG_CONFIG_GATE_LIVE=${fullValues.RAG_CONFIG_GATE_LIVE}` : 'RAG_CONFIG_GATE_LIVE=false'}
+${fullValues.RAG_MONITOR !== undefined ? `RAG_MONITOR=${fullValues.RAG_MONITOR}` : 'RAG_MONITOR=false'}
+${fullValues.RAG_MONITOR_WEBHOOK_URL !== undefined ? `RAG_MONITOR_WEBHOOK_URL=${fullValues.RAG_MONITOR_WEBHOOK_URL}` : 'RAG_MONITOR_WEBHOOK_URL='}
+${fullValues.RAG_MONITOR_WEBHOOK_SECRET !== undefined ? `RAG_MONITOR_WEBHOOK_SECRET=${fullValues.RAG_MONITOR_WEBHOOK_SECRET}` : 'RAG_MONITOR_WEBHOOK_SECRET='}
+${fullValues.RAG_REPRESENTATIVE_SAMPLE !== undefined ? `RAG_REPRESENTATIVE_SAMPLE=${fullValues.RAG_REPRESENTATIVE_SAMPLE}` : 'RAG_REPRESENTATIVE_SAMPLE=false'}
 
 # Prompt-injection defense
 ${fullValues.RAG_CONTEXT_TAGGING !== undefined ? `RAG_CONTEXT_TAGGING=${fullValues.RAG_CONTEXT_TAGGING}` : 'RAG_CONTEXT_TAGGING=false'}
@@ -1602,6 +1610,14 @@ RAG_EMBED_FEEDBACK_SECRET=${getEnvValue('RAG_EMBED_FEEDBACK_SECRET') || ''}
 RAG_SOURCE_OPEN_SIGNAL=${getEnvValue('RAG_SOURCE_OPEN_SIGNAL') || 'false'}
 RAG_DOMAIN_EXPERT_REVIEW=${getEnvValue('RAG_DOMAIN_EXPERT_REVIEW') || 'false'}
 
+# Evaluation gates and monitoring
+RAG_CONFIG_GATE=${getEnvValue('RAG_CONFIG_GATE') || 'off'}
+RAG_CONFIG_GATE_LIVE=${getEnvValue('RAG_CONFIG_GATE_LIVE') || 'false'}
+RAG_MONITOR=${getEnvValue('RAG_MONITOR') || 'false'}
+RAG_MONITOR_WEBHOOK_URL=${getEnvValue('RAG_MONITOR_WEBHOOK_URL') || ''}
+RAG_MONITOR_WEBHOOK_SECRET=${getEnvValue('RAG_MONITOR_WEBHOOK_SECRET') || ''}
+RAG_REPRESENTATIVE_SAMPLE=${getEnvValue('RAG_REPRESENTATIVE_SAMPLE') || 'false'}
+
 # Prompt-injection defense
 RAG_CONTEXT_TAGGING=${getEnvValue('RAG_CONTEXT_TAGGING') || 'false'}
 RAG_INJECTION_CHECK=${getEnvValue('RAG_INJECTION_CHECK') || 'off'}
@@ -2113,6 +2129,14 @@ RAG_EMBED_FEEDBACK=${getEnvValue('RAG_EMBED_FEEDBACK') || 'false'}
 RAG_EMBED_FEEDBACK_SECRET=${getEnvValue('RAG_EMBED_FEEDBACK_SECRET') || ''}
 RAG_SOURCE_OPEN_SIGNAL=${getEnvValue('RAG_SOURCE_OPEN_SIGNAL') || 'false'}
 RAG_DOMAIN_EXPERT_REVIEW=${getEnvValue('RAG_DOMAIN_EXPERT_REVIEW') || 'false'}
+
+# Evaluation gates and monitoring
+RAG_CONFIG_GATE=${getEnvValue('RAG_CONFIG_GATE') || 'off'}
+RAG_CONFIG_GATE_LIVE=${getEnvValue('RAG_CONFIG_GATE_LIVE') || 'false'}
+RAG_MONITOR=${getEnvValue('RAG_MONITOR') || 'false'}
+RAG_MONITOR_WEBHOOK_URL=${getEnvValue('RAG_MONITOR_WEBHOOK_URL') || ''}
+RAG_MONITOR_WEBHOOK_SECRET=${getEnvValue('RAG_MONITOR_WEBHOOK_SECRET') || ''}
+RAG_REPRESENTATIVE_SAMPLE=${getEnvValue('RAG_REPRESENTATIVE_SAMPLE') || 'false'}
 
 # Prompt-injection defense
 RAG_CONTEXT_TAGGING=${getEnvValue('RAG_CONTEXT_TAGGING') || 'false'}
