@@ -10,7 +10,7 @@ import { normalizeIdentifier } from '@/lib/rag/ids/normalize';
 
 // Identifiers are described by shape only: letters, digits and separators of invented codes.
 const SHAPE_A = 'QX-4471-B';
-const SHAPE_A_VARIANT = 'qx 4471 b';
+const SHAPE_A_VARIANT = 'qx_4471.b';
 const SHAPE_A_WIDE = 'ＱＸ－４４７１－Ｂ';
 const SHAPE_B = 'ZK.20.991';
 
