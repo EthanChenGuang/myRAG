@@ -258,8 +258,8 @@ def _cell(pool: int, top_k: int, recall: float, mrr: float, tokens: float = 1000
     )
 
 
-def test_rerank_cap_clamps_the_pool_to_50_through_100():
-    assert [rerank_cap(p) for p in (1, 25, 50, 75, 100, 150, 200)] == [50, 50, 50, 75, 100, 100, 100]
+def test_rerank_cap_clamps_the_pool_to_25_through_100():
+    assert [rerank_cap(p) for p in (1, 25, 50, 75, 100, 150, 200)] == [25, 25, 50, 75, 100, 100, 100]
 
 
 def test_choose_picks_the_smaller_pool_within_the_noise_band_of_the_best():
@@ -350,7 +350,7 @@ def test_sweep_runs_every_cell_with_pool_cap_and_top_k_overrides(tmp_path: Path)
     run_retrieval_sweep(config, SweepGrid(pools=(25, 50, 75, 100), top_ks=(5, 20)), tmp_path / "out", runner=stub, golden=golden)
     assert len(stub.calls) == 8
     seen = {(c["overrides"]["candidate_pool_size"], c["overrides"]["rerank_input_cap"], c["overrides"]["final_top_k"]) for c in stub.calls}
-    assert seen == {(25, 50, 5), (25, 50, 20), (50, 50, 5), (50, 50, 20), (75, 75, 5), (75, 75, 20), (100, 100, 5), (100, 100, 20)}
+    assert seen == {(25, 25, 5), (25, 25, 20), (50, 50, 5), (50, 50, 20), (75, 75, 5), (75, 75, 20), (100, 100, 5), (100, 100, 20)}
     assert all(c["base_url"] is None for c in stub.calls)
 
 
@@ -461,7 +461,7 @@ def test_sweep_live_run_with_write_params_writes_a_valid_params_file_with_sweep_
     assert result.params_written is True
     written = RetrievalParams.model_validate_json(params.read_text(encoding="utf-8"))
     assert written.provenance.source == "sweep"
-    assert (written.candidate_pool_size, written.rerank_input_cap, written.final_top_k) == (25, 50, 8)
+    assert (written.candidate_pool_size, written.rerank_input_cap, written.final_top_k) == (25, 25, 8)
     assert written.rrf_k == existing.rrf_k
     assert written.leg_weights == existing.leg_weights
     assert written.config_hash == compute_config_hash(written)

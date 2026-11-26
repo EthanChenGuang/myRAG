@@ -24,7 +24,7 @@ from rag_eval.split import assign_split
 
 DEFAULT_POOLS = (25, 50, 75, 100)
 DEFAULT_TOP_KS = (5, 8, 10, 15, 20)
-CAP_MIN = 50
+CAP_MIN = 25
 CAP_MAX = 100
 PARAMS_PATH = REPO_ROOT / "eval" / "config" / "retrieval-params.json"
 NOISE_PATH = REPO_ROOT / "eval" / "config" / "noise.json"
