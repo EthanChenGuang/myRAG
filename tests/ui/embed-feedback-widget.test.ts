@@ -2,6 +2,7 @@ import vm from 'node:vm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { FakeDocument, FakeElement, functionSource } from './helpers/html-fake-dom';
+import type { UIMessage } from 'ai';
 import { EMBED_RATING_STRINGS } from '@/app/embed/embed-rating-strings';
 
 const env = process.env as Record<string, string | undefined>;
@@ -315,5 +316,113 @@ describe('embed widget answer rating (D-11)', () => {
     const match = /const RATING_STRINGS = (\{.*?\});\n/.exec(script);
     expect(match).not.toBeNull();
     expect(JSON.parse(match![1]!)).toEqual(EMBED_RATING_STRINGS);
+  });
+});
+
+describe('embed window answer rating (same rules as the widget)', () => {
+  const answer = (overrides: Partial<UIMessage> = {}): UIMessage => ({
+    id: 'a1',
+    role: 'assistant',
+    parts: [{ type: 'text', text: 'A neutral synthetic answer.' }],
+    metadata: { feedbackToken: TOKEN },
+    ...overrides,
+  });
+
+  it('takes the token only from a finished assistant answer that has text', async () => {
+    const { embedRatingToken, feedbackTokenOf } = await import('@/app/embed/window/embed-rating');
+    expect(feedbackTokenOf(answer())).toBe(TOKEN);
+    expect(embedRatingToken({ message: answer(), isLast: true, status: 'ready' })).toBe(TOKEN);
+    expect(embedRatingToken({ message: answer(), isLast: false, status: 'streaming' })).toBe(TOKEN);
+    expect(embedRatingToken({ message: answer({ metadata: undefined }), isLast: true, status: 'ready' })).toBeNull();
+    expect(embedRatingToken({ message: answer({ metadata: { feedbackToken: '' } }), isLast: true, status: 'ready' })).toBeNull();
+    expect(embedRatingToken({ message: answer({ metadata: { feedbackToken: 42 } }), isLast: true, status: 'ready' })).toBeNull();
+    expect(embedRatingToken({ message: answer({ id: 'greeting' }), isLast: true, status: 'ready' })).toBeNull();
+    expect(embedRatingToken({ message: answer({ role: 'user' }), isLast: true, status: 'ready' })).toBeNull();
+    expect(embedRatingToken({ message: answer({ parts: [{ type: 'text', text: '  ' }] }), isLast: true, status: 'ready' })).toBeNull();
+    for (const status of ['streaming', 'submitted', 'error']) {
+      expect(embedRatingToken({ message: answer(), isLast: true, status })).toBeNull();
+    }
+  });
+
+  it('posts the same body as the widget without cookies and maps the status codes the same way', async () => {
+    const { postEmbedRating } = await import('@/app/embed/window/embed-rating');
+    const calls: Array<{ url: string; init: RequestInit }> = [];
+    const respond = (status: number) => async (url: string, init: RequestInit) => {
+      calls.push({ url, init });
+      return { ok: status === 200, status } as Response;
+    };
+    const body = { token: TOKEN, vote: 'not_helpful' as const, reasons: ['wrong' as const] };
+    expect(await postEmbedRating(body, respond(200))).toBe('saved');
+    expect(await postEmbedRating(body, respond(404))).toBe('gone');
+    expect(await postEmbedRating(body, respond(429))).toBe('rateLimited');
+    expect(await postEmbedRating(body, respond(500))).toBe('failed');
+    expect(
+      await postEmbedRating(body, async () => {
+        throw new TypeError('network down');
+      }),
+    ).toBe('failed');
+    expect(calls[0]!.url).toBe('/api/embed/feedback');
+    expect(calls[0]!.init.method).toBe('POST');
+    expect(calls[0]!.init.credentials).toBe('omit');
+    expect(JSON.parse(String(calls[0]!.init.body))).toEqual(body);
+  });
+
+  it('follows the widget state rules: chosen vote ignored, chips only after thumb down, failure restores, 404 hides', async () => {
+    const { INITIAL_EMBED_RATING, startEmbedVote, finishEmbedVote } = await import('@/app/embed/window/embed-rating');
+    const sending = startEmbedVote(INITIAL_EMBED_RATING, 'not_helpful', []);
+    expect(sending).toMatchObject({ vote: 'not_helpful', reasons: [], sending: true });
+    expect(startEmbedVote(sending!, 'helpful', [])).toBeNull();
+    const saved = finishEmbedVote(sending!, INITIAL_EMBED_RATING, 'saved');
+    expect(saved).toMatchObject({ vote: 'not_helpful', sending: false, status: 'saved', gone: false });
+    expect(startEmbedVote(saved, 'not_helpful', [])).toBeNull();
+    const chip = startEmbedVote(saved, 'not_helpful', ['incomplete']);
+    expect(chip).toMatchObject({ reasons: ['incomplete'], sending: true });
+    expect(finishEmbedVote(chip!, saved, 'failed')).toMatchObject({ vote: 'not_helpful', reasons: [], status: 'failed' });
+    expect(finishEmbedVote(chip!, saved, 'rateLimited')).toMatchObject({ status: 'rateLimited' });
+    expect(finishEmbedVote(chip!, saved, 'gone').gone).toBe(true);
+    expect(startEmbedVote(INITIAL_EMBED_RATING, 'helpful', ['wrong'])).toMatchObject({ reasons: [] });
+  });
+
+  it('renders the same labels, roles and states as the widget', async () => {
+    const { createElement } = await import('react');
+    const { renderToStaticMarkup } = await import('react-dom/server');
+    const { EmbedRatingView, INITIAL_EMBED_RATING } = await import('@/app/embed/window/embed-rating');
+    const strings = EMBED_RATING_STRINGS.en;
+    const idle = renderToStaticMarkup(createElement(EmbedRatingView, { state: INITIAL_EMBED_RATING, strings, onVote: () => {} }));
+    expect(idle).toContain('role="group"');
+    expect(idle).toContain('aria-label="Rate This Answer"');
+    expect(idle).toContain('aria-label="Helpful"');
+    expect(idle).toContain('aria-label="Not Helpful"');
+    expect(idle).toContain('aria-pressed="false"');
+    expect(idle).toContain('role="status"');
+    expect(idle).not.toContain('What Went Wrong?');
+    expect(idle).not.toContain(TOKEN);
+    const down = renderToStaticMarkup(
+      createElement(EmbedRatingView, {
+        state: { ...INITIAL_EMBED_RATING, vote: 'not_helpful', reasons: ['wrong'], status: 'saved' },
+        strings,
+        onVote: () => {},
+      }),
+    );
+    expect(down).toContain('What Went Wrong? (Optional)');
+    for (const label of ['Wrong', 'Incomplete', 'Not Relevant', 'Thanks for your feedback.']) expect(down).toContain(label);
+    expect(down.match(/aria-pressed="true"/g)).toHaveLength(2);
+    expect(down).not.toMatch(/<(input|textarea)/);
+    const failed = renderToStaticMarkup(
+      createElement(EmbedRatingView, { state: { ...INITIAL_EMBED_RATING, status: 'failed' }, strings, onVote: () => {} }),
+    );
+    expect(failed).toContain('Your rating was not saved. Select it again to retry.');
+    expect(failed).toContain('text-red-700');
+  });
+
+  it('the page reads the token through embedRatingToken and never passes it to markup', async () => {
+    const fs = await import('node:fs');
+    const page = fs.readFileSync('src/app/embed/window/page.tsx', 'utf8');
+    expect(page).toContain('embedRatingToken');
+    expect(page).toContain('feedbackToken');
+    expect(page).not.toContain('dangerouslySetInnerHTML');
+    const rating = fs.readFileSync('src/app/embed/window/embed-rating.tsx', 'utf8');
+    expect(rating).not.toContain('dangerouslySetInnerHTML');
+    expect(rating).toContain('EMBED_RATING_STRINGS');
   });
 });
