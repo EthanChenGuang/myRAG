@@ -67,6 +67,11 @@ export interface UsedDocument {
   explicitly_referenced?: boolean;
   image_url?: string;
   external_url?: string;
+  /** D-13: set only when the effective version scope is not current; effective dates are the document's own, else null. */
+  version?: number;
+  isCurrent?: boolean;
+  effectiveFrom?: string | null;
+  effectiveTo?: string | null;
 }
 
 export interface SourceImage {

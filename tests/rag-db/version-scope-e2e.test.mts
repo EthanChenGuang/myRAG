@@ -24,7 +24,7 @@ const MODE_ENV = 'VERSION_SCOPE_E2E_MODE';
 const MODE = process.env[MODE_ENV];
 
 const TERM = 'zorvexalith';
-const QUESTION = `${TERM} threshold value per cycle`;
+const QUESTION = `What is the ${TERM} threshold value for each cycle, according to the document?`;
 const OLD_TEXT = `The ${TERM} threshold value is seven units per cycle.`;
 const NEW_TEXT = `The ${TERM} threshold value is nine units per cycle.`;
 const FOREIGN_TEXT = `The ${TERM} threshold value is eleven units per cycle, ${TERM} ${TERM}.`;
