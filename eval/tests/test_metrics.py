@@ -1097,7 +1097,9 @@ def test_the_04_2_37_baselines_add_only_phase42_items_and_move_no_old_item(tmp_p
 
     root = Path(__file__).resolve().parents[1]
     previous = Baseline.model_validate_json((root / "baselines" / "history" / f"{name}.pre-04.2-37.json").read_text(encoding="utf-8"))
-    current = Baseline.model_validate_json((root / "baselines" / f"{name}.json").read_text(encoding="utf-8"))
+    # The 04.2-37 record as train 30 committed it, kept in history when plan 05.2-29 added its golden items;
+    # eval/tests/test_golden_phase52.py compares it with the committed baselines.
+    current = Baseline.model_validate_json((root / "baselines" / "history" / f"{name}.pre-05.2-29.json").read_text(encoding="utf-8"))
     assert len(current.runs) >= 3
     assert {run.run_id for run in current.runs}.isdisjoint({run.run_id for run in previous.runs}), "not re-recorded"
 
