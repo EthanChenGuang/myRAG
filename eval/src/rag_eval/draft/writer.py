@@ -7,12 +7,12 @@ from pathlib import Path
 from typing import Iterable, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
-from rag_sidecar.contracts.golden import DraftedItemProposal, GoldenItem
+from rag_sidecar.contracts.golden import DraftedItemProposal, GoldenItem, Split
 
 from rag_eval.golden_io import write_golden
 from rag_eval.matching import normalize_text
 from rag_eval.paths import REPO_ROOT
-from rag_eval.split import assign_split, freeze_splits, load_manifest
+from rag_eval.split import DOCGROUP_SPLIT_RULE, assign_split, freeze_group_splits, freeze_splits, load_group_manifest, load_manifest
 
 PRIVATE_DIR = REPO_ROOT / "eval" / "golden" / "private"
 DEFAULT_MANIFEST = PRIVATE_DIR / "split-manifest.json"
@@ -24,11 +24,51 @@ class PrivatePathError(RuntimeError):
 
 
 class DraftedEntry(BaseModel):
+    """A drafted item; a D-53 paraphrase also names its parent (base), the parent's split and its tags."""
+
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     proposal: DraftedItemProposal
-    provenance: Literal["claude_draft", "ragas_generated"]
+    provenance: Literal["claude_draft", "ragas_generated", "paraphrased"]
     notes: dict[str, str] = Field(default_factory=dict)
+    base: GoldenItem | None = None
+    split: Split | None = None
+    tags: list[str] = Field(default_factory=list)
+
+
+_NOT_INHERITED = ("pair_of", "native_review")
+
+
+def _golden_item(entry: DraftedEntry, item_id: str, split: str) -> GoldenItem:
+    proposal = entry.proposal
+    if entry.base is not None:
+        fields = entry.base.model_dump(mode="json")
+        for name in _NOT_INHERITED:
+            fields.pop(name, None)
+        fields.update(
+            id=item_id,
+            question=proposal.question,
+            review_status="draft",
+            provenance=entry.provenance,
+            split=split,
+            tags=list(entry.tags),
+        )
+        return GoldenItem.model_validate(fields)
+    return GoldenItem(
+        id=item_id,
+        question=proposal.question,
+        conversation=proposal.conversation,
+        language=proposal.language,
+        category=proposal.category,
+        answerable=proposal.answerable,
+        expected_answer=proposal.expected_answer,
+        gold_evidence=proposal.gold_evidence,
+        evidence_language=proposal.evidence_language,
+        review_status="draft",
+        provenance=entry.provenance,
+        split=split,
+        tags=list(entry.tags),
+    )
 
 
 @dataclass
@@ -93,6 +133,11 @@ def _write_notes(path: Path, notes: dict[str, dict[str, str]]) -> None:
     os.replace(tmp, path)
 
 
+def _is_docgroup(manifest: Path) -> bool:
+    existing = load_group_manifest(manifest)
+    return existing is not None and existing.rule == DOCGROUP_SPLIT_RULE
+
+
 def write_drafted_items(
     entries: Iterable[DraftedEntry | tuple],
     out_path: Path | str,
@@ -112,6 +157,7 @@ def write_drafted_items(
     result = WriteResult()
     new_items: list[GoldenItem] = []
     new_notes: dict[str, dict[str, str]] = {}
+    pinned: dict[str, str] = {}
 
     for raw in entries:
         entry = raw if isinstance(raw, DraftedEntry) else DraftedEntry(proposal=raw[0], provenance=raw[1], notes=dict(raw[2]) if len(raw) > 2 else {})
@@ -129,20 +175,7 @@ def write_drafted_items(
             result.duplicates += 1
             continue
         try:
-            item = GoldenItem(
-                id=item_id,
-                question=proposal.question,
-                conversation=proposal.conversation,
-                language=proposal.language,
-                category=proposal.category,
-                answerable=proposal.answerable,
-                expected_answer=proposal.expected_answer,
-                gold_evidence=proposal.gold_evidence,
-                evidence_language=proposal.evidence_language,
-                review_status="draft",
-                provenance=entry.provenance,
-                split=assignments.get(item_id) or assign_split(item_id),
-            )
+            item = _golden_item(entry, item_id, entry.split or assignments.get(item_id) or assign_split(item_id))
         except ValidationError as exc:
             first = exc.errors()[0]
             result.invalid.append(f"invalid item: {first['msg']}")
@@ -150,6 +183,8 @@ def write_drafted_items(
         seen_questions.add(key)
         seen_ids.add(item_id)
         new_items.append(item)
+        if entry.split is not None:
+            pinned[item_id] = entry.split
         if entry.notes:
             new_notes[item_id] = dict(entry.notes)
 
@@ -157,7 +192,12 @@ def write_drafted_items(
     all_items = existing + new_items
     if not all_items:
         return result
-    frozen = freeze_splits(all_items, manifest)
+    if pinned and _is_docgroup(manifest):
+        frozen = freeze_group_splits(all_items, manifest)
+    elif pinned:
+        frozen = freeze_splits(all_items, manifest, pinned=pinned)
+    else:
+        frozen = freeze_splits(all_items, manifest)
     write_golden(out, frozen)
 
     if new_notes or notes_file.exists():

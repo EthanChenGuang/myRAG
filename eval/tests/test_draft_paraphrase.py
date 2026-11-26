@@ -130,7 +130,9 @@ def test_paraphrase_writes_one_draft_variant_per_style_for_each_approved_expert_
         )
         assert variant.question == f"{style} variant of: {parent.question}"
     assert seen == {(parent.id, style) for parent in PARENTS for style in ("colloquial", "situation")}
-    assert [item for item in items if item.provenance != "paraphrased"] == [*PARENTS, *SKIPPED]
+    assert sorted((item for item in items if item.provenance != "paraphrased"), key=lambda item: item.id) == sorted(
+        [*PARENTS, *SKIPPED], key=lambda item: item.id
+    )
     out = capsys.readouterr().out
     assert "6 written" in out
     assert "synthetic widget" not in out
@@ -251,3 +253,25 @@ def test_styles_are_neutral_and_named():
     for instruction in PARAPHRASE_STYLES.values():
         assert instruction and "{" not in instruction
     assert json.dumps(PARAPHRASE_STYLES, ensure_ascii=True).isascii()
+
+
+def test_paraphrase_in_a_docgroup_domain_set_keeps_each_variant_in_its_parents_group_and_split(private_root):
+    from rag_eval.split import DOCGROUP_SPLIT_RULE, freeze_group_splits, load_group_manifest, plan_group_splits
+
+    path = private_root / "domain" / "group" / "golden.jsonl"
+    path.parent.mkdir(parents=True)
+    manifest = path.parent / "split-manifest.json"
+    parents = freeze_group_splits(list(PARENTS), manifest)
+    write_golden(path, parents)
+    assert _run(path) == 0
+    items = load_golden(path)
+    loaded = load_group_manifest(manifest)
+    assert loaded is not None and loaded.rule == DOCGROUP_SPLIT_RULE
+    plan = plan_group_splits(items, manifest)
+    assert plan.changed is False
+    split_of = {item.id: item.split for item in parents}
+    for variant in _variants(path):
+        (parent_tag,) = [tag for tag in variant.tags if tag.startswith("paraphrase_of:")]
+        parent_id = parent_tag.split(":", 1)[1]
+        assert variant.split == split_of[parent_id]
+        assert plan.item_groups[variant.id] == plan.item_groups[parent_id]
