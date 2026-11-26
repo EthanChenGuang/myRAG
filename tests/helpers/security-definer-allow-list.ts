@@ -20,6 +20,9 @@ import type { AllowListEntry } from './sql-function-acl';
  * The 0654 binding-route functions (rag_finetune_bind_scoped_slot, rag_finetune_scope_slot, rag_finetune_normalize_doc_types, the replaced
  * rag_finetune_clear_slot) and trigger functions (rag_finetune_binding_guard, rag_finetune_backfill_run_guard) are service_role only;
  * tests/rag-db/finetune-binding.test.mts asserts they never appear here.
+ * The 0901 lexical statistics trigger functions rag_lexstats_chunks_insert(), rag_lexstats_chunks_update() and rag_lexstats_chunks_delete()
+ * are service_role-only definers (trigger function; writer roles have no grant on the pending table), revoked in 0901 itself;
+ * tests/rag-db/lexical-stats-triggers.test.mts asserts that PUBLIC, anon and authenticated cannot execute them.
  */
 export const AUTHENTICATED_ALLOW_LIST: Record<string, AllowListEntry> = {
   'delete_folder(uuid,boolean)': { anon: false, reason: 'called with the user session from chat-store.ts and /api/folders/[id]; checks auth.uid() ownership' },
