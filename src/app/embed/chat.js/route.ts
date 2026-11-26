@@ -2,10 +2,44 @@ import { NextRequest, NextResponse } from 'next/server';
 import { env } from '@/lib/env';
 import fs from 'fs';
 import path from 'path';
+import { EMBED_RATING_REASONS, EMBED_RATING_STRINGS } from '@/app/embed/embed-rating-strings';
 
 // Force dynamic rendering - don't cache this route
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
+
+// Path data copied from lucide-react 0.471.2 (thumbs-up, thumbs-down, check).
+const RATING_ICON_PATHS = {
+  thumbsUp: [
+    'M7 10v12',
+    'M15 5.88 14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2a3.13 3.13 0 0 1 3 3.88Z',
+  ],
+  thumbsDown: [
+    'M17 14V2',
+    'M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z',
+  ],
+  check: ['M20 6 9 17l-5-5'],
+};
+
+// Every selector is scoped to the widget container so nothing reaches the host page (T-0511-60).
+const RATING_STYLE_TEXT = [
+  '#myrag-widget-container .myrag-fb { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 8px; }',
+  '#myrag-widget-container .myrag-fb-btn { width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 8px; background: transparent; color: #666; cursor: pointer; padding: 0; margin: 0; font: inherit; touch-action: manipulation; -webkit-tap-highlight-color: transparent; transition: background-color 150ms; }',
+  '#myrag-widget-container .myrag-fb-btn:hover:not(:disabled) { background: #eee; }',
+  '#myrag-widget-container .myrag-fb-btn[aria-pressed="true"] { color: #333; }',
+  '#myrag-widget-container .myrag-fb-btn[aria-pressed="true"] svg { fill: currentColor; }',
+  '#myrag-widget-container .myrag-fb-btn:disabled, #myrag-widget-container .myrag-fb-chip:disabled { cursor: wait; }',
+  '#myrag-widget-container .myrag-fb-status { font-size: 12px; line-height: 16px; color: #666; margin-left: 4px; }',
+  '#myrag-widget-container .myrag-fb-status.myrag-fb-status-error { color: #B91C1C; }',
+  '#myrag-widget-container .myrag-fb-reasons { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; }',
+  '#myrag-widget-container .myrag-fb-legend { flex-basis: 100%; font-size: 12px; line-height: 16px; color: #666; }',
+  '#myrag-widget-container .myrag-fb-chip { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 4px 8px; border: 1px solid #ddd; border-radius: 16px; background: #fff; color: #333; font: inherit; font-size: 12px; line-height: 16px; cursor: pointer; margin: 0; touch-action: manipulation; -webkit-tap-highlight-color: transparent; transition: background-color 150ms; }',
+  '#myrag-widget-container .myrag-fb-chip:hover:not(:disabled) { background: #eee; }',
+  '#myrag-widget-container .myrag-fb-chip[aria-pressed="true"] { border-color: #333; }',
+  '#myrag-widget-container .myrag-fb-btn:focus-visible, #myrag-widget-container .myrag-fb-chip:focus-visible { outline: 2px solid #333; outline-offset: 2px; }',
+  '@media (pointer: coarse) { #myrag-widget-container .myrag-fb-btn { width: 44px; height: 44px; } #myrag-widget-container .myrag-fb-chip { min-height: 44px; } }',
+  '@media (prefers-reduced-motion: reduce) { #myrag-widget-container .myrag-fb-btn, #myrag-widget-container .myrag-fb-chip { transition: none; } }',
+].join(' ');
 
 // Read embed color with fallback for dev and production
 function getEmbedColor(): string {
@@ -353,7 +387,216 @@ export async function GET(request: NextRequest) {
   let isMinimized = false;
   let messages = [];
   let isLoading = false;
-  
+
+  // Answer rating (D-11): rendered only for an answer whose stream carried a feedback token.
+  const RATING_STRINGS = ${JSON.stringify(EMBED_RATING_STRINGS)};
+  const RATING_REASONS = ${JSON.stringify(EMBED_RATING_REASONS)};
+  const RATING_ICON_PATHS = ${JSON.stringify(RATING_ICON_PATHS)};
+  const RATING_STYLE_TEXT = ${JSON.stringify(RATING_STYLE_TEXT)};
+  const RATING_TIMEOUT_MS = 10000;
+  let ratingStyleElement = null;
+
+  function ratingStrings() {
+    const language = typeof navigator !== 'undefined' && navigator.language ? String(navigator.language) : '';
+    const prefix = language.slice(0, 2).toLowerCase();
+    return RATING_STRINGS[prefix === 'zh' || prefix === 'it' ? prefix : 'en'];
+  }
+
+  function ensureRatingStyles() {
+    const container = document.getElementById('myrag-widget-container');
+    if (!container) return;
+    if (ratingStyleElement && ratingStyleElement.parentNode === container) return;
+    ratingStyleElement = document.createElement('style');
+    ratingStyleElement.setAttribute('data-myrag-fb', 'true');
+    ratingStyleElement.textContent = RATING_STYLE_TEXT;
+    container.appendChild(ratingStyleElement);
+  }
+
+  function ratingIcon(name, size) {
+    const ns = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('width', String(size));
+    svg.setAttribute('height', String(size));
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('stroke', 'currentColor');
+    svg.setAttribute('stroke-width', '2');
+    svg.setAttribute('stroke-linecap', 'round');
+    svg.setAttribute('stroke-linejoin', 'round');
+    svg.setAttribute('aria-hidden', 'true');
+    svg.setAttribute('focusable', 'false');
+    RATING_ICON_PATHS[name].forEach((d) => {
+      const path = document.createElementNS(ns, 'path');
+      path.setAttribute('d', d);
+      svg.appendChild(path);
+    });
+    return svg;
+  }
+
+  // The start line carries the token; keep it, and a start line split across reads, out of the debug log.
+  function ratingQuietChunk(chunk, logState) {
+    const keyAt = chunk.lastIndexOf('feedbackToken');
+    if (keyAt === -1 && !logState.tail) return false;
+    logState.tail = chunk.indexOf(String.fromCharCode(10), keyAt === -1 ? 0 : keyAt) === -1;
+    return true;
+  }
+
+  function attachRating(messageDiv, token) {
+    const strings = ratingStrings();
+    const state = { vote: null, reasons: [], sending: false };
+    ensureRatingStyles();
+
+    const row = document.createElement('div');
+    row.className = 'myrag-fb';
+    row.setAttribute('role', 'group');
+    row.setAttribute('aria-label', strings.group);
+
+    function makeThumb(icon, label) {
+      const thumb = document.createElement('button');
+      thumb.className = 'myrag-fb-btn';
+      thumb.setAttribute('type', 'button');
+      thumb.setAttribute('aria-pressed', 'false');
+      thumb.setAttribute('aria-label', label);
+      thumb.setAttribute('title', label);
+      thumb.appendChild(ratingIcon(icon, 16));
+      return thumb;
+    }
+    const up = makeThumb('thumbsUp', strings.helpful);
+    const down = makeThumb('thumbsDown', strings.notHelpful);
+    const status = document.createElement('span');
+    status.className = 'myrag-fb-status';
+    status.setAttribute('role', 'status');
+    status.setAttribute('aria-live', 'polite');
+    row.appendChild(up);
+    row.appendChild(down);
+    row.appendChild(status);
+
+    let reasonsBox = null;
+    let chipButtons = {};
+    let chipIcons = {};
+
+    function buildReasons() {
+      reasonsBox = document.createElement('div');
+      reasonsBox.className = 'myrag-fb-reasons';
+      reasonsBox.setAttribute('role', 'group');
+      reasonsBox.setAttribute('aria-label', strings.reasonsLegend);
+      const legend = document.createElement('span');
+      legend.className = 'myrag-fb-legend';
+      legend.textContent = strings.reasonsLegend;
+      reasonsBox.appendChild(legend);
+      chipButtons = {};
+      chipIcons = {};
+      RATING_REASONS.forEach((reason) => {
+        const chip = document.createElement('button');
+        chip.className = 'myrag-fb-chip';
+        chip.setAttribute('type', 'button');
+        chip.setAttribute('aria-pressed', 'false');
+        const text = document.createElement('span');
+        text.textContent = strings.reasons[reason];
+        chip.appendChild(text);
+        chip.addEventListener('click', () => {
+          if (state.vote !== 'not_helpful') return;
+          const chosen = state.reasons.indexOf(reason) === -1
+            ? state.reasons.concat([reason])
+            : state.reasons.filter((r) => r !== reason);
+          send('not_helpful', RATING_REASONS.filter((r) => chosen.indexOf(r) !== -1), chip);
+        });
+        chipButtons[reason] = chip;
+        reasonsBox.appendChild(chip);
+      });
+      if (row.parentNode) row.parentNode.insertBefore(reasonsBox, row.nextSibling || null);
+    }
+
+    function render() {
+      up.setAttribute('aria-pressed', state.vote === 'helpful' ? 'true' : 'false');
+      down.setAttribute('aria-pressed', state.vote === 'not_helpful' ? 'true' : 'false');
+      up.disabled = state.sending;
+      down.disabled = state.sending;
+      if (state.vote === 'not_helpful' && !reasonsBox) buildReasons();
+      if (state.vote !== 'not_helpful' && reasonsBox) {
+        reasonsBox.remove();
+        reasonsBox = null;
+        chipButtons = {};
+        chipIcons = {};
+      }
+      RATING_REASONS.forEach((reason) => {
+        const chip = chipButtons[reason];
+        if (!chip) return;
+        const pressed = state.reasons.indexOf(reason) !== -1;
+        chip.disabled = state.sending;
+        chip.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+        if (pressed && !chipIcons[reason]) {
+          chipIcons[reason] = ratingIcon('check', 12);
+          chip.insertBefore(chipIcons[reason], chip.firstChild);
+        }
+        if (!pressed && chipIcons[reason]) {
+          chipIcons[reason].remove();
+          chipIcons[reason] = null;
+        }
+      });
+    }
+
+    function setStatus(text, isError) {
+      status.textContent = text;
+      status.className = isError ? 'myrag-fb-status myrag-fb-status-error' : 'myrag-fb-status';
+    }
+
+    async function send(vote, reasons, origin) {
+      if (state.sending) return;
+      const before = { vote: state.vote, reasons: state.reasons };
+      state.vote = vote;
+      state.reasons = reasons;
+      state.sending = true;
+      setStatus('', false);
+      render();
+      let outcome = 'failed';
+      const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const timer = controller ? setTimeout(() => controller.abort(), RATING_TIMEOUT_MS) : null;
+      try {
+        const response = await fetch(apiOrigin + '/api/embed/feedback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'omit',
+          body: JSON.stringify({ token: token, vote: vote, reasons: reasons }),
+          signal: controller ? controller.signal : undefined
+        });
+        if (response.ok) outcome = 'saved';
+        else if (response.status === 404) outcome = 'gone';
+        else if (response.status === 429) outcome = 'rateLimited';
+      } catch (_) {
+        outcome = 'failed';
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+      state.sending = false;
+      if (outcome === 'gone') {
+        row.remove();
+        if (reasonsBox) reasonsBox.remove();
+        return;
+      }
+      if (outcome !== 'saved') {
+        state.vote = before.vote;
+        state.reasons = before.reasons;
+      }
+      render();
+      setStatus(outcome === 'saved' ? strings.saved : outcome === 'rateLimited' ? strings.rateLimited : strings.failed, outcome !== 'saved');
+      const target = origin && origin.isConnected ? origin : state.vote === 'not_helpful' ? down : up;
+      if (target && typeof target.focus === 'function' && document.activeElement !== target && (!document.activeElement || document.activeElement === document.body)) {
+        target.focus();
+      }
+    }
+
+    up.addEventListener('click', () => {
+      if (state.vote !== 'helpful') send('helpful', [], up);
+    });
+    down.addEventListener('click', () => {
+      if (state.vote !== 'not_helpful') send('not_helpful', [], down);
+    });
+
+    messageDiv.appendChild(row);
+    scrollToBottom();
+  }
+
   // Create widget container
   function createWidget() {
     // Check if widget already exists
@@ -887,6 +1130,8 @@ export async function GET(request: NextRequest) {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let assistantMessage = '';
+      let feedbackToken = null;
+      const ratingLog = { tail: false };
 
       // Flag to track if dots have been removed
       let dotsRemoved = false;
@@ -912,17 +1157,18 @@ export async function GET(request: NextRequest) {
         }
         
         const chunk = decoder.decode(value, { stream: true });
-        console.log('Received chunk:', chunk);
+        const quietLog = ratingQuietChunk(chunk, ratingLog);
+        console.log('Received chunk:', quietLog ? '[omitted]' : chunk);
         
         // Split by lines and process each line
         const lines = chunk.split(/\\r?\\n/);
-        console.log('Split into lines:', lines);
+        console.log('Split into lines:', quietLog ? '[omitted]' : lines);
         
         for (let rawLine of lines) {
           const line = rawLine.trim();
           if (!line) continue;
           
-          console.log('Processing line:', line);
+          console.log('Processing line:', quietLog ? '[omitted]' : line);
           
           try {
             // Handle AI SDK streaming format
@@ -961,6 +1207,10 @@ export async function GET(request: NextRequest) {
               
               try {
                 const parsed = JSON.parse(data);
+                if (parsed && parsed.type === 'start' && parsed.messageMetadata && typeof parsed.messageMetadata.feedbackToken === 'string') {
+                  if (parsed.messageMetadata.feedbackToken) feedbackToken = parsed.messageMetadata.feedbackToken;
+                  delete parsed.messageMetadata.feedbackToken;
+                }
                 console.log('📦 SSE data:', JSON.stringify(parsed));
                 console.log('🔍 Keys:', Object.keys(parsed || {}));
                 console.log('🔍 Type:', parsed?.type, typeof parsed?.type);
@@ -998,7 +1248,7 @@ export async function GET(request: NextRequest) {
                   console.log('⚠️ Not an object:', typeof parsed);
                 }
               } catch (e) {
-                console.debug('Could not parse SSE data:', data);
+                console.debug('Could not parse SSE data:', quietLog ? '[omitted]' : data);
                 // Fallback string extractor for AI SDK delta lines without valid JSON
                 try {
                   if (data.indexOf('"delta"') !== -1) {
@@ -1038,11 +1288,11 @@ export async function GET(request: NextRequest) {
                 scrollToBottom();
                 }
               } catch (e) {
-                console.debug('Could not parse line as JSON:', line);
+                console.debug('Could not parse line as JSON:', quietLog ? '[omitted]' : line);
               }
             }
           } catch (e) {
-            console.debug('Error parsing line:', line, e);
+            console.debug('Error parsing line:', quietLog ? '[omitted]' : line, e);
           }
         }
       }
@@ -1058,6 +1308,7 @@ export async function GET(request: NextRequest) {
       // Store the complete message
       if (assistantMessage.trim()) {
         messages.push({ role: 'assistant', content: assistantMessage });
+        if (feedbackToken) attachRating(messageDiv, feedbackToken);
       } else {
         // If no content was received, show error
         bubble.textContent = 'Sorry, I encountered an error. Please try again.';
