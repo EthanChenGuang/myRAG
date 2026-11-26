@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { z } from 'zod/v3';
-import type { TerminologyLexicon as ExportedLexicon } from '@/lib/rag/terminology/lexicon';
+import type { TerminologyLexicon as ExportedLexicon } from '@/lib/rag';
 import {
   TerminologyLexiconSchema,
   TerminologyLexiconTermSchema,
@@ -68,6 +68,13 @@ describe('TerminologyLexicon contract (D-33)', () => {
     expect(() => TerminologyLexiconSchema.parse(sample)).not.toThrow();
     expect(() => TerminologyLexiconSchema.parse({ ...sample, extra: 1 })).toThrow();
     expect(() => TerminologyLexiconSchema.parse({ ...sample, version: 's1' })).toThrow();
+  });
+
+  it('@/lib/rag exports the read API and its error', async () => {
+    const rag = await import('@/lib/rag');
+    const lexicon = await import('@/lib/rag/terminology/lexicon');
+    expect(rag.getTerminologyLexicon).toBe(lexicon.getTerminologyLexicon);
+    expect(rag.TerminologyUnavailableError).toBe(lexicon.TerminologyUnavailableError);
   });
 
   it('a sample result parses, and the exported type is the generated one', () => {

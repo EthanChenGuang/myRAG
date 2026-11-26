@@ -20,6 +20,8 @@ export { isTenantScope, scopeKey } from './tenant/scope';
 export { evalScope } from './tenant/eval';
 export type { EvalScopeInput, EvalScopeOutcome } from './tenant/eval';
 export type { TenantScope } from './tenant/scope';
+export { getTerminologyLexicon, TerminologyUnavailableError } from './terminology/lexicon';
+export type { TerminologyLexicon, TerminologyLexiconOptions } from './terminology/lexicon';
 export { RetrievalBackendError } from './backend/supabase-rpc';
 export { getRetrievalBackend, resetRetrievalBackendForTests, setRetrievalBackendForTests } from './backend/registry';
 export { createPgvectorBackend } from './backend/pgvector';
