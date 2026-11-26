@@ -148,6 +148,9 @@ class RetrievalLogEntry(_LanguageSnapshot):
     feedback_reasons: list[LoggedFeedbackReason] = _unique(default_factory=list)
     feedback_at: Timestamp | None = None
     source_opened_count: int = Field(default=0, ge=0, le=20)
+    topk_redundancy: float | None = Field(
+        default=None, ge=0, le=1, exclude_if=lambda value: value is None, json_schema_extra=omit_none_schema
+    )
     created_at: Timestamp | None = None
 
     @field_validator("feedback_reasons")
@@ -470,6 +473,8 @@ class TenantLoopStats(_Contract):
     items_skipped: Count = 0
     items_exported: Count = 0
     triage: TriageCounts
+    # 04.2-20 (D-22): mean of the logged top-k redundancy over the tenant's rows that carry one.
+    topk_redundancy_mean: Rate | None = None
 
 
 class FeedbackLoopStats(_Contract):

@@ -173,6 +173,26 @@ describe('buildRetrievalLogRow (D-03, D-04)', () => {
   });
 });
 
+describe('buildRetrievalLogRow top-k redundancy (04.2-20, D-22)', () => {
+  it('stores the largest cluster share of the kept chunks when a kept chunk carries a cluster id', () => {
+    const chunks = [
+      { ...kept(1, 1), dupClusterId: 'cluster-x' },
+      { ...kept(2, 2), dupClusterId: 'cluster-x' },
+      kept(3, 3),
+      { ...kept(4, 4), dupClusterId: 'cluster-y' },
+    ];
+    const row = buildRetrievalLogRow(input({ result: result({ kept: chunks }) }));
+    expect(row.topk_redundancy).toBe(0.5);
+    expectValid(row);
+  });
+
+  it('leaves the field out when no kept chunk has a cluster id', () => {
+    const row = buildRetrievalLogRow(input({ result: result({ kept: [kept(1, 1), kept(2, 2)] }) }));
+    expect(row).not.toHaveProperty('topk_redundancy');
+    expectValid(row);
+  });
+});
+
 describe('buildRetrievalLogRow language fields (D-03a)', () => {
   it('takes the pipeline query language and confidence 1 when the detector agrees confidently', () => {
     const row = buildRetrievalLogRow(input({ query: '这是一个关于第二份报告的合成问题', result: result({ queryLanguage: 'zh' }) }));

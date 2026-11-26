@@ -91,6 +91,17 @@ export interface KeptChunk {
   similarity: number;
   rank: number;
   kept_by: KeptBy;
+  /** D-48: the chunk's near-duplicate cluster, when the search returned one. */
+  dupClusterId?: string;
+  /** D-21: other documents of the cluster that the diversify stage dropped, in rank order. */
+  alsoIn?: AlsoIn[];
+}
+
+/** Another document of a kept chunk's duplicate cluster (D-21): the first dropped chunk of that document. */
+export interface AlsoIn {
+  documentId: string;
+  filename: string;
+  chunkId: string;
 }
 
 export type RagMode = 'strict' | 'balanced' | 'flexible' | 'bypass';

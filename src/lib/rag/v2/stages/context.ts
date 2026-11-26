@@ -26,7 +26,9 @@ import { documentNamesFromRows, downweightOrder, injectionDropped, runInjectionS
 import type { SecurityConfig } from '../../security/config';
 import { injectionItems, releasedRulesFromRows, type InjectionMarks } from '../../security/injection-check';
 import type { TraceCollector } from '../../trace/collector';
+import { topkRedundancy } from '../diversify';
 import type {
+  AlsoIn,
   Candidate,
   CitationLabeler,
   InjectionSummary,
@@ -63,6 +65,8 @@ export interface ContextStagesInput {
   versionScope?: VersionScope;
   /** Picks the version line's language; absent falls back to English. */
   queryLanguage?: string | null;
+  /** D-21: the diversify stage's dropped duplicates per kept chunk. */
+  alsoIn?: ReadonlyMap<string, AlsoIn[]>;
 }
 
 /** D-13: the assemble stage detail when the version lookup failed and the labels were skipped. */
@@ -445,7 +449,16 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
       }
 
       const output = render(selected, groupOrder, { runs: blockRuns, chunkIds: blockChunkIds });
-      const kept = output.kept.map((row) => ({ ...row, rank: rankById.get(row.chunk_id) ?? row.rank }));
+      const kept = output.kept.map((row) => {
+        const dupClusterId = hitById.get(row.chunk_id)?.dupClusterId;
+        const alsoIn = ctx.alsoIn?.get(row.chunk_id);
+        return {
+          ...row,
+          rank: rankById.get(row.chunk_id) ?? row.rank,
+          ...(dupClusterId ? { dupClusterId } : {}),
+          ...(alsoIn && alsoIn.length > 0 ? { alsoIn } : {}),
+        };
+      });
       return {
         output: { ...output, kept },
         selected,
@@ -468,6 +481,7 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
         used_tokens: value.usedTokens,
         groups: value.groups,
         ...(resultCap !== null ? { max_results: resultCap } : {}),
+        ...redundancyCount(value.output.kept),
       }),
       ...(versionLookupFailed ? { status: () => 'degraded' as const, detail: () => VERSION_LABELS_UNAVAILABLE } : {}),
     },
@@ -534,6 +548,12 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
     candidates,
     ...injectionOut,
   };
+}
+
+/** D-22, D-34: the top-k redundancy as an integer per mille, only when a kept chunk carries a cluster id. */
+function redundancyCount(kept: ReadonlyArray<{ dupClusterId?: string }>): Record<string, number> {
+  const share = topkRedundancy(kept);
+  return share === null ? {} : { topk_redundancy_permille: Math.round(share * 1000) };
 }
 
 /** D-13: version fields on sources only for a non-current scope with a successful lookup; dates are the document's own. */

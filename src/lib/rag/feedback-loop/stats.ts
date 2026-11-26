@@ -54,6 +54,7 @@ interface LogRow {
   feedback_vote: unknown;
   feedback_kind: unknown;
   source_opened_count: unknown;
+  topk_redundancy: unknown;
   rerank_score: unknown;
 }
 
@@ -68,6 +69,8 @@ interface Tally {
   zero: number;
   low: number;
   opened: number;
+  redundancySum: number;
+  redundancyRows: number;
 }
 
 function validDate(value: Date | undefined): value is Date {
@@ -112,6 +115,7 @@ function emptyStats(hash: string): TenantStats {
     items_skipped: 0,
     items_exported: 0,
     triage: { dictionary: 0, training: 0, golden: 0, kb_gap: 0, not_a_failure: 0 },
+    topk_redundancy_mean: null,
   };
 }
 
@@ -183,7 +187,7 @@ export async function computeFeedbackLoopStats(
           client
             .from('rag_retrieval_log')
             .select(
-              'tenant_key,channel,outcome,candidate_count,top_score,feedback_vote,feedback_kind,source_opened_count,rerank_score:candidates->0->rerank_score',
+              'tenant_key,channel,outcome,candidate_count,top_score,feedback_vote,feedback_kind,source_opened_count,topk_redundancy,rerank_score:candidates->0->rerank_score',
             )
             .gte('created_at', sinceIso)
             .lt('created_at', untilIso)
@@ -224,7 +228,7 @@ export async function computeFeedbackLoopStats(
     const key = tenantOf(tenantKey);
     let entry = tallies.get(key);
     if (!entry) {
-      entry = { stats: emptyStats(tenantHash(key)), zero: 0, low: 0, opened: 0 };
+      entry = { stats: emptyStats(tenantHash(key)), zero: 0, low: 0, opened: 0, redundancySum: 0, redundancyRows: 0 };
       tallies.set(key, entry);
     }
     return entry;
@@ -244,6 +248,11 @@ export async function computeFeedbackLoopStats(
     const ceiling = finiteNumber(row.rerank_score) !== null ? config.low_score_ceiling.rerank : config.low_score_ceiling.similarity;
     if (outcome === 'answered' && top !== null && top < ceiling) entry.low += 1;
     if (outcome === 'answered' && (finiteNumber(row.source_opened_count) ?? 0) > 0) entry.opened += 1;
+    const redundancy = finiteNumber(row.topk_redundancy);
+    if (redundancy !== null && redundancy >= 0 && redundancy <= 1) {
+      entry.redundancySum += redundancy;
+      entry.redundancyRows += 1;
+    }
 
     const vote = finiteNumber(row.feedback_vote);
     const kind = row.feedback_kind;
@@ -269,7 +278,7 @@ export async function computeFeedbackLoopStats(
   }
 
   const tenants = [...tallies.values()]
-    .map(({ stats, zero, low, opened }) => {
+    .map(({ stats, zero, low, opened, redundancySum, redundancyRows }) => {
       const votes = stats.votes;
       const up = votes.answer_up + votes.refusal_up + votes.embed_up;
       const down = votes.answer_down + votes.refusal_down + votes.embed_down;
@@ -280,6 +289,7 @@ export async function computeFeedbackLoopStats(
         low_score_rate: rate(low, stats.outcomes.answered),
         thumbs_down_rate: rate(down, up + down),
         source_open_rate: rate(opened, stats.outcomes.answered),
+        topk_redundancy_mean: rate(redundancySum, redundancyRows),
       };
     })
     .sort((a, b) => a.tenant_hash.localeCompare(b.tenant_hash));
