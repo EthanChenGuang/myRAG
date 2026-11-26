@@ -760,6 +760,30 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_purge_hook_identifiers(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_purge_hook_identifiers(text, uuid, uuid[]) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_finetune_set_consent(text, text, text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_set_consent(text, text, text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_set_consent(text, text, text, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_finetune_list_consent()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_list_consent() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_list_consent() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_finetune_consent_for_export(text[], text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_consent_for_export(text[], text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_consent_for_export(text[], text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_finetune_register_model(jsonb, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_register_model(jsonb, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_register_model(jsonb, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_finetune_list_models(boolean)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_list_models(boolean) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_list_models(boolean) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_finetune_set_model_status(text, text, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_set_model_status(text, text, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_set_model_status(text, text, text) TO service_role;
+  END IF;
 END
 $service_role_only$;
 
