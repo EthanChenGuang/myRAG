@@ -17,6 +17,9 @@ import type { AllowListEntry } from './sql-function-acl';
  * asserts it.
  * The Phase 5.2 functions of 0941 and 0943 (rag_set_document_version_label, rag_record_security_events, the uploader hold and alert functions and
  * the three rag_list_security_* readers) are SECURITY INVOKER and service_role only; tests/rag-db/security-alerts.test.mts asserts they never appear here.
+ * The 0654 binding-route functions (rag_finetune_bind_scoped_slot, rag_finetune_scope_slot, rag_finetune_normalize_doc_types, the replaced
+ * rag_finetune_clear_slot) and trigger functions (rag_finetune_binding_guard, rag_finetune_backfill_run_guard) are service_role only;
+ * tests/rag-db/finetune-binding.test.mts asserts they never appear here.
  */
 export const AUTHENTICATED_ALLOW_LIST: Record<string, AllowListEntry> = {
   'delete_folder(uuid,boolean)': { anon: false, reason: 'called with the user session from chat-store.ts and /api/folders/[id]; checks auth.uid() ownership' },
