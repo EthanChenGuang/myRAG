@@ -2,11 +2,13 @@ import { createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { AttributeImportRowSchema } from '@/lib/rag-eval/contracts.generated';
 import type { RpcClient } from '../../backend/supabase-rpc';
+import type { TenantIdentifierPatterns } from '../../identifiers/patterns';
 import { scopeKey, type TenantScope } from '../../tenant/scope';
 import { BACKFILL_SOURCE } from '../backfill/run';
 import type { RunnerIo } from '../backfill/runners';
 import type { IngestAttributeValues } from '../types';
 import { importAttributeRows, type AttributeRowInput, type ImportAttributeRowsResult } from './apply';
+import { reindexAttributeIdentifiers, reindexCommand, reindexReportLines, type ReindexAttributeIdentifiersReport } from './identifier-feed';
 import { loadAttributeSchema, type LoadAttributeSchemaResult } from './schema';
 import { ATTRIBUTE_KEY_PATTERN, validateAttributes, type AttributeErrorCode } from './validate';
 
@@ -167,6 +169,10 @@ export interface AttributesImportDeps {
   io: RunnerIo;
   /** Defaults to loadAttributeSchema with the fresh option. */
   loadSchema?: (scope: TenantScope, signal: AbortSignal) => Promise<LoadAttributeSchemaResult>;
+  /** RAG_IDENTIFIER_INDEX for the re-index after the apply pass; defaults to the typed RAG configuration. */
+  identifierIndex?: () => boolean | Promise<boolean>;
+  /** Test seam passed to the indexer. */
+  loadPatterns?: (scope: TenantScope, options: { signal: AbortSignal }) => Promise<TenantIdentifierPatterns>;
 }
 
 export type AttributesImportStatus = 'done' | 'failed' | 'report_only' | 'refused';
@@ -182,6 +188,8 @@ export interface AttributesImportOutcome {
   batchesApplied: number;
   /** Ids of the documents the apply pass changed (ids only), for the identifier re-index of plan 03.3-16. */
   changedDocumentIds: string[];
+  /** The identifier re-index after the apply pass (plan 03.3-16); null when it did not run (no flagged definition, or no apply). */
+  reindex: ReindexAttributeIdentifiersReport | null;
 }
 
 function batchesOf(rows: readonly AttributeRowInput[]): AttributeRowInput[][] {
@@ -199,7 +207,7 @@ export async function runAttributesImport(input: AttributesImportInput, deps: At
   const tenantKey = scopeKey(input.scope);
   const read = await readImportFile(input.file, { signal });
   const rowsRead = read.rows.length + read.errors.filter((error) => error.code !== 'too_many_rows').length;
-  const base = { rowsRead, dryRun: null, applied: null, batches: 0, batchesApplied: 0, changedDocumentIds: [] as string[] };
+  const base = { rowsRead, dryRun: null, applied: null, batches: 0, batchesApplied: 0, changedDocumentIds: [] as string[], reindex: null };
 
   const schema = await (deps.loadSchema ?? ((scope, s) => loadAttributeSchema(scope, { signal: s, fresh: true })))(input.scope, signal);
   signal.throwIfAborted();
@@ -272,5 +280,22 @@ export async function runAttributesImport(input: AttributesImportInput, deps: At
   io.out(`${LOG} staged rows unchanged: ${applied.stagedUnchanged}`);
   io.out(`${LOG} chunk rows updated: ${applied.chunksUpdated} in ${batches.length} batches`);
   io.out(`${LOG} vector sync outbox rows added: ${applied.outboxRows}`);
-  return { ...base, exitCode: 0, status: 'done', errors, batches: batches.length, batchesApplied: batches.length, dryRun, applied, changedDocumentIds: [...changed] };
+
+  // TPL-04 (D-25): the changed documents get their attribute identifiers through the 4.2 indexer in the same run.
+  let reindex: ReindexAttributeIdentifiersReport | null = null;
+  if (schema.definitions.some((definition) => definition.in_identifier_index)) {
+    reindex = await reindexAttributeIdentifiers(input.scope, [...changed], {
+      db,
+      signal,
+      ...(deps.identifierIndex ? { identifierIndex: deps.identifierIndex } : {}),
+      ...(deps.loadPatterns ? { loadPatterns: deps.loadPatterns } : {}),
+    });
+    const lines = await reindexReportLines(reindex, reindexCommand(tenantKey));
+    for (const line of lines.out) io.out(line);
+    for (const line of lines.err) io.err(line);
+    if (reindex.failed > 0) {
+      return { ...base, exitCode: 1, status: 'failed', errors, batches: batches.length, batchesApplied: batches.length, dryRun, applied, changedDocumentIds: [...changed], reindex };
+    }
+  }
+  return { ...base, reindex, exitCode: 0, status: 'done', errors, batches: batches.length, batchesApplied: batches.length, dryRun, applied, changedDocumentIds: [...changed] };
 }

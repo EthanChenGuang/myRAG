@@ -153,7 +153,7 @@ async function overloads(db: PGlite, name: string): Promise<number> {
 }
 
 describe('Phase 3.2 migration block files', () => {
-  test('the ten files 0801-0810 exist and only later Phase 3.2 files sort after them', () => {
+  test('the ten files 0801-0810 exist and only later 08xx and 09xx block files sort after them', () => {
     const listed = fs.readdirSync(path.join(REPO_ROOT, 'supabase/migrations'));
     for (const name of BLOCK_NAMES) assert.ok(listed.includes(`${name}.sql`), `supabase/migrations/${name}.sql is missing`);
     assert.ok(BLOCK_NAMES.includes('0810_chunk_translations'));

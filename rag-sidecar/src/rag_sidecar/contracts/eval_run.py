@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from rag_sidecar.contracts.answers import AnswerGroundedness, CitationRecord, CitationStrategy
 from rag_sidecar.contracts.ingest import DocType
-from rag_sidecar.contracts.omit import omit_none_schema
+from rag_sidecar.contracts.omit import omit_default_schema, omit_none_schema
 from rag_sidecar.contracts.query import QueryFramework, QueryParamsOverride, QueryPlan, QueryTransformToggles
 from rag_sidecar.contracts.retrieval import (
     ChunkingProfile,
@@ -375,3 +375,6 @@ class RunManifest(_Contract):
     item_count: int = Field(ge=0)
     edge_errors: int = Field(ge=0)
     run_config: RunConfigRecord | None = None
+    rag_mode: Literal["strict", "balanced", "flexible"] = Field(
+        default="strict", exclude_if=lambda value: value == "strict", json_schema_extra=omit_default_schema
+    )

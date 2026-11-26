@@ -189,6 +189,9 @@ export {
   noKnowledgeBaseResponse,
   noKnowledgeBaseResponseLanguage,
 } from './generation/messages';
+export { identifierSuggestionMessage } from './generation/messages';
+export { IDENTIFIER_NOT_FOUND } from './v2/result';
+export type { IdentifierFilterSummary } from './types';
 export { readFeedbackLoopConfig } from './feedback-loop/config';
 export { EMBED_FEEDBACK_AUDIENCE, mintEmbedFeedbackToken, verifyEmbedFeedbackToken } from './feedback-loop/embed-token';
 export type { EmbedFeedbackTokenClaims } from './feedback-loop/embed-token';
@@ -366,6 +369,7 @@ export type {
 export {
   AUTO_APPLY_MIN_CONFIDENCE,
   MAX_QUERY_LENGTH as MAX_EFFECTIVE_DATES_QUERY_LENGTH,
+  MAX_VERSION_LABEL_LENGTH,
   applyEffectiveDates,
   decideEffectiveDateProposal,
   dismissEffectiveDateProposal,

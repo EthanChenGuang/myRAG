@@ -1,0 +1,173 @@
+{
+  "$defs": {
+    "ReleaseGatePart": {
+      "additionalProperties": false,
+      "properties": {
+        "part": {
+          "enum": [
+            "nightly_absolute",
+            "judge_floors",
+            "ship_check",
+            "pr_smoke"
+          ],
+          "title": "Part",
+          "type": "string"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z0-9_]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "result": {
+          "enum": [
+            "passed",
+            "failed",
+            "skipped",
+            "not_applicable"
+          ],
+          "title": "Result",
+          "type": "string"
+        }
+      },
+      "required": [
+        "part",
+        "result"
+      ],
+      "title": "ReleaseGatePart",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "actor": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})(\\[bot\\])?$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Actor"
+    },
+    "changed_gate_files": {
+      "items": {
+        "enum": [
+          "quality_gates",
+          "release_gate",
+          "noise"
+        ],
+        "type": "string"
+      },
+      "title": "Changed Gate Files",
+      "type": "array"
+    },
+    "created_at": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}(T\\d{2}:\\d{2}(:\\d{2}(\\.\\d{1,9})?)?(Z|[+-]\\d{2}:\\d{2})?)?$",
+      "title": "Created At",
+      "type": "string"
+    },
+    "gate_file_hashes": {
+      "additionalProperties": {
+        "pattern": "^[a-f0-9]{64}$",
+        "type": "string"
+      },
+      "propertyNames": {
+        "enum": [
+          "quality_gates",
+          "release_gate",
+          "noise"
+        ]
+      },
+      "title": "Gate File Hashes",
+      "type": "object"
+    },
+    "override_reason": {
+      "anyOf": [
+        {
+          "maxLength": 500,
+          "minLength": 10,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Override Reason"
+    },
+    "parts": {
+      "items": {
+        "$ref": "#/$defs/ReleaseGatePart"
+      },
+      "minItems": 1,
+      "title": "Parts",
+      "type": "array"
+    },
+    "report_hashes": {
+      "patternProperties": {
+        "^[a-z0-9_]+$": {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        }
+      },
+      "title": "Report Hashes",
+      "type": "object"
+    },
+    "result": {
+      "enum": [
+        "passed",
+        "failed",
+        "skipped"
+      ],
+      "title": "Result",
+      "type": "string"
+    },
+    "sha": {
+      "pattern": "^[a-f0-9]{40}$",
+      "title": "Sha",
+      "type": "string"
+    },
+    "skip_reason": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z0-9_]+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Skip Reason"
+    },
+    "source": {
+      "enum": [
+        "ci",
+        "local_prerelease",
+        "override"
+      ],
+      "title": "Source",
+      "type": "string"
+    }
+  },
+  "required": [
+    "sha",
+    "result",
+    "parts",
+    "source",
+    "created_at"
+  ],
+  "title": "ReleaseGateResult",
+  "type": "object"
+}

@@ -65,6 +65,7 @@ def test_citation_record_field_names_are_exactly_d01():
         "quoteHash",
         "strategy",
         "isCurrent",
+        "versionLabel",
         "effectiveFrom",
         "effectiveTo",
         "alsoIn",

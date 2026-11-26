@@ -18,6 +18,11 @@ ReviewReason = Literal[
     "zero_results",
     "low_score",
     "no_source_opened",
+    "claim_unsupported",
+    "output_guard",
+    "version_conflict",
+    "representative",
+    "re_review",
 ]
 
 

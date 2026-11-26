@@ -21,6 +21,7 @@ import {
   cacheSourcesFromResult,
   finishTrace,
   groundednessEligibility,
+  IDENTIFIER_NOT_FOUND,
   currentLexicalVersion,
   hashSystemPromptTemplate,
   isCacheHitResult,
@@ -191,12 +192,13 @@ function toStageOverrides(options: RagRunRequest['options']): StageOverrides | u
   };
 }
 
-type RefusalReason = 'no_relevant_context' | 'below_threshold' | 'below_similarity_floor' | 'injection_filtered';
+type RefusalReason = 'no_relevant_context' | 'below_threshold' | 'below_similarity_floor' | 'injection_filtered' | typeof IDENTIFIER_NOT_FOUND;
 
 function refusalReasonOf(result: RetrievalResult, refused: boolean): RefusalReason | null {
   if (!refused) return null;
   // D-09, A-3: the check dropped everything that would have reached the generator.
   if (result.status === 'empty' && result.reason === 'injection_filtered') return 'injection_filtered';
+  if (result.status === 'empty' && result.reason === IDENTIFIER_NOT_FOUND) return IDENTIFIER_NOT_FOUND;
   const record = result.refusal;
   if (record?.decision === 'refuse') {
     const reason: string = record.reason;
@@ -206,6 +208,19 @@ function refusalReasonOf(result: RetrievalResult, refused: boolean): RefusalReas
     if (record.basis === 'similarity_floor') return 'below_similarity_floor';
   }
   return 'no_relevant_context';
+}
+
+/** D-31: counts and at most 3 suggestions of the caller's tenant; absent while the identifier filter did not run. */
+function identifierTraceOf(result: RetrievalResult) {
+  const summary = result.identifierFilter;
+  if (!summary) return null;
+  return {
+    asked: summary.asked,
+    resolved: summary.resolved,
+    near_miss_dropped: summary.nearMissDropped,
+    fallback: summary.fallback,
+    suggestions: (result.identifierSuggestions ?? []).filter((value) => value.length > 0 && value.length <= 200).slice(0, 3),
+  };
 }
 
 function stageCountsOf(stages: RetrievalResult['stages']): Record<string, Record<string, number>> {
@@ -649,6 +664,7 @@ export async function POST(req: NextRequest) {
       const effectiveConfig = buildEffectiveConfig({ security: injectionTraceVersions() });
       effectiveConfig.generator_model = generatorModel;
       const redundancy = topkRedundancy(result.kept);
+      const identifierTrace = identifierTraceOf(result);
       const trace = {
         schema_version: 1 as const,
         item_id: itemId ?? null,
@@ -683,6 +699,7 @@ export async function POST(req: NextRequest) {
           ...(dupClusterId ? { dup_cluster_id: dupClusterId } : {}),
         })),
         ...(redundancy !== null ? { topk_redundancy: redundancy } : {}),
+        ...(identifierTrace ? { identifier: identifierTrace } : {}),
         used_documents: result.usedDocuments.map((doc) => ({
           document_id: doc.id,
           name: doc.name,

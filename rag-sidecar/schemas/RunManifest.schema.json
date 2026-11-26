@@ -1604,6 +1604,15 @@
       "title": "Item Count",
       "type": "integer"
     },
+    "rag_mode": {
+      "enum": [
+        "strict",
+        "balanced",
+        "flexible"
+      ],
+      "title": "Rag Mode",
+      "type": "string"
+    },
     "request_options": {
       "$ref": "#/$defs/RagRunOptions"
     },

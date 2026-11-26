@@ -1,5 +1,83 @@
 {
   "$defs": {
+    "AnswerChecks": {
+      "additionalProperties": false,
+      "description": "D-23: per-answer checks; `{}` validates so rows written before this column keep loading.",
+      "properties": {
+        "claims": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ClaimsSummary"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "finish_reason": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_-]{0,31}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Finish Reason"
+        },
+        "output_guard": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OutputGuardSummary"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "sentences": {
+          "items": {
+            "$ref": "#/$defs/AnswerSentence"
+          },
+          "title": "Sentences",
+          "type": "array"
+        },
+        "text_language": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Text Language"
+        },
+        "truncated": {
+          "default": false,
+          "title": "Truncated",
+          "type": "boolean"
+        },
+        "version_conflict": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/VersionConflict"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "title": "AnswerChecks",
+      "type": "object"
+    },
     "AnswerFeedback": {
       "additionalProperties": false,
       "properties": {
@@ -130,6 +208,7 @@
               "enum": [
                 "hhem_2_3_vectara",
                 "hhem_2_1_open",
+                "llm_judge",
                 "none"
               ],
               "type": "string"
@@ -190,6 +269,143 @@
         "status"
       ],
       "title": "AnswerGroundedness",
+      "type": "object"
+    },
+    "AnswerSentence": {
+      "additionalProperties": false,
+      "properties": {
+        "cited": {
+          "title": "Cited",
+          "type": "boolean"
+        },
+        "end": {
+          "minimum": 0,
+          "title": "End",
+          "type": "integer"
+        },
+        "factual": {
+          "title": "Factual",
+          "type": "boolean"
+        },
+        "index": {
+          "minimum": 0,
+          "title": "Index",
+          "type": "integer"
+        },
+        "kind": {
+          "enum": [
+            "sentence",
+            "list_item",
+            "table",
+            "heading",
+            "code",
+            "truncated"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "part": {
+          "minimum": 0,
+          "title": "Part",
+          "type": "integer"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "scorer": {
+          "anyOf": [
+            {
+              "enum": [
+                "hhem_2_3_vectara",
+                "hhem_2_1_open",
+                "llm_judge",
+                "none"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scorer"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "integer"
+        },
+        "support": {
+          "default": "not_checked",
+          "enum": [
+            "supported",
+            "unsupported",
+            "not_checked"
+          ],
+          "title": "Support",
+          "type": "string"
+        },
+        "text_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Text Hash",
+          "type": "string"
+        }
+      },
+      "required": [
+        "index",
+        "part",
+        "start",
+        "end",
+        "kind",
+        "text_hash",
+        "factual",
+        "cited"
+      ],
+      "title": "AnswerSentence",
+      "type": "object"
+    },
+    "BlockedRange": {
+      "additionalProperties": false,
+      "description": "Offsets are UTF-16 code units into text part `part`, valid only while its hash matches.",
+      "properties": {
+        "end": {
+          "minimum": 0,
+          "title": "End",
+          "type": "integer"
+        },
+        "part": {
+          "minimum": 0,
+          "title": "Part",
+          "type": "integer"
+        },
+        "start": {
+          "minimum": 0,
+          "title": "Start",
+          "type": "integer"
+        },
+        "text_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Text Hash",
+          "type": "string"
+        }
+      },
+      "required": [
+        "part",
+        "start",
+        "end",
+        "text_hash"
+      ],
+      "title": "BlockedRange",
       "type": "object"
     },
     "CitationAlsoIn": {
@@ -326,6 +542,11 @@
           ],
           "title": "Strategy",
           "type": "string"
+        },
+        "versionLabel": {
+          "maxLength": 40,
+          "title": "Versionlabel",
+          "type": "string"
         }
       },
       "required": [
@@ -339,6 +560,189 @@
         "strategy"
       ],
       "title": "CitationRecord",
+      "type": "object"
+    },
+    "ClaimsSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "judge_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Judge Version"
+        },
+        "not_checked": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Not Checked",
+          "type": "integer"
+        },
+        "reasons": {
+          "patternProperties": {
+            "^[a-z][a-z0-9_]{0,63}$": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "title": "Reasons",
+          "type": "object"
+        },
+        "scorer": {
+          "anyOf": [
+            {
+              "enum": [
+                "hhem_2_3_vectara",
+                "hhem_2_1_open",
+                "llm_judge",
+                "none"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Scorer"
+        },
+        "total": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Total",
+          "type": "integer"
+        },
+        "unsupported": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Unsupported",
+          "type": "integer"
+        }
+      },
+      "title": "ClaimsSummary",
+      "type": "object"
+    },
+    "OutputGuardSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "blocked_ranges": {
+          "items": {
+            "$ref": "#/$defs/BlockedRange"
+          },
+          "title": "Blocked Ranges",
+          "type": "array"
+        },
+        "credential_blocked": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Credential Blocked",
+          "type": "integer"
+        },
+        "credential_warned": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Credential Warned",
+          "type": "integer"
+        },
+        "event_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Event Ids",
+          "type": "array"
+        },
+        "links_checked": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Links Checked",
+          "type": "integer"
+        },
+        "links_removed": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Links Removed",
+          "type": "integer"
+        },
+        "mode": {
+          "enum": [
+            "flag",
+            "enforce"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "rule_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Rule Ids",
+          "type": "array"
+        },
+        "rules_version": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Rules Version",
+          "type": "string"
+        },
+        "source_chunk_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Source Chunk Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "mode",
+        "rules_version"
+      ],
+      "title": "OutputGuardSummary",
+      "type": "object"
+    },
+    "VersionConflict": {
+      "additionalProperties": false,
+      "properties": {
+        "document_ids": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 2,
+          "title": "Document Ids",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "group_rule": {
+          "enum": [
+            "supersession_link",
+            "supersession_candidate",
+            "title_match"
+          ],
+          "title": "Group Rule",
+          "type": "string"
+        },
+        "latest_document_id": {
+          "minLength": 1,
+          "title": "Latest Document Id",
+          "type": "string"
+        },
+        "mixed_versions": {
+          "default": false,
+          "title": "Mixed Versions",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "document_ids",
+        "latest_document_id",
+        "group_rule"
+      ],
+      "title": "VersionConflict",
       "type": "object"
     }
   },
@@ -373,6 +777,9 @@
       ],
       "default": null,
       "title": "Chatid"
+    },
+    "checks": {
+      "$ref": "#/$defs/AnswerChecks"
     },
     "citationStrategy": {
       "anyOf": [
@@ -451,6 +858,14 @@
         "bypass"
       ],
       "title": "Ragmode",
+      "type": "string"
+    },
+    "textsSource": {
+      "enum": [
+        "registry",
+        "legacy"
+      ],
+      "title": "Textssource",
       "type": "string"
     },
     "traceId": {

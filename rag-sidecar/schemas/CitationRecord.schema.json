@@ -134,6 +134,11 @@
       ],
       "title": "Strategy",
       "type": "string"
+    },
+    "versionLabel": {
+      "maxLength": 40,
+      "title": "Versionlabel",
+      "type": "string"
     }
   },
   "required": [

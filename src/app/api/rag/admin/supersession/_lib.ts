@@ -38,6 +38,7 @@ function projectDocument(view: SupersessionDocumentView | null) {
     effective_to: view.effectiveTo,
     uploaded_at: view.uploadedAt,
     uploader: view.uploader,
+    version_label: view.versionLabel,
   };
 }
 

@@ -1,0 +1,104 @@
+{
+  "$defs": {
+    "ClaimInput": {
+      "additionalProperties": false,
+      "properties": {
+        "hypothesis": {
+          "maxLength": 4000,
+          "minLength": 1,
+          "title": "Hypothesis",
+          "type": "string"
+        },
+        "index": {
+          "minimum": 0,
+          "title": "Index",
+          "type": "integer"
+        },
+        "premise_refs": {
+          "items": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "type": "string"
+          },
+          "maxItems": 64,
+          "minItems": 1,
+          "title": "Premise Refs",
+          "type": "array",
+          "uniqueItems": true
+        }
+      },
+      "required": [
+        "index",
+        "hypothesis",
+        "premise_refs"
+      ],
+      "title": "ClaimInput",
+      "type": "object"
+    },
+    "ClaimPremise": {
+      "additionalProperties": false,
+      "properties": {
+        "ref": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+          "title": "Ref",
+          "type": "string"
+        },
+        "text": {
+          "maxLength": 60000,
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ref",
+        "text"
+      ],
+      "title": "ClaimPremise",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "allow_vectara": {
+      "title": "Allow Vectara",
+      "type": "boolean"
+    },
+    "claims": {
+      "items": {
+        "$ref": "#/$defs/ClaimInput"
+      },
+      "maxItems": 40,
+      "minItems": 1,
+      "title": "Claims",
+      "type": "array"
+    },
+    "language": {
+      "minLength": 1,
+      "title": "Language",
+      "type": "string"
+    },
+    "premises": {
+      "items": {
+        "$ref": "#/$defs/ClaimPremise"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "title": "Premises",
+      "type": "array"
+    },
+    "request_id": {
+      "minLength": 1,
+      "title": "Request Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "request_id",
+    "language",
+    "premises",
+    "claims",
+    "allow_vectara"
+  ],
+  "title": "ClaimCheckRequest",
+  "type": "object"
+}

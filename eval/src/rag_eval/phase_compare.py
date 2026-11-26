@@ -14,22 +14,57 @@ from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
-from rag_sidecar.contracts.baseline import Baseline, GateOffender, GateResult, NoiseConfig, PairedStat
+from rag_sidecar.contracts.baseline import (
+    Baseline,
+    GateOffender,
+    GateResult,
+    NoiseConfig,
+    PairedStat,
+)
 from rag_sidecar.contracts.eval_run import RagTrace
 from rag_sidecar.contracts.golden import GoldenItem
-from rag_sidecar.contracts.report import EvalReport, InjectionReport, ItemResult, SliceMetrics
+from rag_sidecar.contracts.latency import LatencyBudgets
+from rag_sidecar.contracts.latency import Profile as LatencyProfile
+from rag_sidecar.contracts.report import (
+    EvalReport,
+    InjectionReport,
+    ItemResult,
+    SliceMetrics,
+)
 from rag_sidecar.contracts.retrieval import ChunkingDecision, ChunkingSweepReport
 
-from rag_eval.calibrate.refusal import IMAGE_FLOOR, CalibrationResult, CrossComparison, _best_dense, _gate_decided, fit_threshold
+from rag_eval.calibrate.refusal import (
+    IMAGE_FLOOR,
+    CalibrationResult,
+    CrossComparison,
+    _best_dense,
+    _gate_decided,
+    fit_threshold,
+)
 from rag_eval.gate import evaluate_gate
 from rag_eval.golden_io import load_golden
-from rag_eval.harness_runner import HARNESS_SCRIPT, TAIL_LINES, HarnessError, Spawner, _tail, default_spawner
+from rag_eval.harness_runner import (
+    HARNESS_SCRIPT,
+    TAIL_LINES,
+    HarnessError,
+    Spawner,
+    _tail,
+    default_spawner,
+)
 from rag_eval.metrics import CLAUSE_TAG, CROSS_LINGUAL, language_pair_key
 from rag_eval.native_review import counts_in_gated_slices
 from rag_eval.paired import _stat, is_gated_slice, item_metrics
 from rag_eval.paths import REPO_ROOT, repo_relative, resolve_cli_path
 from rag_eval.profile_compare import baseline_from_report
-from rag_eval.sweep.chunking import CLAUSE_SLICE, GENERAL_DOC_TYPE, LEGACY_ID, _profiles_for, ingest_doc_types, parse_presets
+from rag_eval.report import RETRIEVAL_TOTAL
+from rag_eval.sweep.chunking import (
+    CLAUSE_SLICE,
+    GENERAL_DOC_TYPE,
+    LEGACY_ID,
+    _profiles_for,
+    ingest_doc_types,
+    parse_presets,
+)
 from rag_eval.traces import load_manifest, load_traces
 
 FixtureMode = Literal["prechunked", "ingest"]
@@ -1401,10 +1436,25 @@ class RetrievalUnchangedSpec(_Model):
         return "retrieval_unchanged"
 
 
-CheckSpec = Annotated[AbsoluteZeroSpec | CategoryNoiseSpec | RetrievalUnchangedSpec, Field(discriminator="kind")]
+class LatencyBudgetSpec(_Model):
+    """Stage latency p95 within the profile's budgets; with `against`, also within the latency noise band of that earlier run."""
+
+    kind: Literal["latency_budget"]
+    profile: LatencyProfile = "chat"
+    budgets: str = "eval/config/latency-budgets.json"
+    against: str | None = None
+    tolerance_ms: float = Field(default=5.0, ge=0)
+    tolerance_ratio: float = Field(default=0.5, ge=0)
+
+    @property
+    def name(self) -> str:
+        return "latency_budget"
 
 
-def check_name(check: str | AbsoluteZeroSpec | CategoryNoiseSpec | RetrievalUnchangedSpec) -> str:
+CheckSpec = Annotated[AbsoluteZeroSpec | CategoryNoiseSpec | RetrievalUnchangedSpec | LatencyBudgetSpec, Field(discriminator="kind")]
+
+
+def check_name(check: str | AbsoluteZeroSpec | CategoryNoiseSpec | RetrievalUnchangedSpec | LatencyBudgetSpec) -> str:
     return check if isinstance(check, str) else check.name
 
 
@@ -1468,6 +1518,12 @@ class SwitchComparisonSpec(_Model):
                 raise ValueError(f"run {run.name} names unknown checks: {', '.join(unknown)}")
         if not {run.fixture_mode for run in self.runs} <= set(self.baselines):
             raise ValueError("every fixture mode used by a run needs a baseline")
+        earlier: dict[str, str] = {}
+        for run in self.runs:
+            for check in run.checks:
+                if isinstance(check, LatencyBudgetSpec) and check.against is not None and earlier.get(check.against) != run.fixture_mode:
+                    raise ValueError(f"run {run.name}: latency reference {check.against} must be an earlier run with fixture mode {run.fixture_mode}")
+            earlier[run.name] = run.fixture_mode
         return self
 
 
@@ -1635,6 +1691,41 @@ def category_noise_check(
     )
 
 
+def latency_budget_check(output: RunOutput, budgets: LatencyBudgets, check: LatencyBudgetSpec, reference: RunOutput | None = None) -> CheckResult:
+    """Every stage p95 with a budget in the profile, and the retrieval total p95, stay within budget; with a reference run every stage
+    p95 also stays within that run's latency noise band (reference p95 x (1 + tolerance_ratio) + tolerance_ms). Unmeasured latency fails."""
+    latency = output.report.latency or {}
+    if RETRIEVAL_TOTAL not in latency:
+        return CheckResult(name=check.name, passed=False, detail=["stage latency was not measured"])
+    profile = budgets.profiles.get(check.profile)
+    if profile is None:
+        return CheckResult(name=check.name, passed=False, detail=[f"no {check.profile} profile in {check.budgets}"])
+    detail: list[str] = []
+    measures: dict[str, float | None] = {}
+    for stage, stat in sorted(latency.items()):
+        measures[f"{stage}.p95_ms"] = stat.p95_ms
+        budget = profile.total_p95_ms if stage == RETRIEVAL_TOTAL else profile.stages.get(stage)
+        if budget is not None and stat.p95_ms > budget:
+            detail.append(f"{stage} p95 {stat.p95_ms:.1f} ms > {check.profile} budget {budget:.1f} ms")
+    if check.against is not None:
+        if reference is None:
+            detail.append(f"reference run {check.against} has no output")
+        else:
+            before = reference.report.latency or {}
+            if RETRIEVAL_TOTAL not in before:
+                detail.append(f"stage latency of {check.against} was not measured")
+            for stage in sorted(set(before) | set(latency)):
+                if stage not in latency or stage not in before:
+                    detail.append(f"{stage} is measured in only one of this run and {check.against}")
+                    continue
+                allowed = before[stage].p95_ms * (1 + check.tolerance_ratio) + check.tolerance_ms
+                if latency[stage].p95_ms > allowed:
+                    detail.append(
+                        f"{stage} p95 {latency[stage].p95_ms:.1f} ms > {allowed:.1f} ms ({check.against} p95 {before[stage].p95_ms:.1f} ms)"
+                    )
+    return CheckResult(name=check.name, passed=not detail, detail=detail, measures=measures)
+
+
 def gate_check(output: RunOutput, baseline: Baseline, noise: NoiseConfig) -> CheckResult:
     """The CI gate as it runs on this report: the noise band on the gated slices plus the absolute-zero offenders (D-14, A-13)."""
     gate = evaluate_gate(output.report, baseline, noise)
@@ -1673,6 +1764,7 @@ def run_switch_comparison(
     harness_dir = out_dir / HARNESS_DIR
     command_cache: dict[tuple[str, tuple[tuple[str, str], ...]], int] = {}
     results: list[SwitchRunResult] = []
+    outputs_by_name: dict[str, RunOutput] = {}
     for run in spec.runs:
         print(f"[Phase Compare] run {run.name} ({run.fixture_mode})", file=sys.stderr)
         run_config = _switch_run_config(run)
@@ -1686,6 +1778,7 @@ def run_switch_comparison(
                 harness_flags=tuple(run.harness_flags),
             )
         )
+        outputs_by_name[run.name] = output
         baseline = baselines[run.fixture_mode]
         checks: list[CheckResult] = []
         for check in run.checks:
@@ -1695,6 +1788,10 @@ def run_switch_comparison(
                 checks.append(category_noise_check(output, baseline, noise, exclude=list(check.exclude)))
             elif isinstance(check, RetrievalUnchangedSpec):
                 checks.append(retrieval_unchanged_check(output, baseline, noise, exclude_categories=list(check.exclude_categories)))
+            elif isinstance(check, LatencyBudgetSpec):
+                budgets = _read_model(LatencyBudgets, check.budgets, "latency budgets")
+                reference = outputs_by_name[check.against] if check.against is not None else None
+                checks.append(latency_budget_check(output, budgets, check, reference))
             elif check == "gate":
                 checks.append(gate_check(output, baseline, noise))
             elif check == "report_only":

@@ -1,5 +1,88 @@
 {
   "samples": {
+    "AbsoluteGateResult": {
+      "checks": [
+        {
+          "check": "false_answer_rate",
+          "denominator": 20,
+          "limit": 0.05,
+          "limit_kind": "max",
+          "measured": 0.0,
+          "numerator": 0,
+          "reason": null,
+          "result": "passed",
+          "slice": "overall"
+        },
+        {
+          "check": "false_answer_rate",
+          "denominator": 4,
+          "limit": 0.05,
+          "limit_kind": "max",
+          "measured": 0.0,
+          "numerator": 0,
+          "reason": "below_min_n",
+          "result": "insufficient_n",
+          "slice": "language:it"
+        },
+        {
+          "check": "faithfulness_floor",
+          "denominator": null,
+          "limit": 0.85,
+          "limit_kind": "min",
+          "measured": null,
+          "numerator": null,
+          "reason": "no_judge_report",
+          "result": "skipped",
+          "slice": "overall"
+        },
+        {
+          "check": "false_answer_rate",
+          "denominator": 20,
+          "limit": null,
+          "limit_kind": "max",
+          "measured": 0.0,
+          "numerator": 0,
+          "reason": "null_ceiling",
+          "result": "report_only",
+          "slice": "overall"
+        }
+      ],
+      "composition": {
+        "languages": [
+          {
+            "items": 40,
+            "kinds": {
+              "no_answer": 8
+            },
+            "language": "en",
+            "min": 0.15,
+            "no_answer": 8,
+            "result": "passed",
+            "share": 0.2,
+            "target": 0.2
+          },
+          {
+            "items": 12,
+            "kinds": {},
+            "language": "it",
+            "min": 0.15,
+            "no_answer": 2,
+            "result": "insufficient_n",
+            "share": null,
+            "target": 0.2
+          }
+        ],
+        "missing_required_kinds": []
+      },
+      "exit_code": 0,
+      "failed": [],
+      "mode": "enforce",
+      "passed": true,
+      "rag_mode": "strict",
+      "stale_count": 0,
+      "stale_result": "passed",
+      "stale_share": 0.0
+    },
     "ActivationEvidence": {
       "backfill_run_id": "01234567-0123-4012-8012-0123456789ab",
       "baseline_profile": "openai-3-small-1536",
@@ -28,6 +111,83 @@
       "wait_ms": 0,
       "worker_id": "worker-1"
     },
+    "AnswerChecks": {
+      "claims": {
+        "judge_version": null,
+        "not_checked": 1,
+        "reasons": {
+          "too_many": 1
+        },
+        "scorer": "hhem_2_1_open",
+        "total": 2,
+        "unsupported": 0
+      },
+      "finish_reason": "stop",
+      "output_guard": {
+        "blocked_ranges": [
+          {
+            "end": 32,
+            "part": 0,
+            "start": 16,
+            "text_hash": "219bc6effc75b730c9a1e6ecd0c18ad473138092421671aa4daf88352aee80e1"
+          }
+        ],
+        "credential_blocked": 1,
+        "credential_warned": 0,
+        "event_ids": [
+          "00000000-0000-4000-8000-0000000000e1"
+        ],
+        "links_checked": 2,
+        "links_removed": 1,
+        "mode": "enforce",
+        "rule_ids": [
+          "rule-1"
+        ],
+        "rules_version": "1",
+        "source_chunk_ids": [
+          "chunk-001"
+        ]
+      },
+      "sentences": [
+        {
+          "cited": true,
+          "end": 15,
+          "factual": true,
+          "index": 0,
+          "kind": "sentence",
+          "part": 0,
+          "reason": null,
+          "scorer": "hhem_2_1_open",
+          "start": 0,
+          "support": "supported",
+          "text_hash": "219bc6effc75b730c9a1e6ecd0c18ad473138092421671aa4daf88352aee80e1"
+        },
+        {
+          "cited": false,
+          "end": 32,
+          "factual": true,
+          "index": 1,
+          "kind": "sentence",
+          "part": 0,
+          "reason": "too_many",
+          "scorer": null,
+          "start": 16,
+          "support": "not_checked",
+          "text_hash": "219bc6effc75b730c9a1e6ecd0c18ad473138092421671aa4daf88352aee80e1"
+        }
+      ],
+      "text_language": "en",
+      "truncated": false,
+      "version_conflict": {
+        "document_ids": [
+          "doc-0001",
+          "doc-0002"
+        ],
+        "group_rule": "supersession_link",
+        "latest_document_id": "doc-0002",
+        "mixed_versions": false
+      }
+    },
     "AnswerFeedbackRequest": {
       "chatId": "00000000-0000-4000-8000-0000000000b1",
       "comment": "It left out carry-over days.",
@@ -36,6 +196,11 @@
         "bad_citation"
       ],
       "vote": "not_helpful"
+    },
+    "AnswerNotice": {
+      "kind": "uncited",
+      "language": "en",
+      "text": "This sentence has no source."
     },
     "AnswerRecord": {
       "answerId": "00000000-0000-4000-8000-0000000000a1",
@@ -93,6 +258,19 @@
       "ragMode": "strict",
       "traceId": "0123456789abcdef0123456789abcdef",
       "updatedAt": "2026-01-01T00:00:10.000Z"
+    },
+    "AnswerSentence": {
+      "cited": true,
+      "end": 15,
+      "factual": true,
+      "index": 0,
+      "kind": "sentence",
+      "part": 0,
+      "reason": null,
+      "scorer": "hhem_2_1_open",
+      "start": 0,
+      "support": "supported",
+      "text_hash": "219bc6effc75b730c9a1e6ecd0c18ad473138092421671aa4daf88352aee80e1"
     },
     "AnswerabilityVerdict": {
       "answerable": true,
@@ -1208,9 +1386,215 @@
       ],
       "strategy": "chunk-alias"
     },
+    "ClaimCheckRequest": {
+      "allow_vectara": false,
+      "claims": [
+        {
+          "hypothesis": "A neutral claim sentence.",
+          "index": 0,
+          "premise_refs": [
+            "S1"
+          ]
+        }
+      ],
+      "language": "en",
+      "premises": [
+        {
+          "ref": "S1",
+          "text": "A neutral premise sentence."
+        }
+      ],
+      "request_id": "req-0001"
+    },
+    "ClaimCheckResult": {
+      "claims": [
+        {
+          "index": 0,
+          "reason": null,
+          "score": 0.81,
+          "scorer": "hhem_2_1_open",
+          "status": "scored"
+        },
+        {
+          "index": 1,
+          "reason": "too_many",
+          "score": null,
+          "scorer": "none",
+          "status": "not_checked"
+        }
+      ],
+      "latency_ms": 420
+    },
+    "ClaimJudgement": {
+      "judgements": [
+        {
+          "evidence_ref": "S1",
+          "index": 0,
+          "verdict": "supported"
+        },
+        {
+          "evidence_ref": null,
+          "index": 1,
+          "verdict": "not_enough_info"
+        }
+      ]
+    },
+    "ClaimsSummary": {
+      "judge_version": null,
+      "not_checked": 1,
+      "reasons": {
+        "too_many": 1
+      },
+      "scorer": "hhem_2_1_open",
+      "total": 2,
+      "unsupported": 0
+    },
+    "CompositionResult": {
+      "languages": [
+        {
+          "items": 40,
+          "kinds": {
+            "no_answer": 8
+          },
+          "language": "en",
+          "min": 0.15,
+          "no_answer": 8,
+          "result": "passed",
+          "share": 0.2,
+          "target": 0.2
+        },
+        {
+          "items": 12,
+          "kinds": {},
+          "language": "it",
+          "min": 0.15,
+          "no_answer": 2,
+          "result": "insufficient_n",
+          "share": null,
+          "target": 0.2
+        }
+      ],
+      "missing_required_kinds": []
+    },
     "CondensedQuery": {
       "standalone": "Does the product warranty cover ERR_TIMEOUT, and how long is the warranty?",
       "unchanged": false
+    },
+    "ConfigChangeRecord": {
+      "actor": "local-config-ui",
+      "after_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "before_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "changed_keys": [
+        "RAG_SYSTEM_PROMPT"
+      ],
+      "created_at": "2026-01-05T06:05:00Z",
+      "gate_result": "fail",
+      "gate_summary": {
+        "checks": 12,
+        "failed": 1,
+        "github_actor": null,
+        "layers": {
+          "deterministic": "fail",
+          "live": "skipped",
+          "real_set": "skipped"
+        },
+        "offenders": [
+          "false_answer_rate"
+        ],
+        "release_sha": null,
+        "skipped": 2
+      },
+      "id": "00000000-0000-4000-8000-000000000701",
+      "override_reason": "Owner accepted the change for a scheduled review",
+      "retrieval_config_hash": null,
+      "source": "config_ui",
+      "uncalibrated_cells": []
+    },
+    "ConfigGateCheck": {
+      "cached": false,
+      "changed_keys": [
+        "RAG_SYSTEM_PROMPT"
+      ],
+      "check_id": "chk-00000001",
+      "error_reason": null,
+      "finished_at": "2026-01-05T06:04:00Z",
+      "layers": [
+        {
+          "checks": [
+            {
+              "check": "false_answer_rate",
+              "denominator": 20,
+              "limit": 0.05,
+              "limit_kind": "max",
+              "measured": 0.15,
+              "numerator": 3,
+              "reason": null,
+              "result": "failed",
+              "slice": "language:en"
+            }
+          ],
+          "layer": "deterministic",
+          "reason": null,
+          "result": "fail",
+          "set_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        },
+        {
+          "checks": [],
+          "layer": "live",
+          "reason": "live_layer_off",
+          "result": "skipped",
+          "set_hash": null
+        },
+        {
+          "checks": [],
+          "layer": "real_set",
+          "reason": "no_real_set",
+          "result": "skipped",
+          "set_hash": null
+        }
+      ],
+      "mode": "enforce",
+      "not_evaluated": [
+        {
+          "key": "RAG_CONTEXT_COMPRESSION",
+          "reason": "no_layer_exercised"
+        }
+      ],
+      "not_evaluated_on_real_set": [
+        "RAG_SYSTEM_PROMPT"
+      ],
+      "rag_settings_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "result": "fail",
+      "saved_as": "not_saved",
+      "stage": null,
+      "started_at": "2026-01-05T06:00:00Z",
+      "status": "done",
+      "uncalibrated_cells": [
+        "cohere|rerank-model-a|en|same"
+      ]
+    },
+    "ConfigGateLayer": {
+      "checks": [
+        {
+          "check": "false_answer_rate",
+          "denominator": 20,
+          "limit": 0.05,
+          "limit_kind": "max",
+          "measured": 0.15,
+          "numerator": 3,
+          "reason": null,
+          "result": "failed",
+          "slice": "language:en"
+        }
+      ],
+      "layer": "deterministic",
+      "reason": null,
+      "result": "fail",
+      "set_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "ConfigGateNotEvaluated": {
+      "key": "RAG_CONTEXT_COMPRESSION",
+      "reason": "no_layer_exercised"
     },
     "ConversationTurn": {
       "content": "Tell me about leave.",
@@ -1324,6 +1708,65 @@
           "question": "How many leave days do employees get?"
         }
       ]
+    },
+    "DriftReport": {
+      "clusters": [
+        {
+          "id": "c-01",
+          "production_share": 0.2,
+          "state": "under",
+          "test_items": 3,
+          "test_share": 0.05
+        },
+        {
+          "id": "novel",
+          "production_share": 0.02,
+          "state": "ok",
+          "test_items": 0,
+          "test_share": 0.0
+        }
+      ],
+      "divergence": 0.12,
+      "gaps": [
+        {
+          "gap": 0.06,
+          "offline": 0.86,
+          "online": 0.8,
+          "online_n": 60,
+          "result": "passed",
+          "slice": "language:en"
+        }
+      ],
+      "limits": {
+        "alert": 0.2,
+        "gap": 0.15,
+        "warn": 0.1
+      },
+      "null_p95": 0.067,
+      "rates": [
+        {
+          "metric": "refusal_rate",
+          "offline": 0.2,
+          "online": 0.12,
+          "online_n": 300,
+          "slice": "language:en"
+        }
+      ],
+      "scores": {
+        "uncovered_share": 0.02,
+        "unweighted": 0.8,
+        "weighted": 0.76
+      },
+      "state": "warn",
+      "tenant_hash": "0123abcd",
+      "trend": [
+        {
+          "divergence": 0.05,
+          "state": "ok",
+          "week": "2026-W01"
+        }
+      ],
+      "week": "2026-W02"
     },
     "DupClusterParams": {
       "by_profile": {},
@@ -4870,12 +5313,92 @@
       "split": "dev",
       "tags": []
     },
+    "GoldenSetManifest": {
+      "changelog": [
+        {
+          "added": [
+            "en-general-001",
+            "en-general-002",
+            "en-general-003"
+          ],
+          "changed": [],
+          "date": "2026-01-01",
+          "retired": [],
+          "stale": [],
+          "version": 1
+        },
+        {
+          "added": [],
+          "changed": [],
+          "date": "2026-02-01",
+          "retired": [
+            "en-general-003"
+          ],
+          "stale": [
+            "en-general-002"
+          ],
+          "version": 2
+        }
+      ],
+      "items": [
+        {
+          "id": "en-general-001",
+          "item_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "last_reviewed_at": "2026-01-01",
+          "retire_reason": null,
+          "stale_reason": null,
+          "stale_since": null,
+          "status": "active"
+        },
+        {
+          "id": "en-general-002",
+          "item_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "last_reviewed_at": null,
+          "retire_reason": null,
+          "stale_reason": "source_document_changed",
+          "stale_since": "2026-02-01",
+          "status": "stale"
+        },
+        {
+          "id": "en-general-003",
+          "item_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "last_reviewed_at": null,
+          "retire_reason": "duplicate_item",
+          "stale_reason": null,
+          "stale_since": null,
+          "status": "retired"
+        }
+      ],
+      "manifest_sha256": "6a8dd45355f33c6d6e25ff6534bcd51ee7d24f2e166d489c0a85ea28a580ecc7",
+      "schema_version": 1,
+      "set_id": "fixture",
+      "version": 2
+    },
     "GoldenSplitManifest": {
       "assignments": {
         "en-general-001": "dev",
         "en-no-answer-001": "test"
       },
       "rule": "sha256-first8hex-mod100-lt70-dev",
+      "schema_version": 1
+    },
+    "GroundednessJudgeThresholds": {
+      "cells": [
+        {
+          "config_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "fitted_at": null,
+          "judge_model": "judge/model-j",
+          "judge_version": "judge-v1",
+          "language": "it",
+          "max_unsupported_share": 0.2,
+          "precision": 0.9,
+          "recall": 0.8,
+          "run_ids": [
+            "run-0001"
+          ],
+          "source": "fixture"
+        }
+      ],
       "schema_version": 1
     },
     "GroundednessRequest": {
@@ -5307,6 +5830,64 @@
       "vlm_detect": false,
       "vlm_model": null
     },
+    "JudgeCalibration": {
+      "cells": [
+        {
+          "accuracy": 0.88,
+          "assertive_delta": -0.03,
+          "expanded_delta": 0.01,
+          "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "kappa": 0.74,
+          "key": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff|nightly|en|ragas.faithfulness",
+          "labels_human_confirmed": false,
+          "language": "en",
+          "length_bias_delta": 0.02,
+          "library": "ragas",
+          "metric": "faithfulness",
+          "n": 50,
+          "reasons": [
+            "labels_not_confirmed"
+          ],
+          "recorded_at": "2026-01-05T06:00:00Z",
+          "role": "nightly",
+          "source": "seed",
+          "status": "report_only",
+          "unsupported_precision": 0.85,
+          "unsupported_recall": 0.9
+        }
+      ],
+      "config_hash": null,
+      "provenance": {
+        "source": "calibration"
+      },
+      "running_fingerprints": {
+        "nightly": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+      },
+      "schema_version": 1
+    },
+    "JudgeCalibrationCell": {
+      "accuracy": 0.88,
+      "assertive_delta": -0.03,
+      "expanded_delta": 0.01,
+      "fingerprint": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "kappa": 0.74,
+      "key": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff|nightly|en|ragas.faithfulness",
+      "labels_human_confirmed": false,
+      "language": "en",
+      "length_bias_delta": 0.02,
+      "library": "ragas",
+      "metric": "faithfulness",
+      "n": 50,
+      "reasons": [
+        "labels_not_confirmed"
+      ],
+      "recorded_at": "2026-01-05T06:00:00Z",
+      "role": "nightly",
+      "source": "seed",
+      "status": "report_only",
+      "unsupported_precision": 0.85,
+      "unsupported_recall": 0.9
+    },
     "JudgeConfig": {
       "base_url": "https://example.invalid/api/v1",
       "embedding_model": "embed/model-c",
@@ -5372,6 +5953,26 @@
       "run_config_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       "run_id": "run-001",
       "schema_version": 1
+    },
+    "JudgeSeedCase": {
+      "answer": "The sample box described in the context is blue.",
+      "base_id": "en-seed-001",
+      "contexts": [
+        "The sample box is blue."
+      ],
+      "expected": {
+        "answer_relevance": true,
+        "faithfulness": true
+      },
+      "id": "en-seed-001-long",
+      "language": "en",
+      "pair_id": "p-001",
+      "perturbation_group": null,
+      "question": "Which colour is the sample box?",
+      "review_status": "approved",
+      "reviewed_by": "reviewer-01",
+      "unsupported_content": false,
+      "variant": "long"
     },
     "LanguagePack": {
       "code": "zh",
@@ -6049,6 +6650,16 @@
           "target": "someone@outside.example.org"
         }
       ]
+    },
+    "LinkPreviewStatus": {
+      "hosts_not_allowlisted": [
+        "other.example"
+      ],
+      "preview_hosts": [
+        "host.example",
+        "other.example"
+      ],
+      "state": "mismatch"
     },
     "MiningReport": {
       "fn_audit": {
@@ -9342,6 +9953,379 @@
       ],
       "training_config_sha256": "df67daf9a1b4a9bd111dc92bf6b4b003693796040a288a74c071ee085564d051"
     },
+    "MonitorAlert": {
+      "acknowledged_at": null,
+      "band": {
+        "alert": null,
+        "budget": null,
+        "drop": null,
+        "measured_delta": 0.26,
+        "measured_ratio": 3.17,
+        "measured_value": null,
+        "measured_z": 4.36,
+        "min_abs_delta": 0.05,
+        "min_z": 3.0,
+        "ratio": 2.0,
+        "warn": null
+      },
+      "baseline": {
+        "count": 24,
+        "n": 200,
+        "value": 0.12
+      },
+      "breakdown": {
+        "by_channel": {
+          "chat": {
+            "count": 19,
+            "n": 50,
+            "value": 0.38
+          }
+        },
+        "by_doc_type": {
+          "general": {
+            "count": 19,
+            "n": 50,
+            "value": 0.38
+          }
+        },
+        "by_mode": {
+          "strict": {
+            "count": 19,
+            "n": 50,
+            "value": 0.38
+          }
+        }
+      },
+      "cluster_ids": [
+        "c-01"
+      ],
+      "companions": [
+        {
+          "baseline": 0.02,
+          "n": 50,
+          "rule": "not_helpful_rate",
+          "value": 0.02
+        }
+      ],
+      "config_changes": [
+        {
+          "after_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "at": "2026-01-04T10:00:00Z",
+          "before_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "changed_keys": [
+            "RAG_RERANKER"
+          ],
+          "record_id": "00000000-0000-4000-8000-000000000601",
+          "source": "config_ui",
+          "unrecorded": false
+        },
+        {
+          "after_hash": "0123abcd",
+          "at": "2026-01-04",
+          "before_hash": null,
+          "changed_keys": [],
+          "record_id": null,
+          "source": "retrieval_log",
+          "unrecorded": true
+        }
+      ],
+      "created_at": "2026-01-05T06:00:00Z",
+      "day": "2026-01-05",
+      "dedup_key": "s:default|en|refusal_rate",
+      "delivered": {
+        "webhook": {
+          "attempts": 1,
+          "last_attempt_at": "2026-01-05T06:00:00Z",
+          "state": "delivered"
+        }
+      },
+      "id": "00000000-0000-4000-8000-000000000501",
+      "kind": "rate",
+      "language": "en",
+      "observed": {
+        "count": 19,
+        "n": 50,
+        "value": 0.38
+      },
+      "rule": "refusal_rate",
+      "sample_trace_ids": [
+        "trace-0001",
+        "trace-0002"
+      ],
+      "severity": "alert",
+      "status": "open",
+      "suggestion": null,
+      "tenant_key": "s:default",
+      "updated_at": "2026-01-05T06:00:00Z",
+      "window_days": 1
+    },
+    "MonitorAlertsConfig": {
+      "baseline_days": 30,
+      "config_hash": null,
+      "drift": {
+        "gap_alert": 0.15,
+        "jsd_alert": 0.2,
+        "jsd_warn": 0.1,
+        "min_test_items": 50,
+        "null_percentile": 0.95,
+        "under_covered_min_share": 0.05,
+        "under_covered_ratio": 0.5
+      },
+      "provenance": {
+        "source": "defaults"
+      },
+      "rules": [
+        {
+          "baseline_min_sample": 200,
+          "enabled": true,
+          "id": "refusal_rate",
+          "kind": "rate",
+          "metric": "refusal_rate",
+          "min_abs_delta": 0.05,
+          "min_sample": 50,
+          "min_z": 3.0,
+          "ratio": 2.0
+        },
+        {
+          "baseline_min_sample": 200,
+          "enabled": true,
+          "id": "zero_result_rate",
+          "kind": "rate",
+          "metric": "zero_result_rate",
+          "min_abs_delta": 0.05,
+          "min_sample": 50,
+          "min_z": 3.0,
+          "ratio": 2.0
+        },
+        {
+          "baseline_min_sample": 200,
+          "enabled": true,
+          "id": "below_threshold_rate",
+          "kind": "rate",
+          "metric": "below_threshold_rate",
+          "min_abs_delta": 0.05,
+          "min_sample": 50,
+          "min_z": 3.0,
+          "ratio": 2.0
+        },
+        {
+          "baseline_min_sample": 200,
+          "enabled": true,
+          "id": "not_helpful_rate",
+          "kind": "rate",
+          "metric": "not_helpful_rate",
+          "min_abs_delta": 0.05,
+          "min_sample": 50,
+          "min_z": 3.0,
+          "ratio": 2.0
+        },
+        {
+          "baseline_min_sample": 200,
+          "enabled": true,
+          "id": "groundedness_flagged_rate",
+          "kind": "rate",
+          "metric": "groundedness_flagged_rate",
+          "min_abs_delta": 0.05,
+          "min_sample": 50,
+          "min_z": 3.0,
+          "ratio": 2.0
+        },
+        {
+          "baseline_min_sample": 200,
+          "enabled": true,
+          "id": "kb_error_rate",
+          "kind": "rate",
+          "metric": "kb_error_rate",
+          "min_abs_delta": 0.05,
+          "min_sample": 50,
+          "min_z": 3.0,
+          "ratio": 2.0
+        },
+        {
+          "baseline_min_sample": 200,
+          "enabled": true,
+          "id": "kb_degraded_rate",
+          "kind": "rate",
+          "metric": "kb_degraded_rate",
+          "min_abs_delta": 0.05,
+          "min_sample": 50,
+          "min_z": 3.0,
+          "ratio": 2.0
+        },
+        {
+          "baseline_min_sample": 200,
+          "enabled": true,
+          "id": "kb_unavailable_rate",
+          "kind": "rate",
+          "metric": "kb_unavailable_rate",
+          "min_abs_delta": 0.05,
+          "min_sample": 50,
+          "min_z": 3.0,
+          "ratio": 2.0
+        },
+        {
+          "alert": 0.25,
+          "baseline_min_sample": 1000,
+          "enabled": true,
+          "id": "top_score_psi",
+          "kind": "distribution",
+          "metric": "top_score",
+          "min_sample": 300,
+          "warn": 0.1
+        },
+        {
+          "baseline_min_sample": 200,
+          "budget_ratio": 1.0,
+          "enabled": true,
+          "id": "latency_p95",
+          "kind": "latency",
+          "metric": "latency_p95_ms",
+          "min_sample": 50,
+          "ratio": 1.5
+        },
+        {
+          "drop": 0.1,
+          "enabled": true,
+          "id": "online_judge_mean",
+          "kind": "judge_mean",
+          "metric": "online_judge_mean",
+          "min_sample": 50
+        },
+        {
+          "alert": 0.2,
+          "enabled": true,
+          "id": "test_set_not_representative",
+          "kind": "drift",
+          "metric": "cluster_jsd",
+          "min_sample": 50,
+          "warn": 0.1
+        },
+        {
+          "alert": 0.15,
+          "enabled": true,
+          "id": "offline_online_gap",
+          "kind": "offline_online_gap",
+          "metric": "judge_gap",
+          "min_sample": 50
+        }
+      ],
+      "sampling": {
+        "drift_fill_share": 0.5,
+        "max_queries": 5000,
+        "min_queries": 30,
+        "pilot_cap_share": 0.4,
+        "pilot_multiplier": 5.0,
+        "quota_tolerance": 0.1,
+        "weekly_cap": 30
+      },
+      "schema_version": 1,
+      "window_days": [
+        1,
+        3,
+        7
+      ]
+    },
+    "MonitorDailyCell": {
+      "below_threshold": 0,
+      "channel": "chat",
+      "day": "2026-01-05",
+      "degraded": 0,
+      "doc_type": "general",
+      "error": 0,
+      "groundedness_flagged": 0,
+      "helpful": 2,
+      "judge_score_sums": {
+        "faithfulness": 3.4
+      },
+      "judged": 4,
+      "kb_unavailable": 0,
+      "language": "en",
+      "latency_hist": {
+        "bins": [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          40,
+          0,
+          10,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "not_helpful": 1,
+      "rag_mode": "strict",
+      "refused": 19,
+      "retrievals": 50,
+      "tenant_key": "s:default",
+      "top_score_hist": {
+        "similarity": {
+          "bins": [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            30,
+            0,
+            20,
+            0,
+            0
+          ],
+          "overflow": 0,
+          "underflow": 0
+        }
+      },
+      "zero_result": 0
+    },
+    "MonitorDriftBands": {
+      "gap_alert": 0.15,
+      "jsd_alert": 0.2,
+      "jsd_warn": 0.1,
+      "min_test_items": 50,
+      "null_percentile": 0.95,
+      "under_covered_min_share": 0.05,
+      "under_covered_ratio": 0.5
+    },
+    "MonitorRule": {
+      "baseline_min_sample": 200,
+      "enabled": true,
+      "id": "refusal_rate",
+      "kind": "rate",
+      "metric": "refusal_rate",
+      "min_abs_delta": 0.05,
+      "min_sample": 50,
+      "min_z": 3.0,
+      "ratio": 2.0
+    },
+    "MonitorSamplingConfig": {
+      "drift_fill_share": 0.5,
+      "max_queries": 5000,
+      "min_queries": 30,
+      "pilot_cap_share": 0.4,
+      "pilot_multiplier": 5.0,
+      "quota_tolerance": 0.1,
+      "weekly_cap": 30
+    },
     "NoiseConfig": {
       "floor": 0.02,
       "gated_slice_prefixes": [
@@ -9490,6 +10474,76 @@
       "noise_band": 0.02,
       "passed": true,
       "reasons": []
+    },
+    "OutputCaps": {
+      "cells": [
+        {
+          "config_hash": null,
+          "limit": null,
+          "mode": "strict",
+          "run_ids": [],
+          "source": "default"
+        },
+        {
+          "config_hash": null,
+          "limit": null,
+          "mode": "balanced",
+          "run_ids": [],
+          "source": "default"
+        }
+      ],
+      "schema_version": 1
+    },
+    "OutputGuardRules": {
+      "credential_rules": [
+        {
+          "id": "rule-1",
+          "language": "en",
+          "request_terms": [
+            "send me"
+          ],
+          "secret_terms": [
+            "password"
+          ]
+        }
+      ],
+      "obfuscation_patterns": [
+        {
+          "id": "rule-2",
+          "pattern": "h\\s*t\\s*t\\s*p"
+        }
+      ],
+      "opaque_schemes": [
+        "data",
+        "javascript"
+      ],
+      "schema_version": 1,
+      "version": "1"
+    },
+    "OutputGuardSummary": {
+      "blocked_ranges": [
+        {
+          "end": 32,
+          "part": 0,
+          "start": 16,
+          "text_hash": "219bc6effc75b730c9a1e6ecd0c18ad473138092421671aa4daf88352aee80e1"
+        }
+      ],
+      "credential_blocked": 1,
+      "credential_warned": 0,
+      "event_ids": [
+        "00000000-0000-4000-8000-0000000000e1"
+      ],
+      "links_checked": 2,
+      "links_removed": 1,
+      "mode": "enforce",
+      "rule_ids": [
+        "rule-1"
+      ],
+      "rules_version": "1",
+      "source_chunk_ids": [
+        "chunk-001"
+      ]
     },
     "PageStructureVerdict": {
       "complexity": "simple",
@@ -13334,6 +14388,59 @@
       "passed": false,
       "score": 0.45
     },
+    "QualityGates": {
+      "ceilings": {
+        "false_answer_rate": {
+          "balanced": null,
+          "flexible": null,
+          "strict": 0.05
+        },
+        "false_refusal_rate": {
+          "balanced": 0.25,
+          "flexible": 0.25,
+          "strict": 0.25
+        },
+        "min_n": 10
+      },
+      "composition": {
+        "excluded_categories": [
+          "small_talk"
+        ],
+        "min_items_per_language": 20,
+        "no_answer_share_min": 0.15,
+        "no_answer_share_target": 0.2,
+        "required_no_answer_kinds": []
+      },
+      "config_hash": null,
+      "floors": {
+        "nightly": {
+          "answer_relevance": 0.75,
+          "faithfulness": 0.85
+        },
+        "smoke": {}
+      },
+      "judge": {
+        "accuracy_floor": 0.8,
+        "kappa_floor": 0.6,
+        "length_bias_max_delta": 0.1,
+        "max_age_days": 35,
+        "min_labels_per_language": 100,
+        "pass_threshold": {
+          "answer_relevance": 0.7,
+          "faithfulness": 0.8
+        },
+        "perturbation_max_delta": 0.1,
+        "seed_min_labels_per_language": 50
+      },
+      "lifecycle": {
+        "max_stale_share": 0.1,
+        "re_review_days": 90
+      },
+      "provenance": {
+        "source": "defaults"
+      },
+      "schema_version": 1
+    },
     "QuarantineReason": {
       "checker_version": "hidden-text@1",
       "detail": "2 hidden spans",
@@ -13685,6 +14792,65 @@
         "source": "defaults"
       },
       "schema_version": 1
+    },
+    "ReleaseGateConfig": {
+      "config_hash": null,
+      "provenance": {
+        "source": "defaults"
+      },
+      "required_parts": [
+        "nightly_absolute",
+        "judge_floors",
+        "ship_check",
+        "pr_smoke"
+      ],
+      "schema_version": 1,
+      "status_context": "rag-release-gate"
+    },
+    "ReleaseGatePart": {
+      "part": "ship_check",
+      "reason": "population_legacy",
+      "result": "not_applicable"
+    },
+    "ReleaseGateResult": {
+      "actor": "github-actions[bot]",
+      "changed_gate_files": [],
+      "created_at": "2026-01-05T06:00:00Z",
+      "gate_file_hashes": {
+        "noise": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "quality_gates": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "release_gate": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "override_reason": null,
+      "parts": [
+        {
+          "part": "nightly_absolute",
+          "reason": null,
+          "result": "passed"
+        },
+        {
+          "part": "judge_floors",
+          "reason": "judge_keys_missing",
+          "result": "skipped"
+        },
+        {
+          "part": "ship_check",
+          "reason": "population_legacy",
+          "result": "not_applicable"
+        },
+        {
+          "part": "pr_smoke",
+          "reason": null,
+          "result": "passed"
+        }
+      ],
+      "report_hashes": {
+        "nightly": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "result": "skipped",
+      "sha": "0123456789abcdef0123456789abcdef01234567",
+      "skip_reason": "judge_keys_missing",
+      "source": "ci"
     },
     "RetrievalFilters": {
       "current_only": true,
@@ -14103,6 +15269,74 @@
       "require_increasing_numbers": false,
       "skip_toc": true,
       "toc_min_run": 3
+    },
+    "SecurityAlert": {
+      "created_at": null,
+      "event_count": 6,
+      "held": false,
+      "id": "00000000-0000-4000-8000-0000000000f1",
+      "status": "open",
+      "tenant_key": "s:default",
+      "uploader_id": "00000000-0000-4000-8000-0000000000c1",
+      "window_end": "2026-01-02T00:00:00Z",
+      "window_start": "2026-01-01T00:00:00Z"
+    },
+    "SecurityAlertView": {
+      "event_count": 6,
+      "held": false,
+      "id": "00000000-0000-4000-8000-0000000000f1",
+      "opened_at": "2026-01-02T00:00:00Z",
+      "status": "open",
+      "tenant_key": "s:default",
+      "threshold": 5,
+      "uploader_email": null,
+      "uploader_id": "00000000-0000-4000-8000-0000000000c1",
+      "uploader_name": "Uploader A",
+      "window_hours": 24,
+      "workspace_name": "Workspace A"
+    },
+    "SecurityEvent": {
+      "action": "removed",
+      "chunk_id": "chunk-001",
+      "created_at": null,
+      "detector": "output_guard",
+      "document_id": "doc-0001",
+      "id": null,
+      "rule_ids": [
+        "rule-1"
+      ],
+      "source": "output_guard",
+      "tenant_key": "s:default",
+      "trace_id": "0123456789abcdef0123456789abcdef",
+      "uploader_id": "00000000-0000-4000-8000-0000000000c1"
+    },
+    "SecurityEventView": {
+      "action": "removed",
+      "created_at": "2026-01-01T00:00:05Z",
+      "detector": "output_guard",
+      "document_id": "doc-0001",
+      "file_name": "document-a.pdf",
+      "id": "00000000-0000-4000-8000-0000000000e1",
+      "rule_ids": [
+        "rule-1"
+      ],
+      "source": "output_guard",
+      "tenant_key": "s:default",
+      "uploader_email": null,
+      "uploader_id": "00000000-0000-4000-8000-0000000000c1",
+      "uploader_name": "Uploader A",
+      "workspace_name": "Workspace A"
+    },
+    "SecurityUploaderView": {
+      "display_name": "Uploader A",
+      "email": null,
+      "event_count": 6,
+      "held": false,
+      "held_since": null,
+      "last_event_at": "2026-01-01T23:00:00Z",
+      "tenant_key": "s:default",
+      "user_id": "00000000-0000-4000-8000-0000000000c1",
+      "workspace_name": "Workspace A"
     },
     "SemanticCacheCalibration": {
       "profiles": [
@@ -14606,6 +15840,15 @@
       "required": true,
       "uploader_id": "00000000-0000-4000-8000-0000000000c1"
     },
+    "UploaderHold": {
+      "created_at": "2026-01-02T00:00:00Z",
+      "created_by": "00000000-0000-4000-8000-0000000000c2",
+      "id": null,
+      "reason": "Repeated flagged uploads.",
+      "released_at": null,
+      "tenant_key": "s:default",
+      "user_id": "00000000-0000-4000-8000-0000000000c1"
+    },
     "VectorFileHeader": {
       "dims": 3,
       "dtype": "float32-le",
@@ -14627,9 +15870,68 @@
       "more_pending": false,
       "upserted": 3
     },
+    "VersionConflict": {
+      "document_ids": [
+        "doc-0001",
+        "doc-0002"
+      ],
+      "group_rule": "supersession_link",
+      "latest_document_id": "doc-0002",
+      "mixed_versions": false
+    },
     "VersionRange": {
       "from": "2024-01-01",
       "to": "2024-12-31"
+    },
+    "WeeklyGatesSection": {
+      "change_counts": [
+        {
+          "count": 3,
+          "gate_result": "pass",
+          "source": "config_ui"
+        }
+      ],
+      "drift": [
+        {
+          "divergence": 0.12,
+          "state": "warn",
+          "tenant_hash": "0123abcd",
+          "week": "2026-W02"
+        }
+      ],
+      "judge_cells": {
+        "gating": 0,
+        "report_only": 6,
+        "uncalibrated": 0
+      },
+      "open_alerts": {
+        "refusal_rate": 1
+      },
+      "overdue_re_reviews": 0,
+      "overrides": [
+        {
+          "actor": "local-config-ui",
+          "after_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "before_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "changed_keys": [
+            "RAG_SYSTEM_PROMPT"
+          ],
+          "date": "2026-01-05",
+          "gate_result": "fail",
+          "override_reason": "Owner accepted the change for a scheduled review"
+        }
+      ],
+      "release_overrides": [
+        {
+          "date": "2026-01-05",
+          "github_actor": "repo-admin",
+          "override_reason": "Emergency fix for a broken build",
+          "sha": "0123456789abcdef0123456789abcdef01234567"
+        }
+      ],
+      "skipped_runs": {
+        "no_real_set": 1
+      }
     },
     "WeeklyReport": {
       "failures": {
@@ -14739,6 +16041,18 @@
     }
   },
   "variants": {
+    "AnswerChecks:empty": {
+      "model": "AnswerChecks",
+      "value": {
+        "claims": null,
+        "finish_reason": null,
+        "output_guard": null,
+        "sentences": [],
+        "text_language": null,
+        "truncated": false,
+        "version_conflict": null
+      }
+    },
     "AnswerFeedbackRequest:vote_only": {
       "model": "AnswerFeedbackRequest",
       "value": {
@@ -14772,6 +16086,144 @@
         "invalidCitations": 0,
         "modelId": "generator/model-b",
         "ragMode": "strict",
+        "traceId": "0123456789abcdef0123456789abcdef",
+        "updatedAt": "2026-01-01T00:00:10.000Z"
+      }
+    },
+    "AnswerRecord:with_checks": {
+      "model": "AnswerRecord",
+      "value": {
+        "answerId": "00000000-0000-4000-8000-0000000000a1",
+        "answerLanguage": "en",
+        "chatId": "00000000-0000-4000-8000-0000000000b1",
+        "checks": {
+          "claims": {
+            "judge_version": null,
+            "not_checked": 1,
+            "reasons": {
+              "too_many": 1
+            },
+            "scorer": "hhem_2_1_open",
+            "total": 2,
+            "unsupported": 0
+          },
+          "finish_reason": "stop",
+          "output_guard": {
+            "blocked_ranges": [
+              {
+                "end": 32,
+                "part": 0,
+                "start": 16,
+                "text_hash": "219bc6effc75b730c9a1e6ecd0c18ad473138092421671aa4daf88352aee80e1"
+              }
+            ],
+            "credential_blocked": 1,
+            "credential_warned": 0,
+            "event_ids": [
+              "00000000-0000-4000-8000-0000000000e1"
+            ],
+            "links_checked": 2,
+            "links_removed": 1,
+            "mode": "enforce",
+            "rule_ids": [
+              "rule-1"
+            ],
+            "rules_version": "1",
+            "source_chunk_ids": [
+              "chunk-001"
+            ]
+          },
+          "sentences": [
+            {
+              "cited": true,
+              "end": 15,
+              "factual": true,
+              "index": 0,
+              "kind": "sentence",
+              "part": 0,
+              "reason": null,
+              "scorer": "hhem_2_1_open",
+              "start": 0,
+              "support": "supported",
+              "text_hash": "219bc6effc75b730c9a1e6ecd0c18ad473138092421671aa4daf88352aee80e1"
+            },
+            {
+              "cited": false,
+              "end": 32,
+              "factual": true,
+              "index": 1,
+              "kind": "sentence",
+              "part": 0,
+              "reason": "too_many",
+              "scorer": null,
+              "start": 16,
+              "support": "not_checked",
+              "text_hash": "219bc6effc75b730c9a1e6ecd0c18ad473138092421671aa4daf88352aee80e1"
+            }
+          ],
+          "text_language": "en",
+          "truncated": false,
+          "version_conflict": {
+            "document_ids": [
+              "doc-0001",
+              "doc-0002"
+            ],
+            "group_rule": "supersession_link",
+            "latest_document_id": "doc-0002",
+            "mixed_versions": false
+          }
+        },
+        "citationStrategy": "chunk-alias",
+        "citations": [
+          {
+            "alias": "S1",
+            "chunkIds": [
+              "00000000-0000-4000-8000-0000000000c1",
+              "00000000-0000-4000-8000-0000000000c2"
+            ],
+            "documentId": "00000000-0000-4000-8000-0000000000d1",
+            "documentName": "leave-policy.pdf",
+            "documentVersion": 2,
+            "n": 1,
+            "page": 4,
+            "quote": "Employees receive twenty days of paid leave per calendar year.",
+            "quoteHash": "47b56646d72eb06958f6cd1642b43e163abfd20e36d888edfec3a6747594b2af",
+            "sectionPath": [
+              "Leave",
+              "Annual leave"
+            ],
+            "strategy": "chunk-alias"
+          }
+        ],
+        "createdAt": "2026-01-01T00:00:00.000Z",
+        "documents": {
+          "00000000-0000-4000-8000-0000000000d1": "current"
+        },
+        "feedback": {
+          "comment": "It left out carry-over days.",
+          "reasons": [
+            "incomplete"
+          ],
+          "updatedAt": "2026-01-01T00:00:10.000Z",
+          "vote": "not_helpful"
+        },
+        "feedbackEnabled": true,
+        "groundedness": {
+          "checkedAt": "2026-01-01T00:00:03.000Z",
+          "label": "verified",
+          "latencyMs": 640,
+          "reason": null,
+          "score": 0.82,
+          "scorer": "hhem_2_1_open",
+          "status": "scored",
+          "threshold": 0.5,
+          "thresholdSource": "default",
+          "truncated": false
+        },
+        "invalidCitations": 0,
+        "modelId": "generator/model-b",
+        "ragMode": "strict",
+        "textsSource": "registry",
         "traceId": "0123456789abcdef0123456789abcdef",
         "updatedAt": "2026-01-01T00:00:10.000Z"
       }
@@ -14906,6 +16358,30 @@
       "value": {
         "document_ids": null,
         "tenant_key": "s:default"
+      }
+    },
+    "CitationRecord:version_label": {
+      "model": "CitationRecord",
+      "value": {
+        "alias": "S1",
+        "chunkIds": [
+          "00000000-0000-4000-8000-0000000000c1",
+          "00000000-0000-4000-8000-0000000000c2"
+        ],
+        "documentId": "00000000-0000-4000-8000-0000000000d1",
+        "documentName": "leave-policy.pdf",
+        "documentVersion": 2,
+        "effectiveFrom": "2025-03-01",
+        "n": 1,
+        "page": 4,
+        "quote": "Employees receive twenty days of paid leave per calendar year.",
+        "quoteHash": "47b56646d72eb06958f6cd1642b43e163abfd20e36d888edfec3a6747594b2af",
+        "sectionPath": [
+          "Leave",
+          "Annual leave"
+        ],
+        "strategy": "chunk-alias",
+        "versionLabel": "v2"
       }
     },
     "CitationRecord:versions_also_in": {
@@ -17452,6 +18928,34 @@
             }
           }
         }
+      }
+    },
+    "LinkPreviewStatus:unknown": {
+      "model": "LinkPreviewStatus",
+      "value": {
+        "state": "unknown"
+      }
+    },
+    "OutputCaps:sweep": {
+      "model": "OutputCaps",
+      "value": {
+        "cells": [
+          {
+            "config_hash": "h-1",
+            "limit": 600,
+            "mode": "strict",
+            "run_ids": [
+              "run-0001"
+            ],
+            "source": "sweep"
+          },
+          {
+            "limit": null,
+            "mode": "balanced",
+            "source": "default"
+          }
+        ],
+        "schema_version": 1
       }
     },
     "ParseJobState:failed_with_error_class": {

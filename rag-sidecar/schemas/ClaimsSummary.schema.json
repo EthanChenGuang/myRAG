@@ -1,0 +1,65 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "judge_version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Judge Version"
+    },
+    "not_checked": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Not Checked",
+      "type": "integer"
+    },
+    "reasons": {
+      "patternProperties": {
+        "^[a-z][a-z0-9_]{0,63}$": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "title": "Reasons",
+      "type": "object"
+    },
+    "scorer": {
+      "anyOf": [
+        {
+          "enum": [
+            "hhem_2_3_vectara",
+            "hhem_2_1_open",
+            "llm_judge",
+            "none"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Scorer"
+    },
+    "total": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Total",
+      "type": "integer"
+    },
+    "unsupported": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Unsupported",
+      "type": "integer"
+    }
+  },
+  "title": "ClaimsSummary",
+  "type": "object"
+}

@@ -7,7 +7,7 @@ from rag_sidecar.contracts.eval_run import GoldenFilter, RagRunOptions
 from rag_sidecar.contracts.golden import Category, Language, Provenance, Split
 from rag_sidecar.contracts.groundedness import GroundednessScorer
 from rag_sidecar.contracts.latency import CacheState, GroupBudget, Profile, StageLatency
-from rag_sidecar.contracts.omit import omit_none_schema
+from rag_sidecar.contracts.omit import omit_default_schema, omit_none_schema
 
 
 class _Contract(BaseModel):
@@ -51,6 +51,7 @@ class SliceMetrics(_Contract):
     variant_accuracy: MetricValue | None = _optional_metric()
     quantity_match_rate: MetricValue | None = _optional_metric()
     attribute_filter_fallback_rate: MetricValue | None = _optional_metric()
+    false_answer_rate: MetricValue | None = _optional_metric()
 
 
 class ItemResult(_Contract):
@@ -245,6 +246,19 @@ class EvalReport(_Contract):
     by_provenance: dict[str, SliceMetrics] = Field(default_factory=dict)
     by_provenance_category: dict[str, SliceMetrics] = Field(default_factory=dict)
     gate_population: Literal["all", "production", "real"] = "all"
+    rag_mode: Literal["strict", "balanced", "flexible"] = Field(
+        default="strict", exclude_if=lambda value: value == "strict", json_schema_extra=omit_default_schema
+    )
+    golden_set_version: int | None = Field(default=None, ge=1, exclude_if=_omit_none, json_schema_extra=omit_none_schema)
+    golden_manifest_sha256: str | None = Field(
+        default=None, pattern=r"^[a-f0-9]{64}$", exclude_if=_omit_none, json_schema_extra=omit_none_schema
+    )
+    stale_count: int = Field(
+        default=0, ge=0, exclude_if=lambda value: value == 0, json_schema_extra=omit_default_schema
+    )
+    stale_share: float = Field(
+        default=0.0, ge=0, le=1, exclude_if=lambda value: value == 0, json_schema_extra=omit_default_schema
+    )
     rerank_skipped_rate: MetricValue | None = None
     lexical_leg_hit_rate_at_10: MetricValue | None = None
     items: list[ItemResult]

@@ -1,11 +1,12 @@
 import { SupersessionRulesSchema, type SupersessionRules } from '@/lib/rag-eval/contracts.generated';
 import rawRules from '../../../../../config/rag/supersession-rules.json';
 import type { RpcClient } from '../../backend/supabase-rpc';
+import { getRagDeps } from '../../deps';
 import { loadIngestConfig } from '../config';
 import { sameDocType } from '../profiles/same-doc-type';
 import { getIngestDeps } from '../deps';
 import type { PostPublishEvent } from '../post-publish';
-import { directionFor, hasVersionMarker, normalizeTitle, titleOf, titleSimilarity, titleYear, versionMarkersFor } from './title';
+import { directionFor, hasVersionMarker, normalizeTitle, titleOf, titleSimilarity, titleYear, versionMarkerLabel, versionMarkersFor } from './title';
 
 /**
  * Supersession candidates after publish (DATA-19, D-41). Rules only, no model: a published document is compared with the tenant's current
@@ -249,6 +250,51 @@ async function raise(
   return id;
 }
 
+type LabelLookup = {
+  select(columns: string): LabelLookup;
+  eq(column: string, value: unknown): LabelLookup;
+  abortSignal(signal: AbortSignal): LabelLookup;
+  maybeSingle(): PromiseLike<{ data: unknown; error: unknown }>;
+};
+
+/**
+ * D-49: fills documents.version_label with the version marker the title carries, only while the label is null; an admin-set label is
+ * never overwritten. The label is read on the admin client within the document's tenant and written through
+ * rag_set_document_version_label for the same tenant. Any failure leaves the label as it is and is logged with the document id only.
+ */
+export async function fillVersionLabelFromTitle(
+  db: RpcClient,
+  tenantKey: string,
+  document: Pick<SupersessionDocument, 'documentId' | 'filename' | 'language'>,
+  signal: AbortSignal,
+): Promise<'filled' | 'kept' | 'no_marker' | 'unavailable'> {
+  const label = versionMarkerLabel(titleOf(document.filename), versionMarkersFor(document.language));
+  if (label === null) return 'no_marker';
+  const documentId = document.documentId.toLowerCase();
+  try {
+    signal.throwIfAborted();
+    const client = getRagDeps().adminClient() as { from(table: string): LabelLookup } | null;
+    if (!client) return 'unavailable';
+    const current = await client.from('documents').select('version_label').eq('id', documentId).eq('tenant_key', tenantKey).abortSignal(signal).maybeSingle();
+    if (current.error || current.data === null || typeof current.data !== 'object') {
+      console.warn('[Ingest] version label not filled', { documentId, reason: 'lookup_failed' });
+      return 'unavailable';
+    }
+    if ((current.data as Row).version_label !== null && (current.data as Row).version_label !== undefined) return 'kept';
+    const result = await rpcRows(db, 'rag_set_document_version_label', { p_tenant_key: tenantKey, p_document_id: documentId, p_label: label }, signal);
+    if ('reason' in result) {
+      console.warn('[Ingest] version label not filled', { documentId, reason: result.reason });
+      return 'unavailable';
+    }
+    console.log('[Ingest] version label filled from the title', { documentId });
+    return 'filled';
+  } catch (error) {
+    if (signal.aborted) throw error;
+    console.warn('[Ingest] version label not filled', { documentId, reason: error instanceof Error ? error.name : 'unknown' });
+    return 'unavailable';
+  }
+}
+
 /** Runs the detector for one published version. Never throws on a refusal: each is logged with its reason word and ids. */
 export async function runSupersessionDetection(event: PostPublishEvent, signal: AbortSignal): Promise<{ raised: number; confirmed: number }> {
   const db = getIngestDeps().db();
@@ -274,6 +320,7 @@ export async function runSupersessionDetection(event: PostPublishEvent, signal: 
   const self = selfRow ? documentOf(selfRow) : null;
   if (!selfRow || !self) return { raised: 0, confirmed: 0 };
   const peers = loaded.rows.filter((row) => row.is_self !== true).map(documentOf).filter((doc): doc is SupersessionDocument => doc !== null);
+  await fillVersionLabelFromTitle(db, event.tenantKey, self, signal);
 
   let raised = 0;
   let confirmed = 0;

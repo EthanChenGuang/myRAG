@@ -1,0 +1,103 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "cited": {
+      "title": "Cited",
+      "type": "boolean"
+    },
+    "end": {
+      "minimum": 0,
+      "title": "End",
+      "type": "integer"
+    },
+    "factual": {
+      "title": "Factual",
+      "type": "boolean"
+    },
+    "index": {
+      "minimum": 0,
+      "title": "Index",
+      "type": "integer"
+    },
+    "kind": {
+      "enum": [
+        "sentence",
+        "list_item",
+        "table",
+        "heading",
+        "code",
+        "truncated"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "part": {
+      "minimum": 0,
+      "title": "Part",
+      "type": "integer"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    },
+    "scorer": {
+      "anyOf": [
+        {
+          "enum": [
+            "hhem_2_3_vectara",
+            "hhem_2_1_open",
+            "llm_judge",
+            "none"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Scorer"
+    },
+    "start": {
+      "minimum": 0,
+      "title": "Start",
+      "type": "integer"
+    },
+    "support": {
+      "default": "not_checked",
+      "enum": [
+        "supported",
+        "unsupported",
+        "not_checked"
+      ],
+      "title": "Support",
+      "type": "string"
+    },
+    "text_hash": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Text Hash",
+      "type": "string"
+    }
+  },
+  "required": [
+    "index",
+    "part",
+    "start",
+    "end",
+    "kind",
+    "text_hash",
+    "factual",
+    "cited"
+  ],
+  "title": "AnswerSentence",
+  "type": "object"
+}

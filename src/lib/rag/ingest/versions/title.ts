@@ -71,6 +71,44 @@ export function hasVersionMarker(title: string | null | undefined, markers: read
   });
 }
 
+/**
+ * The version markers the title carries, as written (case kept), in title order and joined by one space: the label D-49 fills at
+ * ingestion. Overlapping matches merge; the result is cut to maxLength at a marker boundary (a single longer marker is cut to
+ * maxLength). Null when the title carries no marker.
+ */
+export function versionMarkerLabel(title: string | null | undefined, markers: readonly string[], maxLength = 40): string | null {
+  if (typeof title !== 'string') return null;
+  const text = title.normalize('NFKC').replace(SEPARATORS, ' ').replace(/\p{Cc}/gu, ' ');
+  const spans: Array<[number, number]> = [];
+  for (const marker of markers) {
+    const regex = compile(marker);
+    if (!regex) continue;
+    for (const match of text.matchAll(regex)) {
+      if (match[0].trim() !== '' && match.index !== undefined) spans.push([match.index, match.index + match[0].length]);
+    }
+  }
+  if (spans.length === 0) return null;
+  spans.sort((a, b) => a[0] - b[0] || b[1] - a[1]);
+  const merged: Array<[number, number]> = [];
+  for (const span of spans) {
+    const last = merged[merged.length - 1];
+    if (last && span[0] < last[1]) last[1] = Math.max(last[1], span[1]);
+    else merged.push([span[0], span[1]]);
+  }
+  let label = '';
+  for (const [start, end] of merged) {
+    const piece = text.slice(start, end).replace(SPACES, ' ').trim();
+    if (piece === '') continue;
+    const next = label === '' ? piece : `${label} ${piece}`;
+    if (next.length > maxLength) {
+      if (label === '') label = piece.slice(0, maxLength).trim();
+      break;
+    }
+    label = next;
+  }
+  return label === '' ? null : label;
+}
+
 /** The latest year found inside the title's version markers (yearPattern from the rules file), or null. */
 export function titleYear(title: string | null | undefined, markers: readonly string[], yearPattern: string): number | null {
   if (typeof title !== 'string') return null;

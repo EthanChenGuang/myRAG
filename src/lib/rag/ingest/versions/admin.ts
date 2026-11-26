@@ -7,6 +7,7 @@ import type { IngestConfig } from '../config';
 import { currentIngestConfig } from '../current-config';
 import { getIngestDeps } from '../deps';
 import type { StageContext } from '../types';
+import { versionLabelsOf } from './effective-dates';
 
 /**
  * "Replaces…" at upload and the supersession admin service (DATA-19, D-41, D-50). The uploader may name the document a new upload
@@ -149,6 +150,8 @@ export interface SupersessionDocumentView {
   effectiveTo: string | null;
   uploadedAt: string | null;
   uploader: { id: string; display: string } | null;
+  /** documents.version_label (0941, D-49), read within the workspace; null when unset. */
+  versionLabel: string | null;
 }
 
 export type SupersessionEntry =
@@ -248,7 +251,7 @@ function dateOf(row: Row, key: string): string | null {
   return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : null;
 }
 
-function documentView(value: unknown, names: Map<string, string>): SupersessionDocumentView | null {
+function documentView(value: unknown, names: Map<string, string>, labels: Map<string, string | null>): SupersessionDocumentView | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
   const row = value as Row;
   const id = str(row, 'id');
@@ -263,6 +266,7 @@ function documentView(value: unknown, names: Map<string, string>): SupersessionD
     effectiveTo: dateOf(row, 'effective_to'),
     uploadedAt: timeOf(row, 'uploaded_at'),
     uploader: uploaderId === null ? null : { id: uploaderId, display: names.get(uploaderId) ?? uploaderId },
+    versionLabel: labels.get(id.toLowerCase()) ?? null,
   };
 }
 
@@ -284,6 +288,10 @@ function uploaderIdOf(value: unknown): string | null {
   return typeof value === 'object' && value !== null ? str(value as Row, 'uploader_id') : null;
 }
 
+function documentIdOf(value: unknown): string | null {
+  return typeof value === 'object' && value !== null && !Array.isArray(value) ? str(value as Row, 'id') : null;
+}
+
 export type ListSupersessionResult = { ok: true; items: SupersessionEntry[]; total: number; limit: number; offset: number } | AdminError;
 
 /** Pending candidates of one workspace (stale ones flagged) and its confirmed links, one page. Works with the switch off too. */
@@ -301,6 +309,13 @@ export async function listSupersession(input: SupersessionScopeInput & { limit?:
     page.rows.flatMap((row) => [uploaderIdOf(row.document), uploaderIdOf(row.candidate_document), str(row, 'decided_by')]),
     input.signal,
   );
+  const labelled = await versionLabelsOf(
+    page.rows.flatMap((row) => [documentIdOf(row.document), documentIdOf(row.candidate_document)]),
+    input.tenantKey,
+    input.signal,
+  );
+  if (!labelled.ok) return { ok: false, reason: labelled.reason === 'invalid_argument' ? 'invalid_argument' : 'unavailable' };
+  const labels = labelled.labels;
   const items: SupersessionEntry[] = [];
   for (const row of page.rows) {
     const id = str(row, 'candidate_id');
@@ -315,8 +330,8 @@ export async function listSupersession(input: SupersessionScopeInput & { limit?:
         id,
         linkId,
         origin,
-        older: documentView(row.document, names),
-        newer: documentView(row.candidate_document, names),
+        older: documentView(row.document, names, labels),
+        newer: documentView(row.candidate_document, names, labels),
         decidedAt: timeOf(row, 'decided_at'),
         decidedBy: decidedBy === null ? null : { id: decidedBy, display: names.get(decidedBy) ?? decidedBy },
       });
@@ -328,8 +343,8 @@ export async function listSupersession(input: SupersessionScopeInput & { limit?:
         direction: directionOf(row.direction),
         stale: row.stale === true,
         signals: signalsView(row.signals),
-        document: documentView(row.document, names),
-        candidateDocument: documentView(row.candidate_document, names),
+        document: documentView(row.document, names, labels),
+        candidateDocument: documentView(row.candidate_document, names, labels),
         createdAt: timeOf(row, 'created_at'),
       });
     }

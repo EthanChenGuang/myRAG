@@ -290,6 +290,7 @@ describe('effective-date routes: deployment admin (single-tenant)', () => {
           effective_to: null,
           origin: null,
           confidence: null,
+          version_label: null,
           proposal: { from: '2027-01-01', to: null, confidence: 0.86, evidence_quote: QUOTE, awaiting: true, proposed_at: '2026-11-24T10:00:00.000Z' },
         },
       ],

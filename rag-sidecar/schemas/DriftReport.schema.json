@@ -1,0 +1,393 @@
+{
+  "$defs": {
+    "DriftCluster": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+          "title": "Id",
+          "type": "string"
+        },
+        "production_share": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Production Share",
+          "type": "number"
+        },
+        "state": {
+          "enum": [
+            "under",
+            "off",
+            "ok"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "test_items": {
+          "minimum": 0,
+          "title": "Test Items",
+          "type": "integer"
+        },
+        "test_share": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Test Share",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "production_share",
+        "test_share",
+        "test_items",
+        "state"
+      ],
+      "title": "DriftCluster",
+      "type": "object"
+    },
+    "DriftGap": {
+      "additionalProperties": false,
+      "properties": {
+        "gap": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gap"
+        },
+        "offline": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Offline"
+        },
+        "online": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Online"
+        },
+        "online_n": {
+          "minimum": 0,
+          "title": "Online N",
+          "type": "integer"
+        },
+        "result": {
+          "enum": [
+            "passed",
+            "failed",
+            "insufficient_n"
+          ],
+          "title": "Result",
+          "type": "string"
+        },
+        "slice": {
+          "pattern": "^[a-z0-9_]+(:[A-Za-z0-9_.|-]+)*$",
+          "title": "Slice",
+          "type": "string"
+        }
+      },
+      "required": [
+        "slice",
+        "online_n",
+        "result"
+      ],
+      "title": "DriftGap",
+      "type": "object"
+    },
+    "DriftLimits": {
+      "additionalProperties": false,
+      "properties": {
+        "alert": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Alert",
+          "type": "number"
+        },
+        "gap": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Gap",
+          "type": "number"
+        },
+        "warn": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Warn",
+          "type": "number"
+        }
+      },
+      "required": [
+        "warn",
+        "alert",
+        "gap"
+      ],
+      "title": "DriftLimits",
+      "type": "object"
+    },
+    "DriftRate": {
+      "additionalProperties": false,
+      "properties": {
+        "metric": {
+          "pattern": "^[a-z0-9_]+$",
+          "title": "Metric",
+          "type": "string"
+        },
+        "offline": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Offline"
+        },
+        "online": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Online"
+        },
+        "online_n": {
+          "minimum": 0,
+          "title": "Online N",
+          "type": "integer"
+        },
+        "slice": {
+          "pattern": "^[a-z0-9_]+(:[A-Za-z0-9_.|-]+)*$",
+          "title": "Slice",
+          "type": "string"
+        }
+      },
+      "required": [
+        "slice",
+        "metric",
+        "online_n"
+      ],
+      "title": "DriftRate",
+      "type": "object"
+    },
+    "DriftScores": {
+      "additionalProperties": false,
+      "properties": {
+        "uncovered_share": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uncovered Share"
+        },
+        "unweighted": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unweighted"
+        },
+        "weighted": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Weighted"
+        }
+      },
+      "title": "DriftScores",
+      "type": "object"
+    },
+    "DriftTrendPoint": {
+      "additionalProperties": false,
+      "properties": {
+        "divergence": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Divergence"
+        },
+        "state": {
+          "enum": [
+            "ok",
+            "warn",
+            "alert"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "week": {
+          "pattern": "^\\d{4}-W\\d{2}$",
+          "title": "Week",
+          "type": "string"
+        }
+      },
+      "required": [
+        "week",
+        "state"
+      ],
+      "title": "DriftTrendPoint",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Weekly test-set drift for one tenant (D-43, D-44); written under eval/golden/private/reports/.",
+  "properties": {
+    "clusters": {
+      "items": {
+        "$ref": "#/$defs/DriftCluster"
+      },
+      "title": "Clusters",
+      "type": "array"
+    },
+    "divergence": {
+      "anyOf": [
+        {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Divergence"
+    },
+    "gaps": {
+      "items": {
+        "$ref": "#/$defs/DriftGap"
+      },
+      "title": "Gaps",
+      "type": "array"
+    },
+    "limits": {
+      "$ref": "#/$defs/DriftLimits"
+    },
+    "null_p95": {
+      "anyOf": [
+        {
+          "maximum": 1,
+          "minimum": 0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Null P95"
+    },
+    "rates": {
+      "items": {
+        "$ref": "#/$defs/DriftRate"
+      },
+      "title": "Rates",
+      "type": "array"
+    },
+    "scores": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/DriftScores"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "state": {
+      "enum": [
+        "ok",
+        "warn",
+        "alert"
+      ],
+      "title": "State",
+      "type": "string"
+    },
+    "tenant_hash": {
+      "anyOf": [
+        {
+          "pattern": "^[a-f0-9]{8,64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Tenant Hash"
+    },
+    "trend": {
+      "items": {
+        "$ref": "#/$defs/DriftTrendPoint"
+      },
+      "title": "Trend",
+      "type": "array"
+    },
+    "week": {
+      "pattern": "^\\d{4}-W\\d{2}$",
+      "title": "Week",
+      "type": "string"
+    }
+  },
+  "required": [
+    "week",
+    "state",
+    "limits"
+  ],
+  "title": "DriftReport",
+  "type": "object"
+}

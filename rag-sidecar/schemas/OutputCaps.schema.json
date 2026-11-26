@@ -1,0 +1,89 @@
+{
+  "$defs": {
+    "OutputCapCell": {
+      "additionalProperties": false,
+      "properties": {
+        "config_hash": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Config Hash"
+        },
+        "limit": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Limit"
+        },
+        "mode": {
+          "enum": [
+            "strict",
+            "balanced"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "run_ids": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Run Ids",
+          "type": "array"
+        },
+        "source": {
+          "enum": [
+            "default",
+            "sweep"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "mode",
+        "source"
+      ],
+      "title": "OutputCapCell",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "D-29/D-34: written only by `python -m rag_eval.sweep output-cap`.",
+  "properties": {
+    "cells": {
+      "items": {
+        "$ref": "#/$defs/OutputCapCell"
+      },
+      "maxItems": 2,
+      "minItems": 2,
+      "title": "Cells",
+      "type": "array"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "cells"
+  ],
+  "title": "OutputCaps",
+  "type": "object"
+}

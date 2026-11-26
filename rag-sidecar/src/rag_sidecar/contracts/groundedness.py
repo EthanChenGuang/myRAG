@@ -3,7 +3,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 GroundednessStatus = Literal["scored", "not_checked"]
-GroundednessScorer = Literal["hhem_2_3_vectara", "hhem_2_1_open", "none"]
+GroundednessScorer = Literal["hhem_2_3_vectara", "hhem_2_1_open", "llm_judge", "none"]
 ThresholdSource = Literal["default", "calibrated"]
 ReasonCode = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")]
 

@@ -7,7 +7,7 @@ import pytest
 from rag_sidecar.contracts import GatePopulationConfig
 from rag_sidecar.contracts.eval_run import RagTrace
 from rag_sidecar.contracts.golden import GoldenItem
-from rag_sidecar.contracts.report import EvalReport, ItemResult
+from rag_sidecar.contracts.report import EvalReport, ItemResult, SliceMetrics
 from test_paired import _baseline, _noise, _rows
 from test_paired import _item as _paired_item
 from test_paired import _report as _paired_report_fixture
@@ -111,7 +111,26 @@ def _snapshot() -> dict[str, object]:
 def test_legacy_mode_reproduces_the_saved_aggregates(shape: str, config: GatePopulationConfig | None):
     results, approved = fixture_shapes()[shape]
     out = aggregate(results, approved_ids=approved, population=config)
-    assert dump_aggregate(out) == _snapshot()[shape]
+    assert out.pop("population_exclusions") == {"coverage_only": 0, "stale_count": 0, "retired_count": 0, "stale_share": 0.0}
+    assert dump_aggregate(_without_false_answer_rate(out)) == _snapshot()[shape]
+
+
+def _without_false_answer_rate(out: dict[str, object]) -> dict[str, object]:
+    """05.3-05 adds false_answer_rate (1 - correct_refusal_rate) to every slice; the saved aggregates predate it."""
+
+    def strip(value: object) -> object:
+        if isinstance(value, SliceMetrics):
+            fa, cr = value.false_answer_rate, value.correct_refusal_rate
+            assert fa is not None and fa.n == cr.n
+            assert (fa.value is None) == (cr.value is None)
+            if fa.value is not None:
+                assert fa.value == pytest.approx(1 - cr.value)
+            return value.model_copy(update={"false_answer_rate": None})
+        if isinstance(value, dict):
+            return {key: strip(inner) for key, inner in value.items()}
+        return value
+
+    return {key: strip(value) for key, value in out.items()}
 
 
 def test_saved_aggregates_cover_all_and_production_populations():
@@ -241,7 +260,7 @@ def test_real_report_names_the_population_counts_and_report_only_provenances(tmp
     assert "3 approved item(s)" in note
     assert "en 1, it 1, zh 1" in note
     assert "provenances production, human" in note
-    assert "synthetic_fixture, claude_draft and ragas_generated items are report-only" in note
+    assert "synthetic_fixture, claude_draft, ragas_generated, historical and paraphrased items are report-only" in note
     assert any(LOADED_SHA in note and "mode real" in note for note in report.notes)
 
 

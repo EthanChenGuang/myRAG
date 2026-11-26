@@ -19,7 +19,8 @@ import { effectiveRetrievalParams } from './retrieval-params';
 import { evalFinalTopK, evalResultCap, runContextStages } from './stages/context';
 import { runQueryStages } from './stages/query';
 import { runRankStages } from './stages/rank';
-import { embedForRetrieval, embedVariantTexts, runSearchStages, type SearchIdentifiers } from './stages/search';
+import { embedForRetrieval, embedVariantTexts, runSearchStages, type QueryLexicalOptions, type SearchIdentifiers } from './stages/search';
+import { resolveLexicalOptions } from '../lexical/resolve-options';
 import {
   bindingHashFields,
   planBindingLegs,
@@ -112,6 +113,27 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
   const security = deps.securityConfig();
   if (security.injectionCheck !== 'off') warnInjectionCheckDisabled(config, security.injectionCheck);
 
+  // LANG-07 (D-08, D-09): the tenant's query-side lexical options, resolved once per request from the verified scope only while a
+  // switch is on; the search stage and both config hashes (result and semantic-cache key) read the same resolution.
+  const lexicalSwitchOn = config.v2.lexicalDictionary || config.v2.lexicalStemIt || config.v2.identifierIndex;
+  let lexicalPending: Promise<QueryLexicalOptions> | null = null;
+  const resolveQueryLexical = (): Promise<QueryLexicalOptions> =>
+    (lexicalPending ??= resolveLexicalOptions(scope, config, { language: detectQueryLanguage(input.query), signal }).then(
+      (resolved) => ({
+        options: resolved.options,
+        stamp: resolved.stamp,
+        unavailable: config.v2.lexicalDictionary && (resolved.stamp.dictVersion === null || resolved.warnings.includes('lexical_dictionary_unavailable')),
+      }),
+      (error: unknown) => {
+        if (signal.aborted) throw error;
+        logger.warn('RAG Lexical', 'Query lexical options unavailable; default tokens used', { code: 'lexical_options_unavailable' });
+        return { options: undefined, stamp: { dictVersion: null, patterns: null }, unavailable: true };
+      },
+    ));
+  if (lexicalSwitchOn) resolveQueryLexical().catch(() => undefined);
+  const lexicalStampFor = async () => (lexicalSwitchOn ? { lexicalStamp: (await resolveQueryLexical()).stamp } : {});
+  let queryLexical: QueryLexicalOptions | undefined;
+
   // D-18: the binding plan reads only the request's doc-type filter, so the cache stage may plan it before the query stages end.
   let earlyBindingPlan: Promise<BindingLegsPlan> | null = null;
   const planBindingsEarly = (): Promise<BindingLegsPlan> =>
@@ -159,6 +181,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
         queryLayerHash: await layerHash(),
         ...(config.effectiveDates ? { effectiveOn: effectiveOnFor(config, deps.now()) } : {}),
         terminology: terminologyStage,
+        ...(await lexicalStampFor()),
       }),
   };
 
@@ -237,6 +260,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
     );
     embedding = variantEmbeddings[0]!;
     translationPlan = await planTranslations(embedding.profile?.id ?? LEGACY_PROFILE.id);
+    if (lexicalSwitchOn) queryLexical = await resolveQueryLexical();
 
     const search = await runSearchStages({
       input,
@@ -266,6 +290,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
           }
         : {}),
       ...(query.terminology ? { terminologyDenseWeight: query.terminology.denseWeight } : {}),
+      ...(queryLexical ? { lexical: queryLexical } : {}),
     });
 
     // D-31, D-51: strict with no asked identifier in the tenant answers nothing; rank and context are not run for it.
@@ -452,6 +477,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
     terminology: terminologyStage,
     ...(identifierState ? { identifiers: identifierState } : {}),
     ...(identifierRefusal ? { identifierRefusal } : {}),
+    ...(queryLexical ? { lexicalStamp: queryLexical.stamp } : {}),
   });
 }
 

@@ -1,0 +1,327 @@
+{
+  "$defs": {
+    "ConfigProvenance": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "enum": [
+            "defaults",
+            "sweep",
+            "calibration",
+            "fixture",
+            "live"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "ConfigProvenance",
+      "type": "object"
+    },
+    "MonitorDriftBands": {
+      "additionalProperties": false,
+      "properties": {
+        "gap_alert": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Gap Alert",
+          "type": "number"
+        },
+        "jsd_alert": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Jsd Alert",
+          "type": "number"
+        },
+        "jsd_warn": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Jsd Warn",
+          "type": "number"
+        },
+        "min_test_items": {
+          "minimum": 1,
+          "title": "Min Test Items",
+          "type": "integer"
+        },
+        "null_percentile": {
+          "exclusiveMaximum": 1,
+          "exclusiveMinimum": 0,
+          "title": "Null Percentile",
+          "type": "number"
+        },
+        "under_covered_min_share": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Under Covered Min Share",
+          "type": "number"
+        },
+        "under_covered_ratio": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Under Covered Ratio",
+          "type": "number"
+        }
+      },
+      "required": [
+        "jsd_warn",
+        "jsd_alert",
+        "under_covered_min_share",
+        "under_covered_ratio",
+        "gap_alert",
+        "min_test_items",
+        "null_percentile"
+      ],
+      "title": "MonitorDriftBands",
+      "type": "object"
+    },
+    "MonitorRule": {
+      "additionalProperties": false,
+      "description": "One rule of eval/config/monitor-alerts.json. Which band fields a rule needs depends on its kind (D-24, D-44).",
+      "properties": {
+        "alert": {
+          "minimum": 0,
+          "title": "Alert",
+          "type": "number"
+        },
+        "baseline_min_sample": {
+          "minimum": 1,
+          "title": "Baseline Min Sample",
+          "type": "integer"
+        },
+        "budget_ratio": {
+          "exclusiveMinimum": 0,
+          "title": "Budget Ratio",
+          "type": "number"
+        },
+        "drop": {
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Drop",
+          "type": "number"
+        },
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "id": {
+          "enum": [
+            "refusal_rate",
+            "zero_result_rate",
+            "below_threshold_rate",
+            "not_helpful_rate",
+            "groundedness_flagged_rate",
+            "kb_error_rate",
+            "kb_degraded_rate",
+            "kb_unavailable_rate",
+            "top_score_psi",
+            "latency_p95",
+            "online_judge_mean",
+            "test_set_not_representative",
+            "offline_online_gap",
+            "language_drop"
+          ],
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "rate",
+            "distribution",
+            "latency",
+            "judge_mean",
+            "drift",
+            "offline_online_gap",
+            "language_drop"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "metric": {
+          "pattern": "^[a-z0-9_]+$",
+          "title": "Metric",
+          "type": "string"
+        },
+        "min_abs_delta": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Min Abs Delta",
+          "type": "number"
+        },
+        "min_sample": {
+          "minimum": 1,
+          "title": "Min Sample",
+          "type": "integer"
+        },
+        "min_z": {
+          "minimum": 0,
+          "title": "Min Z",
+          "type": "number"
+        },
+        "params": {
+          "patternProperties": {
+            "^[a-z0-9_]+$": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "pattern": "^[a-z0-9_]+$",
+                  "type": "string"
+                },
+                {
+                  "items": {
+                    "pattern": "^[a-z0-9_]+$",
+                    "type": "string"
+                  },
+                  "type": "array"
+                }
+              ]
+            }
+          },
+          "title": "Params",
+          "type": "object"
+        },
+        "ratio": {
+          "exclusiveMinimum": 0,
+          "title": "Ratio",
+          "type": "number"
+        },
+        "warn": {
+          "minimum": 0,
+          "title": "Warn",
+          "type": "number"
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "min_sample"
+      ],
+      "title": "MonitorRule",
+      "type": "object"
+    },
+    "MonitorSamplingConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "drift_fill_share": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Drift Fill Share",
+          "type": "number"
+        },
+        "max_queries": {
+          "minimum": 1,
+          "title": "Max Queries",
+          "type": "integer"
+        },
+        "min_queries": {
+          "minimum": 1,
+          "title": "Min Queries",
+          "type": "integer"
+        },
+        "pilot_cap_share": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Pilot Cap Share",
+          "type": "number"
+        },
+        "pilot_multiplier": {
+          "minimum": 1,
+          "title": "Pilot Multiplier",
+          "type": "number"
+        },
+        "quota_tolerance": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Quota Tolerance",
+          "type": "number"
+        },
+        "weekly_cap": {
+          "minimum": 1,
+          "title": "Weekly Cap",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "weekly_cap",
+        "pilot_multiplier",
+        "pilot_cap_share",
+        "drift_fill_share",
+        "max_queries",
+        "min_queries",
+        "quota_tolerance"
+      ],
+      "title": "MonitorSamplingConfig",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "baseline_days": {
+      "minimum": 1,
+      "title": "Baseline Days",
+      "type": "integer"
+    },
+    "config_hash": {
+      "anyOf": [
+        {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Config Hash"
+    },
+    "drift": {
+      "$ref": "#/$defs/MonitorDriftBands"
+    },
+    "provenance": {
+      "$ref": "#/$defs/ConfigProvenance"
+    },
+    "rules": {
+      "items": {
+        "$ref": "#/$defs/MonitorRule"
+      },
+      "title": "Rules",
+      "type": "array"
+    },
+    "sampling": {
+      "$ref": "#/$defs/MonitorSamplingConfig"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "window_days": {
+      "items": {
+        "type": "integer"
+      },
+      "minItems": 1,
+      "title": "Window Days",
+      "type": "array"
+    }
+  },
+  "required": [
+    "window_days",
+    "baseline_days",
+    "rules",
+    "drift",
+    "sampling",
+    "provenance"
+  ],
+  "title": "MonitorAlertsConfig",
+  "type": "object"
+}
