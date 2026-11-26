@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { env } from '@/lib/env';
-import { requireAdminOrDeny } from '@/lib/admin-route-auth';
+import { checkAdmin, requireAdminOrDeny } from '@/lib/admin-route-auth';
 import { EnvWriteError, readEnvFile, stringifyJsonForEnv, writeEnvUpdates } from '@/lib/env-file';
-import { guardAppEnvWrite } from '@/lib/rag/config-gate/guard';
+import { guardAppEnvWrite } from '@/lib/rag';
 
 export interface ModelWithReasoning {
   id: string;
@@ -119,6 +119,11 @@ export async function GET(request: NextRequest) {
   }
 }
 
+async function adminUserId(request: Request): Promise<string | null> {
+  const admin = await checkAdmin(request);
+  return admin.ok ? admin.userId : null;
+}
+
 export async function POST(request: NextRequest) {
   const denied = await requireAdminOrDeny(request);
   if (denied) return denied;
@@ -169,8 +174,8 @@ export async function POST(request: NextRequest) {
     }
 
     const updates = modelConfigUpdates(provider, openaiModels, openrouterModels, groqModels);
-    const gate = await guardAppEnvWrite({ updates, ragGate, request, route: 'models' });
-    if (!gate.ok) return gate.response;
+    const gate = await guardAppEnvWrite({ updates, ragGate, actorUserId: () => adminUserId(request), route: 'models' });
+    if (!gate.ok) return NextResponse.json(gate.body, { status: gate.status, headers: { 'Cache-Control': 'no-store' } });
 
     // Save the configuration to .env.local
     await saveModelConfig(updates);

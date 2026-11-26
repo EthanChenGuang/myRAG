@@ -414,3 +414,23 @@ describe('unguarded app writers', () => {
     expect([...servers.matchAll(/writeEnvUpdates\(\{\s*([A-Z_]+):/g)].map((m) => m[1])).toEqual(['MCP_CUSTOM_SERVERS']);
   });
 });
+
+describe('guardAppEnvWrite actor', () => {
+  it('an override without a resolvable admin id answers 503 and is not written; the resolver is not called in off mode', async () => {
+    process.env.RAG_CONFIG_GATE = 'enforce';
+    makeEnvDir(ENV_FILE);
+    await load<Route>('@/app/api/config/rag-prompt/route');
+    const { guardAppEnvWrite } = await import('@/lib/rag/config-gate/guard');
+    const resolver = vi.fn(async () => null);
+
+    const refused = await guardAppEnvWrite({ updates: { RAG_PRE_CONTEXT: NEW_PRE }, ragGate: { override: { reason: REASON } }, actorUserId: resolver, route: 'rag-prompt' });
+    expect(refused).toMatchObject({ ok: false, status: 503, body: { error: 'rag_gate_record_failed' } });
+    expect(db.inserts).toHaveLength(0);
+
+    delete process.env.RAG_CONFIG_GATE;
+    resolver.mockClear();
+    const off = await guardAppEnvWrite({ updates: { RAG_PRE_CONTEXT: NEW_PRE }, ragGate: undefined, actorUserId: resolver, route: 'rag-prompt' });
+    expect(off).toEqual({ ok: true, ragGate: null });
+    expect(resolver).not.toHaveBeenCalled();
+  });
+});

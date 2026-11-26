@@ -1,5 +1,4 @@
 import fs from 'fs';
-import { NextResponse } from 'next/server';
 import { z } from 'zod/v3';
 import { applyEnvUpdates, envFilePath, readEnvFile } from '@/lib/env-file';
 import { monitorSettings, type ConfigGateMode } from '@/lib/rag/monitor/config';
@@ -17,9 +16,8 @@ export type AppGuardRoute = 'config' | 'rag-prompt' | 'models';
 export interface GuardAppEnvWriteInput {
   updates: Record<string, string>;
   ragGate: unknown;
-  /** The admin's user id; without it the id is read from the request's admin session when a record is written. */
-  actorUserId?: string;
-  request?: Request;
+  /** The admin's user id, or a resolver the guard calls only when it writes a record. */
+  actorUserId: string | (() => Promise<string | null>);
   route: AppGuardRoute;
   /** Repository root holding eval/out/config-gate/; defaults to process.cwd(). */
   root?: string;
@@ -27,9 +25,7 @@ export interface GuardAppEnvWriteInput {
 
 export type GuardAppEnvWriteResult =
   | { ok: true; ragGate: { record_id: string; gate_result: string } | null }
-  | { ok: false; response: NextResponse };
-
-const NO_STORE = { 'Cache-Control': 'no-store' };
+  | { ok: false; status: 400 | 409 | 503; body: { success: false; error: string; message?: string } };
 const MODE_RANK: Record<ConfigGateMode, number> = { off: 0, warn: 1, enforce: 2 };
 
 const RagGateSchema = z.union([
@@ -38,8 +34,8 @@ const RagGateSchema = z.union([
   z.object({ skipped: z.literal(true) }).strict(),
 ]);
 
-function refuse(status: 400 | 409 | 503, body: Record<string, unknown>): GuardAppEnvWriteResult {
-  return { ok: false, response: NextResponse.json({ success: false, ...body }, { status, headers: NO_STORE }) };
+function refuse(status: 400 | 409 | 503, body: { error: string; message?: string }): GuardAppEnvWriteResult {
+  return { ok: false, status, body: { success: false, ...body } };
 }
 
 function required(): GuardAppEnvWriteResult {
@@ -57,11 +53,7 @@ function effectiveMode(fromProcess: ConfigGateMode, fileValues: Record<string, s
 }
 
 async function resolveActor(input: GuardAppEnvWriteInput): Promise<string | null> {
-  if (input.actorUserId) return input.actorUserId;
-  if (!input.request) return null;
-  const { checkAdmin } = await import('@/lib/admin-route-auth');
-  const admin = await checkAdmin(input.request);
-  return admin.ok ? admin.userId : null;
+  return typeof input.actorUserId === 'function' ? input.actorUserId() : input.actorUserId;
 }
 
 function writesCleanly(updates: Record<string, string>): boolean {

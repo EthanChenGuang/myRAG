@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server';
 import * as fs from 'fs';
 import * as path from 'path';
-import { requireAdminOrDeny } from '@/lib/admin-route-auth';
+import { checkAdmin, requireAdminOrDeny } from '@/lib/admin-route-auth';
 import {
   MAX_CONFIG_VALUE_LENGTH,
   isReadableEnvEntry,
   isWritableEnvName,
 } from '@/lib/config-env-allowlist';
 import { EnvWriteError, invalidEnvValueReason, parseEnvContent, stringifyJsonForEnv, writeEnvUpdates } from '@/lib/env-file';
-import { guardAppEnvWrite } from '@/lib/rag/config-gate/guard';
+import { guardAppEnvWrite } from '@/lib/rag';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -48,6 +48,11 @@ export async function GET(request: Request) {
     console.error('[Config API] failed to read configuration');
     return NextResponse.json({ success: false, error: 'Failed to read configuration' }, { status: 500 });
   }
+}
+
+async function adminUserId(request: Request): Promise<string | null> {
+  const admin = await checkAdmin(request);
+  return admin.ok ? admin.userId : null;
 }
 
 export async function POST(request: Request) {
@@ -106,10 +111,10 @@ export async function POST(request: Request) {
   const gate = await guardAppEnvWrite({
     updates: updatesToWrite,
     ragGate: (body as { ragGate?: unknown }).ragGate,
-    request,
+    actorUserId: () => adminUserId(request),
     route: 'config',
   });
-  if (!gate.ok) return gate.response;
+  if (!gate.ok) return NextResponse.json(gate.body, { status: gate.status, headers: { 'Cache-Control': 'no-store' } });
 
   try {
     writeEnvUpdates(updatesToWrite);

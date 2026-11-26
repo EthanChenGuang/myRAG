@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdminOrDeny } from '@/lib/admin-route-auth';
+import { checkAdmin, requireAdminOrDeny } from '@/lib/admin-route-auth';
 import { EnvWriteError, invalidEnvValueReason, readEnvFile, writeEnvUpdates } from '@/lib/env-file';
-import { guardAppEnvWrite } from '@/lib/rag/config-gate/guard';
+import { guardAppEnvWrite } from '@/lib/rag';
 
 /**
  * API endpoint for RAG system prompt configuration
@@ -129,6 +129,11 @@ export async function GET(request: NextRequest) {
   }
 }
 
+async function adminUserId(request: Request): Promise<string | null> {
+  const admin = await checkAdmin(request);
+  return admin.ok ? admin.userId : null;
+}
+
 export async function POST(request: NextRequest) {
   const denied = await requireAdminOrDeny(request);
   if (denied) return denied;
@@ -174,8 +179,8 @@ export async function POST(request: NextRequest) {
     // Assemble prompt for response (not saved to env file)
     const assembledPrompt = assemblePrompt(preContext, postContext || '');
 
-    const gate = await guardAppEnvWrite({ updates, ragGate, request, route: 'rag-prompt' });
-    if (!gate.ok) return gate.response;
+    const gate = await guardAppEnvWrite({ updates, ragGate, actorUserId: () => adminUserId(request), route: 'rag-prompt' });
+    if (!gate.ok) return NextResponse.json(gate.body, { status: gate.status, headers: { 'Cache-Control': 'no-store' } });
 
     writeEnvUpdates(updates);
 
