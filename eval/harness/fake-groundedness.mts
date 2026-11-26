@@ -22,18 +22,18 @@ const SECRET_HEADER = 'x-sidecar-secret';
 const PATH = '/v1/groundedness';
 const MAX_BODY_BYTES = 1_000_000;
 
-function sameSecret(given: string | undefined, expected: string): boolean {
+export function sameSecret(given: string | undefined, expected: string): boolean {
   if (typeof given !== 'string') return false;
   const a = crypto.createHash('sha256').update(given).digest();
   const b = crypto.createHash('sha256').update(expected).digest();
   return crypto.timingSafeEqual(a, b);
 }
 
-function latinTokens(text: string): string[] {
+export function latinTokens(text: string): string[] {
   return text.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
 }
 
-function hanChars(text: string): string[] {
+export function hanChars(text: string): string[] {
   return text.match(/\p{Script=Han}/gu) ?? [];
 }
 

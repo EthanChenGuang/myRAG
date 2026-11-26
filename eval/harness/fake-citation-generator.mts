@@ -21,7 +21,7 @@ const MAX_SENTENCE_CHARS = 300;
 const STREAM_PIECE_CHARS = 12;
 const NO_CONTEXT_ANSWER = 'The provided documents do not contain this information.';
 
-const USAGE = {
+export const USAGE = {
   inputTokens: { total: 0, noCache: 0, cacheRead: 0, cacheWrite: 0 },
   outputTokens: { total: 0, text: 0, reasoning: 0 },
 };
@@ -34,7 +34,7 @@ interface LabelledBlock {
 /** Ingested chunks start with "Document: <name>. Chunk <i> of <n>. Content: "; the answer quotes the content after it. */
 const CHUNK_PREFIX_RE = /^Document: [^\n]*?Content:[ \t]*/;
 
-function firstSentence(raw: string): string {
+export function firstSentence(raw: string): string {
   const body = raw
     .trim()
     .replace(CHUNK_PREFIX_RE, '')
@@ -50,10 +50,16 @@ function firstSentence(raw: string): string {
   return sentence;
 }
 
-/** The labelled blocks in prompt order; a label that appears twice keeps its first block. */
-export function labelledBlocks(system: string): LabelledBlock[] {
+export interface ContextBlock {
+  alias: string;
+  /** Everything after the label line up to the next label (or the end of the system prompt). */
+  text: string;
+}
+
+/** The raw labelled blocks in prompt order; a label that appears twice keeps its first block. */
+export function contextBlocks(system: string): ContextBlock[] {
   const headers = [...system.matchAll(HEADER_RE)];
-  const blocks: LabelledBlock[] = [];
+  const blocks: ContextBlock[] = [];
   const seen = new Set<string>();
   headers.forEach((header, index) => {
     const alias = `S${header[1]}`;
@@ -61,9 +67,14 @@ export function labelledBlocks(system: string): LabelledBlock[] {
     seen.add(alias);
     const start = (header.index ?? 0) + header[0].length;
     const end = index + 1 < headers.length ? (headers[index + 1].index ?? system.length) : system.length;
-    blocks.push({ alias, sentence: firstSentence(system.slice(start, end)) });
+    blocks.push({ alias, text: system.slice(start, end) });
   });
   return blocks;
+}
+
+/** The labelled blocks in prompt order; a label that appears twice keeps its first block. */
+export function labelledBlocks(system: string): LabelledBlock[] {
+  return contextBlocks(system).map((block) => ({ alias: block.alias, sentence: firstSentence(block.text) }));
 }
 
 function digest(seed: string, question: string): Buffer {
@@ -104,7 +115,7 @@ export function splitForStreaming(text: string): string[] {
   return pieces.filter((piece) => piece.length > 0);
 }
 
-function promptParts(options: LanguageModelV3CallOptions): { system: string; question: string } {
+export function promptParts(options: LanguageModelV3CallOptions): { system: string; question: string } {
   const system = options.prompt
     .filter((message) => message.role === 'system')
     .map((message) => (typeof message.content === 'string' ? message.content : ''))
