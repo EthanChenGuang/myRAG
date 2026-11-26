@@ -1,6 +1,6 @@
 from typing import Annotated, Literal
 
-from pydantic import Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from rag_sidecar.contracts.groundedness import _Contract
 
@@ -36,3 +36,7 @@ class OutputCaps(_Contract):
         if sorted(cell.mode for cell in self.cells) != sorted(_CAP_MODES):
             raise ValueError("output caps need exactly one cell per mode (strict, balanced)")
         return self
+
+
+class OutputGuardRules(BaseModel):
+    model_config = ConfigDict(extra="allow")

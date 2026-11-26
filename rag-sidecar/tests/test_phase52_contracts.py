@@ -368,3 +368,163 @@ def test_claims_llm_judge_scorer_and_hhem_cells_unchanged():
         GroundednessThresholds.model_validate(
             {"cells": [{"scorer": "llm_judge", "language": "it", "threshold": 0.5, "source": "default"}]}
         )
+
+
+# --- Task 3: guard rules, security events, review reasons and registration ---
+
+from typing import get_args  # noqa: E402
+
+from rag_sidecar.contracts.output_guard import OutputGuardRules  # noqa: E402
+from rag_sidecar.contracts.review import ReviewReason  # noqa: E402
+from rag_sidecar.contracts.security_events import (  # noqa: E402
+    LinkPreviewStatus,
+    SecurityAlert,
+    SecurityEvent,
+    SecurityUploaderView,
+)
+
+
+def _guard_rules(**overrides):
+    base = {
+        "version": "1",
+        "credential_rules": [
+            {"id": "cred-en-01", "language": "en", "request_terms": ["send me"], "secret_terms": ["password"]}
+        ],
+        "obfuscation_patterns": [{"id": "obf-01", "pattern": r"h\s*t\s*t\s*p"}],
+        "opaque_schemes": ["data", "javascript"],
+    }
+    base.update(overrides)
+    return base
+
+
+def test_security_guard_rules_shape():
+    rules = OutputGuardRules.model_validate(_guard_rules())
+    assert rules.schema_version == 1
+    for bad in [
+        {"credential_rules": [{"id": "cred-en-01", "language": "en", "request_terms": [], "secret_terms": ["x"]}]},
+        {"credential_rules": [{"id": "cred-en-01", "language": "en", "request_terms": [""], "secret_terms": ["x"]}]},
+        {"credential_rules": [{"id": "cred-en-01", "language": "en", "request_terms": ["x"], "secret_terms": []}]},
+        {"obfuscation_patterns": [{"id": "obf-01", "pattern": r"(a)\1"}]},
+        {"obfuscation_patterns": [{"id": "obf-01", "pattern": r"(?P<n>a)(?P=n)"}]},
+        {"obfuscation_patterns": [{"id": "obf-01", "pattern": "a"}, {"id": "obf-01", "pattern": "b"}]},
+        {"opaque_schemes": ["Not A Scheme"]},
+        {"version": ""},
+    ]:
+        with pytest.raises(ValidationError):
+            OutputGuardRules.model_validate(_guard_rules(**bad))
+
+
+def _event(**overrides):
+    base = {
+        "tenant_key": "s:default",
+        "source": "output_guard",
+        "action": "removed",
+        "detector": "rules",
+        "rule_ids": ["rule-1"],
+        "document_id": "doc-1",
+        "chunk_id": "chunk-1",
+        "uploader_id": "00000000-0000-4000-8000-0000000000c1",
+        "trace_id": "trace-1",
+    }
+    base.update(overrides)
+    return base
+
+
+def test_security_event_has_no_text_field():
+    event = SecurityEvent.model_validate(_event())
+    assert event.id is None
+    assert not {"text", "snippet", "content", "quote"} & set(SecurityEvent.model_fields)
+    for bad in [{"text": "anything"}, {"source": "chat"}, {"action": "deleted"}, {"tenant_key": ""}]:
+        with pytest.raises(ValidationError):
+            SecurityEvent.model_validate(_event(**bad))
+    SecurityEvent.model_validate(_event(chunk_id=None, uploader_id=None, trace_id=None, source="ingest_injection", action="quarantined"))
+
+
+def test_security_alert_rules():
+    alert = {
+        "tenant_key": "s:default",
+        "uploader_id": "00000000-0000-4000-8000-0000000000c1",
+        "event_count": 3,
+        "window_start": "2026-01-01T00:00:00+00:00",
+        "window_end": "2026-01-02T00:00:00Z",
+        "status": "open",
+    }
+    assert SecurityAlert.model_validate(alert).held is False
+    for bad in [
+        {"event_count": 0},
+        {"status": "closed"},
+        {"window_end": "2026-01-01T00:00:00Z"},
+        {"window_start": "not a time"},
+    ]:
+        with pytest.raises(ValidationError):
+            SecurityAlert.model_validate(alert | bad)
+
+
+def test_security_uploader_view_and_link_previews():
+    view = SecurityUploaderView.model_validate(
+        {"user_id": "00000000-0000-4000-8000-0000000000c1", "display_name": "Uploader A", "tenant_key": "s:default"}
+    )
+    assert view.email is None
+    LinkPreviewStatus.model_validate({"state": "unknown"})
+    LinkPreviewStatus.model_validate({"state": "subset", "preview_hosts": ["host.example"]})
+    LinkPreviewStatus.model_validate(
+        {"state": "mismatch", "preview_hosts": ["host.example", "other.example"], "hosts_not_allowlisted": ["other.example"]}
+    )
+    for bad in [
+        {"state": "partial"},
+        {"state": "subset", "preview_hosts": ["https://host.example/path"]},
+        {"state": "mismatch", "preview_hosts": ["host.example"]},
+        {"state": "subset", "preview_hosts": ["host.example"], "hosts_not_allowlisted": ["host.example"]},
+        {"state": "none", "preview_hosts": ["host.example"]},
+    ]:
+        with pytest.raises(ValidationError):
+            LinkPreviewStatus.model_validate(bad)
+
+
+def test_security_review_reasons_extended_by_three():
+    assert set(get_args(ReviewReason)) >= {
+        "sampled",
+        "feedback_negative",
+        "groundedness_flagged",
+        "claim_unsupported",
+        "output_guard",
+        "version_conflict",
+    }
+    assert not {"calc_mismatch", "calc_unverified"} & set(get_args(ReviewReason))
+
+
+PHASE52_MODELS = [
+    "AnswerChecks",
+    "AnswerSentence",
+    "AnswerNotice",
+    "OutputGuardSummary",
+    "VersionConflict",
+    "ClaimCheckRequest",
+    "ClaimCheckResult",
+    "ClaimJudgement",
+    "GroundednessJudgeThresholds",
+    "OutputCaps",
+    "OutputGuardRules",
+    "SecurityEvent",
+    "SecurityAlert",
+    "UploaderHold",
+    "SecurityEventView",
+    "SecurityAlertView",
+    "SecurityUploaderView",
+    "LinkPreviewStatus",
+]
+
+
+def test_security_every_phase52_model_is_registered_with_a_neutral_sample():
+    from rag_sidecar.contracts.samples import build_samples  # noqa: PLC0415
+    from rag_sidecar.export_schemas import CONTRACTS  # noqa: PLC0415
+
+    registered = {model.__name__: model for model, _ in CONTRACTS}
+    samples = build_samples()["samples"]
+    for name in PHASE52_MODELS:
+        assert name in registered, name
+        assert name in samples, name
+        registered[name].model_validate(samples[name])
+    blob = json.dumps({name: samples[name] for name in PHASE52_MODELS}).lower()
+    for word in ("leave", "salary", "vpn", "travel", "hotel", "restaurant", "branch"):
+        assert word not in blob, word
