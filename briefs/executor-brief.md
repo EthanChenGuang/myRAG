@@ -80,3 +80,5 @@ Additional notes (planning session, 2026-11-25):
 - Phase 4.2: the tokenizer options contract from 04.2-04 is `{ language, stemIt, dictionary: { version, match }, identifierPatterns }` with `_t_`/`_s_` prefixes; every new 4.2 store gets a `rag_purge_hook_<name>` and every new privileged function a guarded entry in 0410 (standing rule from 04.2-03).
 - Phase 4.1.1: `rag_term_effective` is SECURITY INVOKER (0471); deleting a shared entry cascades to tenant suppressions, so the 0472 delete writer writes those audit rows first.
 - Chat route prompt assembly: keep the question last, no provider-side truncation (RNK-08).
+
+Migration numbers (two branches collided on 0864 on 2026-11-26): before you create a migration file, run `git fetch origin '+refs/heads/*:refs/remotes/origin/*'` and list the numbers already used on every origin branch: `for b in $(git for-each-ref --format='%(refname:short)' refs/remotes/origin); do git ls-tree --name-only $b supabase/migrations/; done | sort -u`. Take the next free number in your phase's block, commit the file at once and push it, so other executors see that the number is taken.
