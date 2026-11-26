@@ -1,12 +1,12 @@
 import { useEffect } from 'react';
-import { AlertTriangle, CheckCircle2, Clock, CopyCheck, HelpCircle, Loader2, ShieldAlert, Sparkles, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, CopyCheck, HelpCircle, Hourglass, Loader2, ShieldAlert, Sparkles, XCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   isTerminalIngestStatus,
   useIngestJobStatus,
   type IngestJobState,
 } from '@/lib/hooks/use-ingest-job-status';
-import { describeIngestStatus, type IngestStatusTone } from '@/components/ui/ingest-status-labels';
+import { describeIngestStatus, pendingReviewHint, type IngestStatusTone } from '@/components/ui/ingest-status-labels';
 
 export interface IngestStatusBadgeProps {
   state: IngestJobState;
@@ -25,6 +25,7 @@ const TONE_CLASSES: Record<IngestStatusTone, string> = {
 
 function StatusIcon({ state, tone }: { state: IngestJobState; tone: IngestStatusTone }) {
   const className = 'h-3.5 w-3.5 flex-shrink-0';
+  if (state.status === 'pending_review') return <Hourglass aria-hidden="true" className={className} />;
   if (tone === 'info') return <Sparkles aria-hidden="true" className={className} />;
   if (tone === 'pending') {
     return state.status === 'queued' ? (
@@ -52,12 +53,18 @@ function StatusIcon({ state, tone }: { state: IngestJobState; tone: IngestStatus
 /** Status of one ingestion job; the reason code of a failed or needs_review job is the tooltip. */
 export function IngestStatusBadge({ state, language, className }: IngestStatusBadgeProps) {
   const { label, tone } = describeIngestStatus(state, language);
+  const title =
+    state.status === 'pending_review'
+      ? `${label}. ${pendingReviewHint(language)}`
+      : state.reason
+        ? `${label} (${state.reason})`
+        : label;
   return (
     <span
       role="status"
       aria-live="polite"
       aria-label={label}
-      title={state.reason ? `${label} (${state.reason})` : label}
+      title={title}
       className={cn('inline-flex min-w-0 items-center gap-1.5 text-xs font-medium', TONE_CLASSES[tone], className)}
     >
       <StatusIcon state={state} tone={tone} />

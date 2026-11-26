@@ -51,7 +51,7 @@ export const INGEST_POLL_SLOW_MS = 10_000;
 export const INGEST_POLL_SLOW_AFTER_MS = 60_000;
 
 const BROADCAST_EVENT = 'ingest_status';
-const TERMINAL_STATUSES: ReadonlySet<string> = new Set(['ready', 'failed', 'needs_review', 'quarantined', 'skipped_duplicate']);
+const TERMINAL_STATUSES: ReadonlySet<string> = new Set(['ready', 'failed', 'needs_review', 'quarantined', 'pending_review', 'skipped_duplicate']);
 const STOPPED_STATUSES: ReadonlySet<string> = new Set([...TERMINAL_STATUSES, 'not_found', 'unavailable']);
 
 export function isTerminalIngestStatus(status: string): boolean {
