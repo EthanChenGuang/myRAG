@@ -19,6 +19,8 @@ const PHASE42_FILES = [
   'supabase/migrations/0853_dup_clusters.sql',
   'supabase/migrations/0854_identifier_index.sql',
 ];
+// Later files that redefine a function of 0851-0854; re-running the older files is followed by these, in order (AGENTS.md).
+const LATER_REDEFINITIONS = ['supabase/migrations/0864_purge_hooks.sql'];
 const NEW_TABLES = ['rag_table_rows', 'rag_dup_clusters', 'rag_identifier_patterns'] as const;
 const NEW_CHUNK_COLUMNS: Record<string, string> = {
   lexical_dict_version: 'text',
@@ -470,10 +472,10 @@ for (const mode of MODES) {
       await db?.close();
     });
 
-    test('0851-0854 applied again leave the schema dump unchanged', async () => {
+    test('0851-0854 applied again, followed by their later redefinitions, leave the schema dump unchanged', async () => {
       for (const table of NEW_TABLES) assert.ok(await tableExists(db, table), `${table} exists`);
       const first = await schemaDump(db);
-      await applyMigrationFiles(db, PHASE42_FILES);
+      await applyMigrationFiles(db, [...PHASE42_FILES, ...LATER_REDEFINITIONS]);
       const second = await schemaDump(db);
       assert.deepEqual(second, first);
     });

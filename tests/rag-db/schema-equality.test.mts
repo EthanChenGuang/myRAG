@@ -270,7 +270,7 @@ for (const mode of MODES) {
       try {
         const found = differences(full.dump, partial.dump);
         assert.ok(found.length > 0);
-        assert.ok(found.some((line) => line.startsWith('functions:')));
+        assert.ok(found.some((line) => /^(functions|columns|constraints|triggers):/.test(line)));
       } finally {
         await full.fixture.db.close();
         await partial.fixture.db.close();

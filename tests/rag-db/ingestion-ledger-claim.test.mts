@@ -270,7 +270,7 @@ for (const mode of MODES) {
       const tenant = tenantFor(mode);
       const jobId = await enqueue(db, { tenant, sourceKey: `resume/${crypto.randomUUID()}` });
       await claimRows(db, 'w', 1, true);
-      await db.query(`UPDATE ingestion_jobs SET status = 'chunking', stage = 'chunking', stage_state = '{"cursor":1}'::jsonb WHERE id = $1`, [jobId]);
+      await db.query(`UPDATE ingestion_jobs SET status = 'chunking', stage = 'chunk', stage_state = '{"cursor":1}'::jsonb WHERE id = $1`, [jobId]);
       const released = (
         await db.query<{ rag_release_ingestion_job: boolean }>('SELECT rag_release_ingestion_job($1, $2)', [jobId, 'w'])
       ).rows[0]?.rag_release_ingestion_job;
@@ -278,7 +278,7 @@ for (const mode of MODES) {
       const [claimed] = await claimRows(db, 'w2', 1, true);
       assert.equal(claimed, jobId);
       const row = (await db.query<{ status: string; stage: string }>('SELECT status, stage FROM ingestion_jobs WHERE id = $1', [jobId])).rows[0];
-      assert.deepEqual(row, { status: 'chunking', stage: 'chunking' });
+      assert.deepEqual(row, { status: 'chunking', stage: 'chunk' });
     });
 
     test('batch concurrency, allow_batch slot rule, named claim, heartbeat and release', async () => {

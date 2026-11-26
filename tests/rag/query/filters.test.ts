@@ -119,6 +119,13 @@ describe('effectiveVersionScope (D-12, D-40, D-58)', () => {
     expect(effectiveVersionScope(on, 'embed', 'all')).toEqual({ scope: 'current', ignored: true });
     expect(effectiveVersionScope(embedOn, 'embed', 'all')).toEqual({ scope: 'all', ignored: false });
   });
+
+  it('the embed channel needs the embed switch whatever the profile (D-58)', () => {
+    expect(effectiveVersionScope(on, 'chat', 'all', 'embed')).toEqual({ scope: 'current', ignored: true });
+    expect(effectiveVersionScope(on, 'eval', 'all', 'embed')).toEqual({ scope: 'current', ignored: true });
+    expect(effectiveVersionScope(embedOn, 'chat', 'all', 'embed')).toEqual({ scope: 'all', ignored: false });
+    expect(effectiveVersionScope(embedOn, 'voice', 'all', 'embed')).toEqual({ scope: 'current', ignored: true });
+  });
 });
 
 describe('buildRetrievalFilters', () => {

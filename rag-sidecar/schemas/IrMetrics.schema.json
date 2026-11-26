@@ -1,0 +1,36 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "mrr_at_10": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Mrr At 10",
+      "type": "number"
+    },
+    "n": {
+      "minimum": 0,
+      "title": "N",
+      "type": "integer"
+    },
+    "ndcg_at_10": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Ndcg At 10",
+      "type": "number"
+    },
+    "recall_at_10": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Recall At 10",
+      "type": "number"
+    }
+  },
+  "required": [
+    "n",
+    "recall_at_10",
+    "mrr_at_10",
+    "ndcg_at_10"
+  ],
+  "title": "IrMetrics",
+  "type": "object"
+}

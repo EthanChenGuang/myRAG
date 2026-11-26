@@ -38,5 +38,14 @@ export interface RetrievalPort {
   finishRetrieval(fusedChunkIds: readonly string[]): RetrievalPortHit[];
 }
 
+/** What the search stage hands a delegate besides the port: the stage signal and the RRF settings of retrieval-params.json. */
+export interface SearchDelegateContext {
+  readonly signal: AbortSignal;
+  /** retrieval-params.json rrf_k. */
+  readonly rrfK: number;
+  /** retrieval-params.json leg_weights for the variant legs. */
+  readonly legWeights: { readonly dense: number; readonly lexical: number };
+}
+
 /** Fuses the port's variant lists and returns the fused chunk-id order. */
-export type SearchDelegate = (port: RetrievalPort) => Promise<string[]>;
+export type SearchDelegate = (port: RetrievalPort, context?: SearchDelegateContext) => Promise<string[]>;

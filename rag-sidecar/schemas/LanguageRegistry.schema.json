@@ -334,6 +334,49 @@
       ],
       "title": "LanguageTexts",
       "type": "object"
+    },
+    "QuantityNotation": {
+      "additionalProperties": false,
+      "description": "Language-neutral unit symbols and number separators for quantity tokens (Phase 3.3 D-31, D-32).\n\nOne character may be both a decimal and a grouping separator: an ambiguous separator is read both ways.",
+      "properties": {
+        "decimal_separators": {
+          "items": {
+            "pattern": "^\\D$",
+            "type": "string"
+          },
+          "maxItems": 4,
+          "minItems": 1,
+          "title": "Decimal Separators",
+          "type": "array"
+        },
+        "grouping_separators": {
+          "items": {
+            "pattern": "^\\D$",
+            "type": "string"
+          },
+          "maxItems": 4,
+          "minItems": 1,
+          "title": "Grouping Separators",
+          "type": "array"
+        },
+        "unit_symbols": {
+          "items": {
+            "pattern": "^[^\\s\\d]{1,8}$",
+            "type": "string"
+          },
+          "maxItems": 200,
+          "minItems": 1,
+          "title": "Unit Symbols",
+          "type": "array"
+        }
+      },
+      "required": [
+        "unit_symbols",
+        "decimal_separators",
+        "grouping_separators"
+      ],
+      "title": "QuantityNotation",
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -345,6 +388,9 @@
       "minItems": 1,
       "title": "Packs",
       "type": "array"
+    },
+    "quantity": {
+      "$ref": "#/$defs/QuantityNotation"
     },
     "schema_version": {
       "const": 1,

@@ -1,7 +1,7 @@
 import type { RpcClient } from '../../backend/supabase-rpc';
 import { backendForRequest, getRetrievalBackend } from '../../backend/registry';
 import type { BackendLegs, RankedHit, RetrievalFilters, VersionScope } from '../../backend/types';
-import type { AssemblyDocumentRow } from '../../context/assemble';
+import type { AssemblyDocumentRow, TableRowAttachment } from '../../context/assemble';
 import { fetchAssemblyRows } from '../../context/fetch-rows';
 import type { RagConfig, StageName } from '../../config';
 import { getRagDeps, type RagDeps } from '../../deps';
@@ -16,12 +16,16 @@ import {
   type QueryEmbedding,
 } from '../../embeddings/query-embedding';
 import { requireValue, runStage, StageError, stageSpec, type StageSpec } from '../../pipeline';
-import { exactIdStage, type ExactIdRow } from '../../retrieval/exact-id';
+import { exactIdStage } from '../../retrieval/exact-id';
+import { tableLookupStage, type TableLookupRow } from '../../retrieval/table-lookup';
 import type { TenantScope } from '../../tenant/scope';
 import type { TraceCollector } from '../../trace/collector';
 import type { Profile, QueryVariant, RunRetrievalInput, StageOverrides } from '../../types';
 import { getV2StartupVerdict } from '../startup';
-import { evalChunkingOverride } from '../overrides';
+import { terminologyParams } from '../../terminology/expand';
+import { reserveTerminologyHits } from '../../terminology/reserve';
+import { evalChunkingOverride, evalTuningOverrides } from '../overrides';
+import { effectiveTuningParams } from '../tuning-params';
 import { createRetrievalPort, listsFromLegs, variantSearchRequest, type RetrievalPortHandle } from '../port';
 import { bindingFailureDetail, hasBindingWork, runBindingLegs, type BindingEmbed, type BindingLegsOutput, type BindingLegsPlan } from './binding-legs';
 import {
@@ -59,7 +63,9 @@ export interface SearchStagesInput {
   /** Planned translation legs (XLG-04, D-30); absent or empty runs none. */
   translations?: TranslationLegsPlan;
   /** D-16: the terminology stage's expansion; non-empty tokens add one lexical-only term:0 list. */
-  terminology?: { tokens: readonly string[]; expansionWeight: number } | null;
+  terminology?: { tokens: readonly string[]; expansionWeight: number; reserveSlots?: number } | null;
+  /** D-18: factor on the dense leg weight for a variant of kind terminology; absent reads TerminologyParams.dense_weight. */
+  terminologyDenseWeight?: number;
 }
 
 /** D-16: the expansion list id; no dense/lexical prefix, so nothing that inspects list ids by prefix counts it as a leg. */
@@ -124,12 +130,17 @@ export interface SearchStagesOutput {
   dedupeCounts: DedupeCounts;
   /** D-12: the version scope this request read; the context stage and later legs read this one value. */
   versionScope: VersionScope;
+  /** D-17: the matched table row per chunk of the table:0 list; absent when the list is empty. */
+  tableRows?: ReadonlyMap<string, TableRowAttachment>;
 }
 
 /** D-12, D-40: fixed trace codes of the search stage detail. */
 export const VERSIONS_IGNORED = 'versions_ignored';
 export const SUPERSEDED_DENSE_UNAVAILABLE = 'superseded_dense_unavailable';
 export const BACKEND_FIELD_UNSUPPORTED = 'backend_field_unsupported';
+/** D-45: the table_lookup stage detail when a narrowing filter makes it stand down. */
+export const TABLE_LOOKUP_NARROWED = 'narrowing_filters';
+export const TABLE_LIST_ID = 'table:0';
 
 function buildFilters(input: RunRetrievalInput): RetrievalFilters {
   const { versionScope: _versionScope, ...extra } = input.retrievalFilters ?? {};
@@ -177,8 +188,16 @@ function legHitsByChunkId(legsByVariant: BackendLegs[]): Map<string, RankedHit> 
   return map;
 }
 
-function hitFromExactRow(
-  row: ExactIdRow,
+/** The fields a lookup leg's row shares with a search hit: exact-id and table rows alike. */
+interface LookupRow {
+  chunk_id: string;
+  document_id: string;
+  content: string;
+  metadata: Record<string, unknown> | null;
+}
+
+function hitFromLookupRow(
+  row: LookupRow,
   rank: number,
   doc: AssemblyDocumentRow | undefined,
   chunkMeta: Record<string, unknown> | null | undefined,
@@ -207,15 +226,16 @@ function hitFromExactRow(
   };
 }
 
-async function exactIdRankedList(
-  rows: ExactIdRow[],
+async function lookupRankedList(
+  id: string,
+  weight: number,
+  rows: LookupRow[],
   legsByVariant: BackendLegs[],
-  params: RetrievalParams,
   signal: AbortSignal,
 ): Promise<RankedList | null> {
   if (rows.length === 0) return null;
   const known = legHitsByChunkId(legsByVariant);
-  const missing: ExactIdRow[] = [];
+  const missing: LookupRow[] = [];
   const hits: RankedHit[] = [];
   for (let index = 0; index < rows.length; index++) {
     const row = rows[index]!;
@@ -226,7 +246,7 @@ async function exactIdRankedList(
       continue;
     }
     missing.push(row);
-    hits.push(hitFromExactRow(row, rank, undefined, row.metadata));
+    hits.push(hitFromLookupRow(row, rank, undefined, row.metadata));
   }
   if (missing.length > 0) {
     const adminClient = getRagDeps().adminClient();
@@ -246,11 +266,22 @@ async function exactIdRankedList(
       if (known.has(row.chunk_id)) continue;
       const hitIndex = hits.findIndex((entry) => entry.chunkId === row.chunk_id);
       if (hitIndex < 0) continue;
-      hits[hitIndex] = hitFromExactRow(row, index + 1, assembly.documents.get(row.document_id), assembly.chunkMetadata.get(row.chunk_id));
+      hits[hitIndex] = hitFromLookupRow(row, index + 1, assembly.documents.get(row.document_id), assembly.chunkMetadata.get(row.chunk_id));
     }
   }
-  const weight = params.leg_weights?.exact_id ?? 1;
-  return { id: 'exact_id', weight, hits };
+  return { id, weight, hits };
+}
+
+/** One hit per matched row, its first qualifying chunk; a chunk two rows share is listed once, with the better row. */
+function tableListRows(rows: TableLookupRow[]): { rows: TableLookupRow[]; attachments: Map<string, TableRowAttachment> } {
+  const attachments = new Map<string, TableRowAttachment>();
+  const kept: TableLookupRow[] = [];
+  for (const row of rows) {
+    if (attachments.has(row.chunk_id)) continue;
+    attachments.set(row.chunk_id, { header: row.header, cells: row.cells });
+    kept.push(row);
+  }
+  return { rows: kept, attachments };
 }
 
 /** D-06: the standalone variant is the condensed one when present, else the original; never hyde, expanded or translated. */
@@ -314,7 +345,8 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
   const spec = (name: StageName, onFail: StageSpec['onFail']) => stageSpec(config, profile, name, onFail, stageOverrides);
   const pool = params.candidate_pool_size;
   const filters = ctx.filters ?? buildFilters(input);
-  const versions = effectiveVersionScope(config, profile, input.retrievalFilters?.versionScope);
+  // D-58: the embed channel (set server-side by the embed route) also needs config.v2.embedVersionScope; the rule lives in effectiveVersionScope.
+  const versions = effectiveVersionScope(config, profile, input.retrievalFilters?.versionScope, input.channel);
   const historyScope = versions.scope === 'current' ? undefined : versions.scope;
   const route = historyScope ? backendForRequest({ versionScope: historyScope }) : { backend: getRetrievalBackend() };
   const backend = route.backend;
@@ -330,6 +362,9 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
   const icuSkipLexical = lexicalEnabled && !verdict.icuAvailable;
   const chunkingOverride = evalChunkingOverride(profile, stageOverrides?.retrievalOverrides);
   const bindings = ctx.bindings && hasBindingWork(ctx.bindings.plan) ? ctx.bindings : null;
+  // D-18, D-34: the terminology variant's dense list weighs dense_weight × the dense leg weight in force, read at run time.
+  const terminologyDenseWeight = ctx.terminologyDenseWeight ?? terminologyParams().dense_weight;
+  const denseFactor = (index: number): number => (variants[index]?.kind === 'terminology' ? terminologyDenseWeight : 1);
   const searchSpec = spec('search', 'throw');
   const bindingTimeoutMs = Math.max(
     1,
@@ -411,10 +446,16 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       lexicalEnabled: lexicalEnabled && verdict.icuAvailable,
       ...(chunkingOverride ? { chunkingProfileOverride: chunkingOverride } : {}),
       ...versionScopeArg,
+      terminologyDenseWeight,
     });
     let order: unknown;
     try {
-      order = await delegate(handle.port);
+      const legWeights = params.leg_weights ?? { dense: 1, lexical: 1 };
+      order = await delegate(handle.port, {
+        signal: stageSignal,
+        rrfK: params.rrf_k,
+        legWeights: { dense: legWeights.dense, lexical: legWeights.lexical },
+      });
     } catch (error) {
       throw new SearchDelegateError(error);
     }
@@ -578,7 +619,39 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       },
     );
     if (!exact.skipped && exact.value.rows.length > 0) {
-      exactList = await exactIdRankedList(exact.value.rows, searchValue, params, signal);
+      exactList = await lookupRankedList('exact_id', params.leg_weights?.exact_id ?? 1, exact.value.rows, searchValue, signal);
+    }
+  }
+
+  // D-16, D-45: the structured table leg, one deterministic list of matched rows' chunks. It takes no filter arguments either, so a
+  // narrowing filter makes it stand down; the version scope is passed through.
+  let tableList: RankedList | null = null;
+  let tableRows: Map<string, TableRowAttachment> | undefined;
+  if (config.v2.tableLookup) {
+    const tableSpec = spec('table_lookup', 'skip');
+    const candidatesIn = searchValue.reduce((total, legs) => total + legs.dense.length + legs.lexical.length, 0);
+    if (tableSpec.enabled && hasNarrowingFilters(filters)) {
+      const at = collector.now();
+      collector.record({ name: 'table_lookup', status: 'disabled', reason: 'disabled', startedAt: at, endedAt: at, candidatesIn, detail: TABLE_LOOKUP_NARROWED });
+    } else {
+      const tuning = effectiveTuningParams(profile, config, evalTuningOverrides(profile, input.stageOverrides?.retrievalOverrides)).tableLookup;
+      const table = await runStage(
+        tableSpec,
+        signal,
+        (stageSignal) =>
+          tableLookupStage(input.query, scope, tuning, { client: requireAdminSearchClient(getRagDeps()), signal: stageSignal, ...versionScopeArg }),
+        collector,
+        {
+          candidatesIn,
+          candidatesOut: (value) => value.rows.length,
+          detail: (value) => `tokens=${value.tokenCount} rows=${value.rows.length}`,
+        },
+      );
+      if (!table.skipped && table.value.rows.length > 0) {
+        const listed = tableListRows(table.value.rows);
+        tableList = await lookupRankedList(TABLE_LIST_ID, tuning.weight, listed.rows, searchValue, signal);
+        if (tableList) tableRows = listed.attachments;
+      }
     }
   }
 
@@ -593,27 +666,37 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       spec('fuse', 'throw'),
       signal,
       () => {
-        const extraLists = [...(exactList ? [exactList] : []), ...domainLists, ...translationLists, ...(termList ? [termList] : [])];
+        const extraLists = [...(exactList ? [exactList] : []), ...(tableList ? [tableList] : []), ...domainLists, ...translationLists, ...(termList ? [termList] : [])];
         let fusedHits: FusedHit[];
         if (delegated) {
           fusedHits = delegatedFusion(delegated, extraLists, params.rrf_k);
         } else {
-          const lists = searchValue.flatMap((legs, index) => listsFromLegs(index, legs.dense, legs.lexical, params));
+          const lists = searchValue.flatMap((legs, index) => listsFromLegs(index, legs.dense, legs.lexical, params, denseFactor(index)));
           lists.push(...extraLists);
           fusedHits = rrf(lists, params.rrf_k);
         }
         return ctx.trackStandalone ? withStandaloneSimilarity(fusedHits, variants, searchValue) : fusedHits;
       },
       collector,
-      { candidatesOut: (value) => value.length },
+      // A framework delegate's fusion is marked in the trace; the native fuse record is unchanged.
+      { candidatesOut: (value) => value.length, ...(delegated ? { counts: () => ({ delegated: 1 }) } : {}) },
     ),
     'fuse',
   );
 
+  // D-34: bounded rerank-input places for term:0-only hits; absent reserveSlots reads TerminologyParams.reserve_slots.
+  const reserve = (result: DedupeResult): DedupeResult =>
+    termList && ctx.terminology
+      ? reserveTerminologyHits(result, fused, termList.hits, {
+          reserveSlots: ctx.terminology.reserveSlots ?? terminologyParams().reserve_slots,
+          byParent: config.v2.parentChild,
+        })
+      : result;
+
   const deduped = await runStage(
     spec('dedupe', 'skip'),
     signal,
-    () => dedupeAndCap(fused, { byParent: config.v2.parentChild, cap: params.rerank_input_cap }),
+    () => reserve(dedupeAndCap(fused, { byParent: config.v2.parentChild, cap: params.rerank_input_cap })),
     collector,
     {
       candidatesIn: fused.length,
@@ -622,9 +705,9 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     },
   );
 
-  const capped = deduped.skipped ? sliceCap(fused, params.rerank_input_cap) : deduped.value;
+  const capped = deduped.skipped ? reserve(sliceCap(fused, params.rerank_input_cap)) : deduped.value;
 
-  return { fusedHits: capped.hits, dedupeCounts: capped.counts, versionScope: versions.scope };
+  return { fusedHits: capped.hits, dedupeCounts: capped.counts, versionScope: versions.scope, ...(tableRows ? { tableRows } : {}) };
 }
 
 function supersededCount(value: { legsByVariant: BackendLegs[]; term: RankedHit[] | null }): number {

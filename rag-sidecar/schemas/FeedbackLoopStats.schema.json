@@ -167,6 +167,20 @@
           "default": null,
           "title": "Thumbs Down Rate"
         },
+        "topk_redundancy_mean": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Topk Redundancy Mean"
+        },
         "triage": {
           "$ref": "#/$defs/TriageCounts"
         },

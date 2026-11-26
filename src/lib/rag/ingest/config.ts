@@ -13,6 +13,8 @@ export type CaptionLanguage = 'en' | 'document';
 export type IngestCheckMode = 'off' | 'flag' | 'quarantine';
 export type UploadApprovalMode = 'off' | 'members' | 'all';
 export type DomainEmbeddingsMode = 'off' | 'on';
+export type SectionRulesMode = 'off' | 'on';
+export type PageBoilerplateMode = 'off' | 'detect' | 'rules' | 'both';
 
 export interface IngestEnvInput {
   RAG_INGEST_PIPELINE?: string;
@@ -42,6 +44,10 @@ export interface IngestEnvInput {
   RAG_SUPERSESSION_DETECT?: string;
   RAG_EFFECTIVE_DATE_LLM_EXTRACT?: string;
   RAG_DOMAIN_EMBEDDINGS?: string;
+  RAG_SECTION_RULES?: string;
+  RAG_PAGE_BOILERPLATE?: string;
+  RAG_DOC_ATTRIBUTES?: string;
+  RAG_ATTRIBUTE_HEADER?: string;
 }
 
 export interface IngestConfig {
@@ -77,6 +83,11 @@ export interface IngestConfig {
   supersessionDetect: OffOn;
   effectiveDateLlmExtract: boolean;
   domainEmbeddings: DomainEmbeddingsMode;
+  /** Effective values (D-03): 'off' / false unless the unified pipeline runs; the header also needs docAttributes. */
+  sectionRules: SectionRulesMode;
+  pageBoilerplate: PageBoilerplateMode;
+  docAttributes: boolean;
+  attributeHeader: boolean;
   warnings: string[];
 }
 
@@ -112,16 +123,22 @@ const ENV_NAMES = [
   'RAG_SUPERSESSION_DETECT',
   'RAG_EFFECTIVE_DATE_LLM_EXTRACT',
   'RAG_DOMAIN_EMBEDDINGS',
+  'RAG_SECTION_RULES',
+  'RAG_PAGE_BOILERPLATE',
+  'RAG_DOC_ATTRIBUTES',
+  'RAG_ATTRIBUTE_HEADER',
 ] as const satisfies readonly (keyof IngestEnvInput)[];
 
 const loggedProblems = new Set<string>();
 const memo = new Map<string, IngestConfig>();
 
-function problem(warnings: string[], key: string, message: string, data: Record<string, unknown>): void {
+type LogPrefix = '[Ingest Config]' | '[RAG Config]';
+
+function problem(warnings: string[], key: string, message: string, data: Record<string, unknown>, prefix: LogPrefix = '[Ingest Config]'): void {
   warnings.push(`${message} (${Object.values(data).join(', ')})`);
   if (loggedProblems.has(key)) return;
   loggedProblems.add(key);
-  console.warn(`[Ingest Config] ${message}`, data);
+  console.warn(`${prefix} ${message}`, data);
 }
 
 function parseChoice<T extends string>(
@@ -178,6 +195,44 @@ function parseDomainEmbeddings(raw: string | undefined, profiles: EmbeddingProfi
   return requested;
 }
 
+interface TemplatedCollectionSwitches {
+  sectionRules: SectionRulesMode;
+  pageBoilerplate: PageBoilerplateMode;
+  docAttributes: boolean;
+  attributeHeader: boolean;
+}
+
+/** D-03: an unmet need logs one [RAG Config] warning and the switch takes its default; consumers read only these values. */
+function parseTemplatedCollection(env: IngestEnvInput, pipeline: IngestPipeline, warnings: string[]): TemplatedCollectionSwitches {
+  const sectionRequested = parseChoice('RAG_SECTION_RULES', env.RAG_SECTION_RULES, ['off', 'on'], 'off', warnings);
+  const boilerplateRequested = parseChoice('RAG_PAGE_BOILERPLATE', env.RAG_PAGE_BOILERPLATE, ['off', 'detect', 'rules', 'both'], 'off', warnings);
+  const attributesRequested = parseFlag('RAG_DOC_ATTRIBUTES', env.RAG_DOC_ATTRIBUTES, warnings);
+  const headerRequested = parseFlag('RAG_ATTRIBUTE_HEADER', env.RAG_ATTRIBUTE_HEADER, warnings);
+  const unified = pipeline === 'unified';
+  const needsUnified = (name: string, value: string): void => {
+    problem(warnings, `${name}:needs-unified`, `${name} needs RAG_INGEST_PIPELINE=unified; the switch stays off`, { [name]: value, RAG_INGEST_PIPELINE: pipeline }, '[RAG Config]');
+  };
+  if (!unified && sectionRequested !== 'off') needsUnified('RAG_SECTION_RULES', sectionRequested);
+  if (!unified && boilerplateRequested !== 'off') needsUnified('RAG_PAGE_BOILERPLATE', boilerplateRequested);
+  if (!unified && attributesRequested) needsUnified('RAG_DOC_ATTRIBUTES', 'true');
+  const docAttributes = unified && attributesRequested;
+  if (headerRequested && !docAttributes) {
+    problem(
+      warnings,
+      'RAG_ATTRIBUTE_HEADER:needs-attributes',
+      'RAG_ATTRIBUTE_HEADER needs RAG_DOC_ATTRIBUTES=true; the switch stays off',
+      { RAG_ATTRIBUTE_HEADER: 'true', RAG_DOC_ATTRIBUTES: 'false' },
+      '[RAG Config]',
+    );
+  }
+  return {
+    sectionRules: unified ? sectionRequested : 'off',
+    pageBoilerplate: unified ? boilerplateRequested : 'off',
+    docAttributes,
+    attributeHeader: headerRequested && docAttributes,
+  };
+}
+
 /** The pipeline an unset RAG_INGEST_PIPELINE runs (the shipped default). */
 export const DEFAULT_INGEST_PIPELINE: IngestPipeline = 'legacy';
 
@@ -213,10 +268,11 @@ export function loadIngestConfig(env: IngestEnvInput): IngestConfig {
 
   const warnings: string[] = [];
   const embeddingProfiles = parseChoice('RAG_EMBEDDING_PROFILES', env.RAG_EMBEDDING_PROFILES, ['off', 'on'], 'off', warnings);
+  const pipeline: IngestPipeline = gate.servedLegacy
+    ? 'legacy'
+    : parseChoice('RAG_INGEST_PIPELINE', env.RAG_INGEST_PIPELINE, ['legacy', 'unified'], DEFAULT_INGEST_PIPELINE, warnings);
   const config: IngestConfig = {
-    pipeline: gate.servedLegacy
-      ? 'legacy'
-      : parseChoice('RAG_INGEST_PIPELINE', env.RAG_INGEST_PIPELINE, ['legacy', 'unified'], DEFAULT_INGEST_PIPELINE, warnings),
+    pipeline,
     pipelineBlocked: gate.blocked,
     parser: parseChoice('RAG_PARSER', env.RAG_PARSER, ['llamaparse', 'docling'], 'llamaparse', warnings),
     parsePollBudgetMs: parsePollBudget(env.RAG_PARSE_POLL_BUDGET_MS, warnings),
@@ -229,7 +285,7 @@ export function loadIngestConfig(env: IngestEnvInput): IngestConfig {
     qwenFallback: parseChoice('RAG_QWEN_EMBED_FALLBACK', env.RAG_QWEN_EMBED_FALLBACK, ['openrouter', 'none'], 'openrouter', warnings),
     qwenPrimary: parseChoice('RAG_QWEN_EMBED_PRIMARY', env.RAG_QWEN_EMBED_PRIMARY, ['deepinfra', 'openrouter'], 'deepinfra', warnings),
     languageAwareIngest: parseChoice('RAG_LANGUAGE_AWARE_INGEST', env.RAG_LANGUAGE_AWARE_INGEST, ['off', 'on'], 'off', warnings),
-    tableHeaderRepeat: parseChoice('RAG_TABLE_HEADER_REPEAT', env.RAG_TABLE_HEADER_REPEAT, ['profile', 'always'], 'profile', warnings),
+    tableHeaderRepeat: parseChoice('RAG_TABLE_HEADER_REPEAT', env.RAG_TABLE_HEADER_REPEAT, ['profile', 'always'], 'always', warnings),
     tableRowSerialization: parseFlag('RAG_TABLE_ROW_SERIALIZATION', env.RAG_TABLE_ROW_SERIALIZATION, warnings),
     captionLanguage: parseChoice('RAG_CAPTION_LANGUAGE', env.RAG_CAPTION_LANGUAGE, ['en', 'document'], 'en', warnings),
     docTranslation: parseChoice('RAG_DOC_TRANSLATION', env.RAG_DOC_TRANSLATION, ['off', 'on'], 'off', warnings),
@@ -244,6 +300,7 @@ export function loadIngestConfig(env: IngestEnvInput): IngestConfig {
     supersessionDetect: parseChoice('RAG_SUPERSESSION_DETECT', env.RAG_SUPERSESSION_DETECT, ['off', 'on'], 'off', warnings),
     effectiveDateLlmExtract: parseFlag('RAG_EFFECTIVE_DATE_LLM_EXTRACT', env.RAG_EFFECTIVE_DATE_LLM_EXTRACT, warnings),
     domainEmbeddings: parseDomainEmbeddings(env.RAG_DOMAIN_EMBEDDINGS, embeddingProfiles, warnings),
+    ...parseTemplatedCollection(env, pipeline, warnings),
     warnings,
   };
   memo.set(snapshot, config);

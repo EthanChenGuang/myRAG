@@ -7,7 +7,7 @@ import type { PGlite } from '@electric-sql/pglite';
 // Plan 03.2-66 (D-46): one probe that runs unchanged on the pre-phase tree (to record the reference) and on this tree (to compare).
 // It only uses harness and app APIs that existed before Phase 3.2, and it ingests only the fixtures that existed then.
 
-/** The eighteen variables of D-47; the probe runs with all of them absent. */
+/** The eighteen variables of D-47; the probe runs with all of them absent except RAG_TABLE_HEADER_REPEAT, which it builds with at profile. */
 export const PHASE_32_VARIABLES = [
   'RAG_SUPPORTED_LANGUAGES',
   'RAG_PRIMARY_LANGUAGE',
@@ -306,7 +306,7 @@ async function retrievalProbes(
   return out;
 }
 
-/** Builds the fixture corpus inline and through the queue, with every Phase 3.2 variable unset, and records what each build stored. */
+/** Builds the fixture corpus inline and through the queue, with every Phase 3.2 variable unset (header repetition at profile), and records what each build stored. */
 export async function probeWritePaths(inputs: ProbeInputs, options: { queued?: boolean } = {}): Promise<ProbeSnapshot> {
   clearProbeEnv();
   const ingestMode = await import('../../eval/harness/ingest-mode.mts');
@@ -317,6 +317,9 @@ export async function probeWritePaths(inputs: ProbeInputs, options: { queued?: b
     includeTypedFixtures: true,
     typedFixtureIds: inputs.typed_fixture_ids,
     parseFixtureIds: inputs.parse_fixture_ids,
+    // D-19 (03.2-67): header repetition defaults to always since this plan, so the pre-phase chunking is the explicit profile
+    // value; the pre-phase tree ignores this option.
+    ingestEnv: { RAG_TABLE_HEADER_REPEAT: 'profile' },
   };
 
   const inlineCalls = recordExternalCalls();

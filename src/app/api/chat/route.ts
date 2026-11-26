@@ -34,6 +34,7 @@ import {
   noKnowledgeBaseResponseLanguage,
   mintAnswerId,
   cacheSourcesFromResult,
+  sourceDocumentFields,
   hashSystemPromptTemplate,
   isCacheHitResult,
   isSemanticCacheActive,
@@ -4018,7 +4019,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                   provider: 'Document Database',
                   title: doc.name || doc.filename || 'Document Source',
                   image_url: doc.image_url,
-                  url: doc.external_url || DOCUMENT_URL_MAP[doc.name || doc.filename] || undefined
+                  url: doc.external_url || DOCUMENT_URL_MAP[doc.name || doc.filename] || undefined,
+                  ...sourceDocumentFields(doc)
                 })),
                 // [FIX] Add images directly to the tool result
                 images: sourceImages
@@ -4038,7 +4040,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                 similarity: doc.similarity,
                 uploadedAt: doc.created_at,
                 explicitly_referenced: doc.explicitly_referenced || false,
-                image_url: doc.image_url
+                image_url: doc.image_url,
+                ...sourceDocumentFields(doc)
               }))
             });
 
@@ -4339,7 +4342,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                 created_at: doc.created_at,
                 similarity: doc.similarity,
                 image_url: doc.image_url,
-                url: doc.external_url || DOCUMENT_URL_MAP[doc.name || doc.filename] || undefined
+                url: doc.external_url || DOCUMENT_URL_MAP[doc.name || doc.filename] || undefined,
+                ...sourceDocumentFields(doc)
               }))
             });
           }

@@ -18,10 +18,10 @@ const TENANT_B = `u:${TWO_TENANT_IDS.userB}`;
 const TENANT_O = `o:${TWO_TENANT_IDS.orgO}`;
 const CANARY_CHUNK_IDS = [TWO_TENANT_IDS.chunkA, TWO_TENANT_IDS.chunkB, TWO_TENANT_IDS.chunkO];
 /**
- * 512 fixture corpus chunks (71 before the 05.1-09 injection documents, 107 before the 405 Phase 4.2 chunks of plan 04.2-37) plus the
- * three canary chunks.
+ * 527 fixture corpus chunks (71 before the 05.1-09 injection documents, 107 before the 04.1.1-10 synthetic-terms documents and the
+ * 405 Phase 4.2 chunks of plan 04.2-37) plus the three canary chunks.
  */
-const STALE_ROWS = 515;
+const STALE_ROWS = 530;
 /** The earlier versions of the three Phase 4.2 version notes are superseded (D-40); relex reads current chunks only. */
 const SUPERSEDED_ROWS = 3;
 const RELEXED_ROWS = STALE_ROWS - SUPERSEDED_ROWS;

@@ -26,11 +26,45 @@ export { isTenantScope, scopeKey } from './tenant/scope';
 export { evalScope } from './tenant/eval';
 export type { EvalScopeInput, EvalScopeOutcome } from './tenant/eval';
 export type { TenantScope } from './tenant/scope';
+export { getTerminologyLexicon, TerminologyUnavailableError } from './terminology/lexicon';
+export type { TerminologyLexicon, TerminologyLexiconOptions } from './terminology/lexicon';
+export {
+  createEntry as createTerminologyEntry,
+  deleteEntry as deleteTerminologyEntry,
+  getVersions as getTerminologyVersions,
+  listAudit as listTerminologyAudit,
+  listEntries as listTerminologyEntries,
+  setSuppression as setTerminologySuppression,
+  terminologyEnabledLanguages,
+  updateEntry as updateTerminologyEntry,
+} from './terminology/admin';
+export { exportTerminology, importKey as terminologyImportKey, importTerminology } from './terminology/import';
+export type {
+  TerminologyExportResult,
+  TerminologyImportFormat,
+  TerminologyImportInput,
+  TerminologyImportMode,
+  TerminologyImportResult,
+} from './terminology/import';
+export { previewTerminology } from './terminology/preview';
+export type { TerminologyPreviewInput, TerminologyPreviewResult } from './terminology/preview';
+export { TERMINOLOGY_CSV_COLUMNS, parseTerminologyCsv, serializeTerminologyCsv } from './terminology/csv';
+export type { TerminologyCsvError, TerminologyCsvParseResult, TerminologyCsvRow } from './terminology/csv';
+export { decideTerminologyCandidate, listTerminologyCandidates } from './terminology/candidates';
+export type { DecideTerminologyCandidateResult, ListTerminologyCandidatesResult, TerminologyCandidate } from './terminology/candidates';
+export type {
+  TerminologyAdminEntry,
+  TerminologyAdminFailed,
+  TerminologyAdminFailure,
+  TerminologyAuditItem,
+  TerminologyEntryInput,
+  TerminologyLayerVersion,
+} from './terminology/admin';
 export { RetrievalBackendError } from './backend/supabase-rpc';
 export { getRetrievalBackend, resetRetrievalBackendForTests, setRetrievalBackendForTests } from './backend/registry';
 export { createPgvectorBackend } from './backend/pgvector';
 export { getV2StartupVerdict, resetV2StartupForTests, verifyV2Startup } from './v2/startup';
-export { verifyLanguageSettingsAtStartup } from './lang/startup';
+export { verifyLanguageSettingsAtStartup, verifyLanguagesAgainstEmbeddingProfileAtStartup } from './lang/startup';
 export type { V2StartupVerdict, V2StartupStatus } from './v2/startup';
 export { embedText, embedBatch } from './embeddings/openai';
 export {
@@ -359,8 +393,8 @@ export type {
 } from './ingest/translate/settings';
 export { docTypePickerEnabled, resolvePickerDefault, listDocTypeDefaults, setDocTypeDefault, DocTypeDefaultsError, DOC_TYPE_DEFAULT_SOURCE_KINDS, DOC_TYPE_IDS, DOC_TYPE_CHOICES } from './ingest/profiles/doc-type-defaults';
 export type { DocTypeChoice, DocTypeDefaultRow, DocTypeDefaultSourceKind, PickerDefault, SetDocTypeDefaultInput } from './ingest/profiles/doc-type-defaults';
-export { getEmbeddingProfileCompleteness } from './embeddings/profile-ops';
-export type { ProfileCompleteness } from './embeddings/profile-ops';
+export { getEmbeddingProfileCompleteness, embeddingProfileListFacts } from './embeddings/profile-ops';
+export type { ProfileCompleteness, EmbeddingProfileListFacts } from './embeddings/profile-ops';
 export {
   listBindings,
   createBinding,
@@ -399,6 +433,26 @@ export type { ChangeDocumentTypeFailure, ChangeDocumentTypeInput, ChangeDocument
 export { scopeForAdminDocument, AdminDocumentScopeError } from './tenant/ingest-scope';
 export type { AdminDocumentScopeInput } from './tenant/ingest-scope';
 export { softDeleteLineage } from './ingest/soft-delete';
+export { recomputeDirtyDupClusters } from './dedupe/cluster';
+export type { RecomputeOutcome } from './dedupe/cluster';
+export {
+  createIdentifierPattern,
+  deleteIdentifierPattern,
+  IDENTIFIER_PATTERN_LIMITS,
+  IdentifierPatternError,
+  listIdentifierPatterns,
+  testIdentifierPatterns,
+  updateIdentifierPattern,
+} from './identifiers/patterns';
+export type {
+  IdentifierPatternDraft,
+  IdentifierPatternErrorCode,
+  IdentifierPatternFinding,
+  IdentifierPatternFindingCode,
+  IdentifierPatternRow,
+  IdentifierTestMatch,
+  IdentifierTestResult,
+} from './identifiers/patterns';
 export { removeDocumentObjects } from './ingest/remove-document-objects';
 export type { DocumentObjectRow } from './ingest/remove-document-objects';
 export type { SoftDeleteResult, SoftDeleteFailure } from './ingest/soft-delete';
@@ -475,8 +529,11 @@ export type { ExportKind, GoldenExportLine, MarkExportedRequest, MarkItem, MarkR
 export type { ReviewSearchHit, ReviewSearchRequest, ReviewSearchResult } from './feedback-loop/review-search';
 export { hashSystemPromptTemplate } from './cache/keys';
 export { cacheSourcesFromResult, scheduleCacheStore } from './cache/store-after';
+export { sourceDocumentFields, type SourceDocumentFields } from './context/source-fields';
 export type { CacheStoreFacts, CacheStoreSource, ScheduleCacheStoreInput } from './cache/store-after';
 export { cacheHitMetadata, streamCachedAnswer } from './cache/hit-stream';
 export { clearTenantSemanticCache, SEMANTIC_CACHE_ADMIN_TIMEOUT_MS } from './cache/admin';
 export type { ClearSemanticCacheError, ClearSemanticCacheOptions, ClearSemanticCacheResult } from './cache/admin';
 export { isCacheHitResult } from './v2/result';
+export { topkRedundancy } from './v2/diversify';
+export type { AlsoIn } from './types';

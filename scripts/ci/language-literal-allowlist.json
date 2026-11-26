@@ -47,11 +47,6 @@
       "reason": "query-language detector bodies; LANG-08 replaces them"
     },
     {
-      "path": "src/lib/rag/embeddings/catalog.ts",
-      "owner": "Phase 3.1.1",
-      "reason": "supported_languages declared per catalog model (created by plan 03.1.1-01); the declarations move to the registry codes with the catalog owner"
-    },
-    {
       "path": "src/lib/rag/generation/groundedness.ts",
       "owner": "Phase 5",
       "reason": "groundedness scorer language tags incl. zh-Hans/zh-Hant (created by plan 05-14); the registry groundedness field replaces them"

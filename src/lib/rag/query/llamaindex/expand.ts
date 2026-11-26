@@ -27,7 +27,6 @@ export type ExpandResult = { variants: ExpandedVariant[]; skipped: Array<PostChe
 export async function nativeExpand(input: ExpandInput): Promise<ExpandResult> {
   const { query, language, protectedTokens, signal, deps } = input;
   const maxItems = Math.max(0, Math.floor(input.maxItems));
-  const limits = input.limits ?? DEFAULT_POST_CHECK_LIMITS;
   if (maxItems === 0) return { variants: [], skipped: [] };
 
   const prompt = renderPrompt(
@@ -45,10 +44,23 @@ export async function nativeExpand(input: ExpandInput): Promise<ExpandResult> {
   });
   if (!call.ok) return { variants: [], skipped: [call.skip] };
 
+  return finishExpand(input, call.value.queries);
+}
+
+export type FinishExpandInput = Pick<ExpandInput, 'query' | 'language' | 'protectedTokens' | 'maxItems' | 'limits'>;
+
+/**
+ * Keeps, in order, the generated queries that are not the original or a repeat and pass the shared post-checks, up to
+ * maxItems; shared by both frameworks (D-02).
+ */
+export function finishExpand(input: FinishExpandInput, queries: readonly string[]): ExpandResult {
+  const { query, language, protectedTokens } = input;
+  const maxItems = Math.max(0, Math.floor(input.maxItems));
+  const limits = input.limits ?? DEFAULT_POST_CHECK_LIMITS;
   const variants: ExpandedVariant[] = [];
   const skipped: Array<PostCheckSkip | NativeTransformSkip> = [];
   let overCap = 0;
-  call.value.queries.forEach((text, index) => {
+  queries.forEach((text, index) => {
     if (sameText(text, query) || variants.some((v) => sameText(v.text, text))) return;
     if (variants.length >= maxItems) {
       overCap += 1;

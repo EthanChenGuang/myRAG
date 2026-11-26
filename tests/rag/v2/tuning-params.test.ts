@@ -1,6 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadRagConfig, resetRagConfigForTests, type RagConfig } from '@/lib/rag/config';
-import { effectiveTuningParams, resetTuningParamsForTests } from '@/lib/rag/v2/tuning-params';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import type { RpcClient, RpcRequest, RpcResponse } from '@/lib/rag/backend/supabase-rpc';
+import { clusterPublishedDocument } from '@/lib/rag/dedupe/cluster';
+import { LEGACY_PROFILE } from '@/lib/rag/embeddings/active-profile';
+import { mintScope } from '@/lib/rag/tenant/scope';
+import {
+  dupClusterParamsHaveProfileEntries,
+  dupClusterThreshold,
+  effectiveTuningParams,
+  resetDupClusterParamsForTests,
+  resetTuningParamsForTests,
+  setDupClusterParamsForTests,
+} from '@/lib/rag/v2/tuning-params';
 
 const DEFAULTS = {
   tableLookup: { min_cells: 2, limit: 10, weight: 1 },
@@ -92,5 +106,138 @@ describe('effectiveTuningParams (04.2-06, D-16, D-48, D-49)', () => {
     const params = effectiveTuningParams('eval', config(), { table_lookup: { limit: 5 }, diversity: { mmr_window_factor: 0 } });
     expect(params.tableLookup).toEqual({ min_cells: 2, limit: 5, weight: 1 });
     expect(params.diversity).toEqual(DEFAULTS.diversity);
+  });
+});
+
+describe('dupClusterThreshold (04.2-16, D-49)', () => {
+  const dirs: string[] = [];
+
+  function paramsFile(body: unknown): string {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dup-params-'));
+    dirs.push(dir);
+    const file = path.join(dir, 'dup-cluster-params.json');
+    fs.writeFileSync(file, typeof body === 'string' ? body : JSON.stringify(body));
+    return file;
+  }
+
+  function withEntry(source: 'fixture' | 'live') {
+    return { threshold: 0.95, by_profile: { p1: { threshold: 0.9, source } }, provenance: { source: 'calibration' }, config_hash: null };
+  }
+
+  beforeEach(() => {
+    resetDupClusterParamsForTests();
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    resetDupClusterParamsForTests();
+    for (const dir of dirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('is 0.95 when the file does not exist', () => {
+    setDupClusterParamsForTests(path.join(os.tmpdir(), 'no-such-dir-04.2-16', 'dup-cluster-params.json'));
+    expect(dupClusterThreshold('p1', {})).toBe(0.95);
+    expect(dupClusterThreshold('p1', { evalRun: true })).toBe(0.95);
+    expect(dupClusterParamsHaveProfileEntries()).toBe(false);
+    expect(console.warn).not.toHaveBeenCalled();
+  });
+
+  it('applies a fixture entry only to an eval run of that profile', () => {
+    setDupClusterParamsForTests(paramsFile(withEntry('fixture')));
+    expect(dupClusterParamsHaveProfileEntries()).toBe(true);
+    expect({ profile: 'p1', source: 'fixture', evalRun: true, threshold: dupClusterThreshold('p1', { evalRun: true }) }).toEqual({
+      profile: 'p1', source: 'fixture', evalRun: true, threshold: 0.9,
+    });
+    expect({ profile: 'p1', source: 'fixture', evalRun: false, threshold: dupClusterThreshold('p1', { evalRun: false }) }).toEqual({
+      profile: 'p1', source: 'fixture', evalRun: false, threshold: 0.95,
+    });
+    expect(dupClusterThreshold('p1', {})).toBe(0.95);
+    expect(dupClusterThreshold('p2', { evalRun: true })).toBe(0.95);
+    expect(dupClusterThreshold(null, { evalRun: true })).toBe(0.95);
+  });
+
+  it('applies a live entry everywhere', () => {
+    setDupClusterParamsForTests(paramsFile(withEntry('live')));
+    expect(dupClusterThreshold('p1', { evalRun: true })).toBe(0.9);
+    expect(dupClusterThreshold('p1', { evalRun: false })).toBe(0.9);
+    expect(dupClusterThreshold('p2', { evalRun: false })).toBe(0.95);
+  });
+
+  it('uses the top-level threshold of the file for other profiles', () => {
+    setDupClusterParamsForTests(paramsFile({ ...withEntry('live'), threshold: 0.97 }));
+    expect(dupClusterThreshold('p2', {})).toBe(0.97);
+  });
+
+  it.each([['not json', '{'], ['schema failure', { threshold: 2 }], ['unknown key', { threshold: 0.95, extra: true }]])(
+    'an invalid file (%s) gives 0.95 and one warning per process',
+    (_label, body) => {
+      setDupClusterParamsForTests(paramsFile(body));
+      expect(dupClusterThreshold('p1', { evalRun: true })).toBe(0.95);
+      expect(dupClusterThreshold('p1', {})).toBe(0.95);
+      const lines = (console.warn as unknown as ReturnType<typeof vi.fn>).mock.calls.filter((call: unknown[]) =>
+        String(call[0]).includes('[RAG Config]'),
+      );
+      expect(lines).toHaveLength(1);
+    },
+  );
+});
+
+describe('clustering threshold on the publish path (04.2-16, T-04.2-59)', () => {
+  const dirs: string[] = [];
+  const DOC = '00000000-0000-4000-8000-0000000000d1';
+  const CHUNK = '00000000-0000-4000-8000-0000000000c1';
+
+  function fakeDb(thresholds: number[]): RpcClient {
+    return {
+      rpc(fn: string, args: Record<string, unknown>) {
+        let data: unknown[] = [];
+        if (fn === 'rag_dup_backfill_candidates') data = args.p_after ? [] : [{ id: CHUNK, document_id: DOC, content: 'alpha beta gamma delta' }];
+        if (fn === 'rag_dup_write_hashes') data = [{ written: 1 }];
+        if (fn === 'rag_dup_candidates') thresholds.push(Number(args.p_threshold));
+        if (fn === 'rag_dup_clusters_recompute') data = [{ recomputed: 0, dissolved: 0 }];
+        const response: RpcResponse = { data, error: null };
+        const request: RpcRequest = { abortSignal: () => request, then: (ok, fail) => Promise.resolve(response).then(ok, fail) };
+        return request;
+      },
+    };
+  }
+
+  beforeEach(() => {
+    resetDupClusterParamsForTests();
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dup-params-'));
+    dirs.push(dir);
+    const file = path.join(dir, 'dup-cluster-params.json');
+    fs.writeFileSync(
+      file,
+      JSON.stringify({ threshold: 0.95, by_profile: { [LEGACY_PROFILE.id]: { threshold: 0.9, source: 'fixture' } }, provenance: { source: 'calibration' } }),
+    );
+    setDupClusterParamsForTests(file);
+  });
+
+  afterEach(() => {
+    resetDupClusterParamsForTests();
+    for (const dir of dirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('a production publish keeps the 0.95 cut with a fixture entry for the active profile', async () => {
+    const seen: number[] = [];
+    await clusterPublishedDocument(mintScope('single', null, null), DOC, { db: fakeDb(seen) });
+    expect(seen).toEqual([0.95]);
+  });
+
+  it('only the harness option evalRun applies the fixture entry', async () => {
+    const seen: number[] = [];
+    await clusterPublishedDocument(mintScope('single', null, null), DOC, { db: fakeDb(seen), evalRun: true });
+    expect(seen).toEqual([0.9]);
+    const named: number[] = [];
+    await clusterPublishedDocument(mintScope('single', null, null), DOC, { db: fakeDb(named), evalRun: true, embeddingProfileId: 'other-profile' });
+    expect(named).toEqual([0.95]);
+  });
+
+  it('an explicit threshold option still wins', async () => {
+    const seen: number[] = [];
+    await clusterPublishedDocument(mintScope('single', null, null), DOC, { db: fakeDb(seen), evalRun: true, threshold: 0.99 });
+    expect(seen).toEqual([0.99]);
   });
 });

@@ -1,4 +1,4 @@
-export type EmbeddingMismatchKind = 'dims' | 'zero_norm' | 'model';
+export type EmbeddingMismatchKind = 'dims' | 'zero_norm' | 'model' | 'probe';
 
 export class EmbeddingProfileMismatch extends Error {
   readonly kind: EmbeddingMismatchKind;

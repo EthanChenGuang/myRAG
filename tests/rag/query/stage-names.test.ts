@@ -27,6 +27,7 @@ const V2_INTERNAL_STAGES = [
   'diversify',
   'identifier_resolve',
   'identifier_guard',
+  'attribute_resolve',
 ];
 
 describe('stage names (D-05)', () => {

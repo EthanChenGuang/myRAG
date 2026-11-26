@@ -6690,6 +6690,14 @@
                                                     </label>
                                                     <p class="label-text-alt text-base-content/70 pl-8 max-w-prose" id="rag-lexical-stem-it-help" data-rag-i18n="RAG_LEXICAL_STEM_IT.help">In Italian text, singular and plural forms of a word match each other in keyword search. Other languages are not changed.</p>
                                                 </div>
+                                                <div class="flex flex-col gap-1">
+                                                    <label class="flex items-center gap-2 cursor-pointer">
+                                                        <input type="checkbox" id="RAG_LEXICAL_QUANTITY" name="RAG_LEXICAL_QUANTITY" autocomplete="off" class="checkbox checkbox-primary" aria-describedby="rag-lexical-quantity-help rag-lexical-quantity-stored">
+                                                        <span class="label-text"><span data-rag-i18n="RAG_LEXICAL_QUANTITY.label">Numbers with units as single search terms</span> (<span translate="no">RAG_LEXICAL_QUANTITY</span>)</span>
+                                                    </label>
+                                                    <p class="label-text-alt text-base-content/70 pl-8 max-w-prose" id="rag-lexical-quantity-help" data-rag-i18n="RAG_LEXICAL_QUANTITY.help">A number followed by a unit symbol also matches as one term in keyword search, whatever its spacing, digit grouping, decimal separator or letter case. Calibrated refusal thresholds belong to one tokenizer version; calibrate them again after the rebuild.</p>
+                                                    <p class="label-text-alt text-base-content/70 pl-8" id="rag-lexical-quantity-stored"><span data-rag-i18n="RAG_LEXICAL_QUANTITY.stored">Stored documents: rebuild their search text with</span> <code class="font-mono text-xs break-all" translate="no">npm run rag:relex -- --tenant &lt;key&gt;</code></p>
+                                                </div>
                                             </div>
                                             <div class="space-y-4 border-t border-base-300 pt-4">
                                                 <div class="flex flex-col gap-1">
@@ -6748,6 +6756,15 @@
                                                         <span class="label-text"><span data-rag-i18n="RAG_IDENTIFIER_FILTER.label">Identifier filter</span> (<span translate="no">RAG_IDENTIFIER_FILTER</span>)</span>
                                                     </label>
                                                     <p class="label-text-alt text-base-content/70 pl-8 max-w-prose" id="rag-identifier-filter-help" data-rag-i18n="RAG_IDENTIFIER_FILTER.help">When a question names an identifier this workspace has, retrieval is limited to the passages that carry it, and passages about a look-alike identifier are left out. Needs the identifier index.</p>
+                                                </div>
+                                                <div class="form-control">
+                                                    <label class="label" for="RAG_ATTRIBUTE_FILTER"><span class="label-text" data-rag-i18n="RAG_ATTRIBUTE_FILTER.label">Attribute filter</span></label>
+                                                    <select id="RAG_ATTRIBUTE_FILTER" name="RAG_ATTRIBUTE_FILTER" autocomplete="off" translate="no" aria-describedby="rag-attribute-filter-help" class="select select-bordered w-full max-w-xs">
+                                                        <option value="off" selected>off</option>
+                                                        <option value="hard">hard</option>
+                                                        <option value="soft">soft</option>
+                                                    </select>
+                                                    <p class="label-text-alt text-base-content/70 max-w-prose mt-1" id="rag-attribute-filter-help" data-rag-i18n="RAG_ATTRIBUTE_FILTER.help"><code class="font-mono text-xs" translate="no">off</code> ignores attributes. <code class="font-mono text-xs" translate="no">hard</code> limits retrieval to the documents whose attributes match a value named in the question or sent with the request, and searches again without the limit when that finds nothing. <code class="font-mono text-xs" translate="no">soft</code> keeps every document and ranks the matching ones higher. Needs document attributes and the v2 pipeline.</p>
                                                 </div>
                                             </div>
                                         </div>
@@ -7269,6 +7286,141 @@
                                                 <span class="label-text-alt">Used when the primary host is unavailable: openrouter tries the other host (DeepInfra when OpenRouter is primary and a DeepInfra key is set); none disables it.</span>
                                             </label>
                                         </div>
+
+                                        <div class="form-control mb-4">
+                                            <label class="label" for="RAG_OPENAI_EMBEDDINGS_VIA">
+                                                <span class="label-text">OpenAI embedding host</span>
+                                            </label>
+                                            <select id="RAG_OPENAI_EMBEDDINGS_VIA" class="select select-bordered w-full" aria-describedby="openai-embeddings-via-help">
+                                                <option value="openai">openai</option>
+                                                <option value="openrouter">openrouter</option>
+                                            </select>
+                                            <label class="label">
+                                                <span class="label-text-alt" id="openai-embeddings-via-help">openrouter sends the same embedding model through OpenRouter with the OpenRouter API key (same vectors, no re-embed); the OpenAI Batch API is then unavailable and backfills embed immediately.</span>
+                                            </label>
+                                        </div>
+
+                                        <section id="rag-finetune-slots" class="mt-6 min-w-0" aria-labelledby="rag-finetune-slots-title">
+                                            <h4 id="rag-finetune-slots-title" class="text-md font-semibold mb-2 text-balance">Fine-Tuned Slots</h4>
+                                            <p class="text-sm text-base-content/70 mb-4 max-w-prose">Endpoints for up to two fine-tuned embedding models. These fields only store the settings: binding a model to a slot, recording consent and activating a slot happen in the CLI (<span translate="no">npm run rag:embedding</span>), not here.</p>
+
+                                            <div class="form-control mb-4">
+                                                <label class="label" for="RAG_FINETUNE">
+                                                    <span class="label-text">Fine-tuned embeddings</span>
+                                                </label>
+                                                <select id="RAG_FINETUNE" name="RAG_FINETUNE" class="select select-bordered w-full" translate="no" aria-describedby="finetune-help">
+                                                    <option value="off">off</option>
+                                                    <option value="on">on</option>
+                                                </select>
+                                                <label class="label">
+                                                    <span class="label-text-alt min-w-0" id="finetune-help"><span translate="no">off</span> keeps today’s behaviour: search never uses the slots and the fine-tune commands refuse to run.</span>
+                                                </label>
+                                            </div>
+
+                                            <div class="form-control mb-4">
+                                                <label class="label" for="RAG_FT_EMBED_API_KEY">
+                                                    <span class="label-text">Slot endpoint API key</span>
+                                                </label>
+                                                <div class="flex gap-2">
+                                                    <input type="password" id="RAG_FT_EMBED_API_KEY" name="RAG_FT_EMBED_API_KEY" placeholder="Paste the endpoint key…" autocomplete="off" spellcheck="false"
+                                                        class="input input-bordered flex-1 w-full min-w-0" aria-describedby="ft-embed-api-key-help">
+                                                    <button type="button" class="btn btn-square btn-outline" data-for="RAG_FT_EMBED_API_KEY" aria-label="Show or hide the slot endpoint API key"><span aria-hidden="true">👁️</span></button>
+                                                </div>
+                                                <label class="label">
+                                                    <span class="label-text-alt min-w-0 text-base-content/70" id="ft-embed-api-key-help">Shared by both slots. Stays on the server; only its presence is reported. May stay empty on a private network.</span>
+                                                </label>
+                                            </div>
+
+                                            <fieldset class="mb-4 min-w-0" aria-describedby="ft-slot-a-help">
+                                                <legend class="text-sm font-semibold mb-1">Slot A</legend>
+                                                <p class="text-xs text-base-content/70 mb-2" id="ft-slot-a-help">An OpenAI-compatible endpoint that serves one fine-tuned model (<span translate="no">POST {base}/embeddings</span>, 1024 dimensions).</p>
+
+                                                <div class="form-control mb-4">
+                                                    <label class="label" for="RAG_FT_SLOT_A_BASE_URL">
+                                                        <span class="label-text">Slot A base URL</span>
+                                                    </label>
+                                                    <input type="url" id="RAG_FT_SLOT_A_BASE_URL" name="RAG_FT_SLOT_A_BASE_URL" class="input input-bordered w-full" inputmode="url" autocomplete="off" spellcheck="false" translate="no" placeholder="http://localhost:8080/v1…" aria-describedby="ft-slot-a-base-url-help">
+                                                    <label class="label">
+                                                        <span class="label-text-alt min-w-0" id="ft-slot-a-base-url-help">Empty leaves slot A unconfigured. The app uses no fallback host.</span>
+                                                    </label>
+                                                </div>
+
+                                                <div class="form-control mb-4">
+                                                    <label class="label" for="RAG_FT_SLOT_A_MODEL">
+                                                        <span class="label-text">Slot A model version</span>
+                                                    </label>
+                                                    <input type="text" id="RAG_FT_SLOT_A_MODEL" name="RAG_FT_SLOT_A_MODEL" class="input input-bordered w-full" autocomplete="off" spellcheck="false" translate="no" placeholder="Model version id…" aria-describedby="ft-slot-a-model-help">
+                                                    <label class="label">
+                                                        <span class="label-text-alt min-w-0" id="ft-slot-a-model-help">Enter the model recorded on the slot profile; the startup check compares the two.</span>
+                                                    </label>
+                                                </div>
+
+                                                <div class="form-control mb-4">
+                                                    <label class="label" for="RAG_FT_SLOT_A_QUERY_PROMPT">
+                                                        <span class="label-text">Slot A query prompt</span>
+                                                    </label>
+                                                    <input type="text" id="RAG_FT_SLOT_A_QUERY_PROMPT" name="RAG_FT_SLOT_A_QUERY_PROMPT" class="input input-bordered w-full" autocomplete="off" spellcheck="false" placeholder="Empty for no prefix…" aria-describedby="ft-slot-a-query-prompt-help">
+                                                    <label class="label">
+                                                        <span class="label-text-alt min-w-0" id="ft-slot-a-query-prompt-help">Prefix the app adds to each query before embedding it.</span>
+                                                    </label>
+                                                </div>
+
+                                                <div class="form-control mb-4">
+                                                    <label class="label" for="RAG_FT_SLOT_A_DOCUMENT_PROMPT">
+                                                        <span class="label-text">Slot A document prompt</span>
+                                                    </label>
+                                                    <input type="text" id="RAG_FT_SLOT_A_DOCUMENT_PROMPT" name="RAG_FT_SLOT_A_DOCUMENT_PROMPT" class="input input-bordered w-full" autocomplete="off" spellcheck="false" placeholder="Empty for no prefix…" aria-describedby="ft-slot-a-document-prompt-help">
+                                                    <label class="label">
+                                                        <span class="label-text-alt min-w-0" id="ft-slot-a-document-prompt-help">Prefix the app adds to each passage before embedding it.</span>
+                                                    </label>
+                                                </div>
+                                            </fieldset>
+
+                                            <fieldset class="mb-4 min-w-0" aria-describedby="ft-slot-b-help">
+                                                <legend class="text-sm font-semibold mb-1">Slot B</legend>
+                                                <p class="text-xs text-base-content/70 mb-2" id="ft-slot-b-help">An OpenAI-compatible endpoint that serves one fine-tuned model (<span translate="no">POST {base}/embeddings</span>, 1024 dimensions).</p>
+
+                                                <div class="form-control mb-4">
+                                                    <label class="label" for="RAG_FT_SLOT_B_BASE_URL">
+                                                        <span class="label-text">Slot B base URL</span>
+                                                    </label>
+                                                    <input type="url" id="RAG_FT_SLOT_B_BASE_URL" name="RAG_FT_SLOT_B_BASE_URL" class="input input-bordered w-full" inputmode="url" autocomplete="off" spellcheck="false" translate="no" placeholder="http://localhost:8080/v1…" aria-describedby="ft-slot-b-base-url-help">
+                                                    <label class="label">
+                                                        <span class="label-text-alt min-w-0" id="ft-slot-b-base-url-help">Empty leaves slot B unconfigured. The app uses no fallback host.</span>
+                                                    </label>
+                                                </div>
+
+                                                <div class="form-control mb-4">
+                                                    <label class="label" for="RAG_FT_SLOT_B_MODEL">
+                                                        <span class="label-text">Slot B model version</span>
+                                                    </label>
+                                                    <input type="text" id="RAG_FT_SLOT_B_MODEL" name="RAG_FT_SLOT_B_MODEL" class="input input-bordered w-full" autocomplete="off" spellcheck="false" translate="no" placeholder="Model version id…" aria-describedby="ft-slot-b-model-help">
+                                                    <label class="label">
+                                                        <span class="label-text-alt min-w-0" id="ft-slot-b-model-help">Enter the model recorded on the slot profile; the startup check compares the two.</span>
+                                                    </label>
+                                                </div>
+
+                                                <div class="form-control mb-4">
+                                                    <label class="label" for="RAG_FT_SLOT_B_QUERY_PROMPT">
+                                                        <span class="label-text">Slot B query prompt</span>
+                                                    </label>
+                                                    <input type="text" id="RAG_FT_SLOT_B_QUERY_PROMPT" name="RAG_FT_SLOT_B_QUERY_PROMPT" class="input input-bordered w-full" autocomplete="off" spellcheck="false" placeholder="Empty for no prefix…" aria-describedby="ft-slot-b-query-prompt-help">
+                                                    <label class="label">
+                                                        <span class="label-text-alt min-w-0" id="ft-slot-b-query-prompt-help">Prefix the app adds to each query before embedding it.</span>
+                                                    </label>
+                                                </div>
+
+                                                <div class="form-control mb-4">
+                                                    <label class="label" for="RAG_FT_SLOT_B_DOCUMENT_PROMPT">
+                                                        <span class="label-text">Slot B document prompt</span>
+                                                    </label>
+                                                    <input type="text" id="RAG_FT_SLOT_B_DOCUMENT_PROMPT" name="RAG_FT_SLOT_B_DOCUMENT_PROMPT" class="input input-bordered w-full" autocomplete="off" spellcheck="false" placeholder="Empty for no prefix…" aria-describedby="ft-slot-b-document-prompt-help">
+                                                    <label class="label">
+                                                        <span class="label-text-alt min-w-0" id="ft-slot-b-document-prompt-help">Prefix the app adds to each passage before embedding it.</span>
+                                                    </label>
+                                                </div>
+                                            </fieldset>
+                                        </section>
 
                                         <h4 class="text-md font-semibold mt-6 mb-2">Ingestion</h4>
                                         <p class="text-sm mb-2" data-ingestion-i18n="settings.movedPointer">Queue and tiered parsing settings are under RAG administration, Ingestion.</p>
@@ -9614,7 +9766,7 @@
                                                         </label>
                                                         <select id="RAG_TABLE_HEADER_REPEAT" name="RAG_TABLE_HEADER_REPEAT" autocomplete="off" aria-describedby="rag-table-header-repeat-help" class="select select-bordered select-sm w-full">
                                                             <option value="profile" data-rag-i18n="RAG_TABLE_HEADER_REPEAT.opt.profile">Follow the document type</option>
-                                                            <option value="always" data-rag-i18n="RAG_TABLE_HEADER_REPEAT.opt.always">Always</option>
+                                                            <option value="always" data-rag-i18n="RAG_TABLE_HEADER_REPEAT.opt.always" selected>Always</option>
                                                         </select>
                                                         <div class="label flex-wrap gap-1">
                                                             <span class="label-text-alt" id="rag-table-header-repeat-help"><span data-rag-i18n="RAG_TABLE_HEADER_REPEAT.help">Repeats the header row in every chunk of a split table and carries it to a table continued on the next page.</span> <span data-rag-i18n="settings.affectsStored">Changing this affects documents already stored; saving shows how many.</span></span>
@@ -9645,6 +9797,54 @@
                                                         <div class="label flex-wrap gap-1">
                                                             <span class="label-text-alt" id="rag-caption-language-help"><span data-rag-i18n="RAG_CAPTION_LANGUAGE.help">Captions of images are written in English or in the language of their document.</span> <span data-rag-i18n="settings.affectsStored">Changing this affects documents already stored; saving shows how many.</span></span>
                                                             <code class="font-mono text-xs break-all" translate="no">RAG_CAPTION_LANGUAGE</code>
+                                                        </div>
+                                                    </div>
+                                                    <div class="form-control mb-4">
+                                                        <label class="label" for="RAG_PAGE_BOILERPLATE">
+                                                            <span class="label-text" data-rag-i18n="RAG_PAGE_BOILERPLATE.label">Page boilerplate cleaning</span>
+                                                        </label>
+                                                        <select id="RAG_PAGE_BOILERPLATE" name="RAG_PAGE_BOILERPLATE" autocomplete="off" aria-describedby="rag-page-boilerplate-help" class="select select-bordered select-sm w-full">
+                                                            <option value="off" data-rag-i18n="RAG_PAGE_BOILERPLATE.opt.off">Off</option>
+                                                            <option value="detect" data-rag-i18n="RAG_PAGE_BOILERPLATE.opt.detect">Detect repeated lines</option>
+                                                            <option value="rules" data-rag-i18n="RAG_PAGE_BOILERPLATE.opt.rules">Workspace rules</option>
+                                                            <option value="both" data-rag-i18n="RAG_PAGE_BOILERPLATE.opt.both">Detect and workspace rules</option>
+                                                        </select>
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-page-boilerplate-help"><span data-rag-i18n="RAG_PAGE_BOILERPLATE.help">Before a document is split into chunks, removes lines that repeat at the top or bottom of its pages, lines that match the workspace’s rules, or both. The stored parse output is not changed. Needs the unified ingest pipeline.</span> <span id="rag-page-boilerplate-stored"><span data-rag-i18n="RAG_PAGE_BOILERPLATE.stored">Stored documents: they keep their current chunks until a chunking profile is rebuilt with</span> <code class="font-mono text-xs break-all" translate="no">npm run rag:rechunk -- --profile &lt;id&gt;</code></span></span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_PAGE_BOILERPLATE</code>
+                                                        </div>
+                                                    </div>
+                                                    <div class="form-control mb-4">
+                                                        <label class="label" for="RAG_SECTION_RULES">
+                                                            <span class="label-text" data-rag-i18n="RAG_SECTION_RULES.label">Section rule sets</span>
+                                                        </label>
+                                                        <select id="RAG_SECTION_RULES" name="RAG_SECTION_RULES" autocomplete="off" aria-describedby="rag-section-rules-help" class="select select-bordered select-sm w-full">
+                                                            <option value="off" data-rag-i18n="RAG_SECTION_RULES.opt.off">Off</option>
+                                                            <option value="on" data-rag-i18n="RAG_SECTION_RULES.opt.on">On</option>
+                                                        </select>
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-section-rules-help"><span data-rag-i18n="RAG_SECTION_RULES.help">Splits a document at the headings that its workspace’s rule set allows; other headings stay body text. A document that does not satisfy its rule set is split the usual way and marked for review. A workspace without a rule set is not changed. Needs the unified ingest pipeline.</span> <span id="rag-section-rules-stored"><span data-rag-i18n="RAG_SECTION_RULES.stored">Stored documents: they keep their current chunks until a chunking profile is rebuilt with</span> <code class="font-mono text-xs break-all" translate="no">npm run rag:rechunk -- --profile &lt;id&gt;</code></span></span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_SECTION_RULES</code>
+                                                        </div>
+                                                    </div>
+                                                    <div class="form-control mb-4">
+                                                        <label class="label cursor-pointer justify-start gap-2">
+                                                            <input type="checkbox" id="RAG_DOC_ATTRIBUTES" name="RAG_DOC_ATTRIBUTES" autocomplete="off" class="checkbox checkbox-primary" aria-describedby="rag-doc-attributes-help">
+                                                            <span class="label-text" data-rag-i18n="RAG_DOC_ATTRIBUTES.label">Document attributes</span>
+                                                        </label>
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-doc-attributes-help"><span data-rag-i18n="RAG_DOC_ATTRIBUTES.help">Stores attributes with each document and its chunks, checked against the workspace’s attribute schema. A value with an unknown key or the wrong type is rejected. Needs the unified ingest pipeline.</span></span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_DOC_ATTRIBUTES</code>
+                                                        </div>
+                                                    </div>
+                                                    <div class="form-control mb-4">
+                                                        <label class="label cursor-pointer justify-start gap-2">
+                                                            <input type="checkbox" id="RAG_ATTRIBUTE_HEADER" name="RAG_ATTRIBUTE_HEADER" autocomplete="off" class="checkbox checkbox-primary" aria-describedby="rag-attribute-header-help">
+                                                            <span class="label-text" data-rag-i18n="RAG_ATTRIBUTE_HEADER.label">Attribute header in search text</span>
+                                                        </label>
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-attribute-header-help"><span data-rag-i18n="RAG_ATTRIBUTE_HEADER.help">Adds one line, rendered from the workspace’s header template and the document’s attributes, to the text used for embedding and keyword search. The line is never sent to the answering model. Needs document attributes.</span> <span id="rag-attribute-header-stored"><span data-rag-i18n="RAG_ATTRIBUTE_HEADER.stored">Stored documents: their search text has no attribute header until a chunking profile is rebuilt with</span> <code class="font-mono text-xs break-all" translate="no">npm run rag:rechunk -- --profile &lt;id&gt;</code></span></span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_ATTRIBUTE_HEADER</code>
                                                         </div>
                                                     </div>
                                                 </div>

@@ -1,0 +1,67 @@
+{
+  "additionalProperties": false,
+  "description": "`config/rag/boilerplate-rules.json` (D-13): numbers only.",
+  "properties": {
+    "edge_lines": {
+      "minimum": 1,
+      "title": "Edge Lines",
+      "type": "integer"
+    },
+    "fragment_max_length": {
+      "minimum": 1,
+      "title": "Fragment Max Length",
+      "type": "integer"
+    },
+    "fragment_page_share": {
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "title": "Fragment Page Share",
+      "type": "number"
+    },
+    "max_line_tokens": {
+      "minimum": 1,
+      "title": "Max Line Tokens",
+      "type": "integer"
+    },
+    "min_pages": {
+      "minimum": 1,
+      "title": "Min Pages",
+      "type": "integer"
+    },
+    "page_share": {
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "title": "Page Share",
+      "type": "number"
+    },
+    "review_share": {
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "title": "Review Share",
+      "type": "number"
+    },
+    "rules_version": {
+      "minimum": 1,
+      "title": "Rules Version",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "rules_version",
+    "page_share",
+    "edge_lines",
+    "max_line_tokens",
+    "min_pages",
+    "fragment_max_length",
+    "fragment_page_share",
+    "review_share"
+  ],
+  "title": "BoilerplateRulesConfig",
+  "type": "object"
+}

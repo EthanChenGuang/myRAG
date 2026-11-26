@@ -1,0 +1,35 @@
+{
+  "requests": 2,
+  "urls": [
+    "https://api.anthropic.com/v1/messages",
+    "https://api.anthropic.com/v1/messages"
+  ],
+  "totalMs": 3393,
+  "steps": 2,
+  "parts": {
+    "start": 1,
+    "start-step": 2,
+    "reasoning-start": 2,
+    "reasoning-delta": 4,
+    "reasoning-end": 2,
+    "tool-input-start": 1,
+    "tool-input-delta": 5,
+    "tool-input-end": 1,
+    "tool-call": 1,
+    "tool-result": 1,
+    "finish-step": 2,
+    "text-start": 3,
+    "text-delta": 35,
+    "text-end": 3,
+    "finish": 1
+  },
+  "citations": [
+    {
+      "alias": "S1",
+      "citedText": "The Velmora lighthouse was painted green in 1931. "
+    }
+  ],
+  "invalidSources": 0,
+  "error": null,
+  "text": "**From the document:** The Velmora lighthouse was painted green. The Velmora lighthouse was painted green in 1931.[S1]\n\n**From web search:** The first electric lighthouse lamp was tested in 1858. The only result I found was a single page, and its domain is a placeholder, so I can't fully vouch for it. From general knowledge, the South Foreland Lighthouse in Kent, England, is commonly cited as the first to use an electric light, in 1858, which fits. Checking a more authoritative source would confirm it."
+}

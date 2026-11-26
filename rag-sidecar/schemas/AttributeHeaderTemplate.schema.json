@@ -1,0 +1,22 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "template": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Template",
+      "type": "string"
+    },
+    "version": {
+      "minimum": 1,
+      "title": "Version",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "template",
+    "version"
+  ],
+  "title": "AttributeHeaderTemplate",
+  "type": "object"
+}

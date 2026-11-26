@@ -38,12 +38,12 @@ describe('pinned eval env', () => {
     expect(pinned).not.toHaveProperty('REDIS_URL');
   });
 
-  test('pins the eighteen Phase 3.2 variables: languages zh,en,it with primary en, every switch at its D-47 default (D-02)', () => {
+  test('pins the eighteen Phase 3.2 variables: languages zh,en,it with primary en, every switch at its D-47 default, RAG_TABLE_HEADER_REPEAT at the 03.2-67 decision (D-02, D-19)', () => {
     const expected = {
       RAG_SUPPORTED_LANGUAGES: 'zh,en,it',
       RAG_PRIMARY_LANGUAGE: 'en',
       RAG_LANGUAGE_AWARE_INGEST: 'off',
-      RAG_TABLE_HEADER_REPEAT: 'profile',
+      RAG_TABLE_HEADER_REPEAT: 'always',
       RAG_TABLE_ROW_SERIALIZATION: 'false',
       RAG_CAPTION_LANGUAGE: 'en',
       RAG_BGE_M3_SERVING: 'hosted',
@@ -125,8 +125,39 @@ describe('pinned eval env', () => {
     expect(RUN_CONFIG_ENV_ALLOWLIST).not.toContain('RAG_EMBED_VERSION_SCOPE');
   });
 
+  test('pins the six Phase 3.3 templated-collection switches off (D-03)', () => {
+    const expected = {
+      RAG_SECTION_RULES: 'off',
+      RAG_PAGE_BOILERPLATE: 'off',
+      RAG_DOC_ATTRIBUTES: 'false',
+      RAG_ATTRIBUTE_HEADER: 'false',
+      RAG_ATTRIBUTE_FILTER: 'off',
+      RAG_LEXICAL_QUANTITY: 'false',
+    };
+    const pinned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'eval/config/rag-eval-env.json'), 'utf8'));
+    for (const [name, value] of Object.entries(expected)) {
+      expect(pinned, `${name} is pinned`).toHaveProperty(name);
+      expect(pinned[name], name).toBe(value);
+    }
+  });
+
   test('eval-env --check exits 0', () => {
     const result = spawnSync('npx', ['tsx', 'eval/harness/eval-env.mts', '--check'], { cwd: REPO_ROOT, encoding: 'utf8' });
     expect(result.status).toBe(0);
   }, 60_000);
+  test('pins the Phase 6.1 fine-tune switch off with empty slot settings and an empty key', () => {
+    const pinned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'eval/config/rag-eval-env.json'), 'utf8'));
+    expect(pinned).toMatchObject({
+      RAG_FINETUNE: 'off',
+      RAG_FT_EMBED_API_KEY: '',
+      RAG_FT_SLOT_A_BASE_URL: '',
+      RAG_FT_SLOT_A_MODEL: '',
+      RAG_FT_SLOT_A_QUERY_PROMPT: '',
+      RAG_FT_SLOT_A_DOCUMENT_PROMPT: '',
+      RAG_FT_SLOT_B_BASE_URL: '',
+      RAG_FT_SLOT_B_MODEL: '',
+      RAG_FT_SLOT_B_QUERY_PROMPT: '',
+      RAG_FT_SLOT_B_DOCUMENT_PROMPT: '',
+    });
+  });
 });

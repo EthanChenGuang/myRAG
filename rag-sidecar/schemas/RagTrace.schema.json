@@ -559,6 +559,57 @@
       "title": "SkippedTransform",
       "type": "object"
     },
+    "TraceAttributeFilter": {
+      "additionalProperties": false,
+      "description": "Phase 3.3 D-29, D-30, F-25: attribute filter counts and flags; never an attribute key or value.",
+      "properties": {
+        "applied": {
+          "title": "Applied",
+          "type": "boolean"
+        },
+        "explicit": {
+          "title": "Explicit",
+          "type": "boolean"
+        },
+        "fallback": {
+          "title": "Fallback",
+          "type": "boolean"
+        },
+        "matched_attributes": {
+          "minimum": 0,
+          "title": "Matched Attributes",
+          "type": "integer"
+        },
+        "mode": {
+          "enum": [
+            "hard",
+            "soft"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "resolved_documents": {
+          "minimum": 0,
+          "title": "Resolved Documents",
+          "type": "integer"
+        },
+        "too_broad": {
+          "title": "Too Broad",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "mode",
+        "explicit",
+        "matched_attributes",
+        "resolved_documents",
+        "applied",
+        "fallback",
+        "too_broad"
+      ],
+      "title": "TraceAttributeFilter",
+      "type": "object"
+    },
     "TraceCandidate": {
       "additionalProperties": false,
       "properties": {
@@ -955,6 +1006,11 @@
         "similarity": {
           "title": "Similarity",
           "type": "number"
+        },
+        "variant_index": {
+          "minimum": 0,
+          "title": "Variant Index",
+          "type": "integer"
         }
       },
       "required": [
@@ -1313,6 +1369,9 @@
       ],
       "default": null,
       "title": "Answer"
+    },
+    "attribute_filter": {
+      "$ref": "#/$defs/TraceAttributeFilter"
     },
     "cache": {
       "enum": [

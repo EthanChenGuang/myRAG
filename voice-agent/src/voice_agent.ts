@@ -58,6 +58,9 @@ export class VoicePipeline {
     private transcriptDebounceTimer: NodeJS.Timeout | null = null;
     private readonly TRANSCRIPT_DEBOUNCE_MS = 150; // Optimized for low latency (was 600ms)
 
+    // Voice text timing clock (D-39); tests replace it
+    private clock: () => number = () => Date.now();
+
     // Message Metadata Storage (for saving rich history)
     private messageMetadata = new Map<number, any>();
 
@@ -502,6 +505,7 @@ Examples:
     }
 
     async processUserMessage(text: string, userInputId?: string) {
+        const turnStartedAt = this.clock();
         // Generate a unique request ID for this message
         const requestId = Date.now();
         this.currentRequestId = requestId;
@@ -574,6 +578,9 @@ Examples:
         }
 
         try {
+            const generationStartedAt = this.clock();
+            const traceId = ragResult.traceId;
+            let timingReported = false;
             const stream = await this.llm.chat.completions.create({
                 model: this.llmModel,
                 messages: messages,
@@ -652,6 +659,11 @@ Examples:
 
                 const content = chunk.choices[0]?.delta?.content || '';
                 if (!content) continue;
+
+                if (!timingReported) {
+                    timingReported = true;
+                    if (traceId) this.reportTurnTiming(traceId, turnStartedAt, generationStartedAt, this.clock());
+                }
 
                 fullResponse += content;
                 sentenceBuffer += content;
@@ -883,6 +895,16 @@ Examples:
         } finally {
             // Mark that we're done processing
             this.isProcessing = false;
+        }
+    }
+
+    private reportTurnTiming(traceId: string, turnStartedAt: number, generationStartedAt: number, firstDeltaAt: number): void {
+        const preGenerationMs = Math.max(0, Math.round(generationStartedAt - turnStartedAt));
+        const ttftMs = Math.max(preGenerationMs, Math.round(firstDeltaAt - turnStartedAt));
+        try {
+            void this.rag.reportTiming(traceId, { ttft_ms: ttftMs, pre_generation_ms: preGenerationMs }, this.scopeToken).catch(() => undefined);
+        } catch {
+            // Timing never affects the turn
         }
     }
 
