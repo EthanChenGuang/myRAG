@@ -26,6 +26,10 @@ def _uuid(language: str, index: int) -> str:
     return f"{prefix}0000000-0000-4000-8000-{index:012d}"
 
 
+def _label(supported: bool, relevant: bool, unsupported: bool, labelled_at: str) -> dict:
+    return {"supported": supported, "relevant": relevant, "unsupported_content": unsupported, "labelled_at": labelled_at}
+
+
 def _export_case(language: str | None, index: int, supported: bool, *, contexts: int = 1) -> dict:
     marker = "SUPPORTED" if supported else "UNSUPPORTED"
     lang = language or "en"
@@ -43,8 +47,8 @@ def _export_case(language: str | None, index: int, supported: bool, *, contexts:
             for _ in range(contexts)
         ],
         "labels": [
-            {"supported": not supported, "relevant": True, "unsupported_content": supported, "labelled_at": "2026-11-01T00:00:00Z"},
-            {"supported": supported, "relevant": supported, "unsupported_content": not supported, "labelled_at": "2026-11-02T00:00:00Z"},
+            _label(not supported, True, supported, "2026-11-01T00:00:00Z"),
+            _label(supported, supported, not supported, "2026-11-02T00:00:00Z"),
         ],
     }
 
@@ -91,7 +95,9 @@ class MarkerFactory:
 
 
 class FakeApp:
-    def __init__(self, cases: list[dict] | None = None, *, status: int = 200, error: Exception | None = None, body=None):
+    def __init__(
+        self, cases: list[dict] | None = None, *, status: int = 200, error: Exception | None = None, body=None
+    ) -> None:
         self.cases = cases or []
         self.status = status
         self.error = error

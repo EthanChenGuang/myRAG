@@ -499,7 +499,7 @@ def _queue_case(raw: object) -> JudgeSeedCase | None:
 
 
 def pull_review_queue_cases(base_url: str, tenant_key: str, token: str) -> ReviewQueuePull:
-    """Expert-labelled cases of one tenant from the app's judge-calibration/export route (D-31); text stays in memory."""
+    """Expert-labelled cases of one tenant from the judge-calibration/export route (D-31); text stays in memory."""
     url = base_url.rstrip("/") + EXPORT_ROUTE
     try:
         with _http_client() as client:
@@ -778,7 +778,7 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--seed-only", action="store_true", help="use the seed set only (minimum 50 labels per language)")
     run.add_argument("--seed", type=Path, default=DEFAULT_SEED_PATH)
     run.add_argument("--tenant", help="tenant key whose expert-labelled review-queue cases are pulled (D-31)")
-    run.add_argument("--base-url", help="app base URL for the judge-calibration export (admin Bearer in RAG_ADMIN_BEARER)")
+    run.add_argument("--base-url", help="app base URL of the judge-calibration export (admin Bearer: RAG_ADMIN_BEARER)")
     run.add_argument("--generator-model", required=True, help="generator model id; the judge family must differ")
     run.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
     run.add_argument("--gates", type=Path, default=DEFAULT_GATES_PATH)
