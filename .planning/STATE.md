@@ -1,20 +1,10 @@
 ---
 gsd_state_version: "1.0"
 milestone: v5.0
-current_phase: "05"
-current_phase_name: Verified Citations & Groundedness (Phases 5, 5.1, 6, 7 in parallel)
 status: executing
-stopped_at: "Merge trains 1-11 merged; main synced via PR; 05-22 and 05.1-06 executing; 03.1-53/54 deferred to pre-production; 04-43 partly live"
-last_updated: "2026-11-25T07:35:00.000Z"
-state_head: 01b43787
-package_legitimacy_03_1_04:
-  approved_at: "2026-11-24"
-  lock_commit: 3e83978e482f67da5ce6d463f39251f3e21e8bf4
-  pdfplumber: "0.11.11"
-  pdfminer_six: "20260107"
-  ray_data: "2.60.1"
-last_activity: 2026-11-25
-last_activity_desc: Merge trains 1-6 merged to trunk; Phase 3.1 and Phase 4 code complete except live checkpoints
+stopped_at: Merge trains 1-11 merged; main synced via PR; 05-22 and 05.1-06 executing; 03.1-53/54 deferred to pre-production; 04-43 partly live
+last_updated: "2026-11-26T23:24:29.092Z"
+state_head: b9418d118c6fac25b68cee52fc9392cb9c7af91a
 progress:
   total_phases: 14
   completed_phases: 1
@@ -27,6 +17,8 @@ package_legitimacy_03_1_04:
   pdfminer_six: 20260107
   ray_data: 2.60.1
 last_activity: 2026-11-24
+current_phase: 05
+current_phase_name: Verified Citations & Groundedness (Phases 5, 5.1, 6, 7 in parallel)
 last_activity_desc: Trunk merge train paused at 56b0349d; PRs
 ---
 
@@ -196,6 +188,12 @@ None yet.
 - [Phase 5]: Deepest uncertainty: whether AI SDK v6 Anthropic Citations survive streaming with tools/MCP/webSearch (spike first); Vectara host, limits and retention.
 - [Phase 6]: `@langchain/core` zod 4 isolation from the app's zod 3; LangChain HyDE has no stock retriever and is a port.
 - [Phase 7]: Weaviate hybrid inside a tenant and Chinese tokenizer availability on Cloud; Qdrant per-prefetch filters; drain worker under the 60 s cap.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 261126-w4x | Add RAG_HISTORY_NOT_EVIDENCE switch for RAG turns | 2026-11-26 | b9418d11 | [261126-w4x-add-rag-history-not-evidence-switch-for-](./quick/261126-w4x-add-rag-history-not-evidence-switch-for-/) |
 
 ### Roadmap Evolution
 

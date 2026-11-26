@@ -1,6 +1,7 @@
 import { streamText, tool, type ToolSet, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, UIMessage, stepCountIs } from 'ai';
 import { buildCtaInstruction } from '@/lib/chat/cta-instruction';
 import { buildFormattingInstruction, resolveAnswerStyle } from '@/lib/chat/answer-style';
+import { appendHistoryNotEvidence, historyNotEvidenceEnabled } from '@/lib/chat/history-not-evidence';
 import { z } from 'zod/v3';
 // Use the dedicated OpenRouter provider
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
@@ -2581,10 +2582,14 @@ Context:
       console.log('[RAG SYSTEM] Creating enhanced prompt with context length:', context.length);
       console.log('[RAG SYSTEM] Using RAG mode:', ragMode);
       const answerLanguage = answerLanguageOptions(retrievalResult);
-      systemPrompt = citationSession.decorateSystemPrompt(createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode, answerLanguage));
+      const historyNotEvidence = ragMode !== 'bypass' && historyNotEvidenceEnabled(env.RAG_HISTORY_NOT_EVIDENCE);
+      systemPrompt = appendHistoryNotEvidence(
+        citationSession.decorateSystemPrompt(createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode, answerLanguage)),
+        historyNotEvidence,
+      );
       if (citationSession.strategy === 'claude-citations') {
         claudeSystemText = [
-          appendAnswerLanguage(citationSession.claudeSystemPrompt(ragSystemPrompt), answerLanguage),
+          appendHistoryNotEvidence(appendAnswerLanguage(citationSession.claudeSystemPrompt(ragSystemPrompt), answerLanguage), historyNotEvidence),
           String(formattingSystemMessage.content),
           String(ctaSystemMessage.content),
         ].join('\n\n');
