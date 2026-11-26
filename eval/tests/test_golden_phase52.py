@@ -269,7 +269,8 @@ def test_rebaseline_pre_existing_items_equal_the_previous_baseline(name):
     for slice_name, metrics in previous["slices"].items():
         before = {metric: stat["runs"] for metric, stat in metrics.items()}
         after = {metric: stat["runs"] for metric, stat in current["slices"][slice_name].items()}
-        if slice_name.startswith("language:") or slice_name == "category:injection_evasive":
+        # overall, the language slices and injection_evasive also hold new items; their pre-existing items are checked above.
+        if slice_name == "overall" or slice_name.startswith("language:") or slice_name == "category:injection_evasive":
             continue
         assert after == before, (name, slice_name)
     assert all(stat["spread"] == 0.0 for stats in current["slices"].values() for stat in stats.values()), name
