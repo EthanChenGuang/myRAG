@@ -53,9 +53,19 @@ def _result_for(item: GoldenItem, index: int, provenance: str | None = None) -> 
     )
 
 
+# Plan 06-38 appended the Phase 6 items after the snapshot was saved; the snapshot keeps the earlier set.
+PHASE6_TAGS = frozenset(
+    {"phase6_protected_followup", "phase6_elliptical", "phase6_relative_time", "phase6_compound", "phase6_cross_lingual"}
+)
+
+
+def _added_after_snapshot(item: GoldenItem) -> bool:
+    return item.category == "small_talk" or bool(PHASE6_TAGS & set(item.tags))
+
+
 def fixture_shapes() -> dict[str, tuple[list[ItemResult], frozenset[str]]]:
     """Three deterministic shapes built from the committed fixture golden set."""
-    golden = load_golden(FIXTURE_GOLDEN)
+    golden = [item for item in load_golden(FIXTURE_GOLDEN) if not _added_after_snapshot(item)]
     plain = [_result_for(item, index) for index, item in enumerate(golden)]
     relabelled = [
         _result_for(item, index, "production" if index % PRODUCTION_SHARE == 0 else None)

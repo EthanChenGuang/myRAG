@@ -249,11 +249,11 @@ type ReportItem = Record<string, unknown> & { item_id: string };
 describe('Phase 6 run configs through npm run test-rag', () => {
   test('query-layer-llamaindex records the overlay and condenses the multi_turn items with the fake', () => {
     const items = golden().filter((item) => item.category === 'multi_turn');
-    assert.equal(items.length, 9);
+    assert.equal(items.length, 27);
     const { traces, manifest } = runSmoke(runConfigFile('query-layer-llamaindex.json'), items);
 
     assert.deepEqual(manifest.run_config?.env, { RAG_PIPELINE: 'v2', RAG_QUERY_LAYER: 'true' });
-    assert.equal(traces.length, 9);
+    assert.equal(traces.length, 27);
     assert.equal(manifest.effective_config_hash, configHash(traces[0].effective_config as never));
     assert.equal(traces[0].effective_config.rag_env.RAG_QUERY_LAYER, 'true');
 
@@ -272,8 +272,8 @@ describe('Phase 6 run configs through npm run test-rag', () => {
       );
       condensedLanguages.add(trace.item_id.slice(0, 2));
     }
-    // The Italian follow-ups do not trip the 06-03 gate yet (reported in 06-29-SUMMARY); en and zh must be condensed.
-    for (const language of ['en', 'zh']) assert.ok(condensedLanguages.has(language), `a condensed ${language} multi_turn item`);
+    // The pre-06-38 Italian follow-ups do not trip the gate (06-29-SUMMARY); the 06-38 ones do, so all three languages condense.
+    for (const language of ['en', 'zh', 'it']) assert.ok(condensedLanguages.has(language), `a condensed ${language} multi_turn item`);
   });
 
   test('query-layer-off gives the same traces and per-item results as the v2-all-off run', () => {

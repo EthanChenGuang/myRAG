@@ -22,10 +22,15 @@ NO_ANSWER_ADDED_BY_PLAN_04_38 = 18
 CROSS_LINGUAL_ADDED_BY_PLAN_04_38 = 2
 # Plan 05.1-17: four injection and two injection_evasive items per language.
 INJECTION_PER_LANGUAGE_05_1_17 = 6
+# Plan 06-38: six multi_turn, two compound and two small_talk items per language, and four en->zh and four
+# it->zh cross_lingual items; test_golden_phase6.py checks their kinds.
+PHASE6_PER_LANGUAGE_06_38 = 10
+CROSS_LINGUAL_ADDED_BY_PLAN_06_38 = 8
+PHASE6_RELATIVE_TIME_TAG = "phase6_relative_time"
 PER_LANGUAGE_CATEGORY = {
     "general": 6,
-    "multi_turn": 3,
-    "compound": 3,
+    "multi_turn": 9,
+    "compound": 5,
     "exact_term": 3,
     "table": 3,
     "scanned": 2,
@@ -35,8 +40,9 @@ PER_LANGUAGE_CATEGORY = {
     "typo": 2,
     "cross_lingual": 8,
     "selective_filter": 4,
+    "small_talk": 2,
 }
-PER_LANGUAGE_CATEGORY_OVERRIDES = {("en", "cross_lingual"): 9, ("it", "cross_lingual"): 9}
+PER_LANGUAGE_CATEGORY_OVERRIDES = {("en", "cross_lingual"): 13, ("it", "cross_lingual"): 13}
 # Tightest selective_filter in this corpus pins a single document (4–6 chunk rows of 71).
 FIXTURE_MAX_SELECTIVE_ROW_SHARE = 6 / 71
 RELATIVE_DATE_LATIN = ("today", "yesterday", "last week", "this month", "oggi", "ieri")
@@ -64,15 +70,17 @@ def test_corpus_has_one_image_caption_document():
 def test_single_language_items_forty_per_language(items):
     single = [item for item in items if item.category != "cross_lingual"]
     counts = collections.Counter(item.language for item in single)
-    assert len(single) == 102 + NO_ANSWER_ADDED_BY_PLAN_04_38 + INJECTION_PER_LANGUAGE_05_1_17 * len(LANGUAGES)
-    expected = 40 + INJECTION_PER_LANGUAGE_05_1_17
+    per_language = INJECTION_PER_LANGUAGE_05_1_17 + PHASE6_PER_LANGUAGE_06_38
+    assert len(single) == 102 + NO_ANSWER_ADDED_BY_PLAN_04_38 + per_language * len(LANGUAGES)
+    expected = 40 + per_language
     assert {language: counts[language] for language in LANGUAGES} == {"zh": expected, "en": expected, "it": expected}
 
 
 def test_twenty_six_cross_lingual_items_at_least_four_per_pair(items):
     cross = [item for item in items if item.category == "cross_lingual"]
-    assert len(items) == 102 + NO_ANSWER_ADDED_BY_PLAN_04_38 + INJECTION_PER_LANGUAGE_05_1_17 * len(LANGUAGES) + len(cross)
-    assert len(cross) == PER_PAIR_MINIMUM * len(PAIRS) + CROSS_LINGUAL_ADDED_BY_PLAN_04_38
+    per_language = INJECTION_PER_LANGUAGE_05_1_17 + PHASE6_PER_LANGUAGE_06_38
+    assert len(items) == 102 + NO_ANSWER_ADDED_BY_PLAN_04_38 + per_language * len(LANGUAGES) + len(cross)
+    assert len(cross) == PER_PAIR_MINIMUM * len(PAIRS) + CROSS_LINGUAL_ADDED_BY_PLAN_04_38 + CROSS_LINGUAL_ADDED_BY_PLAN_06_38
     counts = collections.Counter((item.language, item.evidence_language) for item in cross)
     for pair in PAIRS:
         assert counts[pair] >= PER_PAIR_MINIMUM, pair
@@ -122,7 +130,10 @@ def test_splits_equal_manifest_and_rule(items):
 
 
 def test_no_relative_date_phrase_in_questions_or_conversations(items):
+    # The 06-38 relative-time follow-ups name a period on purpose; their answers do not depend on the date.
     for item in items:
+        if PHASE6_RELATIVE_TIME_TAG in item.tags:
+            continue
         texts = [item.question, *(turn.content for turn in item.conversation)]
         for text in texts:
             lowered = text.lower()
