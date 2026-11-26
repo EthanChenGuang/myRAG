@@ -2,6 +2,7 @@ import { SupersessionRulesSchema, type SupersessionRules } from '@/lib/rag-eval/
 import rawRules from '../../../../../config/rag/supersession-rules.json';
 import type { RpcClient } from '../../backend/supabase-rpc';
 import { loadIngestConfig } from '../config';
+import { sameDocType } from '../profiles/same-doc-type';
 import { getIngestDeps } from '../deps';
 import type { PostPublishEvent } from '../post-publish';
 import { directionFor, hasVersionMarker, normalizeTitle, titleOf, titleSimilarity, titleYear, versionMarkersFor } from './title';
@@ -151,7 +152,7 @@ export function detectSupersessionCandidates(
   const found: DetectedCandidate[] = [];
   for (const peer of peers) {
     if (peer.documentId === document.documentId) continue;
-    if (peer.docType !== document.docType) continue;
+    if (!sameDocType(peer.docType, document.docType)) continue;
     if (document.lineageId !== null && peer.lineageId === document.lineageId) continue;
     const pair = pairSignals(document, peer, rules);
     if (pair.titleRule || pair.overlapRule) found.push({ candidateDocumentId: peer.documentId, signals: pair.signals, direction: pair.direction });
