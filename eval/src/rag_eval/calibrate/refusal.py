@@ -144,6 +144,18 @@ def fit_threshold(answerable: Sequence[float], no_answer: Sequence[float], targe
     return best
 
 
+def sweep_candidates(answerable: Sequence[float], no_answer: Sequence[float]) -> tuple:
+    return ()
+
+
+def fit_threshold_capped(answerable: Sequence[float], no_answer: Sequence[float], max_false_answer: float) -> FitResult | None:
+    return None
+
+
+def build_sweeps(rows: Sequence[CalibrationRow], records: Sequence[Any]) -> list:
+    return []
+
+
 def _metric_block(answerable: Sequence[float], no_answer: Sequence[float], threshold: float | None) -> RefusalMetricBlock:
     cut = NEVER_REFUSE if threshold is None else threshold
     false_refusals = sum(1 for s in answerable if s < cut)
