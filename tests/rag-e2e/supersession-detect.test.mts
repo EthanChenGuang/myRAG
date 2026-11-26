@@ -193,6 +193,111 @@ describe('supersession detection after publish (two tenants)', () => {
     assert.equal((await candidatesOf(result.documentId as string)).length, 0);
   });
 
+  const REVISION_A = [
+    'The blue widget weighs 12 grams and ships in boxes of 40 units.',
+    'Each grey panel holds 6 brass screws spaced 15 millimetres apart.',
+    'The copper rail is 120 centimetres long and rests on 3 brackets.',
+    'Assembly takes about 25 minutes with two people working together.',
+    'Store the finished frame in a dry room below 30 degrees.',
+  ];
+  const REVISION_B = [
+    'The blue widget weighs 14 grams and ships in boxes of 40 units.',
+    'Each grey panel holds 8 brass screws spaced 15 millimetres apart.',
+    'The copper rail is 150 centimetres long and rests on 3 brackets.',
+    'Assembly takes about 25 minutes with two people working together.',
+    'Store the finished frame in a dry room below 30 degrees.',
+  ];
+  const plain = (sentences: string[]) => `${sentences.join(' ')}\n`;
+
+  test('different titles whose stored contents overlap while numbers differ raise a candidate; identical content raises nothing', async () => {
+    const first = await upload('Workshop handout.md', plain(REVISION_A), TWO_TENANT_IDS.userA, ORG, { docType: 'contract_legal' });
+    const second = await upload('Assembly sheet.md', plain(REVISION_B), TWO_TENANT_IDS.userA, ORG, { docType: 'contract_legal' });
+    assert.equal(second.status, 'ready');
+    const found = await candidatesOf(second.documentId as string);
+    assert.equal(found.length, 1);
+    const candidate = found[0] as Row;
+    assert.equal(candidate.origin, 'detected');
+    assert.equal(candidate.candidate_document_id, first.documentId);
+    const signals = candidate.signals as Row;
+    assert.equal(signals.title_match, false);
+    assert.ok((signals.content_overlap_percent as number) >= detect.supersessionRules().content_overlap_min_percent);
+    assert.ok((signals.conflicting_numbers as number) >= detect.supersessionRules().min_conflicting_numbers);
+    assert.equal(candidate.direction, null, 'no year marker and no dates: the admin chooses');
+
+    const copy = await upload('Assembly sheet copy.md', plain(REVISION_B), TWO_TENANT_IDS.userA, ORG, { docType: 'contract_legal' });
+    assert.notEqual(copy.status, 'ready', 'identical content is a duplicate, not a version');
+    assert.equal((await candidatesOf(second.documentId as string)).length, 1);
+  });
+
+  const replacesTarget = async (token: string) => {
+    const target = await upload(`Bracket guide ${token}.md`, body(token, ['The steel bracket holds the upper shelf.']), TWO_TENANT_IDS.userA, ORG, {
+      docType: 'financial_report',
+    });
+    assert.equal(target.status, 'ready');
+    return target.documentId as string;
+  };
+
+  test("an admin's Replaces… is confirmed right after publish", async () => {
+    const older = await replacesTarget('zqxrepadm');
+    const newer = await upload('Shelf layout.md', body('zqxrepadmnew', ['The steel bracket now holds two shelves.']), TWO_TENANT_IDS.userA, ORG, {
+      replacesDocumentId: older,
+    });
+    assert.equal(newer.status, 'ready');
+    const found = (await candidatesOf(older)).filter((row) => row.origin === 'uploader');
+    assert.equal(found.length, 1);
+    assert.equal(found[0]?.status, 'confirmed');
+    assert.equal(found[0]?.document_id, newer.documentId);
+    assert.equal(found[0]?.older_document_id, older);
+    assert.equal(found[0]?.decided_by, TWO_TENANT_IDS.userA);
+    const retired = (await rows('SELECT is_current, superseded_by FROM documents WHERE id = $1', [older]))[0] as Row;
+    assert.equal(retired.is_current, false);
+    assert.equal(retired.superseded_by, newer.documentId);
+    const current = (await rows('SELECT is_current FROM documents WHERE id = $1', [newer.documentId]))[0] as Row;
+    assert.equal(current.is_current, true);
+  });
+
+  test("a member's Replaces… stays a pending candidate and supersedes nothing", async () => {
+    const older = await replacesTarget('zqxrepmem');
+    const newer = await upload('Rack layout.md', body('zqxrepmemnew', ['The steel bracket now holds three shelves.']), MEMBER, ORG, {
+      replacesDocumentId: older,
+    });
+    assert.equal(newer.status, 'ready');
+    const found = (await candidatesOf(older)).filter((row) => row.origin === 'uploader');
+    assert.equal(found.length, 1);
+    assert.equal(found[0]?.status, 'pending');
+    assert.equal(found[0]?.direction, 'document_newer');
+    const document = (await rows('SELECT is_current FROM documents WHERE id = $1', [older]))[0] as Row;
+    assert.equal(document.is_current, true);
+  });
+
+  test('a held upload raises its Replaces… candidate only after approval publishes it', async () => {
+    const older = await replacesTarget('zqxrepheld');
+    depsModule.setIngestDepsForTests({ ingestEnv: () => ({ ...ON, RAG_UPLOAD_APPROVAL: 'members' }) });
+    const held = await upload('Cabinet layout.md', body('zqxrepheldnew', ['The steel bracket now holds four shelves.']), MEMBER, ORG, {
+      replacesDocumentId: older,
+    });
+    assert.equal(held.status, 'pending_review');
+    assert.equal((await candidatesOf(older)).length, 0, 'nothing is raised while the upload waits');
+
+    let release: () => void = () => {};
+    const done = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    finished.set(held.documentId as string, release);
+    const approval = await import('@/lib/rag/ingest/approval/admin');
+    const approved = await approval.approveUpload({
+      documentId: held.documentId as string,
+      actorUserId: TWO_TENANT_IDS.userA,
+      tenantKey: ORG_KEY,
+      signal: new AbortController().signal,
+    });
+    assert.ok(approved.ok, JSON.stringify(approved));
+    await Promise.race([done, new Promise((resolve) => setTimeout(resolve, 3000))]);
+    const found = (await candidatesOf(older)).filter((row) => row.origin === 'uploader');
+    assert.equal(found.length, 1);
+    assert.equal(found[0]?.status, 'pending', "the member's choice waits for an admin");
+  });
+
   test('with the switch off no detector runs and no candidate is written', async () => {
     depsModule.setIngestDepsForTests({ ingestEnv: () => ({ RAG_INGEST_PIPELINE: 'unified', RAG_SUPERSESSION_DETECT: 'off' }) });
     postPublish.resetPostPublishHooksForTests();

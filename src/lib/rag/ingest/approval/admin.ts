@@ -166,7 +166,7 @@ function totalOf(rows: Row[]): number {
 }
 
 /** Display names for user ids from the auth user record (email, then name), with the id as the fallback. Failures fall back silently. */
-async function displayUsers(ids: Array<string | null>, signal: AbortSignal): Promise<Map<string, string>> {
+export async function displayUsers(ids: Array<string | null>, signal: AbortSignal): Promise<Map<string, string>> {
   const unique = [...new Set(ids.filter((id): id is string => typeof id === 'string' && UUID.test(id)))];
   const names = new Map<string, string>(unique.map((id) => [id, id]));
   const client = lookupClient();

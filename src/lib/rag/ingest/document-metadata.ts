@@ -11,6 +11,7 @@ const PIPELINE_KEYS: ReadonlySet<string> = new Set([
   'content_hash_version',
   'doc_type_detection',
   'external_url',
+  'supersession_replaces',
 ]);
 
 /**

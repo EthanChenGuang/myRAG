@@ -4,6 +4,7 @@ import { scopeKey } from '../../tenant/scope';
 import { buildIngestFingerprint, collectFingerprintParts } from '../fingerprint';
 import { afterPublish } from '../post-publish';
 import { requireDocument, type IngestResult, type IngestStatus, type StageContext, type StageOutcome, type StageSpec } from '../types';
+import { recordReplacesIntent } from '../versions/admin';
 import { IngestWriterError } from '../writer';
 
 function result(ctx: StageContext, status: IngestStatus, documentId: string, version: number, reason?: string): StageOutcome {
@@ -49,6 +50,7 @@ async function writeFingerprint(ctx: StageContext, documentId: string): Promise<
 async function run(ctx: StageContext): Promise<StageOutcome> {
   const document = requireDocument(ctx, 'publish');
   await writeFingerprint(ctx, document.id);
+  await recordReplacesIntent(ctx, document.id);
   if (ctx.state.approval?.required === true && !quarantinedByScan(ctx)) return holdForReview(ctx, document.id, document.version);
 
   const batchHold = ctx.state.publishHold;

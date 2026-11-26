@@ -1,4 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+import type { RpcClient, RpcRequest, RpcResponse } from '@/lib/rag/backend/supabase-rpc';
+import { resetIngestDepsForTests, setIngestDepsForTests } from '@/lib/rag/ingest/deps';
+import { validateUploadReplaces } from '@/lib/rag/ingest/versions/admin';
+import { mintScope } from '@/lib/rag/tenant/scope';
+import { PAIRS } from './fixtures/supersession-pairs';
 import {
   contentOverlap,
   detectSupersessionCandidates,
@@ -163,5 +168,89 @@ describe('detectSupersessionCandidates: content rule', () => {
     const padding = 'The oak frame stands near the window and is cleaned every week by hand. '.repeat(10);
     const overlap = contentOverlap(padding + REVISION_A, padding + REVISION_B, rules);
     expect(overlap.conflictingNumbers).toBe(0);
+  });
+});
+
+describe('fitted thresholds (config/rag/supersession-rules.json)', () => {
+  it('separate every fixture pair: revisions raise, shared boilerplate, light edits and unrelated texts do not', () => {
+    const rules = supersessionRules();
+    for (const pair of PAIRS) {
+      const overlap = contentOverlap(pair.a, pair.b, rules);
+      const raised = overlap.percent >= rules.content_overlap_min_percent && overlap.conflictingNumbers >= rules.min_conflicting_numbers;
+      expect(raised, pair.label).toBe(pair.expected);
+    }
+  });
+
+  it('are data with a rules version, and every limit is bounded', () => {
+    const rules = supersessionRules();
+    expect(rules.rules_version).toMatch(/^supersession@/);
+    expect(rules.overlap_max_documents).toBeLessThanOrEqual(50);
+    expect(rules.overlap_max_chars_per_document).toBeLessThanOrEqual(100_000);
+    expect(rules.max_title_candidates).toBeLessThanOrEqual(500);
+  });
+});
+
+const ORG = '00000000-0000-4000-8000-0000000045c1';
+const TARGET = '00000000-0000-4000-8000-0000000045d1';
+const ORG_SCOPE = mintScope('org', '00000000-0000-4000-8000-0000000045a1', ORG);
+const ON = { pipeline: 'unified', supersessionDetect: 'on' } as const;
+
+function respond(data: unknown, error: { code: string; message: string } | null = null): RpcRequest {
+  const response: RpcResponse = { data, error };
+  const request: RpcRequest = { abortSignal: () => request, then: (ok, bad) => Promise.resolve(response).then(ok, bad) };
+  return request;
+}
+
+describe('validateUploadReplaces (route-side "Replaces…" check)', () => {
+  const calls: Array<{ fn: string; args: Record<string, unknown> }> = [];
+  const targets = new Map<string, Record<string, unknown>>();
+  let fails = false;
+
+  function install(): void {
+    calls.length = 0;
+    const db: RpcClient = {
+      rpc(fn, args) {
+        calls.push({ fn, args });
+        if (fails) return respond(null, { code: 'XX000', message: 'connection reset' });
+        const row = targets.get(`${String(args.p_tenant_key)}|${String(args.p_document_id)}`);
+        return respond(row ? [row] : []);
+      },
+    };
+    setIngestDepsForTests({ db: () => db });
+  }
+
+  afterEach(() => {
+    resetIngestDepsForTests();
+    targets.clear();
+    fails = false;
+  });
+
+  const check = (raw: unknown, config: { pipeline: string; supersessionDetect: string } = ON, sourceKey = 'root/new.md') =>
+    validateUploadReplaces(ORG_SCOPE, raw, { signal: new AbortController().signal, source: 'config_upload', sourceKey, config: config as never });
+
+  it('accepts a current document of the upload\'s own tenant, asked with the scope\'s tenant key only', async () => {
+    install();
+    targets.set(`o:${ORG}|${TARGET}`, { document_id: TARGET, lineage_id: TARGET, source: 'config_upload', source_key: 'root/old.md' });
+    expect(await check(TARGET.toUpperCase())).toEqual({ ok: true, replacesDocumentId: TARGET, ignored: false });
+    expect(calls).toEqual([{ fn: 'rag_supersession_replace_target', args: { p_tenant_key: `o:${ORG}`, p_document_id: TARGET } }]);
+  });
+
+  it('refuses another tenant\'s or a non-current document, a malformed id and the upload\'s own lineage', async () => {
+    install();
+    expect(await check(TARGET)).toEqual({ ok: false, reason: 'replaces_not_found' });
+    expect(await check('not-a-uuid')).toEqual({ ok: false, reason: 'invalid_replaces' });
+    targets.set(`o:${ORG}|${TARGET}`, { document_id: TARGET, lineage_id: TARGET, source: 'config_upload', source_key: 'root/new.md' });
+    expect(await check(TARGET)).toEqual({ ok: false, reason: 'replaces_same_lineage' });
+    fails = true;
+    expect(await check(TARGET)).toEqual({ ok: false, reason: 'unavailable' });
+  });
+
+  it('is ignored without any lookup with the switch off or the legacy pipeline, and absent when the field is empty', async () => {
+    install();
+    expect(await check(TARGET, { pipeline: 'unified', supersessionDetect: 'off' })).toEqual({ ok: true, replacesDocumentId: undefined, ignored: true });
+    expect(await check(TARGET, { pipeline: 'legacy', supersessionDetect: 'on' })).toEqual({ ok: true, replacesDocumentId: undefined, ignored: true });
+    expect(await check('')).toEqual({ ok: true, replacesDocumentId: undefined, ignored: false });
+    expect(await check(null)).toEqual({ ok: true, replacesDocumentId: undefined, ignored: false });
+    expect(calls).toEqual([]);
   });
 });

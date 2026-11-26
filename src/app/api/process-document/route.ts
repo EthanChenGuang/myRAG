@@ -22,6 +22,7 @@ import {
   repairOwnerMembership,
   resolveAdminWorkspaceScope,
   resolveTenantScope,
+  validateUploadReplaces,
   validateUploadScopes,
   type EnqueueResult,
   type IngestResult,
@@ -753,19 +754,30 @@ async function uploadThroughIngest(input: {
       : NextResponse.json({ success: false, error: scopeCheck.reason }, { status: 400 });
   }
 
+  // D-41: the document this upload replaces must be a current document of the same workspace outside the upload's own lineage.
+  const sourceKey = buildSourceKey(source, { folderId: form.folder_id, filename: file.name });
+  const replacesCheck = await validateUploadReplaces(scope, input.formData.get('replaces_document_id'), { signal: req.signal, source, sourceKey });
+  if (!replacesCheck.ok) {
+    console.warn('[ProcessDocument] upload replaces refused', { reason: replacesCheck.reason });
+    return replacesCheck.reason === 'unavailable'
+      ? NextResponse.json({ error: 'replaces_unavailable' }, { status: 503 })
+      : NextResponse.json({ success: false, error: replacesCheck.reason }, { status: 400 });
+  }
+
   const bytes = new Uint8Array(await file.arrayBuffer());
   const deadlineMs = Math.max(MIN_INGEST_BUDGET_MS, UPLOAD_BUDGET_MS - (Date.now() - input.startedAt));
 
   const ingestInput = {
     scope,
     source,
-    sourceKey: buildSourceKey(source, { folderId: form.folder_id, filename: file.name }),
+    sourceKey,
     uploaderId: userId,
     file: bytes,
     filename: file.name,
     mimeType,
     ...(form.doc_type ? { docType: form.doc_type } : {}),
     ...(scopeCheck.scopes ? { scopes: scopeCheck.scopes } : {}),
+    ...(replacesCheck.replacesDocumentId ? { replacesDocumentId: replacesCheck.replacesDocumentId } : {}),
     signal: req.signal,
     deadlineMs,
   };
