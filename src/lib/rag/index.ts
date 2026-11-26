@@ -442,4 +442,6 @@ export { hashSystemPromptTemplate } from './cache/keys';
 export { cacheSourcesFromResult, scheduleCacheStore } from './cache/store-after';
 export type { CacheStoreFacts, CacheStoreSource, ScheduleCacheStoreInput } from './cache/store-after';
 export { cacheHitMetadata, streamCachedAnswer } from './cache/hit-stream';
+export { clearTenantSemanticCache, SEMANTIC_CACHE_ADMIN_TIMEOUT_MS } from './cache/admin';
+export type { ClearSemanticCacheError, ClearSemanticCacheOptions, ClearSemanticCacheResult } from './cache/admin';
 export { isCacheHitResult } from './v2/result';
