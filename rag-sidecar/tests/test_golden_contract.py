@@ -441,11 +441,22 @@ def test_every_committed_golden_line_still_validates_and_dumps_without_new_keys(
             assert GoldenItem.model_validate(dumped) == item, f"{name}:{number}"
             assert dumped.pop("expected_behavior") == "conversational", f"{name}:{number}"
             item = GoldenItem.model_validate(dumped)
+        if item.evidence_groups is not None:
+            # Plan 04.2-37: the Phase 4.2 items (tag phase42) group their gold spans (evidence_groups, 04.2-12); the rest of their
+            # key set is unchanged.
+            assert "phase42" in item.tags, f"{name}:{number}"
+            assert GoldenItem.model_validate(dumped) == item, f"{name}:{number}"
+            assert dumped.pop("evidence_groups") == item.evidence_groups, f"{name}:{number}"
+            item = GoldenItem.model_validate(dumped)
         assert "table_answer" not in dumped, f"{name}:{number}"
         assert "native_review" not in dumped, f"{name}:{number}"
         assert set(dumped) == _PRE_PHASE32_ITEM_KEYS, f"{name}:{number}"
         if dumped["retrieval_filters"] is not None:
-            assert set(dumped["retrieval_filters"]) == _PRE_PHASE32_FILTER_KEYS, f"{name}:{number}"
+            filter_keys = set(dumped["retrieval_filters"])
+            if "phase42" in item.tags:
+                # Plan 04.2-37: the version items of Phase 4.2 also set the versions filter.
+                filter_keys.discard("versions")
+            assert filter_keys == _PRE_PHASE32_FILTER_KEYS, f"{name}:{number}"
         assert GoldenItem.model_validate(dumped) == item, f"{name}:{number}"
 
 
