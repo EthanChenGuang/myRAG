@@ -12,7 +12,12 @@ from rag_sidecar.contracts.finetune import (
 
 from rag_eval.finetune import bundle, cli, kit
 from rag_eval.finetune.config import load_finetune_config
-from rag_eval.finetune.miner import DEV_FILE, REPORT_FILE, TRAIN_NTUPLE_FILE, TRAIN_PAIRS_FILE
+from rag_eval.finetune.miner import (
+    DEV_FILE,
+    REPORT_FILE,
+    TRAIN_NTUPLE_FILE,
+    TRAIN_PAIRS_FILE,
+)
 
 TENANT_A = "o:00000000-0000-4000-8000-0000000000a1"
 TENANT_B = "o:00000000-0000-4000-8000-0000000000b2"
@@ -73,18 +78,22 @@ def make_bundle(tmp_path, *, n_chunks=40, n_ntuple=18, n_pairs=12, n_dev=4, num_
     mining report, all recorded in the manifest."""
     run_dir = tmp_path / "bundle" / "run-1"
     run_dir.mkdir(parents=True)
-    chunks = [_chunk(i, _split_of(i), tenant) for tenant in tenants for i in range(n_chunks)]
+    chunks = [_chunk(i, _split_of(i), tenant) for i in range(n_chunks) for tenant in tenants]
     by_split = {s: [c for c in chunks if c.split == s] for s in ("train", "dev", "test")}
-    train, dev, test = by_split["train"], by_split["dev"], by_split["test"]
-    ntuple = [
-        _pair(i, train[i % len(train)], split="train", negatives=[train[(i + k) % len(train)] for k in (1, 2, 3)][:num_negatives])
-        for i in range(n_ntuple)
-    ]
-    pairs = [_pair(100 + i, train[(i + 5) % len(train)], split="train") for i in range(n_pairs)]
-    devs = [
-        _pair(200 + i, dev[i % len(dev)], split="dev", negatives=[train[i], dev[(i + 1) % len(dev)]]) for i in range(n_dev)
-    ]
-    tests = [_pair(300 + i, test[i % len(test)], split="test") for i in range(3)]
+    ntuple, pairs, devs, tests = [], [], [], []
+    for t, tenant in enumerate(tenants):
+        train, dev, test = ([c for c in by_split[s] if c.tenant_key == tenant] for s in ("train", "dev", "test"))
+        base = 1000 * t
+        ntuple += [
+            _pair(base + i, train[i % len(train)], split="train", negatives=[train[(i + k) % len(train)] for k in (1, 2, 3)][:num_negatives])
+            for i in range(n_ntuple)
+        ]
+        pairs += [_pair(base + 100 + i, train[(i + 5) % len(train)], split="train") for i in range(n_pairs)]
+        devs += [
+            _pair(base + 200 + i, dev[i % len(dev)], split="dev", negatives=[train[i], dev[(i + 1) % len(dev)]])
+            for i in range(n_dev)
+        ]
+        tests += [_pair(base + 300 + i, test[i % len(test)], split="test") for i in range(3)]
     files = {
         bundle.CHUNKS_FILE: bundle.write_jsonl(run_dir / bundle.CHUNKS_FILE, chunks, ExportedChunk),
         TRAIN_NTUPLE_FILE: bundle.write_jsonl(run_dir / TRAIN_NTUPLE_FILE, ntuple, FinetunePair),
@@ -100,7 +109,7 @@ def make_bundle(tmp_path, *, n_chunks=40, n_ntuple=18, n_pairs=12, n_dev=4, num_
         split_rule="ft-sha256-first8hex-mod100-80-10-10",
         tenant_keys=sorted(tenants),
         chunks={s: len(v) for s, v in by_split.items()},
-        counts={"train": {"synthetic": n_ntuple + n_pairs}, "dev": {"synthetic": n_dev}, "test": {"synthetic": 3}},
+        counts={"train": {"synthetic": len(ntuple) + len(pairs)}, "dev": {"synthetic": len(devs)}, "test": {"synthetic": len(tests)}},
         files=files,
         created_at="2026-11-26T00:00:00Z",
     )
@@ -162,7 +171,8 @@ def test_kit_dev_corpus_covers_dev_documents_and_dev_pair_chunks(tmp_path):
     out = build(run_dir, tmp_path)
     corpus = {(r["tenant_key"], r["chunk_id"]) for r in _rows(out / kit.DEV_CORPUS_FILE)}
     chunks = _rows(run_dir / bundle.CHUNKS_FILE)
-    dev_chunks = {(r["tenant_key"], r["chunk_id"]) for r in chunks if r["split"] == "dev"}
+    dev_tenants = {r["tenant_key"] for r in _rows(out / DEV_FILE)}
+    dev_chunks = {(r["tenant_key"], r["chunk_id"]) for r in chunks if r["split"] == "dev" and r["tenant_key"] in dev_tenants}
     assert dev_chunks <= corpus
     for row in _rows(out / DEV_FILE):
         assert (row["tenant_key"], row["positive_chunk_id"]) in corpus
@@ -179,7 +189,7 @@ def test_kit_manifest_lists_tenants_and_matching_hashes(tmp_path):
     assert set(manifest.files) == {p.name for p in out.iterdir()} - {kit.KIT_MANIFEST_FILE}
     for name, digest in manifest.files.items():
         assert digest == bundle.sha256_file(out / name)
-    assert manifest.counts == {"ntuple": 18, "pairs": 12, "dev": 4, "dev_corpus": manifest.counts["dev_corpus"]}
+    assert manifest.counts == {"ntuple": 36, "pairs": 24, "dev": 8, "dev_corpus": manifest.counts["dev_corpus"]}
     assert kit.verify_kit(out).run_id == "run-1"
 
 
