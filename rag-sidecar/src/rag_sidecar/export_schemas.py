@@ -113,6 +113,8 @@ from rag_sidecar.contracts import (
     TranslationSettings,
     EmbedRequest,
     EmbedResponse,
+    ReconcileReport,
+    VectorSyncSliceReport,
 )
 from rag_sidecar.contracts.feedback_loop import (
     DictionaryCandidate,
@@ -275,6 +277,8 @@ CONTRACTS: list[tuple[type[BaseModel], Mode]] = [
     (FailureEntry, "serialization"),
     (GatePopulationConfig, "validation"),
     (ShipCheckResult, "serialization"),
+    (VectorSyncSliceReport, "serialization"),
+    (ReconcileReport, "serialization"),
 ]
 
 

@@ -245,10 +245,15 @@ from rag_sidecar.contracts.eval_run import (
     TraceQueryContext,
     TraceQueryTransform,
     TraceSecurityVersions,
+    TraceRetrievalBackend,
     TraceUsedDocument,
 )
+from rag_sidecar.contracts.vector_sync import ReconcileReport, VectorSyncSliceReport
 
 __all__ = [
+    "ReconcileReport",
+    "TraceRetrievalBackend",
+    "VectorSyncSliceReport",
     "FingerprintImpact",
     "FingerprintImpactRow",
     "FingerprintSwitches",

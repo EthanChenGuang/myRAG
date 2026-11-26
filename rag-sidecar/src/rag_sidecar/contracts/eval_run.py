@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from rag_sidecar.contracts.answers import AnswerGroundedness, CitationRecord, CitationStrategy
 from rag_sidecar.contracts.ingest import DocType
+from rag_sidecar.contracts.omit import omit_none_schema
 from rag_sidecar.contracts.query import QueryFramework, QueryParamsOverride, QueryPlan, QueryTransformToggles
 from rag_sidecar.contracts.retrieval import ChunkingProfile, RetrievalFilters, RetrievalOverrides, VectorBackend
 
@@ -249,7 +250,11 @@ class RagTrace(_Contract):
     invalid_citations: int = Field(default=0, ge=0)
     groundedness: AnswerGroundedness | None = None
     injection: TraceInjection | None = None
-    retrieval_backend: TraceRetrievalBackend | None = None
+    retrieval_backend: TraceRetrievalBackend | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        json_schema_extra=omit_none_schema,
+    )
     stage_latency_ms: dict[str, float]
     stage_status: dict[str, str] = Field(default_factory=dict)
     effective_config: TraceEffectiveConfig

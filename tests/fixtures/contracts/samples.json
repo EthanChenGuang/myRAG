@@ -6729,6 +6729,19 @@
         }
       ]
     },
+    "ReconcileReport": {
+      "backend_count": 9,
+      "extra": 0,
+      "mismatched_buckets": 1,
+      "missing": 1,
+      "profile_id": "openai-3-small",
+      "repairs_enqueued": 1,
+      "stale": 0,
+      "state": "ready",
+      "supabase_count": 10,
+      "target": "qdrant",
+      "tenant_key": "s:default"
+    },
     "RefusalCalibrationConfig": {
       "config_hash": null,
       "dev_minimums": {
@@ -7327,6 +7340,18 @@
       "reason": "member_upload",
       "required": true,
       "uploader_id": "00000000-0000-4000-8000-0000000000c1"
+    },
+    "VectorSyncSliceReport": {
+      "budget_ms": 5000,
+      "claimed": 4,
+      "dead": 0,
+      "deleted": 1,
+      "elapsed_ms": 120,
+      "failed": 0,
+      "lag_seconds": 2.5,
+      "mode": "drain",
+      "more_pending": false,
+      "upserted": 3
     },
     "WeeklyReport": {
       "failures": {
@@ -8882,6 +8907,145 @@
         ]
       }
     },
+    "RagTrace:retrieval_backend": {
+      "model": "RagTrace",
+      "value": {
+        "answer": null,
+        "candidates": [
+          {
+            "chunk_id": "chunk-001",
+            "content": "Employees receive twenty days of leave per year.",
+            "document_id": "doc-001",
+            "document_name": "handbook.md",
+            "final_score": 0.85,
+            "fused_score": null,
+            "has_image": false,
+            "language": null,
+            "legs": {},
+            "match_reason": "vector",
+            "rank": 1,
+            "rerank_score": null,
+            "similarity": 0.82
+          },
+          {
+            "chunk_id": "chunk-002",
+            "content": "Office hours are nine to five.",
+            "document_id": "doc-002",
+            "document_name": null,
+            "final_score": null,
+            "fused_score": null,
+            "has_image": false,
+            "language": null,
+            "legs": {},
+            "match_reason": null,
+            "rank": 2,
+            "rerank_score": null,
+            "similarity": 0.41
+          }
+        ],
+        "citation_strategy": "chunk-alias",
+        "citations": [
+          {
+            "alias": "S1",
+            "chunkIds": [
+              "chunk-001"
+            ],
+            "documentId": "doc-001",
+            "documentName": "handbook.md",
+            "documentVersion": null,
+            "n": 1,
+            "page": null,
+            "quote": "Employees receive twenty days of leave per year.",
+            "quoteHash": "8ce0aa222a8339916769a9552a8ffcc2834d2f6aa1101ab636571873bf2c7bb2",
+            "sectionPath": null,
+            "strategy": "chunk-alias"
+          }
+        ],
+        "config_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "context": "Employees receive twenty days of leave per year.",
+        "context_tokens": null,
+        "effective_config": {
+          "deployment_mode": "single-tenant",
+          "embedding_model": "text-embedding-3-small",
+          "endpoint_version": "1",
+          "generator_model": null,
+          "rag_env": {
+            "RAG_BEHAVIOR_MODE": "strict"
+          },
+          "rag_prompt_sha256": {
+            "RAG_SYSTEM_PROMPT": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "security": null
+        },
+        "groundedness": null,
+        "injection": null,
+        "invalid_citations": 0,
+        "item_id": "en-general-001",
+        "kept": [
+          {
+            "chunk_id": "chunk-001",
+            "content": "Employees receive twenty days of leave per year.",
+            "document_id": "doc-001",
+            "document_name": "handbook.md",
+            "kept_by": "similarity",
+            "rank": 1,
+            "similarity": 0.82
+          }
+        ],
+        "query": "How many leave days do employees get?",
+        "query_context": {
+          "is_financial_query": false,
+          "is_temporal_query": false,
+          "required_precision": "medium",
+          "search_strategy": "semantic_only",
+          "suggested_threshold": 0.3
+        },
+        "query_language": null,
+        "query_plan": null,
+        "query_transforms": [
+          {
+            "kind": "rewrite",
+            "reason": null,
+            "status": null,
+            "text": "leave days per year",
+            "transform": null
+          }
+        ],
+        "refusal": null,
+        "refusal_reason": null,
+        "refused": false,
+        "retrieval_backend": {
+          "backend": "weaviate",
+          "fallback_reason": "backend_not_ready",
+          "tenant_validation_dropped": 0
+        },
+        "retrieval_config_hash": null,
+        "retrieval_strategy": "standard",
+        "retrieval_versions": null,
+        "schema_version": 1,
+        "stage_counts": {},
+        "stage_latency_ms": {
+          "analyze": 1.5,
+          "embed": 4.0,
+          "generation": 0.0,
+          "search": 7.0
+        },
+        "stage_status": {
+          "analyze": "ok",
+          "embed": "ok",
+          "generation": "ok",
+          "search": "ok"
+        },
+        "used_documents": [
+          {
+            "document_id": "doc-001",
+            "image_url": "https://example.invalid/image.png",
+            "name": "handbook.md",
+            "similarity": 0.82
+          }
+        ]
+      }
+    },
     "RetrievalFilters:scopes": {
       "model": "RetrievalFilters",
       "value": {
@@ -8902,6 +9066,19 @@
           ]
         },
         "sources": null
+      }
+    },
+    "RetrievalOverrides:backend": {
+      "model": "RetrievalOverrides",
+      "value": {
+        "backend": "qdrant",
+        "candidate_pool_size": null,
+        "chunking_profile_by_doc_type": {},
+        "final_top_k": null,
+        "leg_weights": null,
+        "rerank_input_cap": null,
+        "rerank_model": null,
+        "rrf_k": null
       }
     },
     "RetrievalParams:sub_question_coverage_off": {

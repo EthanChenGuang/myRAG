@@ -223,6 +223,7 @@ from rag_sidecar.contracts.eval_run import (
     TraceInjection,
     TraceInjectionChecked,
     TraceInjectionFlagged,
+    TraceRetrievalBackend,
     TraceSecurityVersions,
 )
 from rag_sidecar.contracts.golden import AttackSpec, NativeReview, TableAnswer
@@ -252,6 +253,7 @@ from rag_sidecar.contracts.routing import (
 )
 from rag_sidecar.contracts.embed import EmbedRequest, EmbedResponse
 from rag_sidecar.contracts.retrieval import RetrievalLegWeights
+from rag_sidecar.contracts.vector_sync import ReconcileReport, VectorSyncSliceReport
 from rag_sidecar.contracts.translation import ChunkTranslation, TranslationSettings
 from rag_sidecar.contracts.versions import (
     EffectiveDateExtraction,
@@ -1649,6 +1651,31 @@ def _models() -> dict[str, Any]:
         "BindingComparison": _binding_comparison(),
         "RetrievalParams": RetrievalParams(),
         "RetrievalOverrides": RetrievalOverrides(final_top_k=10),
+        "VectorSyncSliceReport": VectorSyncSliceReport(
+            mode="drain",
+            claimed=4,
+            upserted=3,
+            deleted=1,
+            failed=0,
+            dead=0,
+            lag_seconds=2.5,
+            elapsed_ms=120,
+            budget_ms=5000,
+            more_pending=False,
+        ),
+        "ReconcileReport": ReconcileReport(
+            target="qdrant",
+            profile_id="openai-3-small",
+            tenant_key="s:default",
+            supabase_count=10,
+            backend_count=9,
+            mismatched_buckets=1,
+            missing=1,
+            extra=0,
+            stale=0,
+            repairs_enqueued=1,
+            state="ready",
+        ),
         "RetrievalFilters": RetrievalFilters(sources=["manual"], languages=["en"]),
         "RefusalThresholds": RefusalThresholds(),
         "RefusalCalibrationConfig": RefusalCalibrationConfig(),
@@ -2218,6 +2245,22 @@ def build_samples() -> dict[str, dict[str, Any]]:
             "value": _trace("Twenty days per year.")
             .model_copy(update={"query_plan": _query_plan()})
             .model_dump(mode="json"),
+        },
+        "RagTrace:retrieval_backend": {
+            "model": "RagTrace",
+            "value": _trace(None)
+            .model_copy(
+                update={
+                    "retrieval_backend": TraceRetrievalBackend(
+                        backend="weaviate", fallback_reason="backend_not_ready", tenant_validation_dropped=0
+                    )
+                }
+            )
+            .model_dump(mode="json"),
+        },
+        "RetrievalOverrides:backend": {
+            "model": "RetrievalOverrides",
+            "value": RetrievalOverrides(backend="qdrant").model_dump(mode="json"),
         },
         "RagRunRequest:query_overrides": {
             "model": "RagRunRequest",

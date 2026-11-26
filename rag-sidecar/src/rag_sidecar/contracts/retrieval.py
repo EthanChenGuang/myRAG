@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validat
 from rag_sidecar.contracts.ingest import DocType
 
 from .languages import Language
+from .omit import omit_none_schema
 from .scopes import ScopeFilter
 
 FilterLanguage = Language
@@ -108,7 +109,11 @@ class RetrievalOverrides(_Contract):
     leg_weights: RetrievalLegWeights | None = None
     rerank_model: str | None = Field(default=None, min_length=1)
     chunking_profile_by_doc_type: dict[DocType, Annotated[str, Field(min_length=1, max_length=128)]] = Field(default_factory=dict)
-    backend: VectorBackend | None = None
+    backend: VectorBackend | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        json_schema_extra=omit_none_schema,
+    )
 
 
 class DateRangeFilter(_Contract):

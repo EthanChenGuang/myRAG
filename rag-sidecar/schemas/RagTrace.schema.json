@@ -1039,6 +1039,49 @@
       "title": "TraceRefusal",
       "type": "object"
     },
+    "TraceRetrievalBackend": {
+      "additionalProperties": false,
+      "properties": {
+        "backend": {
+          "enum": [
+            "pgvector",
+            "weaviate",
+            "qdrant"
+          ],
+          "title": "Backend",
+          "type": "string"
+        },
+        "fallback_reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "backend_not_ready",
+                "backend_error",
+                "backend_slow",
+                "filter_unsupported"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fallback Reason"
+        },
+        "tenant_validation_dropped": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Tenant Validation Dropped",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "backend"
+      ],
+      "title": "TraceRetrievalBackend",
+      "type": "object"
+    },
     "TraceRetrievalVersions": {
       "additionalProperties": false,
       "properties": {
@@ -1309,6 +1352,9 @@
     "refused": {
       "title": "Refused",
       "type": "boolean"
+    },
+    "retrieval_backend": {
+      "$ref": "#/$defs/TraceRetrievalBackend"
     },
     "retrieval_config_hash": {
       "anyOf": [

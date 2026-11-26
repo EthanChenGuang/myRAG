@@ -137,3 +137,13 @@ def test_rag_trace_retrieval_backend_optional_and_validated():
     ]:
         with pytest.raises(ValidationError):
             RagTrace.model_validate({**payload, "retrieval_backend": bad})
+
+
+def test_unset_backend_fields_are_left_out_of_dumps():
+    assert "backend" not in RetrievalOverrides(final_top_k=5).model_dump(mode="json")
+    assert RetrievalOverrides(backend="qdrant").model_dump(mode="json")["backend"] == "qdrant"
+    payload = _trace_payload()
+    assert "retrieval_backend" not in RagTrace.model_validate(payload).model_dump(mode="json")
+    schema = RetrievalOverrides.model_json_schema(mode="validation")
+    assert "backend" not in schema.get("required", [])
+    assert "default" not in schema["properties"]["backend"]

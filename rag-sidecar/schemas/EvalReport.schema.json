@@ -1280,6 +1280,15 @@
     "RetrievalOverrides": {
       "additionalProperties": false,
       "properties": {
+        "backend": {
+          "enum": [
+            "pgvector",
+            "weaviate",
+            "qdrant"
+          ],
+          "title": "Backend",
+          "type": "string"
+        },
         "candidate_pool_size": {
           "anyOf": [
             {
