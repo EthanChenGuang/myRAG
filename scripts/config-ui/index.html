@@ -6675,6 +6675,13 @@
                                                     </label>
                                                     <p class="label-text-alt text-base-content/70 pl-8 max-w-prose" id="rag-version-scope-help" data-rag-i18n="RAG_VERSION_SCOPE.help">Lets a request ask for earlier versions of a document: all versions, or those of a period. A request that does not ask gets current versions only.</p>
                                                 </div>
+                                                <div class="flex flex-col gap-1">
+                                                    <label class="flex items-center gap-2 cursor-pointer">
+                                                        <input type="checkbox" id="RAG_EMBED_VERSION_SCOPE" name="RAG_EMBED_VERSION_SCOPE" class="checkbox checkbox-primary" aria-describedby="rag-embed-version-scope-help">
+                                                        <span class="label-text"><span data-rag-i18n="RAG_EMBED_VERSION_SCOPE.label">Version scope in embedded chat</span> (<span translate="no">RAG_EMBED_VERSION_SCOPE</span>)</span>
+                                                    </label>
+                                                    <p class="label-text-alt text-base-content/70 pl-8 max-w-prose" id="rag-embed-version-scope-help" data-rag-i18n="RAG_EMBED_VERSION_SCOPE.help">Lets the embedded chat widget ask for earlier versions too. Works only while the version scope filter is on. Visitors of the widget can then read earlier versions of the workspace’s documents.</p>
+                                                </div>
                                             </div>
                                             <div class="space-y-4 border-t border-base-300 pt-4">
                                                 <div class="flex flex-col gap-1">

@@ -104,7 +104,7 @@ describe('Phase 4.2 retrieval tuning switches in the Config UI (plan 04.2-02, UI
     const embed = content.indexOf('id="RAG_EMBED_VERSION_SCOPE"');
     expect(scope).toBeGreaterThan(-1);
     expect(embed).toBeGreaterThan(scope);
-    const between = content.slice(scope + 'id="RAG_VERSION_SCOPE"'.length, embed);
+    const between = content.slice(scope + 'id="RAG_VERSION_SCOPE"'.length, content.lastIndexOf('<input', embed));
     expect(between).not.toMatch(/<(input|select)\b/);
     expect(between).not.toMatch(/border-t border-base-300 pt-4/);
     const help = new RegExp(`<p\\b[^>]*\\bid="${helpId('RAG_EMBED_VERSION_SCOPE')}"[^>]*>([^<]*)</p>`).exec(content)?.[1] ?? '';
