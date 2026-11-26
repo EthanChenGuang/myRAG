@@ -1023,7 +1023,11 @@ def test_the_04_1_1_10_baseline_adds_only_term_items_and_moves_no_old_item(tmp_p
     previous = Baseline.model_validate_json(
         (root / "baselines" / "history" / "fixture-ingest-baseline.pre-04.1.1-10.json").read_text(encoding="utf-8")
     )
-    current = Baseline.model_validate_json((root / "baselines" / "fixture-ingest-baseline.json").read_text(encoding="utf-8"))
+    # The 04.1.1-10 record, kept in history when plan 04.2-37 added the Phase 4.2 items;
+    # test_the_04_2_37_baselines_add_only_phase42_items_and_move_no_old_item compares it with the committed baselines.
+    current = Baseline.model_validate_json(
+        (root / "baselines" / "history" / "fixture-ingest-baseline.pre-04.2-37.json").read_text(encoding="utf-8")
+    )
     assert len(current.runs) >= 3
     assert {run.run_id for run in current.runs}.isdisjoint({run.run_id for run in previous.runs}), "not re-recorded"
 
@@ -1032,14 +1036,9 @@ def test_the_04_1_1_10_baseline_adds_only_term_items_and_moves_no_old_item(tmp_p
         assert (corpus / relpath).is_file(), relpath
     without_terms = tmp_path / "corpus"
     shutil.copytree(corpus, without_terms)
-    for relpath in TERM_CORPUS_FILES:
-        (without_terms / relpath).unlink()
-    # The merge with plan 04.2-37 re-recorded this baseline with the Phase 4.2 files too; without both sets the corpus
-    # is the one both plans started from.
-    for relpath in PHASE42_CORPUS_FILES_04_2_37:
-        (without_terms / relpath).unlink()
-    # Train 30 re-recorded it again with the 05.2-28 Phase 5.2 documents, which add no golden item.
-    for relpath in P52_CORPUS_FILES_05_2_28:
+    # Without the term files, the Phase 4.2 files (04.2-37) and the 05.2-28 Phase 5.2 documents (train 30) the corpus is the one
+    # 04.1.1-10 started from.
+    for relpath in TERM_CORPUS_FILES | PHASE42_CORPUS_FILES | P52_CORPUS_FILES_05_2_28:
         (without_terms / relpath).unlink()
     assert corpus_sha256(without_terms) == PRE_TERMS_CORPUS_SHA256
     assert current.corpus_sha256 != previous.corpus_sha256 and current.golden_sha256 != previous.golden_sha256
@@ -1054,26 +1053,94 @@ def test_the_04_1_1_10_baseline_adds_only_term_items_and_moves_no_old_item(tmp_p
             if line.strip()
         )
     }
-    phase42 = {item_id for item_id, item in golden.items() if "phase42" in item.tags}
     added = set(current.items) - set(previous.items)
-    term_added = added - phase42
-    assert phase42 <= added
-    assert term_added and all("-term-" in item_id for item_id in term_added), sorted(term_added)
-    assert {golden[item_id].category for item_id in term_added} == {"colloquial", "no_answer"}
+    assert added and all("-term-" in item_id for item_id in added), sorted(added)
     added_categories = {golden[item_id].category for item_id in added}
+    assert added_categories == {"colloquial", "no_answer"}
     moved = {"overall"} | {name for name in previous.slices if name.startswith("language:")}
     moved |= {f"category:{category}" for category in added_categories}
-    # The Phase 6 gate fix scores the small_talk items marked conversational outside the refusal rates, so their category slice
-    # moves too; their item records are compared above.
-    moved |= {f"category:{item.category}" for item in golden.values() if item.expected_behavior == "conversational"}
-    assert set(previous.slices) <= set(current.slices)
-    assert set(current.slices) - set(previous.slices) <= {f"category:{category}" for category in added_categories}
+    assert set(current.slices) == set(previous.slices)
     for name, stats in previous.slices.items():
         if name in moved:
             continue
         assert current.slices[name] == stats, name
     assert all(stat.spread == 0.0 for stats in current.slices.values() for stat in stats.values())
 
+
+# The prechunked corpus hash before plan 04.2-37 added its 22 Phase 4.2 files (04.1.1-10's corpus).
+PRE_PHASE42_CORPUS_SHA256 = "4d9bd0210cebe95433e3065f19414c92f328f1c9f4530cf437647438b230309b"
+PHASE42_CORPUS_FILES = {
+    f"{language}/{name}.{language}.md"
+    for language in ("en", "zh", "it")
+    for name in (
+        "coded-list-a",
+        "coded-list-b",
+        "dup-passage.template",
+        "dup-solo",
+        "grid-reference",
+        "versioned-note.v1",
+        "versioned-note.v2",
+    )
+} | {"it/morphology-note.it.md"}
+
+
+@pytest.mark.parametrize("name", ["fixture-baseline", "fixture-ingest-baseline"])
+def test_the_04_2_37_baselines_add_only_phase42_items_and_move_no_old_item(tmp_path, name):
+    """Plan 04.2-37: both baselines re-recorded with the Phase 4.2 fixtures on top of 04.1.1-10; every earlier item and
+    every slice outside the overall, language and phase42 category slices is unchanged."""
+    import shutil
+    from pathlib import Path
+
+    from rag_sidecar.contracts.baseline import Baseline
+
+    from rag_eval.corpus import corpus_sha256
+
+    root = Path(__file__).resolve().parents[1]
+    previous = Baseline.model_validate_json((root / "baselines" / "history" / f"{name}.pre-04.2-37.json").read_text(encoding="utf-8"))
+    current = Baseline.model_validate_json((root / "baselines" / f"{name}.json").read_text(encoding="utf-8"))
+    assert len(current.runs) >= 3
+    assert {run.run_id for run in current.runs}.isdisjoint({run.run_id for run in previous.runs}), "not re-recorded"
+
+    corpus = root / "fixtures" / "corpus"
+    assert len(PHASE42_CORPUS_FILES) == 22
+    for relpath in PHASE42_CORPUS_FILES:
+        assert (corpus / relpath).is_file(), relpath
+    without_phase42 = tmp_path / "corpus"
+    shutil.copytree(corpus, without_phase42)
+    for relpath in PHASE42_CORPUS_FILES:
+        (without_phase42 / relpath).unlink()
+    # Train 30 re-recorded both baselines with the concurrent 05.2-28 Phase 5.2 documents too, which add no golden item.
+    for relpath in P52_CORPUS_FILES_05_2_28:
+        (without_phase42 / relpath).unlink()
+    assert corpus_sha256(without_phase42) == PRE_PHASE42_CORPUS_SHA256
+    assert current.corpus_sha256 != previous.corpus_sha256 and current.golden_sha256 != previous.golden_sha256
+
+    assert previous.items is not None and current.items is not None
+    assert {item_id: current.items[item_id] for item_id in previous.items} == previous.items
+    golden = {
+        item.id: item
+        for item in (
+            GoldenItem.model_validate_json(line)
+            for line in (root / "fixtures" / "golden.jsonl").read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        )
+    }
+    phase42 = {item_id for item_id, item in golden.items() if "phase42" in item.tags}
+    assert len(phase42) == 36
+    added = set(current.items) - set(previous.items)
+    assert added == phase42, sorted(added ^ phase42)
+    added_categories = {golden[item_id].category for item_id in added}
+    moved = {"overall"} | {name for name in previous.slices if name.startswith("language:")}
+    moved |= {f"category:{category}" for category in added_categories}
+    # The Phase 6 gate fix (train 30) scores the small_talk items marked conversational outside the refusal rates.
+    moved |= {f"category:{item.category}" for item in golden.values() if item.expected_behavior == "conversational"}
+    assert set(previous.slices) <= set(current.slices)
+    assert set(current.slices) - set(previous.slices) <= moved
+    for slice_name, stats in previous.slices.items():
+        if slice_name in moved:
+            continue
+        assert current.slices[slice_name] == stats, slice_name
+    assert all(stat.spread == 0.0 for stats in current.slices.values() for stat in stats.values())
 
 def _answer_trace(item_id: str, *, refused: bool = False, answer: str | None = None) -> RagTrace:
     trace = _trace(item_id, [], refused=refused)
