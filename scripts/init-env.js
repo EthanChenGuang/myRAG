@@ -379,6 +379,10 @@ RAG_HNSW_ITERATIVE_SCAN=off
 RAG_EXACT_SCAN_CUTOFF=0
 # Query translation before lexical tokenization
 RAG_LEXICAL_TRANSLATION=false
+# Terminology dictionary (v2 only): query expansion, dense variant, missed-query mining
+RAG_TERMINOLOGY=false
+RAG_TERMINOLOGY_DENSE=false
+RAG_TERMINOLOGY_MINING=false
 # Emergency override for pool/cap/topk (operator only)
 RAG_RETRIEVAL_PARAMS_OVERRIDE=
 # Tenant for embedded chat: s:default | o:<uuid> | u:<uuid> (empty means s:default in single-tenant, fails closed in multi-tenant)

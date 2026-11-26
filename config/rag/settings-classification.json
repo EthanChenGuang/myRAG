@@ -620,6 +620,18 @@
       "side": "query"
     },
     {
+      "name": "RAG_TERMINOLOGY",
+      "side": "query"
+    },
+    {
+      "name": "RAG_TERMINOLOGY_DENSE",
+      "side": "query"
+    },
+    {
+      "name": "RAG_TERMINOLOGY_MINING",
+      "side": "query"
+    },
+    {
       "name": "RAG_TOOL_RESULT_GUARD",
       "side": "query"
     },

@@ -641,6 +641,21 @@
       "knownGaps": []
     },
     {
+      "name": "RAG_TERMINOLOGY",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_TERMINOLOGY_DENSE",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_TERMINOLOGY_MINING",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_LOW_THRESHOLD",
       "status": "legacy",
       "knownGaps": [

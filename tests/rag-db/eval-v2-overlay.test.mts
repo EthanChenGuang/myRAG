@@ -112,7 +112,7 @@ describe('Phase 4.1 defaults-gate run configs', () => {
 });
 
 describe('run-config validation', () => {
-  test('the allow-list is RAG_PIPELINE, the Phase 4 RAG_ switches, the refusal floor, the value-constrained vendor settings, the five Phase 5.1 SEC switches and the 16 Phase 6 names', () => {
+  test('the allow-list is RAG_PIPELINE, the Phase 4 RAG_ switches, the refusal floor, the value-constrained vendor settings, the five Phase 5.1 SEC switches, the 16 Phase 6 names and the three terminology switches', () => {
     assert.deepEqual([...RUN_CONFIG_ENV_ALLOWLIST].sort(), [
       'COHERE_API_KEY',
       'COHERE_BASE_URL',
@@ -151,6 +151,9 @@ describe('run-config validation', () => {
       'RAG_SEMANTIC_CACHE_MAX_DISTANCE',
       'RAG_SEMANTIC_CACHE_REFUSAL_TTL',
       'RAG_SEMANTIC_CACHE_TTL',
+      'RAG_TERMINOLOGY',
+      'RAG_TERMINOLOGY_DENSE',
+      'RAG_TERMINOLOGY_MINING',
       'RAG_TOOL_RESULT_GUARD',
       'VOYAGE_API_KEY',
       'VOYAGE_BASE_URL',
@@ -160,6 +163,18 @@ describe('run-config validation', () => {
   test('RAG_REFUSAL_FLOOR is accepted', () => {
     const config = parseRunConfig({ name: 'floor', env: { RAG_PIPELINE: 'v2', RAG_REFUSAL_FLOOR: 'legacy_rule' }, overrides: null }, 'inline');
     assert.equal(config.env.RAG_REFUSAL_FLOOR, 'legacy_rule');
+  });
+
+  test('the terminology switches are accepted and an unknown terminology name is rejected (D-29)', () => {
+    const config = parseRunConfig(
+      { name: 'terminology', env: { RAG_PIPELINE: 'v2', RAG_TERMINOLOGY: 'true', RAG_TERMINOLOGY_DENSE: 'false', RAG_TERMINOLOGY_MINING: 'false' }, overrides: null },
+      'inline',
+    );
+    assert.equal(config.env.RAG_TERMINOLOGY, 'true');
+    assert.throws(
+      () => parseRunConfig({ name: 'terminology', env: { RAG_PIPELINE: 'v2', RAG_TERMINOLOGY_X: 'true' }, overrides: null }, 'inline'),
+      (error: unknown) => error instanceof RunConfigError && error.message === REJECT_MESSAGE,
+    );
   });
 
   test('key overlay only takes placeholders', () => {
