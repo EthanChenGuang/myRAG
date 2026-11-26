@@ -443,6 +443,30 @@ describe('quarantine admin routes', () => {
     expect(lines).not.toContain('member@example.invalid');
   });
 
+  it('plan 05.2-17: with RAG_UPLOADER_HOLD on, each item carries uploader_held from one batched lookup; off, the key is absent', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    state.outcomes.rag_list_quarantine_reasons = {
+      data: [
+        { ...LIST_ROW, uploader_id: MEMBER_ID },
+        { ...LIST_ROW, document_id: OTHER_ADMIN_ID, uploader_id: OWNER_ID },
+      ],
+      error: null,
+    };
+    state.outcomes.rag_active_uploader_holds = { data: [MEMBER_ID] as unknown as Row[], error: null };
+    try {
+      vi.stubEnv('RAG_UPLOADER_HOLD', 'manual');
+      const held = await (await loaded.list.GET(req('/api/rag/admin/quarantine'))).json();
+      expect(held.items.map((item: Row) => item.uploader_held)).toEqual([true, false]);
+      expect(state.rpcCalls.filter((call) => call.fn === 'rag_active_uploader_holds')).toHaveLength(1);
+      vi.stubEnv('RAG_UPLOADER_HOLD', 'off');
+      const off = await (await loaded.list.GET(req('/api/rag/admin/quarantine'))).json();
+      expect(off.items.some((item: Row) => 'uploader_held' in item)).toBe(false);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('view=not_checked lists the documents recorded not_checked with their total, one page, for the verified admin', async () => {
     const loaded = await load();
     state.session = { id: ADMIN_ID };
