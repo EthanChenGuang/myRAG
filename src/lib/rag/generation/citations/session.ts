@@ -138,6 +138,7 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
   let finished: { citations: CitationRecord[]; invalidCitations: number } | null = null;
   let full: CitationRecord[] = [];
   let answer = '';
+  let truncated = 0;
 
   const claudeBasePrompt = (basePrompt: string): string => {
     const tagging = input.contextTagging ?? readSecurityConfig().contextTagging;
@@ -180,6 +181,7 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
     }
     try {
       const parsed = parser.finish();
+      truncated = parsed.truncatedMarkers ?? 0;
       const records = CitationListSchema.parse(buildCitationRecords(parsed.valid, aliasMap, strategy));
       finished = { citations: CitationListSchema.parse(capQuotes(records)), invalidCitations: parsed.invalidCitations };
       full = records;
@@ -265,6 +267,7 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
       finished = null;
       full = [];
       answer = '';
+      truncated = 0;
       parser = createMarkerParser({ aliases: aliasMap.aliases });
     },
     stripHistory(messages) {
@@ -319,10 +322,12 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
       return answer;
     },
     aliases() {
-      return new Set<string>();
+      return strategy && aliasMap ? aliasMap.aliases : new Set<string>();
     },
     truncatedMarkers() {
-      return 0;
+      if (!strategy || strategy !== 'chunk-alias') return 0;
+      finalize();
+      return truncated;
     },
   };
 }
