@@ -1,4 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { maskPII } from '@/lib/rag/trace/mask';
 import { queryFingerprint } from '@/lib/rag/feedback-loop/retrieval-log';
 import {
@@ -179,5 +182,101 @@ describe('importQuestions', () => {
     await expect(importQuestions(fakeAdmin(), { tenantKey: 'tenant-a', prepared: prepareQuestions(['question-0001']), dryRun: true })).rejects.toThrow(
       'invalid_tenant_key',
     );
+  });
+});
+
+describe('rag:questions-import CLI', () => {
+  const ENV = { RAG_DOMAIN_EXPERT_REVIEW: 'true', NEXT_PUBLIC_SUPABASE_URL: 'http://localhost:54321', SUPABASE_SERVICE_ROLE_KEY: 'placeholder-key' };
+  const FIXTURE = ['question-0001', 'question-0002', 'question-0002'];
+  let dir: string;
+
+  beforeAll(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'questions-import-'));
+  });
+
+  afterAll(() => {
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  function capture() {
+    const lines: string[] = [];
+    return { lines, io: { out: (line: string) => lines.push(line), err: (line: string) => lines.push(line) } };
+  }
+
+  function file(name: string, content: string): string {
+    const target = path.join(dir, name);
+    fs.writeFileSync(target, content);
+    return target;
+  }
+
+  async function runCli(argv: string[], env: Record<string, string | undefined> = ENV) {
+    const { main } = await import('@/lib/rag/monitor/questions-import-cli');
+    const admin = fakeAdmin();
+    const { lines, io } = capture();
+    const code = await main(argv, io, { env, createClient: () => admin as never, now: new Date('2026-11-26T10:00:00Z') });
+    return { code, lines, admin };
+  }
+
+  it('a dry run prints the count lines, returns 0 and writes nothing', async () => {
+    const csv = file('dry.csv', `question\n${FIXTURE.join('\n')}\n`);
+    const { code, lines, admin } = await runCli(['--tenant', 's:default', '--file', csv, '--dry-run']);
+    expect(code).toBe(0);
+    const output = lines.join('\n');
+    expect(output).toContain('read 3');
+    expect(output).toContain('added 2');
+    expect(output).toContain('duplicates 1');
+    expect(output).toContain('rejected_pii 0');
+    expect(output).toContain('truncated 0');
+    expect(output).toContain('empty 0');
+    expect(output).toContain('by_language');
+    expect(admin.calls.some((call) => call.kind === 'rpc')).toBe(false);
+    for (const question of FIXTURE) expect(output).not.toContain(question);
+  });
+
+  it('imports a JSON-lines file with a chosen key and prints counts only', async () => {
+    const jsonl = file('rows.jsonl', FIXTURE.map((question) => JSON.stringify({ text: question })).join('\n'));
+    const { code, lines, admin } = await runCli(['--tenant', 's:default', '--file', jsonl, '--column', 'text']);
+    expect(code).toBe(0);
+    expect(lines.join('\n')).toContain('added 2');
+    expect(admin.calls.filter((call) => call.kind === 'rpc')).toHaveLength(1);
+    for (const question of FIXTURE) expect(lines.join('\n')).not.toContain(question);
+  });
+
+  it('exits 2 without --file, with an invalid tenant key or an unknown extension', async () => {
+    expect((await runCli(['--tenant', 's:default'])).code).toBe(2);
+    const csv = file('t.csv', 'question\nquestion-0001\n');
+    expect((await runCli(['--tenant', 'tenant-a', '--file', csv])).code).toBe(2);
+    const txt = file('t.txt', 'question-0001\n');
+    expect((await runCli(['--tenant', 's:default', '--file', txt])).code).toBe(2);
+  });
+
+  it('exits 2 naming the limit for a file above 10 MB or above 20,000 rows, never its content', async () => {
+    const big = file('big.csv', `question\n${'x'.repeat(IMPORT_LIMITS.maxFileBytes)}\n`);
+    const tooBig = await runCli(['--tenant', 's:default', '--file', big, '--dry-run']);
+    expect(tooBig.code).toBe(2);
+    expect(tooBig.lines.join('\n')).toContain('10 MB');
+    expect(tooBig.lines.join('\n')).not.toContain('xxxx');
+
+    const many = file('many.csv', `question\n${Array.from({ length: IMPORT_LIMITS.maxRows + 1 }, (_, i) => `question-${i}`).join('\n')}\n`);
+    const tooMany = await runCli(['--tenant', 's:default', '--file', many, '--dry-run']);
+    expect(tooMany.code).toBe(2);
+    expect(tooMany.lines.join('\n')).toContain('20000 rows');
+    expect(tooMany.lines.join('\n')).not.toContain('question-1');
+  });
+
+  it('exits 2 when the column is missing from the header', async () => {
+    const csv = file('nocol.csv', 'text\nquestion-0001\n');
+    const result = await runCli(['--tenant', 's:default', '--file', csv]);
+    expect(result.code).toBe(2);
+    expect(result.lines.join('\n')).not.toContain('question-0001');
+  });
+
+  it('prints one notice and exits 0 with expert review off, without reading the file', async () => {
+    const csv = file('off.csv', 'question\nquestion-0001\n');
+    const result = await runCli(['--tenant', 's:default', '--file', csv], { ...ENV, RAG_DOMAIN_EXPERT_REVIEW: 'false' });
+    expect(result.code).toBe(0);
+    expect(result.lines).toHaveLength(1);
+    expect(result.lines[0]).toContain('RAG_DOMAIN_EXPERT_REVIEW');
+    expect(result.admin.calls).toHaveLength(0);
   });
 });
