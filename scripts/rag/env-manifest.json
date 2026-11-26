@@ -738,6 +738,11 @@
       "ragAffecting": true
     },
     {
+      "name": "RAG_HISTORY_NOT_EVIDENCE",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_HNSW_ITERATIVE_SCAN",
       "status": "managed",
       "knownGaps": [],
