@@ -2,13 +2,15 @@ import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { RAGClient } from '../src/rag_client.js';
+import { createHash } from 'node:crypto';
+import { RAGClient, scopeTokenBinding, type HistoryTurn } from '../src/rag_client.js';
 
 type Seen = { headers: http.IncomingHttpHeaders; body: any };
 
 let server: http.Server;
 let baseUrl: string;
 let seen: Seen[] = [];
+let respondHeaders: Record<string, string> = {};
 let respond: (res: http.ServerResponse) => void = (res) => {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ results: [] }));
@@ -37,10 +39,11 @@ after(async () => {
     await new Promise<void>((resolve) => server.close(() => resolve()));
 });
 
-function reply(status: number, payload: unknown) {
+function reply(status: number, payload: unknown, extraHeaders: Record<string, string> = {}) {
     seen = [];
+    respondHeaders = extraHeaders;
     respond = (res) => {
-        res.writeHead(status, { 'Content-Type': 'application/json' });
+        res.writeHead(status, { 'Content-Type': 'application/json', ...respondHeaders });
         res.end(JSON.stringify(payload));
     };
 }
@@ -115,7 +118,7 @@ test('200 with no results is ok with an empty context', async () => {
     reply(200, { results: [] });
     const client = new RAGClient(baseUrl, 'key-placeholder');
     const result = await client.query('q', 'token-placeholder');
-    assert.deepEqual(result, { ok: true, context: '', sources: [], source_images: [] });
+    assert.deepEqual(result, { ok: true, context: '', sources: [], source_images: [], serverQueryRewrite: false });
 });
 
 test('401 gives unauthorized', async () => {
@@ -225,3 +228,98 @@ for (const [label, value] of [
         assert.deepEqual(result.source_images, []);
     });
 }
+
+const BINDING_A = 'AAAAAAAAAAAAAAAAAAAAAA';
+const BINDING_B = 'BBBBBBBBBBBBBBBBBBBBBB';
+
+test('scopeTokenBinding is the first 22 characters of base64url SHA-256 over the token', () => {
+    const expected = createHash('sha256').update('token-placeholder', 'utf8').digest('base64url').slice(0, 22);
+    assert.equal(scopeTokenBinding('token-placeholder'), expected);
+    assert.equal(scopeTokenBinding('token-placeholder').length, 22);
+    assert.notEqual(scopeTokenBinding('token-placeholder'), scopeTokenBinding('other-token-placeholder'));
+});
+
+test('without history the body has no history key', async () => {
+    reply(200, { results: [] });
+    const client = new RAGClient(baseUrl, 'key-placeholder');
+    await client.query('q', 'token-placeholder', 'user-id-placeholder', undefined);
+    assert.deepEqual(seen[0].body, { query: 'q', userId: 'user-id-placeholder', matchCount: 5 });
+    assert.equal('history' in seen[0].body, false);
+});
+
+test('history is sent with at most the last 6 turns, each cut to 1,000 characters, bindings unchanged', async () => {
+    reply(200, { results: [] });
+    const turns: HistoryTurn[] = [];
+    for (let i = 0; i < 8; i++) {
+        turns.push({ role: i % 2 === 0 ? 'user' : 'assistant', content: `turn ${i} ` + 'x'.repeat(i === 7 ? 1500 : 3), binding: i % 3 === 0 ? BINDING_B : BINDING_A });
+    }
+    const client = new RAGClient(baseUrl, 'key-placeholder');
+    await client.query('q', 'token-placeholder', 'user-id-placeholder', turns);
+    const history = seen[0].body.history;
+    assert.equal(history.length, 6);
+    assert.deepEqual(history.map((h: HistoryTurn) => h.content.slice(0, 6)), ['turn 2', 'turn 3', 'turn 4', 'turn 5', 'turn 6', 'turn 7']);
+    assert.deepEqual(history.map((h: HistoryTurn) => h.binding), turns.slice(2).map((t) => t.binding));
+    assert.deepEqual(history.map((h: HistoryTurn) => h.role), turns.slice(2).map((t) => t.role));
+    assert.equal(history[5].content.length, 1000);
+    assert.ok(history.every((h: HistoryTurn) => h.content.length <= 1000));
+    assert.equal(seen[0].body.query, 'q');
+    assert.equal(seen[0].body.matchCount, 5);
+});
+
+test('history keeps only user and assistant turns and drops empty ones', async () => {
+    reply(200, { results: [] });
+    const turns = [
+        { role: 'system', content: 'sys', binding: BINDING_A },
+        { role: 'user', content: 'first question', binding: BINDING_A },
+        { role: 'tool', content: 'tool out', binding: BINDING_A },
+        { role: 'assistant', content: '', binding: BINDING_A },
+        { role: 'assistant', content: 'first answer', binding: BINDING_A },
+    ] as unknown as HistoryTurn[];
+    const client = new RAGClient(baseUrl, 'key-placeholder');
+    await client.query('q', 'token-placeholder', undefined, turns);
+    assert.deepEqual(seen[0].body.history, [
+        { role: 'user', content: 'first question', binding: BINDING_A },
+        { role: 'assistant', content: 'first answer', binding: BINDING_A },
+    ]);
+});
+
+test('serverQueryRewrite is true only for x-rag-server-query-rewrite: 1', async () => {
+    const client = new RAGClient(baseUrl, 'key-placeholder');
+    const payload = {
+        results: [{ document_id: 'short', content: 'gamma', similarity: 0.7 }],
+        source_images: [{ url: 'https://example.test/i.png', name: 'i', type: 'image/png' }],
+    };
+    reply(200, payload, { 'x-rag-server-query-rewrite': '1' });
+    const on = await client.query('q', 'token-placeholder');
+    assert.equal(on.ok, true);
+    if (!on.ok) return;
+    assert.equal(on.serverQueryRewrite, true);
+    assert.equal(on.context, '[Context from document short]: gamma');
+    assert.deepEqual(on.source_images, payload.source_images);
+
+    reply(200, { results: [] }, { 'x-rag-server-query-rewrite': '1' });
+    const emptyOn = await client.query('q', 'token-placeholder');
+    assert.equal(emptyOn.ok && emptyOn.serverQueryRewrite, true);
+
+    for (const headers of [{}, { 'x-rag-server-query-rewrite': '0' }, { 'x-rag-server-query-rewrite': 'true' }, { 'x-rag-server-query-rewrite': '1 ' + 'x' }]) {
+        reply(200, payload, headers);
+        const off = await client.query('q', 'token-placeholder');
+        assert.equal(off.ok, true);
+        if (!off.ok) return;
+        assert.equal(off.serverQueryRewrite, false);
+    }
+});
+
+test('history content is never written to the console', async () => {
+    reply(200, { results: [] });
+    const lines: string[] = [];
+    const origLog = console.log;
+    console.log = (...args: unknown[]) => lines.push(args.map(String).join(' '));
+    try {
+        const client = new RAGClient(baseUrl, 'key-placeholder');
+        await client.query('q', 'token-placeholder', undefined, [{ role: 'user', content: 'history-marker-placeholder', binding: BINDING_A }]);
+    } finally {
+        console.log = origLog;
+    }
+    assert.equal(lines.some((l) => l.includes('history-marker-placeholder')), false);
+});
