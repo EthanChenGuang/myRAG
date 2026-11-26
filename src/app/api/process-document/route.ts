@@ -23,7 +23,6 @@ import {
   resolveAdminWorkspaceScope,
   resolveTenantScope,
   validateUploadScopes,
-  warnUploadScopesIgnored,
   type EnqueueResult,
   type IngestResult,
   type RagAdminDb,
@@ -978,7 +977,11 @@ export async function POST(req: Request) {
       }
     }
 
-    warnUploadScopesIgnored(formData.getAll('scopes').length, isTemporary ? 'not_ingested' : 'legacy_pipeline');
+    // Tags count only where the unified pipeline ingests (D-40); the legacy path loads nothing new for them.
+    const ignoredScopes = formData.getAll('scopes').length;
+    if (ignoredScopes > 0) {
+      console.warn('[Ingest] upload scope tags ignored', { count: ignoredScopes, reason: isTemporary ? 'not_ingested' : 'legacy_pipeline' });
+    }
     console.log('Processing file', isTemporary ? '(temporary)' : '(permanent)');
     const buffer = Buffer.from(await file.arrayBuffer());
     const extension = file.name.split('.').pop()?.toLowerCase();
