@@ -1,6 +1,7 @@
+import crypto from 'node:crypto';
 import type { RpcClient, RpcRequest, RpcResponse } from '@/lib/rag/backend/supabase-rpc';
 
-/** An in-memory model of the 0703 outbox lifecycle and the 0705 reads, enough to drive drainSlice without a database. */
+/** An in-memory model of the 0703 outbox lifecycle, the 0705 reads and the 0707 reconcile RPCs, enough to drive drainSlice and reconcileSlice without a database. */
 
 export interface FakeClock {
   t: number;
@@ -45,6 +46,20 @@ export interface FakeChunk {
   vector: number[];
   lexical_text: string | null;
   content: string;
+  /** Defaults to `h-<last 4 of id>`; lexical_version defaults to 1. */
+  content_hash?: string | null;
+  lexical_version?: number | null;
+}
+
+export interface FakeIndexState {
+  target: string;
+  profile_id: string;
+  tenant_key: string;
+  state: 'building' | 'ready' | 'stale' | 'failed';
+  last_reconciled_at: number | null;
+  supabase_count: number | null;
+  backend_count: number | null;
+  last_error: string | null;
 }
 
 export interface FakeCall {
@@ -59,6 +74,9 @@ export interface FakeRpc {
   documents: Map<string, FakeDocument>;
   chunks: Map<string, FakeChunk>;
   profiles: Array<{ profile_id: string; dims: number; storage: string }>;
+  /** 0707: enabled targets (default: the fake's own target) and index state keyed `target|profile|tenant`. */
+  enabledTargets: Set<string>;
+  indexState: Map<string, FakeIndexState>;
   enqueue(row: Pick<FakeOutboxRow, 'entity' | 'entity_id' | 'tenant_key'> & Partial<FakeOutboxRow>): FakeOutboxRow;
   addDocument(doc: Partial<FakeDocument> & { id: string; tenant_key: string }, chunks: FakeChunk[]): void;
   /** Called after each RPC with its name; tests use it to move the clock or inject failures. */
@@ -68,6 +86,14 @@ export interface FakeRpc {
 }
 
 const NIL = '00000000-0000-0000-0000-000000000000';
+
+function md5(text: string): string {
+  return crypto.createHash('md5').update(text).digest('hex');
+}
+
+function signed64(hex: string): bigint {
+  return BigInt.asIntN(64, BigInt(`0x${hex.slice(0, 16)}`));
+}
 
 export function createFakeRpc(clock: FakeClock, options: { target?: string } = {}): FakeRpc {
   const target = options.target ?? 'qdrant';
@@ -80,6 +106,8 @@ export function createFakeRpc(clock: FakeClock, options: { target?: string } = {
     documents: new Map(),
     chunks: new Map(),
     profiles: [{ profile_id: 'p1', dims: 3, storage: 'halfvec' }],
+    enabledTargets: new Set([target]),
+    indexState: new Map(),
     onCall: null,
     enqueue(row) {
       const full: FakeOutboxRow = {
@@ -111,6 +139,10 @@ export function createFakeRpc(clock: FakeClock, options: { target?: string } = {
     return !!doc && doc.is_current && doc.status === 'ready' && doc.tenant_key === tenantKey && chunk.tenant_key === tenantKey;
   }
 
+  function servableOf(tenantKey: string): FakeChunk[] {
+    return [...state.chunks.values()].filter((c) => servable(c, tenantKey)).sort((a, b) => (a.id < b.id ? -1 : 1));
+  }
+
   function toRow(chunk: FakeChunk) {
     const doc = state.documents.get(chunk.document_id) as FakeDocument;
     return {
@@ -119,8 +151,8 @@ export function createFakeRpc(clock: FakeClock, options: { target?: string } = {
       tenant_key: chunk.tenant_key,
       vector: chunk.vector,
       lexical_text: chunk.lexical_text,
-      lexical_version: 1,
-      content_hash: `h-${chunk.id.slice(-4)}`,
+      lexical_version: chunk.lexical_version === undefined ? 1 : chunk.lexical_version,
+      content_hash: chunk.content_hash === undefined ? `h-${chunk.id.slice(-4)}` : chunk.content_hash,
       doc_type: doc.doc_type,
       doc_date: null,
       language: 'en',
@@ -233,6 +265,87 @@ export function createFakeRpc(clock: FakeClock, options: { target?: string } = {
         .sort((a, b) => (a.id < b.id ? -1 : 1))
         .slice(0, Number(args.p_limit))
         .map(toRow);
+    },
+    rag_vector_sync_reconcile_summary(args) {
+      const tenantKey = String(args.p_tenant_key);
+      const buckets = Array.from({ length: 64 }, (_, bucket) => ({ bucket, row_count: 0, ix: 0n, cx: 0n }));
+      for (const chunk of servableOf(tenantKey)) {
+        const row = toRow(chunk);
+        const m = md5(row.chunk_id);
+        const b = buckets[parseInt(m.slice(0, 2), 16) % 64];
+        b.row_count += 1;
+        b.ix ^= signed64(m);
+        b.cx ^= signed64(md5(`${row.chunk_id}:${row.content_hash ?? ''}:${row.lexical_version ?? ''}`));
+      }
+      return buckets.map((b) => ({ bucket: b.bucket, row_count: b.row_count, id_xor: b.ix.toString(), content_xor: b.cx.toString() }));
+    },
+    rag_vector_sync_bucket_rows(args) {
+      const tenantKey = String(args.p_tenant_key);
+      const after = (args.p_after as string | null) ?? null;
+      return servableOf(tenantKey)
+        .filter((c) => parseInt(md5(c.id).slice(0, 2), 16) % 64 === Number(args.p_bucket))
+        .filter((c) => after === null || c.id > after)
+        .slice(0, Number(args.p_limit))
+        .map((c) => {
+          const row = toRow(c);
+          return { chunk_id: row.chunk_id, document_id: row.document_id, content_hash: row.content_hash, lexical_version: row.lexical_version };
+        });
+    },
+    rag_vector_sync_tenants(args) {
+      const t = String(args.p_target);
+      if (!state.enabledTargets.has(t)) return [];
+      const keys = new Set<string>();
+      for (const chunk of state.chunks.values()) if (servable(chunk, chunk.tenant_key)) keys.add(chunk.tenant_key);
+      for (const s of state.indexState.values()) if (s.target === t && s.profile_id === args.p_profile_id) keys.add(s.tenant_key);
+      return [...keys]
+        .map((key) => {
+          const s = state.indexState.get(`${t}|${args.p_profile_id}|${key}`);
+          return { tenant_key: key, last: s?.last_reconciled_at ?? null };
+        })
+        .sort((a, b) => (a.last === null ? (b.last === null ? 0 : -1) : b.last === null ? 1 : a.last - b.last) || (a.tenant_key < b.tenant_key ? -1 : 1))
+        .map((r) => ({ tenant_key: r.tenant_key, last_reconciled_at: r.last === null ? null : new Date(r.last).toISOString() }));
+    },
+    rag_vector_sync_enqueue_repair(args) {
+      if (!['weaviate', 'qdrant'].includes(String(args.p_target))) throw Object.assign(new Error('invalid_target'), { code: '22023' });
+      if (!['chunk', 'document', 'tenant'].includes(String(args.p_entity))) throw Object.assign(new Error('invalid_entity'), { code: '22023' });
+      if (args.p_target !== target || !state.enabledTargets.has(target)) return 0;
+      return enqueueDedupe(
+        args.p_entity as FakeOutboxRow['entity'],
+        String(args.p_entity_id),
+        String(args.p_tenant_key),
+        (args.p_profile_id as string | null) ?? null,
+      );
+    },
+    rag_set_backend_index_state(args) {
+      const key = `${args.p_target}|${args.p_profile_id}|${args.p_tenant_key}`;
+      const asked = String(args.p_state);
+      if (!['ready', 'stale', 'failed'].includes(asked)) throw Object.assign(new Error('invalid_state'), { code: '22023' });
+      const found = state.indexState.get(key);
+      const next = asked === 'stale' && (!found || found.state === 'building') ? 'building' : (asked as FakeIndexState['state']);
+      const error = asked === 'failed' ? (/^[a-z0-9_.:-]{1,200}$/.test(String(args.p_error)) ? String(args.p_error) : 'store_error') : null;
+      state.indexState.set(key, {
+        target: String(args.p_target),
+        profile_id: String(args.p_profile_id),
+        tenant_key: String(args.p_tenant_key),
+        state: next,
+        last_reconciled_at: clock.now(),
+        supabase_count: (args.p_supabase_count as number | null) ?? null,
+        backend_count: (args.p_backend_count as number | null) ?? null,
+        last_error: error,
+      });
+      return next;
+    },
+    rag_vector_sync_prune(args) {
+      const cutoff = clock.now() - Number(args.p_days) * 86_400_000;
+      let n = 0;
+      for (let i = state.outbox.length - 1; i >= 0; i -= 1) {
+        const o = state.outbox[i];
+        if (o.status === 'done' && Date.parse(o.enqueued_at) < cutoff) {
+          state.outbox.splice(i, 1);
+          n += 1;
+        }
+      }
+      return n;
     },
     rag_vector_sync_chunk_row(args) {
       const chunk = state.chunks.get(String(args.p_chunk_id));
