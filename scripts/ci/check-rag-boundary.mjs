@@ -15,6 +15,9 @@ export const ALLOWLIST = [
   { path: 'scripts/rag/reprocess-documents.js', reason: 'offline re-embed ingestion script' },
 ];
 
+// Dependency-free CommonJS files the config server requires (Phase 5.3 O-3 item 5); app code uses @/lib/rag.
+export const SHARED_CJS = /^config-gate\/[a-z0-9-]+\.cjs$/;
+
 export const RETIRED_MODULES = [
   'enhanced-rag-retrieval',
   'retrieval-strategies',
@@ -407,7 +410,8 @@ export const RULES = [
     find: (text) =>
       importMatches(text, ({ spec }) => {
         const m = /(?:^|\/)lib\/rag\/(.+)$/.exec(specBase(spec));
-        return m && m[1] !== 'index' ? spec : null;
+        if (!m || m[1] === 'index') return null;
+        return SHARED_CJS.test(/(?:^|\/)lib\/rag\/(.+)$/.exec(spec)[1]) ? null : spec;
       }),
   },
   {

@@ -1,0 +1,29 @@
+{
+  "description": "Phase 5.3 D-12 shared vector for rag_settings_hash; values are synthetic placeholders.",
+  "values": {
+    "RAG_SYSTEM_PROMPT": "Antworte nur aus dem Kontext. 答案 ✓\\n{{context}}",
+    "RAG_PRE_CONTEXT": "Kontext beginnt:",
+    "RAG_POST_CONTEXT": "",
+    "RAG_ANSWER_STYLE": "zusammenfassung — café",
+    "RAG_PIPELINE": "v2",
+    "RAG_RERANKER": "auto",
+    "COHERE_API_KEY": "placeholder-not-a-real-key",
+    "VOYAGE_API_KEY": "",
+    "NEXT_PUBLIC_AI_PROVIDER": "openrouter",
+    "RAG_MONITOR": "true"
+  },
+  "names": [
+    "RAG_RERANKER",
+    "RAG_SYSTEM_PROMPT",
+    "RAG_PRE_CONTEXT",
+    "RAG_POST_CONTEXT",
+    "RAG_ANSWER_STYLE",
+    "RAG_PIPELINE",
+    "COHERE_API_KEY",
+    "VOYAGE_API_KEY",
+    "NEXT_PUBLIC_AI_PROVIDER",
+    "RAG_BEHAVIOR_MODE"
+  ],
+  "canonical": "{\"COHERE_API_KEY\":\"set\",\"NEXT_PUBLIC_AI_PROVIDER\":\"openrouter\",\"RAG_ANSWER_STYLE\":\"zusammenfassung — café\",\"RAG_BEHAVIOR_MODE\":\"\",\"RAG_PIPELINE\":\"v2\",\"RAG_POST_CONTEXT\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"RAG_PRE_CONTEXT\":\"2fdabfdadce0b3618da0167f230559e5cd2b060ed3a4fad85e6d1b58c1f5a5ae\",\"RAG_RERANKER\":\"auto\",\"RAG_SYSTEM_PROMPT\":\"267429f392c5cac830e3a1c0647659ef5f3ce3aad3a54d55e08db3f61a378b96\",\"VOYAGE_API_KEY\":\"unset\"}",
+  "hash": "06f9cddd05f8afc89f8e79a81f61e4d22366f165198b050386fc1f75af3b47fe"
+}
