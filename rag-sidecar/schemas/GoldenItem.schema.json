@@ -205,6 +205,72 @@
       "title": "NativeReview",
       "type": "object"
     },
+    "OffTopicSpec": {
+      "additionalProperties": false,
+      "description": "D-53: neighbouring-subject spans an off_topic_context answer must not use, and where they score.",
+      "properties": {
+        "adjacent_quotes": {
+          "items": {
+            "$ref": "#/$defs/GoldSpan"
+          },
+          "minItems": 1,
+          "title": "Adjacent Quotes",
+          "type": "array"
+        },
+        "score_band": {
+          "enum": [
+            "below_threshold",
+            "above_threshold"
+          ],
+          "title": "Score Band",
+          "type": "string"
+        }
+      },
+      "required": [
+        "adjacent_quotes",
+        "score_band"
+      ],
+      "title": "OffTopicSpec",
+      "type": "object"
+    },
+    "PartialSpec": {
+      "additionalProperties": false,
+      "description": "D-53: what a partial_answer item's answer must use, what the documents leave open and what it must not claim.",
+      "properties": {
+        "covered": {
+          "items": {
+            "$ref": "#/$defs/GoldSpan"
+          },
+          "minItems": 1,
+          "title": "Covered",
+          "type": "array"
+        },
+        "forbidden_claims": {
+          "items": {
+            "maxLength": 200,
+            "type": "string"
+          },
+          "title": "Forbidden Claims",
+          "type": "array"
+        },
+        "uncovered_aspects": {
+          "items": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Uncovered Aspects",
+          "type": "array"
+        }
+      },
+      "required": [
+        "covered",
+        "uncovered_aspects"
+      ],
+      "title": "PartialSpec",
+      "type": "object"
+    },
     "RetrievalFilters": {
       "additionalProperties": false,
       "properties": {
@@ -444,6 +510,57 @@
       },
       "title": "VersionRange",
       "type": "object"
+    },
+    "VersionedValue": {
+      "additionalProperties": false,
+      "description": "One version's evidence span, the value string it states and its version label (D-53).",
+      "properties": {
+        "span": {
+          "$ref": "#/$defs/GoldSpan"
+        },
+        "value": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Value",
+          "type": "string"
+        },
+        "version_label": {
+          "maxLength": 64,
+          "minLength": 1,
+          "title": "Version Label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "span",
+        "value",
+        "version_label"
+      ],
+      "title": "VersionedValue",
+      "type": "object"
+    },
+    "VersionsSpec": {
+      "additionalProperties": false,
+      "description": "D-53: the current and the stale version of one rule; `historical` marks a question about the past.",
+      "properties": {
+        "current": {
+          "$ref": "#/$defs/VersionedValue"
+        },
+        "historical": {
+          "default": false,
+          "title": "Historical",
+          "type": "boolean"
+        },
+        "stale": {
+          "$ref": "#/$defs/VersionedValue"
+        }
+      },
+      "required": [
+        "current",
+        "stale"
+      ],
+      "title": "VersionsSpec",
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -486,7 +603,10 @@
         "duplicate_flood",
         "identifier_near_miss",
         "templated_collection",
-        "implicit_condition"
+        "implicit_condition",
+        "partial_answer",
+        "stale_version",
+        "off_topic_context"
       ],
       "title": "Category",
       "type": "string"
@@ -562,6 +682,9 @@
     "native_review": {
       "$ref": "#/$defs/NativeReview"
     },
+    "off_topic": {
+      "$ref": "#/$defs/OffTopicSpec"
+    },
     "pair_of": {
       "anyOf": [
         {
@@ -574,6 +697,9 @@
       ],
       "default": null,
       "title": "Pair Of"
+    },
+    "partial": {
+      "$ref": "#/$defs/PartialSpec"
     },
     "provenance": {
       "enum": [
@@ -629,6 +755,9 @@
       },
       "title": "Tags",
       "type": "array"
+    },
+    "versions": {
+      "$ref": "#/$defs/VersionsSpec"
     }
   },
   "required": [
