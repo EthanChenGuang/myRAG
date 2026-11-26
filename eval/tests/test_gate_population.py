@@ -63,6 +63,8 @@ PHASE6_TAGS = frozenset(
 
 # Plan 04.1.1-10 appended the colloquial and no_answer term items, too.
 TERM_ITEM_ID = re.compile(r"^[a-z]+-(colloquial|no_answer)-term-\d{3}$")
+# Plan 05.3-15 appended the implicit_condition and near-miss no-answer items under this tag.
+PHASE53_TAG = "phase53_fixture"
 
 
 def _added_after_snapshot(item: GoldenItem) -> bool:
@@ -71,6 +73,7 @@ def _added_after_snapshot(item: GoldenItem) -> bool:
         or item.category in CACHE_PAIR_CATEGORIES
         or bool(PHASE6_TAGS & set(item.tags))
         or bool(TERM_ITEM_ID.match(item.id))
+        or PHASE53_TAG in item.tags
     )
 
 

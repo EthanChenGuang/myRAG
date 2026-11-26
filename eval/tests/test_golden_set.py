@@ -376,7 +376,9 @@ def test_committed_ingest_manifest_verifies_against_the_merged_ingest_set():
 
 
 def test_committed_manifests_start_at_version_one_all_active():
+    # Plan 05.3-15 bumped both fixture manifests to version 2 (implicit_condition and near-miss no-answer items added).
     for path in (FIXTURE_MANIFEST, INGEST_MANIFEST):
         manifest = golden_set.load_manifest(path)
-        assert manifest.version == 1
+        assert manifest.version == 2
+        assert [entry.version for entry in manifest.changelog][-1] == 2
         assert all(entry.status == "active" for entry in manifest.items)

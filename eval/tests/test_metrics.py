@@ -963,6 +963,10 @@ def test_the_03_2_67_baseline_moves_only_table_split_items_and_none_drops():
 # The prechunked corpus hash before plan 04.1.1-10 added the three synthetic-terms files.
 PRE_TERMS_CORPUS_SHA256 = "2d1e198f73a6aba71d94eac166fc21f92853113267cfe00be6659e6c6010ca04"
 TERM_CORPUS_FILES = {"en/synthetic-terms.en.md", "it/synthetic-terms.it.md", "zh/synthetic-terms.zh.md"}
+# Plan 05.3-15 added these later; they are removed too before the pre-terms hash is compared.
+PHASE53_CORPUS_FILES = {
+    f"{language}/{name}.{language}.md" for language in ("en", "it", "zh") for name in ("access-rules", "instrument-catalog")
+}
 
 
 def test_the_04_1_1_10_baseline_adds_only_term_items_and_moves_no_old_item(tmp_path):
@@ -987,7 +991,7 @@ def test_the_04_1_1_10_baseline_adds_only_term_items_and_moves_no_old_item(tmp_p
         assert (corpus / relpath).is_file(), relpath
     without_terms = tmp_path / "corpus"
     shutil.copytree(corpus, without_terms)
-    for relpath in TERM_CORPUS_FILES:
+    for relpath in TERM_CORPUS_FILES | PHASE53_CORPUS_FILES:
         (without_terms / relpath).unlink()
     assert corpus_sha256(without_terms) == PRE_TERMS_CORPUS_SHA256
     assert current.corpus_sha256 != previous.corpus_sha256 and current.golden_sha256 != previous.golden_sha256

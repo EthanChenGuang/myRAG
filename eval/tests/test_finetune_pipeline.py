@@ -255,10 +255,10 @@ def _fixture_sentences(n: int = 20) -> list[str]:
         for piece in re.split(r"(?<=[.!?。！？])\s*|\n+", doc.content):
             piece = piece.strip().lstrip("#-*> ").strip()
             if len(sentences) >= n:
-                return sentences
+                return sentences[:n]
             if len(piece) >= 24 and piece not in sentences:
                 sentences.append(piece)
-    return sentences
+    return sentences[:n]
 
 
 def test_invariant_reports_validate_and_contain_no_fixture_text(fixture_run):
