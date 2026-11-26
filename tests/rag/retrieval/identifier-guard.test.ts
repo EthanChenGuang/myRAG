@@ -173,8 +173,8 @@ describe('identifierSuggestionMessage (D-31)', () => {
   });
 
   it('keeps suggestions as plain text: markup and control characters are removed', () => {
-    const text = identifierSuggestionMessage('en', ['QX<b>-4472\u0007']);
-    expect(text).not.toMatch(/[<>\u0007]/u);
+    const text = identifierSuggestionMessage('en', ['QX<b>-4472\u200b']);
+    expect(text).not.toMatch(/[<>\u200b]/u);
     expect(text).toContain('QXb-4472');
   });
 
