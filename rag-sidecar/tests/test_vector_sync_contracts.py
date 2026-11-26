@@ -112,7 +112,7 @@ def test_retrieval_overrides_backend():
 
 
 def _trace_payload():
-    return build_samples()["RagTrace"].copy()
+    return dict(build_samples()["samples"]["RagTrace"])
 
 
 def test_rag_trace_retrieval_backend_optional_and_validated():

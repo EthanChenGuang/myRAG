@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from rag_sidecar.contracts.answers import AnswerGroundedness, CitationRecord, CitationStrategy
 from rag_sidecar.contracts.ingest import DocType
 from rag_sidecar.contracts.query import QueryFramework, QueryParamsOverride, QueryPlan, QueryTransformToggles
-from rag_sidecar.contracts.retrieval import ChunkingProfile, RetrievalFilters, RetrievalOverrides
+from rag_sidecar.contracts.retrieval import ChunkingProfile, RetrievalFilters, RetrievalOverrides, VectorBackend
 
 
 class _Contract(BaseModel):
@@ -211,6 +211,15 @@ class TraceInjection(_Contract):
     detectors_unavailable: list[str] = Field(default_factory=list)
 
 
+BackendFallbackReason = Literal["backend_not_ready", "backend_error", "backend_slow", "filter_unsupported"]
+
+
+class TraceRetrievalBackend(_Contract):
+    backend: VectorBackend
+    fallback_reason: BackendFallbackReason | None = None
+    tenant_validation_dropped: int = Field(default=0, ge=0)
+
+
 RefusalReason = Literal["no_relevant_context", "below_threshold", "below_similarity_floor", "injection_filtered"]
 
 
@@ -240,6 +249,7 @@ class RagTrace(_Contract):
     invalid_citations: int = Field(default=0, ge=0)
     groundedness: AnswerGroundedness | None = None
     injection: TraceInjection | None = None
+    retrieval_backend: TraceRetrievalBackend | None = None
     stage_latency_ms: dict[str, float]
     stage_status: dict[str, str] = Field(default_factory=dict)
     effective_config: TraceEffectiveConfig
