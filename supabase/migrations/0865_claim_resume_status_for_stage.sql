@@ -1,4 +1,4 @@
--- 0864: a requeued job is claimable again. rag_fail_ingestion_job puts a retryable job back to status 'queued' and keeps its stage (for
+-- 0865: a requeued job is claimable again. rag_fail_ingestion_job puts a retryable job back to status 'queued' and keeps its stage (for
 -- example 'parse'); the claim functions then set status from the raw stage, and a stage name is not a status ('parse' is not 'parsing'),
 -- so the update broke ingestion_jobs_status_check and the error aborted the whole claim: one requeued job stopped the worker for every
 -- job. Both claim functions now resume through rag_ingest_job_status_for_stage (the map rag_advance_ingestion_job checks against); a

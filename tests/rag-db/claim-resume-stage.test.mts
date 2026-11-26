@@ -11,7 +11,7 @@ import { createTwoTenantDatabase, TWO_TENANT_IDS } from '../../eval/harness/two-
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const CORPUS = path.join(REPO_ROOT, 'eval/fixtures/corpus');
 const MIGRATION_0810 = 'supabase/migrations/0810_chunk_translations.sql';
-const MIGRATION_FIX = 'supabase/migrations/0864_claim_resume_status_for_stage.sql';
+const MIGRATION_FIX = 'supabase/migrations/0865_claim_resume_status_for_stage.sql';
 const MODES: DeploymentMode[] = ['single-tenant', 'multi-tenant'];
 const WORKER = 'sidecar-ingest';
 
