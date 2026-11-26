@@ -699,3 +699,5 @@ export {
 export type { EvidenceCheckResult, EvidenceRow, EvidenceSpanInput, EvidenceSpanResult, EvidenceStatus } from './monitor/golden-evidence';
 export { IMPORT_LIMITS, importQuestions, parseQuestionFile, prepareQuestions, QuestionsImportError } from './monitor/questions-import';
 export type { ImportCounts, PreparedQuestions, QuestionFileFormat } from './monitor/questions-import';
+export { guardAppEnvWrite, RAG_GATE_INVALID_REASON_MESSAGE, RAG_GATE_REQUIRED_MESSAGE } from './config-gate/guard';
+export type { AppGuardRoute, GuardAppEnvWriteInput, GuardAppEnvWriteResult } from './config-gate/guard';
