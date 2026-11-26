@@ -203,4 +203,137 @@ $fn$;
 REVOKE ALL ON FUNCTION public.rag_finetune_bind_slot(text, text, text) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rag_finetune_bind_slot(text, text, text) TO service_role;
 
+-- Clear a free slot: delete up to p_limit of its vectors per call (slot-wide, every tenant: a slot holds one model version for the whole
+-- deployment); the call that leaves none resets the slot to unbound and retires its bound version (a tainted version stays tainted).
+
+CREATE OR REPLACE FUNCTION public.rag_finetune_clear_slot(p_slot text, p_actor text, p_limit integer DEFAULT 1000)
+RETURNS TABLE (slot_id text, deleted bigint, remaining bigint, cleared boolean)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+SET statement_timeout = '120s'
+AS $fn$
+DECLARE
+  v_slot public.embedding_profiles%ROWTYPE;
+  v_deleted bigint;
+  v_remaining bigint;
+BEGIN
+  IF p_actor IS NULL OR pg_catalog.btrim(p_actor) = '' THEN
+    RAISE EXCEPTION 'clear_refused: actor_required' USING ERRCODE = '22023';
+  END IF;
+  IF p_limit IS NULL OR p_limit < 1 OR p_limit > 10000 THEN
+    RAISE EXCEPTION 'clear_refused: invalid_limit (1 to 10000)' USING ERRCODE = '22023';
+  END IF;
+  IF p_slot IS NULL OR p_slot NOT IN ('ft-a-1024', 'ft-b-1024') THEN
+    RAISE EXCEPTION 'clear_refused: unknown_slot (%)', COALESCE(p_slot, 'null') USING ERRCODE = '22023';
+  END IF;
+
+  LOCK TABLE public.embedding_profiles IN SHARE ROW EXCLUSIVE MODE;
+
+  SELECT * INTO v_slot FROM public.embedding_profiles AS p WHERE p.id = p_slot;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'clear_refused: unknown_slot (%)', p_slot USING ERRCODE = '22023';
+  END IF;
+  IF v_slot.status = 'active' THEN
+    RAISE EXCEPTION 'clear_refused: slot_active' USING ERRCODE = '55000';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.embedding_profiles AS p WHERE p.status = 'active' AND p.previous_active_id = p_slot) THEN
+    RAISE EXCEPTION 'clear_refused: rollback_target (release it with rag_finetune_release_rollback first)' USING ERRCODE = '55000';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.embedding_backfill_runs AS r WHERE r.profile_id = p_slot AND r.status = 'running') THEN
+    RAISE EXCEPTION 'clear_refused: reembed_running' USING ERRCODE = '55000';
+  END IF;
+
+  WITH doomed AS (
+    SELECT e.chunk_id FROM public.chunk_embeddings AS e WHERE e.profile_id = p_slot ORDER BY e.chunk_id LIMIT p_limit
+  )
+  DELETE FROM public.chunk_embeddings AS e USING doomed AS d
+  WHERE e.profile_id = p_slot AND e.chunk_id = d.chunk_id;
+  GET DIAGNOSTICS v_deleted = ROW_COUNT;
+
+  SELECT pg_catalog.count(*) INTO v_remaining FROM public.chunk_embeddings AS e WHERE e.profile_id = p_slot;
+
+  IF v_remaining = 0 THEN
+    PERFORM pg_catalog.set_config('myrag.ft_slot_op', 'on', true);
+    UPDATE public.embedding_profiles AS p
+    SET model = 'unbound', query_instruction = NULL, eval_evidence = NULL, status = 'available'
+    WHERE p.id = p_slot;
+    PERFORM pg_catalog.set_config('myrag.ft_slot_op', '', true);
+
+    UPDATE public.embedding_model_versions AS m
+    SET status = CASE WHEN m.status = 'bound' THEN 'retired' ELSE m.status END, bound_slot = NULL, updated_at = pg_catalog.now()
+    WHERE m.id = v_slot.model;
+  END IF;
+
+  RETURN QUERY SELECT p_slot, v_deleted, v_remaining, v_remaining = 0;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_clear_slot(text, text, integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_clear_slot(text, text, integer) TO service_role;
+
+-- Drop the active profile's rollback target, so the older slot becomes free to clear or rebind. Needs p_ack = 'drop-rollback'.
+
+CREATE OR REPLACE FUNCTION public.rag_finetune_release_rollback(p_actor text, p_ack text)
+RETURNS TABLE (active_profile text, dropped_previous text)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_active text;
+  v_previous text;
+BEGIN
+  IF p_actor IS NULL OR pg_catalog.btrim(p_actor) = '' THEN
+    RAISE EXCEPTION 'release_refused: actor_required' USING ERRCODE = '22023';
+  END IF;
+  IF p_ack IS DISTINCT FROM 'drop-rollback' THEN
+    RAISE EXCEPTION 'release_refused: ack_required (pass drop-rollback)' USING ERRCODE = '22023';
+  END IF;
+
+  LOCK TABLE public.embedding_profiles IN SHARE ROW EXCLUSIVE MODE;
+
+  SELECT p.id, p.previous_active_id INTO v_active, v_previous FROM public.embedding_profiles AS p WHERE p.status = 'active';
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'release_refused: no_active' USING ERRCODE = '55000';
+  END IF;
+  IF v_previous IS NOT NULL THEN
+    UPDATE public.embedding_profiles AS p SET previous_active_id = NULL WHERE p.id = v_active;
+  END IF;
+
+  RETURN QUERY SELECT v_active, v_previous;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_release_rollback(text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_release_rollback(text, text) TO service_role;
+
+-- Version taint (trigger A): when a version becomes tainted, its non-active slot loses its evidence, so activation refuses eval_missing.
+-- An active slot keeps it (serving does not stop by itself; the revoke output tells the operator to roll back); the slot guard drops it
+-- when the slot leaves active and refuses new evidence and re-activation while the version is tainted.
+
+CREATE OR REPLACE FUNCTION public.rag_finetune_version_taint_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+BEGIN
+  IF NEW.status = 'tainted' AND OLD.status IS DISTINCT FROM 'tainted' THEN
+    UPDATE public.embedding_profiles AS p
+    SET eval_evidence = NULL
+    WHERE p.id LIKE 'ft-%' AND p.model = NEW.id AND p.status <> 'active' AND p.eval_evidence IS NOT NULL;
+  END IF;
+  RETURN NULL;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_finetune_version_taint_guard() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_finetune_version_taint_guard() TO service_role;
+
+DROP TRIGGER IF EXISTS rag_finetune_version_taint_guard ON public.embedding_model_versions;
+CREATE TRIGGER rag_finetune_version_taint_guard
+  AFTER UPDATE OF status ON public.embedding_model_versions
+  FOR EACH ROW EXECUTE FUNCTION public.rag_finetune_version_taint_guard();
+
 COMMIT;

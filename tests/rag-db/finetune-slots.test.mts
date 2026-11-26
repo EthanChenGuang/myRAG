@@ -579,7 +579,7 @@ for (const mode of MODES) {
           const row = result.rows[0];
           assert.ok(row, `${signature} is missing`);
           assert.equal(row.definer, true, signature);
-          assert.deepEqual(row.config, ['search_path=""'], signature);
+          assert.ok((row.config ?? []).includes('search_path=""'), `${signature}: ${JSON.stringify(row.config)}`);
           assert.equal(row.anon, false, signature);
           assert.equal(row.authed, false, signature);
           assert.equal(row.pub, false, signature);
