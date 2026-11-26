@@ -57,8 +57,8 @@ describe('createMarkerParser', () => {
 
   test('an unmatched opener is released after 16 characters and never becomes a marker', () => {
     const text = '[S1, S2, S3, S12, S1] then [S2';
-    expect(feedAll([text])).toEqual({ valid: [], invalidCitations: 0, invalidAliases: [] });
-    expect(feedAll([...text])).toEqual({ valid: [], invalidCitations: 0, invalidAliases: [] });
+    expect(feedAll([text])).toEqual({ valid: [], invalidCitations: 0, invalidAliases: [], truncatedMarkers: 1 });
+    expect(feedAll([...text])).toEqual({ valid: [], invalidCitations: 0, invalidAliases: [], truncatedMarkers: 1 });
     expect(feedAll([...'[S1, S2, S3, S12, S2] [S2]'])).toEqual({ valid: ['S2'], invalidCitations: 0, invalidAliases: [] });
   });
 
@@ -76,7 +76,7 @@ describe('createMarkerParser', () => {
     parser.feed('a', 'tail [S1');
     parser.end('a');
     parser.feed('a', ']');
-    expect(parser.finish()).toEqual({ valid: [], invalidCitations: 0, invalidAliases: [] });
+    expect(parser.finish()).toEqual({ valid: [], invalidCitations: 0, invalidAliases: [], truncatedMarkers: 1 });
   });
 
   test('finish is idempotent and ignores later input', () => {
