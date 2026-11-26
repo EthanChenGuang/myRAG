@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { PGlite } from '@electric-sql/pglite';
 import { createFixtureDatabase, type DeploymentMode } from '../../eval/harness/pglite-supabase.mts';
+import { allowListEntryFor } from '../helpers/security-definer-allow-list';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const REAL_CORPUS = path.join(REPO_ROOT, 'eval/fixtures/corpus');
@@ -118,6 +119,12 @@ async function seedForeignTenant(db: PGlite, tenant: string, versionId: string, 
     [versionId, 'a'.repeat(40), tenantKeys, 'd'.repeat(64)],
   );
 }
+
+test('the six functions are service_role only: none is on the authenticated allow-list', () => {
+  for (const signature of FUNCTIONS) {
+    assert.equal(allowListEntryFor(signature), undefined, signature);
+  }
+});
 
 for (const mode of MODES) {
   const multi = mode === 'multi-tenant';
