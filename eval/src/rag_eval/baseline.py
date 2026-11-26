@@ -159,6 +159,7 @@ def _record(args: argparse.Namespace) -> int:
             ("--golden", args.golden),
             ("--corpus", args.corpus),
             ("--fixture-mode", args.fixture_mode),
+            ("--run-config", args.run_config),
             ("--base-url", args.base_url),
             ("--org", args.org),
             ("--user", args.user),
@@ -233,6 +234,7 @@ def main(argv: list[str] | None = None) -> int:
     record.add_argument("--golden")
     record.add_argument("--corpus")
     record.add_argument("--fixture-mode", choices=("prechunked", "ingest"), help="how the harness builds the fixture database (default: prechunked)")
+    record.add_argument("--run-config", help="run-config file passed to every harness run (for example eval/config/runs/legacy.json)")
     record.add_argument("--base-url")
     record.add_argument("--allow-spread", action="store_true")
     record.add_argument("--org", help="organization UUID to scope the run to (multi-tenant)")

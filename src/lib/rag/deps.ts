@@ -4,6 +4,7 @@ import { env } from '@/lib/env';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { loadRagConfig, pipelineSourceOf, type RagEnvInput } from './config';
 import type { RawPipelineEnv } from './lang/resolve';
+import { getLanguageSettings } from './lang/settings';
 import type { EmbeddingProfile } from './embeddings/active-profile';
 import { EmbeddingProfileMismatch } from './embeddings/mrl';
 import { embedText } from './embeddings/openai';
@@ -50,8 +51,8 @@ export interface RagDeps {
   /** The two pipeline variables exactly as the process has them (undefined when unset), for the D-02 startup check. */
   rawPipelineEnv: () => RawPipelineEnv;
   /**
-   * D-24: whether the deployment has chosen its supported languages. null means no language-settings reader is connected through this
-   * seam, and the resolver then applies no language fallback of its own.
+   * D-24: whether the deployment has chosen its supported languages, from the Phase 3.2 reader at call time. A test override of null
+   * means no reader, and the resolver then applies no language fallback of its own.
    */
   languagesConfigured: () => boolean | null;
   /** The semantic answer cache for RAG_SEMANTIC_CACHE, wrapped fail-open; null when the cache is off (D-34, D-35). */
@@ -164,7 +165,7 @@ const defaults: RagDeps = {
   queryLlm: defaultQueryLlmClient,
   fetch: globalThis.fetch.bind(globalThis),
   rawPipelineEnv: () => ({ RAG_PIPELINE: process.env.RAG_PIPELINE, RAG_INGEST_PIPELINE: process.env.RAG_INGEST_PIPELINE }),
-  languagesConfigured: () => null,
+  languagesConfigured: () => getLanguageSettings().configured,
   semanticCache: () => {
     const deps = getRagDeps();
     return getSemanticCache(loadRagConfig(deps.ragEnv()).semanticCache, semanticCacheIo(deps));

@@ -195,6 +195,18 @@ def test_cli_without_a_fixture_mode_leaves_the_harness_default(tmp_path, monkeyp
     assert all("--fixture-mode" not in command for command in commands)
 
 
+def test_run_config_reaches_every_run(tmp_path, monkeypatch):
+    commands = _record_commands(tmp_path, monkeypatch, ["--run-config", "eval/config/runs/legacy.json"])
+    assert len(commands) == 3
+    for command in commands:
+        assert command[command.index("--run-config") + 1] == "eval/config/runs/legacy.json"
+
+
+def test_cli_without_a_run_config_passes_none(tmp_path, monkeypatch):
+    commands = _record_commands(tmp_path, monkeypatch, [])
+    assert all("--run-config" not in command for command in commands)
+
+
 def test_cli_rejects_an_unknown_fixture_mode(tmp_path):
     with pytest.raises(SystemExit) as excinfo:
         main(["record", "--runs", "3", "--fixture-mode", "nope", "--out", str(tmp_path / "b.json")])
