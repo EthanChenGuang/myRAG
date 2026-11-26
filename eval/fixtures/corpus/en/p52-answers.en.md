@@ -12,7 +12,7 @@ The Brisbel WL-9 table loom has four shafts and a weaving width of 60 centimetre
 
 ## Orrinvale Chess Circle rapid evenings
 
-At the Orrinvale Chess Circle rapid evenings each player has 25 minutes on the clock. Rounds begin at 19:00 on Thursdays in the upstairs room of the circle's hall.
+At the Orrinvale Chess Circle rapid evenings every player gets 25 minutes on the clock. Rounds begin at 19:00 on Thursdays in the upstairs room of the circle's hall.
 
 <!-- chunk -->
 

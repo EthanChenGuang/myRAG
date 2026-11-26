@@ -31,4 +31,4 @@ Registration for the Marrowfield Rocketry Club launch season closes on 2025-10-0
 
 ## Launch day crew
 
-Each Marrowfield Rocketry Club launch day needs 1 pad marshal on duty, and every rocket must carry 3 metres of recovery cord.
+A Marrowfield Rocketry Club launch day needs 1 pad marshal on duty, and every rocket must carry 3 metres of recovery cord.

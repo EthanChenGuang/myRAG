@@ -167,18 +167,20 @@ for (const mode of MODES) {
     test('rows inserted by the fixture loader after the migrations carry the column defaults and the doc_type of their corpus document', async () => {
       await withFixture(mode, { migrations: true }, async ({ db }) => {
         await assertHasColumns(db, 'documents', DOCUMENT_COLUMNS);
-        const result = await db.query<{ id: string; doc_type: string; defaults: boolean }>(
+        const result = await db.query<{ id: string; doc_type: string; defaults: boolean; version: number }>(
           `SELECT id, doc_type,
-             (version = 1 AND is_current AND status = 'ready' AND doc_type_origin = 'fallback'
-               AND source = 'config_upload' AND processing_state = '{}'::jsonb) AS defaults
+             (is_current AND status = 'ready' AND doc_type_origin = 'fallback'
+               AND source = 'config_upload' AND processing_state = '{}'::jsonb) AS defaults,
+             version
            FROM documents ORDER BY id`,
         );
+        // A fixture-meta version (05.2-28) replaces the column default 1; every other default holds.
         const expected = loadCorpus(REAL_CORPUS)
-          .documents.map((doc) => [doc.id, doc.docType, true])
+          .documents.map((doc) => [doc.id, doc.docType, true, doc.version ?? 1])
           .sort((a, b) => String(a[0]).localeCompare(String(b[0])));
         assert.ok(expected.length > 0);
         assert.deepEqual(
-          result.rows.map((row) => [row.id, row.doc_type, row.defaults]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+          result.rows.map((row) => [row.id, row.doc_type, row.defaults, row.version]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
           expected,
         );
       });

@@ -13,12 +13,12 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const REAL_CORPUS = path.join(REPO_ROOT, 'eval/fixtures/corpus');
 const MODES: DeploymentMode[] = ['single-tenant', 'multi-tenant'];
 
-// The committed prechunked corpus before plan 04.2-28 (eval/baselines/fixture-baseline.json). Plan 04.2-37 adds the Phase 4.2 fixture
+// The committed prechunked corpus (re-pinned by plan 05.2-28, eval/baselines/fixture-baseline.json). Plan 04.2-37 adds the Phase 4.2 fixture
 // files and re-records this hash and the two dump digests below together with the baselines.
-const COMMITTED_CORPUS_SHA256 = '416a4cf2b66e76b65c12fc84b2e4ae2c2fee17ce0ba660757443b2387d1734c9';
+const COMMITTED_CORPUS_SHA256 = '51ba2ab714737fc8f212f10185663561c1635d1db5ffc196079ec07bed917e57';
 const COMMITTED_DUMP_SHA256: Record<DeploymentMode, string> = {
-  'single-tenant': 'efad865001851f52f3a9a98a6e0104b146b082f70e9091f9421816f55d4e102d',
-  'multi-tenant': 'b88227f69fe7479418dcd84230d7023f51e7d9de76c3be4cf7557120336d03f2',
+  'single-tenant': 'bb0e373b8da5b659a1d220525f648ac9871a6c62f11c051dd07e7099150961de',
+  'multi-tenant': '476f240088a48e50db12f6d50485720c15de4663d6838653f7df5540741c2c0f',
 };
 const DUMP_DOCUMENT_COLUMNS =
   'id, filename, content, metadata, status, is_current, version, lineage_id, source, source_key, tenant_key, superseded_by, doc_type, user_id, created_at';
