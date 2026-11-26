@@ -249,6 +249,16 @@ def test_upload_approval_rules():
     _model("UploadApproval").model_validate(exempt)
 
 
+def test_upload_approval_uploader_hold():
+    # Plan 05.2-17 (D-46): an uploader hold holds the upload whatever the approval mode, including off.
+    sample = _sample("UploadApproval")
+    for mode in ("off", "members", "all"):
+        _model("UploadApproval").model_validate({**sample, "mode": mode, "required": True, "reason": "uploader_hold"})
+    _rejects("UploadApproval", {**sample, "mode": "off", "required": False, "reason": "uploader_hold"})
+    _rejects("UploadApproval", {**sample, "mode": "members", "required": False, "reason": "uploader_hold"})
+    _rejects("UploadApproval", {**sample, "mode": "off", "required": True, "reason": "member_upload"})
+
+
 # Payloads as recorded before plan 03.2-05 (samples.json at the parent commit); they must validate unchanged.
 OLD_JOB_SETTINGS_SNAPSHOT = {
     "cloud_allowed": True,

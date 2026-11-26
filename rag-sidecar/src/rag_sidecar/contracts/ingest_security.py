@@ -105,8 +105,9 @@ ApprovalReason = Literal[
     "exempt_connector",
     "exempt_uploader",
     "unknown_uploader",
+    "uploader_hold",
 ]
-REQUIRED_APPROVAL_REASONS = frozenset({"member_upload", "all_uploads", "unknown_uploader"})
+REQUIRED_APPROVAL_REASONS = frozenset({"member_upload", "all_uploads", "unknown_uploader", "uploader_hold"})
 EXEMPT_APPROVAL_REASONS = frozenset({"admin_upload", "personal_workspace", "exempt_connector", "exempt_uploader"})
 
 Uuid = Annotated[str, Field(pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")]
@@ -204,6 +205,11 @@ class UploadApproval(_Contract):
 
     @model_validator(mode="after")
     def _reason_matches(self) -> UploadApproval:
+        # D-46 (Phase 5.2): an active uploader hold holds the upload in every mode, off included.
+        if self.reason == "uploader_hold":
+            if not self.required:
+                raise ValueError("an uploader hold always requires approval")
+            return self
         if self.mode == "off":
             if self.required or self.reason is not None:
                 raise ValueError("mode off requires nothing and gives no reason")
