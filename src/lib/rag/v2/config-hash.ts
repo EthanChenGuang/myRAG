@@ -157,6 +157,7 @@ function buildPayload(input: RetrievalConfigHashInput): Record<string, unknown> 
     ...(input.effectiveOn ? { effective_on: input.effectiveOn } : {}),
     ...(input.queryLayer ? { query_layer: input.queryLayer } : {}),
     ...(input.docTranslation ? { doc_translation: input.docTranslation } : {}),
+    ...(input.tuning && Object.keys(input.tuning).length > 0 ? { tuning: input.tuning } : {}),
   };
 }
 
