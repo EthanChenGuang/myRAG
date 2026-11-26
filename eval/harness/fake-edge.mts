@@ -43,7 +43,7 @@ const RPC_ARGUMENTS: Record<string, { vector: string; allowed: string[] }> = {
   },
 };
 
-const GENERIC_RPC_NAME = /^(?:rag_[a-z0-9_]+|match_chunks_by_profile|hybrid_search_chunks)$/;
+const GENERIC_RPC_NAME = /^(?:rag_[a-z0-9_]+|match_chunks_by_profile|hybrid_search_chunks|hybrid_search_translations)$/;
 const FIXTURE_SERVICE_ROLE_KEY = 'fixture-service-role-key-placeholder';
 const VECTOR_ARGUMENT_TYPES = new Set(['vector', 'halfvec']);
 const JSON_ARGUMENT_TYPES = new Set(['json', 'jsonb']);

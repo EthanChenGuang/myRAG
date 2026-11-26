@@ -12,8 +12,10 @@ import type {
   BackendLegs,
   BackendLegsMeta,
   BackendSearchRequest,
+  BackendTranslationSearchRequest,
   RankedHit,
   RetrievalBackend,
+  TranslationHit,
 } from './types';
 
 export interface PgvectorBackendDeps {
@@ -135,6 +137,109 @@ function buildRpcArgs(req: BackendSearchRequest, config: RagConfig): Record<stri
   };
 }
 
+interface TranslationRow {
+  leg: unknown;
+  rank: unknown;
+  chunk_id: unknown;
+  document_id: unknown;
+  translation_language: unknown;
+  content: unknown;
+  metadata: Record<string, unknown> | null;
+  chunk_index: number | null;
+  translation_similarity: number | null;
+  lexical_score: number | null;
+  doc_type: string | null;
+  language: string | null;
+  parent_id: string | null;
+  section_path: string[] | null;
+  chunk_kind: string | null;
+  document_filename: string | null;
+  document_created_at: string | null;
+  document_metadata: Record<string, unknown> | null;
+  document_content_preview: string | null;
+}
+
+/** A hybrid_search_translations row that cannot be mapped to a source chunk; the translation leg is dropped (translation_leg_invalid). */
+export class TranslationRowInvalidError extends Error {
+  constructor() {
+    super('[Document Search] invalid translation row');
+    this.name = 'TranslationRowInvalidError';
+  }
+}
+
+function nonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0;
+}
+
+function mapTranslationRow(row: TranslationRow): TranslationHit {
+  if (
+    (row.leg !== 'dense' && row.leg !== 'lexical') ||
+    typeof row.rank !== 'number' ||
+    !Number.isInteger(row.rank) ||
+    row.rank < 1 ||
+    !nonEmptyString(row.chunk_id) ||
+    !nonEmptyString(row.document_id) ||
+    !nonEmptyString(row.translation_language) ||
+    typeof row.content !== 'string'
+  ) {
+    throw new TranslationRowInvalidError();
+  }
+  return {
+    leg: row.leg,
+    translationLanguage: row.translation_language,
+    hit: {
+      rank: row.rank,
+      chunkId: row.chunk_id,
+      documentId: row.document_id,
+      parentId: row.parent_id ? String(row.parent_id) : null,
+      content: row.content,
+      metadata: row.metadata ?? {},
+      chunkIndex: row.chunk_index,
+      sectionPath: row.section_path ?? [],
+      chunkKind: row.chunk_kind,
+      similarity: row.translation_similarity,
+      lexicalScore: row.lexical_score,
+      docType: row.doc_type,
+      language: row.language,
+      document: {
+        filename: row.document_filename ?? '',
+        createdAt: row.document_created_at,
+        metadata: row.document_metadata ?? {},
+        contentPreview: row.document_content_preview ?? '',
+      },
+    },
+  };
+}
+
+/** hybrid_search_translations takes the hybrid_search_chunks filter arguments unchanged, without the exact-scan and lexical-language ones. */
+function buildTranslationArgs(req: BackendTranslationSearchRequest, config: RagConfig): Record<string, unknown> {
+  const filters = req.filters;
+  return {
+    p_tenant_key: scopeKey(req.scope),
+    p_profile_id: req.embeddingProfileId,
+    p_language: req.language,
+    p_query_embedding: req.denseVector,
+    p_lexical_tokens: req.lexicalTokens,
+    p_dense_limit: req.denseVector && req.denseVector.length > 0 ? req.denseLimit : 0,
+    p_lexical_limit: req.lexicalTokens.length > 0 ? req.lexicalLimit : 0,
+    p_date_from: filters.dateRange?.from ?? null,
+    p_date_to: filters.dateRange?.to ?? null,
+    p_sources: nullIfEmpty(filters.sources),
+    p_document_ids: nullIfEmpty(filters.documentIds),
+    p_doc_types: nullIfEmpty(filters.docTypes),
+    p_languages: nullIfEmpty(filters.languages),
+    p_iterative_scan: config.v2.iterativeScan,
+    p_supplier: filters.invoice?.supplier ?? null,
+    p_amount_min: filters.invoice?.amountMin ?? null,
+    p_amount_max: filters.invoice?.amountMax ?? null,
+    p_currency: filters.invoice?.currency ?? null,
+    p_chunking_override: req.chunkingProfileOverride ?? null,
+    ...(filters.dateRange?.includeUndated === true ? { p_include_undated: true } : {}),
+    ...scopeArgs(filters),
+    ...(filters.effectiveOn ? { p_effective_on: filters.effectiveOn } : {}),
+  };
+}
+
 export function createPgvectorBackend(deps: PgvectorBackendDeps): RetrievalBackend {
   return {
     id: 'pgvector',
@@ -154,6 +259,22 @@ export function createPgvectorBackend(deps: PgvectorBackendDeps): RetrievalBacke
         throw new RetrievalBackendError('hybrid_search_chunks', response.error.code ?? null);
       }
       return splitLegs((response.data ?? []) as HybridRow[]);
+    },
+    async searchTranslations(req: BackendTranslationSearchRequest): Promise<TranslationHit[]> {
+      assertTenantScope(req.scope);
+      const client = deps.adminClient();
+      if (!client) throw new RetrievalBackendError('hybrid_search_translations', 'admin_unavailable');
+      const rpcClient = client as RpcClient;
+      const response = await rpcClient
+        .rpc('hybrid_search_translations', buildTranslationArgs(req, deps.getConfig()))
+        .abortSignal(req.signal);
+      req.signal.throwIfAborted();
+      if (response.error) {
+        logger.error('Document Search', 'hybrid_search_translations failed', { rpc: 'hybrid_search_translations', code: response.error.code ?? null });
+        throw new RetrievalBackendError('hybrid_search_translations', response.error.code ?? null);
+      }
+      if (response.data !== null && response.data !== undefined && !Array.isArray(response.data)) throw new TranslationRowInvalidError();
+      return ((response.data ?? []) as TranslationRow[]).map(mapTranslationRow);
     },
     async health(): Promise<BackendHealth> {
       const client = deps.adminClient();

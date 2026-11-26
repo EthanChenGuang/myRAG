@@ -75,6 +75,31 @@ export interface BackendLegs {
   meta?: BackendLegsMeta;
 }
 
+/** One translation leg request (XLG-04, D-30): the query in one language against the tenant's stored translations into it. */
+export interface BackendTranslationSearchRequest {
+  scope: TenantScope;
+  embeddingProfileId: string;
+  /** The translation language; the request's query language. */
+  language: string;
+  denseVector: number[] | null;
+  lexicalTokens: string[];
+  filters: RetrievalFilters;
+  denseLimit: number;
+  lexicalLimit: number;
+  chunkingProfileOverride?: Record<string, string>;
+  signal: AbortSignal;
+}
+
+/**
+ * A translation hit, already the source chunk: content, metadata and document are the original's, never the translated text.
+ * hit.similarity and hit.lexicalScore are the translation's own scores; the leg module clears them before fusion.
+ */
+export interface TranslationHit {
+  leg: 'dense' | 'lexical';
+  translationLanguage: string;
+  hit: RankedHit;
+}
+
 export interface BackendHealth {
   ok: boolean;
   detail?: string;
@@ -84,6 +109,8 @@ export interface BackendHealth {
 export interface RetrievalBackend {
   readonly id: BackendId;
   search(req: BackendSearchRequest): Promise<BackendLegs>;
+  /** Absent on a backend without chunk translations: no translation leg runs. */
+  searchTranslations?(req: BackendTranslationSearchRequest): Promise<TranslationHit[]>;
   health(): Promise<BackendHealth>;
   isReady(scope: TenantScope): Promise<boolean>;
 }
