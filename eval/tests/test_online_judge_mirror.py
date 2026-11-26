@@ -8,7 +8,7 @@ from fake_langfuse import FakeLangfuse
 from judge_stubs import StubDeepEvalLLM
 from rag_sidecar.contracts.judge import JudgeConfig
 
-import rag_eval.online_judge as online_judge
+from rag_eval import online_judge
 from rag_eval.judge.config import DEFAULT_CONFIG_PATH
 from rag_eval.online_judge import main
 
