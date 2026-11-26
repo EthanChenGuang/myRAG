@@ -2,16 +2,25 @@ import type { QueryFramework } from '../config';
 import { getRagDeps } from '../deps';
 import type { CondensedQuery } from '@/lib/rag-eval/contracts.generated';
 import { finishCondense, llamaindexCondense, type CondenseInput, type CondenseResult } from './llamaindex/condense';
-import { nativeDecompose, type DecomposeInput, type DecomposeResult } from './llamaindex/decompose';
+import { finishDecompose, nativeDecompose, type DecomposeInput, type DecomposeResult, type FinishDecomposeInput } from './llamaindex/decompose';
 import { finishExpand, nativeExpand, type ExpandInput, type ExpandResult, type FinishExpandInput } from './llamaindex/expand';
 import { finishHyde, nativeHyde, type FinishHydeInput, type HydeInput, type HydeResult } from './llamaindex/hyde';
-import { nativeTranslate, type NativeTranslateInput, type NativeTranslateResult } from './llamaindex/translate';
+import {
+  finishTranslate,
+  nativeTranslate,
+  translateRequests,
+  type NativeTranslateInput,
+  type NativeTranslateResult,
+  type TranslateCallOutcome,
+  type TranslateRequest,
+  type TranslateRequestInput,
+} from './llamaindex/translate';
 
 export type { CondenseInput, CondenseResult } from './llamaindex/condense';
 export type { DecomposeResult } from './llamaindex/decompose';
 export type { ExpandResult } from './llamaindex/expand';
 export type { HydeResult } from './llamaindex/hyde';
-export type { NativeTranslateResult as TranslateResult } from './llamaindex/translate';
+export type { NativeTranslateResult as TranslateResult, TranslateCallOutcome, TranslateRequest, TranslateSkipReason } from './llamaindex/translate';
 
 /** The shared transform inputs; the implementation supplies its own client (D-02). */
 export type TransformExpandInput = Omit<ExpandInput, 'deps'>;
@@ -60,10 +69,18 @@ export interface QueryTransformFinishers {
   condense(input: Pick<CondenseInput, 'query' | 'protectedTokens' | 'limits'>, output: CondensedQuery): CondenseResult;
   expand(input: FinishExpandInput, queries: readonly string[]): ExpandResult;
   hyde(input: FinishHydeInput, passage: string): HydeResult;
+  /** Validates the raw SubQuestions output (wire bound) and applies the D-15 cut and checks. */
+  decompose(input: FinishDecomposeInput, output: unknown): DecomposeResult;
+  /** The translate calls to make: targets picked and the shared prompt rendered (research A-6). */
+  translateRequests(input: TranslateRequestInput): TranslateRequest[];
+  translate(input: TranslateRequestInput, outcomes: readonly TranslateCallOutcome[]): NativeTranslateResult;
 }
 
 export const QUERY_TRANSFORM_FINISHERS: QueryTransformFinishers = Object.freeze({
   condense: finishCondense,
   expand: finishExpand,
   hyde: finishHyde,
+  decompose: finishDecompose,
+  translateRequests,
+  translate: finishTranslate,
 });
