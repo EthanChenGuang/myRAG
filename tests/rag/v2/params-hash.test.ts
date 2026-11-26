@@ -94,7 +94,7 @@ describe('effectiveRetrievalParams', () => {
     expect(effectiveRetrievalParams('voice', config, overrides).final_top_k).toBe(COMMITTED.final_top_k);
   });
 
-  it('rejects rerank_input_cap outside 50..100 and keeps the prior value', () => {
+  it('rejects rerank_input_cap outside 25..100 and keeps the prior value', () => {
     const config = baseConfig();
     const overrides: RetrievalOverrides = {
       rerank_input_cap: 120,
