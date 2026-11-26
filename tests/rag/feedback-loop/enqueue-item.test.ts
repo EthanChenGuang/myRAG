@@ -47,7 +47,7 @@ describe('enqueueReviewItem (D-55)', () => {
 
   it('reads RAG_DOMAIN_EXPERT_REVIEW at call time by default', async () => {
     const { calls, deps } = harness();
-    const { enabled: _enabled, ...withoutSwitch } = deps;
+    const withoutSwitch: EnqueueReviewItemDeps = { rpc: deps.rpc, log: deps.log };
     vi.stubEnv('RAG_DOMAIN_EXPERT_REVIEW', 'false');
     await expect(enqueueReviewItem(INPUT, withoutSwitch)).resolves.toBeNull();
     expect(calls).toEqual([]);
@@ -99,7 +99,7 @@ describe('enqueueReviewItem (D-55)', () => {
   });
 
   it('uses the admin client from the RAG deps by default', async () => {
-    const rpc = vi.fn(async () => ({ data: ITEM, error: null }));
+    const rpc = vi.fn<(fn: string, args: Record<string, unknown>) => Promise<{ data: unknown; error: unknown }>>(async () => ({ data: ITEM, error: null }));
     setRagDepsForTests({ adminClient: () => ({ rpc }) as never });
     await expect(enqueueReviewItem(INPUT, { enabled: () => true, log: () => undefined })).resolves.toBe(ITEM);
     expect(rpc).toHaveBeenCalledTimes(1);
