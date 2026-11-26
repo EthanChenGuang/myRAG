@@ -276,3 +276,29 @@ def test_committed_latency_budgets_still_validate_without_answer_checks():
     budgets = LatencyBudgets.model_validate(payload)
     if "answer_checks" not in payload:
         assert "answer_checks" not in budgets.model_dump(mode="json")
+
+
+PHASE52_EVAL_VARIANTS = {
+    "GoldenItem:partial_answer": "GoldenItem",
+    "GoldenItem:stale_version": "GoldenItem",
+    "GoldenItem:off_topic_context": "GoldenItem",
+    "RagTrace:phase52_answer_fields": "RagTrace",
+    "EvalReport:answer_rules": "EvalReport",
+    "LatencyBudgets:answer_checks": "LatencyBudgets",
+}
+
+
+def test_phase52_eval_samples_exist_and_validate():
+    from rag_sidecar.export_schemas import CONTRACTS
+
+    variants = samples.build_samples()["variants"]
+    by_name = {model.__name__: model for model, _mode in CONTRACTS}
+    for name, model_name in PHASE52_EVAL_VARIANTS.items():
+        assert name in variants, name
+        assert variants[name]["model"] == model_name
+        by_name[model_name].model_validate(variants[name]["value"])
+
+
+def test_committed_samples_json_carries_the_phase52_eval_variants():
+    payload = json.loads((REPO_ROOT / "tests" / "fixtures" / "contracts" / "samples.json").read_text(encoding="utf-8"))
+    assert set(PHASE52_EVAL_VARIANTS) <= set(payload["variants"])
