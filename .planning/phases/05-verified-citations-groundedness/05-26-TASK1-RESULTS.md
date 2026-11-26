@@ -1,20 +1,20 @@
-# 05-26 Task 1 results: Anthropic spike (partial: the API key was not reachable)
+# 05-26 Task 1 results: Anthropic spike (complete)
 
-Run 2026-11-26 on branch `exec/05-26-t1`, cloud container, `npm ci --ignore-scripts`. Synthetic, domain-neutral documents only. No Supabase access of any kind.
+First run 2026-11-26 without the key (OpenRouter, unit-level and fallback checks). Second run the same day, in a new session, with the owner's Anthropic key available to the session as `MYRAG_ANTHROPIC_API_KEY`. The key was passed inline to each process as `ANTHROPIC_API_KEY` and was never written to a file. Branch `exec/05-26-t1`, cloud container, `npm ci --ignore-scripts`. Synthetic, domain-neutral documents only. No Supabase access of any kind.
 
-## Blocker: `ANTHROPIC_API_KEY` was not in the process environment
-
-The cloud environment lists `ANTHROPIC_API_KEY` among its variables, but the variable was not set in this container's shell (`[ -n "$ANTHROPIC_API_KEY" ]` was false). A request to `api.anthropic.com` without it returns 401, and the proxy injects no credential for that host. The variable was most likely added after this container started; environment variables take effect when a session starts. **Every step that needs a real Anthropic response is still open:** the model list (step 1), the direct Claude streams (step 2) and the A1 coexistence request (step 3b). The driver below already contains those runs. They switch on when the key is present:
+Commands (second run):
 
 ```bash
 export NODE_USE_ENV_PROXY=1 OPENAI_API_KEY=placeholder SUPABASE_SERVICE_ROLE_KEY=placeholder \
   NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:9 NEXT_PUBLIC_SUPABASE_ANON_KEY=placeholder
-curl -s https://api.anthropic.com/v1/models -H "x-api-key: $ANTHROPIC_API_KEY" -H "anthropic-version: 2023-06-01"   # step 1
-node --import tsx eval/out/05-26-t1/spike.mts anthropic   # step 2: 9 direct turns
-node --import tsx eval/out/05-26-t1/spike.mts a1          # step 3b: raw SSE -> eval/out/05-26-t1/a1-raw.sse
+curl -s "https://api.anthropic.com/v1/models?limit=100" -H "x-api-key: $MYRAG_ANTHROPIC_API_KEY" -H "anthropic-version: 2023-06-01"
+ANTHROPIC_API_KEY="$MYRAG_ANTHROPIC_API_KEY" node --import tsx eval/out/05-26-t1/spike.mts anthropic   # 9 direct turns
+ANTHROPIC_API_KEY="$MYRAG_ANTHROPIC_API_KEY" node --import tsx eval/out/05-26-t1/spike.mts a1          # A1, server web search
+ANTHROPIC_API_KEY="$MYRAG_ANTHROPIC_API_KEY" node --import tsx eval/out/05-26-t1/a1-sdk.mts            # A1, AI SDK client tool, 2 steps
+ANTHROPIC_API_KEY="$MYRAG_ANTHROPIC_API_KEY" node --import tsx eval/out/05-26-t1/spike.mts baseurl     # /v1 vs no /v1, real key
 ```
 
-The placeholder variables only satisfy `src/lib/env.ts` validation; nothing contacts Supabase or OpenAI. `NODE_USE_ENV_PROXY=1` is needed because Node's `fetch` otherwise skips the container proxy, and OpenRouter then answers 401 "Missing Authentication header".
+The placeholder variables only satisfy `src/lib/env.ts` validation; nothing contacts Supabase or OpenAI. `NODE_USE_ENV_PROXY=1` is needed because Node's `fetch` otherwise skips the container proxy.
 
 ## Driver
 
@@ -33,13 +33,31 @@ There are three synthetic blocks: Harbor notes (S1), Garden records (S2) and Bri
 | --- | --- | --- |
 | Mapping (env.ts, init-env.js and the other five locations; `check-config.mjs` enforces equality) | `anthropic/claude-opus-5.5` → `claude-opus-5-5`, `anthropic/claude-sonnet-5.5` → `claude-sonnet-5-5`, `anthropic/claude-haiku-5.5` → `claude-haiku-5-5` | `anthropicIdFor` resolves all three. The unmapped `anthropic/claude-sonnet-4.5` gives `no_anthropic_id` |
 | OpenRouter `GET /api/v1/models` (live) | the three OpenRouter ids | **All listed**, which settles research A6 for the OpenRouter side. All three also streamed answers (below) |
-| Anthropic `GET /v1/models` | the three anthropicIds | **Not verified** (401 without the key) |
+| Anthropic `GET /v1/models` (live, with the key) | the three anthropicIds | **All listed**: `claude-opus-5-5`, `claude-sonnet-5-5`, `claude-haiku-5-5`. The list also has `claude-fable-5-2`, `-5-1`, `claude-fable-5`, `claude-opus-5`, `claude-sonnet-5`, `claude-opus-4-8`, `-4-7`, `-4-6`, `claude-sonnet-4-6` and the dated 4.5 ids |
 
-Note: OpenRouter also lists `anthropic/claude-fable-5`, `-5.1` and `-5.2`. None of them is configured, so this needs no change. They are candidates for a later mapping.
+Note: OpenRouter also lists `anthropic/claude-fable-5`, `-5.1` and `-5.2`. None of them is configured, so this needs no change. They are candidates for a later mapping: the matching Anthropic ids (`claude-fable-5`, `-5-1`, `-5-2`) are listed, and all of them already match an adaptive-thinking prefix.
+
+The configured `anthropicId` values were checked in `src/lib/env.ts`, `scripts/init-env.js`, `scripts/config-server.js` and `scripts/config-ui/index.html`. Each of the three ids appears there and nowhere differs. `.env.local` was not read.
 
 ## Step 2: per-model results
 
-**Direct Claude path: not run (no key).** Its citation mapping, `cited_text` quotes, adaptive thinking and TTFT are unverified on real streams.
+**Direct Claude path (live, `claude-citations`).** All 9 turns took the direct path: no fallback, no error, `fallbackReason` null, no trace rule. Every citation came from an Anthropic `char_location` citation, mapped to the right block, with Anthropic's `cited_text` as the quote:
+
+| Model | Question | TTFT ms | Total ms | Citations → block (quote) | invalid |
+| --- | --- | ---: | ---: | --- | ---: |
+| opus-5.5 | plain | 652 | 1562 | S1 "…painted green in 1931.", S3 "…84 metres long." | 0 |
+| opus-5.5 | reasoning (adaptive) | 375 | 1381 | S1 "Its lamp was replaced … in 1952.", S3 "…closed for repairs in the spring of 2019." | 0 |
+| opus-5.5 | zh | 1291 | 2196 | S2 "…grows forty kinds of beans." | 0 |
+| sonnet-5.5 | plain | 725 | 1120 | S1, S3 (same quotes as opus) | 0 |
+| sonnet-5.5 | reasoning (adaptive) | 1743 | 2570 | S1, S3 | 0 |
+| sonnet-5.5 | zh | 859 | 1983 | S2 | 0 |
+| haiku-5.5 | plain | 848 | 1197 | S1, S3 | 0 |
+| haiku-5.5 | reasoning (adaptive) | 1276 | 1900 | S1, S3 | **1** |
+| haiku-5.5 | zh | 822 | 1241 | S2 | 0 |
+
+- Answers were correct in every turn. The zh turns answered in Chinese, and the cited English sentence was kept as the quote.
+- The haiku-5.5 reasoning turn repeated the planted note itself (*"…a note saying "see [S9]," but the documents don't include…"*). The model wrote `[S9]` as text, not as an Anthropic citation. The marker parser counted it as invalid (`invalidCitations: 1`) and made no record. The marker stays in the server stream and is hidden at render by `src/lib/chat/citation-markers.ts`, the same as on the chunk-alias path.
+- No Anthropic citation named an unknown document (`unknownSources` 0 in every turn).
 
 **OpenRouter, chunk-alias strategy, same questions (live).** All 9 turns used `strategy: chunk-alias`, and every marker resolved to the correct block, with that block's text as the quote:
 
@@ -55,7 +73,24 @@ Note: OpenRouter also lists `anthropic/claude-fable-5`, `-5.1` and `-5.2`. None 
 | haiku-5.5 | reasoning | 2354 | 2374 | S1, S3 | 0 |
 | haiku-5.5 | zh | 1528 | 1753 | S2 | 0 |
 
-TTFT is one sample per cell (report-only, D-23). The Anthropic column of the TTFT comparison is empty until the key is available.
+### TTFT: direct Claude vs OpenRouter (ms, one sample per cell, report-only per D-23)
+
+| Model | Question | Direct Claude | OpenRouter (chunk-alias) |
+| --- | --- | ---: | ---: |
+| opus-5.5 | plain | 652 | 2539 |
+| opus-5.5 | reasoning | 375 | 845 |
+| opus-5.5 | zh | 1291 | 2797 |
+| sonnet-5.5 | plain | 725 | 504 |
+| sonnet-5.5 | reasoning | 1743 | 654 |
+| sonnet-5.5 | zh | 859 | 504 |
+| haiku-5.5 | plain | 848 | 1126 |
+| haiku-5.5 | reasoning | 1276 | 2354 |
+| haiku-5.5 | zh | 822 | 1528 |
+| **median** | | **848** | **1126** |
+
+The two columns were measured in different sessions a few hours apart, and each cell is one sample, so the comparison only shows that the direct path is in the same range. It is not a ranking. Every direct turn produced its first token far inside the first-token gate (`CLAUDE_FIRST_TOKEN_TIMEOUT_MS`). On the direct path the first text token comes after the model's text block starts; markers are added at each text-end, so they do not delay the first token.
+
+The OpenRouter rows (first run) follow.
 
 **Invalid markers are dropped on a real stream.** In the opus-5.5 reasoning turn the model repeated the planted reference: *"The bridge log also says "see [S9]", but no source labelled S9 appears…"*. S9 names no block of the request, so it was not turned into a record and was counted (`invalidCitations: 1`). The labeler had neutralized the S9 in the block text with a zero-width space (`[S` U+200B `9]`), so the model wrote a new marker itself. A unit-level check confirms the same behaviour: `ingestFullText('… [S1]. … [S7].')` gives aliases `['S1']` and `invalidCitations: 1`.
 
@@ -76,7 +111,19 @@ Unit-level call, for all three mapped models with the switch on and a placeholde
 | multiStep | `multi_step` | — |
 | attachments | `attachments` | — |
 
-**A1 (citations and server web search in one request): not run (no key).** The request is ready in `spike.mts a1`. It uses `claude-haiku-5-5`, max_tokens 512, one citations-enabled synthetic text document and a `web_search_20250305` tool with `max_uses: 1`. It saves the raw SSE and reports whether `citations_delta`, `server_tool_use` and `web_search_tool_result` all appear. `CLAUDE_WEB_SEARCH_ELIGIBLE` stays `false`, and no gap-closure plan is opened until A1 is recorded.
+### A1: citations and tool use in one turn (live)
+
+**Outcome: they coexist.** Two shapes were tried, both with `claude-haiku-5-5`, max_tokens 512 and one citations-enabled synthetic document.
+
+1. **Raw Messages API with Anthropic's server web search** (`spike.mts a1`, raw SSE in `eval/out/05-26-t1/a1-raw.sse`, kept local and not committed because it holds third-party web-search text). HTTP 200. The stream had `server_tool_use` (web_search), `web_search_tool_result`, a `char_location` citation on the document (`cited_text` "The Velmora lighthouse was painted green in 1931.", title S1) and two `web_search_result_location` citations. It ended with `max_tokens`: adaptive thinking took 424 of the 761 output tokens without being asked for. Input was 15,846 tokens for one search.
+2. **AI SDK path, the app's shape** (`a1-sdk.mts`, raw SSE in `eval/out/05-26-t1/a1-sdk-raw.sse`, report in `report-a1-sdk.json`). `buildClaudeCitationRequest` plus `claudeMarkerTransform`, a client `webSearch` tool returning a fixed synthetic result (it contacts nothing), and `stopWhen: stepCountIs(2)`. Two requests to `/v1/messages`, 2 steps, `tool-call` 1, `tool-result` 1, no error. The document citation in the second step mapped to S1 with the right `cited_text`. The answer used both the document and the tool result.
+
+So research A1 ("citations coexist with tool use and multi-step on the AI SDK path") holds. Per the plan, this opens a gap-closure plan to make webSearch turns eligible (below). `CLAUDE_WEB_SEARCH_ELIGIBLE` stays `false` until that plan lands.
+
+Points for that plan:
+- Server web search returns `web_search_result_location` citations. The AI SDK surfaces them as `url` sources. `claudeMarkerTransform` handles only `document` sources and passes others through unchanged, so they would reach the UI as plain sources. The app's webSearch is the Exa client tool, so shape 2 is the one to build on, and no server tool is needed.
+- A webSearch turn is multi-step. The direct path today never passes `stopWhen` or tools from the route; the plan has to add both and decide how `multi_step` eligibility changes.
+- The first-token gate must allow for a first step that emits only a tool call, with no text.
 
 ## Step 4: fallback with an unreachable `ANTHROPIC_BASE_URL`
 
@@ -95,16 +142,31 @@ Unit-level call, for all three mapped models with the switch on and a placeholde
 
 ## Defects and follow-ups
 
-- **No code defect found** in the parts that could be exercised: eligibility, ineligible turns, the first-token gate, the one fallback, the trace rule, chunk-alias citation mapping and invalid-marker dropping on live OpenRouter streams.
-- **Base URL without `/v1` (open question, not shown to be a defect).** This container sets `ANTHROPIC_BASE_URL=https://api.anthropic.com`, the Anthropic SDK convention, with no `/v1`. The direct path passes the value to `@ai-sdk/anthropic` unchanged, and that provider expects `.../v1`, so a deployment that inherits such a value would post to `/messages`. With a placeholder key both forms return 401, because auth is checked before routing, so whether this means "every turn falls back with 404" cannot be shown without a real key. The Config UI placeholder already says `https://api.anthropic.com/v1`. Rerun `spike.mts baseurl` with the key; if `withoutV1` falls back with `status_404`, a small gap-closure plan should normalize the value, for example by appending `/v1` when the path is empty.
-- **Gap-closure plan needed now:** none. Whether webSearch turns can become eligible depends on A1.
-- **To finish Task 1:** start a new session so the stored variable is present (or make the key otherwise available), then run the three commands above plus `spike.mts baseurl`. That is about 12 Anthropic requests and 1–3 OpenRouter fallbacks.
+- **No code defect found.** Checked on real streams: model ids, eligibility, ineligible turns, the first-token gate, the one fallback, the trace rule, citation mapping and `cited_text` quotes on the direct path, adaptive thinking on all three models, Chinese turns, chunk-alias mapping on OpenRouter, and invalid-marker counting on both paths.
+- **Base URL without `/v1`: closed, not a defect.** With the real key, `spike.mts baseurl` streamed on both `https://api.anthropic.com/v1` (TTFT 1339 ms) and `https://api.anthropic.com` (804 ms), both `claude-citations` with S1 and S3 and no fallback. `@ai-sdk/anthropic` 3.0.143 `normalizeBaseURL` rewrites exactly `https://api.anthropic.com` to `https://api.anthropic.com/v1`. A direct check shows Anthropic answers 404 on `/messages` and 400 on `/v1/messages` for an empty body. A custom gateway URL without `/v1` would still post to `<url>/messages`. That is operator configuration, and the Config UI placeholder already shows the `/v1` form.
+- **Observation, not a defect: one quote per alias.** When a block is cited twice for different sentences (zh turns: "forty kinds of beans" and "every Tuesday morning"), the record keeps the first `cited_text` only (`quotes.has` guard in `claude.ts`). That matches one `CitationRecord` per alias.
+- **Observation, not a defect: restated quotes.** opus-5.5 and haiku-5.5 often write a short claim and then repeat the cited sentence word for word ("…was painted green. The Velmora lighthouse was painted green in 1931.[S1]"). The raw A1 SSE shows this text in Anthropic's own `text_delta` events, so it comes from the model, not from the transform. sonnet-5.5 did not do it. A prompt tweak could be weighed later, measured against the eval set.
+- **Observation: thinking without being asked.** In A1 the 5.5 model ran adaptive thinking although the request had no `thinking` option. With `CLAUDE_MAX_OUTPUT_TOKENS = 16384` this is harmless for plain turns. It matters only for a small output cap.
+- **Gap-closure plan needed: yes, one.** Make webSearch (Exa client tool) turns eligible for `claude-citations`, because A1 holds (see the points under A1). No other gap plan.
 
 ## Requests made
 
-- api.anthropic.com: 3, all 401 with a placeholder or dummy key (1 `GET /v1/models`, 2 `POST /messages` in the base-URL check). No real key was used and nothing was billed.
-- openrouter.ai chat completions: 13. 12 succeeded (9 comparison turns, 1 fallback turn, 2 base-URL fallback turns); 1 was rejected with 401 before the proxy setting was fixed.
-- openrouter.ai metadata: 3 GETs (`/key` twice for the proxy check, `/models` once).
-- Local: 2 connection attempts to 127.0.0.1:9 (the fallback test).
+First run (no key):
+- api.anthropic.com: 3, all 401 with a placeholder or dummy key. Nothing was billed.
+- openrouter.ai chat completions: 13 (12 succeeded, 1 was a 401 before the proxy setting was fixed).
+- openrouter.ai metadata: 3 GETs.
+- Local: 2 connection attempts to 127.0.0.1:9.
+- Subtotal: 19 external requests.
 
-Total: 19 external requests.
+Second run (with the key):
+- api.anthropic.com: 18 in total.
+  - `GET /v1/models`: 1.
+  - Direct Claude turns: 9.
+  - A1 server web search: 1. It included 1 server-side web search.
+  - A1 on the AI SDK path: 2 (two steps).
+  - Base-URL turns: 2.
+  - Empty-body POSTs to `/messages`, `/v1/messages` and `/nonexistent`: 3. They returned 404, 400 and 404, so nothing was generated.
+- openrouter.ai: 0. No turn fell back.
+- Subtotal: 18 external requests. 15 of them produced output, all with max_tokens of 512 or less, except the direct turns, which use the route's `CLAUDE_MAX_OUTPUT_TOKENS`. Those answers were short: 1–3 sentences each.
+
+Total for Task 1: 37 external requests.

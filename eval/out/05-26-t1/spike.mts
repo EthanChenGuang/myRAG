@@ -237,10 +237,11 @@ if (mode === 'fallback' || mode === 'all') {
   report.fallback = await runTurn({ modelId: MODELS[2], q: QUESTIONS.plain, claude: true, apiKey: key || 'placeholder-no-request-sent', baseUrl: 'http://127.0.0.1:9' });
 }
 if (mode === 'baseurl') {
-  // Placeholder key: Anthropic answers 401 for the right path and 404 for a path without /v1.
+  // With the real key (when set) the two paths are told apart: /v1 streams, a path without /v1 shows how the provider routes it.
+  const k = key || 'placeholder-not-a-key';
   report.baseurl = {
-    withV1: await runTurn({ modelId: MODELS[2], q: QUESTIONS.plain, claude: true, apiKey: 'placeholder-not-a-key', baseUrl: 'https://api.anthropic.com/v1' }),
-    withoutV1: await runTurn({ modelId: MODELS[2], q: QUESTIONS.plain, claude: true, apiKey: 'placeholder-not-a-key', baseUrl: 'https://api.anthropic.com' }),
+    withV1: await runTurn({ modelId: MODELS[2], q: QUESTIONS.plain, claude: true, apiKey: k, baseUrl: 'https://api.anthropic.com/v1' }),
+    withoutV1: await runTurn({ modelId: MODELS[2], q: QUESTIONS.plain, claude: true, apiKey: k, baseUrl: 'https://api.anthropic.com' }),
   };
 }
 if (mode === 'openrouter' || mode === 'all') {
