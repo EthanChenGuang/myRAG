@@ -15,6 +15,7 @@
     "rag:backfill": "tsx src/lib/rag/ingest/backfill/cli.ts",
     "rag:backfill-hashes": "tsx src/lib/rag/ingest/backfill-hashes.ts",
     "rag:reembed": "tsx src/lib/rag/ingest/reembed/cli.ts",
+    "rag:finetune": "tsx src/lib/rag/finetune/cli.ts",
     "rag:feedback-loop": "tsx src/lib/rag/feedback-loop/cli.ts",
     "rag:rechunk": "tsx src/lib/rag/ingest/rechunk/cli.ts",
     "rag:chunking": "tsx src/lib/rag/chunking/cli.ts",
