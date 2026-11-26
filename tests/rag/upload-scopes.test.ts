@@ -48,6 +48,8 @@ const state = {
   vocabularyFails: false,
   rpcCalls: [] as Array<{ fn: string; args: Row }>,
   storageUploads: 0,
+  replaceTargets: [] as Array<{ tenant_key: string; document_id: string; lineage_id: string; source: string; source_key: string }>,
+  tenantAdmins: [] as Array<{ tenant_key: string; user_id: string }>,
 };
 
 function respond(data: Row[] | null, error: { code: string; message: string } | null = null): RpcRequest {
@@ -73,6 +75,14 @@ function vocabularyDb(): RpcClient {
           .sort((x, y) => rank.indexOf(x.dimension) - rank.indexOf(y.dimension) || x.label.toLowerCase().localeCompare(y.label.toLowerCase()))
           .map(({ dimension, value, label, aliases, active }) => ({ dimension, value, label, aliases, active }));
         return respond(rows);
+      }
+      if (fn === 'rag_supersession_replace_target') {
+        const target = state.replaceTargets.find((row) => row.tenant_key === a.p_tenant_key && row.document_id === a.p_document_id);
+        return respond(target ? [{ document_id: target.document_id, lineage_id: target.lineage_id, source: target.source, source_key: target.source_key }] : []);
+      }
+      if (fn === 'rag_is_tenant_admin') {
+        const admin = state.tenantAdmins.some((row) => row.tenant_key === a.p_tenant_key && row.user_id === a.p_user);
+        return respond(admin as unknown as Row[]);
       }
       return respond([]);
     },
@@ -139,6 +149,7 @@ interface RouteEnv {
   pipeline: string;
   scopeTags: string;
   async?: boolean;
+  supersession?: string;
 }
 
 async function mockCommon(env: RouteEnv): Promise<void> {
@@ -148,6 +159,7 @@ async function mockCommon(env: RouteEnv): Promise<void> {
   vi.stubEnv('RAG_INGEST_PIPELINE', env.pipeline);
   vi.stubEnv('RAG_SCOPE_TAGS', env.scopeTags);
   vi.stubEnv('RAG_INGEST_ASYNC', env.async ? 'on' : 'off');
+  vi.stubEnv('RAG_SUPERSESSION_DETECT', env.supersession ?? 'off');
   vi.stubEnv('RAG_SIDECAR_URL', 'http://127.0.0.1:9199');
   vi.stubEnv('RAG_SIDECAR_SECRET', 'wake-sidecar-secret-placeholder-00');
   vi.doMock('next/server', async (importOriginal) => ({
@@ -246,6 +258,8 @@ beforeEach(() => {
   state.vocabularyFails = false;
   state.rpcCalls = [];
   state.storageUploads = 0;
+  state.replaceTargets = [];
+  state.tenantAdmins = [];
   warnings = [];
   ingestSpy.mockReset();
   ingestSpy.mockResolvedValue({ status: 'ready', documentId: DOCUMENT, version: 1, parserUsed: 'text', chunkCount: 2, warnings: [] });
@@ -489,13 +503,14 @@ describe('GET /api/rag/doc-type-defaults: the tags block', () => {
       docType: 'general',
       origin: 'fallback',
       tags: { enabled: false, vocabulary: [] },
+      replaces: { enabled: false, confirmedAtOnce: false },
     });
     expect(vocabularyReads()).toEqual([]);
   });
 
   it('under the legacy pipeline the picker and the tags are both disabled', async () => {
     const GET = await loadDefaults({ pipeline: 'legacy', scopeTags: 'true' });
-    expect(await (await GET(new Request(PICKER))).json()).toEqual({ enabled: false, tags: { enabled: false, vocabulary: [] } });
+    expect(await (await GET(new Request(PICKER))).json()).toEqual({ enabled: false, tags: { enabled: false, vocabulary: [] }, replaces: { enabled: false, confirmedAtOnce: false } });
     expect(vocabularyReads()).toEqual([]);
   });
 
@@ -534,5 +549,181 @@ describe('GET /api/rag/doc-type-defaults: the tags block', () => {
     const response = await GET(new Request(PICKER));
     expect(response.status).toBe(503);
     expect(JSON.stringify(await response.json())).not.toContain('secret-text-placeholder');
+  });
+});
+
+// Plan 03.2-45 (DATA-19, D-41): "Replaces…" at upload. The routes check the named document before anything is stored; the pipeline records
+// the intent on the version before it is published or held; the picker-defaults answer reports the replaces block.
+const REPLACED = '00000000-0000-4000-8000-0000000045e1';
+const REPLACES_PICKER = 'http://localhost/api/rag/doc-type-defaults?source=chat_upload';
+const OTHER_TENANT_DOC = '00000000-0000-4000-8000-0000000045e2';
+
+describe('"Replaces…" at upload', () => {
+  const target = (tenantKey: string, documentId: string, sourceKey = 'root/older.txt') =>
+    state.replaceTargets.push({ tenant_key: tenantKey, document_id: documentId, lineage_id: documentId, source: 'chat_upload', source_key: sourceKey });
+
+  it.each([false, true])('process-document (queued=%s): a current document of the same workspace travels in the ingest input', async (asyncOn) => {
+    target('s:default', REPLACED);
+    const POST = await loadProcessDocument({ pipeline: 'unified', scopeTags: 'false', supersession: 'on', async: asyncOn });
+    const response = await POST(documentForm([], { replaces_document_id: REPLACED }));
+    expect([200, 202]).toContain(response.status);
+    expect(lastInput().replacesDocumentId).toBe(REPLACED);
+    expect(state.rpcCalls.filter((call) => call.fn === 'rag_supersession_replace_target').map((call) => call.args)).toEqual([
+      { p_tenant_key: 's:default', p_document_id: REPLACED },
+    ]);
+  });
+
+  it("another tenant's document, an unknown id, a malformed id or the upload's own lineage answers 400 and nothing is ingested", async () => {
+    state.mode = 'multi-tenant';
+    state.members = [{ organization_id: ORG_O, user_id: USER_A }];
+    target(`o:${ORG_P}`, OTHER_TENANT_DOC);
+    target(`o:${ORG_O}`, REPLACED, 'root/notes.txt');
+    const POST = await loadProcessDocument({ pipeline: 'unified', scopeTags: 'false', supersession: 'on' });
+    for (const [value, error] of [
+      [OTHER_TENANT_DOC, 'replaces_not_found'],
+      ['00000000-0000-4000-8000-0000000045ff', 'replaces_not_found'],
+      ['not-a-document', 'invalid_replaces'],
+      [REPLACED, 'replaces_same_lineage'],
+    ] as const) {
+      const response = await POST(documentForm([], { replaces_document_id: value, organization_id: ORG_O }));
+      expect(response.status, value).toBe(400);
+      expect(await response.json()).toMatchObject({ error });
+    }
+    expect(ingestInputs()).toEqual([]);
+    expect(state.storageUploads).toBe(0);
+  });
+
+  it('with the switch off the field is ignored: no lookup, and the ingest input has no replacesDocumentId', async () => {
+    target('s:default', REPLACED);
+    const POST = await loadProcessDocument({ pipeline: 'unified', scopeTags: 'false', supersession: 'off' });
+    const response = await POST(documentForm([], { replaces_document_id: REPLACED }));
+    expect([200, 202]).toContain(response.status);
+    expect(lastInput()).not.toHaveProperty('replacesDocumentId');
+    expect(state.rpcCalls.filter((call) => call.fn === 'rag_supersession_replace_target')).toEqual([]);
+  });
+
+  it('image upload: one file carries the checked id; several files with Replaces… answer 400 before any file is stored', async () => {
+    target('s:default', REPLACED);
+    const POST = await loadImageUpload({ pipeline: 'unified', scopeTags: 'false', supersession: 'on' });
+    const one = imageForm([]);
+    const form = await one.formData();
+    form.append('replaces_document_id', REPLACED);
+    const response = await POST(new Request('http://localhost/api/upload', { method: 'POST', body: form }));
+    expect([200, 202]).toContain(response.status);
+    await vi.waitFor(() => expect(ingestInputs().length).toBe(1));
+    expect(lastInput().replacesDocumentId).toBe(REPLACED);
+
+    const two = await imageForm([]).formData();
+    two.append('files', new File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 5, 6])], 'second.png', { type: 'image/png' }));
+    two.append('replaces_document_id', REPLACED);
+    const uploadsBefore = state.storageUploads;
+    const refused = await POST(new Request('http://localhost/api/upload', { method: 'POST', body: two }));
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({ error: 'replaces_needs_one_file' });
+    expect(state.storageUploads).toBe(uploadsBefore);
+  });
+
+  it('GET doc-type-defaults: replaces is enabled only with the switch on, and confirmedAtOnce follows the tenant admin check', async () => {
+    let GET = await loadDefaults({ pipeline: 'unified', scopeTags: 'false', supersession: 'on' });
+    expect((await (await GET(new Request(REPLACES_PICKER))).json()).replaces).toEqual({ enabled: true, confirmedAtOnce: false });
+    state.tenantAdmins = [{ tenant_key: 's:default', user_id: USER_A }];
+    GET = await loadDefaults({ pipeline: 'unified', scopeTags: 'false', supersession: 'on' });
+    expect((await (await GET(new Request(REPLACES_PICKER))).json()).replaces).toEqual({ enabled: true, confirmedAtOnce: true });
+    state.rpcCalls = [];
+    GET = await loadDefaults({ pipeline: 'unified', scopeTags: 'false', supersession: 'off' });
+    expect((await (await GET(new Request(REPLACES_PICKER))).json()).replaces).toEqual({ enabled: false, confirmedAtOnce: false });
+    expect(state.rpcCalls.filter((call) => call.fn === 'rag_is_tenant_admin')).toEqual([]);
+  });
+});
+
+describe('the pipeline records the "Replaces…" intent on the version before it is published', () => {
+  async function run(env: Record<string, string>, extra: Partial<IngestInput>, admin: boolean) {
+    vi.resetModules();
+    const fakes = await import('../helpers/ingest-fakes');
+    const { mintScope } = await import('@/lib/rag/tenant/scope');
+    const { db, calls } = fakes.fakeIngestDb();
+    const recording: RpcClient = {
+      rpc(fn, args) {
+        if (fn === 'rag_is_tenant_admin') {
+          calls.push({ fn, args: (args ?? {}) as Row });
+          return respond(admin as unknown as Row[]);
+        }
+        return db.rpc(fn, args);
+      },
+    };
+    fakes.installIngestDeps({ db: recording, env: { RAG_INGEST_PIPELINE: 'unified', ...env } });
+    try {
+      const { ingest } = await import('@/lib/rag/ingest');
+      const result = await ingest({
+        scope: mintScope('single', null, null),
+        source: 'config_upload',
+        sourceKey: 'root/neutral.md',
+        text: '# Neutral notes\n\nA neutral placeholder paragraph.\n',
+        filename: 'neutral.md',
+        mimeType: 'text/markdown',
+        uploaderId: USER_A,
+        signal: new AbortController().signal,
+        ...extra,
+      } as IngestInput);
+      return { result, calls };
+    } finally {
+      fakes.uninstallIngestDeps();
+    }
+  }
+
+  const intents = (calls: Array<{ fn: string; args: Row }>) =>
+    calls
+      .filter((call) => call.fn === 'rag_set_document_fields')
+      .map((call) => ((call.args.p_fields as Row).metadata as Row | undefined)?.supersession_replaces)
+      .filter((value) => value !== undefined);
+
+  it('switch on: the intent (target, uploader, confirm for an admin) is written before rag_publish_document_version', async () => {
+    for (const admin of [true, false]) {
+      const { result, calls } = await run({ RAG_SUPERSESSION_DETECT: 'on' }, { replacesDocumentId: REPLACED }, admin);
+      expect(result.status).toBe('ready');
+      expect(intents(calls)).toEqual([{ document_id: REPLACED, actor: USER_A, confirm: admin }]);
+      const fns = calls.map((call) => call.fn);
+      const write = fns.findIndex((fn, index) => fn === 'rag_set_document_fields' && intents([calls[index] as { fn: string; args: Row }]).length > 0);
+      expect(write).toBeLessThan(fns.indexOf('rag_publish_document_version'));
+    }
+  });
+
+  it('switch off or no id: the writer calls equal those of an upload without Replaces…', async () => {
+    const plain = await run({ RAG_SUPERSESSION_DETECT: 'off' }, {}, true);
+    const off = await run({ RAG_SUPERSESSION_DETECT: 'off' }, { replacesDocumentId: REPLACED }, true);
+    const onWithout = await run({ RAG_SUPERSESSION_DETECT: 'on' }, {}, true);
+    // The post-publish detector (switch on) reads after the result; only the ingest writer calls are compared.
+    const strip = (calls: Array<{ fn: string; args: Row }>) => calls.map((call) => call.fn).filter((fn) => !fn.startsWith('rag_supersession_'));
+    expect(strip(off.calls)).toEqual(strip(plain.calls));
+    expect(strip(onWithout.calls)).toEqual(strip(plain.calls));
+    expect(intents(off.calls)).toEqual([]);
+  });
+
+  it('a queued upload keeps the id in its queued input for the publish of the queued run', async () => {
+    vi.resetModules();
+    const fakes = await import('../helpers/ingest-fakes');
+    const { mintScope } = await import('@/lib/rag/tenant/scope');
+    const { db } = fakes.fakeIngestDb();
+    fakes.installIngestDeps({ db, env: { RAG_INGEST_PIPELINE: 'unified', RAG_SUPERSESSION_DETECT: 'on' } });
+    try {
+      const { enqueueStageContext, queuedInputRecordOf } = await import('@/lib/rag/ingest/enqueue');
+      const { decodeQueuedInput, encodeQueuedInput } = await import('@/lib/rag/ingest/queued-context');
+      const input = {
+        scope: mintScope('single', null, null),
+        source: 'config_upload' as const,
+        sourceKey: 'root/neutral.md',
+        text: 'A neutral placeholder paragraph.',
+        filename: 'neutral.md',
+        mimeType: 'text/markdown',
+        replacesDocumentId: REPLACED,
+        signal: new AbortController().signal,
+      } as IngestInput;
+      const ctx = enqueueStageContext(input, (await import('@/lib/rag/ingest/deps')).getIngestDeps(), db);
+      const record = queuedInputRecordOf(input, ctx);
+      expect(record.replacesDocumentId).toBe(REPLACED);
+      expect(decodeQueuedInput(encodeQueuedInput(record))?.replacesDocumentId).toBe(REPLACED);
+    } finally {
+      fakes.uninstallIngestDeps();
+    }
   });
 });

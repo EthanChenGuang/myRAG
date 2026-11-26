@@ -6,6 +6,8 @@ import {
   INGEST_SOURCES,
   activeUploadVocabulary,
   docTypePickerEnabled,
+  replacesConfirmedAtOnce,
+  replacesEnabled,
   resolvePickerDefault,
   resolveTenantScope,
   uploadScopesEnabled,
@@ -39,10 +41,22 @@ async function uploadTags(scope: TenantScope, signal: AbortSignal): Promise<{ en
   return vocabulary.ok ? { enabled: true, vocabulary: vocabulary.items } : null;
 }
 
+const REPLACES_OFF = { enabled: false, confirmedAtOnce: false };
+
+/**
+ * D-41, UI-SPEC decision 9: whether the "Replaces…" control shows (unified pipeline and RAG_SUPERSESSION_DETECT=on), and whether the
+ * caller's choice is confirmed at once (an admin of this workspace) or becomes a pending candidate for an admin.
+ */
+async function uploadReplaces(scope: TenantScope, userId: string, signal: AbortSignal): Promise<{ enabled: boolean; confirmedAtOnce: boolean }> {
+  if (!replacesEnabled()) return REPLACES_OFF;
+  return { enabled: true, confirmedAtOnce: await replacesConfirmedAtOnce(scope, userId, signal) };
+}
+
 /**
  * The type the upload picker pre-selects for the caller's tenant (D-15, D-17). The session comes first, in both deployment modes; the
  * tenant is the session user's own, or an organization they are a member of. Under the legacy pipeline the picker stays hidden. The tags
- * block says whether the tag picker shows (unified pipeline and RAG_SCOPE_TAGS) and lists that workspace's active values.
+ * block says whether the tag picker shows (unified pipeline and RAG_SCOPE_TAGS) and lists that workspace's active values; the replaces
+ * block says whether "Replaces…" shows and whether it is confirmed at once.
  */
 export async function GET(request: Request): Promise<Response> {
   const session = await requireSessionUser(TAG);
@@ -59,7 +73,7 @@ export async function GET(request: Request): Promise<Response> {
     return fail(400, 'Invalid request data', parsed.error.errors.map((issue) => ({ path: issue.path.join('.'), message: issue.message })));
   }
 
-  if (!docTypePickerEnabled()) return NextResponse.json({ enabled: false, tags: TAGS_OFF }, { headers: NO_STORE });
+  if (!docTypePickerEnabled()) return NextResponse.json({ enabled: false, tags: TAGS_OFF, replaces: REPLACES_OFF }, { headers: NO_STORE });
 
   const tenant = await resolveTenantScope({
     requestedOrganizationId: parsed.data.organizationId ?? null,
@@ -83,7 +97,8 @@ export async function GET(request: Request): Promise<Response> {
     );
     const tags = await uploadTags(tenant.scope, request.signal);
     if (tags === null) return fail(503, 'Document type defaults are unavailable');
-    return NextResponse.json({ enabled: true, docType: choice.docType, origin: choice.origin, tags }, { headers: NO_STORE });
+    const replaces = await uploadReplaces(tenant.scope, session.user.id, request.signal);
+    return NextResponse.json({ enabled: true, docType: choice.docType, origin: choice.origin, tags, replaces }, { headers: NO_STORE });
   } catch (error) {
     console.error(`${TAG} defaults lookup failed`, {
       error: error instanceof Error ? error.name : 'unknown',

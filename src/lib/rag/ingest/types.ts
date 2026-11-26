@@ -76,6 +76,12 @@ interface IngestInputBase {
    * once its row exists and before any chunk is written. Absent: no tag is written, as today.
    */
   scopes?: string[];
+  /**
+   * The document this upload replaces ("Replaces…", D-41), already checked by validateUploadReplaces in the route: a current document of
+   * the same tenant outside the upload's lineage. Recorded on the version at publish; after publish it is raised as a supersession
+   * candidate (confirmed at once for an admin of the tenant). Absent, or with RAG_SUPERSESSION_DETECT=off: nothing is recorded.
+   */
+  replacesDocumentId?: string;
   options?: IngestOptions;
   signal: AbortSignal;
   trace?: TraceCollector;

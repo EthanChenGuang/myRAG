@@ -305,6 +305,22 @@ export type {
 export { activeUploadVocabulary, uploadScopesEnabled, validateUploadScopes, warnUploadScopesIgnored } from './ingest/scopes/upload';
 export type { UploadScopeFailure, UploadVocabularyEntry, ValidateUploadScopesResult } from './ingest/scopes/upload';
 export {
+  confirmSupersession,
+  dismissSupersession,
+  listSupersession,
+  replacesConfirmedAtOnce,
+  replacesEnabled,
+  undoSupersession,
+  validateUploadReplaces,
+} from './ingest/versions/admin';
+export type {
+  SupersessionAdminFailure,
+  SupersessionDocumentView,
+  SupersessionEntry,
+  UploadReplacesFailure,
+  ValidateUploadReplacesResult,
+} from './ingest/versions/admin';
+export {
   AUTO_APPLY_MIN_CONFIDENCE,
   MAX_QUERY_LENGTH as MAX_EFFECTIVE_DATES_QUERY_LENGTH,
   applyEffectiveDates,

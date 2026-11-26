@@ -32,6 +32,7 @@ const RecordSchema = z.object({
   kind: z.enum(['file', 'text']),
   docType: z.string().optional(),
   scopes: z.array(z.string().max(80)).max(20).optional(),
+  replacesDocumentId: z.string().uuid().optional(),
   options: z.record(z.unknown()).optional(),
   typeChange: z.record(z.unknown()).optional(),
   state: z.record(z.unknown()),
@@ -47,6 +48,8 @@ export interface QueuedInputRecord {
   docType?: string;
   /** The upload's scope tags (D-40), for a version the progressive final begin starts. */
   scopes?: string[];
+  /** The document the upload replaces (D-41), for the publish of a queued run. */
+  replacesDocumentId?: string;
   options?: IngestOptions;
   typeChange?: TypeChangeState;
   /** The state slices identify and the earlier stages produced; the ledger's stage_state is laid over it. */
@@ -171,6 +174,7 @@ export async function buildQueuedContext(input: BuildQueuedContextInput): Promis
     mimeType: record.mimeType,
     ...(record.docType ? { docType: record.docType as DocType | 'auto' } : {}),
     ...(record.scopes && record.scopes.length > 0 ? { scopes: record.scopes } : {}),
+    ...(record.replacesDocumentId ? { replacesDocumentId: record.replacesDocumentId } : {}),
     ...(record.options !== undefined ? { options: record.options } : {}),
     ...(state.typeChange ? { typeChange: state.typeChange } : {}),
     signal,
