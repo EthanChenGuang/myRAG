@@ -11,7 +11,7 @@ import { createTwoTenantDatabase, TWO_TENANT_IDS } from '../../eval/harness/two-
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const CORPUS = path.join(REPO_ROOT, 'eval/fixtures/corpus');
 const MIGRATION_0810 = 'supabase/migrations/0810_chunk_translations.sql';
-const MIGRATION_0855 = 'supabase/migrations/0855_claim_resume_status_for_stage.sql';
+const MIGRATION_FIX = 'supabase/migrations/0864_claim_resume_status_for_stage.sql';
 const MODES: DeploymentMode[] = ['single-tenant', 'multi-tenant'];
 const WORKER = 'sidecar-ingest';
 
@@ -107,7 +107,7 @@ for (const mode of MODES) {
       assert.equal(row?.status, 'parsing');
     });
 
-    test('regression: the 0810 claim body breaks ingestion_jobs_status_check on such a job; 0855 restores the claim', async () => {
+    test('regression: the 0810 claim body breaks ingestion_jobs_status_check on such a job; the fix restores the claim', async () => {
       await clearQueue(db);
       const id = await enqueue(db, tenant);
       await requeueAtStage(db, id, 'parse', 'parsing');
@@ -118,12 +118,12 @@ for (const mode of MODES) {
       );
       await db.exec(claimFns);
       await assert.rejects(claimAll(db, 1), /ingestion_jobs_status_check/);
-      await db.exec(fs.readFileSync(path.join(REPO_ROOT, MIGRATION_0855), 'utf8'));
+      await db.exec(fs.readFileSync(path.join(REPO_ROOT, MIGRATION_FIX), 'utf8'));
       assert.equal((await claimAll(db, 1)).get(id), 'parsing');
     });
 
-    test('0855 is idempotent and keeps the claim functions service_role only', async () => {
-      await db.exec(fs.readFileSync(path.join(REPO_ROOT, MIGRATION_0855), 'utf8'));
+    test('the fix migration is idempotent and keeps the claim functions service_role only', async () => {
+      await db.exec(fs.readFileSync(path.join(REPO_ROOT, MIGRATION_FIX), 'utf8'));
       const grants = await db.query<{ fn: string; anon: boolean; authenticated: boolean; service: boolean }>(
         `SELECT p.proname AS fn,
                 has_function_privilege('anon', p.oid, 'EXECUTE') AS anon,
