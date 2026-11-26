@@ -65,15 +65,10 @@ export type RecordEvidenceResult = { ok: true; profileId: string } | ProfileRefu
 
 const REFUSAL = /^((?:activation|rollback|profile_status|evidence|binding)_refused): ([a-z_]+)/;
 
-function refusalFrom(error: RpcError): ProfileRefusal | null {
-  const match = REFUSAL.exec(error.message);
+function refusalFrom(error: RpcError, pattern: RegExp): ProfileRefusal | null {
+  const match = pattern.exec(error.message);
   if (!match) return null;
-  return { ok: false, reason: `${match[1]}: ${match[2]}`, detail: error.message };
-}
-
-function firstRow(data: unknown): Record<string, unknown> | null {
-  const row = rpcRows(data)[0];
-  return typeof row === 'object' && row !== null ? (row as Record<string, unknown>) : null;
+  return { ok: false, reason: match[2] ? `${match[1]}: ${match[2]}` : (match[1] as string), detail: error.message };
 }
 
 function text(row: Record<string, unknown>, key: string): string | null {
@@ -81,8 +76,15 @@ function text(row: Record<string, unknown>, key: string): string | null {
   return typeof value === 'string' ? value : null;
 }
 
-/** Calls a registry gate function: a named refusal comes back as data, anything else unexpected throws ProfileUnavailableError. */
-export async function callGate(fn: string, args: Record<string, unknown>): Promise<{ refusal: ProfileRefusal } | { row: Record<string, unknown> }> {
+/**
+ * Calls a registry function and returns every row: a refusal matching `pattern` (prefix in group 1, code in group 2) comes back as data,
+ * anything else unexpected throws ProfileUnavailableError.
+ */
+export async function callGateRows(
+  fn: string,
+  args: Record<string, unknown>,
+  pattern: RegExp = REFUSAL,
+): Promise<{ refusal: ProfileRefusal } | { rows: Record<string, unknown>[] }> {
   const client = requireRegistryClient();
   let response;
   try {
@@ -91,11 +93,22 @@ export async function callGate(fn: string, args: Record<string, unknown>): Promi
     throw new ProfileUnavailableError('rpc_failed');
   }
   if (response.error) {
-    const refusal = refusalFrom(response.error);
+    const refusal = refusalFrom(response.error, pattern);
     if (refusal) return { refusal };
     throw new ProfileUnavailableError('rpc_failed', response.error.code ?? null);
   }
-  const row = firstRow(response.data);
+  return { rows: rpcRows(response.data).filter((row): row is Record<string, unknown> => typeof row === 'object' && row !== null) };
+}
+
+/** Calls a registry gate function: a named refusal comes back as data, anything else unexpected throws ProfileUnavailableError. */
+export async function callGate(
+  fn: string,
+  args: Record<string, unknown>,
+  pattern: RegExp = REFUSAL,
+): Promise<{ refusal: ProfileRefusal } | { row: Record<string, unknown> }> {
+  const outcome = await callGateRows(fn, args, pattern);
+  if ('refusal' in outcome) return outcome;
+  const row = outcome.rows[0] ?? null;
   if (!row) throw new ProfileUnavailableError('rpc_failed', 'empty_response');
   return { row };
 }
