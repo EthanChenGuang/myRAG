@@ -9,7 +9,7 @@ import type { DocumentFields, IngestWriter } from '@/lib/rag/ingest/writer';
 import { resetLanguageSettingsForTests } from '@/lib/rag/lang/settings';
 import * as chunkText from '@/lib/rag/lexical/chunk-text';
 import { QUANTITY_TOKEN_PREFIX, type LexicalOptions } from '@/lib/rag/lexical/options';
-import { resetLexicalOptionsForTests, setLexicalOptionsResolverForTests, type ResolvedLexicalOptions } from '@/lib/rag/lexical/resolve-options';
+import { resetLexicalOptionsForTests, setLexicalOptionsResolverForTests } from '@/lib/rag/lexical/resolve-options';
 import { mintScope } from '@/lib/rag/tenant/scope';
 
 // Numbers, general symbols and invented words only.
