@@ -233,6 +233,11 @@ export async function prechunkedWriter(
   // A setup from before Phase 3 (the frozen pre-Phase-3 files, migrations:false) has no doc_type columns; 0301 and 0304 add them as 'general' on upgrade.
   const documentsDocType = await hasPublicColumn(db, 'documents', 'doc_type');
   const chunksDocType = await hasPublicColumn(db, 'document_chunks', 'doc_type');
+  // 05.2 D-49: versions and effective dates from fixture-meta, written only to the columns this setup has (0801 adds effective_from, 0941 version_label).
+  const documentsVersion = await hasPublicColumn(db, 'documents', 'version');
+  const documentsVersionLabel = await hasPublicColumn(db, 'documents', 'version_label');
+  const documentsEffectiveFrom = await hasPublicColumn(db, 'documents', 'effective_from');
+  const chunksEffectiveFrom = await hasPublicColumn(db, 'document_chunks', 'effective_from');
   return async (doc) => {
     let lineageColumns: InsertColumn[] = [];
     if (doc.lineage) {
@@ -246,6 +251,11 @@ export async function prechunkedWriter(
         ['is_current', doc.lineage.version === latest],
       ];
     }
+    const versionColumns: InsertColumn[] = [
+      ...(doc.version !== undefined && documentsVersion ? [['version', doc.version] satisfies InsertColumn] : []),
+      ...(doc.versionLabel !== undefined && documentsVersionLabel ? [['version_label', doc.versionLabel] satisfies InsertColumn] : []),
+      ...(doc.effectiveFrom !== undefined && documentsEffectiveFrom ? [['effective_from', doc.effectiveFrom, 'date'] satisfies InsertColumn] : []),
+    ];
     await insertRow(db, 'documents', [
       ['id', doc.id],
       ['filename', doc.filename],
@@ -256,12 +266,15 @@ export async function prechunkedWriter(
           relpath: doc.relpath,
           language: doc.language,
           ...(doc.fixtureDupTemplate !== undefined ? { fixture_dup_template: doc.fixtureDupTemplate } : {}),
+          ...(doc.versionLabel !== undefined ? { version_label: doc.versionLabel } : {}),
+          ...(doc.effectiveFrom !== undefined ? { effective_from: doc.effectiveFrom } : {}),
         }),
         'jsonb',
       ],
       ...(multiTenant ? [['user_id', FIXTURE_USER_ID] satisfies InsertColumn] : []),
       ...(documentsDocType ? [['doc_type', doc.docType] satisfies InsertColumn] : []),
       ...lineageColumns,
+      ...versionColumns,
       ['created_at', doc.createdAt],
     ]);
 
@@ -282,6 +295,7 @@ export async function prechunkedWriter(
         ...(multiTenant ? [['chunk_index', chunk.index] satisfies InsertColumn] : []),
         ['metadata', JSON.stringify(metadata), 'jsonb'],
         ...(chunksDocType ? [['doc_type', doc.docType] satisfies InsertColumn] : []),
+        ...(doc.effectiveFrom !== undefined && chunksEffectiveFrom ? [['effective_from', doc.effectiveFrom, 'date'] satisfies InsertColumn] : []),
         ['created_at', doc.createdAt],
       ]);
     }

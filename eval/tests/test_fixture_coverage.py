@@ -66,12 +66,13 @@ def items():
 
 
 def test_corpus_has_nineteen_documents_per_language():
-    """Thirteen documents plus the sec-topics and sec-attacks pair per language from plan 05.1-09, and one
-    synthetic-terms document per language from plan 04.1.1-10."""
+    """Thirteen documents plus the sec-topics and sec-attacks pair per language from plan 05.1-09, one
+    synthetic-terms document per language from plan 04.1.1-10, and the four Phase 5.2 documents per language
+    (p52-answers, p52-rules-v1, p52-rules-v2, sec-links) from plan 05.2-28."""
     documents = load_corpus(CORPUS_DIR)
     counts = collections.Counter(doc.language for doc in documents)
-    assert len(documents) == 19 + len(LANGUAGES)
-    assert (counts["zh"], counts["en"], counts["it"]) == (7, 8, 7)
+    assert len(documents) == 19 + len(LANGUAGES) + 4 * len(LANGUAGES)
+    assert (counts["zh"], counts["en"], counts["it"]) == (11, 12, 11)
 
 
 def test_corpus_has_one_image_caption_document():
