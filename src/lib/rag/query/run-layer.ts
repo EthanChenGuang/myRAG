@@ -37,6 +37,7 @@ import type { QueryEmbedding } from '../embeddings/query-embedding';
 import { env } from '@/lib/env';
 import { checkBypassReason, type CacheRetrievalOptions, type TurnFacts } from '../cache/bypass';
 import { resolveHitSources } from '../cache/sources';
+import { effectiveCacheThreshold } from '../cache/threshold';
 import type { CacheHit, CacheKeyParts, CacheTicket, EntryProfile } from '../cache/types';
 import { resolveFinalResultCount } from '../config';
 import type { RpcClient } from '../backend/supabase-rpc';
@@ -394,7 +395,15 @@ async function runSemanticCacheStage(args: CacheStageInput): Promise<CacheStageR
     spec,
     signal,
     async (stageSignal) => {
-      const hit = await cache.check({ ...key, scope, standalone: args.standalone, vector: embedding.vector, embeddingProfileId, signal: stageSignal });
+      const hit = await cache.check({
+        ...key,
+        scope,
+        standalone: args.standalone,
+        vector: embedding.vector,
+        embeddingProfileId,
+        maxDistance: effectiveCacheThreshold(embeddingProfileId, ctx.config.semanticCache),
+        signal: stageSignal,
+      });
       if (!hit) return { kind: 'miss' };
       const client = getRagDeps().adminClient() as unknown as RpcClient | null;
       return resolveHitSources(scope, hit, { client, signal: stageSignal });
