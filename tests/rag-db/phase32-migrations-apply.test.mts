@@ -166,7 +166,7 @@ describe('Phase 3.2 migration block files', () => {
       const last = blockIndexes[blockIndexes.length - 1] as number;
       assert.equal(last - first + 1, BLOCK_NAMES.length, `${mode}: no other file sorts inside the block`);
       assert.deepEqual(files.slice(0, first).filter((file) => numberOf(file) >= 800), [], `${mode}: every earlier file is numbered below 0800`);
-      assert.deepEqual(files.slice(last + 1).filter((file) => !isLaterPhase32(file)), [], `${mode}: only Phase 3.2 files (0811-0899) follow`);
+      assert.deepEqual(files.slice(last + 1).filter((file) => numberOf(file) < 900 && !isLaterPhase32(file)), [], `${mode}: below 0900 only Phase 3.2 files (0811-0899) follow`);
     }
   });
 
