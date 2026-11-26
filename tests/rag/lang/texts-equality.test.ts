@@ -40,3 +40,17 @@ describe('registry texts equal today\'s constants (D-10, D-12)', () => {
     });
   }
 });
+
+describe('legacy refusal constants (05.2-05, D-10)', () => {
+  it('notices.no_information (en) equals LEGACY_NO_INFORMATION_EN', async () => {
+    const { LEGACY_NO_INFORMATION_EN } = await import('@/lib/rag/generation/messages');
+    expect(fixedText('notices.no_information', 'en')).toBe(LEGACY_NO_INFORMATION_EN);
+  });
+
+  it('noKnowledgeBaseResponse returns the legacy constants unchanged', async () => {
+    const { LEGACY_NO_INFORMATION_EN, LEGACY_NO_INFORMATION_ES } = await import('@/lib/rag/generation/messages');
+    expect(noKnowledgeBaseResponse('en')).toBe(LEGACY_NO_INFORMATION_EN);
+    expect(noKnowledgeBaseResponse('zh')).toBe(LEGACY_NO_INFORMATION_EN);
+    expect(noKnowledgeBaseResponse('es')).toBe(LEGACY_NO_INFORMATION_ES);
+  });
+});
