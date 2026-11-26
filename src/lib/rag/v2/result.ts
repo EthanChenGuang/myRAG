@@ -33,6 +33,7 @@ import { effectiveTuningParams, tuningHashComponent } from './tuning-params';
 import type { TranslationHashField } from './translation-legs';
 import type { AssembleOutput } from '../context/assemble';
 import type { QueryPlan, RetrievalParams } from '@/lib/rag-eval/contracts.generated';
+import type { LexicalStamp } from '../lexical/resolve-options';
 import type { SearchIdentifiers } from './stages/search';
 
 /** D-31: the refusal reason of a strict request whose asked identifiers do not exist in the tenant (RagTrace.refusal_reason). */
@@ -78,6 +79,8 @@ export interface BuildV2ResultInput {
   identifiers?: SearchIdentifiers & { nearMissDropped: number };
   /** D-31: strict and no asked identifier exists: the result is empty with reason identifier_not_found and the suggestions. */
   identifierRefusal?: boolean;
+  /** LANG-07: what the request's lexical options were built from; present only while a lexical option switch is on. */
+  lexicalStamp?: LexicalStamp;
 }
 
 export interface RequestConfigHashInput {
@@ -94,6 +97,8 @@ export interface RequestConfigHashInput {
   effectiveOn?: string;
   /** D-21: how the terminology stage ended; absent reads as disabled, so the hash is the pre-terminology value. */
   terminology?: TerminologyHashStage;
+  /** LANG-07 (D-34): the request's lexical stamp; absent adds no lexical key to the hash. */
+  lexicalStamp?: LexicalStamp;
 }
 
 /** The request's retrieval-config hash; the result and the semantic-cache key both use it, so they never disagree. */
@@ -303,6 +308,7 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
     ...(ctx.queryLayerHash ? { queryLayerHash: ctx.queryLayerHash } : {}),
     ...(ctx.effectiveOn ? { effectiveOn: ctx.effectiveOn } : {}),
     ...(ctx.terminology ? { terminology: ctx.terminology } : {}),
+    ...(ctx.lexicalStamp ? { lexicalStamp: ctx.lexicalStamp } : {}),
   });
 
   const base = {

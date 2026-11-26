@@ -20,7 +20,9 @@ import { exactIdStage } from '../../retrieval/exact-id';
 import { identifierSuggestions, resolveQueryIdentifiers, type QueryIdentifiers } from '../../retrieval/identifiers';
 import { loadTenantIdentifierPatterns } from '../../identifiers/patterns';
 import { tableLookupStage, type TableLookupRow } from '../../retrieval/table-lookup';
-import type { TenantScope } from '../../tenant/scope';
+import type { LexicalOptions } from '../../lexical/options';
+import type { LexicalStamp } from '../../lexical/resolve-options';
+import { scopeKey, type TenantScope } from '../../tenant/scope';
 import type { TraceCollector } from '../../trace/collector';
 import type { Profile, QueryVariant, RunRetrievalInput, StageOverrides } from '../../types';
 import { getV2StartupVerdict } from '../startup';
@@ -68,6 +70,70 @@ export interface SearchStagesInput {
   terminology?: { tokens: readonly string[]; expansionWeight: number; reserveSlots?: number } | null;
   /** D-18: factor on the dense leg weight for a variant of kind terminology; absent reads TerminologyParams.dense_weight. */
   terminologyDenseWeight?: number;
+  /** LANG-07 (D-08, D-09): resolved once per request; present only while a lexical option switch is on. */
+  lexical?: QueryLexicalOptions;
+}
+
+/** The request's query-side lexical options and what they were built from. */
+export interface QueryLexicalOptions {
+  options: LexicalOptions | undefined;
+  stamp: LexicalStamp;
+  /** True when the dictionary could not be loaded (resolver failure or lexical_dictionary_unavailable). */
+  unavailable: boolean;
+}
+
+export const LEXICAL_DICT_UNAVAILABLE = 'dict=unavailable';
+const STALE_COUNT_RPC = 'rag_lexical_stale_count';
+const STALE_COUNT_TTL_MS = 60_000;
+const STALE_COUNT_TIMEOUT_MS = 250;
+const staleCounts = new Map<string, { value: number; at: number }>();
+
+export function resetLexicalStaleCountForTests(): void {
+  staleCounts.clear();
+}
+
+/** D-09: chunks of the tenant not yet relexed with this dictionary version; null when the count failed or took too long. */
+async function lexicalStaleCount(scope: TenantScope, version: string, signal: AbortSignal): Promise<number | null> {
+  const tenantKey = scopeKey(scope);
+  const key = `${tenantKey}|${version}`;
+  const cached = staleCounts.get(key);
+  if (cached && Date.now() - cached.at < STALE_COUNT_TTL_MS) return cached.value;
+  const controller = new AbortController();
+  const onAbort = () => controller.abort(signal.reason);
+  signal.addEventListener('abort', onAbort, { once: true });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const client = requireAdminSearchClient(getRagDeps());
+    const timeout = new Promise<null>((resolve) => {
+      timer = setTimeout(() => {
+        controller.abort();
+        resolve(null);
+      }, STALE_COUNT_TIMEOUT_MS);
+    });
+    const call = Promise.resolve(client.rpc(STALE_COUNT_RPC, { p_tenant_key: tenantKey, p_dict_version: version }).abortSignal(controller.signal)).then(
+      (response) => {
+        if (response.error) return null;
+        const value = Number(response.data);
+        return Number.isFinite(value) && value >= 0 ? value : null;
+      },
+      () => null,
+    );
+    const value = await Promise.race([call, timeout]);
+    if (value !== null) staleCounts.set(key, { value, at: Date.now() });
+    return value;
+  } catch {
+    return null;
+  } finally {
+    if (timer) clearTimeout(timer);
+    signal.removeEventListener('abort', onAbort);
+  }
+}
+
+/** D-09: `dict=<version> stale_chunks=<n|unknown>` or `dict=unavailable`; a version string and a count, never a term. */
+function lexicalDictionaryDetail(lexical: QueryLexicalOptions, staleCount: number | null): string {
+  const version = lexical.stamp.dictVersion;
+  if (lexical.unavailable || version === null) return LEXICAL_DICT_UNAVAILABLE;
+  return `dict=${version} stale_chunks=${staleCount ?? 'unknown'}`;
 }
 
 /** D-16: the expansion list id; no dense/lexical prefix, so nothing that inspects list ids by prefix counts it as a leg. */
@@ -377,6 +443,14 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
   // D-18, D-34: the terminology variant's dense list weighs dense_weight × the dense leg weight in force, read at run time.
   const terminologyDenseWeight = ctx.terminologyDenseWeight ?? terminologyParams().dense_weight;
   const denseFactor = (index: number): number => (variants[index]?.kind === 'terminology' ? terminologyDenseWeight : 1);
+  const lexical = ctx.lexical;
+  const lexicalOptionsArg = lexical?.options ? { lexicalOptions: lexical.options } : {};
+  const dictionaryDetailOn = config.v2.lexicalDictionary && lexical !== undefined;
+  const dictVersion = dictionaryDetailOn && !lexical.unavailable ? lexical.stamp.dictVersion : null;
+  // Started before the legs so the count runs beside the search; bounded by STALE_COUNT_TIMEOUT_MS.
+  const stalePending: Promise<number | null> = dictVersion ? lexicalStaleCount(scope, dictVersion, signal) : Promise.resolve(null);
+  const lexicalDetail = async (): Promise<string | undefined> =>
+    dictionaryDetailOn ? lexicalDictionaryDetail(lexical, await stalePending) : undefined;
   const identifiers = config.v2.identifierFilter ? await runIdentifierResolve(ctx) : null;
   const filterIdentifiers = identifiers && identifiers.found.length > 0 ? identifiers.found : undefined;
 
@@ -485,6 +559,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
         ...versionScopeArg,
         ...identifierArg,
         terminologyDenseWeight,
+        ...lexicalOptionsArg,
       });
       let order: unknown;
       try {
@@ -507,6 +582,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
         translation,
         term,
         delegated: { handle, order: order as string[] } as DelegatedFusion | null,
+        lexicalDetail: await lexicalDetail(),
       };
     };
 
@@ -531,6 +607,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
               chunkingProfileOverride: chunkingOverride,
               ...versionScopeArg,
               ...identifierArg,
+              ...lexicalOptionsArg,
             }),
           );
           denseTotal += legs.dense.length;
@@ -540,7 +617,16 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       ]) as [RankedHit[] | null, ...BackendLegs[]];
       const domain = await domainPending;
       const translation = await translationPending;
-      return { legsByVariant, denseTotal, lexicalTotal, domain, translation, term, delegated: null as DelegatedFusion | null };
+      return {
+        legsByVariant,
+        denseTotal,
+        lexicalTotal,
+        domain,
+        translation,
+        term,
+        delegated: null as DelegatedFusion | null,
+        lexicalDetail: await lexicalDetail(),
+      };
     };
 
     type SearchResult = Awaited<ReturnType<typeof runBackendSearch>>;
@@ -564,7 +650,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     const extraFailed = (value: SearchResult): boolean =>
       (value.domain !== null && value.domain.failures.length > 0) || (value.translation !== null && value.translation.failures.length > 0);
     const extraDetail = (value: SearchResult): string | undefined =>
-      joinDetail([value.domain ? bindingFailureDetail(value.domain.failures) : undefined, translationDetail(value.translation)]);
+      joinDetail([value.domain ? bindingFailureDetail(value.domain.failures) : undefined, translationDetail(value.translation), value.lexicalDetail]);
     const hasVersionCodes = versionCodes.some((code) => code !== undefined);
 
     let searchValue: Awaited<ReturnType<typeof runBackendSearch>>['legsByVariant'];
@@ -599,7 +685,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
         status: 'degraded',
         startedAt,
         endedAt: collector.now(),
-        detail: joinDetail(['lexical_icu_unavailable', translationDetail(searched.translation), ...versionCodes])!,
+        detail: joinDetail(['lexical_icu_unavailable', translationDetail(searched.translation), searched.lexicalDetail, ...versionCodes])!,
         counts: searchCounts(searched),
         candidatesOut: searched.denseTotal + searched.lexicalTotal,
       });
@@ -614,7 +700,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
             candidatesOut: (value) => value.denseTotal + value.lexicalTotal,
             counts: searchCounts,
             ...(ctx.searchDelegate ? { failureDetail: delegateFailureDetail } : {}),
-            ...(bindings || translations || hasVersionCodes
+            ...(bindings || translations || hasVersionCodes || dictionaryDetailOn
               ? {
                   // D-19, D-30: a dropped binding or translation leg degrades the stage; the original legs and the answer continue.
                   // D-12: a backend that cannot serve the version scope is replaced by pgvector and degrades the stage too.
