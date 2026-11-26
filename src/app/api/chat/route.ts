@@ -32,6 +32,8 @@ import {
   knowledgeBaseUnavailableMessage,
   noKnowledgeBaseResponse,
   noKnowledgeBaseResponseLanguage,
+  identifierSuggestionMessage,
+  IDENTIFIER_NOT_FOUND,
   mintAnswerId,
   cacheSourcesFromResult,
   sourceDocumentFields,
@@ -2505,7 +2507,13 @@ Context:
       context.trim().toLowerCase().startsWith('no relevant context found');
 
     if (shouldBlockNoContextResponse) {
-      const responseText = noKnowledgeBaseResponse(fallbackLanguage);
+      const suggestionText =
+        retrievalResult?.reason === IDENTIFIER_NOT_FOUND
+          ? identifierSuggestionMessage(fallbackLanguage, retrievalResult.identifierSuggestions)
+          : '';
+      const responseText = suggestionText
+        ? `${noKnowledgeBaseResponse(fallbackLanguage)}\n\n${suggestionText}`
+        : noKnowledgeBaseResponse(fallbackLanguage);
       ragTrace?.collector.setReviewContent({ answer: responseText, context });
       setRagLogOutcome('refused_no_context', noKnowledgeBaseResponseLanguage(fallbackLanguage));
       const refusalMetadata = refusalStartMetadata();
