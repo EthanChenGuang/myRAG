@@ -231,3 +231,54 @@ def test_stale_scan_without_a_tenant_or_outside_private_is_refused(tmp_path, pri
     _write(other_golden, other_manifest, [_item("syn-a")])
     assert golden_set.main(["stale-scan", *_args(other_golden, other_manifest)]) == 2
     assert fake.requests == []
+
+
+# --- re-review ---------------------------------------------------------------------------------------------------
+
+
+def _re_review_set(golden: Path, manifest: Path) -> None:
+    items = [_item(f"syn-r{n}") for n in range(1, 8)]
+    reviewed = {
+        "syn-r1": dt.date(2026, 1, 10),
+        "syn-r2": dt.date(2026, 2, 10),
+        "syn-r3": dt.date(2026, 3, 10),
+        "syn-r4": dt.date(2026, 4, 10),
+        "syn-r5": dt.date(2026, 5, 10),
+        "syn-r6": TODAY - dt.timedelta(days=30),
+        "syn-r7": TODAY - dt.timedelta(days=30),
+    }
+    _write(golden, manifest, items, reviewed)
+
+
+def test_re_review_queues_the_oldest_overdue_items_up_to_the_cap(private_set, app, capsys):
+    golden, manifest = private_set
+    _re_review_set(golden, manifest)
+    before = manifest.read_bytes()
+    fake = app(FakeApp({}))
+    assert golden_set.main(["re-review", *_args(golden, manifest, "--cap", "2", "--date", TODAY.isoformat())]) == 0
+    assert [item["item_id"] for item in fake.re_review] == ["syn-r1", "syn-r2"]
+    assert fake.re_review[0]["question"] == "What does the synthetic note syn-r1 state?"
+    assert [r[2]["tenant"] for r in fake.requests] == ["s:default"]
+    assert "overdue: 5, queued: 2" in capsys.readouterr().out
+    assert manifest.read_bytes() == before
+    assert all(e.status == "active" for e in golden_set.load_manifest(manifest).items)
+
+
+def test_re_review_default_cap_and_window_from_the_quality_gates(private_set, app, capsys):
+    golden, manifest = private_set
+    _re_review_set(golden, manifest)
+    fake = app(FakeApp({}))
+    assert golden_set.re_review_days() == 90
+    assert golden_set.main(["re-review", *_args(golden, manifest, "--date", TODAY.isoformat())]) == 0
+    assert [item["item_id"] for item in fake.re_review] == ["syn-r1", "syn-r2", "syn-r3", "syn-r4", "syn-r5"]
+    assert "syn-r6" not in json.dumps(fake.re_review)
+    assert "overdue: 5, queued: 5" in capsys.readouterr().out
+
+
+def test_re_review_sends_nothing_when_no_item_is_overdue(private_set, app, capsys):
+    golden, manifest = private_set
+    _write(golden, manifest, [_item("syn-a")], {"syn-a": TODAY - dt.timedelta(days=10)})
+    fake = app(FakeApp({}))
+    assert golden_set.main(["re-review", *_args(golden, manifest, "--date", TODAY.isoformat())]) == 0
+    assert fake.requests == []
+    assert "overdue: 0, queued: 0" in capsys.readouterr().out

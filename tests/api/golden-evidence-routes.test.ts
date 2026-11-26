@@ -241,3 +241,71 @@ describe('GET|POST /api/rag/admin/golden/register (D-48)', () => {
     expect(after.item_ids).toEqual([]);
   });
 });
+
+describe('POST /api/rag/admin/golden/re-review (D-50)', () => {
+  async function loadReReview() {
+    vi.resetModules();
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: async () => ({ auth: { getUser: async () => ({ data: { user: guard.session } }) } }),
+    }));
+    vi.doMock('@/lib/supabase', () => ({ getSupabaseAdmin: () => adminClient(), getSupabase: () => ({}) }));
+    return import('@/app/api/rag/admin/golden/re-review/route');
+  }
+
+  const items = [
+    { item_id: 'g-r1', question: 'What does the first synthetic note say? Write to someone@example.com.' },
+    { item_id: 'g-r2', question: 'Which value does the second synthetic note give?' },
+    { item_id: 'g-r3', question: 'When does the third synthetic note apply?' },
+  ];
+
+  it('runs the guard and the tenant check, and refuses more than 100 items', async () => {
+    const route = await loadReReview();
+    expect((await route.POST(post('re-review', { tenant: TENANT_A, items }))).status).toBe(401);
+    guard.session = { id: OWNER_B };
+    expect((await route.POST(post('re-review', { tenant: TENANT_A, items }))).status).toBe(403);
+    guard.session = { id: ADMIN };
+    expect((await route.POST(post('re-review', { tenant: TENANT_B, items }))).status).toBe(403);
+    const many = Array.from({ length: 101 }, (_, index) => ({ item_id: `g-${index}`, question: `Synthetic question ${index}?` }));
+    expect((await route.POST(post('re-review', { tenant: TENANT_A, items: many }))).status).toBe(400);
+    expect((await route.POST(post('re-review', { tenant: TENANT_A, items: [{ ...items[0], extra: 1 }] }))).status).toBe(400);
+  });
+
+  it('queues masked, fingerprinted items with reason re_review in this week’s window, once', async () => {
+    const route = await loadReReview();
+    guard.session = { id: ADMIN };
+    const first = await route.POST(post('re-review', { tenant: TENANT_A, items }));
+    expect(first.status).toBe(200);
+    expect(await first.json()).toEqual({ success: true, requested: 3, inserted: 3 });
+    const repeat = await route.POST(post('re-review', { tenant: TENANT_A, items }));
+    expect(await repeat.json()).toEqual({ success: true, requested: 3, inserted: 0 });
+
+    const { weekStart } = await import('@/lib/rag/monitor/golden-evidence');
+    const { maskPII } = await import('@/lib/rag/trace/mask');
+    const { fingerprintMaskedQuery } = await import('@/lib/rag/feedback-loop/retrieval-log');
+    const rows = (
+      await db.query<{ tenant_key: string; query_masked: string; query_fingerprint: string; reasons: string[]; status: string; mining_window: Date }>(
+        "SELECT tenant_key, query_masked, query_fingerprint, reasons, status, mining_window FROM rag_review_items WHERE 're_review' = ANY (reasons) ORDER BY query_masked",
+      )
+    ).rows;
+    expect(rows).toHaveLength(3);
+    for (const row of rows) {
+      expect(row.tenant_key).toBe(TENANT_A);
+      expect(row.reasons).toEqual(['re_review']);
+      expect(row.status).toBe('open');
+      expect(new Date(row.mining_window).toISOString()).toBe(weekStart(new Date()));
+      expect(row.query_fingerprint).toBe(fingerprintMaskedQuery(row.query_masked));
+    }
+    const masked = maskPII(items[0].question);
+    expect(masked).not.toContain('someone@example.com');
+    expect(rows.map((row) => row.query_masked)).toContain(masked);
+    expect(rows.some((row) => row.query_masked.includes('someone@example.com'))).toBe(false);
+    expect(logs.join('\n')).not.toContain('synthetic note');
+  });
+
+  it('computes the week start as Monday 00:00 UTC', async () => {
+    const { weekStart } = await import('@/lib/rag/monitor/golden-evidence');
+    expect(weekStart(new Date('2026-11-26T15:00:00Z'))).toBe('2026-11-23T00:00:00.000Z');
+    expect(weekStart(new Date('2026-11-23T00:00:00Z'))).toBe('2026-11-23T00:00:00.000Z');
+    expect(weekStart(new Date('2026-11-29T23:59:59Z'))).toBe('2026-11-23T00:00:00.000Z');
+  });
+});
