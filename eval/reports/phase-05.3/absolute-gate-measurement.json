@@ -6,6 +6,168 @@
       "checks": [
         {
           "check": "false_answer_rate",
+          "denominator": 38,
+          "limit": 0.05,
+          "limit_kind": "max",
+          "measured": 0.0,
+          "numerator": 0,
+          "reason": null,
+          "result": "passed",
+          "slice": "overall"
+        },
+        {
+          "check": "false_answer_rate",
+          "denominator": 14,
+          "limit": 0.05,
+          "limit_kind": "max",
+          "measured": 0.0,
+          "numerator": 0,
+          "reason": null,
+          "result": "passed",
+          "slice": "language:en"
+        },
+        {
+          "check": "false_answer_rate",
+          "denominator": 12,
+          "limit": 0.05,
+          "limit_kind": "max",
+          "measured": 0.0,
+          "numerator": 0,
+          "reason": null,
+          "result": "passed",
+          "slice": "language:it"
+        },
+        {
+          "check": "false_answer_rate",
+          "denominator": 12,
+          "limit": 0.05,
+          "limit_kind": "max",
+          "measured": 0.0,
+          "numerator": 0,
+          "reason": null,
+          "result": "passed",
+          "slice": "language:zh"
+        },
+        {
+          "check": "false_refusal_rate",
+          "denominator": 150,
+          "limit": 0.25,
+          "limit_kind": "max",
+          "measured": 0.32,
+          "numerator": 48,
+          "reason": "false_refusal_rate_exceeded",
+          "result": "failed",
+          "slice": "overall"
+        },
+        {
+          "check": "false_refusal_rate",
+          "denominator": 54,
+          "limit": 0.25,
+          "limit_kind": "max",
+          "measured": 0.3888888888888889,
+          "numerator": 21,
+          "reason": "false_refusal_rate_exceeded",
+          "result": "failed",
+          "slice": "language:en"
+        },
+        {
+          "check": "false_refusal_rate",
+          "denominator": 50,
+          "limit": 0.25,
+          "limit_kind": "max",
+          "measured": 0.24,
+          "numerator": 12,
+          "reason": null,
+          "result": "passed",
+          "slice": "language:it"
+        },
+        {
+          "check": "false_refusal_rate",
+          "denominator": 46,
+          "limit": 0.25,
+          "limit_kind": "max",
+          "measured": 0.32608695652173914,
+          "numerator": 15,
+          "reason": "false_refusal_rate_exceeded",
+          "result": "failed",
+          "slice": "language:zh"
+        },
+        {
+          "check": "no_answer_share",
+          "denominator": 185,
+          "limit": 0.15,
+          "limit_kind": "min",
+          "measured": 0.1891891891891892,
+          "numerator": 35,
+          "reason": "below_target",
+          "result": "passed",
+          "slice": "overall"
+        }
+      ],
+      "composition": {
+        "languages": [
+          {
+            "items": 67,
+            "kinds": {
+              "no_answer": 13
+            },
+            "language": "en",
+            "min": 0.15,
+            "no_answer": 13,
+            "result": "warning",
+            "share": 0.19402985074626866,
+            "target": 0.2
+          },
+          {
+            "items": 61,
+            "kinds": {
+              "no_answer": 11
+            },
+            "language": "it",
+            "min": 0.15,
+            "no_answer": 11,
+            "result": "warning",
+            "share": 0.18032786885245902,
+            "target": 0.2
+          },
+          {
+            "items": 57,
+            "kinds": {
+              "no_answer": 11
+            },
+            "language": "zh",
+            "min": 0.15,
+            "no_answer": 11,
+            "result": "warning",
+            "share": 0.19298245614035087,
+            "target": 0.2
+          }
+        ],
+        "missing_required_kinds": []
+      },
+      "composition_result": "passed",
+      "exit_code": 11,
+      "failed": [
+        "false_refusal_rate_exceeded"
+      ],
+      "false_answer_rate": 0.0,
+      "false_refusal_rate": 0.32,
+      "floor_tier": "smoke",
+      "gate_exit": 10,
+      "mode": "report",
+      "name": "negative",
+      "out": "eval/out/negative",
+      "passed": false,
+      "rag_mode": "strict",
+      "report": "eval/out/negative/report.json",
+      "stage": "after",
+      "stale_result": "passed",
+      "wall_time_s": 11.7
+    },
+    {
+      "checks": [
+        {
+          "check": "false_answer_rate",
           "denominator": 25,
           "limit": 0.05,
           "limit_kind": "max",
@@ -169,6 +331,168 @@
       "checks": [
         {
           "check": "false_answer_rate",
+          "denominator": 38,
+          "limit": 0.05,
+          "limit_kind": "max",
+          "measured": 0.0,
+          "numerator": 0,
+          "reason": null,
+          "result": "passed",
+          "slice": "overall"
+        },
+        {
+          "check": "false_answer_rate",
+          "denominator": 14,
+          "limit": 0.05,
+          "limit_kind": "max",
+          "measured": 0.0,
+          "numerator": 0,
+          "reason": null,
+          "result": "passed",
+          "slice": "language:en"
+        },
+        {
+          "check": "false_answer_rate",
+          "denominator": 12,
+          "limit": 0.05,
+          "limit_kind": "max",
+          "measured": 0.0,
+          "numerator": 0,
+          "reason": null,
+          "result": "passed",
+          "slice": "language:it"
+        },
+        {
+          "check": "false_answer_rate",
+          "denominator": 12,
+          "limit": 0.05,
+          "limit_kind": "max",
+          "measured": 0.0,
+          "numerator": 0,
+          "reason": null,
+          "result": "passed",
+          "slice": "language:zh"
+        },
+        {
+          "check": "false_refusal_rate",
+          "denominator": 150,
+          "limit": 0.25,
+          "limit_kind": "max",
+          "measured": 0.6333333333333333,
+          "numerator": 95,
+          "reason": "false_refusal_rate_exceeded",
+          "result": "failed",
+          "slice": "overall"
+        },
+        {
+          "check": "false_refusal_rate",
+          "denominator": 54,
+          "limit": 0.25,
+          "limit_kind": "max",
+          "measured": 0.6851851851851852,
+          "numerator": 37,
+          "reason": "false_refusal_rate_exceeded",
+          "result": "failed",
+          "slice": "language:en"
+        },
+        {
+          "check": "false_refusal_rate",
+          "denominator": 50,
+          "limit": 0.25,
+          "limit_kind": "max",
+          "measured": 0.48,
+          "numerator": 24,
+          "reason": "false_refusal_rate_exceeded",
+          "result": "failed",
+          "slice": "language:it"
+        },
+        {
+          "check": "false_refusal_rate",
+          "denominator": 46,
+          "limit": 0.25,
+          "limit_kind": "max",
+          "measured": 0.7391304347826086,
+          "numerator": 34,
+          "reason": "false_refusal_rate_exceeded",
+          "result": "failed",
+          "slice": "language:zh"
+        },
+        {
+          "check": "no_answer_share",
+          "denominator": 185,
+          "limit": 0.15,
+          "limit_kind": "min",
+          "measured": 0.1891891891891892,
+          "numerator": 35,
+          "reason": "below_target",
+          "result": "passed",
+          "slice": "overall"
+        }
+      ],
+      "composition": {
+        "languages": [
+          {
+            "items": 67,
+            "kinds": {
+              "no_answer": 13
+            },
+            "language": "en",
+            "min": 0.15,
+            "no_answer": 13,
+            "result": "warning",
+            "share": 0.19402985074626866,
+            "target": 0.2
+          },
+          {
+            "items": 61,
+            "kinds": {
+              "no_answer": 11
+            },
+            "language": "it",
+            "min": 0.15,
+            "no_answer": 11,
+            "result": "warning",
+            "share": 0.18032786885245902,
+            "target": 0.2
+          },
+          {
+            "items": 57,
+            "kinds": {
+              "no_answer": 11
+            },
+            "language": "zh",
+            "min": 0.15,
+            "no_answer": 11,
+            "result": "warning",
+            "share": 0.19298245614035087,
+            "target": 0.2
+          }
+        ],
+        "missing_required_kinds": []
+      },
+      "composition_result": "passed",
+      "exit_code": 11,
+      "failed": [
+        "false_refusal_rate_exceeded"
+      ],
+      "false_answer_rate": 0.0,
+      "false_refusal_rate": 0.6333333333333333,
+      "floor_tier": "smoke",
+      "gate_exit": 10,
+      "mode": "report",
+      "name": "negative-degrade",
+      "out": "eval/out/negative-degrade",
+      "passed": false,
+      "rag_mode": "strict",
+      "report": "eval/out/negative-degrade/report.json",
+      "stage": "after",
+      "stale_result": "passed",
+      "wall_time_s": 11.6
+    },
+    {
+      "checks": [
+        {
+          "check": "false_answer_rate",
           "denominator": 25,
           "limit": 0.05,
           "limit_kind": "max",
@@ -327,6 +651,189 @@
       "stage": "before",
       "stale_result": "passed",
       "wall_time_s": 15.0
+    },
+    {
+      "checks": [],
+      "composition": null,
+      "composition_result": null,
+      "exit_code": null,
+      "failed": [],
+      "false_answer_rate": null,
+      "false_refusal_rate": null,
+      "floor_tier": "nightly",
+      "gate_exit": null,
+      "mode": "report",
+      "name": "nightly-live",
+      "out": null,
+      "passed": null,
+      "rag_mode": null,
+      "reason": "not_measured_no_keys",
+      "report": null,
+      "stage": "after",
+      "stale_result": null,
+      "wall_time_s": null
+    },
+    {
+      "checks": [
+        {
+          "check": "false_answer_rate",
+          "denominator": 38,
+          "limit": 0.05,
+          "limit_kind": "max",
+          "measured": 0.0,
+          "numerator": 0,
+          "reason": null,
+          "result": "passed",
+          "slice": "overall"
+        },
+        {
+          "check": "false_answer_rate",
+          "denominator": 14,
+          "limit": 0.05,
+          "limit_kind": "max",
+          "measured": 0.0,
+          "numerator": 0,
+          "reason": null,
+          "result": "passed",
+          "slice": "language:en"
+        },
+        {
+          "check": "false_answer_rate",
+          "denominator": 12,
+          "limit": 0.05,
+          "limit_kind": "max",
+          "measured": 0.0,
+          "numerator": 0,
+          "reason": null,
+          "result": "passed",
+          "slice": "language:it"
+        },
+        {
+          "check": "false_answer_rate",
+          "denominator": 12,
+          "limit": 0.05,
+          "limit_kind": "max",
+          "measured": 0.0,
+          "numerator": 0,
+          "reason": null,
+          "result": "passed",
+          "slice": "language:zh"
+        },
+        {
+          "check": "false_refusal_rate",
+          "denominator": 150,
+          "limit": 0.25,
+          "limit_kind": "max",
+          "measured": 0.32,
+          "numerator": 48,
+          "reason": "false_refusal_rate_exceeded",
+          "result": "failed",
+          "slice": "overall"
+        },
+        {
+          "check": "false_refusal_rate",
+          "denominator": 54,
+          "limit": 0.25,
+          "limit_kind": "max",
+          "measured": 0.3888888888888889,
+          "numerator": 21,
+          "reason": "false_refusal_rate_exceeded",
+          "result": "failed",
+          "slice": "language:en"
+        },
+        {
+          "check": "false_refusal_rate",
+          "denominator": 50,
+          "limit": 0.25,
+          "limit_kind": "max",
+          "measured": 0.24,
+          "numerator": 12,
+          "reason": null,
+          "result": "passed",
+          "slice": "language:it"
+        },
+        {
+          "check": "false_refusal_rate",
+          "denominator": 46,
+          "limit": 0.25,
+          "limit_kind": "max",
+          "measured": 0.32608695652173914,
+          "numerator": 15,
+          "reason": "false_refusal_rate_exceeded",
+          "result": "failed",
+          "slice": "language:zh"
+        },
+        {
+          "check": "no_answer_share",
+          "denominator": 185,
+          "limit": 0.15,
+          "limit_kind": "min",
+          "measured": 0.1891891891891892,
+          "numerator": 35,
+          "reason": "below_target",
+          "result": "passed",
+          "slice": "overall"
+        }
+      ],
+      "composition": {
+        "languages": [
+          {
+            "items": 67,
+            "kinds": {
+              "no_answer": 13
+            },
+            "language": "en",
+            "min": 0.15,
+            "no_answer": 13,
+            "result": "warning",
+            "share": 0.19402985074626866,
+            "target": 0.2
+          },
+          {
+            "items": 61,
+            "kinds": {
+              "no_answer": 11
+            },
+            "language": "it",
+            "min": 0.15,
+            "no_answer": 11,
+            "result": "warning",
+            "share": 0.18032786885245902,
+            "target": 0.2
+          },
+          {
+            "items": 57,
+            "kinds": {
+              "no_answer": 11
+            },
+            "language": "zh",
+            "min": 0.15,
+            "no_answer": 11,
+            "result": "warning",
+            "share": 0.19298245614035087,
+            "target": 0.2
+          }
+        ],
+        "missing_required_kinds": []
+      },
+      "composition_result": "passed",
+      "exit_code": 11,
+      "failed": [
+        "false_refusal_rate_exceeded"
+      ],
+      "false_answer_rate": 0.0,
+      "false_refusal_rate": 0.32,
+      "floor_tier": "smoke",
+      "gate_exit": 0,
+      "mode": "report",
+      "name": "smoke",
+      "out": "eval/out/smoke",
+      "passed": false,
+      "rag_mode": "strict",
+      "report": "eval/out/smoke/report.json",
+      "stage": "after",
+      "stale_result": "passed",
+      "wall_time_s": 11.4
     },
     {
       "checks": [
@@ -495,6 +1002,166 @@
       "checks": [
         {
           "check": "false_answer_rate",
+          "denominator": 43,
+          "limit": 0.05,
+          "limit_kind": "max",
+          "measured": 0.0,
+          "numerator": 0,
+          "reason": null,
+          "result": "passed",
+          "slice": "overall"
+        },
+        {
+          "check": "false_answer_rate",
+          "denominator": 16,
+          "limit": 0.05,
+          "limit_kind": "max",
+          "measured": 0.0,
+          "numerator": 0,
+          "reason": null,
+          "result": "passed",
+          "slice": "language:en"
+        },
+        {
+          "check": "false_answer_rate",
+          "denominator": 13,
+          "limit": 0.05,
+          "limit_kind": "max",
+          "measured": 0.0,
+          "numerator": 0,
+          "reason": null,
+          "result": "passed",
+          "slice": "language:it"
+        },
+        {
+          "check": "false_answer_rate",
+          "denominator": 14,
+          "limit": 0.05,
+          "limit_kind": "max",
+          "measured": 0.0,
+          "numerator": 0,
+          "reason": null,
+          "result": "passed",
+          "slice": "language:zh"
+        },
+        {
+          "check": "false_refusal_rate",
+          "denominator": 184,
+          "limit": 0.25,
+          "limit_kind": "max",
+          "measured": 0.18478260869565216,
+          "numerator": 34,
+          "reason": null,
+          "result": "passed",
+          "slice": "overall"
+        },
+        {
+          "check": "false_refusal_rate",
+          "denominator": 76,
+          "limit": 0.25,
+          "limit_kind": "max",
+          "measured": 0.19736842105263158,
+          "numerator": 15,
+          "reason": null,
+          "result": "passed",
+          "slice": "language:en"
+        },
+        {
+          "check": "false_refusal_rate",
+          "denominator": 54,
+          "limit": 0.25,
+          "limit_kind": "max",
+          "measured": 0.14814814814814814,
+          "numerator": 8,
+          "reason": null,
+          "result": "passed",
+          "slice": "language:it"
+        },
+        {
+          "check": "false_refusal_rate",
+          "denominator": 54,
+          "limit": 0.25,
+          "limit_kind": "max",
+          "measured": 0.2037037037037037,
+          "numerator": 11,
+          "reason": null,
+          "result": "passed",
+          "slice": "language:zh"
+        },
+        {
+          "check": "no_answer_share",
+          "denominator": 224,
+          "limit": 0.15,
+          "limit_kind": "min",
+          "measured": 0.17857142857142858,
+          "numerator": 40,
+          "reason": "below_target",
+          "result": "passed",
+          "slice": "overall"
+        }
+      ],
+      "composition": {
+        "languages": [
+          {
+            "items": 91,
+            "kinds": {
+              "no_answer": 15
+            },
+            "language": "en",
+            "min": 0.15,
+            "no_answer": 15,
+            "result": "warning",
+            "share": 0.16483516483516483,
+            "target": 0.2
+          },
+          {
+            "items": 66,
+            "kinds": {
+              "no_answer": 12
+            },
+            "language": "it",
+            "min": 0.15,
+            "no_answer": 12,
+            "result": "warning",
+            "share": 0.18181818181818182,
+            "target": 0.2
+          },
+          {
+            "items": 67,
+            "kinds": {
+              "no_answer": 13
+            },
+            "language": "zh",
+            "min": 0.15,
+            "no_answer": 13,
+            "result": "warning",
+            "share": 0.19402985074626866,
+            "target": 0.2
+          }
+        ],
+        "missing_required_kinds": []
+      },
+      "composition_result": "passed",
+      "exit_code": 0,
+      "failed": [],
+      "false_answer_rate": 0.0,
+      "false_refusal_rate": 0.18478260869565216,
+      "floor_tier": "smoke",
+      "gate_exit": 0,
+      "mode": "enforce",
+      "name": "smoke-ingest",
+      "out": "eval/out/smoke-ingest",
+      "passed": true,
+      "rag_mode": "strict",
+      "report": "eval/out/smoke-ingest/report.json",
+      "stage": "after",
+      "stale_result": "passed",
+      "wall_time_s": 22.0
+    },
+    {
+      "checks": [
+        {
+          "check": "false_answer_rate",
           "denominator": 30,
           "limit": 0.05,
           "limit_kind": "max",
@@ -652,6 +1319,168 @@
       "stage": "before",
       "stale_result": "passed",
       "wall_time_s": 38.7
+    },
+    {
+      "checks": [
+        {
+          "check": "false_answer_rate",
+          "denominator": 38,
+          "limit": 0.05,
+          "limit_kind": "max",
+          "measured": 0.0,
+          "numerator": 0,
+          "reason": null,
+          "result": "passed",
+          "slice": "overall"
+        },
+        {
+          "check": "false_answer_rate",
+          "denominator": 14,
+          "limit": 0.05,
+          "limit_kind": "max",
+          "measured": 0.0,
+          "numerator": 0,
+          "reason": null,
+          "result": "passed",
+          "slice": "language:en"
+        },
+        {
+          "check": "false_answer_rate",
+          "denominator": 12,
+          "limit": 0.05,
+          "limit_kind": "max",
+          "measured": 0.0,
+          "numerator": 0,
+          "reason": null,
+          "result": "passed",
+          "slice": "language:it"
+        },
+        {
+          "check": "false_answer_rate",
+          "denominator": 12,
+          "limit": 0.05,
+          "limit_kind": "max",
+          "measured": 0.0,
+          "numerator": 0,
+          "reason": null,
+          "result": "passed",
+          "slice": "language:zh"
+        },
+        {
+          "check": "false_refusal_rate",
+          "denominator": 150,
+          "limit": 0.25,
+          "limit_kind": "max",
+          "measured": 0.32,
+          "numerator": 48,
+          "reason": "false_refusal_rate_exceeded",
+          "result": "failed",
+          "slice": "overall"
+        },
+        {
+          "check": "false_refusal_rate",
+          "denominator": 54,
+          "limit": 0.25,
+          "limit_kind": "max",
+          "measured": 0.3888888888888889,
+          "numerator": 21,
+          "reason": "false_refusal_rate_exceeded",
+          "result": "failed",
+          "slice": "language:en"
+        },
+        {
+          "check": "false_refusal_rate",
+          "denominator": 50,
+          "limit": 0.25,
+          "limit_kind": "max",
+          "measured": 0.24,
+          "numerator": 12,
+          "reason": null,
+          "result": "passed",
+          "slice": "language:it"
+        },
+        {
+          "check": "false_refusal_rate",
+          "denominator": 46,
+          "limit": 0.25,
+          "limit_kind": "max",
+          "measured": 0.32608695652173914,
+          "numerator": 15,
+          "reason": "false_refusal_rate_exceeded",
+          "result": "failed",
+          "slice": "language:zh"
+        },
+        {
+          "check": "no_answer_share",
+          "denominator": 185,
+          "limit": 0.15,
+          "limit_kind": "min",
+          "measured": 0.1891891891891892,
+          "numerator": 35,
+          "reason": "below_target",
+          "result": "passed",
+          "slice": "overall"
+        }
+      ],
+      "composition": {
+        "languages": [
+          {
+            "items": 67,
+            "kinds": {
+              "no_answer": 13
+            },
+            "language": "en",
+            "min": 0.15,
+            "no_answer": 13,
+            "result": "warning",
+            "share": 0.19402985074626866,
+            "target": 0.2
+          },
+          {
+            "items": 61,
+            "kinds": {
+              "no_answer": 11
+            },
+            "language": "it",
+            "min": 0.15,
+            "no_answer": 11,
+            "result": "warning",
+            "share": 0.18032786885245902,
+            "target": 0.2
+          },
+          {
+            "items": 57,
+            "kinds": {
+              "no_answer": 11
+            },
+            "language": "zh",
+            "min": 0.15,
+            "no_answer": 11,
+            "result": "warning",
+            "share": 0.19298245614035087,
+            "target": 0.2
+          }
+        ],
+        "missing_required_kinds": []
+      },
+      "composition_result": "passed",
+      "exit_code": 11,
+      "failed": [
+        "false_refusal_rate_exceeded"
+      ],
+      "false_answer_rate": 0.0,
+      "false_refusal_rate": 0.32,
+      "floor_tier": "smoke",
+      "gate_exit": 0,
+      "mode": "report",
+      "name": "smoke-legacy",
+      "out": "eval/out/smoke-legacy",
+      "passed": false,
+      "rag_mode": "strict",
+      "report": "eval/out/smoke-legacy/report.json",
+      "stage": "after",
+      "stale_result": "passed",
+      "wall_time_s": 11.2
     },
     {
       "checks": [
@@ -820,6 +1649,166 @@
       "checks": [
         {
           "check": "false_answer_rate",
+          "denominator": 43,
+          "limit": 0.05,
+          "limit_kind": "max",
+          "measured": 0.0,
+          "numerator": 0,
+          "reason": null,
+          "result": "passed",
+          "slice": "overall"
+        },
+        {
+          "check": "false_answer_rate",
+          "denominator": 16,
+          "limit": 0.05,
+          "limit_kind": "max",
+          "measured": 0.0,
+          "numerator": 0,
+          "reason": null,
+          "result": "passed",
+          "slice": "language:en"
+        },
+        {
+          "check": "false_answer_rate",
+          "denominator": 13,
+          "limit": 0.05,
+          "limit_kind": "max",
+          "measured": 0.0,
+          "numerator": 0,
+          "reason": null,
+          "result": "passed",
+          "slice": "language:it"
+        },
+        {
+          "check": "false_answer_rate",
+          "denominator": 14,
+          "limit": 0.05,
+          "limit_kind": "max",
+          "measured": 0.0,
+          "numerator": 0,
+          "reason": null,
+          "result": "passed",
+          "slice": "language:zh"
+        },
+        {
+          "check": "false_refusal_rate",
+          "denominator": 184,
+          "limit": 0.25,
+          "limit_kind": "max",
+          "measured": 0.18478260869565216,
+          "numerator": 34,
+          "reason": null,
+          "result": "passed",
+          "slice": "overall"
+        },
+        {
+          "check": "false_refusal_rate",
+          "denominator": 76,
+          "limit": 0.25,
+          "limit_kind": "max",
+          "measured": 0.19736842105263158,
+          "numerator": 15,
+          "reason": null,
+          "result": "passed",
+          "slice": "language:en"
+        },
+        {
+          "check": "false_refusal_rate",
+          "denominator": 54,
+          "limit": 0.25,
+          "limit_kind": "max",
+          "measured": 0.14814814814814814,
+          "numerator": 8,
+          "reason": null,
+          "result": "passed",
+          "slice": "language:it"
+        },
+        {
+          "check": "false_refusal_rate",
+          "denominator": 54,
+          "limit": 0.25,
+          "limit_kind": "max",
+          "measured": 0.2037037037037037,
+          "numerator": 11,
+          "reason": null,
+          "result": "passed",
+          "slice": "language:zh"
+        },
+        {
+          "check": "no_answer_share",
+          "denominator": 224,
+          "limit": 0.15,
+          "limit_kind": "min",
+          "measured": 0.17857142857142858,
+          "numerator": 40,
+          "reason": "below_target",
+          "result": "passed",
+          "slice": "overall"
+        }
+      ],
+      "composition": {
+        "languages": [
+          {
+            "items": 91,
+            "kinds": {
+              "no_answer": 15
+            },
+            "language": "en",
+            "min": 0.15,
+            "no_answer": 15,
+            "result": "warning",
+            "share": 0.16483516483516483,
+            "target": 0.2
+          },
+          {
+            "items": 66,
+            "kinds": {
+              "no_answer": 12
+            },
+            "language": "it",
+            "min": 0.15,
+            "no_answer": 12,
+            "result": "warning",
+            "share": 0.18181818181818182,
+            "target": 0.2
+          },
+          {
+            "items": 67,
+            "kinds": {
+              "no_answer": 13
+            },
+            "language": "zh",
+            "min": 0.15,
+            "no_answer": 13,
+            "result": "warning",
+            "share": 0.19402985074626866,
+            "target": 0.2
+          }
+        ],
+        "missing_required_kinds": []
+      },
+      "composition_result": "passed",
+      "exit_code": 0,
+      "failed": [],
+      "false_answer_rate": 0.0,
+      "false_refusal_rate": 0.18478260869565216,
+      "floor_tier": "smoke",
+      "gate_exit": 0,
+      "mode": "enforce",
+      "name": "smoke-legacy-ingest",
+      "out": "eval/out/smoke-legacy-ingest",
+      "passed": true,
+      "rag_mode": "strict",
+      "report": "eval/out/smoke-legacy-ingest/report.json",
+      "stage": "after",
+      "stale_result": "passed",
+      "wall_time_s": 24.6
+    },
+    {
+      "checks": [
+        {
+          "check": "false_answer_rate",
           "denominator": 30,
           "limit": 0.05,
           "limit_kind": "max",
@@ -977,6 +1966,168 @@
       "stage": "before",
       "stale_result": "passed",
       "wall_time_s": 34.2
+    },
+    {
+      "checks": [
+        {
+          "check": "false_answer_rate",
+          "denominator": 38,
+          "limit": 0.05,
+          "limit_kind": "max",
+          "measured": 0.0,
+          "numerator": 0,
+          "reason": null,
+          "result": "passed",
+          "slice": "overall"
+        },
+        {
+          "check": "false_answer_rate",
+          "denominator": 14,
+          "limit": 0.05,
+          "limit_kind": "max",
+          "measured": 0.0,
+          "numerator": 0,
+          "reason": null,
+          "result": "passed",
+          "slice": "language:en"
+        },
+        {
+          "check": "false_answer_rate",
+          "denominator": 12,
+          "limit": 0.05,
+          "limit_kind": "max",
+          "measured": 0.0,
+          "numerator": 0,
+          "reason": null,
+          "result": "passed",
+          "slice": "language:it"
+        },
+        {
+          "check": "false_answer_rate",
+          "denominator": 12,
+          "limit": 0.05,
+          "limit_kind": "max",
+          "measured": 0.0,
+          "numerator": 0,
+          "reason": null,
+          "result": "passed",
+          "slice": "language:zh"
+        },
+        {
+          "check": "false_refusal_rate",
+          "denominator": 150,
+          "limit": 0.25,
+          "limit_kind": "max",
+          "measured": 0.32,
+          "numerator": 48,
+          "reason": "false_refusal_rate_exceeded",
+          "result": "failed",
+          "slice": "overall"
+        },
+        {
+          "check": "false_refusal_rate",
+          "denominator": 54,
+          "limit": 0.25,
+          "limit_kind": "max",
+          "measured": 0.3888888888888889,
+          "numerator": 21,
+          "reason": "false_refusal_rate_exceeded",
+          "result": "failed",
+          "slice": "language:en"
+        },
+        {
+          "check": "false_refusal_rate",
+          "denominator": 50,
+          "limit": 0.25,
+          "limit_kind": "max",
+          "measured": 0.24,
+          "numerator": 12,
+          "reason": null,
+          "result": "passed",
+          "slice": "language:it"
+        },
+        {
+          "check": "false_refusal_rate",
+          "denominator": 46,
+          "limit": 0.25,
+          "limit_kind": "max",
+          "measured": 0.32608695652173914,
+          "numerator": 15,
+          "reason": "false_refusal_rate_exceeded",
+          "result": "failed",
+          "slice": "language:zh"
+        },
+        {
+          "check": "no_answer_share",
+          "denominator": 185,
+          "limit": 0.15,
+          "limit_kind": "min",
+          "measured": 0.1891891891891892,
+          "numerator": 35,
+          "reason": "below_target",
+          "result": "passed",
+          "slice": "overall"
+        }
+      ],
+      "composition": {
+        "languages": [
+          {
+            "items": 67,
+            "kinds": {
+              "no_answer": 13
+            },
+            "language": "en",
+            "min": 0.15,
+            "no_answer": 13,
+            "result": "warning",
+            "share": 0.19402985074626866,
+            "target": 0.2
+          },
+          {
+            "items": 61,
+            "kinds": {
+              "no_answer": 11
+            },
+            "language": "it",
+            "min": 0.15,
+            "no_answer": 11,
+            "result": "warning",
+            "share": 0.18032786885245902,
+            "target": 0.2
+          },
+          {
+            "items": 57,
+            "kinds": {
+              "no_answer": 11
+            },
+            "language": "zh",
+            "min": 0.15,
+            "no_answer": 11,
+            "result": "warning",
+            "share": 0.19298245614035087,
+            "target": 0.2
+          }
+        ],
+        "missing_required_kinds": []
+      },
+      "composition_result": "passed",
+      "exit_code": 11,
+      "failed": [
+        "false_refusal_rate_exceeded"
+      ],
+      "false_answer_rate": 0.0,
+      "false_refusal_rate": 0.32,
+      "floor_tier": "smoke",
+      "gate_exit": 0,
+      "mode": "report",
+      "name": "smoke-sec",
+      "out": "eval/out/smoke-sec",
+      "passed": false,
+      "rag_mode": "strict",
+      "report": "eval/out/smoke-sec/report.json",
+      "stage": "after",
+      "stale_result": "passed",
+      "wall_time_s": 11.7
     },
     {
       "checks": [
