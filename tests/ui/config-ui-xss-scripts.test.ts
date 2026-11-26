@@ -597,3 +597,72 @@ describe('rag-panels/versions-dates.js renders server data as text (XSS)', () =>
     doc.body.querySelectorAll('dialog').find((d) => d.open)!.close('keep');
   });
 });
+
+describe('rag-panels/translation-targets.js renders server data as text (XSS)', () => {
+  it('language codes, coverage values, error codes and details create no element and no inline handler', async () => {
+    const doc = new FakeDocument();
+    const section = host(doc, 'rag-administration-translation', 'section');
+    for (const attr of ['data-translation-targets-title', 'data-translation-targets-description', 'data-translation-targets-workspace', 'data-translation-targets-alert', 'data-translation-targets-content', 'data-translation-targets-status']) {
+      const el = doc.createElement('div');
+      el.setAttribute(attr, '');
+      section.appendChild(el);
+    }
+    const selector = host(doc, 'workspace-selector', 'select');
+    const option = doc.createElement('option');
+    option.setAttribute('value', 'org-1');
+    option.textContent = XSS_PAYLOAD;
+    selector.appendChild(option);
+    selector.value = 'org-1';
+    const settings = {
+      success: true,
+      enabled: true,
+      targets: ['en', XSS_PAYLOAD],
+      supportedLanguages: ['zh', 'en', XSS_PAYLOAD, JS_BREAKOUT],
+      languagesConfigured: true,
+      monolingual: false,
+      coverage: [
+        { language: 'en', done: XSS_PAYLOAD, total: JS_BREAKOUT, gaps: 2 },
+        { language: XSS_PAYLOAD, done: 1, total: 2, gaps: JS_BREAKOUT },
+      ],
+      stale: true,
+      deploymentSwitch: 'on',
+      model: XSS_PAYLOAD,
+    };
+    const context: Record<string, unknown> = {
+      document: doc,
+      console: { log() {}, error() {}, warn() {}, info() {}, debug() {} },
+      navigator: { language: 'en-US', clipboard: { writeText: async () => {} } },
+      location: { origin: 'http://config.local' },
+      setTimeout,
+      clearTimeout,
+      AbortController,
+      URLSearchParams,
+      Intl,
+      ragFetch: async (_apiPath: string, init: { method?: string } = {}) => {
+        if (init.method === 'PUT') return { ok: false, status: 400, body: { success: false, error: XSS_PAYLOAD, details: [{ path: 'targets', message: JS_BREAKOUT }] } };
+        return { ok: true, status: 200, body: settings };
+      },
+    };
+    context.window = context;
+    vm.createContext(context);
+    for (const file of ['rag-panels/rag-ui.js', 'rag-panels/translation-targets.js']) {
+      new vm.Script(fs.readFileSync(path.join(configUiDir, file), 'utf8'), { filename: file }).runInContext(context);
+    }
+    const flushAll = async () => {
+      for (let i = 0; i < 25; i += 1) await new Promise((resolve) => setImmediate(resolve));
+    };
+    await (context.initTranslationTargetsPanel as () => Promise<void>)();
+    await flushAll();
+    const zh = doc.body.querySelector('[data-translation-targets-target="zh"]')!;
+    zh.checked = true;
+    zh.dispatch('change');
+    doc.body.querySelectorAll('button').find((b) => b.textContent === 'Save targets')!.click();
+    await flushAll();
+    expectSafe(doc);
+    expect(doc.innerHtmlWrites).toBe(0);
+    expect(doc.body.querySelectorAll('a')).toHaveLength(0);
+    expect(doc.body.textContent).toContain(XSS_PAYLOAD);
+    expect(doc.body.textContent).toContain(JS_BREAKOUT);
+    expect(doc.body.querySelectorAll('[data-translation-targets-target]').map((b) => b.getAttribute('data-translation-targets-target'))).toEqual(['zh', 'en']);
+  });
+});

@@ -406,3 +406,173 @@ describe('Translation targets panel', () => {
     noMarkup(page.doc);
   });
 });
+
+describe('Settings, backfill command, monolingual, stale and empty states', () => {
+  it('moves the translation settings group under a Settings heading; both controls end with the stored-documents sentence', async () => {
+    const page = loadPage();
+    await page.init();
+    const group = page.doc.querySelector('[data-rag-settings-group="translation"]')!;
+    expect(page.root.contains(group)).toBe(true);
+    const heading = page.root.querySelectorAll('h4').find((h) => h.textContent === 'Settings');
+    expect(heading).toBeTruthy();
+    for (const id of ['RAG_DOC_TRANSLATION', 'RAG_DOC_TRANSLATION_MODEL']) {
+      const control = page.doc.getElementById(id)!;
+      expect(group.contains(control)).toBe(true);
+      expect(describedText(page.doc, control).trim().endsWith('Changing this affects documents already stored; saving shows how many.')).toBe(true);
+    }
+  });
+
+  it('localizes the settings group in zh and it', async () => {
+    for (const [locale, label] of [
+      ['zh-CN', '文档翻译'],
+      ['it-IT', 'Traduzione dei documenti'],
+    ] as const) {
+      const page = loadPage({ locale });
+      await page.init();
+      const group = page.doc.querySelector('[data-rag-settings-group="translation"]')!;
+      expect(group.querySelector('[data-rag-i18n="RAG_DOC_TRANSLATION.label"]')!.textContent).toBe(label);
+      expect(page.root.querySelectorAll('h4').some((h) => h.textContent === (locale === 'zh-CN' ? '设置' : 'Impostazioni'))).toBe(true);
+    }
+  });
+
+  it('warns that translation needs languages when RAG_DOC_TRANSLATION=on and languages are unset, recomputed on change', async () => {
+    const page = loadPage({ supported: '', docTranslation: 'off' });
+    await page.init();
+    const needs = 'This setting has no effect until the supported languages are chosen in the Languages panel.';
+    expect(page.alertHost().textContent).not.toContain(needs);
+    const control = page.doc.getElementById('RAG_DOC_TRANSLATION')!;
+    control.value = 'on';
+    control.dispatch('change');
+    expect(page.alertHost().textContent).toContain(needs);
+  });
+
+  it('warns that one supported language keeps translation off', async () => {
+    const page = loadPage({ supported: 'en', docTranslation: 'on' });
+    await page.init();
+    expect(page.alertHost().textContent).toContain('One language is supported, so document translation stays off.');
+    const none = loadPage({ supported: 'zh,en', docTranslation: 'on' });
+    await none.init();
+    expect(none.alertHost().textContent).not.toContain('One language is supported');
+  });
+
+  it('with one supported language the targets area shows the monolingual sentence and no checkbox', async () => {
+    const page = loadPage({ supported: 'en', replies: { get: { status: 200, body: answer({ supportedLanguages: ['en'], monolingual: true, enabled: false, targets: [], coverage: [] }) } } });
+    await page.init();
+    expect(page.root.textContent).toContain('This deployment supports one language, so there is nothing to translate into.');
+    expect(page.root.querySelector('fieldset')).toBeNull();
+    expect(page.root.querySelectorAll('[data-translation-targets-target]')).toHaveLength(0);
+    expect(hasButton(page.root, 'Save targets')).toBe(false);
+  });
+
+  it('before any translation each target reads "0 of {total}" and the backfill help shows the dry-run and the run command with Copy command', async () => {
+    const page = loadPage({ replies: { get: { status: 200, body: answer({ targets: ['en', 'it'], coverage: [{ language: 'en', done: 0, total: 1530, gaps: null }, { language: 'it', done: 0, total: 1530, gaps: null }] }) } } });
+    await page.init();
+    const cells = page.table().querySelectorAll('tbody td').map((td) => td.textContent.trim());
+    expect(cells[1]).toBe('0 of 1,530');
+    expect(cells[4]).toBe('0 of 1,530');
+    expect(cells[2]).toContain('—');
+    const text = page.root.textContent;
+    expect(text).toContain('Saving translates nothing by itself. New documents are translated after they are published; for existing ones run:');
+    const codes = page.root.querySelectorAll('code').map((c) => c.textContent);
+    const dry = `npm run rag:translate -- --tenant o:${ORG} --dry-run`;
+    const run = `npm run rag:translate -- --tenant o:${ORG} --budget <USD>`;
+    expect(codes).toContain(dry);
+    expect(codes).toContain(run);
+    for (const c of page.root.querySelectorAll('code').filter((el) => el.textContent.startsWith('npm run'))) {
+      expect(c.getAttribute('translate')).toBe('no');
+      expect(c.className).toContain('font-mono');
+      expect(c.className).toContain('break-all');
+    }
+    const order = page.root.querySelectorAll('code').map((c) => c.textContent);
+    expect(order.indexOf(dry)).toBeLessThan(order.indexOf(run));
+    const copies = page.root.querySelectorAll('button').filter((b) => b.textContent === 'Copy command');
+    expect(copies).toHaveLength(2);
+    copies[0]!.click();
+    await flush();
+    expect(page.copied).toEqual([dry]);
+    expect(page.status().textContent).toBe('Command copied.');
+  });
+
+  it('fills s:default for the default workspace of a single-tenant deployment and a placeholder in multi-tenant mode', async () => {
+    const single = loadPage({ organization: '' });
+    await single.init();
+    expect(single.root.querySelectorAll('code').map((c) => c.textContent)).toContain('npm run rag:translate -- --tenant s:default --dry-run');
+    const multi = loadPage({ organization: '', multiTenant: true });
+    await multi.init();
+    expect(multi.root.querySelectorAll('code').map((c) => c.textContent)).toContain('npm run rag:translate -- --tenant u:<user-id> --dry-run');
+  });
+
+  it('without a clipboard the commands stay as selectable text and no Copy command button is offered', async () => {
+    const page = loadPage({ clipboard: false });
+    await page.init();
+    expect(hasButton(page.root, 'Copy command')).toBe(false);
+    expect(page.root.querySelectorAll('code').some((c) => c.textContent.includes('--dry-run'))).toBe(true);
+  });
+
+  it('shows the stale notice with the re-embed command and a stale badge per row when the answer says stale', async () => {
+    const page = loadPage({ replies: { get: { status: 200, body: answer({ stale: true }) } } });
+    await page.init();
+    const alert = page.alertHost();
+    expect(alert.textContent).toContain('The embedding profile changed, so stored translations are not used for search.');
+    expect(alert.querySelectorAll('code').map((c) => c.textContent)).toContain(`npm run rag:translate -- --tenant o:${ORG} --reembed --budget <USD>`);
+    expect(page.table().textContent).toContain('Not used for search');
+    const fresh = loadPage();
+    await fresh.init();
+    expect(fresh.alertHost().textContent).not.toContain('The embedding profile changed');
+    expect(fresh.table().textContent).not.toContain('Not used for search');
+  });
+
+  it('gaps above zero show the gaps sentence; zero gaps do not', async () => {
+    const page = loadPage();
+    await page.init();
+    expect(page.root.textContent).toContain('Some chunks were left untranslated');
+    const none = loadPage({ replies: { get: { status: 200, body: answer({ coverage: [{ language: 'en', done: 5, total: 5, gaps: 0 }] }) } } });
+    await none.init();
+    expect(none.root.textContent).not.toContain('Some chunks were left untranslated');
+  });
+
+  it('renders the sign-in and unavailable states without a password field, and Reload panel loads again', async () => {
+    const page = loadPage({ replies: { get: { status: 401, body: { error: 'Unauthorized' } } } });
+    await page.init();
+    expect(page.content().textContent).toContain('Sign in');
+    expect(page.root.querySelector('input[type="password"]')).toBeNull();
+    expect(page.root.querySelector('fieldset')).toBeNull();
+    const down = loadPage({ replies: { get: { status: 503, body: { success: false, error: 'Translation settings are unavailable' } } } });
+    await down.init();
+    expect(down.alertHost().textContent).toContain('Translation targets are unavailable right now. Select Reload panel in a moment.');
+    button(down.alertHost(), 'Reload panel').click();
+    await flush();
+    expect(down.calls('get')).toHaveLength(2);
+  });
+
+  it('shows the loading text while the first request runs', async () => {
+    const page = loadPage();
+    const started = page.init();
+    expect(page.content().textContent).toContain('Loading translation targets…');
+    await started;
+    expect(page.content().textContent).not.toContain('Loading translation targets…');
+  });
+
+  it('the Settings sub-view stays usable when the data call answers 401', async () => {
+    const page = loadPage({ replies: { get: { status: 401, body: { error: 'Unauthorized' } } } });
+    await page.init();
+    const group = page.doc.querySelector('[data-rag-settings-group="translation"]')!;
+    expect(page.root.contains(group)).toBe(true);
+    expect(page.doc.getElementById('RAG_DOC_TRANSLATION')!.disabled).toBe(false);
+  });
+
+  it('renders no cost figure, model name or translated text in any state', async () => {
+    const page = loadPage({ replies: { get: { status: 200, body: answer({ stale: true, cost: { usd: 12.34 }, estimatedCostUsd: 56.78 }) } } });
+    await page.init();
+    const text = page.root.querySelector('[data-translation-targets-content]')!.textContent + page.alertHost().textContent;
+    expect(text).not.toMatch(/\$|USD \d|12\.34|56\.78/);
+    expect(text).not.toContain(MODEL);
+    expect(text).not.toContain(TRANSLATED);
+  });
+
+  it('has zh and it for every English label', () => {
+    const en = Object.keys(mod.TRANSLATION_TARGETS_LABELS.en).sort();
+    expect(Object.keys(mod.TRANSLATION_TARGETS_LABELS.zh).sort()).toEqual(en);
+    expect(Object.keys(mod.TRANSLATION_TARGETS_LABELS.it).sort()).toEqual(en);
+  });
+});
