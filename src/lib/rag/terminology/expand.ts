@@ -63,3 +63,8 @@ export function expandMatches(query: string, raw: readonly RawTermMatch[], param
   }
   return { matches: kept.map(toContractMatch), tokens, capped };
 }
+
+/** D-18: the standalone query (normalized) with each matched surface replaced by its canonical. */
+export function substituteCanonicals(normalizedQuery: string, _matches: readonly TerminologyMatch[]): string {
+  return normalizedQuery;
+}

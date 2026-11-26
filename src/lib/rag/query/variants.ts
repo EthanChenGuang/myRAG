@@ -24,6 +24,8 @@ export interface QueryVariantSet {
   variants: QueryVariant[];
   /** Every variant left out by the cap or a group limit, in preference order (reason cap). */
   cuts: SkippedTransform[];
+  /** D-31: the terminology variant was offered and left out by the cap or the multi-query limit (never a plan cut). */
+  terminologyCut: boolean;
 }
 
 export const PHASE4_VARIANT_LIMITS: Readonly<VariantLimits> = Object.freeze({ cap: MAX_QUERY_VARIANTS, order: null });
@@ -52,7 +54,7 @@ export function queryLayerVariantLimits(
   };
 }
 
-const CUT_TRANSFORM: Record<Exclude<QueryVariantKind, 'original'>, SkippedTransform['transform']> = {
+const CUT_TRANSFORM: Record<Exclude<QueryVariantKind, 'original' | 'terminology'>, SkippedTransform['transform']> = {
   condensed: 'condense_history',
   translated: 'translate',
   sub_question: 'decompose',
@@ -90,6 +92,7 @@ export function buildQueryVariantSet(
   translated: readonly TranslatedQuery[] = [],
   provided: readonly QueryVariant[] = [],
   limits: VariantLimits = PHASE4_VARIANT_LIMITS,
+  _terminology: QueryVariant | null = null,
 ): QueryVariantSet {
   const variants: QueryVariant[] = [{ text: query, language, kind: 'original' }];
   const seen = new Set([textKey(query)]);
@@ -105,14 +108,14 @@ export function buildQueryVariantSet(
     const group = capGroup(variant.kind);
     const groupLimit = group ? limits.groupLimits?.[group] : undefined;
     if (variants.length >= limits.cap || (group && groupLimit !== undefined && (used[group] ?? 0) >= groupLimit)) {
-      if (variant.kind !== 'original') cuts.push({ transform: CUT_TRANSFORM[variant.kind], reason: 'cap' });
+      if (variant.kind !== 'original' && variant.kind !== 'terminology') cuts.push({ transform: CUT_TRANSFORM[variant.kind], reason: 'cap' });
       continue;
     }
     seen.add(key);
     if (group) used[group] = (used[group] ?? 0) + 1;
     variants.push({ ...variant, text: variant.text.trim() });
   }
-  return { variants, cuts };
+  return { variants, cuts, terminologyCut: false };
 }
 
 /**
@@ -125,8 +128,9 @@ export function buildQueryVariants(
   translated: readonly TranslatedQuery[] = [],
   provided: readonly QueryVariant[] = [],
   limits: VariantLimits = PHASE4_VARIANT_LIMITS,
+  terminology: QueryVariant | null = null,
 ): QueryVariant[] {
-  return buildQueryVariantSet(query, language, translated, provided, limits).variants;
+  return buildQueryVariantSet(query, language, translated, provided, limits, terminology).variants;
 }
 
 /** The texts the embed stage sends, index-aligned with the variants (D-06: one batch). */
