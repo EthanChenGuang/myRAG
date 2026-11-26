@@ -612,10 +612,30 @@ def test_table_split_is_gated_and_the_re_recorded_ingest_baseline_leaves_every_o
     current = Baseline.model_validate_json((root / "baselines" / "fixture-ingest-baseline.json").read_text(encoding="utf-8"))
     assert len(current.runs) >= 3
     assert {run.run_id for run in current.runs}.isdisjoint({run.run_id for run in previous.runs}), "not re-recorded"
-    assert (current.golden_sha256, current.corpus_sha256) == (previous.golden_sha256, previous.corpus_sha256)
-    for name, stats in previous.slices.items():
-        assert current.slices[name] == stats, name
+    assert current.corpus_sha256 == previous.corpus_sha256
     assert previous.items is not None and current.items is not None
+    # Plan 06-39 later added the cache pair golden items: they bring their own category slices and move only
+    # the overall and language slices, so those are compared only while the golden set is the one 03.2-32 recorded.
+    cache_categories = {"cache_paraphrase", "cache_near_miss"}
+    golden_categories = {
+        item.id: item.category
+        for item in (
+            GoldenItem.model_validate_json(line)
+            for line in (root / "fixtures" / "golden.jsonl").read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        )
+    }
+    added = set(current.items) - set(previous.items)
+    golden_grew = current.golden_sha256 != previous.golden_sha256
+    if golden_grew:
+        assert added and {golden_categories.get(item_id) for item_id in added} <= cache_categories
+    else:
+        assert not added
+    moved = {"overall"} | {name for name in previous.slices if name.startswith("language:")}
+    for name, stats in previous.slices.items():
+        if golden_grew and name in moved:
+            continue
+        assert current.slices[name] == stats, name
     assert {item_id: current.items[item_id] for item_id in previous.items} == previous.items
     assert all(stat.spread == 0.0 for stats in current.slices.values() for stat in stats.values())
 
