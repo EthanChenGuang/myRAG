@@ -17,6 +17,8 @@ import { VideoGenerationButton } from './video-generation-button';
 import { ExtendedFormEvent } from '@/types/events';
 import type { ProcessedDocument } from './permanent-doc-upload-button';
 import { UnifiedUploadButton } from './unified-upload-button';
+import { ComposerModelPill } from './composer-model-pill';
+import { getComposerState } from '@/lib/chat-composer-state';
 import { useChatStore } from '@/lib/chat-store';
 import { useShallow } from 'zustand/react/shallow';
 import { v4 as uuidv4 } from 'uuid';
@@ -213,6 +215,12 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
 }, ref) {
   const formRef = useRef<HTMLFormElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [isComposerFocused, setIsComposerFocused] = useState(false);
+  const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
+  const composerBlurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (composerBlurTimerRef.current) clearTimeout(composerBlurTimerRef.current);
+  }, []);
   const tempDocInputRef = useRef<HTMLInputElement>(null);
   const { isEnabled: isWebSearchEnabled, isAvailable: isWebSearchAvailable, toggleWebSearch } = useWebSearchStore();
   const { file, fileUrl, fileType, clearFile } = useFileUploadStore();
@@ -4332,6 +4340,28 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
   // onClick={handleClearFile}
 
   // Now update the JSX to include our document selector and document tags
+  const composerState = getComposerState({
+    focused: isComposerFocused,
+    text: input,
+    hasAttachment: Boolean(tempDoc || processingDoc || file || multiFileStore.files.length > 0),
+    hasActiveTool: getActiveToolType() !== null,
+    menuOpen: isModelMenuOpen || isPrimaryModalOpen || isSecondaryModalOpen || isMCPModalOpen,
+    isRecording: isRecording || isTranscribing,
+  });
+
+  const handleComposerFocus = () => {
+    if (composerBlurTimerRef.current) clearTimeout(composerBlurTimerRef.current);
+    setIsComposerFocused(true);
+  };
+
+  // Collapse a beat after blur so a tap on a tool-row button lands before the row reflows.
+  const handleComposerBlur = () => {
+    if (composerBlurTimerRef.current) clearTimeout(composerBlurTimerRef.current);
+    composerBlurTimerRef.current = setTimeout(() => {
+      if (document.activeElement !== textareaRef.current) setIsComposerFocused(false);
+    }, 160);
+  };
+
   return (
     <>
       {/* Add animation styles */}
@@ -4346,7 +4376,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
 
       {/* Suggestion buttons are now rendered in the main page component for proper layout */}
 
-      <div className={cn("chat-input-container relative z-50", className)}>
+      <div className={cn("chat-input-container relative z-50", className)} data-composer={composerState}>
         {/* Voice Mode Overlay moved here to share stacking context with the input form */}
         {VOICE_MODE_ENABLED && (
           <VoiceModeOverlay
@@ -4369,6 +4399,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
 
           <form
             ref={formRef}
+            data-chat-input-form=""
             onSubmit={handleFormSubmit}
             onClick={handleFormClick}
             className={cn(
@@ -4385,7 +4416,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
             {/* Animated Gradient Border - SVG Implementation */}
             <div
               ref={containerRef}
-              className="absolute -inset-[1px] pointer-events-none z-30"
+              className="chat-composer-comet absolute -inset-[1px] pointer-events-none z-30"
               style={{
                 '--perimeter': perimeter,
                 overflow: 'visible',
@@ -4576,7 +4607,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
               )}
 
               <div className="flex flex-col flex-1 min-h-0 overflow-x-hidden cursor-text">
-                <div className={cn("flex items-center gap-2", isTextareaExpanded ? "mb-12" : "mb-10", "sm:mb-12")}>
+                <div className={cn("chat-composer-text-row flex items-center gap-2", isTextareaExpanded ? "mb-12" : "mb-10", "sm:mb-12")}>
                   <div className="flex-1 max-h-[250px] min-h-[40px] relative overflow-x-hidden">
                     {/* Subtle text indicator positioned to the right */}
                     {hasNegativePrompt && videoGenSettings && (
@@ -4597,6 +4628,8 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
                       disabled={parentIsLoading || isProcessingDoc || isRecording || isTranscribing || isMediaLoading}
                       className="w-full resize-none bg-transparent px-3 focus:outline-none placeholder-gray-500 dark:placeholder-gray-400 max-h-[250px] overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent py-2 sm:py-3 leading-6 sm:leading-relaxed min-h-[42px] mobile-textarea relative z-10 text-gray-900 dark:text-gray-100 whitespace-pre-wrap break-words"
                       onKeyDown={handleKeyDown}
+                      onFocus={handleComposerFocus}
+                      onBlur={handleComposerBlur}
                       style={{
                         WebkitTapHighlightColor: 'transparent'
                       }}
@@ -4622,9 +4655,17 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
                   </div>
                 </div>
               </div>
-              <div className="absolute bottom-0 left-0 right-0 py-1 px-1 sm:px-1.5 rounded-b-3xl cursor-default">
+              <div
+                className="chat-composer-tools absolute bottom-0 left-0 right-0 py-1 px-1 sm:px-1.5 rounded-b-3xl cursor-default"
+                onMouseDown={(e) => {
+                  // Keep the keyboard up while the user taps a tool-row control
+                  if (document.activeElement === textareaRef.current && !(e.target as HTMLElement).closest('textarea')) {
+                    e.preventDefault();
+                  }
+                }}
+              >
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1 ml-2">
+                  <div className="flex items-center gap-1 ml-2 min-w-0">
                     <UnifiedUploadButton
                       disabled={parentIsLoading || isProcessingDoc || Boolean(file)}
                       onTempDocUpload={handleTempDocUpload}
@@ -4646,7 +4687,12 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
                       }}
                     />
 
-                    <div className="w-0.5"></div> {/* Smaller spacer */}
+                    <div className="chat-composer-secondary flex items-center gap-1 min-w-0">
+                    <ComposerModelPill
+                      open={isModelMenuOpen}
+                      onOpenChange={setIsModelMenuOpen}
+                      disabled={isVoiceModeActive}
+                    />
 
                     {/* Mobile Layout - Show Tools button and Active Tool Indicator */}
                     {isMobile && (
@@ -4771,8 +4817,11 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
                         )}
                       </>
                     )}
+                    </div>
                   </div>
-                  {renderButton()}
+                  <div className="chat-composer-trailing flex flex-shrink-0 items-center">
+                    {renderButton()}
+                  </div>
                 </div>
               </div>
             </div>

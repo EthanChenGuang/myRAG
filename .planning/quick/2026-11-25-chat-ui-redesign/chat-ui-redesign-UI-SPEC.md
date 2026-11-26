@@ -48,6 +48,25 @@ existing translated disclaimer and placeholder.
 
 ---
 
+## Revision 2 (2026-11-26): Claude iOS app reference
+
+- **Top bar:** no full-width bar or hairline. Separate glass capsules (fill + `blur(20px) saturate(180%)`, 0.5px border, soft
+  shadow): round sidebar capsule, title capsule ("myRAG", no chevron, not a picker), right capsule grouping settings + avatar.
+  Behind them a two-layer progressive blur (light blur with canvas tint, heavy blur near the top) masked to fade out ~32px
+  below the capsules.
+- **Model picker** moves from the header into the composer tool row (`ComposerModelPill`, same `useModel()` provider and
+  `ModelSelector` list), opening upward; focus stays in the textarea so the iOS keyboard stays up.
+- **Composer on phones (<640px):** `data-composer="collapsed"` (idle and empty) is a one-line capsule: [+], placeholder,
+  mic and voice/send in one row; secondary tools (model pill, tools) and the disclaimer are hidden. Focus, text, an
+  attachment, an active tool, an open menu or dictation switch to `expanded`: textarea on top, tool row below
+  ([+], model pill, tools, mic/send). Height animates (220ms; none under reduced motion). The textarea stays mounted and the
+  empty middle of the capsule passes taps straight to it, so iOS opens the keyboard in the same gesture.
+- **Disclaimer:** phones show it only on the empty welcome screen while the composer is collapsed; desktop unchanged.
+- **Scroll to latest:** round 40px glass button with `ArrowDown`, centred 10px above the dock, no bobbing.
+- **Dock:** same two-layer progressive blur, strongest at the bottom edge.
+- **Comet border:** the animated `NEXT_PUBLIC_BORDER_*` comet is hidden on phones (it read as a stray orange arc).
+- Desktop (>=1024px) keeps the always-expanded card; header controls become capsules with the same tokens.
+
 ## Design System
 
 | Property | Value |

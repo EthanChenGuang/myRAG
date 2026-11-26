@@ -52,6 +52,23 @@ Contract: [chat-ui-redesign-UI-SPEC.md](chat-ui-redesign-UI-SPEC.md).
 - No chat, RAG, auth or API logic changed. `chat-message.tsx` (parallel follow-up-chips PR) is untouched: the user bubble
   and action pills are styled from `chat-shell.css` through existing class hooks.
 
+## Revision 2 (2026-11-26)
+
+Matched to the Claude iOS app screenshots (UI-SPEC "Revision 2"):
+
+- Floating glass capsules in the header over a progressive blur; title capsule instead of the header model dropdown.
+- Model picker in the composer tool row (`src/components/ui/composer-model-pill.tsx`), same model provider and list.
+- Collapsed one-line composer capsule on phones, expanded card while in use (`src/lib/chat-composer-state.ts`,
+  `data-composer` on `.chat-input-container`); `data-chat-input-form` on the form.
+- Phone disclaimer only on the empty welcome screen at rest.
+- Glass `ArrowDown` scroll-to-latest button above the dock (`scroll-indicator.tsx`).
+- The orange arc was the animated comet border (`NEXT_PUBLIC_BORDER_ENABLED`, on by default) frozen mid-travel, not a
+  focus ring; hidden on phones, desktop unchanged.
+- Keyboard check (Playwright, iPhone 15, visualViewport height overridden by 336px and resize dispatched): expanded card
+  bottom 8px above the keyboard top; tapping the collapsed capsule focuses the textarea; with the model menu open the
+  textarea keeps focus.
+- Tests: `tests/ui/chat-composer-state.test.ts`. Screenshots `ui-shots/v2-*` in the session scratchpad.
+
 ## Verification
 
 - `npx next typegen && npx tsc --noEmit -p tsconfig.json`: 0 errors.

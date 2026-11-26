@@ -41,7 +41,7 @@ const tooltipStyles = `
   }
 `;
 
-export function ModelSelector() {
+export function ModelSelector({ onSelect }: { onSelect?: () => void } = {}) {
   const { selectedModel, setSelectedModel, availableModels } = useModel();
   const { theme, resolvedTheme } = useTheme();
   const { t } = useLanguage();
@@ -77,7 +77,10 @@ export function ModelSelector() {
         {availableModels.map((option) => (
           <button
             key={option.id}
-            onClick={() => setSelectedModel(option)}
+            onClick={() => {
+              setSelectedModel(option);
+              onSelect?.();
+            }}
             className={cn(
               "w-full text-left text-sm rounded-lg transition-colors flex items-center justify-between",
               "hover:bg-transparent"

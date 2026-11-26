@@ -1,5 +1,5 @@
-import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown } from 'lucide-react';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { ArrowDown, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useEffect, useState, useRef } from 'react';
 
@@ -35,18 +35,6 @@ export function ScrollIndicator({
   // State for idle detection - specifically for fading after scroll inactivity
   const [isScrollIdle, setIsScrollIdle] = useState(false);
   const scrollIdleTimerRef = useRef<NodeJS.Timeout | null>(null);
-  // iOS Safari detection - use lower position for scroll button
-  const [isIOSSafari, setIsIOSSafari] = useState(false);
-
-  // Detect iOS Safari on mount
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const ua = navigator.userAgent;
-      const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-      const isSafari = /^((?!chrome|android).)*safari/i.test(ua);
-      setIsIOSSafari(isIOS && isSafari);
-    }
-  }, []);
 
   // The main function to handle scroll activity
   const handleScrollActivity = () => {
@@ -145,13 +133,28 @@ export function ScrollIndicator({
     };
   }, []);
 
+  const reduceMotion = useReducedMotion();
+  const isDown = direction === 'down';
+
   // Define animation variants
-  const variants = {
+  const variants = isDown ? {
+    hidden: { opacity: 0, scale: reduceMotion ? 1 : 0.8 },
+    visible: {
+      opacity: 1,
+      scale: 1,
+      transition: { duration: reduceMotion ? 0 : 0.18, ease: "easeOut" }
+    },
+    exit: {
+      opacity: 0,
+      scale: reduceMotion ? 1 : 0.8,
+      transition: { duration: reduceMotion ? 0 : 0.15, ease: "easeOut" }
+    }
+  } : {
     hidden: { opacity: 0, scale: 0 },
     visible: {
       opacity: isScrollIdle ? 0.5 : 1,
       scale: 1,
-      y: direction === 'up' ? [0, 6, 0] : [0, -6, 0],
+      y: [0, 6, 0],
       transition: {
         y: { duration: 2, repeat: Infinity, ease: "easeInOut" },
         opacity: { duration: 0.7 },
@@ -199,30 +202,29 @@ export function ScrollIndicator({
             onMouseEnter?.();
           }}
           onMouseLeave={onMouseLeave}
+          type="button"
           className={cn(
-            "absolute left-1/2 -translate-x-1/2 flex items-center justify-center w-8 h-8",
-            "rounded-full bg-[#EFE1D5] dark:bg-[#2F2F2F] hover:bg-[#D4C0B6]",
-            "dark:hover:bg-[#424242] shadow-md z-50", // Higher z-index
-            isScrollIdle && "blur-[0.8px]", // Apply blur only when idle
-            direction === 'up'
-              ? "top-4"
-              : "-top-52 sm:-top-12", // Default: high on mobile, lower on desktop
+            isDown
+              ? "chat-scroll-fab z-50"
+              : cn(
+                "absolute left-1/2 -translate-x-1/2 flex items-center justify-center w-8 h-8 top-4",
+                "rounded-full bg-[#EFE1D5] dark:bg-[#2F2F2F] hover:bg-[#D4C0B6]",
+                "dark:hover:bg-[#424242] shadow-md z-50",
+                isScrollIdle && "blur-[0.8px]"
+              ),
             className
           )}
-          // iOS Safari needs lower position - inline style overrides Tailwind class
-          style={direction === 'down' && isIOSSafari ? { top: '-48px' } : undefined}
           variants={variants}
           initial="hidden"
           animate="visible"
           exit="exit"
           aria-label={`Scroll to ${direction}`}
         >
-          <ChevronDown
-            className={cn(
-              "w-5 h-5 text-gray-700 dark:text-gray-200",
-              direction === 'up' && "rotate-180"
-            )}
-          />
+          {isDown ? (
+            <ArrowDown className="w-5 h-5" strokeWidth={1.75} aria-hidden="true" />
+          ) : (
+            <ChevronDown className="w-5 h-5 text-gray-700 dark:text-gray-200 rotate-180" aria-hidden="true" />
+          )}
         </motion.button>
       )}
     </AnimatePresence>
