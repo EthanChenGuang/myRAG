@@ -86,6 +86,7 @@ export interface FakeRpc {
 }
 
 const NIL = '00000000-0000-0000-0000-000000000000';
+const ZERO = BigInt(0);
 
 function md5(text: string): string {
   return crypto.createHash('md5').update(text).digest('hex');
@@ -268,7 +269,7 @@ export function createFakeRpc(clock: FakeClock, options: { target?: string } = {
     },
     rag_vector_sync_reconcile_summary(args) {
       const tenantKey = String(args.p_tenant_key);
-      const buckets = Array.from({ length: 64 }, (_, bucket) => ({ bucket, row_count: 0, ix: 0n, cx: 0n }));
+      const buckets = Array.from({ length: 64 }, (_, bucket) => ({ bucket, row_count: 0, ix: ZERO, cx: ZERO }));
       for (const chunk of servableOf(tenantKey)) {
         const row = toRow(chunk);
         const m = md5(row.chunk_id);

@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
 import type { PGlite } from '@electric-sql/pglite';
+import type { RpcClient } from '@/lib/rag/backend/supabase-rpc';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from '../../eval/harness/fake-edge.mts';
 import { createFixtureDatabase, type DeploymentMode } from '../../eval/harness/pglite-supabase.mts';
 import { embedText } from '../../eval/harness/fixture-embedder.mts';
@@ -24,6 +25,7 @@ const GOLDEN_IDS = [
   '00000000-0000-4000-8000-000000000002',
   '7f3c2a10-1b2c-4d5e-8f60-0123456789ab',
 ] as const;
+const ZERO = BigInt(0);
 const GOLDEN_BUCKETS = [5, 25, 60];
 const GOLDEN_HASHES = ['5016017787118691403', '-7398545041996669218', '4332796155272647876'];
 
@@ -205,8 +207,8 @@ for (const mode of MODES) {
       const listed = await bucketRows(a.key, bucket);
       assert.ok(listed.some((row) => row.chunk_id === GOLDEN_IDS[2]), 'the golden id is listed in its bucket');
       assert.equal(listed.length, Number(rows[bucket]!.row_count));
-      let idXor = 0n;
-      let contentXor = 0n;
+      let idXor = ZERO;
+      let contentXor = ZERO;
       for (const row of listed) {
         assert.equal(bucketOf(row.chunk_id), bucket);
         idXor ^= hash64(md5(row.chunk_id));
@@ -232,7 +234,7 @@ for (const mode of MODES) {
       // The SQL hash of one golden id, isolated: the bucket's XOR with every other listed id taken out.
       const bucket = GOLDEN_BUCKETS[2]!;
       const listed = await bucketRows(a.key, bucket);
-      let others = 0n;
+      let others = ZERO;
       for (const row of listed) if (row.chunk_id !== GOLDEN_IDS[2]) others ^= hash64(md5(row.chunk_id));
       const sqlXor = BigInt((await summary(a.key))[bucket]!.id_xor);
       assert.equal(BigInt.asIntN(64, sqlXor ^ others).toString(), GOLDEN_HASHES[2]);
@@ -453,14 +455,16 @@ for (const mode of MODES) {
 describe('vector sync reconcile RPCs through the fake edge (multi-tenant)', () => {
   let db: PGlite;
   let edge: FakeEdge;
-  let client: ReturnType<typeof createClient>;
+  let client: RpcClient;
   const key = `u:${TWO_TENANT_IDS.userA}`;
 
   before(async () => {
     db = (await createTwoTenantDatabase()).db;
     edge = await startFakeEdge({ db });
     const env = fixtureProcessEnv(edge.url);
-    client = createClient(edge.url, env.SUPABASE_SERVICE_ROLE_KEY as string, { auth: { persistSession: false, autoRefreshToken: false } });
+    client = createClient(edge.url, env.SUPABASE_SERVICE_ROLE_KEY as string, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    }) as unknown as RpcClient;
   });
 
   after(async () => {
