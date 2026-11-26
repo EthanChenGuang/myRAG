@@ -1,5 +1,5 @@
 {
-  "corpus_sha256": "e305373afc3358fef441ad92fb3c2b1ee6db50079aacb999fb5ed66b77661dcc",
+  "corpus_sha256": "e76ad9227d453345063aba0e11aec806896d5774448ed221d84a3a348d5d75f8",
   "deployment_mode": "single-tenant",
   "embedder_id": "fixture-ngram",
   "embedder_source_sha256": "569156a98ef50469ce7ada4e6ee3c1c22182035c7ce6aa46b8d0bc5b200fc7ad",
@@ -8352,25 +8352,25 @@
     "stage_timeouts_ms": null,
     "user_id": null
   },
-  "run_config_hash": "13b4c5bb7a765c049eafcfc6a7c94abceb1d81e508fee93275097c143b1ab8ae",
+  "run_config_hash": "48be5c5a16f8840cacafdf1809f3d900cdd1c326026b2d32e32375d88283dd04",
   "runs": [
     {
-      "created_at": "2026-11-26T13:49:53Z",
-      "git_sha": "3664c6bb51e099595f09e8a9180c36b976d42b0f",
-      "run_config_hash": "13b4c5bb7a765c049eafcfc6a7c94abceb1d81e508fee93275097c143b1ab8ae",
-      "run_id": "0de4fe00-c975-48d3-b589-ed82758fea9f"
+      "created_at": "2026-11-26T16:30:52Z",
+      "git_sha": "65a3987a6fc3e67e7622c90c8d2ccfc756a09d63",
+      "run_config_hash": "48be5c5a16f8840cacafdf1809f3d900cdd1c326026b2d32e32375d88283dd04",
+      "run_id": "6a985deb-6697-445d-8e18-7da253291ba9"
     },
     {
-      "created_at": "2026-11-26T13:50:18Z",
-      "git_sha": "3664c6bb51e099595f09e8a9180c36b976d42b0f",
-      "run_config_hash": "13b4c5bb7a765c049eafcfc6a7c94abceb1d81e508fee93275097c143b1ab8ae",
-      "run_id": "a7809ea8-b409-4fb7-8e7a-ac7378c24de1"
+      "created_at": "2026-11-26T16:31:18Z",
+      "git_sha": "65a3987a6fc3e67e7622c90c8d2ccfc756a09d63",
+      "run_config_hash": "48be5c5a16f8840cacafdf1809f3d900cdd1c326026b2d32e32375d88283dd04",
+      "run_id": "f98ef777-c242-4569-a387-178ebeb1cbd6"
     },
     {
-      "created_at": "2026-11-26T13:50:42Z",
-      "git_sha": "3664c6bb51e099595f09e8a9180c36b976d42b0f",
-      "run_config_hash": "13b4c5bb7a765c049eafcfc6a7c94abceb1d81e508fee93275097c143b1ab8ae",
-      "run_id": "d09848ba-613c-4cef-bd66-f47d4070f25c"
+      "created_at": "2026-11-26T16:31:44Z",
+      "git_sha": "65a3987a6fc3e67e7622c90c8d2ccfc756a09d63",
+      "run_config_hash": "48be5c5a16f8840cacafdf1809f3d900cdd1c326026b2d32e32375d88283dd04",
+      "run_id": "422e12aa-cff5-415f-99ea-e9145aa4a64c"
     }
   ],
   "schema_version": 1,
