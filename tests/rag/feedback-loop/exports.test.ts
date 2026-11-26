@@ -143,7 +143,7 @@ beforeAll(async () => {
     label(
       [
         span(CHUNK_Z, DOC_Z, 'unsplit sentence'),
-        span(CHUNK_A, DOC_A, 'this quote is not in the chunk'),
+        span(MANY_A_CHUNKS[30], DOC_A_MANY, 'this quote is not in the chunk'),
         span(CHUNK_A_QUARANTINED, DOC_A_QUARANTINED, 'quarantined sentence'),
         span(CHUNK_B, DOC_B, 'private sentence'),
       ],
@@ -297,7 +297,7 @@ describe('exportGolden (D-20)', () => {
     expect(line.label.paraphrased_question).toBe('A paraphrased synthetic question?');
     expect(line.evidence.map((entry) => [entry.chunk_id, entry.quote_verified, entry.chunk_text])).toEqual([
       [CHUNK_Z, true, TEXT_Z],
-      [CHUNK_A, false, TEXT_A],
+      [MANY_A_CHUNKS[30], false, 'Tenant alpha filler sentence number 30.'],
       [CHUNK_A_QUARANTINED, false, null],
       [CHUNK_B, false, null],
     ]);

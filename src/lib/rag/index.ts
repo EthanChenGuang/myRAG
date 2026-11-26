@@ -437,4 +437,15 @@ export {
 export { LabelRequestSchema, normalizeQuoteText, validateAndSaveLabel } from './feedback-loop/labels';
 export type { EvidenceFailureReason, LabelRequest, SaveLabelResult } from './feedback-loop/labels';
 export { REVIEW_SEARCH_POOL, ReviewSearchRequestSchema, searchForReviewItem } from './feedback-loop/review-search';
+export {
+  buildExport,
+  EXPORT_KINDS,
+  exportDictionary,
+  exportGolden,
+  exportTraining,
+  GoldenExportLineSchema,
+  markExported,
+  MarkExportedRequestSchema,
+} from './feedback-loop/exports';
+export type { ExportKind, GoldenExportLine, MarkExportedRequest, MarkItem, MarkResult } from './feedback-loop/exports';
 export type { ReviewSearchHit, ReviewSearchRequest, ReviewSearchResult } from './feedback-loop/review-search';
