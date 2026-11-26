@@ -361,7 +361,12 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     });
     let order: unknown;
     try {
-      order = await delegate(handle.port);
+      const legWeights = params.leg_weights ?? { dense: 1, lexical: 1 };
+      order = await delegate(handle.port, {
+        signal: stageSignal,
+        rrfK: params.rrf_k,
+        legWeights: { dense: legWeights.dense, lexical: legWeights.lexical },
+      });
     } catch (error) {
       throw new SearchDelegateError(error);
     }

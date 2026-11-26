@@ -32,6 +32,7 @@ import { LangChainAdapterError, raceAbort, toAdapterError, type LangChainTransfo
 export { CaptureRetriever } from './capture';
 export { createChatModel, OPENROUTER_BASE_URL, structured, type ChatModelFactory, type ChatModelOptions } from './chat-model';
 export { LangChainAdapterError } from './errors';
+export { createLangChainSearchDelegate } from './ensemble';
 
 const CONTEXTUALIZE_ID = 'langchain.contextualize';
 const MULTI_QUERY_ID = 'langchain.multi-query';
