@@ -661,3 +661,6 @@ export { allocateStrata, drawWeeklySample, loadSampleConfig, missingSamplePrereq
 export type { DrawWeeklySampleResult, SamplePrerequisite, SampleStatus, WeeklySampleConfig } from './monitor/sample';
 export { IMPORT_LIMITS, importQuestions, parseQuestionFile, prepareQuestions, QuestionsImportError } from './monitor/questions-import';
 export type { ImportCounts, PreparedQuestions, QuestionFileFormat } from './monitor/questions-import';
+export { setAlertStatus } from './monitor/alerts-store';
+export { alertForAdmin, alertFromRow, listAlerts, MAX_ALERTS_PAGE, monitorSummary } from './monitor/alerts-read';
+export type { AlertStatusFilter, ListAlertsResult, MonitorSummary } from './monitor/alerts-read';
