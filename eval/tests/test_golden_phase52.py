@@ -24,8 +24,8 @@ PRE_PREFIX = "pre-05.2-29"
 
 # Item count and sha256 over the sorted, newline-joined item ids of each baseline before plan 05.2-29.
 PRE_ITEM_SETS = {
-    "fixture-baseline": (247, "cf07523992ee949f439fe6b9b21a350ee5178e7024d1e1aee53a0df634af5cc0"),
-    "fixture-ingest-baseline": (308, "1640c9a202fcdb8d9ca82025437029a4e21381b8b7f0d79d5343231a65ece883"),
+    "fixture-baseline": (283, "a86c8693e9074d5c600556ce9a5539e07a0366b58f6246390e7862fc1a0df0c3"),
+    "fixture-ingest-baseline": (344, "8842c2de25ba004d9e4ce5aff61c2858edf8a921820f25755978b070dd80208d"),
 }
 
 

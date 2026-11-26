@@ -174,9 +174,20 @@ for (const mode of MODES) {
              version
            FROM documents ORDER BY id`,
         );
-        // A fixture-meta version (05.2-28) replaces the column default 1; every other default holds.
-        const expected = loadCorpus(REAL_CORPUS)
-          .documents.map((doc) => [doc.id, doc.docType, true, doc.version ?? 1])
+        // A fixture-meta version (05.2-28) replaces the column default 1; lineage versions (04.2-37) are seeded with their own version
+        // and the earlier one superseded (D-40), so only the latest version of a lineage keeps the defaults.
+        const corpusDocs = loadCorpus(REAL_CORPUS).documents;
+        const latestVersion = new Map<string, number>();
+        for (const doc of corpusDocs) {
+          if (doc.lineage) latestVersion.set(doc.lineage.id, Math.max(latestVersion.get(doc.lineage.id) ?? 0, doc.lineage.version));
+        }
+        const expected = corpusDocs
+          .map((doc) => [
+            doc.id,
+            doc.docType,
+            doc.lineage === undefined || doc.lineage.version === latestVersion.get(doc.lineage.id),
+            doc.lineage?.version ?? doc.version ?? 1,
+          ])
           .sort((a, b) => String(a[0]).localeCompare(String(b[0])));
         assert.ok(expected.length > 0);
         assert.deepEqual(

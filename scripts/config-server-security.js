@@ -1,13 +1,9 @@
+const { hasUrlCredentials, isSecretName } = require('../src/lib/rag/config-gate/secret-name.cjs');
+
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 const CSRF_HEADER = 'x-config-ui';
 
-const SECRET_NAME =
-  /(KEY|SECRET|TOKEN|PASSWORD|PASSWD|PRIVATE|SERVICE_ROLE|DATABASE_URL|WEBHOOK|DSN|CREDENTIAL|COOKIE|SALT|CERT|CONNECTION_STRING|JWT|SIGNING)/i;
-const BENIGN_NAME = /(_TOKENS$|TOKEN_TTL|TOKEN_LIMIT|KEY_TERMS)/;
-const SECRET_VALUE_NAMES = new Set(['MCP_CUSTOM_SERVERS', 'REDIS_URL']);
-const SECRET_VALUE_PATTERN = /^MCP_[A-Z0-9_]*_ENDPOINT$/;
-const URL_WITH_CREDENTIALS = /:\/\/[^/\s:@]+:[^/\s@]*@/;
 
 const ALLOWED_IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'ico'];
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -68,9 +64,7 @@ function securityMiddleware(req, res, next) {
 }
 
 function isSecretConfigEntry(name, value) {
-  if (SECRET_VALUE_NAMES.has(name) || SECRET_VALUE_PATTERN.test(name)) return true;
-  if (SECRET_NAME.test(name) && !BENIGN_NAME.test(name)) return true;
-  return typeof value === 'string' && URL_WITH_CREDENTIALS.test(value);
+  return isSecretName(name) || hasUrlCredentials(value);
 }
 
 /** Splits an env map into values safe to show and the names of secrets that are set. Secret values never leave the server. */

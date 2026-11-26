@@ -17,8 +17,14 @@ const TENANT_A = `u:${TWO_TENANT_IDS.userA}`;
 const TENANT_B = `u:${TWO_TENANT_IDS.userB}`;
 const TENANT_O = `o:${TWO_TENANT_IDS.orgO}`;
 const CANARY_CHUNK_IDS = [TWO_TENANT_IDS.chunkA, TWO_TENANT_IDS.chunkB, TWO_TENANT_IDS.chunkO];
-/** 122 fixture corpus chunks (71 before the 05.1-09 injection documents, 107 before the 04.1.1-10 synthetic-terms documents) plus the three canary chunks. */
-const STALE_ROWS = 209;
+/**
+ * 614 fixture corpus chunks (71 before the 05.1-09 injection documents, 107 before the 04.1.1-10 synthetic-terms documents, 206 with
+ * the 05.2-28 documents, plus the 405 Phase 4.2 chunks of plan 04.2-37) plus the three canary chunks.
+ */
+const STALE_ROWS = 614;
+/** The earlier versions of the three Phase 4.2 version notes are superseded (D-40); relex reads current chunks only. */
+const SUPERSEDED_ROWS = 3;
+const RELEXED_ROWS = STALE_ROWS - SUPERSEDED_ROWS;
 
 type Row = Record<string, unknown>;
 
@@ -99,11 +105,11 @@ describe('rag:relex job (src/lib/rag/ingest/relex)', () => {
 
   const rows = async (sql: string, params: unknown[] = []): Promise<Row[]> => (await fixture.db.query<Row>(sql, params)).rows;
 
-  test(`a run updates ${STALE_ROWS} stale rows, sets lexical_version 2 and fills lexical_tsv`, async () => {
-    const report = await relex.runRelex({ db: db(), batchSize: 500 });
-    assert.equal(report.updated, STALE_ROWS);
+  test(`a run updates ${RELEXED_ROWS} stale current rows, sets lexical_version 2 and fills lexical_tsv`, async () => {
+    const report = await relex.runRelex({ db: db(), batchSize: 1000 });
+    assert.equal(report.updated, RELEXED_ROWS);
     assert.equal(report.batches, 1);
-    const stale = await rows('SELECT count(*)::int AS n FROM document_chunks WHERE lexical_version IS DISTINCT FROM $1', [LEXICAL_VERSION]);
+    const stale = await rows('SELECT count(*)::int AS n FROM document_chunks WHERE is_current AND lexical_version IS DISTINCT FROM $1', [LEXICAL_VERSION]);
     assert.equal(stale[0]?.n, 0);
     const missingTsv = await rows(
       'SELECT count(*)::int AS n FROM document_chunks WHERE lexical_text IS NOT NULL AND lexical_text <> \'\' AND lexical_tsv IS NULL',
@@ -150,9 +156,12 @@ describe('rag:relex job (src/lib/rag/ingest/relex)', () => {
     assert.equal(batchSizes[0], 20);
 
     const report = await relex.runRelex({ db: db(), batchSize: 20, resumeAfter });
-    assert.equal(report.updated, STALE_ROWS - 20);
+    assert.equal(report.updated, RELEXED_ROWS - 20);
     assert.ok(report.batches >= 3);
-    assert.equal((await rows('SELECT count(*)::int AS n FROM document_chunks WHERE lexical_version IS DISTINCT FROM $1', [LEXICAL_VERSION]))[0]?.n, 0);
+    assert.equal(
+      (await rows('SELECT count(*)::int AS n FROM document_chunks WHERE is_current AND lexical_version IS DISTINCT FROM $1', [LEXICAL_VERSION]))[0]?.n,
+      0,
+    );
   });
 
   test('--tenant touches only one tenant rows', async () => {
@@ -174,7 +183,7 @@ describe('rag:relex job (src/lib/rag/ingest/relex)', () => {
     );
     const before = await lexicalChecksum(fixture.db);
     const report = await relex.dryRunRelex({ db: db() });
-    assert.equal(report.total, STALE_ROWS);
+    assert.equal(report.total, RELEXED_ROWS);
     assert.ok(report.tenants[TENANT_A] > 0);
     const after = await lexicalChecksum(fixture.db);
     assert.equal(before, after);

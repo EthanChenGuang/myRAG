@@ -13,12 +13,12 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const REAL_CORPUS = path.join(REPO_ROOT, 'eval/fixtures/corpus');
 const MODES: DeploymentMode[] = ['single-tenant', 'multi-tenant'];
 
-// The committed prechunked corpus (re-pinned by plan 05.2-29, eval/baselines/fixture-baseline.json). Plan 04.2-37 adds the Phase 4.2 fixture
-// files and re-records this hash and the two dump digests below together with the baselines.
-const COMMITTED_CORPUS_SHA256 = 'd4968bbbf1b7a1f8993f13aec9d4eb6868ca9d7d46016e1ae6d9599069ac9ae1';
+// The committed prechunked corpus with the 04.1.1-10, 05.2-28 and 04.2-37 fixture files (re-pinned on train 30, eval/baselines/fixture-baseline.json); this hash and
+// the two dump digests below are re-recorded together with the baselines.
+const COMMITTED_CORPUS_SHA256 = '8d202b8cec3701b6010e75fa97ab3968ad6d0183a6c40ae9937f2e12003714b3';
 const COMMITTED_DUMP_SHA256: Record<DeploymentMode, string> = {
-  'single-tenant': '04b96d9a4005c9695dd7818a7b7c4cd3f8624d6e087de163175aed7b754526aa',
-  'multi-tenant': '25c74ba453a945157decb49a32acf93edc65dce2db2c05f2e5c1840451dbb96c',
+  'single-tenant': 'b9b3d81dc3389d3edf6a619dd6b0704f6a2cebc7f1820aceaa230c7cd9e4db07',
+  'multi-tenant': 'da577283ca968049f9c00e28a389c524afa0cf2205e05dbcdb90cb549d9c747e',
 };
 const DUMP_DOCUMENT_COLUMNS =
   'id, filename, content, metadata, status, is_current, version, lineage_id, source, source_key, tenant_key, superseded_by, doc_type, user_id, created_at';
@@ -116,7 +116,9 @@ describe('corpus loaders on a Phase 4.2 corpus', () => {
     const loaded = loadCorpus(REAL_CORPUS);
     assert.equal(loaded.corpusSha256, COMMITTED_CORPUS_SHA256);
     assert.equal(pythonCorpus('sha256', REAL_CORPUS).trim(), COMMITTED_CORPUS_SHA256);
-    assert.ok(loaded.documents.every((doc) => doc.fixtureDupTemplate === undefined && doc.lineage === undefined));
+    // Plan 04.2-37: thirty generated copies per language and one two-version lineage per language.
+    assert.equal(loaded.documents.filter((doc) => doc.fixtureDupTemplate !== undefined).length, 90);
+    assert.equal(loaded.documents.filter((doc) => doc.lineage !== undefined).length, 6);
   });
 });
 

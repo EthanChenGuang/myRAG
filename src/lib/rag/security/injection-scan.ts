@@ -43,7 +43,7 @@ const CONTROL = /\p{Cc}/gu;
  * NFKC, invisible and bidi control characters replaced, lowercase, whitespace runs collapsed. Phrase rules and
  * the scanned text go through the same function; regex rules keep their source and match with the iu flags.
  */
-function normalise(text: string, invisible: '' | ' '): string {
+export function normalise(text: string, invisible: '' | ' '): string {
   return text.normalize('NFKC').replace(INVISIBLE_GLOBAL, invisible).toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
@@ -51,7 +51,7 @@ function ruleProblem(id: string, reason: string): never {
   throw new Error(`[Ingest Config] injection rule ${id}: ${reason}`);
 }
 
-function hasBackreference(pattern: string): boolean {
+export function hasBackreference(pattern: string): boolean {
   for (let index = 0; index < pattern.length; index += 1) {
     const char = pattern[index];
     if (char === '\\') {

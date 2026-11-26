@@ -1,135 +1,167 @@
 {
   "schemaVersion": 1,
+  "ragAffectingExtra": [
+    "NEXT_PUBLIC_AI_PROVIDER",
+    "NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE",
+    "NEXT_PUBLIC_OPENAI_MODELS",
+    "NEXT_PUBLIC_OPENROUTER_MODELS"
+  ],
   "vars": [
     {
       "name": "ANTHROPIC_API_KEY",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "ANTHROPIC_BASE_URL",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "COHERE_API_KEY",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "COHERE_BASE_URL",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "DEEPINFRA_API_KEY",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "DEEPINFRA_BASE_URL",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "LAKERA_GUARD_API_KEY",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "LAKERA_GUARD_BASE_URL",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "LANGFUSE_BASE_URL",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "LANGFUSE_CAPTURE_CONTENT",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "LANGFUSE_ENABLED",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "LANGFUSE_PUBLIC_KEY",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "LANGFUSE_REVIEW_SAMPLE_RATE",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "LANGFUSE_SAMPLE_RATE",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "LANGFUSE_SECRET_KEY",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "LLAMACLOUD_ADAPTIVE_LONG_TABLE",
       "status": "legacy",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "LLAMACLOUD_CHUNK_OVERLAP",
       "status": "legacy",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "LLAMACLOUD_CHUNK_SIZE",
       "status": "legacy",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "LLAMACLOUD_CHUNK_STRATEGY",
       "status": "legacy",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "LLAMACLOUD_HIGH_RES_OCR",
       "status": "legacy",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "LLAMACLOUD_MULTIMODAL_PARSING",
       "status": "legacy",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "LLAMACLOUD_OUTLINED_TABLE_EXTRACTION",
       "status": "legacy",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "LLAMACLOUD_OUTPUT_TABLES_AS_HTML",
       "status": "legacy",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "LLAMACLOUD_PARSE_MODE",
       "status": "legacy",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "LLAMACLOUD_PARSE_MODEL",
       "status": "legacy",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "LLAMACLOUD_PARSING_MODE",
       "status": "legacy",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "NEXT_PUBLIC_RAG_CACHE_ENABLED",
@@ -138,7 +170,8 @@
         "config-server",
         "config-ui",
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "NEXT_PUBLIC_RAG_CACHE_TTL",
@@ -147,7 +180,8 @@
         "config-server",
         "config-ui",
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "NEXT_PUBLIC_RAG_ENHANCEMENT_CONFIDENCE_THRESHOLD",
@@ -156,17 +190,20 @@
         "config-server",
         "config-ui",
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "NEXT_PUBLIC_RAG_INGEST_REALTIME",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "NEXT_PUBLIC_RAG_MODE",
@@ -176,7 +213,8 @@
         "config-ui",
         "env-ts",
         "init-env"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "NEXT_PUBLIC_RAG_PERFORMANCE_MODE",
@@ -185,7 +223,8 @@
         "config-server",
         "config-ui",
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "NEXT_PUBLIC_RAG_QUERY_ENHANCEMENT_ENABLED",
@@ -194,12 +233,14 @@
         "config-server",
         "config-ui",
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "NEXT_PUBLIC_RAG_REASONING_ENABLED",
       "status": "legacy",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "NEXT_PUBLIC_RAG_RERANKING_ENABLED",
@@ -207,7 +248,8 @@
       "knownGaps": [
         "config-server",
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "NEXT_PUBLIC_RAG_RERANKING_STRATEGY",
@@ -215,19 +257,22 @@
       "knownGaps": [
         "config-server",
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "OPENAI_EMBEDDING_MODEL",
       "status": "legacy",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_ADAPTIVE_RETRIEVAL",
       "status": "legacy",
       "knownGaps": [
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_ADJACENCY_WINDOW",
@@ -235,66 +280,78 @@
       "knownGaps": [
         "config-ui",
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_ADJACENT_CHUNKS",
       "status": "legacy",
       "knownGaps": [
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_ANSWER_FEEDBACK",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "RAG_ANSWER_STYLE",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_BEHAVIOR_MODE",
       "status": "legacy",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_BGE_M3_SERVING",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_CACHE_ENABLED",
       "status": "legacy",
       "knownGaps": [
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_CAPTION_LANGUAGE",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_CITATIONS",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_CITATION_PER_SENTENCE",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_CLAIM_CHECK",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_CLAUDE_CITATIONS",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_COMPLETENESS_CONFIDENCE",
@@ -302,37 +359,44 @@
       "knownGaps": [
         "config-ui",
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_CONTEXT_COMPRESSION",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_CONTEXT_EDGE_ORDER",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_CONTEXT_RELEVANCE_RULE",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_CONTEXT_TAGGING",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_CONTEXT_TOKEN_BUDGET",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_DISABLED_STAGES",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_DIVERSITY_WEIGHT",
@@ -340,22 +404,26 @@
       "knownGaps": [
         "config-ui",
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_DOC_TRANSLATION",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_DOC_TRANSLATION_MODEL",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_DOC_TYPE_LLM_DETECT",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_DOCUMENT_COMPLETENESS_THRESHOLD",
@@ -365,112 +433,134 @@
         "config-ui",
         "env-ts",
         "init-env"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_DOMAIN_EXPERT_REVIEW",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "RAG_EFFECTIVE_DATES",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_EFFECTIVE_DATE_LLM_EXTRACT",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_EMBED_BATCH_MODE",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_EMBED_FEEDBACK",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "RAG_EMBED_FEEDBACK_SECRET",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "RAG_EMBED_TENANT",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_EMBEDDING_PROFILES",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_DOMAIN_EMBEDDINGS",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_FINETUNE",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_FT_EMBED_API_KEY",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "RAG_FT_SLOT_A_BASE_URL",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_FT_SLOT_A_MODEL",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_FT_SLOT_A_QUERY_PROMPT",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_FT_SLOT_A_DOCUMENT_PROMPT",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_FT_SLOT_B_BASE_URL",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_FT_SLOT_B_MODEL",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_FT_SLOT_B_QUERY_PROMPT",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_FT_SLOT_B_DOCUMENT_PROMPT",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_DOMAIN_EMBEDDING_MAX_LEGS",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_DOMAIN_EMBEDDING_TIMEOUT_MS",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_ENABLE_ADJACENT_CHUNKS",
@@ -478,7 +568,8 @@
       "knownGaps": [
         "config-ui",
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_ENABLE_HYBRID_SEARCH",
@@ -486,7 +577,8 @@
       "knownGaps": [
         "config-server",
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_ENABLE_MULTI_PASS",
@@ -496,17 +588,20 @@
         "config-ui",
         "env-ts",
         "init-env"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_EVAL_ALLOWED_SCOPES",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "RAG_EVAL_ENDPOINT_ENABLED",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "RAG_EVAL_RETRIEVAL_MIN_SIMILARITY",
@@ -516,57 +611,66 @@
         "env-ts",
         "config-server",
         "config-ui"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_EVAL_SECRET",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "RAG_EXACT_ID_LOOKUP",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_EXACT_SCAN_CUTOFF",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_EXACT_THRESHOLD",
       "status": "legacy",
       "knownGaps": [
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_EXTRACT_KEY_TERMS",
       "status": "legacy",
       "knownGaps": [
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_FALLBACK_LOWER_THRESHOLD",
       "status": "legacy",
       "knownGaps": [
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_FINAL_RESULT_COUNT",
       "status": "legacy",
       "knownGaps": [
         "config-ui"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_FINANCIAL_BOOST",
       "status": "legacy",
       "knownGaps": [
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_FINANCIAL_CONFIDENCE_MIN",
@@ -574,258 +678,308 @@
       "knownGaps": [
         "config-server",
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_GROUNDEDNESS",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_GROUNDEDNESS_JUDGE_MODEL",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_GROUNDEDNESS_LLM_JUDGE",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_GROUNDEDNESS_TIMEOUT_MS",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_GROUNDEDNESS_VECTARA_MULTI_TENANT_ACK",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_GROUNDEDNESS_VECTARA_OPT_IN",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_HIDDEN_TEXT_CHECK",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_HIGH_THRESHOLD",
       "status": "legacy",
       "knownGaps": [
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_HNSW_ITERATIVE_SCAN",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_INGEST_ASYNC",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_INGEST_LINK_CHECK",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_INGEST_PIPELINE",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_INGEST_WORKER_CONCURRENCY",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "RAG_INGEST_JOB_RETENTION_DAYS",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "RAG_INGEST_MAINTENANCE_INTERVAL_SECONDS",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "RAG_INGEST_MAINTENANCE",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "RAG_INITIAL_MATCH_COUNT",
       "status": "legacy",
       "knownGaps": [
         "config-ui"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_INJECTION_CHECK",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_INJECTION_LAKERA",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_INJECTION_LAKERA_MULTI_TENANT_ACK",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_INJECTION_PROMPT_GUARD",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_INJECTION_SCAN",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_INVOICE_LLM_EXTRACT",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_LANGUAGE_AWARE_INGEST",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_LEXICAL_SEARCH",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_LEXICAL_TRANSLATION",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_LEXICAL_DICTIONARY",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_LEXICAL_STEM_IT",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_MAX_OUTPUT_TOKENS",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_OUTPUT_GUARD",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_PARTIAL_ANSWER_RULE",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_REGISTRY_TEXTS",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_SECURITY_EVENTS",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "RAG_UPLOADER_ALERT_THRESHOLD",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "RAG_UPLOADER_ALERT_WINDOW_HOURS",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "RAG_UPLOADER_HOLD",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_VERSION_LABELS",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_VERSION_SCOPE",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_EMBED_VERSION_SCOPE",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_TABLE_LOOKUP",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_DUP_CLUSTERS",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_RESULT_DIVERSITY",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_IDENTIFIER_INDEX",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_IDENTIFIER_FILTER",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_TERMINOLOGY",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_TERMINOLOGY_DENSE",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_TERMINOLOGY_MINING",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "RAG_LOW_THRESHOLD",
       "status": "legacy",
       "knownGaps": [
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_MATCH_MULTIPLIER",
@@ -833,14 +987,16 @@
       "knownGaps": [
         "config-ui",
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_MAX_KEY_TERMS",
       "status": "legacy",
       "knownGaps": [
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_MAX_RETRIEVAL_PASSES",
@@ -848,14 +1004,16 @@
       "knownGaps": [
         "config-ui",
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_MEDIUM_THRESHOLD",
       "status": "legacy",
       "knownGaps": [
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_MIN_CONFIDENCE",
@@ -863,7 +1021,8 @@
       "knownGaps": [
         "config-ui",
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_MMR_LAMBDA",
@@ -871,79 +1030,94 @@
       "knownGaps": [
         "config-ui",
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_MULTI_PASS",
       "status": "legacy",
       "knownGaps": [
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_OUTPUT_LINK_ALLOWLIST",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_PARENT_CHILD",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_PARSE_ESCALATION",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_PARSE_POLL_BUDGET_MS",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_PARSE_PREMIUM_MAX_PAGES_PER_DOC",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_PARSE_PREMIUM_PAGE_BUDGET",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_PARSE_PROGRESSIVE",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_PARSE_ROUTING",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_PARSE_VLM_DETECT",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_PARSE_VLM_MODEL",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_PARSER",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_PARSER_ALLOW_CLOUD",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_PDF_IMAGE_CHUNKS",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_PERFORMANCE_MODE",
@@ -951,152 +1125,179 @@
       "knownGaps": [
         "config-ui",
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_PIPELINE",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_POST_CONTEXT",
       "status": "legacy",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_PRE_CONTEXT",
       "status": "legacy",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_PRIMARY_LANGUAGE",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_QUERY_CONDENSE",
       "status": "managed",
       "knownGaps": [],
-      "description": "Condense a multi-turn question into a standalone query (inert while RAG_QUERY_LAYER is false)"
+      "description": "Condense a multi-turn question into a standalone query (inert while RAG_QUERY_LAYER is false)",
+      "ragAffecting": true
     },
     {
       "name": "RAG_QUERY_DATE_NORMALIZE",
       "status": "managed",
       "knownGaps": [],
-      "description": "Normalize relative dates in the query to absolute ranges (inert while RAG_QUERY_LAYER is false)"
+      "description": "Normalize relative dates in the query to absolute ranges (inert while RAG_QUERY_LAYER is false)",
+      "ragAffecting": true
     },
     {
       "name": "RAG_QUERY_DECOMPOSE",
       "status": "managed",
       "knownGaps": [],
-      "description": "Split compound questions into sub-queries (inert while RAG_QUERY_LAYER is false)"
+      "description": "Split compound questions into sub-queries (inert while RAG_QUERY_LAYER is false)",
+      "ragAffecting": true
     },
     {
       "name": "RAG_QUERY_ENHANCEMENT",
       "status": "legacy",
       "knownGaps": [
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_QUERY_EXPAND",
       "status": "managed",
       "knownGaps": [],
-      "description": "Add paraphrase variants of the query (inert while RAG_QUERY_LAYER is false)"
+      "description": "Add paraphrase variants of the query (inert while RAG_QUERY_LAYER is false)",
+      "ragAffecting": true
     },
     {
       "name": "RAG_QUERY_FRAMEWORK",
       "status": "managed",
       "knownGaps": [],
-      "description": "Query-layer implementation: llamaindex (native port) or langchain"
+      "description": "Query-layer implementation: llamaindex (native port) or langchain",
+      "ragAffecting": true
     },
     {
       "name": "RAG_QUERY_HYDE",
       "status": "managed",
       "knownGaps": [],
-      "description": "Hypothetical-answer (HyDE) variant on the dense leg; off by default and never used in voice"
+      "description": "Hypothetical-answer (HyDE) variant on the dense leg; off by default and never used in voice",
+      "ragAffecting": true
     },
     {
       "name": "RAG_QUERY_LAYER",
       "status": "managed",
       "knownGaps": [],
-      "description": "Master switch for the Phase 6 query layer (rewrite gate and transforms); false keeps today's behaviour"
+      "description": "Master switch for the Phase 6 query layer (rewrite gate and transforms); false keeps today's behaviour",
+      "ragAffecting": true
     },
     {
       "name": "RAG_QUERY_LLM_MODEL",
       "status": "managed",
       "knownGaps": [],
-      "description": "OpenRouter model used for query rewriting, expansion, decomposition and translation"
+      "description": "OpenRouter model used for query rewriting, expansion, decomposition and translation",
+      "ragAffecting": true
     },
     {
       "name": "RAG_QUERY_TRANSLATE",
       "status": "managed",
       "knownGaps": [],
-      "description": "Add a translated variant for cross-language retrieval (inert while RAG_QUERY_LAYER is false)"
+      "description": "Add a translated variant for cross-language retrieval (inert while RAG_QUERY_LAYER is false)",
+      "ragAffecting": true
     },
     {
       "name": "RAG_QUERY_TRANSLATE_DISABLED_PROFILES",
       "status": "managed",
       "knownGaps": [],
-      "description": "Comma-separated embedding profiles for which the translate transform is skipped"
+      "description": "Comma-separated embedding profiles for which the translate transform is skipped",
+      "ragAffecting": true
     },
     {
       "name": "RAG_QUERY_VOICE_TRANSFORMS",
       "status": "managed",
       "knownGaps": [],
-      "description": "Transforms allowed on the voice path: condense_history, normalize_dates, translate"
+      "description": "Transforms allowed on the voice path: condense_history, normalize_dates, translate",
+      "ragAffecting": true
     },
     {
       "name": "RAG_QWEN_EMBED_FALLBACK",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_QWEN_EMBED_PRIMARY",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_REFUSAL_FEEDBACK",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "RAG_REFUSAL_FLOOR",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_REFUSAL_THRESHOLD",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_RERANK_TIER_CHAT",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_RERANK_TIER_VOICE",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_RERANK_VOYAGE_MODEL_BY_LANG",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_RERANKER",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_RERANKING",
       "status": "legacy",
       "knownGaps": [
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_RERANKING_STRATEGY",
@@ -1104,62 +1305,73 @@
       "knownGaps": [
         "config-ui",
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_RETRIEVAL_LOG",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "RAG_RETRIEVAL_LOG_RETENTION_DAYS",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "RAG_RETRIEVAL_PARAMS_OVERRIDE",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_SCOPE_TAGS",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_SCOPE_TAG_SUGGEST",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_SEMANTIC_CACHE",
       "status": "managed",
       "knownGaps": [],
-      "description": "Semantic answer cache backend: off, pgvector or redisvl"
+      "description": "Semantic answer cache backend: off, pgvector or redisvl",
+      "ragAffecting": true
     },
     {
       "name": "RAG_SEMANTIC_CACHE_EMBED_STORE",
       "status": "managed",
       "knownGaps": [],
-      "description": "Store embed-widget answers in the cache; false keeps embed check-only"
+      "description": "Store embed-widget answers in the cache; false keeps embed check-only",
+      "ragAffecting": true
     },
     {
       "name": "RAG_SEMANTIC_CACHE_MAX_DISTANCE",
       "status": "managed",
       "knownGaps": [],
-      "description": "Maximum cosine distance for a cache hit"
+      "description": "Maximum cosine distance for a cache hit",
+      "ragAffecting": true
     },
     {
       "name": "RAG_SEMANTIC_CACHE_REFUSAL_TTL",
       "status": "managed",
       "knownGaps": [],
-      "description": "Lifetime of a cached refusal in seconds"
+      "description": "Lifetime of a cached refusal in seconds",
+      "ragAffecting": true
     },
     {
       "name": "RAG_SEMANTIC_CACHE_TTL",
       "status": "managed",
       "knownGaps": [],
-      "description": "Lifetime of a cached answer in seconds"
+      "description": "Lifetime of a cached answer in seconds",
+      "ragAffecting": true
     },
     {
       "name": "RAG_SEMANTIC_CLASSIFICATION",
@@ -1167,44 +1379,52 @@
       "knownGaps": [
         "config-server",
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_SIDECAR_SECRET",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "RAG_SIDECAR_URL",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_SIMILARITY_THRESHOLD",
       "status": "legacy",
       "knownGaps": [
         "config-ui"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_SOURCE_OPEN_SIGNAL",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "RAG_STAGE_TIMEOUTS",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_SUPERSESSION_DETECT",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_SUPPORTED_LANGUAGES",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_SYSTEM_PROMPT",
@@ -1213,24 +1433,28 @@
         "config-server",
         "config-ui",
         "init-env"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_TABLE_HEADER_REPEAT",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_TABLE_ROW_SERIALIZATION",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_TEMPORAL_BOOST",
       "status": "legacy",
       "knownGaps": [
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_TEMPORAL_CONFIDENCE_MIN",
@@ -1238,177 +1462,210 @@
       "knownGaps": [
         "config-server",
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_TEMPORAL_MATCHING",
       "status": "legacy",
       "knownGaps": [
         "env-ts"
-      ]
+      ],
+      "ragAffecting": true
     },
     {
       "name": "RAG_TOOL_RESULT_GUARD",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_UPLOAD_APPROVAL",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_VOICE_TOKEN_SECRET",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "RAG_VOICE_TOKEN_TTL_SECONDS",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "REDIS_URL",
       "status": "managed",
       "knownGaps": [],
-      "description": "RedisVL connection URL for the semantic cache; read by the sidecar only, never by the app"
+      "description": "RedisVL connection URL for the semantic cache; read by the sidecar only, never by the app",
+      "ragAffecting": false
     },
     {
       "name": "VOICE_MAX_ACTIVE_ROOMS",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "VOYAGE_API_KEY",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "VOYAGE_BASE_URL",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_RETRIEVAL_BACKEND",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_RETRIEVAL_BACKEND_VOICE",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_VECTOR_SYNC_SECRET",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "RAG_VECTOR_SYNC_MAX_LAG_SECONDS",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "WEAVIATE_URL",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "WEAVIATE_API_KEY",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "WEAVIATE_READ_API_KEY",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "QDRANT_URL",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "QDRANT_API_KEY",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "QDRANT_READ_API_KEY",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": false
     },
     {
       "name": "RAG_OPENAI_EMBEDDINGS_VIA",
       "status": "managed",
       "knownGaps": [],
-      "description": "Host for the OpenAI embedding model: openai or openrouter (same model, same vectors; no Batch API through OpenRouter)"
+      "description": "Host for the OpenAI embedding model: openai or openrouter (same model, same vectors; no Batch API through OpenRouter)",
+      "ragAffecting": true
     },
     {
       "name": "RAG_SECTION_RULES",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_PAGE_BOILERPLATE",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_DOC_ATTRIBUTES",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_ATTRIBUTE_HEADER",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_ATTRIBUTE_FILTER",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_LEXICAL_QUANTITY",
       "status": "managed",
-      "knownGaps": []
+      "knownGaps": [],
+      "ragAffecting": true
     },
     {
       "name": "RAG_CONFIG_GATE",
       "status": "managed",
       "knownGaps": [],
-      "description": "Pre-save setting check in the Config UI: off | warn | enforce (off saves at once, as before)."
+      "description": "Pre-save setting check in the Config UI: off | warn | enforce (off saves at once, as before).",
+      "ragAffecting": false
     },
     {
       "name": "RAG_CONFIG_GATE_LIVE",
       "status": "managed",
       "knownGaps": [],
-      "description": "Adds a live chat-model layer to the setting check; no effect while RAG_CONFIG_GATE=off."
+      "description": "Adds a live chat-model layer to the setting check; no effect while RAG_CONFIG_GATE=off.",
+      "ragAffecting": false
     },
     {
       "name": "RAG_MONITOR",
       "status": "managed",
       "knownGaps": [],
-      "description": "Daily monitor over the retrieval log; off runs nothing, stores nothing and its routes answer 404."
+      "description": "Daily monitor over the retrieval log; off runs nothing, stores nothing and its routes answer 404.",
+      "ragAffecting": false
     },
     {
       "name": "RAG_MONITOR_WEBHOOK_SECRET",
       "status": "managed",
       "knownGaps": [],
-      "description": "Optional HMAC-SHA256 signing secret for monitor webhook deliveries, at least 32 characters."
+      "description": "Optional HMAC-SHA256 signing secret for monitor webhook deliveries, at least 32 characters.",
+      "ragAffecting": false
     },
     {
       "name": "RAG_MONITOR_WEBHOOK_URL",
       "status": "managed",
       "knownGaps": [],
-      "description": "Optional https:// admin webhook for monitor alerts; treated as a secret, never shown or logged."
+      "description": "Optional https:// admin webhook for monitor alerts; treated as a secret, never shown or logged.",
+      "ragAffecting": false
     },
     {
       "name": "RAG_REPRESENTATIVE_SAMPLE",
       "status": "managed",
       "knownGaps": [],
-      "description": "Weekly representative sample of real questions into the review queue; needs masked_query logging and expert review."
+      "description": "Weekly representative sample of real questions into the review queue; needs masked_query logging and expert review.",
+      "ragAffecting": false
     }
   ]
 }

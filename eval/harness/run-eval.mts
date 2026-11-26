@@ -14,7 +14,7 @@ import { canonicalJson, configHash } from '../../src/lib/rag-eval/trace.ts';
 import { EMBEDDER_ID, EMBEDDER_VERSION, embedderSourceSha256 } from './fixture-embedder.mts';
 import { ingestModeRetrievalEnv, partitionIngestModeItems } from './ingest-mode.mts';
 import { closeTableSplitTenants, isTableSplitItem, TABLE_SPLIT_USER_ID, withTableSplitTenant, type TableSplitTenant } from './table-split.mts';
-import { createFixtureDatabase, FIXTURE_USER_ID, seedTerminology, type DeploymentMode, type FixtureMode, type TerminologySeedRow } from './pglite-supabase.mts';
+import { createFixtureDatabase, FIXTURE_USER_ID, seedFixtureFeatures, seedTerminology, type DeploymentMode, type FixtureMode, type TerminologySeedRow } from './pglite-supabase.mts';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from './fake-edge.mts';
 import { applyFixtureProcessEnv } from './process-env.mts';
 import { FAKE_CITATION_GENERATOR_MODEL, installFakeCitationGenerator } from './fake-citation-generator.mts';
@@ -175,6 +175,8 @@ export function itemRequestOptions(
   return options;
 }
 
+// D-07: every harness request runs in strict mode; run.json and the report carry it, run_config_hash does not.
+const EVAL_RAG_MODE = 'strict' as const;
 const NO_INGEST_DOCUMENT_IDS: ReadonlyMap<string, string> = new Map();
 
 const INJECTION_CATEGORIES: ReadonlySet<string> = new Set(['injection', 'injection_evasive']);
@@ -388,6 +390,19 @@ export async function prepareInProcessEval(options: {
     const report = await runReembed({ db: fixtureAdminClient(startedEdge.url), profileId: embeddingProfileId, batchSize: 32 });
     if (report.status !== 'completed') {
       throw new Error(`[Eval Harness] re-embed for profile ${embeddingProfileId} failed: ${report.reason ?? 'unknown'}`);
+    }
+  }
+
+  // Plan 04.2-29: the Phase 4.2 rebuild commands the run's switches call for, on the database this build made (prechunked only; the
+  // ingest mode writes those stores at ingestion with its build env).
+  if (!ingestFixture && fixtureMode !== 'ingest') {
+    try {
+      const { fixtureAdminClient } = await import('./ingest-fakes.mts');
+      await seedFixtureFeatures(fixture, { deploymentMode, admin: fixtureAdminClient(startedEdge.url) });
+    } catch (error) {
+      if (ownsEdge) await startedEdge.close().catch(() => undefined);
+      await fixture.db.close().catch(() => undefined);
+      throw error;
     }
   }
 
@@ -766,7 +781,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         schema_version: 1 as const,
         query: item.question,
         conversation: item.conversation,
-        rag_mode: 'strict' as const,
+        rag_mode: EVAL_RAG_MODE,
         web_search: false as const,
         options,
         item_id: item.id,
@@ -887,6 +902,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     embedding_profile: embeddingProfile,
     effective_config_hash: effectiveConfigHash,
     run_config_hash: runConfigHash,
+    rag_mode: EVAL_RAG_MODE,
     item_count: items.length,
     edge_errors: edgeErrors,
     ...(runConfigRecord ? { run_config: runConfigRecord } : {}),

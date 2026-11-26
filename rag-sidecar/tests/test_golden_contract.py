@@ -436,13 +436,29 @@ def test_every_committed_golden_line_still_validates_and_dumps_without_new_keys(
             assert GoldenItem.model_validate(item.model_dump(mode="json")) == item, f"{name}:{number}"
             continue
         dumped = item.model_dump(mode="json")
+        if item.category == "small_talk" and item.expected_behavior is not None:
+            # Phase 6 gate fix: small_talk items carry expected_behavior (D-10); the rest of their key set is unchanged.
+            assert GoldenItem.model_validate(dumped) == item, f"{name}:{number}"
+            assert dumped.pop("expected_behavior") == "conversational", f"{name}:{number}"
+            item = GoldenItem.model_validate(dumped)
+        if item.evidence_groups is not None:
+            # Plan 04.2-37: the Phase 4.2 items (tag phase42) group their gold spans (evidence_groups, 04.2-12); the rest of their
+            # key set is unchanged.
+            assert "phase42" in item.tags, f"{name}:{number}"
+            assert GoldenItem.model_validate(dumped) == item, f"{name}:{number}"
+            assert dumped.pop("evidence_groups") == item.evidence_groups, f"{name}:{number}"
+            item = GoldenItem.model_validate(dumped)
         assert "table_answer" not in dumped, f"{name}:{number}"
         assert "native_review" not in dumped, f"{name}:{number}"
         # 05.2-29 answer-rule items carry exactly their category's structure on top of the pre-Phase-3.2 keys.
         extra = {"partial_answer": {"partial"}, "stale_version": {"versions"}, "off_topic_context": {"off_topic"}}
         assert set(dumped) == _PRE_PHASE32_ITEM_KEYS | extra.get(item.category, set()), f"{name}:{number}"
         if dumped["retrieval_filters"] is not None:
-            assert set(dumped["retrieval_filters"]) == _PRE_PHASE32_FILTER_KEYS, f"{name}:{number}"
+            filter_keys = set(dumped["retrieval_filters"])
+            if "phase42" in item.tags:
+                # Plan 04.2-37: the version items of Phase 4.2 also set the versions filter.
+                filter_keys.discard("versions")
+            assert filter_keys == _PRE_PHASE32_FILTER_KEYS, f"{name}:{number}"
         assert GoldenItem.model_validate(dumped) == item, f"{name}:{number}"
 
 
@@ -798,3 +814,19 @@ def test_phase52_items_serialize_without_new_keys_when_unset():
     plain = GoldenItem.model_validate(_item())
     dumped = plain.model_dump(mode="json")
     assert not {"partial", "versions", "off_topic"} & set(dumped)
+
+
+def _conversational_item(**overrides):
+    base = _item("no_answer", id="en-small-talk-009", question="hello")
+    return GoldenItem.model_validate({**base, "category": "small_talk", **overrides})
+
+
+def test_expected_behavior_conversational_is_accepted_on_small_talk_and_dumped():
+    item = _conversational_item(expected_behavior="conversational")
+    assert item.model_dump(mode="json")["expected_behavior"] == "conversational"
+    assert "expected_behavior" not in _conversational_item().model_dump(mode="json")
+
+
+def test_expected_behavior_conversational_is_refused_outside_conversational_item():
+    with pytest.raises(ValidationError, match="only for small_talk"):
+        GoldenItem.model_validate(_item("no_answer", expected_behavior="conversational"))

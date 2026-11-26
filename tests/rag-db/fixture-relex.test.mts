@@ -48,7 +48,13 @@ for (const mode of MODES) {
           assert.equal(before.unset, before.total, 'no relex ran before the caller applied the migrations');
           await runFixtureRelex(fixture.db);
           const after = await lexicalVersions(fixture.db);
-          assert.equal(after.relexed, after.total, 'relex after the migrations stamps every legacy chunk');
+          // 0806 backfills lineages on upgrade: an older upload with the same filename (the Phase 4.2 version notes) is superseded,
+          // and relex stamps current chunks only.
+          const superseded = await fixture.db.query<{ n: number }>(
+            `SELECT count(*)::int AS n FROM document_chunks c JOIN documents d ON d.id = c.document_id
+              WHERE NOT c.is_current AND d.superseded_by IS NOT NULL AND c.lexical_version IS NULL`,
+          );
+          assert.equal(after.relexed + (superseded.rows[0]?.n ?? 0), after.total, 'relex after the migrations stamps every current legacy chunk');
         } finally {
           await fixture.db.close();
         }

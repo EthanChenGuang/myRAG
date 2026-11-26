@@ -10,6 +10,7 @@ import { contentHash } from '../hash';
 import { countTokens } from '../text/tokens';
 import { isTenantKey } from '../writer';
 import { estimateReembedCost, formatUsd } from './cost';
+import { chunkHeadersFor } from '../attributes/header';
 import { embeddingTextOf } from './run';
 
 /** A request the recaption job cannot start from (switch, languages, arguments); nothing was changed. */
@@ -299,7 +300,15 @@ function targetResolver(db: RpcClient, signal: AbortSignal): (candidate: Recapti
     resolveCaptionLanguage({ documentLanguage: candidate.pictureDocument ? null : candidate.documentLanguage, tenantKey: candidate.tenantKey, lookupShares });
 }
 
-function embeddingText(candidate: RecaptionCandidate, content: string): string {
+/** TPL-05 (D-27): the stored header of each candidate in step with its document, one read per tenant key of the page; empty while off. */
+function pageHeaders(db: RpcClient, page: readonly RecaptionCandidate[], signal: AbortSignal): Promise<Map<string, string>> {
+  return chunkHeadersFor(
+    page.map((candidate) => ({ chunkId: candidate.id, tenantKey: candidate.tenantKey })),
+    { signal, db },
+  );
+}
+
+function embeddingText(candidate: RecaptionCandidate, content: string, attributeHeader: string | undefined): string {
   return embeddingTextOf(
     {
       id: candidate.id,
@@ -313,6 +322,7 @@ function embeddingText(candidate: RecaptionCandidate, content: string): string {
       hasGap: false,
     },
     new Set<string>(),
+    attributeHeader,
   );
 }
 
@@ -333,6 +343,7 @@ export async function dryRunRecaption(input: Omit<RecaptionRunInput, 'resumeRunI
   for (;;) {
     const page = await candidatePage(input.db, signal, tenantKey, after, batchSize);
     if (page.length === 0) break;
+    const headers = await pageHeaders(input.db, page, signal);
     for (const candidate of page) {
       const entry = tenants.get(candidate.tenantKey) ?? { tenantKey: candidate.tenantKey, imageChunks: 0, toRecaption: 0 };
       tenants.set(candidate.tenantKey, entry);
@@ -341,7 +352,7 @@ export async function dryRunRecaption(input: Omit<RecaptionRunInput, 'resumeRunI
       if (goal === null || goal === candidate.language) continue;
       entry.toRecaption += 1;
       images += 1;
-      const tokens = countTokens(embeddingText(candidate, candidate.content));
+      const tokens = countTokens(embeddingText(candidate, candidate.content, headers.get(candidate.id)));
       for (const profile of candidate.profiles) {
         const bucket = tokensByProfile.get(profile.id) ?? { profile, totals: {} };
         tokensByProfile.set(profile.id, bucket);
@@ -428,7 +439,7 @@ export async function runRecaption(input: RecaptionRunInput): Promise<RecaptionR
     report.skipped[reason] = (report.skipped[reason] ?? 0) + 1;
   };
 
-  async function recaptionOne(candidate: RecaptionCandidate, goal: string): Promise<void> {
+  async function recaptionOne(candidate: RecaptionCandidate, goal: string, attributeHeader: string | undefined): Promise<void> {
     let image: RecaptionImage | null;
     try {
       image = await deps.fetchImage(candidate.imageUrl, candidate.imageType, signal);
@@ -446,7 +457,7 @@ export async function runRecaption(input: RecaptionRunInput): Promise<RecaptionR
     }
     if (caption === '') return skip('caption_empty');
 
-    const embedText = embeddingText(candidate, caption);
+    const embedText = embeddingText(candidate, caption, attributeHeader);
     const vectors: Record<string, number[]> = {};
     for (const profile of candidate.profiles) {
       try {
@@ -463,7 +474,7 @@ export async function runRecaption(input: RecaptionRunInput): Promise<RecaptionR
       p_chunk_id: candidate.id,
       p_content: caption,
       p_content_hash: contentHash(caption),
-      p_lexical_text: lexicalText(candidate.sectionPath, caption),
+      p_lexical_text: lexicalText(attributeHeader ? [...candidate.sectionPath, attributeHeader] : candidate.sectionPath, caption),
       p_language: captionLanguageOf(caption),
       p_vectors: vectors,
     });
@@ -477,13 +488,20 @@ export async function runRecaption(input: RecaptionRunInput): Promise<RecaptionR
     for (;;) {
       const page = await candidatePage(db, signal, run.tenantKey, after, batchSize);
       if (page.length === 0) break;
+      let headers: Map<string, string>;
+      try {
+        headers = await pageHeaders(db, page, signal);
+      } catch (error) {
+        if (signal.aborted) throw error;
+        throw new RecaptionWriterError('rag_attribute_headers', null, 'attribute_header_read_failed');
+      }
       for (const candidate of page) {
         signal.throwIfAborted();
         report.examined += 1;
         const goal = await target(candidate);
         if (goal === null || goal === candidate.language) continue;
         report.eligible += 1;
-        await recaptionOne(candidate, goal);
+        await recaptionOne(candidate, goal, headers.get(candidate.id));
       }
       after = (page[page.length - 1] as RecaptionCandidate).id;
       await call(db, signal, 'rag_recaption_advance', { p_run_id: run.runId, p_cursor: after });
