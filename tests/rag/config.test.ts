@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi, type MockInstance } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
 import {
   CORE_STAGES,
   OPTIONAL_STAGES,
@@ -357,7 +359,7 @@ describe('Phase 3.2 typed switches (D-47)', () => {
       supersessionDetect: config.supersessionDetect,
       effectiveDateLlmExtract: config.effectiveDateLlmExtract,
     }).toEqual({
-      tableHeaderRepeat: 'profile',
+      tableHeaderRepeat: 'always',
       tableRowSerialization: false,
       captionLanguage: 'en',
       docTranslation: 'off',
@@ -372,6 +374,16 @@ describe('Phase 3.2 typed switches (D-47)', () => {
       effectiveDateLlmExtract: false,
     });
     expect(config.warnings).toEqual([]);
+  });
+
+  // The default of RAG_TABLE_HEADER_REPEAT is the outcome recorded in eval/decisions/03.2-table-header-default.json (D-19).
+  test('RAG_TABLE_HEADER_REPEAT defaults to always and profile restores the processing profile flag', () => {
+    const decision = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'eval/decisions/03.2-table-header-default.json'), 'utf8')) as { decision: string };
+    expect(loadIngestConfig({}).tableHeaderRepeat).toBe(decision.decision);
+    expect(decision.decision).toBe('always');
+    const explicit = loadIngestConfig({ RAG_TABLE_HEADER_REPEAT: 'profile' });
+    expect(explicit.tableHeaderRepeat).toBe('profile');
+    expect(explicit.warnings).toEqual([]);
   });
 
   test('ingestion-side fields accept every D-47 value', () => {
@@ -412,7 +424,7 @@ describe('Phase 3.2 typed switches (D-47)', () => {
   });
 
   test.each([
-    ['RAG_TABLE_HEADER_REPEAT', 'tableHeaderRepeat', 'sometimes', 'profile'],
+    ['RAG_TABLE_HEADER_REPEAT', 'tableHeaderRepeat', 'sometimes', 'always'],
     ['RAG_TABLE_ROW_SERIALIZATION', 'tableRowSerialization', 'yes', false],
     ['RAG_TABLE_ROW_SERIALIZATION', 'tableRowSerialization', '1', false],
     ['RAG_CAPTION_LANGUAGE', 'captionLanguage', 'fr', 'en'],

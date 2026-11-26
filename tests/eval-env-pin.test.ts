@@ -37,12 +37,12 @@ describe('pinned eval env', () => {
     expect(pinned).not.toHaveProperty('REDIS_URL');
   });
 
-  test('pins the eighteen Phase 3.2 variables: languages zh,en,it with primary en, every switch at its D-47 default (D-02)', () => {
+  test('pins the eighteen Phase 3.2 variables: languages zh,en,it with primary en, every switch at its D-47 default, RAG_TABLE_HEADER_REPEAT at the 03.2-67 decision (D-02, D-19)', () => {
     const expected = {
       RAG_SUPPORTED_LANGUAGES: 'zh,en,it',
       RAG_PRIMARY_LANGUAGE: 'en',
       RAG_LANGUAGE_AWARE_INGEST: 'off',
-      RAG_TABLE_HEADER_REPEAT: 'profile',
+      RAG_TABLE_HEADER_REPEAT: 'always',
       RAG_TABLE_ROW_SERIALIZATION: 'false',
       RAG_CAPTION_LANGUAGE: 'en',
       RAG_BGE_M3_SERVING: 'hosted',

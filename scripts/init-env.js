@@ -616,7 +616,7 @@ RAG_PRIMARY_LANGUAGE=
 # Language-aware chunking, sentence splitting and OCR: off | on
 RAG_LANGUAGE_AWARE_INGEST=off
 # Repeat table headers in split table chunks: profile | always
-RAG_TABLE_HEADER_REPEAT=profile
+RAG_TABLE_HEADER_REPEAT=always
 # Add "column = value" lines per table row to the search text: true | false
 RAG_TABLE_ROW_SERIALIZATION=false
 # Image caption language: en | document
