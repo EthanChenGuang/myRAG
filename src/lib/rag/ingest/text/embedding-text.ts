@@ -6,6 +6,8 @@ export interface EmbeddingTextInput {
   section_path: string[];
   content: string;
   template_header?: string;
+  /** TPL-05 (D-26): the tenant's stored attribute header; a string, also an empty one, takes the place of template_header. */
+  attribute_header?: string | null;
   /** D-21: the list separator of the block's language, set only for a table chunk while RAG_TABLE_ROW_SERIALIZATION is on. */
   table_row_separator?: string | null;
 }
@@ -21,7 +23,8 @@ const PLACEHOLDER_NAME = /^[a-z][a-z0-9_]*$/;
  */
 export function buildEmbeddingText(input: EmbeddingTextInput): string {
   const prefix = input.section_path.length > 0 ? `${input.section_path.join(' > ')}\n\n` : '';
-  const header = input.template_header ? `${input.template_header}\n` : '';
+  const line = input.attribute_header === undefined || input.attribute_header === null ? input.template_header : input.attribute_header;
+  const header = line ? `${line}\n` : '';
   const text = `${prefix}${header}${input.content}`;
   const rows = input.table_row_separator ? serializeTableRows(input.content, { list_separator: input.table_row_separator }) : [];
   return rows.length === 0 ? text : `${text}\n\n${rows.join('\n')}`;

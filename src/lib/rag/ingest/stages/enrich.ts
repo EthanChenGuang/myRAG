@@ -7,7 +7,8 @@ import { countTokens } from '../text/tokens';
 import { chunkLexicalText } from '../../lexical/chunk-text';
 import { ingestLexical, lexicalStampMetadata } from '../lexical-options';
 import { contentHash } from '../hash';
-import { requireDocument, requireIdentity, type StageContext, type StageOutcome, type StageSpec } from '../types';
+import { ATTRIBUTE_HEADER_STAMP_KEY, ATTRIBUTE_HEADER_STAMP_NONE, attributeHeaderEnabled, documentHeadersFor, type StoredAttributeHeader } from '../attributes/header';
+import { IngestStageError, requireDocument, requireIdentity, type StageContext, type StageName, type StageOutcome, type StageSpec } from '../types';
 
 /** D-13 needs the enabled languages; without them the switch-off path runs. */
 function chunkLanguageOptions(): ChunkLanguageOptions | null {
@@ -57,6 +58,22 @@ export function languageTraceFacts(
 }
 
 /**
+ * TPL-05: the document's stored header and stamp (null: none stored) while RAG_ATTRIBUTE_HEADER is effectively on; undefined while off,
+ * without any call. A failed read fails the stage with attribute_header_read_failed.
+ */
+export async function storedDocumentHeader(ctx: StageContext, stage: StageName): Promise<StoredAttributeHeader | null | undefined> {
+  if (!attributeHeaderEnabled(ctx.config) || !ctx.document) return undefined;
+  const identity = requireIdentity(ctx, stage);
+  try {
+    const found = await documentHeadersFor(identity.tenantKey, [ctx.document.id], { signal: ctx.signal, config: ctx.config, db: ctx.deps.db() });
+    return found.get(ctx.document.id) ?? null;
+  } catch (error) {
+    if (ctx.signal.aborted) throw error;
+    throw new IngestStageError(stage, 'attribute_header_read_failed');
+  }
+}
+
+/**
  * Per chunk: the lexical text (path prefix plus content), the normalised chunk content hash and the URL
  * metadata storeDocument writes (D-07 keeps it for every document). The dominant language goes on the
  * document row; the writer mirrors it onto the chunks, unless RAG_LANGUAGE_AWARE_INGEST gives each chunk its own. With
@@ -78,6 +95,10 @@ async function run(ctx: StageContext): Promise<StageOutcome> {
   // D-55: the language is known before any lexical text is built; one resolve per document (plan 04.2-19).
   const lexical = await ingestLexical(ctx);
   const stamps = lexicalStampMetadata(lexical);
+  // TPL-05 (D-26, D-27): one read of the document's stored header while the switch is effectively on; off adds no key and no call.
+  const stored = await storedDocumentHeader(ctx, 'enrich');
+  const attributeHeader = stored ? stored.header : undefined;
+  const headerStamp: Record<string, string> = stored === undefined ? {} : { [ATTRIBUTE_HEADER_STAMP_KEY]: stored?.stamp ?? ATTRIBUTE_HEADER_STAMP_NONE };
 
   const rowSerialization = ctx.config.tableRowSerialization === true;
   const primary = rowSerialization ? getLanguageSettings().primary : null;
@@ -95,11 +116,13 @@ async function run(ctx: StageContext): Promise<StageOutcome> {
       metadata: draft.metadata,
       documentFilename: filename,
       ...(separator !== null ? { tableRowSeparator: separator } : {}),
+      ...(attributeHeader ? { attributeHeader } : {}),
     }, lexical.resolved.options);
     draft.content_hash = contentHash(draft.content);
     draft.metadata = {
       ...(enrichChunkWithURLs(draft.content, draft.metadata) as Record<string, unknown>),
       ...stamps,
+      ...headerStamp,
     };
   }
 

@@ -2,7 +2,16 @@ import { rpcRows, type RpcClient } from '../../backend/supabase-rpc';
 import type { TenantScope } from '../../tenant/scope';
 import type { IngestConfig } from '../config';
 import { currentIngestConfig } from '../current-config';
+import { getIngestDeps } from '../deps';
 import { IngestStageError, type IngestAttributeValues, type StageContext } from '../types';
+import {
+  attributeHeaderEnabled,
+  attributeHeaderStamp,
+  headerListSeparator,
+  loadHeaderTemplate,
+  renderAttributeHeader,
+  type HeaderTemplate,
+} from './header';
 import { docAttributesEnabled, loadAttributeSchema } from './schema';
 import { validateAttributes, type AttributeError } from './validate';
 
@@ -83,6 +92,7 @@ export async function writeDocumentAttributes(
   documentId: string,
   explicit: IngestAttributeValues | undefined,
   signal: AbortSignal,
+  options: { config?: IngestConfig } = {},
 ): Promise<{ origin: AttributeOrigin; keyCount: number }> {
   signal.throwIfAborted();
   const response = await db
@@ -98,6 +108,10 @@ export async function writeDocumentAttributes(
   const origin = isOrigin(row?.origin) ? row.origin : 'none';
   const keyCount = typeof row?.key_count === 'number' ? row.key_count : 0;
   if (origin !== 'none') console.info(`${LOG} document attributes applied`, { documentId, origin, keys: keyCount });
+  if (attributeHeaderEnabled(options.config ?? currentIngestConfig())) {
+    const rendered = await renderDocumentHeaders(db, tenantKey, [documentId], signal);
+    if (!rendered.ok) throw new IngestStageError('file_hash_dedup', 'attribute_header_failed');
+  }
   return { origin, keyCount };
 }
 
@@ -114,7 +128,7 @@ export async function applyDocumentAttributes(ctx: StageContext): Promise<void> 
   }
   const db = ctx.deps.db();
   if (!db) throw new IngestStageError('file_hash_dedup', 'db_unavailable');
-  await writeDocumentAttributes(db, ctx.identity.tenantKey, ctx.document.id, ctx.input.attributes, ctx.signal);
+  await writeDocumentAttributes(db, ctx.identity.tenantKey, ctx.document.id, ctx.input.attributes, ctx.signal, { config: ctx.config });
 }
 
 export interface AttributeRowInput {
@@ -201,7 +215,7 @@ export async function importAttributeRows(
   db: RpcClient,
   tenantKey: string,
   rows: readonly AttributeRowInput[],
-  options: { dryRun: boolean; signal: AbortSignal },
+  options: { dryRun: boolean; signal: AbortSignal; config?: IngestConfig },
 ): Promise<ImportAttributeRowsResult | AttributeCallFailure> {
   const result = await call(
     db,
@@ -211,6 +225,11 @@ export async function importAttributeRows(
   );
   if (!result.ok) return result;
   const row = result.rows[0] ?? {};
+  const changedDocumentIds = Array.isArray(row.changed_document_ids) ? row.changed_document_ids.map(String) : [];
+  if (!options.dryRun && changedDocumentIds.length > 0 && attributeHeaderEnabled(options.config ?? currentIngestConfig())) {
+    const rendered = await renderDocumentHeaders(db, tenantKey, changedDocumentIds, options.signal);
+    if (!rendered.ok) return { ok: false, reason: 'attribute_header_failed' };
+  }
   return {
     ok: true,
     documentsChanged: count(row.documents_changed),
@@ -218,7 +237,7 @@ export async function importAttributeRows(
     chunksUpdated: count(row.chunks_updated),
     staged: count(row.staged),
     stagedUnchanged: count(row.staged_unchanged),
-    changedDocumentIds: Array.isArray(row.changed_document_ids) ? row.changed_document_ids.map(String) : [],
+    changedDocumentIds,
     outboxRows: count(row.outbox_rows),
   };
 }
@@ -261,3 +280,101 @@ export function attributesFormField(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   return typeof value === 'string' ? value : '';
 }
+
+// --- Attribute header (plan 03.3-15; D-26, D-27) -------------------------------------------------------------------------------------
+
+const HEADER_WRITE_BATCH = 500;
+const PENDING_PAGE = 200;
+
+interface HeaderWrite {
+  document_id: string;
+  header: string | null;
+  stamp: string | null;
+}
+
+function headerWriteOf(documentId: string, template: HeaderTemplate | null, attributes: unknown, separator: string): HeaderWrite {
+  if (template === null) return { document_id: documentId, header: null, stamp: null };
+  const values = typeof attributes === 'object' && attributes !== null && !Array.isArray(attributes) ? (attributes as Record<string, unknown>) : null;
+  const rendered = renderAttributeHeader(template.template, values, separator);
+  return { document_id: documentId, header: rendered.header, stamp: attributeHeaderStamp(template.version, rendered.row) };
+}
+
+async function writeHeaders(db: RpcClient, tenantKey: string, writes: readonly HeaderWrite[], signal: AbortSignal): Promise<{ ok: true; updated: number } | AttributeCallFailure> {
+  let updated = 0;
+  for (let start = 0; start < writes.length; start += HEADER_WRITE_BATCH) {
+    const result = await call(db, 'rag_set_document_attribute_headers', { p_tenant_key: tenantKey, p_rows: writes.slice(start, start + HEADER_WRITE_BATCH) }, signal);
+    if (!result.ok) return result;
+    updated += count(result.rows[0]?.updated);
+  }
+  return { ok: true, updated };
+}
+
+/**
+ * Renders and stores the header and stamp of the given documents from their stored attributes (cached template, one batched attribute
+ * read and one stored-header write per 500 documents). Without a template nothing is read or written beyond the cached template read.
+ */
+export async function renderDocumentHeaders(
+  db: RpcClient,
+  tenantKey: string,
+  documentIds: readonly string[],
+  signal: AbortSignal,
+): Promise<{ ok: true; rendered: number } | AttributeCallFailure> {
+  if (documentIds.length === 0) return { ok: true, rendered: 0 };
+  const loaded = await loadHeaderTemplate(tenantKey, { signal, db });
+  if (!loaded.ok) return { ok: false, reason: 'unavailable' };
+  const template = loaded.template;
+  if (template === null) return { ok: true, rendered: 0 };
+  const separator = headerListSeparator();
+  const ids = [...new Set(documentIds)];
+  let rendered = 0;
+  for (let start = 0; start < ids.length; start += STAGE_BATCH) {
+    const read = await readDocumentAttributes(db, tenantKey, ids.slice(start, start + STAGE_BATCH), signal);
+    if (!read.ok) return read;
+    const writes = read.rows.map((row) => headerWriteOf(row.documentId, template, row.attributes, separator));
+    const written = await writeHeaders(db, tenantKey, writes, signal);
+    if (!written.ok) return written;
+    rendered += writes.length;
+  }
+  console.info(`${LOG} attribute headers rendered`, { documents: rendered, version: template.version });
+  return { ok: true, rendered };
+}
+
+/**
+ * After a template change: pages through the tenant's documents whose stamp is not of the current template version (or that still carry a
+ * stamp after the template was removed) and renders them, within deadlineMs. more is true when documents are left for a later call.
+ * A null client uses the service-role client of the ingest deps (the admin route).
+ */
+export async function renderPendingHeaders(
+  client: RpcClient | null,
+  tenantKey: string,
+  options: { signal: AbortSignal; deadlineMs: number },
+): Promise<{ ok: true; rendered: number; more: boolean } | AttributeCallFailure> {
+  const clock = getIngestDeps();
+  const db = client ?? clock.db();
+  if (!db) return { ok: false, reason: 'unavailable' };
+  const stopAt = clock.now() + Math.max(0, options.deadlineMs);
+  const loaded = await loadHeaderTemplate(tenantKey, { signal: options.signal, db, fresh: true });
+  if (!loaded.ok) return { ok: false, reason: 'unavailable' };
+  const template = loaded.template;
+  const separator = headerListSeparator();
+  let rendered = 0;
+  let after: string | null = null;
+  for (;;) {
+    if (clock.now() >= stopAt) {
+      console.info(`${LOG} attribute headers re-rendered`, { documents: rendered, version: template?.version ?? 0, more: true });
+      return { ok: true, rendered, more: true };
+    }
+    const page = await call(db, 'rag_attribute_header_pending', { p_tenant_key: tenantKey, p_after: after, p_limit: PENDING_PAGE }, options.signal);
+    if (!page.ok) return page;
+    if (page.rows.length === 0) break;
+    const writes = page.rows.map((row) => headerWriteOf(String(row.document_id), template, row.attributes, separator));
+    const written = await writeHeaders(db, tenantKey, writes, options.signal);
+    if (!written.ok) return written;
+    rendered += writes.length;
+    after = String(page.rows[page.rows.length - 1]?.document_id);
+    if (page.rows.length < PENDING_PAGE) break;
+  }
+  console.info(`${LOG} attribute headers re-rendered`, { documents: rendered, version: template?.version ?? 0, more: false });
+  return { ok: true, rendered, more: false };
+}
+

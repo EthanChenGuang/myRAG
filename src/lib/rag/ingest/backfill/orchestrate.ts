@@ -13,6 +13,7 @@ import { getIngestDeps } from '../deps';
 import { resolveEmbeddingTargets, type EmbeddingTarget } from '../embedding-targets';
 import { getProcessingProfile, type DocType } from '../profiles/load';
 import { buildEmbeddingText, templateHeaderFor } from '../text/embedding-text';
+import { chunkHeadersFor } from '../attributes/header';
 import { countTokens } from '../text/tokens';
 import { createIngestWriter } from '../writer';
 import {
@@ -355,7 +356,7 @@ function textOf(value: unknown): string | null {
 }
 
 /** The text ingest embeds for a chunk, rebuilt from stored columns exactly as the re-embed job does (section path, profile header, content). */
-function deferredText(row: JobRow): string {
+function deferredText(row: JobRow, attributeHeader?: string): string {
   const sectionPath = Array.isArray(row.section_path) ? row.section_path.filter((entry): entry is string => typeof entry === 'string') : [];
   const templateRow: Record<string, string | null> = {};
   if (row.template_row && typeof row.template_row === 'object' && !Array.isArray(row.template_row)) {
@@ -370,19 +371,29 @@ function deferredText(row: JobRow): string {
       header = '';
     }
   }
-  return buildEmbeddingText({ section_path: sectionPath, content: typeof row.content === 'string' ? row.content : '', template_header: header });
+  return buildEmbeddingText({
+    section_path: sectionPath,
+    content: typeof row.content === 'string' ? row.content : '',
+    template_header: header,
+    ...(attributeHeader !== undefined ? { attribute_header: attributeHeader } : {}),
+  });
 }
 
 /** The chunks of the batch's deferred jobs that still lack a vector of the profile, in groups, keyset by chunk id so each is read once per pass. */
-async function* deferredGroups(rpc: RpcClient, batchId: string, profileId: string, signal: AbortSignal): AsyncGenerator<DeferredChunk[]> {
+export async function* deferredGroups(rpc: RpcClient, batchId: string, profileId: string, signal: AbortSignal): AsyncGenerator<DeferredChunk[]> {
   let after: string | null = null;
   let group: DeferredChunk[] = [];
   for (;;) {
     const data = await call(rpc, 'rag_deferred_embed_chunks', { p_batch_id: batchId, p_profile_id: profileId, p_after: after, p_limit: DEFERRED_PAGE }, signal);
     const page = (Array.isArray(data) ? data : []) as JobRow[];
+    // TPL-05 (D-27): the stored header of each chunk in step with its document, one read per tenant key of the page; empty while off.
+    const headers = await chunkHeadersFor(
+      page.flatMap((row) => (typeof row.id === 'string' && typeof row.tenant_key === 'string' ? [{ chunkId: row.id, tenantKey: row.tenant_key }] : [])),
+      { signal, db: rpc },
+    );
     for (const row of page) {
       if (typeof row.id !== 'string') continue;
-      const text = deferredText(row);
+      const text = deferredText(row, headers.get(row.id));
       group.push({ chunkId: row.id, embeddingTextVersion: numberOf(row.embedding_text_version) ?? 0, text, tokens: countTokens(text) });
       if (group.length >= DEFERRED_GROUP) {
         yield group;
