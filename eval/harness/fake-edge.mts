@@ -112,6 +112,7 @@ const TABLE_COLUMNS: Record<string, string[]> = {
     'lineage_id',
     'version',
     'doc_type',
+    'version_label',
   ],
   document_chunks: ['id', 'document_id', 'content', 'metadata', 'created_at', 'organization_id', 'chunk_index', 'is_current', 'status', 'tenant_key', 'version', 'doc_type'],
   organization_members: ['id', 'organization_id', 'user_id', 'role', 'created_at'],
