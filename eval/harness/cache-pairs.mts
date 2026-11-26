@@ -21,7 +21,7 @@ const CACHE_STAGE = 'semantic_cache';
 const BYPASS_PREFIX = 'bypass_';
 const PAIR_CATEGORIES: ReadonlySet<string> = new Set(['cache_paraphrase', 'cache_near_miss']);
 
-type PairRow = CachePairsRun['pairs'][number];
+type PairRow = NonNullable<CachePairsRun['pairs']>[number];
 type Outcome = PairRow['outcome'];
 type Send = (payload: RagRunRequest) => Promise<{ status: number; body: unknown }>;
 
@@ -83,7 +83,7 @@ function payloadFor(item: GoldenItem, options: EvalRequestOptions, seed: string 
     rag_mode: 'strict',
     web_search: false,
     options: { ...options, ...(seed !== null ? { cache_seed_answer: seed } : {}) },
-  } as RagRunRequest;
+  } as unknown as RagRunRequest;
 }
 
 async function sendTrace(send: Send, payload: RagRunRequest): Promise<RagTrace> {
