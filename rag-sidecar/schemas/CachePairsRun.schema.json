@@ -1,0 +1,167 @@
+{
+  "$defs": {
+    "CachePairResult": {
+      "additionalProperties": false,
+      "description": "One golden cache pair (D-37): the anchor is stored, then the candidate is checked against it alone.",
+      "properties": {
+        "anchor_id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Anchor Id",
+          "type": "string"
+        },
+        "anchor_outcome": {
+          "anyOf": [
+            {
+              "enum": [
+                "hit",
+                "miss",
+                "bypass",
+                "failure"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Anchor Outcome"
+        },
+        "bypass_reason": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bypass Reason"
+        },
+        "category": {
+          "enum": [
+            "cache_paraphrase",
+            "cache_near_miss"
+          ],
+          "title": "Category",
+          "type": "string"
+        },
+        "distance": {
+          "anyOf": [
+            {
+              "maximum": 0.2,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Distance"
+        },
+        "hit": {
+          "title": "Hit",
+          "type": "boolean"
+        },
+        "language": {
+          "enum": [
+            "zh",
+            "en",
+            "it"
+          ],
+          "title": "Language",
+          "type": "string"
+        },
+        "outcome": {
+          "enum": [
+            "hit",
+            "miss",
+            "bypass",
+            "failure"
+          ],
+          "title": "Outcome",
+          "type": "string"
+        },
+        "pair_id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Pair Id",
+          "type": "string"
+        },
+        "split": {
+          "enum": [
+            "dev",
+            "test"
+          ],
+          "title": "Split",
+          "type": "string"
+        }
+      },
+      "required": [
+        "pair_id",
+        "anchor_id",
+        "category",
+        "split",
+        "language",
+        "outcome",
+        "hit"
+      ],
+      "title": "CachePairResult",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "cache-pairs.json: every pair checked at probe_max_distance; a pair with no hit at the probe is farther than it.",
+  "properties": {
+    "embedding_profile_id": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Embedding Profile Id"
+    },
+    "pairs": {
+      "items": {
+        "$ref": "#/$defs/CachePairResult"
+      },
+      "title": "Pairs",
+      "type": "array"
+    },
+    "probe_max_distance": {
+      "maximum": 0.2,
+      "minimum": 0,
+      "title": "Probe Max Distance",
+      "type": "number"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "source": {
+      "enum": [
+        "fixture",
+        "live"
+      ],
+      "title": "Source",
+      "type": "string"
+    }
+  },
+  "required": [
+    "source",
+    "probe_max_distance"
+  ],
+  "title": "CachePairsRun",
+  "type": "object"
+}

@@ -4,6 +4,7 @@ from rag_sidecar.contracts import (
     CachedAnswer,
     CacheInvalidateRequest,
     CacheInvalidateResponse,
+    CachePairsRun,
     CacheStoreRequest,
     GoldenItem,
     RetrievalParams,
@@ -20,6 +21,7 @@ EXPECTED_MODES = {
     CacheInvalidateRequest: "validation",
     CacheInvalidateResponse: "serialization",
     SemanticCacheCalibration: "serialization",
+    CachePairsRun: "validation",
 }
 
 
