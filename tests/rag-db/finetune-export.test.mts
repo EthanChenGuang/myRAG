@@ -2,6 +2,7 @@ import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { PGlite } from '@electric-sql/pglite';
@@ -246,3 +247,108 @@ for (const mode of MODES) {
     });
   });
 }
+
+describe('npm run rag:finetune over the fake edge (two tenants)', () => {
+  const FT_ENV = { RAG_FINETUNE: 'on' };
+  let fixture: import('../../eval/harness/two-tenant.mts').TwoTenantDatabase;
+  let edge: import('../../eval/harness/fake-edge.mts').FakeEdge;
+  let cli: typeof import('@/lib/rag/finetune/cli');
+  let bundleIo: typeof import('@/lib/rag/finetune/bundle-io');
+  let ingestDeps: typeof import('@/lib/rag/ingest/deps');
+  let activeProfile: typeof import('@/lib/rag/embeddings/active-profile');
+  let ids: typeof import('../../eval/harness/two-tenant.mts').TWO_TENANT_IDS;
+  let tenantA: string;
+  let tenantB: string;
+  const bundles: string[] = [];
+
+  before(async () => {
+    const twoTenant = await import('../../eval/harness/two-tenant.mts');
+    const fakeEdge = await import('../../eval/harness/fake-edge.mts');
+    ids = twoTenant.TWO_TENANT_IDS;
+    tenantA = `u:${ids.userA}`;
+    tenantB = `u:${ids.userB}`;
+    fixture = await twoTenant.createTwoTenantDatabase();
+    edge = await fakeEdge.startFakeEdge({ db: fixture.db });
+    Object.assign(process.env, fakeEdge.fixtureProcessEnv(edge.url));
+    process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = 'multi-tenant';
+    process.env.MYRAG_DEPLOYMENT_MODE = 'multi-tenant';
+    cli = await import('@/lib/rag/finetune/cli');
+    bundleIo = await import('@/lib/rag/finetune/bundle-io');
+    ingestDeps = await import('@/lib/rag/ingest/deps');
+    activeProfile = await import('@/lib/rag/embeddings/active-profile');
+  });
+
+  after(async () => {
+    ingestDeps?.resetIngestDepsForTests();
+    activeProfile?.resetActiveProfileForTests();
+    for (const dir of bundles) fs.rmSync(dir, { recursive: true, force: true });
+    await edge?.close();
+    await fixture?.db.close();
+  });
+
+  function makeBundle(tenantKeys: string[], purpose: 'private' | 'deployment'): string {
+    const dir = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'ft-export-'));
+    bundles.push(dir);
+    const manifest = {
+      run_id: 'run-export-1',
+      purpose,
+      split_rule: 'ft-sha256-first8hex-mod100-80-10-10',
+      tenant_keys: [...tenantKeys].sort(),
+      chunks: {},
+      counts: {},
+      files: {},
+      created_at: '2026-11-26T10:00:00Z',
+    };
+    fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(manifest));
+    return dir;
+  }
+
+  async function run(...argv: string[]): Promise<{ code: number; out: string; err: string }> {
+    const out: string[] = [];
+    const err: string[] = [];
+    const code = await cli.main(argv, { out: (line) => out.push(line), err: (line) => err.push(line) }, undefined, FT_ENV);
+    return { code, out: out.join('\n'), err: err.join('\n') };
+  }
+
+  const consent = (tenant: string, scope: 'none' | 'private' | 'deployment') =>
+    fixture.db.query('SELECT * FROM public.rag_finetune_set_consent($1, $2, $3, $4)', [tenant, scope, scope === 'none' ? null : 'TICKET-2', 'op']);
+
+  const rowsFile = (dir: string, base: string) =>
+    fs.readFileSync(path.join(dir, `${base}.rows.jsonl`), 'utf8').trim().split('\n').filter(Boolean).map((line) => JSON.parse(line) as Record<string, unknown>);
+
+  test('export-vectors refuses without consent and writes nothing', async () => {
+    const dir = makeBundle([tenantA], 'private');
+    const result = await run('export-vectors', '--bundle', dir);
+    assert.equal(result.code, 1);
+    assert.match(result.err, /refused: consent/);
+    assert.equal(fs.existsSync(path.join(dir, 'vectors')) ? fs.readdirSync(path.join(dir, 'vectors')).length : 0, 0);
+  });
+
+  test('export-vectors writes each tenant\'s own chunk vectors of the active profile, counts only on stdout', async () => {
+    await consent(tenantA, 'deployment');
+    await consent(tenantB, 'deployment');
+    const dir = makeBundle([tenantA, tenantB], 'deployment');
+    const result = await run('export-vectors', '--bundle', dir, '--batch-size', '1');
+    assert.equal(result.code, 0, result.err);
+    const baseA = bundleIo.vectorFileBase('chunks', tenantA, 'openai-3-small-1536');
+    const baseB = bundleIo.vectorFileBase('chunks', tenantB, 'openai-3-small-1536');
+    assert.deepEqual(rowsFile(dir, baseA).map((row) => row.chunk_id), [ids.chunkA]);
+    assert.deepEqual(rowsFile(dir, baseB).map((row) => row.chunk_id), [ids.chunkB]);
+    const { header, vectors } = bundleIo.readVectorSet(dir, baseA);
+    assert.equal(header.tenant_key, tenantA);
+    assert.equal(header.dims, 1536);
+    assert.equal(vectors.length, 1);
+    assert.doesNotMatch(result.out, /canary|personal notes/);
+    assert.match(result.out, /2 rows for 2 tenants/);
+  });
+
+  test('a consent revoke between two commands makes the second refuse', async () => {
+    const dir = makeBundle([tenantA, tenantB], 'deployment');
+    assert.equal((await run('export-vectors', '--bundle', dir)).code, 0);
+    await consent(tenantB, 'none');
+    const again = await run('export-vectors', '--bundle', dir);
+    assert.equal(again.code, 1);
+    assert.match(again.err, /refused: consent/);
+    await consent(tenantB, 'deployment');
+  });
+});

@@ -23,9 +23,10 @@ const TENANT = 's:default';
 
 const dirs: string[] = [];
 function bundle(manifest: unknown = MANIFEST): string {
+  // null writes no manifest
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ft-bundle-'));
   dirs.push(dir);
-  if (manifest !== undefined) fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(manifest));
+  if (manifest !== null) fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify(manifest));
   return dir;
 }
 
@@ -64,7 +65,7 @@ describe('bundle manifest', () => {
       }
     };
     expect(codeOf(path.join(os.tmpdir(), `missing-${crypto.randomUUID()}`))).toBe('bundle_missing');
-    expect(codeOf(bundle(undefined))).toBe('manifest_missing');
+    expect(codeOf(bundle(null))).toBe('manifest_missing');
     expect(codeOf(bundle({ ...MANIFEST, purpose: 'everyone' }))).toBe('manifest_invalid');
     expect(codeOf(bundle({ ...MANIFEST, tenant_keys: ['not-a-key'] }))).toBe('manifest_invalid');
     expect(codeOf(bundle({ ...MANIFEST, extra: true }))).toBe('manifest_invalid');
@@ -147,7 +148,7 @@ describe('rag:finetune CLI switch', () => {
     const io = { out: (line: string) => lines.push(line), err: (line: string) => lines.push(line) };
     for (const value of [undefined, 'ON', 'true']) {
       lines.length = 0;
-      const env: NodeJS.ProcessEnv = value === undefined ? {} : { RAG_FINETUNE: value };
+      const env: Record<string, string> = value === undefined ? {} : { RAG_FINETUNE: value };
       const code = await main(['export-vectors', '--bundle', bundle()], io, undefined, env);
       expect(code).not.toBe(0);
       expect(lines.join('\n')).toContain('RAG_FINETUNE is off');
