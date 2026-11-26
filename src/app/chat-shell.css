@@ -849,6 +849,14 @@ html .chat-answer .react-markdown :is(strong, b) {
   font-weight: 600;
 }
 
+/* Inline emphasis keeps the size and flow of its line, inside list items too. */
+html .chat-answer .react-markdown :is(strong, b, em) {
+  display: inline;
+  font-size: inherit;
+  line-height: inherit;
+  margin: 0;
+}
+
 /* No heading hierarchy: every heading level reads as a bold line at body size. */
 html .chat-answer .react-markdown :is(h1, h2, h3, h4, h5, h6) {
   color: var(--answer-ink) !important;

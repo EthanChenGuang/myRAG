@@ -1448,14 +1448,6 @@ html {
   margin-right: 0.25rem;
 }
 
-/* Make numbered list headings larger and more prominent */
-.react-markdown ol>li>strong {
-  font-size: 1.25rem;
-  line-height: 1.75rem;
-  margin-bottom: 0.5rem;
-  display: inline-block;
-}
-
 /* Ensure proper spacing in lists */
 .prose :where(ol, ul):not(:where([class~="not-prose"] *)) {
   padding-left: 1.5rem;
