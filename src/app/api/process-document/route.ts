@@ -24,6 +24,9 @@ import {
   resolveTenantScope,
   validateUploadReplaces,
   validateUploadScopes,
+  attributesFormField,
+  uploadAttributesRefusal,
+  validateUploadAttributes,
   type EnqueueResult,
   type IngestResult,
   type RagAdminDb,
@@ -754,6 +757,15 @@ async function uploadThroughIngest(input: {
       : NextResponse.json({ success: false, error: scopeCheck.reason }, { status: 400 });
   }
 
+  // D-22, D-23: the uploader's attribute values, checked against the workspace's schema before anything is stored; refused, never
+  // ignored, while RAG_DOC_ATTRIBUTES is effectively off.
+  const attributeCheck = await validateUploadAttributes(scope, attributesFormField(input.formData.get('attributes')), { signal: req.signal });
+  if (!attributeCheck.ok) {
+    console.warn('[ProcessDocument] upload attributes refused', { reason: attributeCheck.reason });
+    const refusal = uploadAttributesRefusal(attributeCheck);
+    return NextResponse.json(refusal.body, { status: refusal.status });
+  }
+
   // D-41: the document this upload replaces must be a current document of the same workspace outside the upload's own lineage.
   const sourceKey = buildSourceKey(source, { folderId: form.folder_id, filename: file.name });
   const replacesCheck = await validateUploadReplaces(scope, input.formData.get('replaces_document_id'), { signal: req.signal, source, sourceKey });
@@ -777,6 +789,7 @@ async function uploadThroughIngest(input: {
     mimeType,
     ...(form.doc_type ? { docType: form.doc_type } : {}),
     ...(scopeCheck.scopes ? { scopes: scopeCheck.scopes } : {}),
+    ...(attributeCheck.attributes !== undefined ? { attributes: attributeCheck.attributes } : {}),
     ...(replacesCheck.replacesDocumentId ? { replacesDocumentId: replacesCheck.replacesDocumentId } : {}),
     signal: req.signal,
     deadlineMs,
@@ -989,6 +1002,11 @@ export async function POST(req: Request) {
       }
     }
 
+    // D-22a: attributes count only where the unified pipeline ingests; elsewhere they are refused, never dropped.
+    if (formData.get('attributes') !== null) {
+      console.warn('[ProcessDocument] upload attributes refused', { reason: 'attributes_not_enabled' });
+      return NextResponse.json({ success: false, error: 'attributes_not_enabled' }, { status: 400 });
+    }
     // Tags count only where the unified pipeline ingests (D-40); the legacy path loads nothing new for them.
     const ignoredScopes = formData.getAll('scopes').length;
     if (ignoredScopes > 0) {
