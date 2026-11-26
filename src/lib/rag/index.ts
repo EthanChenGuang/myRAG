@@ -363,6 +363,7 @@ export type {
 export {
   AUTO_APPLY_MIN_CONFIDENCE,
   MAX_QUERY_LENGTH as MAX_EFFECTIVE_DATES_QUERY_LENGTH,
+  MAX_VERSION_LABEL_LENGTH,
   applyEffectiveDates,
   decideEffectiveDateProposal,
   dismissEffectiveDateProposal,

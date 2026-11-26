@@ -140,7 +140,7 @@ function fakeDb(): RpcClient {
   };
 }
 
-/** The admin client: the candidate tenant lookup and the auth user record for display names. */
+/** The admin client: the candidate tenant lookup, the documents' version labels (05.2-21) and the auth user record for display names. */
 function adminClient() {
   return {
     from(table: string) {
@@ -151,6 +151,11 @@ function adminClient() {
         eq(column: string, value: unknown) {
           filters[column] = value;
           return query;
+        },
+        in: () => query,
+        then(ok: (value: unknown) => unknown, bad?: (reason: unknown) => unknown) {
+          const result = state.dbFails ? { data: null, error: { message: 'down' } } : { data: [], error: null };
+          return Promise.resolve(result).then(ok, bad);
         },
         maybeSingle() {
           if (state.dbFails) return Promise.resolve({ data: null, error: { message: 'down' } });
@@ -252,6 +257,7 @@ describe('GET /api/rag/admin/supersession', () => {
         effective_to: null,
         uploaded_at: '2026-01-02T03:04:05.000Z',
         uploader: { id: UPLOADER, display: 'uploader@example.invalid' },
+        version_label: null,
       },
       candidate_document: expect.objectContaining({ id: DOC(2), uploader: null }),
       created_at: '2026-01-03T00:00:00.000Z',
