@@ -140,6 +140,15 @@ from rag_sidecar.contracts.feedback_loop import (
     TrainingPositive,
     WeeklyReport,
 )
+from rag_sidecar.contracts.retrieval import (
+    DiversityParams,
+    DupClusterParams,
+    IdentifierIndexEntry,
+    IdentifierPattern,
+    TableLookupParams,
+    TableRow,
+    VersionRange,
+)
 from rag_sidecar.contracts.samples import build_samples
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -279,6 +288,13 @@ CONTRACTS: list[tuple[type[BaseModel], Mode]] = [
     (ShipCheckResult, "serialization"),
     (VectorSyncSliceReport, "serialization"),
     (ReconcileReport, "serialization"),
+    (VersionRange, "validation"),
+    (TableRow, "serialization"),
+    (TableLookupParams, "validation"),
+    (DiversityParams, "validation"),
+    (DupClusterParams, "validation"),
+    (IdentifierPattern, "validation"),
+    (IdentifierIndexEntry, "serialization"),
 ]
 
 

@@ -58,6 +58,42 @@
       ],
       "title": "EnvironmentMinimums",
       "type": "object"
+    },
+    "RefusalModeTargets": {
+      "additionalProperties": false,
+      "description": "D-23: per-mode operating point; null means the shared target_false_refusal.",
+      "properties": {
+        "max_false_answer": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max False Answer"
+        },
+        "target_false_refusal": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target False Refusal"
+        }
+      },
+      "title": "RefusalModeTargets",
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -101,6 +137,20 @@
       "minimum": 0,
       "title": "Target False Refusal",
       "type": "number"
+    },
+    "targets_by_mode": {
+      "additionalProperties": {
+        "$ref": "#/$defs/RefusalModeTargets"
+      },
+      "propertyNames": {
+        "enum": [
+          "strict",
+          "balanced",
+          "flexible"
+        ]
+      },
+      "title": "Targets By Mode",
+      "type": "object"
     }
   },
   "title": "RefusalCalibrationConfig",

@@ -1178,6 +1178,10 @@
       "observed_term": "widget azzurro",
       "relation": "translation"
     },
+    "DiversityParams": {
+      "mmr_lambda": 0.7,
+      "mmr_window_factor": 3
+    },
     "DocTypeDetection": {
       "confidence": 0.85,
       "doc_type": "invoice_receipt",
@@ -1206,6 +1210,10 @@
           "question": "How many leave days do employees get?"
         }
       ]
+    },
+    "DupClusterParams": {
+      "by_profile": {},
+      "threshold": 0.95
     },
     "EffectiveDateExtraction": {
       "confidence": 0.9,
@@ -4677,6 +4685,16 @@
     "HypotheticalDocument": {
       "passage": "The product warranty lasts two years and covers ERR_TIMEOUT faults caused by the device."
     },
+    "IdentifierIndexEntry": {
+      "normalized": "ab0012",
+      "raw": "AB-0012"
+    },
+    "IdentifierPattern": {
+      "enabled": true,
+      "flags": "u",
+      "name": "reference-code",
+      "pattern": "[A-Z]{2}-[0-9]{4}"
+    },
     "IngestFingerprintParts": {
       "assumed_defaults": [
         "switches"
@@ -7299,6 +7317,34 @@
       "title_similarity_min": 0.9,
       "year_pattern": "(?:19|20)\\d{2}"
     },
+    "TableLookupParams": {
+      "limit": 10,
+      "min_cells": 2,
+      "weight": 1.0
+    },
+    "TableRow": {
+      "cell_tokens": [
+        [
+          "alpha"
+        ],
+        [
+          "12"
+        ]
+      ],
+      "cells": [
+        "alpha",
+        "12"
+      ],
+      "chunk_ids": [
+        "chunk-001"
+      ],
+      "header": [
+        "Column A",
+        "Column B"
+      ],
+      "row_index": 0,
+      "table_key": "table-0"
+    },
     "TrainingNegative": {
       "chunk_id": "chunk-0003",
       "confirmed": false,
@@ -7359,6 +7405,10 @@
       "mode": "drain",
       "more_pending": false,
       "upserted": 3
+    },
+    "VersionRange": {
+      "from": "2024-01-01",
+      "to": "2024-12-31"
     },
     "WeeklyReport": {
       "failures": {
@@ -7518,6 +7568,38 @@
       "value": {
         "document_ids": null,
         "tenant_key": "s:default"
+      }
+    },
+    "CitationRecord:versions_also_in": {
+      "model": "CitationRecord",
+      "value": {
+        "alias": "S1",
+        "alsoIn": [
+          {
+            "chunkId": "chunk-009",
+            "documentId": "doc-0002",
+            "filename": "reference-copy.md"
+          }
+        ],
+        "chunkIds": [
+          "00000000-0000-4000-8000-0000000000c1",
+          "00000000-0000-4000-8000-0000000000c2"
+        ],
+        "documentId": "00000000-0000-4000-8000-0000000000d1",
+        "documentName": "leave-policy.pdf",
+        "documentVersion": 2,
+        "effectiveFrom": "2024-01-01",
+        "effectiveTo": "2024-12-31",
+        "isCurrent": false,
+        "n": 1,
+        "page": 4,
+        "quote": "Employees receive twenty days of paid leave per calendar year.",
+        "quoteHash": "47b56646d72eb06958f6cd1642b43e163abfd20e36d888edfec3a6747594b2af",
+        "sectionPath": [
+          "Leave",
+          "Annual leave"
+        ],
+        "strategy": "chunk-alias"
       }
     },
     "EvalReport:injection": {
@@ -8044,6 +8126,548 @@
         "tier": "smoke"
       }
     },
+    "EvalReport:phase42": {
+      "model": "EvalReport",
+      "value": {
+        "by_category": {
+          "general": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          }
+        },
+        "by_doc_type": {
+          "general": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          }
+        },
+        "by_language": {
+          "en": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          }
+        },
+        "by_language_category": {
+          "en:general": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          }
+        },
+        "by_language_pair": {
+          "en->zh": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          }
+        },
+        "by_provenance": {
+          "synthetic_fixture": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          }
+        },
+        "by_provenance_category": {
+          "synthetic_fixture/general": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          }
+        },
+        "by_question_kind": {
+          "fact_lookup": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          }
+        },
+        "by_split": {
+          "dev": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          }
+        },
+        "by_strategy": {
+          "chunk-alias": {
+            "citation_coverage": {
+              "n": 4,
+              "value": 0.75
+            },
+            "cited_gold_hit": {
+              "n": 4,
+              "value": 0.5
+            },
+            "faithfulness": null,
+            "generation_latency": {
+              "n": 4,
+              "p50_ms": 300.0,
+              "p95_ms": 900.0
+            },
+            "invalid_citation_rate": {
+              "n": 3,
+              "value": 0.0
+            },
+            "items": 4,
+            "raw_invalid_markers": 1
+          }
+        },
+        "citation_coverage": {
+          "n": 4,
+          "value": 0.75
+        },
+        "cited_gold_hit": {
+          "n": 4,
+          "value": 0.5
+        },
+        "corpus_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "deployment_mode": "single-tenant",
+        "embedder_id": "fixture-embedder",
+        "embedder_source_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "embedder_version": 1,
+        "gate_population": "all",
+        "golden_filter": {
+          "gate_split": "dev",
+          "review_statuses": [
+            "approved"
+          ]
+        },
+        "golden_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "groundedness_labels": {
+          "hhem_2_1_open": {
+            "en": {
+              "not_checked": 0,
+              "possibly_unreliable": 1,
+              "verified": 2
+            }
+          },
+          "none": {
+            "it": {
+              "not_checked": 1,
+              "possibly_unreliable": 0,
+              "verified": 0
+            }
+          }
+        },
+        "groundedness_latency": {
+          "hhem_2_1_open": {
+            "n": 3,
+            "p50_ms": 900.0,
+            "p95_ms": 1800.0
+          }
+        },
+        "injection": null,
+        "invalid_citation_rate": {
+          "n": 3,
+          "value": 0.0
+        },
+        "items": [
+          {
+            "answerable": true,
+            "category": "general",
+            "context_k": 8,
+            "doc_type": "general",
+            "evidence_language": null,
+            "first_hit_rank": 1,
+            "group_count": 1,
+            "identifier_precise": true,
+            "intent_coverage": true,
+            "item_id": "en-general-001",
+            "language": "en",
+            "lexical_hit_at_10": true,
+            "ndcg_at_context_k": 1.0,
+            "near_miss_leak": false,
+            "provenance": "synthetic_fixture",
+            "question_kind": "fact_lookup",
+            "refused": false,
+            "rerank_status": "ok",
+            "span_count": 1,
+            "spans_hit_at_10": 1,
+            "spans_hit_at_5": 1,
+            "split": "dev",
+            "topk_redundancy": 0.125
+          }
+        ],
+        "k_values": [
+          5,
+          10
+        ],
+        "latency": {
+          "embed": {
+            "n": 12,
+            "p50_ms": 4.0,
+            "p95_ms": 6.0
+          },
+          "retrieval_total": {
+            "n": 12,
+            "p50_ms": 12.0,
+            "p95_ms": 20.0
+          }
+        },
+        "lexical_leg_hit_rate_at_10": {
+          "n": 4,
+          "value": 0.75
+        },
+        "notes": [
+          "synthetic sample"
+        ],
+        "overall": {
+          "correct_refusal_rate": {
+            "n": 10,
+            "value": 0.5
+          },
+          "false_refusal_rate": {
+            "n": 10,
+            "value": 0.5
+          },
+          "false_refusal_upper_95": 0.25,
+          "identifier_precision": {
+            "n": 1,
+            "value": 1.0
+          },
+          "intent_coverage": {
+            "n": 1,
+            "value": 1.0
+          },
+          "k_zero": {
+            "n": 1,
+            "value": 1.0
+          },
+          "mrr": {
+            "n": 10,
+            "value": 0.5
+          },
+          "ndcg_at_context_k": {
+            "n": 1,
+            "value": 1.0
+          },
+          "near_miss_leakage": {
+            "n": 1,
+            "value": 0.0
+          },
+          "recall_at_10": {
+            "n": 10,
+            "value": 0.5
+          },
+          "recall_at_5": {
+            "n": 10,
+            "value": 0.5
+          },
+          "topk_redundancy": {
+            "n": 1,
+            "value": 1.0
+          }
+        },
+        "pre_generation": {
+          "chat": {
+            "n": 4,
+            "p50_ms": 40.0,
+            "p95_ms": 90.0
+          }
+        },
+        "query_layer": {
+          "budget_profile": "chat",
+          "gate_rules": {
+            "R1_PRONOUN": 3,
+            "R9_KEYWORDS": 1
+          },
+          "items": 4,
+          "items_with_plan": 4,
+          "llm_transform_share": {
+            "n": 4,
+            "value": 0.5
+          },
+          "protected_token_losses": 1,
+          "query_budget": {
+            "p50_ms": 600.0,
+            "p95_ms": 1200.0
+          },
+          "query_latency": {
+            "latency": {
+              "n": 4,
+              "p50_ms": 300.0,
+              "p95_ms": 900.0
+            },
+            "status": "within"
+          },
+          "query_latency_by_category": {
+            "multi_turn": {
+              "latency": {
+                "n": 2,
+                "p50_ms": 700.0,
+                "p95_ms": 1300.0
+              },
+              "status": "over"
+            }
+          },
+          "query_latency_by_language": {
+            "en": {
+              "latency": {
+                "n": 4,
+                "p50_ms": 300.0,
+                "p95_ms": 900.0
+              },
+              "status": "within"
+            }
+          },
+          "transforms": {
+            "condense": {
+              "disabled": 0,
+              "run": 3,
+              "skip_reasons": {},
+              "skipped": 0
+            },
+            "expand": {
+              "disabled": 0,
+              "run": 0,
+              "skip_reasons": {
+                "timeout": 1
+              },
+              "skipped": 1
+            },
+            "hyde": {
+              "disabled": 4,
+              "run": 0,
+              "skip_reasons": {},
+              "skipped": 0
+            }
+          }
+        },
+        "raw_invalid_markers": 1,
+        "request_options": {
+          "cache_seed_answer": null,
+          "citations": false,
+          "degrade": null,
+          "disabled_stages": null,
+          "domain_control_leg": null,
+          "embedding_bindings": null,
+          "embedding_profile": null,
+          "generator_model": null,
+          "groundedness": false,
+          "max_results": 10,
+          "organization_id": null,
+          "query_framework": null,
+          "query_layer": null,
+          "query_params": null,
+          "query_transforms": null,
+          "retrieval_filters": null,
+          "retrieval_overrides": null,
+          "semantic_cache": null,
+          "stage_timeouts_ms": null,
+          "user_id": null
+        },
+        "rerank_skipped_rate": {
+          "n": 4,
+          "value": 0.25
+        },
+        "run_config_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "run_id": "run-001",
+        "schema_version": 1,
+        "semantic_cache": {
+          "bypasses": {
+            "protected_tokens": 2
+          },
+          "checks": 4,
+          "failures": 1,
+          "hit_latency": {
+            "n": 1,
+            "p50_ms": 20.0,
+            "p95_ms": 20.0
+          },
+          "hit_rate": {
+            "n": 4,
+            "value": 0.25
+          },
+          "hits": 1,
+          "miss_latency": {
+            "n": 3,
+            "p50_ms": 400.0,
+            "p95_ms": 800.0
+          },
+          "misses": 3,
+          "near_miss_checks": 2,
+          "near_miss_wrong_hit_rate": {
+            "n": 2,
+            "value": 0.0
+          },
+          "near_miss_wrong_hits": 0
+        },
+        "tier": "smoke",
+        "ttft": {
+          "miss": {
+            "n": 4,
+            "p50_ms": 40.0,
+            "p95_ms": 90.0
+          }
+        }
+      }
+    },
     "GoldenItem:cache_near_miss": {
       "model": "GoldenItem",
       "value": {
@@ -8092,6 +8716,97 @@
         "pair_of": null,
         "provenance": "synthetic_fixture",
         "question": "How many days of annual leave does a new employee get?",
+        "retrieval_filters": null,
+        "review_status": "approved",
+        "split": "dev",
+        "tags": []
+      }
+    },
+    "GoldenItem:duplicate_flood": {
+      "model": "GoldenItem",
+      "value": {
+        "answerable": true,
+        "attack": null,
+        "category": "duplicate_flood",
+        "conversation": [
+          {
+            "content": "Tell me about leave.",
+            "role": "user"
+          },
+          {
+            "content": "Which part of the policy?",
+            "role": "assistant"
+          }
+        ],
+        "evidence_groups": [
+          [
+            0
+          ],
+          [
+            1,
+            2
+          ]
+        ],
+        "evidence_language": null,
+        "expected_answer": "Twenty days per year.",
+        "gold_evidence": [
+          {
+            "document": "handbook.md",
+            "quote": "twenty days",
+            "section": "Leave policy"
+          },
+          {
+            "document": "reference-b.md",
+            "quote": "the second value",
+            "section": "Part two"
+          },
+          {
+            "document": "reference-c.md",
+            "quote": "the second value, copied",
+            "section": "Part two"
+          }
+        ],
+        "id": "en-duplicate-flood-001",
+        "language": "en",
+        "pair_of": null,
+        "provenance": "synthetic_fixture",
+        "question": "How many leave days do employees get?",
+        "retrieval_filters": null,
+        "review_status": "approved",
+        "split": "dev",
+        "tags": []
+      }
+    },
+    "GoldenItem:identifier_near_miss": {
+      "model": "GoldenItem",
+      "value": {
+        "answerable": true,
+        "attack": null,
+        "category": "identifier_near_miss",
+        "conversation": [
+          {
+            "content": "Tell me about leave.",
+            "role": "user"
+          },
+          {
+            "content": "Which part of the policy?",
+            "role": "assistant"
+          }
+        ],
+        "evidence_language": null,
+        "expected_answer": "Twenty days per year.",
+        "gold_evidence": [
+          {
+            "document": "handbook.md",
+            "quote": "twenty days",
+            "section": "Leave policy"
+          }
+        ],
+        "id": "en-identifier-near-miss-001",
+        "language": "en",
+        "pair_of": null,
+        "provenance": "synthetic_fixture",
+        "question": "How many leave days do employees get?",
         "retrieval_filters": null,
         "review_status": "approved",
         "split": "dev",
@@ -8277,6 +8992,75 @@
           "tax_id_scheme": "unknown"
         },
         "tax_total": null
+      }
+    },
+    "LatencyBudgets:ttft": {
+      "model": "LatencyBudgets",
+      "value": {
+        "groundedness": {
+          "hhem_2_1_open": {
+            "p50_ms": 2500.0,
+            "p95_ms": 5000.0
+          },
+          "hhem_2_3_vectara": {
+            "p50_ms": 4000.0,
+            "p95_ms": 8000.0
+          },
+          "report_only": true
+        },
+        "pre_generation": {
+          "chat": {
+            "p95_ms": 1500.0
+          }
+        },
+        "profiles": {
+          "chat": {
+            "groups": {
+              "query": {
+                "p50_ms": 600.0,
+                "p95_ms": 1200.0
+              }
+            },
+            "stages": {
+              "assemble": 100.0,
+              "condense": 600.0,
+              "embed": 200.0,
+              "search": 400.0
+            },
+            "total_p50_ms": 1000.0,
+            "total_p95_ms": 2000.0
+          },
+          "voice": {
+            "groups": {
+              "query": {
+                "p50_ms": null,
+                "p95_ms": 300.0
+              }
+            },
+            "stages": {},
+            "total_p50_ms": 400.0,
+            "total_p95_ms": 800.0
+          }
+        },
+        "schema_version": 1,
+        "ttft": {
+          "chat": {
+            "hit": {
+              "p50_ms": 300.0,
+              "p95_ms": 600.0
+            },
+            "miss": {
+              "p50_ms": 1200.0,
+              "p95_ms": 2500.0
+            }
+          },
+          "voice": {
+            "bypass": {
+              "p50_ms": 800.0,
+              "p95_ms": 1500.0
+            }
+          }
+        }
       }
     },
     "ParseJobState:failed_with_error_class": {
@@ -8545,6 +9329,140 @@
         ]
       }
     },
+    "RagTrace:identifier_not_found": {
+      "model": "RagTrace",
+      "value": {
+        "answer": null,
+        "candidates": [
+          {
+            "chunk_id": "chunk-001",
+            "content": "Employees receive twenty days of leave per year.",
+            "document_id": "doc-001",
+            "document_name": "handbook.md",
+            "final_score": 0.85,
+            "fused_score": null,
+            "has_image": false,
+            "language": null,
+            "legs": {},
+            "match_reason": "vector",
+            "rank": 1,
+            "rerank_score": null,
+            "similarity": 0.82
+          },
+          {
+            "chunk_id": "chunk-002",
+            "content": "Office hours are nine to five.",
+            "document_id": "doc-002",
+            "document_name": null,
+            "final_score": null,
+            "fused_score": null,
+            "has_image": false,
+            "language": null,
+            "legs": {},
+            "match_reason": null,
+            "rank": 2,
+            "rerank_score": null,
+            "similarity": 0.41
+          }
+        ],
+        "citation_strategy": "chunk-alias",
+        "citations": [
+          {
+            "alias": "S1",
+            "chunkIds": [
+              "chunk-001"
+            ],
+            "documentId": "doc-001",
+            "documentName": "handbook.md",
+            "documentVersion": null,
+            "n": 1,
+            "page": null,
+            "quote": "Employees receive twenty days of leave per year.",
+            "quoteHash": "8ce0aa222a8339916769a9552a8ffcc2834d2f6aa1101ab636571873bf2c7bb2",
+            "sectionPath": null,
+            "strategy": "chunk-alias"
+          }
+        ],
+        "config_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "context": "Employees receive twenty days of leave per year.",
+        "context_tokens": null,
+        "effective_config": {
+          "deployment_mode": "single-tenant",
+          "embedding_model": "text-embedding-3-small",
+          "endpoint_version": "1",
+          "generator_model": null,
+          "rag_env": {
+            "RAG_BEHAVIOR_MODE": "strict"
+          },
+          "rag_prompt_sha256": {
+            "RAG_SYSTEM_PROMPT": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "security": null
+        },
+        "groundedness": null,
+        "injection": null,
+        "invalid_citations": 0,
+        "item_id": "en-general-001",
+        "kept": [
+          {
+            "chunk_id": "chunk-001",
+            "content": "Employees receive twenty days of leave per year.",
+            "document_id": "doc-001",
+            "document_name": "handbook.md",
+            "kept_by": "similarity",
+            "rank": 1,
+            "similarity": 0.82
+          }
+        ],
+        "query": "How many leave days do employees get?",
+        "query_context": {
+          "is_financial_query": false,
+          "is_temporal_query": false,
+          "required_precision": "medium",
+          "search_strategy": "semantic_only",
+          "suggested_threshold": 0.3
+        },
+        "query_language": null,
+        "query_plan": null,
+        "query_transforms": [
+          {
+            "kind": "rewrite",
+            "reason": null,
+            "status": null,
+            "text": "leave days per year",
+            "transform": null
+          }
+        ],
+        "refusal": null,
+        "refusal_reason": "identifier_not_found",
+        "refused": true,
+        "retrieval_config_hash": null,
+        "retrieval_strategy": "standard",
+        "retrieval_versions": null,
+        "schema_version": 1,
+        "stage_counts": {},
+        "stage_latency_ms": {
+          "analyze": 1.5,
+          "embed": 4.0,
+          "generation": 0.0,
+          "search": 7.0
+        },
+        "stage_status": {
+          "analyze": "ok",
+          "embed": "ok",
+          "generation": "ok",
+          "search": "ok"
+        },
+        "used_documents": [
+          {
+            "document_id": "doc-001",
+            "image_url": "https://example.invalid/image.png",
+            "name": "handbook.md",
+            "similarity": 0.82
+          }
+        ]
+      }
+    },
     "RagTrace:injection": {
       "model": "RagTrace",
       "value": {
@@ -8711,6 +9629,160 @@
             "similarity": 0.82
           }
         ]
+      }
+    },
+    "RagTrace:phase42": {
+      "model": "RagTrace",
+      "value": {
+        "answer": "Twenty days per year.",
+        "cache": "miss",
+        "candidates": [
+          {
+            "chunk_id": "chunk-001",
+            "content": "Employees receive twenty days of leave per year.",
+            "document_id": "doc-001",
+            "document_name": "handbook.md",
+            "final_score": 0.85,
+            "fused_score": null,
+            "has_image": false,
+            "language": null,
+            "legs": {},
+            "match_reason": "vector",
+            "rank": 1,
+            "rerank_score": null,
+            "similarity": 0.82
+          },
+          {
+            "chunk_id": "chunk-002",
+            "content": "Office hours are nine to five.",
+            "document_id": "doc-002",
+            "document_name": null,
+            "final_score": null,
+            "fused_score": null,
+            "has_image": false,
+            "language": null,
+            "legs": {},
+            "match_reason": null,
+            "rank": 2,
+            "rerank_score": null,
+            "similarity": 0.41
+          }
+        ],
+        "citation_strategy": "chunk-alias",
+        "citations": [
+          {
+            "alias": "S1",
+            "chunkIds": [
+              "chunk-001"
+            ],
+            "documentId": "doc-001",
+            "documentName": "handbook.md",
+            "documentVersion": null,
+            "n": 1,
+            "page": null,
+            "quote": "Employees receive twenty days of leave per year.",
+            "quoteHash": "8ce0aa222a8339916769a9552a8ffcc2834d2f6aa1101ab636571873bf2c7bb2",
+            "sectionPath": null,
+            "strategy": "chunk-alias"
+          }
+        ],
+        "config_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "context": "Employees receive twenty days of leave per year.",
+        "context_tokens": null,
+        "effective_config": {
+          "deployment_mode": "single-tenant",
+          "embedding_model": "text-embedding-3-small",
+          "endpoint_version": "1",
+          "generator_model": null,
+          "rag_env": {
+            "RAG_BEHAVIOR_MODE": "strict"
+          },
+          "rag_prompt_sha256": {
+            "RAG_SYSTEM_PROMPT": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "security": null
+        },
+        "groundedness": null,
+        "identifier": {
+          "asked": 1,
+          "fallback": false,
+          "near_miss_dropped": 1,
+          "resolved": 0,
+          "suggestions": [
+            "AB-0013"
+          ]
+        },
+        "injection": null,
+        "invalid_citations": 0,
+        "item_id": "en-general-001",
+        "kept": [
+          {
+            "chunk_id": "chunk-001",
+            "content": "Employees receive twenty days of leave per year.",
+            "document_id": "doc-001",
+            "document_name": "handbook.md",
+            "document_version": 2,
+            "dup_cluster_id": "cluster-1",
+            "identifiers_norm": [
+              "ab0012"
+            ],
+            "is_current": true,
+            "kept_by": "similarity",
+            "rank": 1,
+            "similarity": 0.82
+          }
+        ],
+        "pre_generation_ms": 180.0,
+        "query": "How many leave days do employees get?",
+        "query_context": {
+          "is_financial_query": false,
+          "is_temporal_query": false,
+          "required_precision": "medium",
+          "search_strategy": "semantic_only",
+          "suggested_threshold": 0.3
+        },
+        "query_language": null,
+        "query_plan": null,
+        "query_transforms": [
+          {
+            "kind": "rewrite",
+            "reason": null,
+            "status": null,
+            "text": "leave days per year",
+            "transform": null
+          }
+        ],
+        "refusal": null,
+        "refusal_reason": null,
+        "refused": false,
+        "retrieval_config_hash": null,
+        "retrieval_strategy": "standard",
+        "retrieval_versions": null,
+        "schema_version": 1,
+        "stage_counts": {},
+        "stage_latency_ms": {
+          "analyze": 1.5,
+          "embed": 4.0,
+          "generation": 0.0,
+          "search": 7.0
+        },
+        "stage_status": {
+          "analyze": "ok",
+          "embed": "ok",
+          "generation": "ok",
+          "search": "ok"
+        },
+        "topk_redundancy": 0.125,
+        "ttft_ms": 420.0,
+        "used_documents": [
+          {
+            "document_id": "doc-001",
+            "image_url": "https://example.invalid/image.png",
+            "name": "handbook.md",
+            "similarity": 0.82
+          }
+        ],
+        "version_scope": "current"
       }
     },
     "RagTrace:query_plan": {
@@ -9053,6 +10125,123 @@
         ]
       }
     },
+    "RefusalCalibrationConfig:targets_by_mode": {
+      "model": "RefusalCalibrationConfig",
+      "value": {
+        "config_hash": null,
+        "dev_minimums": {
+          "fixture": {
+            "answerable": 5,
+            "no_answer": 3
+          },
+          "live": {
+            "answerable": 20,
+            "no_answer": 10
+          }
+        },
+        "holdout_minimums": {
+          "fixture": {
+            "answerable": 2,
+            "no_answer": 1
+          },
+          "live": {
+            "answerable": 6,
+            "no_answer": 3
+          }
+        },
+        "pass_rule": "false_refusal_test <= target + max(noise_floor, 1 / n_test_answerable)",
+        "provenance": {
+          "source": "defaults"
+        },
+        "schema_version": 1,
+        "target_false_refusal": 0.05,
+        "targets_by_mode": {
+          "balanced": {
+            "max_false_answer": null,
+            "target_false_refusal": null
+          },
+          "flexible": {
+            "max_false_answer": null,
+            "target_false_refusal": null
+          },
+          "strict": {
+            "max_false_answer": 0.05,
+            "target_false_refusal": null
+          }
+        }
+      }
+    },
+    "RefusalThresholds:per_mode": {
+      "model": "RefusalThresholds",
+      "value": {
+        "cells": [
+          {
+            "config_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+            "dev": {
+              "answerable_count": 2,
+              "correct_refusal_rate": 1.0,
+              "false_refusal_rate": 0.0,
+              "false_refusal_rate_upper_bound": 0.5,
+              "no_answer_count": 1
+            },
+            "holdout": {
+              "answerable_count": 2,
+              "correct_refusal_rate": 1.0,
+              "false_refusal_rate": 0.0,
+              "false_refusal_rate_upper_bound": 0.5,
+              "no_answer_count": 1
+            },
+            "holdout_evaluations": 0,
+            "key": "local_bm25|bm25-v1|en|same",
+            "model": "bm25-v1",
+            "pairing": "same",
+            "provider": "local_bm25",
+            "query_language": "en",
+            "recorded_at": "2026-11-26",
+            "rerank_text_version": 1,
+            "source": "fixture",
+            "status": "uncalibrated",
+            "threshold": null,
+            "tokenizer_version": 2
+          },
+          {
+            "config_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+            "dev": {
+              "answerable_count": 2,
+              "correct_refusal_rate": 1.0,
+              "false_refusal_rate": 0.0,
+              "false_refusal_rate_upper_bound": 0.5,
+              "no_answer_count": 1
+            },
+            "holdout": {
+              "answerable_count": 2,
+              "correct_refusal_rate": 1.0,
+              "false_refusal_rate": 0.0,
+              "false_refusal_rate_upper_bound": 0.5,
+              "no_answer_count": 1
+            },
+            "holdout_evaluations": 0,
+            "key": "local_bm25|bm25-v1|en|same|strict",
+            "mode": "strict",
+            "model": "bm25-v1",
+            "pairing": "same",
+            "provider": "local_bm25",
+            "query_language": "en",
+            "recorded_at": "2026-11-26",
+            "rerank_text_version": 1,
+            "source": "fixture",
+            "status": "uncalibrated",
+            "threshold": 0.4,
+            "tokenizer_version": 2
+          }
+        ],
+        "config_hash": null,
+        "provenance": {
+          "source": "defaults"
+        },
+        "schema_version": 2
+      }
+    },
     "RetrievalFilters:scopes": {
       "model": "RetrievalFilters",
       "value": {
@@ -9075,6 +10264,34 @@
         "sources": null
       }
     },
+    "RetrievalFilters:versions_all": {
+      "model": "RetrievalFilters",
+      "value": {
+        "current_only": true,
+        "date_range": null,
+        "doc_types": null,
+        "document_ids": null,
+        "invoice": null,
+        "languages": null,
+        "sources": null,
+        "versions": "all"
+      }
+    },
+    "RetrievalFilters:versions_range": {
+      "model": "RetrievalFilters",
+      "value": {
+        "current_only": true,
+        "date_range": null,
+        "doc_types": null,
+        "document_ids": null,
+        "invoice": null,
+        "languages": null,
+        "sources": null,
+        "versions": {
+          "from": "2024-01-01"
+        }
+      }
+    },
     "RetrievalOverrides:backend": {
       "model": "RetrievalOverrides",
       "value": {
@@ -9086,6 +10303,57 @@
         "rerank_input_cap": null,
         "rerank_model": null,
         "rrf_k": null
+      }
+    },
+    "RetrievalOverrides:phase42": {
+      "model": "RetrievalOverrides",
+      "value": {
+        "candidate_pool_size": null,
+        "chunking_profile_by_doc_type": {},
+        "diversity": {
+          "mmr_lambda": 0.6,
+          "mmr_window_factor": 3
+        },
+        "dup_cluster": {
+          "by_profile": {
+            "profile-a": {
+              "source": "fixture",
+              "threshold": 0.93
+            }
+          },
+          "threshold": 0.95
+        },
+        "final_top_k": null,
+        "leg_weights": null,
+        "rerank_input_cap": 25,
+        "rerank_model": null,
+        "rrf_k": null,
+        "table_lookup": {
+          "limit": 5,
+          "min_cells": 3,
+          "weight": 0.5
+        }
+      }
+    },
+    "RetrievalParams:phase42": {
+      "model": "RetrievalParams",
+      "value": {
+        "candidate_pool_size": 25,
+        "config_hash": null,
+        "final_top_k": 8,
+        "leg_weights": {
+          "dense": 1.0,
+          "exact_id": 1.0,
+          "lexical": 1.0
+        },
+        "mmr_lambda": 0.7,
+        "provenance": {
+          "source": "defaults"
+        },
+        "rerank_input_cap": 25,
+        "rrf_k": 60,
+        "schema_version": 1,
+        "sub_question_coverage": true
       }
     },
     "RetrievalParams:sub_question_coverage_off": {

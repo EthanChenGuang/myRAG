@@ -217,6 +217,8 @@ class RetrievalOverrides(_Contract):
 class VersionRange(_Contract):
     """D-12: a version period; either bound may be left open, not both."""
 
+    model_config = ConfigDict(extra="forbid", frozen=True, serialize_by_alias=True)
+
     from_: Annotated[
         date | None, Field(default=None, alias="from", exclude_if=_omit_none, json_schema_extra=omit_none_schema)
     ]

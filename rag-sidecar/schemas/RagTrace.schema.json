@@ -140,6 +140,33 @@
       "title": "AnswerGroundedness",
       "type": "object"
     },
+    "CitationAlsoIn": {
+      "additionalProperties": false,
+      "description": "D-21: a duplicate of the cited chunk in another document, collapsed under this citation.",
+      "properties": {
+        "chunkId": {
+          "minLength": 1,
+          "title": "Chunkid",
+          "type": "string"
+        },
+        "documentId": {
+          "minLength": 1,
+          "title": "Documentid",
+          "type": "string"
+        },
+        "filename": {
+          "title": "Filename",
+          "type": "string"
+        }
+      },
+      "required": [
+        "documentId",
+        "filename",
+        "chunkId"
+      ],
+      "title": "CitationAlsoIn",
+      "type": "object"
+    },
     "CitationRecord": {
       "additionalProperties": false,
       "properties": {
@@ -147,6 +174,13 @@
           "pattern": "^S[1-9][0-9]*$",
           "title": "Alias",
           "type": "string"
+        },
+        "alsoIn": {
+          "items": {
+            "$ref": "#/$defs/CitationAlsoIn"
+          },
+          "title": "Alsoin",
+          "type": "array"
         },
         "chunkIds": {
           "items": {
@@ -176,6 +210,20 @@
           ],
           "default": null,
           "title": "Documentversion"
+        },
+        "effectiveFrom": {
+          "format": "date",
+          "title": "Effectivefrom",
+          "type": "string"
+        },
+        "effectiveTo": {
+          "format": "date",
+          "title": "Effectiveto",
+          "type": "string"
+        },
+        "isCurrent": {
+          "title": "Iscurrent",
+          "type": "boolean"
         },
         "n": {
           "minimum": 1,
@@ -693,6 +741,49 @@
       "title": "TraceEffectiveConfig",
       "type": "object"
     },
+    "TraceIdentifier": {
+      "additionalProperties": false,
+      "description": "D-31, T-04.2-04: identifier filter counts and at most 3 suggestions from the caller's tenant.",
+      "properties": {
+        "asked": {
+          "minimum": 0,
+          "title": "Asked",
+          "type": "integer"
+        },
+        "fallback": {
+          "default": false,
+          "title": "Fallback",
+          "type": "boolean"
+        },
+        "near_miss_dropped": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Near Miss Dropped",
+          "type": "integer"
+        },
+        "resolved": {
+          "minimum": 0,
+          "title": "Resolved",
+          "type": "integer"
+        },
+        "suggestions": {
+          "items": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 3,
+          "title": "Suggestions",
+          "type": "array"
+        }
+      },
+      "required": [
+        "asked",
+        "resolved"
+      ],
+      "title": "TraceIdentifier",
+      "type": "object"
+    },
     "TraceInjection": {
       "additionalProperties": false,
       "properties": {
@@ -821,6 +912,29 @@
         "document_name": {
           "title": "Document Name",
           "type": "string"
+        },
+        "document_version": {
+          "minimum": 0,
+          "title": "Document Version",
+          "type": "integer"
+        },
+        "dup_cluster_id": {
+          "minLength": 1,
+          "title": "Dup Cluster Id",
+          "type": "string"
+        },
+        "identifiers_norm": {
+          "items": {
+            "maxLength": 200,
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Identifiers Norm",
+          "type": "array"
+        },
+        "is_current": {
+          "title": "Is Current",
+          "type": "boolean"
         },
         "kept_by": {
           "enum": [
@@ -1166,6 +1280,24 @@
       ],
       "title": "TraceUsedDocument",
       "type": "object"
+    },
+    "VersionRange": {
+      "additionalProperties": false,
+      "description": "D-12: a version period; either bound may be left open, not both.",
+      "properties": {
+        "from": {
+          "format": "date",
+          "title": "From",
+          "type": "string"
+        },
+        "to": {
+          "format": "date",
+          "title": "To",
+          "type": "string"
+        }
+      },
+      "title": "VersionRange",
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -1181,6 +1313,15 @@
       ],
       "default": null,
       "title": "Answer"
+    },
+    "cache": {
+      "enum": [
+        "hit",
+        "miss",
+        "bypass"
+      ],
+      "title": "Cache",
+      "type": "string"
     },
     "candidates": {
       "items": {
@@ -1247,6 +1388,9 @@
       ],
       "default": null
     },
+    "identifier": {
+      "$ref": "#/$defs/TraceIdentifier"
+    },
     "injection": {
       "anyOf": [
         {
@@ -1282,6 +1426,11 @@
       },
       "title": "Kept",
       "type": "array"
+    },
+    "pre_generation_ms": {
+      "minimum": 0,
+      "title": "Pre Generation Ms",
+      "type": "number"
     },
     "query": {
       "title": "Query",
@@ -1338,7 +1487,8 @@
             "no_relevant_context",
             "below_threshold",
             "below_similarity_floor",
-            "injection_filtered"
+            "injection_filtered",
+            "identifier_not_found"
           ],
           "type": "string"
         },
@@ -1413,12 +1563,38 @@
       "title": "Stage Status",
       "type": "object"
     },
+    "topk_redundancy": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Topk Redundancy",
+      "type": "number"
+    },
+    "ttft_ms": {
+      "minimum": 0,
+      "title": "Ttft Ms",
+      "type": "number"
+    },
     "used_documents": {
       "items": {
         "$ref": "#/$defs/TraceUsedDocument"
       },
       "title": "Used Documents",
       "type": "array"
+    },
+    "version_scope": {
+      "anyOf": [
+        {
+          "enum": [
+            "current",
+            "all"
+          ],
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/VersionRange"
+        }
+      ],
+      "title": "Version Scope"
     }
   },
   "required": [

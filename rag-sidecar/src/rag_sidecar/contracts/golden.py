@@ -1,6 +1,6 @@
 import unicodedata
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -29,6 +29,8 @@ Category = Literal[
     "cache_near_miss",
     "small_talk",
     "table_split",
+    "duplicate_flood",
+    "identifier_near_miss",
 ]
 INJECTION_CATEGORIES = frozenset({"injection", "injection_evasive"})
 CACHE_PAIR_CATEGORIES = frozenset({"cache_paraphrase", "cache_near_miss"})
@@ -141,6 +143,29 @@ class GoldenItem(_Contract):
         exclude_if=lambda value: value is None,
         json_schema_extra=_optional_object_schema,
     )
+    evidence_groups: list[list[Annotated[int, Field(ge=0)]]] | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        json_schema_extra=_optional_object_schema,
+    )
+
+    @model_validator(mode="after")
+    def _check_evidence_groups(self) -> "GoldenItem":
+        if self.evidence_groups is None:
+            return self
+        if not self.evidence_groups:
+            raise ValueError("evidence_groups must not be an empty list")
+        seen: set[int] = set()
+        for group in self.evidence_groups:
+            if not group:
+                raise ValueError("an evidence group must not be empty")
+            for index in group:
+                if index >= len(self.gold_evidence):
+                    raise ValueError("evidence_groups index out of range of gold_evidence")
+                if index in seen:
+                    raise ValueError("a gold_evidence index belongs to at most one evidence group")
+                seen.add(index)
+        return self
 
     @model_validator(mode="after")
     def _check_rules(self) -> "GoldenItem":

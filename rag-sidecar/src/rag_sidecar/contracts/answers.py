@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -18,6 +19,25 @@ class _Contract(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
+def _omit_none(value: object) -> bool:
+    return value is None
+
+
+def _omit_none_schema(schema: dict) -> None:
+    schema.pop("default", None)
+    branches = [branch for branch in schema.pop("anyOf", None) or [] if branch.get("type") != "null"]
+    if len(branches) == 1:
+        schema.update(branches[0])
+
+
+class CitationAlsoIn(_Contract):
+    """D-21: a duplicate of the cited chunk in another document, collapsed under this citation."""
+
+    documentId: str = Field(min_length=1)
+    filename: str
+    chunkId: str = Field(min_length=1)
+
+
 class CitationRecord(_Contract):
     n: int = Field(ge=1)
     alias: str = Field(pattern=r"^S[1-9][0-9]*$")
@@ -30,6 +50,12 @@ class CitationRecord(_Contract):
     quote: str = Field(min_length=1)
     quoteHash: str = Field(pattern=r"^[a-f0-9]{64}$")
     strategy: CitationStrategy
+    isCurrent: bool | None = Field(default=None, exclude_if=_omit_none, json_schema_extra=_omit_none_schema)
+    effectiveFrom: date | None = Field(default=None, exclude_if=_omit_none, json_schema_extra=_omit_none_schema)
+    effectiveTo: date | None = Field(default=None, exclude_if=_omit_none, json_schema_extra=_omit_none_schema)
+    alsoIn: list[CitationAlsoIn] | None = Field(
+        default=None, exclude_if=_omit_none, json_schema_extra=_omit_none_schema
+    )
 
 
 class AnswerGroundedness(_Contract):

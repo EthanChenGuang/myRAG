@@ -414,3 +414,9 @@ def test_citation_record_version_fields_and_also_in():
     assert validated.model_dump(mode="json")["effectiveFrom"] == "2024-01-01"
     with pytest.raises(ValidationError):
         answer_contracts.CitationRecord.model_validate(dict(full, alsoIn=[{"documentId": "doc-2"}]))
+
+
+def test_trace_cache_state_equals_latency_cache_state():
+    from typing import get_args
+
+    assert get_args(run_contracts.TraceCacheState) == get_args(latency.CacheState)

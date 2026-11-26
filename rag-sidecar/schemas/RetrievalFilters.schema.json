@@ -103,6 +103,24 @@
       },
       "title": "ScopeFilter",
       "type": "object"
+    },
+    "VersionRange": {
+      "additionalProperties": false,
+      "description": "D-12: a version period; either bound may be left open, not both.",
+      "properties": {
+        "from": {
+          "format": "date",
+          "title": "From",
+          "type": "string"
+        },
+        "to": {
+          "format": "date",
+          "title": "To",
+          "type": "string"
+        }
+      },
+      "title": "VersionRange",
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -215,6 +233,21 @@
       ],
       "default": null,
       "title": "Sources"
+    },
+    "versions": {
+      "anyOf": [
+        {
+          "enum": [
+            "current",
+            "all"
+          ],
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/VersionRange"
+        }
+      ],
+      "title": "Versions"
     }
   },
   "title": "RetrievalFilters",

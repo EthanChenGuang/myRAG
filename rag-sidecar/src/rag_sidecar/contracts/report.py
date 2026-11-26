@@ -6,7 +6,7 @@ from rag_sidecar.contracts.answers import CitationStrategy
 from rag_sidecar.contracts.eval_run import GoldenFilter, RagRunOptions
 from rag_sidecar.contracts.golden import Category, Language, Provenance, Split
 from rag_sidecar.contracts.groundedness import GroundednessScorer
-from rag_sidecar.contracts.latency import GroupBudget, Profile, StageLatency
+from rag_sidecar.contracts.latency import CacheState, GroupBudget, Profile, StageLatency
 from rag_sidecar.contracts.omit import omit_none_schema
 
 
@@ -24,6 +24,14 @@ ReportOnlyReason = Literal["native_review_pending"]
 NativeReviewBacklogState = Literal["pending", "existing_unreviewed"]
 
 
+def _omit_none(value: object) -> bool:
+    return value is None
+
+
+def _optional_metric() -> "MetricValue | None":
+    return Field(default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema)  # type: ignore[return-value]
+
+
 class SliceMetrics(_Contract):
     recall_at_5: MetricValue
     recall_at_10: MetricValue
@@ -31,6 +39,12 @@ class SliceMetrics(_Contract):
     correct_refusal_rate: MetricValue
     false_refusal_rate: MetricValue
     false_refusal_upper_95: float | None = Field(default=None, ge=0, le=1)
+    ndcg_at_context_k: MetricValue | None = _optional_metric()
+    k_zero: MetricValue | None = _optional_metric()
+    topk_redundancy: MetricValue | None = _optional_metric()
+    intent_coverage: MetricValue | None = _optional_metric()
+    identifier_precision: MetricValue | None = _optional_metric()
+    near_miss_leakage: MetricValue | None = _optional_metric()
 
 
 class ItemResult(_Contract):
@@ -53,6 +67,17 @@ class ItemResult(_Contract):
     report_only_reason: ReportOnlyReason | None = Field(
         default=None, exclude_if=lambda value: value is None, json_schema_extra=omit_none_schema
     )
+    context_k: int | None = Field(default=None, ge=0, exclude_if=_omit_none, json_schema_extra=omit_none_schema)
+    ndcg_at_context_k: float | None = Field(
+        default=None, ge=0, le=1, exclude_if=_omit_none, json_schema_extra=omit_none_schema
+    )
+    group_count: int | None = Field(default=None, ge=0, exclude_if=_omit_none, json_schema_extra=omit_none_schema)
+    topk_redundancy: float | None = Field(
+        default=None, ge=0, le=1, exclude_if=_omit_none, json_schema_extra=omit_none_schema
+    )
+    intent_coverage: bool | None = Field(default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema)
+    identifier_precise: bool | None = Field(default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema)
+    near_miss_leak: bool | None = Field(default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema)
 
 
 class NativeReviewBacklogEntry(_Contract):
@@ -227,4 +252,10 @@ class EvalReport(_Contract):
     )
     table_split: TableSplitReport | None = Field(
         default=None, exclude_if=lambda value: value is None, json_schema_extra=omit_none_schema
+    )
+    ttft: dict[CacheState, StageLatency] | None = Field(
+        default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema
+    )
+    pre_generation: dict[Profile, StageLatency] | None = Field(
+        default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema
     )

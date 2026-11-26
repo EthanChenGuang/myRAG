@@ -187,6 +187,33 @@
       "title": "CachedSourceVersion",
       "type": "object"
     },
+    "CitationAlsoIn": {
+      "additionalProperties": false,
+      "description": "D-21: a duplicate of the cited chunk in another document, collapsed under this citation.",
+      "properties": {
+        "chunkId": {
+          "minLength": 1,
+          "title": "Chunkid",
+          "type": "string"
+        },
+        "documentId": {
+          "minLength": 1,
+          "title": "Documentid",
+          "type": "string"
+        },
+        "filename": {
+          "title": "Filename",
+          "type": "string"
+        }
+      },
+      "required": [
+        "documentId",
+        "filename",
+        "chunkId"
+      ],
+      "title": "CitationAlsoIn",
+      "type": "object"
+    },
     "CitationRecord": {
       "additionalProperties": false,
       "properties": {
@@ -194,6 +221,13 @@
           "pattern": "^S[1-9][0-9]*$",
           "title": "Alias",
           "type": "string"
+        },
+        "alsoIn": {
+          "items": {
+            "$ref": "#/$defs/CitationAlsoIn"
+          },
+          "title": "Alsoin",
+          "type": "array"
         },
         "chunkIds": {
           "items": {
@@ -223,6 +257,20 @@
           ],
           "default": null,
           "title": "Documentversion"
+        },
+        "effectiveFrom": {
+          "format": "date",
+          "title": "Effectivefrom",
+          "type": "string"
+        },
+        "effectiveTo": {
+          "format": "date",
+          "title": "Effectiveto",
+          "type": "string"
+        },
+        "isCurrent": {
+          "title": "Iscurrent",
+          "type": "boolean"
         },
         "n": {
           "minimum": 1,

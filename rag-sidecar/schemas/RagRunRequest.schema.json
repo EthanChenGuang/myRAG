@@ -50,6 +50,79 @@
       "title": "DateRangeFilter",
       "type": "object"
     },
+    "DiversityParams": {
+      "additionalProperties": false,
+      "description": "D-21, D-48: MMR over the reranked list; lambda 0.7 until a live sweep sets the shipped value.",
+      "properties": {
+        "mmr_lambda": {
+          "default": 0.7,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Mmr Lambda",
+          "type": "number"
+        },
+        "mmr_window_factor": {
+          "default": 3,
+          "maximum": 10,
+          "minimum": 1,
+          "title": "Mmr Window Factor",
+          "type": "integer"
+        }
+      },
+      "title": "DiversityParams",
+      "type": "object"
+    },
+    "DupClusterParams": {
+      "additionalProperties": false,
+      "properties": {
+        "by_profile": {
+          "additionalProperties": {
+            "$ref": "#/$defs/DupClusterProfileEntry"
+          },
+          "propertyNames": {
+            "maxLength": 128,
+            "minLength": 1
+          },
+          "title": "By Profile",
+          "type": "object"
+        },
+        "threshold": {
+          "default": 0.95,
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Threshold",
+          "type": "number"
+        }
+      },
+      "title": "DupClusterParams",
+      "type": "object"
+    },
+    "DupClusterProfileEntry": {
+      "additionalProperties": false,
+      "description": "D-49: a duplicate threshold for one embedding profile; a fixture-fitted value applies in eval only.",
+      "properties": {
+        "source": {
+          "enum": [
+            "fixture",
+            "live"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "threshold": {
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Threshold",
+          "type": "number"
+        }
+      },
+      "required": [
+        "threshold",
+        "source"
+      ],
+      "title": "DupClusterProfileEntry",
+      "type": "object"
+    },
     "InvoiceFilter": {
       "additionalProperties": false,
       "properties": {
@@ -755,6 +828,21 @@
           ],
           "default": null,
           "title": "Sources"
+        },
+        "versions": {
+          "anyOf": [
+            {
+              "enum": [
+                "current",
+                "all"
+              ],
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/VersionRange"
+            }
+          ],
+          "title": "Versions"
         }
       },
       "title": "RetrievalFilters",
@@ -840,6 +928,12 @@
           "title": "Chunking Profile By Doc Type",
           "type": "object"
         },
+        "diversity": {
+          "$ref": "#/$defs/DiversityParams"
+        },
+        "dup_cluster": {
+          "$ref": "#/$defs/DupClusterParams"
+        },
         "final_top_k": {
           "anyOf": [
             {
@@ -869,7 +963,7 @@
           "anyOf": [
             {
               "maximum": 100,
-              "minimum": 50,
+              "minimum": 25,
               "type": "integer"
             },
             {
@@ -904,6 +998,9 @@
           ],
           "default": null,
           "title": "Rrf K"
+        },
+        "table_lookup": {
+          "$ref": "#/$defs/TableLookupParams"
         }
       },
       "title": "RetrievalOverrides",
@@ -1196,6 +1293,52 @@
         }
       },
       "title": "StageTimeoutsMs",
+      "type": "object"
+    },
+    "TableLookupParams": {
+      "additionalProperties": false,
+      "description": "D-15, D-16: the structured table leg; a row matches when at least min_cells distinct cells match.",
+      "properties": {
+        "limit": {
+          "default": 10,
+          "maximum": 100,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "min_cells": {
+          "default": 2,
+          "maximum": 20,
+          "minimum": 1,
+          "title": "Min Cells",
+          "type": "integer"
+        },
+        "weight": {
+          "default": 1.0,
+          "exclusiveMinimum": 0,
+          "title": "Weight",
+          "type": "number"
+        }
+      },
+      "title": "TableLookupParams",
+      "type": "object"
+    },
+    "VersionRange": {
+      "additionalProperties": false,
+      "description": "D-12: a version period; either bound may be left open, not both.",
+      "properties": {
+        "from": {
+          "format": "date",
+          "title": "From",
+          "type": "string"
+        },
+        "to": {
+          "format": "date",
+          "title": "To",
+          "type": "string"
+        }
+      },
+      "title": "VersionRange",
       "type": "object"
     }
   },
