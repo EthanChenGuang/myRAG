@@ -982,7 +982,10 @@ def test_the_04_1_1_10_baseline_adds_only_term_items_and_moves_no_old_item(tmp_p
     previous = Baseline.model_validate_json(
         (root / "baselines" / "history" / "fixture-ingest-baseline.pre-04.1.1-10.json").read_text(encoding="utf-8")
     )
-    current = Baseline.model_validate_json((root / "baselines" / "fixture-ingest-baseline.json").read_text(encoding="utf-8"))
+    # The baseline 04.1.1-10 recorded, kept in history when plan 05.3-15 re-recorded it with answers on.
+    current = Baseline.model_validate_json(
+        (root / "baselines" / "history" / "fixture-ingest-baseline.pre-05.3-15.json").read_text(encoding="utf-8")
+    )
     assert len(current.runs) >= 3
     assert {run.run_id for run in current.runs}.isdisjoint({run.run_id for run in previous.runs}), "not re-recorded"
 

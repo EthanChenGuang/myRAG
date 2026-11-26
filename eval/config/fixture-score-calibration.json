@@ -1,16 +1,16 @@
 {
   "dev": {
-    "answerable_count": 86,
-    "correct_refusal_rate": 0.3333333333333333,
-    "false_refusal_rate": 0.046511627906976744,
-    "false_refusal_rate_upper_bound": 0.10327809264274575,
-    "no_answer_count": 21
+    "answerable_count": 150,
+    "correct_refusal_rate": 0.2631578947368421,
+    "false_refusal_rate": 0.02,
+    "false_refusal_rate_upper_bound": 0.05087706797852393,
+    "no_answer_count": 38
   },
   "fixture_mode": "prechunked",
-  "golden_sha256": "425aa830422844d8a4856775c8ec50f4be73f090ed7097b9d9dec2d85a12fa67",
+  "golden_sha256": "0f2069169c7eff495ef79bfaf7cc85663e6fa24e4924c86884a6c56d1c88fa61",
   "schema_version": 1,
   "score_calibration": {
-    "context_threshold": 0.11585847749171707
+    "context_threshold": 0.1410906862942342
   },
   "source": "fixture",
   "status": "calibrated",

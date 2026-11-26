@@ -192,6 +192,14 @@ describe('instruction-sensitive fake generator (D-13)', () => {
     expect(fakeCitationAnswer({ system: tagged, question, noAnswerQuestions, promptTemplate: template })).toBe(
       'A tagged passage states a third rule.',
     );
+    // Ingest-mode context: the group header only, no chunk prefix.
+    const ingested = template.replace(
+      '{{context}}',
+      '=== RELEVANT INFORMATION FROM DOCUMENTS ===\n\n\n--- Document: doc-3.md (1 relevant chunks) ---\n\nAn ingested passage states a fourth rule. More text.\n\n=== END OF RELEVANT INFORMATION ===',
+    );
+    expect(fakeCitationAnswer({ system: ingested, question, noAnswerQuestions, promptTemplate: template })).toBe(
+      'An ingested passage states a fourth rule.',
+    );
     // Without the instruction-sensitive option the answer is today's no-context sentence.
     expect(fakeCitationAnswer({ system, question, promptTemplate: template })).toBe(fakeCitationAnswer({ system, question }));
     // An empty retrieval still gets the no-context sentence.

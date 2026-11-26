@@ -1,9 +1,9 @@
 """Checks the committed fixture sweep, calibration and refusal outcome (plan 04-39). Reads committed files only.
 
-Rebuild outcome.json after re-running both harness runs:
-    npm run test-rag -- --run-config eval/config/runs/v2-recommended.json --no-gate --out eval/out/p4-39-rec
-    npm run test-rag -- --run-config eval/config/runs/v2-all-off.json --no-gate --out eval/out/p4-39-off
-    uv run --directory eval python tests/test_fixture_calibration_outputs.py eval/out/p4-39-rec eval/out/p4-39-off
+Rebuild outcome.json after re-running both harness runs (retrieval only: the outcome reads trace-level refusals):
+    npm run test-rag -- --run-config eval/config/runs/v2-recommended.json --no-gate --no-answers --out eval/out/p4-39-rec
+    npm run test-rag -- --run-config eval/config/runs/v2-all-off.json --no-gate --no-answers --out eval/out/p4-39-off
+    uv run --directory eval python tests/test_fixture_calibration_outputs.py "$PWD/eval/out/p4-39-rec" "$PWD/eval/out/p4-39-off"
 """
 
 import json
@@ -24,6 +24,7 @@ CALIBRATION = REPO / "eval" / "config" / "refusal-calibration.json"
 NOISE = REPO / "eval" / "config" / "noise.json"
 PARAMS = REPO / "eval" / "config" / "retrieval-params.json"
 GOLDEN = REPO / "eval" / "fixtures" / "golden.jsonl"
+GOLDEN_MANIFEST = REPO / "eval" / "fixtures" / "golden.manifest.json"
 SWEEP = REPO / "eval" / "reports" / "retrieval-sweep-fixture" / "retrieval-sweep.json"
 OUTCOME = REPO / "eval" / "reports" / "refusal-calibration-fixture" / "outcome.json"
 RUNS = ("v2_recommended", "v2_all_off")
@@ -137,8 +138,10 @@ def test_each_language_has_a_calibrated_same_language_fixture_cell():
     fixture = [c for c in thresholds.cells if c.source == "fixture"]
     for language in ("en", "it", "zh"):
         assert any(c.query_language == language and c.pairing == "same" and c.status == "calibrated" for c in fixture), language
+    # The holdout is read once per fixture golden-set version: a set bump re-fits on the new dev split and reads it again.
+    version = json.loads(GOLDEN_MANIFEST.read_text(encoding="utf-8"))["version"]
     for cell in fixture:
-        assert cell.holdout_evaluations <= 1, cell.key
+        assert cell.holdout_evaluations <= version, cell.key
 
 
 def test_fixture_floor_is_a_calibrated_fixture_record_with_only_a_context_threshold():

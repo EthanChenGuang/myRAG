@@ -15,7 +15,8 @@ import { hasRefusalDirective } from './prompt-directives.mts';
  *
  * Instruction-sensitive mode (Phase 5.3 D-13), only for the questions in `noAnswerQuestions` that reach the generator with
  * context: the refusal text of the question's language when the prompt template carries a refusal directive, else a fixed
- * unsupported answer. Every other question is answered exactly as without the option.
+ * unsupported answer. A question outside that set whose context has no labels is answered with the first sentence of its
+ * first passage, uncited; every other question is answered exactly as without the option.
  */
 export const FAKE_CITATION_GENERATOR_MODEL = 'fake/citation-alias-v1';
 /** The generator id of a run with the instruction-sensitive mode on (--answers, D-13). */
@@ -96,6 +97,25 @@ function firstSentence(raw: string): string {
   return sentence;
 }
 
+/**
+ * A context block without a [S<k>] label: a "--- Document: <name> ... ---" group header, a "Document: ... Content:" chunk
+ * line or a tagged <doc> element.
+ */
+const UNLABELLED_BLOCK_START_RE = /^(?:--- Document: [^\n]*---[ \t]*\n|Document: [^\n]*?Content:[ \t]*|<doc\b[^>\n]*>[ \t]*\n)/m;
+const UNLABELLED_BLOCK_END_RE = /\n[ \t]*(?:--- Document: |Document: [^\n]*?Content:|<doc\b|<\/doc>|<\/documents>|===)/;
+
+/** The first sentence of the first unlabelled context block, or '' when the prompt has none. */
+function unlabelledContextSentence(system: string): string {
+  const start = UNLABELLED_BLOCK_START_RE.exec(system);
+  if (!start) return '';
+  const rest = system
+    .slice(start.index + start[0].length)
+    .replace(/^\s+/, '')
+    .replace(CHUNK_PREFIX_RE, '');
+  const end = UNLABELLED_BLOCK_END_RE.exec(rest);
+  return firstSentence(end ? rest.slice(0, end.index) : rest);
+}
+
 /** The labelled blocks in prompt order; a label that appears twice keeps its first block. */
 export function labelledBlocks(system: string): LabelledBlock[] {
   const headers = [...system.matchAll(HEADER_RE)];
@@ -126,7 +146,14 @@ export function fakeCitationAnswer(input: { system: string; question: string; se
     if (!unsupported) throw new Error(`[Fake Generator] no unsupported answer for language ${noAnswerLanguage}`);
     return unsupported;
   }
-  if (blocks.length === 0) return NO_CONTEXT_ANSWER;
+  if (blocks.length === 0) {
+    // 05.3-15: in instruction-sensitive mode a question with unlabelled context is answered from its first passage, uncited.
+    if (input.noAnswerQuestions !== undefined && hasContext(input.system, 0, input.promptTemplate)) {
+      const sentence = unlabelledContextSentence(input.system);
+      if (sentence) return sentence;
+    }
+    return NO_CONTEXT_ANSWER;
+  }
   const bytes = digest(input.seed ?? DEFAULT_FAKE_CITATION_SEED, input.question);
   const count = blocks.length;
   const first = bytes[0] % count;
