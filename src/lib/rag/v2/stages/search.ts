@@ -37,6 +37,7 @@ import {
 import type { RetrievalParams } from '@/lib/rag-eval/contracts.generated';
 import type { SearchDelegate } from '../../query/port-types';
 import { effectiveVersionScope } from '../../query/filters';
+import type { AttributeSearchInput } from './query';
 
 export interface SearchStagesInput {
   input: RunRetrievalInput;
@@ -64,6 +65,8 @@ export interface SearchStagesInput {
   terminology?: { tokens: readonly string[]; expansionWeight: number; reserveSlots?: number } | null;
   /** D-18: factor on the dense leg weight for a variant of kind terminology; absent reads TerminologyParams.dense_weight. */
   terminologyDenseWeight?: number;
+  /** D-29: the attribute stage's soft list and fallback filters; absent runs neither. */
+  attributes?: AttributeSearchInput;
 }
 
 /** D-16: the expansion list id; no dense/lexical prefix, so nothing that inspects list ids by prefix counts it as a leg. */

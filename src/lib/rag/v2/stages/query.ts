@@ -22,7 +22,9 @@ import { terminologyMatcherFor } from '../../terminology/load';
 import { normalizeLexical } from '../../lexical/tokenize';
 import { getV2StartupVerdict } from '../startup';
 import type { TraceCollector as Collector } from '../../trace/collector';
-import type { TerminologyHashStage } from '../config-hash';
+import { ATTRIBUTE_STATE_NONE, ATTRIBUTE_STATE_SKIPPED, type AttributeFilterHashStage, type TerminologyHashStage } from '../config-hash';
+import { AttributeFilterError, resolveAttributeFilter, type AttributeResolution } from '../../retrieval/attributes';
+import { attributeFilterConfig } from '../../retrieval/attribute-filter-config';
 
 export interface QueryStagesInput {
   input: RunRetrievalInput;
@@ -36,6 +38,8 @@ export interface QueryStagesInput {
   cache?: SemanticCacheSeam;
   /** D-21: told how the terminology stage ended, before semantic_cache builds its key. */
   onTerminology?: (stage: TerminologyHashStage) => void;
+  /** D-30: told how the attribute_resolve stage ended, before semantic_cache builds its key. */
+  onAttributeFilter?: (stage: AttributeFilterHashStage) => void;
 }
 
 export interface QueryStagesOutput {
@@ -48,6 +52,128 @@ export interface QueryStagesOutput {
   queryLayer?: QueryLayerOutcome;
   /** D-20: what the terminology stage applied to retrieval; null when it was disabled, skipped or not reached. */
   terminology: TerminologyOutcome | null;
+  /** D-29: what the attribute stage hands the search stage; absent when it was disabled, skipped, not reached or resolved nothing. */
+  attributes?: AttributeSearchInput;
+}
+
+/** D-29: the search stage's attribute input: the soft list and the filters the one fallback round uses. */
+export interface AttributeSearchInput {
+  mode: 'hard' | 'soft';
+  /** Documents the attr:0 list searches; empty adds no list. */
+  softIds: string[];
+  softWeight: number;
+  /** The filters without the automatic hard ids; null when no automatic id was intersected (no fallback). */
+  fallbackFilters: RetrievalFilters | null;
+}
+
+export const ATTRIBUTE_FILTER_TOO_BROAD = 'attribute_filter_too_broad';
+export const ATTRIBUTE_LEXICON_TRUNCATED = 'attribute_lexicon_truncated';
+export const ATTRIBUTE_LEXICON_UNAVAILABLE = 'attribute_lexicon_unavailable';
+export const ATTRIBUTE_ALIAS_UNAVAILABLE = 'attribute_alias_unavailable';
+export const ATTRIBUTE_EXPLICIT_REJECTED = 'attribute_explicit_rejected';
+
+/** D-29: the ids the attribute stage applied; a rejected explicit filter matches nothing. */
+export type AttributeStageOutcome =
+  | { kind: 'rejected' }
+  | {
+      kind: 'resolved';
+      resolution: AttributeResolution;
+      /** Explicit ids (capped when too broad); null without an explicit filter. */
+      explicitIds: string[] | null;
+      /** Automatic hard ids intersected in hard mode; null otherwise. */
+      automaticIds: string[] | null;
+      softIds: string[];
+    };
+
+class AttributeResolveError extends Error {
+  constructor() {
+    super('[RAG Attributes] attribute resolution failed');
+    this.name = 'AttributeResolveError';
+  }
+}
+
+function hasExplicitAttributes(explicit: Record<string, readonly string[]> | undefined): boolean {
+  return explicit !== undefined && Object.values(explicit).some((values) => values.length > 0);
+}
+
+function attributeCounts(value: AttributeStageOutcome): Record<string, number> {
+  if (value.kind === 'rejected') {
+    return { explicit_keys: 0, matched_keys: 0, alias_matches: 0, ambiguous: 0, hard_ids: 0, soft_ids: 0, too_broad: 0, lexicon_truncated: 0, explicit_rejected: 1 };
+  }
+  const { resolution } = value;
+  return {
+    explicit_keys: resolution.counts.explicitKeys,
+    matched_keys: resolution.counts.matchedKeys,
+    alias_matches: resolution.counts.aliasMatches,
+    ambiguous: resolution.counts.ambiguous,
+    hard_ids: resolution.hardIds?.length ?? 0,
+    soft_ids: value.softIds.length,
+    too_broad: resolution.tooBroad ? 1 : 0,
+    lexicon_truncated: resolution.lexiconTruncated ? 1 : 0,
+    explicit_rejected: 0,
+  };
+}
+
+function attributeDetail(value: AttributeStageOutcome): string | undefined {
+  if (value.kind === 'rejected') return ATTRIBUTE_EXPLICIT_REJECTED;
+  const { resolution } = value;
+  const codes = [
+    resolution.tooBroad ? ATTRIBUTE_FILTER_TOO_BROAD : undefined,
+    resolution.lexiconTruncated ? ATTRIBUTE_LEXICON_TRUNCATED : undefined,
+    resolution.lexiconUnavailable ? ATTRIBUTE_LEXICON_UNAVAILABLE : undefined,
+    resolution.aliasUnavailable ? ATTRIBUTE_ALIAS_UNAVAILABLE : undefined,
+  ].filter((code): code is string => code !== undefined);
+  return codes.length > 0 ? codes.join(';') : undefined;
+}
+
+function intersectIds(a: readonly string[] | null, b: readonly string[] | null): string[] | null {
+  if (a === null) return b === null ? null : [...b];
+  if (b === null) return [...a];
+  const keep = new Set(b);
+  return a.filter((id) => keep.has(id));
+}
+
+/**
+ * D-29: the attribute stage on the standalone query. Without an explicit filter a failure or timeout records skipped and the request
+ * continues unfiltered; with one it fails the request (never widened). An unknown explicit key matches nothing. Detail and counts carry
+ * fixed codes and counts only (D-37).
+ */
+export async function runAttributeResolveStage(args: {
+  standalone: string;
+  scope: TenantScope;
+  explicit: Record<string, readonly string[]> | undefined;
+  mode: 'hard' | 'soft';
+  spec: StageSpec;
+  signal: AbortSignal;
+  collector: TraceCollector;
+}): Promise<AttributeStageOutcome | null> {
+  const explicitPresent = hasExplicitAttributes(args.explicit);
+  const outcome = await runStage(
+    { ...args.spec, onFail: explicitPresent ? 'throw' : 'skip' },
+    args.signal,
+    async (stageSignal): Promise<AttributeStageOutcome> => {
+      let resolution: AttributeResolution;
+      try {
+        resolution = await resolveAttributeFilter(args.scope, args.standalone, explicitPresent ? args.explicit : null, { signal: stageSignal });
+      } catch (error) {
+        if (error instanceof AttributeFilterError) return { kind: 'rejected' };
+        if (stageSignal.aborted) throw error;
+        throw explicitPresent ? new AttributeResolveError() : error;
+      }
+      // Automatic resolution that could not read the tenant's values is a failure of this stage, not an empty match.
+      if (resolution.lexiconUnavailable && !explicitPresent) throw new AttributeResolveError();
+      const explicitIds = explicitPresent ? (resolution.explicitIds ?? resolution.explicitCappedIds ?? []) : null;
+      const automaticIds = args.mode === 'hard' ? resolution.hardIds : null;
+      const softIds =
+        args.mode === 'soft' && resolution.hardIds
+          ? [...new Set([...resolution.softIds, ...resolution.hardIds])].sort()
+          : [...resolution.softIds];
+      return { kind: 'resolved', resolution, explicitIds, automaticIds, softIds };
+    },
+    args.collector,
+    { detail: attributeDetail, counts: attributeCounts },
+  );
+  return outcome.skipped ? null : outcome.value;
 }
 
 /** D-20: the matches and version applied to retrieval, plus the expansion the search group turns into the term:0 list. */
@@ -180,6 +306,9 @@ export async function runQueryStages(ctx: QueryStagesInput): Promise<QueryStages
   let terminology: TerminologyOutcome | null = null;
   let terminologyRan = false;
   let terminologyStandalone = input.query;
+  // D-29: the attribute stage runs right after the terminology stage, in the same closure, so semantic_cache keys on its state.
+  let attributeOutcome: AttributeStageOutcome | null = null;
+  const attributeMode = config.v2.attributeFilter;
   const terminologyStage = async (standalone: string): Promise<void> => {
     terminologyRan = true;
     terminologyStandalone = standalone;
@@ -187,6 +316,29 @@ export async function runQueryStages(ctx: QueryStagesInput): Promise<QueryStages
     const outcome = await runTerminologyStage({ standalone, scope, spec: termSpec, signal, collector });
     terminology = outcome;
     ctx.onTerminology?.(termSpec.enabled ? { enabled: true, version: outcome?.version ?? null } : { enabled: false });
+
+    const attrSpec = spec('attribute_resolve', 'skip');
+    if (!attrSpec.enabled || attributeMode === 'off') {
+      await runStage({ ...attrSpec, enabled: false }, signal, () => undefined, collector);
+      ctx.onAttributeFilter?.({ enabled: false });
+      return;
+    }
+    attributeOutcome = await runAttributeResolveStage({
+      standalone,
+      scope,
+      explicit: input.retrievalFilters?.attributes,
+      mode: attributeMode,
+      spec: attrSpec,
+      signal,
+      collector,
+    });
+    const state =
+      attributeOutcome === null
+        ? ATTRIBUTE_STATE_SKIPPED
+        : attributeOutcome.kind === 'rejected'
+          ? ATTRIBUTE_EXPLICIT_REJECTED
+          : (attributeOutcome.resolution.stateDigest ?? ATTRIBUTE_STATE_NONE);
+    ctx.onAttributeFilter?.({ enabled: true, state });
   };
 
   let queryLayer: QueryLayerOutcome | undefined;
@@ -227,12 +379,28 @@ export async function runQueryStages(ctx: QueryStagesInput): Promise<QueryStages
   // The layer runs the stage after its parallel group; without the layer (or when it stood down early) it runs here, after translate.
   if (!terminologyRan && queryLayer?.shortCircuit?.kind !== 'small_talk') await terminologyStage(input.query);
 
-  const built = buildRetrievalFilters({
-    explicit: input.retrievalFilters,
-    referencedDocumentIds: referencedDocumentIds(referenced),
-    ...(config.effectiveDates ? { effectiveOn: effectiveOnFor(config, getRagDeps().now()) } : {}),
-  });
-  const filters = queryLayer?.dateRange ? mergeLayerDateRange(built, queryLayer.dateRange) : built;
+  const applied = attributeOutcome as AttributeStageOutcome | null;
+  const attributeIds =
+    applied === null ? undefined : applied.kind === 'rejected' ? [] : (intersectIds(applied.explicitIds, applied.automaticIds) ?? undefined);
+  const filtersWith = (attributeDocumentIds: string[] | undefined): RetrievalFilters => {
+    const built = buildRetrievalFilters({
+      explicit: input.retrievalFilters,
+      referencedDocumentIds: referencedDocumentIds(referenced),
+      ...(config.effectiveDates ? { effectiveOn: effectiveOnFor(config, getRagDeps().now()) } : {}),
+      ...(attributeDocumentIds !== undefined ? { attributeDocumentIds } : {}),
+    });
+    return queryLayer?.dateRange ? mergeLayerDateRange(built, queryLayer.dateRange) : built;
+  };
+  const filters = filtersWith(attributeIds);
+  let attributes: AttributeSearchInput | undefined;
+  if (applied?.kind === 'resolved' && (applied.automaticIds !== null || applied.softIds.length > 0)) {
+    attributes = {
+      mode: attributeMode === 'soft' ? 'soft' : 'hard',
+      softIds: applied.softIds,
+      softWeight: attributeFilterConfig().soft_weight,
+      fallbackFilters: applied.automaticIds !== null ? filtersWith(applied.explicitIds ?? undefined) : null,
+    };
+  }
 
   const provided = [...(queryLayer?.variants ?? []), ...(input.queryVariants ?? [])];
   // D-18, D-19: the dense variant needs its switch and never runs in voice. TS narrows `terminology` to null across the closure.
@@ -288,5 +456,6 @@ export async function runQueryStages(ctx: QueryStagesInput): Promise<QueryStages
     variants,
     ...(queryLayer ? { queryLayer } : {}),
     terminology,
+    ...(attributes ? { attributes } : {}),
   };
 }

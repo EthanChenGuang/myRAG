@@ -19,7 +19,7 @@ import { SCOPE_SINGLE } from '../cache/fixtures';
 
 const DOC = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const PLANTED_VALUE = 'zeta-17';
-const QUERY = `Which part of the record concerns ${PLANTED_VALUE} today?`;
+const QUERY = `Which part of the record concerns ${PLANTED_VALUE}?`;
 
 type ResolverMode = 'nothing' | 'hard' | 'soft_only' | 'ambiguous' | 'too_broad' | 'explicit' | 'explicit_too_broad' | 'unknown' | 'fail' | 'hang';
 

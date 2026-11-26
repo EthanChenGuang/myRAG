@@ -20,12 +20,15 @@ import { isMultiTenant } from '@/lib/deployment-mode';
 import { getRagDeps } from '../deps';
 import type { SecurityConfig } from '../security/config';
 import {
+  attributeFilterHashBlock,
   computeRetrievalConfigHash,
   securityHashComponent,
   terminologyHashBlock,
+  type AttributeFilterHashStage,
   type RetrievalConfigHashQueryLayer,
   type TerminologyHashStage,
 } from './config-hash';
+import { attributeFilterConfig } from '../retrieval/attribute-filter-config';
 import { terminologyParams } from '../terminology/expand';
 import { recordMiss } from '../terminology/miss-log';
 import { effectiveRetrievalParams } from './retrieval-params';
@@ -70,6 +73,8 @@ export interface BuildV2ResultInput {
   cacheTicket?: CacheTicket;
   /** D-21: how the terminology stage ended; absent reads as disabled. */
   terminology?: TerminologyHashStage;
+  /** D-30: how the attribute_resolve stage ended; absent reads as disabled. */
+  attributeFilter?: AttributeFilterHashStage;
 }
 
 export interface RequestConfigHashInput {
@@ -86,6 +91,8 @@ export interface RequestConfigHashInput {
   effectiveOn?: string;
   /** D-21: how the terminology stage ended; absent reads as disabled, so the hash is the pre-terminology value. */
   terminology?: TerminologyHashStage;
+  /** D-30: how the attribute_resolve stage ended; absent reads as disabled, so the hash is the value before the filter. */
+  attributeFilter?: AttributeFilterHashStage;
 }
 
 /** The request's retrieval-config hash; the result and the semantic-cache key both use it, so they never disagree. */
@@ -94,6 +101,10 @@ export async function requestRetrievalConfigHash(ctx: RequestConfigHashInput): P
   const { configHash: thresholdsConfigHash } = loadThresholds();
   const chunking = await getActiveChunkingProfiles();
   const terminology = terminologyHashBlock(ctx.terminology ?? { enabled: false }, terminologyParams(), terminologyDenseFor(config, profile));
+  const attributeStage = ctx.attributeFilter ?? { enabled: false };
+  const attributeFilter = attributeStage.enabled
+    ? attributeFilterHashBlock(attributeStage, config.v2.attributeFilter, attributeFilterConfig())
+    : undefined;
   return computeRetrievalConfigHash({
     backendId: getRetrievalBackend().id,
     embeddingProfileId: ctx.embeddingProfileId,
@@ -125,6 +136,7 @@ export async function requestRetrievalConfigHash(ctx: RequestConfigHashInput): P
     ...(ctx.queryLayerHash ? { queryLayer: ctx.queryLayerHash } : {}),
     ...(ctx.effectiveOn ? { effectiveOn: ctx.effectiveOn } : {}),
     ...(terminology ? { terminology } : {}),
+    ...(attributeFilter ? { attributeFilter } : {}),
   });
 }
 
@@ -286,6 +298,7 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
     ...(ctx.queryLayerHash ? { queryLayerHash: ctx.queryLayerHash } : {}),
     ...(ctx.effectiveOn ? { effectiveOn: ctx.effectiveOn } : {}),
     ...(ctx.terminology ? { terminology: ctx.terminology } : {}),
+    ...(ctx.attributeFilter ? { attributeFilter: ctx.attributeFilter } : {}),
   });
 
   const base = {

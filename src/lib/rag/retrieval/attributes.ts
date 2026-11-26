@@ -33,6 +33,8 @@ export interface AttributeLexicon {
 export interface AttributeResolution {
   /** Documents of the explicit filter; null without one, or when it is too broad. */
   explicitIds: string[] | null;
+  /** The first id-cap documents of an explicit filter that is too broad; null otherwise. The stage still narrows to them (D-29). */
+  explicitCappedIds: string[] | null;
   /** Documents of the automatic matches on attributes not flagged soft; null when there are none or they are too broad. */
   hardIds: string[] | null;
   /** Documents of soft attributes, ambiguous values and too-broad sets (at most the id cap). */
@@ -415,7 +417,7 @@ export async function resolveAttributeFilter(
   };
 
   if (explicitSets.size === 0 && matched.hard.size === 0 && matched.soft.size === 0 && matched.ambiguous.size === 0) {
-    return { explicitIds: null, hardIds: null, softIds: [], counts, tooBroad: false, ...base, stateDigest: null };
+    return { explicitIds: null, explicitCappedIds: null, hardIds: null, softIds: [], counts, tooBroad: false, ...base, stateDigest: null };
   }
 
   const onUnknown = () => unknownAttribute(explicitSets, lexicon);
@@ -423,10 +425,12 @@ export async function resolveAttributeFilter(
   const soft = new Set<string>();
 
   let explicitIds: string[] | null = null;
+  let explicitCappedIds: string[] | null = null;
   if (explicitSets.size > 0) {
     const call = await documentsFor(scope, canonical(explicitSets), idCap, options, onUnknown);
     if (call.tooBroad) {
       tooBroad = true;
+      explicitCappedIds = call.ids;
       call.ids.forEach((id) => soft.add(id));
     } else explicitIds = call.ids;
   }
@@ -470,5 +474,5 @@ export async function resolveAttributeFilter(
     tooBroad,
   });
 
-  return { explicitIds, hardIds, softIds, counts, tooBroad, ...base, stateDigest };
+  return { explicitIds, explicitCappedIds, hardIds, softIds, counts, tooBroad, ...base, stateDigest };
 }
