@@ -206,7 +206,7 @@ async function loggedAnswerId(admin: Client, item: Row): Promise<string | null> 
  * The masked answer of a chat item: the assistant message of the item's own chat row (from the item, never from the request) whose
  * metadata carries the item's trace id or logged answer id. The chat must belong to the item's user.
  */
-async function linkedAnswer(admin: Client, item: Row): Promise<string | null> {
+export async function linkedAnswer(admin: Client, item: Row): Promise<string | null> {
   if (item.channel !== 'chat' || !isReviewItemId(item.chat_id) || !isReviewItemId(item.user_id)) return null;
   const { data, error } = await admin.from('chats').select('id,user_id,messages').eq('id', item.chat_id).maybeSingle();
   if (error || !data) return null;
