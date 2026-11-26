@@ -321,3 +321,12 @@ describe('public exports', () => {
     expect(rag.isTraceId(collector().traceId)).toBe(true);
   });
 });
+
+describe('traceCacheState (D-25)', () => {
+  test('hit when the cache answered, miss when it handed out a ticket, bypass otherwise', () => {
+    expect(rag.traceCacheState({ cacheHit: { answer: {} } })).toBe('hit');
+    expect(rag.traceCacheState({ cacheHit: { answer: {} }, cacheTicket: { key: 'k' } })).toBe('hit');
+    expect(rag.traceCacheState({ cacheTicket: { key: 'k' } })).toBe('miss');
+    expect(rag.traceCacheState({})).toBe('bypass');
+  });
+});

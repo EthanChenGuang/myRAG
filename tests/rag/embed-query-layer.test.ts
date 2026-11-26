@@ -20,11 +20,23 @@ vi.mock('@/lib/query-classifier', async (importOriginal) => {
   spies.classifyQuery.mockImplementation(actual.classifyQuery);
   return { ...actual, classifyQuery: spies.classifyQuery };
 });
+// The embed route builds its response from toUIMessageStream, as toUIMessageStreamResponse does; this marks the model's answer
+function modelStream() {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue({ type: 'text-start', id: 'model' });
+      controller.enqueue({ type: 'text-delta', id: 'model', delta: 'model stream' });
+      controller.enqueue({ type: 'text-end', id: 'model' });
+      controller.close();
+    },
+  });
+}
+
 vi.mock('ai', async (importOriginal) => ({
   ...(await importOriginal<typeof import('ai')>()),
   streamText: async (params: Record<string, unknown>) => ({
     ...(await h.capture.streamText(params)),
-    toUIMessageStreamResponse: () => new Response('model stream'),
+    toUIMessageStream: () => modelStream(),
   }),
 }));
 vi.mock('@/lib/supabase', async (importOriginal) => ({
@@ -131,7 +143,7 @@ describe('embed route query-layer inputs (D-09, D-10, D-11, D-16)', () => {
     const body = await response.text();
 
     expect(response.status).toBe(200);
-    expect(body).toBe('model stream');
+    expect(body).toContain('"delta":"model stream"');
     expect(h.capture.streamText).toHaveBeenCalledTimes(1);
     const system = systemTextOf(h.capture.streamText.mock.calls[0][0] as Record<string, unknown>);
     expect(system).not.toContain('Context from knowledge base');
