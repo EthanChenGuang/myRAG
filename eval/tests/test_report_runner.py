@@ -392,3 +392,95 @@ def test_score_cli_ignores_a_shared_item_rule_manifest_next_to_the_golden_file(t
         encoding="utf-8",
     )
     assert main(_score_args(traces_path, golden_path, manifest_path, out)) == 0
+
+
+# D-07, D-46: rag_mode and the golden-set version from the run manifest and the set manifest into report and baseline.
+
+
+def _set_manifest(golden: list[GoldenItem], stale: tuple[str, ...] = ()):
+    import datetime as dt
+
+    from rag_eval.golden_set import _next_version, build_manifest
+
+    manifest = build_manifest("fixture", golden, today=dt.date(2026, 11, 26))
+    if not stale:
+        return manifest
+    entries = [
+        entry.model_copy(update={"status": "stale", "stale_reason": "quote_not_found", "stale_since": dt.date(2026, 11, 26)})
+        if entry.id in stale
+        else entry
+        for entry in manifest.items
+    ]
+    return _next_version(manifest, entries, dt.date(2026, 11, 26), stale=list(stale))
+
+
+def test_report_copies_rag_mode_from_the_run_manifest():
+    golden, traces = _four_items()
+    assert build_report(_manifest(), score_items(traces, golden), golden).rag_mode == "strict"
+    balanced = _manifest().model_copy(update={"rag_mode": "balanced"})
+    assert build_report(balanced, score_items(traces, golden), golden).rag_mode == "balanced"
+
+
+def test_report_without_a_set_manifest_keeps_the_lifecycle_defaults():
+    report = _report()
+    assert (report.golden_set_version, report.golden_manifest_sha256, report.stale_count, report.stale_share) == (
+        None, None, 0, 0.0,
+    )
+
+
+def test_report_with_a_set_manifest_carries_version_hash_and_stale_share():
+    golden, traces = _four_items()
+    manifest = _set_manifest(golden, stale=("it-general-001",))
+    report = build_report(_manifest(), score_items(traces, golden), golden, golden_manifest=manifest)
+    assert report.golden_set_version == 2 and report.golden_manifest_sha256 == manifest.manifest_sha256
+    assert report.stale_count == 1 and report.stale_share == pytest.approx(0.25)
+    assert report.by_language["it"].recall_at_5.n == 0
+
+
+def test_markdown_prints_set_version_stale_share_and_false_answer_rate(tmp_path: Path):
+    golden, traces = _four_items()
+    manifest = _set_manifest(golden, stale=("it-general-001",))
+    report = build_report(_manifest(), score_items(traces, golden), golden, golden_manifest=manifest)
+    _, md_path = write_report(report, tmp_path)
+    markdown = md_path.read_text(encoding="utf-8")
+    assert f"- Golden set: version 2, manifest {manifest.manifest_sha256[:12]}" in markdown
+    assert "- Stale items: 1 (share 0.250)" in markdown
+    assert "- Refusals (overall): correct refusal 1.000 (n=1), false answer 0.000 (n=1)" in markdown
+    assert "- RAG mode: strict" in markdown
+    _, plain = write_report(_report(), tmp_path / "plain")
+    assert "- Golden set: version n/a, manifest n/a" in plain.read_text(encoding="utf-8")
+
+
+def test_score_cli_with_a_golden_manifest_fills_the_lifecycle_fields(tmp_path: Path):
+    golden, traces = _four_items()
+    traces_path, golden_path, manifest_path, out = _write_inputs(tmp_path, traces)
+    set_path = tmp_path / "golden.manifest.json"
+    set_path.write_text(_set_manifest(golden, stale=("zh-general-001",)).model_dump_json(), encoding="utf-8")
+    assert main([*_score_args(traces_path, golden_path, manifest_path, out), "--golden-manifest", str(set_path)]) == 0
+    report = EvalReport.model_validate_json((out / "report.json").read_text(encoding="utf-8"))
+    assert (report.golden_set_version, report.stale_count) == (2, 1)
+
+
+def test_score_cli_refuses_a_golden_file_that_differs_from_its_set_manifest(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+    golden, traces = _four_items()
+    traces_path, golden_path, manifest_path, out = _write_inputs(tmp_path, traces)
+    changed = [item.model_copy(update={"question": "another question"}) if item.id == "zh-general-001" else item for item in golden]
+    set_path = tmp_path / "golden.manifest.json"
+    set_path.write_text(_set_manifest(changed).model_dump_json(), encoding="utf-8")
+    assert main([*_score_args(traces_path, golden_path, manifest_path, out), "--golden-manifest", str(set_path)]) == 2
+    assert "zh-general-001" in capsys.readouterr().err
+    assert not (out / "report.json").exists()
+
+
+def test_baseline_record_stores_the_set_version_manifest_hash_and_rag_mode():
+    from rag_eval.baseline import record_baseline
+
+    golden, traces = _four_items()
+    manifest = _set_manifest(golden)
+    reports = [build_report(_manifest(), score_items(traces, golden), golden, golden_manifest=manifest) for _ in range(3)]
+    baseline = record_baseline(reports)
+    assert (baseline.golden_set_version, baseline.golden_manifest_sha256) == (1, manifest.manifest_sha256)
+    assert baseline.rag_mode == "strict"
+    mixed = [*reports[:2], reports[2].model_copy(update={"golden_set_version": 2})]
+    with pytest.raises(ValueError, match="golden_set_version"):
+        record_baseline(mixed)
