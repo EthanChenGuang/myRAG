@@ -335,3 +335,49 @@ describe('fine-tune slot probe check (06.1 D-24)', () => {
     expect(fake.callsFor('ft')).toHaveLength(before);
   });
 });
+
+const PROFILE = {
+  id: 'ft-a-1024',
+  provider: 'ft_slot_a',
+  model: VERSION,
+  dims: 1024,
+  storage: 'halfvec' as const,
+  status: 'active' as const,
+  queryInstruction: null,
+  scoreCalibration: {},
+  activatedAt: null,
+  activatedBy: null,
+  previousActiveId: null,
+  hasEvidence: true,
+};
+
+describe('probe failure on the query path', () => {
+  it('surfaces as a model mismatch of the profile, never as a dims mismatch', async () => {
+    const { embedQueryForEvalProfile } = await import('@/lib/rag/embeddings/query-embedding');
+    setRagDepsForTests({
+      profileEmbedder: async () => {
+        throw new EmbeddingProfileMismatch('probe', 0.42, FINETUNE_PROBE_MIN_COSINE);
+      },
+    });
+    await expect(embedQueryForEvalProfile('neutral', SIGNAL, PROFILE)).rejects.toMatchObject({
+      name: 'EmbeddingProfileMismatchError',
+      kind: 'model',
+      profile: 'ft-a-1024',
+      actual: 0.42,
+    });
+  });
+
+  it('the batch query path surfaces a probe failure as a model mismatch too', async () => {
+    const { embedQueriesForEvalProfile } = await import('@/lib/rag/embeddings/query-embedding');
+    setRagDepsForTests({
+      profileBatchEmbedder: async () => {
+        throw new EmbeddingProfileMismatch('probe', 0.42, FINETUNE_PROBE_MIN_COSINE);
+      },
+    });
+    await expect(embedQueriesForEvalProfile(['one', 'two'], SIGNAL, PROFILE)).rejects.toMatchObject({
+      name: 'EmbeddingProfileMismatchError',
+      kind: 'model',
+      profile: 'ft-a-1024',
+    });
+  });
+});
