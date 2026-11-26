@@ -6,10 +6,13 @@ import { afterEach, describe, expect, test } from 'vitest';
 import type { PGlite } from '@electric-sql/pglite';
 import { scanText } from '@/lib/rag/security/injection-rules';
 import { loadCorpus, type CorpusDocument, type CorpusLanguage } from '../../eval/harness/corpus.mts';
+import { embedText } from '../../eval/harness/fixture-embedder.mts';
+import { loadFixtureScoreCalibration } from '../../eval/harness/fixture-floor.mts';
 import { prechunkedWriter } from '../../eval/harness/pglite-supabase.mts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const CORPUS_DIR = path.join(REPO_ROOT, 'eval/fixtures/corpus');
+const GOLDEN_PATH = path.join(REPO_ROOT, 'eval/fixtures/golden.jsonl');
 const LANGUAGE_PACKS_PATH = path.join(REPO_ROOT, 'config/rag/language-packs.json');
 const LANGUAGES: CorpusLanguage[] = ['zh', 'en', 'it'];
 const NEW_FILE_RE = /^(?:p52-answers|p52-rules-v1|p52-rules-v2|sec-links)\.(?:zh|en|it)\.md$/;
@@ -171,12 +174,37 @@ const ANSWER_SECTIONS: Record<CorpusLanguage, { partial: string[]; adjacent: str
   },
 };
 
+// The planned off_topic_context questions (plan 05.2-29 writes the golden items): each lands on one adjacent section, half of them
+// scoring below and half above the eval refusal threshold with the fixture embedder.
+const OFF_TOPIC_QUESTIONS: Array<{ language: CorpusLanguage; question: string; adjacent: string; band: 'below_threshold' | 'above_threshold' }> = [
+  { language: 'en', question: 'What speeds and bowl size does the Quillon SP-7 slip pump have?', adjacent: 'Quillon GM-1 glaze mixer', band: 'above_threshold' },
+  { language: 'en', question: 'Where does the Orrinvale draughts club post its weekly puzzles?', adjacent: 'Orrinvale Chess Circle puzzle corner', band: 'above_threshold' },
+  { language: 'en', question: 'Do mixers splash slip?', adjacent: 'Quillon GM-1 glaze mixer', band: 'below_threshold' },
+  { language: 'en', question: 'Can warming mats crack?', adjacent: 'Tessaly ST-4 seed tray heater', band: 'below_threshold' },
+  { language: 'zh', question: '岚溪泥浆泵有几档转速，料桶多大？', adjacent: '岚溪 GM-2 釉料搅拌机', band: 'above_threshold' },
+  { language: 'zh', question: '弈桥围棋社把每周的题目贴在哪里？', adjacent: '弈桥棋社每周残局角', band: 'above_threshold' },
+  { language: 'zh', question: '垫子会烫手吗？', adjacent: '青畦 YM-4 育苗盘加热垫', band: 'below_threshold' },
+  { language: 'zh', question: '桨叶会生锈吗？', adjacent: '岚溪 GM-2 釉料搅拌机', band: 'below_threshold' },
+  { language: 'it', question: 'Che ugello monta la smerigliatrice Calvessa?', adjacent: 'Sabbiatrice per vetro Calvessa SB-2', band: 'above_threshold' },
+  { language: 'it', question: 'Dove conserva i nastri la banda di Valdentro?', adjacent: 'Archivio spartiti del Coro Valdentro', band: 'above_threshold' },
+  { language: 'it', question: "I fumi d'alveare disturbano le api?", adjacent: 'Affumicatore Arnelia AF-1', band: 'below_threshold' },
+  { language: 'it', question: 'I coristi firmano spesso?', adjacent: 'Archivio spartiti del Coro Valdentro', band: 'below_threshold' },
+];
+
 const CREDENTIAL_WORDS: Record<CorpusLanguage, RegExp> = {
   en: /\b(?:password|code)\b/i,
   zh: /密码|验证码/,
   it: /\b(?:password|codice)\b/i,
 };
 
+// Subject words of the requirement illustrations (travel and lodging limits, leave, salaries, restaurants, VPN or password FAQs).
+// `password` is allowed in sec-links only, where the credential request is the attack itself.
+const DENYLIST = [
+  'hotel', 'lodging', 'accommodation', 'travel', 'trip', 'flight', 'airfare', 'mileage', 'per diem', 'overage', 'allowance',
+  'leave', 'vacation', 'salary', 'salaries', 'payroll', 'wage', 'bonus', 'restaurant', 'meal', 'vpn', 'faq', 'reimburse', 'expense',
+  '酒店', '住宿', '差旅', '出差', '机票', '假期', '年假', '请假', '工资', '薪资', '薪水', '餐厅', '餐费', '报销', '常见问题',
+  'albergo', 'alloggio', 'viaggio', 'trasferta', 'ferie', 'stipendio', 'salario', 'ristorante', 'pasto', 'rimborso', 'domande frequenti',
+];
 const RESERVED_HOST_RE = /\.(?:test|invalid|example)$/;
 const ALLOWLISTED_HOST = 'help.fixture-site.example';
 
@@ -314,5 +342,99 @@ describe('documents', () => {
       for (const chunk of doc.chunks) if (scanText(chunk.text).matched) findings.push(`${doc.relpath} chunk ${chunk.index}`);
     }
     expect(findings).toEqual([]);
+  });
+});
+
+interface Scored {
+  id: string;
+  section: string;
+  score: number;
+}
+
+function chunkVectors(documents: CorpusDocument[]): Array<{ id: string; section: string; vector: number[] }> {
+  return documents.flatMap((doc) => doc.chunks.map((chunk) => ({ id: chunk.id, section: chunk.section, vector: embedText(chunk.text) })));
+}
+
+function ranked(question: string, pool: ReturnType<typeof chunkVectors>): Scored[] {
+  const query = embedText(question);
+  return pool
+    .map((entry) => ({ id: entry.id, section: entry.section, score: entry.vector.reduce((sum, value, index) => sum + value * query[index], 0) }))
+    .sort((a, b) => b.score - a.score || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+}
+
+function refusalThreshold(): number {
+  const calibration = loadFixtureScoreCalibration('prechunked');
+  if (!calibration) throw new Error('the fixture score calibration is missing');
+  return calibration.context_threshold;
+}
+
+interface GoldenLine {
+  id: string;
+  question: string;
+  gold_evidence?: Array<{ document: string; quote: string }>;
+}
+
+describe('isolation and score bands', () => {
+  const TOP_K = 10;
+
+  test('for every existing golden item, the top-k above the refusal threshold keeps its top chunk and every gold rank', () => {
+    const all = loadCorpus(CORPUS_DIR).documents;
+    const before = all.filter((doc) => !NEW_FILE_RE.test(path.posix.basename(doc.relpath)));
+    expect(all.length - before.length).toBe(12);
+    const oldPool = chunkVectors(before);
+    const newPool = chunkVectors(all);
+    const threshold = refusalThreshold();
+    const items = fs
+      .readFileSync(GOLDEN_PATH, 'utf8')
+      .split('\n')
+      .filter((line) => line.trim() !== '')
+      .map((line) => JSON.parse(line) as GoldenLine);
+    const changed: string[] = [];
+    for (const item of items) {
+      const gold = new Set(
+        before.flatMap((doc) =>
+          doc.chunks
+            .filter((chunk) => (item.gold_evidence ?? []).some((g) => (g.document === doc.filename || g.document === path.posix.basename(doc.relpath)) && chunk.text.includes(g.quote)))
+            .map((chunk) => chunk.id),
+        ),
+      );
+      const signature = (top: Scored[]) => `${top[0]?.id ?? 'none'}|${top.flatMap((entry, rank) => (gold.has(entry.id) ? [`${entry.id}@${rank}`] : [])).join(',')}`;
+      const topOld = ranked(item.question, oldPool).filter((entry) => entry.score >= threshold).slice(0, TOP_K);
+      const topNew = ranked(item.question, newPool).filter((entry) => entry.score >= threshold).slice(0, TOP_K);
+      if (signature(topOld) !== signature(topNew)) changed.push(item.id);
+    }
+    expect(changed).toEqual([]);
+  });
+
+  test('every planned off_topic_context question lands on its adjacent section, in its score band', () => {
+    const pool = chunkVectors(loadCorpus(CORPUS_DIR).documents);
+    const threshold = refusalThreshold();
+    for (const planned of OFF_TOPIC_QUESTIONS) {
+      expect(ANSWER_SECTIONS[planned.language].adjacent).toContain(planned.adjacent);
+      const [best] = ranked(planned.question, pool);
+      expect(best.section, planned.question).toBe(planned.adjacent);
+      if (planned.band === 'above_threshold') expect(best.score, planned.question).toBeGreaterThanOrEqual(threshold);
+      else expect(best.score, planned.question).toBeLessThan(threshold);
+    }
+  });
+
+  test.each(LANGUAGES)('%s: at least 4 off_topic_context questions, split half below and half above the threshold', (language) => {
+    const planned = OFF_TOPIC_QUESTIONS.filter((entry) => entry.language === language);
+    expect(planned.length).toBeGreaterThanOrEqual(4);
+    const below = planned.filter((entry) => entry.band === 'below_threshold').length;
+    expect(below * 2).toBe(planned.length);
+  });
+
+  test('no new file contains a denylisted illustration word', () => {
+    const hits: string[] = [];
+    for (const doc of newDocuments()) {
+      const text = rawFile(doc).toLowerCase();
+      for (const word of DENYLIST) {
+        const pattern = /^[a-z ]+$/.test(word) ? new RegExp(`\\b${word}`, 'u') : new RegExp(word, 'u');
+        if (pattern.test(text)) hits.push(`${doc.relpath}: ${word}`);
+      }
+      if (!path.posix.basename(doc.relpath).startsWith('sec-links.') && /password|密码/.test(text)) hits.push(`${doc.relpath}: password`);
+    }
+    expect(hits).toEqual([]);
   });
 });
