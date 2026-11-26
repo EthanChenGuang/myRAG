@@ -26,7 +26,7 @@ import { resolveFinalResultCount, type RagConfig, type StageName } from '../../c
 import { env } from '@/lib/env';
 import { documentNamesFromRows, downweightOrder, injectionDropped, runInjectionStage, runStage, stageSpec, type StageSpec } from '../../pipeline';
 import type { SecurityConfig } from '../../security/config';
-import { injectionItems, releasedRulesFromRows, type InjectionMarks } from '../../security/injection-check';
+import { injectionItems, releasedRulesFromRows, uploadersFromRows, type InjectionMarks } from '../../security/injection-check';
 import type { TraceCollector } from '../../trace/collector';
 import { topkRedundancy } from '../diversify';
 import type {
@@ -432,6 +432,7 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
       // Released rule ids come only from the document rows this request's scoped search returned (D-10).
       released: releasedRulesFromRows(rows.documents),
       documentNames: documentNamesFromRows(rows.documents),
+      uploaders: uploadersFromRows(rows.documents),
     });
     injectionStalled = run.stalled;
     if (run.applied) {

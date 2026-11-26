@@ -3,7 +3,7 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LangfuseConfig } from '@/lib/rag/trace/config';
-import { postLangfuseScores, scoreId, type LangfuseScoreInput } from '@/lib/rag/trace/scores';
+import { postLangfuseEvent, postLangfuseScores, scoreId, type LangfuseScoreInput } from '@/lib/rag/trace/scores';
 import { startFakeLangfuse, type FakeLangfuse } from '../helpers/fake-langfuse.mts';
 
 const PUBLIC_KEY = 'pk-lf-test-placeholder';
@@ -165,5 +165,51 @@ describe('postLangfuseScores', () => {
     expect(serialized).not.toContain(PUBLIC_KEY);
     expect(serialized).not.toContain(SECRET_KEY);
     expect(fake.scores).toHaveLength(2);
+  });
+});
+
+describe('score id keys and the event poster (05.2-16)', () => {
+  function capture(status = 202) {
+    const calls: Array<{ url: string; body: unknown }> = [];
+    const fetchFn = (async (url: string, init: RequestInit) => {
+      calls.push({ url, body: JSON.parse(String(init.body)) });
+      return new Response(null, { status });
+    }) as unknown as typeof fetch;
+    return { calls, fetchFn };
+  }
+
+  it('an idKey replaces the name in the score id; without one the id is unchanged', async () => {
+    const { calls, fetchFn } = capture();
+    await postLangfuseScores(
+      [
+        { traceId: TRACE_ID, name: 'security_removed', value: 1, dataType: 'NUMERIC', idKey: 'security_removed|output_guard' },
+        { traceId: TRACE_ID, name: 'groundedness', value: 0.5, dataType: 'NUMERIC' },
+      ],
+      { config: configFor('http://langfuse.invalid'), fetch: fetchFn },
+    );
+    const body = calls[0]!.body as Array<Record<string, unknown>>;
+    expect(body[0]!.id).toBe(scoreId(TRACE_ID, 'security_removed|output_guard'));
+    expect(body[0]!.name).toBe('security_removed');
+    expect(body[0]).not.toHaveProperty('idKey');
+    expect(body[1]!.id).toBe(scoreId(TRACE_ID, 'groundedness'));
+  });
+
+  it('posts one event-create item to the ingestion endpoint and never throws', async () => {
+    const { calls, fetchFn } = capture(207);
+    const result = await postLangfuseEvent(
+      { traceId: TRACE_ID, name: 'security_alert', metadata: { tenant_key: 's:default', event_count: 2 } },
+      { config: configFor('http://langfuse.invalid'), fetch: fetchFn },
+    );
+    expect(result).toEqual({ status: 'partial', httpStatus: 207 });
+    expect(calls[0]!.url).toBe('http://langfuse.invalid/api/public/ingestion');
+    const batch = (calls[0]!.body as { batch: Array<{ type: string; body: Record<string, unknown> }> }).batch;
+    expect(batch).toHaveLength(1);
+    expect(batch[0]!.type).toBe('event-create');
+    expect(batch[0]!.body).toMatchObject({ traceId: TRACE_ID, name: 'security_alert', metadata: { tenant_key: 's:default', event_count: 2 } });
+    const failing = (async () => {
+      throw new Error('down');
+    }) as unknown as typeof fetch;
+    await expect(postLangfuseEvent({ traceId: null, name: 'x', metadata: {} }, { config: configFor('http://langfuse.invalid'), fetch: failing })).resolves.toEqual({ status: 'failed', httpStatus: null });
+    await expect(postLangfuseEvent({ traceId: null, name: 'x', metadata: {} }, { config: configFor('http://langfuse.invalid', { enabled: false }) })).resolves.toEqual({ status: 'skipped', httpStatus: null });
   });
 });
