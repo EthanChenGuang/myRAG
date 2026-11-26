@@ -18,6 +18,19 @@ import {
 } from '@/lib/rag/ingest/attributes/header';
 import { importAttributeRows, renderDocumentHeaders, renderPendingHeaders, writeDocumentAttributes } from '@/lib/rag/ingest/attributes/apply';
 import { resetAttributeSchemaCacheForTests } from '@/lib/rag/ingest/attributes/schema';
+import { buildEmbeddingText } from '@/lib/rag/ingest/text/embedding-text';
+import { chunkLexicalText } from '@/lib/rag/lexical/chunk-text';
+import { lexicalTokens } from '@/lib/rag/lexical/tokenize';
+import { buildProfileChunks, type ChunkingProfileRow } from '@/lib/rag/ingest/profile-chunks';
+import { getProcessingProfile } from '@/lib/rag/ingest/profiles/load';
+import { enrichStage } from '@/lib/rag/ingest/stages/enrich';
+import { deferredEmbedStage, embedStage } from '@/lib/rag/ingest/stages/embed-write';
+import { emptyIngestState, type ChunkDraft, type StageContext } from '@/lib/rag/ingest/types';
+import { createIngestWriter } from '@/lib/rag/ingest/writer';
+import { mintScope } from '@/lib/rag/tenant/scope';
+import { resetRagDepsForTests, setRagDepsForTests } from '@/lib/rag/deps';
+import { resetActiveProfileForTests } from '@/lib/rag/embeddings/active-profile';
+import { FAKE_DOCUMENT_ID, FAKE_LINEAGE_ID, fakeIngestDb, installIngestDeps, uninstallIngestDeps, unitVector, type RecordedRpc } from '../../helpers/ingest-fakes';
 
 /**
  * TPL-05 (D-26, D-27): rendering, the stamp, the template service and its tenant-keyed cache, the batched header reads and the re-render
@@ -382,5 +395,241 @@ describe('the apply path re-renders headers', () => {
     useDb(db);
     await renderPendingHeaders(db, TENANT_A, { signal, deadlineMs: 20_000 });
     expect(db.calls.at(-1)?.args.p_rows).toEqual([{ document_id: DOC_1, header: null, stamp: null }]);
+  });
+});
+
+// --- Plan 03.3-17: the stored header in embedding text and lexical_text (D-26, D-27, D-05) -------------------------------------------------
+
+const HEADER_MARKER = 'hdrmark-q7z';
+const STORED_HEADER = `A K-${HEADER_MARKER} | B b1, b2`;
+const STORED_STAMP = 't3.0123456789ab';
+
+describe('buildEmbeddingText with an attribute header', () => {
+  const inputs = [
+    { section_path: [], content: 'Neutral body sentence one.' },
+    { section_path: ['Part 1', 'Part 2'], content: 'Neutral body sentence two.' },
+    { section_path: ['Part 1'], content: 'Neutral body sentence three.', template_header: 'Profile line' },
+    { section_path: ['T'], content: '| c1 | c2 |\n| --- | --- |\n| v1 | v2 |', template_header: 'Profile line', table_row_separator: ', ' },
+  ];
+
+  it('absent or null equals today for every input', () => {
+    for (const input of inputs) {
+      const today = buildEmbeddingText(input);
+      expect(buildEmbeddingText({ ...input, attribute_header: null })).toBe(today);
+      expect(buildEmbeddingText({ ...input, attribute_header: undefined })).toBe(today);
+    }
+  });
+
+  it('a string takes the place of the profile header on the same line; an empty string gives no header line', () => {
+    for (const input of inputs) {
+      const withHeader = buildEmbeddingText({ ...input, attribute_header: STORED_HEADER });
+      expect(withHeader).toBe(buildEmbeddingText({ ...input, template_header: STORED_HEADER }));
+      expect(withHeader).not.toContain('Profile line');
+      expect(buildEmbeddingText({ ...input, attribute_header: '' })).toBe(buildEmbeddingText({ ...input, template_header: undefined }));
+    }
+  });
+});
+
+describe('chunkLexicalText with an attribute header', () => {
+  const inputs = [
+    { sectionPath: [], content: 'Neutral body sentence one.' },
+    { sectionPath: ['Part 1', 'Part 2'], content: 'Neutral body sentence two.' },
+    { sectionPath: ['Pics'], content: 'A caption of a shape.', chunkKind: 'image', metadata: { name: 'shape-name', image_context: 'near text' }, documentFilename: 'file.md' },
+    { sectionPath: ['T'], content: '| c1 | c2 |\n| --- | --- |\n| v1 | v2 |', chunkKind: 'table', tableRowSeparator: ', ' },
+  ];
+
+  it('absent, null or empty equals today', () => {
+    for (const input of inputs) {
+      const today = chunkLexicalText(input);
+      expect(chunkLexicalText({ ...input, attributeHeader: null })).toBe(today);
+      expect(chunkLexicalText({ ...input, attributeHeader: undefined })).toBe(today);
+      expect(chunkLexicalText({ ...input, attributeHeader: '' })).toBe(today);
+    }
+  });
+
+  it('a header is one more part after the path prefix and before the body; extras and row lines keep their order', () => {
+    for (const input of inputs) {
+      const today = chunkLexicalText(input).split(' ').filter(Boolean);
+      const pathCount = input.sectionPath.flatMap((part) => lexicalTokens(part)).length;
+      const expected = [...today.slice(0, pathCount), ...lexicalTokens(STORED_HEADER), ...today.slice(pathCount)].join(' ');
+      expect(chunkLexicalText({ ...input, attributeHeader: STORED_HEADER })).toBe(expected);
+    }
+  });
+});
+
+const PROFILE_ROW: ChunkingProfileRow = { id: 'p256', docType: 'general', childTokens: 256, parentMode: 'structure', parentTokens: 1024, status: 'building' };
+const PROFILE_MARKDOWN = ['# Part 1', '', 'Neutral body sentence one about a shape.', '', '## Part 2', '', 'Neutral body sentence two about a colour.', ''].join('\n');
+
+describe('buildProfileChunks with an attribute header', () => {
+  const document = { filename: 'file.md', chunker: getProcessingProfile('general').chunker, templateHeader: 'Profile line' };
+
+  it('without the field the result deep-equals today', () => {
+    const today = buildProfileChunks(document, PROFILE_MARKDOWN, PROFILE_ROW);
+    expect(buildProfileChunks({ ...document, attributeHeader: undefined }, PROFILE_MARKDOWN, PROFILE_ROW)).toEqual(today);
+    for (const child of today.children) expect(Object.keys(child.metadata)).not.toContain('attribute_header_stamp');
+  });
+
+  it('with a stored header every child carries it in both texts and the stamp in its metadata; content is unchanged', () => {
+    const today = buildProfileChunks(document, PROFILE_MARKDOWN, PROFILE_ROW);
+    const built = buildProfileChunks({ ...document, attributeHeader: { header: STORED_HEADER, stamp: STORED_STAMP } }, PROFILE_MARKDOWN, PROFILE_ROW);
+    expect(built.children.length).toBe(today.children.length);
+    built.children.forEach((child, index) => {
+      expect(child.content).toBe(today.children[index]?.content);
+      expect(child.content).not.toContain(HEADER_MARKER);
+      expect(child.metadata.attribute_header_stamp).toBe(STORED_STAMP);
+      expect(child.lexical_text).toBe(
+        chunkLexicalText({ sectionPath: child.section_path, content: child.content, chunkKind: child.chunk_kind, metadata: {}, documentFilename: 'file.md', attributeHeader: STORED_HEADER }),
+      );
+      expect(built.embeddingTexts[index]).toBe(buildEmbeddingText({ section_path: child.section_path, content: child.content, attribute_header: STORED_HEADER }));
+      expect(built.embeddingTexts[index]).not.toContain('Profile line');
+    });
+    expect(built.parents).toEqual(today.parents);
+  });
+
+  it('null (switch on, no stamped header) keeps the texts and writes the clearing value', () => {
+    const today = buildProfileChunks(document, PROFILE_MARKDOWN, PROFILE_ROW);
+    const built = buildProfileChunks({ ...document, attributeHeader: null }, PROFILE_MARKDOWN, PROFILE_ROW);
+    expect(built.embeddingTexts).toEqual(today.embeddingTexts);
+    expect(built.children.map((child) => child.lexical_text)).toEqual(today.children.map((child) => child.lexical_text));
+    for (const child of built.children) expect(child.metadata.attribute_header_stamp).toBe('none');
+  });
+});
+
+const HEADER_ENV = { RAG_INGEST_PIPELINE: 'unified', RAG_DOC_ATTRIBUTES: 'true', RAG_ATTRIBUTE_HEADER: 'true' };
+const OFF_ENV = { RAG_INGEST_PIPELINE: 'unified', RAG_DOC_ATTRIBUTES: 'true' };
+const INVOICE_ROW = { invoice_number: 'N-7', supplier_name: 'Party Q', supplier_tax_id: null };
+const STAGE_TENANT = 's:default';
+
+function headerAnswer(found: boolean) {
+  return (args: Record<string, unknown>): Row[] => {
+    if (!found || args.p_tenant_key !== STAGE_TENANT) return [];
+    return ((args.p_document_ids as string[] | undefined) ?? []).map((id) => ({ document_id: id, chunk_id: null, header: STORED_HEADER, stamp: STORED_STAMP }));
+  };
+}
+
+function drafts(): ChunkDraft[] {
+  return [
+    { content: 'Neutral body sentence one about a shape.', section_path: ['Part 1'], chunk_kind: 'text', page_start: null, page_end: null, metadata: {} },
+    { content: 'Neutral body sentence two about a colour.', section_path: ['Part 1', 'Part 2'], chunk_kind: 'text', page_start: null, page_end: null, metadata: {} },
+  ];
+}
+
+interface StageRun {
+  calls: RecordedRpc[];
+  embedded: string[];
+  ctx: StageContext;
+}
+
+async function runStages(options: {
+  env: Record<string, string>;
+  found?: boolean;
+  docType?: 'general' | 'invoice_receipt';
+  pipeline?: string;
+  deferred?: boolean;
+}): Promise<StageRun> {
+  setRagDepsForTests({ ragEnv: () => ({ RAG_PIPELINE: options.pipeline }) });
+  resetActiveProfileForTests();
+  const docType = options.docType ?? 'invoice_receipt';
+  const { db, calls } = fakeIngestDb({
+    chunkingProfiles: [{ ...PROFILE_ROW, id: 'p256', doc_type: docType, child_tokens: 256, parent_mode: 'structure', parent_tokens: 1024, status: 'building' }],
+    answers: { rag_attribute_headers: headerAnswer(options.found ?? true) },
+  });
+  const embedded: string[] = [];
+  installIngestDeps({ db, env: options.env, embedDocuments: async (texts) => (embedded.push(...texts), texts.map(() => unitVector())) });
+  const scope = mintScope('single', null, null);
+  const signal = new AbortController().signal;
+  const ctx: StageContext = {
+    input: { scope, source: 'config_upload', sourceKey: 'root/file.md', text: PROFILE_MARKDOWN, filename: 'file.md', mimeType: 'text/markdown', signal },
+    deps: (await import('@/lib/rag/ingest/deps')).getIngestDeps(),
+    writer: createIngestWriter({ db, scope, signal }),
+    config: loadIngestConfig(options.env),
+    signal,
+    deadline: Date.now() + 60_000,
+    state: emptyIngestState(),
+    warnings: [],
+    identity: {
+      tenantKey: STAGE_TENANT,
+      filename: 'file.md',
+      fileSha256: 'a'.repeat(64),
+      docType,
+      docTypeOrigin: 'explicit',
+      profile: getProcessingProfile(docType),
+      bytes: null,
+    },
+    document: { id: FAKE_DOCUMENT_ID, version: 1, lineageId: FAKE_LINEAGE_ID, resumed: false },
+    parserUsed: null,
+    work: { parseText: PROFILE_MARKDOWN, parserVersion: null, chunks: drafts(), chunksWritten: 0, templateRow: INVOICE_ROW },
+  };
+  await enrichStage.run(ctx);
+  await (options.deferred ? deferredEmbedStage : embedStage).run(ctx);
+  return { calls, embedded, ctx };
+}
+
+const headerReads = (calls: RecordedRpc[]) => calls.filter((call) => call.fn === 'rag_attribute_headers');
+const writtenChunks = (calls: RecordedRpc[]) => calls.filter((call) => call.fn === 'rag_write_chunks').flatMap((call) => call.args.p_chunks as Row[]);
+const writtenChildren = (calls: RecordedRpc[]) => calls.filter((call) => call.fn === 'rag_write_profile_chunks').flatMap((call) => call.args.p_children as Row[]);
+
+describe('inline ingest stages with the stored header (enrich, runEmbed, runDeferredEmbed)', () => {
+  afterEach(() => {
+    uninstallIngestDeps();
+    resetRagDepsForTests();
+    resetActiveProfileForTests();
+  });
+
+  it('switch on, header stored: one read per stage call, header in lexical_text and the embedding inputs, never in content; stamp on every chunk', async () => {
+    const run = await runStages({ env: HEADER_ENV, pipeline: 'v2' });
+    const reads = headerReads(run.calls);
+    expect(reads).toHaveLength(2);
+    for (const read of reads) expect(read.args).toEqual({ p_tenant_key: STAGE_TENANT, p_document_ids: [FAKE_DOCUMENT_ID] });
+    const chunks = writtenChunks(run.calls);
+    expect(chunks).toHaveLength(2);
+    for (const chunk of chunks) {
+      expect(String(chunk.lexical_text)).toContain(lexicalTokens(HEADER_MARKER)[0]);
+      expect(String(chunk.content)).not.toContain(HEADER_MARKER);
+      expect((chunk.metadata as Row).attribute_header_stamp).toBe(STORED_STAMP);
+    }
+    const legacyTexts = run.embedded.slice(0, 2);
+    legacyTexts.forEach((text, index) => {
+      expect(text).toBe(buildEmbeddingText({ section_path: drafts()[index]!.section_path, content: drafts()[index]!.content, attribute_header: STORED_HEADER }));
+      expect(text).not.toContain('Invoice N-7');
+    });
+    const children = writtenChildren(run.calls);
+    expect(children.length).toBeGreaterThan(0);
+    for (const child of children) {
+      expect((child.metadata as Row).attribute_header_stamp).toBe(STORED_STAMP);
+      expect(String(child.lexical_text)).toContain(lexicalTokens(HEADER_MARKER)[0]);
+      expect(String(child.content)).not.toContain(HEADER_MARKER);
+    }
+    expect(run.embedded.slice(2).every((text) => text.includes(STORED_HEADER) && !text.includes('Invoice N-7'))).toBe(true);
+    expect(lines.join('\n')).not.toContain(HEADER_MARKER);
+  });
+
+  it('switch on, tenant without a template: texts equal the switch-off run and metadata carries the clearing value', async () => {
+    const off = await runStages({ env: OFF_ENV, pipeline: 'v2' });
+    uninstallIngestDeps();
+    const bare = await runStages({ env: HEADER_ENV, found: false, pipeline: 'v2' });
+    expect(bare.embedded).toEqual(off.embedded);
+    expect(writtenChunks(bare.calls).map((chunk) => chunk.lexical_text)).toEqual(writtenChunks(off.calls).map((chunk) => chunk.lexical_text));
+    for (const chunk of writtenChunks(bare.calls)) expect((chunk.metadata as Row).attribute_header_stamp).toBe('none');
+    for (const child of writtenChildren(bare.calls)) expect((child.metadata as Row).attribute_header_stamp).toBe('none');
+  });
+
+  it('switch off: no header read, and texts and metadata carry no new key', async () => {
+    for (const env of [OFF_ENV, {}]) {
+      const run = await runStages({ env, pipeline: 'v2' });
+      expect(headerReads(run.calls)).toHaveLength(0);
+      for (const chunk of [...writtenChunks(run.calls), ...writtenChildren(run.calls)]) expect(Object.keys(chunk.metadata as Row)).not.toContain('attribute_header_stamp');
+      expect(run.embedded.slice(0, 2)[0]).toContain('Invoice N-7');
+      uninstallIngestDeps();
+    }
+  });
+
+  it('deferred embed: one read for the dual write, children carry the header and the stamp', async () => {
+    const run = await runStages({ env: HEADER_ENV, pipeline: 'v2', deferred: true });
+    expect(headerReads(run.calls)).toHaveLength(2);
+    const children = writtenChildren(run.calls);
+    expect(children.length).toBeGreaterThan(0);
+    for (const child of children) expect((child.metadata as Row).attribute_header_stamp).toBe(STORED_STAMP);
+    expect(run.embedded.every((text) => text.includes(STORED_HEADER))).toBe(true);
   });
 });
