@@ -293,6 +293,8 @@ export type {
   VocabularyEntry,
   VocabularyEntryResult,
 } from './ingest/scopes/admin';
+export { activeUploadVocabulary, uploadScopesEnabled, validateUploadScopes, warnUploadScopesIgnored } from './ingest/scopes/upload';
+export type { UploadScopeFailure, UploadVocabularyEntry, ValidateUploadScopesResult } from './ingest/scopes/upload';
 export {
   AUTO_APPLY_MIN_CONFIDENCE,
   MAX_QUERY_LENGTH as MAX_EFFECTIVE_DATES_QUERY_LENGTH,

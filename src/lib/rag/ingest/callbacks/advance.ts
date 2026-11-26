@@ -5,6 +5,7 @@ import { backfillDocumentScope } from '../../tenant/backfill-scope';
 import { scopeFromIngestionJob } from '../../tenant/ingestion-job';
 import { scopeKey } from '../../tenant/scope';
 import { isArtifactName, loadArtifact, originalName, saveArtifact, type ArtifactContext } from '../artifacts';
+import { loadIngestConfig } from '../config';
 import { getIngestDeps } from '../deps';
 import { callerDocumentMetadata } from '../document-metadata';
 import { enqueueStageContext, queuedInputRecordOf, runEnqueueStages } from '../enqueue';
@@ -14,6 +15,7 @@ import { ORIGINALS_BUCKET, assertObjectKey, getObjectStore } from '../object-sto
 import { originFields } from '../origin';
 import { getProcessingProfile, profileFor, type DocType } from '../profiles/load';
 import { finishQueueIngestTrace } from '../queue-trace';
+import { uploadScopesEnabled, writeUploadScopes } from '../scopes/upload';
 import { readParseResultForJob } from '../parse-cache';
 import { QUEUED_INPUT_ARTIFACT, buildQueuedContext, decodeQueuedInput, encodeQueuedInput } from '../queued-context';
 import { INGEST_STAGES, REGISTERED_STAGES, rehydrateFromStore, runIngestStages } from '../runner';
@@ -364,6 +366,10 @@ async function startProgressiveFinal(
   if (callerMetadata) await writer.setFields(begun.documentId, { metadata: callerMetadata });
   const originValues = originFields(record.options);
   if (originValues !== null) await writer.setFields(begun.documentId, originValues);
+  // D-40: the final version carries the upload's tags before its chunks are written, as the first version did.
+  if (record.scopes && record.scopes.length > 0 && uploadScopesEnabled(loadIngestConfig(getIngestDeps().ingestEnv()))) {
+    await writeUploadScopes(db, tenantKey, begun.documentId, record.scopes, signal);
+  }
   await saveArtifact(to, QUEUED_INPUT_ARTIFACT, encodeQueuedInput({ ...record, state: { ...record.state, artifacts } }), 'application/json');
   return { kind: 'continue', job: await beginProgressiveFinal(job.id, workerId, begun.documentId, { signal }) };
 }

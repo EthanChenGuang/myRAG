@@ -2,6 +2,7 @@ import { removeArtifacts } from '../artifacts';
 import { callerDocumentMetadata } from '../document-metadata';
 import { HASH_NORMALIZATION_VERSION, contentHash } from '../hash';
 import { originFields } from '../origin';
+import { applyUploadScopes } from '../scopes/upload';
 import {
   requireDocument,
   requireIdentity,
@@ -43,6 +44,8 @@ async function runFileHashDedup(ctx: StageContext): Promise<StageOutcome> {
   if (callerMetadata) await ctx.writer.setFields(begun.documentId, { metadata: callerMetadata });
   const origin = originFields(ctx.input.options);
   if (origin !== null) await ctx.writer.setFields(begun.documentId, origin);
+  // D-40: the uploader's tags go on the document before any chunk is written, so the chunk writers copy them to every chunk.
+  await applyUploadScopes(ctx);
   return { kind: 'next' };
 }
 
