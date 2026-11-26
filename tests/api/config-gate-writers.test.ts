@@ -266,3 +266,151 @@ describe('POST /api/config/rag-prompt guard', () => {
     expect(readSpy.mock.calls.some(([file]) => String(file).includes('config-gate'))).toBe(false);
   });
 });
+
+describe('POST /api/config guard (in-app settings)', () => {
+  const post = (route: Route, body: unknown) => route.POST(request('/api/config', { method: 'POST', body }));
+  const ragChange = { RAG_BEHAVIOR_MODE: 'balanced' };
+  const configAfter = () => ({ ...parseEnv(ENV_FILE), ...ragChange });
+
+  it('enforce with a RAG-affecting change and no ragGate answers 409 with the Config UI message and writes nothing', async () => {
+    process.env.RAG_CONFIG_GATE = 'enforce';
+    const env = makeEnvDir(ENV_FILE);
+    const route = await load<Route>('@/app/api/config/route');
+    const { RAG_GATE_REQUIRED_MESSAGE } = await import('@/lib/rag/config-gate/guard');
+
+    const res = await post(route, { config: ragChange });
+    const json = await res.json();
+
+    expect(res.status).toBe(409);
+    expect(json).toEqual({ success: false, error: 'rag_gate_required', message: RAG_GATE_REQUIRED_MESSAGE });
+    expect(RAG_GATE_REQUIRED_MESSAGE).toContain('Config UI');
+    expect(writeSpy).not.toHaveBeenCalled();
+    expect(env.read()).toBe(ENV_FILE);
+  });
+
+  it('enforce with a stored passed check of the same hash writes and records once', async () => {
+    process.env.RAG_CONFIG_GATE = 'enforce';
+    const env = makeEnvDir(ENV_FILE);
+    storeCheck(env.dir, configAfter());
+    const route = await load<Route>('@/app/api/config/route');
+
+    const res = await post(route, { config: ragChange, ragGate: { check_id: CHECK_ID } });
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(env.read()).toContain('RAG_BEHAVIOR_MODE=balanced');
+    expect(db.inserts).toHaveLength(1);
+    expect(db.inserts[0]).toMatchObject({ actor: ADMIN_ID, gate_result: 'pass', changed_keys: ['RAG_BEHAVIOR_MODE'] });
+    expect(json.ragGate).toEqual({ record_id: db.inserts[0].id, gate_result: 'pass' });
+  });
+
+  it('a change of only non-RAG-affecting names is written without a check in enforce mode', async () => {
+    process.env.RAG_CONFIG_GATE = 'enforce';
+    const env = makeEnvDir(ENV_FILE);
+    const route = await load<Route>('@/app/api/config/route');
+
+    const res = await post(route, { config: { NEXT_PUBLIC_APP_NAME: 'Renamed' } });
+
+    expect(res.status).toBe(200);
+    expect(env.read()).toContain('NEXT_PUBLIC_APP_NAME=Renamed');
+    expect(db.inserts).toHaveLength(0);
+    expect((await res.json()).ragGate).toBeUndefined();
+  });
+
+  it('mode off writes exactly as before', async () => {
+    delete process.env.RAG_CONFIG_GATE;
+    const env = makeEnvDir(ENV_FILE);
+    const route = await load<Route>('@/app/api/config/route');
+
+    const res = await post(route, { config: ragChange });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ success: true, message: 'Configuration saved' });
+    expect(env.read()).toBe(ENV_FILE.replace('RAG_BEHAVIOR_MODE=strict', 'RAG_BEHAVIOR_MODE=balanced'));
+    expect(db.inserts).toHaveLength(0);
+  });
+});
+
+describe('POST /api/config/models guard', () => {
+  const post = (route: Route, body: unknown) => route.POST(request('/api/config/models', { method: 'POST', body }));
+  const models = {
+    provider: 'openrouter',
+    openaiModels: [{ id: 'model-a', displayName: 'Model A' }],
+    openrouterModels: [{ id: 'vendor/model-b', displayName: 'Model B' }],
+    groqModels: [],
+  };
+  const modelsAfter = async () => {
+    const { stringifyJsonForEnv } = await import('@/lib/env-file');
+    return {
+      ...parseEnv(ENV_FILE),
+      NEXT_PUBLIC_AI_PROVIDER: models.provider,
+      NEXT_PUBLIC_OPENAI_MODELS: stringifyJsonForEnv(models.openaiModels),
+      NEXT_PUBLIC_OPENROUTER_MODELS: stringifyJsonForEnv(models.openrouterModels),
+      NEXT_PUBLIC_GROQ_MODELS: stringifyJsonForEnv(models.groqModels),
+    };
+  };
+
+  it('enforce with a model change and no ragGate answers 409 and writes nothing', async () => {
+    process.env.RAG_CONFIG_GATE = 'enforce';
+    const env = makeEnvDir(ENV_FILE);
+    const route = await load<Route>('@/app/api/config/models/route');
+
+    const res = await post(route, models);
+
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBe('rag_gate_required');
+    expect(writeSpy).not.toHaveBeenCalled();
+    expect(env.read()).toBe(ENV_FILE);
+  });
+
+  it('enforce with a stored passed check of the same hash writes and records once', async () => {
+    process.env.RAG_CONFIG_GATE = 'enforce';
+    const env = makeEnvDir(ENV_FILE);
+    storeCheck(env.dir, await modelsAfter());
+    const route = await load<Route>('@/app/api/config/models/route');
+
+    const res = await post(route, { ...models, ragGate: { check_id: CHECK_ID } });
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(env.read()).toContain('NEXT_PUBLIC_AI_PROVIDER=openrouter');
+    expect(db.inserts).toHaveLength(1);
+    expect(db.inserts[0]).toMatchObject({ actor: ADMIN_ID, gate_result: 'pass' });
+    expect(json.ragGate).toEqual({ record_id: db.inserts[0].id, gate_result: 'pass' });
+  });
+
+  it('mode off writes exactly as before', async () => {
+    delete process.env.RAG_CONFIG_GATE;
+    const env = makeEnvDir(ENV_FILE);
+    const route = await load<Route>('@/app/api/config/models/route');
+
+    const res = await post(route, models);
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(Object.keys(json).sort()).toEqual(['config', 'message', 'success']);
+    expect(env.read()).toContain('NEXT_PUBLIC_AI_PROVIDER=openrouter');
+    expect(db.inserts).toHaveLength(0);
+  });
+});
+
+describe('unguarded app writers', () => {
+  it('updateEnvFile (logo and favicon uploads) and custom-servers-store write no RAG-affecting name', () => {
+    const file = path.join(process.cwd(), 'src/lib/rag/config-gate/rag-affecting.generated.json');
+    const generated = JSON.parse(fs.readFileSync(file, 'utf8')) as { names: string[] };
+    expect(generated.names.length).toBeGreaterThan(0);
+    for (const name of ['NEXT_PUBLIC_HEADER_LOGO_URL', 'NEXT_PUBLIC_AI_RESPONSE_LOGO_URL', 'NEXT_PUBLIC_FAVICON_URL', 'MCP_CUSTOM_SERVERS']) {
+      expect(generated.names, name).not.toContain(name);
+    }
+  });
+
+  it('the unguarded writers write only those names', () => {
+    const read = (file: string) => fs.readFileSync(path.join(process.cwd(), file), 'utf8');
+    const logo = read('src/app/api/config/upload-logo/route.ts');
+    const favicon = read('src/app/api/config/upload-favicon/route.ts');
+    const servers = read('src/lib/mcp/custom-servers-store.ts');
+    expect([...logo.matchAll(/'(NEXT_PUBLIC_[A-Z_]+)'/g)].map((m) => m[1]).sort()).toEqual(['NEXT_PUBLIC_AI_RESPONSE_LOGO_URL', 'NEXT_PUBLIC_HEADER_LOGO_URL']);
+    expect([...favicon.matchAll(/updateEnvFile\('([A-Z_]+)'/g)].map((m) => m[1])).toEqual(['NEXT_PUBLIC_FAVICON_URL']);
+    expect([...servers.matchAll(/writeEnvUpdates\(\{\s*([A-Z_]+):/g)].map((m) => m[1])).toEqual(['MCP_CUSTOM_SERVERS']);
+  });
+});
