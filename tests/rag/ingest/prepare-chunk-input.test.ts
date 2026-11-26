@@ -5,6 +5,10 @@ vi.mock('@/lib/rag/patterns/tenant-line-pattern', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/rag/patterns/tenant-line-pattern')>();
   return { ...actual, matchTenantLinePatterns: vi.fn(actual.matchTenantLinePatterns) };
 });
+vi.mock('@/lib/rag/ingest/rules/load', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/rag/ingest/rules/load')>();
+  return { ...actual, loadTenantRules: vi.fn(actual.loadTenantRules) };
+});
 vi.mock('@/lib/rag/ingest/prepare', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/rag/ingest/prepare')>();
   return { ...actual, prepareChunkInput: vi.fn(actual.prepareChunkInput) };
@@ -24,6 +28,13 @@ import { readPageLines } from '@/lib/rag/ingest/prepare/page-lines';
 import { getProcessingProfile } from '@/lib/rag/ingest/profiles/load';
 import type { TenantRules } from '@/lib/rag/ingest/rules/load';
 import { matchTenantLinePatterns } from '@/lib/rag/patterns/tenant-line-pattern';
+import { loadTenantRules } from '@/lib/rag/ingest/rules/load';
+import { loadIngestConfig } from '@/lib/rag/ingest/config';
+import { callerDocumentMetadata } from '@/lib/rag/ingest/document-metadata';
+import { INGEST_STAGES } from '@/lib/rag/ingest/runner';
+import { chunkStage } from '@/lib/rag/ingest/stages/chunk';
+import { emptyIngestState, type StageContext } from '@/lib/rag/ingest/types';
+import { mintScope } from '@/lib/rag/tenant/scope';
 import { createFakeObjectStore } from '../../helpers/fake-object-store';
 import { setObjectStoreForTests } from '@/lib/rag/ingest/object-store';
 
@@ -281,5 +292,116 @@ describe('applyPrepareOutcome', () => {
       ['rag_flag_document_review', { p_document_id: 'doc-1', p_tenant_key: 's:default', p_reason: 'boilerplate_above_threshold' }],
       ['rag_flag_document_review', { p_document_id: 'doc-1', p_tenant_key: 's:default', p_reason: 'tenant_pattern_timeout' }],
     ]);
+  });
+});
+
+describe('chunk stage wiring (D-06 to D-10)', () => {
+  const prepareSpy = vi.mocked(prepareChunkInput);
+  const loaderSpy = vi.mocked(loadTenantRules);
+
+  function stageContext(mode: string, overrides: { docType?: 'general' | 'scanned_image'; deadline?: number; markdown?: string } = {}) {
+    const env = mode === 'unset' ? {} : { RAG_INGEST_PIPELINE: 'unified', RAG_PAGE_BOILERPLATE: mode };
+    const setFields = vi.fn(async () => undefined);
+    const rpcCalls: Array<[string, Record<string, unknown>]> = [];
+    const db = {
+      rpc: (name: string, params: Record<string, unknown>) => {
+        rpcCalls.push([name, params]);
+        const response = Promise.resolve({ data: name === 'rag_tenant_rules_for' ? [] : [], error: null });
+        return Object.assign(response, { abortSignal: () => response });
+      },
+    };
+    const docType = overrides.docType ?? 'general';
+    const ctx = {
+      input: { scope: mintScope('single', null, null), source: 'config_upload' },
+      deps: { db: () => db, now: () => 0 },
+      writer: { setFields },
+      config: loadIngestConfig(env),
+      signal: new AbortController().signal,
+      deadline: overrides.deadline ?? 50_000,
+      identity: { tenantKey: 's:default', filename: 'doc.md', fileSha256: 'x', docType, docTypeOrigin: 'picked', profile: getProcessingProfile(docType), bytes: null },
+      document: { id: 'doc-1', version: 1, lineageId: '33333333-3333-4333-8333-333333333333', resumed: false },
+      warnings: [] as string[],
+      state: emptyIngestState(),
+      work: { parseText: overrides.markdown ?? documentOf(4, [MARKER]).markdown, parserVersion: null, chunks: [], chunksWritten: 0 },
+    } as unknown as StageContext;
+    return { ctx, setFields, rpcCalls };
+  }
+
+  beforeEach(() => {
+    prepareSpy.mockClear();
+    loaderSpy.mockClear();
+  });
+
+  test.each(['unset', 'off'])('mode %s: no preparation, no loader, no artifact read, no write, no snapshot; thirteen stages', async (mode) => {
+    const store = createFakeObjectStore();
+    setObjectStoreForTests(store);
+    const { ctx, setFields, rpcCalls } = stageContext(mode);
+    const before = ctx.work.parseText;
+    expect(await chunkStage.run(ctx)).toEqual({ kind: 'next' });
+    expect(prepareSpy).not.toHaveBeenCalled();
+    expect(loaderSpy).not.toHaveBeenCalled();
+    expect(store.calls).toEqual([]);
+    expect(setFields).not.toHaveBeenCalled();
+    expect(rpcCalls).toEqual([]);
+    expect('chunkPrep' in ctx.state).toBe(false);
+    expect(ctx.work.parseText).toBe(before);
+    expect(INGEST_STAGES).toHaveLength(13);
+  });
+
+  test('mode detect on a document without page structure: warning, report stored, chunks cut, snapshot saved, no loader call', async () => {
+    setObjectStoreForTests(createFakeObjectStore());
+    const { ctx, setFields } = stageContext('detect');
+    expect(await chunkStage.run(ctx)).toEqual({ kind: 'next' });
+    expect(prepareSpy).toHaveBeenCalledTimes(1);
+    expect(loaderSpy).not.toHaveBeenCalled();
+    expect(ctx.warnings).toContain('boilerplate_pages_unavailable');
+    expect(setFields).toHaveBeenCalledWith('doc-1', { metadata: { boilerplate: expect.objectContaining({ lines_removed: 0 }) } });
+    expect(ctx.state.chunkPrep?.boilerplate?.mode).toBe('detect');
+    expect(ctx.work.chunks.length).toBeGreaterThan(0);
+  });
+
+  test('with a snapshot in the state the stage replays it: no loader and no worker call', async () => {
+    setObjectStoreForTests(createFakeObjectStore());
+    const { ctx } = stageContext('rules');
+    ctx.state.chunkPrep = { fingerprint: 'c'.repeat(64), boilerplate: { mode: 'rules', cleanerVersion: 1, rulesVersion: 1, ruleIds: [], removedLineKeys: [] }, warnings: [], truncated: false };
+    await chunkStage.run(ctx);
+    expect(loaderSpy).not.toHaveBeenCalled();
+    expect(matchSpy).not.toHaveBeenCalled();
+  });
+
+  test('a picture is not cleaned but records a snapshot with the mode and versions', async () => {
+    setObjectStoreForTests(createFakeObjectStore());
+    const { ctx, setFields } = stageContext('both', { docType: 'scanned_image' });
+    const profile = ctx.identity!.profile;
+    ctx.identity!.profile = { ...profile, chunker: { ...profile.chunker, kind: 'image_caption' } };
+    await chunkStage.run(ctx);
+    expect(prepareSpy).not.toHaveBeenCalled();
+    expect(setFields).not.toHaveBeenCalled();
+    expect(ctx.state.chunkPrep?.boilerplate).toMatchObject({ mode: 'both', cleanerVersion: 1, rulesVersion: 1, removedLineKeys: [] });
+  });
+
+  test('a needed worker call with less than the worker deadline plus two seconds left yields; without one it never yields for this reason', async () => {
+    setObjectStoreForTests(createFakeObjectStore());
+    loaderSpy.mockResolvedValueOnce(lineRule);
+    const short = stageContext('rules', { deadline: 4_000 });
+    expect(await chunkStage.run(short.ctx)).toEqual({ kind: 'yield', reason: 'deadline' });
+    expect(prepareSpy).not.toHaveBeenCalled();
+
+    loaderSpy.mockResolvedValueOnce(rules());
+    const noRule = stageContext('rules', { deadline: 4_000 });
+    expect(await chunkStage.run(noRule.ctx)).toEqual({ kind: 'next' });
+  });
+
+  test('a review code is flagged through the rpc with the run tenant key', async () => {
+    setObjectStoreForTests(createFakeObjectStore());
+    loaderSpy.mockResolvedValueOnce(lineRule);
+    matchSpy.mockResolvedValueOnce({ kind: 'timeout' });
+    const { ctx, rpcCalls } = stageContext('rules');
+    expect(await chunkStage.run(ctx)).toEqual({ kind: 'next' });
+    expect(rpcCalls).toContainEqual(['rag_flag_document_review', { p_document_id: 'doc-1', p_tenant_key: 's:default', p_reason: 'tenant_pattern_timeout' }]);
+  });
+
+  test('callerDocumentMetadata drops the pipeline-owned keys and keeps an unrelated one', () => {
+    expect(callerDocumentMetadata({ documentMetadata: { boilerplate: 'x', review_reasons: 'y', section_rules: 'z', note: 'kept' } })).toEqual({ note: 'kept' });
   });
 });
