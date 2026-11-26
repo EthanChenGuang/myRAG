@@ -657,6 +657,289 @@
       },
       "title": "VoteCounts",
       "type": "object"
+    },
+    "WeeklyChangeCount": {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "minimum": 0,
+          "title": "Count",
+          "type": "integer"
+        },
+        "gate_result": {
+          "enum": [
+            "pass",
+            "fail",
+            "error",
+            "skipped",
+            "not_required"
+          ],
+          "title": "Gate Result",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "config_ui",
+            "cli",
+            "release_override",
+            "local_prerelease",
+            "profile_activation"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "gate_result",
+        "count"
+      ],
+      "title": "WeeklyChangeCount",
+      "type": "object"
+    },
+    "WeeklyDrift": {
+      "additionalProperties": false,
+      "properties": {
+        "divergence": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Divergence"
+        },
+        "state": {
+          "enum": [
+            "ok",
+            "warn",
+            "alert"
+          ],
+          "title": "State",
+          "type": "string"
+        },
+        "tenant_hash": {
+          "pattern": "^[a-f0-9]{8,64}$",
+          "title": "Tenant Hash",
+          "type": "string"
+        },
+        "week": {
+          "pattern": "^\\d{4}-W\\d{2}$",
+          "title": "Week",
+          "type": "string"
+        }
+      },
+      "required": [
+        "tenant_hash",
+        "week",
+        "state"
+      ],
+      "title": "WeeklyDrift",
+      "type": "object"
+    },
+    "WeeklyGatesSection": {
+      "additionalProperties": false,
+      "description": "WeeklyReport.gates (D-17, research X-7): numbers, ids, names and the capped reason only.",
+      "properties": {
+        "change_counts": {
+          "items": {
+            "$ref": "#/$defs/WeeklyChangeCount"
+          },
+          "title": "Change Counts",
+          "type": "array"
+        },
+        "drift": {
+          "items": {
+            "$ref": "#/$defs/WeeklyDrift"
+          },
+          "title": "Drift",
+          "type": "array"
+        },
+        "judge_cells": {
+          "additionalProperties": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "propertyNames": {
+            "enum": [
+              "gating",
+              "report_only",
+              "uncalibrated"
+            ]
+          },
+          "title": "Judge Cells",
+          "type": "object"
+        },
+        "open_alerts": {
+          "additionalProperties": {
+            "minimum": 0,
+            "type": "integer"
+          },
+          "propertyNames": {
+            "enum": [
+              "refusal_rate",
+              "zero_result_rate",
+              "below_threshold_rate",
+              "not_helpful_rate",
+              "groundedness_flagged_rate",
+              "kb_error_rate",
+              "kb_degraded_rate",
+              "kb_unavailable_rate",
+              "top_score_psi",
+              "latency_p95",
+              "online_judge_mean",
+              "test_set_not_representative",
+              "offline_online_gap",
+              "language_drop"
+            ]
+          },
+          "title": "Open Alerts",
+          "type": "object"
+        },
+        "overdue_re_reviews": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Overdue Re Reviews",
+          "type": "integer"
+        },
+        "overrides": {
+          "items": {
+            "$ref": "#/$defs/WeeklyOverride"
+          },
+          "title": "Overrides",
+          "type": "array"
+        },
+        "release_overrides": {
+          "items": {
+            "$ref": "#/$defs/WeeklyReleaseOverride"
+          },
+          "title": "Release Overrides",
+          "type": "array"
+        },
+        "skipped_runs": {
+          "patternProperties": {
+            "^[a-z0-9_]+$": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "title": "Skipped Runs",
+          "type": "object"
+        }
+      },
+      "title": "WeeklyGatesSection",
+      "type": "object"
+    },
+    "WeeklyOverride": {
+      "additionalProperties": false,
+      "properties": {
+        "actor": {
+          "pattern": "^(local-config-ui|cli|ci|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
+          "title": "Actor",
+          "type": "string"
+        },
+        "after_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "After Hash",
+          "type": "string"
+        },
+        "before_hash": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Before Hash",
+          "type": "string"
+        },
+        "changed_keys": {
+          "items": {
+            "pattern": "^[A-Z][A-Z0-9_]{0,127}$",
+            "type": "string"
+          },
+          "title": "Changed Keys",
+          "type": "array"
+        },
+        "date": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "title": "Date",
+          "type": "string"
+        },
+        "gate_result": {
+          "enum": [
+            "pass",
+            "fail",
+            "error",
+            "skipped",
+            "not_required"
+          ],
+          "title": "Gate Result",
+          "type": "string"
+        },
+        "override_reason": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Override Reason"
+        }
+      },
+      "required": [
+        "date",
+        "actor",
+        "before_hash",
+        "after_hash",
+        "gate_result"
+      ],
+      "title": "WeeklyOverride",
+      "type": "object"
+    },
+    "WeeklyReleaseOverride": {
+      "additionalProperties": false,
+      "properties": {
+        "date": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "title": "Date",
+          "type": "string"
+        },
+        "github_actor": {
+          "pattern": "^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})(\\[bot\\])?$",
+          "title": "Github Actor",
+          "type": "string"
+        },
+        "override_reason": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Override Reason"
+        },
+        "sha": {
+          "pattern": "^[a-f0-9]{40}$",
+          "title": "Sha",
+          "type": "string"
+        }
+      },
+      "required": [
+        "date",
+        "sha",
+        "github_actor"
+      ],
+      "title": "WeeklyReleaseOverride",
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -671,6 +954,9 @@
         }
       ],
       "default": null
+    },
+    "gates": {
+      "$ref": "#/$defs/WeeklyGatesSection"
     },
     "generated_at": {
       "maxLength": 64,

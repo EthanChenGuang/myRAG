@@ -1,0 +1,140 @@
+{
+  "additionalProperties": false,
+  "description": "One synthetic, neutral seed case (D-31). A draft case cannot produce a gating cell (H-5).",
+  "properties": {
+    "answer": {
+      "maxLength": 4000,
+      "minLength": 1,
+      "title": "Answer",
+      "type": "string"
+    },
+    "base_id": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,95}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Base Id"
+    },
+    "contexts": {
+      "items": {
+        "maxLength": 4000,
+        "minLength": 1,
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Contexts",
+      "type": "array"
+    },
+    "expected": {
+      "minProperties": 1,
+      "patternProperties": {
+        "^[a-z][a-z0-9_]{0,63}$": {
+          "type": "boolean"
+        }
+      },
+      "title": "Expected",
+      "type": "object"
+    },
+    "id": {
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,95}$",
+      "title": "Id",
+      "type": "string"
+    },
+    "language": {
+      "enum": [
+        "zh",
+        "en",
+        "it"
+      ],
+      "title": "Language",
+      "type": "string"
+    },
+    "pair_id": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,95}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Pair Id"
+    },
+    "perturbation_group": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z0-9][a-z0-9_-]{0,95}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Perturbation Group"
+    },
+    "question": {
+      "maxLength": 2000,
+      "minLength": 1,
+      "title": "Question",
+      "type": "string"
+    },
+    "review_status": {
+      "default": "draft",
+      "enum": [
+        "draft",
+        "approved"
+      ],
+      "title": "Review Status",
+      "type": "string"
+    },
+    "reviewed_by": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reviewed By"
+    },
+    "unsupported_content": {
+      "title": "Unsupported Content",
+      "type": "boolean"
+    },
+    "variant": {
+      "default": "base",
+      "enum": [
+        "base",
+        "long",
+        "short",
+        "expanded",
+        "assertive"
+      ],
+      "title": "Variant",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "language",
+    "question",
+    "contexts",
+    "answer",
+    "expected",
+    "unsupported_content"
+  ],
+  "title": "JudgeSeedCase",
+  "type": "object"
+}

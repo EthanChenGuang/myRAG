@@ -11,8 +11,11 @@ from typing import Callable, TypeVar
 
 from pydantic import BaseModel, ValidationError
 from rag_sidecar.contracts.feedback_loop import GatePopulationConfig
+from rag_sidecar.contracts.judge_calibration import JudgeCalibration
+from rag_sidecar.contracts.monitor import MonitorAlertsConfig, default_monitor_alerts
 from rag_sidecar.contracts.quality_gates import QualityGates, default_quality_gates
 from rag_sidecar.contracts.query import QueryParams
+from rag_sidecar.contracts.release_gate import ReleaseGateConfig, default_release_gate
 from rag_sidecar.contracts.retrieval import (
     ChunkingSweepReport,
     ConfigProvenance,
@@ -39,6 +42,13 @@ CONFIG_TARGETS: list[tuple[str, type[BaseModel], Callable[[], BaseModel]]] = [
     ),
     ("eval/config/dup-cluster-params.json", DupClusterParamsFile, DupClusterParamsFile),
     ("eval/config/quality-gates.json", QualityGates, default_quality_gates),
+    ("eval/config/monitor-alerts.json", MonitorAlertsConfig, default_monitor_alerts),
+    ("eval/config/release-gate.json", ReleaseGateConfig, default_release_gate),
+    (
+        "eval/config/judge-calibration.json",
+        JudgeCalibration,
+        lambda: JudgeCalibration(cells=[], provenance=ConfigProvenance(source="defaults")),
+    ),
 ]
 
 PROTECTED_SOURCES = frozenset({"sweep", "calibration", "fixture", "live"})
