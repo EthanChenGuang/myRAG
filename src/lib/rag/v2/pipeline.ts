@@ -65,7 +65,7 @@ function precomputedVectors(entry: { text: string; embedding: QueryEmbedding } |
 /** The query-layer part of the config hash (research A-7); loaded only while the layer is on, so run-layer stays unimported otherwise. */
 async function queryLayerHashFor(input: RunRetrievalInput, config: ReturnType<typeof loadRagConfig>, profile: Profile): Promise<RetrievalConfigHashQueryLayer> {
   const [{ effectiveQueryLayerConfig, queryLayerOverrides }, { effectiveQueryParams }, { queryLayerHashComponent }] = await Promise.all([
-    import('../query/run-layer'),
+    import('../query/layer-config'),
     import('../query/query-params'),
     import('../query/hash-part'),
   ]);
