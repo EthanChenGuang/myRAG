@@ -15,6 +15,9 @@ import type { AllowListEntry } from './sql-function-acl';
  * (rag_finetune_slot_guard, rag_finetune_version_taint_guard) are service_role only as well; tests/rag-db/finetune-slots.test.mts asserts it.
  * The 0653 export function rag_finetune_export_vectors(text,text,text,uuid,integer) is service_role only; tests/rag-db/finetune-export.test.mts
  * asserts it.
+ * The 0654 binding-route functions (rag_finetune_bind_scoped_slot, rag_finetune_scope_slot, rag_finetune_normalize_doc_types, the replaced
+ * rag_finetune_clear_slot) and trigger functions (rag_finetune_binding_guard, rag_finetune_backfill_run_guard) are service_role only;
+ * tests/rag-db/finetune-binding.test.mts asserts they never appear here.
  */
 export const AUTHENTICATED_ALLOW_LIST: Record<string, AllowListEntry> = {
   'delete_folder(uuid,boolean)': { anon: false, reason: 'called with the user session from chat-store.ts and /api/folders/[id]; checks auth.uid() ownership' },
