@@ -16,6 +16,7 @@ import {
   type StageSpec,
 } from '../types';
 import { HiddenSpanWriteError, assertNoHiddenSpans, type SpanCheckedChunk } from '../../security/hidden-text';
+import { ingestLexical } from '../lexical-options';
 import { IngestWriterError, chunkIdFor, profileRowIdFor, type ChunkWrite, type ProfileVectors } from '../writer';
 
 const MAX_BATCH_BYTES = 1_000_000;
@@ -190,7 +191,14 @@ async function dualWriteProfiles(ctx: StageContext, documentId: string, targets:
   for (const profile of profiles) {
     ctx.signal.throwIfAborted();
     const built = buildProfileChunks(
-      { filename: identity.filename, chunker: identity.profile.chunker, templateHeader, languageAwareIngest: ctx.config?.languageAwareIngest, tableHeaderRepeat: ctx.config?.tableHeaderRepeat },
+      {
+        filename: identity.filename,
+        chunker: identity.profile.chunker,
+        templateHeader,
+        languageAwareIngest: ctx.config?.languageAwareIngest,
+        tableHeaderRepeat: ctx.config?.tableHeaderRepeat,
+        lexical: await ingestLexical(ctx),
+      },
       ctx.work.parseText ?? '',
       profile,
     );

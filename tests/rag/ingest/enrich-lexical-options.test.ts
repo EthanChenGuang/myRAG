@@ -219,7 +219,7 @@ describe('profile children, image captions and the extractor path use the docume
       PROFILE,
     );
     const child = built.children[0]!;
-    expect(child.lexical_text.split(' ')).toContain(`${DICT_TOKEN_PREFIX}zento_prisma`);
+    expect((child.lexical_text ?? '').split(' ')).toContain(`${DICT_TOKEN_PREFIX}zento_prisma`);
     expect(child.metadata).toMatchObject({ lexical_version: 3, lexical_dict_version: 's3.w5', lexical_patterns: 'p0123456789ab' });
   });
 

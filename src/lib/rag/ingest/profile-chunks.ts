@@ -1,7 +1,7 @@
 import { blockSplitterForIngest } from '@/lib/rag/lang/sentences';
 import { enrichChunkWithURLs } from '@/lib/url-extractor';
-import { LEXICAL_VERSION, chunkLexicalText } from '../lexical/chunk-text';
-import type { IngestLexical } from './lexical-options';
+import { chunkLexicalText } from '../lexical/chunk-text';
+import { lexicalStampMetadata, type IngestLexical } from './lexical-options';
 import { withEffectiveHeader, type ChunkerConfig } from './chunkers';
 import { chunkParentChild } from './chunkers/parent-child';
 import { contentHash } from './hash';
@@ -73,6 +73,7 @@ export function buildProfileChunks(document: ProfileDocument, parseMarkdown: str
     token_count: parent.token_count,
   }));
   const embeddingTexts: string[] = [];
+  const stamps = lexicalStampMetadata(document.lexical);
   const children = cut.children.map((child, index): ProfileChildWrite => {
     embeddingTexts.push(buildEmbeddingText({ section_path: child.section_path, content: child.content, template_header: document.templateHeader }));
     return {
@@ -91,14 +92,14 @@ export function buildProfileChunks(document: ProfileDocument, parseMarkdown: str
         chunkKind: child.chunk_kind,
         metadata: child.metadata,
         documentFilename: document.filename,
-      }),
+      }, document.lexical?.resolved.options),
       metadata: {
         ...(enrichChunkWithURLs(child.content, child.metadata) as Record<string, unknown>),
         document_title: document.filename,
         chunk_index: index,
         chunk_position: index + 1,
         total_chunks: cut.children.length,
-        lexical_version: LEXICAL_VERSION,
+        ...stamps,
       },
     };
   });

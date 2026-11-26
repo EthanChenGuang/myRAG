@@ -4,7 +4,8 @@ import { getLanguageSettings } from '../../lang/settings';
 import { detectChunkLanguages, documentLanguages, type ChunkLanguageOptions } from '../lang/chunk-language';
 import { tableRowLanguage, tableRowSeparator } from '../text/table-rows';
 import { countTokens } from '../text/tokens';
-import { LEXICAL_VERSION, chunkLexicalText } from '../../lexical/chunk-text';
+import { chunkLexicalText } from '../../lexical/chunk-text';
+import { ingestLexical, lexicalStampMetadata } from '../lexical-options';
 import { contentHash } from '../hash';
 import { requireDocument, requireIdentity, type StageContext, type StageOutcome, type StageSpec } from '../types';
 
@@ -53,6 +54,9 @@ async function run(ctx: StageContext): Promise<StageOutcome> {
     if (documentLanguage !== null) await ctx.writer.setFields(document.id, { language: documentLanguage });
   }
   ctx.work.documentLanguage = documentLanguage;
+  // D-55: the language is known before any lexical text is built; one resolve per document (plan 04.2-19).
+  const lexical = await ingestLexical(ctx);
+  const stamps = lexicalStampMetadata(lexical);
 
   const rowSerialization = ctx.config.tableRowSerialization === true;
   const primary = rowSerialization ? getLanguageSettings().primary : null;
@@ -70,11 +74,11 @@ async function run(ctx: StageContext): Promise<StageOutcome> {
       metadata: draft.metadata,
       documentFilename: filename,
       ...(separator !== null ? { tableRowSeparator: separator } : {}),
-    });
+    }, lexical.resolved.options);
     draft.content_hash = contentHash(draft.content);
     draft.metadata = {
       ...(enrichChunkWithURLs(draft.content, draft.metadata) as Record<string, unknown>),
-      lexical_version: LEXICAL_VERSION,
+      ...stamps,
     };
   }
 
