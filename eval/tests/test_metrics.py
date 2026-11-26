@@ -589,3 +589,44 @@ def test_table_split_without_answers_reports_the_answer_check_as_not_run():
     assert report is not None and report.answer_mode is False
     assert report.overall.answer_correct_rate is None
     assert all(row.answer_verdict is None for row in report.items)
+
+
+# --- table_split gate and re-baseline (D-45, D-46) ---------------------------------------------------------------------
+
+def test_table_split_is_gated_and_the_re_recorded_ingest_baseline_leaves_every_old_slice_and_item_unchanged():
+    from pathlib import Path
+
+    from rag_sidecar.contracts.baseline import Baseline, NoiseConfig
+
+    from rag_eval.native_review import counts_in_gated_slices
+    from rag_eval.paired import is_gated_slice
+
+    root = Path(__file__).resolve().parents[1]
+    noise = NoiseConfig.model_validate_json((root / "config" / "noise.json").read_text(encoding="utf-8"))
+    assert is_gated_slice("category:table_split", noise)
+    assert not is_gated_slice("category:table", noise)
+
+    previous = Baseline.model_validate_json(
+        (root / "baselines" / "history" / "fixture-ingest-baseline.pre-03.2-32.json").read_text(encoding="utf-8")
+    )
+    current = Baseline.model_validate_json((root / "baselines" / "fixture-ingest-baseline.json").read_text(encoding="utf-8"))
+    assert len(current.runs) >= 3
+    assert {run.run_id for run in current.runs}.isdisjoint({run.run_id for run in previous.runs}), "not re-recorded"
+    assert (current.golden_sha256, current.corpus_sha256) == (previous.golden_sha256, previous.corpus_sha256)
+    for name, stats in previous.slices.items():
+        assert current.slices[name] == stats, name
+    assert previous.items is not None and current.items is not None
+    assert {item_id: current.items[item_id] for item_id in previous.items} == previous.items
+    assert all(stat.spread == 0.0 for stats in current.slices.values() for stat in stats.values())
+
+    golden = [
+        GoldenItem.model_validate_json(line)
+        for line in (root / "fixtures" / "ingest" / "golden-ingest.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    table_items = [item for item in golden if item.category == "table_split"]
+    counting = [item for item in table_items if item.split == current.golden_filter.gate_split and counts_in_gated_slices(item)]
+    assert counting and {item.language for item in counting} == {"en"}
+    assert all(not counts_in_gated_slices(item) for item in table_items if item.language in {"zh", "it"})
+    gated = current.slices["category:table_split"]
+    assert gated["recall_at_5"].n == len(counting)
