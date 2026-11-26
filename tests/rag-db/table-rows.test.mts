@@ -538,6 +538,106 @@ describe('write stage on the two-tenant fixture: RAG_TABLE_LOOKUP (D-15, D-45, T
       await fixture.db.query('ALTER FUNCTION public.rag_write_table_rows_disabled(text, uuid, text, jsonb) RENAME TO rag_write_table_rows');
     }
   });
+
+  describe('backfill command rag:table-rows (D-15, T-04.2-120)', () => {
+    const ROW_COLUMNS = 'document_id, tenant_key, chunking_profile_id, table_key, row_index, header, cells, chunk_ids, version, is_current, status';
+    const tenantRows = (key: string) => rows(`SELECT ${ROW_COLUMNS} FROM rag_table_rows WHERE tenant_key = $1 ORDER BY document_id, chunking_profile_id, table_key, row_index`, [key]);
+    const knownUsers = new Set([TWO_TENANT_IDS.userA, TWO_TENANT_IDS.userB]);
+    const fakeAuthAdmin = () => ({
+      auth: {
+        admin: {
+          getUserById: async (id: string) =>
+            knownUsers.has(id) ? { data: { user: { id } }, error: null } : { data: { user: null }, error: { message: 'not found', status: 404 } },
+        },
+      },
+      from: () => {
+        throw new Error('not used');
+      },
+    });
+    const run = async (argv: string[], signal?: AbortSignal, onLine?: (line: string) => void) => {
+      const cli = await import('@/lib/rag/tables/cli');
+      const out: string[] = [];
+      const err: string[] = [];
+      const code = await cli.main(argv, { out: (line) => (out.push(line), onLine?.(line)), err: (line) => err.push(line) }, signal);
+      return { code, out, err };
+    };
+    const eligible = async (key: string) =>
+      rows(
+        `SELECT count(*)::int AS n, count(*) FILTER (WHERE is_current)::int AS current FROM documents
+         WHERE tenant_key = $1 AND status = 'ready' AND NOT provisional AND (is_current OR superseded_by IS NOT NULL)`,
+        [key],
+      );
+
+    before(async () => {
+      tableLookup = 'false';
+      ragDeps.setRagDepsForTests({ adminClient: () => fakeAuthAdmin() as never });
+      // Existing documents without rows: tenant A's rows are cleared, as if they were stored before the switch existed.
+      await fixture.db.query('DELETE FROM rag_table_rows WHERE tenant_key = $1', [KEY_A]);
+    });
+
+    test('a dry run counts current and superseded documents per tenant and writes nothing', async () => {
+      await assertIndexerFunctions(fixtureDb());
+      const bRows = await tenantRows(KEY_B);
+      const result = await run(['--tenant', KEY_A, '--dry-run']);
+      assert.equal(result.code, 0, result.err.join('\n'));
+      const [count] = await eligible(KEY_A);
+      assert.ok((count?.n as number) > (count?.current as number), 'tenant A has a superseded version');
+      assert.ok(result.out.includes(`[RAG Tables] dry run, nothing written`), result.out.join('\n'));
+      assert.ok(
+        result.out.includes(`[RAG Tables] ${KEY_A}: would index ${count?.n} documents (${count?.current} current, ${(count?.n as number) - (count?.current as number)} superseded)`),
+        result.out.join('\n'),
+      );
+      assert.deepEqual(await tenantRows(KEY_A), []);
+      assert.deepEqual(await tenantRows(KEY_B), bRows);
+    });
+
+    test('a key that does not resolve or belongs to the other deployment mode exits 2 and writes nothing', async () => {
+      const stranger = await run(['--tenant', 'u:00000000-0000-4000-8000-00000000ffff']);
+      assert.equal(stranger.code, 2, stranger.err.join('\n'));
+      const single = await run(['--tenant', 's:default', '--dry-run']);
+      assert.equal(single.code, 2, single.err.join('\n'));
+      assert.deepEqual(await tenantRows(KEY_A), []);
+    });
+
+    test('an interrupted run stops between batches with exit code 130 and a resume cursor', async () => {
+      const controller = new AbortController();
+      const result = await run(['--tenant', KEY_A, '--batch-size', '1'], controller.signal, (line) => {
+        if (/ batch 1:/.test(line)) controller.abort(new Error('interrupted'));
+      });
+      assert.equal(result.code, 130, [...result.out, ...result.err].join('\n'));
+      assert.ok(result.err.some((line) => new RegExp(`--tenant ${KEY_A} --resume-after [0-9a-f-]{36}`).test(line)), result.err.join('\n'));
+      await fixture.db.query('DELETE FROM rag_table_rows WHERE tenant_key = $1', [KEY_A]);
+    });
+
+    test('a real run writes the rows of current and superseded documents of that tenant only; counts only in the output', async () => {
+      const bRows = await tenantRows(KEY_B);
+      const result = await run(['--tenant', KEY_A, '--batch-size', '2']);
+      assert.equal(result.code, 0, [...result.out, ...result.err].join('\n'));
+      assert.ok(result.out.some((line) => line.includes('after npm run rag:rechunk')), 'the run states when to run it');
+      const stored = await tenantRows(KEY_A);
+      const [off] = await rows("SELECT id FROM documents WHERE tenant_key = $1 AND source_key = 'rows/off'", [KEY_A]);
+      assert.equal(stored.filter((row) => row.document_id === off?.id).length, 2, 'a document ingested with the switch off gets its rows');
+      const superseded = await rows("SELECT id FROM documents WHERE tenant_key = $1 AND source_key = 'rows/one' AND NOT is_current", [KEY_A]);
+      assert.equal(superseded.length, 1);
+      const old = stored.filter((row) => row.document_id === superseded[0]?.id);
+      assert.equal(old.length, 2, 'the superseded version gets its rows');
+      for (const row of old) assert.deepEqual([row.is_current, row.version], [false, 1]);
+      for (const row of stored) assert.equal(row.tenant_key, KEY_A);
+      assert.deepEqual(await tenantRows(KEY_B), bRows, "tenant B's rows are untouched");
+      for (const line of [...result.out, ...result.err]) {
+        for (const value of ['Kelmo', 'Darvi', 'lumo', 'kaso', 'grumo', 'rosk']) assert.equal(line.includes(value), false, `no cell or header in the output: ${line}`);
+      }
+      assert.ok(result.out.some((line) => new RegExp(`^\\[RAG Tables\\] ${KEY_A}: \\d+ documents indexed, 0 failed, ${stored.length} rows written`).test(line)), result.out.join('\n'));
+    });
+
+    test('running it again leaves the same rows', async () => {
+      const before = await tenantRows(KEY_A);
+      assert.ok(before.length > 0);
+      const again = await run(['--tenant', KEY_A]);
+      assert.equal(again.code, 0, again.err.join('\n'));
+      assert.deepEqual(await tenantRows(KEY_A), before);
+    });
+  });
 });
 
 // Runs after the two-tenant suite, whose before() sets the fixture environment the app modules read at import.
