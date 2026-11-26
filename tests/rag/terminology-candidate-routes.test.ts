@@ -129,9 +129,9 @@ const params = (id: string) => ({ params: Promise.resolve({ id }) });
 const BASE = '/api/rag/admin/terminology/candidates';
 const ADMIN = 'token-admin';
 
-const list = (loaded: Loaded, query = '', token: string | undefined = ADMIN) => loaded.list.GET(req(`${BASE}${query}`, { token }));
-const decide = (loaded: Loaded, body: unknown, token: string | undefined = ADMIN, id = CANDIDATE_ID) =>
-  loaded.item.PATCH(req(`${BASE}/${id}`, { method: 'PATCH', token, body }), params(id));
+const list = (loaded: Loaded, query = '', token: string | null = ADMIN) => loaded.list.GET(req(`${BASE}${query}`, { token: token ?? undefined }));
+const decide = (loaded: Loaded, body: unknown, token: string | null = ADMIN, id = CANDIDATE_ID) =>
+  loaded.item.PATCH(req(`${BASE}/${id}`, { method: 'PATCH', token: token ?? undefined, body }), params(id));
 
 let logged: string[];
 
@@ -160,7 +160,7 @@ afterEach(() => {
 describe('guards', () => {
   it('answers 401 without a session and 403 for a user who is not an admin, calling no function', async () => {
     const loaded = await load();
-    for (const token of [undefined, 'token-plain']) {
+    for (const token of [null, 'token-plain']) {
       const status = token ? 403 : 401;
       const listed = await list(loaded, '', token);
       expect(listed.status).toBe(status);
