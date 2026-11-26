@@ -502,3 +502,418 @@ describe('review-labelling.js static guards', () => {
     expect(Object.keys(mod.REVIEW_LABELLING_LABELS.it!).sort()).toEqual(en);
   });
 });
+
+function selectIn(panel: ReturnType<typeof loadPanel>, region: FakeElement, text: string, state: { sel: unknown }) {
+  const node = region.childNodes[0];
+  state.sel = { toString: () => text, anchorNode: node, focusNode: node };
+  region.dispatch('mouseup');
+  void panel;
+}
+
+function loadWithSelection(options: { route?: Route; locale?: string } = {}) {
+  const state: { sel: unknown } = { sel: null };
+  const panel = loadPanel({ ...options, selection: () => state.sel });
+  return { panel, state };
+}
+
+function labelCalls(panel: ReturnType<typeof loadPanel>) {
+  return panel.calls.filter((c) => c.url.endsWith('/label'));
+}
+
+function check(el: FakeElement, on = true) {
+  el.checked = on;
+  el.dispatch('change');
+}
+
+function typeInto(el: FakeElement, value: string) {
+  el.value = value;
+  el.dispatch('input');
+}
+
+/** Answerable yes, one quote from passage 1, an expected answer and Test set ticked. */
+async function fillAnswerable(panel: ReturnType<typeof loadPanel>, state: { sel: unknown }, quote = 'needs a signed form') {
+  await openFirstCase(panel);
+  const passage = panel.section.querySelectorAll('article[data-review-passage]')[0]!;
+  selectIn(panel, q(passage, '[data-review-passage-text]'), quote, state);
+  q(passage, '[data-review-add-quote]').click();
+  check(q(panel.section, 'input[data-review-answerable="yes"]'));
+  typeInto(q(panel.section, 'textarea[data-review-expected]'), 'It needs a signed form.');
+}
+
+describe('review-labelling.js: label form (D-18, D-22)', () => {
+  it('adds a quote with the exact selected substring and checks it on every edit', async () => {
+    const { panel, state } = loadWithSelection();
+    await openFirstCase(panel);
+    const passage = panel.section.querySelectorAll('article[data-review-passage]')[0]!;
+    selectIn(panel, q(passage, '[data-review-passage-text]'), 'Step two needs', state);
+    q(passage, '[data-review-add-quote]').click();
+    const slip = q(panel.section, 'figure[data-review-quote]');
+    const field = q(slip, 'textarea[data-review-quote-text]');
+    expect(field.value).toBe('Step two needs');
+    expect(slip.textContent).toContain('Quote 1 from Passage 1: document-a.pdf');
+    expect(q(slip, '[data-review-quote-check]').textContent).toBe('Found word for word in the passage.');
+    expect(panel.doc.activeElement).toBe(field);
+    typeInto(field, 'Step three needs');
+    expect(q(slip, '[data-review-quote-check]').textContent).toContain('This text is not in the passage word for word.');
+    expect(field.getAttribute('aria-invalid')).toBe('true');
+    typeInto(field, 'S');
+    expect(q(slip, '[data-review-quote-check]').textContent).toBe('A quote needs at least 2 characters.');
+    typeInto(field, '  step TWO, needs ');
+    expect(q(slip, '[data-review-quote-check]').textContent).toBe('Found word for word in the passage.');
+    expect(field.getAttribute('aria-invalid')).toBeNull();
+  });
+
+  it('ignores a selection made outside the passage and adds an empty quote for keyboard use', async () => {
+    const { panel, state } = loadWithSelection();
+    await openFirstCase(panel);
+    const [first, second] = panel.section.querySelectorAll('article[data-review-passage]');
+    selectIn(panel, q(first!, '[data-review-passage-text]'), 'Step two needs', state);
+    q(second!, '[data-review-add-quote]').click();
+    expect(q(panel.section, 'textarea[data-review-quote-text]').value).toBe('');
+    expect(panel.section.textContent).toContain('Quote 1 from Passage 2: document-a.pdf');
+  });
+
+  it('keeps Save enabled but sends nothing while a quote is not a substring, and marks the field', async () => {
+    const { panel, state } = loadWithSelection();
+    await fillAnswerable(panel, state);
+    check(q(panel.section, 'input[data-review-triage="kb_gap"]'));
+    typeInto(q(panel.section, 'textarea[data-review-quote-text]'), 'a sentence that is not there');
+    const save = q(panel.section, '[data-review-save]');
+    expect(save.disabled).toBe(false);
+    save.click();
+    await flush();
+    expect(labelCalls(panel)).toHaveLength(0);
+    expect(panel.status.textContent).toContain('Fix the marked fields before saving.');
+    expect(panel.status.querySelector('[role="alert"]')).not.toBeNull();
+    const field = q(panel.section, 'textarea[data-review-quote-text]');
+    expect(field.getAttribute('aria-invalid')).toBe('true');
+    expect(panel.doc.activeElement).toBe(field);
+  });
+
+  it('marks every missing field of an untouched form and sends nothing', async () => {
+    const panel = loadPanel();
+    await openFirstCase(panel);
+    q(panel.section, '[data-review-save]').click();
+    await flush();
+    expect(labelCalls(panel)).toHaveLength(0);
+    const text = panel.section.textContent;
+    expect(text).toContain('Choose Yes or No.');
+    expect(text).toContain('Choose at least one use for this case.');
+    expect(panel.doc.activeElement?.getAttribute('data-review-answerable')).toBe('yes');
+  });
+
+  it('sends a complete answerable label with evidence and not-relevant passages', async () => {
+    const { panel, state } = loadWithSelection();
+    await fillAnswerable(panel, state);
+    check(q(panel.section, 'input[data-review-triage="training"]'));
+    check(q(panel.section, `input[data-review-not-relevant="${CHUNK_2}"]`));
+    change(q(panel.section, 'select[data-review-category]'), 'exact_term');
+    q(panel.section, '[data-review-save]').click();
+    await flush();
+    expect(labelCalls(panel)).toHaveLength(1);
+    expect(labelCalls(panel)[0]).toMatchObject({ url: `/api/rag/review/items/${ITEM_A}/label`, method: 'POST' });
+    expect(labelCalls(panel)[0]!.body).toEqual({
+      status: 'labelled',
+      label: {
+        answerable: true,
+        category: 'exact_term',
+        language: 'en',
+        expected_answer: 'It needs a signed form.',
+        evidence: [{ chunk_id: CHUNK_1, document_id: DOC_A, document_name: 'document-a.pdf', section: '2.1', quote: 'needs a signed form' }],
+        triage: ['training'],
+        not_relevant_chunk_ids: [CHUNK_2],
+        pii_checked: false,
+        paraphrased_question: null,
+        confirm_near_duplicate_of: null,
+      },
+    });
+  });
+
+  it('locks "not relevant" on a quoted passage', async () => {
+    const { panel, state } = loadWithSelection();
+    await openFirstCase(panel);
+    check(q(panel.section, `input[data-review-not-relevant="${CHUNK_1}"]`));
+    const passage = panel.section.querySelectorAll('article[data-review-passage]')[0]!;
+    selectIn(panel, q(passage, '[data-review-passage-text]'), 'Step two', state);
+    q(passage, '[data-review-add-quote]').click();
+    const box = q(panel.section, `input[data-review-not-relevant="${CHUNK_1}"]`);
+    expect(box.checked).toBe(false);
+    expect(box.disabled).toBe(true);
+    expect(panel.section.textContent).toContain('A passage you quote can’t be marked not relevant.');
+  });
+
+  it('sends an unanswerable label without evidence or expected answer and switches the category to no_answer', async () => {
+    const { panel, state } = loadWithSelection();
+    await fillAnswerable(panel, state);
+    check(q(panel.section, 'input[data-review-answerable="no"]'));
+    expect(q(panel.section, 'textarea[data-review-expected]').disabled).toBe(true);
+    expect(q(panel.section, 'select[data-review-category]').value).toBe('no_answer');
+    expect(panel.section.textContent).toContain('Quotes are not saved for a question the documents can’t answer.');
+    check(q(panel.section, 'input[data-review-triage="kb_gap"]'));
+    q(panel.section, '[data-review-save]').click();
+    await flush();
+    const label = (labelCalls(panel)[0]!.body as Json).label as Json;
+    expect(label).toMatchObject({ answerable: false, category: 'no_answer', expected_answer: null, triage: ['kb_gap'] });
+    expect(label.evidence).toBeUndefined();
+  });
+
+  it('requires a matching category for the answer', async () => {
+    const { panel, state } = loadWithSelection();
+    await fillAnswerable(panel, state);
+    check(q(panel.section, 'input[data-review-triage="kb_gap"]'));
+    change(q(panel.section, 'select[data-review-category]'), 'small_talk');
+    q(panel.section, '[data-review-save]').click();
+    await flush();
+    expect(labelCalls(panel)).toHaveLength(0);
+    expect(panel.section.textContent).toContain('Choose “No answer in the documents” or “Small talk” only when');
+  });
+
+  it('blocks a test-set label until the personal data check is confirmed or a rewritten question is written', async () => {
+    const { panel, state } = loadWithSelection();
+    await fillAnswerable(panel, state);
+    expect(panel.section.querySelector('input[data-review-pii-confirm]')).toBeNull();
+    check(q(panel.section, 'input[data-review-triage="golden"]'));
+    const block = q(panel.section, '[data-review-pii]');
+    expect(block.textContent).toContain('What does step two need?');
+    expect(block.textContent).toContain('Names of people');
+    q(panel.section, '[data-review-save]').click();
+    await flush();
+    expect(labelCalls(panel)).toHaveLength(0);
+    expect(panel.section.textContent).toContain('Tick the personal data check or write a rewritten question');
+
+    typeInto(q(panel.section, 'textarea[data-review-paraphrase]'), 'What does the second step require?');
+    q(panel.section, '[data-review-save]').click();
+    await flush();
+    expect(labelCalls(panel)).toHaveLength(1);
+    expect((labelCalls(panel)[0]!.body as Json).label).toMatchObject({ triage: ['golden'], pii_checked: true, paraphrased_question: 'What does the second step require?' });
+  });
+
+  it('sends pii_checked and the near-duplicate id when the check is ticked', async () => {
+    const { panel, state } = loadWithSelection();
+    await fillAnswerable(panel, state);
+    check(q(panel.section, 'input[data-review-triage="golden"]'));
+    check(q(panel.section, 'input[data-review-pii-confirm]'));
+    typeInto(q(panel.section, 'input[data-review-dup]'), 'Not an id!');
+    q(panel.section, '[data-review-save]').click();
+    await flush();
+    expect(labelCalls(panel)).toHaveLength(0);
+    expect(panel.section.textContent).toContain('Paste the item ID exactly as the promotion command printed it.');
+    typeInto(q(panel.section, 'input[data-review-dup]'), 'golden-item-007');
+    q(panel.section, '[data-review-save]').click();
+    await flush();
+    expect((labelCalls(panel)[0]!.body as Json).label).toMatchObject({ pii_checked: true, paraphrased_question: null, confirm_near_duplicate_of: 'golden-item-007' });
+  });
+
+  it('shows term pairs only while Dictionary terms is ticked and sends them', async () => {
+    const { panel, state } = loadWithSelection();
+    await fillAnswerable(panel, state);
+    expect(panel.section.querySelector('[data-review-term]')).toBeNull();
+    check(q(panel.section, 'input[data-review-triage="dictionary"]'));
+    expect(panel.section.querySelectorAll('[data-review-term]')).toHaveLength(1);
+    q(panel.section, '[data-review-save]').click();
+    await flush();
+    expect(labelCalls(panel)).toHaveLength(0);
+    expect(panel.section.textContent).toContain('Fill both words of each term pair, or remove the pair.');
+    typeInto(q(panel.section, 'input[data-review-term-observed]'), 'form B');
+    typeInto(q(panel.section, 'input[data-review-term-canonical]'), 'signed form');
+    q(panel.section, '[data-review-add-term]').click();
+    const rows = panel.section.querySelectorAll('[data-review-term]');
+    expect(rows).toHaveLength(2);
+    typeInto(q(rows[1]!, 'input[data-review-term-observed]'), 'modulo');
+    typeInto(q(rows[1]!, 'input[data-review-term-canonical]'), 'form');
+    change(q(rows[1]!, 'select[data-review-term-relation]'), 'translation');
+    q(panel.section, '[data-review-save]').click();
+    await flush();
+    expect(labelCalls(panel)).toHaveLength(0);
+    expect(panel.section.textContent).toContain('Choose the language of the documents’ word for a translation.');
+    change(q(panel.section.querySelectorAll('[data-review-term]')[1]!, 'select[data-review-term-language]'), 'en');
+    q(panel.section, '[data-review-save]').click();
+    await flush();
+    expect((labelCalls(panel)[0]!.body as Json).label).toMatchObject({
+      triage: ['dictionary'],
+      dictionary_terms: [
+        { observed_term: 'form B', canonical_term: 'signed form', relation: 'synonym', canonical_language: null },
+        { observed_term: 'modulo', canonical_term: 'form', relation: 'translation', canonical_language: 'en' },
+      ],
+    });
+    check(q(panel.section, 'input[data-review-triage="dictionary"]'), false);
+    expect(panel.section.querySelector('[data-review-term]')).toBeNull();
+  });
+
+  it('marks the quote the server refused (400 with a span index) and moves focus to it', async () => {
+    const { panel, state } = loadWithSelection({
+      route: (call) => (call.url.endsWith('/label') ? { status: 400, body: { error: 'invalid_evidence', span: 1, reason: 'quote_not_found' } } : undefined),
+    });
+    await fillAnswerable(panel, state);
+    const second = panel.section.querySelectorAll('article[data-review-passage]')[1]!;
+    selectIn(panel, q(second, '[data-review-passage-text]'), 'the archive', state);
+    q(second, '[data-review-add-quote]').click();
+    check(q(panel.section, 'input[data-review-triage="kb_gap"]'));
+    q(panel.section, '[data-review-save]').click();
+    await flush();
+    const slips = panel.section.querySelectorAll('figure[data-review-quote]');
+    expect(q(slips[0]!, '[data-review-quote-check]').textContent).toBe('Found word for word in the passage.');
+    expect(q(slips[1]!, '[data-review-quote-check]').textContent).toContain('The server did not find this text in the passage.');
+    expect(panel.doc.activeElement).toBe(q(slips[1]!, 'textarea[data-review-quote-text]'));
+    typeInto(q(slips[1]!, 'textarea[data-review-quote-text]'), 'the archive and');
+    expect(q(slips[1]!, '[data-review-quote-check]').textContent).toBe('Found word for word in the passage.');
+  });
+
+  it('maps a gone chunk and an unknown span reason', async () => {
+    let reason = 'chunk_not_servable';
+    const { panel, state } = loadWithSelection({ route: (call) => (call.url.endsWith('/label') ? { status: 400, body: { error: 'invalid_evidence', span: 0, reason } } : undefined) });
+    await fillAnswerable(panel, state);
+    check(q(panel.section, 'input[data-review-triage="kb_gap"]'));
+    q(panel.section, '[data-review-save]').click();
+    await flush();
+    expect(panel.section.textContent).toContain('This passage can no longer be quoted.');
+    reason = 'document_mismatch';
+    q(panel.section, '[data-review-save]').click();
+    await flush();
+    expect(panel.section.textContent).toContain('The server rejected this quote (document_mismatch).');
+  });
+
+  it('shows "already exported" on 409 and reloads the case read-only', async () => {
+    let exported = false;
+    const { panel, state } = loadWithSelection({
+      route: (call) => {
+        if (call.url.endsWith('/label')) {
+          exported = true;
+          return { status: 409, body: { error: 'Review item already exported' } };
+        }
+        if (call.url === `/api/rag/review/items/${ITEM_A}` && exported) return { status: 200, body: item(ITEM_A, { status: 'exported' }) };
+        return undefined;
+      },
+    });
+    await fillAnswerable(panel, state);
+    check(q(panel.section, 'input[data-review-triage="kb_gap"]'));
+    q(panel.section, '[data-review-save]').click();
+    await flush();
+    expect(panel.section.textContent).toContain('This case was exported to the test set. Its label can no longer be changed.');
+    expect(panel.section.querySelector('[data-review-save]')).toBeNull();
+    expect(panel.section.querySelector('[data-review-skip]')).toBeNull();
+    expect(q(panel.section, 'textarea[data-review-expected]').disabled).toBe(true);
+  });
+
+  it('skips with status skipped and opens the next case', async () => {
+    const panel = loadPanel();
+    await openFirstCase(panel);
+    q(panel.section, '[data-review-skip]').click();
+    await flush();
+    expect(labelCalls(panel)[0]).toMatchObject({ method: 'POST', body: { status: 'skipped' } });
+    expect(panel.status.textContent).toContain('Case skipped. Next case opened.');
+    expect(q(panel.section, '[data-review-question]').textContent).toBe('Where is the archive kept?');
+  });
+
+  it('returns to the queue after the last case is saved', async () => {
+    const { panel, state } = loadWithSelection();
+    await panel.init();
+    await flush();
+    panel.section.querySelectorAll('[data-review-open]')[1]!.click();
+    await flush();
+    check(q(panel.section, 'input[data-review-answerable="no"]'));
+    check(q(panel.section, 'input[data-review-triage="kb_gap"]'));
+    q(panel.section, '[data-review-save]').click();
+    await flush();
+    void state;
+    expect(labelCalls(panel)).toHaveLength(1);
+    expect(panel.status.textContent).toContain('Label saved. No more cases in this view.');
+    expect(panel.section.querySelectorAll('tr[data-review-row]').length).toBeGreaterThan(0);
+  });
+
+  it('reports an unknown outcome when the save request throws and reloads the case', async () => {
+    const { panel, state } = loadWithSelection({ route: (call) => (call.url.endsWith('/label') ? { status: 0, throws: true } : undefined) });
+    await fillAnswerable(panel, state);
+    check(q(panel.section, 'input[data-review-triage="kb_gap"]'));
+    q(panel.section, '[data-review-save]').click();
+    await flush();
+    expect(panel.status.textContent).toContain('No answer from the server. The label may or may not be saved');
+    expect(panel.calls.filter((c) => c.url === `/api/rag/review/items/${ITEM_A}`)).toHaveLength(2);
+  });
+
+  it('fills in a stored label', async () => {
+    const stored = {
+      answerable: true,
+      category: 'exact_term',
+      language: 'en',
+      expected_answer: 'A signed form.',
+      evidence: [{ chunk_id: CHUNK_1, document_id: DOC_A, document_name: 'document-a.pdf', section: '2.1', quote: 'signed form' }],
+      triage: ['training', 'golden'],
+      not_relevant_chunk_ids: [CHUNK_2],
+      dictionary_terms: [],
+      paraphrased_question: null,
+      pii_checked: true,
+      confirm_near_duplicate_of: null,
+    };
+    const panel = loadPanel({ route: (call) => (call.url === `/api/rag/review/items/${ITEM_A}` ? { status: 200, body: item(ITEM_A, { status: 'labelled', label: stored, triage: stored.triage }) } : undefined) });
+    await openFirstCase(panel);
+    expect(q(panel.section, 'input[data-review-answerable="yes"]').checked).toBe(true);
+    expect(q(panel.section, 'textarea[data-review-expected]').value).toBe('A signed form.');
+    expect(q(panel.section, 'select[data-review-category]').value).toBe('exact_term');
+    expect(q(panel.section, 'input[data-review-triage="golden"]').checked).toBe(true);
+    expect(q(panel.section, 'input[data-review-pii-confirm]').checked).toBe(true);
+    expect(q(panel.section, 'textarea[data-review-quote-text]').value).toBe('signed form');
+    expect(q(panel.section, '[data-review-quote-check]').textContent).toBe('Found word for word in the passage.');
+    expect(q(panel.section, `input[data-review-not-relevant="${CHUNK_2}"]`).checked).toBe(true);
+    q(panel.section, '[data-review-save]').click();
+    await flush();
+    expect(((labelCalls(panel)[0]!.body as Json).label as Json).triage).toEqual(['training', 'golden']);
+  });
+
+  it('asks before leaving a case with unsaved changes', async () => {
+    const { panel, state } = loadWithSelection();
+    await fillAnswerable(panel, state);
+    q(panel.section, '[data-review-back]').click();
+    const dialog = q(panel.section, 'dialog[data-review-discard]');
+    expect(dialog.open).toBe(true);
+    expect(panel.doc.activeElement?.hasAttribute('data-review-discard-keep')).toBe(true);
+    q(dialog, '[data-review-discard-keep]').click();
+    expect(panel.section.querySelector('[data-review-question]')).not.toBeNull();
+    q(panel.section, '[data-review-back]').click();
+    q(panel.section, '[data-review-discard-confirm]').click();
+    await flush();
+    expect(panel.section.querySelectorAll('tr[data-review-row]')).toHaveLength(2);
+  });
+
+  it('offers no control to delete, export or change the split of a case', async () => {
+    const { panel, state } = loadWithSelection();
+    await fillAnswerable(panel, state);
+    for (const button of panel.section.querySelectorAll('button')) expect(button.textContent).not.toMatch(/delete|export|split/i);
+    const source = fs.readFileSync(PANEL_FILE, 'utf8');
+    expect(source).not.toMatch(/method:\s*'DELETE'/);
+    expect(source).not.toMatch(/['"]split['"]\s*:/);
+  });
+
+  it('renders markup in quotes and stored labels as text (XSS)', async () => {
+    const payload = `${XSS_PAYLOAD}<script>PWNED(3)</script>`;
+    const stored = {
+      answerable: false,
+      category: 'no_answer',
+      language: 'en',
+      expected_answer: null,
+      triage: ['dictionary', 'golden'],
+      dictionary_terms: [{ observed_term: payload, canonical_term: payload, relation: 'synonym', canonical_language: null }],
+      paraphrased_question: payload,
+      pii_checked: true,
+      confirm_near_duplicate_of: null,
+    };
+    const panel = loadPanel({ route: (call) => (call.url === `/api/rag/review/items/${ITEM_A}` ? { status: 200, body: item(ITEM_A, { query_masked: payload, label: stored, status: 'labelled' }) } : undefined) });
+    await openFirstCase(panel);
+    expect(q(panel.section, 'input[data-review-term-observed]').value).toBe(payload);
+    expect(q(panel.section, 'textarea[data-review-paraphrase]').value).toBe(payload);
+    expect(injectedElements(panel.doc)).toEqual([]);
+    expect(panel.doc.created).not.toContain('script');
+    expect(panel.doc.innerHtmlWrites).toBe(0);
+  });
+});
+
+describe('review-labelling.js: quote normalisation', () => {
+  it('equals the Python normalize_text result on every shared fixture string', () => {
+    const fixture = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '../fixtures/feedback-loop/normalize-quotes.json'), 'utf8')) as {
+      cases: Array<{ input: string; expected: string }>;
+    };
+    const mod = require(PANEL_FILE) as { reviewLabellingNormalize: (text: string) => string };
+    expect(fixture.cases.length).toBeGreaterThanOrEqual(20);
+    for (const entry of fixture.cases) expect(mod.reviewLabellingNormalize(entry.input)).toBe(entry.expected);
+  });
+});
