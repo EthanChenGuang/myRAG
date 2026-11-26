@@ -3138,6 +3138,32 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
   }, [parentIsLoading, handleStop, tempDoc, isProcessingDoc, input]);
 
   // Update the button click handler
+  // Keep the textarea focused while the send button is pressed: on iOS the blur would close the keyboard,
+  // move the dock under the finger and swallow the click, so the first tap did nothing.
+  const keepComposerFocus = (e: React.MouseEvent) => {
+    e.preventDefault();
+  };
+
+  // Touch screens: act on touchend (and cancel the synthetic click) so a keyboard or viewport change
+  // between touchstart and click can never drop the send.
+  const handleSendTouchEnd = (e: React.TouchEvent<HTMLButtonElement>) => {
+    const button = e.currentTarget;
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+    const rect = button.getBoundingClientRect();
+    const inside = touch.clientX >= rect.left - 8 && touch.clientX <= rect.right + 8
+      && touch.clientY >= rect.top - 8 && touch.clientY <= rect.bottom + 8;
+    if (!inside) return;
+    if (e.cancelable) e.preventDefault();
+    if (parentIsLoading) {
+      handleStop?.();
+      return;
+    }
+    if (button.disabled || !input.trim()) return;
+    button.form?.requestSubmit();
+    setTimeout(() => setInput(''), 0);
+  };
+
   const handleButtonClick = (e: React.MouseEvent) => {
     // Debug: Button click handler (removed verbose logging)
 
@@ -3316,6 +3342,8 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
       <button
         type={parentIsLoading ? "button" : "submit"}
         onClick={handleButtonClick}
+        onMouseDown={keepComposerFocus}
+        onTouchEnd={handleSendTouchEnd}
         className={cn(
           "chat-send-button inline-flex h-9 w-9 items-center justify-center rounded-full transition-[background-color,transform] duration-150 group relative",
           parentIsLoading

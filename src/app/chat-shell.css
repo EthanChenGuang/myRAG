@@ -1169,3 +1169,86 @@ html .chat-row[data-role='user'] .chat-message.rounded-\[20px\] :is(div, p) {
     transform: none;
   }
 }
+
+/* Thinking indicator: three dots rise and glow in turn; a neon band sweeps the label left to right. */
+.chat-thinking {
+  --thinking-ink: #8a7468;
+  --thinking-glow: #ff6417;
+  --thinking-hot: #ffd2b8;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+.dark .chat-thinking {
+  --thinking-ink: #9a9a9a;
+  --thinking-glow: #ff8a4d;
+  --thinking-hot: #fff1e8;
+}
+.chat-thinking-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  height: 1rem;
+}
+.chat-thinking-dots > span {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 9999px;
+  background: var(--thinking-glow);
+  opacity: 0.35;
+  animation: chat-thinking-dot 1.2s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+.chat-thinking-dots > span:nth-child(2) { animation-delay: 0.16s; }
+.chat-thinking-dots > span:nth-child(3) { animation-delay: 0.32s; }
+@keyframes chat-thinking-dot {
+  0%, 60%, 100% { transform: translateY(0) scale(0.85); opacity: 0.35; box-shadow: none; }
+  30% { transform: translateY(-0.3rem) scale(1.1); opacity: 1; box-shadow: 0 0 0.5rem var(--thinking-glow); }
+}
+.chat-thinking-label {
+  position: relative;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--thinking-ink);
+  background-image: linear-gradient(
+    100deg,
+    var(--thinking-ink) 0%,
+    var(--thinking-ink) 38%,
+    var(--thinking-glow) 46%,
+    var(--thinking-hot) 50%,
+    var(--thinking-glow) 54%,
+    var(--thinking-ink) 62%,
+    var(--thinking-ink) 100%
+  );
+  background-size: 250% 100%;
+  background-position: 100% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: chat-thinking-sweep 1.8s linear infinite;
+}
+/* Soft glow that travels with the band. */
+.chat-thinking-label::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  background: inherit;
+  background-size: inherit;
+  -webkit-background-clip: text;
+  background-clip: text;
+  filter: blur(6px);
+  opacity: 0.7;
+  animation: inherit;
+  pointer-events: none;
+}
+@keyframes chat-thinking-sweep {
+  from { background-position: 100% 0; }
+  to { background-position: -50% 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-thinking-dots > span { animation: none; opacity: 0.7; }
+  .chat-thinking-label,
+  .chat-thinking-label::after { animation: none; background-position: 100% 0; }
+}
