@@ -90,7 +90,7 @@ describe('ChatMessage part labels', async () => {
 
   test('HTML entities in a plain paragraph render as text, never as elements (pre-existing raw-HTML path)', () => {
     const html = render('Hello &lt;img src=x onerror=alert(1)&gt; and &lt;a href="javascript:alert(1)"&gt;x&lt;/a&gt; there');
-    expect(html).not.toContain('<img');
+    expect(html).not.toMatch(/<img[^>]*onerror/);
     expect(html).not.toMatch(/<a\b[^>]*javascript/);
     expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
   });

@@ -81,6 +81,8 @@ import { MARK_HREF_PREFIX, markFromHref, markHref, placedSentenceMarks, insertSe
 import { SentenceMark } from './sentence-mark'
 import { AnswerMarkLegend } from './answer-mark-legend'
 import { AnswerNotices } from './answer-notices'
+import { PART_LABEL_ICONS } from './part-label-icon'
+import { partLabelOf, soleText } from '@/lib/chat/part-labels'
 import { useAnswerRecordsStore } from '@/lib/stores/answer-records-store'
 import { GroundednessBadge } from './groundedness-badge'
 import { AnswerFeedback } from './answer-feedback'
@@ -213,8 +215,14 @@ function metadataHasNotices(metadata: unknown): boolean {
   return Array.isArray(notices) && notices.length > 0;
 }
 
-function highlightDocumentMentions(text: string) {
-  if (!text) return '';
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+/** The paragraph's raw-HTML path: the text is escaped first, so only the mention spans are markup. */
+function highlightDocumentMentions(raw: string) {
+  if (!raw) return '';
+  const text = escapeHtml(raw);
 
   // Regex to match /mentions, potentially with backslashes
   const mentionRegex = /\/\\?([^\\]+?)\\?(?=\s|$|\.|\,|\;|\:|\!|\?)/g;
@@ -4047,6 +4055,23 @@ ChatMessage = function ({
     li: ({ children }) => (
       <li className="ml-2 text-gray-700 dark:text-gray-300">{children}</li>
     ),
+    strong: ({ children }) => {
+      const label = partLabelOf(soleText(children));
+      if (!label) return <strong>{children}</strong>;
+      const Icon = PART_LABEL_ICONS[label.key];
+      return (
+        <strong>
+          <span
+            data-part-label={label.key}
+            lang={clientTextLanguage(language) === label.language ? undefined : label.language}
+            className="inline-flex items-center gap-1"
+          >
+            <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+            {children}
+          </span>
+        </strong>
+      );
+    },
     p: ({ children }) => {
       // If children contains a string that might have @mentions
       if (typeof children === 'string') {
@@ -4175,7 +4200,7 @@ ChatMessage = function ({
         </div>
       );
     }
-  }), [isCodeCopied, markerCitations, citationNumbers, citationMessageId, buildCitationSources]);
+  }), [isCodeCopied, markerCitations, citationNumbers, citationMessageId, buildCitationSources, language]);
 
   // Set up layout stabilization on initial render
   useEffect(() => {

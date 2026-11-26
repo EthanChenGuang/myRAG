@@ -7,6 +7,8 @@ import { CodeBlock, CodeBlockCode } from "./code-block"
 import { useTextSize } from "@/components/providers/text-size-provider"
 import { useFont } from "@/components/providers/font-provider"
 import { imageLinkHref, isAllowedImageUrl } from "@/lib/safe-image-hosts"
+import { partLabelOf, soleText } from "@/lib/chat/part-labels"
+import { PART_LABEL_ICONS } from "./part-label-icon"
 
 export type MarkdownProps = {
   children: string
@@ -87,6 +89,19 @@ const INITIAL_COMPONENTS: Partial<Components> = {
   },
   pre: function PreComponent({ children }) {
     return <>{children}</>
+  },
+  strong: function StrongComponent({ children }) {
+    const label = partLabelOf(soleText(children))
+    if (!label) return <strong>{children}</strong>
+    const Icon = PART_LABEL_ICONS[label.key]
+    return (
+      <strong>
+        <span data-part-label={label.key} className="inline-flex items-center gap-1">
+          <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+          {children}
+        </span>
+      </strong>
+    )
   },
 }
 
