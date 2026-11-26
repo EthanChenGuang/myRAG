@@ -104,6 +104,8 @@ describe('ReplacesChooserBody', () => {
     const id = /<label[^>]*for="([^"]+)"/.exec(html)?.[1];
     expect(html).toContain(`id="${id}"`);
     expect(html).toContain('type="search"');
+    expect(html).toContain('name="replaces-search"');
+    expect(html).toMatch(/autocomplete="off"/i);
     expect(html).toContain('lucide-search');
     expect(html).toContain('role="radiogroup"');
     expect(html.match(/role="radio"/g)).toHaveLength(3);
@@ -134,7 +136,7 @@ describe('ReplacesChooserBody', () => {
 
   it('shows the no-match sentence with the query as text', () => {
     const html = renderBody({ query: '<script>x</script>' });
-    expect(html).toContain('No document matches &quot;&lt;script&gt;x&lt;/script&gt;&quot;.');
+    expect(html).toContain('No document matches “&lt;script&gt;x&lt;/script&gt;”.');
     expect(html).not.toContain('<script>');
   });
 
@@ -162,6 +164,7 @@ describe('ReplacesPicker', () => {
     expect(html).toContain('lucide-replace');
     expect(html).toContain('aria-haspopup="dialog"');
     expect(html).toContain('h-8');
+    expect(html).toContain('<span class="sr-only">(for sample-notes.pdf)</span>');
   });
 
   it('renders nothing when the server does not enable it', () => {

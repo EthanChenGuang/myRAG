@@ -85,6 +85,8 @@ describe('buildScopeTagGroups', () => {
   });
 
   it('lets a long tag label wrap in its menu item', () => {
+    const long = 'L'.repeat(60);
+    expect(buildScopeTagGroups([{ dimension: 'department', value: 'long-one', label: long }], 'en', [])[0]?.items[0]?.label).toBe(long);
     expect(SCOPE_TAG_ITEM_CLASS).toContain('whitespace-normal');
     expect(SCOPE_TAG_ITEM_CLASS).toContain('break-words');
     expect(SCOPE_TAG_ITEM_CLASS).not.toContain('truncate');
@@ -115,7 +117,7 @@ describe('tag selection', () => {
 describe('ScopeTagPicker', () => {
   it('renders an outline trigger whose accessible name includes the file name', () => {
     const html = renderPicker({ value: ['region:north', 'department:unit-a'] });
-    expect(html).toContain('aria-label="Choose tags for sample-notes.pdf"');
+    expect(html).toContain('aria-label="Tags: 2, Choose tags for sample-notes.pdf"');
     expect(html).toContain('Tags: 2');
     expect(html).toContain('title="North, Unit A"');
     expect(html).toContain('lucide-tags');
@@ -175,9 +177,10 @@ describe('UploadQueueRow with the tag picker', () => {
         onRemove: () => undefined,
       }),
     );
-    expect(html).toContain('aria-label="Choose tags for sample-notes.pdf"');
+    expect(html).toContain('aria-label="Tags, Choose tags for sample-notes.pdf"');
     expect(html).toContain('flex flex-wrap items-center justify-end gap-2');
     expect(html.indexOf('role="combobox"')).toBeLessThan(html.indexOf('Choose tags for'));
+    expect(SCOPE_TAG_MENU_CLASS).toContain('overscroll-contain');
   });
 
   it('gives a 200-character unbroken file name the truncate class and a title', () => {

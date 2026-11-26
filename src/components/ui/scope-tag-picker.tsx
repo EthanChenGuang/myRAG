@@ -27,8 +27,8 @@ export interface ScopeTagGroup {
   items: Array<{ tag: string; label: string; checked: boolean }>;
 }
 
-export const SCOPE_TAG_MENU_CLASS = 'w-64 max-h-72 overflow-y-auto';
-export const SCOPE_TAG_ITEM_CLASS = 'whitespace-normal break-words';
+export const SCOPE_TAG_MENU_CLASS = 'w-64 max-h-72 overflow-y-auto overscroll-contain';
+export const SCOPE_TAG_ITEM_CLASS = 'whitespace-normal break-words [contain-intrinsic-size:auto_2rem] [content-visibility:auto]';
 
 export const SCOPE_TAG_TRIGGER_CLASS = 'h-8 px-2 gap-1 text-xs font-normal';
 
@@ -99,7 +99,7 @@ export function ScopeTagPicker({ enabled, vocabulary, value, language, fileName,
         <Button
           type="button"
           variant="outline"
-          aria-label={scopeTagText('aria', language, { file: fileName })}
+          aria-label={`${scopeTagTriggerLabel(selected.length, language)}, ${scopeTagText('aria', language, { file: fileName })}`}
           title={selectedLabels || undefined}
           className={cn(SCOPE_TAG_TRIGGER_CLASS, className)}
         >

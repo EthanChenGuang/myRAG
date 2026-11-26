@@ -31,6 +31,11 @@ describe('UploadQueueRow with tags and "Replaces…" off', () => {
     expect(remove).toContain('<span class="sr-only">Remove file</span>');
   });
 
+  it('renders the same row when the dashboard passes tags and "Replaces…" as off', () => {
+    expect(render({ tags: null, replaces: null })).toBe(render());
+    expect(render({ tags: null, replaces: null, docType: { value: 'auto', onChange: noop } })).not.toContain('Replaces');
+  });
+
   it('matches the snapshot of today with and without the doc-type picker', () => {
     expect(render()).toMatchSnapshot('no-picker');
     expect(render({ docType: { value: 'auto', onChange: noop } })).toMatchSnapshot('doc-type-picker');

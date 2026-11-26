@@ -2,6 +2,7 @@ import type { Language } from '@/lib/rag';
 
 export type ReplacesTextKey =
   | 'trigger'
+  | 'triggerFor'
   | 'title'
   | 'member'
   | 'admin'
@@ -16,12 +17,13 @@ export type ReplacesTextKey =
 const LABELS: { en: Record<ReplacesTextKey, string> } & Partial<Record<Language, Record<ReplacesTextKey, string>>> = {
   en: {
     trigger: 'Replaces…',
+    triggerFor: '(for {file})',
     title: 'Which document does {file} replace?',
     member: 'An admin confirms the replacement. Until then both documents are used for answers.',
     admin: 'The chosen document stops being used for answers when this upload is ready.',
     search: 'Search documents',
     empty: 'No documents in this workspace yet.',
-    noMatch: 'No document matches "{query}".',
+    noMatch: 'No document matches “{query}”.',
     close: 'Close chooser',
     confirm: 'Choose document',
     line: 'Replaces: {name}',
@@ -29,6 +31,7 @@ const LABELS: { en: Record<ReplacesTextKey, string> } & Partial<Record<Language,
   },
   zh: {
     trigger: '替换…',
+    triggerFor: '（{file}）',
     title: '{file} 要替换哪份文档？',
     member: '替换需由管理员确认。在此之前，两份文档都会用于回答。',
     admin: '此上传就绪后，所选文档会停止用于回答。',
@@ -42,6 +45,7 @@ const LABELS: { en: Record<ReplacesTextKey, string> } & Partial<Record<Language,
   },
   it: {
     trigger: 'Sostituisce…',
+    triggerFor: '(per {file})',
     title: 'Quale documento sostituisce {file}?',
     member: 'Un amministratore conferma la sostituzione. Fino ad allora entrambi i documenti sono usati nelle risposte.',
     admin: 'Il documento scelto smette di essere usato nelle risposte quando questo caricamento è pronto.',
