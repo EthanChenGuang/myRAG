@@ -363,3 +363,153 @@ for (const mode of MODES) {
     });
   });
 }
+
+describe('the table_lookup stage and the table:0 list through runRetrieval (single-tenant, D-16, D-45)', () => {
+  const CORPUS_DIR = path.resolve(import.meta.dirname, '../../eval/fixtures/corpus');
+  const QUESTION = 'Which entry pairs drovask with quilmeno?';
+  const TABLE_TEXT = [
+    'Tarvel register of invented entries.',
+    '',
+    '| Brennik | Solvane | Mirtha |',
+    '| --- | --- | --- |',
+    '| drovask | pelunor | ostric |',
+    '| fenwahl | quilmeno | ostric |',
+    '| drovask | quilmeno | yarrot |',
+  ].join('\n');
+  const T_HEADER = ['Brennik', 'Solvane', 'Mirtha'];
+  const T_ROWS = [
+    ['drovask', 'pelunor', 'ostric'],
+    ['fenwahl', 'quilmeno', 'ostric'],
+    ['drovask', 'quilmeno', 'yarrot'],
+  ];
+  let prepared: Awaited<ReturnType<typeof import('../../eval/harness/run-eval.mts').prepareInProcessEval>>;
+  let db: PGlite;
+  let configModule: typeof import('../../src/lib/rag/config.ts');
+  let documentId = '';
+  let chunkId = '';
+
+  async function withEnv<T>(overrides: Record<string, string>, fn: () => Promise<T>): Promise<T> {
+    const previous = Object.fromEntries(Object.keys(overrides).map((key) => [key, process.env[key]]));
+    Object.assign(process.env, overrides);
+    configModule.resetRagConfigForTests();
+    try {
+      return await fn();
+    } finally {
+      for (const [key, value] of Object.entries(previous)) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+      configModule.resetRagConfigForTests();
+    }
+  }
+
+  async function run(env: Record<string, string>, extra: Record<string, unknown> = {}) {
+    const { runRetrieval } = await import('../../src/lib/rag/index.ts');
+    const { mintScope } = await import('../../src/lib/rag/tenant/scope.ts');
+    return withEnv(env, async () =>
+      runRetrieval({
+        scope: mintScope('single', null, null),
+        query: QUESTION,
+        profile: 'eval',
+        signal: new AbortController().signal,
+        options: { ragMode: 'balanced' },
+        ...extra,
+      } as Parameters<typeof runRetrieval>[0]),
+    );
+  }
+
+  before(async () => {
+    const { prepareInProcessEval } = await import('../../eval/harness/run-eval.mts');
+    const { embedText } = await import('../../eval/harness/fixture-embedder.mts');
+    prepared = await prepareInProcessEval({
+      corpusDir: CORPUS_DIR,
+      deploymentMode: 'single-tenant',
+      envOverrides: { RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'true', RAG_RERANKER: 'none', RAG_TABLE_LOOKUP: 'false' },
+    });
+    db = prepared.fixtureDb as PGlite;
+    configModule = await import('../../src/lib/rag/config.ts');
+    const { resetRetrievalBackendForTests } = await import('../../src/lib/rag/backend/registry.ts');
+    const { verifyV2Startup, resetV2StartupForTests } = await import('../../src/lib/rag/v2/startup.ts');
+    resetRetrievalBackendForTests();
+    resetV2StartupForTests();
+    await verifyV2Startup();
+
+    documentId = crypto.randomUUID();
+    chunkId = crypto.randomUUID();
+    const hash = crypto.createHash('sha256').update(TABLE_TEXT).digest('hex');
+    await db.query(
+      `INSERT INTO documents (id, filename, content, lineage_id, is_current, status, content_hash) VALUES ($1, 'tarvel-register.md', $2, $1, true, 'ready', $3)`,
+      [documentId, TABLE_TEXT, hash],
+    );
+    await db.query(
+      `INSERT INTO document_chunks (id, document_id, content, embedding, lexical_text, tenant_key, is_current, status, chunk_index, provisional, content_hash, chunk_kind)
+       VALUES ($1, $2, $3, $4::vector, $3, 's:default', true, 'ready', 0, false, $5, 'table')`,
+      [chunkId, documentId, TABLE_TEXT, `[${embedText(TABLE_TEXT).join(',')}]`, hash],
+    );
+    await db.transaction(async (tx) => {
+      await tx.exec('SET LOCAL ROLE service_role');
+      await tx.query('SELECT * FROM public.rag_write_table_rows($1, $2::uuid, $3, $4::jsonb)', [
+        's:default',
+        documentId,
+        'legacy',
+        JSON.stringify(tableRows(`${documentId}:t0`, chunkId, T_ROWS, T_HEADER)),
+      ]);
+    });
+  });
+
+  after(async () => {
+    await prepared?.close();
+  });
+
+  test('switch off: no table_lookup stage and no table:0 list', async () => {
+    const off = await run({ RAG_TABLE_LOOKUP: 'false' });
+    assert.ok(!off.stages.some((stage) => stage.name === 'table_lookup'));
+    assert.ok(!off.candidates.some((candidate) => candidate.legs && 'table:0' in candidate.legs));
+    assert.ok(!off.stages.some((stage) => stage.counts && 'table_row_attached' in stage.counts));
+  });
+
+  test('switch on: the row chunk heads table:0 and is in the context; detail carries counts only', async () => {
+    const on = await run({ RAG_TABLE_LOOKUP: 'true' });
+    const stage = on.stages.find((entry) => entry.name === 'table_lookup');
+    assert.equal(stage?.status, 'ok', JSON.stringify(stage));
+    assert.match(stage?.detail ?? '', /^tokens=\d+ rows=1$/);
+    const row = on.candidates.find((candidate) => candidate.chunk_id === chunkId);
+    assert.ok(row, `candidates: ${JSON.stringify(on.candidates.map((candidate) => candidate.legs))}`);
+    assert.equal(row.legs?.['table:0'], 1, JSON.stringify(row.legs));
+    assert.ok(on.kept.some((chunk) => chunk.chunk_id === chunkId), 'kept in the context');
+    assert.ok(on.context.includes('drovask'), 'the row chunk text is in the context');
+  });
+
+  test('a narrowing filter makes the stage stand down with the reason; a version scope alone does not', async () => {
+    const narrowed = await run({ RAG_TABLE_LOOKUP: 'true' }, { retrievalFilters: { documentIds: [documentId] } });
+    const stage = narrowed.stages.find((entry) => entry.name === 'table_lookup');
+    assert.equal(stage?.status, 'disabled');
+    assert.equal(stage?.detail, 'narrowing_filters');
+    assert.ok(!narrowed.candidates.some((candidate) => candidate.legs && 'table:0' in candidate.legs));
+
+    const scoped = await run({ RAG_TABLE_LOOKUP: 'true', RAG_VERSION_SCOPE: 'true' }, { retrievalFilters: { versionScope: 'all' } });
+    assert.equal(scoped.stages.find((entry) => entry.name === 'table_lookup')?.status, 'ok');
+  });
+
+  test('the eval override of TableLookupParams.weight changes the fused score of the row chunk', async () => {
+    const base = await run({ RAG_TABLE_LOOKUP: 'true' });
+    const heavier = await run({ RAG_TABLE_LOOKUP: 'true' }, { stageOverrides: { retrievalOverrides: { tableLookup: { weight: 3 } } } });
+    const score = (result: typeof base) => result.candidates.find((candidate) => candidate.chunk_id === chunkId)?.fused_score ?? 0;
+    assert.ok(score(heavier) > score(base), `${score(heavier)} > ${score(base)}`);
+  });
+
+  test('an RPC failure skips the stage and the other lists fuse as without it', async () => {
+    await db.exec('ALTER FUNCTION public.rag_table_lookup(text, text[], integer, integer, jsonb, text[]) RENAME TO rag_table_lookup_hidden');
+    try {
+      const failed = await run({ RAG_TABLE_LOOKUP: 'true' });
+      const off = await run({ RAG_TABLE_LOOKUP: 'false' });
+      assert.equal(failed.stages.find((entry) => entry.name === 'table_lookup')?.status, 'skipped');
+      assert.deepEqual(
+        failed.candidates.map((candidate) => [candidate.chunk_id, candidate.fused_score]),
+        off.candidates.map((candidate) => [candidate.chunk_id, candidate.fused_score]),
+      );
+    } finally {
+      await db.exec('ALTER FUNCTION public.rag_table_lookup_hidden(text, text[], integer, integer, jsonb, text[]) RENAME TO rag_table_lookup');
+    }
+  });
+});
