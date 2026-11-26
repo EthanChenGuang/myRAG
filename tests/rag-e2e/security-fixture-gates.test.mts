@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { startQueuedHarness, type QueuedHarness } from '../../eval/harness/queued-ingest.mts';
+import { QUEUED_IDS, startQueuedHarness, type QueuedHarness } from '../../eval/harness/queued-ingest.mts';
 import type { DocumentParser } from '@/lib/rag/ingest/parsers/shared';
 import type { IngestEnvInput } from '@/lib/rag/ingest/config';
 import type { TenantScope } from '@/lib/rag/tenant/scope';
@@ -132,9 +132,13 @@ describe('the security fixture corpus is an absolute gate on the inline and the 
     llama: typeof import('@/lib/rag/ingest/parsers/llamaparse-v2');
     docling: typeof import('@/lib/rag/ingest/parsers/sidecar-docling');
     contracts: typeof import('@/lib/rag-eval/contracts.generated');
+    rescan: typeof import('@/lib/rag/security/rescan');
+    cli: typeof import('@/lib/rag/ingest/rebuild/cli');
+    admin: typeof import('@/lib/rag/ingest/quarantine-admin');
   };
   let current: GateCase | null = null;
   let env: IngestEnvInput = {};
+  let gateEnv: IngestEnvInput = {};
   const signal = () => new AbortController().signal;
 
   /** Parser stand-in: what a parser extracts from the current fixture, the hidden sentence included like any visible text. */
@@ -180,6 +184,9 @@ describe('the security fixture corpus is an absolute gate on the inline and the 
       llama: await import('@/lib/rag/ingest/parsers/llamaparse-v2'),
       docling: await import('@/lib/rag/ingest/parsers/sidecar-docling'),
       contracts: await import('@/lib/rag-eval/contracts.generated'),
+      rescan: await import('@/lib/rag/security/rescan'),
+      cli: await import('@/lib/rag/ingest/rebuild/cli'),
+      admin: await import('@/lib/rag/ingest/quarantine-admin'),
     };
     m.objectStore.resetObjectStoreForTests();
     const base = m.deps.getIngestDeps().ingestEnv();
@@ -190,6 +197,7 @@ describe('the security fixture corpus is an absolute gate on the inline and the 
       RAG_OUTPUT_LINK_ALLOWLIST: ALLOWLIST,
       NEXT_PUBLIC_SITE_URL: SITE_URL,
     };
+    gateEnv = env;
     m.deps.setIngestDepsForTests({ ingestEnv: (): IngestEnvInput => env });
     m.config.resetIngestConfigForTests();
     const sidecar = harness.fakes.sidecar;
@@ -208,6 +216,13 @@ describe('the security fixture corpus is an absolute gate on the inline and the 
     (await harness.rows('SELECT status, is_current, hidden_text_check, metadata FROM documents WHERE id = $1', [documentId]))[0] as Row;
   const chunksOf = (documentId: string) => harness.rows('SELECT content, lexical_text, status FROM document_chunks WHERE document_id = $1', [documentId]);
   const normalized = (text: unknown) => String(text ?? '').replace(/\s/g, '');
+  /** An admin of the tenant: the personal owner, or the organization's owner. */
+  const adminOf = async (tenantKey: string): Promise<string> => {
+    const id = tenantKey.slice(2);
+    if (tenantKey.startsWith('u:')) return id;
+    const [org] = await harness.rows('SELECT owner_id FROM organizations WHERE id = $1', [id]);
+    return String(org?.owner_id);
+  };
 
   async function inline(fixture: GateCase, scope: TenantScope): Promise<{ status: string; documentId: string }> {
     const result = await m.ingest.ingest({
@@ -307,5 +322,226 @@ describe('the security fixture corpus is an absolute gate on the inline and the 
       current = fixture;
       await assertGate(fixture, 'queued', await queued(fixture, harness.scopeA));
     }
+  });
+
+  describe('rescan of stored documents: explicit, per check, under the configured mode (D-47)', () => {
+    const byName = (name: string) => {
+      const found = CASES.find((fixture) => fixture.name === name);
+      assert.ok(found, name);
+      return found;
+    };
+    const ids: Record<string, string> = {};
+    const tenantOf = async (documentId: string) => String((await harness.rows('SELECT tenant_key FROM documents WHERE id = $1', [documentId]))[0]?.tenant_key);
+    const withChecks = (hidden: string, links: string) => {
+      env = { ...gateEnv, RAG_HIDDEN_TEXT_CHECK: hidden, RAG_INGEST_LINK_CHECK: links };
+      m.config.resetIngestConfigForTests();
+    };
+    const seedCache = async (tenantKey: string) =>
+      harness.db.query(
+        `INSERT INTO public.rag_semantic_cache (tenant_key, key_hash, embedding_profile_id, embedding, query_text_masked, answer, source_versions, is_refusal, expires_at)
+         VALUES ($1, 'k', 'p1', '[1,0,0,0]'::halfvec, 'masked placeholder', '{}'::jsonb, '[]'::jsonb, false, now() + interval '1 hour')`,
+        [tenantKey],
+      );
+    const cacheRows = async (tenantKey: string) => Number((await harness.rows('SELECT count(*)::int AS n FROM public.rag_semantic_cache WHERE tenant_key = $1', [tenantKey]))[0]?.n);
+    const parseMdOf = async (documentId: string) => {
+      const [row] = await harness.rows('SELECT tenant_key, lineage_id, version FROM documents WHERE id = $1', [documentId]);
+      const found = await m.objectStore.getObjectStore().get(`${row?.tenant_key}/${row?.lineage_id}/${row?.version}/parse.md`, { signal: signal() });
+      return found ? new TextDecoder().decode(found.bytes) : null;
+    };
+    const io = () => {
+      const out: string[] = [];
+      const err: string[] = [];
+      return { out, err, io: { out: (line: string) => void out.push(line), err: (line: string) => void err.push(line) } };
+    };
+
+    before(async () => {
+      await harness.db.exec("UPDATE documents SET status = 'deleted', is_current = false WHERE status <> 'deleted'");
+      await harness.db.query('INSERT INTO admin_users (id) VALUES ($1), ($2) ON CONFLICT DO NOTHING', [QUEUED_IDS.userA, QUEUED_IDS.userB]);
+      withChecks('off', 'off');
+      // Tenant B: one hidden-text PDF, one off-allowlist link, two clean files. Tenant A: another hidden-text PDF and link file.
+      for (const [name, scope] of [
+        ['white-on-white.pdf', harness.scopeB],
+        ['bad-url.md', harness.scopeB],
+        ['clean-plain.pdf', harness.scopeB],
+        ['clean-en.md', harness.scopeB],
+        ['tiny-font.pdf', harness.scopeA],
+        ['bad-email.md', harness.scopeA],
+      ] as const) {
+        const fixture = { ...byName(name) };
+        current = fixture;
+        const result = await m.ingest.ingest({
+          scope,
+          source: 'config_upload',
+          sourceKey: `rescan/${name}`,
+          file: fixture.bytes,
+          filename: fixture.name,
+          mimeType: fixture.mime,
+          docType: 'general',
+          signal: signal(),
+        });
+        assert.equal(result.status, 'ready', `${name} is indexed with both checks off`);
+        ids[name] = String(result.documentId);
+      }
+    });
+
+    after(() => {
+      env = gateEnv;
+      m.config.resetIngestConfigForTests();
+    });
+
+    test('with the mode off the command refuses with a message and changes nothing', async () => {
+      withChecks('off', 'off');
+      const before = await harness.rows("SELECT id, status, metadata FROM documents WHERE status <> 'deleted' ORDER BY id");
+      const result = await m.rescan.rescanDocuments({ check: 'hidden_text' });
+      assert.deepEqual(result, { ok: false, reason: 'check_off' });
+      const run = io();
+      assert.equal(await m.cli.main(['rescan', '--check', 'links'], run.io), 3);
+      assert.match(run.err.join('\n'), /RAG_INGEST_LINK_CHECK is off/);
+      assert.deepEqual(await harness.rows("SELECT id, status, metadata FROM documents WHERE status <> 'deleted' ORDER BY id"), before);
+    });
+
+    test('a dry run reports the one affected document and writes nothing', async () => {
+      withChecks('quarantine', 'off');
+      const tenantB = await tenantOf(ids['white-on-white.pdf'] as string);
+      const before = await harness.rows("SELECT id, status, hidden_text_check, metadata FROM documents WHERE status <> 'deleted' ORDER BY id");
+      const parseBefore = await parseMdOf(ids['white-on-white.pdf'] as string);
+      const result = await m.rescan.rescanDocuments({ check: 'hidden_text', tenantKey: tenantB, dryRun: true });
+      assert.ok(result.ok, JSON.stringify(result));
+      assert.equal(result.report.dryRun, true);
+      assert.equal(result.report.checked, 4);
+      assert.deepEqual(result.report.affectedIds, [ids['white-on-white.pdf']]);
+      assert.equal(result.report.quarantined, 0);
+      assert.deepEqual(await harness.rows("SELECT id, status, hidden_text_check, metadata FROM documents WHERE status <> 'deleted' ORDER BY id"), before);
+      assert.equal(await parseMdOf(ids['white-on-white.pdf'] as string), parseBefore);
+      const run = io();
+      assert.equal(await m.cli.main(['rescan', '--check', 'hidden_text', '--tenant', tenantB, '--dry-run'], run.io), 0);
+      assert.match(run.out.join('\n'), /dry run/);
+      assert.ok(run.out.join('\n').includes(ids['white-on-white.pdf'] as string), 'the CLI prints the affected ids');
+    });
+
+    test('hidden text: the run quarantines the affected document of the tenant, rewrites its parse output, empties the tenant cache and leaves the rest', async () => {
+      withChecks('quarantine', 'off');
+      const white = ids['white-on-white.pdf'] as string;
+      const tenantB = await tenantOf(white);
+      const tenantA = await tenantOf(ids['tiny-font.pdf'] as string);
+      await seedCache(tenantB);
+      await seedCache(tenantA);
+      const sentence = String(byName('white-on-white.pdf').hiddenText);
+      assert.ok(normalized(await parseMdOf(white)).includes(normalized(sentence)), 'the stored parse output still holds the sentence');
+
+      const result = await m.rescan.rescanDocuments({ check: 'hidden_text', tenantKey: tenantB });
+      assert.ok(result.ok, JSON.stringify(result));
+      assert.deepEqual(result.report.affectedIds, [white]);
+      assert.equal(result.report.quarantined, 1);
+      assert.equal(result.report.unavailable, 0);
+
+      const document = await documentOf(white);
+      assert.equal(document.status, 'quarantined');
+      assert.equal(document.hidden_text_check, 'hidden_found');
+      const reasons = (((document.metadata as Row).quarantine as Row).reasons as unknown[]).map((reason) => m.contracts.QuarantineReasonSchema.parse(reason));
+      assert.deepEqual(reasons.map((reason) => reason.kind), ['hidden_text']);
+      assert.ok(reasons[0]?.kind === 'hidden_text' && reasons[0].spans.some((span) => span.reason === 'color_near_background'));
+      assert.ok((await chunksOf(white)).every((chunk) => chunk.status === 'quarantined'), 'its chunks leave retrieval');
+      assert.ok(!normalized(await parseMdOf(white)).includes(normalized(sentence)), 'parse.md is rewritten without the sentence');
+      assert.equal(await cacheRows(tenantB), 0, "the tenant's semantic cache is emptied");
+      assert.equal(await cacheRows(tenantA), 1, "another tenant's cache is kept");
+
+      for (const name of ['bad-url.md', 'clean-plain.pdf', 'clean-en.md']) {
+        const other = await documentOf(ids[name] as string);
+        assert.equal(other.status, 'ready', `${name} stays ready`);
+      }
+      assert.equal((await documentOf(ids['clean-plain.pdf'] as string)).hidden_text_check, 'clean');
+      assert.equal((await documentOf(ids['clean-en.md'] as string)).hidden_text_check, 'not_checked');
+      const untouched = await documentOf(ids['tiny-font.pdf'] as string);
+      assert.equal(untouched.status, 'ready', '--tenant limits the run');
+      assert.equal(untouched.hidden_text_check, null);
+      assert.equal((untouched.metadata as Row).security_rescan, undefined);
+
+      const listed = await m.admin.listQuarantine({ actorUserId: await adminOf(tenantB), limit: 100, signal: signal() });
+      assert.ok(listed.ok && listed.items.some((item) => item.documentId === white && item.reasons[0]?.kind === 'hidden_text'), 'the admin list shows it');
+    });
+
+    test('a second run skips the quarantined document and the documents recorded clean for the current rules', async () => {
+      withChecks('quarantine', 'off');
+      const tenantB = await tenantOf(ids['clean-plain.pdf'] as string);
+      const requests = harness.fakes.sidecar.hiddenTextRequests.length;
+      const result = await m.rescan.rescanDocuments({ check: 'hidden_text', tenantKey: tenantB });
+      assert.ok(result.ok, JSON.stringify(result));
+      assert.equal(result.report.checked, 3, 'the quarantined version is not a candidate');
+      assert.equal(result.report.skipped, 1, 'the PDF recorded clean for these rules is skipped');
+      assert.deepEqual(result.report.affectedIds, []);
+      assert.equal(harness.fakes.sidecar.hiddenTextRequests.length, requests, 'no checker call for a skipped document');
+    });
+
+    test('links: the run quarantines the off-allowlist document with its target and leaves the clean ones', async () => {
+      withChecks('off', 'quarantine');
+      const link = ids['bad-url.md'] as string;
+      const tenantB = await tenantOf(link);
+      const result = await m.rescan.rescanDocuments({ check: 'links', tenantKey: tenantB });
+      assert.ok(result.ok, JSON.stringify(result));
+      assert.deepEqual(result.report.affectedIds, [link]);
+      const document = await documentOf(link);
+      assert.equal(document.status, 'quarantined');
+      const reasons = (((document.metadata as Row).quarantine as Row).reasons as unknown[]).map((reason) => m.contracts.QuarantineReasonSchema.parse(reason));
+      assert.ok(reasons[0]?.kind === 'untrusted_link');
+      assert.deepEqual(reasons[0].targets, byName('bad-url.md').targets);
+      assert.ok((await chunksOf(link)).every((chunk) => chunk.status === 'quarantined'));
+      for (const name of ['clean-plain.pdf', 'clean-en.md']) assert.equal((await documentOf(ids[name] as string)).status, 'ready');
+      assert.equal((await documentOf(ids['bad-email.md'] as string)).status, 'ready', '--tenant limits the run');
+    });
+
+    test('a released document is not quarantined again for what the admin reviewed', async () => {
+      withChecks('quarantine', 'quarantine');
+      for (const [name, check] of [['white-on-white.pdf', 'hidden_text'], ['bad-url.md', 'links']] as const) {
+        const id = ids[name] as string;
+        const tenant = await tenantOf(id);
+        const released = await m.admin.releaseQuarantined({ documentId: id, actorUserId: await adminOf(tenant), signal: signal() });
+        assert.ok(released.ok, JSON.stringify(released));
+        assert.equal((await documentOf(id)).status, 'ready', `${name} is released`);
+        const result = await m.rescan.rescanDocuments({ check, tenantKey: tenant });
+        assert.ok(result.ok, JSON.stringify(result));
+        assert.ok(!result.report.affectedIds.includes(id), `${name} is not affected again`);
+        assert.equal((await documentOf(id)).status, 'ready', `${name} stays ready`);
+      }
+    });
+
+    test('flag records the reports and quarantines nothing', async () => {
+      withChecks('flag', 'flag');
+      const tiny = ids['tiny-font.pdf'] as string;
+      const email = ids['bad-email.md'] as string;
+      const tenantA = await tenantOf(tiny);
+      const hidden = await m.rescan.rescanDocuments({ check: 'hidden_text', tenantKey: tenantA });
+      assert.ok(hidden.ok, JSON.stringify(hidden));
+      assert.deepEqual(hidden.report.affectedIds, [tiny]);
+      assert.equal(hidden.report.flagged, 1);
+      assert.equal(hidden.report.quarantined, 0);
+      const links = await m.rescan.rescanDocuments({ check: 'links', tenantKey: tenantA });
+      assert.ok(links.ok, JSON.stringify(links));
+      assert.deepEqual(links.report.affectedIds, [email]);
+      const tinyRow = await documentOf(tiny);
+      assert.equal(tinyRow.status, 'ready');
+      assert.equal(tinyRow.hidden_text_check, 'hidden_found');
+      assert.equal(m.contracts.HiddenTextReportSchema.parse((tinyRow.metadata as Row).hidden_text_report).status, 'hidden_found');
+      assert.equal((tinyRow.metadata as Row).quarantine, undefined);
+      const emailRow = await documentOf(email);
+      assert.equal(emailRow.status, 'ready');
+      assert.deepEqual(((emailRow.metadata as Row).link_check as Row).status, 'untrusted_found');
+      assert.equal((emailRow.metadata as Row).quarantine, undefined);
+    });
+
+    test('the CLI refuses bad arguments, and start --mechanism rescan still points to the rescan command', async () => {
+      withChecks('quarantine', 'quarantine');
+      for (const argv of [['rescan'], ['rescan', '--check', 'images'], ['rescan', '--check', 'links', '--tenant', 'not-a-tenant'], ['rescan', '--check', 'links', '--dry-run', '--dry-run']]) {
+        const run = io();
+        assert.equal(await m.cli.main(argv, run.io), 2, argv.join(' '));
+      }
+      assert.deepEqual(m.cli.parseRebuildArgs(['rescan', '--check', 'links', '--tenant', 's:default', '--dry-run']), {
+        ok: true,
+        command: 'rescan',
+        check: 'links',
+        tenantKey: 's:default',
+        dryRun: true,
+      });
+    });
   });
 });
