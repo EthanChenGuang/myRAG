@@ -116,6 +116,8 @@ export interface Harness {
   ingestDeps: typeof import('@/lib/rag/ingest/deps');
   ingestConfig: typeof import('@/lib/rag/ingest/config');
   ragDeps: typeof import('@/lib/rag/deps');
+  /** Legacy queries use the like-for-like fixture production model (default) or the stock fixture embedder. */
+  likeForLike: boolean;
   /** Selects the database and deployment mode every later call uses. */
   use(db: PGlite, mode: DeploymentMode): Promise<void>;
   embedding(...argv: string[]): Promise<CliResult>;
@@ -150,6 +152,7 @@ export async function startHarness(): Promise<Harness> {
     edge,
     endpoints,
     workDir: fs.mkdtempSync(path.join(os.tmpdir(), 'finetune-lifecycle-')),
+    likeForLike: true,
     env: envModule.env,
     rag: await import('@/lib/rag'),
     activeProfile: await import('@/lib/rag/embeddings/active-profile'),
@@ -196,7 +199,7 @@ export async function startHarness(): Promise<Harness> {
       harness.slot.resetFinetuneProbeCacheForTests();
       harness.activeProfile.resetActiveProfileForTests();
       harness.ragDeps.resetRagDepsForTests();
-      harness.ragDeps.setRagDepsForTests({ embedder: async (text: string) => productionModel(text) });
+      if (harness.likeForLike) harness.ragDeps.setRagDepsForTests({ embedder: async (text: string) => productionModel(text) });
     },
     async close() {
       harness.ingestDeps.resetIngestDepsForTests();
