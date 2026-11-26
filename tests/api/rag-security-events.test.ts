@@ -306,8 +306,7 @@ describe('GET link-previews', () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(Object.keys(body).sort()).toEqual(['hosts_not_allowlisted', 'preview_hosts', 'state', 'success']);
-      const { success: _success, ...view } = body;
-      return LinkPreviewStatusSchema.parse(view);
+      return LinkPreviewStatusSchema.parse({ state: body.state, preview_hosts: body.preview_hosts, hosts_not_allowlisted: body.hosts_not_allowlisted });
     };
     preview.hosts = null;
     expect(await status()).toEqual({ state: 'unknown', preview_hosts: [], hosts_not_allowlisted: [] });

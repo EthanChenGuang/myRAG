@@ -1,4 +1,4 @@
-import { acknowledgeSecurityAlert } from '@/lib/rag/security/security-admin';
+import { acknowledgeSecurityAlert } from '@/lib/rag';
 import { admitSecurityActor, jsonNoStore, securityFailure } from '../../../_responses';
 
 export const runtime = 'nodejs';

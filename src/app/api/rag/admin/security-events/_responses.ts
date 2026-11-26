@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
 import { adminDenied, checkAdmin } from '@/lib/admin-route-auth';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { verifyRagUser, type RagAdminDb } from '@/lib/rag';
-import { resolveAdminTenants, type SecurityActor, type SecurityAdminDb, type SecurityFailure } from '@/lib/rag/security/security-admin';
+import { resolveAdminTenants, verifyRagUser, type RagAdminDb, type SecurityActor, type SecurityAdminDb, type SecurityFailure } from '@/lib/rag';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
 

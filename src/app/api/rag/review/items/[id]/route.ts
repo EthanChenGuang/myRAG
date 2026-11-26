@@ -1,8 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { checkAdmin } from '@/lib/admin-route-auth';
-import { getReviewItem, isReviewItemId, openReviewSession, REVIEW_NO_STORE, reviewNotFound, reviewUnavailable } from '@/lib/rag';
-import { checkItemDetails, checkReasonOf, type SecurityAdminDb } from '@/lib/rag/security/security-admin';
+import {
+  checkItemDetails,
+  checkReasonOf,
+  getReviewItem,
+  isReviewItemId,
+  openReviewSession,
+  REVIEW_NO_STORE,
+  reviewNotFound,
+  reviewUnavailable,
+  type ReviewSnapshotReader,
+  type SecurityAdminDb,
+} from '@/lib/rag';
 
 export const runtime = 'nodejs';
 
@@ -28,7 +38,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     }
     if (checkReasonOf(result.item) === null) return NextResponse.json(result.item, { headers: REVIEW_NO_STORE });
     const deploymentAdmin = (await checkAdmin(request)).ok;
-    const details = await checkItemDetails(session.ssr, admin as unknown as SecurityAdminDb, result.item, { deploymentAdmin });
+    const details = await checkItemDetails(session.ssr as unknown as ReviewSnapshotReader, admin as unknown as SecurityAdminDb, result.item, { deploymentAdmin });
     return NextResponse.json(details ? { ...result.item, check_details: details } : result.item, { headers: REVIEW_NO_STORE });
   } catch {
     console.error('[Review] item read failed');

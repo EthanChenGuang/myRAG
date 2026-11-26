@@ -568,7 +568,7 @@ export function checkReasonOf(item: Pick<ReviewItem, 'reasons'>): CheckReason | 
   return CHECK_REASONS.find((reason) => (reasons as readonly string[]).includes(reason)) ?? null;
 }
 
-interface SnapshotReader {
+export interface ReviewSnapshotReader {
   from(table: string): { select(columns: string): FilterBuilder };
 }
 
@@ -578,7 +578,7 @@ interface SnapshotReader {
  * item's tenant. Null for any other item, which then returns exactly as before.
  */
 export async function checkItemDetails(
-  ssr: SnapshotReader,
+  ssr: ReviewSnapshotReader,
   db: SecurityAdminDb,
   item: Pick<ReviewItem, 'id' | 'tenant_key' | 'reasons'>,
   actor: { deploymentAdmin: boolean },

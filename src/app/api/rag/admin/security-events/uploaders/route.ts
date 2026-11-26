@@ -1,5 +1,5 @@
 import { z } from 'zod/v3';
-import { listSecurityUploaders, readSecuritySettings } from '@/lib/rag/security/security-admin';
+import { listSecurityUploaders, readSecuritySettings } from '@/lib/rag';
 import { admitSecurityActor, CURSOR_PATTERN, cursorOffset, invalidRequest, jsonNoStore, securityFailure, zodDetails } from '../_responses';
 
 export const runtime = 'nodejs';

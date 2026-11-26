@@ -1,5 +1,5 @@
 import { getWhatsAppClient } from '@/lib/whatsapp/client-factory';
-import { linkPreviewStatus } from '@/lib/rag/security/security-admin';
+import { linkPreviewStatus } from '@/lib/rag';
 import { admitSecurityActor, jsonNoStore } from '../_responses';
 
 export const runtime = 'nodejs';
