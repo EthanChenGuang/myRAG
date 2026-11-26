@@ -216,8 +216,7 @@ function expectedResults(chunks: ChunkSpec[], tenant: string, eff: EffectiveMap,
   const scores = bm25Reference({ docs: docs.map((d) => d.tokens), query: [...new Set(call.tokens)], k1: call.k1 ?? 1.2, b: call.b ?? 0.75, stats });
   return docs
     .map((d, i) => ({ id: d.id, score: scores[i] as number }))
-    .sort((x, y) => (Math.abs(y.score - x.score) > 1e-9 ? y.score - x.score : x.id < y.id ? -1 : x.id > y.id ? 1 : 0))
-    .slice(0, call.limit ?? 200);
+    .sort((x, y) => (Math.abs(y.score - x.score) > 1e-9 ? y.score - x.score : x.id < y.id ? -1 : x.id > y.id ? 1 : 0));
 }
 
 async function bm25(db: PGlite, tenant: string, call: Call): Promise<Row[]> {
@@ -244,17 +243,25 @@ async function bm25(db: PGlite, tenant: string, call: Call): Promise<Row[]> {
   ).rows;
 }
 
-function assertMatchesReference(rows: Row[], expected: Expected[], label: string): void {
-  assert.deepEqual(
-    rows.map((r) => r.chunk_id),
-    expected.map((e) => e.id),
-    `${label}: order`,
-  );
+/**
+ * Rank by rank, the reference score of the returned chunk equals the reference score expected at that rank, and the returned score equals
+ * it. Scores that are mathematically equal can differ by one unit in the last place in both implementations (b = 1 makes tf / dl the
+ * only input), so such near-ties may come in either order; exact ties are checked separately.
+ */
+function assertMatchesReference(rows: Row[], expected: Expected[], label: string, limit = 200): void {
+  const want = expected.slice(0, limit);
+  const byId = new Map(expected.map((e) => [e.id, e.score]));
+  const tol = (x: number): number => 1e-9 * Math.max(1, Math.abs(x));
+  assert.equal(rows.length, want.length, `${label}: row count`);
+  assert.equal(new Set(rows.map((r) => r.chunk_id)).size, rows.length, `${label}: distinct chunks`);
   rows.forEach((row, i) => {
-    const want = (expected[i] as Expected).score;
+    const target = (want[i] as Expected).score;
+    const ref = byId.get(String(row.chunk_id));
+    assert.ok(ref !== undefined, `${label}: rank ${i + 1} returned a chunk the filter does not admit`);
+    assert.ok(Math.abs(ref - target) <= tol(target), `${label}: rank ${i + 1} order (reference ${ref} where ${target} is expected)`);
     const got = Number(row.lexical_score);
     // lexical_score is real, as in hybrid_search_chunks: compare to 1e-6 relative to the score once it exceeds 1.
-    assert.ok(Math.abs(got - want) <= 1e-6 * Math.max(1, Math.abs(want)), `${label}: rank ${i + 1} score ${got} vs reference ${want}`);
+    assert.ok(Math.abs(got - ref) <= 1e-6 * Math.max(1, Math.abs(ref)), `${label}: rank ${i + 1} score ${got} vs reference ${ref}`);
     assert.equal(row.rank, i + 1, `${label}: rank`);
     assert.equal(row.leg, 'lexical');
     assert.equal(row.dense_mode, 'n/a');
@@ -264,6 +271,15 @@ function assertMatchesReference(rows: Row[], expected: Expected[], label: string
 async function errorOf(db: PGlite, sql: string, params: unknown[] = []): Promise<unknown> {
   try {
     await db.query(sql, params);
+  } catch (error) {
+    return error;
+  }
+  return null;
+}
+
+async function execErrorOf(db: PGlite, sql: string): Promise<unknown> {
+  try {
+    await db.exec(sql);
   } catch (error) {
     return error;
   }
@@ -374,8 +390,7 @@ for (const mode of MODES) {
         assert.ok(expected.length > 0, `query ${tokens.join(' ')} matches`);
         assertMatchesReference(await bm25(db, tenantA.key, { tokens, cap: 0 }), expected, `cap 0 ${tokens.join(' ')}`);
         assertMatchesReference(await bm25(db, tenantA.key, { tokens }), expected, `default cap ${tokens.join(' ')}`);
-        const top5 = expectedResults(seeder.chunks, tenantA.key, eff, { tokens, limit: 5 });
-        assertMatchesReference(await bm25(db, tenantA.key, { tokens, limit: 5 }), top5, `limit 5 ${tokens.join(' ')}`);
+        assertMatchesReference(await bm25(db, tenantA.key, { tokens, limit: 5 }), expected, `limit 5 ${tokens.join(' ')}`, 5);
       }
     });
 
@@ -395,6 +410,11 @@ for (const mode of MODES) {
       const flat = await bm25(db, tenantA.key, { tokens: ['w9001'], b: 0 });
       assert.equal(flat.length, 2);
       assert.equal(scoreOf(flat, short.id), scoreOf(flat, long.id));
+      assert.deepEqual(
+        flat.map((r) => r.chunk_id),
+        [short.id, long.id].sort(),
+        'an exact tie is ordered by chunk id',
+      );
       const normal = await bm25(db, tenantA.key, { tokens: ['w9001'] });
       assert.ok(scoreOf(normal, short.id) > scoreOf(normal, long.id), 'with b = 0.75 the shorter chunk scores higher');
     });
@@ -638,7 +658,7 @@ for (const mode of MODES) {
           db,
           files.filter((file) => file < 'supabase/migrations/0900'),
         );
-        const error = await errorOf(db, fs.readFileSync(path.join(REPO_ROOT, MIGRATION), 'utf8'));
+        const error = await execErrorOf(db, fs.readFileSync(path.join(REPO_ROOT, MIGRATION), 'utf8'));
         assert.equal(codeOf(error), '55000', messageOf(error));
       } finally {
         await db.close();
