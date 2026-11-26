@@ -350,7 +350,7 @@ describe('review-labelling.js: case view (D-16, D-19)', () => {
     const panel = loadPanel({
       route: (call) =>
         call.url.endsWith('/chunks')
-          ? { status: 200, body: { item_id: ITEM_A, chunks: [{ chunk_id: CHUNK_1, document_id: DOC_A, available: false }, chunksBody().chunks[1]] } }
+          ? { status: 200, body: { item_id: ITEM_A, chunks: [{ chunk_id: CHUNK_1, document_id: DOC_A, available: false }, (chunksBody().chunks as Json[])[1]] } }
           : undefined,
     });
     await openFirstCase(panel);
