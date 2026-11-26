@@ -60,6 +60,8 @@ def fixture_run(tmp_path_factory):
         code = _run(out)
     finally:
         capture.undo()
+    if code != 0:
+        pytest.fail(f"fixture run exited {code}: {stderr.getvalue()[-2000:]}")
     report = json.loads((out / pipeline.PIPELINE_REPORT_FILE).read_text())
     run_dir = out / pipeline.BUNDLES_DIR / report["run_id"]
     return {
@@ -225,6 +227,9 @@ def test_invariant_no_kept_query_overlaps_a_golden_question(fixture_run):
     assert not [q for q in queries if index.overlaps(q, 0.8)]
     filter_report = FilterReport.model_validate_json((run_dir / "filter-report.json").read_text())
     assert filter_report.kept > 0
+    assert filter_report.dropped["golden_overlap"] > 0, "the fixture LLM emits golden questions the filter must drop"
+    mined_report = json.loads((run_dir / "mined-report.json").read_text())
+    assert mined_report["dropped"]["golden_overlap"] > 0, "the synthetic sample asks golden questions"
 
 
 def test_invariant_every_pair_belongs_to_one_tenant(fixture_run):
