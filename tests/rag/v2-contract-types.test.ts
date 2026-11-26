@@ -10,6 +10,7 @@ import type { RefusalRecord } from '@/lib/rag/refusal/types';
 import { RERANK_TEXT_VERSION, type Reranker } from '@/lib/rag/rerank/types';
 import type { RetrievalOverrides } from '@/lib/rag/types';
 import { mintScope } from '@/lib/rag/tenant/scope';
+import { RetrievalFiltersSchema, RetrievalParamsSchema } from '@/lib/rag-eval/contracts.generated';
 
 describe('v2 contract literals type-check', () => {
   test('RETRIEVAL_BACKEND_IDS and RERANK_TEXT_VERSION', () => {
@@ -78,5 +79,16 @@ describe('v2 contract literals type-check', () => {
       },
     };
     expect(reranker.scoreSemantics).toBe('relative');
+  });
+});
+
+describe('Phase 4.2 generated retrieval contracts', () => {
+  test('a rerank cap of 25 and a versions filter of all parse', () => {
+    const params = RetrievalParamsSchema.parse({ candidate_pool_size: 25, rerank_input_cap: 25 });
+    expect(params.rerank_input_cap).toBe(25);
+    expect(RetrievalParamsSchema.safeParse({ rerank_input_cap: 24 }).success).toBe(false);
+    const filters = RetrievalFiltersSchema.parse({ versions: 'all' });
+    expect(filters.versions).toBe('all');
+    expect(RetrievalFiltersSchema.safeParse({ versions: 'latest' }).success).toBe(false);
   });
 });

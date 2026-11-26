@@ -1,0 +1,61 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "entry_id": {
+      "format": "uuid",
+      "title": "Entry Id",
+      "type": "string"
+    },
+    "source_language": {
+      "enum": [
+        "zh",
+        "en",
+        "it"
+      ],
+      "title": "Source Language",
+      "type": "string"
+    },
+    "sources": {
+      "items": {
+        "maxLength": 64,
+        "minLength": 1,
+        "type": "string"
+      },
+      "maxItems": 16,
+      "minItems": 1,
+      "title": "Sources",
+      "type": "array"
+    },
+    "target": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Target",
+      "type": "string"
+    },
+    "target_language": {
+      "enum": [
+        "zh",
+        "en",
+        "it"
+      ],
+      "title": "Target Language",
+      "type": "string"
+    },
+    "target_normalized": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Target Normalized",
+      "type": "string"
+    }
+  },
+  "required": [
+    "entry_id",
+    "source_language",
+    "target_language",
+    "sources",
+    "target",
+    "target_normalized"
+  ],
+  "title": "TerminologyTranslationPair",
+  "type": "object"
+}

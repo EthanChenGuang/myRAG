@@ -641,6 +641,61 @@
       "knownGaps": []
     },
     {
+      "name": "RAG_LEXICAL_DICTIONARY",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_LEXICAL_STEM_IT",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_VERSION_SCOPE",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_TABLE_LOOKUP",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_DUP_CLUSTERS",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_RESULT_DIVERSITY",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_IDENTIFIER_INDEX",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_IDENTIFIER_FILTER",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_TERMINOLOGY",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_TERMINOLOGY_DENSE",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_TERMINOLOGY_MINING",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_LOW_THRESHOLD",
       "status": "legacy",
       "knownGaps": [

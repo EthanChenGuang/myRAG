@@ -4,6 +4,7 @@ import { env } from '@/lib/env';
 import { getSupabaseAdmin } from '@/lib/supabase';
 import { loadRagConfig, pipelineSourceOf, type RagEnvInput } from './config';
 import type { RawPipelineEnv } from './lang/resolve';
+import { getLanguageSettings } from './lang/settings';
 import type { EmbeddingProfile } from './embeddings/active-profile';
 import { EmbeddingProfileMismatch } from './embeddings/mrl';
 import { embedText } from './embeddings/openai';
@@ -50,8 +51,8 @@ export interface RagDeps {
   /** The two pipeline variables exactly as the process has them (undefined when unset), for the D-02 startup check. */
   rawPipelineEnv: () => RawPipelineEnv;
   /**
-   * D-24: whether the deployment has chosen its supported languages. null means no language-settings reader is connected through this
-   * seam, and the resolver then applies no language fallback of its own.
+   * D-24: whether the deployment has chosen its supported languages, from the Phase 3.2 reader at call time. A test override of null
+   * means no reader, and the resolver then applies no language fallback of its own.
    */
   languagesConfigured: () => boolean | null;
   /** The semantic answer cache for RAG_SEMANTIC_CACHE, wrapped fail-open; null when the cache is off (D-34, D-35). */
@@ -92,6 +93,14 @@ function readRagEnvInput(): RagEnvInput {
     RAG_HNSW_ITERATIVE_SCAN: process.env.RAG_HNSW_ITERATIVE_SCAN ?? env.RAG_HNSW_ITERATIVE_SCAN,
     RAG_EXACT_SCAN_CUTOFF: process.env.RAG_EXACT_SCAN_CUTOFF ?? env.RAG_EXACT_SCAN_CUTOFF,
     RAG_LEXICAL_TRANSLATION: process.env.RAG_LEXICAL_TRANSLATION ?? env.RAG_LEXICAL_TRANSLATION,
+    RAG_LEXICAL_DICTIONARY: process.env.RAG_LEXICAL_DICTIONARY ?? env.RAG_LEXICAL_DICTIONARY,
+    RAG_LEXICAL_STEM_IT: process.env.RAG_LEXICAL_STEM_IT ?? env.RAG_LEXICAL_STEM_IT,
+    RAG_VERSION_SCOPE: process.env.RAG_VERSION_SCOPE ?? env.RAG_VERSION_SCOPE,
+    RAG_TABLE_LOOKUP: process.env.RAG_TABLE_LOOKUP ?? env.RAG_TABLE_LOOKUP,
+    RAG_DUP_CLUSTERS: process.env.RAG_DUP_CLUSTERS ?? env.RAG_DUP_CLUSTERS,
+    RAG_RESULT_DIVERSITY: process.env.RAG_RESULT_DIVERSITY ?? env.RAG_RESULT_DIVERSITY,
+    RAG_IDENTIFIER_INDEX: process.env.RAG_IDENTIFIER_INDEX ?? env.RAG_IDENTIFIER_INDEX,
+    RAG_IDENTIFIER_FILTER: process.env.RAG_IDENTIFIER_FILTER ?? env.RAG_IDENTIFIER_FILTER,
     RAG_RETRIEVAL_PARAMS_OVERRIDE: process.env.RAG_RETRIEVAL_PARAMS_OVERRIDE ?? env.RAG_RETRIEVAL_PARAMS_OVERRIDE,
     VOYAGE_API_KEY: process.env.VOYAGE_API_KEY ?? env.VOYAGE_API_KEY,
     VOYAGE_BASE_URL: process.env.VOYAGE_BASE_URL ?? env.VOYAGE_BASE_URL,
@@ -164,7 +173,7 @@ const defaults: RagDeps = {
   queryLlm: defaultQueryLlmClient,
   fetch: globalThis.fetch.bind(globalThis),
   rawPipelineEnv: () => ({ RAG_PIPELINE: process.env.RAG_PIPELINE, RAG_INGEST_PIPELINE: process.env.RAG_INGEST_PIPELINE }),
-  languagesConfigured: () => null,
+  languagesConfigured: () => getLanguageSettings().configured,
   semanticCache: () => {
     const deps = getRagDeps();
     return getSemanticCache(loadRagConfig(deps.ragEnv()).semanticCache, semanticCacheIo(deps));

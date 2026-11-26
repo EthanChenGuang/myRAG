@@ -1,5 +1,6 @@
 import type { RpcClient } from '../backend/supabase-rpc';
 import { buildQuarantineReasons, legacyQuarantineReasons, type QuarantineReason } from '../security/quarantine-reasons';
+import { displayUsers, type UserDisplay } from './approval/admin';
 import { removeVersionObjects } from './artifacts';
 import { getIngestDeps } from './deps';
 import { afterPublish } from './post-publish';
@@ -25,6 +26,8 @@ export interface QuarantineItem {
   /** The upload also needed approval (D-36); releasing it counts as the approval. */
   pendingApproval: boolean;
   uploaderId: string | null;
+  /** The uploader's e-mail or name, the id when no display is known; null when no uploader was recorded. Never log it. */
+  uploader: UserDisplay | null;
 }
 
 export interface NotCheckedItem {
@@ -168,6 +171,7 @@ function itemOf(row: Row): QuarantineItem | null {
     hiddenTextCheck: HIDDEN_TEXT_CHECKS.has(hiddenTextCheck ?? '') ? (hiddenTextCheck as QuarantineItem['hiddenTextCheck']) : null,
     pendingApproval: row.pending_approval === true,
     uploaderId: text(row, 'uploader_id'),
+    uploader: null,
   };
 }
 
@@ -200,6 +204,8 @@ export async function listQuarantine(input: ListQuarantineInput): Promise<ListQu
     total = first.rows.length > 0 ? Number(first.rows[0]?.total_count) : 0;
   }
   if (!Number.isFinite(total)) return { ok: false, reason: 'unavailable' };
+  const names = await displayUsers(items.map((item) => item.uploaderId), input.signal);
+  for (const item of items) item.uploader = item.uploaderId === null ? null : { id: item.uploaderId, display: names.get(item.uploaderId) ?? item.uploaderId };
   return { ok: true, items, total, limit, offset };
 }
 

@@ -256,6 +256,21 @@ from rag_sidecar.contracts.routing import (
 from rag_sidecar.contracts.embed import EmbedRequest, EmbedResponse
 from rag_sidecar.contracts.retrieval import RetrievalLegWeights
 from rag_sidecar.contracts.vector_sync import ReconcileReport, VectorSyncSliceReport
+from rag_sidecar.contracts.terminology import (
+    TerminologyCandidate,
+    TerminologyEntry,
+    TerminologyExpansion,
+    TerminologyImportReport,
+    TerminologyImportRow,
+    TerminologyLexicon,
+    TerminologyLexiconTerm,
+    TerminologyMatch,
+    TerminologyParams,
+    TerminologyPreviewRequest,
+    TerminologyPreviewResponse,
+    TerminologyTranslationPair,
+    TerminologyValidationIssue,
+)
 from rag_sidecar.contracts.translation import ChunkTranslation, TranslationSettings
 from rag_sidecar.contracts.versions import (
     EffectiveDateExtraction,
@@ -2186,9 +2201,359 @@ def _feedback_loop_models() -> dict[str, Any]:
         ),
     }
 
+_TERM_ENTRY = "00000000-0000-4000-8000-000000000401"
+_TERM_PAIR = "00000000-0000-4000-8000-000000000402"
+_TERM_SOURCE = LANGUAGE_CODES[0]
+_TERM_TARGET = LANGUAGE_CODES[1]
+
+
+def _term_entry() -> TerminologyEntry:
+    return TerminologyEntry(
+        id=_TERM_ENTRY,
+        layer="shared",
+        canonical="term alpha beta",
+        variants=["termalpha", "alpha beta"],
+        language="any",
+        kind="alias",
+    )
+
+
+def _term_pair() -> TerminologyEntry:
+    return TerminologyEntry(
+        id=_TERM_PAIR,
+        layer="shared",
+        canonical="term alpha beta",
+        variants=["术语甲乙丙"],
+        language=_TERM_SOURCE,
+        kind="translation",
+        source_language=_TERM_SOURCE,
+        target_language=_TERM_TARGET,
+    )
+
+
+def _term_match() -> TerminologyMatch:
+    return TerminologyMatch(
+        surface="termalpha",
+        canonical="term alpha beta",
+        entry_id=_TERM_ENTRY,
+        kind="alias",
+        language="any",
+        layer="shared",
+        start=0,
+        end=9,
+    )
+
+
+def _term_issue() -> TerminologyValidationIssue:
+    return TerminologyValidationIssue(
+        code="override",
+        severity="warning",
+        row=2,
+        entry_ids=[_TERM_ENTRY],
+        message="the workspace entry overrides a shared entry for the same variant",
+    )
+
+
+def _terminology_models() -> dict[str, Any]:
+    seen = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    return {
+        "TerminologyEntry": _term_entry(),
+        "TerminologyParams": TerminologyParams(),
+        "TerminologyMatch": _term_match(),
+        "TerminologyExpansion": TerminologyExpansion(
+            matches=[_term_match()],
+            expansion_tokens=["term", "alpha", "beta"],
+            dense_text="termalpha term alpha beta",
+            capped=False,
+            version="s12.w3",
+        ),
+        "TerminologyPreviewRequest": TerminologyPreviewRequest(
+            query="what is termalpha", layer="shared", draft_entries=[_term_entry()]
+        ),
+        "TerminologyPreviewResponse": TerminologyPreviewResponse(
+            matches=[_term_match()],
+            original_tokens=["termalpha"],
+            expansion_tokens=["term", "alpha", "beta"],
+            capped=False,
+            overrides=[_term_issue()],
+            issues=[],
+            version="s12.w3",
+        ),
+        "TerminologyImportRow": TerminologyImportRow(
+            canonical="term alpha beta",
+            variants=["termalpha", "alpha beta"],
+            language="any",
+            kind="alias",
+            note="placeholder entry",
+        ),
+        "TerminologyImportReport": TerminologyImportReport(
+            create=1, update=0, unchanged=2, delete=0, issues=[_term_issue()], layer_version_seen=3, applied=False
+        ),
+        "TerminologyValidationIssue": _term_issue(),
+        "TerminologyCandidate": TerminologyCandidate(
+            id="00000000-0000-4000-8000-000000000403",
+            term="termalpha",
+            language=_TERM_SOURCE,
+            support=3,
+            examples=["what is termalpha"],
+            corpus_df=0,
+            status="pending",
+            source="miss_log",
+            first_seen=seen,
+            last_seen=seen,
+        ),
+        "TerminologyLexiconTerm": TerminologyLexiconTerm(normalized="termalpha", language="any", kind="alias"),
+        "TerminologyTranslationPair": _term_translation(),
+        "TerminologyLexicon": TerminologyLexicon(
+            version="s12.w3",
+            entries_sha256=hashlib.sha256(b"terminology-sample").hexdigest(),
+            terms=[TerminologyLexiconTerm(normalized="termalpha", language="any", kind="alias")],
+            translations=[_term_translation()],
+        ),
+    }
+
+
+def _term_translation() -> TerminologyTranslationPair:
+    return TerminologyTranslationPair(
+        entry_id=_TERM_PAIR,
+        source_language=_TERM_SOURCE,
+        target_language=_TERM_TARGET,
+        sources=["术语甲乙丙"],
+        target="term alpha beta",
+        target_normalized="term alpha beta",
+    )
+
+
+def _phase42_models() -> dict[str, Any]:
+    from rag_sidecar.contracts.retrieval import (
+        DiversityParams,
+        DupClusterParams,
+        IdentifierIndexEntry,
+        IdentifierPattern,
+        TableLookupParams,
+        TableRow,
+        VersionRange,
+    )
+
+    return {
+        "TableRow": TableRow(
+            table_key="table-0",
+            row_index=0,
+            header=["Column A", "Column B"],
+            cells=["alpha", "12"],
+            cell_tokens=[["alpha"], ["12"]],
+            chunk_ids=["chunk-001"],
+        ),
+        "TableLookupParams": TableLookupParams(),
+        "DiversityParams": DiversityParams(),
+        "DupClusterParams": DupClusterParams(),
+        "IdentifierPattern": IdentifierPattern(name="reference-code", pattern="[A-Z]{2}-[0-9]{4}"),
+        "IdentifierIndexEntry": IdentifierIndexEntry(raw="AB-0012", normalized="ab0012"),
+        "VersionRange": VersionRange.model_validate({"from": "2024-01-01", "to": "2024-12-31"}),
+    }
+
+
+def _phase42_variants() -> dict[str, dict[str, Any]]:
+    from rag_sidecar.contracts.answers import CitationAlsoIn
+    from rag_sidecar.contracts.eval_run import TraceIdentifier
+    from rag_sidecar.contracts.latency import PreGenerationBudget, TtftBudget
+    from rag_sidecar.contracts.retrieval import (
+        DiversityParams,
+        DupClusterParams,
+        DupClusterProfileEntry,
+        RefusalMetricBlock,
+        RefusalModeTargets,
+        TableLookupParams,
+        VersionRange,
+    )
+
+    block = RefusalMetricBlock(
+        no_answer_count=1,
+        answerable_count=2,
+        false_refusal_rate=0.0,
+        false_refusal_rate_upper_bound=0.5,
+        correct_refusal_rate=1.0,
+    )
+    item = _golden_item()
+    second = GoldSpan(document="reference-b.md", section="Part two", quote="the second value")
+    third = GoldSpan(document="reference-c.md", section="Part two", quote="the second value, copied")
+    flood = item.model_copy(
+        update={
+            "id": "en-duplicate-flood-001",
+            "category": "duplicate_flood",
+            "gold_evidence": [*item.gold_evidence, second, third],
+        }
+    )
+    flood = GoldenItem.model_validate({**flood.model_dump(mode="json"), "evidence_groups": [[0], [1, 2]]})
+    near_miss = GoldenItem.model_validate(
+        {**item.model_dump(mode="json"), "id": "en-identifier-near-miss-001", "category": "identifier_near_miss"}
+    )
+    base_cell = RefusalCell(
+        key="local_bm25|bm25-v1|en|same",
+        provider="local_bm25",
+        model="bm25-v1",
+        query_language="en",
+        pairing="same",
+        threshold=None,
+        status="uncalibrated",
+        tokenizer_version=2,
+        rerank_text_version=1,
+        config_hash="0" * 64,
+        source="fixture",
+        recorded_at="2026-11-26",
+        holdout_evaluations=0,
+        dev=block,
+        holdout=block,
+    )
+    strict_cell = RefusalCell.model_validate(
+        {**base_cell.model_dump(mode="json"), "key": f"{base_cell.key}|strict", "mode": "strict", "threshold": 0.4}
+    )
+    latency = StageLatency(p50_ms=40.0, p95_ms=90.0, n=4)
+    report = _eval_report()
+    metric = MetricValue(value=1.0, n=1)
+    trace = _trace("Twenty days per year.")
+    citation = _citation_record()
+    return {
+        "RetrievalParams:phase42": {
+            "model": "RetrievalParams",
+            "value": RetrievalParams(candidate_pool_size=25, rerank_input_cap=25, mmr_lambda=0.7).model_dump(
+                mode="json"
+            ),
+        },
+        "RetrievalFilters:versions_all": {
+            "model": "RetrievalFilters",
+            "value": RetrievalFilters(versions="all").model_dump(mode="json"),
+        },
+        "RetrievalFilters:versions_range": {
+            "model": "RetrievalFilters",
+            "value": RetrievalFilters(versions=VersionRange.model_validate({"from": "2024-01-01"})).model_dump(
+                mode="json"
+            ),
+        },
+        "RetrievalOverrides:phase42": {
+            "model": "RetrievalOverrides",
+            "value": RetrievalOverrides(
+                rerank_input_cap=25,
+                table_lookup=TableLookupParams(min_cells=3, limit=5, weight=0.5),
+                diversity=DiversityParams(mmr_lambda=0.6),
+                dup_cluster=DupClusterParams(
+                    by_profile={"profile-a": DupClusterProfileEntry(threshold=0.93, source="fixture")}
+                ),
+            ).model_dump(mode="json"),
+        },
+        "RefusalThresholds:per_mode": {
+            "model": "RefusalThresholds",
+            "value": RefusalThresholds(schema_version=2, cells=[base_cell, strict_cell]).model_dump(mode="json"),
+        },
+        "RefusalCalibrationConfig:targets_by_mode": {
+            "model": "RefusalCalibrationConfig",
+            "value": RefusalCalibrationConfig(
+                targets_by_mode={
+                    "strict": RefusalModeTargets(max_false_answer=0.05),
+                    "balanced": RefusalModeTargets(),
+                    "flexible": RefusalModeTargets(),
+                }
+            ).model_dump(mode="json"),
+        },
+        "LatencyBudgets:ttft": {
+            "model": "LatencyBudgets",
+            "value": _latency_budgets()
+            .model_copy(
+                update={
+                    "ttft": {
+                        "chat": {
+                            "hit": TtftBudget(p50_ms=300, p95_ms=600),
+                            "miss": TtftBudget(p50_ms=1200, p95_ms=2500),
+                        },
+                        "voice": {"bypass": TtftBudget(p50_ms=800, p95_ms=1500)},
+                    },
+                    "pre_generation": {"chat": PreGenerationBudget(p95_ms=1500)},
+                }
+            )
+            .model_dump(mode="json"),
+        },
+        "GoldenItem:duplicate_flood": {"model": "GoldenItem", "value": flood.model_dump(mode="json")},
+        "GoldenItem:identifier_near_miss": {"model": "GoldenItem", "value": near_miss.model_dump(mode="json")},
+        "EvalReport:phase42": {
+            "model": "EvalReport",
+            "value": report.model_copy(
+                update={
+                    "overall": report.overall.model_copy(
+                        update={
+                            "ndcg_at_context_k": metric,
+                            "k_zero": metric,
+                            "topk_redundancy": metric,
+                            "intent_coverage": metric,
+                            "identifier_precision": metric,
+                            "near_miss_leakage": MetricValue(value=0.0, n=1),
+                        }
+                    ),
+                    "items": [
+                        report.items[0].model_copy(
+                            update={
+                                "context_k": 8,
+                                "ndcg_at_context_k": 1.0,
+                                "group_count": 1,
+                                "topk_redundancy": 0.125,
+                                "intent_coverage": True,
+                                "identifier_precise": True,
+                                "near_miss_leak": False,
+                            }
+                        )
+                    ],
+                    "ttft": {"miss": latency},
+                    "pre_generation": {"chat": latency},
+                }
+            ).model_dump(mode="json"),
+        },
+        "RagTrace:phase42": {
+            "model": "RagTrace",
+            "value": trace.model_copy(
+                update={
+                    "kept": [
+                        chunk.model_copy(
+                            update={
+                                "dup_cluster_id": "cluster-1",
+                                "document_version": 2,
+                                "is_current": True,
+                                "identifiers_norm": ["ab0012"],
+                            }
+                        )
+                        for chunk in trace.kept
+                    ],
+                    "ttft_ms": 420.0,
+                    "pre_generation_ms": 180.0,
+                    "cache": "miss",
+                    "version_scope": "current",
+                    "topk_redundancy": 0.125,
+                    "identifier": TraceIdentifier(
+                        asked=1, resolved=0, near_miss_dropped=1, fallback=False, suggestions=["AB-0013"]
+                    ),
+                }
+            ).model_dump(mode="json"),
+        },
+        "RagTrace:identifier_not_found": {
+            "model": "RagTrace",
+            "value": _trace(None)
+            .model_copy(update={"refused": True, "refusal_reason": "identifier_not_found"})
+            .model_dump(mode="json"),
+        },
+        "CitationRecord:versions_also_in": {
+            "model": "CitationRecord",
+            "value": citation.model_copy(
+                update={
+                    "isCurrent": False,
+                    "effectiveFrom": date(2024, 1, 1),
+                    "effectiveTo": date(2024, 12, 31),
+                    "alsoIn": [CitationAlsoIn(documentId="doc-0002", filename="reference-copy.md", chunkId="chunk-009")],
+                }
+            ).model_dump(mode="json"),
+        },
+    }
+
 
 def build_samples() -> dict[str, dict[str, Any]]:
-    models = {**_models(), **_feedback_loop_models()}
+    models = {**_models(), **_feedback_loop_models(), **_phase42_models(), **_terminology_models()}
     samples = {name: model.model_dump(mode="json") for name, model in models.items()}
     variants: dict[str, dict[str, Any]] = {
         "AnswerRecord:pending_unlinked": {
@@ -2300,6 +2665,21 @@ def build_samples() -> dict[str, dict[str, Any]]:
             "value": InvoiceFields(confidence=0.0, errors=["no invoice number found"]).model_dump(mode="json"),
         },
     }
+    variants["TerminologyEntry:translation_pair"] = {
+        "model": "TerminologyEntry",
+        "value": _term_pair().model_dump(mode="json"),
+    }
+    variants["TerminologyEntry:suppression"] = {
+        "model": "TerminologyEntry",
+        "value": TerminologyEntry(
+            layer="workspace",
+            canonical="term alpha beta",
+            language="any",
+            kind="alias",
+            suppresses_entry_id=_TERM_ENTRY,
+        ).model_dump(mode="json"),
+    }
     variants.update(_phase32_ingest_contract_variants())
     variants.update(_phase32_query_contract_variants())
+    variants.update(_phase42_variants())
     return {"samples": samples, "variants": variants}

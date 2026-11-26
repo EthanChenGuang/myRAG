@@ -572,3 +572,53 @@ Neither file has a `.single-tenant`/`.multi-tenant` variant, and no migration nu
 - One merge conflict: `eval/harness/fake-edge.mts` (03.2-51 vs the 07-04/07-09 vector sync RPC table on trunk). Kept trunk's `VECTOR_SYNC_RPC_ARGUMENTS` table and added 03.2-51's `hybrid_search_translations` to `GENERIC_RPC_NAME`.
 - No merge-fix commits, no migration renumbering.
 - `rag-sidecar/tests/test_preflight_hidden_text.py::test_off_makes_no_check_and_sends_and_records_exactly_what_it_did_before` (03.2-36) failed once in the full sidecar run and passed on every rerun: it compares job dumps that include the parse attempt's wall-clock `ms`. Left as is; flagged for a follow-up.
+
+## Train 24: 0822, 0851-0854, 0410 r9 and 0471 (to apply after train 24 reaches `origin/main`)
+
+Branch `ci/merge-train-24`, built on `origin/main` 4b05dade (train 23, PR #106). Nothing below has been applied live yet; the orchestrator applies it after the train merges. Production is multi-tenant.
+
+### Merged plans
+| Branch | Plan | Migration |
+|---|---|---|
+| `exec/04.1-12` (contains 04.1-13) | 04.1-09 flip closed, not flipped; 04.1-10 legacy tiers in CI; 04.1-11 docs; 04.1-12 what an operator who sets nothing gets; 04.1-13 language state and the implicit-default resolver | none |
+| `exec/03.2-58` (contains 03.2-40) | 03.2-40 quarantine reasons, explicit rescan, absolute fixture gate; 03.2-58 quarantine panel (Config UI) | 0822_rescan_candidates |
+| `exec/03.2-62` (contains 03.2-61) | 03.2-61 versions and dates panel; 03.2-62 translation targets panel (Config UI) | none |
+| `exec/04.2-01` | 04.2-01 Phase 4.2 contracts | none |
+| `exec/04.2-02` | 04.2-02 eight tuning switches, four stage names, effective lexical version | none |
+| `exec/04.2-03` | 04.2-03 Phase 4.2 storage schema | 0851_lexical_dict_version, 0852_rag_table_rows, 0853_dup_clusters, 0854_identifier_index; 0410 lockdown entries (r9) |
+| `exec/04.2-04` | 04.2-04 tokenizer options, Snowball Italian stemmer | none |
+| `exec/04.1.1-01` | 04.1.1-01 terminology contracts | none |
+| `exec/04.1.1-02` | 04.1.1-02 terminology switches, stage and budgets | none |
+| `exec/04.1.1-03` | 04.1.1-03 terminology schema | 0471_terminology_schema |
+
+### Migrations to apply live, in order
+| # | File | Notes |
+|---|---|---|
+| 1 | `0822_rescan_candidates.sql` | Needs 0801 (`hidden_text_check`), 0804 and 0817 metadata and `rag_assert_tenant_key` (all live). SECURITY INVOKER, read-only, service_role only. |
+| 2 | `0851_lexical_dict_version.sql` | Adds `document_chunks.lexical_dict_version` and a row trigger (SECURITY INVOKER). Existing rows keep null. |
+| 3 | `0852_rag_table_rows.sql` | Needs 0301 and 0401 (`tenant_key` columns, `rag_assert_tenant_key`); stops with 55000 otherwise. New server-only table with two SECURITY DEFINER functions (`rag_table_rows_follow_document`, `rag_purge_hook_table_rows`). |
+| 4 | `0853_dup_clusters.sql` | Needs 0301 and 0401. Adds `dup_cluster_id` and `simhash` to `document_chunks`, a CHECK and a foreign key (one validating scan, no rewrite), a partial index on `document_chunks`, the server-only `rag_dup_clusters` table, `rag_row_tenant_key_guard` and three SECURITY DEFINER functions. |
+| 5 | `0854_identifier_index.sql` | Needs 0853 (`rag_row_tenant_key_guard`; stops with 55000 otherwise). GIN indexes on `document_chunks.identifiers_norm` and `documents.identifiers_norm`, the server-only `rag_identifier_patterns` table, one SECURITY DEFINER purge hook. |
+| 6 | `0410_security_definer_rpc_grants.sql` (r9) | Changed since r8 by +24 lines only (04.2-03, 456ad2f7): guarded REVOKE/GRANT for the six 0852-0854 SECURITY DEFINER functions. 0852-0854 already carry their own REVOKE/GRANT, so r9 keeps 0410 complete for upgrades; run it after 0854. Grants only, so the 0801 re-run rule does not apply. |
+| 7 | `0471_terminology_schema.sql` | Needs `rag_assert_tenant_key` (0403 mode files, live); no dependency on 0820 or 0704/0705. Server-only tables (RLS on, no policies), `rag_term_effective` SECURITY INVOKER, service_role only. 04.1.1-03 assigns the live apply and grant check to plan 04.1.1-15's human checkpoint; it can be applied now (inert while `RAG_TERMINOLOGY=false`) or held for that plan. Its writers come in 0472 (not in this train). |
+
+None of the files has a `.single-tenant`/`.multi-tenant` variant, and no migration number collides (0471 is the first 047x; 0822 follows 0821; 0851-0854 are new). None is folded into the setup files. 0853 and 0854 build indexes on `document_chunks` and `documents` with plain `CREATE INDEX` (write lock for the build); the columns are new and all null, so the builds are cheap, but apply them in a quiet window on large tables.
+
+### Operator actions
+- 03.2-40: apply 0822. After turning on `RAG_HIDDEN_TEXT_CHECK` or `RAG_INGEST_LINK_CHECK` on a deployment with existing documents, run `npm run rag:rebuild -- rescan --check <hidden_text|links> --dry-run`, review the ids, then run it without `--dry-run` (again if it exits 1).
+- 04.2-03: apply 0851, 0852, 0853 and 0854 in that order (after 0820), then 0410 r9. No switch reads the new storage yet; every Phase 4.2 switch defaults off.
+- 04.1.1-03: apply 0471 (see note 7). All three terminology switches stay off (04.1.1-02).
+- 03.2-62: none required; to fill translation coverage after saving targets, run the dry-run command shown in the panel, then the run with a `--budget` in USD.
+- 04.1-09 to 04.1-13, 03.2-58, 03.2-61, 04.2-01, 04.2-02, 04.2-04, 04.1.1-01, 04.1.1-02: none (no env variable, migration or deployment change; retrieval defaults not flipped).
+
+### Deviations
+- Merge conflicts (all additive, both sides kept):
+  - `tests/ui/config-rag-panel-binding.test.ts` (03.2-58 vs 04.1-12 trunk, then 03.2-62): kept the scope-tags, quarantine, versions-dates and translation-targets panel rows.
+  - 04.1.1-01 vs 04.2-01 contracts: `rag-sidecar/src/rag_sidecar/contracts/samples.py` (`build_samples` merges `_phase42_models()` and `_terminology_models()`) and `export_schemas.py` (both export lists); `src/lib/rag-eval/contracts.generated.ts` and `tests/fixtures/contracts/samples.json` regenerated with `npm run gen:schemas` (152 schemas).
+  - 04.1.1-02 vs 04.2-02 switches: `scripts/config-server.js`, `scripts/init-env.js`, `src/lib/env.ts`, `scripts/rag/env-manifest.json`, `src/lib/rag/config.ts` (optional stages, `RagEnvInput`, `applyV2DisabledStages`, `parseTuningSwitches` and `parseTerminologyDense`, memo key), `tests/rag/config.test.ts` and `tests/rag-db/eval-v2-overlay.test.mts` (allow-list keeps the eight Phase 4.2 and the three terminology switches).
+- Fix commits on the train:
+  - 48885d4c: the TS refusal-thresholds loader and calibration status share `parseRefusalThresholds`, which applies the Pydantic rule that `schema_version` is 2 exactly when a cell carries a mode (04.2-01 widened `schema_version` to 1 | 2; the generated Zod has no model validators, so `tests/rag/refusal/gate.test.ts` failed). New test covers both directions.
+  - 80a8befa: `tests/rag/config.test.ts` counts the three terminology fields among the v2 fields that predate Phase 4.2 (only red after 04.2-02 and 04.1.1-02 met).
+  - 7dc80f68: `eval/src/rag_eval/sweep/retrieval.py` `CAP_MIN` 50 → 25 (D-41), so pool-25 sweep cells no longer build cap 50 > pool 25, which the 04.2-01 `RetrievalParams` validator rejects; three grid expectations in `eval/tests/test_sweep_retrieval.py` follow. This is the value plan 04.2-05 Task 3 sets; its nDCG work and the regenerated fixture sweep report stay with 04.2-05 (expect a trivial overlap there).
+- The 04.1.1-01/02 stage-name test failures reported by the executors resolved once both branches merged; no change needed.
+- No migration renumbering.

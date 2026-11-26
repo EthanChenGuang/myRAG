@@ -112,7 +112,7 @@ describe('Phase 4.1 defaults-gate run configs', () => {
 });
 
 describe('run-config validation', () => {
-  test('the allow-list is RAG_PIPELINE, the Phase 4 RAG_ switches, the refusal floor, the value-constrained vendor settings, the five Phase 5.1 SEC switches and the 16 Phase 6 names', () => {
+  test('the allow-list is RAG_PIPELINE, the Phase 4 RAG_ switches, the refusal floor, the eight Phase 4.2 tuning switches, the value-constrained vendor settings, the five Phase 5.1 SEC switches, the 16 Phase 6 names and the three terminology switches', () => {
     assert.deepEqual([...RUN_CONFIG_ENV_ALLOWLIST].sort(), [
       'COHERE_API_KEY',
       'COHERE_BASE_URL',
@@ -120,12 +120,17 @@ describe('run-config validation', () => {
       'RAG_CONTEXT_EDGE_ORDER',
       'RAG_CONTEXT_TAGGING',
       'RAG_CONTEXT_TOKEN_BUDGET',
+      'RAG_DUP_CLUSTERS',
       'RAG_EXACT_SCAN_CUTOFF',
       'RAG_HNSW_ITERATIVE_SCAN',
+      'RAG_IDENTIFIER_FILTER',
+      'RAG_IDENTIFIER_INDEX',
       'RAG_INJECTION_CHECK',
       'RAG_INJECTION_LAKERA',
       'RAG_INJECTION_PROMPT_GUARD',
+      'RAG_LEXICAL_DICTIONARY',
       'RAG_LEXICAL_SEARCH',
+      'RAG_LEXICAL_STEM_IT',
       'RAG_LEXICAL_TRANSLATION',
       'RAG_PARENT_CHILD',
       'RAG_PIPELINE',
@@ -146,12 +151,18 @@ describe('run-config validation', () => {
       'RAG_RERANK_TIER_CHAT',
       'RAG_RERANK_TIER_VOICE',
       'RAG_RERANK_VOYAGE_MODEL_BY_LANG',
+      'RAG_RESULT_DIVERSITY',
       'RAG_SEMANTIC_CACHE',
       'RAG_SEMANTIC_CACHE_EMBED_STORE',
       'RAG_SEMANTIC_CACHE_MAX_DISTANCE',
       'RAG_SEMANTIC_CACHE_REFUSAL_TTL',
       'RAG_SEMANTIC_CACHE_TTL',
+      'RAG_TABLE_LOOKUP',
+      'RAG_TERMINOLOGY',
+      'RAG_TERMINOLOGY_DENSE',
+      'RAG_TERMINOLOGY_MINING',
       'RAG_TOOL_RESULT_GUARD',
+      'RAG_VERSION_SCOPE',
       'VOYAGE_API_KEY',
       'VOYAGE_BASE_URL',
     ]);
@@ -160,6 +171,18 @@ describe('run-config validation', () => {
   test('RAG_REFUSAL_FLOOR is accepted', () => {
     const config = parseRunConfig({ name: 'floor', env: { RAG_PIPELINE: 'v2', RAG_REFUSAL_FLOOR: 'legacy_rule' }, overrides: null }, 'inline');
     assert.equal(config.env.RAG_REFUSAL_FLOOR, 'legacy_rule');
+  });
+
+  test('the terminology switches are accepted and an unknown terminology name is rejected (D-29)', () => {
+    const config = parseRunConfig(
+      { name: 'terminology', env: { RAG_PIPELINE: 'v2', RAG_TERMINOLOGY: 'true', RAG_TERMINOLOGY_DENSE: 'false', RAG_TERMINOLOGY_MINING: 'false' }, overrides: null },
+      'inline',
+    );
+    assert.equal(config.env.RAG_TERMINOLOGY, 'true');
+    assert.throws(
+      () => parseRunConfig({ name: 'terminology', env: { RAG_PIPELINE: 'v2', RAG_TERMINOLOGY_X: 'true' }, overrides: null }, 'inline'),
+      (error: unknown) => error instanceof RunConfigError && error.message === REJECT_MESSAGE,
+    );
   });
 
   test('key overlay only takes placeholders', () => {

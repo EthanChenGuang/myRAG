@@ -316,6 +316,21 @@
           ],
           "default": null,
           "title": "Sources"
+        },
+        "versions": {
+          "anyOf": [
+            {
+              "enum": [
+                "current",
+                "all"
+              ],
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/VersionRange"
+            }
+          ],
+          "title": "Versions"
         }
       },
       "title": "RetrievalFilters",
@@ -393,6 +408,24 @@
       ],
       "title": "TableAnswer",
       "type": "object"
+    },
+    "VersionRange": {
+      "additionalProperties": false,
+      "description": "D-12: a version period; either bound may be left open, not both.",
+      "properties": {
+        "from": {
+          "format": "date",
+          "title": "From",
+          "type": "string"
+        },
+        "to": {
+          "format": "date",
+          "title": "To",
+          "type": "string"
+        }
+      },
+      "title": "VersionRange",
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -431,7 +464,9 @@
         "cache_paraphrase",
         "cache_near_miss",
         "small_talk",
-        "table_split"
+        "table_split",
+        "duplicate_flood",
+        "identifier_near_miss"
       ],
       "title": "Category",
       "type": "string"
@@ -441,6 +476,17 @@
         "$ref": "#/$defs/ConversationTurn"
       },
       "title": "Conversation",
+      "type": "array"
+    },
+    "evidence_groups": {
+      "items": {
+        "items": {
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": "array"
+      },
+      "title": "Evidence Groups",
       "type": "array"
     },
     "evidence_language": {

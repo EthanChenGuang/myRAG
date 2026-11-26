@@ -7,6 +7,7 @@ import {
   loadRagConfig,
   resetRagConfigForTests,
   resolveFinalResultCount,
+  terminologyDenseFor,
   warnInjectionCheckDisabled,
 } from '@/lib/rag/config';
 import { loadIngestConfig, resetIngestConfigForTests } from '@/lib/rag/ingest/config';
@@ -23,9 +24,27 @@ afterEach(() => {
   warn.mockRestore();
 });
 
+const PHASE42_STAGES = ['table_lookup', 'diversify', 'identifier_resolve', 'identifier_guard'];
+
 function phase4Disabled(config: { disabledStages: ReadonlySet<string> }): string[] {
-  const queryLayer = new Set<string>(QUERY_LAYER_STAGES);
-  return [...config.disabledStages].filter((name) => !queryLayer.has(name)).sort();
+  const skip = new Set<string>([...QUERY_LAYER_STAGES, ...PHASE42_STAGES]);
+  return [...config.disabledStages].filter((name) => !skip.has(name)).sort();
+}
+
+const PHASE42_V2_FIELDS = [
+  'lexicalDictionary',
+  'lexicalStemIt',
+  'versionScope',
+  'tableLookup',
+  'dupClusters',
+  'resultDiversity',
+  'identifierIndex',
+  'identifierFilter',
+  'lexicalVersion',
+];
+
+function withoutPhase42(v2: object): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(v2).filter(([key]) => !PHASE42_V2_FIELDS.includes(key)));
 }
 
 function configWarnings(): string[] {
@@ -45,6 +64,7 @@ const CHAT_DEFAULTS = {
   assemble: 10000,
   exact_id_lookup: 1000,
   translate: 1000,
+  terminology: 50,
   dedupe: 1000,
   rerank: 600,
   refusal: 1000,
@@ -58,6 +78,10 @@ const CHAT_DEFAULTS = {
   hyde: 900,
   decompose: 800,
   semantic_cache: 150,
+  table_lookup: 1000,
+  diversify: 1000,
+  identifier_resolve: 1000,
+  identifier_guard: 1000,
 };
 
 describe('stage tables', () => {
@@ -86,6 +110,11 @@ describe('stage tables', () => {
       'hyde',
       'decompose',
       'semantic_cache',
+      'table_lookup',
+      'diversify',
+      'identifier_resolve',
+      'identifier_guard',
+      'terminology',
     ]);
   });
 
@@ -102,7 +131,11 @@ describe('stage tables', () => {
       rerank: 250,
       expand_parents: 1000,
       translate: 300,
+      terminology: 30,
     });
+    expect(PROFILE_STAGE_DEFAULTS.voice).toMatchObject({ table_lookup: 500, identifier_resolve: 500, diversify: 300, identifier_guard: 300 });
+    expect(PROFILE_STAGE_DEFAULTS.eval).toMatchObject({ table_lookup: 1000, identifier_resolve: 1000, diversify: 1000, identifier_guard: 1000 });
+    expect(PROFILE_STAGE_DEFAULTS.eval.terminology).toBe(1000);
   });
 });
 
@@ -110,7 +143,7 @@ describe('loadRagConfig', () => {
   test('empty values give legacy, v2 switch-off stages disabled and profile defaults', () => {
     const config = loadRagConfig({});
     expect(config.pipeline).toBe('legacy');
-    expect(phase4Disabled(config)).toEqual(['compress', 'expand_parents', 'rerank', 'translate']);
+    expect(phase4Disabled(config)).toEqual(['compress', 'expand_parents', 'rerank', 'terminology', 'translate']);
     expect(config.timeouts.chat).toEqual(PROFILE_STAGE_DEFAULTS.chat);
     expect(config.v2.reranker).toBe('none');
     expect(config.v2.tokenBudget).toBe(6000);
@@ -134,19 +167,19 @@ describe('loadRagConfig', () => {
 
   test('optional stages can be disabled explicitly', () => {
     const config = loadRagConfig({ RAG_DISABLED_STAGES: 'legacy_rank, assemble' });
-    expect(phase4Disabled(config)).toEqual(['assemble', 'compress', 'expand_parents', 'legacy_rank', 'rerank', 'translate']);
+    expect(phase4Disabled(config)).toEqual(['assemble', 'compress', 'expand_parents', 'legacy_rank', 'rerank', 'terminology', 'translate']);
   });
 
   test('a core stage in the disabled list is dropped and logged once', () => {
     const env = { RAG_DISABLED_STAGES: 'embed,legacy_rank,search' };
     const config = loadRagConfig(env);
-    expect(phase4Disabled(config)).toEqual(['compress', 'expand_parents', 'legacy_rank', 'rerank', 'translate']);
+    expect(phase4Disabled(config)).toEqual(['compress', 'expand_parents', 'legacy_rank', 'rerank', 'terminology', 'translate']);
     expect(configWarnings()).toHaveLength(2);
   });
 
   test('rerank is a valid optional stage name in RAG_DISABLED_STAGES', () => {
     const config = loadRagConfig({ RAG_DISABLED_STAGES: 'rerank,post_filter' });
-    expect(phase4Disabled(config)).toEqual(['compress', 'expand_parents', 'post_filter', 'rerank', 'translate']);
+    expect(phase4Disabled(config)).toEqual(['compress', 'expand_parents', 'post_filter', 'rerank', 'terminology', 'translate']);
     expect(configWarnings()).toEqual([]);
   });
 
@@ -188,10 +221,19 @@ describe('loadRagConfig', () => {
     expect(configWarnings().join(' ')).toMatch(/cap|foo/);
   });
 
+  test('rerank_input_cap accepts 25..100 (D-41)', () => {
+    expect(loadRagConfig({ RAG_RETRIEVAL_PARAMS_OVERRIDE: 'cap=25' }).v2.paramsOverride).toEqual({ rerank_input_cap: 25 });
+    expect(loadRagConfig({ RAG_RETRIEVAL_PARAMS_OVERRIDE: 'cap=24' }).v2.paramsOverride).toEqual({});
+    expect(loadRagConfig({ RAG_RETRIEVAL_PARAMS_OVERRIDE: 'cap=101' }).v2.paramsOverride).toEqual({});
+    const text = configWarnings().join(' ');
+    expect(text).toContain('rerank_input_cap must be 25..100, entry ignored');
+    expect(text).not.toContain('50..100');
+  });
+
   test('RAG_RERANKER=cohere removes rerank from disabledStages', () => {
     const config = loadRagConfig({ RAG_RERANKER: 'cohere' });
     expect(config.disabledStages.has('rerank')).toBe(false);
-    expect(phase4Disabled(config)).toEqual(['compress', 'expand_parents', 'translate']);
+    expect(phase4Disabled(config)).toEqual(['compress', 'expand_parents', 'terminology', 'translate']);
   });
 
   test('hasCohereKey reflects presence only and warnings never echo the key', () => {
@@ -472,11 +514,11 @@ describe('Phase 3.2 typed switches (D-47)', () => {
       disabledStages: phase4Disabled(rag),
       timeouts: rag.timeouts,
       exactIdLookup: rag.exactIdLookup,
-      v2: rag.v2,
+      v2: withoutPhase42(rag.v2),
       warnings: rag.warnings,
     }).toEqual({
       pipeline: 'legacy',
-      disabledStages: ['compress', 'expand_parents', 'rerank', 'translate'],
+      disabledStages: ['compress', 'expand_parents', 'rerank', 'terminology', 'translate'],
       timeouts: PROFILE_STAGE_DEFAULTS,
       exactIdLookup: false,
       v2: {
@@ -493,6 +535,9 @@ describe('Phase 3.2 typed switches (D-47)', () => {
         iterativeScan: 'off',
         exactScanCutoff: 0,
         lexicalTranslation: false,
+        terminology: false,
+        terminologyDense: false,
+        terminologyMining: false,
         paramsOverride: {},
         hasCohereKey: false,
         hasVoyageKey: false,
@@ -597,7 +642,7 @@ describe('query layer', () => {
         v2: config.v2,
         warnings: config.warnings,
       }).toEqual({
-        disabled: ['compress', 'expand_parents', 'rerank', 'translate'],
+        disabled: ['compress', 'expand_parents', 'rerank', 'terminology', 'translate'],
         chat: PHASE4_CHAT_TIMEOUTS,
         evalTranslate: 1000,
         voiceTranslate: 300,
@@ -788,5 +833,213 @@ describe('retrieval backend (D-11, D-24)', () => {
     expect(loadRagConfig({ RAG_RETRIEVAL_BACKEND: 'qdrant' })).not.toBe(base);
     expect(loadRagConfig({ RAG_RETRIEVAL_BACKEND_VOICE: 'qdrant' })).not.toBe(base);
     expect(loadRagConfig({ RAG_VECTOR_SYNC_MAX_LAG_SECONDS: '60' })).not.toBe(base);
+  });
+});
+
+describe('Phase 4.2 tuning switches (D-04, D-40, D-42, D-53)', () => {
+  const BOOLEANS = [
+    ['RAG_LEXICAL_DICTIONARY', 'lexicalDictionary'],
+    ['RAG_LEXICAL_STEM_IT', 'lexicalStemIt'],
+    ['RAG_VERSION_SCOPE', 'versionScope'],
+    ['RAG_TABLE_LOOKUP', 'tableLookup'],
+    ['RAG_DUP_CLUSTERS', 'dupClusters'],
+    ['RAG_IDENTIFIER_INDEX', 'identifierIndex'],
+    ['RAG_IDENTIFIER_FILTER', 'identifierFilter'],
+  ] as const;
+  const PREREQS: Record<string, Record<string, string>> = {
+    RAG_VERSION_SCOPE: { RAG_LEXICAL_SEARCH: 'true' },
+    RAG_IDENTIFIER_FILTER: { RAG_IDENTIFIER_INDEX: 'true' },
+  };
+
+  test('unset: every switch is off, diversity is off, the lexical version is 2 and no warning is logged', () => {
+    const config = loadRagConfig({});
+    for (const [, field] of BOOLEANS) expect(config.v2[field], field).toBe(false);
+    expect(config.v2.resultDiversity).toBe('off');
+    expect(config.v2.lexicalVersion).toBe(2);
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test('unset: every pre-existing v2 field keeps its value', () => {
+    const rest = withoutPhase42(loadRagConfig({ RAG_PIPELINE: 'v2' }).v2);
+    expect(rest).toEqual({
+      lexicalSearch: false,
+      reranker: 'none',
+      rerankTier: { chat: 'quality', voice: 'fast' },
+      voyageModelByLang: {},
+      refusalThreshold: false,
+      refusalFloor: 'similarity',
+      edgeOrder: false,
+      compression: false,
+      tokenBudget: 6000,
+      parentChild: false,
+      iterativeScan: 'off',
+      exactScanCutoff: 0,
+      lexicalTranslation: false,
+      paramsOverride: {},
+      hasCohereKey: false,
+      hasVoyageKey: false,
+      domainEmbeddings: { enabled: false, maxLegs: 2, timeoutMs: 800 },
+      terminology: false,
+      terminologyDense: false,
+      terminologyMining: false,
+    });
+  });
+
+  test.each(BOOLEANS)('%s accepts true and false', (name, field) => {
+    expect(loadRagConfig({ ...PREREQS[name], [name]: 'true' }).v2[field]).toBe(true);
+    expect(loadRagConfig({ ...PREREQS[name], [name]: 'TRUE' }).v2[field]).toBe(true);
+    expect(loadRagConfig({ ...PREREQS[name], [name]: 'false' }).v2[field]).toBe(false);
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test.each(BOOLEANS)('%s: any other value warns once and uses false', (name, field) => {
+    for (let i = 0; i < 3; i += 1) {
+      expect(loadRagConfig({ ...PREREQS[name], [name]: 'on' }).v2[field]).toBe(false);
+    }
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('[RAG Config]');
+  });
+
+  test('RAG_RESULT_DIVERSITY accepts off, collapse and mmr; anything else warns once and uses off', () => {
+    const clusters = { RAG_DUP_CLUSTERS: 'true' };
+    expect(loadRagConfig({ ...clusters, RAG_RESULT_DIVERSITY: 'off' }).v2.resultDiversity).toBe('off');
+    expect(loadRagConfig({ ...clusters, RAG_RESULT_DIVERSITY: 'collapse' }).v2.resultDiversity).toBe('collapse');
+    expect(loadRagConfig({ ...clusters, RAG_RESULT_DIVERSITY: 'MMR' }).v2.resultDiversity).toBe('mmr');
+    expect(configWarnings()).toEqual([]);
+    expect(loadRagConfig({ RAG_RESULT_DIVERSITY: 'random' }).v2.resultDiversity).toBe('off');
+    expect(loadRagConfig({ RAG_RESULT_DIVERSITY: 'random', RAG_PIPELINE: 'v2' }).v2.resultDiversity).toBe('off');
+    expect(configWarnings()).toHaveLength(1);
+    expect(configWarnings()[0]).toContain('RAG_RESULT_DIVERSITY');
+  });
+
+  test('identifier filter without the identifier index warns once and runs unfiltered', () => {
+    const a = loadRagConfig({ RAG_IDENTIFIER_FILTER: 'true' });
+    const b = loadRagConfig({ RAG_IDENTIFIER_FILTER: 'true', RAG_IDENTIFIER_INDEX: 'false' });
+    for (const config of [a, b]) {
+      expect(config.v2.identifierFilter).toBe(false);
+      expect(config.disabledStages.has('identifier_resolve')).toBe(true);
+      expect(config.disabledStages.has('identifier_guard')).toBe(true);
+    }
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('RAG_IDENTIFIER_INDEX');
+  });
+
+  test('version scope without the lexical leg warns once and scopes to current versions only', () => {
+    const config = loadRagConfig({ RAG_VERSION_SCOPE: 'true' });
+    loadRagConfig({ RAG_VERSION_SCOPE: 'true', RAG_LEXICAL_SEARCH: 'false' });
+    expect(config.v2.versionScope).toBe(false);
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('RAG_LEXICAL_SEARCH');
+    expect(loadRagConfig({ RAG_VERSION_SCOPE: 'true', RAG_LEXICAL_SEARCH: 'true' }).v2.versionScope).toBe(true);
+  });
+
+  test('collapse without duplicate clusters warns once and keeps the value', () => {
+    expect(loadRagConfig({ RAG_RESULT_DIVERSITY: 'collapse' }).v2.resultDiversity).toBe('collapse');
+    loadRagConfig({ RAG_RESULT_DIVERSITY: 'collapse', RAG_DUP_CLUSTERS: 'false' });
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('RAG_DUP_CLUSTERS');
+    expect(loadRagConfig({ RAG_RESULT_DIVERSITY: 'mmr' }).v2.resultDiversity).toBe('mmr');
+    expect(configWarnings()).toHaveLength(1);
+  });
+
+  test('changing any one of the eight variables returns a different configuration object', () => {
+    const base = loadRagConfig({});
+    for (const [name] of BOOLEANS) expect(loadRagConfig({ [name]: 'true' }), name).not.toBe(base);
+    expect(loadRagConfig({ RAG_RESULT_DIVERSITY: 'mmr' })).not.toBe(base);
+  });
+
+  test('the four stages are disabled while their switch is off', () => {
+    const off = loadRagConfig({});
+    for (const stage of PHASE42_STAGES) expect(off.disabledStages.has(stage as never), stage).toBe(true);
+    const on = loadRagConfig({
+      RAG_TABLE_LOOKUP: 'true',
+      RAG_DUP_CLUSTERS: 'true',
+      RAG_RESULT_DIVERSITY: 'collapse',
+      RAG_IDENTIFIER_INDEX: 'true',
+      RAG_IDENTIFIER_FILTER: 'true',
+    });
+    for (const stage of PHASE42_STAGES) expect(on.disabledStages.has(stage as never), stage).toBe(false);
+    expect(loadRagConfig({ RAG_RESULT_DIVERSITY: 'mmr' }).disabledStages.has('diversify' as never)).toBe(false);
+    expect(loadRagConfig({ RAG_IDENTIFIER_INDEX: 'true' }).disabledStages.has('identifier_resolve' as never)).toBe(true);
+  });
+
+  test('RAG_DISABLED_STAGES accepts the four stage names', () => {
+    const config = loadRagConfig({ RAG_TABLE_LOOKUP: 'true', RAG_DISABLED_STAGES: 'table_lookup,diversify,identifier_resolve,identifier_guard' });
+    for (const stage of PHASE42_STAGES) expect(config.disabledStages.has(stage as never), stage).toBe(true);
+    expect(configWarnings()).toEqual([]);
+  });
+});
+
+describe('terminology switches (D-15, D-18, D-19)', () => {
+  test('default env: switches off, stage disabled, timeouts in every profile', () => {
+    const config = loadRagConfig({});
+    expect(config.v2.terminology).toBe(false);
+    expect(config.v2.terminologyDense).toBe(false);
+    expect(config.v2.terminologyMining).toBe(false);
+    expect(config.disabledStages.has('terminology')).toBe(true);
+    expect(config.timeouts.chat.terminology).toBe(50);
+    expect(config.timeouts.embed.terminology).toBe(50);
+    expect(config.timeouts.voice.terminology).toBe(30);
+    expect(config.timeouts.eval.terminology).toBe(1000);
+    expect(config.warnings).toEqual([]);
+  });
+
+  test('RAG_TERMINOLOGY=true enables the stage whatever the pipeline value', () => {
+    for (const pipeline of [undefined, 'legacy', 'v2']) {
+      const config = loadRagConfig({ RAG_PIPELINE: pipeline, RAG_TERMINOLOGY: 'true' });
+      expect(config.v2.terminology).toBe(true);
+      expect(config.disabledStages.has('terminology')).toBe(false);
+    }
+  });
+
+  test('an unparseable value warns and stays false', () => {
+    const config = loadRagConfig({ RAG_TERMINOLOGY: 'yes-please' });
+    expect(config.v2.terminology).toBe(false);
+    expect(config.disabledStages.has('terminology')).toBe(true);
+    expect(config.warnings).toHaveLength(1);
+    expect(configWarnings()).toHaveLength(1);
+    expect(loadRagConfig({ RAG_TERMINOLOGY: 'true', RAG_TERMINOLOGY_MINING: 'maybe' }).v2.terminologyMining).toBe(false);
+  });
+
+  test('RAG_TERMINOLOGY_DENSE without RAG_TERMINOLOGY is off with a warning', () => {
+    const config = loadRagConfig({ RAG_TERMINOLOGY: 'false', RAG_TERMINOLOGY_DENSE: 'true' });
+    expect(config.v2.terminologyDense).toBe(false);
+    expect(config.warnings).toHaveLength(1);
+    expect(configWarnings().join(' ')).toContain('RAG_TERMINOLOGY_DENSE');
+  });
+
+  test('the dense variant is ignored for the voice profile', () => {
+    expect(typeof terminologyDenseFor).toBe('function');
+    const config = loadRagConfig({ RAG_TERMINOLOGY: 'true', RAG_TERMINOLOGY_DENSE: 'true' });
+    expect(config.v2.terminologyDense).toBe(true);
+    expect(terminologyDenseFor(config, 'chat')).toBe(true);
+    expect(terminologyDenseFor(config, 'embed')).toBe(true);
+    expect(terminologyDenseFor(config, 'voice')).toBe(false);
+    expect(terminologyDenseFor(loadRagConfig({ RAG_TERMINOLOGY_DENSE: 'true' }), 'chat')).toBe(false);
+  });
+
+  test('RAG_DISABLED_STAGES=terminology disables the stage while the switch is on', () => {
+    const config = loadRagConfig({ RAG_TERMINOLOGY: 'true', RAG_DISABLED_STAGES: 'terminology' });
+    expect(config.v2.terminology).toBe(true);
+    expect(config.disabledStages.has('terminology')).toBe(true);
+    expect(config.operatorDisabledStages?.has('terminology')).toBe(true);
+  });
+
+  test('RAG_STAGE_TIMEOUTS can set the terminology budget', () => {
+    expect(loadRagConfig({ RAG_STAGE_TIMEOUTS: 'terminology=80' }).timeouts.chat.terminology).toBe(80);
+  });
+
+  test('the three switches are part of the memo key', () => {
+    const base = { RAG_TERMINOLOGY: 'true' };
+    expect(loadRagConfig({}).v2.terminology).toBe(false);
+    expect(loadRagConfig(base).v2.terminology).toBe(true);
+    expect(loadRagConfig({ ...base, RAG_TERMINOLOGY_DENSE: 'true' }).v2.terminologyDense).toBe(true);
+    expect(loadRagConfig(base).v2.terminologyDense).toBe(false);
+    expect(loadRagConfig({ ...base, RAG_TERMINOLOGY_MINING: 'true' }).v2.terminologyMining).toBe(true);
+    expect(loadRagConfig(base).v2.terminologyMining).toBe(false);
   });
 });

@@ -71,7 +71,7 @@ export const RUN_CONFIG_CONSTRAINED_VALUES: Readonly<Record<string, readonly str
 };
 
 /**
- * RAG_PIPELINE, the Phase 4 D-23 switch names, the Phase 4.1 refusal floor, the value-constrained vendor settings, the five
+ * RAG_PIPELINE, the Phase 4 D-23 switch names, the Phase 4.1 refusal floor, the eight Phase 4.2 tuning switches, the value-constrained vendor settings, the five
  * Phase 5.1 SEC switches and the 16 Phase 6 query-layer and semantic-cache names. Every other variable stays out of reach.
  */
 export const RUN_CONFIG_ENV_ALLOWLIST: readonly string[] = [
@@ -89,7 +89,18 @@ export const RUN_CONFIG_ENV_ALLOWLIST: readonly string[] = [
   'RAG_HNSW_ITERATIVE_SCAN',
   'RAG_EXACT_SCAN_CUTOFF',
   'RAG_LEXICAL_TRANSLATION',
+  'RAG_TERMINOLOGY',
+  'RAG_TERMINOLOGY_DENSE',
+  'RAG_TERMINOLOGY_MINING',
   'RAG_REFUSAL_FLOOR',
+  'RAG_LEXICAL_DICTIONARY',
+  'RAG_LEXICAL_STEM_IT',
+  'RAG_VERSION_SCOPE',
+  'RAG_TABLE_LOOKUP',
+  'RAG_DUP_CLUSTERS',
+  'RAG_RESULT_DIVERSITY',
+  'RAG_IDENTIFIER_INDEX',
+  'RAG_IDENTIFIER_FILTER',
   ...Object.keys(RUN_CONFIG_CONSTRAINED_VALUES),
   ...Object.keys(SEC_SWITCH_VALUES),
   ...Object.keys(PHASE6_SWITCH_VALUES),

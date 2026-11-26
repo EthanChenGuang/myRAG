@@ -22,7 +22,9 @@
             "cache_paraphrase",
             "cache_near_miss",
             "small_talk",
-            "table_split"
+            "table_split",
+            "duplicate_flood",
+            "identifier_near_miss"
           ],
           "title": "Category",
           "type": "string"

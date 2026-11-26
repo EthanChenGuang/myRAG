@@ -51,7 +51,34 @@ function readSseText(body: string): string {
   return text;
 }
 
-describe('chat route characterization (strict mode, web search off)', () => {
+interface Configuration {
+  name: string;
+  env: Record<string, string | undefined>;
+  defaultPipeline: 'v2' | null;
+}
+
+// One snapshot file, two configurations: the explicit legacy pipeline, and a defaulted v2 whose languages are not chosen (D-24).
+const CONFIGURATIONS: Configuration[] = [
+  { name: 'explicit legacy', env: { RAG_PIPELINE: 'legacy' }, defaultPipeline: null },
+  {
+    name: 'languages unset under a defaulted v2',
+    env: { RAG_PIPELINE: undefined, RAG_SUPPORTED_LANGUAGES: undefined, RAG_PRIMARY_LANGUAGE: undefined },
+    defaultPipeline: 'v2',
+  },
+];
+
+/** The route modules are re-imported per load, so the shipped default is set on the instance the route just loaded. */
+async function applyDefaultPipeline(pipeline: 'v2' | null): Promise<void> {
+  const config = await import('@/lib/rag/config');
+  config.setDefaultPipelineForTests(pipeline);
+  config.resetRagConfigForTests();
+}
+
+function hybridCalls(fixture: RouteFixture): number {
+  return fixture.edge.calls.filter((call) => call.path === '/rest/v1/rpc/hybrid_search_chunks').length;
+}
+
+describe.each(CONFIGURATIONS)('chat route characterization (strict mode, web search off), $name', (configuration) => {
   let fixture: RouteFixture;
   const gptModel = configuredModelIds().find((id) => GPT_PATTERN.test(id));
   const otherModel = configuredModelIds().find((id) => !GPT_PATTERN.test(id) && !id.includes('claude'));
@@ -59,10 +86,11 @@ describe('chat route characterization (strict mode, web search off)', () => {
   beforeAll(async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
-    fixture = await startRouteFixture({ deploymentMode: 'single-tenant', env: { RAG_PIPELINE: 'legacy' } });
+    fixture = await startRouteFixture({ deploymentMode: 'single-tenant', env: configuration.env });
   });
 
   afterAll(async () => {
+    await applyDefaultPipeline(null);
     await fixture.close();
     vi.useRealTimers();
   });
@@ -82,6 +110,8 @@ describe('chat route characterization (strict mode, web search off)', () => {
 
   it('builds the same system prompt or refusal for every fixture question and model kind', async () => {
     const { POST } = await fixture.loadRoute('chat');
+    await applyDefaultPipeline(configuration.defaultPipeline);
+    const hybridBefore = hybridCalls(fixture);
     const questions = readGoldenQuestions();
     const kinds: Array<{ kind: 'other' | 'gpt'; model: string }> = [
       { kind: 'other', model: otherModel as string },
@@ -109,6 +139,22 @@ describe('chat route characterization (strict mode, web search off)', () => {
       }
     }
     expect(actual).toHaveLength(questions.length * kinds.length);
+    expect(hybridCalls(fixture) - hybridBefore).toBe(0);
     expectCharacterization('chat', actual);
+  });
+
+  it.runIf(configuration.defaultPipeline === 'v2')('languages unset under a defaulted v2 never calls hybrid_search_chunks', async () => {
+    const { POST } = await fixture.loadRoute('chat');
+    await applyDefaultPipeline(configuration.defaultPipeline);
+    const before = hybridCalls(fixture);
+    for (const { question } of readGoldenQuestions().slice(0, 5)) {
+      h.capture.reset();
+      const response = await POST(
+        chatRequest({ messages: [{ role: 'user', content: question }], data: { ragMode: 'strict', settings: { webSearch: false } } }),
+      );
+      await response.text();
+    }
+    expect(hybridCalls(fixture) - before).toBe(0);
+    expect(fixture.edge.calls.some((call) => /\/rest\/v1\/rpc\/match_document_chunks$/.test(call.path))).toBe(true);
   });
 });

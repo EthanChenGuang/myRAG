@@ -36,16 +36,19 @@ export interface PipelineResolution {
 
 type LanguageSource = LanguageSettings | (() => LanguageSettings);
 
+/** D-07, D-24: the one rule for whether a pipeline variable was set. An empty or whitespace-only value counts as unset. */
+export function pipelineSourceOf(raw: string | undefined): PipelineSource {
+  return (raw ?? '').trim() === '' ? 'default' : 'explicit';
+}
+
 function requestedRetrieval(raw: string | undefined, shipped: RetrievalPipeline): { requested: RetrievalPipeline; source: PipelineSource } {
-  const value = (raw ?? '').trim();
-  if (value === '') return { requested: shipped, source: 'default' };
-  return { requested: value === 'v2' ? 'v2' : 'legacy', source: 'explicit' };
+  if (pipelineSourceOf(raw) === 'default') return { requested: shipped, source: 'default' };
+  return { requested: (raw ?? '').trim() === 'v2' ? 'v2' : 'legacy', source: 'explicit' };
 }
 
 function requestedIngest(raw: string | undefined, shipped: IngestPipelineChoice): { requested: IngestPipelineChoice; source: PipelineSource } {
-  const value = (raw ?? '').trim();
-  if (value === '') return { requested: shipped, source: 'default' };
-  return { requested: value.toLowerCase() === 'unified' ? 'unified' : 'legacy', source: 'explicit' };
+  if (pipelineSourceOf(raw) === 'default') return { requested: shipped, source: 'default' };
+  return { requested: (raw ?? '').trim().toLowerCase() === 'unified' ? 'unified' : 'legacy', source: 'explicit' };
 }
 
 function resolvePath<T extends string>(

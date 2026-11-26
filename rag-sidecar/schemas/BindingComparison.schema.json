@@ -316,13 +316,31 @@
           "default": null,
           "title": "False Refusal Upper 95"
         },
+        "identifier_precision": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "intent_coverage": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "k_zero": {
+          "$ref": "#/$defs/MetricValue"
+        },
         "mrr": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "ndcg_at_context_k": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "near_miss_leakage": {
           "$ref": "#/$defs/MetricValue"
         },
         "recall_at_10": {
           "$ref": "#/$defs/MetricValue"
         },
         "recall_at_5": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "topk_redundancy": {
           "$ref": "#/$defs/MetricValue"
         }
       },

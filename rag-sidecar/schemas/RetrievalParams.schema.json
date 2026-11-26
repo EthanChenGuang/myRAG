@@ -89,13 +89,19 @@
     "leg_weights": {
       "$ref": "#/$defs/RetrievalLegWeights"
     },
+    "mmr_lambda": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Mmr Lambda",
+      "type": "number"
+    },
     "provenance": {
       "$ref": "#/$defs/ConfigProvenance"
     },
     "rerank_input_cap": {
       "default": 75,
       "maximum": 100,
-      "minimum": 50,
+      "minimum": 25,
       "title": "Rerank Input Cap",
       "type": "integer"
     },

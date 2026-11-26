@@ -218,7 +218,7 @@ function zeroWidthSpans(finding: ZeroWidthFinding): HiddenTextSpan[] {
 }
 
 /** The report recorded under flag: the sidecar's spans, then the zero-width ones; status hidden_found, clean only when the sidecar checked it, else not_checked. */
-function mergedReport(report: HiddenTextReport | null, finding: ZeroWidthFinding, rulesVersion: string): HiddenTextReport {
+export function mergedReport(report: HiddenTextReport | null, finding: ZeroWidthFinding, rulesVersion: string): HiddenTextReport {
   const spans = [...(report?.status === 'hidden_found' ? (report.spans ?? []) : []), ...zeroWidthSpans(finding)];
   const status = spans.length > 0 ? 'hidden_found' : report?.status === 'clean' ? 'clean' : 'not_checked';
   return HiddenTextReportSchema.parse({
@@ -231,7 +231,7 @@ function mergedReport(report: HiddenTextReport | null, finding: ZeroWidthFinding
 }
 
 /** One hidden_text reason for the sidecar spans and the zero-width finding together; at most 200 spans, the rest counted as unlocated. */
-function hiddenTextReason(
+export function hiddenTextReason(
   report: HiddenTextReport | null,
   finding: ZeroWidthFinding,
   zeroWidthQuarantines: boolean,
@@ -349,7 +349,7 @@ const hiddenTextCheck: ScanCheck = {
 };
 
 /** One untrusted_link reason listing the targets outside the allowlist; the detail names the count per kind and any targets left out. */
-function untrustedLinkReason(result: LinkCheckOutcome): QuarantineReason | null {
+export function untrustedLinkReason(result: LinkCheckOutcome): QuarantineReason | null {
   const targets = result.targets ?? [];
   if (targets.length === 0) return null;
   const counts = new Map<string, number>();

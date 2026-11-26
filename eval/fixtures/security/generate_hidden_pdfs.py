@@ -399,6 +399,10 @@ def build_fixtures() -> dict[str, bytes]:
     return dict(sorted(built.items()))
 
 
+# The link annotation targets the checker reports for each fixture (empty for every other one).
+LINK_ANNOTATIONS: dict[str, list[str]] = {"link-annotation.pdf": [LINK_TARGET]}
+
+
 def manifest(built: dict[str, bytes]) -> dict:
     return {
         "generator": "eval/fixtures/security/generate_hidden_pdfs.py",
@@ -408,6 +412,7 @@ def manifest(built: dict[str, bytes]) -> dict:
                 "expected": "hidden_found" if name in HIDDEN_FIXTURES else "clean",
                 "reason": HIDDEN_FIXTURES[name][1] if name in HIDDEN_FIXTURES else None,
                 "hidden_text": HIDDEN_SENTENCE.get(name.removesuffix(".pdf")),
+                "link_targets": LINK_ANNOTATIONS.get(name, []),
             }
             for name, data in built.items()
         },

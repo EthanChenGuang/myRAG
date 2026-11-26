@@ -1,0 +1,101 @@
+{
+  "$defs": {
+    "ConfigProvenance": {
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "enum": [
+            "defaults",
+            "sweep",
+            "calibration",
+            "fixture",
+            "live"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "ConfigProvenance",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "config_hash": {
+      "anyOf": [
+        {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Config Hash"
+    },
+    "dense_weight": {
+      "default": 0.5,
+      "exclusiveMinimum": 0,
+      "maximum": 0.5,
+      "title": "Dense Weight",
+      "type": "number"
+    },
+    "expansion_weight": {
+      "default": 0.5,
+      "exclusiveMinimum": 0,
+      "maximum": 1,
+      "title": "Expansion Weight",
+      "type": "number"
+    },
+    "max_expansion_tokens": {
+      "default": 24,
+      "maximum": 24,
+      "minimum": 1,
+      "title": "Max Expansion Tokens",
+      "type": "integer"
+    },
+    "max_matches": {
+      "default": 8,
+      "maximum": 8,
+      "minimum": 1,
+      "title": "Max Matches",
+      "type": "integer"
+    },
+    "max_terms_per_match": {
+      "default": 4,
+      "maximum": 16,
+      "minimum": 1,
+      "title": "Max Terms Per Match",
+      "type": "integer"
+    },
+    "min_han_chars": {
+      "default": 2,
+      "maximum": 4,
+      "minimum": 1,
+      "title": "Min Han Chars",
+      "type": "integer"
+    },
+    "provenance": {
+      "$ref": "#/$defs/ConfigProvenance"
+    },
+    "reserve_slots": {
+      "default": 2,
+      "maximum": 4,
+      "minimum": 0,
+      "title": "Reserve Slots",
+      "type": "integer"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    }
+  },
+  "title": "TerminologyParams",
+  "type": "object"
+}

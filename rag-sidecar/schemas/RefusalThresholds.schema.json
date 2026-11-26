@@ -45,6 +45,15 @@
           "title": "Key",
           "type": "string"
         },
+        "mode": {
+          "enum": [
+            "strict",
+            "balanced",
+            "flexible"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
         "model": {
           "minLength": 1,
           "title": "Model",
@@ -205,8 +214,11 @@
       "$ref": "#/$defs/ConfigProvenance"
     },
     "schema_version": {
-      "const": 1,
       "default": 1,
+      "enum": [
+        1,
+        2
+      ],
       "title": "Schema Version",
       "type": "integer"
     }

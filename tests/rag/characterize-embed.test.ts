@@ -49,16 +49,44 @@ function embedRequest(question: string): NextRequest {
   });
 }
 
-describe('embed route characterization', () => {
+interface Configuration {
+  name: string;
+  env: Record<string, string | undefined>;
+  defaultPipeline: 'v2' | null;
+}
+
+// One snapshot file, two configurations: the explicit legacy pipeline, and a defaulted v2 whose languages are not chosen (D-24).
+const CONFIGURATIONS: Configuration[] = [
+  { name: 'explicit legacy', env: { RAG_PIPELINE: 'legacy' }, defaultPipeline: null },
+  {
+    name: 'languages unset under a defaulted v2',
+    env: { RAG_PIPELINE: undefined, RAG_SUPPORTED_LANGUAGES: undefined, RAG_PRIMARY_LANGUAGE: undefined },
+    defaultPipeline: 'v2',
+  },
+];
+
+/** The route modules are re-imported per load, so the shipped default is set on the instance the route just loaded. */
+async function applyDefaultPipeline(pipeline: 'v2' | null): Promise<void> {
+  const config = await import('@/lib/rag/config');
+  config.setDefaultPipelineForTests(pipeline);
+  config.resetRagConfigForTests();
+}
+
+function hybridCalls(fixture: RouteFixture): number {
+  return fixture.edge.calls.filter((call) => call.path === '/rest/v1/rpc/hybrid_search_chunks').length;
+}
+
+describe.each(CONFIGURATIONS)('embed route characterization, $name', (configuration) => {
   let fixture: RouteFixture;
 
   beforeAll(async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
-    fixture = await startRouteFixture({ deploymentMode: 'single-tenant', env: { RAG_PIPELINE: 'legacy' } });
+    fixture = await startRouteFixture({ deploymentMode: 'single-tenant', env: configuration.env });
   });
 
   afterAll(async () => {
+    await applyDefaultPipeline(null);
     await fixture.close();
     vi.useRealTimers();
   });
@@ -72,6 +100,8 @@ describe('embed route characterization', () => {
 
   it('hands the model the same system prompt for every fixture question', async () => {
     const { POST } = await fixture.loadRoute('embed/chat');
+    await applyDefaultPipeline(configuration.defaultPipeline);
+    const hybridBefore = hybridCalls(fixture);
     const rag = await import('@/lib/rag');
     const scope = await rag.resolveEmbedScope({
       rawBody: {},
@@ -109,6 +139,19 @@ describe('embed route characterization', () => {
     expect(actual).toHaveLength(questions.length);
     expect(actual.every((entry) => entry.system.length > 0)).toBe(true);
     expect(fixture.edge.errors).toHaveLength(0);
+    expect(hybridCalls(fixture) - hybridBefore).toBe(0);
     expectCharacterization('embed', actual);
+  });
+
+  it.runIf(configuration.defaultPipeline === 'v2')('languages unset under a defaulted v2 never calls hybrid_search_chunks', async () => {
+    const { POST } = await fixture.loadRoute('embed/chat');
+    await applyDefaultPipeline(configuration.defaultPipeline);
+    const before = hybridCalls(fixture);
+    for (const { question } of readGoldenQuestions().slice(0, 5)) {
+      h.capture.reset();
+      await (await POST(embedRequest(question))).text();
+      expect(h.capture.calls).toHaveLength(1);
+    }
+    expect(hybridCalls(fixture) - before).toBe(0);
   });
 });

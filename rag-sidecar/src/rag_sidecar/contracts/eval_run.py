@@ -6,11 +6,33 @@ from rag_sidecar.contracts.answers import AnswerGroundedness, CitationRecord, Ci
 from rag_sidecar.contracts.ingest import DocType
 from rag_sidecar.contracts.omit import omit_none_schema
 from rag_sidecar.contracts.query import QueryFramework, QueryParamsOverride, QueryPlan, QueryTransformToggles
-from rag_sidecar.contracts.retrieval import ChunkingProfile, RetrievalFilters, RetrievalOverrides, VectorBackend
+from rag_sidecar.contracts.retrieval import (
+    ChunkingProfile,
+    RetrievalFilters,
+    RetrievalOverrides,
+    VectorBackend,
+    VersionScope,
+)
 
 
 class _Contract(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+TraceCacheState = Literal["hit", "miss", "bypass"]
+
+
+def _omit_none(value: object) -> bool:
+    return value is None
+
+
+def _optional_any_schema(schema: dict) -> None:
+    schema.pop("default", None)
+    branches = [branch for branch in schema.pop("anyOf", None) or [] if branch.get("type") != "null"]
+    if len(branches) == 1:
+        schema.update(branches[0])
+    elif branches:
+        schema["anyOf"] = branches
 
 
 BINDING_PROFILE_ID_PATTERN = r"^[a-z0-9][a-z0-9._-]{0,63}$"
@@ -39,6 +61,7 @@ StageName = Literal[
     "expand",
     "hyde",
     "decompose",
+    "terminology",
     "semantic_cache",
 ]
 
@@ -66,6 +89,7 @@ class StageTimeoutsMs(_Contract):
     expand: _TimeoutMs | None = None
     hyde: _TimeoutMs | None = None
     decompose: _TimeoutMs | None = None
+    terminology: _TimeoutMs | None = None
     semantic_cache: _TimeoutMs | None = None
 
 
@@ -135,6 +159,16 @@ class TraceKeptChunk(_Contract):
     content: str
     similarity: float
     kept_by: Literal["similarity", "name", "image", "rerank", "fused"]
+    dup_cluster_id: str | None = Field(
+        default=None, min_length=1, exclude_if=_omit_none, json_schema_extra=omit_none_schema
+    )
+    document_version: int | None = Field(
+        default=None, ge=0, exclude_if=_omit_none, json_schema_extra=omit_none_schema
+    )
+    is_current: bool | None = Field(default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema)
+    identifiers_norm: list[Annotated[str, Field(min_length=1, max_length=200)]] | None = Field(
+        default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema
+    )
 
 
 class TraceUsedDocument(_Contract):
@@ -221,7 +255,19 @@ class TraceRetrievalBackend(_Contract):
     tenant_validation_dropped: int = Field(default=0, ge=0)
 
 
-RefusalReason = Literal["no_relevant_context", "below_threshold", "below_similarity_floor", "injection_filtered"]
+RefusalReason = Literal[
+    "no_relevant_context", "below_threshold", "below_similarity_floor", "injection_filtered", "identifier_not_found"
+]
+
+
+class TraceIdentifier(_Contract):
+    """D-31, T-04.2-04: identifier filter counts and at most 3 suggestions from the caller's tenant."""
+
+    asked: int = Field(ge=0)
+    resolved: int = Field(ge=0)
+    near_miss_dropped: int = Field(default=0, ge=0)
+    fallback: bool = False
+    suggestions: list[Annotated[str, Field(min_length=1, max_length=200)]] = Field(default_factory=list, max_length=3)
 
 
 class RagTrace(_Contract):
@@ -259,6 +305,20 @@ class RagTrace(_Contract):
     stage_status: dict[str, str] = Field(default_factory=dict)
     effective_config: TraceEffectiveConfig
     config_hash: str
+    ttft_ms: float | None = Field(default=None, ge=0, exclude_if=_omit_none, json_schema_extra=omit_none_schema)
+    pre_generation_ms: float | None = Field(
+        default=None, ge=0, exclude_if=_omit_none, json_schema_extra=omit_none_schema
+    )
+    cache: TraceCacheState | None = Field(default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema)
+    version_scope: VersionScope | None = Field(
+        default=None, exclude_if=_omit_none, json_schema_extra=_optional_any_schema
+    )
+    topk_redundancy: float | None = Field(
+        default=None, ge=0, le=1, exclude_if=_omit_none, json_schema_extra=omit_none_schema
+    )
+    identifier: TraceIdentifier | None = Field(
+        default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema
+    )
 
 
 class RunEmbedder(_Contract):

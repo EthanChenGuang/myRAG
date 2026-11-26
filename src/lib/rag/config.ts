@@ -1,7 +1,8 @@
 import type { Profile } from './types';
 import { RETRIEVAL_BACKEND_IDS, type BackendId } from './backend/types';
 import { getLanguageSettings } from './lang/settings';
-import { LANGUAGES_NOT_CONFIGURED, resolvePipelines, type LanguagesNotConfigured, type PipelineSource } from './lang/resolve';
+import { LEXICAL_VERSION } from './lexical/tokenize';
+import { LANGUAGES_NOT_CONFIGURED, pipelineSourceOf, resolvePipelines, type LanguagesNotConfigured, type PipelineSource } from './lang/resolve';
 
 export const CORE_STAGES = ['embed', 'search', 'fuse'] as const;
 export const OPTIONAL_STAGES = [
@@ -27,6 +28,11 @@ export const OPTIONAL_STAGES = [
   'hyde',
   'decompose',
   'semantic_cache',
+  'table_lookup',
+  'diversify',
+  'identifier_resolve',
+  'identifier_guard',
+  'terminology',
 ] as const;
 
 /** Phase 6 query-layer stages (D-05); translate is the shared Phase 4 slot and is not listed here. */
@@ -61,22 +67,32 @@ const LEGACY_STANDARD: StageTimeouts = {
 
 const V2_STANDARD: StageTimeouts = {
   translate: 1000,
+  terminology: 50,
   fuse: 1000,
   dedupe: 1000,
   rerank: 600,
   refusal: 1000,
   expand_parents: 3000,
   compress: 1000,
+  table_lookup: 1000,
+  diversify: 1000,
+  identifier_resolve: 1000,
+  identifier_guard: 1000,
 };
 
 const V2_VOICE: StageTimeouts = {
   translate: 300,
+  terminology: 30,
   fuse: 300,
   dedupe: 300,
   rerank: 250,
   refusal: 300,
   expand_parents: 1000,
   compress: 1000,
+  table_lookup: 500,
+  diversify: 300,
+  identifier_resolve: 500,
+  identifier_guard: 300,
 };
 
 const V2_EVAL: StageTimeouts = {
@@ -138,6 +154,7 @@ export const PROFILE_STAGE_DEFAULTS: Record<Profile, StageTimeouts> = {
   eval: mergeProfileDefaults(LEGACY_STANDARD, V2_STANDARD, {
     ...V2_EVAL,
     translate: 1000,
+    terminology: 1000,
     fuse: 1000,
     dedupe: 1000,
     refusal: 1000,
@@ -195,6 +212,10 @@ export const REFUSAL_FLOOR_POLICIES = ['similarity', 'legacy_rule'] as const;
 
 export type RefusalFloorPolicy = (typeof REFUSAL_FLOOR_POLICIES)[number];
 
+export const RESULT_DIVERSITY_MODES = ['off', 'collapse', 'mmr'] as const;
+
+export type ResultDiversityMode = (typeof RESULT_DIVERSITY_MODES)[number];
+
 export interface V2Config {
   lexicalSearch: boolean;
   reranker: RerankerSetting;
@@ -209,10 +230,27 @@ export interface V2Config {
   iterativeScan: IterativeScanMode;
   exactScanCutoff: number;
   lexicalTranslation: boolean;
+  /** D-15: the terminology stage; acts only inside the v2 graph. */
+  terminology: boolean;
+  /** D-18: the dense terminology variant; requires terminology, never in voice (see terminologyDenseFor). */
+  terminologyDense: boolean;
+  terminologyMining: boolean;
   paramsOverride: RetrievalParamsOverride;
   hasCohereKey: boolean;
   hasVoyageKey: boolean;
   domainEmbeddings: DomainEmbeddingsConfig;
+  lexicalDictionary: boolean;
+  lexicalStemIt: boolean;
+  /** Effective: false while RAG_LEXICAL_SEARCH is off (D-40). */
+  versionScope: boolean;
+  tableLookup: boolean;
+  dupClusters: boolean;
+  resultDiversity: ResultDiversityMode;
+  identifierIndex: boolean;
+  /** Effective: false while RAG_IDENTIFIER_INDEX is off (D-04). */
+  identifierFilter: boolean;
+  /** D-42: LEXICAL_VERSION plus 1 for the dictionary and 2 for Italian stemming. */
+  lexicalVersion: number;
 }
 
 export type QueryFramework = 'llamaindex' | 'langchain';
@@ -277,6 +315,17 @@ export interface RagEnvInput {
   RAG_HNSW_ITERATIVE_SCAN?: string;
   RAG_EXACT_SCAN_CUTOFF?: string;
   RAG_LEXICAL_TRANSLATION?: string;
+  RAG_LEXICAL_DICTIONARY?: string;
+  RAG_LEXICAL_STEM_IT?: string;
+  RAG_VERSION_SCOPE?: string;
+  RAG_TABLE_LOOKUP?: string;
+  RAG_DUP_CLUSTERS?: string;
+  RAG_RESULT_DIVERSITY?: string;
+  RAG_IDENTIFIER_INDEX?: string;
+  RAG_IDENTIFIER_FILTER?: string;
+  RAG_TERMINOLOGY?: string;
+  RAG_TERMINOLOGY_DENSE?: string;
+  RAG_TERMINOLOGY_MINING?: string;
   RAG_RETRIEVAL_PARAMS_OVERRIDE?: string;
   VOYAGE_API_KEY?: string;
   VOYAGE_BASE_URL?: string;
@@ -390,10 +439,7 @@ export function setDefaultPipelineForTests(next: 'legacy' | 'v2' | null): void {
   memo.clear();
 }
 
-/** D-07: an empty or whitespace-only value counts as unset. */
-export function pipelineSourceOf(raw: string | undefined): PipelineSource {
-  return (raw ?? '').trim() === '' ? 'default' : 'explicit';
-}
+export { pipelineSourceOf };
 
 function pipelineSource(env: RagEnvInput): PipelineSource {
   return env.pipelineSourceHint ?? pipelineSourceOf(env.RAG_PIPELINE);
@@ -603,8 +649,8 @@ function parseParamsOverride(raw: string | undefined, warnings: string[]): Retri
       continue;
     }
     const n = Number(text);
-    if (field === 'rerank_input_cap' && (n < 50 || n > 100)) {
-      problem(warnings, `params-cap:${n}`, 'rerank_input_cap must be 50..100, entry ignored', { cap: n });
+    if (field === 'rerank_input_cap' && (n < 25 || n > 100)) {
+      problem(warnings, `params-cap:${n}`, 'rerank_input_cap must be 25..100, entry ignored', { cap: n });
       continue;
     }
     out[field] = n;
@@ -846,6 +892,84 @@ function applyV2DisabledStages(v2: V2Config, disabled: Set<StageName>): void {
   if (!v2.compression) disabled.add('compress');
   if (!v2.parentChild) disabled.add('expand_parents');
   if (!v2.lexicalTranslation) disabled.add('translate');
+  if (!v2.tableLookup) disabled.add('table_lookup');
+  if (v2.resultDiversity === 'off') disabled.add('diversify');
+  if (!v2.identifierFilter) {
+    disabled.add('identifier_resolve');
+    disabled.add('identifier_guard');
+  }
+  if (!v2.terminology) disabled.add('terminology');
+}
+
+/** D-42: the version stored with lexical text and refusal cells; LEXICAL_VERSION (2) itself never changes. */
+export function lexicalVersionFor(dictionary: boolean, stemIt: boolean): number {
+  return LEXICAL_VERSION + (dictionary ? 1 : 0) + (stemIt ? 2 : 0);
+}
+
+export function effectiveLexicalVersion(config: Pick<RagConfig, 'v2'>): number {
+  return config.v2.lexicalVersion;
+}
+
+interface TuningSwitches {
+  lexicalDictionary: boolean;
+  lexicalStemIt: boolean;
+  versionScope: boolean;
+  tableLookup: boolean;
+  dupClusters: boolean;
+  resultDiversity: ResultDiversityMode;
+  identifierIndex: boolean;
+  identifierFilter: boolean;
+  lexicalVersion: number;
+}
+
+/** D-04, D-40: invalid combinations resolve here, so every consumer reads one effective value. */
+function parseTuningSwitches(env: RagEnvInput, lexicalSearch: boolean, warnings: string[]): TuningSwitches {
+  const lexicalDictionary = parseBooleanSwitch(env.RAG_LEXICAL_DICTIONARY, false, 'lexical-dictionary', warnings);
+  const lexicalStemIt = parseBooleanSwitch(env.RAG_LEXICAL_STEM_IT, false, 'lexical-stem-it', warnings);
+  const versionRequested = parseBooleanSwitch(env.RAG_VERSION_SCOPE, false, 'version-scope', warnings);
+  const tableLookup = parseBooleanSwitch(env.RAG_TABLE_LOOKUP, false, 'table-lookup', warnings);
+  const dupClusters = parseBooleanSwitch(env.RAG_DUP_CLUSTERS, false, 'dup-clusters', warnings);
+  const resultDiversity = parseNamedChoice('RAG_RESULT_DIVERSITY', env.RAG_RESULT_DIVERSITY, RESULT_DIVERSITY_MODES, 'off', warnings);
+  const identifierIndex = parseBooleanSwitch(env.RAG_IDENTIFIER_INDEX, false, 'identifier-index', warnings);
+  const filterRequested = parseBooleanSwitch(env.RAG_IDENTIFIER_FILTER, false, 'identifier-filter', warnings);
+
+  if (filterRequested && !identifierIndex) {
+    problem(warnings, 'identifier-filter-needs-index', 'RAG_IDENTIFIER_FILTER needs RAG_IDENTIFIER_INDEX=true; retrieval runs unfiltered', {
+      RAG_IDENTIFIER_INDEX: (env.RAG_IDENTIFIER_INDEX ?? '').trim() || 'false',
+    });
+  }
+  if (versionRequested && !lexicalSearch) {
+    problem(warnings, 'version-scope-needs-lexical', 'RAG_VERSION_SCOPE needs RAG_LEXICAL_SEARCH=true; retrieval scopes to current versions only', {
+      RAG_LEXICAL_SEARCH: (env.RAG_LEXICAL_SEARCH ?? '').trim() || 'false',
+    });
+  }
+  if (resultDiversity === 'collapse' && !dupClusters) {
+    problem(warnings, 'diversity-collapse-needs-clusters', 'RAG_RESULT_DIVERSITY=collapse has no clusters to act on while RAG_DUP_CLUSTERS is off', {
+      RAG_DUP_CLUSTERS: (env.RAG_DUP_CLUSTERS ?? '').trim() || 'false',
+    });
+  }
+
+  return {
+    lexicalDictionary,
+    lexicalStemIt,
+    versionScope: versionRequested && lexicalSearch,
+    tableLookup,
+    dupClusters,
+    resultDiversity,
+    identifierIndex,
+    identifierFilter: filterRequested && identifierIndex,
+    lexicalVersion: lexicalVersionFor(lexicalDictionary, lexicalStemIt),
+  };
+}
+
+
+function parseTerminologyDense(env: RagEnvInput, terminology: boolean, warnings: string[]): boolean {
+  const dense = parseBooleanSwitch(env.RAG_TERMINOLOGY_DENSE, false, 'terminology-dense', warnings);
+  if (dense && !terminology) {
+    problem(warnings, 'terminology-dense:requires-terminology', 'RAG_TERMINOLOGY_DENSE needs RAG_TERMINOLOGY=true, using false', { RAG_TERMINOLOGY_DENSE: 'true' });
+    return false;
+  }
+  return dense;
 }
 
 function memoKey(env: RagEnvInput): string {
@@ -872,6 +996,17 @@ function memoKey(env: RagEnvInput): string {
     env.RAG_HNSW_ITERATIVE_SCAN ?? '',
     env.RAG_EXACT_SCAN_CUTOFF ?? '',
     env.RAG_LEXICAL_TRANSLATION ?? '',
+    env.RAG_LEXICAL_DICTIONARY ?? '',
+    env.RAG_LEXICAL_STEM_IT ?? '',
+    env.RAG_VERSION_SCOPE ?? '',
+    env.RAG_TABLE_LOOKUP ?? '',
+    env.RAG_DUP_CLUSTERS ?? '',
+    env.RAG_RESULT_DIVERSITY ?? '',
+    env.RAG_IDENTIFIER_INDEX ?? '',
+    env.RAG_IDENTIFIER_FILTER ?? '',
+    env.RAG_TERMINOLOGY ?? '',
+    env.RAG_TERMINOLOGY_DENSE ?? '',
+    env.RAG_TERMINOLOGY_MINING ?? '',
     env.RAG_RETRIEVAL_PARAMS_OVERRIDE ?? '',
     (env.VOYAGE_API_KEY ?? '').trim() !== '',
     env.VOYAGE_BASE_URL ?? '',
@@ -954,9 +1089,11 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
   }
 
   const exactIdLookup = parseExactIdSwitch(env.RAG_EXACT_ID_LOOKUP, warnings);
+  const terminology = parseBooleanSwitch(env.RAG_TERMINOLOGY, false, 'terminology', warnings);
 
+  const lexicalSearch = parseBooleanSwitch(env.RAG_LEXICAL_SEARCH, false, 'lexical-search', warnings);
   const v2: V2Config = {
-    lexicalSearch: parseBooleanSwitch(env.RAG_LEXICAL_SEARCH, false, 'lexical-search', warnings),
+    lexicalSearch,
     reranker: parseReranker(env.RAG_RERANKER, warnings),
     rerankTier: {
       chat: parseRerankTier(env.RAG_RERANK_TIER_CHAT, 'RAG_RERANK_TIER_CHAT', 'quality', warnings),
@@ -972,10 +1109,14 @@ export function loadRagConfig(env: RagEnvInput): RagConfig {
     iterativeScan: parseIterativeScan(env.RAG_HNSW_ITERATIVE_SCAN, warnings),
     exactScanCutoff: parseNonNegativeInt(env.RAG_EXACT_SCAN_CUTOFF, 0, 100_000, 'exact-scan-cutoff', warnings),
     lexicalTranslation: gate.monolingual ? false : parseBooleanSwitch(env.RAG_LEXICAL_TRANSLATION, false, 'lexical-translation', warnings),
+    terminology,
+    terminologyDense: parseTerminologyDense(env, terminology, warnings),
+    terminologyMining: parseBooleanSwitch(env.RAG_TERMINOLOGY_MINING, false, 'terminology-mining', warnings),
     paramsOverride: parseParamsOverride(env.RAG_RETRIEVAL_PARAMS_OVERRIDE, warnings),
     hasCohereKey: (env.COHERE_API_KEY ?? '').trim() !== '',
     hasVoyageKey: (env.VOYAGE_API_KEY ?? '').trim() !== '',
     domainEmbeddings: parseDomainEmbeddings(env, warnings),
+    ...parseTuningSwitches(env, lexicalSearch, warnings),
   };
 
   const operatorDisabledStages: ReadonlySet<StageName> = new Set(disabledStages);
@@ -1037,6 +1178,11 @@ export function warnInjectionCheckDisabled(config: RagConfig, injectionCheck: st
     mode: injectionCheck,
   });
   return true;
+}
+
+/** D-18, D-19: the dense terminology variant never runs in voice and needs the stage switch. */
+export function terminologyDenseFor(config: RagConfig, profile: Profile): boolean {
+  return config.v2.terminology && config.v2.terminologyDense && profile !== 'voice';
 }
 
 export function resetRagConfigForTests(): void {

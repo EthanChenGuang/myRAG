@@ -71,3 +71,25 @@ describe('AGENTS.md reflects the Phase 3.1.1 domain embedding bindings', () => {
     expect(AGENTS).toContain('Phase 3.1.1 (0440–0442)');
   });
 });
+
+describe('AGENTS.md reflects the Phase 4.1 retrieval-defaults outcome', () => {
+  const section6 = AGENTS.slice(AGENTS.indexOf('## 6. RAG & Data Pipeline'), AGENTS.indexOf('## 7. AI Model Management'));
+  const section14 = AGENTS.slice(AGENTS.indexOf('## 14. Behaviour to Preserve'), AGENTS.indexOf('## 15. Quality Checklist'));
+
+  test.each([
+    '`RAG_RERANKER=auto`',
+    '`RAG_REFUSAL_FLOOR=similarity`',
+    '`RAG_PIPELINE=legacy`',
+    'eval/decisions/04.1-retrieval-defaults.md',
+    'until the supported languages are chosen',
+    '`languages_not_configured`',
+    'sends query and candidate text to Cohere',
+  ])('section 6 mentions %s', (fragment) => {
+    expect(section6).toContain(fragment);
+  });
+
+  test('section 14 names the legacy relevance rule without a single global threshold', () => {
+    expect(section14).toContain('`RAG_REFUSAL_FLOOR=legacy_rule`');
+    expect(section14).not.toContain('the refusal threshold');
+  });
+});
