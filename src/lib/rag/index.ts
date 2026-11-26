@@ -222,6 +222,8 @@ export {
   type AnswerTurn,
   type TextsSource,
 } from './generation/answer-turn';
+export { guardChannelReply } from './security/channel-reply-guard';
+export type { ChannelReplyGuardInput, ChannelReplyGuardResult } from './security/channel-reply-guard';
 export { resolveAnswerLanguage, previousTurnLanguage, type AnswerLanguageSource } from './lang/answer-language';
 export { identifierSuggestionMessage } from './generation/messages';
 export { IDENTIFIER_NOT_FOUND } from './v2/result';
