@@ -8,15 +8,7 @@ import { ExtendedMessage } from '@/types/chat';
 import { env } from '@/lib/env';
 import { nanoid } from 'nanoid';
 import { generateTitle, generateSmartTitle } from '@/lib/title-generator';
-import { readAnswerConfig } from '@/lib/rag/generation/answer-config';
-import { emitNotice, renderNoticeAsText } from '@/lib/rag/generation/notices';
-import { fixedText } from '@/lib/rag/lang/texts';
-import { getLanguageSettings, languageVariablesUnset } from '@/lib/rag/lang/settings';
-import { guardWholeText, type OutputGuardLinkSummary } from '@/lib/rag/security/output-guard';
-import { createOutputLinkPolicy } from '@/lib/rag/security/link-targets';
-import { recordOutputGuardEvents } from '@/lib/rag/security/security-events';
-import { resolveTenantScope } from '@/lib/rag/tenant/resolve-chat';
-import { scopeKey } from '@/lib/rag/tenant/scope';
+import { guardChannelReply, readAnswerConfig } from '@/lib/rag';
 
 function messageText(message: ExtendedMessage): string {
   if (typeof message.content === 'string') return message.content;
@@ -25,10 +17,6 @@ function messageText(message: ExtendedMessage): string {
     .map((part) => (part && typeof part === 'object' && 'text' in part && typeof part.text === 'string' ? part.text : ''))
     .filter(Boolean)
     .join('\n');
-}
-
-function hasFindings(summary: OutputGuardLinkSummary): boolean {
-  return summary.links_removed > 0 || summary.credential_blocked > 0 || summary.credential_warned > 0;
 }
 
 /**
@@ -659,8 +647,10 @@ export class WhatsAppWebhookHandler {
     userMessage = '',
     ownerUserId?: string
   ): Promise<string> {
-    const guarded = await this.guardReply(reply, userMessage, ownerUserId);
+    // Phase 5.2 D-40: the whole reply is filtered before it is split; previews are off per message while the guard is on
+    const guarded = await guardChannelReply({ text: reply, userMessage, ownerUserId, channel: 'whatsapp' });
     const response = guarded.text;
+    const sendOptions: TextMessageOptions | null = guarded.linkPreviewOff ? { linkPreview: false } : null;
 
     // Start keep-alive before processing the response
     // This prevents disconnection during long message formatting/sending
@@ -695,8 +685,8 @@ export class WhatsAppWebhookHandler {
       for (let i = 0; i < parts.length; i++) {
         logger.info('WhatsAppWebhookHandler', `[DEBUG] Sending part ${i + 1}/${parts.length}, length: ${parts[i].length}`);
         logger.info('WhatsAppWebhookHandler', `[DEBUG] Part ${i + 1} content (first 500 chars): ${parts[i].substring(0, 500)}`);
-        const result = guarded.options
-          ? await this.whatsappClient.sendTextMessage(sessionId, to, parts[i], guarded.options)
+        const result = sendOptions
+          ? await this.whatsappClient.sendTextMessage(sessionId, to, parts[i], sendOptions)
           : await this.whatsappClient.sendTextMessage(sessionId, to, parts[i]);
 
         // Track outgoing message
@@ -712,65 +702,6 @@ export class WhatsAppWebhookHandler {
         (this.whatsappClient as any).stopKeepAlive(sessionId);
         logger.info('WhatsAppWebhookHandler', 'Stopped keep-alive for WhatsApp session');
       }
-    }
-  }
-
-  /**
-   * D-40, D-41: with RAG_OUTPUT_GUARD flag or enforce, the whole reply is filtered before it is split and sent
-   * (fail closed), previews are turned off per message, and the handler's own findings are recorded for channel whatsapp.
-   */
-  private async guardReply(
-    text: string,
-    userMessage: string,
-    ownerUserId?: string
-  ): Promise<{ text: string; options?: TextMessageOptions }> {
-    const mode = readAnswerConfig().outputGuard;
-    if (mode === 'off') return { text };
-
-    const language = languageVariablesUnset() ? '' : getLanguageSettings().primary ?? '';
-    let result: { text: string; summary: OutputGuardLinkSummary };
-    try {
-      result = guardWholeText(text, {
-        mode,
-        links: createOutputLinkPolicy({
-          allowlistValue: env.RAG_OUTPUT_LINK_ALLOWLIST,
-          siteUrl: env.NEXT_PUBLIC_SITE_URL,
-          userMessage,
-        }),
-        placeholder: fixedText('notices.link_removed', language),
-        language,
-      });
-    } catch (error) {
-      logger.error('WhatsAppWebhookHandler', '[RAG Security] output guard failed', { mode });
-      if (mode === 'enforce') throw error;
-      return { text, options: { linkPreview: false } };
-    }
-
-    let guardedText = result.text;
-    if (mode === 'enforce' && result.summary.credential_warned > 0) {
-      guardedText += renderNoticeAsText(emitNotice('credential_request_warning', { language }));
-    }
-    if (hasFindings(result.summary)) await this.recordGuardFindings(result.summary, ownerUserId);
-    return { text: guardedText, options: { linkPreview: false } };
-  }
-
-  private async recordGuardFindings(summary: OutputGuardLinkSummary, ownerUserId?: string): Promise<void> {
-    try {
-      const resolved = await resolveTenantScope({
-        getUser: async () => (ownerUserId ? { id: ownerUserId } : null),
-        signal: AbortSignal.timeout(5000),
-      });
-      if (!resolved.ok || !resolved.scope) return;
-      recordOutputGuardEvents(summary, {
-        tenantKey: scopeKey(resolved.scope),
-        traceId: null,
-        blocks: [],
-        channel: 'whatsapp',
-        removedTargets: summary.removedTargets,
-        matchedPhrases: [],
-      });
-    } catch {
-      logger.warn('WhatsAppWebhookHandler', '[RAG Security] output guard events not recorded');
     }
   }
 
