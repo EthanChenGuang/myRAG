@@ -4,6 +4,7 @@ import { MiningRunResultSchema, type MiningRunResult } from '@/lib/rag-eval/cont
 import { getRagDeps } from '../deps';
 import { loadFeedbackMiningConfig, readFeedbackLoopConfig, type FeedbackLoopEnvSource, type FeedbackMiningConfig } from './config';
 import { purgeRetrievalLog, PurgeError, type PurgeCounts } from './purge';
+import { bridgeToTerminologyMisses, type BridgeTenant } from './terminology-bridge';
 
 export const MAX_MINING_WINDOW_DAYS = 31;
 /** The run report around public.rag_mine_failed_queries (0537): its reason rows plus the items each tenant got. */
@@ -52,6 +53,17 @@ export interface RunMiningDeps {
   purge?: (client: SupabaseClient, retentionDays: number) => Promise<PurgeCounts>;
   now?: () => number;
   log?: (line: string) => void;
+}
+
+/** Phase 4.1.1's RAG_TERMINOLOGY_MINING, read with its config rule: only true (any case, trimmed) turns it on. */
+export function terminologyMiningEnabled(env: FeedbackLoopEnvSource = process.env): boolean {
+  return (env.RAG_TERMINOLOGY_MINING ?? '').trim().toLowerCase() === 'true';
+}
+
+function bridgeTenants(rows: MiningRow[]): BridgeTenant[] {
+  const byTenant = new Map<string, number>();
+  for (const row of rows) byTenant.set(row.tenant_key, row.tenant_inserted);
+  return [...byTenant].map(([tenantKey, inserted]) => ({ tenantKey, inserted }));
 }
 
 /** A sha256 prefix of the tenant key: reports name tenants by it, never by the key. */
@@ -158,6 +170,7 @@ function tenantResults(rows: MiningRow[]): TenantResult[] {
  * config/rag/feedback-mining.json. Disabled unless RAG_DOMAIN_EXPERT_REVIEW is true and RAG_RETRIEVAL_LOG is masked_query; a
  * disabled run makes no call. until defaults to now, since to until minus window_days; a window longer than 31 days is refused.
  * The result names tenants by hash and carries counts only. Throws MiningError with a code.
+ * A completed run then bridges its new items to Phase 4.1.1's miss log (terminology-bridge.ts); the bridge never changes the result.
  */
 export async function runMining(input: MiningWindowInput = {}, deps: RunMiningDeps = {}): Promise<MiningRunResult> {
   const env = deps.env ?? process.env;
@@ -232,5 +245,13 @@ export async function runMining(input: MiningWindowInput = {}, deps: RunMiningDe
       purged_review_items: result.purged_review_items,
     })}`,
   );
+  try {
+    await bridgeToTerminologyMisses(
+      { until, tenants: bridgeTenants(rows) },
+      { client, enabled: terminologyMiningEnabled(env), log },
+    );
+  } catch {
+    log('[Feedback Loop] terminology bridge failed (exception)');
+  }
   return result;
 }
