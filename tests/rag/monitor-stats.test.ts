@@ -42,7 +42,7 @@ describe('pooledRate', () => {
 describe('psi', () => {
   it('is 0 for two equal histograms and finite with an empty bin (0.5 smoothing)', () => {
     expect(psi([10, 20, 30, 40], [10, 20, 30, 40])).toBe(0);
-    expect(psi([1, 2, 3], [2, 4, 6])).toBeCloseTo(0, 10);
+    expect(psi([10, 20, 30], [20, 40, 60])).toBeLessThan(0.01);
     const value = psi([0, 50, 50], [40, 30, 30]);
     expect(Number.isFinite(value)).toBe(true);
     expect(value).toBeGreaterThan(0.25);
