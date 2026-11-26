@@ -8,12 +8,12 @@ import { spawnSync } from 'node:child_process';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { MockLanguageModelV3 } from 'ai/test';
 import type { LanguageModel } from 'ai';
-import { GoldenItemSchema, RagTraceSchema, RunManifestSchema, type GoldenItem, type RagRunRequest, type RagTrace, type RunManifest } from '../../src/lib/rag-eval/contracts.generated.ts';
+import { GoldenItemSchema, RagTraceSchema, RunManifestSchema, TerminologyImportRowSchema, type GoldenItem, type RagRunRequest, type RagTrace, type RunManifest } from '../../src/lib/rag-eval/contracts.generated.ts';
 import { canonicalJson, configHash } from '../../src/lib/rag-eval/trace.ts';
 import { EMBEDDER_ID, EMBEDDER_VERSION, embedderSourceSha256 } from './fixture-embedder.mts';
 import { ingestModeRetrievalEnv, partitionIngestModeItems } from './ingest-mode.mts';
 import { closeTableSplitTenants, isTableSplitItem, TABLE_SPLIT_USER_ID, withTableSplitTenant, type TableSplitTenant } from './table-split.mts';
-import { createFixtureDatabase, FIXTURE_USER_ID, type DeploymentMode, type FixtureMode } from './pglite-supabase.mts';
+import { createFixtureDatabase, FIXTURE_USER_ID, seedTerminology, type DeploymentMode, type FixtureMode, type TerminologySeedRow } from './pglite-supabase.mts';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from './fake-edge.mts';
 import { applyFixtureProcessEnv } from './process-env.mts';
 import { FAKE_CITATION_GENERATOR_MODEL, installFakeCitationGenerator } from './fake-citation-generator.mts';
@@ -237,6 +237,43 @@ export function shouldInstallFakeQueryLlm(env: Record<string, string | undefined
   return switchIsOn(env?.RAG_QUERY_LAYER, 'true') || options.queryLayer === true;
 }
 
+const FIXTURE_TERMINOLOGY_PATH = path.join(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..'), 'eval/fixtures/terminology/dictionary.jsonl');
+
+/** D-27: the fixture dictionary (eval/fixtures/terminology/dictionary.jsonl) as shared-layer seed rows; each line is a TerminologyImportRow. */
+export function loadFixtureTerminologySeed(filePath: string = FIXTURE_TERMINOLOGY_PATH): TerminologySeedRow[] {
+  return fs
+    .readFileSync(filePath, 'utf8')
+    .split('\n')
+    .map((line, index) => ({ line, index }))
+    .filter(({ line }) => line.trim() !== '')
+    .map(({ line, index }) => {
+      const parsed = TerminologyImportRowSchema.safeParse(JSON.parse(line));
+      if (!parsed.success) throw new Error(`[Eval Harness] ${path.basename(filePath)} line ${index + 1} is not a TerminologyImportRow`);
+      const row = parsed.data;
+      return {
+        layer: 'shared',
+        canonical: row.canonical,
+        variants: row.variants,
+        language: row.language,
+        kind: row.kind,
+        mode: row.mode,
+        source_language: row.source_language,
+        target_language: row.target_language,
+      };
+    });
+}
+
+/** A caller-built database gets the seed too, unless the caller already wrote a shared layer (or built it without the terminology tables). */
+async function seedCallerFixture(db: import('@electric-sql/pglite').PGlite, rows: readonly TerminologySeedRow[]): Promise<void> {
+  if (rows.length === 0) return;
+  const table = await db.query<{ present: boolean }>("SELECT to_regclass('public.rag_term_layers') IS NOT NULL AS present");
+  if (!table.rows[0]?.present) return;
+  const layers = new Set(rows.map((row) => row.layer));
+  const existing = await db.query<{ layer_key: string }>('SELECT layer_key FROM public.rag_term_layers WHERE layer_key = ANY($1::text[])', [[...layers]]);
+  if (existing.rows.length > 0) return;
+  await seedTerminology(db, rows);
+}
+
 export async function prepareInProcessEval(options: {
   corpusDir: string;
   deploymentMode: DeploymentMode;
@@ -259,7 +296,10 @@ export async function prepareInProcessEval(options: {
   ingestBuildEnv?: Record<string, string>;
   /** The run's requests set options.query_layer=true (D-38); with the env overlay it decides the fake query LLM install (D-39). */
   queryLayer?: boolean;
-  /** D-27: dictionary rows written into the fixture database it builds (ignored with ingestFixture, which the caller seeds). */
+  /**
+   * D-27: dictionary rows written into the fixture database, whatever RAG_TERMINOLOGY says. Defaults to the fixture dictionary; an empty
+   * list seeds nothing. A caller-built ingestFixture is seeded only when it holds no layer of these rows yet.
+   */
   terminologySeed?: readonly import('./pglite-supabase.mts').TerminologySeedRow[];
 }): Promise<InProcessEval> {
   const {
@@ -291,6 +331,8 @@ export async function prepareInProcessEval(options: {
     ...(embeddingProfileId ? { RAG_EMBEDDING_PROFILES: 'on' } : {}),
   };
   const seeding = !ingestFixture && (chunkingProfiles?.length ?? 0) > 0;
+  const terminologySeed = options.terminologySeed ?? loadFixtureTerminologySeed();
+  if (ingestFixture) await seedCallerFixture(ingestFixture.db, terminologySeed);
   const fixture =
     ingestFixture ??
     (await createFixtureDatabase({
@@ -303,7 +345,7 @@ export async function prepareInProcessEval(options: {
       ...(tableSplit ? { tableSplit: true } : {}),
       ...(tableSplit && options.tableSplitDocType ? { tableSplitDocType: options.tableSplitDocType } : {}),
       ...(options.ingestBuildEnv ? { ingestEnv: options.ingestBuildEnv } : {}),
-      ...(options.terminologySeed?.length ? { terminologySeed: options.terminologySeed } : {}),
+      ...(terminologySeed.length ? { terminologySeed } : {}),
     }));
   if (tableSplit && !fixture.tableSplitTenants) {
     if (!ingestFixture) await fixture.db.close().catch(() => undefined);
