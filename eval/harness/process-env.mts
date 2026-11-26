@@ -15,6 +15,8 @@ export function applyFixtureProcessEnv(options: {
   deploymentMode: DeploymentMode;
   extra?: Record<string, string>;
   vendorEmbeddingRoutes?: boolean;
+  /** --env-overlay runs: set the fixture pins (fake-edge endpoints, deployment mode, embedder) again after `extra`. */
+  reapplyFixturePins?: boolean;
 }): void {
   const env = process.env as MutableEnv;
   for (const name of Object.keys(env)) {
@@ -23,11 +25,18 @@ export function applyFixtureProcessEnv(options: {
   Object.assign(env, loadPinnedEvalEnv());
   const fixture = fixtureProcessEnv(options.edgeUrl, { vendorEmbeddingRoutes: options.vendorEmbeddingRoutes === true });
   Object.assign(env, fixture);
-  env.NODE_ENV = 'test';
-  env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = options.deploymentMode;
-  env.OPENAI_EMBEDDING_MODEL = 'text-embedding-3-small';
+  const pin = (): void => {
+    env.NODE_ENV = 'test';
+    env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = options.deploymentMode;
+    env.OPENAI_EMBEDDING_MODEL = 'text-embedding-3-small';
+  };
+  pin();
   const extra = options.extra ?? {};
   Object.assign(env, extra);
+  if (options.reapplyFixturePins === true) {
+    Object.assign(env, fixture);
+    pin();
+  }
   for (const name of ['COHERE_API_KEY', 'VOYAGE_API_KEY'] as const) {
     if (extra[name] === RUN_CONFIG_FIXTURE_KEY_TOKEN) env[name] = fixture[name];
   }

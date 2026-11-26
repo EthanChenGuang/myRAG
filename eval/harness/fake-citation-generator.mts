@@ -18,6 +18,8 @@ import { hasRefusalDirective } from './prompt-directives.mts';
  * unsupported answer. Every other question is answered exactly as without the option.
  */
 export const FAKE_CITATION_GENERATOR_MODEL = 'fake/citation-alias-v1';
+/** The generator id of a run with the instruction-sensitive mode on (--answers, D-13). */
+export const FAKE_INSTRUCTION_GENERATOR_MODEL = 'fake/instruction-sensitive-v1';
 export const FAKE_INVALID_ALIAS = 'S99';
 export const DEFAULT_FAKE_CITATION_SEED = 'p5-22';
 
