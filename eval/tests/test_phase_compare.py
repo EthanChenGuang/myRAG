@@ -6,41 +6,44 @@ import pytest
 from rag_sidecar.contracts.baseline import NoiseConfig
 from rag_sidecar.contracts.eval_run import RagRunOptions, TraceCandidate, TraceRefusal
 from rag_sidecar.contracts.golden import GoldenItem
+from rag_sidecar.contracts.latency import LatencyBudgets, StageLatency
 from rag_sidecar.contracts.report import InjectionReport, MetricValue
 from rag_sidecar.contracts.retrieval import ChunkingDecision, ChunkingSweepReport
 from test_report_runner import QUOTE, _manifest, _trace
 
 from rag_eval.calibrate.refusal import CalibrationResult, CrossComparison
 from rag_eval.gate import evaluate_gate
-from rag_eval.metrics import score_items
 from rag_eval.golden_io import write_golden
+from rag_eval.metrics import score_items
 from rag_eval.phase_compare import (
     ComparisonSpec,
+    LatencyBudgetSpec,
+    PhaseComparison,
+    RunOutput,
     RunRequest,
     SwitchComparison,
     SwitchComparisonSpec,
     absolute_zero_check,
     category_noise_check,
     citation_validity_check,
-    gate_check,
-    no_slice_drop_check,
-    paired_all_zero_check,
-    retrieval_unchanged_check,
-    run_switch_comparison,
-    default_runner,
-    PhaseComparison,
-    RunOutput,
-    compression_rule,
     command_result,
+    compression_rule,
+    default_runner,
+    gate_check,
+    iterative_scan_rule,
+    latency_budget_check,
     legacy_parity_rule,
     local_bm25_refusal_rule,
     main,
+    no_slice_drop_check,
+    paired_all_zero_check,
     parent_child_rule,
     recommended_rule,
     resolve_chunking_profile,
+    retrieval_unchanged_check,
     run_phase_comparison,
+    run_switch_comparison,
     translation_rule,
-    iterative_scan_rule,
     xlg03_verdict,
 )
 from rag_eval.profile_compare import baseline_from_report
@@ -1070,6 +1073,118 @@ def test_report_only_runs_never_fail_the_comparison(tmp_path: Path):
     commands, _ = _env_commands()
     result = run_switch_comparison(spec, tmp_path / "out", runner=_switch_runner(_spec51_outputs(spec, flag=worse), {}), commands=commands)
     assert result.passed is True
+
+
+# ---------- Phase 5.1.1 closing comparison (plan 05.1.1-22)
+
+SPEC511 = REPO_ROOT / "eval" / "config" / "phase5.1.1-comparison.json"
+PHASE511_DEFAULTS = {
+    "RAG_RETRIEVAL_LOG": "off",
+    "RAG_RETRIEVAL_LOG_RETENTION_DAYS": "30",
+    "RAG_REFUSAL_FEEDBACK": "false",
+    "RAG_EMBED_FEEDBACK": "false",
+    "RAG_SOURCE_OPEN_SIGNAL": "false",
+    "RAG_DOMAIN_EXPERT_REVIEW": "false",
+}
+PHASE511_ON = {
+    "RAG_RETRIEVAL_LOG": "masked_query",
+    "RAG_REFUSAL_FEEDBACK": "true",
+    "RAG_EMBED_FEEDBACK": "true",
+    "RAG_SOURCE_OPEN_SIGNAL": "true",
+    "RAG_DOMAIN_EXPERT_REVIEW": "true",
+}
+FAST = {"analyze": 1.0, "embed": 2.0, "search": 6.0, "assemble": 0.0, "generation": 5.0, "retrieval_total": 12.0}
+
+
+def _with_latency(output: RunOutput, p95: dict[str, float] | None) -> RunOutput:
+    latency = None if p95 is None else {stage: StageLatency(p50_ms=value, p95_ms=value, n=10) for stage, value in p95.items()}
+    return RunOutput(report=output.report.model_copy(update={"latency": latency}), traces=output.traces, golden=output.golden)
+
+
+def _spec511_world(tmp_path: Path) -> SwitchComparisonSpec:
+    baseline = _baseline(_output())
+    for name in ("prechunked", "ingest"):
+        (tmp_path / f"{name}.json").write_text(baseline.model_dump_json(), encoding="utf-8")
+    raw = json.loads(SPEC511.read_text(encoding="utf-8"))
+    raw["baselines"] = {"prechunked": str(tmp_path / "prechunked.json"), "ingest": str(tmp_path / "ingest.json")}
+    return SwitchComparisonSpec.model_validate(raw)
+
+
+def _spec511_outputs(spec: SwitchComparisonSpec, **changes: RunOutput) -> dict[str, RunOutput]:
+    outputs = {run.name: _with_latency(_output(), FAST) for run in spec.runs}
+    outputs.update({name.replace("_", "-"): output for name, output in changes.items()})
+    return outputs
+
+
+def test_committed_phase511_spec_runs_both_fixture_modes_off_and_on():
+    spec = SwitchComparisonSpec.model_validate_json(SPEC511.read_text(encoding="utf-8"))
+    runs = {run.name: run for run in spec.runs}
+    assert set(runs) == {"off-prechunked", "off-ingest", "on-prechunked", "on-ingest"}
+    assert set(spec.baselines) == {"prechunked", "ingest"}
+    for mode in ("prechunked", "ingest"):
+        off, on = runs[f"off-{mode}"], runs[f"on-{mode}"]
+        assert off.fixture_mode == on.fixture_mode == mode
+        assert off.switches == PHASE511_DEFAULTS
+        assert {name: on.switches.get(name) for name in PHASE511_ON} == PHASE511_ON
+        assert not any("SECRET" in name for name in on.switches)
+        assert off.harness_flags == on.harness_flags == []
+        assert {"paired_all_zero", "characterization"} <= {check for check in off.checks if isinstance(check, str)}
+        assert {"retrieval_unchanged", "no_slice_drop"} <= {check for check in on.checks if isinstance(check, str)}
+        latency = next(check for check in on.checks if getattr(check, "kind", None) == "latency_budget")
+        assert latency.against == f"off-{mode}" and latency.budgets == "eval/config/latency-budgets.json"
+    assert "tests/rag/feedback-loop/refusal-metadata.test.ts" in spec.commands["characterization"]
+
+
+def test_run_switch_comparison_phase511_passes(tmp_path: Path):
+    spec = _spec511_world(tmp_path)
+    seen: dict = {}
+    commands, calls = _env_commands()
+    result = run_switch_comparison(spec, tmp_path / "out", runner=_switch_runner(_spec511_outputs(spec), seen), commands=commands)
+    assert result.passed is True, result.model_dump_json(indent=2)
+    assert seen["on-ingest"].process_env["RAG_RETRIEVAL_LOG"] == "masked_query"
+    assert any("characterize-chat" in " ".join(argv) and env.get("RAG_RETRIEVAL_LOG") == "off" for argv, env in calls)
+    by_name = {run.name: run for run in result.runs}
+    assert any(check.name == "latency_budget" and check.passed for check in by_name["on-prechunked"].checks)
+
+
+@pytest.mark.parametrize("breaker", ["retrieval_moved", "off_moved", "over_budget", "total_over_budget", "slower_than_off", "not_measured", "stage_missing"])
+def test_run_switch_comparison_phase511_fails_on_a_synthetic_failing_input(tmp_path: Path, breaker: str):
+    spec = _spec511_world(tmp_path)
+    changes = {
+        "retrieval_moved": {"on_prechunked": _with_latency(_output(rank2=("en-general-001",)), FAST)},
+        "off_moved": {"off_ingest": _with_latency(_output(misses=("en-general-001",)), FAST)},
+        "over_budget": {"on_ingest": _with_latency(_output(), {**FAST, "search": 450.0})},
+        "total_over_budget": {"off_prechunked": _with_latency(_output(), {**FAST, "retrieval_total": 2500.0})},
+        "slower_than_off": {"on_prechunked": _with_latency(_output(), {**FAST, "embed": 2.0 * 1.5 + 5.0 + 1.0})},
+        "not_measured": {"on_ingest": _with_latency(_output(), None)},
+        "stage_missing": {"on_ingest": _with_latency(_output(), {k: v for k, v in FAST.items() if k != "search"})},
+    }[breaker]
+    commands, _ = _env_commands()
+    result = run_switch_comparison(spec, tmp_path / "out", runner=_switch_runner(_spec511_outputs(spec, **changes), {}), commands=commands)
+    assert result.passed is False
+    assert "FAIL" in (tmp_path / "out" / "comparison.md").read_text(encoding="utf-8")
+
+
+def test_latency_budget_check_allows_the_noise_band_and_fails_beyond_it():
+    budgets = LatencyBudgets.model_validate_json((REPO_ROOT / "eval" / "config" / "latency-budgets.json").read_text(encoding="utf-8"))
+    check = LatencyBudgetSpec(kind="latency_budget", profile="chat", against="off", tolerance_ms=5, tolerance_ratio=0.5)
+    off = _with_latency(_output(), FAST)
+    within = latency_budget_check(_with_latency(_output(), {**FAST, "search": 6.0 * 1.5 + 5.0}), budgets, check, off)
+    assert within.passed is True, within.detail
+    beyond = latency_budget_check(_with_latency(_output(), {**FAST, "search": 6.0 * 1.5 + 5.5}), budgets, check, off)
+    assert beyond.passed is False and any("search" in line for line in beyond.detail)
+    unbudgeted = latency_budget_check(_with_latency(_output(), {**FAST, "made_up_stage": 9000.0}), budgets, check.model_copy(update={"against": None}))
+    assert unbudgeted.passed is True, unbudgeted.detail
+    assert latency_budget_check(off, budgets, check, None).passed is False
+
+
+@pytest.mark.parametrize("against", ["missing-run", "on-prechunked", "off-ingest"])
+def test_phase511_spec_rejects_a_latency_reference_that_is_not_an_earlier_run_of_the_same_mode(against: str):
+    raw = json.loads(SPEC511.read_text(encoding="utf-8"))
+    on = next(run for run in raw["runs"] if run["name"] == "on-prechunked")
+    next(check for check in on["checks"] if isinstance(check, dict))["against"] = against
+    with pytest.raises(ValueError):
+        SwitchComparisonSpec.model_validate(raw)
 
 
 # ---------- schema 3: Phase 3.2 per-switch arms (plan 03.2-66, D-46)

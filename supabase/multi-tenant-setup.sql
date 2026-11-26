@@ -18898,3 +18898,674 @@ $do$;
 CREATE INDEX IF NOT EXISTS idx_rag_answer_records_tenant_created ON public.rag_answer_records (tenant_key, created_at);
 
 COMMIT;
+
+------------------------------------------
+-- Phase 5.1.1: Feedback loop (migrations 0531-0537, plan 05.1.1-22, after 0502 in migration order)
+------------------------------------------
+
+-- >>> supabase/migrations/0531_rag_retrieval_log.sql
+-- 0531: rag_retrieval_log, one row per knowledge-base retrieval (Phase 5.1.1, FBK-01, FBK-02, D-03, D-03a, D-06).
+-- Written by the service role after the response; ids, scores and language codes only, never answer, chunk or document text.
+-- chat_id has no foreign key: a new chat's row is created after its first answer. The AFTER DELETE trigger on public.chats removes
+-- the rows of a deleted chat instead. user_id and organization_id cascade, so deleting a user or an organization deletes their rows.
+-- The organization foreign key is added only where public.organizations exists (multi-tenant).
+-- tenant_key is a generated column added per mode by 0532. The column names and types read by Phases 5.3 and 7 are frozen (D-29).
+-- Access: RLS on with no policy; no grant to PUBLIC, anon or authenticated; only service_role reads and writes. Idempotent.
+
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS public.rag_retrieval_log (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  trace_id text NOT NULL CONSTRAINT rag_retrieval_log_trace_id_key UNIQUE,
+  user_id uuid NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  organization_id uuid NULL,
+  chat_id uuid NULL,
+  answer_id uuid NULL,
+  channel text NOT NULL CONSTRAINT rag_retrieval_log_channel_check CHECK (channel IN ('chat', 'embed', 'voice')),
+  rag_mode text NULL,
+  pipeline text NOT NULL CONSTRAINT rag_retrieval_log_pipeline_check CHECK (pipeline IN ('legacy', 'v2')),
+  retrieval_config_hash text NULL,
+  query_language text NULL CONSTRAINT rag_retrieval_log_query_language_check
+    CHECK (query_language ~ '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$'),
+  query_language_confidence real NULL CONSTRAINT rag_retrieval_log_query_language_confidence_check
+    CHECK (query_language_confidence BETWEEN 0 AND 1),
+  chunk_languages text[] NOT NULL DEFAULT '{}'::text[] CONSTRAINT rag_retrieval_log_chunk_languages_check
+    CHECK (
+      cardinality(chunk_languages) = 0
+      OR (
+        array_ndims(chunk_languages) = 1
+        AND array_position(chunk_languages, NULL) IS NULL
+        AND array_to_string(chunk_languages, ',') ~ '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?(,[a-z]{2,3}(-[A-Za-z0-9]{2,8})?)*$'
+        AND array_to_string(chunk_languages, ';') ~ '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?(;[a-z]{2,3}(-[A-Za-z0-9]{2,8})?)*$'
+      )
+    ),
+  answer_language text NULL CONSTRAINT rag_retrieval_log_answer_language_check
+    CHECK (answer_language ~ '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$'),
+  query_masked text NULL CONSTRAINT rag_retrieval_log_query_masked_check CHECK (char_length(query_masked) <= 2000),
+  query_fingerprint text NULL CONSTRAINT rag_retrieval_log_query_fingerprint_check CHECK (query_fingerprint ~ '^[0-9a-f]{64}$'),
+  status text NOT NULL CONSTRAINT rag_retrieval_log_status_check CHECK (status IN ('ok', 'empty', 'error', 'degraded')),
+  refusal_decision text NULL,
+  refusal_reason text NULL,
+  outcome text NOT NULL DEFAULT 'unknown' CONSTRAINT rag_retrieval_log_outcome_check
+    CHECK (outcome IN ('answered', 'refused_no_context', 'kb_unavailable', 'degraded_answer', 'unknown')),
+  candidates jsonb NOT NULL DEFAULT '[]'::jsonb CONSTRAINT rag_retrieval_log_candidates_check
+    CHECK (jsonb_typeof(candidates) = 'array' AND jsonb_array_length(candidates) <= 50),
+  candidate_count integer NOT NULL DEFAULT 0 CONSTRAINT rag_retrieval_log_candidate_count_check CHECK (candidate_count >= 0),
+  top_score real NULL,
+  latency_ms integer NULL CONSTRAINT rag_retrieval_log_latency_ms_check CHECK (latency_ms >= 0),
+  stage_latency jsonb NOT NULL DEFAULT '{}'::jsonb,
+  feedback_vote smallint NULL CONSTRAINT rag_retrieval_log_feedback_vote_check CHECK (feedback_vote IN (-1, 1)),
+  feedback_kind text NULL CONSTRAINT rag_retrieval_log_feedback_kind_check CHECK (feedback_kind IN ('answer', 'refusal', 'embed')),
+  feedback_reasons text[] NOT NULL DEFAULT '{}'::text[],
+  feedback_at timestamptz NULL,
+  source_opened_count integer NOT NULL DEFAULT 0 CONSTRAINT rag_retrieval_log_source_opened_count_check
+    CHECK (source_opened_count >= 0),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+
+DO $org_fk$
+BEGIN
+  IF to_regclass('public.organizations') IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_constraint
+    WHERE conrelid = 'public.rag_retrieval_log'::regclass AND conname = 'rag_retrieval_log_organization_id_fkey'
+  ) THEN
+    ALTER TABLE public.rag_retrieval_log
+      ADD CONSTRAINT rag_retrieval_log_organization_id_fkey
+      FOREIGN KEY (organization_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
+  END IF;
+END
+$org_fk$;
+
+CREATE INDEX IF NOT EXISTS idx_rag_retrieval_log_created ON public.rag_retrieval_log (created_at);
+CREATE INDEX IF NOT EXISTS idx_rag_retrieval_log_chat_id ON public.rag_retrieval_log (chat_id);
+
+ALTER TABLE public.rag_retrieval_log ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL ON TABLE public.rag_retrieval_log FROM PUBLIC, anon, authenticated;
+GRANT ALL ON TABLE public.rag_retrieval_log TO service_role;
+
+CREATE OR REPLACE FUNCTION public.rag_feedback_loop_on_chat_delete()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+BEGIN
+  DELETE FROM public.rag_retrieval_log l
+  WHERE l.chat_id IN (SELECT o.id FROM old_rows o);
+  RETURN NULL;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_feedback_loop_on_chat_delete() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_feedback_loop_on_chat_delete() TO service_role;
+
+DROP TRIGGER IF EXISTS rag_feedback_loop_chats_delete ON public.chats;
+CREATE TRIGGER rag_feedback_loop_chats_delete
+  AFTER DELETE ON public.chats
+  REFERENCING OLD TABLE AS old_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.rag_feedback_loop_on_chat_delete();
+
+NOTIFY pgrst, 'reload schema';
+
+COMMIT;
+
+-- >>> supabase/migrations/0532_rag_retrieval_log_tenant.multi-tenant.sql
+-- 0532 (multi-tenant): rag_retrieval_log.tenant_key is o:<organization_id> for an organization retrieval and u:<user_id> for a
+-- personal one, the same expression as documents.tenant_key (0301), rag_answer_records.tenant_key (0502) and scopeKey().
+-- Adds the (tenant_key, created_at desc) index read by Phases 5.3 and 7 and the partial index for negative feedback. Idempotent.
+
+BEGIN;
+
+ALTER TABLE public.rag_retrieval_log ADD COLUMN IF NOT EXISTS tenant_key text GENERATED ALWAYS AS (
+  CASE WHEN organization_id IS NOT NULL THEN 'o:' || organization_id::text ELSE 'u:' || user_id::text END
+) STORED;
+
+CREATE INDEX IF NOT EXISTS idx_rag_retrieval_log_tenant_created ON public.rag_retrieval_log (tenant_key, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_rag_retrieval_log_tenant_negative ON public.rag_retrieval_log (tenant_key, created_at)
+  WHERE feedback_vote = -1;
+
+COMMIT;
+
+-- >>> supabase/migrations/0533_rag_retrieval_log_functions.sql
+-- 0533: rag_purge_retrieval_log deletes retrieval log rows older than the retention window in bounded batches (Phase 5.1.1, D-06).
+-- Oldest first, at most p_batch_size rows per call; returns the number deleted. Callers repeat until it returns 0.
+-- Called by the weekly mining job, `npm run rag:feedback-loop purge` and the optional pg_cron file. Service role only. Idempotent.
+
+BEGIN;
+
+CREATE OR REPLACE FUNCTION public.rag_purge_retrieval_log(p_retention_days integer, p_batch_size integer)
+RETURNS integer
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_deleted integer;
+BEGIN
+  IF p_retention_days IS NULL OR p_retention_days < 1 THEN
+    RAISE EXCEPTION 'rag_purge_retrieval_log: p_retention_days must be at least 1' USING ERRCODE = '22023';
+  END IF;
+  IF p_batch_size IS NULL OR p_batch_size < 1 OR p_batch_size > 10000 THEN
+    RAISE EXCEPTION 'rag_purge_retrieval_log: p_batch_size must be between 1 and 10000' USING ERRCODE = '22023';
+  END IF;
+
+  DELETE FROM public.rag_retrieval_log l
+  WHERE l.ctid IN (
+    SELECT r.ctid
+    FROM public.rag_retrieval_log r
+    WHERE r.created_at < pg_catalog.now() - pg_catalog.make_interval(days => p_retention_days)
+    ORDER BY r.created_at
+    LIMIT p_batch_size
+  );
+  GET DIAGNOSTICS v_deleted = ROW_COUNT;
+  RETURN v_deleted;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_purge_retrieval_log(integer, integer) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_purge_retrieval_log(integer, integer) TO service_role;
+
+NOTIFY pgrst, 'reload schema';
+
+COMMIT;
+
+-- >>> supabase/migrations/0534_rag_feedback_review.sql
+-- 0534: tenant feedback settings, domain-expert grants and the review queue (Phase 5.1.1, FBK-02, FBK-05, FBK-06, D-06, D-14, D-16).
+-- rag_tenant_feedback_settings: a tenant may only lower the global retrieval-log level (inherit, off, ids). Service role only.
+-- rag_domain_experts: explicit (tenant_key, user_id) grants made by operator admins. Service role only.
+-- rag_review_items: one row per mined case with a snapshot that survives the log purge (query, language codes D-03a, candidates ids
+-- and scores, reasons). tags (D-29) is a seam for Phase 5.3; this phase writes none and experts cannot write it.
+-- Access: authenticated may SELECT items and UPDATE status, triage, label and labelled_at only where public.rag_is_domain_expert(tenant_key)
+-- is true. Single-tenant (no public.organizations table): admin_users are experts of s:default without a grant row. Multi-tenant: every
+-- expert needs an explicit grant, operator admins included. The guard trigger sets labelled_by for client callers, limits their status to
+-- labelled or skipped, keeps exported items closed to them and freezes split and split_group once either is set, for every caller.
+-- chat_id has no foreign key; rag_feedback_loop_on_chat_delete() (0531) is extended here to delete the items of a deleted chat. Idempotent.
+
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS public.rag_tenant_feedback_settings (
+  tenant_key text PRIMARY KEY CONSTRAINT rag_tenant_feedback_settings_tenant_key_check
+    CHECK (tenant_key ~ '^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$'),
+  retrieval_log text NOT NULL DEFAULT 'inherit' CONSTRAINT rag_tenant_feedback_settings_retrieval_log_check
+    CHECK (retrieval_log IN ('inherit', 'off', 'ids')),
+  updated_by uuid NULL REFERENCES auth.users(id) ON DELETE SET NULL,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS public.rag_domain_experts (
+  tenant_key text NOT NULL CONSTRAINT rag_domain_experts_tenant_key_check
+    CHECK (tenant_key ~ '^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$'),
+  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  granted_by uuid NULL REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT rag_domain_experts_pkey PRIMARY KEY (tenant_key, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_rag_domain_experts_user ON public.rag_domain_experts (user_id);
+
+CREATE TABLE IF NOT EXISTS public.rag_review_items (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_key text NOT NULL CONSTRAINT rag_review_items_tenant_key_check
+    CHECK (tenant_key ~ '^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$'),
+  retrieval_log_id uuid NULL REFERENCES public.rag_retrieval_log(id) ON DELETE SET NULL,
+  trace_id text NULL,
+  user_id uuid NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  chat_id uuid NULL,
+  query_masked text NOT NULL CONSTRAINT rag_review_items_query_masked_check CHECK (char_length(query_masked) <= 2000),
+  query_fingerprint text NULL CONSTRAINT rag_review_items_query_fingerprint_check CHECK (query_fingerprint ~ '^[0-9a-f]{64}$'),
+  query_language text NULL CONSTRAINT rag_review_items_query_language_check
+    CHECK (query_language ~ '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$'),
+  query_language_confidence real NULL CONSTRAINT rag_review_items_query_language_confidence_check
+    CHECK (query_language_confidence BETWEEN 0 AND 1),
+  answer_language text NULL CONSTRAINT rag_review_items_answer_language_check
+    CHECK (answer_language ~ '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?$'),
+  chunk_languages text[] NOT NULL DEFAULT '{}'::text[] CONSTRAINT rag_review_items_chunk_languages_check
+    CHECK (
+      cardinality(chunk_languages) = 0
+      OR (
+        array_ndims(chunk_languages) = 1
+        AND array_position(chunk_languages, NULL) IS NULL
+        AND array_to_string(chunk_languages, ',') ~ '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?(,[a-z]{2,3}(-[A-Za-z0-9]{2,8})?)*$'
+        AND array_to_string(chunk_languages, ';') ~ '^[a-z]{2,3}(-[A-Za-z0-9]{2,8})?(;[a-z]{2,3}(-[A-Za-z0-9]{2,8})?)*$'
+      )
+    ),
+  channel text NULL CONSTRAINT rag_review_items_channel_check CHECK (channel IN ('chat', 'embed', 'voice')),
+  outcome text NULL CONSTRAINT rag_review_items_outcome_check
+    CHECK (outcome IN ('answered', 'refused_no_context', 'kb_unavailable', 'degraded_answer', 'unknown')),
+  candidates jsonb NOT NULL DEFAULT '[]'::jsonb CONSTRAINT rag_review_items_candidates_check
+    CHECK (jsonb_typeof(candidates) = 'array' AND jsonb_array_length(candidates) <= 50),
+  retrieval_config_hash text NULL,
+  reasons text[] NOT NULL DEFAULT '{}'::text[] CONSTRAINT rag_review_items_reasons_check
+    CHECK (reasons <@ ARRAY['feedback_negative', 'refusal_disputed', 'groundedness_flagged', 'refused_high_score', 'zero_results',
+                            'low_score', 'no_source_opened']::text[]),
+  occurrences integer NOT NULL DEFAULT 1 CONSTRAINT rag_review_items_occurrences_check CHECK (occurrences >= 1),
+  tags text[] NOT NULL DEFAULT '{}'::text[] CONSTRAINT rag_review_items_tags_check
+    CHECK (
+      cardinality(tags) = 0
+      OR (
+        array_ndims(tags) = 1
+        AND array_position(tags, NULL) IS NULL
+        AND array_to_string(tags, ',') ~ '^[a-z_]{1,32}(,[a-z_]{1,32})*$'
+        AND array_to_string(tags, ';') ~ '^[a-z_]{1,32}(;[a-z_]{1,32})*$'
+      )
+    ),
+  status text NOT NULL DEFAULT 'open' CONSTRAINT rag_review_items_status_check
+    CHECK (status IN ('open', 'labelled', 'skipped', 'exported')),
+  triage text[] NOT NULL DEFAULT '{}'::text[] CONSTRAINT rag_review_items_triage_check
+    CHECK (triage <@ ARRAY['dictionary', 'training', 'golden', 'kb_gap', 'not_a_failure']::text[]),
+  label jsonb NULL CONSTRAINT rag_review_items_label_check CHECK (jsonb_typeof(label) = 'object'),
+  labelled_by uuid NULL REFERENCES auth.users(id) ON DELETE SET NULL,
+  labelled_at timestamptz NULL,
+  split text NULL CONSTRAINT rag_review_items_split_check CHECK (split IN ('dev', 'test')),
+  split_group text NULL,
+  mining_window timestamptz NULL,
+  mined_at timestamptz NOT NULL DEFAULT now(),
+  expires_at timestamptz NULL,
+  CONSTRAINT rag_review_items_tenant_fingerprint_window_key UNIQUE (tenant_key, query_fingerprint, mining_window)
+);
+
+CREATE INDEX IF NOT EXISTS idx_rag_review_items_tenant_status ON public.rag_review_items (tenant_key, status, mined_at DESC);
+CREATE INDEX IF NOT EXISTS idx_rag_review_items_chat_id ON public.rag_review_items (chat_id);
+CREATE INDEX IF NOT EXISTS idx_rag_review_items_user_id ON public.rag_review_items (user_id);
+CREATE INDEX IF NOT EXISTS idx_rag_review_items_retrieval_log_id ON public.rag_review_items (retrieval_log_id);
+CREATE INDEX IF NOT EXISTS idx_rag_review_items_expires ON public.rag_review_items (expires_at) WHERE status = 'open';
+
+ALTER TABLE public.rag_tenant_feedback_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.rag_domain_experts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.rag_review_items ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL ON TABLE public.rag_tenant_feedback_settings FROM PUBLIC, anon, authenticated;
+GRANT ALL ON TABLE public.rag_tenant_feedback_settings TO service_role;
+REVOKE ALL ON TABLE public.rag_domain_experts FROM PUBLIC, anon, authenticated;
+GRANT ALL ON TABLE public.rag_domain_experts TO service_role;
+REVOKE ALL ON TABLE public.rag_review_items FROM PUBLIC, anon, authenticated;
+GRANT ALL ON TABLE public.rag_review_items TO service_role;
+GRANT SELECT ON TABLE public.rag_review_items TO authenticated;
+GRANT UPDATE (status, triage, label, labelled_at) ON TABLE public.rag_review_items TO authenticated;
+
+-- True only for the calling user: an explicit grant for the tenant, or, in a single-tenant database, an admin asking about s:default.
+CREATE OR REPLACE FUNCTION public.rag_is_domain_expert(p_tenant_key text)
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+  SELECT auth.uid() IS NOT NULL
+    AND p_tenant_key IS NOT NULL
+    AND (
+      EXISTS (
+        SELECT 1 FROM public.rag_domain_experts e
+        WHERE e.tenant_key = p_tenant_key AND e.user_id = auth.uid()
+      )
+      OR (
+        p_tenant_key = 's:default'
+        AND pg_catalog.to_regclass('public.organizations') IS NULL
+        AND EXISTS (SELECT 1 FROM public.admin_users a WHERE a.id = auth.uid())
+      )
+    )
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_is_domain_expert(text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.rag_is_domain_expert(text) TO authenticated, service_role;
+
+DROP POLICY IF EXISTS rag_review_items_expert_select ON public.rag_review_items;
+CREATE POLICY rag_review_items_expert_select ON public.rag_review_items
+  FOR SELECT TO authenticated
+  USING (public.rag_is_domain_expert(tenant_key));
+
+DROP POLICY IF EXISTS rag_review_items_expert_update ON public.rag_review_items;
+CREATE POLICY rag_review_items_expert_update ON public.rag_review_items
+  FOR UPDATE TO authenticated
+  USING (public.rag_is_domain_expert(tenant_key))
+  WITH CHECK (public.rag_is_domain_expert(tenant_key));
+
+-- Callers that bypass RLS (service_role, the database owner) are trusted writers; every other caller is a client.
+CREATE OR REPLACE FUNCTION public.rag_review_items_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_trusted boolean;
+BEGIN
+  IF (OLD.split IS NOT NULL OR OLD.split_group IS NOT NULL)
+     AND (NEW.split IS DISTINCT FROM OLD.split OR NEW.split_group IS DISTINCT FROM OLD.split_group) THEN
+    RAISE EXCEPTION 'split_immutable' USING ERRCODE = '23514', DETAIL = 'split and split_group cannot change once set';
+  END IF;
+
+  SELECT r.rolsuper OR r.rolbypassrls INTO v_trusted FROM pg_catalog.pg_roles r WHERE r.rolname = current_user;
+  IF coalesce(v_trusted, false) THEN
+    RETURN NEW;
+  END IF;
+
+  IF OLD.status = 'exported' THEN
+    RAISE EXCEPTION 'review_item_exported' USING ERRCODE = '42501';
+  END IF;
+  IF NEW.status NOT IN ('labelled', 'skipped') THEN
+    RAISE EXCEPTION 'review_status_not_allowed' USING ERRCODE = '42501', DETAIL = 'clients may set labelled or skipped only';
+  END IF;
+  NEW.labelled_by := auth.uid();
+  RETURN NEW;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_review_items_guard() FROM PUBLIC, anon, authenticated;
+
+DROP TRIGGER IF EXISTS rag_review_items_guard ON public.rag_review_items;
+CREATE TRIGGER rag_review_items_guard
+  BEFORE UPDATE ON public.rag_review_items
+  FOR EACH ROW EXECUTE FUNCTION public.rag_review_items_guard();
+
+CREATE OR REPLACE FUNCTION public.rag_feedback_loop_on_chat_delete()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+BEGIN
+  DELETE FROM public.rag_retrieval_log l
+  WHERE l.chat_id IN (SELECT o.id FROM old_rows o);
+  DELETE FROM public.rag_review_items i
+  WHERE i.chat_id IN (SELECT o.id FROM old_rows o);
+  RETURN NULL;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_feedback_loop_on_chat_delete() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_feedback_loop_on_chat_delete() TO service_role;
+
+NOTIFY pgrst, 'reload schema';
+
+COMMIT;
+
+-- >>> supabase/migrations/0535_rag_feedback_mining.sql
+-- 0535: rag_mine_failed_queries, the weekly mining of rag_retrieval_log into rag_review_items (Phase 5.1.1, FBK-05, D-13, D-15, D-03a, D-29).
+-- Selects rows created in [p_since, p_until) with a masked query and a fingerprint, skips tenants that lowered their log level
+-- (rag_tenant_feedback_settings.retrieval_log off or ids), and flags each row with the D-13 reasons:
+--   feedback_negative     vote -1 on an answer or embed row, or a public.rag_answer_records feedback vote not_helpful on the same trace_id
+--   refusal_disputed      refusal vote -1
+--   groundedness_flagged  the answer record's groundedness label is possibly_unreliable
+--   refused_high_score    outcome refused_no_context or refusal decision refuse, with top_score at or above the floor
+--   zero_results          candidate_count 0 and outcome not kb_unavailable
+--   low_score             answered with top_score below the ceiling
+--   no_source_opened      answered, no source opened, p_config.source_open_signal true, and only together with another reason
+-- Thresholds come from p_config (config/rag/feedback-mining.json), per scorer kind: rerank when any candidate carries rerank_score,
+-- else similarity. Answer records join on trace_id and the same tenant_key. Rows are deduplicated by (tenant_key, query_fingerprint):
+-- the newest row is the snapshot, occurrences counts the rows, and reasons is the union of the group's reasons in priority order.
+-- At most per_tenant_limit items per tenant per run, best reason priority first. Each item copies tenant_key, user_id, chat_id, the
+-- query, the language codes and the candidates from its own log row; tags stay empty. ON CONFLICT on (tenant_key, query_fingerprint,
+-- mining_window) makes a re-run of the same window insert nothing. Returns per tenant and reason how many items were inserted.
+-- Service role only (0410 section 1). Idempotent.
+
+BEGIN;
+
+CREATE OR REPLACE FUNCTION public.rag_mine_failed_queries(p_since timestamptz, p_until timestamptz, p_config jsonb)
+RETURNS TABLE (tenant_key text, reason text, inserted integer)
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+DECLARE
+  v_limit integer;
+  v_ttl_days integer;
+  v_low_similarity double precision;
+  v_low_rerank double precision;
+  v_high_similarity double precision;
+  v_high_rerank double precision;
+  v_source_signal boolean;
+  v_window timestamptz;
+  v_path text[];
+BEGIN
+  IF p_since IS NULL OR p_until IS NULL OR p_since >= p_until THEN
+    RAISE EXCEPTION 'invalid_window' USING ERRCODE = '22023', DETAIL = 'p_since and p_until are required and p_since must be before p_until';
+  END IF;
+  IF p_config IS NULL OR jsonb_typeof(p_config) <> 'object' THEN
+    RAISE EXCEPTION 'invalid_config' USING ERRCODE = '22023', DETAIL = 'p_config must be a JSON object';
+  END IF;
+
+  FOREACH v_path SLICE 1 IN ARRAY ARRAY[
+    ARRAY['per_tenant_limit', ''],
+    ARRAY['open_item_ttl_days', ''],
+    ARRAY['low_score_ceiling', 'similarity'],
+    ARRAY['low_score_ceiling', 'rerank'],
+    ARRAY['refused_high_score_floor', 'similarity'],
+    ARRAY['refused_high_score_floor', 'rerank']
+  ] LOOP
+    IF jsonb_typeof(p_config #> array_remove(v_path, '')) IS DISTINCT FROM 'number' THEN
+      RAISE EXCEPTION 'invalid_config' USING ERRCODE = '22023', DETAIL = array_to_string(array_remove(v_path, ''), '.') || ' must be a number';
+    END IF;
+  END LOOP;
+  IF p_config ? 'source_open_signal' AND jsonb_typeof(p_config -> 'source_open_signal') IS DISTINCT FROM 'boolean' THEN
+    RAISE EXCEPTION 'invalid_config' USING ERRCODE = '22023', DETAIL = 'source_open_signal must be a boolean';
+  END IF;
+
+  IF (p_config ->> 'per_tenant_limit')::numeric NOT BETWEEN 1 AND 1000
+     OR (p_config ->> 'per_tenant_limit')::numeric <> trunc((p_config ->> 'per_tenant_limit')::numeric) THEN
+    RAISE EXCEPTION 'invalid_config' USING ERRCODE = '22023', DETAIL = 'per_tenant_limit must be an integer from 1 to 1000';
+  END IF;
+  IF (p_config ->> 'open_item_ttl_days')::numeric NOT BETWEEN 1 AND 3650
+     OR (p_config ->> 'open_item_ttl_days')::numeric <> trunc((p_config ->> 'open_item_ttl_days')::numeric) THEN
+    RAISE EXCEPTION 'invalid_config' USING ERRCODE = '22023', DETAIL = 'open_item_ttl_days must be an integer from 1 to 3650';
+  END IF;
+
+  v_limit := (p_config ->> 'per_tenant_limit')::integer;
+  v_ttl_days := (p_config ->> 'open_item_ttl_days')::integer;
+  v_low_similarity := (p_config #>> '{low_score_ceiling,similarity}')::double precision;
+  v_low_rerank := (p_config #>> '{low_score_ceiling,rerank}')::double precision;
+  v_high_similarity := (p_config #>> '{refused_high_score_floor,similarity}')::double precision;
+  v_high_rerank := (p_config #>> '{refused_high_score_floor,rerank}')::double precision;
+  v_source_signal := coalesce((p_config ->> 'source_open_signal')::boolean, false);
+  v_window := pg_catalog.date_trunc('week', p_until, 'UTC');
+
+  RETURN QUERY
+  WITH source_rows AS (
+    SELECT l.id, l.tenant_key, l.trace_id, l.query_fingerprint, l.created_at, l.outcome, l.refusal_decision, l.top_score,
+           l.candidate_count, l.feedback_vote, l.feedback_kind, l.source_opened_count,
+           (l.candidates @? '$[*].rerank_score') AS reranked
+    FROM public.rag_retrieval_log l
+    WHERE l.created_at >= p_since
+      AND l.created_at < p_until
+      AND l.query_masked IS NOT NULL
+      AND l.query_fingerprint IS NOT NULL
+      AND l.tenant_key IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM public.rag_tenant_feedback_settings s
+        WHERE s.tenant_key = l.tenant_key AND s.retrieval_log <> 'inherit'
+      )
+  ),
+  flagged AS (
+    SELECT r.id, r.tenant_key, r.query_fingerprint, r.created_at,
+      coalesce(
+        (r.feedback_vote = -1 AND r.feedback_kind IN ('answer', 'embed'))
+        OR EXISTS (
+          SELECT 1 FROM public.rag_answer_records a
+          WHERE a.trace_id = r.trace_id AND a.tenant_key = r.tenant_key AND a.feedback ->> 'vote' = 'not_helpful'
+        ),
+        false) AS f_negative,
+      coalesce(r.feedback_vote = -1 AND r.feedback_kind = 'refusal', false) AS f_disputed,
+      EXISTS (
+        SELECT 1 FROM public.rag_answer_records a
+        WHERE a.trace_id = r.trace_id AND a.tenant_key = r.tenant_key AND a.groundedness ->> 'label' = 'possibly_unreliable'
+      ) AS f_groundedness,
+      coalesce(
+        (r.outcome = 'refused_no_context' OR r.refusal_decision = 'refuse')
+        AND r.top_score >= CASE WHEN r.reranked THEN v_high_rerank ELSE v_high_similarity END,
+        false) AS f_high,
+      coalesce(r.candidate_count = 0 AND r.outcome <> 'kb_unavailable', false) AS f_zero,
+      coalesce(r.outcome = 'answered' AND r.top_score < CASE WHEN r.reranked THEN v_low_rerank ELSE v_low_similarity END, false) AS f_low,
+      coalesce(v_source_signal AND r.outcome = 'answered' AND r.source_opened_count = 0, false) AS f_no_source
+    FROM source_rows r
+  ),
+  grouped AS (
+    SELECT f.id, f.tenant_key, f.query_fingerprint, f.created_at,
+      row_number() OVER (PARTITION BY f.tenant_key, f.query_fingerprint ORDER BY f.created_at DESC, f.id DESC) AS newest,
+      count(*) OVER g AS occurrences,
+      bool_or(f.f_negative) OVER g AS g_negative,
+      bool_or(f.f_disputed) OVER g AS g_disputed,
+      bool_or(f.f_groundedness) OVER g AS g_groundedness,
+      bool_or(f.f_high) OVER g AS g_high,
+      bool_or(f.f_zero) OVER g AS g_zero,
+      bool_or(f.f_low) OVER g AS g_low,
+      bool_or(f.f_no_source) OVER g AS g_no_source
+    FROM flagged f
+    WHERE f.f_negative OR f.f_disputed OR f.f_groundedness OR f.f_high OR f.f_zero OR f.f_low
+    WINDOW g AS (PARTITION BY f.tenant_key, f.query_fingerprint)
+  ),
+  kept AS (
+    SELECT g.id, g.tenant_key, g.query_fingerprint, g.created_at, g.occurrences,
+      array_remove(ARRAY[
+        CASE WHEN g.g_negative THEN 'feedback_negative' END,
+        CASE WHEN g.g_disputed THEN 'refusal_disputed' END,
+        CASE WHEN g.g_groundedness THEN 'groundedness_flagged' END,
+        CASE WHEN g.g_high THEN 'refused_high_score' END,
+        CASE WHEN g.g_zero THEN 'zero_results' END,
+        CASE WHEN g.g_low THEN 'low_score' END,
+        CASE WHEN g.g_no_source THEN 'no_source_opened' END
+      ]::text[], NULL) AS reasons,
+      CASE
+        WHEN g.g_negative THEN 1
+        WHEN g.g_disputed THEN 2
+        WHEN g.g_groundedness THEN 3
+        WHEN g.g_high THEN 4
+        WHEN g.g_zero THEN 5
+        ELSE 6
+      END AS priority
+    FROM grouped g
+    WHERE g.newest = 1
+  ),
+  selected AS (
+    SELECT k.*
+    FROM (
+      SELECT k0.*,
+        row_number() OVER (PARTITION BY k0.tenant_key ORDER BY k0.priority, k0.occurrences DESC, k0.created_at DESC, k0.id) AS tenant_rank
+      FROM kept k0
+    ) k
+    WHERE k.tenant_rank <= v_limit
+  ),
+  ins AS (
+    INSERT INTO public.rag_review_items AS i (
+      tenant_key, retrieval_log_id, trace_id, user_id, chat_id,
+      query_masked, query_fingerprint, query_language, query_language_confidence, answer_language, chunk_languages,
+      channel, outcome, candidates, retrieval_config_hash, reasons, occurrences,
+      status, mining_window, mined_at, expires_at
+    )
+    SELECT l.tenant_key, l.id, l.trace_id, l.user_id, l.chat_id,
+      l.query_masked, l.query_fingerprint, l.query_language, l.query_language_confidence, l.answer_language, l.chunk_languages,
+      l.channel, l.outcome, l.candidates, l.retrieval_config_hash, s.reasons, s.occurrences::integer,
+      'open', v_window, now(), now() + make_interval(days => v_ttl_days)
+    FROM selected s
+    JOIN public.rag_retrieval_log l ON l.id = s.id AND l.tenant_key = s.tenant_key
+    ON CONFLICT ON CONSTRAINT rag_review_items_tenant_fingerprint_window_key DO NOTHING
+    RETURNING i.tenant_key, i.query_fingerprint
+  )
+  SELECT s.tenant_key, r.reason, count(n.query_fingerprint)::integer
+  FROM selected s
+  CROSS JOIN LATERAL unnest(s.reasons) AS r(reason)
+  LEFT JOIN ins n ON n.tenant_key = s.tenant_key AND n.query_fingerprint = s.query_fingerprint
+  GROUP BY s.tenant_key, r.reason
+  ORDER BY s.tenant_key, r.reason;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_mine_failed_queries(timestamptz, timestamptz, jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_mine_failed_queries(timestamptz, timestamptz, jsonb) TO service_role;
+
+NOTIFY pgrst, 'reload schema';
+
+COMMIT;
+
+-- >>> supabase/migrations/0536_rag_retrieval_log_source_opened.sql
+-- 0536: rag_record_source_opened adds one to source_opened_count on the caller's own rag_retrieval_log row (Phase 5.1.1, D-12).
+-- One statement: the row must match the trace id and the user id, and the count stops at 20. Returns the count after the call,
+-- the unchanged count at the cap, or NULL when that user has no row with that trace id (the route answers 404).
+-- SECURITY INVOKER: only service_role has privileges on the table. Service role only. Idempotent.
+
+BEGIN;
+
+CREATE OR REPLACE FUNCTION public.rag_record_source_opened(p_trace_id text, p_user_id uuid)
+RETURNS integer
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_count integer;
+BEGIN
+  IF p_trace_id IS NULL OR p_user_id IS NULL OR p_trace_id !~ '^[0-9a-f]{32}$' THEN
+    RETURN NULL;
+  END IF;
+
+  UPDATE public.rag_retrieval_log l
+  SET source_opened_count = l.source_opened_count + 1
+  WHERE l.trace_id = p_trace_id AND l.user_id = p_user_id AND l.source_opened_count < 20
+  RETURNING l.source_opened_count INTO v_count;
+  IF FOUND THEN
+    RETURN v_count;
+  END IF;
+
+  SELECT l.source_opened_count INTO v_count
+  FROM public.rag_retrieval_log l
+  WHERE l.trace_id = p_trace_id AND l.user_id = p_user_id;
+  RETURN v_count;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_record_source_opened(text, uuid) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_record_source_opened(text, uuid) TO service_role;
+
+NOTIFY pgrst, 'reload schema';
+
+COMMIT;
+
+-- >>> supabase/migrations/0537_rag_feedback_mining_report.sql
+-- 0537: rag_mine_failed_queries_report, the run report around rag_mine_failed_queries (Phase 5.1.1, FBK-05, D-15).
+-- rag_mine_failed_queries counts an item under each of its reasons, so its rows cannot give the number of items a tenant got.
+-- This wrapper runs it, then counts per tenant the review items that the same transaction inserted (mined_at = now(), the
+-- transaction start, in the mining window of p_until), and returns the reason rows with that per-tenant total. The count runs in a
+-- second statement, so it sees the rows the first one inserted. SECURITY INVOKER: the caller needs EXECUTE on the mining function
+-- and SELECT on rag_review_items, which only the service role has. Service role only. Idempotent.
+
+BEGIN;
+
+CREATE OR REPLACE FUNCTION public.rag_mine_failed_queries_report(p_since timestamptz, p_until timestamptz, p_config jsonb)
+RETURNS TABLE (tenant_key text, reason text, inserted integer, tenant_inserted integer)
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+#variable_conflict use_column
+DECLARE
+  v_rows jsonb;
+BEGIN
+  SELECT coalesce(pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object('tenant_key', m.tenant_key, 'reason', m.reason, 'inserted', m.inserted)), '[]'::jsonb)
+  INTO v_rows
+  FROM public.rag_mine_failed_queries(p_since, p_until, p_config) AS m;
+
+  RETURN QUERY
+  SELECT r.tenant_key, r.reason, r.inserted, coalesce(c.n, 0)::integer
+  FROM pg_catalog.jsonb_to_recordset(v_rows) AS r(tenant_key text, reason text, inserted integer)
+  LEFT JOIN (
+    SELECT i.tenant_key, count(*) AS n
+    FROM public.rag_review_items i
+    WHERE i.mined_at = pg_catalog.now()
+      AND i.mining_window = pg_catalog.date_trunc('week', p_until, 'UTC')
+    GROUP BY i.tenant_key
+  ) AS c ON c.tenant_key = r.tenant_key
+  ORDER BY r.tenant_key, r.reason;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_mine_failed_queries_report(timestamptz, timestamptz, jsonb) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_mine_failed_queries_report(timestamptz, timestamptz, jsonb) TO service_role;
+
+NOTIFY pgrst, 'reload schema';
+
+COMMIT;
