@@ -180,14 +180,14 @@ const OFF_TOPIC_QUESTIONS: Array<{ language: CorpusLanguage; question: string; a
   { language: 'en', question: 'What speeds and bowl size does the Quillon SP-7 slip pump have?', adjacent: 'Quillon GM-1 glaze mixer', band: 'above_threshold' },
   { language: 'en', question: 'Where does the Orrinvale draughts club post its weekly puzzles?', adjacent: 'Orrinvale Chess Circle puzzle corner', band: 'above_threshold' },
   { language: 'en', question: 'Do mixers splash slip?', adjacent: 'Quillon GM-1 glaze mixer', band: 'below_threshold' },
-  { language: 'en', question: 'Can warming mats crack?', adjacent: 'Tessaly ST-4 seed tray heater', band: 'below_threshold' },
+  { language: 'en', question: 'Can a warming mat go brittle?', adjacent: 'Tessaly ST-4 seed tray heater', band: 'below_threshold' },
   { language: 'zh', question: '岚溪泥浆泵有几档转速，料桶多大？', adjacent: '岚溪 GM-2 釉料搅拌机', band: 'above_threshold' },
   { language: 'zh', question: '弈桥围棋社把每周的题目贴在哪里？', adjacent: '弈桥棋社每周残局角', band: 'above_threshold' },
-  { language: 'zh', question: '垫子会烫手吗？', adjacent: '青畦 YM-4 育苗盘加热垫', band: 'below_threshold' },
-  { language: 'zh', question: '桨叶会生锈吗？', adjacent: '岚溪 GM-2 釉料搅拌机', band: 'below_threshold' },
+  { language: 'zh', question: '这种垫子烫手？', adjacent: '青畦 YM-4 育苗盘加热垫', band: 'below_threshold' },
+  { language: 'zh', question: '桨叶容易生锈？', adjacent: '岚溪 GM-2 釉料搅拌机', band: 'below_threshold' },
   { language: 'it', question: 'Che ugello monta la smerigliatrice Calvessa?', adjacent: 'Sabbiatrice per vetro Calvessa SB-2', band: 'above_threshold' },
   { language: 'it', question: 'Dove conserva i nastri la banda di Valdentro?', adjacent: 'Archivio spartiti del Coro Valdentro', band: 'above_threshold' },
-  { language: 'it', question: "I fumi d'alveare disturbano le api?", adjacent: 'Affumicatore Arnelia AF-1', band: 'below_threshold' },
+  { language: 'it', question: "I fumi d'alveare infastidiscono?", adjacent: 'Affumicatore Arnelia AF-1', band: 'below_threshold' },
   { language: 'it', question: 'I coristi firmano spesso?', adjacent: 'Archivio spartiti del Coro Valdentro', band: 'below_threshold' },
 ];
 
