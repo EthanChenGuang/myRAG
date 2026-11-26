@@ -96,3 +96,36 @@ export async function fetchAssemblyRows(
 
   return { documents, chunkMetadata };
 }
+
+export type VersionColumns = Pick<AssemblyDocumentRow, 'version' | 'doc_type' | 'doc_date' | 'effective_from' | 'version_label'>;
+
+/**
+ * v2 builds its document rows from the search hits, which carry no version label or dates. While RAG_VERSION_LABELS is on it
+ * reads the five columns in one batched read of the request's documents, restricted to the request's tenant key. A missing
+ * column warns once and returns nothing; any other failure returns nothing too, so assembly continues without labels.
+ */
+export async function fetchVersionColumns(
+  adminClient: SupabaseClient,
+  documentIds: string[],
+  { tenantKey, signal }: { tenantKey: string; signal: AbortSignal },
+): Promise<Map<string, VersionColumns>> {
+  const out = new Map<string, VersionColumns>();
+  if (documentIds.length === 0) return out;
+  const { data, error } = await adminClient
+    .from('documents')
+    .select(`id, ${VERSION_LABEL_COLUMNS.join(', ')}`)
+    .eq('tenant_key', tenantKey)
+    .in('id', unique(documentIds))
+    .abortSignal(signal);
+  signal.throwIfAborted();
+  if (error) {
+    if (isUnknownColumnError(error)) warnVersionColumnsMissing();
+    else console.warn('[RAG Context] version columns lookup failed', { code: error.code ?? 'unknown' });
+    return out;
+  }
+  for (const row of (data ?? []) as unknown as Array<VersionColumns & { id: string }>) {
+    const { id, ...columns } = row;
+    out.set(id, columns);
+  }
+  return out;
+}
