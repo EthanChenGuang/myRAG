@@ -98,8 +98,33 @@ export function pendingCells(input: {
   alerts: readonly PendingAlert[];
   running: PendingRunning;
 }): PendingCells {
-  void input;
-  return new Map();
+  const result: PendingCells = new Map();
+  const changes = input.changes
+    .map((record) => ({ day: dayOf(record.created_at), keys: record.changed_keys }))
+    .filter((record): record is { day: string; keys: readonly string[] } => record.day !== null)
+    .sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : 0));
+  const alerts = input.alerts
+    .map((alert) => ({ id: alert.id, language: alert.language, day: dayOf(alert.day) }))
+    .filter((alert): alert is { id: string; language: string; day: string } => alert.day !== null)
+    .sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : 0));
+
+  for (const cell of input.thresholds?.cells ?? []) {
+    if (cell.status !== 'calibrated') continue;
+    const cellDay = dayOf(cell.recorded_at);
+    let mark: CellPending | null = null;
+    for (const category of CATEGORY_ORDER) {
+      const record = changes.find((entry) => onOrAfter(entry.day, cellDay) && categoryKeys(category, entry.keys).length > 0);
+      if (!record || matchesRunning(category, cell, input.running)) continue;
+      mark = { reason: category, since: record.day, changed_keys: categoryKeys(category, record.keys) };
+      break;
+    }
+    if (!mark) {
+      const alert = alerts.find((entry) => entry.language === 'all' || entry.language === cell.query_language);
+      if (alert) mark = { reason: 'score_shift', since: alert.day, alert_id: alert.id };
+    }
+    if (mark) result.set(cell.key, mark);
+  }
+  return result;
 }
 
 /** Whether the live gate would apply a cell under a configuration: calibrated, live, finite threshold, matching versions and model. */
@@ -124,6 +149,13 @@ function configOf(values: EnvValues): { config: RagConfig; embeddingModel: strin
 
 /** Keys of the cells that apply under the current values and stop applying under the proposed ones (D-18 setting check). */
 export function proposedPendingCells(thresholds: RefusalThresholds | null, currentEnv: EnvValues, proposedEnv: EnvValues): string[] {
-  void thresholds; void currentEnv; void proposedEnv;
-  return [];
+  const current = configOf(currentEnv);
+  const proposed = configOf(proposedEnv);
+  const keys: string[] = [];
+  for (const cell of thresholds?.cells ?? []) {
+    if (!appliesUnder(cell, current.config, current.embeddingModel)) continue;
+    if (appliesUnder(cell, proposed.config, proposed.embeddingModel)) continue;
+    keys.push(cell.key);
+  }
+  return keys.sort();
 }
