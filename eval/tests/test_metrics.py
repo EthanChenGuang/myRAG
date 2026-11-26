@@ -806,3 +806,104 @@ def test_items_without_groups_score_exactly_as_before(rank_field):
         traces.append(trace)
     results = score_items(traces, golden, rank_field=rank_field)
     _reference_gated(results, traces, golden, rank_field)
+
+
+# --- Phase 4.2 plan 12: identifier precision and near-miss leakage (D-32) ---
+
+ID_DOC = "identifiers.en.md"
+
+
+def _identifier_item(item_id: str, asked: str | None, *, answerable: bool = True) -> GoldenItem:
+    item = _item(item_id, [(ID_DOC, "the asked record")] if answerable else None, category="identifier_near_miss")
+    return item.model_copy(update={"tags": [f"asked_identifier:{asked}"] if asked is not None else []})
+
+
+def _identifier_trace(item_id: str, chunks: list[list[str] | None], *, refused: bool = False, cited: list[int] = ()):
+    trace = _trace(item_id, [(ID_DOC, f"the asked record part {index}") for index in range(len(chunks))], refused=refused)
+    kept = [chunk.model_copy(update={"identifiers_norm": ids}) for chunk, ids in zip(trace.kept, chunks, strict=True)]
+    citations = [
+        {
+            "alias": f"S{position + 1}",
+            "chunkIds": [kept[position].chunk_id],
+            "documentId": kept[position].document_id,
+            "documentName": ID_DOC,
+            "n": position + 1,
+            "quote": kept[position].content,
+            "quoteHash": "a" * 64,
+            "strategy": "chunk-alias",
+        }
+        for position in cited
+    ]
+    return RagTrace.model_validate(
+        {**trace.model_dump(mode="json"), "kept": [k.model_dump(mode="json") for k in kept], "citations": citations}
+    )
+
+
+def test_answerable_identifier_item_is_precise_when_only_the_asked_identifier_is_kept():
+    item = _identifier_item("en-id-001", "QX-4471")
+    (result,) = score_items([_identifier_trace(item.id, [["qx4471"], ["other99"]], cited=[0])], [item])
+    assert (result.identifier_precise, result.near_miss_leak) == (True, False)
+
+
+def test_a_near_miss_chunk_without_the_asked_identifier_leaks():
+    item = _identifier_item("en-id-001", "qx 4471")
+    (result,) = score_items([_identifier_trace(item.id, [["qx4471"], ["qx4472"]])], [item])
+    assert (result.identifier_precise, result.near_miss_leak) == (False, True)
+
+
+def test_a_chunk_holding_both_the_asked_and_a_near_miss_identifier_does_not_leak():
+    item = _identifier_item("en-id-001", "QX4471")
+    (result,) = score_items([_identifier_trace(item.id, [["qx4471", "qx4472"]])], [item])
+    assert (result.identifier_precise, result.near_miss_leak) == (True, False)
+
+
+def test_citing_a_chunk_without_the_asked_identifier_is_not_precise():
+    item = _identifier_item("en-id-001", "QX4471")
+    (result,) = score_items([_identifier_trace(item.id, [["qx4471"], ["lm9902"]], cited=[0, 1])], [item])
+    assert (result.identifier_precise, result.near_miss_leak) == (False, False)
+
+
+def test_answerable_item_without_a_kept_asked_identifier_is_not_precise():
+    item = _identifier_item("en-id-001", "QX4471")
+    (result,) = score_items([_identifier_trace(item.id, [["lm9902"]])], [item])
+    assert result.identifier_precise is False
+
+
+def test_no_answer_identifier_item_is_precise_only_when_refused_without_leak():
+    item = _identifier_item("en-id-002", "QX4479", answerable=False)
+    (refused,) = score_items([_identifier_trace(item.id, [], refused=True)], [item])
+    assert (refused.identifier_precise, refused.near_miss_leak) == (True, False)
+    (answered,) = score_items([_identifier_trace(item.id, [["lm9902"]])], [item])
+    assert answered.identifier_precise is False
+    (leaked,) = score_items([_identifier_trace(item.id, [["qx4471"]], refused=True)], [item])
+    assert (leaked.identifier_precise, leaked.near_miss_leak) == (False, True)
+
+
+def test_identifier_item_without_the_asked_tag_is_a_scoring_error():
+    item = _identifier_item("en-id-009", None)
+    with pytest.raises(ValueError, match="en-id-009"):
+        score_items([_identifier_trace(item.id, [["qx4471"]])], [item])
+
+
+def test_traces_without_identifiers_norm_give_no_identifier_values():
+    item = _identifier_item("en-id-001", "QX4471")
+    (result,) = score_items([_identifier_trace(item.id, [["qx4471"], None])], [item])
+    assert (result.identifier_precise, result.near_miss_leak) == (None, None)
+
+
+def test_identifier_slices_count_identifier_items_only():
+    golden = [
+        _identifier_item("en-id-001", "QX4471"),
+        _identifier_item("en-id-002", "QX4471"),
+        _item("en-a-001", [(DOC, "gold sentence")]),
+    ]
+    traces = [
+        _identifier_trace("en-id-001", [["qx4471"]]),
+        _identifier_trace("en-id-002", [["qx4471"], ["qx4417"]]),
+        _trace("en-a-001", [(DOC, "gold sentence")]),
+    ]
+    results = score_items(traces, golden)
+    assert results[2].identifier_precise is None and results[2].near_miss_leak is None
+    overall = aggregate(results)["overall"]
+    assert overall.identifier_precision == MetricValue(value=0.5, n=2)
+    assert overall.near_miss_leakage == MetricValue(value=0.5, n=2)
