@@ -416,3 +416,40 @@ describe('review-labelling.js Phase 5.3: answer check (D-31, UI-SPEC 6.11)', () 
     expect(q(itPanel.section, '[data-review-save-check]').textContent).toBe('Salva verifica della risposta');
   });
 });
+
+describe('review-labelling.js Phase 5.3: answer check edge cases', () => {
+  it('removes the answer check when the route says the item has no answer (409), and sends nothing', async () => {
+    const panel = loadPanel({
+      route: (call) => (call.url.endsWith('/answer-check') && call.method === 'GET' ? { status: 409, body: { error: 'no_answer' } } : undefined),
+    });
+    await open(panel);
+    expect(panel.section.querySelector('[data-review-check]')).toBeNull();
+    expect(q(panel.section, '[data-review-answer]').textContent).toBe(ANSWER);
+    expect(checkPosts(panel)).toEqual([]);
+  });
+
+  it('locks the answer check of an exported item', async () => {
+    const panel = loadPanel({
+      route: (call) => (call.url === `/api/rag/review/items/${ITEM_A}` ? { status: 200, body: item(ITEM_A, { answer_masked: ANSWER, status: 'exported' }) } : undefined),
+    });
+    await open(panel);
+    expect(q(panel.section, '[data-review-save-check]').disabled).toBe(true);
+    for (const field of FIELDS) expect(radio(panel, field, true).disabled).toBe(true);
+  });
+
+  it('renders markup in the saved time and the masked answer as text', async () => {
+    const payload = `${XSS_PAYLOAD}<script>PWNED(3)</script>`;
+    const panel = loadPanel({
+      route: (call) => {
+        if (call.url === `/api/rag/review/items/${ITEM_A}`) return { status: 200, body: item(ITEM_A, { answer_masked: payload }) };
+        if (call.url.endsWith('/answer-check')) return { status: 200, body: { supported: true, relevant: true, unsupported_content: false, labelled_at: payload } };
+        return undefined;
+      },
+    });
+    await open(panel);
+    expect(q(panel.section, '[data-review-check] time').textContent).toBe(payload);
+    expect(injectedElements(panel.doc)).toEqual([]);
+    expect(panel.doc.created).not.toContain('script');
+    expect(panel.doc.innerHtmlWrites).toBe(0);
+  });
+});
