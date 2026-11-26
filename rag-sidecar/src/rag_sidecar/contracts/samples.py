@@ -23,6 +23,8 @@ from rag_sidecar.contracts import (
     GroundednessThresholds,
     AdvanceRequest,
     AdvanceResponse,
+    TranslateCallbackRequest,
+    TranslateCallbackResponse,
     BackfillDryRunReport,
     BackfillManifestEntry,
     DetectVlmRequest,
@@ -508,6 +510,13 @@ def _phase31_contract_samples() -> dict[str, Any]:
             stage="identify",
             done=False,
             wait_ms=0,
+        ),
+        "TranslateCallbackRequest": TranslateCallbackRequest(worker_id="worker-1", deadline_ms=40_000),
+        "TranslateCallbackResponse": TranslateCallbackResponse(
+            worker_id="worker-1",
+            outcome="continue",
+            remaining=3,
+            reason="time_budget",
         ),
         "BackfillManifestEntry": BackfillManifestEntry(
             source_key="kb/doc-1",

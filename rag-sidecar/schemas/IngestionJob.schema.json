@@ -249,6 +249,23 @@
           "title": "Row Serialization",
           "type": "boolean"
         },
+        "target_language": {
+          "anyOf": [
+            {
+              "enum": [
+                "zh",
+                "en",
+                "it"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Target Language"
+        },
         "vlm_detect": {
           "title": "Vlm Detect",
           "type": "boolean"

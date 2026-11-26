@@ -18,6 +18,8 @@ from rag_sidecar.contracts.queue import (
     DetectVlmResponse,
     ParseExternalRequest,
     ParseExternalResponse,
+    TranslateCallbackRequest,
+    TranslateCallbackResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -172,3 +174,5 @@ class AppClient:
         if response.status_code >= 400:
             raise AppTransientError(f"advance returned {response.status_code}")
         return AdvanceResponse.model_validate(response.json())
+    async def translate(self, job_id: str, request: TranslateCallbackRequest) -> TranslateCallbackResponse:
+        raise AppTransientError("translate callback not implemented")

@@ -1,0 +1,79 @@
+{
+  "additionalProperties": false,
+  "description": "done: the ledger row is terminal (status); continue: the time budget ran out with chunks remaining, call again; retry: fail the job retryably.",
+  "properties": {
+    "outcome": {
+      "enum": [
+        "done",
+        "continue",
+        "retry"
+      ],
+      "title": "Outcome",
+      "type": "string"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    },
+    "remaining": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Remaining"
+    },
+    "status": {
+      "anyOf": [
+        {
+          "enum": [
+            "queued",
+            "preflight",
+            "parsing",
+            "checking",
+            "chunking",
+            "embedding",
+            "ready",
+            "failed",
+            "quarantined",
+            "needs_review",
+            "skipped_duplicate",
+            "pending_review"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Status"
+    },
+    "worker_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Worker Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "worker_id",
+    "outcome"
+  ],
+  "title": "TranslateCallbackResponse",
+  "type": "object"
+}

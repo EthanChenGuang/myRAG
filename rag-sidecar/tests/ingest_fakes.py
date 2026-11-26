@@ -17,6 +17,8 @@ from rag_sidecar.contracts.queue import (
     OriginalRef,
     ParseExternalRequest,
     ParseExternalResponse,
+    TranslateCallbackRequest,
+    TranslateCallbackResponse,
 )
 from rag_sidecar.contracts.routing import ParseAttempt
 from rag_sidecar.ingest.ledger_client import LeaseLost, ParseCacheEntry, Refused
@@ -351,6 +353,13 @@ class FakeApp:
         if script.status >= 400:
             raise RuntimeError(f"advance status {script.status}")
         return AdvanceResponse.model_validate(script.response)
+
+    async def translate(self, job_id: str, request: TranslateCallbackRequest) -> TranslateCallbackResponse:
+        self.calls.append(("translate", job_id, request.model_dump(mode="json")))
+        script = await self._next_script("translate")
+        if script.status >= 400:
+            raise RuntimeError(f"translate status {script.status}")
+        return TranslateCallbackResponse.model_validate(script.response)
 
     async def acquire_token(self) -> None:
         self.token_acquires += 1

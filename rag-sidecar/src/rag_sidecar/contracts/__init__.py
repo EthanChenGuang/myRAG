@@ -195,6 +195,9 @@ from rag_sidecar.contracts.queue import (
     JobStatus,
     ParseExternalRequest,
     ParseExternalResponse,
+    TranslateCallbackRequest,
+    TranslateCallbackResponse,
+    TranslateOutcome,
 )
 from rag_sidecar.contracts.routing import (
     PageRange,
@@ -441,6 +444,9 @@ __all__ = [
     "ParseExternalResponse",
     "AdvanceRequest",
     "AdvanceResponse",
+    "TranslateCallbackRequest",
+    "TranslateCallbackResponse",
+    "TranslateOutcome",
     "BackfillManifestEntry",
     "BackfillDryRunReport",
     "ParserExpected",

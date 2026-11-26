@@ -387,6 +387,7 @@ export type { QueueConfig } from './ingest/queue-config';
 export { handleAdvance } from './ingest/callbacks/advance';
 export { handleParseExternal } from './ingest/callbacks/parse-external';
 export { handleDetectVlm } from './ingest/callbacks/detect-vlm';
+export { handleTranslateCallback } from './ingest/callbacks/translate';
 export { checkSidecarSecret, SIDECAR_SECRET_HEADER } from './ingest/callbacks/internal-auth';
 export type { ChangeDocumentTypeFailure, ChangeDocumentTypeInput, ChangeDocumentTypeResult } from './ingest/change-doc-type';
 export { scopeForAdminDocument, AdminDocumentScopeError } from './tenant/ingest-scope';

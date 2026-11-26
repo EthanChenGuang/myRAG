@@ -54,6 +54,8 @@ function syncBuiltInHooks(): void {
   else unregisterPostPublishHook(TRANSLATION_HOOK);
 }
 
+export function setPostPublishQueueConfigForTests(_source: unknown): void {}
+
 export function resetPostPublishHooksForTests(): void {
   hooks.length = 0;
 }

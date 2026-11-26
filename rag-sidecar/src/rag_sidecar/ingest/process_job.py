@@ -40,6 +40,7 @@ logger = logging.getLogger(__name__)
 ADVANCE_DEADLINE_MS = 40_000
 MAX_ADVANCE_CALLS = 200
 MAX_PARSE_POLLS = 400
+TRANSLATE_DEADLINE_MS = 40_000
 
 # The chain has no tier of its own; the attempt row names the delegation instead of a conversion preset.
 FIXED_CHAIN_PARSER = "chain"
