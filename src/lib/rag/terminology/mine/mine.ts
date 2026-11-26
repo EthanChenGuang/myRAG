@@ -78,6 +78,17 @@ async function call(request: RpcRequest, signal: AbortSignal | undefined, code: 
   return rpcRows(data);
 }
 
+/** The integer a scalar function returns: PostgREST sends the bare value; a one-column row carries it as its only field. */
+function scalarCount(rows: unknown[]): number {
+  let value = rows[0];
+  if (value && typeof value === 'object') {
+    const fields = Object.values(value as Record<string, unknown>);
+    value = fields.length === 1 ? fields[0] : undefined;
+  }
+  const parsed = typeof value === 'string' ? Number(value) : value;
+  return typeof parsed === 'number' && Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+}
+
 function textOf(value: unknown): string | null {
   return typeof value === 'string' ? value : null;
 }
@@ -342,9 +353,7 @@ export async function mineCandidates(input: MineInput = {}): Promise<MineReport>
 
   let purged: number | null = null;
   if (!dryRun) {
-    const rows = await call(db.rpc('rag_term_purge_misses', { p_older_than_days: MISS_RETENTION_DAYS }), input.signal, 'purge failed');
-    const value = rows[0];
-    purged = typeof value === 'number' ? value : Number(value ?? 0) || 0;
+    purged = scalarCount(await call(db.rpc('rag_term_purge_misses', { p_older_than_days: MISS_RETENTION_DAYS }), input.signal, 'purge failed'));
   }
 
   const tenants = await readMisses(db, { tenantKey: input.tenantKey ?? null, windowDays, ...(input.signal ? { signal: input.signal } : {}) });
@@ -380,8 +389,7 @@ export async function mineCandidates(input: MineInput = {}): Promise<MineReport>
           input.signal,
           'candidate upsert failed',
         );
-        const value = rows[0];
-        report.upserted += typeof value === 'number' ? value : Number(value ?? 0) || 0;
+        report.upserted += scalarCount(rows);
       }
     } catch (error) {
       if (input.signal?.aborted) throw error;
