@@ -9,8 +9,12 @@ import { IngestFingerprintPartsSchema } from '@/lib/rag-eval/contracts.generated
 const TENANT_A = `u:${TWO_TENANT_IDS.userA}`;
 const TENANT_B = `u:${TWO_TENANT_IDS.userB}`;
 const TENANT_O = `o:${TWO_TENANT_IDS.orgO}`;
-/** 22 fixture corpus documents of the fixture user (19 before the 04.1.1-10 synthetic-terms documents) plus the three canary documents, all published before Phase 3.2. */
-const DOCUMENTS = 25;
+/**
+ * 140 fixture corpus documents of the fixture user (19 before the 04.1.1-10 synthetic-terms documents, 22 before the 05.2-28
+ * Phase 5.2 documents and the 04.2-37 Phase 4.2 documents; the three superseded Phase 4.2 version notes are not current) plus
+ * the three canary documents, all published before Phase 3.2.
+ */
+const DOCUMENTS = 143;
 const SENTINEL = 'c'.repeat(64);
 
 type Row = Record<string, unknown>;
@@ -87,17 +91,24 @@ describe('rag:fingerprint backfill (src/lib/rag/ingest/fingerprint/backfill.ts)'
     assert.equal(report.updated, DOCUMENTS);
     assert.equal(report.skipped, 0);
     assert.equal(report.complete, true);
-    assert.deepEqual(report.tenants, { [TENANT_O]: 1, [TENANT_A]: 1, [TENANT_B]: 1, [`u:${'00000000-0000-4000-8000-0000000000f1'}`]: 22 });
+    assert.deepEqual(report.tenants, { [TENANT_O]: 1, [TENANT_A]: 1, [TENANT_B]: 1, [`u:${'00000000-0000-4000-8000-0000000000f1'}`]: 140 });
     assert.equal(await fingerprinted(fixture.db), DOCUMENTS);
     assert.deepEqual(fetchCalls, []);
     assert.deepEqual([...new Set(calls)].sort(), ['rag_fingerprint_backfill_page', 'rag_fingerprint_backfill_write']);
 
-    const rows = await fixture.db.query<Row>('SELECT doc_type, ingest_fingerprint, metadata FROM documents');
-    for (const row of rows.rows) {
+    // The three superseded Phase 4.2 version notes (04.2-37) are not current, so the backfill leaves them; their current
+    // versions are seeded without metadata.parser, so their parser is recorded as unknown.
+    const rows = await fixture.db.query<Row>('SELECT filename, is_current, doc_type, ingest_fingerprint, metadata FROM documents');
+    const versionNote = /^versioned-note\.(en|zh|it)\.md$/;
+    const skipped = rows.rows.filter((row) => row.ingest_fingerprint === null);
+    assert.equal(skipped.length, 3);
+    assert.ok(skipped.every((row) => row.is_current === false && versionNote.test(String(row.filename))));
+    for (const row of rows.rows.filter((candidate) => candidate.ingest_fingerprint !== null)) {
       const parts = IngestFingerprintPartsSchema.parse((row.metadata as Row).ingest_fingerprint_parts);
       assert.equal(row.ingest_fingerprint, fp.buildIngestFingerprint(parts));
-      assert.equal(parts.parser_used, 'llamaparse');
-      assert.equal(parts.parser_version, 'legacy');
+      const noParser = versionNote.test(String(row.filename));
+      assert.equal(parts.parser_used, noParser ? 'unknown' : 'llamaparse');
+      assert.equal(parts.parser_version, noParser ? 'unknown' : 'legacy');
       assert.equal(parts.processing_profile_id, `${row.doc_type}@1`);
       assert.equal(parts.chunking_profile_id, 'legacy');
       assert.equal(parts.lexical_version, 2);
@@ -105,6 +116,7 @@ describe('rag:fingerprint backfill (src/lib/rag/ingest/fingerprint/backfill.ts)'
       assert.equal(parts.embedding_profile_id, 'openai-3-small-1536');
       assert.deepEqual(parts.switches, { language_aware_ingest: 'off', table_header_repeat: 'profile', table_row_serialization: 'false', caption_language: 'en' });
       assert.deepEqual(parts.assumed_defaults, [
+        ...(noParser ? ['parser_used', 'parser_version'] : []),
         'processing_profile_id',
         'processing_profile_version',
         'ocr_engine_codes',
