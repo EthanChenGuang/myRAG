@@ -201,7 +201,7 @@ export function Header({ onNewChat, onToggleSidebar, isSidebarOpen }: HeaderProp
         }
       `}</style>
 
-      <div className="relative flex items-center justify-between h-14 lg:h-16 px-3 sm:px-5 bg-transparent pointer-events-none">
+      <div className="chat-topbar__row relative flex items-center justify-between h-14 lg:h-16 px-3 sm:px-5 bg-transparent pointer-events-none">
         {/* Desktop Layout (1024px and up) */}
         <div className="hidden lg:flex items-center justify-between w-full">
           <div className="flex items-center gap-2 z-20">
@@ -293,7 +293,7 @@ export function Header({ onNewChat, onToggleSidebar, isSidebarOpen }: HeaderProp
         </div>
 
         {/* Mobile + Tablet Layout (smaller than 1024px): floating glass capsules */}
-        <div className="flex lg:hidden items-center justify-between w-full gap-2">
+        <div className="chat-topbar__mobile flex lg:hidden items-center justify-between w-full gap-2">
           <div className="flex items-center gap-2 min-w-0 z-20">
             <div className="chat-capsule chat-capsule--round pointer-events-auto">
               <button
@@ -311,7 +311,7 @@ export function Header({ onNewChat, onToggleSidebar, isSidebarOpen }: HeaderProp
           </div>
 
           {!isAuthPage && (
-            <div className="chat-capsule flex items-center gap-0.5 pointer-events-auto z-20">
+            <div className="chat-capsule chat-capsule--actions flex items-center pointer-events-auto z-20">
               {(!isAuthEnabled || user) && (
                 <MobileToolbarFixed />
               )}

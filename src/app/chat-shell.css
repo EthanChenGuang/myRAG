@@ -19,8 +19,8 @@
   --chat-accent-ink: #b8430e;
   --chat-focus: rgba(242, 97, 26, 0.55);
   --chat-card-shadow: 0 8px 24px -12px rgba(60, 30, 10, 0.28), 0 1px 2px rgba(60, 30, 10, 0.06);
-  --chat-glass-fill: rgba(255, 250, 246, 0.7);
-  --chat-glass-border: rgba(110, 70, 40, 0.12);
+  --chat-glass-fill: rgba(255, 250, 246, 0.46);
+  --chat-glass-border: rgba(0, 0, 0, 0.08);
   --chat-glass-shadow: 0 6px 18px -8px rgba(60, 30, 10, 0.22), 0 1px 2px rgba(60, 30, 10, 0.06);
   --chat-bar-h: 56px;
   --chat-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
@@ -39,8 +39,8 @@
   --chat-accent: #ff7a33;
   --chat-accent-ink: #ffa36e;
   --chat-focus: rgba(255, 122, 51, 0.6);
-  --chat-glass-fill: rgba(56, 55, 53, 0.62);
-  --chat-glass-border: rgba(255, 255, 255, 0.09);
+  --chat-glass-fill: rgba(56, 55, 53, 0.4);
+  --chat-glass-border: rgba(255, 255, 255, 0.12);
   --chat-glass-shadow: 0 8px 20px -8px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.3);
   --chat-card-shadow: 0 10px 28px -12px rgba(0, 0, 0, 0.55), 0 1px 2px rgba(0, 0, 0, 0.25);
 }
@@ -161,6 +161,48 @@ html .header-container.chat-topbar::before {
 @media (min-width: 1024px) {
   .chat-title-capsule {
     height: 42px;
+  }
+}
+
+/* Phone and tablet bar: 44px capsules, 16px side margin, 12px between capsules, 8px below the safe area. */
+@media (max-width: 1023px) {
+  html .chat-topbar__row {
+    height: auto;
+    min-height: var(--chat-bar-h);
+    padding: 8px max(16px, env(safe-area-inset-right, 0px)) 4px max(16px, env(safe-area-inset-left, 0px));
+  }
+
+  .chat-topbar__mobile,
+  .chat-topbar__mobile > div:first-child {
+    gap: 12px;
+  }
+
+  .chat-capsule--round {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .chat-title-capsule {
+    height: 44px;
+    min-width: 110px;
+    padding: 0 20px;
+    justify-content: center;
+  }
+
+  .chat-capsule--actions {
+    height: 44px;
+    padding: 0 2px;
+    gap: 6px;
+  }
+
+  /* 44px hit area, 32px visible avatar disc inset inside the capsule. */
+  html .header-container .chat-capsule--actions button.chat-avatar-pill {
+    width: 44px;
+    height: 44px;
+    border: 6px solid transparent;
+    background-clip: padding-box;
   }
 }
 
@@ -352,8 +394,8 @@ html[data-chat-keyboard='open'] .chat-dock {
 
 @media (max-width: 639px) {
   .chat-dock {
-    padding-left: max(12px, env(safe-area-inset-left, 0px));
-    padding-right: max(12px, env(safe-area-inset-right, 0px));
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
   }
 
   .chat-dock .chat-input-container > .flex {
@@ -483,7 +525,7 @@ html .chat-composer-card button.chat-composer-model-pill.is-open {
   }
 
   .chat-input-container[data-composer='collapsed'] form.chat-composer-card {
-    padding: 4px !important;
+    padding: 5px !important;
     border-radius: 9999px !important;
   }
 
@@ -493,8 +535,8 @@ html .chat-composer-card button.chat-composer-model-pill.is-open {
 
   .chat-input-container[data-composer='collapsed'] .chat-composer-text-row {
     margin-bottom: 0 !important;
-    padding-left: 40px;
-    padding-right: 84px;
+    padding-left: 36px;
+    padding-right: 106px;
   }
 
   .chat-input-container[data-composer='collapsed'] textarea {
@@ -522,11 +564,31 @@ html .chat-composer-card button.chat-composer-model-pill.is-open {
   }
 
   .chat-input-container[data-composer='collapsed'] .chat-composer-tools > div > div:first-child {
-    margin-left: 2px;
+    margin-left: 0;
   }
 
   .chat-input-container[data-composer='collapsed'] .chat-composer-secondary {
     display: none;
+  }
+
+  .chat-input-container[data-composer='collapsed'] .chat-composer-tools {
+    padding-inline: 0 !important;
+  }
+
+  .chat-composer-trailing,
+  .chat-composer-trailing > .flex {
+    gap: 8px;
+  }
+
+  .chat-composer-tools > .flex > .flex:first-child,
+  .chat-composer-secondary {
+    gap: 8px;
+  }
+
+  .chat-input-container[data-composer='expanded'] textarea {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+    padding-top: 12px !important;
   }
 
   .chat-input-container[data-composer='expanded'] .chat-composer-secondary {
@@ -557,7 +619,7 @@ html .chat-scroll-fab {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: calc(100% + 10px);
+  bottom: calc(100% + 12px);
   margin-inline: auto;
   width: 40px;
   height: 40px;
