@@ -366,6 +366,7 @@ describe('Embedding profiles panel: declared languages and BGE-M3 serving', () =
     expect(lines(bge)).toContain('Served by: the sidecar, in-house');
     const zhName = bge.querySelectorAll('span').find((el) => el.textContent === '中文');
     expect(zhName?.getAttribute('lang')).toBe('zh');
+    expect(bge.querySelectorAll('[translate="no"]').map((el) => el.textContent)).toEqual(['zh', 'en', 'it']);
     for (const id of ['openai-3-small-1536', 'voyage-finance-2-1024']) {
       expect(lines(page.card(id)).some((text) => text.startsWith('Served by'))).toBe(false);
     }
@@ -376,7 +377,7 @@ describe('Embedding profiles panel: declared languages and BGE-M3 serving', () =
   it('a profile missing a chosen language shows a warning line per language, with icon and word', async () => {
     const page = loadProfilesPage();
     await page.init();
-    const warnings = page.card('voyage-finance-2-1024').querySelectorAll('p').filter((el) => el.className.includes('text-warning'));
+    const warnings = page.card('voyage-finance-2-1024').querySelectorAll('[data-rag-profile-warning]');
     expect(warnings.map((el) => el.textContent)).toEqual([
       'Warning: Does not declare 中文, which this deployment supports.',
       'Warning: Does not declare Italiano, which this deployment supports.',
@@ -384,15 +385,16 @@ describe('Embedding profiles panel: declared languages and BGE-M3 serving', () =
     for (const line of warnings) {
       const icon = line.querySelector('i');
       expect(icon?.className).toContain('bi-exclamation-triangle');
+      expect(icon?.className).toContain('text-warning');
       expect(icon?.getAttribute('aria-hidden')).toBe('true');
     }
-    expect(page.card('bge-m3-1024').querySelectorAll('p').some((el) => el.className.includes('text-warning'))).toBe(false);
+    expect(page.card('bge-m3-1024').querySelectorAll('[data-rag-profile-warning]')).toEqual([]);
   });
 
   it('shows no warning before languages are chosen', async () => {
     const page = loadProfilesPage({ supported: '' });
     await page.init();
-    expect(page.root.querySelectorAll('p').some((el) => el.className.includes('text-warning'))).toBe(false);
+    expect(page.root.querySelectorAll('[data-rag-profile-warning]')).toEqual([]);
   });
 
   it('renders zh and it strings, and server strings only as text', async () => {

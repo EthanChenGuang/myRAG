@@ -214,7 +214,7 @@ class EmbeddingProfilesPanel {
       row.className = 'border border-base-300 rounded-lg p-4 mb-3';
 
       const title = document.createElement('h4');
-      title.className = 'font-semibold';
+      title.className = 'font-semibold break-words';
       title.textContent = view.id + (view.id === this.activeId ? ' (active)' : '');
       row.appendChild(title);
 
@@ -266,7 +266,10 @@ class EmbeddingProfilesPanel {
     if (codes.length === 0) parts.push(this.t('profile.noLanguages'));
     codes.forEach((code, index) => {
       if (index > 0) parts.push(this.t('listSeparator'));
-      parts.push(this.languageName(code), ` (${code})`);
+      const codeEl = document.createElement('span');
+      codeEl.setAttribute('translate', 'no');
+      codeEl.textContent = code;
+      parts.push(this.languageName(code), ' (', codeEl, ')');
     });
     parts.push(after || '');
     line.replaceChildren(...parts);
@@ -275,15 +278,19 @@ class EmbeddingProfilesPanel {
 
   missingLanguageLine(code) {
     const line = document.createElement('p');
-    line.className = 'text-xs text-warning break-words';
+    line.className = 'flex items-start gap-1 text-xs min-w-0 break-words';
+    line.setAttribute('data-rag-profile-warning', '');
     const icon = document.createElement('i');
-    icon.className = 'bi bi-exclamation-triangle me-1';
+    icon.className = 'bi bi-exclamation-triangle text-warning shrink-0';
     icon.setAttribute('aria-hidden', 'true');
     const word = document.createElement('span');
     word.className = 'font-medium';
     word.textContent = this.t('profile.warning');
     const [before, after] = String(this.t('profile.missingLanguage')).split('{language}');
-    line.replaceChildren(icon, word, ' ', before || '', this.languageName(code), after || '');
+    const sentence = document.createElement('span');
+    sentence.className = 'min-w-0';
+    sentence.replaceChildren(word, ' ', before || '', this.languageName(code), after || '');
+    line.replaceChildren(icon, sentence);
     return line;
   }
 
