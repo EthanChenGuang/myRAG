@@ -388,6 +388,7 @@ export async function POST(request: NextRequest) {
         scope: embedScope.scope,
         query: queryText,
         profile: 'embed',
+        channel: 'embed',
         options: {
           maxResults: parseInt(env.RAG_FINAL_RESULT_COUNT || '25'),
           fallbackToLowerThreshold: true,

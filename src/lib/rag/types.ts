@@ -72,6 +72,8 @@ export interface UsedDocument {
   isCurrent?: boolean;
   effectiveFrom?: string | null;
   effectiveTo?: string | null;
+  /** D-21: other documents holding the same passage as a kept chunk of this document; set only when there are any. */
+  alsoIn?: AlsoIn[];
 }
 
 export interface SourceImage {
@@ -91,6 +93,17 @@ export interface KeptChunk {
   similarity: number;
   rank: number;
   kept_by: KeptBy;
+  /** D-48: the chunk's near-duplicate cluster, when the search returned one. */
+  dupClusterId?: string;
+  /** D-21: other documents of the cluster that the diversify stage dropped, in rank order. */
+  alsoIn?: AlsoIn[];
+}
+
+/** Another document of a kept chunk's duplicate cluster (D-21): the first dropped chunk of that document. */
+export interface AlsoIn {
+  documentId: string;
+  filename: string;
+  chunkId: string;
 }
 
 export type RagMode = 'strict' | 'balanced' | 'flexible' | 'bypass';
@@ -258,6 +271,8 @@ export interface RunRetrievalInput {
   logContext?: LogContext;
   /** Chat and embed only; without it the semantic_cache stage stands down. */
   cacheContext?: RetrievalCacheContext;
+  /** D-58: set server-side by the embed route only, never from a request body; a version scope then also needs RAG_EMBED_VERSION_SCOPE. */
+  channel?: 'embed';
 }
 
 export type LogOutcomeValue = 'answered' | 'refused_no_context' | 'kb_unavailable' | 'degraded_answer' | 'unknown';
