@@ -77,10 +77,10 @@ function defaultRoute(call: RagCall): Reply | undefined {
           config_sha256: 'f'.repeat(64),
           purged_log_rows: 0,
           purged_review_items: 0,
-          total_inserted: 6,
+          total_inserted: 7,
           tenants: [
             { tenant_hash: HASH_B, inserted: 1, tenant_key: `o:${ORG_A}`, by_reason: { zero_results: 1 } },
-            { tenant_hash: HASH_A, inserted: 5, by_reason: { low_score: 2, feedback_negative: 3, groundedness_flagged: 0 } },
+            { tenant_hash: HASH_A, inserted: 6, by_reason: { low_score: 2, feedback_negative: 3, groundedness_flagged: 0, zero_results: 1 } },
           ],
         },
       },
@@ -528,10 +528,10 @@ describe('review-admin.js: mining and purge (D-15, D-06)', () => {
     const table = q(panel.section, 'table[data-review-admin-mine-result]');
     expect(table.textContent).toContain('Mining result');
     const rows = table.querySelectorAll('tbody tr');
-    expect(rows.map((r) => r.textContent)).toEqual([`${HASH_A}Marked not helpful3`, `${HASH_A}Weak matches only2`, `${HASH_B}Nothing retrieved1`]);
+    expect(rows.map((r) => r.textContent)).toEqual([`${HASH_A}Marked not helpful3`, `${HASH_A}Nothing retrieved1`, `${HASH_A}Weak matches only2`, `${HASH_B}Nothing retrieved1`]);
     expect(rows[0]!.querySelector('th')!.className).toContain('font-mono');
     expect(rows[0]!.querySelectorAll('td')[1]!.className).toContain('tabular-nums');
-    expect(panel.status.textContent).toContain('Mining finished. New cases: 6');
+    expect(panel.status.textContent).toContain('Mining finished. New cases: 7');
     expect(panel.section.textContent).toContain('Workspaces are shown as hashes here');
     expect(panel.section.textContent).not.toContain(`o:${ORG_A}`);
     expect(panel.section.textContent).not.toContain('f'.repeat(64));

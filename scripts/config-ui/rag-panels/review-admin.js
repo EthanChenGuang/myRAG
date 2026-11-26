@@ -295,6 +295,11 @@ const REVIEW_ADMIN_UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a
 const REVIEW_ADMIN_UUID_RE = new RegExp(`^${REVIEW_ADMIN_UUID}$`, 'i');
 const REVIEW_ADMIN_TENANT_RE = new RegExp(`^[ou]:${REVIEW_ADMIN_UUID}$`, 'i');
 const REVIEW_ADMIN_SAMPLE_ID = '00000000-0000-0000-0000-000000000000';
+const REVIEW_ADMIN_MINE_PATH = '/api/rag/admin/feedback-loop/mine';
+const REVIEW_ADMIN_PURGE_PATH = '/api/rag/admin/feedback-loop/purge';
+const REVIEW_ADMIN_MAX_WINDOW_DAYS = 31;
+const REVIEW_ADMIN_DAY_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+const REVIEW_ADMIN_MINE_LEVEL = 'IDs, scores and the masked question';
 
 function reviewAdminHelpers() {
   if (typeof window !== 'undefined' && typeof window.reviewLabellingEl === 'function') {
@@ -311,7 +316,7 @@ function reviewAdminHelpers() {
       formatNumber: window.reviewLabellingFormatNumber,
       formatDate: window.reviewLabellingFormatDate,
       nextId: window.reviewLabellingNextId,
-      reasons: window.REVIEW_LABELLING_REASONS || [],
+      reasons: typeof REVIEW_LABELLING_REASONS !== 'undefined' ? REVIEW_LABELLING_REASONS : window.REVIEW_LABELLING_REASONS || [],
     };
   }
   const m = reviewAdminSharedModule;
@@ -391,6 +396,88 @@ function reviewAdminDetail(body) {
   const details = Array.isArray(body.details) ? body.details : [];
   const first = details.length && reviewAdminIsObject(details[0]) ? reviewAdminText(details[0].message) : '';
   return first || reviewAdminText(body.error);
+}
+
+/** Days since the epoch of a YYYY-MM-DD string, or null when it is not a real calendar date. */
+function reviewAdminDayNumber(text) {
+  const match = REVIEW_ADMIN_DAY_RE.exec(String(text || ''));
+  if (!match) return null;
+  const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  const ms = Date.UTC(year, month - 1, day);
+  const date = new Date(ms);
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+  return Math.round(ms / 86400000);
+}
+
+function reviewAdminDayString(dayNumber) {
+  return new Date(dayNumber * 86400000).toISOString().slice(0, 10);
+}
+
+/** Today in the admin's own calendar, as the date inputs show it. */
+function reviewAdminToday() {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
+/**
+ * The mining window from the two inclusive date fields: since is the From day, until the day after To, because the route
+ * mines [since, until). Null when To is before From or the window is longer than 31 days.
+ */
+function reviewAdminMiningWindow(fromText, toText) {
+  const from = reviewAdminDayNumber(fromText);
+  const to = reviewAdminDayNumber(toText);
+  if (from === null || to === null || to < from) return null;
+  if (to + 1 - from > REVIEW_ADMIN_MAX_WINDOW_DAYS) return null;
+  return { since: reviewAdminDayString(from), until: reviewAdminDayString(to + 1) };
+}
+
+function reviewAdminFormatDay(text, locale) {
+  const match = REVIEW_ADMIN_DAY_RE.exec(String(text || ''));
+  if (!match) return String(text || '');
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  try {
+    return new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(date);
+  } catch {
+    return String(text);
+  }
+}
+
+/** Mining result rows (UI-SPEC 6.7.4): tenant hash, reason and count, sorted by hash and then by the D-13 reason order. */
+function reviewAdminMiningRows(result, reasonOrder) {
+  const tenants = reviewAdminIsObject(result) && Array.isArray(result.tenants) ? result.tenants : [];
+  const rows = [];
+  for (const tenant of tenants) {
+    if (!reviewAdminIsObject(tenant)) continue;
+    const hash = reviewAdminText(tenant.tenant_hash);
+    if (!hash || !reviewAdminIsObject(tenant.by_reason)) continue;
+    for (const [reason, value] of Object.entries(tenant.by_reason)) {
+      const count = Number(value);
+      if (!Number.isFinite(count) || count <= 0) continue;
+      rows.push({ hash, reason, count });
+    }
+  }
+  const rank = (reason) => {
+    const index = reasonOrder.indexOf(reason);
+    return index < 0 ? reasonOrder.length : index;
+  };
+  rows.sort((a, b) => (a.hash < b.hash ? -1 : a.hash > b.hash ? 1 : rank(a.reason) - rank(b.reason) || (a.reason < b.reason ? -1 : 1)));
+  return rows;
+}
+
+function reviewAdminMiningTotal(result, rows) {
+  if (reviewAdminIsObject(result) && Number.isFinite(Number(result.total_inserted)) && result.total_inserted !== null && result.total_inserted !== undefined) {
+    return Number(result.total_inserted);
+  }
+  return rows.reduce((sum, row) => sum + row.count, 0);
+}
+
+function reviewAdminRetentionDays(doc) {
+  const field = doc && typeof doc.getElementById === 'function' ? doc.getElementById('RAG_RETRIEVAL_LOG_RETENTION_DAYS') : null;
+  const text = field ? String(field.value || '').trim() : '';
+  if (!/^\d{1,3}$/.test(text)) return null;
+  const days = Number(text);
+  return days >= 1 && days <= 365 ? days : null;
 }
 
 class ReviewAdminPanel {
@@ -545,7 +632,195 @@ class ReviewAdminPanel {
   }
 
   renderExtraBlocks() {
-    return [];
+    return [this.renderMiningBlock(), this.renderPurgeBlock()];
+  }
+
+  renderMiningBlock() {
+    const today = reviewAdminToday();
+    const todayNumber = reviewAdminDayNumber(today);
+    const sinceId = this.h.nextId('review-admin-since');
+    const untilId = this.h.nextId('review-admin-until');
+    const helpId = `${sinceId}-help`;
+    const errorId = `${sinceId}-error`;
+    const dateField = (id, labelKey, value, hook) => {
+      const field = this.el('input', {
+        className: 'input input-bordered input-sm w-full',
+        attrs: { id, type: 'date', 'aria-describedby': `${helpId} ${errorId}`, [hook]: true, 'data-review-admin-action': true },
+      });
+      field.value = value;
+      return {
+        field,
+        control: this.el('div', { className: 'form-control w-full md:w-auto' }, [
+          this.el('label', { className: 'label', attrs: { for: id } }, [this.el('span', { className: 'label-text', text: this.t(labelKey) })]),
+          field,
+        ]),
+      };
+    };
+    const since = dateField(sinceId, 'mining.since', todayNumber === null ? '' : reviewAdminDayString(todayNumber - 7), 'data-review-admin-since');
+    const until = dateField(untilId, 'mining.until', today, 'data-review-admin-until');
+    const error = this.fieldError(errorId);
+    const noticeHost = this.el('div', { className: 'mt-4 empty:mt-0' });
+    const resultHost = this.el('div', { className: 'mt-4 empty:mt-0', attrs: { 'data-review-admin-mine-host': true } });
+    const button = this.el('button', { className: 'btn btn-outline btn-sm', text: this.t('action.mine'), attrs: { type: 'button', 'data-review-admin-mine': true, 'data-review-admin-action': true } });
+    const clearError = () => {
+      this.setFieldError(since.field, error, null);
+      until.field.removeAttribute('aria-invalid');
+    };
+    since.field.addEventListener('change', clearError);
+    until.field.addEventListener('change', clearError);
+    button.addEventListener('click', () => {
+      if (this.busy) return;
+      const miningWindow = reviewAdminMiningWindow(since.field.value, until.field.value);
+      if (!miningWindow) {
+        this.setFieldError(since.field, error, this.t('mining.windowInvalid'));
+        until.field.setAttribute('aria-invalid', 'true');
+        since.field.focus();
+        return;
+      }
+      clearError();
+      this.confirmAction({
+        kind: 'mine',
+        title: this.t('mine.title', { since: reviewAdminFormatDay(since.field.value, this.locale), until: reviewAdminFormatDay(until.field.value, this.locale) }),
+        body: this.t('mine.body'),
+        keep: this.t('mine.keep'),
+        confirm: this.t('mine.confirm'),
+        confirmClass: 'btn-primary',
+        runningText: this.t('mine.running'),
+        opener: button,
+        action: () => this.runMining(miningWindow, { button, noticeHost, resultHost, field: since.field, error }),
+      });
+    });
+    return this.el('div', { className: 'mt-6', attrs: { 'data-review-admin-block': 'mining' } }, [
+      this.heading(this.t('mining.heading')),
+      this.el('p', { className: 'text-sm text-base-content/70 max-w-prose', text: this.t('mining.description') }),
+      this.el('p', { className: 'text-xs text-base-content/70 mt-1 mb-4 max-w-prose', text: this.t('mining.uncalibrated') }),
+      this.el('div', { className: 'flex flex-col md:flex-row gap-4' }, [since.control, until.control]),
+      this.el('p', { className: 'text-xs text-base-content/70 mt-1', text: this.t('mining.windowHelp'), attrs: { id: helpId } }),
+      error,
+      this.el('div', { className: 'mt-4' }, [button]),
+      noticeHost,
+      resultHost,
+    ]);
+  }
+
+  async runMining(miningWindow, { button, noticeHost, resultHost, field, error }) {
+    noticeHost.replaceChildren();
+    this.setBusy(true, button, this.t('mine.running'));
+    const result = await this.request(REVIEW_ADMIN_MINE_PATH, { method: 'POST', body: JSON.stringify(miningWindow) }, REVIEW_ADMIN_LONG_TIMEOUT_MS);
+    this.setBusy(false, button);
+    if (result.thrown) {
+      this.announce(this.t('mine.unknown'), { error: true });
+      return;
+    }
+    const run = result.ok && reviewAdminIsObject(result.body) ? result.body.result : null;
+    if (result.status === 404 || (result.ok && reviewAdminIsObject(run) && run.status === 'disabled')) {
+      resultHost.replaceChildren();
+      const sentence = this.keyTemplate('mine.off', { level: REVIEW_ADMIN_MINE_LEVEL, tab: 'RAG Modes', card: 'Retrieval log and feedback' });
+      const alert = this.h.alert(this.doc, { tone: 'info', icon: 'bi-toggle-off', body: sentence });
+      alert.setAttribute('data-review-admin-mine-notice', '');
+      noticeHost.replaceChildren(alert);
+      this.announce(this.t('mine.off', { level: REVIEW_ADMIN_MINE_LEVEL, tab: 'RAG Modes', card: 'Retrieval log and feedback' }));
+      return;
+    }
+    if (result.status === 400) {
+      this.setFieldError(field, error, this.lt('error.invalid', { detail: reviewAdminDetail(result.body) || String(result.status) }));
+      return;
+    }
+    if (!result.ok) {
+      this.failure(result);
+      return;
+    }
+    const rows = reviewAdminMiningRows(run, this.h.reasons);
+    const total = reviewAdminMiningTotal(run, rows);
+    if (!rows.length || total <= 0) {
+      resultHost.replaceChildren();
+      this.announce(this.t('mine.none'));
+      return;
+    }
+    const head = this.el('tr', {}, [
+      this.el('th', { className: 'text-xs font-semibold', text: this.t('col.workspaceHash'), attrs: { scope: 'col' } }),
+      this.el('th', { className: 'text-xs font-semibold', text: this.t('col.reason'), attrs: { scope: 'col' } }),
+      this.el('th', { className: 'text-xs font-semibold text-right', text: this.t('col.newCases'), attrs: { scope: 'col' } }),
+    ]);
+    const body = rows.map((row) =>
+      this.el('tr', {}, [
+        this.el('th', { className: 'font-mono text-xs font-normal break-all', text: row.hash, attrs: { scope: 'row', translate: 'no' } }),
+        this.el('td', { text: this.h.reasonText(row.reason, this.locale) }),
+        this.el('td', { className: 'text-right tabular-nums', text: this.h.formatNumber(row.count, this.locale) }),
+      ]),
+    );
+    resultHost.replaceChildren(this.resultTable('result.caption', 'data-review-admin-mine-result', head, body), this.el('p', { className: 'text-xs text-base-content/70 mt-2', text: this.t('result.hashHelp') }));
+    this.announce(this.t('mine.done', { count: this.h.formatNumber(total, this.locale) }));
+  }
+
+  resultTable(captionKey, hook, head, rows) {
+    const table = this.el('table', { className: 'table table-sm', attrs: { [hook]: true } }, [
+      this.el('caption', { className: 'text-left text-sm font-semibold mb-2', text: this.t(captionKey) }),
+      this.el('thead', {}, [head]),
+      this.el('tbody', {}, rows),
+    ]);
+    return this.el(
+      'div',
+      { className: 'overflow-x-auto rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2', attrs: { tabindex: '0', role: 'region', 'aria-label': this.t(captionKey) } },
+      [table],
+    );
+  }
+
+  renderPurgeBlock() {
+    const resultHost = this.el('div', { className: 'mt-4 empty:mt-0', attrs: { 'data-review-admin-purge-host': true } });
+    const button = this.el('button', { className: 'btn btn-outline btn-error btn-sm', text: this.t('action.purge'), attrs: { type: 'button', 'data-review-admin-purge': true, 'data-review-admin-action': true } });
+    button.addEventListener('click', () => {
+      if (this.busy) return;
+      const days = reviewAdminRetentionDays(this.doc);
+      const period = days === null ? this.t('purge.period.generic') : this.t('purge.period.days', { days: this.h.formatNumber(days, this.locale) });
+      this.confirmAction({
+        kind: 'purge',
+        title: this.t('purge.title'),
+        body: this.t('purge.body', { period }),
+        keep: this.t('purge.keep'),
+        confirm: this.t('action.purge'),
+        confirmClass: 'btn-error',
+        runningText: this.t('purge.running'),
+        opener: button,
+        action: () => this.runPurge(button, resultHost),
+      });
+    });
+    return this.el('div', { className: 'mt-6', attrs: { 'data-review-admin-block': 'purge' } }, [
+      this.heading(this.t('purge.heading')),
+      this.el('p', { className: 'text-sm text-base-content/70 mb-4 max-w-prose', text: this.t('purge.description') }),
+      button,
+      resultHost,
+    ]);
+  }
+
+  async runPurge(button, resultHost) {
+    this.setBusy(true, button, this.t('purge.running'));
+    const result = await this.request(REVIEW_ADMIN_PURGE_PATH, { method: 'POST', body: JSON.stringify({}) }, REVIEW_ADMIN_LONG_TIMEOUT_MS);
+    this.setBusy(false, button);
+    if (result.thrown) {
+      this.announce(this.t('purge.unknown'), { error: true });
+      return;
+    }
+    if (!result.ok) {
+      this.failure(result);
+      return;
+    }
+    const body = reviewAdminIsObject(result.body) ? result.body : {};
+    const head = this.el('tr', {}, [
+      this.el('th', { className: 'text-xs font-semibold', text: this.t('col.deleted'), attrs: { scope: 'col' } }),
+      this.el('th', { className: 'text-xs font-semibold text-right', text: this.t('col.count'), attrs: { scope: 'col' } }),
+    ]);
+    const rows = [
+      ['purge.logRows', body.logRows],
+      ['purge.reviewItems', body.reviewItems],
+    ].map(([key, value]) =>
+      this.el('tr', {}, [
+        this.el('th', { className: 'font-normal', text: this.t(key), attrs: { scope: 'row' } }),
+        this.el('td', { className: 'text-right tabular-nums', text: this.h.formatNumber(Number.isFinite(Number(value)) ? Number(value) : 0, this.locale) }),
+      ]),
+    );
+    resultHost.replaceChildren(this.resultTable('purge.caption', 'data-review-admin-purge-result', head, rows));
+    this.announce(this.t('purge.done'));
   }
 
   heading(text, level) {
@@ -582,6 +857,9 @@ class ReviewAdminPanel {
       if (name === 'o') nodes.push(code('o:'));
       else if (name === 'u') nodes.push(code('u:'));
       else if (name === 'sample') nodes.push(code(REVIEW_ADMIN_SAMPLE_ID));
+      else if ((name === 'level' || name === 'tab' || name === 'card') && vars && vars[name] !== undefined) {
+        nodes.push(this.el('span', { text: String(vars[name]), attrs: { lang: 'en' } }));
+      }
       else nodes.push(this.doc.createTextNode(vars && vars[name] !== undefined ? String(vars[name]) : match[0]));
       last = re.lastIndex;
     }
@@ -1064,5 +1342,8 @@ if (typeof module !== 'undefined' && module.exports) {
     reviewAdminWorkspaceOptions,
     reviewAdminGrantRow,
     reviewAdminSettingsRow,
+    reviewAdminMiningWindow,
+    reviewAdminMiningRows,
+    reviewAdminRetentionDays,
   };
 }
