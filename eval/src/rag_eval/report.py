@@ -36,6 +36,7 @@ from rag_eval.metrics import (
     injection_metrics,
     language_pair_key,
     population_exclusions,
+    report_gate_items,
     select_gate_population,
     slices_by,
     strategy_key,
@@ -1251,7 +1252,58 @@ def _lifecycle_lines(report: EvalReport) -> list[str]:
     ]
 
 
-def _render_markdown(report: EvalReport, budgets: LatencyBudgets | None = None) -> str:
+WEIGHTED_HEADING = "## Production-weighted score (report only)"
+WEIGHTED_NOTE = (
+    "D-42: per-cluster mean recall@5 of the gated answerable items, weighted by the 30-day production cluster shares in "
+    "production-shares.json; clusters without a scored test item are left out and counted as the uncovered share. "
+    "The gate reads only the unweighted metrics."
+)
+
+
+def _share_cell(value: float | None) -> str:
+    return "n/a" if value is None else f"{round(value, 3):.3f}"
+
+
+def production_weighted_section(report: EvalReport, set_dir: Path | None) -> list[str]:
+    """D-42: the report-only weighted score of a private real set that has strata.json and production-shares.json beside it."""
+    if set_dir is None:
+        return []
+    from rag_eval import representativeness
+    from rag_eval.draft.writer import PrivatePathError, assert_private_path
+
+    strata_path = Path(set_dir) / representativeness.STRATA_NAME
+    shares_path = Path(set_dir) / representativeness.PRODUCTION_SHARES_NAME
+    if not (strata_path.is_file() and shares_path.is_file()):
+        return []
+    try:
+        assert_private_path(strata_path)
+        assert_private_path(shares_path)
+        strata = representativeness.load_strata(strata_path)
+        shares = representativeness.load_production_shares(shares_path)
+    except (PrivatePathError, OSError, ValueError):
+        return []
+    gated = report_gate_items(report.items, report.golden_filter.gate_split, report.gate_population)
+    scores = {
+        item.item_id: item.spans_hit_at_5 / item.span_count for item in gated if item.answerable and item.span_count > 0
+    }
+    weighted = representativeness.weighted_score(scores, strata, shares)
+    uncovered = representativeness.uncovered_share(strata, shares, scores)
+    unweighted = report.overall.recall_at_5
+    return [
+        WEIGHTED_HEADING,
+        "",
+        WEIGHTED_NOTE,
+        "",
+        f"- Unweighted recall@5 (gated): {_share_cell(unweighted.value)} (n={unweighted.n})",
+        f"- Production-weighted recall@5 (report only): {_share_cell(weighted)} (n={len(scores)})",
+        f"- Production share with no test item: {_share_cell(uncovered)}",
+        "",
+    ]
+
+
+def _render_markdown(
+    report: EvalReport, budgets: LatencyBudgets | None = None, weighted: list[str] | None = None
+) -> str:
     lines = [
         f"# Eval report: {report.run_id}",
         "",
@@ -1311,6 +1363,7 @@ def _render_markdown(report: EvalReport, budgets: LatencyBudgets | None = None) 
         "",
         *([NDCG_NOTE, ""] if report.overall.ndcg_at_context_k is not None else []),
         *_report_only_section(report),
+        *(weighted or []),
     ]
     if budgets is None and (report.latency or report.groundedness_latency or report.ttft or report.pre_generation):
         budgets = load_latency_budgets()
@@ -1350,5 +1403,5 @@ def write_report(
     md_path = out_dir / "report.md"
     payload = json.dumps(report.model_dump(mode="json"), sort_keys=True, ensure_ascii=False, indent=2) + "\n"
     _atomic_write(json_path, payload)
-    _atomic_write(md_path, _render_markdown(report, budgets))
+    _atomic_write(md_path, _render_markdown(report, budgets, production_weighted_section(report, set_dir)))
     return json_path, md_path

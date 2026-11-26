@@ -163,7 +163,7 @@ def _score(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return EXIT_REAL_SET_TOO_SMALL
-    write_report(report, out_dir)
+    write_report(report, out_dir, set_dir=resolve_cli_path(args.golden).parent)
     print(f"gate_population={report.gate_population} sha256={gate_config[1]} (mode {gate_config[0].mode})")
     overall = report.overall
     print(
