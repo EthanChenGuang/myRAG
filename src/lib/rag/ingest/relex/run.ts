@@ -3,7 +3,7 @@ import type { RagConfig } from '../../config';
 import { detectLanguage } from '../../lang/detect';
 import { getLanguageSettings } from '../../lang/settings';
 import { LEXICAL_VERSION, chunkLexicalText } from '../../lexical/chunk-text';
-import type { LexicalOptions } from '../../lexical/options';
+import { lexicalOptionsOn, type LexicalOptions } from '../../lexical/options';
 import type { LexicalStamp } from '../../lexical/resolve-options';
 import type { BackfillScopeResult } from '../../tenant/backfill-scope';
 import { tableRowLanguage, tableRowSeparator } from '../text/table-rows';
@@ -83,6 +83,8 @@ export interface DryRunRelexInput {
   staleDictionary?: boolean;
   resolveScope?: (tenantKey: string) => Promise<BackfillScopeResult>;
   attributeHeader?: boolean;
+  /** Notice lines (the D-33 recalibration reminder); counts and versions only. */
+  onProgress?: (line: string) => void;
 }
 
 export interface DryRunRelexReport {
@@ -215,10 +217,11 @@ async function listCandidates(
   after: string | null,
   limit: number,
   tenantKey: string | null,
+  version: number,
 ): Promise<RelexCandidate[]> {
   const rows = await callRpc(db, signal, 'rag_relex_candidates', {
     p_after: after,
-    p_version: LEXICAL_VERSION,
+    p_version: version,
     p_limit: limit,
     p_tenant_key: tenantKey,
   });
@@ -273,7 +276,16 @@ function rowSerializationOf(enabled: boolean | undefined): RowSerialization | nu
  * differ, keeping the version. With the switch off on a database without the function nothing can have been serialized, so it is skipped.
  */
 async function tablePass(
-  input: { db: RpcClient; signal: AbortSignal; batchSize: number; tenantKey: string | null; rows: RowSerialization; write: boolean; attributeHeader?: boolean },
+  input: {
+    db: RpcClient;
+    signal: AbortSignal;
+    batchSize: number;
+    tenantKey: string | null;
+    rows: RowSerialization;
+    write: boolean;
+    version: number;
+    attributeHeader?: boolean;
+  },
   onPage: (written: number, candidates: TableCandidate[], stale: BatchRow[]) => Promise<void>,
 ): Promise<number | null> {
   let after: string | null = null;
@@ -286,7 +298,7 @@ async function tablePass(
     }
     if (candidates.length === 0) break;
     const stale = staleTableRows(candidates, input.rows, await pageHeaders(input.db, input.signal, candidates, input.attributeHeader));
-    const written = input.write ? await writeBatch(input.db, input.signal, stale) : stale.length;
+    const written = input.write ? await writeBatch(input.db, input.signal, stale, input.version) : stale.length;
     total += written;
     await onPage(written, candidates, stale);
     after = candidates[candidates.length - 1]?.id ?? after;
@@ -295,11 +307,27 @@ async function tablePass(
   return total;
 }
 
-async function writeBatch(db: RpcClient, signal: AbortSignal, rows: BatchRow[]): Promise<number> {
+async function writeBatch(db: RpcClient, signal: AbortSignal, rows: BatchRow[], version: number): Promise<number> {
   if (rows.length === 0) return 0;
-  const result = await callRpc(db, signal, 'rag_relex_batch', { p_rows: rows, p_version: LEXICAL_VERSION });
+  const result = await callRpc(db, signal, 'rag_relex_batch', { p_rows: rows, p_version: version });
   const count = result[0]?.rag_relex_batch;
   return typeof count === 'number' ? count : Number(count ?? 0);
+}
+
+/** The version-only relex runs while every lexical switch is off, so its target is the effective version with no bit: LEXICAL_VERSION. */
+function versionOnlyTarget(config: Pick<RagConfig, 'v2'> | undefined): number {
+  return config?.v2.lexicalVersion ?? LEXICAL_VERSION;
+}
+
+/** D-33: refusal cells are keyed by the tokenizer version; a target with the quantity bit (+4) needs a new calibration. */
+export const RECALIBRATE_REFUSAL_LINE = 'refusal thresholds are keyed by the tokenizer version: re-run `python -m rag_eval.calibrate refusal` from eval/';
+
+export function hasQuantityBit(version: number): boolean {
+  return version >= LEXICAL_VERSION && ((version - LEXICAL_VERSION) & 4) !== 0;
+}
+
+function recalibrationLine(version: number, candidates: number): string | null {
+  return candidates > 0 && hasQuantityBit(version) ? `target version ${version}: ${RECALIBRATE_REFUSAL_LINE}` : null;
 }
 
 /**
@@ -316,19 +344,20 @@ export async function runRelex(input: RunRelexInput): Promise<RelexReport> {
   let updated = 0;
   let batches = 0;
   const rowSerialization = rowSerializationOf(input.tableRowSerialization);
+  const version = versionOnlyTarget(input.config);
 
   input.onProgress?.(
-    `started: version ${LEXICAL_VERSION}, batch size ${batchSize}${tenantKey ? `, tenant ${tenantKey}` : ', all tenants'}${after ? `, resume after ${after}` : ''}`,
+    `started: version ${version}, batch size ${batchSize}${tenantKey ? `, tenant ${tenantKey}` : ', all tenants'}${after ? `, resume after ${after}` : ''}`,
   );
 
   for (;;) {
     signal.throwIfAborted();
-    const candidates = await listCandidates(input.db, signal, after, batchSize, tenantKey);
+    const candidates = await listCandidates(input.db, signal, after, batchSize, tenantKey, version);
     if (candidates.length === 0) break;
 
     const headers = await pageHeaders(input.db, signal, candidates, input.attributeHeader);
     const rows = candidates.map((candidate) => batchRow(candidate, rowSerialization, headers.get(candidate.id)));
-    const written = await writeBatch(input.db, signal, rows);
+    const written = await writeBatch(input.db, signal, rows, version);
     batches += 1;
     updated += written;
     for (const candidate of candidates) {
@@ -347,7 +376,7 @@ export async function runRelex(input: RunRelexInput): Promise<RelexReport> {
   }
 
   const tables = await tablePass(
-    { db: input.db, signal, batchSize, tenantKey, rows: rowSerialization, write: true, attributeHeader: input.attributeHeader },
+    { db: input.db, signal, batchSize, tenantKey, rows: rowSerialization, write: true, version, attributeHeader: input.attributeHeader },
     async (written, candidates, stale) => {
       if (stale.length === 0) return;
       batches += 1;
@@ -374,10 +403,11 @@ export async function dryRunRelex(input: DryRunRelexInput): Promise<DryRunRelexR
   const tenants: Record<string, number> = {};
   const counted = new Set<string>();
   let total = 0;
+  const version = versionOnlyTarget(input.config);
 
   for (;;) {
     signal.throwIfAborted();
-    const candidates = await listCandidates(input.db, signal, after, batchSize, tenantKey);
+    const candidates = await listCandidates(input.db, signal, after, batchSize, tenantKey, version);
     if (candidates.length === 0) break;
     for (const candidate of candidates) {
       tenants[candidate.tenant_key] = (tenants[candidate.tenant_key] ?? 0) + 1;
@@ -392,7 +422,7 @@ export async function dryRunRelex(input: DryRunRelexInput): Promise<DryRunRelexR
   if (rowSerialization === null) return { tenants, total };
   // A chunk the version pass already counts is rewritten there with the switch applied, so the table pass would not touch it again.
   let tables = 0;
-  const installed = await tablePass({ db: input.db, signal, batchSize, tenantKey, rows: rowSerialization, write: false, attributeHeader: input.attributeHeader }, async (_count, candidates, stale) => {
+  const installed = await tablePass({ db: input.db, signal, batchSize, tenantKey, rows: rowSerialization, write: false, version, attributeHeader: input.attributeHeader }, async (_count, candidates, stale) => {
     for (const row of stale) {
       if (counted.has(row.id)) continue;
       const tenant = candidates.find((candidate) => candidate.id === row.id)?.tenant_key;
@@ -420,9 +450,7 @@ interface TenantLexical {
 const NO_LEXICAL: TenantLexical = { options: undefined, stamp: { dictVersion: null, patterns: null } };
 
 function lexicalSwitchesOn(config: Pick<RagConfig, 'v2'> | undefined): config is Pick<RagConfig, 'v2'> {
-  if (!config) return false;
-  const { lexicalDictionary, lexicalStemIt, identifierIndex } = config.v2;
-  return lexicalDictionary || lexicalStemIt || identifierIndex;
+  return lexicalOptionsOn(config);
 }
 
 function stampedRun(input: { config?: Pick<RagConfig, 'v2'>; staleDictionary?: boolean; tenantKey?: string | null }): boolean {
@@ -650,6 +678,8 @@ async function runStampedRelex(input: RunRelexInput): Promise<RelexReport> {
     if (tables === null) input.onProgress?.('table pass skipped: rag_relex_table_candidates is not installed (migration 0815)');
   }
   if (plan.warnings.size > 0) input.onProgress?.(`warnings: ${[...plan.warnings].sort().join(', ')}`);
+  const reminder = recalibrationLine(plan.version, Object.values(tenants).reduce((sum, count) => sum + count, 0));
+  if (reminder) input.onProgress?.(reminder);
   input.onProgress?.(`done: ${updated} rows in ${batches} batches, dict=${plan.stamp.dictVersion ?? 'none'}`);
   const report: RelexReport = { updated, batches, tenants };
   if (tables !== undefined) report.tables = tables ?? 0;
@@ -680,7 +710,12 @@ async function dryRunStampedRelex(input: DryRunRelexInput): Promise<DryRunRelexR
   }
 
   const rowSerialization = rowSerializationOf(input.tableRowSerialization);
-  if (rowSerialization === null || plan.staleDictionary) return { tenants, total };
+  const remind = (report: DryRunRelexReport): DryRunRelexReport => {
+    const reminder = recalibrationLine(plan.version, report.total);
+    if (reminder) input.onProgress?.(reminder);
+    return report;
+  };
+  if (rowSerialization === null || plan.staleDictionary) return remind({ tenants, total });
   let tables = 0;
   const installed = await stampedTablePass({ db: input.db, signal, batchSize, plan, rows: rowSerialization, write: false, attributeHeader: input.attributeHeader }, async (_count, stale) => {
     for (const { tenantKey, row } of stale) {
@@ -689,5 +724,5 @@ async function dryRunStampedRelex(input: DryRunRelexInput): Promise<DryRunRelexR
       tables += 1;
     }
   });
-  return { tenants, total: total + (installed === null ? 0 : tables), tables: installed === null ? 0 : tables };
+  return remind({ tenants, total: total + (installed === null ? 0 : tables), tables: installed === null ? 0 : tables });
 }

@@ -17,6 +17,11 @@ const REGISTRY = parseLanguageRegistry(rawRegistry);
 const PACKS = REGISTRY.packs;
 // D-32: general unit symbols and separators; read only while the quantity option is on.
 const QUANTITY_UNITS = buildQuantityUnits(REGISTRY.quantity);
+
+/** D-32: the registry unit symbols in the tokenizer's normalised form (the alias targets the resolver may map to). */
+export function quantityUnitSymbols(): ReadonlySet<string> {
+  return new Set(QUANTITY_UNITS.units.values());
+}
 const ELISION_PREFIX_LIST = PACKS.flatMap((pack) => pack.folding.elision_prefixes);
 const ELISION_SUFFIX_LIST = PACKS.flatMap((pack) => pack.folding.elision_suffixes);
 const ELISION_PREFIXES = [...ELISION_PREFIX_LIST].sort((a, b) => b.length - a.length);

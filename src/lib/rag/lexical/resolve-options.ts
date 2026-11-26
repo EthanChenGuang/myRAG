@@ -1,11 +1,10 @@
 import crypto from 'node:crypto';
-import type { RagConfig } from '../config';
 import { loadTenantIdentifierPatterns } from '../identifiers/patterns';
 import { loadEffectiveDictionary, type EffectiveDictionary } from '../terminology/load';
 import { buildMatcher, type TermEntry, type TerminologyMatcher } from '../terminology/matcher';
 import { assertTenantScope, type TenantScope } from '../tenant/scope';
-import type { LexicalOptions } from './options';
-import { normalizeLexical } from './tokenize';
+import { lexicalOptionsOn, type LexicalOptions, type LexicalOptionSwitches } from './options';
+import { normalizeLexical, quantityUnitSymbols } from './tokenize';
 
 /**
  * Per-tenant options of the shared lexical tokenizer for index-side text (LANG-07 D-08..D-10, RET-15 D-30): the tenant's effective TERM
@@ -14,16 +13,8 @@ import { normalizeLexical } from './tokenize';
  * version strings and counts only (4.1.1 D-21).
  */
 
-export type LexicalSwitches = {
-  v2: Pick<RagConfig['v2'], 'lexicalDictionary' | 'lexicalStemIt' | 'identifierIndex'> & Partial<Pick<RagConfig['v2'], 'lexicalQuantity'>>;
-};
-
-/** The one off rule of every lexical option: false means no resolve, no load and today's text and version. */
-export function lexicalOptionsOn(config: LexicalSwitches | undefined): boolean {
-  if (!config) return false;
-  const { lexicalDictionary, lexicalStemIt, identifierIndex } = config.v2;
-  return lexicalDictionary || lexicalStemIt || identifierIndex;
-}
+export type LexicalSwitches = LexicalOptionSwitches;
+export { lexicalOptionsOn };
 
 export type LexicalOptionsWarning = 'lexical_dictionary_unavailable' | 'identifier_patterns_unavailable';
 
@@ -106,6 +97,35 @@ function dictionaryOption(dictionary: EffectiveDictionary): NonNullable<LexicalO
   };
 }
 
+const ALIAS_EXCLUDED_KINDS: ReadonlySet<TermEntry['kind']> = new Set(['translation', 'identifier', 'misspelling']);
+const ALIAS_INVALID = /[\s\p{N}]/u;
+const unitAliasCache = new WeakMap<EffectiveDictionary, Readonly<Record<string, string>>>();
+
+/**
+ * D-32: the tenant's unit words, built from the entries the resolver already loaded: each single-word variant (no white space, no digit)
+ * of an entry whose canonical is a registry unit symbol, mapped to that symbol. Translation, identifier and misspelling entries are left
+ * out. The dictionary is the tenant's own (scopeKey), so the aliases never cross tenants.
+ */
+function unitAliases(dictionary: EffectiveDictionary): Readonly<Record<string, string>> {
+  const cached = unitAliasCache.get(dictionary);
+  if (cached) return cached;
+  const symbols = quantityUnitSymbols();
+  const aliases: Record<string, string> = {};
+  for (const entry of dictionary.entries) {
+    if (ALIAS_EXCLUDED_KINDS.has(entry.kind)) continue;
+    const symbol = surface(entry.canonical);
+    if (!symbols.has(symbol)) continue;
+    for (const variant of entry.variants) {
+      const word = surface(variant);
+      if (word === '' || word === symbol || ALIAS_INVALID.test(word) || symbols.has(word) || word in aliases) continue;
+      aliases[word] = symbol;
+    }
+  }
+  const frozen = Object.freeze(aliases);
+  unitAliasCache.set(dictionary, frozen);
+  return frozen;
+}
+
 /** Sorted `id|pattern|flags` lines of the enabled, compiled patterns; flags as stored (`u` or `iu`). */
 export function identifierPatternsFingerprint(patternIds: readonly string[], expressions: readonly RegExp[]): string {
   const lines = patternIds.map((id, index) => {
@@ -118,9 +138,10 @@ export function identifierPatternsFingerprint(patternIds: readonly string[], exp
 const defaultResolver: LexicalOptionsResolver = async (scope, config, input) => {
   assertTenantScope(scope);
   const { lexicalDictionary, lexicalStemIt, identifierIndex } = config.v2;
+  const lexicalQuantity = config.v2.lexicalQuantity === true;
   const stamp: LexicalStamp = { dictVersion: null, patterns: null };
   const warnings: LexicalOptionsWarning[] = [];
-  if (!lexicalDictionary && !lexicalStemIt && !identifierIndex) return { options: undefined, stamp, warnings };
+  if (!lexicalOptionsOn(config)) return { options: undefined, stamp, warnings };
 
   const options: LexicalOptions = {};
   if (lexicalStemIt) {
@@ -128,11 +149,14 @@ const defaultResolver: LexicalOptionsResolver = async (scope, config, input) => 
     options.language = input.language;
   }
 
+  if (lexicalQuantity) options.quantity = true;
+
   if (lexicalDictionary) {
     try {
       const dictionary = await loadEffectiveDictionary(scope, input.signal ? { signal: input.signal } : {});
       options.dictionary = dictionaryOption(dictionary);
       stamp.dictVersion = dictionary.version;
+      if (lexicalQuantity) options.quantity = { unitAliases: unitAliases(dictionary) };
     } catch (error) {
       if (input.signal?.aborted) throw error;
       console.warn(`${LOG} dictionary unavailable; lexical text built without dictionary tokens`, { code: 'lexical_dictionary_unavailable' });
@@ -150,7 +174,8 @@ const defaultResolver: LexicalOptionsResolver = async (scope, config, input) => 
     }
   }
 
-  const empty = options.stemIt === undefined && options.dictionary === undefined && options.identifierPatterns === undefined;
+  const empty =
+    options.stemIt === undefined && options.dictionary === undefined && options.identifierPatterns === undefined && options.quantity === undefined;
   return { options: empty ? undefined : options, stamp, warnings };
 };
 

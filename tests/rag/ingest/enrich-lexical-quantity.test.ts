@@ -52,7 +52,7 @@ function stubDictionary(): NonNullable<LexicalOptions['dictionary']> {
   return { version: 's3.w5', match: () => [] };
 }
 
-const quantityTokens = (text: string | undefined) => (text ?? '').split(' ').filter((token) => token.startsWith(Q));
+const quantityTokens = (text: string | null | undefined) => (text ?? '').split(' ').filter((token) => token.startsWith(Q));
 
 beforeEach(() => useSwitches({}));
 
@@ -143,8 +143,8 @@ describe('enrich: RAG_LEXICAL_QUANTITY on (D-31, D-33)', () => {
     expect(quantityTokens(built.children[0]!.lexical_text)).toContain(`${Q}2.5kg`);
     expect(built.children[0]!.metadata).toMatchObject({ lexical_version: 6 });
 
-    const caption = lexicalFieldsFor(lexical, [], 'A label reading 12 V and 3 A');
-    expect(quantityTokens(caption.lexical_text)).toEqual(expect.arrayContaining([`${Q}12v`, `${Q}3a`]));
+    const caption = lexicalFieldsFor(lexical, [], 'A label reading 12 V and 300 mA');
+    expect(quantityTokens(caption.lexical_text)).toEqual(expect.arrayContaining([`${Q}12v`, `${Q}300ma`]));
     expect(caption.metadata).toEqual({ lexical_version: 6 });
 
     const headed = chunkText.chunkLexicalText(
