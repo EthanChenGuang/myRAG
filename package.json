@@ -19,6 +19,7 @@
     "rag:rechunk": "tsx src/lib/rag/ingest/rechunk/cli.ts",
     "rag:chunking": "tsx src/lib/rag/chunking/cli.ts",
     "rag:relex": "tsx src/lib/rag/ingest/relex/cli.ts",
+    "rag:terms:mine": "tsx src/lib/rag/terminology/mine/cli.ts",
     "rag:dup-clusters": "tsx src/lib/rag/dedupe/cli.ts",
     "rag:table-rows": "tsx src/lib/rag/tables/cli.ts",
     "rag:identifiers": "tsx src/lib/rag/identifiers/cli.ts",
