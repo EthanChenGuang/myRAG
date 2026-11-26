@@ -14,6 +14,7 @@ from rag_sidecar.contracts import ClaimCheckRequest, ClaimCheckResult, SidecarEr
 from rag_sidecar.groundedness import LOCAL_SCORER, VECTARA_SCORER, StubScorer
 from rag_sidecar.groundedness.local_hhem import LocalHhemScorer
 from rag_sidecar.groundedness.vectara import VectaraScorer
+from rag_sidecar.main import create_app
 from rag_sidecar.settings import SidecarSettings
 
 PLACEHOLDER_KEY = "vectara-placeholder-key-0000"
@@ -424,3 +425,64 @@ def test_router_logs_counts_and_never_text(caplog):
     assert record.counts == {"scored": 2, "not_checked": 0}
     assert record.scorers == ["hhem_2_1_open", "hhem_2_3_vectara"]
     assert isinstance(record.latency_ms, int)
+
+
+# Task 3: registration and authentication (D-22).
+
+APP_SECRET = "c" * 48
+APP_HEADER = {"x-sidecar-secret": APP_SECRET}
+
+
+def _app_post(
+    scorers, body, headers=APP_HEADER, settings: SidecarSettings | None = None, path="/v1/groundedness/claims"
+):
+    app = create_app(settings if settings is not None else _claims_settings(), scorers=scorers)
+    return TestClient(app).post(path, json=body, headers=headers)
+
+
+def test_app_claims_without_secret_header_is_401():
+    scorers = _claim_stubs()
+    response = _app_post(scorers, _claims_body(), headers={})
+    assert response.status_code == 401
+    assert SidecarError.model_validate(response.json()).error == "unauthorized"
+    assert scorers[LOCAL_SCORER].batch_sizes == []
+
+
+def test_app_claims_with_wrong_secret_is_401():
+    scorers = _claim_stubs()
+    response = _app_post(scorers, _claims_body(), headers={"x-sidecar-secret": "w" * 48})
+    assert response.status_code == 401
+    assert scorers[LOCAL_SCORER].batch_sizes == []
+
+
+def test_app_claims_with_unset_secret_fails_closed():
+    scorers = _claim_stubs()
+    unset = _app_post(scorers, _claims_body(), settings=SidecarSettings())
+    answer_level = _app_post(
+        scorers,
+        {"request_id": "r", "language": "en", "premise_texts": ["p"], "hypothesis": "h", "allow_vectara": False},
+        settings=SidecarSettings(),
+        path="/v1/groundedness",
+    )
+    assert unset.status_code == answer_level.status_code == 503
+    assert scorers[LOCAL_SCORER].batch_sizes == []
+
+
+def test_app_claims_with_correct_secret_is_200():
+    response = _app_post(_claim_stubs(), _claims_body("en", False))
+    assert response.status_code == 200, response.text
+    result = ClaimCheckResult.model_validate(response.json())
+    assert [claim.index for claim in result.claims] == [0, 1, 2]
+
+
+def test_app_answer_level_endpoint_is_unchanged():
+    scorers = _claim_stubs()
+    response = _app_post(
+        scorers,
+        {"request_id": "r", "language": "en", "premise_texts": ["p"], "hypothesis": "h", "allow_vectara": False},
+        path="/v1/groundedness",
+    )
+    assert response.status_code == 200
+    assert response.json()["scorer"] == "hhem_2_1_open"
+    assert scorers[LOCAL_SCORER].calls == 1
+    assert scorers[LOCAL_SCORER].batch_sizes == []
