@@ -23,6 +23,8 @@ export interface RetrievalPortContext {
   chunkingProfileOverride?: Record<string, string>;
   /** D-12: the effective non-current version scope; absent reads current versions. */
   versionScope?: Exclude<VersionScope, 'current'>;
+  /** D-31: normalized identifiers every variant leg is filtered to; absent sends no filter. */
+  identifiersNorm?: string[];
   /** D-18: factor on the dense leg weight for a variant of kind terminology; absent means 1. */
   terminologyDenseWeight?: number;
 }
@@ -52,6 +54,8 @@ export function variantSearchRequest(args: {
   chunkingProfileOverride?: Record<string, string> | null;
   /** D-12: set only for a non-current effective scope, so a default request sends today's request object. */
   versionScope?: VersionScope;
+  /** D-31: set only while the identifier filter applies, so a default request sends today's request object. */
+  identifiersNorm?: string[];
 }): BackendSearchRequest {
   const { variant, embedding } = args;
   // P-6: a dense-only variant (HyDE) sends no lexical tokens, so it contributes no lexical list.
@@ -69,6 +73,7 @@ export function variantSearchRequest(args: {
     signal: args.signal,
     ...(args.chunkingProfileOverride ? { chunkingProfileOverride: args.chunkingProfileOverride } : {}),
     ...(args.versionScope !== undefined && args.versionScope !== 'current' ? { versionScope: args.versionScope } : {}),
+    ...(args.identifiersNorm !== undefined ? { identifiersNorm: [...args.identifiersNorm] } : {}),
   };
 }
 
@@ -143,6 +148,7 @@ export function createRetrievalPort(ctx: RetrievalPortContext): RetrievalPortHan
           signal,
           chunkingProfileOverride: ctx.chunkingProfileOverride ?? null,
           ...(ctx.versionScope !== undefined ? { versionScope: ctx.versionScope } : {}),
+          ...(ctx.identifiersNorm !== undefined ? { identifiersNorm: ctx.identifiersNorm } : {}),
         }),
       );
       collected.set(index, legs);

@@ -222,6 +222,8 @@ export interface RunBindingLegsInput {
   /** Bounds each leg's backend call; a leg past it is dropped as a timeout. */
   timeoutMs: number;
   chunkingProfileOverride?: Record<string, string>;
+  /** D-31: normalized identifiers each leg is filtered to; absent sends no filter. */
+  identifiersNorm?: string[];
 }
 
 export interface BindingLegsOutput {
@@ -257,6 +259,7 @@ export async function runBindingLegs(input: RunBindingLegsInput): Promise<Bindin
           lexicalLimit: 0,
           signal: legSignal,
           ...(input.chunkingProfileOverride ? { chunkingProfileOverride: input.chunkingProfileOverride } : {}),
+          ...(input.identifiersNorm ? { identifiersNorm: [...input.identifiersNorm] } : {}),
         }),
       signal,
       timeoutMs,

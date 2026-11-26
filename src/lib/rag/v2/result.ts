@@ -33,6 +33,10 @@ import { effectiveTuningParams, tuningHashComponent } from './tuning-params';
 import type { TranslationHashField } from './translation-legs';
 import type { AssembleOutput } from '../context/assemble';
 import type { QueryPlan, RetrievalParams } from '@/lib/rag-eval/contracts.generated';
+import type { SearchIdentifiers } from './stages/search';
+
+/** D-31: the refusal reason of a strict request whose asked identifiers do not exist in the tenant (RagTrace.refusal_reason). */
+export const IDENTIFIER_NOT_FOUND = 'identifier_not_found';
 
 export interface BuildV2ResultInput {
   input: RunRetrievalInput;
@@ -70,6 +74,10 @@ export interface BuildV2ResultInput {
   cacheTicket?: CacheTicket;
   /** D-21: how the terminology stage ended; absent reads as disabled. */
   terminology?: TerminologyHashStage;
+  /** D-31: the identifier_resolve outcome and the guard's drop count; absent while RAG_IDENTIFIER_FILTER is off. */
+  identifiers?: SearchIdentifiers & { nearMissDropped: number };
+  /** D-31: strict and no asked identifier exists: the result is empty with reason identifier_not_found and the suggestions. */
+  identifierRefusal?: boolean;
 }
 
 export interface RequestConfigHashInput {
@@ -277,6 +285,12 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
     reason = refusedReason(refusal);
   }
 
+  const identifiers = ctx.identifiers;
+  if (ctx.identifierRefusal && identifiers?.notFound) {
+    status = 'empty';
+    reason = IDENTIFIER_NOT_FOUND;
+  }
+
   const retrievalConfigHash = await requestRetrievalConfigHash({
     input,
     config,
@@ -293,6 +307,17 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
 
   const base = {
     ...failure(collector, status, reason, queryContext),
+    ...(identifiers
+      ? {
+          identifierFilter: {
+            asked: identifiers.asked.length,
+            resolved: identifiers.found.length,
+            fallback: identifiers.fallback,
+            nearMissDropped: identifiers.nearMissDropped,
+          },
+        }
+      : {}),
+    ...(identifiers?.notFound ? { identifierSuggestions: [...identifiers.suggestions] } : {}),
     ...(injection ? { injection } : {}),
     ...(queryPlan ? { queryPlan } : {}),
     ...(ctx.cacheTicket && profile !== 'voice' ? { cacheTicket: ctx.cacheTicket } : {}),
@@ -307,9 +332,17 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
       retrievalConfigHash,
       refusal,
       queryLanguage,
+      ...(reason === IDENTIFIER_NOT_FOUND ? { refusalCandidate: true } : {}),
     };
   } else if (!assembly) {
-    result = { ...base, candidates: outputCandidates, retrievalConfigHash, refusal, queryLanguage };
+    result = {
+      ...base,
+      candidates: outputCandidates,
+      retrievalConfigHash,
+      refusal,
+      queryLanguage,
+      ...(reason === IDENTIFIER_NOT_FOUND ? { refusalCandidate: true } : {}),
+    };
   } else {
     result = {
       ...base,

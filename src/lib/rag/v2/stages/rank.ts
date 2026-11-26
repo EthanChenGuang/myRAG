@@ -32,6 +32,7 @@ import { reserveSubQuestionCoverage, subQuestionsOf } from '../subq-coverage';
 import { diversify, type AlsoIn, type DiversifyCounts } from '../diversify';
 import { effectiveRetrievalParams } from '../retrieval-params';
 import { effectiveTuningParams } from '../tuning-params';
+import { guardNearMisses } from '../../retrieval/identifiers';
 import type { ContextRerankInput } from './context';
 
 export interface RankStagesInput {
@@ -57,6 +58,8 @@ export interface RankStagesInput {
   finalTopK?: number;
   /** D-49: selects a per-profile tuning entry. */
   embeddingProfileId?: string;
+  /** D-31, D-51: the question's normalized identifiers and the tenant's patterns; present only while the identifier filter is on. */
+  identifiers?: { askedNorms: readonly string[]; patterns: readonly RegExp[] };
 }
 
 export interface RankRerankOutput extends ContextRerankInput {
@@ -78,6 +81,8 @@ export interface RankStagesOutput {
   rerank: RankRerankOutput;
   /** D-21: the dropped duplicates of each kept chunk; present only when the diversify stage ran. */
   alsoIn?: Map<string, AlsoIn[]>;
+  /** D-31, D-51: how many look-alike candidates the identifier_guard stage removed; present only when it ran. */
+  identifierGuard?: { dropped: number };
 }
 
 interface RerankGateState {
@@ -457,8 +462,37 @@ export async function runRankStages(ctx: RankStagesInput): Promise<RankStagesOut
     },
   );
 
-  const { record: decision, gate, survivors: decided } = refused.skipped ? decide() : refused.value;
-  const output: RankStagesOutput = { decision, gate, survivors: decided, preRefusalHits, rerank: reranked.output };
+  const { record: decision, gate, survivors: refusalSurvivors } = refused.skipped ? decide() : refused.value;
+
+  // D-31, D-51: rerank, refusal, identifier guard, diversify, reservation. The guard reads each candidate's identifiers in memory.
+  let decided = refusalSurvivors;
+  let identifierGuard: { dropped: number } | undefined;
+  if (ctx.identifiers && ctx.identifiers.askedNorms.length > 0) {
+    const { askedNorms, patterns } = ctx.identifiers;
+    const guarded = await runStage(
+      spec('identifier_guard', 'skip'),
+      signal,
+      async () => guardNearMisses(refusalSurvivors, askedNorms, { contentOf: (row) => row.hit.content, patterns }),
+      collector,
+      {
+        candidatesIn: refusalSurvivors.length,
+        candidatesOut: (value) => value.kept.length,
+        counts: (value) => ({ dropped: value.dropped }),
+      },
+    );
+    if (!guarded.skipped) {
+      decided = guarded.value.kept;
+      identifierGuard = { dropped: guarded.value.dropped };
+    }
+  }
+  const output: RankStagesOutput = {
+    decision,
+    gate,
+    survivors: decided,
+    preRefusalHits,
+    rerank: reranked.output,
+    ...(identifierGuard ? { identifierGuard } : {}),
+  };
 
   if (!diversityOn) {
     await runStage(diversifySpec, signal, async () => null, collector, { candidatesIn: decided.length });
