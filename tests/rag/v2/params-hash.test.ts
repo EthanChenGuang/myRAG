@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { loadRagConfig, resetRagConfigForTests, type RagConfig } from '@/lib/rag/config';
 import { setRagDepsForTests, resetRagDepsForTests } from '@/lib/rag/deps';
@@ -8,7 +10,7 @@ import { RetrievalParamsSchema, type RetrievalOverrides, type RetrievalParams } 
 import rawCommitted from '../../../eval/config/retrieval-params.json';
 import { effectiveRetrievalParams } from '@/lib/rag/v2/retrieval-params';
 import { v2ProfileSettings } from '@/lib/rag/v2/profiles';
-import { computeRetrievalConfigHash, securityHashComponent, type RetrievalConfigHashInput } from '@/lib/rag/v2/config-hash';
+import { computeRetrievalConfigHash, lexicalScoringHashBlock, securityHashComponent, type RetrievalConfigHashInput } from '@/lib/rag/v2/config-hash';
 import { readSecurityConfig } from '@/lib/rag/security/config';
 import { requestRetrievalConfigHash } from '@/lib/rag/v2/result';
 import { effectiveTuningParams, tuningHashComponent } from '@/lib/rag/v2/tuning-params';
@@ -664,5 +666,83 @@ describe('lexical dictionary version and identifier patterns in the hash (04.2-2
     const stemOnly = (stamp: typeof STAMP) => requestRetrievalConfigHash(requestInput({ RAG_LEXICAL_STEM_IT: 'true' }, stamp));
     expect(await stemOnly(STAMP)).toBe(await stemOnly({ dictVersion: 's9.w9', patterns: 'p999999999999' }));
     expect(await stemOnly(STAMP)).toBe(await requestRetrievalConfigHash(requestInput({ RAG_LEXICAL_STEM_IT: 'true' })));
+  });
+});
+
+describe('requestRetrievalConfigHash lexical scoring block (04.4-01, D-08)', () => {
+  beforeEach(() => {
+    resetRagConfigForTests();
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    setRetrievalBackendForTests({ id: 'pgvector' } as unknown as RetrievalBackend);
+    setActiveChunkingProfilesForTests({ general: 'legacy' });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    resetRetrievalBackendForTests();
+    resetActiveChunkingProfilesForTests();
+    resetRagConfigForTests();
+  });
+
+  function requestFor(env: Record<string, string>) {
+    return {
+      input: { scope: null, query: 'q', profile: 'chat', signal: new AbortController().signal } as RunRetrievalInput,
+      config: loadRagConfig(env),
+      profile: 'chat' as const,
+      embeddingProfileId: 'openai-3-small-1536',
+      queryLanguage: 'en',
+      security: readSecurityConfig({}),
+    };
+  }
+
+  const runConfigs = (() => {
+    const dir = path.join(process.cwd(), 'eval', 'config', 'runs');
+    return fs
+      .readdirSync(dir)
+      .filter((name) => name.endsWith('.json'))
+      .map((name) => {
+        const parsed = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8')) as { env?: Record<string, string> };
+        return [name, parsed.env ?? {}] as const;
+      });
+  })();
+
+  it('keeps the pinned off-hash', async () => {
+    const env = { RAG_PIPELINE: 'v2', RAG_CONTEXT_TOKEN_BUDGET: '7500', RAG_CONTEXT_COMPRESSION: 'true', RAG_RERANK_TIER_CHAT: 'quality', RAG_RERANK_TIER_VOICE: 'fast', RAG_LEXICAL_SEARCH: 'true' };
+    expect(await requestRetrievalConfigHash(requestFor({ ...env, RAG_LEXICAL_SCORING: 'ts_rank_cd', RAG_LEXICAL_BM25_K1: '2.5', RAG_LEXICAL_BM25_B: '0.1' }))).toBe(
+      PINNED_REQUEST_OFF_HASH,
+    );
+  });
+
+  it.each(runConfigs)('run config %s: ts_rank_cd with any k1 and b keeps its hash', async (_name, env) => {
+    const before = await requestRetrievalConfigHash(requestFor({ ...env }));
+    resetRagConfigForTests();
+    const after = await requestRetrievalConfigHash(requestFor({ ...env, RAG_LEXICAL_SCORING: 'ts_rank_cd', RAG_LEXICAL_BM25_K1: '2', RAG_LEXICAL_BM25_B: '0.3' }));
+    expect(after).toBe(before);
+  });
+
+  it('bm25 that resolves to ts_rank_cd keeps the hash', async () => {
+    const env = { RAG_PIPELINE: 'v2' };
+    expect(await requestRetrievalConfigHash(requestFor({ ...env, RAG_LEXICAL_SCORING: 'bm25' }))).toBe(await requestRetrievalConfigHash(requestFor(env)));
+  });
+
+  it('effective bm25 changes the hash, and again for each change of k1 or b', async () => {
+    const env = { RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'true' };
+    const hashes = [
+      await requestRetrievalConfigHash(requestFor(env)),
+      await requestRetrievalConfigHash(requestFor({ ...env, RAG_LEXICAL_SCORING: 'bm25' })),
+      await requestRetrievalConfigHash(requestFor({ ...env, RAG_LEXICAL_SCORING: 'bm25', RAG_LEXICAL_BM25_K1: '1.5' })),
+      await requestRetrievalConfigHash(requestFor({ ...env, RAG_LEXICAL_SCORING: 'bm25', RAG_LEXICAL_BM25_B: '0.5' })),
+    ];
+    expect(new Set(hashes).size).toBe(4);
+  });
+
+  it('the hash input block is present only when bm25 is effective', () => {
+    expect(typeof lexicalScoringHashBlock).toBe('function');
+    expect(lexicalScoringHashBlock(loadRagConfig({ RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'true' }))).toBeNull();
+    expect(lexicalScoringHashBlock(loadRagConfig({ RAG_PIPELINE: 'v2', RAG_LEXICAL_SEARCH: 'true', RAG_LEXICAL_SCORING: 'bm25', RAG_LEXICAL_BM25_K1: '2' }))).toEqual({
+      mode: 'bm25',
+      k1: 2,
+      b: 0.75,
+    });
   });
 });
