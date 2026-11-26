@@ -59,6 +59,28 @@ const PHASE6_SWITCH_VALUES: Readonly<Record<string, readonly string[] | null>> =
 };
 
 /**
+ * The fourteen Phase 5.2 answer-rule switches (D-58). The enumerated ones must carry a value the app accepts; the cap is checked
+ * separately (off, auto or a positive integer), the judge model and the two uploader numbers are validated by the app.
+ */
+const PHASE52_SWITCH_VALUES: Readonly<Record<string, readonly string[] | null>> = {
+  RAG_REGISTRY_TEXTS: BOOLEAN_VALUES,
+  RAG_PARTIAL_ANSWER_RULE: BOOLEAN_VALUES,
+  RAG_CONTEXT_RELEVANCE_RULE: BOOLEAN_VALUES,
+  RAG_CITATION_PER_SENTENCE: BOOLEAN_VALUES,
+  RAG_CLAIM_CHECK: BOOLEAN_VALUES,
+  RAG_GROUNDEDNESS_LLM_JUDGE: BOOLEAN_VALUES,
+  RAG_GROUNDEDNESS_JUDGE_MODEL: null,
+  RAG_MAX_OUTPUT_TOKENS: null,
+  RAG_OUTPUT_GUARD: ['off', 'flag', 'enforce'],
+  RAG_VERSION_LABELS: BOOLEAN_VALUES,
+  RAG_SECURITY_EVENTS: BOOLEAN_VALUES,
+  RAG_UPLOADER_ALERT_THRESHOLD: null,
+  RAG_UPLOADER_ALERT_WINDOW_HOURS: null,
+  RAG_UPLOADER_HOLD: ['off', 'manual', 'auto'],
+};
+const MAX_OUTPUT_TOKENS_RE = /^(off|auto|[1-9]\d*)$/;
+
+/**
  * Vendor settings a run config may set, each only to one of the listed values (Phase 4.1 D-22): a key is empty, the proxy
  * placeholder or the token `fixture` (keep the fake edge's placeholder key); a base URL is empty or the vendor's own host.
  */
@@ -104,6 +126,7 @@ export const RUN_CONFIG_ENV_ALLOWLIST: readonly string[] = [
   ...Object.keys(RUN_CONFIG_CONSTRAINED_VALUES),
   ...Object.keys(SEC_SWITCH_VALUES),
   ...Object.keys(PHASE6_SWITCH_VALUES),
+  ...Object.keys(PHASE52_SWITCH_VALUES),
 ];
 
 export const RUN_CONFIG_REJECT_MESSAGE =
@@ -154,12 +177,16 @@ export function parseRunConfig(raw: unknown, source: string): RunConfig {
   if (env.RAG_PIPELINE !== undefined && !PIPELINE_VALUES.has(env.RAG_PIPELINE)) {
     throw new RunConfigError(`[Eval Harness] run-config ${source} RAG_PIPELINE must be legacy or v2`);
   }
-  for (const [name, allowed] of Object.entries({ ...SEC_SWITCH_VALUES, ...PHASE6_SWITCH_VALUES })) {
+  for (const [name, allowed] of Object.entries({ ...SEC_SWITCH_VALUES, ...PHASE6_SWITCH_VALUES, ...PHASE52_SWITCH_VALUES })) {
     if (!allowed) continue;
     // A malformed SEC or Phase 6 value would silently fall back to off in the app; the run config fails instead (the value is never echoed).
     if (env[name] !== undefined && !allowed.includes(env[name])) {
       throw new RunConfigError(`[Eval Harness] run-config ${source} ${name} must be one of ${allowed.join(', ')}`);
     }
+  }
+
+  if (env.RAG_MAX_OUTPUT_TOKENS !== undefined && !MAX_OUTPUT_TOKENS_RE.test(env.RAG_MAX_OUTPUT_TOKENS)) {
+    throw new RunConfigError(`[Eval Harness] run-config ${source} RAG_MAX_OUTPUT_TOKENS must be off, auto or a positive integer`);
   }
 
   let overrides: RetrievalOverrides | null = null;

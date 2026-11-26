@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "version": "2026-11-26.1",
+  "credential_rules": [],
+  "obfuscation_patterns": [
+    { "id": "obf.scheme-hxxp", "pattern": "^h(?:xx|__|\\*\\*)ps?://$" },
+    { "id": "obf.scheme-fxp", "pattern": "^fxps?://$" },
+    { "id": "obf.bracket-dot", "pattern": "^[\\[({]\\s*(?:\\.|dot)\\s*[\\])}]$" },
+    { "id": "obf.bracket-colon", "pattern": "^[\\[({]\\s*:\\s*[\\])}]$" },
+    { "id": "obf.bracket-at", "pattern": "^[\\[({]\\s*(?:@|at)\\s*[\\])}]$" },
+    { "id": "obf.spelled-dot", "pattern": "^\\s+dot\\s+$" }
+  ],
+  "opaque_schemes": [
+    "about",
+    "blob",
+    "callto",
+    "data",
+    "facetime",
+    "file",
+    "intent",
+    "itms-services",
+    "javascript",
+    "magnet",
+    "market",
+    "sms",
+    "smsto",
+    "tel",
+    "vbscript"
+  ]
+}
