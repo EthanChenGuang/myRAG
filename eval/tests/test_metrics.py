@@ -369,3 +369,264 @@ def test_only_approved_production_items_count_when_approved_ids_are_given():
     none_approved = aggregate(results, approved_ids=frozenset({"s1"}))
     assert none_approved["gate_population"] == "all"
     assert none_approved["overall"].recall_at_5.n == 3
+
+
+# --- table_split (D-46, EVAL-18) ---------------------------------------------------------------------------------------
+
+from rag_sidecar.contracts.eval_run import RagTrace as _RagTrace  # noqa: E402
+
+from rag_eval.metrics import table_split_report  # noqa: E402
+
+TABLE_DOC = "long-table-fixture.pdf"
+HEADER = "Station | Sample | First value (cm) | Second value (cm) | Note"
+
+
+def _table_item(
+    item_id: str,
+    row: str,
+    *,
+    language: str = "en",
+    split: str = "dev",
+    value: str = "42.5",
+    distractors: tuple[str, ...] = ("17.25",),
+    pending: bool = False,
+) -> GoldenItem:
+    payload: dict[str, object] = {
+        "id": item_id,
+        "question": "Which first value is listed for the synthetic sample row?",
+        "language": language,
+        "category": "table_split",
+        "answerable": True,
+        "expected_answer": f"{value} cm",
+        "gold_evidence": [
+            {"document": TABLE_DOC, "section": "Synthetic readings", "quote": row},
+            {"document": TABLE_DOC, "section": "Synthetic readings", "quote": HEADER},
+        ],
+        "review_status": "approved",
+        "provenance": "synthetic_fixture",
+        "split": split,
+        "table_answer": {"value": value, "column": "First value (cm)", "distractor_values": list(distractors)},
+    }
+    if pending:
+        payload["native_review"] = {"origin": "llm_drafted", "status": "pending"}
+    return GoldenItem.model_validate(payload)
+
+
+def _table_trace(item_id: str, kept: list[tuple[str, str]], *, answer: str | None = None, refused: bool = False) -> _RagTrace:
+    trace = _trace(item_id, kept, refused=refused)
+    return trace.model_copy(update={"answer": answer}) if answer is not None else trace
+
+
+def _table_filler(count: int) -> list[tuple[str, str]]:
+    return [(TABLE_DOC, f"Station Z{i} | Sample {i:02d} | 1{i}.0 | 2{i}.0 | none") for i in range(count)]
+
+
+ROW_A = "Station A | Sample 07 | 42.5 | 17.25 | steady"
+ROW_B = "Station B | Sample 31 | 42.5 | 17.25 | steady"
+
+
+def test_table_split_row_recall_counts_rank_k_and_not_rank_k_plus_one():
+    items = [_table_item(f"t-{rank:02d}", ROW_A) for rank in (5, 6, 10, 11)]
+    traces = [_table_trace(item.id, _table_filler(rank - 1) + [(TABLE_DOC, ROW_A)]) for item, rank in zip(items, (5, 6, 10, 11))]
+    report = table_split_report(traces, items)
+    assert report is not None
+    rows = {row.item_id: row for row in report.items}
+    assert [rows[item.id].row_rank for item in items] == [5, 6, 10, 11]
+    assert report.overall.row_recall_at_5.value == 0.25 and report.overall.row_recall_at_5.n == 4
+    assert report.overall.row_recall_at_10.value == 0.75 and report.overall.row_recall_at_10.n == 4
+
+
+def test_table_split_header_in_context_needs_the_header_inside_the_row_chunk():
+    with_header = _table_item("t-with", ROW_A)
+    without_header = _table_item("t-without", ROW_B)
+    missing_row = _table_item("t-missing", "Station C | Sample 44 | 42.5 | 17.25 | steady")
+    traces = [
+        _table_trace("t-with", [(TABLE_DOC, f"{HEADER}\n|---|---|---|---|---|\n{ROW_A}")]),
+        _table_trace("t-without", [(TABLE_DOC, HEADER), (TABLE_DOC, ROW_B)]),
+        _table_trace("t-missing", [(TABLE_DOC, HEADER)]),
+    ]
+    report = table_split_report(traces, [with_header, without_header, missing_row])
+    assert report is not None
+    rows = {row.item_id: row for row in report.items}
+    assert rows["t-with"].header_in_context is True
+    assert rows["t-without"].header_in_context is False
+    assert rows["t-missing"].row_rank is None and rows["t-missing"].header_in_context is None
+    assert report.overall.header_in_context_rate.value == 0.5
+    assert report.overall.header_in_context_rate.n == 2
+    assert report.overall.row_recall_at_10.value == 2 / 3 and report.overall.row_recall_at_10.n == 3
+
+
+def test_table_split_refused_trace_scores_no_row_hit():
+    item = _table_item("t-refused", ROW_A)
+    report = table_split_report([_table_trace("t-refused", [(TABLE_DOC, ROW_A)], refused=True)], [item])
+    assert report is not None
+    assert report.items[0].row_rank is None
+    assert report.overall.row_recall_at_5.value == 0.0 and report.overall.header_in_context_rate.n == 0
+
+
+def test_table_split_shuffled_item_order_changes_nothing_and_rows_sort_by_language_then_id():
+    items = [
+        _table_item("t-zh-02", ROW_A, language="zh", pending=True),
+        _table_item("t-en-02", ROW_B),
+        _table_item("t-it-01", ROW_A, language="it", pending=True),
+        _table_item("t-en-01", ROW_A),
+        _table_item("t-zh-01", ROW_B, language="zh", pending=True),
+    ]
+    rows = {"t-zh-02": ROW_A, "t-en-02": ROW_B, "t-it-01": ROW_A, "t-en-01": ROW_A, "t-zh-01": ROW_B}
+    traces = [_table_trace(item_id, _table_filler(2) + [(TABLE_DOC, f"{HEADER}\n{row}")]) for item_id, row in rows.items()]
+    forward = table_split_report(traces, items)
+    backward = table_split_report(list(reversed(traces)), list(reversed(items)))
+    assert forward is not None and forward == backward
+    assert [(row.language, row.item_id) for row in forward.items] == [
+        ("en", "t-en-01"),
+        ("en", "t-en-02"),
+        ("it", "t-it-01"),
+        ("zh", "t-zh-01"),
+        ("zh", "t-zh-02"),
+    ]
+
+
+def test_table_split_languages_without_counting_items_are_report_only_with_no_division_by_zero():
+    items = [_table_item("t-en-01", ROW_A), _table_item("t-zh-01", ROW_A, language="zh", pending=True)]
+    traces = [_table_trace(item.id, [(TABLE_DOC, f"{HEADER}\n{ROW_A}")]) for item in items]
+    report = table_split_report(traces, items)
+    assert report is not None
+    assert sorted(report.by_language) == ["en", "it", "zh"]
+    english, italian, chinese = report.by_language["en"], report.by_language["it"], report.by_language["zh"]
+    assert (english.status, english.items, english.counting_items) == ("gated", 1, 1)
+    assert (chinese.status, chinese.items, chinese.counting_items) == ("report_only", 1, 0)
+    assert (italian.status, italian.items, italian.counting_items) == ("report_only", 0, 0)
+    assert italian.row_recall_at_5.value is None and italian.row_recall_at_5.n == 0
+    assert italian.header_in_context_rate.value is None and italian.header_in_context_rate.n == 0
+    assert report.overall.counting_items == 1 and report.overall.status == "gated"
+
+
+def test_table_split_test_split_items_do_not_count_in_the_gate():
+    item = _table_item("t-en-test", ROW_A, split="test")
+    report = table_split_report([_table_trace(item.id, [(TABLE_DOC, ROW_A)])], [item])
+    assert report is not None
+    assert report.by_language["en"].counting_items == 0 and report.by_language["en"].status == "report_only"
+    assert report.items[0].counts_in_gate is False
+
+
+def test_table_split_report_is_absent_without_table_split_items():
+    item = _item("en-a-001", [(DOC, "gold sentence")])
+    assert table_split_report([_trace("en-a-001", [(DOC, "gold sentence")])], [item]) is None
+
+
+def test_table_split_block_is_in_the_report_and_its_markdown_rows_are_sorted():
+    from test_report_runner import _manifest
+
+    from rag_eval.report import _render_markdown, build_report
+
+    items = [
+        _table_item("t-zh-01", ROW_A, language="zh", pending=True),
+        _table_item("t-en-01", ROW_A),
+        _table_item("t-it-01", ROW_B, language="it", pending=True),
+    ]
+    traces = [_table_trace(item.id, [(TABLE_DOC, f"{HEADER}\n{ROW_A}\n{ROW_B}")]) for item in items]
+    report = build_report(_manifest(), score_items(traces, items), items, traces, supported_languages=("zh", "en", "it"))
+    assert report.table_split is not None
+    assert report.table_split.answer_mode is False
+    assert report.table_split.overall.answer_correct_rate is None
+    markdown = _render_markdown(report)
+    section = markdown.split("## Table split", 1)[1].split("\n## ", 1)[0]
+    assert "| overall | gated |" in section
+    assert "| en | gated |" in section and "| zh | report-only |" in section and "| it | report-only |" in section
+    assert "1.0000 (n=3)" in section
+    assert "not run" in section
+    order = [section.index(f"| {item_id} |") for item_id in ("t-en-01", "t-it-01", "t-zh-01")]
+    assert order == sorted(order)
+
+
+def test_report_without_table_split_items_has_no_table_split_key():
+    from test_report_runner import _four_items, _manifest
+
+    from rag_eval.report import build_report
+
+    golden, traces = _four_items()
+    report = build_report(_manifest(), score_items(traces, golden), golden, traces)
+    assert report.table_split is None
+    assert "table_split" not in report.model_dump(mode="json")
+
+
+def test_table_split_answer_correct_rate_counts_ambiguous_and_empty_as_not_correct():
+    items = [_table_item(f"t-en-{index}", ROW_A) for index in range(1, 6)]
+    answers = {
+        "t-en-1": "The first value is 42.5 cm.",
+        "t-en-2": "The first value is 42,50.",
+        "t-en-3": "It is 42.5 or 17.25.",
+        "t-en-4": "It is 17.25.",
+        "t-en-5": "",
+    }
+    traces = [_table_trace(item_id, [(TABLE_DOC, ROW_A)], answer=answer) for item_id, answer in answers.items()]
+    report = table_split_report(traces, items)
+    assert report is not None and report.answer_mode is True
+    verdicts = {row.item_id: row.answer_verdict for row in report.items}
+    assert verdicts == {"t-en-1": "correct", "t-en-2": "correct", "t-en-3": "ambiguous", "t-en-4": "wrong", "t-en-5": "wrong"}
+    assert report.overall.answer_correct_rate is not None
+    assert report.overall.answer_correct_rate.value == 0.4 and report.overall.answer_correct_rate.n == 5
+
+
+def test_table_split_answer_mode_scores_a_refused_or_unanswered_item_as_wrong():
+    items = [_table_item("t-en-1", ROW_A), _table_item("t-en-2", ROW_A), _table_item("t-en-3", ROW_A)]
+    traces = [
+        _table_trace("t-en-1", [(TABLE_DOC, ROW_A)], answer="42.5"),
+        _table_trace("t-en-2", [(TABLE_DOC, ROW_A)], answer="42.5", refused=True),
+        _table_trace("t-en-3", [(TABLE_DOC, ROW_A)]),
+    ]
+    report = table_split_report(traces, items)
+    assert report is not None and report.answer_mode is True
+    assert [row.answer_verdict for row in report.items] == ["correct", "wrong", "wrong"]
+    assert report.overall.answer_correct_rate == report.by_language["en"].answer_correct_rate
+    assert report.by_language["it"].answer_correct_rate is not None
+    assert report.by_language["it"].answer_correct_rate.value is None and report.by_language["it"].answer_correct_rate.n == 0
+
+
+def test_table_split_without_answers_reports_the_answer_check_as_not_run():
+    item = _table_item("t-en-1", ROW_A)
+    report = table_split_report([_table_trace("t-en-1", [(TABLE_DOC, ROW_A)])], [item])
+    assert report is not None and report.answer_mode is False
+    assert report.overall.answer_correct_rate is None
+    assert all(row.answer_verdict is None for row in report.items)
+
+
+# --- table_split gate and re-baseline (D-45, D-46) ---------------------------------------------------------------------
+
+def test_table_split_is_gated_and_the_re_recorded_ingest_baseline_leaves_every_old_slice_and_item_unchanged():
+    from pathlib import Path
+
+    from rag_sidecar.contracts.baseline import Baseline, NoiseConfig
+
+    from rag_eval.native_review import counts_in_gated_slices
+    from rag_eval.paired import is_gated_slice
+
+    root = Path(__file__).resolve().parents[1]
+    noise = NoiseConfig.model_validate_json((root / "config" / "noise.json").read_text(encoding="utf-8"))
+    assert is_gated_slice("category:table_split", noise)
+    assert not is_gated_slice("category:table", noise)
+
+    previous = Baseline.model_validate_json(
+        (root / "baselines" / "history" / "fixture-ingest-baseline.pre-03.2-32.json").read_text(encoding="utf-8")
+    )
+    current = Baseline.model_validate_json((root / "baselines" / "fixture-ingest-baseline.json").read_text(encoding="utf-8"))
+    assert len(current.runs) >= 3
+    assert {run.run_id for run in current.runs}.isdisjoint({run.run_id for run in previous.runs}), "not re-recorded"
+    assert (current.golden_sha256, current.corpus_sha256) == (previous.golden_sha256, previous.corpus_sha256)
+    for name, stats in previous.slices.items():
+        assert current.slices[name] == stats, name
+    assert previous.items is not None and current.items is not None
+    assert {item_id: current.items[item_id] for item_id in previous.items} == previous.items
+    assert all(stat.spread == 0.0 for stats in current.slices.values() for stat in stats.values())
+
+    golden = [
+        GoldenItem.model_validate_json(line)
+        for line in (root / "fixtures" / "ingest" / "golden-ingest.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    table_items = [item for item in golden if item.category == "table_split"]
+    counting = [item for item in table_items if item.split == current.golden_filter.gate_split and counts_in_gated_slices(item)]
+    assert counting and {item.language for item in counting} == {"en"}
+    assert all(not counts_in_gated_slices(item) for item in table_items if item.language in {"zh", "it"})
+    gated = current.slices["category:table_split"]
+    assert gated["recall_at_5"].n == len(counting)

@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
@@ -49,6 +50,8 @@ async function main(): Promise<number> {
       'force-tier': { type: 'string' },
       citations: { type: 'boolean', default: false },
       groundedness: { type: 'boolean', default: false },
+      'table-split-doc-type': { type: 'string' },
+      'table-header-repeat': { type: 'string' },
     },
     strict: true,
   });
@@ -119,7 +122,25 @@ async function main(): Promise<number> {
     requestOptions[key] = value.toLowerCase();
   }
 
+  // Eval check only (D-46): load the table_split documents under another processing profile; such a run is never gated.
+  const tableSplitDocType = values['table-split-doc-type']?.trim();
+  if (tableSplitDocType !== undefined) {
+    if (fixtureMode !== 'ingest' || ingestRouting) throw new Error('--table-split-doc-type needs the inline --fixture-mode ingest');
+    const profiles = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'config/rag/processing-profiles.json'), 'utf8')) as {
+      profiles: Array<{ doc_type: string }>;
+    };
+    const docTypes = profiles.profiles.map((profile) => profile.doc_type);
+    if (!docTypes.includes(tableSplitDocType)) throw new Error(`--table-split-doc-type must be one of ${docTypes.join(', ')}`);
+  }
+
+  const tableHeaderRepeat = values['table-header-repeat']?.trim();
+  if (tableHeaderRepeat !== undefined) {
+    if (fixtureMode !== 'ingest' || ingestRouting || baseUrl) throw new Error('--table-header-repeat needs the inline --fixture-mode ingest');
+    if (tableHeaderRepeat !== 'profile' && tableHeaderRepeat !== 'always') throw new Error('--table-header-repeat must be profile or always');
+  }
+
   let gate = !values['no-gate'];
+  if (tableSplitDocType !== undefined || tableHeaderRepeat !== undefined) gate = false;
   if (embeddingProfileId) gate = false;
   // A queued build has its own corpus hash; it is compared with another routing mode by the parser gate, not with the inline baseline.
   if (ingestRouting && values.baseline === undefined) gate = false;
@@ -155,6 +176,8 @@ async function main(): Promise<number> {
     embeddingProfileId,
     ...(ingestRouting ? { ingestRouting } : {}),
     ...(runConfig ? { runConfig } : {}),
+    ...(tableSplitDocType ? { tableSplitDocType } : {}),
+    ...(tableHeaderRepeat ? { ingestBuildEnv: { RAG_TABLE_HEADER_REPEAT: tableHeaderRepeat } } : {}),
     // Either flag implies include_answer; fixture runs answer with the fake citation generator and score against the fake sidecar.
     ...(values.citations ? { citations: true } : {}),
     ...(values.groundedness ? { groundedness: true } : {}),

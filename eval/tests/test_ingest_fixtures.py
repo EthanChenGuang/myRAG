@@ -456,6 +456,8 @@ def test_the_recorded_directory_holds_only_files_the_manifest_names():
     named = set()
     for entry in [*_manifest()["fixtures"], *_manifest()["long_table_fixtures"]]:
         named |= {Path(entry["recorded"]["parse_result"]).name, Path(entry["recorded"]["docling"]).name}
+        if "parse_result_header_repeat" in entry["recorded"]:
+            named.add(Path(entry["recorded"]["parse_result_header_repeat"]).name)
         named |= {Path(path).name for path in entry["recorded"]["artifacts"].values()}
     on_disk = {path.name for path in RECORDED.iterdir()} if RECORDED.is_dir() else set()
     assert on_disk == named and len(named) >= 24

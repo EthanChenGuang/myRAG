@@ -145,6 +145,43 @@ class SemanticCacheReport(_Contract):
     near_miss_wrong_hit_rate: MetricValue | None = None
 
 
+TableAnswerVerdict = Literal["correct", "wrong", "ambiguous"]
+TableSplitStatus = Literal["gated", "report_only"]
+
+
+class TableSplitItemRow(_Contract):
+    """One scored table_split item (D-46): where its row chunk ranks, whether that chunk holds the header, the answer verdict."""
+
+    item_id: str
+    language: Language
+    split: Split
+    counts_in_gate: bool
+    row_rank: int | None = Field(default=None, ge=1)
+    header_in_context: bool | None = None
+    answer_verdict: TableAnswerVerdict | None = None
+
+
+class TableSplitSlice(_Contract):
+    """table_split metrics of one slice; answer_correct_rate is None when the run produced no answers (not run, never 0)."""
+
+    status: TableSplitStatus
+    items: int = Field(ge=0)
+    counting_items: int = Field(ge=0)
+    row_recall_at_5: MetricValue
+    row_recall_at_10: MetricValue
+    header_in_context_rate: MetricValue
+    answer_correct_rate: MetricValue | None = None
+
+
+class TableSplitReport(_Contract):
+    """D-46, EVAL-18: row Recall@k, header_in_context_rate and the deterministic answer check for table_split items."""
+
+    answer_mode: bool
+    overall: TableSplitSlice
+    by_language: dict[str, TableSplitSlice] = Field(default_factory=dict)
+    items: list[TableSplitItemRow] = Field(default_factory=list)
+
+
 class EvalReport(_Contract):
     schema_version: Literal[1] = 1
     run_id: str
@@ -186,5 +223,8 @@ class EvalReport(_Contract):
     semantic_cache: SemanticCacheReport | None = None
     notes: list[str] = Field(default_factory=list)
     native_review_backlog: list[NativeReviewBacklogEntry] | None = Field(
+        default=None, exclude_if=lambda value: value is None, json_schema_extra=omit_none_schema
+    )
+    table_split: TableSplitReport | None = Field(
         default=None, exclude_if=lambda value: value is None, json_schema_extra=omit_none_schema
     )

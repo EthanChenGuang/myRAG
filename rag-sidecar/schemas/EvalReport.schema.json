@@ -1914,6 +1914,174 @@
       "title": "StrategySlice",
       "type": "object"
     },
+    "TableSplitItemRow": {
+      "additionalProperties": false,
+      "description": "One scored table_split item (D-46): where its row chunk ranks, whether that chunk holds the header, the answer verdict.",
+      "properties": {
+        "answer_verdict": {
+          "anyOf": [
+            {
+              "enum": [
+                "correct",
+                "wrong",
+                "ambiguous"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Answer Verdict"
+        },
+        "counts_in_gate": {
+          "title": "Counts In Gate",
+          "type": "boolean"
+        },
+        "header_in_context": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Header In Context"
+        },
+        "item_id": {
+          "title": "Item Id",
+          "type": "string"
+        },
+        "language": {
+          "enum": [
+            "zh",
+            "en",
+            "it"
+          ],
+          "title": "Language",
+          "type": "string"
+        },
+        "row_rank": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Row Rank"
+        },
+        "split": {
+          "enum": [
+            "dev",
+            "test"
+          ],
+          "title": "Split",
+          "type": "string"
+        }
+      },
+      "required": [
+        "item_id",
+        "language",
+        "split",
+        "counts_in_gate"
+      ],
+      "title": "TableSplitItemRow",
+      "type": "object"
+    },
+    "TableSplitReport": {
+      "additionalProperties": false,
+      "description": "D-46, EVAL-18: row Recall@k, header_in_context_rate and the deterministic answer check for table_split items.",
+      "properties": {
+        "answer_mode": {
+          "title": "Answer Mode",
+          "type": "boolean"
+        },
+        "by_language": {
+          "additionalProperties": {
+            "$ref": "#/$defs/TableSplitSlice"
+          },
+          "title": "By Language",
+          "type": "object"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/TableSplitItemRow"
+          },
+          "title": "Items",
+          "type": "array"
+        },
+        "overall": {
+          "$ref": "#/$defs/TableSplitSlice"
+        }
+      },
+      "required": [
+        "answer_mode",
+        "overall"
+      ],
+      "title": "TableSplitReport",
+      "type": "object"
+    },
+    "TableSplitSlice": {
+      "additionalProperties": false,
+      "description": "table_split metrics of one slice; answer_correct_rate is None when the run produced no answers (not run, never 0).",
+      "properties": {
+        "answer_correct_rate": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MetricValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "counting_items": {
+          "minimum": 0,
+          "title": "Counting Items",
+          "type": "integer"
+        },
+        "header_in_context_rate": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "items": {
+          "minimum": 0,
+          "title": "Items",
+          "type": "integer"
+        },
+        "row_recall_at_10": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "row_recall_at_5": {
+          "$ref": "#/$defs/MetricValue"
+        },
+        "status": {
+          "enum": [
+            "gated",
+            "report_only"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "items",
+        "counting_items",
+        "row_recall_at_5",
+        "row_recall_at_10",
+        "header_in_context_rate"
+      ],
+      "title": "TableSplitSlice",
+      "type": "object"
+    },
     "TransformOutcomeCounts": {
       "additionalProperties": false,
       "description": "Per transform: traces where it ran, was off by config, or was skipped, with the skip reasons (D-28, D-38).",
@@ -2282,6 +2450,9 @@
         }
       ],
       "default": null
+    },
+    "table_split": {
+      "$ref": "#/$defs/TableSplitReport"
     },
     "tier": {
       "enum": [
