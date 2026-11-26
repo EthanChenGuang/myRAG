@@ -3,6 +3,7 @@ import { env } from '@/lib/env';
 import rawMonitorAlerts from '../../../../eval/config/monitor-alerts.json';
 import { embedQueries, type QueryEmbedding } from '../embeddings/query-embedding';
 import { tenantHash } from '../feedback-loop/mining';
+import { maskPII } from '../trace/mask';
 import { seededRandom } from '../ingest/backfill/sample';
 import {
   assignNearest,
@@ -10,6 +11,7 @@ import {
   chooseK,
   distanceThreshold,
   mergeSmallClusters,
+  NOVEL_CLUSTER,
   normalize,
   sphericalKMeans,
   type CentroidRef,
@@ -356,4 +358,50 @@ export async function refreshClusters(admin: SupabaseClient, options: RefreshClu
     novel: 0,
     dropped,
   };
+}
+
+export const MAX_ASSIGN_ITEMS = 500;
+export const MAX_ASSIGN_QUESTION_CHARS = 2000;
+
+export interface TestItemQuestion {
+  item_id: string;
+  question: string;
+}
+
+export interface AssignTestItemsOptions {
+  tenantKey: string;
+  items: readonly TestItemQuestion[];
+  embed?: ClusterEmbedder;
+  signal?: AbortSignal;
+}
+
+export type AssignTestItemsResult =
+  | { ok: true; setId: string; embedder: string; assignments: Array<{ item_id: string; cluster_id: string }> }
+  | { ok: false; reason: 'no_cluster_set' | 'embedder_mismatch' };
+
+/**
+ * D-42: places test items in the tenant's current production clusters. Each question is masked again, embedded in memory through
+ * the active embedding profile and assigned to the nearest centroid, or novel beyond the set's distance threshold. Nothing is
+ * written; only item ids and cluster ids leave, and the log line carries counts.
+ */
+export async function assignTestItems(admin: SupabaseClient, options: AssignTestItemsOptions): Promise<AssignTestItemsResult> {
+  const { tenantKey, items } = options;
+  if (!TENANT_KEY_RE.test(tenantKey)) throw new Error('[Monitor] clusters need one valid tenant key');
+  if (items.length === 0 || items.length > MAX_ASSIGN_ITEMS) throw new Error('[Monitor] test item count out of range');
+  const current = await readCurrentSet(admin, tenantKey);
+  if (!current || current.clusters.length === 0) return { ok: false, reason: 'no_cluster_set' };
+  const rows: LogRow[] = items.map((item) => ({ id: item.item_id, query_masked: maskPII(item.question) }));
+  const embedded = await embedRows(rows, options.embed ?? embedQueries, options.signal ?? new AbortController().signal);
+  if (embedded.embedder !== current.set.embedder || embedded.dimension !== current.set.dimension) {
+    console.warn('[Monitor] test items not assigned: the running embedder differs from the cluster set', { tenant: tenantHash(tenantKey), items: items.length });
+    return { ok: false, reason: 'embedder_mismatch' };
+  }
+  let novel = 0;
+  const assignments = rows.map((row) => {
+    const hit = assignNearest(embedded.vectors.get(row.id) as Float32Array, current.clusters, current.set.distance_threshold);
+    if (hit.clusterId === NOVEL_CLUSTER) novel += 1;
+    return { item_id: row.id, cluster_id: hit.clusterId };
+  });
+  console.log('[Monitor] test items assigned', { tenant: tenantHash(tenantKey), setId: current.set.id, items: assignments.length, novel });
+  return { ok: true, setId: current.set.id, embedder: current.set.embedder, assignments };
 }
