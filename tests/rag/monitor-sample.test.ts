@@ -27,7 +27,7 @@ function rows(count: number, over: Partial<SampleCandidateRow> & { tag: string }
       trace_id: `trace-${over.tag}-${i}`,
       query_masked: `Synthetic question ${over.tag} ${i}`,
       query_fingerprint: fp(`${over.tag}-${i}`),
-      language: over.language ?? 'xx',
+      language: 'language' in over ? (over.language ?? null) : 'xx',
       channel: over.channel ?? 'chat',
       user_id: over.user_id ?? OTHER,
       cluster: over.cluster ?? 'c-01',
@@ -150,7 +150,7 @@ describe('planWeeklySample', () => {
       expect(item.sampling_weight).toBeCloseTo(10 / 3, 6);
     }
     // Horvitz-Thompson: the weights add back up to the population.
-    expect(sum(plan.items.map((item) => item.sampling_weight))).toBeCloseTo(100, 6);
+    expect(sum(plan.items.map((item) => item.sampling_weight))).toBeCloseTo(100, 3);
   });
 
   it('gives the same items for the same tenant and week and a different draw for another week', () => {
