@@ -73,13 +73,14 @@ import type { SourceImageData } from '@/types/chat'
 import { CitationChip } from './citation-chip'
 import { citationSourcesFor } from '@/components/providers/sources-provider'
 import { citeAliasFromHref, isCitationAware, renderCitationMarkers, type CitationMarkerTarget, type CitationRenderPhase } from '@/lib/chat/citation-markers'
-import { pickAnswerMetadata } from '@/lib/chat/answer-metadata'
+import { noticesOf, pickAnswerMetadata } from '@/lib/chat/answer-metadata'
 import { useShallow } from 'zustand/react/shallow'
 import { clientText, clientTextLanguage } from '@/lib/chat/answer-texts'
 import { answerDisplayText, blockedReplacements } from '@/lib/chat/answer-display-text'
 import { MARK_HREF_PREFIX, markFromHref, markHref, placedSentenceMarks, insertSentenceMarks, sentenceMarkKinds, verifySentenceRecords, verifySentenceRecordsSync, type SentenceOffsets } from '@/lib/chat/sentence-marks'
 import { SentenceMark } from './sentence-mark'
 import { AnswerMarkLegend } from './answer-mark-legend'
+import { AnswerNotices } from './answer-notices'
 import { useAnswerRecordsStore } from '@/lib/stores/answer-records-store'
 import { GroundednessBadge } from './groundedness-badge'
 import { AnswerFeedback } from './answer-feedback'
@@ -206,6 +207,12 @@ interface ToolCall {
 }
 
 // Function to highlight document mentions in text
+/** True when message metadata carries a non-empty notices array (UI-SPEC 6.4, independent of citation awareness). */
+function metadataHasNotices(metadata: unknown): boolean {
+  const notices = metadata && typeof metadata === 'object' ? (metadata as { notices?: unknown }).notices : undefined;
+  return Array.isArray(notices) && notices.length > 0;
+}
+
 function highlightDocumentMentions(text: string) {
   if (!text) return '';
 
@@ -2761,6 +2768,8 @@ ChatMessage = function ({
     () => new Map((markerCitations ?? []).map(({ alias, n }) => [alias, n] as const)),
     [markerCitations]
   );
+  const noticesKey = isAI && metadataHasNotices(messageMetadata) ? JSON.stringify((messageMetadata as { notices: unknown }).notices) : '';
+  const answerNotices = useMemo(() => (noticesKey ? noticesOf({ notices: JSON.parse(noticesKey) }) : []), [noticesKey]);
   const answerId = answerMetadata?.answerId;
   const answerDocuments = useAnswerRecordsStore((s) => (answerId ? s.records[answerId]?.documents : undefined));
   const citationMessageId = answerMetadata ? message.id : undefined;
@@ -4991,6 +5000,7 @@ ChatMessage = function ({
                         live={markLive}
                       />
                     )}
+                    {answerNotices.length > 0 && <AnswerNotices notices={answerNotices} />}
                     {followupSplit.followups.length > 0 && (
                       <RelatedQuestions
                         questions={followupSplit.followups}
