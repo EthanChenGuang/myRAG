@@ -7263,6 +7263,128 @@
                                             </label>
                                         </div>
 
+                                        <section id="rag-finetune-slots" class="mt-6 min-w-0" aria-labelledby="rag-finetune-slots-title">
+                                            <h4 id="rag-finetune-slots-title" class="text-md font-semibold mb-2">Fine-tuned slots</h4>
+                                            <p class="text-sm text-base-content/70 mb-4 max-w-prose">Endpoints for up to two fine-tuned embedding models. These fields only store the settings: binding a model to a slot, recording consent and activating a slot happen in the CLI (<span translate="no">npm run rag:embedding</span>), not here.</p>
+
+                                            <div class="form-control mb-4">
+                                                <label class="label" for="RAG_FINETUNE">
+                                                    <span class="label-text">Fine-tuned embeddings</span>
+                                                </label>
+                                                <select id="RAG_FINETUNE" name="RAG_FINETUNE" class="select select-bordered w-full" translate="no" aria-describedby="finetune-help">
+                                                    <option value="off">off</option>
+                                                    <option value="on">on</option>
+                                                </select>
+                                                <label class="label">
+                                                    <span class="label-text-alt min-w-0" id="finetune-help">off keeps today’s behaviour: the slots are never searched and the fine-tune commands refuse.</span>
+                                                </label>
+                                            </div>
+
+                                            <div class="form-control mb-4">
+                                                <label class="label" for="RAG_FT_EMBED_API_KEY">
+                                                    <span class="label-text">Slot endpoint API key</span>
+                                                </label>
+                                                <div class="flex gap-2">
+                                                    <input type="password" id="RAG_FT_EMBED_API_KEY" name="RAG_FT_EMBED_API_KEY" placeholder="Empty until configured" autocomplete="off" spellcheck="false"
+                                                        class="input input-bordered flex-1 w-full" aria-describedby="ft-embed-api-key-help">
+                                                    <button type="button" class="btn btn-square btn-outline" data-for="RAG_FT_EMBED_API_KEY" aria-label="Show or hide the slot endpoint API key">👁️</button>
+                                                </div>
+                                                <label class="label">
+                                                    <span class="label-text-alt min-w-0 text-base-content/70" id="ft-embed-api-key-help">Shared by both slots. Stays on the server; only its presence is reported. May stay empty on a private network.</span>
+                                                </label>
+                                            </div>
+
+                                            <fieldset class="mb-4 min-w-0" aria-describedby="ft-slot-a-help">
+                                                <legend class="text-sm font-semibold mb-1">Slot A</legend>
+                                                <p class="text-xs text-base-content/70 mb-2" id="ft-slot-a-help">An OpenAI-compatible endpoint that serves one fine-tuned model (<span translate="no">POST {base}/embeddings</span>, 1024 dimensions).</p>
+
+                                                <div class="form-control mb-4">
+                                                    <label class="label" for="RAG_FT_SLOT_A_BASE_URL">
+                                                        <span class="label-text">Slot A base URL</span>
+                                                    </label>
+                                                    <input type="url" id="RAG_FT_SLOT_A_BASE_URL" name="RAG_FT_SLOT_A_BASE_URL" class="input input-bordered w-full" inputmode="url" autocomplete="off" spellcheck="false" translate="no" placeholder="http://localhost:8080/v1…" aria-describedby="ft-slot-a-base-url-help">
+                                                    <label class="label">
+                                                        <span class="label-text-alt min-w-0" id="ft-slot-a-base-url-help">Empty leaves slot A unconfigured. No fallback host is used.</span>
+                                                    </label>
+                                                </div>
+
+                                                <div class="form-control mb-4">
+                                                    <label class="label" for="RAG_FT_SLOT_A_MODEL">
+                                                        <span class="label-text">Slot A model version</span>
+                                                    </label>
+                                                    <input type="text" id="RAG_FT_SLOT_A_MODEL" name="RAG_FT_SLOT_A_MODEL" class="input input-bordered w-full" autocomplete="off" spellcheck="false" translate="no" placeholder="Model version id…" aria-describedby="ft-slot-a-model-help">
+                                                    <label class="label">
+                                                        <span class="label-text-alt min-w-0" id="ft-slot-a-model-help">Must equal the model recorded on the slot profile; the startup check compares them.</span>
+                                                    </label>
+                                                </div>
+
+                                                <div class="form-control mb-4">
+                                                    <label class="label" for="RAG_FT_SLOT_A_QUERY_PROMPT">
+                                                        <span class="label-text">Slot A query prompt</span>
+                                                    </label>
+                                                    <input type="text" id="RAG_FT_SLOT_A_QUERY_PROMPT" name="RAG_FT_SLOT_A_QUERY_PROMPT" class="input input-bordered w-full" autocomplete="off" spellcheck="false" placeholder="Empty for no prefix…" aria-describedby="ft-slot-a-query-prompt-help">
+                                                    <label class="label">
+                                                        <span class="label-text-alt min-w-0" id="ft-slot-a-query-prompt-help">Prefix added to each query before it is embedded.</span>
+                                                    </label>
+                                                </div>
+
+                                                <div class="form-control mb-4">
+                                                    <label class="label" for="RAG_FT_SLOT_A_DOCUMENT_PROMPT">
+                                                        <span class="label-text">Slot A document prompt</span>
+                                                    </label>
+                                                    <input type="text" id="RAG_FT_SLOT_A_DOCUMENT_PROMPT" name="RAG_FT_SLOT_A_DOCUMENT_PROMPT" class="input input-bordered w-full" autocomplete="off" spellcheck="false" placeholder="Empty for no prefix…" aria-describedby="ft-slot-a-document-prompt-help">
+                                                    <label class="label">
+                                                        <span class="label-text-alt min-w-0" id="ft-slot-a-document-prompt-help">Prefix added to each passage before it is embedded.</span>
+                                                    </label>
+                                                </div>
+                                            </fieldset>
+
+                                            <fieldset class="mb-4 min-w-0" aria-describedby="ft-slot-b-help">
+                                                <legend class="text-sm font-semibold mb-1">Slot B</legend>
+                                                <p class="text-xs text-base-content/70 mb-2" id="ft-slot-b-help">An OpenAI-compatible endpoint that serves one fine-tuned model (<span translate="no">POST {base}/embeddings</span>, 1024 dimensions).</p>
+
+                                                <div class="form-control mb-4">
+                                                    <label class="label" for="RAG_FT_SLOT_B_BASE_URL">
+                                                        <span class="label-text">Slot B base URL</span>
+                                                    </label>
+                                                    <input type="url" id="RAG_FT_SLOT_B_BASE_URL" name="RAG_FT_SLOT_B_BASE_URL" class="input input-bordered w-full" inputmode="url" autocomplete="off" spellcheck="false" translate="no" placeholder="http://localhost:8080/v1…" aria-describedby="ft-slot-b-base-url-help">
+                                                    <label class="label">
+                                                        <span class="label-text-alt min-w-0" id="ft-slot-b-base-url-help">Empty leaves slot B unconfigured. No fallback host is used.</span>
+                                                    </label>
+                                                </div>
+
+                                                <div class="form-control mb-4">
+                                                    <label class="label" for="RAG_FT_SLOT_B_MODEL">
+                                                        <span class="label-text">Slot B model version</span>
+                                                    </label>
+                                                    <input type="text" id="RAG_FT_SLOT_B_MODEL" name="RAG_FT_SLOT_B_MODEL" class="input input-bordered w-full" autocomplete="off" spellcheck="false" translate="no" placeholder="Model version id…" aria-describedby="ft-slot-b-model-help">
+                                                    <label class="label">
+                                                        <span class="label-text-alt min-w-0" id="ft-slot-b-model-help">Must equal the model recorded on the slot profile; the startup check compares them.</span>
+                                                    </label>
+                                                </div>
+
+                                                <div class="form-control mb-4">
+                                                    <label class="label" for="RAG_FT_SLOT_B_QUERY_PROMPT">
+                                                        <span class="label-text">Slot B query prompt</span>
+                                                    </label>
+                                                    <input type="text" id="RAG_FT_SLOT_B_QUERY_PROMPT" name="RAG_FT_SLOT_B_QUERY_PROMPT" class="input input-bordered w-full" autocomplete="off" spellcheck="false" placeholder="Empty for no prefix…" aria-describedby="ft-slot-b-query-prompt-help">
+                                                    <label class="label">
+                                                        <span class="label-text-alt min-w-0" id="ft-slot-b-query-prompt-help">Prefix added to each query before it is embedded.</span>
+                                                    </label>
+                                                </div>
+
+                                                <div class="form-control mb-4">
+                                                    <label class="label" for="RAG_FT_SLOT_B_DOCUMENT_PROMPT">
+                                                        <span class="label-text">Slot B document prompt</span>
+                                                    </label>
+                                                    <input type="text" id="RAG_FT_SLOT_B_DOCUMENT_PROMPT" name="RAG_FT_SLOT_B_DOCUMENT_PROMPT" class="input input-bordered w-full" autocomplete="off" spellcheck="false" placeholder="Empty for no prefix…" aria-describedby="ft-slot-b-document-prompt-help">
+                                                    <label class="label">
+                                                        <span class="label-text-alt min-w-0" id="ft-slot-b-document-prompt-help">Prefix added to each passage before it is embedded.</span>
+                                                    </label>
+                                                </div>
+                                            </fieldset>
+                                        </section>
+
                                         <h4 class="text-md font-semibold mt-6 mb-2">Ingestion</h4>
                                         <p class="text-sm mb-2" data-ingestion-i18n="settings.movedPointer">Queue and tiered parsing settings are under RAG administration, Ingestion.</p>
                                         <button type="button" class="btn btn-link btn-sm" id="open-ingestion-settings-link" data-ingestion-i18n="settings.movedOpen">Open Ingestion settings</button>

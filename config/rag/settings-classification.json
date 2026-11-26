@@ -205,6 +205,55 @@
       "side": "query"
     },
     {
+      "name": "RAG_FINETUNE",
+      "side": "both",
+      "mechanism": "reembed"
+    },
+    {
+      "name": "RAG_FT_EMBED_API_KEY",
+      "side": "query"
+    },
+    {
+      "name": "RAG_FT_SLOT_A_BASE_URL",
+      "side": "both",
+      "mechanism": "reembed"
+    },
+    {
+      "name": "RAG_FT_SLOT_A_DOCUMENT_PROMPT",
+      "side": "both",
+      "mechanism": "reembed"
+    },
+    {
+      "name": "RAG_FT_SLOT_A_MODEL",
+      "side": "both",
+      "mechanism": "reembed"
+    },
+    {
+      "name": "RAG_FT_SLOT_A_QUERY_PROMPT",
+      "side": "both",
+      "mechanism": "reembed"
+    },
+    {
+      "name": "RAG_FT_SLOT_B_BASE_URL",
+      "side": "both",
+      "mechanism": "reembed"
+    },
+    {
+      "name": "RAG_FT_SLOT_B_DOCUMENT_PROMPT",
+      "side": "both",
+      "mechanism": "reembed"
+    },
+    {
+      "name": "RAG_FT_SLOT_B_MODEL",
+      "side": "both",
+      "mechanism": "reembed"
+    },
+    {
+      "name": "RAG_FT_SLOT_B_QUERY_PROMPT",
+      "side": "both",
+      "mechanism": "reembed"
+    },
+    {
       "name": "RAG_GROUNDEDNESS",
       "side": "query"
     },
