@@ -34,7 +34,8 @@ BEGIN
   EXECUTE $sql$
     ALTER TABLE public.rag_review_items ADD CONSTRAINT rag_review_items_reasons_check
       CHECK (reasons <@ ARRAY['feedback_negative', 'refusal_disputed', 'groundedness_flagged', 'refused_high_score', 'zero_results',
-                              'low_score', 'no_source_opened', 'representative', 're_review']::text[])
+                              'low_score', 'no_source_opened', 'claim_unsupported', 'output_guard', 'version_conflict',
+                              'representative', 're_review']::text[])
   $sql$;
 
   IF EXISTS (
