@@ -176,11 +176,15 @@ function ingestCorpusSha256(
   parseFixtures: ParseFixtureDocument[],
   routing?: IngestRoutingOptions,
   tableSplit = false,
+  tableSplitDocType?: string,
+  ingestEnv?: Record<string, string>,
 ): string {
   const hash = crypto.createHash('sha256').update('fixture-mode:ingest').update(Buffer.from([0])).update(corpusSha256);
   for (const fixture of parseFixtures) hash.update(Buffer.from([0])).update(`parse:${fixture.filename}:${fixture.sha256}`);
   if (routing) hash.update(Buffer.from([0])).update(`routing:${routing.routing}:${routing.forceTier ?? 'none'}`);
   if (tableSplit) for (const part of tableSplitCorpusParts()) hash.update(Buffer.from([0])).update(part);
+  if (tableSplit && tableSplitDocType) hash.update(Buffer.from([0])).update(`table_split_doc_type:${tableSplitDocType}`);
+  for (const name of Object.keys(ingestEnv ?? {}).sort()) hash.update(Buffer.from([0])).update(`ingest_env:${name}=${ingestEnv?.[name]}`);
   return hash.digest('hex');
 }
 
@@ -406,6 +410,10 @@ export async function buildIngestFixtureDatabase(options: {
    * Inline ingest() only: a queued --routing build leaves the table_split items out.
    */
   tableSplit?: boolean;
+  /** The doc type the table_split documents are loaded with instead of the manifest's (eval checks only; changes the corpus hash). */
+  tableSplitDocType?: string;
+  /** Ingestion switches layered over INGEST_MODE_FEATURE_ENV (eval checks only, for example RAG_TABLE_HEADER_REPEAT=always). */
+  ingestEnv?: Record<string, string>;
 }): Promise<
   FixtureDatabase & { buildState: IngestFixtureBuildState; routingSummary?: IngestRoutingSummary; tableSplitTenants?: TableSplitTenant[] }
 > {
@@ -442,7 +450,7 @@ export async function buildIngestFixtureDatabase(options: {
   const parseFixtures = includeTyped
     ? allParseFixtures.filter((fixture) => !fixture.typedTwin && (parseWanted === null || parseWanted.has(fixture.id)))
     : [];
-  const corpusSha256 = ingestCorpusSha256(corpus.corpusSha256, includeTyped ? allParseFixtures : [], routing, tableSplit);
+  const corpusSha256 = ingestCorpusSha256(corpus.corpusSha256, includeTyped ? allParseFixtures : [], routing, tableSplit, options.tableSplitDocType, options.ingestEnv);
   const parseById = new Map(allParseFixtures.map((fixture) => [fixture.id, fixture]));
 
   const createIngestDatabase = async (): Promise<EmptyFixtureDatabase> => {
@@ -500,7 +508,7 @@ export async function buildIngestFixtureDatabase(options: {
     const { mintScope, scopeKey } = await import('@/lib/rag/tenant/scope');
 
     const { INGEST_MODE_FEATURE_ENV } = await import('./ingest-fakes.mts');
-    const fakes = await installIngestFakes({ db: fixtureAdminClient(edge.url), env: INGEST_MODE_FEATURE_ENV });
+    const fakes = await installIngestFakes({ db: fixtureAdminClient(edge.url), env: { ...INGEST_MODE_FEATURE_ENV, ...options.ingestEnv } });
     uninstall = fakes.uninstall;
 
     if (seeded.length > 0) await seedChunkingProfiles(empty.db, seeded);
@@ -645,6 +653,7 @@ export async function buildIngestFixtureDatabase(options: {
         buildSourceKey,
         mintScope,
         scopeKey,
+        ...(options.tableSplitDocType ? { docType: options.tableSplitDocType } : {}),
       });
       if (fakes.llamaParseAttempts() !== llamaAttempts) throw new Error('[Ingest Mode] the table_split tenants reached LlamaParse');
     }

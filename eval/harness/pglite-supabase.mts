@@ -268,6 +268,10 @@ export async function createFixtureDatabase(options: {
   chunkingProfiles?: import('../../src/lib/rag-eval/contracts.generated.ts').ChunkingProfile[];
   /** Ingest mode only: also load the isolated table_split tenants. */
   tableSplit?: boolean;
+  /** Ingest mode only: the doc type the table_split documents are loaded with (default: the manifest's). */
+  tableSplitDocType?: string;
+  /** Ingest mode only: ingestion switches layered over the build's fixed ingest env. */
+  ingestEnv?: Record<string, string>;
 }): Promise<FixtureDatabase> {
   const { deploymentMode, corpusDir } = options;
   if (deploymentMode !== 'single-tenant' && deploymentMode !== 'multi-tenant') {
@@ -290,6 +294,8 @@ export async function createFixtureDatabase(options: {
       ...(options.chunkingProfiles?.length ? { chunkingProfiles: options.chunkingProfiles } : {}),
       ...(options.ingestRouting ? { routing: options.ingestRouting } : {}),
       ...(options.tableSplit ? { tableSplit: true } : {}),
+      ...(options.tableSplit && options.tableSplitDocType ? { tableSplitDocType: options.tableSplitDocType } : {}),
+      ...(options.ingestEnv ? { ingestEnv: options.ingestEnv } : {}),
     });
   }
   if (options.tableSplit) throw new Error('[Fixture DB] the table_split tenants need the ingest fixture mode');

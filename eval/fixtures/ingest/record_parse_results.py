@@ -162,8 +162,10 @@ def build_document(spec: Any, binary_hash: int) -> DoclingDocument:
     return doc
 
 
-def request_for(spec: Any) -> ParseJobRequest:
-    """The ParseJobRequest the app sends for the fixture's doc type, taken from the shipped processing profiles."""
+def request_for(spec: Any, *, header_repeat: bool = False) -> ParseJobRequest:
+    """The ParseJobRequest the app sends for the fixture's doc type, taken from the shipped processing profiles.
+
+    header_repeat is the request under RAG_TABLE_HEADER_REPEAT=always: the header repeated and carried onto continuations."""
     profiles = ProcessingProfileSet.model_validate_json(PROFILES.read_text(encoding="utf-8"))
     profile = next(item for item in profiles.profiles if item.doc_type == spec.doc_type)
     return ParseJobRequest(
@@ -172,7 +174,8 @@ def request_for(spec: Any) -> ParseJobRequest:
         docling=DoclingOptions.model_validate(profile.parser.docling.model_dump()),
         ocr_languages=list(profile.parser.ocr_languages),
         max_tokens=profile.chunker.max_tokens,
-        repeat_table_header=profile.chunker.repeat_table_header,
+        repeat_table_header=True if header_repeat else profile.chunker.repeat_table_header,
+        carry_table_header=header_repeat,
         input_format="pdf",
     )
 
@@ -200,13 +203,13 @@ def _check_invoice_facts(spec: Any, result: ParseResult) -> None:
         raise SystemExit(f"{spec.id}: the recorded markdown does not yield the expected invoice facts: {found} {fields.errors}")
 
 
-def record_fixture(spec: Any, binary_hash: int) -> tuple[ParseResult, dict[str, bytes]]:
+def record_fixture(spec: Any, binary_hash: int, *, header_repeat: bool = False) -> tuple[ParseResult, dict[str, bytes]]:
     """Runs the adapter on the spec's document; returns the ParseResult and the artifact files by name."""
     doc = build_document(spec, binary_hash)
     share = 0.0 if spec.layer == "scanned" else 1.0
     with tempfile.TemporaryDirectory() as directory:
         out_dir = Path(directory)
-        result = docling_adapter.to_parse_result(doc, request_for(spec), out_dir, text_layer_page_share=share)
+        result = docling_adapter.to_parse_result(doc, request_for(spec, header_repeat=header_repeat), out_dir, text_layer_page_share=share)
         artifacts = {name: (out_dir / name).read_bytes() for name in result.artifacts}
     return result, artifacts
 
@@ -217,7 +220,7 @@ def build_all(pdf_dir: Path) -> dict[str, bytes]:
     build_info = json.loads((pdf_dir / "build-info.json").read_text(encoding="utf-8"))
     files: dict[str, bytes] = {}
     entries = _record_entries(specs.all_specs(), pdf_dir, files, first_hash=2000)
-    long_table_entries = _record_entries(specs.long_table_specs(), pdf_dir, files, first_hash=3000)
+    long_table_entries = _record_entries(specs.long_table_specs(), pdf_dir, files, first_hash=3000, header_repeat_variant=True)
     from importlib.metadata import version
 
     manifest = {
@@ -232,8 +235,13 @@ def build_all(pdf_dir: Path) -> dict[str, bytes]:
     return files
 
 
-def _record_entries(fixture_specs: Any, pdf_dir: Path, files: dict[str, bytes], first_hash: int) -> list[dict[str, Any]]:
-    """Records each spec into files and returns its manifest entries, in spec order."""
+def _record_entries(
+    fixture_specs: Any, pdf_dir: Path, files: dict[str, bytes], first_hash: int, *, header_repeat_variant: bool = False
+) -> list[dict[str, Any]]:
+    """Records each spec into files and returns its manifest entries, in spec order.
+
+    With header_repeat_variant, each spec also gets the ParseResult of the RAG_TABLE_HEADER_REPEAT=always request
+    (<id>.header-repeat.parse.json), which the fake sidecar answers when a request repeats and carries headers."""
     entries: list[dict[str, Any]] = []
     for index, spec in enumerate(fixture_specs, start=1):
         pdf_path = pdf_dir / f"{spec.id}.pdf"
@@ -245,6 +253,11 @@ def _record_entries(fixture_specs: Any, pdf_dir: Path, files: dict[str, bytes], 
         parse_path = f"recorded/{spec.id}.parse.json"
         files[parse_path] = _dump(result.model_dump(mode="json"))
         recorded["parse_result"] = parse_path
+        if header_repeat_variant:
+            repeated, _ = record_fixture(spec, binary_hash=first_hash + index, header_repeat=True)
+            repeat_path = f"recorded/{spec.id}.header-repeat.parse.json"
+            files[repeat_path] = _dump(repeated.model_dump(mode="json"))
+            recorded["parse_result_header_repeat"] = repeat_path
         for name, data in artifacts.items():
             if name == docling_adapter.DOCLING_JSON:
                 relative = f"recorded/{spec.id}.docling.json"
