@@ -53,3 +53,26 @@ def freeze_splits(items: list[GoldenItem], manifest_path: Path) -> list[GoldenIt
     if added:
         write_manifest(manifest_path, assignments)
     return frozen
+
+
+DOCGROUP_SPLIT_RULE = "docgroup-sha256-first8hex-mod100-lt70-dev"
+
+
+def assign_group_split(key: str) -> str:
+    return "dev"
+
+
+def group_id(key: str) -> str:
+    return ""
+
+
+def document_groups(items, pairs=()):
+    return {}
+
+
+def load_group_manifest(path):
+    return None
+
+
+def freeze_group_splits(items, manifest_path, pairs=()):
+    return list(items)

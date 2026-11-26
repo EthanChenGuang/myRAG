@@ -155,6 +155,7 @@ def main(argv: list[str] | None = None) -> int:
         help="GatePopulationConfig JSON (default: eval/config/gate-population.json); real mode below min_items "
         f"exits {EXIT_REAL_SET_TOO_SMALL} with real_set_too_small",
     )
+    score.add_argument("--split-manifest", type=Path, default=None)
     score.set_defaults(handler=_score)
     args = parser.parse_args(argv)
     return args.handler(args)

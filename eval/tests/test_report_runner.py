@@ -339,3 +339,56 @@ def test_markdown_has_provenance_tables(tmp_path: Path):
     assert "| production |" in md
     assert "production/colloquial" in md
     assert "Gate population: production" in md
+
+
+def _docgroup_manifest(path: Path, ids: list[str]) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "rule": "docgroup-sha256-first8hex-mod100-lt70-dev",
+                "assignments": {item_id: "dev" for item_id in ids},
+                "group_assignments": {"0" * 64: "dev"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_score_cli_refuses_a_golden_file_missing_an_id_of_its_split_manifest(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+    golden, traces = _four_items()
+    traces_path, golden_path, manifest_path, out = _write_inputs(tmp_path, traces)
+    _docgroup_manifest(golden_path.with_name("split-manifest.json"), [item.id for item in golden] + ["prod-en-deleted01"])
+    assert main(_score_args(traces_path, golden_path, manifest_path, out)) == 2
+    err = capsys.readouterr().err
+    assert "prod-en-deleted01" in err and "split manifest" in err
+    assert not (out / "report.json").exists()
+
+
+def test_score_cli_accepts_a_complete_split_manifest(tmp_path: Path):
+    golden, traces = _four_items()
+    traces_path, golden_path, manifest_path, out = _write_inputs(tmp_path, traces)
+    _docgroup_manifest(golden_path.with_name("split-manifest.json"), [item.id for item in golden])
+    assert main(_score_args(traces_path, golden_path, manifest_path, out)) == 0
+
+
+def test_score_cli_checks_an_explicit_split_manifest_of_either_rule(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
+    golden, traces = _four_items()
+    traces_path, golden_path, manifest_path, out = _write_inputs(tmp_path, traces)
+    explicit = tmp_path / "other-manifest.json"
+    explicit.write_text(
+        json.dumps({"schema_version": 1, "rule": "sha256-first8hex-mod100-lt70-dev", "assignments": {"gone-item-001": "dev"}}),
+        encoding="utf-8",
+    )
+    assert main([*_score_args(traces_path, golden_path, manifest_path, out), "--split-manifest", str(explicit)]) == 2
+    assert "gone-item-001" in capsys.readouterr().err
+
+
+def test_score_cli_ignores_a_shared_item_rule_manifest_next_to_the_golden_file(tmp_path: Path):
+    golden, traces = _four_items()
+    traces_path, golden_path, manifest_path, out = _write_inputs(tmp_path, traces)
+    golden_path.with_name("split-manifest.json").write_text(
+        json.dumps({"schema_version": 1, "rule": "sha256-first8hex-mod100-lt70-dev", "assignments": {"other-file-001": "dev"}}),
+        encoding="utf-8",
+    )
+    assert main(_score_args(traces_path, golden_path, manifest_path, out)) == 0
