@@ -16,7 +16,13 @@ import {
 } from './link-targets';
 import { getLanguageRegistry } from '@/lib/rag/lang/registry';
 import { fixedText } from '@/lib/rag/lang/texts';
-import { compileCredentialRules, isWordChar, matchCredentialSentence, type CompiledCredentialRule } from './credential-rules';
+import {
+  compileCredentialRules,
+  isWordChar,
+  matchCredentialSentence,
+  matchedCredentialTerms,
+  type CompiledCredentialRule,
+} from './credential-rules';
 import { normalise } from './injection-scan';
 
 /**
@@ -77,6 +83,8 @@ export interface OutputGuardLinkSummary {
   rule_ids: string[];
   /** In memory only, for source attribution; never logged, stored or serialized. */
   readonly removedTargets: readonly string[];
+  /** In memory only, for source attribution: the normalised credential terms of matched sentences; never logged or stored. */
+  readonly matchedPhrases: readonly string[];
   /** In memory only: released sentences blocked after a later link removal (enforce). */
   readonly blockedRanges: readonly OutputGuardBlockedRange[];
 }
@@ -107,6 +115,7 @@ interface Counters {
   credentialRuleIds: string[];
   credentialBlocked: number;
   credentialWarned: number;
+  matchedPhrases: string[];
 }
 
 interface CredentialState {
@@ -148,6 +157,7 @@ export function createOutputGuard(policy: OutputGuardPolicy): OutputGuard {
     credentialRuleIds: [],
     credentialBlocked: 0,
     credentialWarned: 0,
+    matchedPhrases: [],
   };
   const credential = createCredentialStage(policy, rules, counters);
 
@@ -281,6 +291,10 @@ export function createOutputGuard(policy: OutputGuardPolicy): OutputGuard {
         value: Object.freeze([...counters.removedTargets]),
         enumerable: false,
       });
+      Object.defineProperty(summary, 'matchedPhrases', {
+        value: Object.freeze([...counters.matchedPhrases]),
+        enumerable: false,
+      });
       Object.defineProperty(summary, 'blockedRanges', {
         value: Object.freeze(credential.blockedRanges().map((range) => Object.freeze({ ...range }))),
         enumerable: false,
@@ -327,6 +341,7 @@ export function guardWholeText(text: string, policy: OutputGuardPolicy): { text:
   const exact = applyBlockedRanges(out, summary.blockedRanges, credentialBlockedText(policy));
   const settled = { ...summary };
   Object.defineProperty(settled, 'removedTargets', { value: summary.removedTargets, enumerable: false });
+  Object.defineProperty(settled, 'matchedPhrases', { value: summary.matchedPhrases, enumerable: false });
   Object.defineProperty(settled, 'blockedRanges', { value: Object.freeze([]), enumerable: false });
   return { text: exact, summary: settled as OutputGuardLinkSummary };
 }
@@ -495,6 +510,9 @@ function createCredentialStage(
     const ids = matchCredentialSentence(sentence, undefined, compiled);
     if (ids.length === 0) return sentence;
     ids.forEach(addRule);
+    for (const term of matchedCredentialTerms(sentence, ids, compiled)) {
+      if (!counters.matchedPhrases.includes(term)) counters.matchedPhrases.push(term);
+    }
     const removedElsewhere = [...textsWithRemoval].some((id) => id !== textId);
     if (policy.flaggedContext === true || removedElsewhere || state.firstRemoval < decidedAt) {
       counters.credentialBlocked += 1;

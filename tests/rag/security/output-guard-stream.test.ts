@@ -279,3 +279,24 @@ describe('guard slot of buildAnswerTransforms (D-35, D-36)', () => {
     expect(buildAnswerTransforms({ citationTransforms: [citation] })).toEqual([citation]);
   });
 });
+
+describe('guardSlot (D-36)', () => {
+  const options = { createGuard: () => createOutputGuard(policyFor(byId('en-url-removed'), 'enforce')) };
+  it('off: no transform; flag and enforce: one transform between the sentinel and the notice collector', async () => {
+    const { guardSlot } = await import('@/lib/rag/generation/answer-transforms');
+    expect(guardSlot('off', options)).toBeNull();
+    const citation: Transform = () => new TransformStream();
+    const sentinel: Transform = () => new TransformStream();
+    const collector: Transform = () => new TransformStream();
+    for (const mode of ['flag', 'enforce'] as const) {
+      const guard = guardSlot(mode, options);
+      expect(typeof guard).toBe('function');
+      expect(buildAnswerTransforms({ citationTransforms: [citation], sentinel, guard, noticeCollector: [collector] })).toEqual([
+        citation,
+        sentinel,
+        guard,
+        collector,
+      ]);
+    }
+  });
+});
