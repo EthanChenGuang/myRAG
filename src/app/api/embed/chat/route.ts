@@ -4,7 +4,6 @@ import { checkRateLimit, getRateLimitIdentifier } from '@/lib/embed-rate-limit';
 import { createUIMessageStream, createUIMessageStreamResponse, streamText, type ModelMessage } from 'ai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { z } from 'zod/v3';
-import { linkUsageInstructions } from '@/lib/rag/security/link-section';
 import { classifyQuery } from '@/lib/query-classifier';
 import {
   buildHistoryWindow,
@@ -29,6 +28,7 @@ import {
   isV2Pipeline,
   knowledgeBaseUnavailableLanguage,
   knowledgeBaseUnavailableMessage,
+  linkUsageInstructions,
   mintEmbedFeedbackToken,
   parseRetrievalFilters,
   resolveScopesFilter,

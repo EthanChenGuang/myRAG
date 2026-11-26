@@ -12,13 +12,8 @@ import {
   readImageContext,
 } from '@/lib/mcp/caller-scope';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { escapeTags, isAdminUser, readSecurityConfig, scanToolOutput, TOOL_RESULT_NOTICE, wrapToolResultsForPrompt, type RagAdminDb } from '@/lib/rag';
+import { escapeTags, guardSummaryText, isAdminUser, readSecurityConfig, scanToolOutput, TOOL_RESULT_NOTICE, wrapToolResultsForPrompt, type RagAdminDb } from '@/lib/rag';
 import { isUrlMcpCompatible } from '@/lib/mcp/url-validator';
-import { readAnswerConfig } from '@/lib/rag/generation/answer-config';
-import { fixedText } from '@/lib/rag/lang/texts';
-import { getLanguageSettings, languageVariablesUnset } from '@/lib/rag/lang/settings';
-import { createOutputLinkPolicy } from '@/lib/rag/security/link-targets';
-import { guardWholeText } from '@/lib/rag/security/output-guard';
 
 function describeConnections(client: unknown): { server: string; connected: boolean }[] {
   const candidate = client as { getConnectionStatus?: () => { server: string; connected: boolean }[] } | null;
@@ -2518,7 +2513,7 @@ export async function POST(req: NextRequest) {
                   // Use GPT-5 Nano to intelligently summarize the email content
                   console.log('🔍 [SUMMARY] Calling GPT-5 Nano for email summarization');
                   const summaryQuery = params.instructions || params.query || 'Find my recent emails';
-                  const summarizedContent = guardApproveSummary(await summarizeEmailsWithGPT(emails, summaryQuery, toolName), summaryQuery);
+                  const summarizedContent = guardSummaryText({ text: await summarizeEmailsWithGPT(emails, summaryQuery, toolName), userMessage: summaryQuery, channel: 'approve' });
                   
                   return {
                     content: [makeText(summarizedContent)],
@@ -3673,40 +3668,6 @@ function generatePreviewFromBody(body: string | null, existingSnippet: string | 
 /* Manual extraction function - DEPRECATED in simplified approach */
 // This function has been removed as part of the Gmail integration simplification.
 // The stripGmailPayload function now handles all necessary payload processing.
-
-/**
- * Phase 5.2 D-35: the model-written summary passes the whole-text output guard with the chat mode. The policy is the allowlist,
- * the site host and the user's own request; this path issues no server URLs. Off returns the text unchanged.
- */
-function guardApproveSummary(text: string, userMessage: unknown): string {
-  const mode = readAnswerConfig().outputGuard;
-  if (mode === 'off' || typeof text !== 'string') return text;
-  const language = languageVariablesUnset() ? '' : getLanguageSettings().primary ?? '';
-  const result = guardWholeText(text, {
-    mode,
-    links: createOutputLinkPolicy({
-      allowlistValue: process.env.RAG_OUTPUT_LINK_ALLOWLIST,
-      siteUrl: process.env.NEXT_PUBLIC_SITE_URL,
-      userMessage: typeof userMessage === 'string' ? userMessage : '',
-    }),
-    placeholder: fixedText('notices.link_removed', language),
-    language,
-  });
-  const { summary } = result;
-  if (summary.links_removed > 0 || summary.credential_blocked > 0 || summary.credential_warned > 0) {
-    console.warn('[RAG Security] Output guard findings', {
-      channel: 'approve',
-      mode: summary.mode,
-      linksChecked: summary.links_checked,
-      linksRemoved: summary.links_removed,
-      credentialBlocked: summary.credential_blocked,
-      credentialWarned: summary.credential_warned,
-      ruleIds: summary.rule_ids,
-      rulesVersion: summary.rules_version,
-    });
-  }
-  return result.text;
-}
 
 /* GPT-5 Nano email summarization function */
 interface SummaryEmail {
