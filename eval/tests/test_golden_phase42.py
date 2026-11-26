@@ -611,10 +611,11 @@ def test_every_phase42_quote_is_found_in_its_loaded_document(phase42, documents)
 # words (train 30). Both fixture baselines were re-recorded on the combined corpus with every earlier item unchanged; any
 # other shared word, or one of these four in a pre-existing document, still fails.
 CONCURRENT_P52_WORDS = {"basin", "closes", "griglia", "chiude"}
+# 05.2-29 moved the sec-links topic sections, unchanged, into sec-link-topics.
 CONCURRENT_P52_FILES = {
     f"{language}/{name}.{language}.md"
     for language in ("en", "it", "zh")
-    for name in ("p52-answers", "p52-rules-v1", "p52-rules-v2", "sec-links")
+    for name in ("p52-answers", "p52-rules-v1", "p52-rules-v2", "sec-links", "sec-link-topics")
 }
 
 
