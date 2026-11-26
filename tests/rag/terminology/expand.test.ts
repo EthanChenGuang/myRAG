@@ -276,7 +276,7 @@ describe('the terminology stage in the query group (D-15, D-21)', () => {
     const record = collector.stages().find((row) => row.name === 'terminology');
     expect(record?.status).toBe('ok');
     expect(record?.detail).toBe('matches=1 tokens=3 capped=false version=s3');
-    expect(record?.counts).toEqual({ matches: 1, tokens: 3, capped: 0, shared_version: 3, workspace_version: 0 });
+    expect(record?.counts).toEqual({ matches: 1, tokens: 3, capped: 0, shared_version: 3, workspace_version: 0, search_cut: 0, variant_cut: 0 });
     expect(out.terminology?.expansionTokens).toEqual(['term', 'alpha', 'beta']);
     expect(out.terminology?.version).toBe('s3');
     expectNoText(collector.stages(), ['termalpha', 'term alpha beta', 'what is']);
