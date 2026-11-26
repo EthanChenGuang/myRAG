@@ -684,6 +684,30 @@ BEGIN
     REVOKE ALL ON FUNCTION public.unshare_chat(uuid) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.unshare_chat(uuid) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_table_rows_follow_document()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_table_rows_follow_document() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_table_rows_follow_document() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_purge_hook_table_rows(text, uuid, uuid[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_hook_table_rows(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_hook_table_rows(text, uuid, uuid[]) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_dup_clusters_mark_dirty_delete()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_dup_clusters_mark_dirty_delete() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_dup_clusters_mark_dirty_delete() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_dup_clusters_mark_dirty_update()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_dup_clusters_mark_dirty_update() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_dup_clusters_mark_dirty_update() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_purge_hook_dup_clusters(text, uuid, uuid[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_hook_dup_clusters(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_hook_dup_clusters(text, uuid, uuid[]) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_purge_hook_identifiers(text, uuid, uuid[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_hook_identifiers(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_hook_identifiers(text, uuid, uuid[]) TO service_role;
+  END IF;
 END
 $service_role_only$;
 
