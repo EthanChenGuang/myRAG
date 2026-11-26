@@ -658,3 +658,25 @@ test('cache-rpc: the Phase 3.1 parse-cache home is unchanged', () => {
     'src/lib/rag/cache/x.ts:cache-rpc',
   ]);
 });
+
+test('terminology-rpc: rag_term_* RPCs and table access fail under src outside src/lib/rag/terminology/', () => {
+  assert.ok(RULES.some((r) => r.id === 'terminology-rpc'));
+  const rpc = "await db.rpc('rag_term_effective', { p_tenant_key: key });\n";
+  const table = "await admin.from('rag_term_entries').select('*');\n";
+  const others = {
+    'src/lib/a.ts': 'await db.rpc(`rag_term_apply_import`, args);\n',
+    'src/lib/b.ts': "await admin.from<Row>('rag_term_layers').select('version');\n",
+    'src/app/api/c/route.ts': 'await admin.from("rag_term_audit").insert(row);\n',
+  };
+  assert.deepEqual(rulesFor({ 'src/lib/out.ts': rpc }), ['src/lib/out.ts:terminology-rpc']);
+  assert.deepEqual(rulesFor({ 'src/app/api/x/route.ts': table }), ['src/app/api/x/route.ts:terminology-rpc']);
+  assert.deepEqual(rulesFor({ 'src/lib/rag/v2/stages/query.ts': rpc }), ['src/lib/rag/v2/stages/query.ts:terminology-rpc']);
+  const out = rulesFor(others);
+  assert.equal(out.length, 3);
+  assert.ok(out.every((entry) => entry.endsWith(':terminology-rpc')));
+  assert.deepEqual(rulesFor({ 'src/lib/rag/terminology/load.ts': rpc + table }), []);
+  assert.deepEqual(rulesFor({ 'src/lib/rag/terminology/admin/write.ts': rpc + table }), []);
+  assert.deepEqual(rulesFor({ 'tests/rag-db/x.test.mts': rpc + table }), []);
+  assert.deepEqual(rulesFor({ 'eval/harness/x.mts': rpc + table }), []);
+  assert.deepEqual(rulesFor({ 'src/lib/c.ts': "// db.rpc('rag_term_effective')\nconst x = 'rag_term_entries';\n" }), []);
+});
