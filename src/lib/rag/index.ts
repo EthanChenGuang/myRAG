@@ -577,3 +577,14 @@ export type {
   ListAttributeDefinitionsResult,
   UpsertAttributeDefinitionResult,
 } from './ingest/attributes/schema';
+export { attributeHeaderEnabled, getHeaderTemplate, listStaleHeaderDocuments, setHeaderTemplate } from './ingest/attributes/header';
+export type {
+  GetHeaderTemplateResult,
+  HeaderTemplate,
+  HeaderTemplateError,
+  HeaderTemplateFailure,
+  ListStaleHeaderDocumentsResult,
+  SetHeaderTemplateResult,
+  StaleHeaderDocument,
+} from './ingest/attributes/header';
+export { renderPendingHeaders } from './ingest/attributes/apply';

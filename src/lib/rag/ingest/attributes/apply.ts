@@ -342,13 +342,16 @@ export async function renderDocumentHeaders(
 /**
  * After a template change: pages through the tenant's documents whose stamp is not of the current template version (or that still carry a
  * stamp after the template was removed) and renders them, within deadlineMs. more is true when documents are left for a later call.
+ * A null client uses the service-role client of the ingest deps (the admin route).
  */
 export async function renderPendingHeaders(
-  db: RpcClient,
+  client: RpcClient | null,
   tenantKey: string,
   options: { signal: AbortSignal; deadlineMs: number },
 ): Promise<{ ok: true; rendered: number; more: boolean } | AttributeCallFailure> {
   const clock = getIngestDeps();
+  const db = client ?? clock.db();
+  if (!db) return { ok: false, reason: 'unavailable' };
   const stopAt = clock.now() + Math.max(0, options.deadlineMs);
   const loaded = await loadHeaderTemplate(tenantKey, { signal: options.signal, db, fresh: true });
   if (!loaded.ok) return { ok: false, reason: 'unavailable' };
