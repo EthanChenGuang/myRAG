@@ -204,7 +204,24 @@ export {
   noKnowledgeBaseResponseLanguage,
 } from './generation/messages';
 export { readAnswerConfig, type AnswerConfig } from './generation/answer-config';
-export { createAnswerTurn, type AnswerChannel, type AnswerTurn, type TextsSource } from './generation/answer-turn';
+export {
+  answerReserveTokens,
+  decideOutputCap,
+  effectiveMaxOutputTokens,
+  outputCapFloor,
+  resolveOutputCap,
+  type OutputCapDecision,
+} from './generation/output-cap';
+export { CLAUDE_MAX_OUTPUT_TOKENS } from './generation/citations/claude';
+export {
+  answerFinishFields,
+  answerTraceFields,
+  createAnswerTurn,
+  parseBodyChannel,
+  type AnswerChannel,
+  type AnswerTurn,
+  type TextsSource,
+} from './generation/answer-turn';
 export { resolveAnswerLanguage, previousTurnLanguage, type AnswerLanguageSource } from './lang/answer-language';
 export { identifierSuggestionMessage } from './generation/messages';
 export { IDENTIFIER_NOT_FOUND } from './v2/result';

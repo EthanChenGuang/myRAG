@@ -82,7 +82,7 @@ describe('fixedText (D-08)', () => {
     const keys = Object.entries(raw().packs[0].texts).flatMap(([group, texts]) =>
       Object.keys(texts as Record<string, string>).map((name) => `${group}.${name}`),
     );
-    expect(keys).toHaveLength(38);
+    expect(keys).toHaveLength(39);
     const params = { value: 'V', version: 'N', date: 'D', sentinel: 'S', not_covered: 'C', general_knowledge: 'G', from_documents: 'FD', from_web: 'FW' };
     for (const pack of getLanguageRegistry().packs) {
       for (const key of keys) {

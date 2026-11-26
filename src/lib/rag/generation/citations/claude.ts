@@ -55,6 +55,8 @@ export interface ClaudeCitationRequestInput {
   anthropicId: string;
   reasoning?: boolean;
   abortSignal?: AbortSignal;
+  /** Phase 5.2 D-29: the output cap of the turn; the call gets min(CLAUDE_MAX_OUTPUT_TOKENS, cap). */
+  outputCap?: number | null;
 }
 
 function documentParts(aliasMap: AliasMap): FilePart[] {
@@ -88,7 +90,7 @@ export function buildClaudeCitationRequest(input: ClaudeCitationRequestInput) {
       { role: 'user', content: [...documentParts(input.aliasMap), question] },
     ] as ModelMessage[],
     maxRetries: 0,
-    maxOutputTokens: CLAUDE_MAX_OUTPUT_TOKENS,
+    maxOutputTokens: typeof input.outputCap === 'number' ? Math.min(CLAUDE_MAX_OUTPUT_TOKENS, input.outputCap) : CLAUDE_MAX_OUTPUT_TOKENS,
     providerOptions: { anthropic: { ...thinking } },
     ...(input.abortSignal ? { abortSignal: input.abortSignal } : {}),
   };

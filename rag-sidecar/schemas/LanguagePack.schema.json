@@ -96,6 +96,19 @@
           "default": null,
           "title": "General Knowledge"
         },
+        "grounding_per_sentence": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Grounding Per Sentence"
+        },
         "partial_answer": {
           "anyOf": [
             {
