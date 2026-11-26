@@ -438,3 +438,6 @@ export { LabelRequestSchema, normalizeQuoteText, validateAndSaveLabel } from './
 export type { EvidenceFailureReason, LabelRequest, SaveLabelResult } from './feedback-loop/labels';
 export { REVIEW_SEARCH_POOL, ReviewSearchRequestSchema, searchForReviewItem } from './feedback-loop/review-search';
 export type { ReviewSearchHit, ReviewSearchRequest, ReviewSearchResult } from './feedback-loop/review-search';
+export { hashSystemPromptTemplate } from './cache/keys';
+export { cacheSourcesFromResult, scheduleCacheStore } from './cache/store-after';
+export type { CacheStoreFacts, CacheStoreSource, ScheduleCacheStoreInput } from './cache/store-after';

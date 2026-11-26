@@ -33,7 +33,8 @@ export interface FailOpenOptions {
 const TIMEOUT = Symbol('semantic-cache-timeout');
 const ABORTED = Symbol('semantic-cache-aborted');
 
-function hashedTenant(scope: TenantScope): string {
+/** The first 12 hex digits of sha256(tenant key); log lines never carry the key itself. */
+export function hashedTenantKey(scope: TenantScope): string {
   try {
     return createHash('sha256').update(scopeKey(scope), 'utf8').digest('hex').slice(0, 12);
   } catch {
@@ -56,7 +57,7 @@ function logFailure(backend: BackendName, op: Operation, scope: TenantScope, fai
     backend,
     op,
     reason: reasonOf(failure),
-    tenant: hashedTenant(scope),
+    tenant: hashedTenantKey(scope),
   });
 }
 
