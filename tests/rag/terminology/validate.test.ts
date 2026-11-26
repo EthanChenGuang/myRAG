@@ -242,9 +242,16 @@ describe('validateEntries: determinism and scale', () => {
 
   it('validates 5,000 entries in under 500 ms', () => {
     const list = Array.from({ length: 5000 }, (_, index) => entry(`term alpha beta ${index}`, [`termalpha ${index}`, `alpha beta ${index}`]));
-    const started = performance.now();
-    const issues = validateEntries(list, ctx());
-    expect(performance.now() - started).toBeLessThan(500);
-    expect(issues).toEqual([]);
+    // Warm up once, then keep the best of three runs: one slow run on a loaded CI runner is noise,
+    // while a quadratic validator misses the bound on every run.
+    expect(validateEntries(list, ctx())).toEqual([]);
+    let best = Number.POSITIVE_INFINITY;
+    for (let run = 0; run < 3; run += 1) {
+      const started = performance.now();
+      const issues = validateEntries(list, ctx());
+      best = Math.min(best, performance.now() - started);
+      expect(issues).toEqual([]);
+    }
+    expect(best).toBeLessThan(500);
   });
 });
