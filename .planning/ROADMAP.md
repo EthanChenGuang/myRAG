@@ -333,7 +333,7 @@ Plans:
   8. Rule sets, boilerplate rules, attribute schemas, values and header templates never cross tenants in either deployment mode; their functions are executable by the service role only; every tenant pattern is validated when saved and runs only in the time-boxed worker; purge removes the new values; no file in the repository contains a rule, pattern, attribute value or template of a real collection.
   9. The synthetic `templated_collection` items in zh/en/it pass the pre-registered gates under the recommended configuration (named-document retrieval, variant accuracy, boilerplate token share, quantity match), and no other slice drops beyond the noise band.
 **Live verification**: Push migrations 1001–1009 and check grants; measure the boilerplate residue that real Docling output leaves on a handful of real tenant files before trusting the thresholds; import one tenant's rule and attribute files, which are kept outside the repository.
-**Plans**: 26 plans in 10 waves (see `phases/03.3-templated-collection-ingestion/03.3-PLAN-INDEX.md`); migrations 1001–1009 (1010–1018 spare, 1019 reserved and unused); human step in plan 26 (live verification); coordinator confirmations: lexical version values 6–9 for the quantity bit with the Phase 4.2 owner, baseline ownership against 04.2-37; Config UI gets six switch controls only (`03.3-UI-SPEC.md`), editing panels are deferred
+**Plans**: 26 plans in 11 waves (see `phases/03.3-templated-collection-ingestion/03.3-PLAN-INDEX.md`); migrations 1001–1009 (1010–1018 spare, 1019 reserved and unused); human step in plan 26 (live verification); coordinator confirmations: lexical version values 6–9 for the quantity bit with the Phase 4.2 owner, baseline ownership against 04.2-37; Config UI gets six switch controls only (`03.3-UI-SPEC.md`), editing panels are deferred
 **UI hint**: yes
 
 ### Phase 4: Hybrid Retrieval, Reranking & Calibrated Refusal
@@ -873,7 +873,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 3.1 → 3.1.1 → 3.2 → 3.2
 | 3.1.1. Domain Embedding Model Candidates & Per-Doc-Type Selection (INSERTED) | 0/16 | Planned (plan-check PASS) | - |
 | 3.2. Language Support & Ingestion Hardening (INSERTED) | 0/65 | Planned | - |
 | 3.2.1. BGE-M3 Open-Source Fallback Embedding (INSERTED) | 0/5 | Planned (needs 3.1.1) | - |
-| 3.3. Templated-Collection Ingestion (INSERTED) | 0/26 | Planned (plan-check pending) | - |
+| 3.3. Templated-Collection Ingestion (INSERTED) | 0/26 | Planned (plan-check PASS) | - |
 | 4. Hybrid Retrieval, Reranking & Calibrated Refusal | 46/47 | In Progress (04-43 live calibration) | - |
 | 4.1. Hybrid Retrieval & Rerank On by Default (INSERTED) | 8/17 | Gate not passed (04.1-07); gap closure 04.1-14 to 04.1-17 planned 2026-11-25 | - |
 | 4.1.1. Domain Terminology Dictionary (INSERTED) | 0/18 | Planned (plan-check PASS, revised 2026-11-25) | - |
