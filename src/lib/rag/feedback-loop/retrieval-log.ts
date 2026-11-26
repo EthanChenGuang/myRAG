@@ -69,6 +69,11 @@ function normaliseForFingerprint(text: string): string {
   return text.normalize('NFKC').toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
+/** The 5.1.1 query fingerprint of an already masked query (sha256 of its NFKC, lower-cased, space-collapsed form). */
+export function fingerprintMaskedQuery(masked: string): string {
+  return createHash('sha256').update(normaliseForFingerprint(masked)).digest('hex');
+}
+
 function logCandidate(item: Candidate, rank: number, keptIds: ReadonlySet<string>): LogCandidate | null {
   const chunkId = typeof item.chunk_id === 'string' ? item.chunk_id : String(item.chunk_id ?? '');
   if (chunkId.length === 0 || chunkId.length > 128 || !UUID.test(item.document_id ?? '')) return null;
@@ -137,7 +142,7 @@ export function buildRetrievalLogRow(input: BuildRetrievalLogRowInput): Retrieva
   if (mode === 'masked_query' && query.length > 0) {
     const masked = maskPII(query);
     queryMasked = masked.slice(0, MAX_QUERY_LENGTH);
-    queryFingerprint = createHash('sha256').update(normaliseForFingerprint(masked)).digest('hex');
+    queryFingerprint = fingerprintMaskedQuery(masked);
   }
 
   const holder = result.logOutcome;

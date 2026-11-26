@@ -339,16 +339,17 @@ def test_stale_scan_of_the_committed_fixture_set_finds_nothing(capsys):
     assert findings == []
 
 
-def test_real_set_scan_and_register_wait_for_plan_35(fixture_dir, capsys):
+def test_real_set_commands_refuse_a_fixture_set(fixture_dir, capsys, monkeypatch):
     golden = fixture_dir / "golden.jsonl"
     manifest_path = fixture_dir / "golden.manifest.json"
     items = [_item("syn-a")]
     _write_jsonl(golden, items)
     _write_manifest(manifest_path, golden_set.build_manifest("syn", items, today=DAY1))
-    base = ["--golden", str(golden), "--manifest", str(manifest_path)]
+    monkeypatch.setenv("RAG_ADMIN_BEARER", "test-token-value")
+    base = ["--golden", str(golden), "--manifest", str(manifest_path), "--tenant", "s:default", "--base-url", "http://localhost:3000"]
     assert golden_set.main(["register", *base]) == 2
-    assert golden_set.main(["stale-scan", *base, "--base-url", "http://localhost:3000"]) == 2
-    assert "needs plan 05.3-35" in capsys.readouterr().err
+    assert golden_set.main(["stale-scan", *base]) == 2
+    assert "not a fixture set" in capsys.readouterr().err
 
 
 # --- registration rows -------------------------------------------------------------------------------------------
