@@ -573,6 +573,20 @@ RAG_DOMAIN_EMBEDDING_TIMEOUT_MS=800
 RAG_QWEN_EMBED_FALLBACK=openrouter
 # Primary host for the Qwen embedding provider: deepinfra | openrouter (openrouter needs only OPENROUTER_API_KEY; the fallback then goes to DeepInfra when a key is set)
 RAG_QWEN_EMBED_PRIMARY=deepinfra
+# Fine-tuned embedding slots: off | on (any other value is off). Bind, consent and activation are CLI-only (npm run rag:embedding)
+RAG_FINETUNE=off
+# Shared key for the fine-tuned slot endpoints (may stay empty on a private network)
+RAG_FT_EMBED_API_KEY=
+# Slot A: OpenAI-compatible base URL (POST {base}/embeddings), model version id, query and document prompts
+RAG_FT_SLOT_A_BASE_URL=
+RAG_FT_SLOT_A_MODEL=
+RAG_FT_SLOT_A_QUERY_PROMPT=
+RAG_FT_SLOT_A_DOCUMENT_PROMPT=
+# Slot B: same settings as slot A
+RAG_FT_SLOT_B_BASE_URL=
+RAG_FT_SLOT_B_MODEL=
+RAG_FT_SLOT_B_QUERY_PROMPT=
+RAG_FT_SLOT_B_DOCUMENT_PROMPT=
 
 # -----------------------------
 # INGESTION (Phase 3.1 queue)
