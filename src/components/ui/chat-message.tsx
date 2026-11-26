@@ -85,6 +85,7 @@ import { imageLinkHref, isAllowedImageUrl } from '@/lib/safe-image-hosts'
 import { splitFollowups } from '@/lib/chat/followups'
 import { answerQualityStrings } from '@/translations/answer-quality'
 import { RelatedQuestions } from './related-questions'
+import { ThinkingIndicator } from './thinking-indicator'
 
 const IMAGE_ALLOWLIST = process.env.NEXT_PUBLIC_RAG_IMAGE_ALLOWLIST === 'true';
 
@@ -4538,17 +4539,7 @@ ChatMessage = function ({
                         <span className="text-sm text-gray-600 dark:text-gray-400">Generating image...</span>
                       </>
                     ) : (
-                      <>
-                        <div className="animate-bounce-1">
-                          <div className="h-2 w-2 rounded-full bg-blue-500 dark:bg-blue-400"></div>
-                        </div>
-                        <div className="animate-bounce-2">
-                          <div className="h-2 w-2 rounded-full bg-yellow-500 dark:bg-yellow-400"></div>
-                        </div>
-                        <div className="animate-bounce-3">
-                          <div className="h-2 w-2 rounded-full bg-orange-500 dark:bg-orange-400"></div>
-                        </div>
-                      </>
+                      <ThinkingIndicator />
                     )}
                   </div>
                 ) : (

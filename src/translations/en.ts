@@ -210,6 +210,7 @@ export const en = {
   // Input and actions
   messagePlaceholder: "Ask anything",
   sendPrompt: "Send prompt",
+  thinkingStatus: "Thinking",
   stopGenerating: "Stop generating",
   useVoice: "Dictate",
   stopRecording: "Stop recording",
