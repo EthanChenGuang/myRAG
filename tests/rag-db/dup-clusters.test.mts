@@ -626,3 +626,110 @@ describe('duplicate clusters through ingestion, supersession and deletes (D-19, 
     assert.equal(INGEST_STAGES.length, 13);
   });
 });
+
+describe('backfill command rag:dup-clusters (D-20)', () => {
+  let ingestModule: typeof import('@/lib/rag/ingest');
+  let ingestDeps: typeof import('@/lib/rag/ingest/deps');
+  let ingestConfig: typeof import('@/lib/rag/ingest/config');
+  let objectStoreModule: typeof import('@/lib/rag/ingest/object-store');
+  let fakeStoreModule: typeof import('../helpers/fake-object-store');
+  let ragDeps: typeof import('@/lib/rag/deps');
+  let scopeModule: typeof import('@/lib/rag/tenant/scope');
+  let cli: typeof import('@/lib/rag/dedupe/cli');
+  const db = lifecycleFixture.db;
+  const KEY_O = `o:${TWO_TENANT_IDS.orgO}`;
+  const rows = async (sql: string, params: unknown[] = []): Promise<Row[]> => (await db.query<Row>(sql, params)).rows;
+  const counts = async () =>
+    rows(
+      `SELECT (SELECT count(*)::int FROM rag_dup_chunk_bands WHERE tenant_key = $1) AS bands,
+              (SELECT count(*)::int FROM rag_dup_clusters WHERE tenant_key = $1) AS clusters,
+              (SELECT count(*)::int FROM document_chunks WHERE tenant_key = $1 AND simhash IS NOT NULL) AS hashed`,
+      [KEY_O],
+    );
+  const run = async (argv: string[], signal?: AbortSignal, onLine?: (line: string) => void) => {
+    const out: string[] = [];
+    const err: string[] = [];
+    const code = await cli.main(argv, { out: (line) => (out.push(line), onLine?.(line)), err: (line) => err.push(line) }, signal);
+    return { code, out, err };
+  };
+
+  before(async () => {
+    ingestModule = await import('@/lib/rag/ingest');
+    ingestDeps = await import('@/lib/rag/ingest/deps');
+    ingestConfig = await import('@/lib/rag/ingest/config');
+    objectStoreModule = await import('@/lib/rag/ingest/object-store');
+    fakeStoreModule = await import('../helpers/fake-object-store');
+    ragDeps = await import('@/lib/rag/deps');
+    scopeModule = await import('@/lib/rag/tenant/scope');
+    cli = await import('@/lib/rag/dedupe/cli');
+    objectStoreModule.setObjectStoreForTests(fakeStoreModule.createFakeObjectStore());
+    ingestConfig.resetIngestConfigForTests();
+    ragDeps.setRagDepsForTests({ ragEnv: () => ({ RAG_DUP_CLUSTERS: 'false' }) });
+    const scope = scopeModule.mintScope('org', TWO_TENANT_IDS.userA, TWO_TENANT_IDS.orgO);
+    for (let copy = 0; copy < COPIES; copy += 1) {
+      const result = await ingestModule.ingest({
+        scope,
+        source: 'config_upload',
+        sourceKey: `backfill/${copy}`,
+        text: `# Circular ${copy + 1}\n\n## Routine\n\n${sharedPassage(copy)}\n\n## Note\n\n${uniqueParagraph(3, copy)}\n`,
+        filename: `circular-${copy}.md`,
+        mimeType: 'text/markdown',
+        signal: new AbortController().signal,
+      });
+      assert.equal(result.status, 'ready');
+    }
+  });
+
+  after(() => {
+    objectStoreModule?.resetObjectStoreForTests();
+    ingestDeps?.resetIngestDepsForTests();
+    ingestConfig?.resetIngestConfigForTests();
+    ragDeps?.resetRagDepsForTests();
+  });
+
+  test('ingestion with the switch off wrote no hash, band or cluster row', async () => {
+    assert.deepEqual(await counts(), [{ bands: 0, clusters: 0, hashed: 0 }]);
+  });
+
+  test('a dry run counts the chunks to hash and writes nothing', async () => {
+    const result = await run(['--tenant', KEY_O, '--dry-run']);
+    assert.equal(result.code, 0, result.err.join('\n'));
+    assert.ok(result.out.some((line) => line.includes('dry run')));
+    assert.ok(result.out.some((line) => line.includes(`${KEY_O}: would hash ${COPIES * 2}`)), result.out.join('\n'));
+    assert.deepEqual(await counts(), [{ bands: 0, clusters: 0, hashed: 0 }]);
+  });
+
+  test('an interrupted run stops between batches with exit code 130 and a resume cursor', async () => {
+    const controller = new AbortController();
+    const result = await run(['--tenant', KEY_O, '--batch-size', '10'], controller.signal, (line) => {
+      if (/batch 1:/.test(line)) controller.abort(new Error('interrupted'));
+    });
+    assert.equal(result.code, 130, [...result.out, ...result.err].join('\n'));
+    assert.ok(result.err.some((line) => /--resume-after [0-9a-f-]{36}/.test(line)), result.err.join('\n'));
+    const [partial] = await counts();
+    assert.equal(partial?.hashed, 10);
+  });
+
+  test('a real run hashes, clusters and recomputes: one cluster of 30 like ingestion with the switch on; counts only in the output', async () => {
+    const result = await run(['--tenant', KEY_O, '--batch-size', '25']);
+    assert.equal(result.code, 0, result.err.join('\n'));
+    assert.ok(result.out.some((line) => /once per batch/.test(line)), 'the output states the trigger effect');
+    for (const line of [...result.out, ...result.err]) assert.equal(line.includes(SHARED_WORDS[0] as string), false, 'no chunk text in the output');
+    const clusters = await rows('SELECT * FROM rag_dup_clusters WHERE tenant_key = $1', [KEY_O]);
+    assert.equal(clusters.length, 1, `${clusters.length} clusters`);
+    assert.equal(Number(clusters[0]?.member_count), COPIES);
+    assert.equal(new Set(clusters[0]?.source_document_ids as string[]).size, COPIES);
+    const [after] = await counts();
+    assert.equal(after?.hashed, COPIES * 2);
+  });
+
+  test('running it again reports zero to do and changes nothing', async () => {
+    const before = await rows('SELECT id, member_count, source_document_ids, updated_at FROM rag_dup_clusters WHERE tenant_key = $1', [KEY_O]);
+    const dry = await run(['--tenant', KEY_O, '--dry-run']);
+    assert.ok(dry.out.some((line) => line.includes(`${KEY_O}: would hash 0`)), dry.out.join('\n'));
+    const again = await run(['--tenant', KEY_O]);
+    assert.equal(again.code, 0);
+    assert.ok(again.out.some((line) => /hashed 0/.test(line)), again.out.join('\n'));
+    assert.deepEqual(await rows('SELECT id, member_count, source_document_ids, updated_at FROM rag_dup_clusters WHERE tenant_key = $1', [KEY_O]), before);
+  });
+});
