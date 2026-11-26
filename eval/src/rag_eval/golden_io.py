@@ -50,3 +50,7 @@ def write_golden(path: Path, items: list[GoldenItem]) -> None:
 
 def golden_sha256(path: Path) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def item_sha256(item: GoldenItem) -> str:
+    return ""
