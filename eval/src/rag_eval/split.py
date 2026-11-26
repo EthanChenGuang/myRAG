@@ -1,17 +1,16 @@
 import hashlib
 import json
 import os
-from pathlib import Path
-
 from collections.abc import Iterable
 from dataclasses import dataclass
+from pathlib import Path
 
 from rag_sidecar.contracts.golden import (
     DOCGROUP_SPLIT_RULE,
     ITEM_SPLIT_RULE,
     GoldenItem,
-    GoldSpan,
     GoldenSplitManifest,
+    GoldSpan,
 )
 
 SPLIT_RULE = ITEM_SPLIT_RULE

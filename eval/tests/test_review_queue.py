@@ -1,4 +1,5 @@
 import base64
+import hashlib
 import json
 import re
 import subprocess
@@ -14,6 +15,7 @@ from rag_eval.draft import writer
 from rag_eval.golden_io import load_golden
 from rag_eval.langfuse_api import DEFAULT_BASE_URL, LangfuseApi, LangfuseApiError
 from rag_eval.review_queue import detect_language, main, mask_text
+from rag_eval.split import DOCGROUP_SPLIT_RULE, load_group_manifest, write_manifest
 
 PUBLIC_KEY = "pk-test-placeholder"
 SECRET_KEY = "sk-test-placeholder"
@@ -539,10 +541,6 @@ def test_pull_source_langfuse_is_the_default_and_never_calls_the_app(private_roo
 
 
 # --- promote-db (Phase 5.1.1 D-20, D-21, D-22, D-29) ---
-
-import hashlib  # noqa: E402
-
-from rag_eval.split import DOCGROUP_SPLIT_RULE, load_group_manifest, write_manifest  # noqa: E402
 
 DB_TENANT = "o:11111111-2222-4333-8444-555555555555"
 DB_TENANT_HASH = hashlib.sha256(DB_TENANT.encode()).hexdigest()[:16]

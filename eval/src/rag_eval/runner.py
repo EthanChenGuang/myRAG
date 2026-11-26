@@ -7,10 +7,10 @@ from rag_sidecar.contracts.judge import JudgeReport
 from rag_eval.config_files import load_gate_population
 from rag_eval.corpus import load_corpus
 from rag_eval.golden_io import load_golden, select_golden
-from rag_eval.split import DOCGROUP_SPLIT_RULE, load_group_manifest
 from rag_eval.metrics import RealSetTooSmall, score_items
 from rag_eval.paths import REPO_ROOT, resolve_cli_path
 from rag_eval.report import build_report, write_report
+from rag_eval.split import DOCGROUP_SPLIT_RULE, load_group_manifest
 from rag_eval.traces import load_manifest, load_traces
 
 

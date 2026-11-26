@@ -6,7 +6,19 @@ import pytest
 from pydantic import ValidationError
 from rag_sidecar.contracts.golden import GoldenItem
 
-from rag_eval.split import SPLIT_RULE, assign_split, freeze_splits, load_manifest, write_manifest
+from rag_eval.split import (
+    DOCGROUP_SPLIT_RULE,
+    SPLIT_RULE,
+    assign_group_split,
+    assign_split,
+    document_groups,
+    freeze_group_splits,
+    freeze_splits,
+    group_id,
+    load_group_manifest,
+    load_manifest,
+    write_manifest,
+)
 
 
 def _expected(item_id: str) -> str:
@@ -112,15 +124,6 @@ def test_manifest_with_other_rule_rejected(tmp_path: Path):
 
 
 # --- Document-group rule (Phase 5.1.1 D-21, D-29) ---
-
-from rag_eval.split import (  # noqa: E402
-    DOCGROUP_SPLIT_RULE,
-    assign_group_split,
-    document_groups,
-    freeze_group_splits,
-    group_id,
-    load_group_manifest,
-)
 
 DOC_A = "aaaaaaaa-0000-4000-8000-000000000001"
 DOC_B = "bbbbbbbb-0000-4000-8000-000000000002"

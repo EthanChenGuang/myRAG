@@ -373,7 +373,7 @@ def test_score_cli_accepts_a_complete_split_manifest(tmp_path: Path):
 
 
 def test_score_cli_checks_an_explicit_split_manifest_of_either_rule(tmp_path: Path, capsys: pytest.CaptureFixture[str]):
-    golden, traces = _four_items()
+    _, traces = _four_items()
     traces_path, golden_path, manifest_path, out = _write_inputs(tmp_path, traces)
     explicit = tmp_path / "other-manifest.json"
     explicit.write_text(
@@ -385,7 +385,7 @@ def test_score_cli_checks_an_explicit_split_manifest_of_either_rule(tmp_path: Pa
 
 
 def test_score_cli_ignores_a_shared_item_rule_manifest_next_to_the_golden_file(tmp_path: Path):
-    golden, traces = _four_items()
+    _, traces = _four_items()
     traces_path, golden_path, manifest_path, out = _write_inputs(tmp_path, traces)
     golden_path.with_name("split-manifest.json").write_text(
         json.dumps({"schema_version": 1, "rule": "sha256-first8hex-mod100-lt70-dev", "assignments": {"other-file-001": "dev"}}),
