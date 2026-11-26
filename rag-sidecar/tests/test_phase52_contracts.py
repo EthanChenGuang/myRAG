@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -196,3 +199,172 @@ def test_citation_with_and_without_version_fields():
     for bad in [{"effectiveFrom": "03/01/2025"}, {"effectiveFrom": "2025-13-01"}, {"versionLabel": "x" * 41}]:
         with pytest.raises(ValidationError):
             CitationRecord.model_validate(_citation(**bad))
+
+
+# --- Task 2: claims, judge, thresholds and output caps ---
+
+from rag_sidecar.contracts.claims import (  # noqa: E402
+    MAX_CLAIMS,
+    ClaimCheckRequest,
+    ClaimCheckResult,
+    ClaimJudgement,
+    ClaimVerdict,
+    GroundednessJudgeThresholds,
+)
+from rag_sidecar.contracts.groundedness import GroundednessResult, GroundednessThresholds  # noqa: E402
+from rag_sidecar.contracts.output_guard import OutputCaps  # noqa: E402
+
+
+def _claim_request(claims=None, premises=None):
+    return {
+        "request_id": "req-1",
+        "language": "en",
+        "premises": premises if premises is not None else [{"ref": "S1", "text": "A neutral premise."}],
+        "claims": claims if claims is not None else [{"index": 0, "hypothesis": "A claim.", "premise_refs": ["S1"]}],
+        "allow_vectara": False,
+    }
+
+
+def test_claims_request_caps_and_refs():
+    assert MAX_CLAIMS == 40
+    ClaimCheckRequest.model_validate(_claim_request())
+    forty = [{"index": i, "hypothesis": "A claim.", "premise_refs": ["S1"]} for i in range(40)]
+    assert len(ClaimCheckRequest.model_validate(_claim_request(claims=forty)).claims) == 40
+    bad_cases = [
+        _claim_request(claims=forty + [{"index": 40, "hypothesis": "A claim.", "premise_refs": ["S1"]}]),
+        _claim_request(claims=[{"index": 0, "hypothesis": "A claim.", "premise_refs": ["S9"]}]),
+        _claim_request(
+            claims=[
+                {"index": 0, "hypothesis": "A claim.", "premise_refs": ["S1"]},
+                {"index": 0, "hypothesis": "Another claim.", "premise_refs": ["S1"]},
+            ]
+        ),
+        _claim_request(premises=[{"ref": "S1", "text": "One."}, {"ref": "S1", "text": "Two."}]),
+        _claim_request(premises=[{"ref": f"S{i + 1}", "text": "p"} for i in range(65)]),
+        _claim_request(claims=[]),
+    ]
+    for bad in bad_cases:
+        with pytest.raises(ValidationError):
+            ClaimCheckRequest.model_validate(bad)
+
+
+def test_claims_verdict_status_rules():
+    ClaimVerdict.model_validate({"index": 0, "status": "scored", "scorer": "hhem_2_1_open", "score": 0.7})
+    ClaimVerdict.model_validate({"index": 1, "status": "not_checked", "scorer": "none", "reason": "too_many"})
+    for reason in [
+        "timeout",
+        "too_many",
+        "unsupported_language",
+        "judge_not_configured",
+        "judge_same_family",
+        "judge_uncalibrated",
+        "error",
+    ]:
+        ClaimVerdict.model_validate({"index": 0, "status": "not_checked", "scorer": "none", "reason": reason})
+    for bad in [
+        {"index": 0, "status": "scored", "scorer": "hhem_2_1_open"},
+        {"index": 0, "status": "scored", "scorer": "hhem_2_1_open", "score": 1.5},
+        {"index": 0, "status": "scored", "scorer": "none", "score": 0.5},
+        {"index": 0, "status": "not_checked", "scorer": "none"},
+        {"index": 0, "status": "not_checked", "scorer": "none", "reason": "something_else"},
+        {"index": 0, "status": "not_checked", "scorer": "none", "reason": "timeout", "score": 0.1},
+    ]:
+        with pytest.raises(ValidationError):
+            ClaimVerdict.model_validate(bad)
+    with pytest.raises(ValidationError):
+        ClaimCheckResult.model_validate(
+            {
+                "claims": [
+                    {"index": 0, "status": "not_checked", "scorer": "none", "reason": "timeout"},
+                    {"index": 0, "status": "not_checked", "scorer": "none", "reason": "timeout"},
+                ],
+                "latency_ms": 3,
+            }
+        )
+
+
+def test_claims_judgement_verdicts():
+    judgement = ClaimJudgement.model_validate(
+        {
+            "judgements": [
+                {"index": 0, "verdict": "supported", "evidence_ref": "S1"},
+                {"index": 1, "verdict": "not_enough_info", "evidence_ref": None},
+                {"index": 2, "verdict": "unsupported"},
+            ]
+        }
+    )
+    assert judgement.judgements[2].evidence_ref is None
+    with pytest.raises(ValidationError):
+        ClaimJudgement.model_validate({"judgements": [{"index": 0, "verdict": "partly", "evidence_ref": None}]})
+    with pytest.raises(ValidationError):
+        ClaimJudgement.model_validate(
+            {"judgements": [{"index": 0, "verdict": "supported"}, {"index": 0, "verdict": "unsupported"}]}
+        )
+
+
+def _judge_cell(**overrides):
+    base = {
+        "judge_model": "judge/model-j",
+        "judge_version": "jv-1",
+        "language": "it",
+        "max_unsupported_share": 0.2,
+        "recall": 0.8,
+        "precision": 0.9,
+        "source": "fixture",
+        "run_ids": ["run-1"],
+        "config_hash": "c" * 64,
+    }
+    base.update(overrides)
+    return base
+
+
+def test_claims_judge_thresholds_cells():
+    GroundednessJudgeThresholds.model_validate({"cells": [_judge_cell(), _judge_cell(language="en")]})
+    with pytest.raises(ValidationError):
+        GroundednessJudgeThresholds.model_validate({"cells": [_judge_cell(), _judge_cell(recall=0.5)]})
+    for bad in [
+        {"max_unsupported_share": 1.2},
+        {"recall": -0.1},
+        {"precision": 2},
+        {"source": "default"},
+        {"run_ids": []},
+        {"config_hash": ""},
+    ]:
+        with pytest.raises(ValidationError):
+            GroundednessJudgeThresholds.model_validate({"cells": [_judge_cell(**bad)]})
+
+
+def test_output_caps_one_cell_per_mode():
+    caps = OutputCaps.model_validate(
+        {"cells": [{"mode": "strict", "limit": None, "source": "default"}, {"mode": "balanced", "limit": None, "source": "default"}]}
+    )
+    assert caps.schema_version == 1
+    OutputCaps.model_validate(
+        {
+            "cells": [
+                {"mode": "strict", "limit": 600, "source": "sweep", "run_ids": ["run-1"], "config_hash": "h"},
+                {"mode": "balanced", "limit": None, "source": "default"},
+            ]
+        }
+    )
+    for cells in [
+        [{"mode": "strict", "limit": None, "source": "default"}],
+        [{"mode": "strict", "limit": None, "source": "default"}, {"mode": "strict", "limit": 100, "source": "default"}],
+        [{"mode": "strict", "limit": 0, "source": "default"}, {"mode": "balanced", "limit": None, "source": "default"}],
+        [{"mode": "flexible", "limit": None, "source": "default"}, {"mode": "balanced", "limit": None, "source": "default"}],
+        [{"mode": "strict", "limit": 10, "source": "sweep"}, {"mode": "balanced", "limit": None, "source": "default"}],
+    ]:
+        with pytest.raises(ValidationError):
+            OutputCaps.model_validate({"cells": cells})
+
+
+def test_claims_llm_judge_scorer_and_hhem_cells_unchanged():
+    result = GroundednessResult.model_validate({"status": "scored", "scorer": "llm_judge", "score": 0.75, "latency_ms": 9})
+    assert result.scorer == "llm_judge"
+    path = Path(__file__).resolve().parents[2] / "eval" / "config" / "groundedness-thresholds.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    GroundednessThresholds.model_validate(data)
+    with pytest.raises(ValidationError):
+        GroundednessThresholds.model_validate(
+            {"cells": [{"scorer": "llm_judge", "language": "it", "threshold": 0.5, "source": "default"}]}
+        )
