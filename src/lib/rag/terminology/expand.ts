@@ -65,6 +65,15 @@ export function expandMatches(query: string, raw: readonly RawTermMatch[], param
 }
 
 /** D-18: the standalone query (normalized) with each matched surface replaced by its canonical. */
-export function substituteCanonicals(normalizedQuery: string, _matches: readonly TerminologyMatch[]): string {
-  return normalizedQuery;
+export function substituteCanonicals(normalizedQuery: string, matches: readonly TerminologyMatch[]): string {
+  const ordered = [...matches].sort((a, b) => a.start - b.start || b.end - a.end);
+  let out = '';
+  let cursor = 0;
+  for (const match of ordered) {
+    // Several entries can share one span; the first one wins and the span is replaced once.
+    if (match.start < cursor || match.end > normalizedQuery.length) continue;
+    out += normalizedQuery.slice(cursor, match.start) + match.canonical;
+    cursor = match.end;
+  }
+  return out + normalizedQuery.slice(cursor);
 }
