@@ -1,5 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import { createTraceCollector } from '@/lib/rag';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import * as rag from '@/lib/rag';
+import {
+  awaitPreGenerationDelay,
+  createTraceCollector,
+  resetPreGenerationDelayForTests,
+  setPreGenerationDelayForTests,
+  withFirstTextDelta,
+} from '@/lib/rag';
 import { buildTraceLogPayload } from '@/lib/rag/trace/log';
 import { resetRagDepsForTests, setRagDepsForTests } from '@/lib/rag/deps';
 import type { TraceCacheState } from '@/lib/rag/trace/collector';
@@ -172,5 +181,143 @@ describe('[RAG Trace] log payload timing', () => {
     const trace = collector();
     const payload = buildTraceLogPayload(trace, result()) as Record<string, unknown>;
     expect(Object.keys(payload)).toEqual(['traceId', 'tenantKey', 'profile', 'status', 'reason', 'stages']);
+  });
+});
+
+type Chunk = { type: string; id?: string; delta?: string };
+
+function streamOf(chunks: Chunk[]): ReadableStream<Chunk> {
+  return new ReadableStream<Chunk>({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(chunk);
+      controller.close();
+    },
+  });
+}
+
+async function drain<T>(stream: ReadableStream<T>): Promise<T[]> {
+  const out: T[] = [];
+  const reader = stream.getReader();
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) return out;
+    out.push(value);
+  }
+}
+
+describe('withFirstTextDelta', () => {
+  test('passes every chunk through in order and calls back once, on the first text-delta', async () => {
+    const chunks: Chunk[] = [
+      { type: 'start' },
+      { type: 'text-delta', id: 't1', delta: 'alpha' },
+      { type: 'text-delta', id: 't1', delta: 'beta' },
+      { type: 'finish' },
+    ];
+    const seenAt: number[] = [];
+    let passed = 0;
+    const source = streamOf(chunks).pipeThrough(
+      new TransformStream<Chunk, Chunk>({
+        transform(chunk, controller) {
+          passed += 1;
+          controller.enqueue(chunk);
+        },
+      }),
+    );
+    const out = await drain(withFirstTextDelta(source, () => seenAt.push(passed)));
+    expect(out).toEqual(chunks);
+    expect(out[1]).toBe(chunks[1]);
+    expect(seenAt).toHaveLength(1);
+    expect(seenAt[0]).toBeGreaterThanOrEqual(2);
+  });
+
+  test('never calls back when no text-delta passes', async () => {
+    let calls = 0;
+    const chunks: Chunk[] = [{ type: 'start' }, { type: 'error' }, { type: 'finish' }];
+    const out = await drain(withFirstTextDelta(streamOf(chunks), () => (calls += 1)));
+    expect(out).toEqual(chunks);
+    expect(calls).toBe(0);
+  });
+
+  test('a throwing callback does not break the stream', async () => {
+    let calls = 0;
+    const chunks: Chunk[] = [{ type: 'text-delta', id: 't', delta: 'x' }, { type: 'text-delta', id: 't', delta: 'y' }, { type: 'finish' }];
+    const out = await drain(
+      withFirstTextDelta(streamOf(chunks), () => {
+        calls += 1;
+        throw new Error('callback failure');
+      }),
+    );
+    expect(out).toEqual(chunks);
+    expect(calls).toBe(1);
+  });
+
+  test('marks the collector first delta when wired to it', async () => {
+    const trace = collector();
+    trace.markRequestStart(1000);
+    clock = 1300;
+    await drain(withFirstTextDelta(streamOf([{ type: 'start' }, { type: 'text-delta', id: 't', delta: 'x' }]), () => trace.markFirstTextDelta()));
+    expect(trace.timing()?.ttft_ms).toBe(300);
+  });
+});
+
+describe('pre-generation delay (test-only, D-26)', () => {
+  afterEach(() => {
+    resetPreGenerationDelayForTests();
+  });
+
+  test('resolves immediately when no delay was set', async () => {
+    const started = performance.now();
+    await awaitPreGenerationDelay();
+    expect(performance.now() - started).toBeLessThan(25);
+  });
+
+  test('waits at least the injected delay, and nothing after a reset', async () => {
+    setPreGenerationDelayForTests(50);
+    let started = performance.now();
+    await awaitPreGenerationDelay();
+    expect(performance.now() - started).toBeGreaterThanOrEqual(49);
+
+    resetPreGenerationDelayForTests();
+    started = performance.now();
+    await awaitPreGenerationDelay();
+    expect(performance.now() - started).toBeLessThan(25);
+  });
+
+  test('no environment variable sets the delay', async () => {
+    const saved = { ...process.env };
+    try {
+      for (const name of ['RAG_PRE_GENERATION_DELAY_MS', 'PRE_GENERATION_DELAY_MS', 'RAG_TTFT_DELAY_MS']) process.env[name] = '200';
+      const started = performance.now();
+      await awaitPreGenerationDelay();
+      expect(performance.now() - started).toBeLessThan(25);
+    } finally {
+      process.env = saved;
+    }
+    const source = readFileSync(fileURLToPath(new URL('../../../src/lib/rag/trace/ttft.ts', import.meta.url)), 'utf8');
+    expect(source).not.toMatch(/process\.env|import\.meta\.env/);
+  });
+
+  test('a negative or non-finite delay is treated as none', async () => {
+    for (const value of [-10, Number.NaN, Number.POSITIVE_INFINITY]) {
+      setPreGenerationDelayForTests(value);
+      const started = performance.now();
+      await awaitPreGenerationDelay();
+      expect(performance.now() - started).toBeLessThan(25);
+    }
+  });
+});
+
+describe('public exports', () => {
+  test('@/lib/rag exports the timing helpers the routes import', () => {
+    expect(typeof rag.withFirstTextDelta).toBe('function');
+    expect(typeof rag.awaitPreGenerationDelay).toBe('function');
+    expect(typeof rag.setPreGenerationDelayForTests).toBe('function');
+    expect(typeof rag.resetPreGenerationDelayForTests).toBe('function');
+    expect(typeof rag.postLangfuseScores).toBe('function');
+    expect(rag.isTraceId('0123456789abcdef0123456789abcdef')).toBe(true);
+    expect(rag.isTraceId('0123456789ABCDEF0123456789abcdef')).toBe(false);
+    expect(rag.isTraceId('not-a-trace')).toBe(false);
+    expect(rag.isTraceId(42)).toBe(false);
+    expect(rag.isTraceId(collector().traceId)).toBe(true);
   });
 });
