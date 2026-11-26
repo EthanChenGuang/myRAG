@@ -333,3 +333,45 @@ describe('answer metadata persistence (D-15)', () => {
     expect(loaded[0].metadata).toEqual({ answerId: ANSWER_ID });
   });
 });
+
+describe('Phase 5.2 answer metadata persistence (D-11, D-23)', () => {
+  const sentence = {
+    index: 0,
+    part: 0,
+    start: 0,
+    end: 20,
+    kind: 'sentence',
+    cited: true,
+    factual: true,
+    support: 'not_checked',
+    reason: null,
+    scorer: null,
+    text_hash: 'c'.repeat(64),
+  };
+
+  it('keeps sentences, notices, answerLanguage, truncated, refusalOrigin, checks and textsSource through save, reload and the UI shape', () => {
+    const metadata = {
+      ragTraceId: 'f'.repeat(32),
+      answerId: ANSWER_ID,
+      sentences: [sentence],
+      notices: [{ kind: 'partial_answer', language: 'en', text: 'Only part of the question is covered.' }],
+      answerLanguage: 'it',
+      truncated: true,
+      refusalOrigin: 'model_relevance',
+      checks: { claims: null, finish_reason: 'length', output_guard: null, text_language: 'en', truncated: true, version_conflict: null },
+      textsSource: 'registry',
+    };
+    const stored = JSON.parse(JSON.stringify(toDBMessages([assistantWith(metadata)]))) as DBMessage[];
+    expect(stored[0].metadata).toEqual(metadata);
+    const [restored] = fromDBMessages(stored);
+    expect(restored.metadata).toEqual(metadata);
+    const back = fromUIMessage(toMessage(restored));
+    expect(back.metadata).toEqual(metadata);
+    expect(saveAndReload(back).metadata).toEqual(metadata);
+  });
+
+  it('loads an old message without the fields unchanged', () => {
+    const metadata = answerMetadata();
+    expect(saveAndReload(assistantWith(metadata)).metadata).toEqual(metadata);
+  });
+});

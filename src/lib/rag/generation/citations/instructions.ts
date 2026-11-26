@@ -36,3 +36,13 @@ export function citationInstructionText(language: string, source: TextsSource = 
 export function attachedDocumentsText(language: string, source: TextsSource = 'legacy'): string {
   return source === 'registry' ? fixedText('instructions.attached_documents', language) : attachedDocumentsSentence(language);
 }
+
+/** D-20: with RAG_CITATION_PER_SENTENCE the chunk-alias instruction asks for a marker on every factual sentence (registry text). */
+export function citationInstructionFor(language: string, source: TextsSource = 'legacy', perSentence = false): string {
+  return perSentence ? fixedText('instructions.citation_per_sentence', language) : citationInstructionText(language, source);
+}
+
+/** D-20: the Claude Citations system text asks to ground every factual sentence in the attached documents. */
+export function groundingPerSentenceText(language: string): string {
+  return fixedText('instructions.grounding_per_sentence', language);
+}

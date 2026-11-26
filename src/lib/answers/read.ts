@@ -72,7 +72,16 @@ export function toAnswerRecord(
     feedbackEnabled: options.feedbackEnabled,
     createdAt,
     updatedAt: isoOf(row.updated_at),
+    ...checksFields(row),
   };
+}
+
+/** D-23: present only when the row was read with the 0940 columns; a stored '{}' (or a non-object) gives an empty checks object. */
+function checksFields(row: AnswerRecordRow): { checks?: Record<string, unknown>; textsSource?: string } {
+  const fields: { checks?: Record<string, unknown>; textsSource?: string } = {};
+  if (row.checks !== undefined) fields.checks = objectOr(row.checks) ?? {};
+  if (typeof row.texts_source === 'string') fields.textsSource = row.texts_source;
+  return fields;
 }
 
 /**
