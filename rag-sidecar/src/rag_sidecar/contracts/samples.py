@@ -257,6 +257,23 @@ from rag_sidecar.contracts.embed import EmbedRequest, EmbedResponse
 from rag_sidecar.contracts.retrieval import RetrievalLegWeights
 from rag_sidecar.contracts.vector_sync import ReconcileReport, VectorSyncSliceReport
 from rag_sidecar.contracts.golden_lifecycle import GoldenSetManifest, manifest_hash
+from rag_sidecar.contracts.monitor import (
+    LATENCY_BINS,
+    TOP_SCORE_BINS,
+    DriftReport,
+    MonitorAlert,
+    MonitorDailyCell,
+    default_monitor_alerts,
+)
+from rag_sidecar.contracts.judge_calibration import JudgeCalibration, JudgeCalibrationCell, JudgeSeedCase
+from rag_sidecar.contracts.release_gate import ReleaseGatePart, ReleaseGateResult, default_release_gate
+from rag_sidecar.contracts.config_change import (
+    ConfigChangeRecord,
+    ConfigGateCheck,
+    ConfigGateLayer,
+    ConfigGateNotEvaluated,
+    WeeklyGatesSection,
+)
 from rag_sidecar.contracts.quality_gates import (
     AbsoluteGateResult,
     CompositionLanguageResult,
@@ -2364,12 +2381,296 @@ def _golden_set_manifest() -> GoldenSetManifest:
     return GoldenSetManifest.model_validate(data)
 
 
+_P53_SHA = "a" * 64
+_P53_SHA_B = "b" * 64
+_P53_FP = "f" * 64
+_P53_GIT_SHA = "0123456789abcdef0123456789abcdef01234567"
+
+
+def _monitor_daily_cell() -> MonitorDailyCell:
+    bins = [0] * TOP_SCORE_BINS
+    bins[15] = 30
+    bins[17] = 20
+    latency = [0] * LATENCY_BINS
+    latency[6] = 40
+    latency[8] = 10
+    return MonitorDailyCell(
+        tenant_key="s:default",
+        day="2026-01-05",
+        language="en",
+        rag_mode="strict",
+        channel="chat",
+        doc_type="general",
+        retrievals=50,
+        refused=19,
+        kb_unavailable=0,
+        degraded=0,
+        error=0,
+        zero_result=0,
+        below_threshold=0,
+        helpful=2,
+        not_helpful=1,
+        judged=4,
+        judge_score_sums={"faithfulness": 3.4},
+        groundedness_flagged=0,
+        top_score_hist={"similarity": {"bins": bins, "underflow": 0, "overflow": 0}},
+        latency_hist={"bins": latency},
+    )
+
+
+def _monitor_alert() -> MonitorAlert:
+    return MonitorAlert(
+        id="00000000-0000-4000-8000-000000000501",
+        tenant_key="s:default",
+        rule="refusal_rate",
+        kind="rate",
+        language="en",
+        day="2026-01-05",
+        window_days=1,
+        severity="alert",
+        status="open",
+        observed={"count": 19, "n": 50, "value": 0.38},
+        baseline={"count": 24, "n": 200, "value": 0.12},
+        band={
+            "ratio": 2.0,
+            "min_abs_delta": 0.05,
+            "min_z": 3.0,
+            "measured_ratio": 3.17,
+            "measured_delta": 0.26,
+            "measured_z": 4.36,
+        },
+        breakdown={
+            "by_mode": {"strict": {"count": 19, "n": 50, "value": 0.38}},
+            "by_channel": {"chat": {"count": 19, "n": 50, "value": 0.38}},
+            "by_doc_type": {"general": {"count": 19, "n": 50, "value": 0.38}},
+        },
+        companions=[{"rule": "not_helpful_rate", "value": 0.02, "baseline": 0.02, "n": 50}],
+        sample_trace_ids=["trace-0001", "trace-0002"],
+        cluster_ids=["c-01"],
+        config_changes=[
+            {
+                "record_id": "00000000-0000-4000-8000-000000000601",
+                "at": "2026-01-04T10:00:00Z",
+                "source": "config_ui",
+                "changed_keys": ["RAG_RERANKER"],
+                "before_hash": _P53_SHA,
+                "after_hash": _P53_SHA_B,
+            },
+            {"at": "2026-01-04", "source": "retrieval_log", "after_hash": "0123abcd", "unrecorded": True},
+        ],
+        suggestion=None,
+        delivered={"webhook": {"state": "delivered", "attempts": 1, "last_attempt_at": "2026-01-05T06:00:00Z"}},
+        dedup_key="s:default|en|refusal_rate",
+        created_at="2026-01-05T06:00:00Z",
+        updated_at="2026-01-05T06:00:00Z",
+    )
+
+
+def _drift_report() -> DriftReport:
+    return DriftReport(
+        week="2026-W02",
+        tenant_hash="0123abcd",
+        divergence=0.12,
+        state="warn",
+        null_p95=0.067,
+        limits={"warn": 0.10, "alert": 0.20, "gap": 0.15},
+        trend=[{"week": "2026-W01", "divergence": 0.05, "state": "ok"}],
+        clusters=[
+            {"id": "c-01", "production_share": 0.2, "test_share": 0.05, "test_items": 3, "state": "under"},
+            {"id": "novel", "production_share": 0.02, "test_share": 0.0, "test_items": 0, "state": "ok"},
+        ],
+        scores={"unweighted": 0.8, "weighted": 0.76, "uncovered_share": 0.02},
+        gaps=[{"slice": "language:en", "offline": 0.86, "online": 0.8, "online_n": 60, "gap": 0.06, "result": "passed"}],
+        rates=[{"slice": "language:en", "metric": "refusal_rate", "online": 0.12, "online_n": 300, "offline": 0.2}],
+    )
+
+
+def _judge_calibration_cell() -> JudgeCalibrationCell:
+    return JudgeCalibrationCell(
+        key=f"{_P53_FP}|nightly|en|ragas.faithfulness",
+        fingerprint=_P53_FP,
+        role="nightly",
+        language="en",
+        library="ragas",
+        metric="faithfulness",
+        status="report_only",
+        reasons=["labels_not_confirmed"],
+        kappa=0.74,
+        accuracy=0.88,
+        n=50,
+        source="seed",
+        unsupported_recall=0.9,
+        unsupported_precision=0.85,
+        length_bias_delta=0.02,
+        expanded_delta=0.01,
+        assertive_delta=-0.03,
+        labels_human_confirmed=False,
+        recorded_at="2026-01-05T06:00:00Z",
+    )
+
+
+def _judge_seed_case() -> JudgeSeedCase:
+    return JudgeSeedCase(
+        id="en-seed-001-long",
+        language="en",
+        question="Which colour is the sample box?",
+        contexts=["The sample box is blue."],
+        answer="The sample box described in the context is blue.",
+        expected={"faithfulness": True, "answer_relevance": True},
+        unsupported_content=False,
+        variant="long",
+        base_id="en-seed-001",
+        pair_id="p-001",
+        review_status="approved",
+        reviewed_by="reviewer-01",
+    )
+
+
+def _release_gate_result() -> ReleaseGateResult:
+    return ReleaseGateResult(
+        sha=_P53_GIT_SHA,
+        result="skipped",
+        skip_reason="judge_keys_missing",
+        parts=[
+            ReleaseGatePart(part="nightly_absolute", result="passed"),
+            ReleaseGatePart(part="judge_floors", result="skipped", reason="judge_keys_missing"),
+            ReleaseGatePart(part="ship_check", result="not_applicable", reason="population_legacy"),
+            ReleaseGatePart(part="pr_smoke", result="passed"),
+        ],
+        gate_file_hashes={"quality_gates": _P53_SHA, "release_gate": _P53_SHA, "noise": _P53_SHA},
+        changed_gate_files=[],
+        source="ci",
+        actor="github-actions[bot]",
+        report_hashes={"nightly": _P53_SHA_B},
+        created_at="2026-01-05T06:00:00Z",
+    )
+
+
+def _config_gate_layer() -> ConfigGateLayer:
+    return ConfigGateLayer(
+        layer="deterministic",
+        set_hash=_P53_SHA_B,
+        result="fail",
+        checks=[
+            GateCheckRow(
+                check="false_answer_rate",
+                slice="language:en",
+                measured=0.15,
+                numerator=3,
+                denominator=20,
+                limit=0.05,
+                limit_kind="max",
+                result="failed",
+            )
+        ],
+    )
+
+
+def _config_gate_check() -> ConfigGateCheck:
+    return ConfigGateCheck(
+        check_id="chk-00000001",
+        status="done",
+        started_at="2026-01-05T06:00:00Z",
+        finished_at="2026-01-05T06:04:00Z",
+        mode="enforce",
+        cached=False,
+        rag_settings_hash=_P53_SHA,
+        changed_keys=["RAG_SYSTEM_PROMPT"],
+        result="fail",
+        layers=[
+            _config_gate_layer(),
+            ConfigGateLayer(layer="live", result="skipped", reason="live_layer_off"),
+            ConfigGateLayer(layer="real_set", result="skipped", reason="no_real_set"),
+        ],
+        not_evaluated_on_real_set=["RAG_SYSTEM_PROMPT"],
+        not_evaluated=[ConfigGateNotEvaluated(key="RAG_CONTEXT_COMPRESSION", reason="no_layer_exercised")],
+        uncalibrated_cells=["cohere|rerank-model-a|en|same"],
+        saved_as="not_saved",
+    )
+
+
+def _config_change_record() -> ConfigChangeRecord:
+    return ConfigChangeRecord(
+        id="00000000-0000-4000-8000-000000000701",
+        created_at="2026-01-05T06:05:00Z",
+        actor="local-config-ui",
+        source="config_ui",
+        changed_keys=["RAG_SYSTEM_PROMPT"],
+        before_hash=_P53_SHA,
+        after_hash=_P53_SHA_B,
+        retrieval_config_hash=None,
+        gate_result="fail",
+        gate_summary={
+            "checks": 12,
+            "failed": 1,
+            "skipped": 2,
+            "offenders": ["false_answer_rate"],
+            "layers": {"deterministic": "fail", "live": "skipped", "real_set": "skipped"},
+        },
+        override_reason="Owner accepted the change for a scheduled review",
+        uncalibrated_cells=[],
+    )
+
+
+def _weekly_gates_section() -> WeeklyGatesSection:
+    return WeeklyGatesSection(
+        overrides=[
+            {
+                "date": "2026-01-05",
+                "actor": "local-config-ui",
+                "changed_keys": ["RAG_SYSTEM_PROMPT"],
+                "before_hash": _P53_SHA,
+                "after_hash": _P53_SHA_B,
+                "gate_result": "fail",
+                "override_reason": "Owner accepted the change for a scheduled review",
+            }
+        ],
+        change_counts=[{"source": "config_ui", "gate_result": "pass", "count": 3}],
+        release_overrides=[
+            {
+                "date": "2026-01-05",
+                "sha": _P53_GIT_SHA,
+                "github_actor": "repo-admin",
+                "override_reason": "Emergency fix for a broken build",
+            }
+        ],
+        open_alerts={"refusal_rate": 1},
+        judge_cells={"gating": 0, "report_only": 6, "uncalibrated": 0},
+        drift=[{"tenant_hash": "0123abcd", "week": "2026-W02", "divergence": 0.12, "state": "warn"}],
+        skipped_runs={"no_real_set": 1},
+        overdue_re_reviews=0,
+    )
+
+
 def _phase53_models() -> dict[str, Any]:
+    monitor = default_monitor_alerts()
     return {
         "QualityGates": default_quality_gates(),
         "AbsoluteGateResult": _absolute_gate_result(),
         "CompositionResult": _composition_result(),
         "GoldenSetManifest": _golden_set_manifest(),
+        "MonitorRule": monitor.rules[0],
+        "MonitorDriftBands": monitor.drift,
+        "MonitorSamplingConfig": monitor.sampling,
+        "MonitorAlertsConfig": monitor,
+        "MonitorDailyCell": _monitor_daily_cell(),
+        "MonitorAlert": _monitor_alert(),
+        "DriftReport": _drift_report(),
+        "JudgeCalibration": JudgeCalibration(
+            cells=[_judge_calibration_cell()],
+            running_fingerprints={"nightly": _P53_FP},
+            provenance={"source": "calibration"},
+        ),
+        "JudgeCalibrationCell": _judge_calibration_cell(),
+        "JudgeSeedCase": _judge_seed_case(),
+        "ReleaseGateConfig": default_release_gate(),
+        "ReleaseGatePart": ReleaseGatePart(part="ship_check", result="not_applicable", reason="population_legacy"),
+        "ReleaseGateResult": _release_gate_result(),
+        "ConfigGateLayer": _config_gate_layer(),
+        "ConfigGateNotEvaluated": ConfigGateNotEvaluated(key="RAG_CONTEXT_COMPRESSION", reason="no_layer_exercised"),
+        "ConfigGateCheck": _config_gate_check(),
+        "ConfigChangeRecord": _config_change_record(),
+        "WeeklyGatesSection": _weekly_gates_section(),
     }
 
 

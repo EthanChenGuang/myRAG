@@ -155,6 +155,24 @@ from rag_sidecar.contracts.retrieval import (
 from rag_sidecar.contracts.samples import build_samples
 from rag_sidecar.contracts.golden_lifecycle import GoldenSetManifest
 from rag_sidecar.contracts.quality_gates import AbsoluteGateResult, CompositionResult, QualityGates
+from rag_sidecar.contracts.monitor import (
+    DriftReport,
+    MonitorAlert,
+    MonitorAlertsConfig,
+    MonitorDailyCell,
+    MonitorDriftBands,
+    MonitorRule,
+    MonitorSamplingConfig,
+)
+from rag_sidecar.contracts.judge_calibration import JudgeCalibration, JudgeCalibrationCell, JudgeSeedCase
+from rag_sidecar.contracts.release_gate import ReleaseGateConfig, ReleaseGatePart, ReleaseGateResult
+from rag_sidecar.contracts.config_change import (
+    ConfigChangeRecord,
+    ConfigGateCheck,
+    ConfigGateLayer,
+    ConfigGateNotEvaluated,
+    WeeklyGatesSection,
+)
 from rag_sidecar.contracts.terminology import (
     TerminologyCandidate,
     TerminologyEntry,
@@ -334,6 +352,24 @@ CONTRACTS: list[tuple[type[BaseModel], Mode]] = [
     (AbsoluteGateResult, "serialization"),
     (CompositionResult, "serialization"),
     (GoldenSetManifest, "validation"),
+    (MonitorRule, "validation"),
+    (MonitorDriftBands, "validation"),
+    (MonitorSamplingConfig, "validation"),
+    (MonitorAlertsConfig, "validation"),
+    (MonitorDailyCell, "serialization"),
+    (MonitorAlert, "serialization"),
+    (DriftReport, "serialization"),
+    (JudgeCalibration, "validation"),
+    (JudgeCalibrationCell, "serialization"),
+    (JudgeSeedCase, "validation"),
+    (ReleaseGateConfig, "validation"),
+    (ReleaseGatePart, "serialization"),
+    (ReleaseGateResult, "serialization"),
+    (ConfigGateLayer, "serialization"),
+    (ConfigGateNotEvaluated, "serialization"),
+    (ConfigGateCheck, "serialization"),
+    (ConfigChangeRecord, "serialization"),
+    (WeeklyGatesSection, "serialization"),
     (TerminologyLexicon, "serialization"),
 ]
 

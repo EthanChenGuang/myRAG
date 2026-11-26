@@ -4,7 +4,10 @@ import sys
 from pathlib import Path
 
 import pytest
+from rag_sidecar.contracts.judge_calibration import JudgeCalibration
+from rag_sidecar.contracts.monitor import MonitorAlertsConfig
 from rag_sidecar.contracts.quality_gates import QualityGates
+from rag_sidecar.contracts.release_gate import ReleaseGateConfig
 from rag_sidecar.contracts.retrieval import (
     ChunkingSweepReport,
     RefusalCalibrationConfig,
@@ -129,6 +132,9 @@ def test_committed_query_params_matches_defaults():
         ("eval/config/refusal-thresholds.json", RefusalThresholds),
         ("eval/config/refusal-calibration.json", RefusalCalibrationConfig),
         ("eval/config/quality-gates.json", QualityGates),
+        ("eval/config/monitor-alerts.json", MonitorAlertsConfig),
+        ("eval/config/release-gate.json", ReleaseGateConfig),
+        ("eval/config/judge-calibration.json", JudgeCalibration),
     ],
 )
 def test_committed_config_rewrites_byte_identical_with_its_hash(tmp_path: Path, rel: str, model_cls):
@@ -166,3 +172,52 @@ def test_committed_quality_gates_hold_the_d04_defaults():
     assert committed.lifecycle.max_stale_share == 0.10
     assert committed.lifecycle.re_review_days == 90
     assert committed.judge.max_age_days == 35
+
+
+PHASE53_FILES = (
+    "eval/config/monitor-alerts.json",
+    "eval/config/release-gate.json",
+    "eval/config/judge-calibration.json",
+)
+
+
+@pytest.mark.parametrize("rel", PHASE53_FILES)
+def test_phase53_config_files_are_targets_at_their_defaults(rel: str):
+    """Phase 5.3 D-02: each file validates in pr-smoke and starts with provenance.source = defaults."""
+    factories = {target: (model, factory) for target, model, factory in CONFIG_TARGETS}
+    assert rel in factories
+    model_cls, factory = factories[rel]
+    committed = model_cls.model_validate_json((REPO_ROOT / rel).read_text(encoding="utf-8"))
+    assert committed == finalize_config(factory())
+    assert committed.provenance.source == "defaults"
+
+
+def test_committed_monitor_alerts_hold_the_d24_and_d44_numbers():
+    committed = MonitorAlertsConfig.model_validate_json(
+        (REPO_ROOT / "eval/config/monitor-alerts.json").read_text(encoding="utf-8")
+    )
+    rules = {rule.id: rule for rule in committed.rules}
+    assert len(rules) == 13
+    assert "language_drop" not in rules
+    rate = [rule for rule in committed.rules if rule.kind == "rate"]
+    assert len(rate) == 8
+    assert {(r.ratio, r.min_abs_delta, r.min_z, r.min_sample, r.baseline_min_sample) for r in rate} == {
+        (2.0, 0.05, 3.0, 50, 200)
+    }
+    psi = rules["top_score_psi"]
+    assert (psi.warn, psi.alert, psi.min_sample, psi.baseline_min_sample) == (0.10, 0.25, 300, 1000)
+    assert rules["latency_p95"].ratio == 1.5
+    assert rules["online_judge_mean"].drop == 0.10
+    assert (committed.drift.jsd_warn, committed.drift.jsd_alert, committed.drift.gap_alert) == (0.10, 0.20, 0.15)
+
+
+def test_committed_release_gate_and_empty_judge_calibration():
+    release = ReleaseGateConfig.model_validate_json(
+        (REPO_ROOT / "eval/config/release-gate.json").read_text(encoding="utf-8")
+    )
+    assert release.status_context == "rag-release-gate"
+    assert release.required_parts == ["nightly_absolute", "judge_floors", "ship_check", "pr_smoke"]
+    calibration = JudgeCalibration.model_validate_json(
+        (REPO_ROOT / "eval/config/judge-calibration.json").read_text(encoding="utf-8")
+    )
+    assert calibration.cells == []

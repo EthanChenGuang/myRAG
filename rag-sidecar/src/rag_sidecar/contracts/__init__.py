@@ -205,6 +205,30 @@ from rag_sidecar.contracts.quality_gates import (
     QualityGatesLifecycle,
     default_quality_gates,
 )
+from rag_sidecar.contracts.monitor import (
+    DriftReport,
+    MonitorAlert,
+    MonitorAlertsConfig,
+    MonitorDailyCell,
+    MonitorDriftBands,
+    MonitorRule,
+    MonitorSamplingConfig,
+    default_monitor_alerts,
+)
+from rag_sidecar.contracts.judge_calibration import JudgeCalibration, JudgeCalibrationCell, JudgeSeedCase
+from rag_sidecar.contracts.release_gate import (
+    ReleaseGateConfig,
+    ReleaseGatePart,
+    ReleaseGateResult,
+    default_release_gate,
+)
+from rag_sidecar.contracts.config_change import (
+    ConfigChangeRecord,
+    ConfigGateCheck,
+    ConfigGateLayer,
+    ConfigGateNotEvaluated,
+    WeeklyGatesSection,
+)
 from rag_sidecar.contracts.terminology import (
     TerminologyCandidate,
     TerminologyEntry,
@@ -592,4 +616,24 @@ __all__ = [
     "QualityGatesLifecycle",
     "default_quality_gates",
     "manifest_hash",
+    "MonitorRule",
+    "MonitorDriftBands",
+    "MonitorSamplingConfig",
+    "MonitorAlertsConfig",
+    "MonitorDailyCell",
+    "MonitorAlert",
+    "DriftReport",
+    "default_monitor_alerts",
+    "JudgeCalibration",
+    "JudgeCalibrationCell",
+    "JudgeSeedCase",
+    "ReleaseGateConfig",
+    "ReleaseGatePart",
+    "ReleaseGateResult",
+    "default_release_gate",
+    "ConfigGateLayer",
+    "ConfigGateNotEvaluated",
+    "ConfigGateCheck",
+    "ConfigChangeRecord",
+    "WeeklyGatesSection",
 ]

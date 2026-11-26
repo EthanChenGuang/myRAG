@@ -9,6 +9,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .cache import TENANT_KEY_PATTERN
+from .omit import omit_none_schema
 from .retrieval import ConfigProvenance
 
 CODE_PATTERN = r"^[a-z0-9_]+$"
@@ -103,23 +104,33 @@ def _no_repeats(values: list, what: str) -> list:
     return values
 
 
+def _omit_none(value: object) -> bool:
+    return value is None
+
+
+def _optional(**kwargs: object):  # noqa: ANN202 - returns a pydantic FieldInfo
+    """A rule field left out of the hand-edited file while unset."""
+
+    return Field(default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema, **kwargs)  # type: ignore[arg-type]
+
+
 class MonitorRule(_Contract):
     """One rule of eval/config/monitor-alerts.json. Which band fields a rule needs depends on its kind (D-24, D-44)."""
 
     id: MonitorRuleId
     kind: MonitorRuleKind
-    metric: Code | None = None
+    metric: Code | None = _optional()
     min_sample: int = Field(ge=1)
-    baseline_min_sample: int | None = Field(default=None, ge=1)
-    ratio: float | None = Field(default=None, gt=0)
-    min_abs_delta: float | None = Field(default=None, ge=0, le=1)
-    min_z: float | None = Field(default=None, ge=0)
-    warn: float | None = Field(default=None, ge=0)
-    alert: float | None = Field(default=None, ge=0)
-    drop: float | None = Field(default=None, gt=0, le=1)
-    budget_ratio: float | None = Field(default=None, gt=0)
+    baseline_min_sample: int | None = _optional(ge=1)
+    ratio: float | None = _optional(gt=0)
+    min_abs_delta: float | None = _optional(ge=0, le=1)
+    min_z: float | None = _optional(ge=0)
+    warn: float | None = _optional(ge=0)
+    alert: float | None = _optional(ge=0)
+    drop: float | None = _optional(gt=0, le=1)
+    budget_ratio: float | None = _optional(gt=0)
     enabled: bool = True
-    params: dict[Code, RuleParam] | None = None
+    params: dict[Code, RuleParam] | None = _optional()
 
     @model_validator(mode="after")
     def _fields_for_kind(self) -> "MonitorRule":

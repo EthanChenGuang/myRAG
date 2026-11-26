@@ -1,0 +1,171 @@
+{
+  "$defs": {
+    "GateCheckRow": {
+      "additionalProperties": false,
+      "description": "One absolute check on one slice; skipped and insufficient_n are never counted as passed.",
+      "properties": {
+        "check": {
+          "pattern": "^[a-z0-9_]+$",
+          "title": "Check",
+          "type": "string"
+        },
+        "denominator": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Denominator"
+        },
+        "limit": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Limit"
+        },
+        "limit_kind": {
+          "enum": [
+            "max",
+            "min"
+          ],
+          "title": "Limit Kind",
+          "type": "string"
+        },
+        "measured": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Measured"
+        },
+        "numerator": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Numerator"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z0-9_]+$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        },
+        "result": {
+          "enum": [
+            "passed",
+            "failed",
+            "insufficient_n",
+            "report_only",
+            "skipped"
+          ],
+          "title": "Result",
+          "type": "string"
+        },
+        "slice": {
+          "pattern": "^[a-z0-9_]+(:[A-Za-z0-9_.|-]+)*$",
+          "title": "Slice",
+          "type": "string"
+        }
+      },
+      "required": [
+        "check",
+        "slice",
+        "limit_kind",
+        "result"
+      ],
+      "title": "GateCheckRow",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "checks": {
+      "items": {
+        "$ref": "#/$defs/GateCheckRow"
+      },
+      "title": "Checks",
+      "type": "array"
+    },
+    "layer": {
+      "enum": [
+        "deterministic",
+        "live",
+        "real_set"
+      ],
+      "title": "Layer",
+      "type": "string"
+    },
+    "reason": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z0-9_]+$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Reason"
+    },
+    "result": {
+      "enum": [
+        "pass",
+        "fail",
+        "error",
+        "skipped"
+      ],
+      "title": "Result",
+      "type": "string"
+    },
+    "set_hash": {
+      "anyOf": [
+        {
+          "pattern": "^[a-f0-9]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Set Hash"
+    }
+  },
+  "required": [
+    "layer",
+    "result"
+  ],
+  "title": "ConfigGateLayer",
+  "type": "object"
+}
