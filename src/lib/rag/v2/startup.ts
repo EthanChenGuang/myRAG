@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getChunkingCoverage, type ChunkingCoverageRow } from '../chunking/profile-ops';
-import { loadRagConfig, type RagEnvInput } from '../config';
+import { loadRagConfig, type RagConfig, type RagEnvInput } from '../config';
 import { getRagDeps } from '../deps';
 import { icuSegmentsChinese } from '../lexical/icu-check';
 import { resolveEffectivePipeline } from './readiness';
@@ -116,6 +116,26 @@ async function readChunkingCoverage(deps: V2StartupDeps): Promise<V2ChunkingCove
   return { state: 'checked', missing };
 }
 
+function switchRequested(raw: string | undefined): boolean {
+  return (raw ?? '').trim().toLowerCase() === 'true';
+}
+
+/** D-04, D-40: both combinations resolve to a narrower behaviour in loadRagConfig; startup only records and warns. */
+function checkSwitchCombinations(env: RagEnvInput, config: RagConfig, reasons: string[]): void {
+  if (switchRequested(env.RAG_VERSION_SCOPE) && !config.v2.lexicalSearch) {
+    reasons.push('version_scope_needs_lexical');
+    logOnce('version_scope_needs_lexical', 'warn', 'invalid switch combination: version scope needs lexical search, retrieval scopes to current versions only', {
+      switches: ['RAG_VERSION_SCOPE', 'RAG_LEXICAL_SEARCH'],
+    });
+  }
+  if (switchRequested(env.RAG_IDENTIFIER_FILTER) && !config.v2.identifierIndex) {
+    reasons.push('identifier_filter_needs_index');
+    logOnce('identifier_filter_needs_index', 'warn', 'invalid switch combination: the identifier filter needs the identifier index, retrieval runs unfiltered', {
+      switches: ['RAG_IDENTIFIER_FILTER', 'RAG_IDENTIFIER_INDEX'],
+    });
+  }
+}
+
 async function runChecks(deps: V2StartupDeps): Promise<V2StartupVerdict> {
   const env = deps.ragEnv();
   const config = loadRagConfig(env);
@@ -169,6 +189,8 @@ async function runChecks(deps: V2StartupDeps): Promise<V2StartupVerdict> {
       required: '0.8.0',
     });
   }
+
+  checkSwitchCombinations(env, config, reasons);
 
   verdict = {
     status: reasons.length === 0 ? 'ok' : 'degraded',

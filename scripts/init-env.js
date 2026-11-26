@@ -385,6 +385,8 @@ RAG_LEXICAL_DICTIONARY=false
 RAG_LEXICAL_STEM_IT=false
 # Requests may ask for earlier document versions (needs RAG_LEXICAL_SEARCH=true)
 RAG_VERSION_SCOPE=false
+# Embedded chat may request earlier versions only while this and RAG_VERSION_SCOPE are on
+RAG_EMBED_VERSION_SCOPE=false
 # Structured table row lookup (needs the table-rows backfill)
 RAG_TABLE_LOOKUP=false
 # Group near-duplicate passages across documents (needs the dup-cluster backfill)

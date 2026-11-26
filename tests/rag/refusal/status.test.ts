@@ -343,3 +343,34 @@ describe('GET /api/rag/admin/refusal-calibration', () => {
     expect(Object.keys(route).filter((name) => ['POST', 'PUT', 'PATCH', 'DELETE'].includes(name))).toEqual([]);
   });
 });
+
+describe('refusalCalibrationStatus with the effective lexical version and mode cells (D-24, D-42)', () => {
+  beforeEach(() => resetRagConfigForTests());
+
+  it('with both lexical switches off reports tokenizer 2 and no cell at version 2 is stale', () => {
+    const status = refusalCalibrationStatus(thresholds([cell('cohere', 'rerank-v5.0-pro', 'en', { tokenizer_version: 2 })]), config(COHERE_ON));
+    expect(status.versions.tokenizer).toBe(2);
+    expect(status.cells[0]?.stale).toBe(false);
+    expect(codes(status)).not.toContain('stale_cells');
+  });
+
+  it.each([
+    [{ RAG_LEXICAL_DICTIONARY: 'true' }, 3],
+    [{ RAG_LEXICAL_STEM_IT: 'true' }, 4],
+    [{ RAG_LEXICAL_DICTIONARY: 'true', RAG_LEXICAL_STEM_IT: 'true' }, 5],
+  ])('with %o on every cell calibrated at version 2 is stale against version %i', (env, version) => {
+    const cells = [cell('cohere', 'rerank-v5.0-pro', 'en', { tokenizer_version: 2 }), cell('cohere', 'rerank-v5.0-pro', 'zh', { tokenizer_version: 2 })];
+    const status = refusalCalibrationStatus(thresholds(cells), config({ ...COHERE_ON, RAG_LEXICAL_SEARCH: 'true', ...env }));
+    expect(status.versions.tokenizer).toBe(version);
+    expect(status.cells.every((entry) => entry.stale)).toBe(true);
+    expect(codes(status)).toContain('stale_cells');
+  });
+
+  it('lists the mode of a mode cell and adds no mode field to a base cell', () => {
+    const base = cell('cohere', 'rerank-v5.0-pro', 'en');
+    const strict = cell('cohere', 'rerank-v5.0-pro', 'en', { key: 'cohere|rerank-v5.0-pro|en|same|strict', mode: 'strict' });
+    const status = refusalCalibrationStatus({ ...thresholds([base, strict]), schema_version: 2 }, config(COHERE_ON));
+    expect(status.cells[0]).not.toHaveProperty('mode');
+    expect(status.cells[1]?.mode).toBe('strict');
+  });
+});

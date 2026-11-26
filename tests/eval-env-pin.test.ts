@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, test } from 'vitest';
 import { derivePinnedEvalEnv } from '../eval/harness/eval-env.mts';
+import { RUN_CONFIG_ENV_ALLOWLIST } from '../eval/harness/run-config.mts';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -105,6 +106,7 @@ describe('pinned eval env', () => {
       RAG_LEXICAL_DICTIONARY: 'false',
       RAG_LEXICAL_STEM_IT: 'false',
       RAG_VERSION_SCOPE: 'false',
+      RAG_EMBED_VERSION_SCOPE: 'false',
       RAG_TABLE_LOOKUP: 'false',
       RAG_DUP_CLUSTERS: 'false',
       RAG_RESULT_DIVERSITY: 'off',
@@ -132,6 +134,11 @@ describe('pinned eval env', () => {
       expect(pinned, `${name} is pinned`).toHaveProperty(name);
       expect(pinned[name], name).toBe(value);
     }
+  });
+
+  test('a run config cannot set the embed version-scope switch (D-58)', () => {
+    expect(RUN_CONFIG_ENV_ALLOWLIST).toContain('RAG_VERSION_SCOPE');
+    expect(RUN_CONFIG_ENV_ALLOWLIST).not.toContain('RAG_EMBED_VERSION_SCOPE');
   });
 
   test('eval-env --check exits 0', () => {

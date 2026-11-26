@@ -1,0 +1,183 @@
+{
+  "cells": [
+    {
+      "config_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "dev": {
+        "answerable_count": 2,
+        "correct_refusal_rate": 0.0,
+        "false_refusal_rate": 0.0,
+        "false_refusal_rate_upper_bound": 0.7763932022500211,
+        "no_answer_count": 1
+      },
+      "holdout": {
+        "answerable_count": 0,
+        "correct_refusal_rate": 0.0,
+        "false_refusal_rate": 0.0,
+        "false_refusal_rate_upper_bound": 1.0,
+        "no_answer_count": 0
+      },
+      "holdout_evaluations": 0,
+      "key": "cohere|fake-quality-v1|en|cross",
+      "model": "fake-quality-v1",
+      "pairing": "cross",
+      "provider": "cohere",
+      "query_language": "en",
+      "recorded_at": "2026-11-26",
+      "rerank_text_version": 1,
+      "source": "fixture",
+      "status": "insufficient_data",
+      "threshold": null,
+      "tokenizer_version": 2
+    },
+    {
+      "config_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "dev": {
+        "answerable_count": 7,
+        "correct_refusal_rate": 0.5,
+        "false_refusal_rate": 0.0,
+        "false_refusal_rate_upper_bound": 0.3481636551311608,
+        "no_answer_count": 4
+      },
+      "holdout": {
+        "answerable_count": 4,
+        "correct_refusal_rate": 0.5,
+        "false_refusal_rate": 0.25,
+        "false_refusal_rate_upper_bound": 0.7513953742698186,
+        "no_answer_count": 2
+      },
+      "holdout_evaluations": 1,
+      "key": "cohere|fake-quality-v1|en|same",
+      "model": "fake-quality-v1",
+      "pairing": "same",
+      "provider": "cohere",
+      "query_language": "en",
+      "recorded_at": "2026-11-26",
+      "rerank_text_version": 1,
+      "source": "fixture",
+      "status": "calibrated",
+      "threshold": 0.425,
+      "tokenizer_version": 2
+    },
+    {
+      "config_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "dev": {
+        "answerable_count": 2,
+        "correct_refusal_rate": 0.0,
+        "false_refusal_rate": 0.0,
+        "false_refusal_rate_upper_bound": 0.7763932022500211,
+        "no_answer_count": 1
+      },
+      "holdout": {
+        "answerable_count": 0,
+        "correct_refusal_rate": 0.0,
+        "false_refusal_rate": 0.0,
+        "false_refusal_rate_upper_bound": 1.0,
+        "no_answer_count": 0
+      },
+      "holdout_evaluations": 0,
+      "key": "cohere|fake-quality-v1|it|cross",
+      "model": "fake-quality-v1",
+      "pairing": "cross",
+      "provider": "cohere",
+      "query_language": "it",
+      "recorded_at": "2026-11-26",
+      "rerank_text_version": 1,
+      "source": "fixture",
+      "status": "insufficient_data",
+      "threshold": null,
+      "tokenizer_version": 2
+    },
+    {
+      "config_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "dev": {
+        "answerable_count": 7,
+        "correct_refusal_rate": 0.5,
+        "false_refusal_rate": 0.0,
+        "false_refusal_rate_upper_bound": 0.3481636551311608,
+        "no_answer_count": 4
+      },
+      "holdout": {
+        "answerable_count": 4,
+        "correct_refusal_rate": 0.5,
+        "false_refusal_rate": 0.25,
+        "false_refusal_rate_upper_bound": 0.7513953742698186,
+        "no_answer_count": 2
+      },
+      "holdout_evaluations": 1,
+      "key": "cohere|fake-quality-v1|it|same",
+      "model": "fake-quality-v1",
+      "pairing": "same",
+      "provider": "cohere",
+      "query_language": "it",
+      "recorded_at": "2026-11-26",
+      "rerank_text_version": 1,
+      "source": "fixture",
+      "status": "calibrated",
+      "threshold": 0.375,
+      "tokenizer_version": 2
+    },
+    {
+      "config_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "dev": {
+        "answerable_count": 2,
+        "correct_refusal_rate": 0.0,
+        "false_refusal_rate": 0.0,
+        "false_refusal_rate_upper_bound": 0.7763932022500211,
+        "no_answer_count": 1
+      },
+      "holdout": {
+        "answerable_count": 0,
+        "correct_refusal_rate": 0.0,
+        "false_refusal_rate": 0.0,
+        "false_refusal_rate_upper_bound": 1.0,
+        "no_answer_count": 0
+      },
+      "holdout_evaluations": 0,
+      "key": "cohere|fake-quality-v1|zh|cross",
+      "model": "fake-quality-v1",
+      "pairing": "cross",
+      "provider": "cohere",
+      "query_language": "zh",
+      "recorded_at": "2026-11-26",
+      "rerank_text_version": 1,
+      "source": "fixture",
+      "status": "insufficient_data",
+      "threshold": null,
+      "tokenizer_version": 2
+    },
+    {
+      "config_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "dev": {
+        "answerable_count": 7,
+        "correct_refusal_rate": 0.5,
+        "false_refusal_rate": 0.0,
+        "false_refusal_rate_upper_bound": 0.3481636551311608,
+        "no_answer_count": 4
+      },
+      "holdout": {
+        "answerable_count": 4,
+        "correct_refusal_rate": 0.5,
+        "false_refusal_rate": 0.25,
+        "false_refusal_rate_upper_bound": 0.7513953742698186,
+        "no_answer_count": 2
+      },
+      "holdout_evaluations": 1,
+      "key": "cohere|fake-quality-v1|zh|same",
+      "model": "fake-quality-v1",
+      "pairing": "same",
+      "provider": "cohere",
+      "query_language": "zh",
+      "recorded_at": "2026-11-26",
+      "rerank_text_version": 1,
+      "source": "fixture",
+      "status": "calibrated",
+      "threshold": 0.395,
+      "tokenizer_version": 2
+    }
+  ],
+  "config_hash": "6274671cd7eb265461c8820f1cb9cfdd5a19ce1df24fbd3f51061bbf062bdca7",
+  "provenance": {
+    "source": "calibration"
+  },
+  "schema_version": 1
+}

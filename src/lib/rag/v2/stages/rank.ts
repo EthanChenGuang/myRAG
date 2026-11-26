@@ -5,7 +5,6 @@ import { getRagDeps } from '../../deps';
 import { LEGACY_PROFILE } from '../../embeddings/active-profile';
 import type { QueryEmbedding } from '../../embeddings/query-embedding';
 import type { FusedHit } from '../../fusion/rrf';
-import { LEXICAL_VERSION } from '../../lexical/chunk-text';
 import { runStage, StageError, stageSpec, type StageSpec } from '../../pipeline';
 import type { DedupeCounts } from '../../fusion/dedupe';
 import { decideRefusal, type GateCandidate, type GateInput, type QueryLanguage } from '../../refusal/gate';
@@ -180,7 +179,8 @@ function applyRefusal(
     reranked: rerankGate.reranked,
     queryLanguage,
     cells,
-    versions: { lexical: LEXICAL_VERSION, rerankText: RERANK_TEXT_VERSION },
+    versions: { lexical: config.v2.lexicalVersion, rerankText: RERANK_TEXT_VERSION },
+    ragMode: ctx.input.options?.ragMode,
   });
   if (gate.decision !== 'not_applied') return { record: gate, gate };
 

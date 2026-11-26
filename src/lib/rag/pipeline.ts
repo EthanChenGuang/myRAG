@@ -832,6 +832,11 @@ function bufferedCollector(parent: TraceCollector): TraceCollector & { commit():
     toStageStatus: () => buffer.toStageStatus(),
     setReviewContent: (content) => parent.setReviewContent(content),
     reviewContent: () => parent.reviewContent(),
+    markRequestStart: (at) => parent.markRequestStart(at),
+    markGenerationStart: () => parent.markGenerationStart(),
+    markFirstTextDelta: () => parent.markFirstTextDelta(),
+    setCacheState: (state) => parent.setCacheState(state),
+    timing: () => parent.timing(),
     commit() {
       for (const record of buffer.stages()) {
         parent.record({

@@ -194,6 +194,7 @@ class EnvironmentConfig {
       RAG_LEXICAL_DICTIONARY: process.env.RAG_LEXICAL_DICTIONARY || 'false',
       RAG_LEXICAL_STEM_IT: process.env.RAG_LEXICAL_STEM_IT || 'false',
       RAG_VERSION_SCOPE: process.env.RAG_VERSION_SCOPE || 'false',
+      RAG_EMBED_VERSION_SCOPE: process.env.RAG_EMBED_VERSION_SCOPE || 'false',
       RAG_TABLE_LOOKUP: process.env.RAG_TABLE_LOOKUP || 'false',
       RAG_DUP_CLUSTERS: process.env.RAG_DUP_CLUSTERS || 'false',
       RAG_RESULT_DIVERSITY: process.env.RAG_RESULT_DIVERSITY || 'off',

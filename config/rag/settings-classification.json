@@ -158,6 +158,10 @@
       "side": "query"
     },
     {
+      "name": "RAG_EMBED_VERSION_SCOPE",
+      "side": "query"
+    },
+    {
       "name": "RAG_ENABLE_ADJACENT_CHUNKS",
       "side": "query"
     },

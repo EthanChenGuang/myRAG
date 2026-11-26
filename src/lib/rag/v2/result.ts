@@ -1,9 +1,8 @@
 import { getRetrievalBackend } from '../backend/registry';
-import { CORE_STAGES, QUERY_LAYER_STAGES, type RagConfig } from '../config';
+import { CORE_STAGES, QUERY_LAYER_STAGES, effectiveLexicalVersion, type RagConfig } from '../config';
 import { getActiveChunkingProfiles } from '../chunking/active';
 import { LEGACY_PROFILE } from '../embeddings/active-profile';
 import type { QueryEmbedding } from '../embeddings/query-embedding';
-import { LEXICAL_VERSION } from '../lexical/chunk-text';
 import type { FusedHit } from '../fusion/rrf';
 import type { ChunkWithScore } from '../rerank/local-hybrid';
 import { assembleDisabledStatus, deriveStatus, failure, injectionFilteredAll, injectionReason } from '../pipeline';
@@ -22,6 +21,7 @@ import { getRagDeps } from '../deps';
 import type { SecurityConfig } from '../security/config';
 import { computeRetrievalConfigHash, securityHashComponent, type RetrievalConfigHashQueryLayer } from './config-hash';
 import { effectiveRetrievalParams } from './retrieval-params';
+import { effectiveTuningParams, tuningHashComponent } from './tuning-params';
 import type { TranslationHashField } from './translation-legs';
 import type { AssembleOutput } from '../context/assemble';
 import type { QueryPlan, RetrievalParams } from '@/lib/rag-eval/contracts.generated';
@@ -84,7 +84,7 @@ export async function requestRetrievalConfigHash(ctx: RequestConfigHashInput): P
   return computeRetrievalConfigHash({
     backendId: getRetrievalBackend().id,
     embeddingProfileId: ctx.embeddingProfileId,
-    lexicalVersion: LEXICAL_VERSION,
+    lexicalVersion: effectiveLexicalVersion(config),
     rerankTextVersion: RERANK_TEXT_VERSION,
     params: effectiveRetrievalParams(profile, config, evalRetrievalOverrides(profile, input.stageOverrides?.retrievalOverrides)),
     reranker: describeReranker(config, profile, queryLanguage ?? '', input.stageOverrides?.retrievalOverrides),
@@ -106,6 +106,7 @@ export async function requestRetrievalConfigHash(ctx: RequestConfigHashInput): P
       ...(config.monolingual ? { monolingual: true as const } : {}),
     },
     security: securityHashComponent(security, { multiTenant: isMultiTenant() }),
+    tuning: tuningHashComponent(config, effectiveTuningParams(profile, config, undefined, { embeddingProfileId: ctx.embeddingProfileId })),
     ...(ctx.bindingHash ?? {}),
     ...(ctx.translationHash ?? {}),
     ...(ctx.queryLayerHash ? { queryLayer: ctx.queryLayerHash } : {}),
