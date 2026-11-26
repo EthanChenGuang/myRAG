@@ -530,3 +530,194 @@ for (const mode of MODES) {
     });
   });
 }
+
+// Task 3 and the serving path: the CLI route for a private model of tenant A, on the real search through the fake edge (multi-tenant,
+// two tenants with identical contract chunks). Every endpoint is a local fake.
+describe('ft-bind --doc-types and the binding route end to end (multi-tenant, two tenants)', () => {
+  const VERSION = 'ft-private-contract-a1';
+  const QUERY = 'which numbered steps does the sample widget record list';
+  const PASSAGE = 'Neutral sample passage: the widget record lists seven numbered steps for the routine.';
+  let harness: import('../helpers/finetune-lifecycle.mts').Harness;
+  let helpers: typeof import('../helpers/finetune-lifecycle.mts');
+  let bindings: typeof import('@/lib/rag/embeddings/bindings');
+  let db: PGlite;
+  let tenantA: string;
+  let tenantB: string;
+  let userA: string;
+  let userB: string;
+  const chunksOf: Record<string, string[]> = {};
+  const saved: Record<string, string | undefined> = {};
+  const ENV = {
+    RAG_PIPELINE: 'v2',
+    RAG_LEXICAL_SEARCH: 'false',
+    RAG_RERANKER: 'none',
+    RAG_REFUSAL_THRESHOLD: 'false',
+    RAG_EMBEDDING_PROFILES: 'on',
+    RAG_DOMAIN_EMBEDDINGS: 'on',
+  };
+
+  before(async () => {
+    for (const name of Object.keys(ENV)) saved[name] = process.env[name];
+    Object.assign(process.env, ENV);
+    helpers = await import('../helpers/finetune-lifecycle.mts');
+    harness = await helpers.startHarness();
+    bindings = await import('@/lib/rag/embeddings/bindings');
+    const twoTenant = await import('../../eval/harness/two-tenant.mts');
+    userA = twoTenant.TWO_TENANT_IDS.userA;
+    userB = twoTenant.TWO_TENANT_IDS.userB;
+    tenantA = `u:${userA}`;
+    tenantB = `u:${userB}`;
+    db = (await twoTenant.createTwoTenantDatabase()).db;
+    for (const userId of [userA, userB]) {
+      const documentId = crypto.randomUUID();
+      await db.query('INSERT INTO documents (id, filename, content, metadata, user_id, doc_type) VALUES ($1, $2, $3, $4::jsonb, $5, $6)', [
+        documentId,
+        'contract-identical.md',
+        PASSAGE,
+        '{}',
+        userId,
+        CONTRACT,
+      ]);
+      for (let index = 0; index < 2; index += 1) {
+        await db.query('INSERT INTO document_chunks (id, document_id, content, chunk_index, metadata) VALUES ($1, $2, $3, $4, $5::jsonb)', [
+          crypto.randomUUID(),
+          documentId,
+          `Document: contract-identical.md. Chunk ${index + 1} of 2. Content: ${PASSAGE}`,
+          index,
+          '{}',
+        ]);
+      }
+    }
+    await helpers.installFixtureProductionModel(db);
+    for (const tenant of [tenantA, tenantB]) {
+      chunksOf[tenant] = (await helpers.rowsOf(db, 'SELECT id FROM document_chunks WHERE tenant_key = $1', [tenant])).map((row) => String(row.id));
+    }
+    await harness.use(db, 'multi-tenant');
+    await helpers.resetFinetuneState(db);
+    harness.setFinetune(true);
+    // setProfilesSwitch would replace the ingest env without RAG_DOMAIN_EMBEDDINGS; the binding route needs both switches on.
+    harness.ingestConfig.resetIngestConfigForTests();
+    harness.ingestDeps.setIngestDepsForTests({ ingestEnv: () => ({ RAG_EMBEDDING_PROFILES: 'on', RAG_DOMAIN_EMBEDDINGS: 'on' }) });
+    harness.activeProfile.resetActiveProfileForTests();
+    harness.env.RAG_FT_SLOT_A_MODEL = VERSION;
+  });
+
+  after(async () => {
+    for (const [name, saved_] of Object.entries(saved)) {
+      if (saved_ === undefined) delete process.env[name];
+      else process.env[name] = saved_;
+    }
+    bindings?.resetBindingsForTests();
+    await harness?.close();
+    await db?.close();
+  });
+
+  const rpcCalls = (fn: string): number => harness.edge.calls.filter((call) => call.path.endsWith(`/rpc/${fn}`)).length;
+  const slotVectors = async (tenant: string): Promise<number> =>
+    Number((await helpers.rowsOf(db, 'SELECT count(*)::int AS n FROM chunk_embeddings WHERE profile_id = $1 AND tenant_key = $2', [SLOT_A, tenant]))[0]?.n);
+
+  async function retrieve(userId: string) {
+    harness.resetCaches();
+    bindings.resetBindingsForTests();
+    const resolved = await harness.rag.resolveTenantScope({ deploymentMode: 'multi-tenant', getUser: async () => ({ id: userId }), signal: new AbortController().signal });
+    assert.ok(resolved.ok && resolved.scope);
+    harness.endpoints.calls.length = 0;
+    return harness.rag.runRetrieval({
+      scope: resolved.scope,
+      query: QUERY,
+      profile: 'chat',
+      options: { maxResults: 25, ragMode: 'balanced' },
+      signal: new AbortController().signal,
+    });
+  }
+
+  test('a private model of A serves only A, through its tenant binding; every other route is refused', async () => {
+    assert.equal((await harness.embedding('ft-consent', 'grant', tenantA, '--scope', 'private', '--ref', 'TICKET-3001')).code, 0);
+    const cardFile = helpers.writeJson(harness.workDir, VERSION, helpers.modelCard(VERSION, [tenantA], { scope: 'tenant' }));
+    const registered = await harness.embedding('ft-models', 'register', cardFile);
+    assert.equal(registered.code, 0, registered.text);
+
+    harness.edge.calls.length = 0;
+    const unscoped = await harness.embedding('ft-bind', SLOT_A, VERSION);
+    assert.equal(unscoped.code, 1, unscoped.text);
+    assert.match(unscoped.text, /--doc-types/);
+    assert.equal(rpcCalls('rag_finetune_bind_slot') + rpcCalls('rag_finetune_bind_scoped_slot'), 0, 'refused before any bind RPC');
+
+    const bound = await harness.embedding('ft-bind', SLOT_A, VERSION, '--doc-types', CONTRACT);
+    assert.equal(bound.code, 0, bound.text);
+    assert.match(bound.text, new RegExp(`scoped to ${CONTRACT}`));
+    assert.ok(bound.text.includes(`npm run rag:embedding -- bind ${CONTRACT} ${SLOT_A} --tenant ${tenantA}`), bound.text);
+    assert.ok(bound.text.includes(`npm run rag:reembed -- --profile ${SLOT_A} --tenant ${tenantA}`), bound.text);
+    assert.doesNotMatch(bound.text, new RegExp(`rag:reembed -- --profile ${SLOT_A}(?! --tenant)`));
+    assert.doesNotMatch(bound.text, /rag:embedding -- activate (?!-binding)/);
+    assert.deepEqual((await helpers.rowsOf(db, 'SELECT doc_types FROM embedding_profiles WHERE id = $1', [SLOT_A]))[0]?.doc_types, [CONTRACT]);
+
+    const globalActivation = await harness.embedding('activate', SLOT_A);
+    assert.equal(globalActivation.code, 1, 'a scoped slot is never activated globally');
+
+    const forB = await harness.embedding('bind', CONTRACT, SLOT_A, '--tenant', tenantB);
+    assert.equal(forB.code, 1, forB.text);
+    assert.match(forB.text, /finetune_tenant_mismatch/);
+    const deploymentWide = await harness.embedding('bind', CONTRACT, SLOT_A);
+    assert.equal(deploymentWide.code, 1, deploymentWide.text);
+    assert.match(deploymentWide.text, /finetune_deployment_wide/);
+
+    const forA = await harness.embedding('bind', CONTRACT, SLOT_A, '--tenant', tenantA);
+    assert.equal(forA.code, 0, forA.text);
+    const bindingId = String((await helpers.rowsOf(db, 'SELECT id FROM embedding_profile_bindings WHERE profile_id = $1 AND tenant_key = $2', [SLOT_A, tenantA]))[0]?.id);
+    assert.equal((await harness.embedding('bind-status', bindingId, 'backfilling')).code, 0);
+
+    const global = await harness.reembed('--profile', SLOT_A, '--batch-size', '8');
+    assert.notEqual(global.code, 0, 'a global re-embed of the private slot is refused');
+    assert.equal(await slotVectors(tenantB), 0);
+    const backfill = await harness.reembed('--profile', SLOT_A, '--tenant', tenantA, '--batch-size', '8');
+    assert.equal(backfill.code, 0, backfill.text);
+    assert.equal(await slotVectors(tenantA), 2);
+    assert.equal(await slotVectors(tenantB), 0, 'identical chunks of tenant B got no vector of the private model');
+
+    const runId = String((await helpers.rowsOf(db, "SELECT id FROM embedding_backfill_runs WHERE profile_id = $1 AND status = 'completed'", [SLOT_A]))[0]?.id);
+    const evidence = {
+      binding_id: bindingId,
+      target_profile: SLOT_A,
+      doc_type: CONTRACT,
+      tenant_key: tenantA,
+      baseline_global_profile: LEGACY,
+      baseline_binding_profile: null,
+      gate_passed: true,
+      doc_type_slice: { n: 40, real_n: 40, passed: true, by_language: { en: true } },
+      other_slices_passed: true,
+      backfill_run_id: runId,
+      recorded_at: new Date().toISOString(),
+    };
+    await db.query('SELECT * FROM rag_record_binding_evidence($1, $2::jsonb, $3)', [bindingId, JSON.stringify(evidence), 'test']);
+    const activated = await harness.embedding('activate-binding', bindingId);
+    assert.equal(activated.code, 0, activated.text);
+
+    const servedA = await retrieve(userA);
+    assert.notEqual(servedA.status, 'error', servedA.reason);
+    const ftCallsA = harness.endpoints.callsFor('ft');
+    assert.ok(ftCallsA.length > 0, "A's query reached the private model through the binding leg");
+    const bodies = ftCallsA.map((call) => JSON.stringify(call.body));
+    assert.ok(bodies.some((body) => body.includes(QUERY)), "the private model embedded tenant A's query");
+    assert.ok(
+      bodies.every((body) => body.includes(QUERY) || helpers.PROBE_TEXTS.some((probe) => body.includes(probe))),
+      "the private model saw only tenant A's query and its own registered probe texts",
+    );
+    assert.ok(servedA.candidates.every((row) => !chunksOf[tenantB]!.includes(row.chunk_id)), 'A sees none of B');
+    assert.ok(servedA.candidates.some((row) => chunksOf[tenantA]!.includes(row.chunk_id)));
+
+    const servedB = await retrieve(userB);
+    assert.notEqual(servedB.status, 'error', servedB.reason);
+    assert.deepEqual(harness.endpoints.callsFor('ft'), [], "B's queries never use the slot");
+    assert.ok(servedB.candidates.every((row) => !chunksOf[tenantA]!.includes(row.chunk_id)), 'B sees none of A');
+
+    const revoked = await harness.embedding('ft-consent', 'revoke', tenantA);
+    assert.equal(revoked.code, 0, revoked.text);
+    assert.ok(revoked.text.includes(`binding ${bindingId} (${CONTRACT}, ${tenantA}) of ${SLOT_A} was active and is now available`), revoked.text);
+    assert.equal((await helpers.rowsOf(db, 'SELECT status FROM embedding_profile_bindings WHERE id = $1', [bindingId]))[0]?.status, 'available');
+
+    const fallback = await retrieve(userA);
+    assert.notEqual(fallback.status, 'error', fallback.reason);
+    assert.deepEqual(harness.endpoints.callsFor('ft'), [], 'after the taint A falls back to the global profile');
+  });
+});
