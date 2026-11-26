@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod/v3';
 import { TerminologyEntrySchema } from '@/lib/rag-eval/contracts.generated';
-import { resolveAdminWorkspaceScope, scopeKey, terminologyEnabledLanguages, type TerminologyAdminFailed } from '@/lib/rag';
+import { resolveAdminWorkspaceScope, scopeKey, terminologyEnabledLanguages, type TenantScope, type TerminologyAdminFailed } from '@/lib/rag';
 
 export const TAG = '[RAG Admin]';
 export const NO_STORE = { 'Cache-Control': 'no-store' };
@@ -18,6 +18,29 @@ export function ok(body: Record<string, unknown>, status = 200): NextResponse {
 
 export const invalid = (error: z.ZodError): NextResponse =>
   fail(400, 'Invalid request data', { details: error.errors.map((issue) => ({ path: issue.path.join('.'), message: issue.message })) as Details });
+
+export const IMPORT_BODY_MAX_BYTES = 1.5 * 1024 * 1024;
+
+/** The JSON body of an import, refused with 413 before any parse when it is over 1.5 MB (T-0411-32). */
+export async function readLimitedJson(
+  request: Request,
+  maxBytes: number,
+): Promise<{ ok: true; body: unknown } | { ok: false; response: NextResponse }> {
+  const declared = Number(request.headers.get('content-length') ?? '');
+  if (Number.isFinite(declared) && declared > maxBytes) return { ok: false, response: fail(413, 'payload_too_large') };
+  let raw: string;
+  try {
+    raw = await request.text();
+  } catch {
+    return { ok: false, response: fail(400, 'Invalid request data', { details: [{ path: '', message: 'Body could not be read' }] }) };
+  }
+  if (Buffer.byteLength(raw, 'utf8') > maxBytes) return { ok: false, response: fail(413, 'payload_too_large') };
+  try {
+    return { ok: true, body: JSON.parse(raw) };
+  } catch {
+    return { ok: false, response: fail(400, 'Invalid request data', { details: [{ path: '', message: 'Body is not valid JSON' }] }) };
+  }
+}
 
 /** The parsed JSON body, or the 400 for a body that is not JSON. */
 export async function readJson(request: Request): Promise<{ ok: true; body: unknown } | { ok: false; response: NextResponse }> {
@@ -53,6 +76,28 @@ export const ListQuerySchema = z
     offset: QueryInt(1_000_000).nullish(),
   })
   .strict();
+export const ImportBodySchema = z
+  .object({
+    layer: LayerSchema,
+    organization_id: OrganizationId,
+    mode: z.enum(['merge', 'replace']).default('merge'),
+    format: z.enum(['csv', 'dictionary_candidates_jsonl']).default('csv'),
+    csv: z.string().optional(),
+    jsonl: z.string().optional(),
+    dry_run: z.boolean().default(true),
+    expected_version: ExpectedVersion.optional(),
+  })
+  .strict()
+  .superRefine((body, ctx) => {
+    const field = body.format === 'csv' ? 'csv' : 'jsonl';
+    const other = field === 'csv' ? 'jsonl' : 'csv';
+    if (typeof body[field] !== 'string') ctx.addIssue({ code: z.ZodIssueCode.custom, path: [field], message: `${field} is required for format ${body.format}` });
+    if (body[other] !== undefined) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [other], message: `${other} is not allowed for format ${body.format}` });
+    if (!body.dry_run && body.expected_version === undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['expected_version'], message: 'expected_version is required to apply' });
+    }
+  });
+export const ExportQuerySchema = z.object({ layer: LayerSchema, organization_id: OrganizationId }).strict();
 export const DeleteQuerySchema = z.object({ layer: LayerSchema, organization_id: OrganizationId, expected_version: z.coerce.number().int().min(0) }).strict();
 export const VersionsQuerySchema = z.object({ organization_id: OrganizationId }).strict();
 export const AuditQuerySchema = z
@@ -85,6 +130,19 @@ export async function workspaceKey(
     return { ok: false, response: fail(workspace.status, workspace.status === 403 ? 'Forbidden' : 'Workspace verification unavailable') };
   }
   return { ok: true, key: workspace.scope.kind === 'single' ? null : scopeKey(workspace.scope) };
+}
+
+/** The minted workspace scope of the verified admin (s:default in single-tenant mode); 403 for an organization the admin is not in. */
+export async function workspaceScope(
+  adminUserId: string,
+  organizationId: string | null | undefined,
+  signal: AbortSignal,
+): Promise<{ ok: true; scope: TenantScope } | { ok: false; response: NextResponse }> {
+  const workspace = await resolveAdminWorkspaceScope({ adminUserId, requestedOrganizationId: organizationId ?? null, signal });
+  if (!workspace.ok) {
+    return { ok: false, response: fail(workspace.status, workspace.status === 403 ? 'Forbidden' : 'Workspace verification unavailable') };
+  }
+  return { ok: true, scope: workspace.scope };
 }
 
 /** 'shared' for the shared layer; the workspace's tenant key for the workspace layer, refused in single-tenant mode (D-03). */
