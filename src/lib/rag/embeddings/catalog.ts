@@ -1,5 +1,8 @@
 import type { EmbeddingProviderId } from './types';
 import {
+  FT_SLOT_DIMS,
+  FT_SLOT_SUPPORTED_DIMS,
+  FT_SLOT_UNBOUND_MODEL,
   OPENAI_NATIVE_DIMS,
   QWEN_MODEL_ID,
   QWEN_NATIVE_DIMS,
@@ -9,6 +12,7 @@ import {
   VOYAGE_MODEL_ID,
   VOYAGE_SUPPORTED_DIMS,
   canonicalModelId,
+  isFinetuneSlotProvider,
 } from './types';
 
 export type EmbeddingServingMode = 'hosted' | 'sidecar';
@@ -58,6 +62,33 @@ const DEEPINFRA_HOSTED: EmbeddingHostedEndpoint = {
   apiKeyEnv: 'DEEPINFRA_API_KEY',
   baseUrlEnv: 'DEEPINFRA_BASE_URL',
 };
+
+function slotEndpoint(slot: 'A' | 'B'): EmbeddingHostedEndpoint {
+  return { host: 'operator-configured', apiKeyEnv: 'RAG_FT_EMBED_API_KEY', baseUrlEnv: `RAG_FT_SLOT_${slot}_BASE_URL` };
+}
+
+function slotEntry(provider: 'ft_slot_a' | 'ft_slot_b', slot: 'A' | 'B'): EmbeddingModelEntry {
+  return {
+    provider,
+    model: FT_SLOT_UNBOUND_MODEL,
+    nativeDims: FT_SLOT_DIMS,
+    supportedDims: [...FT_SLOT_SUPPORTED_DIMS],
+    sendsOutputDimension: false,
+    maxInputTokens: 8192,
+    maxTokensPerRequest: null,
+    inputTypes: [],
+    usdPerMillionTokens: 0,
+    tokensAreEstimates: true,
+    freeTokensNote: 'No list price: the operator runs or rents the endpoint.',
+    supportedLanguages: ['zh', 'en', 'it'],
+    languagesNote: 'Depends on the fine-tuned base model; the fine-tune gate evaluates the zh, en and it slices.',
+    servingModes: ['hosted'],
+    hostedEndpoint: slotEndpoint(slot),
+    sidecarPath: null,
+    vendorDomainNote: 'Operator fine-tuned model behind an OpenAI-compatible endpoint; one entry serves every bound version.',
+    readOn: '2026-11-26',
+  };
+}
 
 const VOYAGE_INPUT_TYPES: readonly string[] = ['query', 'document'];
 
@@ -175,6 +206,8 @@ export const EMBEDDING_MODEL_CATALOG: readonly EmbeddingModelEntry[] = Object.fr
       vendorDomainNote: 'General purpose and multilingual.',
       readOn: '2026-11-24',
     },
+    slotEntry('ft_slot_a', 'A'),
+    slotEntry('ft_slot_b', 'B'),
   ].map((entry) => freezeEntry(entry as EmbeddingModelEntry)),
 );
 
@@ -182,10 +215,16 @@ const DEFAULT_MODELS: Readonly<Record<EmbeddingProviderId, string>> = Object.fre
   openai: 'text-embedding-3-small',
   voyage: VOYAGE_MODEL_ID,
   qwen3: QWEN_MODEL_ID,
+  ft_slot_a: FT_SLOT_UNBOUND_MODEL,
+  ft_slot_b: FT_SLOT_UNBOUND_MODEL,
 });
 
-/** The catalog entry for a provider and model (host-specific spellings accepted); undefined when not listed. */
+/**
+ * The catalog entry for a provider and model (host-specific spellings accepted); undefined when not listed. A fine-tune slot has one
+ * entry for whatever version is bound, so any model id of a slot provider resolves to it.
+ */
 export function catalogEntry(provider: string, model: string): EmbeddingModelEntry | undefined {
+  if (isFinetuneSlotProvider(provider)) return EMBEDDING_MODEL_CATALOG.find((entry) => entry.provider === provider);
   const canonical = canonicalModelId(model);
   return EMBEDDING_MODEL_CATALOG.find((entry) => entry.provider === provider && entry.model === canonical);
 }
