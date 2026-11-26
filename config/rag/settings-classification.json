@@ -22,6 +22,15 @@
       "side": "query"
     },
     {
+      "name": "RAG_ATTRIBUTE_FILTER",
+      "side": "query"
+    },
+    {
+      "name": "RAG_ATTRIBUTE_HEADER",
+      "side": "ingestion",
+      "mechanism": "rechunk"
+    },
+    {
       "name": "RAG_BEHAVIOR_MODE",
       "side": "query"
     },
@@ -76,6 +85,10 @@
     },
     {
       "name": "RAG_DOCUMENT_COMPLETENESS_THRESHOLD",
+      "side": "query"
+    },
+    {
+      "name": "RAG_DOC_ATTRIBUTES",
       "side": "query"
     },
     {
@@ -317,6 +330,11 @@
       "mechanism": "relex"
     },
     {
+      "name": "RAG_LEXICAL_QUANTITY",
+      "side": "both",
+      "mechanism": "relex"
+    },
+    {
       "name": "RAG_LEXICAL_SEARCH",
       "side": "query"
     },
@@ -365,6 +383,11 @@
       "name": "RAG_OUTPUT_LINK_ALLOWLIST",
       "side": "both",
       "mechanism": "rescan"
+    },
+    {
+      "name": "RAG_PAGE_BOILERPLATE",
+      "side": "ingestion",
+      "mechanism": "rechunk"
     },
     {
       "name": "RAG_PARENT_CHILD",
@@ -567,6 +590,11 @@
     {
       "name": "RAG_SCOPE_TAG_SUGGEST",
       "side": "query"
+    },
+    {
+      "name": "RAG_SECTION_RULES",
+      "side": "ingestion",
+      "mechanism": "rechunk"
     },
     {
       "name": "RAG_SEMANTIC_CACHE",

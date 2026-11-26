@@ -645,6 +645,19 @@ RAG_SUPERSESSION_DETECT=off
 RAG_EFFECTIVE_DATES=false
 # Read effective dates with a model when rules find none: true | false
 RAG_EFFECTIVE_DATE_LLM_EXTRACT=false
+# Templated collections (Phase 3.3)
+# Split documents at the headings of the workspace's section rule set (needs the unified ingest pipeline): off | on
+RAG_SECTION_RULES=off
+# Remove repeated page lines before chunking (needs the unified ingest pipeline): off | detect | rules | both
+RAG_PAGE_BOILERPLATE=off
+# Store schema-checked attributes with documents and chunks (needs the unified ingest pipeline): true | false
+RAG_DOC_ATTRIBUTES=false
+# Add the rendered attribute header line to embedding and keyword text (needs RAG_DOC_ATTRIBUTES=true): true | false
+RAG_ATTRIBUTE_HEADER=false
+# Limit or rank retrieval by matched attributes (needs RAG_DOC_ATTRIBUTES=true and RAG_PIPELINE=v2): off | hard | soft
+RAG_ATTRIBUTE_FILTER=off
+# Numbers with unit symbols match as single lexical tokens (needs relex): true | false
+RAG_LEXICAL_QUANTITY=false
 
 # Voyage embeddings
 VOYAGE_API_KEY=
