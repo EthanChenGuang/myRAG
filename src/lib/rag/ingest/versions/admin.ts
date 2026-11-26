@@ -1,7 +1,8 @@
 import type { RpcClient } from '../../backend/supabase-rpc';
 import { getRagDeps } from '../../deps';
-import { type TenantScope } from '../../tenant/scope';
+import { assertTenantScope, scopeKey, type TenantScope } from '../../tenant/scope';
 import { displayUsers } from '../approval/admin';
+import { uploaderOf } from '../approval/resolve';
 import type { IngestConfig } from '../config';
 import { currentIngestConfig } from '../current-config';
 import { getIngestDeps } from '../deps';
@@ -19,8 +20,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 type Row = Record<string, unknown>;
 
 /** "Replaces…" counts only under the unified pipeline with RAG_SUPERSESSION_DETECT=on (UI-SPEC decision 9); otherwise it is not offered. */
-export function replacesEnabled(_config: Pick<IngestConfig, 'pipeline' | 'supersessionDetect'> = currentIngestConfig()): boolean {
-  return false;
+export function replacesEnabled(config: Pick<IngestConfig, 'pipeline' | 'supersessionDetect'> = currentIngestConfig()): boolean {
+  return config.pipeline === 'unified' && config.supersessionDetect === 'on';
 }
 
 export type UploadReplacesFailure = 'invalid_replaces' | 'replaces_not_found' | 'replaces_same_lineage' | 'unavailable';
@@ -43,16 +44,55 @@ function single(raw: unknown): string | null {
  * must not be the lineage the upload itself writes into (same source and source key).
  */
 export async function validateUploadReplaces(
-  _scope: TenantScope,
-  _raw: unknown,
-  _options: { signal: AbortSignal; source: string; sourceKey: string; config?: Pick<IngestConfig, 'pipeline' | 'supersessionDetect'> },
+  scope: TenantScope,
+  raw: unknown,
+  options: { signal: AbortSignal; source: string; sourceKey: string; config?: Pick<IngestConfig, 'pipeline' | 'supersessionDetect'> },
 ): Promise<ValidateUploadReplacesResult> {
-  return { ok: true, replacesDocumentId: undefined, ignored: false };
+  const value = single(raw);
+  if (value === null) return { ok: true, replacesDocumentId: undefined, ignored: false };
+  const config = options.config ?? currentIngestConfig();
+  if (!replacesEnabled(config)) {
+    console.warn('[Ingest] upload replaces ignored', { reason: config.pipeline === 'unified' ? 'supersession_off' : 'legacy_pipeline' });
+    return { ok: true, replacesDocumentId: undefined, ignored: true };
+  }
+  if (!UUID.test(value)) return { ok: false, reason: 'invalid_replaces' };
+  assertTenantScope(scope);
+  const db: RpcClient | null = getIngestDeps().db();
+  if (!db) return { ok: false, reason: 'unavailable' };
+  const documentId = value.toLowerCase();
+  try {
+    options.signal.throwIfAborted();
+    const response = await db
+      .rpc('rag_supersession_replace_target', { p_tenant_key: scopeKey(scope).toLowerCase(), p_document_id: documentId })
+      .abortSignal(options.signal);
+    if (response.error) {
+      console.error('[Ingest] upload replaces lookup failed', { code: response.error.code ?? null });
+      return { ok: false, reason: 'unavailable' };
+    }
+    const row = (Array.isArray(response.data) ? response.data[0] : response.data) as Row | null | undefined;
+    if (!row || typeof row.document_id !== 'string') return { ok: false, reason: 'replaces_not_found' };
+    if (row.source === options.source && row.source_key === options.sourceKey) return { ok: false, reason: 'replaces_same_lineage' };
+    return { ok: true, replacesDocumentId: documentId, ignored: false };
+  } catch (error) {
+    console.error('[Ingest] upload replaces lookup failed', { error: error instanceof Error ? error.name : 'unknown' });
+    return { ok: false, reason: 'unavailable' };
+  }
 }
 
 /** Whether a "Replaces…" by this user in this workspace is confirmed at once (an admin of the tenant). A failed lookup answers false. */
-export async function replacesConfirmedAtOnce(_scope: TenantScope, _userId: string, _signal: AbortSignal): Promise<boolean> {
-  return false;
+export async function replacesConfirmedAtOnce(scope: TenantScope, userId: string, signal: AbortSignal): Promise<boolean> {
+  if (!UUID.test(userId)) return false;
+  const db: RpcClient | null = getIngestDeps().db();
+  if (!db) return false;
+  try {
+    signal.throwIfAborted();
+    const response = await db
+      .rpc('rag_is_tenant_admin', { p_user: userId.toLowerCase(), p_tenant_key: scopeKey(scope).toLowerCase() })
+      .abortSignal(signal);
+    return !response.error && response.data === true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -60,7 +100,23 @@ export async function replacesConfirmedAtOnce(_scope: TenantScope, _userId: stri
  * so the post-publish hook finds it after an approval too. confirm is true only when the uploader is an admin of the tenant now; the SQL
  * confirmation checks the actor again. Nothing is written without a replacesDocumentId or with the switch off.
  */
-export async function recordReplacesIntent(_ctx: StageContext, _documentId: string): Promise<void> {}
+export async function recordReplacesIntent(ctx: StageContext, documentId: string): Promise<void> {
+  const target = ctx.input.replacesDocumentId;
+  if (typeof target !== 'string' || !UUID.test(target) || ctx.config.supersessionDetect !== 'on') return;
+  const actor = uploaderOf(ctx) ?? ctx.state.approval?.uploader_id ?? null;
+  let confirm = false;
+  if (actor !== null) {
+    try {
+      confirm = await ctx.writer.isTenantAdmin(actor);
+    } catch (error) {
+      if (ctx.signal.aborted) throw error;
+      console.warn('[Ingest] replaces admin check unavailable; leaving the candidate pending', { documentId });
+    }
+  }
+  await ctx.writer.setFields(documentId, {
+    metadata: { supersession_replaces: { document_id: target.toLowerCase(), actor, confirm } },
+  });
+}
 
 // --- Admin service (D-50) -----------------------------------------------------------------------------------------------------------
 
