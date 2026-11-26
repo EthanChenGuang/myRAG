@@ -1836,6 +1836,7 @@ ARM_WIRING_PROOF = (
     "wiring proof: fixture corpus, fixture embedder and fakes; the numbers prove each comparison runs end to end, not that a switch "
     "helps or hurts, so no recommendation is given"
 )
+ARM_NOT_RUN = "the arm has no off and on runs"
 ArmStatus = Literal["passed", "failed", "not_run"]
 ArmSide = Literal["ingestion", "query"]
 ArmRunner = Literal["smoke", "translation"]
@@ -2029,9 +2030,7 @@ def compare_arm(
     if off is None or on is None:
         if arm.optional:
             return ArmResult(**base, status="not_run", rows=[], failures=[], wiring_proof=False, recommendation=None, notes=["not run"])
-        return ArmResult(
-            **base, status="failed", rows=[], failures=["the arm has no off and on runs"], wiring_proof=False, recommendation=None
-        )
+        return ArmResult(**base, status="failed", rows=[], failures=[ARM_NOT_RUN], wiring_proof=False, recommendation=None)
     band = noise.floor
     groups = {name: re.compile(pattern) for name, pattern in (item_groups or {}).items()}
     wiring_proof = any(
@@ -2150,6 +2149,9 @@ def render_arm_markdown(c: ArmComparison) -> str:
         ]
         if arm.status == "not_run":
             lines += ["This optional arm was not run.", ""]
+            continue
+        if arm.failures == [ARM_NOT_RUN]:
+            lines += ["This required arm did not run, so it fails the comparison.", ""]
             continue
         if arm.wiring_proof:
             lines += ["Wiring proof only: no recommendation.", ""]

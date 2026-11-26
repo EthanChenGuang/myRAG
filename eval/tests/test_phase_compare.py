@@ -1253,8 +1253,9 @@ def test_an_optional_arm_without_runs_is_not_run_and_a_required_one_fails(tmp_pa
     assert "This optional arm was not run." in markdown
     assert code == 0 and payload["passed"] is True
     del runs["caption_language"]
-    code, payload, _ = _run_arms(tmp_path / "required", runs)
+    code, payload, markdown = _run_arms(tmp_path / "required", runs)
     assert _arm(payload, "caption_language")["status"] == "failed"
+    assert "This required arm did not run, so it fails the comparison." in markdown
     assert code == 10
 
 
