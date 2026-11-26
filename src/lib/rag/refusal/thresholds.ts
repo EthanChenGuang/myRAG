@@ -1,6 +1,6 @@
 import rawThresholds from '../../../../eval/config/refusal-thresholds.json';
 import { RefusalThresholdsSchema, type RefusalThresholds } from '@/lib/rag-eval/contracts.generated';
-import type { ThresholdCell, ThresholdCells } from './gate';
+import { cellKey, type ThresholdCell, type ThresholdCells } from './gate';
 
 export type { ThresholdCells };
 
@@ -17,6 +17,7 @@ function cellsFromFile(parsed: RefusalThresholds): ThresholdCells {
   for (const cell of parsed.cells ?? []) {
     cells.set(cell.key, {
       key: cell.key,
+      ...(cell.mode ? { mode: cell.mode } : {}),
       provider: cell.provider,
       model: cell.model,
       query_language: cell.query_language,
@@ -31,15 +32,30 @@ function cellsFromFile(parsed: RefusalThresholds): ThresholdCells {
   return cells;
 }
 
-export function loadThresholdsFromData(data: unknown): { cells: ThresholdCells; configHash: string | null } {
+/** The Pydantic rules JSON Schema cannot express: unique keys, key = dims (+ |mode), schema_version 2 exactly when a mode cell exists. */
+function consistent(parsed: RefusalThresholds): boolean {
+  const cells = parsed.cells ?? [];
+  const keys = new Set(cells.map((cell) => cell.key));
+  if (keys.size !== cells.length) return false;
+  if (cells.some((cell) => cell.mode !== undefined) !== (parsed.schema_version === 2)) return false;
+  return cells.every((cell) => cell.key === cellKey(cell.provider, cell.model, cell.query_language, cell.pairing, cell.mode));
+}
+
+/** A thresholds file that passes the generated schema and the cross-field rules, or null. */
+export function parseThresholds(data: unknown): RefusalThresholds | null {
   const parsed = RefusalThresholdsSchema.safeParse(data);
-  if (!parsed.success) {
+  return parsed.success && consistent(parsed.data) ? parsed.data : null;
+}
+
+export function loadThresholdsFromData(data: unknown): { cells: ThresholdCells; configHash: string | null } {
+  const parsed = parseThresholds(data);
+  if (!parsed) {
     problem('refusal-thresholds-invalid', 'Invalid refusal-thresholds.json, refusal thresholds disabled', {});
     return { cells: new Map(), configHash: null };
   }
   return {
-    cells: cellsFromFile(parsed.data),
-    configHash: parsed.data.config_hash ?? null,
+    cells: cellsFromFile(parsed),
+    configHash: parsed.config_hash ?? null,
   };
 }
 
