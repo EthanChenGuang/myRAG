@@ -444,11 +444,11 @@ describe('Embedding profiles panel: declared languages and BGE-M3 serving', () =
     expect(zhSelect.querySelectorAll('option').map((o) => o.textContent)).toEqual(['托管 API', '侧车服务（本地）']);
     expect(zh.doc.getElementById('rag-bge-m3-serving-help')!.textContent).toMatch(/不会回退到托管 API/);
     const label = zh.doc.querySelector('label[for="RAG_BGE_M3_SERVING"]')!;
-    expect(label.textContent).toBe('BGE-M3 服务方式');
+    expect(label.textContent.trim()).toBe('BGE-M3 服务方式');
     expect(label.querySelector('[translate="no"]')?.textContent).toBe('BGE-M3');
     const it_ = loadProfilesPage({ locale: 'it-IT' });
     await it_.init();
-    expect(it_.doc.querySelector('label[for="RAG_BGE_M3_SERVING"]')!.textContent).toBe('Servizio di BGE-M3');
+    expect(it_.doc.querySelector('label[for="RAG_BGE_M3_SERVING"]')!.textContent.trim()).toBe('Servizio di BGE-M3');
   });
 
   it('keeps the serving control usable when the list answers 401', async () => {
