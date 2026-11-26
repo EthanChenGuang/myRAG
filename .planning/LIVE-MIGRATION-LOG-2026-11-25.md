@@ -831,3 +831,34 @@ The combined live SQL (the twelve files verbatim in the order above, then the 04
   - dd041937: `tests/rag-db/ingestion-ledger-claim.test.mts` stored stage `'chunking'` (a status name); with 0865 an unknown stage resumes at preflight. The test stores the real stage `'chunk'` and still checks resume at the stored stage.
   - 4eccde6a: `tests/rag-db/fixture-phase42-corpus.test.mts` and `eval/tests/test_corpus.py` (04.2-28) pinned the corpus hash and dump digests before 04.1.1-10 added the synthetic-terms fixtures; updated to the merged corpus (hash `4d9bd021...`, the one both baselines record).
 - Merge of `origin/main` d21a1a57 (PR #111) is tree-identical to train 26.
+
+## Train 28: 1004 and 1005 (to apply after train 28 reaches `origin/main`)
+
+Branch `ci/merge-train-28`, built on `origin/main` aeb68f6e (train 27, PR #112). Nothing below has been applied live yet. Production is multi-tenant.
+
+### Merged plans
+| Branch | Plan | Migration |
+|---|---|---|
+| `exec/06.1-15` | 06.1-15 `rag:embedding ft-*` commands | none |
+| `exec/06.1-11` | 06.1-11 vector file reader (sha256 and shape checks), encoders | none |
+| `exec/06.1-17` | 06.1-17 fine-tune slot pricing in the re-embed dry run, two-tenant canary, `RAG_FINETUNE=off` parity | none |
+| `exec/06-41` | 06-41 synchronous eval cache store, semantic-cache calibration (`python -m rag_eval.calibrate cache`) | none |
+| `exec/06-42` | 06-42 two-tenant query-layer and semantic-cache cases | none |
+| `exec/06-43` | 06-43 `python -m rag_eval.compare frameworks` | none |
+| `exec/05.1.1-24` | 05.1.1-24 mined feedback failures into the terminology miss log | none |
+| `exec/04.2-27` | 04.2-27 question identifiers filter every leg before ranking | none |
+| `exec/03.3-10` | 03.3-10 ingest preparation review flag | 1004_flag_document_review |
+| `exec/03.3-11` | 03.3-11 attribute value writers | 1005_attribute_writers |
+| `exec/03.3-13` (contains 03.3-11) | 03.3-13 `rag:attributes` import command | (1005) |
+
+No branch was ejected.
+
+### Migrations to apply live, in order
+| # | File | Notes |
+|---|---|---|
+| 1 | `1004_flag_document_review.sql` | Needs `rag_assert_tenant_key` (live) and `documents.needs_review`/`needs_review_reason` (0351, live). One SECURITY INVOKER function `rag_flag_document_review`, empty search_path, service_role only (own REVOKE/GRANT). |
+| 2 | `1005_attribute_writers.sql` | Needs 1001 (attribute columns, `rag_staged_attributes`, `rag_guard_phase33_columns`), 1003 (`rag_attribute_definitions`), 0603 (`rag_cache_invalidate`), 0701 (`vector_sync_outbox`, read only) and 0351. Eight SECURITY INVOKER functions, service_role only (own REVOKE/GRANT), and two triggers: `rag_chunks_x_document_attributes` (BEFORE INSERT on `document_chunks`, sorts after `rag_chunks_legacy_defaults`) and `rag_documents_x_attribute_insert_guard` (on `documents`). 1004 and 1005 are independent of each other. |
+
+No 0410 change in this train (1004 and 1005 carry their own grants), so there is no 0410 delta. Numbers 1004 and 1005 are unique across every `origin` branch; both sort after 1003, which they follow. Neither has a `.single-tenant`/`.multi-tenant` variant and neither is folded into the setup files. Both are idempotent (CREATE OR REPLACE, DROP TRIGGER IF EXISTS before CREATE TRIGGER).
+
+The combined live SQL (the two files verbatim in the order above, each after a `-- ==== <file>` line) was written to the orchestrator scratchpad as `train28-live.sql`.
