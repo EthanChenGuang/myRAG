@@ -233,3 +233,7 @@ export async function drainSlice(options: DrainSliceOptions): Promise<VectorSync
     more_pending: morePending,
   };
 }
+
+export async function drainUntilEmpty(options: DrainSliceOptions): Promise<VectorSyncSliceReport[]> {
+  return [await drainSlice(options)];
+}
