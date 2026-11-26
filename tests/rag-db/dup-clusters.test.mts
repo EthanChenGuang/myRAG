@@ -3,6 +3,7 @@ import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { PGlite } from '@electric-sql/pglite';
+import { fixtureProcessEnv, startFakeEdge } from '../../eval/harness/fake-edge.mts';
 import { embedText } from '../../eval/harness/fixture-embedder.mts';
 import { createEmptyFixtureDatabase, type DeploymentMode } from '../../eval/harness/pglite-supabase.mts';
 import { TWO_TENANT_IDS, createTwoTenantDatabase } from '../../eval/harness/two-tenant.mts';
@@ -168,6 +169,18 @@ function cosine(a: number[], b: number[]): number {
 }
 
 const MODES: DeploymentMode[] = ['multi-tenant', 'single-tenant'];
+
+// The lifecycle cases ingest through the app, which reads its environment at import: the fake edge is up before any app import.
+const lifecycleFixture = await createTwoTenantDatabase();
+const lifecycleEdge = await startFakeEdge({ db: lifecycleFixture.db });
+Object.assign(process.env, fixtureProcessEnv(lifecycleEdge.url));
+process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = 'multi-tenant';
+process.env.MYRAG_DEPLOYMENT_MODE = 'multi-tenant';
+
+after(async () => {
+  await lifecycleEdge.close();
+  await lifecycleFixture.db.close();
+});
 
 for (const mode of MODES) {
   describe(`duplicate clusters (${mode}): SimHash, candidates, assignment (D-18, D-19, D-49, D-56)`, () => {
