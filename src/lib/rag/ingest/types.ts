@@ -136,6 +136,18 @@ export interface IngestState {
   parserVersion?: string;
   /** The hidden-text check of this version (D-33, D-34), kept so a retried scan reuses the report and removes each span once. */
   hiddenText?: HiddenTextState;
+  /** Single-tenant runs only: the server-set uploader, so that uploader can resume the version without being an administrator. */
+  uploaderId?: string;
+  /** An embed stage that yielded between batches: where a resumed run continues, valid only for the same targets and chunk total. */
+  embedProgress?: EmbedProgress;
+}
+
+export interface EmbedProgress {
+  batchesDone: number;
+  written: number;
+  total: number;
+  targets: string[];
+  gaps: Array<{ profileId: string; chunkIndex: number }>;
 }
 
 export interface HiddenTextState {

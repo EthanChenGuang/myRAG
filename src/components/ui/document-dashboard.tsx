@@ -46,6 +46,13 @@ import {
   pollIngestUntilTerminal,
   type DocTypePickerValue,
 } from "@/components/ui/doc-type-picker"
+import {
+  abortableSleep,
+  ingestResumeFetchers,
+  needsResume,
+  resumeIngestUntilSettled,
+  type ResumeProgress,
+} from "@/components/ui/ingest-resume"
 
 export interface ProcessedDocument {
   id: string
@@ -286,6 +293,9 @@ export function DocumentDashboard({
   const processingTimeoutRef = React.useRef<NodeJS.Timeout | null>(null)
   const refreshIntervalRef = React.useRef<NodeJS.Timeout | null>(null)
   const skeletonTimeoutRef = React.useRef<NodeJS.Timeout | null>(null)
+  const uploadAbortRef = React.useRef<AbortController | null>(null)
+  const [resumeProgress, setResumeProgress] = React.useState<Record<string, ResumeProgress>>({})
+  React.useEffect(() => () => uploadAbortRef.current?.abort(), [])
   const { theme } = useTheme();
   const isDarkMode = theme === 'dark';
   const [isDeleteInProgress, setIsDeleteInProgress] = React.useState(false);
@@ -835,7 +845,30 @@ export function DocumentDashboard({
           continue;
         }
 
-        if (outcome.kind === 'poll' && resolvedId) {
+        if (resolvedId && needsResume(response.status, result)) {
+          // The upload ran out of its request budget: continue it with resume calls, each with a fresh budget
+          const controller = uploadAbortRef.current ?? new AbortController();
+          uploadAbortRef.current = controller;
+          const resumed = await resumeIngestUntilSettled(resolvedId, {
+            ...ingestResumeFetchers(workspaceQuery),
+            sleep: abortableSleep,
+            signal: controller.signal,
+            onProgress: (progress) => setResumeProgress(prev => ({ ...prev, [doc.id]: progress })),
+          });
+          setResumeProgress(prev => {
+            const { [doc.id]: _done, ...rest } = prev;
+            return rest;
+          });
+          if (resumed.kind === 'cancelled') return;
+          console.log('[DocumentDashboard] Resume finished', { kind: resumed.kind, attempts: resumed.attempts });
+          if (resumed.kind === 'settled') {
+            ingestStatus = resumed.status;
+          } else if (resumed.kind === 'failed') {
+            throw new Error('Document processing failed');
+          } else {
+            throw new Error('Document processing could not finish. Upload the file again, or ask an administrator to check it.');
+          }
+        } else if (outcome.kind === 'poll' && resolvedId) {
           const polled = await pollIngestUntilTerminal(resolvedId, {
             fetchStatus: async (documentId) => {
               const statusUrl = `/api/rag/ingest/${documentId}${workspaceQuery}`;
@@ -1655,7 +1688,9 @@ export function DocumentDashboard({
                                           {doc.status === "ready"
                                             ? t('readyStatus')
                                             : doc.status === "processing"
-                                              ? t('processingStatus')
+                                              ? resumeProgress[doc.id]
+                                                ? `${t('processingStatus')} · ${resumeProgress[doc.id].attempt}/${resumeProgress[doc.id].maxAttempts}`
+                                                : t('processingStatus')
                                               : doc.status === "failed"
                                                 ? t('failedStatus')
                                                 : t('partialStatus')}

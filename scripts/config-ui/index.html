@@ -14381,6 +14381,7 @@
 
                     const captureOrgId = this.workspaces.isMultiTenant ? this.workspaces.currentSelection : null;
 
+                    this.lastUploadPayload = null;
                     if (response.status === 202) {
                         let payload = {};
                         try {
@@ -14388,6 +14389,7 @@
                         } catch (_) {
                             payload = {};
                         }
+                        this.lastUploadPayload = payload;
                         const jobId = payload && payload.jobId;
                         if (jobId) {
                             const lang = (navigator.language || 'en').slice(0, 2);
@@ -14420,8 +14422,24 @@
                         }
                     }
 
+                    // An inline upload that ran out of its request budget answers 202 processing without a job: continue it with resume calls.
+                    let unfinished = null;
+                    if (response.status === 202) {
+                        const documentId = this.lastUploadPayload && (this.lastUploadPayload.documentId || this.lastUploadPayload.id);
+                        if (this.lastUploadPayload && this.lastUploadPayload.status === 'processing' && typeof documentId === 'string' && documentId) {
+                            unfinished = await this.resumeUnfinishedUpload(fileItem, documentId, captureOrgId);
+                            if (unfinished.kind !== 'settled') {
+                                throw new Error(unfinished.kind === 'failed'
+                                    ? `Document processing failed (${unfinished.reason})`
+                                    : `Document processing could not finish (${unfinished.reason})`);
+                            }
+                        }
+                    }
+
                     if (response.ok) {
-                        const result = await response.json();
+                        const result = response.status === 202
+                            ? { ...(this.lastUploadPayload || {}), ...(unfinished ? { status: unfinished.status } : {}) }
+                            : await response.json();
                         fileItem.status = 'completed';
                         fileItem.progress = 100;
                         this.results.push({
@@ -14610,6 +14628,56 @@
             monitorUiLocale() {
                 const lang = (navigator.language || 'en').slice(0, 2);
                 return lang === 'zh' || lang === 'it' ? lang : 'en';
+            }
+
+            async resumeUnfinishedUpload(fileItem, documentId, organizationId) {
+                const maxAttempts = 20;
+                const maxStalled = 3;
+                const query = organizationId ? `?organizationId=${encodeURIComponent(organizationId)}` : '';
+                const base = `/api/rag/ingest/${encodeURIComponent(documentId)}`;
+                const settled = ['ready', 'quarantined', 'pending_review'];
+                let lastKey = null;
+                let stalled = 0;
+                for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+                    let body = null;
+                    let httpStatus = 0;
+                    try {
+                        const res = await fetch(`${base}/resume${query}`, { method: 'POST' });
+                        httpStatus = res.status;
+                        body = res.ok ? await res.json().catch(() => null) : null;
+                    } catch (_) {
+                        body = null;
+                    }
+                    if ([401, 403, 404].includes(httpStatus)) return { kind: 'refused', reason: `http_${httpStatus}` };
+                    const status = body && typeof body.status === 'string' ? body.status : null;
+                    if (status && settled.includes(status)) return { kind: 'settled', status };
+                    if (status === 'failed') return { kind: 'failed', reason: typeof body.reason === 'string' ? body.reason : 'failed' };
+                    if (body && body.reason === 'resume_state_missing') return { kind: 'stalled', reason: body.reason };
+                    let stage = '';
+                    let parsePending = false;
+                    if (status) {
+                        try {
+                            const statusRes = await fetch(`${base}${query}`);
+                            const statusBody = statusRes.ok ? await statusRes.json() : null;
+                            stage = statusBody && typeof statusBody.lastCompleted === 'string' ? statusBody.lastCompleted : '';
+                            parsePending = Boolean(statusBody && Array.isArray(statusBody.warnings) && statusBody.warnings.includes('parse_pending'));
+                        } catch (_) {
+                            stage = '';
+                        }
+                    }
+                    const key = status ? `${stage}|${Number.isInteger(body.chunkCount) ? body.chunkCount : 0}` : null;
+                    const progressed = key !== null && key !== lastKey;
+                    if (key !== null) lastKey = key;
+                    stalled = progressed || parsePending ? 0 : stalled + 1;
+                    fileItem.displayStatus = `Processing… step ${attempt}/${maxAttempts}${stage ? ` (${stage})` : ''}`;
+                    this.logActivity(`⏳ ${fileItem.name}: ${fileItem.displayStatus}`);
+                    this.updateCurrentProcessing();
+                    if (stalled >= maxStalled) return { kind: 'stalled', reason: (body && body.reason) || 'no_progress' };
+                    if (attempt < maxAttempts) {
+                        await new Promise((resolve) => setTimeout(resolve, Math.min(1000 * 2 ** stalled, 15000)));
+                    }
+                }
+                return { kind: 'exhausted', reason: 'max_attempts' };
             }
 
             beginQueuedUploadMonitor(resultEntry, locale) {

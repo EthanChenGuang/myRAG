@@ -12,6 +12,7 @@ import { createIngestTrace, finishIngestTrace } from './trace';
 import {
   DEFAULT_INGEST_DEADLINE_MS,
   INGEST_SOURCES,
+  type EmbedProgress,
   emptyIngestState,
   type DocTypeOrigin,
   type HiddenTextState,
@@ -38,6 +39,11 @@ export interface ResumeIngestOptions {
   signal?: AbortSignal;
   /** Request budget for the resumed run. Defaults to DEFAULT_INGEST_DEADLINE_MS. */
   deadlineMs?: number;
+  /**
+   * Single-tenant non-administrator callers: the session user, who must be the uploader the version recorded. Any other
+   * version (another uploader, or none recorded) reads exactly like an unknown id and nothing runs.
+   */
+  requireUploader?: string;
 }
 
 const LOOKUP_TIMEOUT_MS = 10_000;
@@ -225,6 +231,22 @@ function hiddenTextOf(value: unknown): HiddenTextState | null {
   return { fileSha256: slice.fileSha256, report, removedSpans, unlocated, sanitized: slice.sanitized === true };
 }
 
+const isCount = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 0;
+
+function embedProgressOf(value: unknown): EmbedProgress | null {
+  const slice = objectOf<Record<string, unknown>>(value);
+  if (!slice || !isCount(slice.batchesDone) || !isCount(slice.written) || !isCount(slice.total)) return null;
+  if (!Array.isArray(slice.targets) || !slice.targets.every((id) => typeof id === 'string')) return null;
+  if (!Array.isArray(slice.gaps)) return null;
+  const gaps: EmbedProgress['gaps'] = [];
+  for (const gap of slice.gaps) {
+    const entry = objectOf<Record<string, unknown>>(gap);
+    if (!entry || typeof entry.profileId !== 'string' || !isCount(entry.chunkIndex)) return null;
+    gaps.push({ profileId: entry.profileId, chunkIndex: entry.chunkIndex });
+  }
+  return { batchesDone: slice.batchesDone, written: slice.written, total: slice.total, targets: slice.targets as string[], gaps };
+}
+
 /** A persisted state record (a document row's processing_state or a ledger row's stage_state), with every slice checked for shape; anything unreadable falls back to its empty value. */
 export function ingestStateFromRecord(raw: Record<string, unknown>): IngestState {
   const state = emptyIngestState();
@@ -250,6 +272,9 @@ export function ingestStateFromRecord(raw: Record<string, unknown>): IngestState
   }
   const hiddenText = hiddenTextOf(raw.hiddenText);
   if (hiddenText) state.hiddenText = hiddenText;
+  if (typeof raw.uploaderId === 'string' && UUID.test(raw.uploaderId)) state.uploaderId = raw.uploaderId.toLowerCase();
+  const embedProgress = embedProgressOf(raw.embedProgress);
+  if (embedProgress) state.embedProgress = embedProgress;
   const hold = objectOf<{ batchId?: unknown }>(raw.publishHold);
   if (hold && typeof hold.batchId === 'string' && hold.batchId !== '') state.publishHold = { batchId: hold.batchId };
   return state;
@@ -367,6 +392,9 @@ export async function resumeIngest(scope: TenantScope, documentId: string, optio
   if (!row) return failed('document_not_found');
 
   const state = stateOf(row);
+  if (options.requireUploader !== undefined && (state.uploaderId === undefined || state.uploaderId !== options.requireUploader.toLowerCase())) {
+    return failed('document_not_found');
+  }
   const settled = settledResult(row, state, documentId);
   if (settled) return settled;
 

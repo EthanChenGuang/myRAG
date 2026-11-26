@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod/v3';
 import { requireSessionUser } from '@/lib/session-auth';
+import { checkSingleTenantKbWrite } from '@/lib/kb-write-access';
 import {
   getIngestStatusReport,
-  isAdminUser,
   resumeIngest,
   resolveTenantScope,
   type IngestResult,
@@ -23,7 +23,9 @@ const CODE_RE = /^[a-z0-9][a-z0-9_:.-]{0,63}$/;
 const ParamsSchema = z.object({ id: z.string().regex(UUID_RE, 'Expected a document id (UUID)') });
 const QuerySchema = z.object({ organizationId: z.string().max(64).nullish() });
 
-type Access = { ok: true; scope: TenantScope; documentId: string; userId: string } | { ok: false; response: Response };
+type Access =
+  | { ok: true; scope: TenantScope; documentId: string; userId: string; requireUploader?: string }
+  | { ok: false; response: Response };
 
 function fail(status: number, error: string, details?: Array<{ path: string; message: string }>): Response {
   return NextResponse.json(details ? { success: false, error, details } : { error }, { status });
@@ -91,20 +93,23 @@ async function authorize(
   }
   if (!tenant.scope) return { ok: false, response: fail(401, 'Unauthorized') };
 
-  // Documents of the single tenant carry no user id, so a non-admin cannot be shown to own one: resuming is administrator-only there.
+  // Documents of the single tenant carry no user id. An administrator may resume any of them; anyone else needs the knowledge-base
+  // write right (read_only_doc_dashboard off) and may resume only a version that recorded them as its uploader.
+  let requireUploader: string | undefined;
   if (write && tenant.scope.kind === 'single') {
     const admin = getSupabaseAdmin();
     if (!admin) return { ok: false, response: fail(503, 'Authorization unavailable') };
-    try {
-      if (!(await isAdminUser(admin as unknown as RagAdminDb, userId.toLowerCase(), request.signal))) {
-        return { ok: false, response: fail(403, 'Forbidden') };
-      }
-    } catch {
-      console.error(`${tag} Admin lookup failed`);
-      return { ok: false, response: fail(503, 'Authorization unavailable') };
-    }
+    const access = await checkSingleTenantKbWrite({ admin: admin as unknown as RagAdminDb, userId: userId.toLowerCase(), signal: request.signal });
+    if (!access.ok) return { ok: false, response: fail(access.status, access.status === 403 ? 'Forbidden' : 'Authorization unavailable') };
+    if (!access.isAdmin) requireUploader = userId.toLowerCase();
   }
-  return { ok: true, scope: tenant.scope, documentId: parsedId.data.id.toLowerCase(), userId };
+  return {
+    ok: true,
+    scope: tenant.scope,
+    documentId: parsedId.data.id.toLowerCase(),
+    userId,
+    ...(requireUploader ? { requireUploader } : {}),
+  };
 }
 
 function codeOrNull(value: string | undefined | null): string | null {
@@ -159,7 +164,10 @@ export async function handleIngestResume(request: Request, params: Promise<{ id:
   try {
     const access = await authorize(request, params, tag, deps, true);
     if (!access.ok) return access.response;
-    const result = await resumeIngest(access.scope, access.documentId, { signal: request.signal });
+    const result = await resumeIngest(access.scope, access.documentId, {
+      signal: request.signal,
+      ...(access.requireUploader ? { requireUploader: access.requireUploader } : {}),
+    });
     if (result.status === 'failed' && result.reason === 'document_not_found') return notFound();
     if (result.status === 'failed' && (result.reason === 'db_unavailable' || result.reason === 'resume_lookup_failed')) {
       return fail(503, 'Resume unavailable');

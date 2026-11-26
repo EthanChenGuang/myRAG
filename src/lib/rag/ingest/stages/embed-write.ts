@@ -10,6 +10,7 @@ import {
   IngestStageError,
   requireDocument,
   requireIdentity,
+  type EmbedProgress,
   type StageContext,
   type StageOutcome,
   type StageSpec,
@@ -246,6 +247,13 @@ async function dualWriteProfiles(ctx: StageContext, documentId: string, targets:
   }
 }
 
+function usableEmbedProgress(progress: EmbedProgress | undefined, targetIds: string[], total: number, batchCount: number): EmbedProgress | null {
+  if (!progress) return null;
+  if (progress.total !== total || progress.batchesDone <= 0 || progress.batchesDone >= batchCount) return null;
+  if (progress.targets.length !== targetIds.length || progress.targets.some((id, index) => id !== targetIds[index])) return null;
+  return progress;
+}
+
 /**
  * Embeds each batch once per target (active, backfilling, previous active, and the binding profiles of the document's doc type and tenant)
  * from the same embedding text and writes the vectors in one call. A failing active target fails the run (embed_failed, or embedding_profile_mismatch for a wrong model or dimensions); a failing other target
@@ -269,12 +277,23 @@ async function runEmbed(ctx: StageContext): Promise<StageOutcome> {
   const vectorBytes = targets.reduce((sum, target) => sum + target.profile.dims * BYTES_PER_VECTOR_DIM, 0);
   const batches = batchByBytes(writes, vectorBytes);
   const failed = new Map<string, TargetFailure>();
-  const gaps: Array<{ profileId: string; chunkIndex: number }> = [];
+  const targetIds = targets.map((target) => target.profile.id);
+  // Chunk ids follow the document id and chunk index, so a resumed run that skips the batches an earlier call wrote rewrites nothing.
+  const progress = usableEmbedProgress(ctx.state.embedProgress, targetIds, writes.length, batches.length);
+  const gaps: Array<{ profileId: string; chunkIndex: number }> = progress ? progress.gaps.slice() : [];
   const templateHeader = templateHeaderFor(ctx.identity?.profile.embedding_text_template, ctx.work.templateRow);
-  let written = 0;
+  let written = progress ? progress.written : 0;
+  const firstPosition = progress ? progress.batchesDone : 0;
 
   for (const [position, batch] of batches.entries()) {
+    if (position < firstPosition) continue;
     ctx.signal.throwIfAborted();
+    // At least one batch per call, so every call makes progress; then yield while there is no room for another batch.
+    if (position > firstPosition && ctx.deadline - ctx.deps.now() < EMBED_MIN_MS) {
+      ctx.state.embedProgress = { batchesDone: position, written, total: writes.length, targets: targetIds, gaps: gaps.slice() };
+      ctx.work.chunksWritten = written;
+      return { kind: 'yield', reason: 'deadline' };
+    }
     const texts = batch.map((write) =>
       buildEmbeddingText({
         section_path: write.section_path,
@@ -336,8 +355,9 @@ async function runEmbed(ctx: StageContext): Promise<StageOutcome> {
   if (dualWrite) await dualWriteProfiles(ctx, document.id, targets, failed, templateHeader);
 
   ctx.work.chunksWritten = written;
-  ctx.state.embeddingTargets = targets.map((target) => target.profile.id);
+  ctx.state.embeddingTargets = targetIds;
   ctx.state.embeddingGaps = gaps;
+  delete ctx.state.embedProgress;
   const note: { fallbackReason?: string } = {};
   for (const profileId of failed.keys()) {
     const warning = `embedding_gap:${profileId}`;
