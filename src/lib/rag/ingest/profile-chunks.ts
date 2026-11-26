@@ -1,6 +1,7 @@
 import { blockSplitterForIngest } from '@/lib/rag/lang/sentences';
 import { enrichChunkWithURLs } from '@/lib/url-extractor';
 import { LEXICAL_VERSION, chunkLexicalText } from '../lexical/chunk-text';
+import type { IngestLexical } from './lexical-options';
 import { withEffectiveHeader, type ChunkerConfig } from './chunkers';
 import { chunkParentChild } from './chunkers/parent-child';
 import { contentHash } from './hash';
@@ -27,6 +28,8 @@ export interface ProfileDocument {
   languageAwareIngest?: 'off' | 'on';
   /** RAG_TABLE_HEADER_REPEAT (D-19, D-20); `profile` or absent reads the processing profile's repeat_table_header. */
   tableHeaderRepeat?: 'profile' | 'always';
+  /** The document's lexical options and stamps (plan 04.2-19); absent: default options and LEXICAL_VERSION. */
+  lexical?: IngestLexical;
 }
 
 export interface BuiltProfileChunks {
