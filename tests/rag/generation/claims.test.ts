@@ -17,7 +17,7 @@ import {
   type ClaimStepConfig,
   type ClaimStepDeps,
 } from '@/lib/rag/generation/claims';
-import type { JudgeClaimsInput, JudgeClaimsResult } from '@/lib/rag/generation/judge';
+import { loadJudgeThresholdsFromData, type JudgeClaimsInput, type JudgeClaimsResult } from '@/lib/rag/generation/judge';
 import { buildSentenceRecords } from '@/lib/rag/generation/sentences-record';
 import type { LangfuseScoreInput } from '@/lib/rag/trace/scores';
 import type { LangfuseConfig } from '@/lib/rag/trace/config';
@@ -476,6 +476,33 @@ describe('createClaimStep with the judge (D-25, D-27, D-28)', () => {
     const span = traces[0]!.stages.find((stage) => stage.name === 'groundedness_judge');
     expect(span?.attributes).toMatchObject({ input_tokens: 300, output_tokens: 40, latency_ms: 25 });
     expect(span?.attributes).not.toHaveProperty('estimated_cost_usd');
+  });
+
+  it('labels the answer from a calibrated judge cell and queues a possibly_unreliable label as groundedness_flagged', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const version = 'abcdef0123456789';
+    const { cells } = loadJudgeThresholdsFromData({
+      schema_version: 1,
+      cells: [
+        { judge_model: JUDGE, judge_version: version, language: 'it', max_unsupported_share: 0.2, precision: 0.9, recall: 0.8, run_ids: ['run-1'], config_hash: 'h', source: 'calibrated' },
+      ],
+    });
+    const h = harness(
+      {
+        judge: vi.fn(async (input: JudgeClaimsInput): Promise<JudgeClaimsResult> => ({
+          status: 'judged',
+          judgeModel: JUDGE,
+          judgeVersion: version,
+          verdicts: input.claims.map((claim, i) => ({ index: claim.index, verdict: i === 0 ? 'supported' : 'unsupported', evidenceRef: null })),
+          usage: { inputTokens: 1, outputTokens: 1, latencyMs: 5, costUsd: null },
+        })),
+        judgeCells: () => cells,
+      },
+      { llmJudge: true, judgeModel: JUDGE },
+    );
+    await h.step(h.context(finishInput({ answerText: IT_ANSWER }, 'it')));
+    expect(h.groundednessWrites[0]).toMatchObject({ status: 'scored', label: 'possibly_unreliable', scorer: 'llm_judge', score: 0.5, threshold: 0.8 });
+    expect(h.reasons).toEqual(['groundedness_flagged', 'claim_unsupported']);
   });
 
   it('marks every claim not_checked with the judge reason and keeps the answer label when the judge does not run', async () => {

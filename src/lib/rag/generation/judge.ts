@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto';
 import type { LanguageModel } from 'ai';
 import rawFamilies from '../../../../config/rag/model-families.json';
-import { ClaimJudgementSchema, type ClaimCheckRequest } from '@/lib/rag-eval/contracts.generated';
+import rawJudgeThresholds from '../../../../eval/config/groundedness-judge-thresholds.json';
+import { ClaimJudgementSchema, GroundednessJudgeThresholdsSchema, type ClaimCheckRequest } from '@/lib/rag-eval/contracts.generated';
 import { wrapDocuments, type WrapDoc } from '../context/wrap';
+import type { AnswerGroundedness } from './groundedness';
 
 export type ClaimPremise = ClaimCheckRequest['premises'][number];
 export type ClaimInput = ClaimCheckRequest['claims'][number];
@@ -241,22 +243,93 @@ export async function judgeClaims(input: JudgeClaimsInput): Promise<JudgeClaimsR
   return { status: 'judged', judgeModel, judgeVersion: version, verdicts, usage };
 }
 
-export type JudgeThresholdCells = ReadonlyMap<string, never>;
-export function loadJudgeThresholdsFromData(_data: unknown): { cells: JudgeThresholdCells } {
-  return { cells: new Map() };
+export interface JudgeThresholdCell {
+  maxUnsupportedShare: number;
+  source: 'calibrated' | 'fixture';
 }
+export type JudgeThresholdCells = ReadonlyMap<string, JudgeThresholdCell>;
+
+function judgeCellKey(judgeModel: string, version: string, language: string): string {
+  return `${judgeModel.trim()}\u0000${version}\u0000${language}`;
+}
+
+let warnedInvalidJudgeThresholds = false;
+
+export function loadJudgeThresholdsFromData(data: unknown): { cells: JudgeThresholdCells } {
+  const parsed = GroundednessJudgeThresholdsSchema.safeParse(data);
+  if (!parsed.success) {
+    if (!warnedInvalidJudgeThresholds) {
+      warnedInvalidJudgeThresholds = true;
+      console.warn('[Groundedness] Invalid groundedness-judge-thresholds.json, no judge cell used', { issues: parsed.error.issues.length });
+    }
+    return { cells: new Map() };
+  }
+  const cells = new Map<string, JudgeThresholdCell>();
+  for (const cell of parsed.data.cells ?? []) {
+    cells.set(judgeCellKey(cell.judge_model, cell.judge_version, cell.language), {
+      maxUnsupportedShare: cell.max_unsupported_share,
+      source: cell.source,
+    });
+  }
+  return { cells };
+}
+
+let cachedJudgeThresholds: { cells: JudgeThresholdCells } | null = null;
+
+/** The committed judge cells, validated once; only `python -m rag_eval.calibrate groundedness-judge` writes the file (D-27). */
 export function loadJudgeThresholds(): { cells: JudgeThresholdCells } {
-  return { cells: new Map() };
+  cachedJudgeThresholds ??= loadJudgeThresholdsFromData(rawJudgeThresholds);
+  return cachedJudgeThresholds;
 }
-export function judgeAnswerLabel(_input: {
+
+export interface JudgeAnswerLabelInput {
   judgements: readonly JudgeVerdict[];
   judgeModel: string;
   judgeVersion: string;
   language: string;
   latencyMs: number;
   cells?: JudgeThresholdCells;
+  /** Fixture-fitted cells apply only in eval runs (AGENTS.md). */
   allowFixtureCells?: boolean;
   now?: () => Date;
-}): import('./groundedness').AnswerGroundedness {
-  return { status: 'pending' } as never;
+}
+
+/**
+ * D-27: the answer-level label of a judge language. Score 1 - unsupported share (not_enough_info counts as unsupported) against
+ * 1 - max_unsupported_share of the (judge_model, judge_version, language) cell; without a usable cell, not_checked judge_uncalibrated.
+ */
+export function judgeAnswerLabel(input: JudgeAnswerLabelInput): AnswerGroundedness {
+  const checkedAt = (input.now ?? (() => new Date()))().toISOString();
+  const latencyMs = Math.max(0, Math.round(input.latencyMs));
+  const notCheckedLabel = (reason: string): AnswerGroundedness => ({
+    status: 'not_checked',
+    label: 'not_checked',
+    scorer: 'llm_judge',
+    score: null,
+    threshold: null,
+    thresholdSource: null,
+    reason,
+    truncated: false,
+    latencyMs,
+    checkedAt,
+  });
+  if (input.judgements.length === 0) return notCheckedLabel('invalid_output');
+  const cells = input.cells ?? loadJudgeThresholds().cells;
+  const cell = cells.get(judgeCellKey(input.judgeModel, input.judgeVersion, input.language));
+  if (!cell || (cell.source === 'fixture' && input.allowFixtureCells !== true)) return notCheckedLabel('judge_uncalibrated');
+  const unsupported = input.judgements.filter((judgement) => judgement.verdict !== 'supported').length;
+  const score = 1 - unsupported / input.judgements.length;
+  const threshold = 1 - cell.maxUnsupportedShare;
+  return {
+    status: 'scored',
+    label: score >= threshold - 1e-12 ? 'verified' : 'possibly_unreliable',
+    scorer: 'llm_judge',
+    score,
+    threshold,
+    thresholdSource: 'calibrated',
+    reason: null,
+    truncated: false,
+    latencyMs,
+    checkedAt,
+  };
 }

@@ -24,7 +24,7 @@ import type { AnswerFinishInput, AnswerPendingContext } from './answer-finish';
 import { readAnswerConfig } from './answer-config';
 import { readGenerationConfig } from './config';
 import { allowVectaraFor, answerGroundednessLanguage, labelGroundedness, type AnswerGroundedness } from './groundedness';
-import { judgeClaims, type ClaimInput, type ClaimPremise, type JudgeClaimsInput, type JudgeClaimsResult, type JudgeUsage } from './judge';
+import { judgeAnswerLabel, judgeClaims, loadJudgeThresholds, type JudgeThresholdCells, type ClaimInput, type ClaimPremise, type JudgeClaimsInput, type JudgeClaimsResult, type JudgeUsage } from './judge';
 import { answerTextHash } from './sentences-record';
 
 export interface ClaimStepConfig {
@@ -60,6 +60,8 @@ export interface ClaimStepDeps {
   exportTrace: (trace: CollectedTrace, options: ExportTraceOptions) => Promise<void>;
   postScores: (scores: readonly LangfuseScoreInput[], options: PostScoresOptions) => Promise<PostScoresResult>;
   now: () => Date;
+  /** D-27: the judge cells; the committed file by default. */
+  judgeCells: () => JudgeThresholdCells;
   updateTimeoutMs: number;
   langfuseTimeoutMs: number;
 }
@@ -324,6 +326,7 @@ const defaultClaimDeps: ClaimStepDeps = {
   exportTrace: async (trace, options) => (await import('../trace/langfuse')).exportTrace(trace, options),
   postScores: postLangfuseScores,
   now: () => new Date(),
+  judgeCells: () => loadJudgeThresholds().cells,
   updateTimeoutMs: UPDATE_TIMEOUT_MS,
   langfuseTimeoutMs: LANGFUSE_TIMEOUT_MS,
 };
@@ -668,13 +671,38 @@ export function createClaimStep(
         ...(judgeRun ? { judge: judgeRun.result.status === 'judged' ? 'judged' : judgeRun.result.reason } : {}),
       });
 
+      let groundedness: AnswerGroundedness | undefined;
+      if (judgeRun?.result.status === 'judged' && !hasHhemRoute(language, allowVectara)) {
+        groundedness = judgeAnswerLabel({
+          judgements: judgeRun.result.verdicts,
+          judgeModel: judgeRun.result.judgeModel,
+          judgeVersion: judgeRun.result.judgeVersion,
+          language,
+          latencyMs: judgeRun.result.usage.latencyMs,
+          cells: deps.judgeCells(),
+          now: deps.now,
+        });
+        try {
+          await withTimeout(deps.updateGroundedness(admin, { id: answerId, groundedness }), deps.updateTimeoutMs, 'groundedness update');
+        } catch (error) {
+          console.warn('[Answer Record] Groundedness update failed:', { answerId, code: errorCode(error) });
+        }
+        if (groundedness.label === 'possibly_unreliable') {
+          try {
+            await withTimeout(deps.appendReviewReason(admin, { id: answerId, reason: 'groundedness_flagged' }), deps.updateTimeoutMs, 'review reason');
+          } catch (error) {
+            console.warn('[Answer Record] Review reason append failed:', { answerId, code: errorCode(error) });
+          }
+        }
+      }
+
       if (summary.unsupported > 0) await flagClaimForReview(input, admin, deps);
       const judgeSpan =
         judgeRun && judgeRun.result.usage
           ? { usage: judgeRun.result.usage, startedAt: judgeRun.startedAt, endedAt: judgeRun.endedAt, judgeModel: judgeRun.result.judgeModel }
           : null;
       await reportClaims(input, summary, language, { startedAt, endedAt }, judgeSpan, deps);
-      return {};
+      return groundedness ? { groundedness } : {};
     } catch (error) {
       console.warn('[Answer Record] Claim step failed:', { answerId, code: errorCode(error) });
       return null;
