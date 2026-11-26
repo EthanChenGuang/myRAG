@@ -917,3 +917,53 @@ describe('review-labelling.js: quote normalisation', () => {
     for (const entry of fixture.cases) expect(mod.reviewLabellingNormalize(entry.input)).toBe(entry.expected);
   });
 });
+
+describe('review-labelling.js: bodies the label route accepts', () => {
+  it('every label the form sends passes the server LabelRequestSchema', async () => {
+    const { LabelRequestSchema } = await import('@/lib/rag/feedback-loop/labels');
+    const mod = require(PANEL_FILE) as {
+      reviewLabellingValidate: (form: unknown, quotes: unknown[], textFor: (q: unknown) => string | null) => { ok: boolean; label: unknown };
+    };
+    const quote = { chunkId: CHUNK_1, documentId: DOC_A, documentName: 'document-a.pdf', section: '2.1', quote: 'signed form', text: PASSAGE_1 };
+    const base = {
+      answerable: true,
+      expected: 'A signed form.',
+      category: 'general',
+      language: 'en',
+      triage: new Set(['training']),
+      terms: [{ observed: 'form B', canonical: 'form', relation: 'translation', language: 'it' }],
+      piiConfirmed: false,
+      paraphrase: '',
+      dup: '',
+      notRelevant: new Set([CHUNK_2]),
+    };
+    const forms = [
+      base,
+      { ...base, triage: new Set(['dictionary', 'golden']), piiConfirmed: true, dup: 'golden-item-007' },
+      { ...base, triage: new Set(['golden']), paraphrase: 'Rewritten question?' },
+      { ...base, answerable: false, category: 'no_answer', expected: '', triage: new Set(['kb_gap', 'not_a_failure']) },
+    ];
+    for (const form of forms) {
+      const result = mod.reviewLabellingValidate(form, form.answerable ? [quote] : [], (q) => (q as { text: string }).text);
+      expect(result.ok).toBe(true);
+      const parsed = LabelRequestSchema.safeParse(JSON.parse(JSON.stringify({ status: 'labelled', label: result.label })));
+      expect(parsed.success, JSON.stringify(parsed.success ? null : parsed.error.errors)).toBe(true);
+    }
+    expect(LabelRequestSchema.safeParse({ status: 'skipped' }).success).toBe(true);
+  });
+});
+
+describe('review-labelling.js: selection capture', () => {
+  it('remembers a selection reported by selectionchange inside one passage', async () => {
+    const { panel, state } = loadWithSelection();
+    await openFirstCase(panel);
+    const passage = panel.section.querySelectorAll('article[data-review-passage]')[1]!;
+    const node = q(passage, '[data-review-passage-text]').childNodes[0];
+    state.sel = { toString: () => 'the archive', anchorNode: node, focusNode: node };
+    panel.doc.dispatch('selectionchange');
+    state.sel = { toString: () => '', anchorNode: null, focusNode: null };
+    panel.doc.dispatch('selectionchange');
+    q(passage, '[data-review-add-quote]').click();
+    expect(q(panel.section, 'textarea[data-review-quote-text]').value).toBe('the archive');
+  });
+});

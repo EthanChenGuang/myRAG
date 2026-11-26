@@ -1035,6 +1035,16 @@ class ReviewLabellingPanel {
   }
 
   mount() {
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('beforeunload', (event) => {
+        if (!this.caseState || !this.caseState.dirty || this.caseState.readOnly) return;
+        event.preventDefault();
+        event.returnValue = '';
+      });
+    }
+    if (this.doc && typeof this.doc.addEventListener === 'function') {
+      this.doc.addEventListener('selectionchange', () => this.captureDocumentSelection());
+    }
     this.root.setAttribute('lang', this.locale);
     if (this.titleEl) this.titleEl.textContent = this.t('panel.title');
     if (this.descriptionEl) this.descriptionEl.textContent = this.t('panel.description');
@@ -1261,7 +1271,7 @@ class ReviewLabellingPanel {
     } else {
       nodes.push(this.queueTable());
       if (this.cursor) {
-        const more = this.el('button', { className: 'btn btn md:btn-sm btn-outline mt-4', text: this.t('action.loadMore'), attrs: { type: 'button', 'data-review-load-more': true } });
+        const more = this.el('button', { className: 'btn md:btn-sm btn-outline mt-4', text: this.t('action.loadMore'), attrs: { type: 'button', 'data-review-load-more': true } });
         more.addEventListener('click', () => {
           more.disabled = true;
           more.replaceChildren(reviewLabellingSpinner(doc, this.t('list.loading')));
@@ -1295,7 +1305,7 @@ class ReviewLabellingPanel {
       });
       open.addEventListener('click', () => this.openCase(row.id));
       const reasons = this.reasonBadges(row);
-      const small = this.el('div', { className: 'md:hidden mt-1 text-xs text-base-content/70 flex flex-wrap gap-x-2 gap-y-1' }, [
+      const small = this.el('div', { className: 'md:hidden mt-1 text-xs font-normal text-base-content/70 flex flex-wrap gap-x-2 gap-y-1' }, [
         this.el('span', { text: row.reasons.length ? row.reasons.map((r) => reviewLabellingReasonText(r, this.locale)).join(', ') : this.t('reason.none') }),
         this.el('span', {}, [reviewLabellingLanguageNode(doc, row.queryLanguage, this.locale)]),
         row.minedAt ? this.el('span', { text: reviewLabellingFormatDate(row.minedAt, this.locale) }) : null,
@@ -1303,7 +1313,7 @@ class ReviewLabellingPanel {
       const first = this.el('th', { className: 'min-w-0 max-w-md align-top', attrs: { scope: 'row' } }, [open, small]);
       if (showWorkspace && row.tenantKey) {
         first.appendChild(
-          this.el('p', { className: 'text-xs text-base-content/70 mt-1 break-all' }, [
+          this.el('p', { className: 'text-xs font-normal text-base-content/70 mt-1 break-all' }, [
             this.el('span', { text: `${this.t('meta.workspace')}: ` }),
             this.el('span', { className: 'font-mono', text: row.tenantKey, attrs: { translate: 'no' } }),
           ]),
@@ -1327,7 +1337,7 @@ class ReviewLabellingPanel {
       this.el('thead', {}, [head]),
       body,
     ]);
-    return this.el('div', { className: 'overflow-x-auto', attrs: { tabindex: '0', role: 'region', 'aria-label': this.t('list.caption') } }, [table]);
+    return this.el('div', { className: 'overflow-x-auto rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2', attrs: { tabindex: '0', role: 'region', 'aria-label': this.t('list.caption') } }, [table]);
   }
 
   reasonBadges(row) {
@@ -1436,18 +1446,13 @@ class ReviewLabellingPanel {
       chunksState: 'loading',
       passagesShown: REVIEW_LABELLING_PAGE,
       search: { state: 'idle', hits: [], shown: REVIEW_LABELLING_PAGE, query: '', error: null },
-      quotes: [],
+      quotes: this.storedQuotes(view),
       form: this.initialForm(view),
       errors: {},
       dirty: false,
       busy: false,
       readOnly: view.status === 'exported',
     };
-  }
-
-  initialForm(view) {
-    const lang = REVIEW_LABELLING_LANGUAGES.includes(view.queryLanguage) ? view.queryLanguage : '';
-    return { language: lang, notRelevant: new Set() };
   }
 
   async loadChunks() {
@@ -1594,7 +1599,7 @@ class ReviewLabellingPanel {
     if (!this.evidenceHost || !this.caseState) return;
     const doc = this.doc;
     const state = this.caseState;
-    const nodes = [this.el('h4', { className: 'text-base font-semibold mb-2', text: this.t('passages.heading') })];
+    const nodes = [this.el('h4', { className: 'text-balance text-base font-semibold mb-2', text: this.t('passages.heading') })];
     if (state.chunksState === 'failed') {
       const reload = this.el('button', { className: 'btn btn-sm', text: this.t('action.reloadPassages'), attrs: { type: 'button', 'data-review-reload-passages': true } });
       reload.addEventListener('click', () => this.loadChunks());
@@ -1667,7 +1672,7 @@ class ReviewLabellingPanel {
     const usable = source.text !== null && source.text !== undefined;
     const atMax = state.quotes.length >= REVIEW_LABELLING_MAX_QUOTES;
     const add = this.el('button', {
-      className: 'btn btn md:btn-sm btn-outline',
+      className: 'btn md:btn-sm btn-outline',
       text: this.t('action.addQuote'),
       attrs: { type: 'button', 'data-review-add-quote': source.key, 'aria-label': this.t('action.addQuoteAria', { source: source.sourceLabel }) },
     });
@@ -1710,6 +1715,25 @@ class ReviewLabellingPanel {
     );
   }
 
+  /** Remembers the last non-empty selection that lies wholly inside one passage or result text region. */
+  captureDocumentSelection() {
+    if (!this.caseState || !this.evidenceHost) return;
+    const selection = typeof window !== 'undefined' && typeof window.getSelection === 'function' ? window.getSelection() : null;
+    if (!selection || !selection.anchorNode) return;
+    const regionOf = (node) => {
+      let current = node;
+      while (current && !(current.getAttribute && current.hasAttribute('data-review-passage-text'))) current = current.parentNode;
+      return current && this.evidenceHost.contains(current) ? current : null;
+    };
+    const region = regionOf(selection.anchorNode);
+    if (!region || regionOf(selection.focusNode) !== region) return;
+    const text = typeof selection.toString === 'function' ? selection.toString() : '';
+    if (!text || !text.trim()) return;
+    let block = region.parentNode;
+    while (block && !(block.getAttribute && block.getAttribute('data-review-source'))) block = block.parentNode;
+    if (block) this.selection = { key: block.getAttribute('data-review-source'), text };
+  }
+
   captureSelection(region, source) {
     const selection = typeof window !== 'undefined' && typeof window.getSelection === 'function' ? window.getSelection() : null;
     if (!selection) return;
@@ -1728,6 +1752,7 @@ class ReviewLabellingPanel {
       className: 'input input-bordered input-sm w-full min-w-0',
       attrs: {
         id: inputId,
+        name: 'review_search',
         type: 'search',
         maxlength: String(REVIEW_LABELLING_SEARCH_MAX),
         placeholder: this.t('search.placeholder'),
@@ -1744,7 +1769,7 @@ class ReviewLabellingPanel {
     input.addEventListener('change', () => {
       search.query = input.value;
     });
-    const button = this.el('button', { className: 'btn btn md:btn-sm btn-outline', attrs: { type: 'submit', 'data-review-search-submit': true } }, [
+    const button = this.el('button', { className: 'btn md:btn-sm btn-outline', attrs: { type: 'submit', 'data-review-search-submit': true } }, [
       search.state === 'running' ? reviewLabellingSpinner(doc, this.t('search.running')) : this.el('span', { text: this.t('action.search') }),
     ]);
     button.disabled = search.state === 'running';
@@ -1759,7 +1784,7 @@ class ReviewLabellingPanel {
       search.query = input.value;
       void this.runSearch();
     });
-    const nodes = [this.el('h4', { className: 'text-base font-semibold mt-6', text: this.t('search.heading') }), form];
+    const nodes = [this.el('h4', { className: 'text-balance text-base font-semibold mt-6', text: this.t('search.heading') }), form];
     const results = this.el('div', { className: 'mt-4', attrs: { 'data-review-search-results': true } });
     if (search.state === 'idle') results.appendChild(this.el('p', { className: 'text-xs text-base-content/70', text: this.t('search.hint') }));
     else if (search.state === 'empty') results.appendChild(this.el('p', { className: 'text-sm', text: this.t('search.empty') }));
@@ -1863,19 +1888,758 @@ function reviewLabellingDetail(body) {
   return '';
 }
 
-ReviewLabellingPanel.prototype.renderLabel = function renderLabel() {
-  if (!this.labelHost || !this.caseState) return;
-  const nodes = [this.el('h4', { className: 'text-base font-semibold mb-2', text: this.t('answerable.heading') })];
-  if (!this.caseState.readOnly) {
-    nodes.push(
-      this.el('div', { className: 'flex flex-wrap gap-2 mt-4' }, [
-        this.el('button', { className: 'btn btn-primary btn-sm', text: this.t('action.save'), attrs: { type: 'button', 'data-review-save': true } }),
-        this.el('button', { className: 'btn btn-outline btn-sm', text: this.t('action.skip'), attrs: { type: 'button', 'data-review-skip': true } }),
-      ]),
-    );
+function reviewLabellingEmptyTerm() {
+  return { observed: '', canonical: '', relation: 'synonym', language: '' };
+}
+
+/** The form state of a case, filled from its stored label when it has one (latest wins on save). */
+function reviewLabellingInitialForm(view) {
+  const label = view.label;
+  const stored = (value) => (typeof value === 'string' ? value : '');
+  const language = label && REVIEW_LABELLING_LANGUAGES.includes(label.language) ? label.language : REVIEW_LABELLING_LANGUAGES.includes(view.queryLanguage) ? view.queryLanguage : '';
+  const terms =
+    label && Array.isArray(label.dictionary_terms)
+      ? label.dictionary_terms
+          .filter(reviewLabellingIsObject)
+          .map((term) => ({
+            observed: stored(term.observed_term),
+            canonical: stored(term.canonical_term),
+            relation: REVIEW_LABELLING_RELATIONS.includes(term.relation) ? term.relation : 'synonym',
+            language: REVIEW_LABELLING_LANGUAGES.includes(term.canonical_language) ? term.canonical_language : '',
+          }))
+      : [];
+  return {
+    answerable: label && typeof label.answerable === 'boolean' ? label.answerable : null,
+    expected: label ? stored(label.expected_answer) : '',
+    category: label && typeof label.category === 'string' ? label.category : 'general',
+    language,
+    triage: new Set(label ? reviewLabellingStrings(label.triage).filter((t) => REVIEW_LABELLING_TRIAGE.includes(t)) : []),
+    terms: terms.length ? terms : [reviewLabellingEmptyTerm()],
+    piiConfirmed: Boolean(label && label.pii_checked === true),
+    paraphrase: label ? stored(label.paraphrased_question) : '',
+    dup: label ? stored(label.confirm_near_duplicate_of) : '',
+    notRelevant: new Set(label ? reviewLabellingStrings(label.not_relevant_chunk_ids) : []),
+  };
+}
+
+/**
+ * Client checks of the ExpertLabel rules (D-18, D-22) and the label body. Returns field errors as label keys, one error per
+ * quote index, and the body; the server checks everything again. Server span errors are shown, not used here.
+ */
+function reviewLabellingValidate(form, quotes, textFor) {
+  const errors = {};
+  const quoteErrors = [];
+  const answerable = form.answerable;
+  if (answerable !== true && answerable !== false) errors.answerable = 'answerable.required';
+  if (answerable === true) {
+    if (!String(form.expected || '').trim()) errors.expected = 'expected.required';
+    if (quotes.length === 0) errors.evidence = 'evidence.required';
+    const seen = new Set();
+    quotes.forEach((quote, index) => {
+      const state = reviewLabellingQuoteState(quote.quote, textFor(quote));
+      if (state === 'tooShort' || state === 'notFound') quoteErrors[index] = state;
+      const key = `${quote.chunkId}\u0000${quote.quote}`;
+      if (!quoteErrors[index] && seen.has(key)) quoteErrors[index] = 'duplicate';
+      seen.add(key);
+    });
   }
-  this.labelHost.replaceChildren(...nodes);
-};
+  if (typeof answerable === 'boolean' && REVIEW_LABELLING_UNANSWERABLE.has(form.category) === answerable) errors.category = 'category.mismatch';
+  if (!REVIEW_LABELLING_CATEGORIES.includes(form.category)) errors.category = 'category.mismatch';
+  if (!REVIEW_LABELLING_LANGUAGES.includes(form.language)) errors.language = 'language.required';
+  if (form.triage.size === 0) errors.triage = 'triage.required';
+  else if (form.triage.has('training') && !(answerable === true && quotes.length > 0)) errors.triage = 'triage.trainingNeedsQuote';
+  const dictionary = form.triage.has('dictionary');
+  if (dictionary) {
+    if (form.terms.length === 0 || form.terms.some((term) => !term.observed.trim() || !term.canonical.trim())) errors.terms = 'dict.required';
+    else if (form.terms.some((term) => term.relation === 'translation' && !REVIEW_LABELLING_LANGUAGES.includes(term.language))) errors.terms = 'dict.languageRequired';
+  }
+  const golden = form.triage.has('golden');
+  const paraphrase = String(form.paraphrase || '').trim();
+  const dup = String(form.dup || '').trim();
+  if (golden) {
+    if (!form.piiConfirmed && !paraphrase) errors.pii = 'pii.required';
+    if (dup && !REVIEW_LABELLING_ITEM_ID_RE.test(dup)) errors.dup = 'dup.invalid';
+  }
+  const ok = Object.keys(errors).length === 0 && quoteErrors.filter(Boolean).length === 0;
+  if (!ok) return { ok, errors, quoteErrors, label: null };
+
+  const quoted = new Set(quotes.map((quote) => quote.chunkId));
+  const label = {
+    answerable,
+    category: form.category,
+    language: form.language,
+    expected_answer: answerable ? form.expected : null,
+    triage: REVIEW_LABELLING_TRIAGE.filter((t) => form.triage.has(t)),
+    pii_checked: golden,
+    paraphrased_question: golden && paraphrase ? paraphrase : null,
+    confirm_near_duplicate_of: golden && dup ? dup : null,
+  };
+  if (answerable) {
+    label.evidence = quotes.map((quote) => ({
+      chunk_id: quote.chunkId,
+      document_id: quote.documentId || '',
+      document_name: quote.documentName || quote.chunkId,
+      section: quote.section || '',
+      quote: quote.quote,
+    }));
+  }
+  const notRelevant = [...form.notRelevant].filter((id) => !quoted.has(id));
+  if (notRelevant.length) label.not_relevant_chunk_ids = notRelevant;
+  if (dictionary) {
+    label.dictionary_terms = form.terms.map((term) => ({
+      observed_term: term.observed.trim(),
+      canonical_term: term.canonical.trim(),
+      relation: term.relation,
+      canonical_language: term.relation === 'translation' ? term.language : null,
+    }));
+  }
+  return { ok, errors, quoteErrors, label };
+}
+
+/** Label key for a span the server refused (UI-SPEC 8.2). */
+function reviewLabellingServerQuoteError(reason) {
+  if (reason === 'quote_not_found') return { key: 'quote.server.quote_not_found' };
+  if (reason === 'chunk_not_in_tenant' || reason === 'chunk_not_servable') return { key: 'quote.server.gone' };
+  return { key: 'quote.server.other', code: String(reason || 'unknown') };
+}
+
+Object.assign(ReviewLabellingPanel.prototype, {
+  initialForm(view) {
+    return reviewLabellingInitialForm(view);
+  },
+
+  storedQuotes(view) {
+    const evidence = view.label && Array.isArray(view.label.evidence) ? view.label.evidence : [];
+    return evidence.filter((span) => reviewLabellingIsObject(span) && typeof span.chunk_id === 'string').slice(0, REVIEW_LABELLING_MAX_QUOTES).map((span) => {
+      const candidate = view.candidates.find((c) => c.chunkId === span.chunk_id);
+      return {
+        key: reviewLabellingNextId('review-quote'),
+        sourceKey: candidate ? `p:${candidate.chunkId}` : null,
+        sourceLabel: candidate ? this.t('passage.title', { rank: candidate.rank, document: '' }).replace(/[:：]\s*$/, '') : '—',
+        chunkId: span.chunk_id,
+        documentId: reviewLabellingString(span.document_id),
+        documentName: reviewLabellingString(span.document_name) || '',
+        section: reviewLabellingString(span.section) || '',
+        text: null,
+        quote: typeof span.quote === 'string' ? span.quote : '',
+        serverError: null,
+      };
+    });
+  },
+
+  quoteText(quote) {
+    if (typeof quote.text === 'string') return quote.text;
+    const state = this.caseState;
+    const chunk = state && state.chunks ? state.chunks.get(quote.chunkId) : null;
+    return chunk && chunk.available ? chunk.text : null;
+  },
+
+  markDirty() {
+    if (this.caseState) this.caseState.dirty = true;
+  },
+
+  fieldMessage(key, vars) {
+    const id = reviewLabellingNextId('review-field-error');
+    return { id, node: this.el('p', { className: 'text-xs text-error mt-1 flex items-start gap-1', attrs: { id, 'data-review-error': key } }, [reviewLabellingIcon(this.doc, 'bi-exclamation-circle'), this.el('span', { text: this.t(key, vars) })]) };
+  },
+
+  /** Wires an error to a control and returns the message node, or null. */
+  withError(control, field) {
+    const key = this.caseState.errors[field];
+    if (!key) return null;
+    const message = this.fieldMessage(key);
+    control.setAttribute('aria-invalid', 'true');
+    const described = control.getAttribute('aria-describedby');
+    control.setAttribute('aria-describedby', described ? `${described} ${message.id}` : message.id);
+    return message.node;
+  },
+
+  clearError(field) {
+    if (this.caseState && this.caseState.errors[field]) delete this.caseState.errors[field];
+  },
+
+  controlsLocked() {
+    return this.caseState.readOnly || this.caseState.busy;
+  },
+
+  renderLabel(focusSelector) {
+    if (!this.labelHost || !this.caseState) return;
+    const state = this.caseState;
+    const form = state.form;
+    const nodes = [this.answerBlock(), this.quotesBlock(), this.typeBlock(), this.outputsBlock()];
+    if (!state.readOnly) nodes.push(this.actionsBlock());
+    const element = this.el('form', { attrs: { 'data-review-form': true, novalidate: true } }, nodes);
+    element.addEventListener('submit', (event) => {
+      if (event && typeof event.preventDefault === 'function') event.preventDefault();
+    });
+    this.labelHost.replaceChildren(element);
+    void form;
+    if (focusSelector) {
+      const target = this.labelHost.querySelector(focusSelector);
+      if (target) target.focus();
+    }
+  },
+
+  answerBlock() {
+    const state = this.caseState;
+    const form = state.form;
+    const locked = this.controlsLocked();
+    const name = reviewLabellingNextId('review-answerable');
+    const radio = (value, key) => {
+      const input = this.el('input', { className: 'radio radio-sm', attrs: { type: 'radio', name, value, 'data-review-answerable': value } });
+      input.checked = form.answerable === (value === 'yes');
+      input.disabled = locked;
+      input.addEventListener('change', () => {
+        if (!input.checked) return;
+        const yes = value === 'yes';
+        form.answerable = yes;
+        if (!yes && form.category === 'general') form.category = 'no_answer';
+        if (yes && form.category === 'no_answer') form.category = 'general';
+        this.clearError('answerable');
+        this.clearError('category');
+        this.markDirty();
+        this.renderLabel(`input[data-review-answerable="${value}"]`);
+      });
+      return this.el('label', { className: 'label cursor-pointer justify-start gap-2 py-1' }, [input, this.el('span', { className: 'label-text text-sm', text: this.t(key) })]);
+    };
+    const yes = radio('yes', 'answerable.yes');
+    const fieldset = this.el('fieldset', { className: 'mb-4' }, [
+      this.el('legend', { className: 'text-sm mb-1', text: this.t('answerable.legend') }),
+      this.el('div', { className: 'flex flex-wrap gap-4' }, [yes, radio('no', 'answerable.no')]),
+    ]);
+    const err = this.withError(yes.querySelector('input'), 'answerable');
+    if (err) fieldset.appendChild(err);
+
+    const expectedId = reviewLabellingNextId('review-expected');
+    const helpId = `${expectedId}-help`;
+    const expected = this.el('textarea', {
+      className: 'textarea textarea-bordered textarea-sm w-full',
+      attrs: { id: expectedId, name: 'expected_answer', rows: '3', maxlength: '4000', dir: 'auto', autocomplete: 'off', 'aria-describedby': helpId, 'data-review-expected': true },
+    });
+    expected.value = form.expected;
+    expected.disabled = locked || form.answerable === false;
+    expected.addEventListener('input', () => {
+      form.expected = expected.value;
+      this.markDirty();
+    });
+    const expectedError = this.withError(expected, 'expected');
+    return this.el('div', { className: 'mb-6' }, [
+      this.el('h4', { className: 'text-balance text-base font-semibold mb-2', text: this.t('answerable.heading') }),
+      fieldset,
+      this.el('div', { className: 'form-control' }, [
+        this.el('label', { className: 'label pb-1', attrs: { for: expectedId } }, [this.el('span', { className: 'label-text text-sm', text: this.t('expected.label') })]),
+        expected,
+        this.el('p', { className: 'text-xs text-base-content/70 mt-1', text: this.t('expected.help'), attrs: { id: helpId } }),
+        expectedError,
+      ]),
+    ]);
+  },
+
+  quotesBlock() {
+    const state = this.caseState;
+    const headingId = reviewLabellingNextId('review-evidence-heading');
+    const block = this.el('div', { className: 'mb-6', attrs: { 'data-review-quotes': true } }, [
+      this.el('h4', { className: 'text-balance text-base font-semibold mb-2 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2', text: this.t('evidence.heading'), attrs: { id: headingId, tabindex: '-1', 'data-review-evidence-heading': true } }),
+    ]);
+    if (state.quotes.length === 0) block.appendChild(this.el('p', { className: 'text-sm text-base-content/70', text: this.t('evidence.empty') }));
+    if (state.quotes.length && state.form.answerable === false) block.appendChild(this.el('p', { className: 'text-xs text-base-content/70 mb-2', text: this.t('evidence.notSent') }));
+    state.quotes.forEach((quote, index) => block.appendChild(this.quoteSlip(quote, index)));
+    if (state.quotes.length >= REVIEW_LABELLING_MAX_QUOTES) block.appendChild(this.el('p', { className: 'text-xs text-base-content/70', text: this.t('evidence.max') }));
+    if (state.errors.evidence) block.appendChild(this.fieldMessage(state.errors.evidence).node);
+    return block;
+  },
+
+  /** The quote slip (UI-SPEC 6.6.5): passage caption, the quoted words and a line that says whether they are in the passage. */
+  quoteSlip(quote, index) {
+    const doc = this.doc;
+    const state = this.caseState;
+    const n = index + 1;
+    const fieldId = reviewLabellingNextId('review-quote-text');
+    const checkId = `${fieldId}-check`;
+    const field = this.el('textarea', {
+      className: 'textarea textarea-bordered textarea-sm w-full',
+      attrs: {
+        id: fieldId,
+        name: `quote_${n}`,
+        rows: String(Math.min(6, Math.max(2, Math.ceil((quote.quote.length || 1) / 60)))),
+        maxlength: '2000',
+        dir: 'auto',
+        translate: 'no',
+        spellcheck: 'false',
+        autocomplete: 'off',
+        'aria-label': this.t('quote.textLabel', { n }),
+        'aria-describedby': checkId,
+        'data-review-quote-text': quote.key,
+      },
+    });
+    field.value = quote.quote;
+    field.disabled = this.controlsLocked() || state.form.answerable === false;
+    const check = this.el('p', { className: 'text-xs mt-1 flex items-start gap-1', attrs: { id: checkId, 'data-review-quote-check': true } });
+    const figure = this.el('figure', { className: '!block border-l-4 border-base-300 bg-base-100 rounded-r-lg p-2 mb-2 min-w-0', attrs: { 'data-review-quote': quote.key } }, [
+      this.el('figcaption', { className: 'text-xs text-base-content/70 mb-1 break-words', text: this.t('quote.caption', { n, source: quote.sourceLabel, document: quote.documentName || '—' }) }),
+      field,
+      check,
+    ]);
+    const update = () => this.updateQuoteCheck(quote, index, figure, field, check);
+    field.addEventListener('input', () => {
+      quote.quote = field.value;
+      quote.touched = true;
+      quote.serverError = null;
+      this.markDirty();
+      update();
+    });
+    update();
+    const show = this.el('button', { className: 'btn btn-ghost btn-sm', text: this.t('action.showPassage'), attrs: { type: 'button', 'data-review-show-passage': quote.key } });
+    show.disabled = !quote.sourceKey;
+    show.addEventListener('click', () => this.showPassage(quote));
+    const remove = this.el('button', { className: 'btn btn-ghost btn-sm', text: this.t('action.removeQuote'), attrs: { type: 'button', 'data-review-remove-quote': quote.key, 'aria-label': this.t('action.removeQuoteAria', { n }) } });
+    remove.disabled = this.controlsLocked();
+    remove.addEventListener('click', () => this.removeQuote(quote));
+    figure.appendChild(this.el('div', { className: 'mt-1 flex flex-wrap gap-2' }, [show, remove]));
+    void doc;
+    return figure;
+  },
+
+  updateQuoteCheck(quote, index, figure, field, check) {
+    const doc = this.doc;
+    let text;
+    let bad = true;
+    if (quote.serverError) {
+      text = this.t(quote.serverError.key, { code: quote.serverError.code });
+    } else {
+      const quotes = this.caseState.quotes;
+      let state = reviewLabellingQuoteState(quote.quote, this.quoteText(quote));
+      if (state === 'ok' || state === 'unchecked') {
+        const duplicate = quotes.slice(0, index).some((other) => other.chunkId === quote.chunkId && other.quote === quote.quote);
+        if (duplicate) state = 'duplicate';
+      }
+      bad = state === 'notFound' || state === 'duplicate' || (state === 'tooShort' && (quote.touched || quote.quote.length > 0));
+      text = this.t(state === 'ok' ? 'quote.ok' : state === 'unchecked' ? 'quote.unchecked' : state === 'tooShort' ? 'quote.tooShort' : state === 'duplicate' ? 'quote.duplicate' : 'quote.notFound');
+    }
+    check.replaceChildren(reviewLabellingIcon(doc, bad ? 'bi-exclamation-circle' : 'bi-check2'), this.el('span', { text }));
+    check.classList.toggle('text-error', bad);
+    check.classList.toggle('text-base-content/70', !bad);
+    figure.classList.toggle('border-error', bad);
+    figure.classList.toggle('border-base-300', !bad);
+    if (bad) field.setAttribute('aria-invalid', 'true');
+    else field.removeAttribute('aria-invalid');
+  },
+
+  showPassage(quote) {
+    const state = this.caseState;
+    if (!quote.sourceKey || !state) return;
+    let block = this.evidenceHost.querySelector(`[data-review-source="${quote.sourceKey}"]`);
+    if (!block && quote.sourceKey.startsWith('p:')) {
+      state.passagesShown = Math.max(state.passagesShown, state.view.candidates.length);
+      this.renderEvidence();
+      block = this.evidenceHost.querySelector(`[data-review-source="${quote.sourceKey}"]`);
+    }
+    if (!block) return;
+    if (typeof block.scrollIntoView === 'function') block.scrollIntoView({ block: 'nearest' });
+    const region = block.querySelector('[data-review-passage-text]');
+    if (region) region.focus();
+  },
+
+  removeQuote(quote) {
+    const state = this.caseState;
+    const index = state.quotes.indexOf(quote);
+    if (index < 0) return;
+    state.quotes.splice(index, 1);
+    this.markDirty();
+    this.renderEvidence();
+    const next = state.quotes[index];
+    this.renderLabel(next ? `[data-review-quote-text="${next.key}"]` : '[data-review-evidence-heading]');
+  },
+
+  selectControl(options, attrs, value) {
+    const select = this.el('select', { className: 'select select-bordered select-sm w-full', attrs });
+    for (const option of options) {
+      const el = this.el('option', { text: option.label, attrs: { value: option.value } });
+      if (option.value === value) el.setAttribute('selected', '');
+      select.appendChild(el);
+    }
+    select.value = value;
+    return select;
+  },
+
+  typeBlock() {
+    const form = this.caseState.form;
+    const locked = this.controlsLocked();
+    const categoryId = reviewLabellingNextId('review-category');
+    const categories = REVIEW_LABELLING_CATEGORIES.slice();
+    if (!categories.includes(form.category)) categories.push(form.category);
+    const category = this.selectControl(
+      categories.map((value) => ({ value, label: REVIEW_LABELLING_LABELS.en[`category.${value}`] ? this.t(`category.${value}`) : value })),
+      { id: categoryId, 'data-review-category': true },
+      form.category,
+    );
+    category.disabled = locked;
+    category.addEventListener('change', () => {
+      form.category = category.value;
+      this.clearError('category');
+      this.markDirty();
+    });
+    const languageId = reviewLabellingNextId('review-language');
+    const language = this.selectControl(
+      [{ value: '', label: this.t('language.choose') }, ...REVIEW_LABELLING_LANGUAGES.map((value) => ({ value, label: this.t(`lang.${value}`) }))],
+      { id: languageId, required: true, 'data-review-language': true },
+      form.language,
+    );
+    language.disabled = locked;
+    language.addEventListener('change', () => {
+      form.language = language.value;
+      this.clearError('language');
+      this.markDirty();
+    });
+    const categoryError = this.withError(category, 'category');
+    const languageError = this.withError(language, 'language');
+    return this.el('div', { className: 'mb-6' }, [
+      this.el('h4', { className: 'text-balance text-base font-semibold mb-2', text: this.t('type.heading') }),
+      this.el('div', { className: 'grid gap-4 md:grid-cols-2' }, [
+        this.el('div', { className: 'form-control min-w-0' }, [
+          this.el('label', { className: 'label pb-1', attrs: { for: categoryId } }, [this.el('span', { className: 'label-text text-sm', text: this.t('category.label') })]),
+          category,
+          categoryError,
+        ]),
+        this.el('div', { className: 'form-control min-w-0' }, [
+          this.el('label', { className: 'label pb-1', attrs: { for: languageId } }, [this.el('span', { className: 'label-text text-sm', text: this.t('language.label') })]),
+          language,
+          languageError,
+        ]),
+      ]),
+    ]);
+  },
+
+  outputsBlock() {
+    const state = this.caseState;
+    const form = state.form;
+    const locked = this.controlsLocked();
+    const fieldset = this.el('fieldset', { className: 'mb-2' }, [this.el('legend', { className: 'text-base font-semibold mb-2', text: this.t('outputs.heading') })]);
+    let firstBox = null;
+    for (const value of REVIEW_LABELLING_TRIAGE) {
+      const helpId = reviewLabellingNextId(`review-triage-${value}`);
+      const box = this.el('input', { className: 'checkbox checkbox-sm mt-0.5', attrs: { type: 'checkbox', value, 'aria-describedby': helpId, 'data-review-triage': value } });
+      box.checked = form.triage.has(value);
+      box.disabled = locked;
+      box.addEventListener('change', () => {
+        if (box.checked) form.triage.add(value);
+        else form.triage.delete(value);
+        this.clearError('triage');
+        if (value === 'dictionary') this.clearError('terms');
+        if (value === 'golden') {
+          this.clearError('pii');
+          this.clearError('dup');
+        }
+        this.markDirty();
+        this.renderLabel(`input[data-review-triage="${value}"]`);
+      });
+      if (!firstBox) firstBox = box;
+      fieldset.appendChild(
+        this.el('label', { className: 'label cursor-pointer justify-start items-start gap-2 py-1' }, [
+          box,
+          this.el('span', { className: 'min-w-0' }, [
+            this.el('span', { className: 'label-text text-sm block', text: this.t(`triage.${value}`) }),
+            this.el('span', { className: 'text-xs text-base-content/70 block', text: this.t(`triage.${value}.help`), attrs: { id: helpId } }),
+          ]),
+        ]),
+      );
+    }
+    const err = firstBox ? this.withError(firstBox, 'triage') : null;
+    if (err) fieldset.appendChild(err);
+    else if (form.triage.size === 0) fieldset.appendChild(this.el('p', { className: 'text-xs text-base-content/70 mt-1', text: this.t('triage.required') }));
+    const block = this.el('div', { className: 'mb-6' }, [fieldset]);
+    if (form.triage.has('dictionary')) block.appendChild(this.termsBlock());
+    if (form.triage.has('golden')) block.appendChild(this.piiBlock());
+    return block;
+  },
+
+  termsBlock() {
+    const form = this.caseState.form;
+    const locked = this.controlsLocked();
+    const block = this.el('div', { className: 'mt-4 border border-base-300 rounded-lg p-4', attrs: { 'data-review-terms': true } }, [
+      this.el('h5', { className: 'text-sm font-semibold mb-2', text: this.t('dict.heading') }),
+    ]);
+    form.terms.forEach((term, index) => {
+      const row = this.el('div', { className: 'grid gap-2 md:grid-cols-2 lg:grid-cols-[1fr_1fr_auto_auto] items-end mb-2', attrs: { 'data-review-term': String(index) } });
+      const input = (prop, labelKey, attr) => {
+        const id = reviewLabellingNextId('review-term');
+        const el = this.el('input', { className: 'input input-bordered input-sm w-full', attrs: { id, name: `${prop}_term_${index + 1}`, type: 'text', maxlength: '200', autocomplete: 'off', spellcheck: 'false', translate: 'no', dir: 'auto', [attr]: true } });
+        el.value = term[prop];
+        el.disabled = locked;
+        el.addEventListener('input', () => {
+          term[prop] = el.value;
+          this.markDirty();
+        });
+        return this.el('div', { className: 'form-control min-w-0' }, [this.el('label', { className: 'label py-1', attrs: { for: id } }, [this.el('span', { className: 'label-text text-xs', text: this.t(labelKey) })]), el]);
+      };
+      row.appendChild(input('observed', 'dict.observed', 'data-review-term-observed'));
+      row.appendChild(input('canonical', 'dict.canonical', 'data-review-term-canonical'));
+      const relationId = reviewLabellingNextId('review-term-relation');
+      const relation = this.selectControl(
+        REVIEW_LABELLING_RELATIONS.map((value) => ({ value, label: this.t(`relation.${value}`) })),
+        { id: relationId, 'data-review-term-relation': true },
+        term.relation,
+      );
+      relation.disabled = locked;
+      relation.addEventListener('change', () => {
+        term.relation = relation.value;
+        this.markDirty();
+        this.renderLabel(`[data-review-term="${index}"] select[data-review-term-relation]`);
+      });
+      row.appendChild(this.el('div', { className: 'form-control min-w-0' }, [this.el('label', { className: 'label py-1', attrs: { for: relationId } }, [this.el('span', { className: 'label-text text-xs', text: this.t('dict.relation') })]), relation]));
+      if (term.relation === 'translation') {
+        const langId = reviewLabellingNextId('review-term-language');
+        const lang = this.selectControl(
+          [{ value: '', label: this.t('language.choose') }, ...REVIEW_LABELLING_LANGUAGES.map((value) => ({ value, label: this.t(`lang.${value}`) }))],
+          { id: langId, 'data-review-term-language': true },
+          term.language,
+        );
+        lang.disabled = locked;
+        lang.addEventListener('change', () => {
+          term.language = lang.value;
+          this.markDirty();
+        });
+        row.appendChild(this.el('div', { className: 'form-control min-w-0' }, [this.el('label', { className: 'label py-1', attrs: { for: langId } }, [this.el('span', { className: 'label-text text-xs', text: this.t('dict.canonicalLanguage') })]), lang]));
+      }
+      const remove = this.el('button', { className: 'btn md:btn-sm btn-ghost', text: this.t('action.removeTerm'), attrs: { type: 'button', 'aria-label': this.t('action.removeTermAria', { n: index + 1 }), 'data-review-remove-term': String(index) } });
+      remove.disabled = locked;
+      remove.addEventListener('click', () => {
+        form.terms.splice(index, 1);
+        this.markDirty();
+        this.renderLabel(form.terms.length ? `[data-review-term="${Math.min(index, form.terms.length - 1)}"] input[data-review-term-observed]` : '[data-review-add-term]');
+      });
+      row.appendChild(remove);
+      block.appendChild(row);
+    });
+    const add = this.el('button', { className: 'btn btn-sm btn-outline', text: this.t('action.addTerm'), attrs: { type: 'button', 'data-review-add-term': true } });
+    add.disabled = locked || form.terms.length >= 20;
+    add.addEventListener('click', () => {
+      form.terms.push(reviewLabellingEmptyTerm());
+      this.markDirty();
+      this.renderLabel(`[data-review-term="${form.terms.length - 1}"] input[data-review-term-observed]`);
+    });
+    block.appendChild(add);
+    if (this.caseState.errors.terms) {
+      const firstInput = block.querySelector('input[data-review-term-observed]') || add;
+      const err = this.withError(firstInput, 'terms');
+      if (err) block.appendChild(err);
+    }
+    return block;
+  },
+
+  piiBlock() {
+    const state = this.caseState;
+    const form = state.form;
+    const locked = this.controlsLocked();
+    const confirmBox = this.el('input', { className: 'checkbox checkbox-sm', attrs: { type: 'checkbox', 'data-review-pii-confirm': true } });
+    confirmBox.checked = form.piiConfirmed;
+    confirmBox.disabled = locked;
+    confirmBox.addEventListener('change', () => {
+      form.piiConfirmed = confirmBox.checked;
+      this.clearError('pii');
+      this.markDirty();
+    });
+    const rewriteId = reviewLabellingNextId('review-paraphrase');
+    const leftId = `${rewriteId}-left`;
+    const helpId = `${rewriteId}-help`;
+    const rewrite = this.el('textarea', {
+      className: 'textarea textarea-bordered textarea-sm w-full',
+      attrs: { id: rewriteId, name: 'paraphrased_question', rows: '2', maxlength: '1000', dir: 'auto', autocomplete: 'off', 'aria-describedby': `${helpId} ${leftId}`, 'data-review-paraphrase': true },
+    });
+    rewrite.value = form.paraphrase;
+    rewrite.disabled = locked;
+    const left = this.el('p', { className: 'text-xs text-base-content/70 mt-1 tabular-nums', attrs: { id: leftId } });
+    const updateLeft = () => {
+      left.textContent = this.t('pii.rewrite.left', { count: reviewLabellingFormatNumber(Math.max(0, 1000 - rewrite.value.length), this.locale) });
+    };
+    updateLeft();
+    rewrite.addEventListener('input', () => {
+      form.paraphrase = rewrite.value;
+      this.clearError('pii');
+      this.markDirty();
+      updateLeft();
+    });
+    const dupId = reviewLabellingNextId('review-dup');
+    const dupHelpId = `${dupId}-help`;
+    const dup = this.el('input', {
+      className: 'input input-bordered input-sm w-full font-mono',
+      attrs: { id: dupId, name: 'confirm_near_duplicate_of', type: 'text', maxlength: '64', autocomplete: 'off', spellcheck: 'false', translate: 'no', 'aria-describedby': dupHelpId, 'data-review-dup': true },
+    });
+    dup.value = form.dup;
+    dup.disabled = locked;
+    dup.addEventListener('input', () => {
+      form.dup = dup.value;
+      this.clearError('dup');
+      this.markDirty();
+    });
+    const dupError = this.withError(dup, 'dup');
+    const details = this.el('details', { className: 'mt-4' }, [
+      this.el('summary', { className: 'text-sm cursor-pointer rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2', text: this.t('dup.summary') }),
+      this.el('div', { className: 'form-control mt-2' }, [
+        this.el('label', { className: 'label pb-1', attrs: { for: dupId } }, [this.el('span', { className: 'label-text text-sm', text: this.t('dup.label') })]),
+        dup,
+        this.el('p', { className: 'text-xs text-base-content/70 mt-1', text: this.t('dup.help'), attrs: { id: dupHelpId } }),
+        dupError,
+      ]),
+    ]);
+    if (form.dup || state.errors.dup) details.setAttribute('open', '');
+    const piiError = this.withError(confirmBox, 'pii');
+    return this.el('div', { className: 'mt-4 border border-base-300 rounded-lg p-4', attrs: { 'data-review-pii': true } }, [
+      this.el('h5', { className: 'text-sm font-semibold mb-2', text: this.t('pii.heading') }),
+      this.el('p', { className: 'text-sm break-words bg-base-100 rounded p-2', text: state.view.question || this.t('item.noQuestion'), attrs: { dir: 'auto', translate: 'no' } }),
+      this.el('p', { className: 'text-sm mt-2', text: this.t('pii.intro') }),
+      this.el('ul', { className: 'list-disc pl-6 text-sm mt-1' }, ['names', 'addresses', 'accounts', 'health'].map((k) => this.el('li', { text: this.t(`pii.item.${k}`) }))),
+      this.el('label', { className: 'label cursor-pointer justify-start gap-2 mt-2' }, [confirmBox, this.el('span', { className: 'label-text text-sm', text: this.t('pii.confirm') })]),
+      this.el('div', { className: 'form-control mt-2' }, [
+        this.el('label', { className: 'label pb-1', attrs: { for: rewriteId } }, [this.el('span', { className: 'label-text text-sm', text: this.t('pii.rewrite.label') })]),
+        rewrite,
+        this.el('p', { className: 'text-xs text-base-content/70 mt-1', text: this.t('pii.rewrite.help'), attrs: { id: helpId } }),
+        left,
+      ]),
+      piiError,
+      details,
+    ]);
+  },
+
+  actionsBlock() {
+    const doc = this.doc;
+    const state = this.caseState;
+    const save = this.el('button', { className: 'btn btn-primary btn-sm', attrs: { type: 'button', 'data-review-save': true } }, [
+      state.busy === 'save' ? reviewLabellingSpinner(doc, this.t('action.saving')) : this.el('span', { text: this.t('action.save') }),
+    ]);
+    const skip = this.el('button', { className: 'btn btn-outline btn-sm', attrs: { type: 'button', 'data-review-skip': true } }, [
+      state.busy === 'skip' ? reviewLabellingSpinner(doc, this.t('action.skipping')) : this.el('span', { text: this.t('action.skip') }),
+    ]);
+    save.disabled = Boolean(state.busy);
+    skip.disabled = Boolean(state.busy);
+    save.addEventListener('click', () => {
+      void this.saveLabel();
+    });
+    skip.addEventListener('click', () => {
+      void this.submit({ status: 'skipped' }, 'skip');
+    });
+    return this.el('div', { className: 'flex flex-wrap gap-2 mt-2' }, [save, skip]);
+  },
+
+  async saveLabel() {
+    const state = this.caseState;
+    if (!state || state.busy || state.readOnly) return;
+    const result = reviewLabellingValidate(state.form, state.quotes, (quote) => this.quoteText(quote));
+    if (!result.ok) {
+      state.errors = result.errors;
+      for (const quote of state.quotes) quote.touched = true;
+      this.renderLabel();
+      this.focusFirstInvalid(result);
+      this.announce(this.t('save.blocked'), { error: true, alert: true });
+      return;
+    }
+    state.errors = {};
+    await this.submit({ status: 'labelled', label: result.label }, 'save');
+  },
+
+  focusFirstInvalid(result) {
+    const order = [
+      ['answerable', 'input[data-review-answerable="yes"]'],
+      ['expected', 'textarea[data-review-expected]'],
+      ['evidence', '[data-review-evidence-heading]'],
+      ['quotes', null],
+      ['category', 'select[data-review-category]'],
+      ['language', 'select[data-review-language]'],
+      ['triage', 'input[data-review-triage]'],
+      ['terms', '[data-review-terms] input[data-review-term-observed], [data-review-add-term]'],
+      ['pii', 'input[data-review-pii-confirm]'],
+      ['dup', 'input[data-review-dup]'],
+    ];
+    for (const [field, selector] of order) {
+      if (field === 'quotes') {
+        const index = result.quoteErrors.findIndex(Boolean);
+        if (index >= 0) {
+          const target = this.labelHost.querySelector(`[data-review-quote-text="${this.caseState.quotes[index].key}"]`);
+          if (target) {
+            target.focus();
+            return;
+          }
+        }
+        continue;
+      }
+      if (result.errors[field]) {
+        const target = this.labelHost.querySelector(selector);
+        if (target) {
+          target.focus();
+          return;
+        }
+      }
+    }
+  },
+
+  async submit(body, kind) {
+    const state = this.caseState;
+    if (!state || state.busy || state.readOnly) return;
+    const id = state.view.id;
+    state.busy = kind;
+    this.renderLabel();
+    this.renderEvidence();
+    this.announce(this.t(kind === 'save' ? 'action.saving' : 'action.skipping'));
+    const result = await this.request(reviewLabellingItemPath(id, '/label'), { method: 'POST', body: JSON.stringify(body) });
+    if (this.caseState !== state) return;
+    state.busy = false;
+    if (result.ok) {
+      state.dirty = false;
+      await this.afterSubmit(id, body.status, kind);
+      return;
+    }
+    if (result.thrown) {
+      await this.openCase(id, { keepStatus: true });
+      this.announce(this.t('error.outcomeUnknown'), { error: true });
+      return;
+    }
+    if (result.status === 401 || result.status === 403) {
+      this.showSignIn();
+      return;
+    }
+    if (result.status === 404) {
+      this.caseGone();
+      return;
+    }
+    if (result.status === 409) {
+      await this.openCase(id, { keepStatus: true });
+      this.announce(this.t('exported.notice'), { error: true });
+      return;
+    }
+    const responseBody = result.body || {};
+    if (result.status === 400 && responseBody.error === 'invalid_evidence' && Number.isInteger(responseBody.span) && state.quotes[responseBody.span]) {
+      const quote = state.quotes[responseBody.span];
+      quote.serverError = reviewLabellingServerQuoteError(responseBody.reason);
+      this.renderEvidence();
+      this.renderLabel(`[data-review-quote-text="${quote.key}"]`);
+      this.announce(this.t('save.blocked'), { error: true, alert: true });
+      return;
+    }
+    this.renderLabel();
+    this.renderEvidence();
+    if (result.status === 400 && responseBody.error === 'invalid_not_relevant') this.announce(this.t('error.notRelevant'), { error: true });
+    else if (result.status === 400) this.announce(this.t('error.invalid', { detail: reviewLabellingDetail(responseBody) }), { error: true });
+    else if (result.status === 503) this.announce(this.t('list.unavailable'), { error: true });
+    else this.announce(reviewLabellingShared('error.generic', this.locale, { status: result.status }), { error: true });
+  },
+
+  async afterSubmit(id, status, kind) {
+    const prefix = kind === 'save' ? 'saved' : 'skipped';
+    const index = this.items.findIndex((row) => row.id === id);
+    if (index >= 0) this.items[index] = { ...this.items[index], status };
+    const next = index >= 0 ? this.items[index + 1] : null;
+    if (next) {
+      await this.openCase(next.id, { keepStatus: true });
+      this.announce(this.t(`${prefix}.next`));
+      return;
+    }
+    this.view = 'queue';
+    this.caseState = null;
+    await this.loadQueue({ reset: true });
+    this.announce(this.t(`${prefix}.last`));
+    if (this.titleEl) this.titleEl.focus();
+  },
+});
 
 let reviewLabellingPanelInstance = null;
 
@@ -1947,5 +2711,8 @@ if (typeof module !== 'undefined' && module.exports) {
     reviewLabellingQueuePath,
     reviewLabellingNormalize,
     reviewLabellingQuoteState,
+    reviewLabellingValidate,
+    reviewLabellingInitialForm,
+    reviewLabellingServerQuoteError,
   };
 }
