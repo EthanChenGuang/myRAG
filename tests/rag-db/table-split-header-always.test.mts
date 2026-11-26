@@ -74,10 +74,9 @@ describe('header_in_context_rate under RAG_TABLE_HEADER_REPEAT=always (D-46)', (
 
   test('is 1.0 over every table_split item in every processing profile', { timeout: 900_000 }, async () => {
     assert.ok(DOC_TYPES.length >= 6, 'the six shipped processing profiles');
-    const blocks = await Promise.all(
-      DOC_TYPES.map(async (docType) => [docType, await tableSplitBlock(golden.file, path.join(dir, `always-${docType}`), docType, 'always')] as const),
-    );
-    for (const [docType, block] of blocks) {
+    // One build at a time: concurrent fixture builds compete for the stage time budgets and can fail a stage under load.
+    for (const docType of DOC_TYPES) {
+      const block = await tableSplitBlock(golden.file, path.join(dir, `always-${docType}`), docType, 'always');
       assert.equal(block.overall.items, golden.count, `${docType}: every table_split item is scored`);
       assert.deepEqual(block.overall.row_recall_at_10, { value: 1, n: golden.count }, `${docType}: every row chunk is retrieved`);
       assert.deepEqual(block.overall.header_in_context_rate, { value: 1, n: golden.count }, `${docType}: header_in_context_rate`);
