@@ -35,8 +35,42 @@ export type ParsedLookupBackfillArgs =
 
 /** `[--tenant <key>] [--dry-run] [--batch-size n] [--resume-after <documentId>]`; no tenant means every tenant. */
 export function parseLookupBackfillArgs(argv: string[]): ParsedLookupBackfillArgs {
-  void argv;
-  return { ok: false, error: 'not implemented' };
+  let dryRun = false;
+  const values = new Map<string, string>();
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i] as string;
+    if (arg === '--dry-run') {
+      if (dryRun) return { ok: false, error: '--dry-run was given twice' };
+      dryRun = true;
+    } else if (WITH_VALUE.has(arg)) {
+      const value = argv[(i += 1)];
+      if (value === undefined || value.startsWith('--')) return { ok: false, error: `${arg} needs a value` };
+      if (values.has(arg)) return { ok: false, error: `${arg} was given twice` };
+      values.set(arg, value);
+    } else {
+      return { ok: false, error: `unknown option: ${arg}` };
+    }
+  }
+
+  const rawTenant = values.get('--tenant');
+  const tenantKey = rawTenant === undefined ? null : rawTenant.trim().toLowerCase();
+  if (tenantKey !== null && !isTenantKey(tenantKey)) return { ok: false, error: '--tenant needs a tenant key: s:default, u:<uuid> or o:<uuid>' };
+
+  let batchSize = DEFAULT_LOOKUP_BACKFILL_BATCH_SIZE;
+  const rawBatch = values.get('--batch-size');
+  if (rawBatch !== undefined) {
+    const parsed = /^\d+$/.test(rawBatch) ? Number(rawBatch) : NaN;
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > MAX_LOOKUP_BACKFILL_BATCH_SIZE) {
+      return { ok: false, error: `--batch-size needs an integer from 1 to ${MAX_LOOKUP_BACKFILL_BATCH_SIZE}` };
+    }
+    batchSize = parsed;
+  }
+
+  const resumeAfter = values.get('--resume-after')?.toLowerCase() ?? null;
+  if (resumeAfter !== null && !UUID.test(resumeAfter)) return { ok: false, error: '--resume-after needs a document id (a UUID)' };
+  if (resumeAfter !== null && tenantKey === null) return { ok: false, error: '--resume-after needs --tenant: the cursor belongs to one tenant' };
+
+  return { ok: true, dryRun, tenantKey, batchSize, resumeAfter };
 }
 
 export interface LookupBackfillBatchInfo {
@@ -126,8 +160,21 @@ export async function dryRunLookupBackfill(
   kind: LookupBackfillKind,
   input: Omit<LookupBackfillInput, 'onBatch' | 'loadPatterns'>,
 ): Promise<LookupBackfillDryRunReport> {
-  void kind;
-  return { tenantKey: scopeKey(input.scope), documents: 0, current: 0, superseded: 0 };
+  const batchSize = checkBatchSize(input.batchSize);
+  const signal = input.signal ?? new AbortController().signal;
+  const tenantKey = scopeKey(input.scope).toLowerCase();
+  const report: LookupBackfillDryRunReport = { tenantKey, documents: 0, current: 0, superseded: 0 };
+  let after = checkCursor(input.resumeAfter);
+  for (;;) {
+    const page = await listDocuments(input.db, tenantKey, kind, after, batchSize, signal);
+    for (const listed of page) {
+      report.documents += 1;
+      if (listed.isCurrent) report.current += 1;
+      else report.superseded += 1;
+    }
+    if (page.length < batchSize) return report;
+    after = page[page.length - 1]?.documentId ?? after;
+  }
 }
 
 function addDocument(report: LookupBackfillReport, result: IndexDocumentReport): boolean {
@@ -151,8 +198,50 @@ function addDocument(report: LookupBackfillReport, result: IndexDocumentReport):
  * inside a document; counts only, never a cell value, header or identifier.
  */
 export async function runLookupBackfill(kind: LookupBackfillKind, input: LookupBackfillInput): Promise<LookupBackfillReport> {
-  void kind;
-  return { tenantKey: scopeKey(input.scope), documents: 0, failed: 0, batches: 0, rowsWritten: 0, rowsDeleted: 0, chunksIndexed: 0, chunksWritten: 0, documentsChanged: 0 };
+  const batchSize = checkBatchSize(input.batchSize);
+  const signal = input.signal ?? new AbortController().signal;
+  const tenantKey = scopeKey(input.scope).toLowerCase();
+  const writer = createIngestWriter({ db: input.db, scope: input.scope, signal });
+  const report: LookupBackfillReport = {
+    tenantKey,
+    documents: 0,
+    failed: 0,
+    batches: 0,
+    rowsWritten: 0,
+    rowsDeleted: 0,
+    chunksIndexed: 0,
+    chunksWritten: 0,
+    documentsChanged: 0,
+  };
+  let after = checkCursor(input.resumeAfter);
+  for (;;) {
+    signal.throwIfAborted();
+    const page = await listDocuments(input.db, tenantKey, kind, after, batchSize, signal);
+    if (page.length === 0) break;
+    let documents = 0;
+    let failed = 0;
+    for (const listed of page) {
+      const result = await indexDocumentForLookup({
+        writer,
+        scope: input.scope,
+        documentId: listed.documentId,
+        tables: kind === 'tables',
+        identifiers: kind === 'identifiers',
+        signal,
+        ...(input.loadPatterns ? { loadPatterns: input.loadPatterns } : {}),
+      });
+      if (addDocument(report, result)) failed += 1;
+      else documents += 1;
+    }
+    report.batches += 1;
+    report.documents += documents;
+    report.failed += failed;
+    const cursor = page[page.length - 1]?.documentId as string;
+    await input.onBatch?.({ tenantKey, batch: report.batches, documents, failed, cursor });
+    after = cursor;
+    if (page.length < batchSize) break;
+  }
+  return report;
 }
 
 export interface TenantListingAdmin {
@@ -174,6 +263,26 @@ export interface TenantListingAdmin {
  * document, read one distinct key at a time in key order through the service-role client.
  */
 export async function listBackfillTenants(input: { multiTenant: boolean; admin: TenantListingAdmin | null; signal: AbortSignal }): Promise<string[]> {
-  void input;
-  return [];
+  if (!input.multiTenant) return ['s:default'];
+  if (!input.admin) throw new LookupBackfillError('admin_unavailable');
+  const keys: string[] = [];
+  let last = '';
+  for (;;) {
+    input.signal.throwIfAborted();
+    const response = await input.admin
+      .from('documents')
+      .select('tenant_key')
+      .eq('status', 'ready')
+      .gt('tenant_key', last)
+      .order('tenant_key', { ascending: true })
+      .limit(1)
+      .abortSignal(input.signal);
+    if (response.error) throw new LookupBackfillError('tenant_listing_failed', response.error.code ?? null);
+    const row = Array.isArray(response.data) ? (response.data[0] as { tenant_key?: unknown } | undefined) : undefined;
+    const key = typeof row?.tenant_key === 'string' ? row.tenant_key.toLowerCase() : null;
+    if (key === null) return keys;
+    if (key <= last) throw new LookupBackfillError('tenant_listing_failed');
+    if (isTenantKey(key) && !key.startsWith('s:')) keys.push(key);
+    last = key;
+  }
 }
