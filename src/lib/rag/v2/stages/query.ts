@@ -18,6 +18,7 @@ import type { QueryLanguage } from '../../refusal/gate';
 import type { TerminologyMatch } from '@/lib/rag-eval/contracts.generated';
 import { expandMatches, terminologyParams } from '../../terminology/expand';
 import { terminologyMatcherFor } from '../../terminology/load';
+import type { TerminologyHashStage } from '../config-hash';
 
 export interface QueryStagesInput {
   input: RunRetrievalInput;
@@ -29,6 +30,8 @@ export interface QueryStagesInput {
   stageOverrides?: StageOverrides;
   /** Lent to the query layer's semantic_cache stage. */
   cache?: SemanticCacheSeam;
+  /** D-21: told how the terminology stage ended, before semantic_cache builds its key. */
+  onTerminology?: (stage: TerminologyHashStage) => void;
 }
 
 export interface QueryStagesOutput {
@@ -142,7 +145,10 @@ export async function runQueryStages(ctx: QueryStagesInput): Promise<QueryStages
   let terminologyRan = false;
   const terminologyStage = async (standalone: string): Promise<void> => {
     terminologyRan = true;
-    terminology = await runTerminologyStage({ standalone, scope, spec: spec('terminology', 'skip'), signal, collector });
+    const termSpec = spec('terminology', 'skip');
+    const outcome = await runTerminologyStage({ standalone, scope, spec: termSpec, signal, collector });
+    terminology = outcome;
+    ctx.onTerminology?.(termSpec.enabled ? { enabled: true, version: outcome?.version ?? null } : { enabled: false });
   };
 
   let queryLayer: QueryLayerOutcome | undefined;
