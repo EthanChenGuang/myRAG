@@ -34,7 +34,7 @@ describe('data files', () => {
   it('validates the output-guard rules against the generated contract', () => {
     const rules = OutputGuardRulesSchema.parse(rawRules);
     expect(rules.opaque_schemes).toEqual(expect.arrayContaining(['javascript', 'data']));
-    expect(rules.credential_rules).toEqual([]);
+    expect((rules.credential_rules ?? []).length).toBeGreaterThan(0);
   });
 });
 

@@ -105,7 +105,7 @@ describe('guardWholeText', () => {
 
   it('produces a summary that the contract accepts and never serializes removed targets', () => {
     const result = guardWholeText('See https://other.test/secret-path now.', policy());
-    expect(OutputGuardSummarySchema.parse(result.summary)).toMatchObject({ links_removed: 1, rules_version: '2026-11-26.1' });
+    expect(OutputGuardSummarySchema.parse(result.summary)).toMatchObject({ links_removed: 1, rules_version: '2026-11-26.2' });
     expect(result.summary.removedTargets).toEqual(['https://other.test/secret-path']);
     expect(JSON.stringify(result.summary)).not.toContain('secret-path');
   });
