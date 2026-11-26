@@ -52,6 +52,13 @@ const REVIEW_LABELLING_LABELS = {
     'reason.no_source_opened': "No source opened",
     'reason.none': "No reason recorded",
     'reason.unknown': "Reason code {code}",
+    'tag.representative': "Weekly sample",
+    'tag.re_review': "Due for re-review",
+    'tag.historical': "Imported question",
+    'tag.pilot': "Pilot user",
+    'tag.drift_fill': "Under-covered topic group",
+    'source.unknown': "Source code {code}",
+    'item.noAnswerImported': "No answer is recorded for this question, so there is nothing to check. Use the search to find the evidence for your label.",
     'outcome.answered': "Answered",
     'outcome.refused_no_context': "Refused: not in the documents",
     'outcome.kb_unavailable': "Knowledge base unavailable",
@@ -263,6 +270,13 @@ const REVIEW_LABELLING_LABELS = {
     'reason.no_source_opened': "未打开任何来源",
     'reason.none': "未记录原因",
     'reason.unknown': "原因代码 {code}",
+    'tag.representative': "每周抽样",
+    'tag.re_review': "需要复审",
+    'tag.historical': "导入的问题",
+    'tag.pilot': "试点用户",
+    'tag.drift_fill': "覆盖不足的主题分组",
+    'source.unknown': "来源代码 {code}",
+    'item.noAnswerImported': "这个问题没有记录回答，因此无需检查回答。请使用搜索查找标注所需的依据。",
     'outcome.answered': "已回答",
     'outcome.refused_no_context': "拒答：文档中没有",
     'outcome.kb_unavailable': "知识库不可用",
@@ -474,6 +488,13 @@ const REVIEW_LABELLING_LABELS = {
     'reason.no_source_opened': "Nessuna fonte aperta",
     'reason.none': "Nessun motivo registrato",
     'reason.unknown': "Codice motivo {code}",
+    'tag.representative': "Campione settimanale",
+    'tag.re_review': "Da rivedere",
+    'tag.historical': "Domanda importata",
+    'tag.pilot': "Utente pilota",
+    'tag.drift_fill': "Gruppo di argomenti poco coperto",
+    'source.unknown': "Codice origine {code}",
+    'item.noAnswerImported': "Per questa domanda non è registrata alcuna risposta, quindi non c'è nulla da verificare. Usa la ricerca per trovare le prove per la tua etichetta.",
     'outcome.answered': "Risposta data",
     'outcome.refused_no_context': "Rifiutata: non nei documenti",
     'outcome.kb_unavailable': "Knowledge base non disponibile",
@@ -666,6 +687,11 @@ const REVIEW_LABELLING_REASONS = [
   'low_score',
   'no_source_opened',
 ];
+/** Phase 5.3 reasons (0967): the weekly sample and re-review. Kept apart from the mined reasons, which the mining report counts. */
+const REVIEW_LABELLING_SAMPLE_REASONS = ['representative', 're_review'];
+/** rag_review_item_strata.source; a mined item has none. */
+const REVIEW_LABELLING_SOURCES = ['representative', 'pilot', 'drift_fill', 'historical'];
+const REVIEW_LABELLING_SOURCE_FILTER = 'source:';
 const REVIEW_LABELLING_LANGUAGES = ['zh', 'en', 'it'];
 const REVIEW_LABELLING_OUTCOMES = ['answered', 'refused_no_context', 'kb_unavailable', 'degraded_answer', 'unknown'];
 const REVIEW_LABELLING_CHANNELS = ['chat', 'embed', 'voice'];
@@ -840,7 +866,18 @@ function reviewLabellingFormatDate(value, locale) {
 }
 
 function reviewLabellingReasonText(code, locale) {
+  if (REVIEW_LABELLING_SAMPLE_REASONS.includes(code)) return reviewLabellingLabel(`tag.${code}`, locale);
   return REVIEW_LABELLING_REASONS.includes(code) ? reviewLabellingLabel(`reason.${code}`, locale) : reviewLabellingLabel('reason.unknown', locale, { code });
+}
+
+function reviewLabellingSourceText(code, locale) {
+  return REVIEW_LABELLING_SOURCES.includes(code) ? reviewLabellingLabel(`tag.${code}`, locale) : reviewLabellingLabel('source.unknown', locale, { code });
+}
+
+/** A known reason or source as its label; an unknown code inside its sentence, the code in a code element (text only). */
+function reviewLabellingCodeNodes(doc, known, key, label, locale, code) {
+  if (known) return [doc.createTextNode(label)];
+  return reviewLabellingTemplateNodes(doc, reviewLabellingLabel(key, locale), { code });
 }
 
 function reviewLabellingOutcomeText(code, locale) {
@@ -873,7 +910,9 @@ function reviewLabellingQueuePath(filters, cursor) {
   const params = new URLSearchParams();
   for (const name of ['status', 'reason', 'language']) {
     const value = filters && filters[name];
-    if (value) params.set(name, value);
+    if (!value) continue;
+    if (name === 'reason' && value.startsWith(REVIEW_LABELLING_SOURCE_FILTER)) params.set('source', value.slice(REVIEW_LABELLING_SOURCE_FILTER.length));
+    else params.set(name, value);
   }
   if (cursor) params.set('cursor', cursor);
   const query = params.toString();
@@ -934,6 +973,7 @@ function reviewLabellingQueueRow(raw) {
     question: reviewLabellingString(raw.query_masked),
     queryLanguage: reviewLabellingString(raw.query_language),
     reasons: reviewLabellingStrings(raw.reasons),
+    source: reviewLabellingString(raw.source),
     occurrences: Number.isInteger(raw.occurrences) ? raw.occurrences : 1,
     outcome: reviewLabellingString(raw.outcome) || 'unknown',
     status: reviewLabellingString(raw.status) || 'open',
@@ -1241,7 +1281,12 @@ class ReviewLabellingPanel {
         ...REVIEW_LABELLING_STATUSES.map((s) => ({ value: s, label: this.t(`status.${s}`) })),
         { value: '', label: all },
       ]),
-      this.filterSelect('reason', 'filter.reason', [{ value: '', label: all }, ...REVIEW_LABELLING_REASONS.map((r) => ({ value: r, label: this.t(`reason.${r}`) }))]),
+      this.filterSelect('reason', 'filter.reason', [
+        { value: '', label: all },
+        ...REVIEW_LABELLING_REASONS.map((r) => ({ value: r, label: this.t(`reason.${r}`) })),
+        ...REVIEW_LABELLING_SAMPLE_REASONS.map((r) => ({ value: r, label: this.t(`tag.${r}`) })),
+        { value: `${REVIEW_LABELLING_SOURCE_FILTER}historical`, label: this.t('tag.historical') },
+      ]),
       this.filterSelect('language', 'filter.language', [{ value: '', label: all }, ...REVIEW_LABELLING_LANGUAGES.map((l) => ({ value: l, label: this.t(`lang.${l}`) }))]),
     ]);
     const refresh = this.el('button', { className: 'btn btn-sm btn-outline md:ml-auto', attrs: { type: 'button', 'data-review-refresh': true } }, [
@@ -1306,7 +1351,12 @@ class ReviewLabellingPanel {
       open.addEventListener('click', () => this.openCase(row.id));
       const reasons = this.reasonBadges(row);
       const small = this.el('div', { className: 'md:hidden mt-1 text-xs font-normal text-base-content/70 flex flex-wrap gap-x-2 gap-y-1' }, [
-        this.el('span', { text: row.reasons.length ? row.reasons.map((r) => reviewLabellingReasonText(r, this.locale)).join(', ') : this.t('reason.none') }),
+        this.el('span', {
+          text: [
+            ...(row.reasons.length ? row.reasons.map((r) => reviewLabellingReasonText(r, this.locale)) : [this.t('reason.none')]),
+            ...(row.source ? [reviewLabellingSourceText(row.source, this.locale)] : []),
+          ].join(', '),
+        }),
         this.el('span', {}, [reviewLabellingLanguageNode(doc, row.queryLanguage, this.locale)]),
         row.minedAt ? this.el('span', { text: reviewLabellingFormatDate(row.minedAt, this.locale) }) : null,
       ]);
@@ -1343,7 +1393,26 @@ class ReviewLabellingPanel {
   reasonBadges(row) {
     const wrap = this.el('div', { className: 'flex flex-wrap items-center gap-2' });
     if (row.reasons.length === 0) wrap.appendChild(this.el('span', { className: 'text-xs text-base-content/70', text: this.t('reason.none') }));
-    for (const reason of row.reasons) wrap.appendChild(this.el('span', { className: 'badge badge-sm badge-ghost h-auto', text: reviewLabellingReasonText(reason, this.locale) }));
+    for (const reason of row.reasons) {
+      const sample = REVIEW_LABELLING_SAMPLE_REASONS.includes(reason);
+      const known = sample || REVIEW_LABELLING_REASONS.includes(reason);
+      wrap.appendChild(
+        this.el(
+          'span',
+          { className: `badge badge-sm ${sample ? 'badge-outline' : 'badge-ghost'} h-auto` },
+          reviewLabellingCodeNodes(this.doc, known, 'reason.unknown', reviewLabellingReasonText(reason, this.locale), this.locale, reason),
+        ),
+      );
+    }
+    if (row.source) {
+      wrap.appendChild(
+        this.el(
+          'span',
+          { className: 'badge badge-sm badge-outline h-auto', attrs: { 'data-review-source-tag': true } },
+          reviewLabellingCodeNodes(this.doc, REVIEW_LABELLING_SOURCES.includes(row.source), 'source.unknown', reviewLabellingSourceText(row.source, this.locale), this.locale, row.source),
+        ),
+      );
+    }
     if (row.occurrences > 1) {
       wrap.appendChild(this.el('span', { className: 'text-xs text-base-content/70 tabular-nums', text: this.t('occurrences', { count: reviewLabellingFormatNumber(row.occurrences, this.locale) }) }));
     }
@@ -1515,6 +1584,8 @@ class ReviewLabellingPanel {
           attrs: { tabindex: '0', role: 'region', 'aria-label': this.t('item.answer'), dir: 'auto', translate: 'no', 'data-review-answer': true },
         }),
       );
+    } else if (this.importedWithoutAnswer()) {
+      header.appendChild(this.el('p', { className: 'text-sm text-base-content/70 mt-4 max-w-prose', text: this.t('item.noAnswerImported'), attrs: { 'data-review-no-answer': true } }));
     } else {
       header.appendChild(this.el('p', { className: 'text-xs text-base-content/70 mt-2', text: this.t('item.noAnswer') }));
     }
@@ -1530,6 +1601,12 @@ class ReviewLabellingPanel {
     this.contentHost.replaceChildren(...nodes);
     this.renderEvidence();
     this.renderLabel();
+  }
+
+  /** An imported question without a recorded answer: no answer, no candidate list and no answer check; the search stays. */
+  importedWithoutAnswer() {
+    const view = this.caseState && this.caseState.view;
+    return Boolean(view) && !view.answer && view.source === 'historical';
   }
 
   caseMeta() {
@@ -1599,6 +1676,10 @@ class ReviewLabellingPanel {
     if (!this.evidenceHost || !this.caseState) return;
     const doc = this.doc;
     const state = this.caseState;
+    if (this.importedWithoutAnswer()) {
+      this.evidenceHost.replaceChildren(this.searchBlock());
+      return;
+    }
     const nodes = [this.el('h4', { className: 'text-balance text-base font-semibold mb-2', text: this.t('passages.heading') })];
     if (state.chunksState === 'failed') {
       const reload = this.el('button', { className: 'btn btn-sm', text: this.t('action.reloadPassages'), attrs: { type: 'button', 'data-review-reload-passages': true } });
