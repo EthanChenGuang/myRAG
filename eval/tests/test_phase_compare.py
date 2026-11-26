@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 from rag_sidecar.contracts.baseline import NoiseConfig
+from rag_sidecar.contracts.cache import CachePairResult, CachePairsRun, SemanticCacheCalibration
 from rag_sidecar.contracts.eval_run import RagRunOptions, TraceCandidate, TraceRefusal
 from rag_sidecar.contracts.golden import GoldenItem
 from rag_sidecar.contracts.report import InjectionReport, MetricValue
@@ -15,7 +16,13 @@ from rag_eval.gate import evaluate_gate
 from rag_eval.metrics import score_items
 from rag_eval.golden_io import write_golden
 from rag_eval.phase_compare import (
+    CachePairsOutput,
     ComparisonSpec,
+    NearMissZeroSpec,
+    cache_latency_check,
+    equal_runs_check,
+    near_miss_zero_check,
+    slice_hold_check,
     RunRequest,
     SwitchComparison,
     SwitchComparisonSpec,
@@ -1073,17 +1080,6 @@ def test_report_only_runs_never_fail_the_comparison(tmp_path: Path):
 
 
 # ---------- Phase 6 (D-42): equal_runs, slice_hold, cache_latency, near_miss_zero
-from rag_sidecar.contracts.cache import CachePairResult, CachePairsRun, SemanticCacheCalibration  # noqa: E402
-
-from rag_eval.phase_compare import (  # noqa: E402
-    CachePairsOutput,
-    NearMissZeroSpec,
-    cache_latency_check,
-    equal_runs_check,
-    near_miss_zero_check,
-    slice_hold_check,
-)
-
 SPEC6 = REPO_ROOT / "eval" / "config" / "phase6-comparison.json"
 HOLD_SLICES = ["category:compound", "category:cross_lingual"]
 
@@ -1198,9 +1194,11 @@ def test_cache_latency_fails_when_hits_are_not_fast_enough_or_unmeasured():
 
 def _calibration(tmp_path: Path, max_distance: float = 0.05, source: str = "default") -> Path:
     path = tmp_path / "semantic-cache.json"
-    config = SemanticCacheCalibration.model_validate(
-        {"profiles": [{"embedding_profile_id": "fixture-ngram", "max_distance": max_distance, "source": source}]}
-    )
+    entry = {"embedding_profile_id": "fixture-ngram", "max_distance": max_distance, "source": source}
+    if source == "calibrated":
+        metrics = {"paraphrase_pairs": 2, "near_miss_pairs": 2, "paraphrase_hit_rate": 0.5, "near_miss_wrong_hit_rate": 0.0}
+        entry.update({"fitted_at": "2026-01-01T00:00:00Z", "dev": metrics, "test": metrics})
+    config = SemanticCacheCalibration.model_validate({"profiles": [entry]})
     path.write_text(config.model_dump_json(), encoding="utf-8")
     return path
 
@@ -1239,6 +1237,8 @@ def _spec6_world(tmp_path: Path) -> SwitchComparisonSpec:
         for check in run["checks"]:
             if isinstance(check, dict) and check["kind"] == "near_miss_zero":
                 check["calibration"] = str(calibration)
+            if isinstance(check, dict) and check["kind"] == "slice_hold":
+                check["slices"] = HOLD_SLICES
     return SwitchComparisonSpec.model_validate(raw)
 
 
@@ -1291,7 +1291,7 @@ def test_phase6_spec_rejects_bad_references_and_misplaced_checks():
 def test_run_switch_comparison_phase6_passes_and_records_cache_measures(tmp_path: Path):
     spec = _spec6_world(tmp_path)
     seen: dict = {}
-    commands, calls = _env_commands()
+    commands, _ = _env_commands()
     outputs = {run.name: _output() for run in spec.runs if not run.cache_pairs}
     out = tmp_path / "phase-06"
     result = run_switch_comparison(

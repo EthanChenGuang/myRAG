@@ -15,11 +15,13 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 from rag_sidecar.contracts.baseline import Baseline, GateOffender, GateResult, NoiseConfig
+from rag_sidecar.contracts.cache import CachePairsRun
 from rag_sidecar.contracts.eval_run import RagTrace
 from rag_sidecar.contracts.golden import GoldenItem
 from rag_sidecar.contracts.report import EvalReport, InjectionReport, ItemResult, SliceMetrics
 from rag_sidecar.contracts.retrieval import ChunkingDecision, ChunkingSweepReport
 
+from rag_eval.calibrate.cache import DEFAULT_MAX_DISTANCE, NEAR_MISS, CalibrationError, effective_threshold, hits_at, load_pairs, read_config
 from rag_eval.calibrate.refusal import IMAGE_FLOOR, CalibrationResult, CrossComparison, _best_dense, _gate_decided, fit_threshold
 from rag_eval.gate import evaluate_gate
 from rag_eval.golden_io import load_golden
@@ -27,6 +29,7 @@ from rag_eval.harness_runner import HARNESS_SCRIPT, TAIL_LINES, HarnessError, Sp
 from rag_eval.metrics import CLAUSE_TAG, CROSS_LINGUAL
 from rag_eval.paths import REPO_ROOT, repo_relative, resolve_cli_path
 from rag_eval.profile_compare import baseline_from_report
+from rag_eval.report import _latency_stat, _retrieval_total, cache_outcome
 from rag_eval.sweep.chunking import CLAUSE_SLICE, GENERAL_DOC_TYPE, LEGACY_ID, _profiles_for, ingest_doc_types, parse_presets
 from rag_eval.traces import load_manifest, load_traces
 
@@ -902,8 +905,7 @@ def materialise_run_config(run: RunSpec, profiles: list[dict[str, Any]]) -> dict
     return config
 
 
-def default_runner(request: RunRequest, spawner: Spawner | None = None) -> RunOutput:
-    """One in-process smoke run over the default golden files of its fixture mode; scoring only, the gate runs here."""
+def _spawn_harness(request: RunRequest, spawner: Spawner | None) -> Path:
     out_dir = Path(request.out_dir)
     inputs = out_dir / "inputs"
     inputs.mkdir(parents=True, exist_ok=True)
@@ -936,6 +938,12 @@ def default_runner(request: RunRequest, spawner: Spawner | None = None) -> RunOu
             f"run {request.name}: harness exited with exit code {result.returncode}\n--- last {TAIL_LINES} lines ---\n{tail}",
             exit_code=result.returncode,
         )
+    return out_dir
+
+
+def default_runner(request: RunRequest, spawner: Spawner | None = None) -> RunOutput:
+    """One in-process smoke run over the default golden files of its fixture mode; scoring only, the gate runs here."""
+    out_dir = _spawn_harness(request, spawner)
     try:
         report = EvalReport.model_validate_json((out_dir / "report.json").read_text(encoding="utf-8"))
         traces = load_traces(out_dir / "traces.jsonl")
@@ -943,6 +951,18 @@ def default_runner(request: RunRequest, spawner: Spawner | None = None) -> RunOu
     except (OSError, ValidationError, ValueError) as exc:
         raise HarnessError(f"run {request.name}: harness output in {out_dir} is unreadable: {exc}", exit_code=0) from exc
     return RunOutput(report=report, traces=traces, golden=golden)
+
+
+def default_pairs_runner(request: RunRequest, spawner: Spawner | None = None) -> CachePairsOutput:
+    """D-37 cache-pair run (--cache-pairs): fresh fixture database, anchors stored, candidates checked at the probe distance."""
+    out_dir = _spawn_harness(request, spawner)
+    try:
+        pairs = load_pairs(out_dir / "cache-pairs.json")
+        traces = load_traces(out_dir / "traces.jsonl")
+        manifest = load_manifest(out_dir / "run.json")
+    except (OSError, ValidationError, ValueError, CalibrationError) as exc:
+        raise HarnessError(f"run {request.name}: cache-pair output in {out_dir} is unreadable: {exc}", exit_code=0) from exc
+    return CachePairsOutput(pairs=pairs, traces=traces, run_config_hash=manifest.run_config_hash)
 
 
 def default_command_runner(argv: list[str]) -> int:
@@ -1399,10 +1419,78 @@ class RetrievalUnchangedSpec(_Model):
         return "retrieval_unchanged"
 
 
-CheckSpec = Annotated[AbsoluteZeroSpec | CategoryNoiseSpec | RetrievalUnchangedSpec, Field(discriminator="kind")]
+SLICE_NAME = re.compile(r"^(overall|language:[a-z][a-zA-Z-]*|category:[a-z][a-z0-9_]*)$")
+HOLD_METRICS = (*RETRIEVAL_METRICS, "correct_refusal_rate", "false_refusal_rate")
+CACHE_PAIRS_FLAG = "--cache-pairs"
+CACHE_CALIBRATION = "eval/config/semantic-cache.json"
 
 
-def check_name(check: str | AbsoluteZeroSpec | CategoryNoiseSpec | RetrievalUnchangedSpec) -> str:
+class EqualRunsSpec(_Model):
+    """D-42 a, e: item by item, this run's outputs equal those of an earlier item run on the same data."""
+
+    kind: Literal["equal_runs"]
+    reference: str
+
+    @property
+    def name(self) -> str:
+        return f"equal_runs:{self.reference}"
+
+
+class SliceHoldSpec(_Model):
+    """D-42 b: the named slices hold or improve against an earlier item run, and no overall, language or category slice moves
+    beyond the noise band on Recall@5, Recall@10, MRR, correct refusal or false refusal."""
+
+    kind: Literal["slice_hold"]
+    reference: str
+    slices: list[str] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _slices(self) -> SliceHoldSpec:
+        for name in self.slices:
+            if not SLICE_NAME.match(name):
+                raise ValueError(f"slice_hold: {name!r} is not an overall, language: or category: slice")
+        if len(set(self.slices)) != len(self.slices):
+            raise ValueError("slice_hold: slices must be unique")
+        return self
+
+    @property
+    def name(self) -> str:
+        return f"slice_hold:{self.reference}"
+
+
+class CacheLatencySpec(_Model):
+    """D-42 e: on a cache-pair run, hit p95 retrieval latency is at most max_ratio of miss p95."""
+
+    kind: Literal["cache_latency"]
+    max_ratio: float = Field(default=0.5, gt=0, le=1)
+
+    @property
+    def name(self) -> str:
+        return "cache_latency"
+
+
+class NearMissZeroSpec(_Model):
+    """D-42 e: on a cache-pair run, no near-miss pair hits at the distance the app uses for the run's embedding profile."""
+
+    kind: Literal["near_miss_zero"]
+    calibration: str = CACHE_CALIBRATION
+    default_distance: float = Field(default=DEFAULT_MAX_DISTANCE, gt=0, le=2)
+
+    @property
+    def name(self) -> str:
+        return "near_miss_zero"
+
+
+ITEM_RUN_SPECS = (AbsoluteZeroSpec, CategoryNoiseSpec, RetrievalUnchangedSpec, EqualRunsSpec, SliceHoldSpec)
+CACHE_PAIR_SPECS = (CacheLatencySpec, NearMissZeroSpec)
+CheckSpec = Annotated[
+    AbsoluteZeroSpec | CategoryNoiseSpec | RetrievalUnchangedSpec | EqualRunsSpec | SliceHoldSpec | CacheLatencySpec | NearMissZeroSpec,
+    Field(discriminator="kind"),
+]
+AnyCheckSpec = AbsoluteZeroSpec | CategoryNoiseSpec | RetrievalUnchangedSpec | EqualRunsSpec | SliceHoldSpec | CacheLatencySpec | NearMissZeroSpec
+
+
+def check_name(check: str | AnyCheckSpec) -> str:
     return check if isinstance(check, str) else check.name
 
 
@@ -1421,6 +1509,7 @@ class SwitchRun(_Model):
     env: dict[str, str] = Field(default_factory=dict)
     switches: dict[str, str] = Field(default_factory=dict)
     harness_flags: list[HarnessFlag] = Field(default_factory=list)
+    cache_pairs: bool = False
     checks: list[str | CheckSpec] = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -1436,6 +1525,20 @@ class SwitchRun(_Model):
             raise ValueError(f"run {self.name}: checks must be unique")
         if "report_only" in names and len(names) > 1:
             raise ValueError(f"run {self.name}: report_only is the only check of a reported run")
+        specs = [check for check in self.checks if not isinstance(check, str)]
+        if self.cache_pairs:
+            if self.harness_flags:
+                raise ValueError(f"run {self.name}: a cache-pair run takes no harness flags")
+            if self.base is None:
+                raise ValueError(f"run {self.name}: a cache-pair run needs a base run config with the query layer on")
+            misplaced = [check.name for check in specs if not isinstance(check, CACHE_PAIR_SPECS)]
+            builtin = [check for check in self.checks if isinstance(check, str) and check in BUILTIN_CHECKS and check != "report_only"]
+            if misplaced or builtin:
+                raise ValueError(f"run {self.name}: {', '.join(misplaced + builtin)} need(s) an item run, not a cache-pair run")
+        else:
+            misplaced = [check.name for check in specs if isinstance(check, CACHE_PAIR_SPECS)]
+            if misplaced:
+                raise ValueError(f"run {self.name}: {', '.join(misplaced)} need(s) a cache-pair run")
         return self
 
 
@@ -1466,6 +1569,16 @@ class SwitchComparisonSpec(_Model):
                 raise ValueError(f"run {run.name} names unknown checks: {', '.join(unknown)}")
         if not {run.fixture_mode for run in self.runs} <= set(self.baselines):
             raise ValueError("every fixture mode used by a run needs a baseline")
+        earlier: dict[str, SwitchRun] = {}
+        for run in self.runs:
+            for check in run.checks:
+                if isinstance(check, (EqualRunsSpec, SliceHoldSpec)):
+                    reference = earlier.get(check.reference)
+                    if reference is None:
+                        raise ValueError(f"run {run.name}: {check.name} must name an earlier run")
+                    if reference.cache_pairs or reference.fixture_mode != run.fixture_mode:
+                        raise ValueError(f"run {run.name}: {check.name} must name an item run of fixture mode {run.fixture_mode}")
+            earlier[run.name] = run
         return self
 
 
@@ -1476,17 +1589,25 @@ class CheckResult(_Model):
     measures: dict[str, float | None] = Field(default_factory=dict)
 
 
+class CachePairsSummary(_Model):
+    pairs: int = Field(ge=0)
+    probe_max_distance: float
+    embedding_profile_id: str | None
+    traces: int = Field(ge=0)
+
+
 class SwitchRunResult(_Model):
     name: str
     fixture_mode: FixtureMode
     switches: dict[str, str]
     harness_flags: list[str]
     run_config_hash: str
-    overall: SliceMetrics
+    overall: SliceMetrics | None = None
     invalid_citation_rate: float | None
     citation_coverage: float | None
     run_config_env: dict[str, str] | None = None
     injection: InjectionReport | None = None
+    cache_pairs: CachePairsSummary | None = None
     passed: bool
     checks: list[CheckResult]
 
@@ -1643,6 +1764,209 @@ def gate_check(output: RunOutput, baseline: Baseline, noise: NoiseConfig) -> Che
     return CheckResult(name="gate", passed=gate.passed, detail=detail)
 
 
+# ---------- Phase 6 (D-42): run equality, slice holds, cache latency and near-miss hits
+
+EQUAL_DATA_FIELDS = (
+    "golden_sha256",
+    "corpus_sha256",
+    "embedder_id",
+    "embedder_version",
+    "embedder_source_sha256",
+    "deployment_mode",
+    "tier",
+    "golden_filter",
+)
+
+
+@dataclass(frozen=True)
+class CachePairsOutput:
+    pairs: CachePairsRun
+    traces: list[RagTrace]
+    run_config_hash: str
+
+
+PairsRunner = Callable[[RunRequest], CachePairsOutput]
+
+
+def _item_signature(item: ItemResult, trace: RagTrace | None) -> dict[str, Any]:
+    signature: dict[str, Any] = {"result": item.model_dump(mode="json")}
+    if trace is not None:
+        signature["kept"] = [(chunk.rank, chunk.chunk_id, chunk.document_id, chunk.kept_by) for chunk in trace.kept]
+        signature["refused"] = trace.refused
+        signature["refusal_reason"] = trace.refusal_reason
+        signature["refusal"] = trace.refusal.model_dump(mode="json") if trace.refusal is not None else None
+        signature["answer"] = trace.answer
+    return signature
+
+
+def _traces_by_item(traces: list[RagTrace]) -> tuple[dict[str, RagTrace], list[str]]:
+    by_item: dict[str, RagTrace] = {}
+    repeated: list[str] = []
+    for trace in traces:
+        if trace.item_id is None:
+            continue
+        if trace.item_id in by_item:
+            repeated.append(trace.item_id)
+        by_item[trace.item_id] = trace
+    return by_item, sorted(set(repeated))
+
+
+def equal_runs_check(output: RunOutput, reference_output: RunOutput, *, reference: str) -> CheckResult:
+    """D-42: every item's scored result, kept chunks (rank, id, document, keep reason), refusal and answer equal the reference
+    run's. Fails naming the first differing item in report order; a run on other data or another item set never passes."""
+    name = f"equal_runs:{reference}"
+    observed, recorded = output.report, reference_output.report
+    detail = [
+        f"{field} differs from {reference}"
+        for field in EQUAL_DATA_FIELDS
+        if getattr(observed, field) != getattr(recorded, field)
+    ]
+    if detail:
+        return CheckResult(name=name, passed=False, detail=detail)
+    ours, repeated = _traces_by_item(output.traces)
+    theirs, repeated_ref = _traces_by_item(reference_output.traces)
+    if repeated or repeated_ref:
+        return CheckResult(name=name, passed=False, detail=[f"item(s) with more than one trace: {', '.join(repeated or repeated_ref)}"])
+    observed_items = {item.item_id: item for item in observed.items}
+    recorded_items = {item.item_id: item for item in recorded.items}
+    only_ours = sorted(set(observed_items) - set(recorded_items))
+    only_theirs = sorted(set(recorded_items) - set(observed_items))
+    if only_ours or only_theirs:
+        detail = []
+        if only_theirs:
+            detail.append(f"item(s) missing from this run: {', '.join(only_theirs)}")
+        if only_ours:
+            detail.append(f"item(s) missing from {reference}: {', '.join(only_ours)}")
+        return CheckResult(name=name, passed=False, detail=detail)
+    differing: list[str] = []
+    first: str | None = None
+    for item in observed.items:
+        mine = _item_signature(item, ours.get(item.item_id))
+        other = _item_signature(recorded_items[item.item_id], theirs.get(item.item_id))
+        if mine == other:
+            continue
+        differing.append(item.item_id)
+        if first is None:
+            fields = sorted(key for key in set(mine) | set(other) if mine.get(key) != other.get(key))
+            if "result" in fields:
+                result_fields = sorted(
+                    key for key, value in mine["result"].items() if other["result"].get(key) != value
+                ) or ["result"]
+                fields = [*(f"result.{key}" for key in result_fields), *(f for f in fields if f != "result")]
+            first = f"first differing item {item.item_id}: {', '.join(fields)}"
+    detail = [first] if first is not None else []
+    return CheckResult(
+        name=name,
+        passed=not differing,
+        detail=detail,
+        measures={"items_compared": float(len(observed.items)), "items_differing": float(len(differing))},
+    )
+
+
+def _hold_noise(noise: NoiseConfig) -> NoiseConfig:
+    defaults = {"correct_refusal_rate": "higher", "false_refusal_rate": "lower"}
+    return noise.model_copy(
+        update={
+            "gated_slice_prefixes": list(SLICE_PREFIXES),
+            "metrics": {metric: noise.metrics.get(metric, defaults.get(metric, "higher")) for metric in HOLD_METRICS},
+        }
+    )
+
+
+def slice_hold_check(
+    output: RunOutput, reference_output: RunOutput, noise: NoiseConfig, *, slices: list[str], reference: str
+) -> CheckResult:
+    """D-42 b: the gate's band arithmetic against the reference run's report (one run, so the band is the noise floor), over the
+    overall, every language and every category slice on Recall@5, Recall@10, MRR, correct and false refusal. The named slices
+    must be measured in both runs; their retrieval deltas are recorded."""
+    name = f"slice_hold:{reference}"
+    baseline = baseline_from_report(reference_output.report, tag=reference)
+    aligned = baseline.model_copy(update={"request_options": output.report.request_options})
+    gate = evaluate_gate(output.report, aligned, _hold_noise(noise))
+    if gate.mismatches:
+        return CheckResult(name=name, passed=False, detail=list(gate.mismatches))
+    offenders = [o for o in gate.offenders if o.kind == "noise_band"]
+    detail = [
+        f"{o.slice}:{o.metric} {o.observed:.4f} {'<' if o.direction == 'higher' else '>'} {o.threshold:.4f} ({reference} {o.baseline_mean:.4f})"
+        for o in offenders
+    ]
+    measures: dict[str, float | None] = {}
+    for slice_name in slices:
+        ours = _slice(output.report, slice_name)
+        theirs = _slice(reference_output.report, slice_name)
+        if ours is None or theirs is None:
+            where = "this run" if ours is None else reference
+            detail.append(f"{slice_name} is missing from {where}")
+            continue
+        measured = [m for m in RETRIEVAL_METRICS if getattr(ours, m).value is not None and getattr(theirs, m).value is not None]
+        if not measured:
+            detail.append(f"{slice_name} has no retrieval metric measured in both runs")
+            continue
+        for metric in measured:
+            measures[f"{slice_name}:{metric}_delta"] = _delta(getattr(ours, metric).value, getattr(theirs, metric).value)
+    return CheckResult(name=name, passed=not detail, detail=detail, measures=measures)
+
+
+def cache_latency_check(output: CachePairsOutput, *, max_ratio: float) -> CheckResult:
+    """D-42 e: the retrieval total of the pair run's cache hits against its misses (fail-open failures count as misses, bypasses
+    are left out), read like the eval report's semantic_cache block. Nothing passes without both hits and misses."""
+    hits: list[float] = []
+    misses: list[float] = []
+    for trace in output.traces:
+        outcome = cache_outcome(trace)
+        if outcome is None or outcome[0] == "bypass":
+            continue
+        total = _retrieval_total(trace)
+        if total is None:
+            continue
+        (hits if outcome[0] == "hit" else misses).append(total)
+    hit, miss = _latency_stat(hits), _latency_stat(misses)
+    measures: dict[str, float | None] = {
+        "hit_p50_ms": hit.p50_ms if hit else None,
+        "hit_p95_ms": hit.p95_ms if hit else None,
+        "hits": float(len(hits)),
+        "miss_p50_ms": miss.p50_ms if miss else None,
+        "miss_p95_ms": miss.p95_ms if miss else None,
+        "misses": float(len(misses)),
+        "max_ratio": max_ratio,
+    }
+    if hit is None or miss is None:
+        return CheckResult(name="cache_latency", passed=False, detail=["the run measured no cache hit or no cache miss"], measures=measures)
+    measures["ratio"] = hit.p95_ms / miss.p95_ms if miss.p95_ms > 0 else None
+    passed = hit.p95_ms <= max_ratio * miss.p95_ms
+    detail = [] if passed else [f"hit p95 {hit.p95_ms:.1f} ms > {max_ratio:g} x miss p95 {miss.p95_ms:.1f} ms"]
+    return CheckResult(name="cache_latency", passed=passed, detail=detail, measures=measures)
+
+
+def near_miss_zero_check(output: CachePairsOutput, spec: NearMissZeroSpec) -> CheckResult:
+    """D-42 e: no near-miss pair hits at the effective distance (a calibrated entry for the run's profile, else the default),
+    the distance the app checks at (src/lib/rag/cache/threshold.ts). Needs at least one near-miss pair."""
+    run = output.pairs
+    if run.embedding_profile_id is None:
+        return CheckResult(name="near_miss_zero", passed=False, detail=["the pair run names no embedding profile"])
+    try:
+        config = read_config(resolve_cli_path(Path(spec.calibration)))
+    except CalibrationError as exc:
+        return CheckResult(name="near_miss_zero", passed=False, detail=[str(exc)])
+    threshold = effective_threshold(config, run.embedding_profile_id, spec.default_distance)
+    near = [pair for pair in run.pairs if pair.category == NEAR_MISS]
+    wrong = [pair.pair_id for pair in near if hits_at(pair, threshold)]
+    measures: dict[str, float | None] = {
+        "max_distance": threshold,
+        "near_miss_pairs": float(len(near)),
+        "near_miss_wrong_hits": float(len(wrong)),
+        "near_miss_wrong_hit_rate": len(wrong) / len(near) if near else None,
+    }
+    detail: list[str] = []
+    if wrong:
+        detail.append(f"near-miss wrong hit(s) at {threshold:g}: {', '.join(wrong)}")
+    if not near:
+        detail.append("the pair run has no near-miss pair")
+    if run.probe_max_distance < threshold:
+        detail.append(f"probe distance {run.probe_max_distance:g} is below the effective distance {threshold:g}")
+    return CheckResult(name="near_miss_zero", passed=not detail, detail=detail, measures=measures)
+
+
 def default_env_command_runner(argv: list[str], env: dict[str, str]) -> int:
     result = subprocess.run(argv, cwd=REPO_ROOT, capture_output=True, text=True, check=False, env={**os.environ, **env})
     if result.returncode != 0:
@@ -1662,6 +1986,7 @@ def run_switch_comparison(
     out: Path,
     runner: Runner = default_runner,
     commands: EnvCommandRunner = default_env_command_runner,
+    pairs_runner: PairsRunner = default_pairs_runner,
 ) -> SwitchComparison:
     if not isinstance(spec, SwitchComparisonSpec):
         spec = _read_model(SwitchComparisonSpec, str(spec), "comparison spec")
@@ -1671,23 +1996,72 @@ def run_switch_comparison(
     harness_dir = out_dir / HARNESS_DIR
     command_cache: dict[tuple[str, tuple[tuple[str, str], ...]], int] = {}
     results: list[SwitchRunResult] = []
+    item_outputs: dict[str, RunOutput] = {}
+
+    def command_check(run: SwitchRun, check: str) -> CheckResult:
+        argv = list(spec.commands[check])
+        key = (check, tuple(sorted(run.switches.items())))
+        if key not in command_cache:
+            command_cache[key] = commands(argv, dict(run.switches))
+        code = command_cache[key]
+        return CheckResult(name=check, passed=code == 0, detail=[] if code == 0 else [f"{' '.join(argv)} exited {code}"])
+
     for run in spec.runs:
-        print(f"[Phase Compare] run {run.name} ({run.fixture_mode})", file=sys.stderr)
+        print(f"[Phase Compare] run {run.name} ({run.fixture_mode}{', cache pairs' if run.cache_pairs else ''})", file=sys.stderr)
         run_config = _switch_run_config(run)
-        output = runner(
-            RunRequest(
-                name=run.name,
-                run_config=run_config,
-                fixture_mode=run.fixture_mode,
-                out_dir=harness_dir / run.name,
-                process_env=dict(run.switches),
-                harness_flags=tuple(run.harness_flags),
-            )
+        request = RunRequest(
+            name=run.name,
+            run_config=run_config,
+            fixture_mode=run.fixture_mode,
+            out_dir=harness_dir / run.name,
+            process_env=dict(run.switches),
+            harness_flags=(CACHE_PAIRS_FLAG,) if run.cache_pairs else tuple(run.harness_flags),
         )
+        if run.cache_pairs:
+            pairs_output = pairs_runner(request)
+            pair_checks: list[CheckResult] = []
+            for check in run.checks:
+                if isinstance(check, CacheLatencySpec):
+                    pair_checks.append(cache_latency_check(pairs_output, max_ratio=check.max_ratio))
+                elif isinstance(check, NearMissZeroSpec):
+                    pair_checks.append(near_miss_zero_check(pairs_output, check))
+                elif check == "report_only":
+                    pair_checks.append(CheckResult(name="report_only", passed=True, detail=["reported, not gated"]))
+                else:
+                    pair_checks.append(command_check(run, str(check)))
+            results.append(
+                SwitchRunResult(
+                    name=run.name,
+                    fixture_mode=run.fixture_mode,
+                    switches=dict(run.switches),
+                    harness_flags=list(request.harness_flags),
+                    run_config_hash=pairs_output.run_config_hash,
+                    invalid_citation_rate=None,
+                    citation_coverage=None,
+                    run_config_env=dict(run_config["env"]),
+                    cache_pairs=CachePairsSummary(
+                        pairs=len(pairs_output.pairs.pairs),
+                        probe_max_distance=pairs_output.pairs.probe_max_distance,
+                        embedding_profile_id=pairs_output.pairs.embedding_profile_id,
+                        traces=len(pairs_output.traces),
+                    ),
+                    passed=all(check.passed for check in pair_checks),
+                    checks=pair_checks,
+                )
+            )
+            continue
+        output = runner(request)
+        item_outputs[run.name] = output
         baseline = baselines[run.fixture_mode]
         checks: list[CheckResult] = []
         for check in run.checks:
-            if isinstance(check, AbsoluteZeroSpec):
+            if isinstance(check, EqualRunsSpec):
+                checks.append(equal_runs_check(output, item_outputs[check.reference], reference=check.reference))
+            elif isinstance(check, SliceHoldSpec):
+                checks.append(
+                    slice_hold_check(output, item_outputs[check.reference], noise, slices=list(check.slices), reference=check.reference)
+                )
+            elif isinstance(check, AbsoluteZeroSpec):
                 checks.append(absolute_zero_check(output, check.path))
             elif isinstance(check, CategoryNoiseSpec):
                 checks.append(category_noise_check(output, baseline, noise, exclude=list(check.exclude)))
@@ -1705,15 +2079,8 @@ def run_switch_comparison(
                 checks.append(no_slice_drop_check(output, baseline, noise))
             elif check == "citation_validity":
                 checks.append(citation_validity_check(output))
-            else:
-                argv = list(spec.commands[check])
-                key = (check, tuple(sorted(run.switches.items())))
-                if key not in command_cache:
-                    command_cache[key] = commands(argv, dict(run.switches))
-                code = command_cache[key]
-                checks.append(
-                    CheckResult(name=check, passed=code == 0, detail=[] if code == 0 else [f"{' '.join(argv)} exited {code}"])
-                )
+            elif isinstance(check, str):
+                checks.append(command_check(run, check))
         report = output.report
         results.append(
             SwitchRunResult(
@@ -1741,7 +2108,7 @@ def run_switch_comparison(
     )
     payload = comparison.model_dump(mode="json")
     for run_payload in payload["runs"]:
-        for optional in ("run_config_env", "injection"):
+        for optional in ("run_config_env", "injection", "overall", "cache_pairs"):
             if run_payload.get(optional) is None:
                 run_payload.pop(optional, None)
     _write_text(out_dir / JSON_NAME, json.dumps(payload, sort_keys=True, indent=2) + "\n")
@@ -1771,6 +2138,32 @@ def _injection_lines(block: InjectionReport | None) -> list[str]:
     return [*lines, ""]
 
 
+def _run_summary_line(r: SwitchRunResult) -> str:
+    if r.cache_pairs is not None:
+        p = r.cache_pairs
+        return (
+            f"Cache-pair run: {p.pairs} golden pair(s), {p.traces} trace(s), probe distance {p.probe_max_distance:g}, "
+            f"embedding profile {p.embedding_profile_id or 'n/a'}."
+        )
+    o = r.overall
+    if o is None:
+        return "No item metrics."
+    return (
+        f"Recall@5 {_num(o.recall_at_5.value)}, Recall@10 {_num(o.recall_at_10.value)}, MRR {_num(o.mrr.value)}, "
+        f"correct refusal {_num(o.correct_refusal_rate.value)}, false refusal {_num(o.false_refusal_rate.value)}, "
+        f"invalid citation rate {_num(r.invalid_citation_rate)}, citation coverage {_num(r.citation_coverage)}."
+    )
+
+
+def _measure_lines(r: SwitchRunResult) -> list[str]:
+    rows = [(check.name, key, value) for check in r.checks for key, value in sorted(check.measures.items())]
+    if not rows:
+        return []
+    lines = ["", "| Check | Measure | Value |", "|---|---|---|"]
+    lines += [f"| {name} | {key} | {_num(value)} |" for name, key, value in rows]
+    return lines
+
+
 def render_switch_markdown(c: SwitchComparison) -> str:
     lines = [
         f"# Phase {c.phase} comparison",
@@ -1789,7 +2182,6 @@ def render_switch_markdown(c: SwitchComparison) -> str:
         "## Runs",
     ]
     for r in c.runs:
-        o = r.overall
         switches = ", ".join(f"{k}={v}" for k, v in sorted(r.switches.items())) or "none"
         lines += [
             "",
@@ -1805,11 +2197,7 @@ def render_switch_markdown(c: SwitchComparison) -> str:
                 else []
             ),
             *_injection_lines(r.injection),
-            (
-                f"Recall@5 {_num(o.recall_at_5.value)}, Recall@10 {_num(o.recall_at_10.value)}, MRR {_num(o.mrr.value)}, "
-                f"correct refusal {_num(o.correct_refusal_rate.value)}, false refusal {_num(o.false_refusal_rate.value)}, "
-                f"invalid citation rate {_num(r.invalid_citation_rate)}, citation coverage {_num(r.citation_coverage)}."
-            ),
+            _run_summary_line(r),
             "",
             "| Check | Result | Detail |",
             "|---|---|---|",
@@ -1817,35 +2205,8 @@ def render_switch_markdown(c: SwitchComparison) -> str:
         for check in r.checks:
             detail = "; ".join(check.detail) or "-"
             lines.append(f"| {check.name} | {_verdict(check.passed)} | {detail} |")
+        lines += _measure_lines(r)
     return "\n".join(lines) + "\n"
-
-
-@dataclass(frozen=True)
-class CachePairsOutput:
-    pairs: Any
-    traces: list[RagTrace]
-    run_config_hash: str
-
-
-class NearMissZeroSpec(_Model):
-    kind: Literal["near_miss_zero"]
-    calibration: str = ""
-
-
-def equal_runs_check(output: RunOutput, reference_output: RunOutput, *, reference: str) -> CheckResult:
-    return CheckResult(name="equal_runs", passed=False)
-
-
-def slice_hold_check(output: RunOutput, reference_output: RunOutput, noise: NoiseConfig, *, slices: list[str], reference: str) -> CheckResult:
-    return CheckResult(name="slice_hold", passed=False)
-
-
-def cache_latency_check(output: CachePairsOutput, *, max_ratio: float) -> CheckResult:
-    return CheckResult(name="cache_latency", passed=False)
-
-
-def near_miss_zero_check(output: CachePairsOutput, spec: NearMissZeroSpec) -> CheckResult:
-    return CheckResult(name="near_miss_zero", passed=True)
 
 
 def _write_text(path: Path, text: str) -> None:
@@ -1873,7 +2234,13 @@ def main(argv: list[str] | None = None) -> int:
     try:
         spec_path = resolve_cli_path(args.spec)
         if _schema_version(spec_path) == 2:
-            result = run_switch_comparison(spec_path, resolve_cli_path(args.out), runner=default_runner, commands=default_env_command_runner)
+            result = run_switch_comparison(
+                spec_path,
+                resolve_cli_path(args.out),
+                runner=default_runner,
+                commands=default_env_command_runner,
+                pairs_runner=default_pairs_runner,
+            )
         else:
             result = run_phase_comparison(spec_path, resolve_cli_path(args.out), runner=default_runner, commands=default_command_runner)
     except ComparisonError as exc:
