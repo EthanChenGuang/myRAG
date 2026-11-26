@@ -3,9 +3,10 @@ import { rpcRows, type RpcClient } from '../backend/supabase-rpc';
 import { getIngestDeps } from '../ingest/deps';
 import { isTenantKey } from '../ingest/writer';
 import { assertTenantScope, scopeKey, type TenantScope } from '../tenant/scope';
+import { dupClusterParamsHaveProfileEntries, dupClusterThreshold } from '../v2/tuning-params';
 import { simhash64, toInt64String } from './simhash';
 
-/** D-49: the shipped threshold; a fixture-fitted value reaches the service only as an explicit option (eval tooling). */
+/** D-49: the shipped threshold; a calibrated one comes from dupClusterThreshold (a fixture entry only with evalRun). */
 export const DUP_CLUSTER_THRESHOLD_DEFAULT: number = DupClusterParamsSchema.parse({}).threshold;
 /** Candidates need at most this many differing SimHash bits before the cosine check. */
 export const DUP_CLUSTER_MAX_HAMMING = 16;
@@ -101,6 +102,24 @@ function checkThreshold(value: number | undefined): number {
   const threshold = value ?? DUP_CLUSTER_THRESHOLD_DEFAULT;
   if (!Number.isFinite(threshold) || threshold < -1 || threshold > 1) throw new DupClusterError('invalid_threshold');
   return threshold;
+}
+
+/** The active embedding profile id, read only when the calibration file names a profile; null when it cannot be read. */
+async function activeEmbeddingProfileId(): Promise<string | null> {
+  try {
+    const { getActiveProfile } = await import('../embeddings/active-profile');
+    return (await getActiveProfile()).id;
+  } catch {
+    return null;
+  }
+}
+
+/** D-49: an explicit threshold wins; otherwise the source rule of dupClusterThreshold for the chunks' embedding profile. */
+async function resolveThreshold(options: ClusterOptions): Promise<number> {
+  if (options.threshold !== undefined) return checkThreshold(options.threshold);
+  let profileId = options.embeddingProfileId ?? null;
+  if (profileId === null && dupClusterParamsHaveProfileEntries()) profileId = await activeEmbeddingProfileId();
+  return checkThreshold(dupClusterThreshold(profileId, { evalRun: options.evalRun === true }));
 }
 
 function checkHamming(value: number | undefined): number {
@@ -240,7 +259,8 @@ export async function clusterChunksForTenantKey(
 ): Promise<ClusterReport> {
   if (!isTenantKey(tenantKey)) throw new DupClusterError('invalid_tenant_key');
   const signal = options.signal ?? new AbortController().signal;
-  const settings = { threshold: checkThreshold(options.threshold), maxHamming: checkHamming(options.maxHamming) };
+  const maxHamming = checkHamming(options.maxHamming);
+  const settings = { threshold: await resolveThreshold(options), maxHamming };
   const db = options.db;
   let hashed = 0;
   const clusterIds = new Set<string>();

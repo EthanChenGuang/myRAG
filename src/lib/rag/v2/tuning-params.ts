@@ -1,8 +1,12 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import {
   DiversityParamsSchema,
+  DupClusterParamsFileSchema,
   DupClusterParamsSchema,
   TableLookupParamsSchema,
   type DiversityParams,
+  type DupClusterParamsFile,
   type TableLookupParams,
 } from '@/lib/rag-eval/contracts.generated';
 import type { RagConfig } from '../config';
@@ -117,17 +121,72 @@ export interface DupClusterThresholdOptions {
   evalRun?: boolean;
 }
 
-export function dupClusterThreshold(_embeddingProfileId: string | null, _options: DupClusterThresholdOptions = {}): number {
-  return DUP_CLUSTER_THRESHOLD_DEFAULT;
+const DUP_CLUSTER_PARAMS_PATH = ['eval', 'config', 'dup-cluster-params.json'] as const;
+
+let dupParamsPath: string | null = null;
+let dupParams: DupClusterParamsFile | null | undefined;
+let dupParamsWarned = false;
+
+function dupParamsProblem(reason: string): null {
+  if (!dupParamsWarned) {
+    dupParamsWarned = true;
+    console.warn('[RAG Config] eval/config/dup-cluster-params.json is invalid; the duplicate threshold 0.95 applies', { reason });
+  }
+  return null;
 }
 
+/** The committed calibration file, read once per process; a missing file is the normal state until a calibration writes it. */
+function committedDupParams(): DupClusterParamsFile | null {
+  if (dupParams !== undefined) return dupParams;
+  const file = dupParamsPath ?? path.join(process.cwd(), ...DUP_CLUSTER_PARAMS_PATH);
+  let raw: string;
+  try {
+    raw = readFileSync(file, 'utf8');
+  } catch (error) {
+    dupParams = (error as NodeJS.ErrnoException | null)?.code === 'ENOENT' ? null : dupParamsProblem('unreadable');
+    return dupParams;
+  }
+  let json: unknown;
+  try {
+    json = JSON.parse(raw);
+  } catch {
+    dupParams = dupParamsProblem('not_json');
+    return dupParams;
+  }
+  const parsed = DupClusterParamsFileSchema.safeParse(json);
+  dupParams = parsed.success ? parsed.data : dupParamsProblem('schema');
+  return dupParams;
+}
+
+/**
+ * D-49: the duplicate threshold of an embedding profile. Its entry applies when the source is live, or when the source is fixture and
+ * the caller is the eval harness (evalRun); otherwise the top-level threshold. No file: 0.95.
+ */
+export function dupClusterThreshold(embeddingProfileId: string | null, options: DupClusterThresholdOptions = {}): number {
+  const params = committedDupParams();
+  if (!params) return DUP_CLUSTER_THRESHOLD_DEFAULT;
+  const entry = embeddingProfileId ? params.by_profile?.[embeddingProfileId] : undefined;
+  if (entry && (entry.source === 'live' || (entry.source === 'fixture' && options.evalRun === true))) return entry.threshold;
+  return params.threshold;
+}
+
+/** True when the committed file names at least one profile, so a caller needs the embedding profile id. */
 export function dupClusterParamsHaveProfileEntries(): boolean {
-  return false;
+  const params = committedDupParams();
+  return Boolean(params && params.by_profile && Object.keys(params.by_profile).length > 0);
 }
 
-export function setDupClusterParamsForTests(_filePath: string): void {}
+export function setDupClusterParamsForTests(filePath: string): void {
+  dupParamsPath = filePath;
+  dupParams = undefined;
+  dupParamsWarned = false;
+}
 
-export function resetDupClusterParamsForTests(): void {}
+export function resetDupClusterParamsForTests(): void {
+  dupParamsPath = null;
+  dupParams = undefined;
+  dupParamsWarned = false;
+}
 
 export function resetTuningParamsForTests(): void {
   loggedProblems.clear();
