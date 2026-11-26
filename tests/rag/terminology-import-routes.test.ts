@@ -131,6 +131,9 @@ async function load(mode: 'single-tenant' | 'multi-tenant' = 'multi-tenant') {
   return {
     importRoute: await import('@/app/api/rag/admin/terminology/import/route'),
     exportRoute: await import('@/app/api/rag/admin/terminology/export/route'),
+    previewRoute: await import('@/app/api/rag/admin/terminology/preview/route'),
+    loader: await import('@/lib/rag/terminology/load'),
+    scopes: await import('@/lib/rag/tenant/scope'),
   };
 }
 
@@ -426,5 +429,124 @@ describe('DictionaryCandidate JSONL import (D-25a)', () => {
     const loaded = await load();
     await postImport(loaded, { layer: 'workspace', format: 'dictionary_candidates_jsonl', jsonl: candidate(), dry_run: false, expected_version: 1 });
     expect((applyCalls()[0]!.args.p_rows as Row[])[0]).toMatchObject({ variants: ['iotak', 'termiota'], note: 'kept' });
+  });
+});
+
+const EFFECTIVE_ID = (n: number) => `00000000-0000-4000-8000-0000000001${String(n).padStart(2, '0')}`;
+
+function effectiveRow(n: number, layer: 'shared' | 'workspace', canonical: string, variants: string[], extra: Row = {}): Row {
+  return {
+    entry_id: EFFECTIVE_ID(n),
+    layer,
+    canonical,
+    variants,
+    normalized_variants: variants,
+    language: LATIN,
+    kind: 'synonym',
+    mode: 'one_way',
+    source_language: null,
+    target_language: null,
+    shared_version: 3,
+    tenant_version: 0,
+    ...extra,
+  };
+}
+
+function setEffective(rows: Row[]): void {
+  state.outcomes.rag_term_effective = { data: rows, error: null };
+}
+
+async function postPreview(loaded: Loaded, body: Row, token = ADMIN): Promise<{ status: number; body: Record<string, any> }> {
+  const response = await loaded.previewRoute.POST(req(`${BASE}/preview`, { method: 'POST', token, body }));
+  return { status: response.status, body: await response.json() };
+}
+
+const effectiveCalls = () => state.rpcCalls.filter((call) => call.fn === 'rag_term_effective');
+const writeCalls = () => state.rpcCalls.filter((call) => /upsert|apply|delete|suppression/.test(call.fn));
+
+describe('POST /api/rag/admin/terminology/preview (D-22, D-24, D-32)', () => {
+  it('returns the match, the original and expansion tokens and the version, bypassing the cache', async () => {
+    setEffective([effectiveRow(1, 'shared', '术语甲乙丙', ['术语甲'], { language: HAN })]);
+    const loaded = await load();
+    const answer = await postPreview(loaded, { layer: 'shared', query: '关于术语甲的问题' });
+    expect(answer.status).toBe(200);
+    expect(answer.body.matches).toEqual([expect.objectContaining({ entry_id: EFFECTIVE_ID(1), canonical: '术语甲乙丙', layer: 'shared', surface: '术语甲' })]);
+    expect(answer.body.original_tokens.length).toBeGreaterThan(0);
+    expect(answer.body.expansion_tokens.length).toBeGreaterThan(0);
+    expect(answer.body.capped).toBe(false);
+    expect(answer.body.version).toBe('s3');
+    expect(answer.body.overrides).toEqual([]);
+    expect(writeCalls()).toEqual([]);
+  });
+
+  it('loads the dictionary again even right after a cached load', async () => {
+    setEffective([effectiveRow(1, 'shared', 'term alpha beta', ['termalpha'])]);
+    const loaded = await load();
+    const scope = loaded.scopes.mintScope('personal', ADMIN_ID, null);
+    await loaded.loader.loadEffectiveDictionary(scope);
+    await loaded.loader.loadEffectiveDictionary(scope);
+    expect(effectiveCalls()).toHaveLength(1);
+    await postPreview(loaded, { layer: 'shared', query: 'about termalpha' });
+    await postPreview(loaded, { layer: 'shared', query: 'about termalpha' });
+    expect(effectiveCalls()).toHaveLength(3);
+    expect(effectiveCalls().every((call) => call.args.p_tenant_key === WORKSPACE_KEY)).toBe(true);
+  });
+
+  it('applies a draft entry in memory without any write, and returns the issues of an invalid draft', async () => {
+    setEffective([effectiveRow(1, 'shared', 'term alpha beta', ['termalpha'])]);
+    const loaded = await load();
+    const draft = { layer: 'shared', canonical: 'term iota kappa', variants: ['termiota'], language: LATIN, kind: 'synonym' };
+    const answer = await postPreview(loaded, { layer: 'shared', query: 'about termiota', draft_entries: [draft] });
+    expect(answer.status).toBe(200);
+    expect(answer.body.matches).toEqual([expect.objectContaining({ canonical: 'term iota kappa', layer: 'shared' })]);
+    expect(writeCalls()).toEqual([]);
+
+    const conflicting = { ...draft, canonical: 'term gamma delta', variants: ['termalpha'] };
+    const refused = await postPreview(loaded, { layer: 'shared', query: 'about termalpha', draft_entries: [conflicting] });
+    expect(refused.status).toBe(422);
+    expect(refused.body.issues.some((issue: { code: string }) => issue.code === 'conflict')).toBe(true);
+    expect(writeCalls()).toEqual([]);
+  });
+
+  it('lists a workspace entry overriding a shared one under overrides', async () => {
+    setEffective([
+      effectiveRow(1, 'shared', 'term alpha beta', ['termalpha']),
+      effectiveRow(2, 'workspace', 'term alpha beta', ['alpha beta'], { tenant_version: 1 }),
+    ]);
+    const answer = await postPreview(await load(), { layer: 'workspace', query: 'about alpha beta' });
+    expect(answer.status).toBe(200);
+    expect(answer.body.version).toBe('s3.w1');
+    expect(answer.body.overrides).toEqual([expect.objectContaining({ code: 'override', severity: 'warning' })]);
+    expect(answer.body.overrides[0].entry_ids).toEqual(expect.arrayContaining([EFFECTIVE_ID(1), EFFECTIVE_ID(2)]));
+  });
+
+  it('never lists a translation pair as a match', async () => {
+    setEffective([
+      effectiveRow(1, 'shared', 'term alpha beta', ['术语甲乙丙'], { language: HAN, kind: 'translation', source_language: HAN, target_language: LATIN }),
+    ]);
+    const loaded = await load();
+    const answer = await postPreview(loaded, { layer: 'shared', query: '关于术语甲乙丙的问题' });
+    expect(answer.status).toBe(200);
+    expect(answer.body.matches).toEqual([]);
+    expect(answer.body.expansion_tokens).toEqual([]);
+    const draftPair = { layer: 'shared', canonical: 'term gamma delta', variants: ['术语丁戊己'], language: HAN, kind: 'translation', source_language: HAN, target_language: LATIN };
+    const withDraft = await postPreview(loaded, { layer: 'shared', query: '关于术语丁戊己的问题', draft_entries: [draftPair] });
+    expect(withDraft.body.matches).toEqual([]);
+  });
+
+  it('answers 400 for a query over 1,000 characters, 403 for a non-admin, and never logs the query', async () => {
+    setEffective([effectiveRow(1, 'shared', 'term alpha beta', ['termalpha'])]);
+    const loaded = await load();
+    expect((await postPreview(loaded, { layer: 'shared', query: 'x'.repeat(1001) })).status).toBe(400);
+    expect((await postPreview(loaded, { layer: 'shared', query: 'about termalpha' }, 'token-plain')).status).toBe(403);
+    expect((await postPreview(loaded, { layer: 'workspace', organization_id: '00000000-0000-4000-8000-0000000000e9', query: 'about termalpha' })).status).toBe(403);
+    await postPreview(loaded, { layer: 'shared', query: 'about termalpha placeholder-marker-omega' });
+    expect(logged.join('\n')).not.toContain('placeholder-marker-omega');
+  });
+
+  it('answers 503 when the dictionary cannot be loaded', async () => {
+    state.outcomes.rag_term_effective = { data: null, error: { message: 'boom', code: 'XX000' } };
+    const answer = await postPreview(await load(), { layer: 'shared', query: 'about termalpha' });
+    expect(answer.status).toBe(503);
   });
 });

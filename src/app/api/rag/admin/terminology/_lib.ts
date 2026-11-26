@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod/v3';
-import { TerminologyEntrySchema } from '@/lib/rag-eval/contracts.generated';
+import { TerminologyEntrySchema, TerminologyPreviewRequestSchema } from '@/lib/rag-eval/contracts.generated';
 import { resolveAdminWorkspaceScope, scopeKey, terminologyEnabledLanguages, type TenantScope, type TerminologyAdminFailed } from '@/lib/rag';
 
 export const TAG = '[RAG Admin]';
@@ -97,6 +97,9 @@ export const ImportBodySchema = z
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['expected_version'], message: 'expected_version is required to apply' });
     }
   });
+/** D-22: the preview body of the contract; the route caps the query at 1,000 characters. */
+export const PREVIEW_QUERY_MAX_CHARS = 1000;
+export const PreviewBodySchema = TerminologyPreviewRequestSchema.extend({ query: z.string().min(1).max(PREVIEW_QUERY_MAX_CHARS) }).strict();
 export const ExportQuerySchema = z.object({ layer: LayerSchema, organization_id: OrganizationId }).strict();
 export const DeleteQuerySchema = z.object({ layer: LayerSchema, organization_id: OrganizationId, expected_version: z.coerce.number().int().min(0) }).strict();
 export const VersionsQuerySchema = z.object({ organization_id: OrganizationId }).strict();

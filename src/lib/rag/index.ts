@@ -46,6 +46,8 @@ export type {
   TerminologyImportMode,
   TerminologyImportResult,
 } from './terminology/import';
+export { previewTerminology } from './terminology/preview';
+export type { TerminologyPreviewInput, TerminologyPreviewResult } from './terminology/preview';
 export { TERMINOLOGY_CSV_COLUMNS, parseTerminologyCsv, serializeTerminologyCsv } from './terminology/csv';
 export type { TerminologyCsvError, TerminologyCsvParseResult, TerminologyCsvRow } from './terminology/csv';
 export type {
