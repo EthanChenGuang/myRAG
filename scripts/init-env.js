@@ -383,6 +383,12 @@ RAG_LEXICAL_TRANSLATION=false
 RAG_LEXICAL_DICTIONARY=false
 # Italian stemming in lexical text (needs relex)
 RAG_LEXICAL_STEM_IT=false
+# Lexical leg scoring: ts_rank_cd or bm25 (bm25 needs RAG_PIPELINE=v2, RAG_LEXICAL_SEARCH=true and npm run rag:lexstats)
+RAG_LEXICAL_SCORING=ts_rank_cd
+# BM25 term-frequency saturation, 0.5 to 3
+RAG_LEXICAL_BM25_K1=1.2
+# BM25 length normalisation, 0 to 1
+RAG_LEXICAL_BM25_B=0.75
 # Requests may ask for earlier document versions (needs RAG_LEXICAL_SEARCH=true)
 RAG_VERSION_SCOPE=false
 # Embedded chat may request earlier versions only while this and RAG_VERSION_SCOPE are on
