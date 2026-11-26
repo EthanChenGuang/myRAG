@@ -8,6 +8,7 @@ import argparse
 import datetime as dt
 import hashlib
 import json
+import os
 import re
 import sys
 from collections.abc import Callable, Iterable, Mapping
@@ -37,10 +38,20 @@ EXIT_CRASH = 70
 FIXTURE_DIR = REPO_ROOT / "eval" / "fixtures"
 FIXTURE_CORPUS_DIR = REPO_ROOT / "eval" / "fixtures" / "corpus"
 FIXTURE_SET_ID = "fixture"
-PENDING_REAL_SET = "needs plan 05.3-35"
+QUALITY_GATES_PATH = REPO_ROOT / "eval" / "config" / "quality-gates.json"
+DEFAULT_RE_REVIEW_DAYS = 90
+DEFAULT_RE_REVIEW_CAP = 20
+TOKEN_ENV = "RAG_ADMIN_BEARER"
+ROUTE_EVIDENCE_CHECK = "golden/evidence-check"
+ROUTE_REGISTER = "golden/register"
+ROUTE_RE_REVIEW = "golden/re-review"
+EVIDENCE_BATCH = 500
+RE_REVIEW_BATCH = 100
 
 STALE_DOCUMENT_MISSING = "document_missing"
+STALE_DOCUMENT_SUPERSEDED = "document_superseded"
 STALE_QUOTE_NOT_FOUND = "quote_not_found"
+EVIDENCE_STATUSES = ("ok", STALE_DOCUMENT_MISSING, STALE_DOCUMENT_SUPERSEDED, STALE_QUOTE_NOT_FOUND)
 
 _CODE_RE = re.compile(CODE_PATTERN)
 
@@ -252,6 +263,26 @@ def _stale_reason(item: GoldenItem, documents: Mapping[str, str]) -> str | None:
     return None
 
 
+def mark_stale(
+    manifest: GoldenSetManifest, reasons: Mapping[str, str], today: dt.date | None = None
+) -> tuple[GoldenSetManifest | None, list[dict[str, str]]]:
+    """Mark the active items named in `reasons` (id -> reason code) stale under version N+1; the manifest only changes."""
+
+    day = _today(today)
+    findings: list[dict[str, str]] = []
+    entries: list[GoldenSetManifestItem] = []
+    for entry in manifest.items:
+        reason = reasons.get(entry.id) if entry.status == "active" else None
+        if reason is None:
+            entries.append(entry)
+            continue
+        findings.append({"id": entry.id, "reason": _require_code(reason, "stale")})
+        entries.append(entry.model_copy(update={"status": "stale", "stale_reason": reason, "stale_since": day}))
+    if not findings:
+        return None, []
+    return _next_version(manifest, entries, day, stale=[f["id"] for f in findings]), findings
+
+
 def stale_scan_fixture(
     items: list[GoldenItem],
     manifest: GoldenSetManifest,
@@ -264,21 +295,16 @@ def stale_scan_fixture(
     and one finding per newly stale item. Stale items keep their first `stale_since`; only relabel returns them.
     """
 
-    day = _today(today)
     current = _by_id(items)
-    findings: list[dict[str, str]] = []
-    entries: list[GoldenSetManifestItem] = []
+    reasons: dict[str, str] = {}
     for entry in manifest.items:
         item = current.get(entry.id)
-        reason = _stale_reason(item, documents) if entry.status == "active" and item is not None else None
-        if reason is None:
-            entries.append(entry)
+        if entry.status != "active" or item is None:
             continue
-        findings.append({"id": entry.id, "reason": reason})
-        entries.append(entry.model_copy(update={"status": "stale", "stale_reason": reason, "stale_since": day}))
-    if not findings:
-        return None, []
-    return _next_version(manifest, entries, day, stale=[f["id"] for f in findings]), findings
+        reason = _stale_reason(item, documents)
+        if reason is not None:
+            reasons[entry.id] = reason
+    return mark_stale(manifest, reasons, today=today)
 
 
 def quote_sha256(quote: str) -> str:
@@ -421,10 +447,235 @@ def _cmd_relabel(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+# --- real sets through the app (D-48 to D-50) -----------------------------------------------------------------
+
+
+class RemoteError(RuntimeError):
+    pass
+
+
+def _http_client():
+    import httpx
+
+    return httpx.Client(timeout=60.0)
+
+
+def _token() -> str:
+    token = os.environ.get(TOKEN_ENV, "").strip()
+    if not token:
+        raise LifecycleError(f"set {TOKEN_ENV} to an admin bearer token for the app")
+    return token
+
+
+def _check_real_paths(args: argparse.Namespace) -> None:
+    """A real set (any path outside eval/fixtures/) and its manifest must be private, git-ignored files."""
+
+    for raw in [*args.golden, args.manifest]:
+        path = resolve_cli_path(raw)
+        if _is_fixture_path(path):
+            raise LifecycleError("real-set commands take a set under eval/golden/private/, not a fixture set")
+        assert_private_path(path)
+
+
+def _need(value: str | None, flag: str, command: str) -> str:
+    if not value:
+        raise LifecycleError(f"{command} needs {flag}")
+    return value
+
+
+class AppClient:
+    """The admin evidence routes of the app; requests carry ids, names and quotes, responses only codes, ids and counts."""
+
+    def __init__(self, base_url: str, tenant: str, token: str) -> None:
+        self.base = base_url.rstrip("/")
+        self.tenant = tenant
+        self.headers = {"Authorization": f"Bearer {token}"}
+
+    def _send(self, method: str, route: str, *, body: dict[str, Any] | None = None, params: dict[str, str] | None = None) -> dict[str, Any]:
+        url = f"{self.base}/api/rag/admin/{route}"
+        try:
+            with _http_client() as client:
+                response = client.request(method, url, json=body, params=params, headers=self.headers)
+        except Exception as exc:  # noqa: BLE001
+            raise RemoteError(f"{route} request failed: {type(exc).__name__}") from None
+        if response.status_code != 200:
+            raise RemoteError(f"{route} answered HTTP {response.status_code}")
+        try:
+            payload = response.json()
+        except ValueError:
+            raise RemoteError(f"{route} answered a body that is not JSON") from None
+        if not isinstance(payload, dict):
+            raise RemoteError(f"{route} answered an unexpected body")
+        return payload
+
+    def check(self, spans: list[dict[str, str]]) -> list[dict[str, Any]]:
+        results: list[dict[str, Any]] = []
+        for start in range(0, len(spans), EVIDENCE_BATCH):
+            batch = spans[start : start + EVIDENCE_BATCH]
+            payload = self._send("POST", ROUTE_EVIDENCE_CHECK, body={"tenant": self.tenant, "spans": batch})
+            got = payload.get("results")
+            if not isinstance(got, list) or len(got) != len(batch):
+                raise RemoteError("evidence-check answered a result list of the wrong length")
+            for sent, result in zip(batch, got, strict=True):
+                if not isinstance(result, dict) or result.get("item_id") != sent["item_id"] or result.get("status") not in EVIDENCE_STATUSES:
+                    raise RemoteError("evidence-check answered an unexpected result")
+                results.append(result)
+        return results
+
+    def register(self, set_id: str, rows: list[dict[str, Any]]) -> dict[str, int]:
+        payload = self._send("POST", ROUTE_REGISTER, body={"tenant": self.tenant, "set_id": set_id, "rows": rows})
+        return {"stored": int(payload.get("stored", 0)), "dropped": int(payload.get("dropped", 0))}
+
+    def pending(self, set_id: str) -> list[str]:
+        payload = self._send("GET", ROUTE_REGISTER, params={"tenant": self.tenant, "set_id": set_id})
+        ids = payload.get("item_ids")
+        if not isinstance(ids, list):
+            raise RemoteError("register answered no item_ids")
+        return [str(item_id) for item_id in ids]
+
+    def clear(self, set_id: str, item_ids: list[str]) -> int:
+        cleared = 0
+        for start in range(0, len(item_ids), EVIDENCE_BATCH):
+            batch = item_ids[start : start + EVIDENCE_BATCH]
+            payload = self._send("POST", ROUTE_REGISTER, body={"action": "clear", "tenant": self.tenant, "set_id": set_id, "item_ids": batch})
+            cleared += int(payload.get("cleared", 0))
+        return cleared
+
+    def re_review(self, items: list[dict[str, str]]) -> int:
+        inserted = 0
+        for start in range(0, len(items), RE_REVIEW_BATCH):
+            payload = self._send("POST", ROUTE_RE_REVIEW, body={"tenant": self.tenant, "items": items[start : start + RE_REVIEW_BATCH]})
+            inserted += int(payload.get("inserted", 0))
+        return inserted
+
+
+def _spans(items: Iterable[GoldenItem]) -> list[dict[str, str]]:
+    return [{"item_id": item.id, "document": span.document, "quote": span.quote} for item in items for span in item.gold_evidence]
+
+
+def evidence_reasons(items: list[GoldenItem], results: list[dict[str, Any]]) -> dict[str, str | None]:
+    """Per item: None when every span answered ok, else the first non-ok status (spans in item order)."""
+
+    reasons: dict[str, str | None] = {item.id: None for item in items}
+    for result in results:
+        item_id = str(result["item_id"])
+        if reasons.get(item_id) is None and result["status"] != "ok":
+            reasons[item_id] = str(result["status"])
+    return reasons
+
+
+def register_rows(items: list[GoldenItem], results: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, str]]]:
+    """Index rows for the spans that answered ok (the resolved document id with the quote hash); the others are reported."""
+
+    rows: list[dict[str, Any]] = []
+    skipped: list[dict[str, str]] = []
+    position = 0
+    for item in items:
+        for span in item.gold_evidence:
+            result = results[position]
+            position += 1
+            if result["status"] == "ok" and result.get("document_id"):
+                rows.append({"item_id": item.id, "document_id": str(result["document_id"]), "quote_sha256": quote_sha256(span.quote)})
+            else:
+                skipped.append({"id": item.id, "reason": str(result["status"])})
+    return rows, skipped
+
+
+def _registrable(items: list[GoldenItem], manifest: GoldenSetManifest) -> list[GoldenItem]:
+    live = {entry.id for entry in manifest.items if entry.status != "retired"}
+    return [item for item in items if item.id in live and item.gold_evidence]
+
+
+def _cmd_register(args: argparse.Namespace) -> int:
+    base_url = _need(args.base_url, "--base-url", "register")
+    tenant = _need(args.tenant, "--tenant", "register")
+    _check_real_paths(args)
+    token = _token()
+    items, _, manifest = _load_matching(args)
+    targets = _registrable(items, manifest)
+    app = AppClient(base_url, tenant, token)
+    results = app.check(_spans(targets))
+    rows, skipped = register_rows(targets, results)
+    for entry in skipped:
+        print(f"not registered: {entry['id']} ({entry['reason']})")
+    stored = app.register(manifest.set_id, rows)
+    print(f"register: {len(rows)} spans sent, stored {stored['stored']}, dropped {stored['dropped']}, not registered {len(skipped)}")
+    return EXIT_OK
+
+
+def stale_scan_real(
+    items: list[GoldenItem], manifest: GoldenSetManifest, app: AppClient, today: dt.date | None = None
+) -> tuple[GoldenSetManifest | None, list[dict[str, str]], list[str]]:
+    """Check flagged items first, then every other active item; returns the next manifest, findings and the flagged ids."""
+
+    flagged = app.pending(manifest.set_id)
+    status = {entry.id: entry.status for entry in manifest.items}
+    current = _by_id(items)
+    order = [item_id for item_id in flagged if status.get(item_id) == "active" and item_id in current]
+    seen = set(order)
+    order += [entry.id for entry in manifest.items if entry.status == "active" and entry.id not in seen and entry.id in current]
+    targets = [current[item_id] for item_id in order if current[item_id].gold_evidence]
+    results = app.check(_spans(targets)) if targets else []
+    reasons = {item_id: reason for item_id, reason in evidence_reasons(targets, results).items() if reason is not None}
+    scanned, findings = mark_stale(manifest, reasons, today=today)
+    return scanned, findings, flagged
+
+
+def _cmd_stale_scan_real(args: argparse.Namespace) -> int:
+    tenant = _need(args.tenant, "--tenant", "stale-scan --base-url")
+    _check_real_paths(args)
+    token = _token()
+    items, manifest_path, manifest = _load_matching(args)
+    app = AppClient(args.base_url, tenant, token)
+    scanned, findings, flagged = stale_scan_real(items, manifest, app, today=args.date)
+    for finding in findings:
+        print(f"stale: {finding['id']} ({finding['reason']})")
+    if scanned is not None:
+        write_manifest(manifest_path, scanned)
+    cleared = app.clear(manifest.set_id, flagged) if flagged else 0
+    summary = _summary(scanned if scanned is not None else manifest)
+    print(f"stale-scan: flagged {len(flagged)}, cleared {cleared}, {len(findings)} newly stale; {summary}")
+    return EXIT_OK
+
+
+def re_review_days(path: Path = QUALITY_GATES_PATH) -> int:
+    try:
+        value = json.loads(Path(path).read_text(encoding="utf-8")).get("lifecycle", {}).get("re_review_days")
+    except (OSError, ValueError, AttributeError):
+        return DEFAULT_RE_REVIEW_DAYS
+    return int(value) if isinstance(value, int) and value > 0 else DEFAULT_RE_REVIEW_DAYS
+
+
+def overdue_items(manifest: GoldenSetManifest, today: dt.date, days: int) -> list[GoldenSetManifestItem]:
+    """Active items last reviewed more than `days` ago (or never), oldest first; they stay active and in the gate."""
+
+    cutoff = today - dt.timedelta(days=days)
+    due = [entry for entry in manifest.items if entry.status == "active" and (entry.last_reviewed_at is None or entry.last_reviewed_at < cutoff)]
+    return sorted(due, key=lambda entry: (entry.last_reviewed_at or dt.date.min, entry.id))
+
+
+def _cmd_re_review(args: argparse.Namespace) -> int:
+    base_url = _need(args.base_url, "--base-url", "re-review")
+    tenant = _need(args.tenant, "--tenant", "re-review")
+    if args.cap < 1:
+        raise LifecycleError("--cap must be at least 1")
+    _check_real_paths(args)
+    token = _token()
+    items, _, manifest = _load_matching(args)
+    current = _by_id(items)
+    due = [entry for entry in overdue_items(manifest, _today(args.date), re_review_days()) if entry.id in current]
+    chosen = due[: args.cap]
+    inserted = 0
+    if chosen:
+        app = AppClient(base_url, tenant, token)
+        inserted = app.re_review([{"item_id": entry.id, "question": current[entry.id].question} for entry in chosen])
+    print(f"overdue: {len(due)}, queued: {len(chosen)}, inserted: {inserted}")
+    return EXIT_OK
+
+
 def _cmd_stale_scan(args: argparse.Namespace) -> int:
     if args.base_url:
-        print(f"error: the real-set stale scan through the evidence-check route {PENDING_REAL_SET}", file=sys.stderr)
-        return EXIT_USAGE
+        return _cmd_stale_scan_real(args)
     items, manifest_path, manifest = _load_matching(args)
     if args.corpus:
         corpus_dir = resolve_cli_path(args.corpus)
@@ -441,11 +692,6 @@ def _cmd_stale_scan(args: argparse.Namespace) -> int:
     write_manifest(manifest_path, scanned)
     print(f"stale-scan: {len(findings)} newly stale; {_summary(scanned)}")
     return EXIT_OK
-
-
-def _cmd_register(_args: argparse.Namespace) -> int:
-    print(f"error: registering real-set evidence {PENDING_REAL_SET}", file=sys.stderr)
-    return EXIT_USAGE
 
 
 def _date(value: str) -> dt.date:
@@ -479,10 +725,13 @@ def _parser() -> argparse.ArgumentParser:
             cmd.add_argument("--reason", default=None, help="reason code, e.g. obsolete")
         if name == "stale-scan":
             cmd.add_argument("--corpus", default=None, help="fixture corpus directory (default for set fixture)")
-            cmd.add_argument("--base-url", default=None, help="real sets: the app's evidence-check route")
-        if name == "register":
-            cmd.add_argument("--tenant", default=None)
-            cmd.add_argument("--base-url", default=None)
+            cmd.add_argument("--base-url", default=None, help="real sets: the app's base URL (evidence-check route)")
+        if name in ("stale-scan", "register", "re-review"):
+            cmd.add_argument("--tenant", default=None, help="real sets: the tenant key the set belongs to")
+        if name in ("register", "re-review"):
+            cmd.add_argument("--base-url", default=None, help="the app's base URL")
+        if name == "re-review":
+            cmd.add_argument("--cap", type=int, default=DEFAULT_RE_REVIEW_CAP, help="items queued per run (default 20)")
     return parser
 
 
@@ -503,7 +752,7 @@ def main(argv: list[str] | None = None) -> int:
         return int(exc.code) if isinstance(exc.code, int) else EXIT_USAGE
     try:
         return COMMANDS[args.command](args)
-    except (LifecycleError, PrivatePathError, OSError, ValueError) as exc:
+    except (LifecycleError, PrivatePathError, RemoteError, OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_USAGE
     except Exception as exc:  # noqa: BLE001

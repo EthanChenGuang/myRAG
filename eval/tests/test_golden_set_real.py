@@ -191,7 +191,7 @@ def test_stale_scan_marks_a_superseded_flagged_item_and_changes_only_the_manifes
     assert (status["syn-c"].status, status["syn-c"].stale_reason) == ("stale", "quote_not_found")
     assert scanned.version == 2 and scanned.changelog[-1].stale == ["syn-b", "syn-c"]
     checks = [r[2] for r in fake.requests if r[1] == "evidence-check"]
-    assert [s["item_id"] for s in checks[0]["spans"]][0] == "syn-b"
+    assert checks[0]["spans"][0]["item_id"] == "syn-b"
     assert fake.cleared == ["syn-b"]
     out = capsys.readouterr().out
     assert "stale: syn-b (document_superseded)" in out and "flagged 1, cleared 1, 2 newly stale" in out
