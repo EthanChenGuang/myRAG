@@ -1,7 +1,7 @@
 import pytest
 from rag_sidecar.contracts.eval_run import RagTrace
 from rag_sidecar.contracts.golden import GoldenItem
-from rag_sidecar.contracts.report import ItemResult
+from rag_sidecar.contracts.report import ItemResult, MetricValue
 
 from rag_eval.metrics import aggregate, score_items
 
@@ -650,3 +650,159 @@ def test_table_split_is_gated_and_the_re_recorded_ingest_baseline_leaves_every_o
     assert all(not counts_in_gated_slices(item) for item in table_items if item.language in {"zh", "it"})
     gated = current.slices["category:table_split"]
     assert gated["recall_at_5"].n == len(counting)
+
+
+# --- Phase 4.2 plan 12: evidence groups, nDCG at context k, redundancy, intent coverage ---
+
+FLOOD_DOC = "flood-copy-{index}.en.md"
+
+
+def _grouped_item(item_id: str = "en-flood-001") -> GoldenItem:
+    spans = [(FLOOD_DOC.format(index=index), "the shared passage statement") for index in range(30)]
+    spans.append((DOC, "the single passage statement"))
+    item = _item(item_id, spans, category="duplicate_flood")
+    return item.model_copy(update={"evidence_groups": [list(range(30)), [30]]})
+
+
+def _with_clusters(trace: RagTrace, clusters: list[str | None]) -> RagTrace:
+    kept = [
+        chunk.model_copy(update={"dup_cluster_id": cluster}) for chunk, cluster in zip(trace.kept, clusters, strict=True)
+    ]
+    return trace.model_copy(update={"kept": kept})
+
+
+def test_evidence_groups_count_a_group_once_when_any_span_is_kept():
+    item = _grouped_item()
+    kept = [(FLOOD_DOC.format(index=7), "the shared passage statement"), (DOC, "the single passage statement")]
+    (result,) = score_items([_trace(item.id, kept)], [item])
+    assert result.group_count == 2
+    assert (result.span_count, result.spans_hit_at_5, result.spans_hit_at_10) == (2, 2, 2)
+    assert result.intent_coverage is True
+    assert aggregate([result])["overall"].recall_at_10.value == 1.0
+
+
+def test_evidence_groups_with_one_group_missing_halve_recall_and_lose_intent_coverage():
+    item = _grouped_item()
+    kept = [(FLOOD_DOC.format(index=3), "the shared passage statement")] + _filler(3)
+    (result,) = score_items([_trace(item.id, kept)], [item])
+    assert result.group_count == 2
+    assert result.intent_coverage is False
+    assert aggregate([result])["overall"].recall_at_10.value == 0.5
+    assert aggregate([result])["overall"].mrr.value == 1.0
+
+
+def test_item_without_evidence_groups_has_no_group_fields():
+    item = _item("en-a-001", [(DOC, "alpha fact"), (DOC, "beta fact")])
+    (result,) = score_items([_trace("en-a-001", [(DOC, "alpha fact")])], [item])
+    assert result.group_count is None
+    assert result.intent_coverage is None
+    assert (result.span_count, result.spans_hit_at_5, result.first_hit_rank) == (2, 1, 1)
+
+
+def test_ndcg_at_context_k_uses_the_kept_chunks():
+    item = _item("en-a-001", [(DOC, "gold sentence")])
+    (first,) = score_items([_trace("en-a-001", [(DOC, "gold sentence")] + _filler(3))], [item])
+    assert (first.context_k, first.ndcg_at_context_k) == (4, 1.0)
+    (second,) = score_items([_trace("en-a-001", _filler(1) + [(DOC, "gold sentence")])], [item])
+    assert second.context_k == 2
+    assert second.ndcg_at_context_k == pytest.approx(1 / __import__("math").log2(3))
+
+
+def test_refused_or_empty_context_scores_ndcg_zero_and_counts_in_k_zero():
+    golden = [_item("en-a-001", [(DOC, "gold sentence")]), _item("en-a-002", [(DOC, "gold sentence")])]
+    traces = [_trace("en-a-001", [(DOC, "gold sentence")], refused=True), _trace("en-a-002", [])]
+    results = score_items(traces, golden)
+    assert [(r.context_k, r.ndcg_at_context_k) for r in results] == [(0, 0.0), (0, 0.0)]
+    overall = aggregate(results)["overall"]
+    assert overall.ndcg_at_context_k == MetricValue(value=0.0, n=2)
+    assert overall.k_zero == MetricValue(value=2.0, n=2)
+
+
+def test_unanswerable_items_carry_no_ndcg():
+    (result,) = score_items([_trace("en-n-001", [], refused=True)], [_item("en-n-001")])
+    assert result.ndcg_at_context_k is None
+    overall = aggregate([result])["overall"]
+    assert overall.ndcg_at_context_k is None and overall.k_zero is None
+
+
+def test_topk_redundancy_is_the_largest_cluster_share_of_kept_chunks():
+    item = _item("en-a-001", [(DOC, "gold sentence")])
+    clustered = _with_clusters(_trace("en-a-001", _filler(8)), ["c1"] * 5 + ["c2", None, None])
+    (result,) = score_items([clustered], [item])
+    assert result.topk_redundancy == 0.625
+    (plain,) = score_items([_trace("en-a-001", _filler(8))], [item])
+    assert plain.topk_redundancy == 0.125
+    (empty,) = score_items([_trace("en-a-001", [])], [item])
+    assert empty.topk_redundancy is None
+
+
+def test_slice_means_redundancy_and_rates_intent_coverage():
+    flood = _grouped_item("en-flood-001")
+    flood_two = _grouped_item("en-flood-002")
+    covered = [(FLOOD_DOC.format(index=1), "the shared passage statement"), (DOC, "the single passage statement")]
+    missed = [(FLOOD_DOC.format(index=1), "the shared passage statement")] * 4
+    traces = [
+        _with_clusters(_trace(flood.id, covered), ["k1", None]),
+        _with_clusters(_trace(flood_two.id, missed), ["k1"] * 4),
+    ]
+    overall = aggregate(score_items(traces, [flood, flood_two]))["overall"]
+    assert overall.topk_redundancy == MetricValue(value=0.75, n=2)
+    assert overall.intent_coverage == MetricValue(value=0.5, n=2)
+
+
+def test_slice_without_group_items_has_no_intent_coverage():
+    item = _item("en-a-001", [(DOC, "gold sentence")])
+    overall = aggregate(score_items([_trace("en-a-001", [(DOC, "gold sentence")])], [item]))["overall"]
+    assert overall.intent_coverage is None
+    assert overall.topk_redundancy == MetricValue(value=1.0, n=1)
+
+
+def _reference_ranks(item: GoldenItem, ranked) -> list[int]:
+    """The span loop of score_items before plan 04.2-12, kept verbatim as the oracle for items without groups."""
+    from rag_eval.matching import chunk_matches_span
+
+    ranks: list[int] = []
+    for span in item.gold_evidence:
+        for position, chunk in enumerate(ranked, start=1):
+            if chunk_matches_span(getattr(chunk, "document_name", None) or "", chunk.content, span):
+                ranks.append(position)
+                break
+    return ranks
+
+
+def _reference_gated(results: list[ItemResult], traces: list[RagTrace], golden: list[GoldenItem], rank_field: str):
+    by_id = {trace.item_id: trace for trace in traces}
+    for result, item in zip(results, golden, strict=True):
+        trace = by_id[item.id]
+        ranked = trace.kept if rank_field == "kept" else trace.candidates
+        ranks = [] if trace.refused else _reference_ranks(item, ranked)
+        assert result.span_count == len(item.gold_evidence), item.id
+        assert result.spans_hit_at_5 == sum(1 for r in ranks if r <= 5), item.id
+        assert result.spans_hit_at_10 == sum(1 for r in ranks if r <= 10), item.id
+        assert result.first_hit_rank == (min(ranks) if ranks else None), item.id
+
+
+@pytest.mark.parametrize("rank_field", ["kept", "candidates"])
+def test_items_without_groups_score_exactly_as_before(rank_field):
+    import random
+
+    rng = random.Random(4212)
+    words = ["alpha", "beta", "gamma", "delta", "epsilon", "zeta"]
+    golden: list[GoldenItem] = []
+    traces: list[RagTrace] = []
+    for index in range(60):
+        item_id = f"en-r-{index:03d}"
+        spans = [(DOC, f"{word} fact") for word in rng.sample(words, rng.randint(1, 3))]
+        answerable = index % 7 != 0
+        golden.append(_item(item_id, spans if answerable else None))
+        rows = [(DOC, f"{rng.choice(words)} fact") if rng.random() < 0.3 else _filler(1)[0] for _ in range(rng.randint(0, 14))]
+        trace = _trace(item_id, rows, refused=index % 11 == 0)
+        if rank_field == "candidates":
+            candidates = [
+                {**chunk.model_dump(mode="json", include={"rank", "chunk_id", "document_id", "document_name", "content", "similarity"}), "has_image": False}
+                for chunk in reversed(trace.kept)
+            ]
+            trace = RagTrace.model_validate({**trace.model_dump(mode="json"), "candidates": candidates})
+        traces.append(trace)
+    results = score_items(traces, golden, rank_field=rank_field)
+    _reference_gated(results, traces, golden, rank_field)
