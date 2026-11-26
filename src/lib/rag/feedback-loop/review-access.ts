@@ -186,16 +186,81 @@ export async function listReviewItems(ssr: Client, query: ReviewListQuery): Prom
   return { ok: true, items, next_cursor };
 }
 
-export async function attachReviewSources(_admin: Client, items: ReviewItem[]): Promise<ReviewItem[]> {
-  return items;
+const SOURCE_SCAN_PAGES = 10;
+
+function isReviewSource(value: unknown): value is ReviewSource {
+  return typeof value === 'string' && (REVIEW_SOURCES as readonly string[]).includes(value);
 }
 
-export async function listReviewItemsWithSource(ssr: Client, _admin: Client, query: ReviewListQuery): Promise<ListReviewItemsResult> {
-  return listReviewItems(ssr, query);
+/**
+ * D-41, D-55, research X-9: adds each item's rag_review_item_strata source (null for mined items). Only items already read under
+ * the caller's RLS are passed in; the admin read is limited to exactly their ids and, per tenant, to that tenant_key, and the
+ * tenant is checked again in code. A failed read leaves source null: it is shown, never used for access.
+ */
+export async function attachReviewSources(admin: Client, items: ReviewItem[]): Promise<ReviewItem[]> {
+  const byTenant = new Map<string, string[]>();
+  for (const item of items) {
+    if (!parseTenantKey(item.tenant_key) || !isReviewItemId(item.id)) continue;
+    const ids = byTenant.get(item.tenant_key) ?? [];
+    ids.push(item.id.toLowerCase());
+    byTenant.set(item.tenant_key, ids);
+  }
+  const sources = new Map<string, ReviewSource>();
+  for (const [tenantKey, ids] of byTenant) {
+    const wanted = new Set(ids);
+    const { data, error } = await admin
+      .from('rag_review_item_strata')
+      .select('review_item_id,tenant_key,source')
+      .in('review_item_id', [...wanted])
+      .eq('tenant_key', tenantKey);
+    if (error) {
+      console.error('[Review] strata read failed', { tenant: hashForLog(tenantKey), count: wanted.size });
+      continue;
+    }
+    for (const row of (data ?? []) as unknown as Row[]) {
+      const id = typeof row.review_item_id === 'string' ? row.review_item_id.toLowerCase() : null;
+      if (id && wanted.has(id) && row.tenant_key === tenantKey && isReviewSource(row.source)) sources.set(`${tenantKey}|${id}`, row.source);
+    }
+  }
+  return items.map((item) => ({ ...item, source: sources.get(`${item.tenant_key}|${item.id.toLowerCase()}`) ?? null }));
+}
+
+/**
+ * The review list with each item's source. A source filter is applied after the strata read, page by page of the RLS list (at most
+ * SOURCE_SCAN_PAGES pages per call), so strata are only ever read for visible items; next_cursor continues the scan.
+ */
+export async function listReviewItemsWithSource(ssr: Client, admin: Client, query: ReviewListQuery): Promise<ListReviewItemsResult> {
+  const { source, ...rest } = query;
+  if (!source) {
+    const page = await listReviewItems(ssr, rest);
+    if (!page.ok) return page;
+    return { ok: true, items: await attachReviewSources(admin, page.items), next_cursor: page.next_cursor };
+  }
+  const items: ReviewItem[] = [];
+  let cursor = rest.cursor;
+  for (let scanned = 0; scanned < SOURCE_SCAN_PAGES; scanned += 1) {
+    const page = await listReviewItems(ssr, { ...rest, ...(cursor ? { cursor } : {}) });
+    if (!page.ok) return page;
+    for (const item of await attachReviewSources(admin, page.items)) {
+      if (item.source !== source) continue;
+      items.push(item);
+      if (items.length === REVIEW_PAGE_SIZE) {
+        const last = page.items[page.items.length - 1];
+        const more = page.next_cursor !== null || last.id !== item.id;
+        return { ok: true, items, next_cursor: more ? encodeCursor(item.mined_at, item.id) : null };
+      }
+    }
+    if (!page.next_cursor) return { ok: true, items, next_cursor: null };
+    cursor = page.next_cursor;
+  }
+  return { ok: true, items, next_cursor: cursor ?? null };
 }
 
 export async function getReviewItemWithSource(ssr: Client, admin: Client, id: string): Promise<GetReviewItemResult> {
-  return getReviewItem(ssr, admin, id);
+  const result = await getReviewItem(ssr, admin, id);
+  if (!result.ok) return result;
+  const [item] = await attachReviewSources(admin, [result.item]);
+  return { ok: true, item };
 }
 
 /** The item as RLS lets the caller see it, with the internal link columns; null when missing or not visible. */

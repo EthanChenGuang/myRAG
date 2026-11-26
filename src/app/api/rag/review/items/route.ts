@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { listReviewItems, openReviewSession, REVIEW_NO_STORE, ReviewListQuerySchema, reviewUnavailable } from '@/lib/rag';
+import { getSupabaseAdmin } from '@/lib/supabase';
+import { listReviewItemsWithSource, openReviewSession, REVIEW_NO_STORE, ReviewListQuerySchema, reviewUnavailable } from '@/lib/rag';
 
 export const runtime = 'nodejs';
 
-/** D-16: the caller's visible review items, newest first, at most 50 per page. Filters: status, reason, language; no tag filter (D-29). */
+/** D-16: the caller's visible review items, newest first, at most 50 per page. Filters: status, reason, language and the strata source; no tag filter (D-29).
+ * Each item carries its rag_review_item_strata source, read with the admin client for the visible items only. */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const session = await openReviewSession();
   if (!session.ok) return session.response;
@@ -24,7 +26,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    const result = await listReviewItems(session.ssr, parsed.data);
+    const admin = getSupabaseAdmin();
+    if (!admin) return reviewUnavailable();
+    const result = await listReviewItemsWithSource(session.ssr, admin, parsed.data);
     if (!result.ok) {
       return NextResponse.json(
         { success: false, error: 'Invalid request data', details: [{ path: 'cursor', message: 'Invalid cursor' }] },

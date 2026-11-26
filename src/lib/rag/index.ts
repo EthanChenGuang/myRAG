@@ -515,11 +515,14 @@ export { isMiningWindowError, miningDisabledReason, MiningError, parseMiningDate
 export { computeFeedbackLoopStats, isStatsWindowError, MAX_STATS_WINDOW_DAYS, StatsError } from './feedback-loop/stats';
 export {
   getReviewItem,
+  getReviewItemWithSource,
+  attachReviewSources,
   getReviewItemChunks,
   grantDomainExpert,
   isReviewItemId,
   listDomainExperts,
   listReviewItems,
+  listReviewItemsWithSource,
   REVIEW_PAGE_SIZE,
   ReviewListQuerySchema,
   revokeDomainExpert,
