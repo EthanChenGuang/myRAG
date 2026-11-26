@@ -43,6 +43,65 @@ const INGEST_IMPACT_LABELS = {
     'settings.affectsStored': 'Changing this affects documents already stored; saving shows how many.',
     'warn.needsLanguages': 'This setting has no effect until the supported languages are chosen in the Languages panel.',
     'warn.needsUnified': 'This setting works in the unified ingest pipeline only. The ingest pipeline is set to legacy under RAG Modes.',
+    'pending.heading': 'Documents on previous settings',
+    'pending.col.next': 'Next step',
+    'rebuilds.heading': 'Rebuilds',
+    'rebuilds.col.state': 'State',
+    'rebuilds.col.started': 'Started',
+    'rebuilds.col.actions': 'Actions',
+    'rebuilds.none': 'No rebuild has been started.',
+    'rebuilds.empty.title': 'No documents to rebuild',
+    'rebuilds.empty.body': 'Every stored document matches the saved ingestion settings. When you change one, the affected documents appear here.',
+    'rebuilds.loading': 'Loading rebuilds…',
+    'rebuilds.unavailable': 'Ingestion changes are unavailable right now. Select Reload panel in a moment.',
+    'rebuilds.loaded': '{pending}. {rebuilds}.',
+    'coverage.missing': 'Stored documents without a fingerprint: {count}. They are not counted until you run {command}.',
+    'action.start': 'Start rebuild',
+    'action.startAria': 'Start rebuild: {mechanism}',
+    'rebuild.starting': 'Starting…',
+    'rebuild.started': 'Rebuild started: {mechanism}.',
+    'rebuild.nothing': 'Nothing to rebuild: {mechanism}.',
+    'rebuild.cli': 'Run this command on the server:',
+    'rebuild.needsAsync':
+      'Parsing again runs through the async ingest queue, which is off. Turn it on under Ingestion, Settings, or run this command:',
+    'action.copy': 'Copy command',
+    'action.copyAria': 'Copy command: {mechanism}',
+    'copy.done': 'Command copied.',
+    'copy.failed': 'The command could not be copied. Select it and copy it by hand.',
+    'rebuild.progress': '{done} of {total}',
+    'rebuild.gaps': 'Documents that could not be rebuilt: {count}',
+    'rebuild.announce': '{mechanism}: {progress}',
+    'rebuild.ended': 'Rebuild finished: {mechanism}, {state}.',
+    'state.running': 'Running',
+    'state.incomplete': 'Incomplete',
+    'state.built': 'Built, not active',
+    'state.active': 'Active',
+    'state.completed': 'Completed',
+    'state.rolledBack': 'Rolled back',
+    'state.failed': 'Failed',
+    'action.activate': 'Activate rebuild',
+    'action.activateAria': 'Activate rebuild: {mechanism}',
+    'action.rollback': 'Roll back rebuild',
+    'action.rollbackAria': 'Roll back rebuild: {mechanism}',
+    'rebuild.activating': 'Activating…',
+    'rebuild.rollingBack': 'Rolling back…',
+    'action.keepVersions': 'Keep current versions',
+    'action.openChunking': 'Open chunking profiles',
+    'action.openEmbedding': 'Open embedding profiles',
+    'action.refresh': 'Refresh rebuilds',
+    'action.loadMore': 'Load more rebuilds',
+    'confirm.activate.title': 'Activate this rebuild?',
+    'confirm.activate.body':
+      'Documents in this rebuild: {count}. Their rebuilt versions replace the current ones in every workspace, starting at once. The current versions are kept, and Roll back rebuild returns to them.',
+    'confirm.rollback.title': 'Roll back this rebuild?',
+    'confirm.rollback.body':
+      'Documents in this rebuild: {count}. They go back to their previous versions in every workspace, starting at once. The rebuilt versions are kept and can be activated again.',
+    'activate.done': 'Rebuild activated.',
+    'rollback.done': 'Rebuild rolled back.',
+    'gate.eval_missing': 'Not activated. No evaluation result is recorded for this rebuild. Run the evaluation, then activate again.',
+    'gate.eval_failed': 'Not activated. The evaluation of this rebuild shows a slice dropping beyond the noise band. The current versions stay in use.',
+    'gate.incomplete': 'Not activated. Some documents are not rebuilt yet. Start the rebuild again for the rest, then activate.',
+    'gate.other': 'Not changed. The server gave the reason {code}. Select Refresh rebuilds and try again.',
   },
   zh: {
     'panel.title': '入库设置变更',
@@ -80,6 +139,62 @@ const INGEST_IMPACT_LABELS = {
     'settings.affectsStored': '更改此项会影响已入库的文档；保存时会显示数量。',
     'warn.needsLanguages': '在“语言”面板中选择支持的语言之前，此设置不会生效。',
     'warn.needsUnified': '此设置仅在统一入库流程中生效。“RAG 模式”中的入库流程目前为 legacy。',
+    'pending.heading': '仍使用旧设置的文档',
+    'pending.col.next': '下一步',
+    'rebuilds.heading': '重建记录',
+    'rebuilds.col.state': '状态',
+    'rebuilds.col.started': '开始时间',
+    'rebuilds.col.actions': '操作',
+    'rebuilds.none': '尚未开始任何重建。',
+    'rebuilds.empty.title': '没有需要重建的文档',
+    'rebuilds.empty.body': '所有已入库文档都与已保存的入库设置一致。更改设置后，受影响的文档会显示在这里。',
+    'rebuilds.loading': '正在加载重建记录…',
+    'rebuilds.unavailable': '暂时无法获取入库设置变更。请稍后选择“重新加载面板”。',
+    'rebuilds.loaded': '{pending}。{rebuilds}。',
+    'coverage.missing': '尚无指纹的已入库文档：{count}。运行 {command} 之前它们不会被计入。',
+    'action.start': '开始重建',
+    'action.startAria': '开始重建：{mechanism}',
+    'rebuild.starting': '正在开始…',
+    'rebuild.started': '重建已开始：{mechanism}。',
+    'rebuild.nothing': '没有需要重建的文档：{mechanism}。',
+    'rebuild.cli': '请在服务器上运行此命令：',
+    'rebuild.needsAsync': '重新解析需要通过异步入库队列进行，而该队列目前关闭。请在“文档入库 → 设置”中开启，或运行此命令：',
+    'action.copy': '复制命令',
+    'action.copyAria': '复制命令：{mechanism}',
+    'copy.done': '命令已复制。',
+    'copy.failed': '无法复制命令。请手动选择并复制。',
+    'rebuild.progress': '{done} / {total}',
+    'rebuild.gaps': '无法重建的文档：{count}',
+    'rebuild.announce': '{mechanism}：{progress}',
+    'rebuild.ended': '重建结束：{mechanism}，{state}。',
+    'state.running': '进行中',
+    'state.incomplete': '未完成',
+    'state.built': '已构建，未启用',
+    'state.active': '已启用',
+    'state.completed': '已完成',
+    'state.rolledBack': '已回滚',
+    'state.failed': '失败',
+    'action.activate': '启用重建结果',
+    'action.activateAria': '启用重建结果：{mechanism}',
+    'action.rollback': '回滚重建',
+    'action.rollbackAria': '回滚重建：{mechanism}',
+    'rebuild.activating': '正在启用…',
+    'rebuild.rollingBack': '正在回滚…',
+    'action.keepVersions': '保留当前版本',
+    'action.openChunking': '打开切块配置',
+    'action.openEmbedding': '打开 Embedding 配置',
+    'action.refresh': '刷新重建记录',
+    'action.loadMore': '加载更多重建记录',
+    'confirm.activate.title': '要启用这次重建的结果吗？',
+    'confirm.activate.body': '本次重建的文档：{count}。重建后的版本会立即在所有工作区取代当前版本。当前版本会保留，“回滚重建”可以恢复它们。',
+    'confirm.rollback.title': '要回滚这次重建吗？',
+    'confirm.rollback.body': '本次重建的文档：{count}。它们会立即在所有工作区恢复为之前的版本。重建后的版本会保留，可以再次启用。',
+    'activate.done': '重建结果已启用。',
+    'rollback.done': '重建已回滚。',
+    'gate.eval_missing': '未启用。这次重建没有评估结果记录。请先运行评估，再启用。',
+    'gate.eval_failed': '未启用。这次重建的评估显示有分组下降超出噪声范围。继续使用当前版本。',
+    'gate.incomplete': '未启用。还有文档尚未重建。请对其余文档再次开始重建，然后启用。',
+    'gate.other': '未更改。服务器给出的原因是 {code}。请选择“刷新重建记录”后重试。',
     'RAG_LANGUAGE_AWARE_INGEST.label': '按语言处理',
     'RAG_LANGUAGE_AWARE_INGEST.help': '检测每个切块的语言，按该语言断句，并按支持的语言识别扫描件。',
     'RAG_LANGUAGE_AWARE_INGEST.opt.off': '关闭（与现在相同）',
@@ -137,6 +252,68 @@ const INGEST_IMPACT_LABELS = {
     'warn.needsLanguages': 'Questa impostazione non ha effetto finché non scegli le lingue supportate nel pannello Lingue.',
     'warn.needsUnified':
       'Questa impostazione funziona solo nella pipeline di ingestione unificata. In RAG Modes la pipeline è impostata su legacy.',
+    'pending.heading': 'Documenti con le impostazioni precedenti',
+    'pending.col.next': 'Passo successivo',
+    'rebuilds.heading': 'Ricostruzioni',
+    'rebuilds.col.state': 'Stato',
+    'rebuilds.col.started': 'Avviata',
+    'rebuilds.col.actions': 'Azioni',
+    'rebuilds.none': 'Nessuna ricostruzione avviata.',
+    'rebuilds.empty.title': 'Nessun documento da ricostruire',
+    'rebuilds.empty.body':
+      'Tutti i documenti archiviati corrispondono alle impostazioni salvate. Quando ne cambi una, i documenti interessati appaiono qui.',
+    'rebuilds.loading': 'Caricamento delle ricostruzioni…',
+    'rebuilds.unavailable': 'Le modifiche all’ingestione non sono disponibili. Seleziona Ricarica pannello tra poco.',
+    'rebuilds.loaded': '{pending}. {rebuilds}.',
+    'coverage.missing': 'Documenti archiviati senza impronta: {count}. Non vengono contati finché non esegui {command}.',
+    'action.start': 'Avvia ricostruzione',
+    'action.startAria': 'Avvia ricostruzione: {mechanism}',
+    'rebuild.starting': 'Avvio…',
+    'rebuild.started': 'Ricostruzione avviata: {mechanism}.',
+    'rebuild.nothing': 'Niente da ricostruire: {mechanism}.',
+    'rebuild.cli': 'Esegui questo comando sul server:',
+    'rebuild.needsAsync':
+      'Il nuovo parsing passa dalla coda di ingestione asincrona, che è disattivata. Attivala in Ingestione, Impostazioni, oppure esegui questo comando:',
+    'action.copy': 'Copia il comando',
+    'action.copyAria': 'Copia il comando: {mechanism}',
+    'copy.done': 'Comando copiato.',
+    'copy.failed': 'Impossibile copiare il comando. Selezionalo e copialo a mano.',
+    'rebuild.progress': '{done} di {total}',
+    'rebuild.gaps': 'Documenti non ricostruiti: {count}',
+    'rebuild.announce': '{mechanism}: {progress}',
+    'rebuild.ended': 'Ricostruzione terminata: {mechanism}, {state}.',
+    'state.running': 'In corso',
+    'state.incomplete': 'Incompleta',
+    'state.built': 'Costruita, non attiva',
+    'state.active': 'Attiva',
+    'state.completed': 'Completata',
+    'state.rolledBack': 'Annullata',
+    'state.failed': 'Non riuscita',
+    'action.activate': 'Attiva ricostruzione',
+    'action.activateAria': 'Attiva ricostruzione: {mechanism}',
+    'action.rollback': 'Annulla ricostruzione',
+    'action.rollbackAria': 'Annulla ricostruzione: {mechanism}',
+    'rebuild.activating': 'Attivazione…',
+    'rebuild.rollingBack': 'Annullamento…',
+    'action.keepVersions': 'Mantieni le versioni attuali',
+    'action.openChunking': 'Apri i profili di chunking',
+    'action.openEmbedding': 'Apri i profili di embedding',
+    'action.refresh': 'Aggiorna le ricostruzioni',
+    'action.loadMore': 'Carica altre ricostruzioni',
+    'confirm.activate.title': 'Attivare questa ricostruzione?',
+    'confirm.activate.body':
+      'Documenti in questa ricostruzione: {count}. Le versioni ricostruite sostituiscono subito quelle attuali in tutti gli spazi di lavoro. Le versioni attuali restano conservate e Annulla ricostruzione le ripristina.',
+    'confirm.rollback.title': 'Annullare questa ricostruzione?',
+    'confirm.rollback.body':
+      'Documenti in questa ricostruzione: {count}. Tornano subito alle versioni precedenti in tutti gli spazi di lavoro. Le versioni ricostruite restano conservate e possono essere riattivate.',
+    'activate.done': 'Ricostruzione attivata.',
+    'rollback.done': 'Ricostruzione annullata.',
+    'gate.eval_missing':
+      'Non attivata. Nessun risultato di valutazione è registrato per questa ricostruzione. Esegui la valutazione, poi attiva di nuovo.',
+    'gate.eval_failed':
+      'Non attivata. La valutazione di questa ricostruzione mostra un calo oltre la banda di rumore. Restano in uso le versioni attuali.',
+    'gate.incomplete': 'Non attivata. Alcuni documenti non sono ancora ricostruiti. Avvia di nuovo la ricostruzione per i restanti, poi attiva.',
+    'gate.other': 'Nessuna modifica. Il server ha indicato il motivo {code}. Seleziona Aggiorna le ricostruzioni e riprova.',
     'RAG_LANGUAGE_AWARE_INGEST.label': 'Elaborazione per lingua',
     'RAG_LANGUAGE_AWARE_INGEST.help':
       'Rileva la lingua di ogni chunk, divide le frasi secondo quella lingua e legge le scansioni con le lingue supportate.',
@@ -175,6 +352,27 @@ const INGEST_IMPACT_OPEN_DELAY_MS = 300;
 const INGEST_IMPACT_TIMEOUT_MS = 15000;
 const INGEST_IMPACT_LANGUAGE_KEYS = ['RAG_SUPPORTED_LANGUAGES', 'RAG_PRIMARY_LANGUAGE'];
 const INGEST_IMPACT_SETTINGS_IDS = ['RAG_LANGUAGE_AWARE_INGEST', 'RAG_TABLE_HEADER_REPEAT', 'RAG_TABLE_ROW_SERIALIZATION', 'RAG_CAPTION_LANGUAGE'];
+
+const INGEST_IMPACT_POLL_MS = 15000;
+const INGEST_IMPACT_ANNOUNCE_MS = 30000;
+const INGEST_IMPACT_PAGE = 20;
+const INGEST_IMPACT_STARTS = ['ui', 'cli', 'needs_async'];
+const INGEST_IMPACT_ACTIVATIONS = ['rebuild_batch', 'chunking_profiles', 'embedding_profiles', 'none'];
+const INGEST_IMPACT_GATES = ['eval_missing', 'eval_failed', 'incomplete'];
+const INGEST_IMPACT_STATE_RANK = { running: 0, incomplete: 1, built: 2, active: 3 };
+const INGEST_IMPACT_STATE_BADGES = {
+  running: { classes: 'badge-info badge-outline', icon: 'arrow-repeat', key: 'state.running' },
+  incomplete: { classes: 'badge-warning', icon: 'exclamation-triangle', key: 'state.incomplete' },
+  built: { classes: 'badge-info', icon: 'hourglass', key: 'state.built' },
+  active: { classes: 'badge-success', icon: 'check-circle-fill', key: 'state.active' },
+  completed: { classes: 'badge-success badge-outline', icon: 'check-circle', key: 'state.completed' },
+  rolled_back: { classes: 'badge-ghost', icon: 'arrow-counterclockwise', key: 'state.rolledBack' },
+  failed: { classes: 'badge-error', icon: 'x-octagon', key: 'state.failed' },
+};
+const INGEST_IMPACT_PANEL_TARGETS = {
+  chunking_profiles: { section: 'rag-administration-chunking', key: 'action.openChunking' },
+  embedding_profiles: { section: 'rag-administration-profiles', key: 'action.openEmbedding' },
+};
 
 let ingestImpactUi = null;
 if (typeof require !== 'undefined') {
@@ -444,7 +642,7 @@ function ingestImpactOpenDialog(doc, locale, options) {
         ]),
       );
     }
-    changesHost.replaceChildren(ui.ragUiEl(doc, 'h4', { className: 'text-sm font-semibold mb-2', text: t('impact.changedHeading') }), list);
+    changesHost.replaceChildren(ui.ragUiEl(doc, 'h4', { className: 'text-xs font-semibold text-base-content/70 mb-2', text: t('impact.changedHeading') }), list);
   };
 
   const notes = (view) => {
@@ -490,7 +688,7 @@ function ingestImpactOpenDialog(doc, locale, options) {
       ]),
     );
     const caption = ui.ragUiEl(doc, 'caption', { className: 'sr-only', text: t('impact.caption') });
-    return ui.ragUiEl(doc, 'div', { className: 'overflow-x-auto', attrs: { tabindex: '0', role: 'region', 'aria-label': t('impact.caption') } }, [
+    return ui.ragUiEl(doc, 'div', { className: 'overflow-x-auto rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2', attrs: { tabindex: '0', role: 'region', 'aria-label': t('impact.caption') } }, [
       ui.ragUiEl(doc, 'table', { className: 'table table-sm' }, [caption, head, body]),
     ]);
   };
@@ -630,15 +828,88 @@ function ingestImpactCreateGuard(factoryOptions) {
   };
 }
 
+function ingestImpactCommand(value) {
+  return typeof value === 'string' && value.length <= 300 ? value : '';
+}
+
+function ingestImpactStartedAt(value) {
+  const t = typeof value === 'string' ? Date.parse(value) : NaN;
+  return Number.isFinite(t) ? t : null;
+}
+
+/**
+ * The GET ingest-fingerprint answer as the Rebuilds view needs it (UI-SPEC 8.1). Named fields only: a run id is kept for the action
+ * request and never rendered; fingerprints, batch ids and any other field are dropped (UI-SPEC 11.4, 11.5).
+ */
+function ingestImpactRebuildsView(body) {
+  const answer = body && typeof body === 'object' ? body : {};
+  const pending = (Array.isArray(answer.pending) ? answer.pending : [])
+    .filter((row) => row && typeof row === 'object' && typeof row.mechanism === 'string')
+    .map((row) => ({
+      mechanism: row.mechanism,
+      affected: ingestImpactCount(row.affected),
+      start: INGEST_IMPACT_STARTS.includes(row.start) ? row.start : 'cli',
+      command: ingestImpactCommand(row.command),
+    }))
+    .filter((row) => row.affected > 0);
+  const without = answer.without_fingerprint && typeof answer.without_fingerprint === 'object' ? answer.without_fingerprint : {};
+  const rebuilds = (Array.isArray(answer.rebuilds) ? answer.rebuilds : [])
+    .filter((row) => row && typeof row === 'object' && typeof row.id === 'string' && typeof row.mechanism === 'string')
+    .map((row) => ({
+      id: row.id,
+      mechanism: row.mechanism,
+      done: ingestImpactCount(row.done),
+      total: ingestImpactCount(row.total),
+      gaps: ingestImpactCount(row.gaps),
+      state: typeof row.state === 'string' ? row.state : '',
+      started: ingestImpactStartedAt(row.started) === null ? null : row.started,
+      activation: INGEST_IMPACT_ACTIVATIONS.includes(row.activation) ? row.activation : 'none',
+    }));
+  const rank = (state) => (Object.prototype.hasOwnProperty.call(INGEST_IMPACT_STATE_RANK, state) ? INGEST_IMPACT_STATE_RANK[state] : 4);
+  rebuilds.sort((a, b) => rank(a.state) - rank(b.state) || (ingestImpactStartedAt(b.started) ?? -Infinity) - (ingestImpactStartedAt(a.started) ?? -Infinity));
+  return {
+    pending,
+    missing: { count: ingestImpactCount(without.count), command: ingestImpactCommand(without.command) || INGEST_IMPACT_BACKFILL_COMMAND },
+    rebuilds,
+    running: rebuilds.some((row) => row.state === 'running'),
+    empty: pending.length === 0 && rebuilds.length === 0,
+  };
+}
+
+/** The Actions cell (UI-SPEC 6.4.2, finding 6): Activate or Roll back only for a held reparse batch; links for the profile panels. */
+function ingestImpactRowAction(row) {
+  if (row.activation === 'rebuild_batch') {
+    if (row.state === 'built') return 'activate';
+    if (row.state === 'active') return 'rollback';
+    return null;
+  }
+  if (INGEST_IMPACT_PANEL_TARGETS[row.activation]) return row.activation;
+  return null;
+}
+
 class IngestImpactPanel {
-  constructor(root) {
+  constructor(root, options) {
+    const opts = options || {};
     this.root = root;
     this.doc = typeof document !== 'undefined' ? document : null;
     this.locale = ingestImpactLocale();
+    this.pollMs = typeof opts.pollMs === 'number' ? opts.pollMs : INGEST_IMPACT_POLL_MS;
+    this.announceMs = typeof opts.announceMs === 'number' ? opts.announceMs : INGEST_IMPACT_ANNOUNCE_MS;
     this.mounted = false;
     this.tabs = null;
     this.warningsHost = null;
     this.rebuildsHost = null;
+    this.view = null;
+    this.visible = INGEST_IMPACT_PAGE;
+    this.loading = false;
+    this.pollTimer = null;
+    this.pollStopped = false;
+    this.lastAnnounce = 0;
+    this.runningIds = new Set();
+    this.loadAlert = null;
+    this.gateAlert = null;
+    this.refreshButton = null;
+    this.updatedAt = null;
   }
 
   t(key, vars) {
@@ -690,11 +961,15 @@ class IngestImpactPanel {
       if (control) control.addEventListener('change', () => this.renderWarnings());
     }
     this.renderWarnings();
-    await this.loadRebuilds();
+    if (this.doc && typeof this.doc.addEventListener === 'function') {
+      this.doc.addEventListener('visibilitychange', () => this.schedulePoll());
+    }
+    await this.loadRebuilds('first');
   }
 
   async refresh() {
-    await this.loadRebuilds();
+    this.pollStopped = false;
+    await this.loadRebuilds('refresh');
   }
 
   /** zh and it through data-rag-i18n; English is the static markup (UI-SPEC 6.3). */
@@ -726,17 +1001,417 @@ class IngestImpactPanel {
     );
   }
 
-  async loadRebuilds() {}
+
+  tabActive() {
+    const tab = this.doc.getElementById('rag-administration');
+    return !tab || tab.classList.contains('active');
+  }
+
+  documentVisible() {
+    return this.doc.visibilityState !== 'hidden';
+  }
+
+  stopPolling() {
+    this.pollStopped = true;
+    if (this.pollTimer) clearTimeout(this.pollTimer);
+    this.pollTimer = null;
+  }
+
+  /** UI-SPEC 6.4.2: reload every 15 seconds only while a rebuild runs, the tab is active and the document is visible. */
+  schedulePoll() {
+    if (this.pollTimer) clearTimeout(this.pollTimer);
+    this.pollTimer = null;
+    if (this.pollStopped || !this.view || !this.view.running || !this.tabActive() || !this.documentVisible()) return;
+    this.pollTimer = setTimeout(() => {
+      this.pollTimer = null;
+      if (this.view && this.view.running && this.tabActive() && this.documentVisible()) this.loadRebuilds('poll');
+    }, this.pollMs);
+  }
+
+  mechanismText(mechanism) {
+    return ingestImpactMechanismLabel(mechanism, this.locale, null) || mechanism;
+  }
+
+  stateText(state) {
+    const badge = INGEST_IMPACT_STATE_BADGES[state];
+    return badge ? this.t(badge.key) : state;
+  }
+
+  renderAlerts() {
+    const host = this.root.querySelector('[data-ingest-impact-alert]');
+    if (!host) return;
+    host.replaceChildren(...[this.gateAlert, this.loadAlert].filter(Boolean));
+  }
+
+  async loadRebuilds(source) {
+    if (!this.rebuildsHost || this.loading) return;
+    const ui = ingestImpactUiLib();
+    this.loading = true;
+    const hadContent = Boolean(this.view);
+    if (hadContent) ui.ragUiListBusy(this.rebuildsHost, true);
+    else ui.ragUiListLoading(this.doc, this.rebuildsHost, this.t('rebuilds.loading'));
+    let restore = null;
+    if (hadContent && this.refreshButton && this.refreshButton.isConnected !== false && source === 'refresh') {
+      restore = ui.ragUiButtonBusy(this.doc, this.refreshButton, this.t('rebuilds.loading'));
+    }
+    let result;
+    try {
+      result = await ui.ragUiRagRequest(INGEST_IMPACT_PATHS.coverage, { method: 'GET' });
+    } finally {
+      this.loading = false;
+      if (restore) restore();
+    }
+    if (result && result.ok && result.body && typeof result.body === 'object') {
+      const previous = this.runningIds;
+      this.view = ingestImpactRebuildsView(result.body);
+      this.updatedAt = new Date();
+      this.loadAlert = null;
+      this.renderAlerts();
+      ui.ragUiListBusy(this.rebuildsHost, false);
+      this.renderRebuilds();
+      this.announceLoad(source, previous);
+    } else {
+      const mapped = ui.ragUiMapError(result, this.locale, { unavailable: this.t('rebuilds.unavailable') });
+      if (mapped.kind === 'signIn') {
+        this.view = null;
+        this.loadAlert = null;
+        this.renderAlerts();
+        ui.ragUiListBusy(this.rebuildsHost, false);
+        this.rebuildsHost.replaceChildren(ui.ragUiSignInAlert(this.doc, this.locale, () => this.refresh()));
+      } else {
+        this.loadAlert = ui.ragUiUnavailableAlert(this.doc, this.locale, mapped.message, () => this.refresh());
+        this.renderAlerts();
+        if (hadContent) ui.ragUiListBusy(this.rebuildsHost, true, true);
+        else this.rebuildsHost.replaceChildren();
+      }
+      this.announce(mapped.message, true);
+    }
+    this.schedulePoll();
+  }
+
+  /** Load counts on the first load and on Refresh; progress at most every 30 seconds; always the end state of a run. */
+  announceLoad(source, previous) {
+    const ui = ingestImpactUiLib();
+    const view = this.view;
+    const now = Date.now();
+    const ended = view.rebuilds.filter((row) => previous.has(row.id) && row.state !== 'running');
+    this.runningIds = new Set(view.rebuilds.filter((row) => row.state === 'running').map((row) => row.id));
+    if (ended.length) {
+      const row = ended[0];
+      this.announce(this.t('rebuild.ended', { mechanism: this.mechanismText(row.mechanism), state: this.stateText(row.state) }));
+      this.lastAnnounce = now;
+      return;
+    }
+    const running = view.rebuilds.find((row) => row.state === 'running');
+    if (running && (this.lastAnnounce === 0 || now - this.lastAnnounce >= this.announceMs)) {
+      const progress = this.t('rebuild.progress', { done: ui.ragUiFormatNumber(running.done, this.locale), total: ui.ragUiFormatNumber(running.total, this.locale) });
+      this.announce(this.t('rebuild.announce', { mechanism: this.mechanismText(running.mechanism), progress }));
+      this.lastAnnounce = now;
+      return;
+    }
+    if (source === 'first' || source === 'refresh') {
+      const pending = view.pending.reduce((sum, row) => sum + row.affected, 0);
+      this.announce(
+        this.t('rebuilds.loaded', {
+          pending: ui.ragUiCount(this.t('pending.heading'), pending, this.locale),
+          rebuilds: ui.ragUiCount(this.t('rebuilds.heading'), view.rebuilds.length, this.locale),
+        }),
+      );
+    }
+  }
+
+  formatTime(date, withDate) {
+    try {
+      const options = withDate ? { dateStyle: 'medium', timeStyle: 'short' } : { timeStyle: 'short' };
+      return new Intl.DateTimeFormat(this.locale, options).format(date);
+    } catch {
+      return date.toISOString();
+    }
+  }
+
+  tableRegion(label, table) {
+    return this.el('div', { className: 'overflow-x-auto mb-6 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2', attrs: { tabindex: '0', role: 'region', 'aria-label': label } }, [table]);
+  }
+
+  th(text, extra) {
+    return this.el('th', { className: 'font-semibold' + (extra ? ' ' + extra : ''), text, attrs: { scope: 'col' } });
+  }
+
+  renderRebuilds() {
+    const ui = ingestImpactUiLib();
+    const view = this.view;
+    const nodes = [];
+    this.refreshButton = this.el('button', { className: 'btn btn-sm', text: this.t('action.refresh'), attrs: { type: 'button' } });
+    this.refreshButton.addEventListener('click', () => this.refresh());
+    nodes.push(
+      this.el('div', { className: 'flex flex-wrap items-center justify-between gap-2 mb-4' }, [
+        this.el('span', { className: 'text-xs text-base-content/70', text: ui.ragUiLabel('panel.updated', this.locale, { time: this.formatTime(this.updatedAt, false) }) }),
+        this.refreshButton,
+      ]),
+    );
+    if (view.missing.count > 0) {
+      const vars = { count: ui.ragUiFormatNumber(view.missing.count, this.locale), command: view.missing.command };
+      nodes.push(this.el('p', { className: 'text-sm mb-4 max-w-prose' }, ui.ragUiTemplateNodes(this.doc, this.t('coverage.missing'), vars, ['command'])));
+    }
+    if (view.empty) {
+      nodes.push(
+        this.el('div', { className: 'py-8 text-center' }, [
+          this.el('p', { className: 'text-base font-semibold mb-2 text-balance', text: this.t('rebuilds.empty.title') }),
+          this.el('p', { className: 'text-sm text-base-content/70 max-w-prose mx-auto text-pretty', text: this.t('rebuilds.empty.body') }),
+        ]),
+      );
+      this.rebuildsHost.replaceChildren(...nodes);
+      return;
+    }
+    if (view.pending.length) {
+      nodes.push(this.el('h4', { className: 'text-base font-semibold mb-2 text-balance', text: this.t('pending.heading') }));
+      nodes.push(this.pendingTable(view.pending));
+    }
+    nodes.push(this.el('h4', { className: 'text-base font-semibold mb-2 text-balance', text: this.t('rebuilds.heading') }));
+    if (view.rebuilds.length) {
+      nodes.push(this.rebuildsTable(view.rebuilds.slice(0, this.visible)));
+      if (view.rebuilds.length > this.visible) {
+        const more = this.el('button', { className: 'btn btn-outline btn-sm', text: this.t('action.loadMore'), attrs: { type: 'button' } });
+        more.addEventListener('click', () => {
+          this.visible += INGEST_IMPACT_PAGE;
+          this.renderRebuilds();
+        });
+        nodes.push(more);
+      }
+    } else {
+      nodes.push(this.el('p', { className: 'text-sm', text: this.t('rebuilds.none') }));
+    }
+    this.rebuildsHost.replaceChildren(...nodes);
+  }
+
+  commandBlock(row, sentenceKey) {
+    const children = [
+      this.el('p', { className: 'text-sm max-w-prose', text: this.t(sentenceKey) }),
+      this.el('div', { className: 'flex flex-wrap items-center gap-2 min-w-0' }, [
+        this.el('code', { className: 'font-mono text-xs break-all min-w-0', text: row.command, attrs: { translate: 'no' } }),
+        this.copyButton(row),
+      ]),
+    ];
+    return this.el('div', { className: 'flex flex-col gap-1 min-w-0' }, children);
+  }
+
+  copyButton(row) {
+    const clipboard = typeof navigator !== 'undefined' && navigator ? navigator.clipboard : null;
+    if (!row.command || !clipboard || typeof clipboard.writeText !== 'function') return null;
+    const button = this.el('button', {
+      className: 'btn btn-ghost md:btn-sm',
+      text: this.t('action.copy'),
+      attrs: { type: 'button', 'aria-label': this.t('action.copyAria', { mechanism: this.mechanismText(row.mechanism) }) },
+    });
+    button.addEventListener('click', async () => {
+      try {
+        await clipboard.writeText(row.command);
+        this.announce(this.t('copy.done'));
+      } catch {
+        this.announce(this.t('copy.failed'), true);
+      }
+    });
+    return button;
+  }
+
+  pendingTable(rows) {
+    const ui = ingestImpactUiLib();
+    const body = this.el('tbody');
+    for (const row of rows) {
+      let next;
+      if (row.start === 'ui') {
+        const button = this.el('button', {
+          className: 'btn btn-primary md:btn-sm',
+          text: this.t('action.start'),
+          attrs: { type: 'button', 'aria-label': this.t('action.startAria', { mechanism: this.mechanismText(row.mechanism) }) },
+        });
+        button.addEventListener('click', () => this.start(row, button));
+        next = button;
+      } else {
+        next = row.command ? this.commandBlock(row, row.start === 'needs_async' ? 'rebuild.needsAsync' : 'rebuild.cli') : null;
+      }
+      body.appendChild(
+        this.el('tr', {}, [
+          this.el('th', { className: 'font-normal break-words', attrs: { scope: 'row' } }, [ingestImpactMechanismNode(this.doc, row.mechanism, this.locale, null)]),
+          this.el('td', { className: 'text-right tabular-nums', text: ui.ragUiFormatNumber(row.affected, this.locale) }),
+          this.el('td', { className: 'min-w-56' }, [next]),
+        ]),
+      );
+    }
+    const table = this.el('table', { className: 'table table-sm', attrs: { 'data-ingest-impact-table': 'pending' } }, [
+      this.el('caption', { className: 'sr-only', text: this.t('pending.heading') }),
+      this.el('thead', {}, [this.el('tr', {}, [this.th(this.t('impact.col.rebuild')), this.th(this.t('impact.col.documents'), 'text-right'), this.th(this.t('pending.col.next'))])]),
+      body,
+    ]);
+    return this.tableRegion(this.t('pending.heading'), table);
+  }
+
+  stateBadge(state) {
+    const ui = ingestImpactUiLib();
+    const badge = INGEST_IMPACT_STATE_BADGES[state];
+    if (!badge) {
+      return this.el('span', { className: 'badge badge-sm badge-ghost gap-1' }, [
+        this.el('span', { className: 'font-mono', text: state, attrs: { translate: 'no' } }),
+      ]);
+    }
+    return this.el('span', { className: 'badge badge-sm gap-1 whitespace-nowrap ' + badge.classes }, [ui.ragUiIcon(this.doc, badge.icon), this.el('span', { text: this.t(badge.key) })]);
+  }
+
+  rebuildsTable(rows) {
+    const ui = ingestImpactUiLib();
+    const body = this.el('tbody');
+    for (const row of rows) {
+      const progressText = this.t('rebuild.progress', { done: ui.ragUiFormatNumber(row.done, this.locale), total: ui.ragUiFormatNumber(row.total, this.locale) });
+      const documents = [];
+      if (row.state === 'running') {
+        documents.push(
+          this.el('progress', {
+            className: 'progress progress-primary w-full min-w-24',
+            attrs: { value: String(row.done), max: String(Math.max(row.total, 1)), 'aria-label': progressText },
+          }),
+        );
+      }
+      documents.push(this.el('span', { className: 'text-sm tabular-nums', text: progressText }));
+      if (row.gaps > 0) documents.push(this.el('p', { className: 'text-xs text-warning mt-1', text: this.t('rebuild.gaps', { count: ui.ragUiFormatNumber(row.gaps, this.locale) }) }));
+      const started = row.started
+        ? this.el('time', { text: this.formatTime(new Date(row.started), true), attrs: { datetime: row.started } })
+        : this.el('span', { text: '—' });
+      body.appendChild(
+        this.el('tr', {}, [
+          this.el('th', { className: 'font-normal break-words', attrs: { scope: 'row' } }, [ingestImpactMechanismNode(this.doc, row.mechanism, this.locale, null)]),
+          this.el('td', { className: 'min-w-0' }, [this.el('div', { className: 'flex flex-col gap-1' }, documents)]),
+          this.el('td', {}, [this.stateBadge(row.state)]),
+          this.el('td', { className: 'hidden lg:table-cell text-xs whitespace-nowrap' }, [started]),
+          this.el('td', {}, [this.rowActionNode(row)]),
+        ]),
+      );
+    }
+    const table = this.el('table', { className: 'table table-sm', attrs: { 'data-ingest-impact-table': 'rebuilds' } }, [
+      this.el('caption', { className: 'sr-only', text: this.t('rebuilds.heading') }),
+      this.el('thead', {}, [
+        this.el('tr', {}, [
+          this.th(this.t('impact.col.rebuild')),
+          this.th(this.t('impact.col.documents')),
+          this.th(this.t('rebuilds.col.state')),
+          this.th(this.t('rebuilds.col.started'), 'hidden lg:table-cell'),
+          this.th(this.t('rebuilds.col.actions')),
+        ]),
+      ]),
+      body,
+    ]);
+    return this.tableRegion(this.t('rebuilds.heading'), table);
+  }
+
+  rowActionNode(row) {
+    const action = ingestImpactRowAction(row);
+    const mechanism = this.mechanismText(row.mechanism);
+    if (action === 'activate' || action === 'rollback') {
+      const activate = action === 'activate';
+      const button = this.el('button', {
+        className: 'btn md:btn-sm ' + (activate ? 'btn-primary' : 'btn-outline'),
+        text: this.t(activate ? 'action.activate' : 'action.rollback'),
+        attrs: { type: 'button', 'aria-label': this.t(activate ? 'action.activateAria' : 'action.rollbackAria', { mechanism }) },
+      });
+      button.addEventListener('click', () => this.decide(row, action, button));
+      return button;
+    }
+    if (action && INGEST_IMPACT_PANEL_TARGETS[action]) {
+      const target = INGEST_IMPACT_PANEL_TARGETS[action];
+      const link = this.el('button', { className: 'btn btn-link btn-sm px-0', text: this.t(target.key), attrs: { type: 'button' } });
+      link.addEventListener('click', () => this.openPanel(target.section));
+      return link;
+    }
+    return null;
+  }
+
+  openPanel(sectionId) {
+    const section = this.doc.getElementById(sectionId);
+    if (!section) return;
+    if (typeof section.scrollIntoView === 'function') section.scrollIntoView({ block: 'start' });
+    const heading = section.querySelector('h3');
+    if (!heading) return;
+    if (!heading.hasAttribute('tabindex')) heading.setAttribute('tabindex', '-1');
+    heading.focus();
+  }
+
+  gate(reason) {
+    const ui = ingestImpactUiLib();
+    const code = typeof reason === 'string' && reason ? reason : 'unknown';
+    const body = INGEST_IMPACT_GATES.includes(code)
+      ? [this.t('gate.' + code)]
+      : [this.el('p', { className: 'text-sm' }, ui.ragUiTemplateNodes(this.doc, this.t('gate.other'), { code }, ['code']))];
+    this.gateAlert = ui.ragUiAlert(this.doc, { tone: 'warning', icon: 'exclamation-triangle', role: 'alert', body });
+    this.renderAlerts();
+  }
+
+  /** The answer of a start, activate or rollback (UI-SPEC 8.2): gate refusals in the alert host, the rest in the status region. */
+  async settle(result, action, doneText) {
+    const ui = ingestImpactUiLib();
+    if (result && result.ok) {
+      this.announce(doneText);
+      await this.loadRebuilds('action');
+      return;
+    }
+    const body = result && result.body && typeof result.body === 'object' ? result.body : {};
+    if (result && result.status === 409 && ['activation_refused', 'rollback_refused', 'start_refused'].includes(body.error)) {
+      this.gate(body.reason);
+      await this.loadRebuilds('action');
+      return;
+    }
+    const mapped = ui.ragUiMapError(result, this.locale, { action, unavailable: this.t('rebuilds.unavailable') });
+    this.announce(mapped.message, true);
+    if (mapped.reload) await this.loadRebuilds('action');
+  }
+
+  async start(row, button) {
+    const ui = ingestImpactUiLib();
+    this.gateAlert = null;
+    this.renderAlerts();
+    const others = Array.from(this.rebuildsHost.querySelectorAll('button')).filter((b) => b !== button);
+    const restore = ui.ragUiButtonBusy(this.doc, button, this.t('rebuild.starting'), others);
+    let result;
+    try {
+      result = await ui.ragUiRagRequest(INGEST_IMPACT_PATHS.rebuild, { method: 'POST', body: JSON.stringify({ mechanism: row.mechanism }) }, 60000);
+    } finally {
+      restore();
+    }
+    const mechanism = this.mechanismText(row.mechanism);
+    const nothing = result && result.ok && result.body && result.body.status === 'nothing';
+    await this.settle(result, 'start', this.t(nothing ? 'rebuild.nothing' : 'rebuild.started', { mechanism }));
+  }
+
+  async decide(row, action, button) {
+    const ui = ingestImpactUiLib();
+    this.gateAlert = null;
+    this.renderAlerts();
+    const activate = action === 'activate';
+    const path = INGEST_IMPACT_PATHS.rebuild + '/' + encodeURIComponent(row.id) + '/' + (activate ? 'activate' : 'rollback');
+    let result = null;
+    const confirmed = await ui.ragUiConfirmDialog(this.doc, {
+      title: this.t(activate ? 'confirm.activate.title' : 'confirm.rollback.title'),
+      body: [this.t(activate ? 'confirm.activate.body' : 'confirm.rollback.body', { count: ui.ragUiFormatNumber(row.total, this.locale) })],
+      keepLabel: this.t('action.keepVersions'),
+      confirmLabel: this.t(activate ? 'action.activate' : 'action.rollback'),
+      runningLabel: this.t(activate ? 'rebuild.activating' : 'rebuild.rollingBack'),
+      opener: button,
+      fallbackFocus: this.root.querySelector('[data-ingest-impact-status]'),
+      onConfirm: async () => {
+        result = await ui.ragUiRagRequest(path, { method: 'POST', body: '{}' }, 60000);
+      },
+    });
+    if (!confirmed) return;
+    await this.settle(result, activate ? 'activate' : 'rollback', this.t(activate ? 'activate.done' : 'rollback.done'));
+  }
 }
 
 let ingestImpactPanelInstance = null;
 
-function initIngestImpactPanel() {
+function initIngestImpactPanel(options) {
   if (typeof document === 'undefined') return null;
   const root = document.getElementById('rag-administration-ingest-impact');
   if (!root) return null;
   if (!ingestImpactPanelInstance) {
-    ingestImpactPanelInstance = new IngestImpactPanel(root);
+    ingestImpactPanelInstance = new IngestImpactPanel(root, options);
     if (typeof window !== 'undefined') window.ingestImpactPanel = ingestImpactPanelInstance;
     return ingestImpactPanelInstance.mount();
   }
@@ -778,6 +1453,8 @@ if (typeof module !== 'undefined' && module.exports) {
     ingestImpactDecision,
     ingestImpactRevert,
     ingestImpactWarnings,
+    ingestImpactRebuildsView,
+    ingestImpactRowAction,
     ingestImpactCreateGuard,
     IngestImpactPanel,
     initIngestImpactPanel,
