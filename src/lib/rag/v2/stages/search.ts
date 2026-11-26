@@ -318,7 +318,8 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
   const spec = (name: StageName, onFail: StageSpec['onFail']) => stageSpec(config, profile, name, onFail, stageOverrides);
   const pool = params.candidate_pool_size;
   const filters = ctx.filters ?? buildFilters(input);
-  const versions = effectiveVersionScope(config, profile, input.retrievalFilters?.versionScope);
+  // D-58: the embed channel (set server-side by the embed route) also needs config.v2.embedVersionScope; the rule lives in effectiveVersionScope.
+  const versions = effectiveVersionScope(config, profile, input.retrievalFilters?.versionScope, input.channel);
   const historyScope = versions.scope === 'current' ? undefined : versions.scope;
   const route = historyScope ? backendForRequest({ versionScope: historyScope }) : { backend: getRetrievalBackend() };
   const backend = route.backend;

@@ -324,7 +324,7 @@ async function runSemanticCacheStage(args: CacheStageInput): Promise<CacheStageR
     retrievalOptions: cacheRetrievalOptions(input),
     defaultMaxResults: resolveFinalResultCount(undefined, env.RAG_FINAL_RESULT_COUNT),
   };
-  const versionScope = effectiveVersionScope(ctx.config, profile, input.retrievalFilters?.versionScope).scope;
+  const versionScope = effectiveVersionScope(ctx.config, profile, input.retrievalFilters?.versionScope, input.channel).scope;
   if (versionScope !== 'current') facts.versionScope = versionScope;
   const bypass = checkBypassReason(facts);
   if (bypass !== null) {
