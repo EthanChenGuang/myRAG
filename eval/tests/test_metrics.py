@@ -950,3 +950,115 @@ def test_the_03_2_67_baseline_moves_only_table_split_items_and_none_drops():
                 else:
                     assert new >= old, (item_id, metric)
     assert all(stat.spread == 0.0 for stats in current.slices.values() for stat in stats.values())
+
+
+def _answer_trace(item_id: str, *, refused: bool = False, answer: str | None = None) -> RagTrace:
+    trace = _trace(item_id, [], refused=refused)
+    return trace.model_copy(update={"answer": answer})
+
+
+def _no_answer_results(refused: int, total: int, *, language: str = "en") -> list[ItemResult]:
+    golden = [_item(f"{language}-na-{i:03d}", language=language) for i in range(total)]
+    traces = [_trace(item.id, [], refused=i < refused) for i, item in enumerate(golden)]
+    return score_items(traces, golden)
+
+
+def test_false_answer_rate_is_the_share_of_answered_unanswerable_items_with_its_n():
+    out = aggregate(_no_answer_results(17, 20))
+    overall = out["overall"]
+    assert overall.correct_refusal_rate == MetricValue(value=0.85, n=20)
+    assert overall.false_answer_rate is not None
+    assert overall.false_answer_rate.n == 20
+    assert overall.false_answer_rate.value == pytest.approx(0.15)
+    assert overall.false_answer_rate.value == pytest.approx(1 - overall.correct_refusal_rate.value)
+
+
+def test_false_answer_rate_is_none_on_a_slice_without_unanswerable_items():
+    item = _item("en-a-001", [(DOC, "alpha fact")])
+    results = score_items([_trace("en-a-001", [(DOC, "the alpha fact holds")])], [item])
+    overall = aggregate(results)["overall"]
+    assert overall.false_answer_rate == MetricValue(value=None, n=0)
+
+
+def test_answer_equal_to_the_language_refusal_text_is_scored_refused():
+    from rag_eval.refusal_text import load_refusal_texts
+
+    text = load_refusal_texts()["en"][0]
+    item = _item("en-na-001")
+    for answer in (text, f"  {text.upper()}  \n"):
+        (result,) = score_items([_answer_trace(item.id, refused=False, answer=answer)], [item])
+        assert result.refused is True
+
+
+def test_refusal_text_inside_a_longer_answer_is_not_a_refusal():
+    from rag_eval.refusal_text import load_refusal_texts
+
+    text = load_refusal_texts()["en"][0]
+    item = _item("en-na-001")
+    answer = f"The limit is twelve units. {text}"
+    (result,) = score_items([_answer_trace(item.id, refused=False, answer=answer)], [item])
+    assert result.refused is False
+
+
+def test_trace_without_an_answer_is_scored_from_trace_refused_alone():
+    item = _item("en-na-001")
+    (kept,) = score_items([_answer_trace(item.id, refused=True, answer=None)], [item])
+    (answered,) = score_items([_answer_trace(item.id, refused=False, answer=None)], [item])
+    assert (kept.refused, answered.refused) == (True, False)
+
+
+def test_retrieval_only_fixture_shape_keeps_the_five_noise_metrics():
+    from rag_eval.golden_io import load_golden
+    from rag_eval.paths import REPO_ROOT
+
+    golden = [item for item in load_golden(REPO_ROOT / "eval" / "fixtures" / "golden.jsonl") if item.split == "dev"]
+    traces = [_trace(item.id, [], refused=index % 3 == 0) for index, item in enumerate(golden)]
+    results = score_items(traces, golden)
+    assert [r.refused for r in results] == [t.refused for t in traces]
+    expected = [
+        ItemResult.model_validate({**r.model_dump(), "refused": t.refused}) for r, t in zip(results, traces, strict=True)
+    ]
+    noise = ("recall_at_5", "recall_at_10", "mrr", "correct_refusal_rate", "false_refusal_rate")
+    got, want = aggregate(results)["overall"], aggregate(expected)["overall"]
+    assert {m: getattr(got, m) for m in noise} == {m: getattr(want, m) for m in noise}
+
+
+def _answerable_row(item_id: str, provenance: str = "synthetic_fixture") -> ItemResult:
+    return ItemResult(
+        item_id=item_id,
+        language="en",
+        category="general",
+        split="dev",
+        provenance=provenance,
+        answerable=True,
+        refused=False,
+        span_count=1,
+        spans_hit_at_5=1,
+        spans_hit_at_10=1,
+        first_hit_rank=1,
+    )
+
+
+def test_paraphrased_items_leave_the_gate_population_and_are_counted_coverage_only():
+    rows = [_answerable_row("en-a-001"), _answerable_row("en-a-002", "paraphrased")]
+    out = aggregate(rows)
+    assert out["overall"].recall_at_5.n == 1
+    assert out["by_language"]["en"].recall_at_5.n == 1
+    assert out["population_exclusions"]["coverage_only"] == 1
+
+
+def test_non_active_items_leave_the_gate_population_and_stale_share_is_stale_over_active_plus_stale():
+    rows = [_answerable_row(f"en-a-{i:03d}") for i in range(10)]
+    statuses = {"en-a-000": "stale", "en-a-001": "retired", "en-a-002": "active"}
+    out = aggregate(rows, statuses=statuses)
+    assert out["overall"].recall_at_5.n == 8
+    exclusions = out["population_exclusions"]
+    assert exclusions["stale_count"] == 1
+    assert exclusions["retired_count"] == 1
+    assert exclusions["stale_share"] == pytest.approx(1 / 9)
+
+
+def test_without_statuses_nothing_is_excluded_for_lifecycle():
+    rows = [_answerable_row(f"en-a-{i:03d}") for i in range(3)]
+    exclusions = aggregate(rows)["population_exclusions"]
+    assert exclusions == {"coverage_only": 0, "stale_count": 0, "retired_count": 0, "stale_share": 0.0}
