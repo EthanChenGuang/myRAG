@@ -1,18 +1,37 @@
 import type { AnswerNotice } from '@/lib/rag-eval/contracts.generated';
-import type { TextParams } from '../lang/texts';
+import { fixedText, type TextKey, type TextParams } from '../lang/texts';
 
-export const NOTICE_KINDS = [] as const;
-export type NoticeKind = 'answer_truncated' | 'credential_request_blocked' | 'credential_request_warning' | 'calc_corrected' | 'calc_not_verified';
+/** D-11: every server-added notice; calc_corrected and calc_not_verified are reserved for Phase 5.2.1. */
+export const NOTICE_KINDS = [
+  'answer_truncated',
+  'credential_request_blocked',
+  'credential_request_warning',
+  'calc_corrected',
+  'calc_not_verified',
+] as const;
+export type NoticeKind = (typeof NOTICE_KINDS)[number];
+
+const NOTICE_KEYS: Readonly<Record<NoticeKind, TextKey>> = Object.freeze({
+  answer_truncated: 'notices.answer_truncated',
+  credential_request_blocked: 'notices.credential_request_blocked',
+  credential_request_warning: 'notices.credential_request_warning',
+  calc_corrected: 'notices.calc_corrected',
+  calc_not_verified: 'notices.calc_not_verified',
+});
 
 export interface NoticeOptions {
   language: string;
   params?: TextParams;
 }
 
+/** The one notice emitter (D-11): the registry text of the kind in the answer language; a missing parameter throws. */
 export function emitNotice(kind: NoticeKind, options: NoticeOptions): AnswerNotice {
-  return { kind, text: '', language: options.language };
+  if (!Object.prototype.hasOwnProperty.call(NOTICE_KEYS, kind)) throw new Error(`[Notices] unknown notice kind ${String(kind)}`);
+  const text = fixedText(NOTICE_KEYS[kind], options.language, options.params);
+  return { kind, text, language: options.language };
 }
 
+/** The plain-text form for channels that read text only (WhatsApp, embed, the eval answer): one final delta after a blank line. */
 export function renderNoticeAsText(notice: AnswerNotice): string {
-  return notice.text;
+  return `\n\n${notice.text}`;
 }
