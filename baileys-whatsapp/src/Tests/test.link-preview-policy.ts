@@ -1,4 +1,9 @@
-import { buildTextMessage, socketLinkPreviewConfig } from '../Service/link-preview-policy'
+import {
+	buildTextMessage,
+	linkPreviewHostList,
+	parseLinkPreviewField,
+	socketLinkPreviewConfig
+} from '../Service/link-preview-policy'
 
 const INJECTED = 'Answer: see https://attacker.example/c?d=+10000000000'
 
@@ -58,6 +63,51 @@ describe('link preview policy', () => {
 		it('requests a high-quality preview only when hosts are allowlisted', () => {
 			expect(socketLinkPreviewConfig(env).generateHighQualityLinkPreview).toBe(true)
 			expect(socketLinkPreviewConfig({ WHATSAPP_LINK_PREVIEW_HOSTS: ' , ' }).generateHighQualityLinkPreview).toBe(false)
+		})
+	})
+
+	describe('per-message linkPreview false', () => {
+		const env = { WHATSAPP_LINK_PREVIEW_HOSTS: 'docs.example.com' }
+
+		it('forces linkPreview null even when every URL is on the preview hosts', () => {
+			const content = buildTextMessage('Read https://docs.example.com/guide', env, { linkPreview: false })
+			expect(content).toEqual({ text: 'Read https://docs.example.com/guide', linkPreview: null })
+		})
+
+		it('keeps the existing policy without the option', () => {
+			expect(buildTextMessage('Read https://docs.example.com/guide', env, {})).not.toHaveProperty('linkPreview')
+			expect(buildTextMessage('Read https://docs.example.com/guide', env)).not.toHaveProperty('linkPreview')
+		})
+
+		it('builds a reply with a non-allowlisted URL with linkPreview null', () => {
+			expect(buildTextMessage(INJECTED, {}, { linkPreview: false })).toEqual({ text: INJECTED, linkPreview: null })
+		})
+	})
+
+	describe('send endpoint linkPreview field', () => {
+		it('accepts an absent field or a boolean', () => {
+			expect(parseLinkPreviewField(undefined)).toEqual({ ok: true, options: {} })
+			expect(parseLinkPreviewField(false)).toEqual({ ok: true, options: { linkPreview: false } })
+			expect(parseLinkPreviewField(true)).toEqual({ ok: true, options: {} })
+		})
+
+		it('rejects a non-boolean value', () => {
+			for (const value of ['false', 0, null, {}, []]) {
+				expect(parseLinkPreviewField(value)).toEqual({ ok: false })
+			}
+		})
+	})
+
+	describe('health preview hosts', () => {
+		it('is empty by default', () => {
+			expect(linkPreviewHostList({})).toEqual([])
+		})
+
+		it('lists the configured host names only, sorted', () => {
+			expect(linkPreviewHostList({ WHATSAPP_LINK_PREVIEW_HOSTS: 'shop.example.org, Docs.Example.com' })).toEqual([
+				'docs.example.com',
+				'shop.example.org'
+			])
 		})
 	})
 })
