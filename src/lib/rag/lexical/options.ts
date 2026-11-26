@@ -13,6 +13,8 @@ export interface LexicalOptions {
   } | null;
   /** Tenant identifier patterns compiled with 'giu' (plan 04.2-34). */
   identifierPatterns?: readonly RegExp[];
+  /** Present only while RAG_LEXICAL_QUANTITY is on; unitAliases come from the tenant's TERM dictionary (plan 03.3-21). */
+  quantity?: boolean | { unitAliases?: Readonly<Record<string, string>> } | null;
 }
 
 /** Natural tokens start with a letter, a digit or a Han character, so these prefixes cannot collide. */

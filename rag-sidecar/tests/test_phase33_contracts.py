@@ -49,7 +49,9 @@ def test_language_packs_file_round_trips_unchanged(folder):
     raw = json.loads((folder / "language-packs.json").read_text(encoding="utf-8"))
     dumped = LanguageRegistry.model_validate(raw).model_dump(mode="json")
     assert dumped == raw
-    assert "quantity" not in dumped
+    # Plan 03.3-09 ships the general unit block; pack_version stays 1 (D-05).
+    assert dumped["quantity"]["unit_symbols"]
+    assert [pack["pack_version"] for pack in dumped["packs"]] == [1] * len(dumped["packs"])
 
 
 # --- unchanged stored objects

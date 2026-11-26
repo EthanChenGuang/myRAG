@@ -2,6 +2,7 @@ import rawRegistry from '../../../../config/rag/language-packs.json';
 import { splitAtIdentifiers } from '../ids/shapes';
 import { parseLanguageRegistry } from '../lang/registry';
 import { DICT_TOKEN_PREFIX, STEM_TOKEN_PREFIX, type LexicalOptions } from './options';
+import { buildQuantityUnits, quantityTokens, type QuantityUnits } from './quantity';
 import rules from './rules.json';
 import { stemItalian } from './stem-it';
 
@@ -11,7 +12,10 @@ const CODE_PATTERN = new RegExp(rules.codePattern, 'giu');
 const zhSegmenter = new Intl.Segmenter('zh', { granularity: 'word' });
 const HAN_OR_OTHER = /(\p{Script=Han}+)|([^\p{Script=Han}]+)/gu;
 // D-11: per-language rules come from the language registry (equality with the former constants is tested).
-const PACKS = parseLanguageRegistry(rawRegistry).packs;
+const REGISTRY = parseLanguageRegistry(rawRegistry);
+const PACKS = REGISTRY.packs;
+// D-32: general unit symbols and separators; read only while the quantity option is on.
+const QUANTITY_UNITS = buildQuantityUnits(REGISTRY.quantity);
 const ELISION_PREFIX_LIST = PACKS.flatMap((pack) => pack.folding.elision_prefixes);
 const ELISION_SUFFIX_LIST = PACKS.flatMap((pack) => pack.folding.elision_suffixes);
 const ELISION_PREFIXES = [...ELISION_PREFIX_LIST].sort((a, b) => b.length - a.length);
@@ -236,6 +240,28 @@ function dictionaryTokens(normalized: string, options: LexicalOptions | undefine
   return out;
 }
 
+const aliasUnits = new WeakMap<object, QuantityUnits>();
+
+function quantityUnitsFor(quantity: LexicalOptions['quantity']): QuantityUnits | null {
+  if (!quantity) return null;
+  if (quantity === true) return QUANTITY_UNITS;
+  const aliases = quantity.unitAliases;
+  if (!aliases || Object.keys(aliases).length === 0) return QUANTITY_UNITS;
+  let units = aliasUnits.get(aliases);
+  if (!units) {
+    units = buildQuantityUnits(REGISTRY.quantity, aliases);
+    aliasUnits.set(aliases, units);
+  }
+  return units;
+}
+
+/** D-31: quantity tokens of the normalised whole text; empty unless the option is on. */
+function quantityTokensFor(normalized: string, options: LexicalOptions | undefined): string[] {
+  const units = quantityUnitsFor(options?.quantity);
+  if (!units) return [];
+  return quantityTokens(normalized, units).filter(acceptsToken);
+}
+
 function stemmerFor(options: LexicalOptions | undefined): ((word: string) => string) | null {
   if (options?.stemIt !== true || options.language !== STEM_IT_LANGUAGE) return null;
   return lexicalStemmerAvailable(options.language) ? STEMMERS.get(options.language)! : null;
@@ -252,8 +278,8 @@ export function lexicalTokens(text: string, options?: LexicalOptions): string[] 
   if (text === '') return [];
   const normalized = normalize(text);
   const tokens = tokenizeNormalized(normalized, contextFor(text, options, true));
-  const dictionary = dictionaryTokens(normalized, options);
-  return dictionary.length === 0 ? tokens : [...tokens, ...dictionary];
+  const additive = [...dictionaryTokens(normalized, options), ...quantityTokensFor(normalized, options)];
+  return additive.length === 0 ? tokens : [...tokens, ...additive];
 }
 
 export function lexicalText(prefix: string[], content: string, options?: LexicalOptions): string {
@@ -268,7 +294,12 @@ export function queryLexicalTokens(text: string, options?: LexicalOptions): stri
   const natural = tokenizeNormalized(normalized, ctx);
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const token of [...dictionaryTokens(normalized, options), ...(ctx?.additive ?? [])]) {
+  const additive = [
+    ...dictionaryTokens(normalized, options),
+    ...quantityTokensFor(normalized, options),
+    ...(ctx?.additive ?? []),
+  ];
+  for (const token of additive) {
     if (out.length >= MAX_ADDITIVE_QUERY_TOKENS) break;
     if (seen.has(token)) continue;
     seen.add(token);
