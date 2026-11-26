@@ -335,4 +335,103 @@ describe('write stage on the two-tenant fixture: RAG_IDENTIFIER_INDEX (D-28, T-0
       await fixture.db.query('ALTER FUNCTION public.rag_write_chunk_identifiers_disabled(text, uuid, jsonb) RENAME TO rag_write_chunk_identifiers');
     }
   });
+
+  describe('backfill command rag:identifiers (D-28, T-04.2-120)', () => {
+    const KEY_B = `u:${TWO_TENANT_IDS.userB}`;
+    const knownUsers = new Set([TWO_TENANT_IDS.userA, TWO_TENANT_IDS.userB]);
+    const fakeAuthAdmin = () => ({
+      auth: {
+        admin: {
+          getUserById: async (id: string) =>
+            knownUsers.has(id) ? { data: { user: { id } }, error: null } : { data: { user: null }, error: { message: 'not found', status: 404 } },
+        },
+      },
+      from: () => {
+        throw new Error('not used');
+      },
+    });
+    const run = async (argv: string[]) => {
+      const cli = await import('@/lib/rag/identifiers/cli');
+      const out: string[] = [];
+      const err: string[] = [];
+      const code = await cli.main(argv, { out: (line) => out.push(line), err: (line) => err.push(line) });
+      return { code, out, err };
+    };
+    const unindexed = async (key: string) =>
+      rows(
+        `SELECT count(DISTINCT d.id)::int AS documents, count(*) FILTER (WHERE d.is_current)::int AS current_chunks FROM documents d
+         JOIN document_chunks c ON c.document_id = d.id AND c.tenant_key = d.tenant_key
+         WHERE d.tenant_key = $1 AND d.status = 'ready' AND NOT d.provisional AND (d.is_current OR d.superseded_by IS NOT NULL) AND c.identifiers_norm IS NULL`,
+        [key],
+      );
+    const snapshot = (key: string) =>
+      rows('SELECT id, identifiers_raw, identifiers_norm FROM document_chunks WHERE tenant_key = $1 ORDER BY id', [key]);
+    let superseded = '';
+
+    before(async () => {
+      identifierIndex = 'false';
+      ragDeps.setRagDepsForTests({ adminClient: () => fakeAuthAdmin() as never });
+      const [old] = await rows("SELECT id FROM documents WHERE tenant_key = $1 AND source_key = 'ids/one' AND NOT is_current", [KEY_A]);
+      superseded = String(old?.id);
+      // The superseded version as if it had been stored before identifiers existed.
+      await withReplica(fixture.db, async () => {
+        await fixture.db.query('UPDATE document_chunks SET identifiers_raw = NULL, identifiers_norm = NULL WHERE document_id = $1', [superseded]);
+        await fixture.db.query('UPDATE documents SET identifiers_raw = NULL, identifiers_norm = NULL WHERE id = $1', [superseded]);
+      });
+    });
+
+    test('a dry run counts the documents with an unindexed chunk and writes nothing', async () => {
+      await assertIndexerFunctions(fixtureDb());
+      const before = await snapshot(KEY_A);
+      const [count] = await unindexed(KEY_A);
+      assert.ok((count?.documents as number) >= 2, 'the switch-off upload and the superseded version are unindexed');
+      const result = await run(['--tenant', KEY_A, '--dry-run']);
+      assert.equal(result.code, 0, result.err.join('\n'));
+      assert.ok(result.out.includes('[RAG Identifiers] dry run, nothing written'), result.out.join('\n'));
+      assert.ok(result.out.some((line) => line.startsWith(`[RAG Identifiers] ${KEY_A}: would index ${count?.documents} documents (`)), result.out.join('\n'));
+      assert.deepEqual(await snapshot(KEY_A), before);
+    });
+
+    test("a real run indexes current and superseded documents of that tenant only, with the tenant's patterns; counts and the cache effect only", async () => {
+      const bBefore = await snapshot(KEY_B);
+      const result = await run(['--tenant', KEY_A, '--batch-size', '1']);
+      assert.equal(result.code, 0, [...result.out, ...result.err].join('\n'));
+      assert.deepEqual(await unindexed(KEY_A), [{ documents: 0, current_chunks: 0 }]);
+      const [off] = await rows("SELECT id FROM documents WHERE tenant_key = $1 AND source_key = 'ids/off'", [KEY_A]);
+      const offNorm = (await chunksOf(off?.id)).flatMap((chunk) => chunk.identifiers_norm as string[]);
+      assert.ok(offNorm.includes('qx4471b') && offNorm.includes('klompriva'), JSON.stringify(offNorm));
+      const oldNorm = (await chunksOf(superseded)).flatMap((chunk) => chunk.identifiers_norm as string[]);
+      assert.ok(oldNorm.includes('qx4471b'), 'the superseded version is indexed for history queries');
+      const [oldDocument] = await rows('SELECT identifiers_norm FROM documents WHERE id = $1', [superseded]);
+      assert.ok((oldDocument?.identifiers_norm as string[]).includes('zk20991'));
+      assert.deepEqual(await snapshot(KEY_B), bBefore, "tenant B's chunks are untouched");
+      assert.ok(result.out.some((line) => line.includes('semantic cache: unaffected')), result.out.join('\n'));
+      assert.ok(result.out.some((line) => line.includes('after npm run rag:rechunk and after identifier pattern changes')));
+      for (const line of [...result.out, ...result.err]) {
+        for (const value of ['qx', 'QX', 'zk20', 'ZK.', 'KLOMP', 'klomp', '[A-Z]']) assert.equal(line.includes(value), false, `no identifier or pattern in the output: ${line}`);
+      }
+    });
+
+    test('running it again reports zero to do and changes nothing', async () => {
+      const before = await snapshot(KEY_A);
+      const dry = await run(['--tenant', KEY_A, '--dry-run']);
+      assert.ok(dry.out.includes(`[RAG Identifiers] ${KEY_A}: would index 0 documents (0 current, 0 superseded)`), dry.out.join('\n'));
+      const again = await run(['--tenant', KEY_A]);
+      assert.equal(again.code, 0, again.err.join('\n'));
+      assert.ok(again.out.some((line) => line.startsWith(`[RAG Identifiers] ${KEY_A}: 0 documents indexed, 0 failed`)), again.out.join('\n'));
+      assert.deepEqual(await snapshot(KEY_A), before);
+    });
+
+    test("tenant B's run repairs its failed document with the built-in rule only and leaves tenant A alone", async () => {
+      const aBefore = await snapshot(KEY_A);
+      const result = await run(['--tenant', KEY_B]);
+      assert.equal(result.code, 0, result.err.join('\n'));
+      assert.deepEqual(await unindexed(KEY_B), [{ documents: 0, current_chunks: 0 }]);
+      const [failed] = await rows("SELECT id FROM documents WHERE tenant_key = $1 AND source_key = 'ids/fails'", [KEY_B]);
+      const norm = (await chunksOf(failed?.id)).flatMap((chunk) => chunk.identifiers_norm as string[]);
+      assert.ok(norm.includes('qx4471b'));
+      assert.equal(norm.includes('klompriva'), false, "tenant A's pattern is not applied to tenant B");
+      assert.deepEqual(await snapshot(KEY_A), aBefore);
+    });
+  });
 });
