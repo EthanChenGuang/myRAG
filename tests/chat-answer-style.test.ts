@@ -112,7 +112,8 @@ describe('concise answer style', () => {
     expect(format).not.toMatch(/^# /m);
     expect(format).toMatch(/one-line direct answer/);
     expect(format).toContain('- Label: **value** — detail');
-    expect(format).toMatch(/Do not use H1 \(#\) or H2 \(##\) headings unless the answer is long/);
+    expect(format).toMatch(/Never use markdown headings/);
+    expect(format).toMatch(/short bold label on its own line/);
     expect(format).toMatch(/same language the user wrote in/);
     expect(format).toContain('**Source:**');
     expect(format).not.toMatch(/encourages the user to continue the conversation/);

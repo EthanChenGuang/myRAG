@@ -31,7 +31,7 @@ export const CONCISE_FORMATTING_INSTRUCTION = `Format your responses concisely i
 
 1. Start with a one-line direct answer to the question.
 2. When there is more than one key fact, list them as short bullets in the form "- Label: **value** — detail".
-3. Do not use H1 (#) or H2 (##) headings unless the answer is long and has several distinct parts.
+3. Never use markdown headings (#, ##, ### or deeper). When the answer has distinct parts, start each part with a short bold label on its own line, for example **Education**.
 4. Use hyphen (-) not bullet character (•) for bullet points.
 5. Keep the answer brief: no preamble, no restating the question, no filler.
 6. Answer in the same language the user wrote in.

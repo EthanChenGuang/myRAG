@@ -770,7 +770,7 @@ html .chat-source-pill.is-open {
 /* The user's text-size setting picks the base; every element below scales from it in em. */
 html .chat-answer,
 html .chat-row[data-role='user'] .chat-message.rounded-\[20px\] {
-  --answer-fs: 16px;
+  --answer-fs: 15px;
   --answer-ink: var(--chat-ink);
   max-width: 100% !important;
   min-width: 0;
@@ -778,12 +778,12 @@ html .chat-row[data-role='user'] .chat-message.rounded-\[20px\] {
 
 html .chat-answer.text-size-small,
 html .chat-row[data-role='user'] .chat-message.rounded-\[20px\].text-size-small {
-  --answer-fs: 14px;
+  --answer-fs: 13px;
 }
 
 html .chat-answer.text-size-large,
 html .chat-row[data-role='user'] .chat-message.rounded-\[20px\].text-size-large {
-  --answer-fs: 18px;
+  --answer-fs: 17px;
 }
 
 html .chat-row[data-role='assistant'] {
@@ -806,17 +806,17 @@ html .chat-row[data-role='assistant'] {
 
   html .chat-answer,
   html .chat-row[data-role='user'] .chat-message.rounded-\[20px\] {
-    --answer-fs: 17px;
+    --answer-fs: 16px;
   }
 
   html .chat-answer.text-size-small,
   html .chat-row[data-role='user'] .chat-message.rounded-\[20px\].text-size-small {
-    --answer-fs: 15px;
+    --answer-fs: 14px;
   }
 
   html .chat-answer.text-size-large,
   html .chat-row[data-role='user'] .chat-message.rounded-\[20px\].text-size-large {
-    --answer-fs: 19px;
+    --answer-fs: 18px;
   }
 }
 
@@ -849,28 +849,14 @@ html .chat-answer .react-markdown :is(strong, b) {
   font-weight: 600;
 }
 
+/* No heading hierarchy: every heading level reads as a bold line at body size. */
 html .chat-answer .react-markdown :is(h1, h2, h3, h4, h5, h6) {
   color: var(--answer-ink) !important;
-  font-weight: 600 !important;
-  line-height: 1.35;
-  letter-spacing: -0.01em;
-  margin: 1.1em 0 0.4em !important;
-}
-
-html .chat-answer .react-markdown h1 {
-  font-size: calc(var(--answer-fs) * 1.18) !important;
-}
-
-html .chat-answer .react-markdown h2 {
-  font-size: calc(var(--answer-fs) * 1.06) !important;
-}
-
-html .chat-answer .react-markdown h3 {
   font-size: var(--answer-fs) !important;
-}
-
-html .chat-answer .react-markdown :is(h4, h5, h6) {
-  font-size: calc(var(--answer-fs) * 0.94) !important;
+  font-weight: 600 !important;
+  line-height: 1.5;
+  letter-spacing: 0;
+  margin: 1em 0 0.35em !important;
 }
 
 html .chat-answer .react-markdown > :first-child {
@@ -1051,8 +1037,17 @@ html .chat-answer [data-related-questions] {
   font-family: var(--font-chat-ui), ui-sans-serif, system-ui, sans-serif;
 }
 
+/* No visible heading: it stays for screen readers (the list's accessible name). */
 html .chat-answer [data-related-questions] > p {
-  color: var(--chat-ink-muted) !important;
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
 }
 
 html .chat-answer [data-related-questions] ul {
@@ -1060,8 +1055,8 @@ html .chat-answer [data-related-questions] ul {
 }
 
 html .chat-answer [data-related-questions] :is(button, div)[class*='min-h-'] {
-  font-size: calc(var(--answer-fs) * 0.92) !important;
-  color: var(--answer-ink) !important;
+  font-size: calc(var(--answer-fs) * 0.875) !important;
+  color: var(--chat-ink-muted) !important;
 }
 
 /* User bubble text matches the answer size and face. */
