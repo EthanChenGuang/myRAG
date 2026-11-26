@@ -1,5 +1,6 @@
 import type { RetrievalOverrides as ApiRetrievalOverrides } from '@/lib/rag-eval/contracts.generated';
 import type { Profile, StageOverrides } from '../types';
+import type { TuningOverrides } from './tuning-params';
 
 export function evalRetrievalOverrides(
   profile: Profile,
@@ -22,6 +23,12 @@ export function evalRetrievalOverrides(
   };
   return mapped;
 }
+/** The eval-only Phase 4.2 tuning blocks for effectiveTuningParams; every other profile reads the defaults. */
+export function evalTuningOverrides(profile: Profile, overrides?: StageOverrides['retrievalOverrides']): TuningOverrides | undefined {
+  if (profile !== 'eval' || !overrides?.tableLookup) return undefined;
+  return { table_lookup: { ...overrides.tableLookup } };
+}
+
 /** The eval-only chunking override as the backend takes it; every other profile searches the active pointers. */
 export function evalChunkingOverride(
   profile: Profile,

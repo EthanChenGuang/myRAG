@@ -356,6 +356,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
         security,
         versionScope: search.versionScope,
         queryLanguage: query.queryLanguage,
+        ...(search.tableRows ? { tableRows: search.tableRows } : {}),
       });
       assembly = context.assembly;
       candidates = context.candidates;

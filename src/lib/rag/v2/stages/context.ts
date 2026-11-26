@@ -1,10 +1,12 @@
 import {
   buildContext,
+  attachTableRow,
   filterCandidates,
   IMAGE_EXTENSIONS,
   type AssembleInput,
   type AssembleOutput,
   type AssemblyDocumentRow,
+  type TableRowAttachment,
 } from '../../context/assemble';
 import { selectWithinBudget, type BudgetOptions, type RenderEstimate } from '../../context/budget';
 import { compressChunks, type CompressibleChunk } from '../../context/compress';
@@ -67,6 +69,8 @@ export interface ContextStagesInput {
   queryLanguage?: string | null;
   /** D-21: the diversify stage's dropped duplicates per kept chunk. */
   alsoIn?: ReadonlyMap<string, AlsoIn[]>;
+  /** D-17: the matched table row per chunk of the table:0 list (search output); absent leaves the context unchanged. */
+  tableRows?: ReadonlyMap<string, TableRowAttachment>;
 }
 
 /** D-13: the assemble stage detail when the version lookup failed and the labels were skipped. */
@@ -180,6 +184,12 @@ function assemblyRowsFromHits(hits: FusedHit[]): AssemblyRows {
   return { documents, chunkMetadata };
 }
 
+function tableAttachedCount(selected: readonly Candidate[], attached: ReadonlySet<string>): { table_row_attached?: number } {
+  if (attached.size === 0) return {};
+  const count = selected.filter((candidate) => attached.has(candidate.chunk_id)).length;
+  return count > 0 ? { table_row_attached: count } : {};
+}
+
 export function fusedToCandidate(row: FusedHit, rerankScore?: number): Candidate {
   const similarity = row.hit.similarity ?? 0;
   const legs = Object.fromEntries(Object.entries(row.ranks).map(([key, rank]) => [key, rank]));
@@ -281,6 +291,18 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
   const resultCap = evalResultCap(profile, input);
   const topHits = fusedHits.slice(0, evalFinalTopK(profile, input, params.final_top_k));
   let candidates = topHits.map((row) => fusedToCandidate(row, rerank?.scoreByChunk?.get(row.hit.chunkId)));
+  // D-17: a table:0 chunk without its header gets the header and the matched row before the token budget sees it.
+  const tableAttached = new Set<string>();
+  if (ctx.tableRows && ctx.tableRows.size > 0) {
+    const tableRows = ctx.tableRows;
+    candidates = candidates.map((candidate) => {
+      const row = candidate.legs?.['table:0'] !== undefined ? tableRows.get(candidate.chunk_id) : undefined;
+      const content = row ? attachTableRow(candidate.content, row) : null;
+      if (content === null) return candidate;
+      tableAttached.add(candidate.chunk_id);
+      return { ...candidate, content };
+    });
+  }
   const rows = assemblyRowsFromHits(topHits);
   const hitById = new Map(topHits.map((row) => [row.hit.chunkId, row.hit]));
   const rankById = new Map(candidates.map((candidate, index) => [candidate.chunk_id, index + 1]));
@@ -560,6 +582,7 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
         used_tokens: value.usedTokens,
         groups: value.groups,
         ...(resultCap !== null ? { max_results: resultCap } : {}),
+        ...tableAttachedCount(value.selected, tableAttached),
         ...redundancyCount(value.output.kept),
         ...(clusterSources ? { also_in_sources: [...clusterSources.values()].reduce((sum, list) => sum + list.length, 0) } : {}),
       }),

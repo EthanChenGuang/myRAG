@@ -212,6 +212,8 @@ export interface RetrievalOverrides {
   iterativeScan?: string;
   exactScanCutoff?: number;
   chunkingProfileByDocType?: Record<string, string>;
+  /** Eval only: the structured table leg's parameters (TableLookupParams). */
+  tableLookup?: { min_cells?: number; limit?: number; weight?: number };
 }
 
 export type { QueryParamsOverrides } from './query/query-params';
