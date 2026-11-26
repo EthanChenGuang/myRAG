@@ -1,0 +1,17 @@
+{
+  "fixtures": {
+    "clean-plain.docx": {
+      "expected": "clean",
+      "hidden_text": null,
+      "reason": null,
+      "sha256": "9ffc058b3e8bb17defe05125131e489cd65785294a4ebaf67d1429cea3aa5845"
+    },
+    "hidden-run.docx": {
+      "expected": "hidden_found",
+      "hidden_text": "This sentence is marked as vanished text in its run.",
+      "reason": "vanished_run",
+      "sha256": "506c56c0aa4a8fb67b9b1c911aff929247cdfaeea0432c83e60f52bc7b6b1c79"
+    }
+  },
+  "generator": "eval/fixtures/security/generate_hidden_docx.py"
+}
