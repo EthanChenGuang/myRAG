@@ -1,6 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { IDENTIFIER_PATTERN, extractIdentifiers } from '@/lib/rag/ids/shapes';
-import { LEXICAL_VERSION, lexicalText, lexicalTokens } from '@/lib/rag/lexical/tokenize';
+import { STEM_TOKEN_PREFIX } from '@/lib/rag/lexical/options';
+import lexicalRules from '@/lib/rag/lexical/rules.json';
+import {
+  LEXICAL_VERSION,
+  lexicalRegistryRules,
+  lexicalStemmerAvailable,
+  lexicalText,
+  lexicalTokens,
+  queryLexicalTokens,
+} from '@/lib/rag/lexical/tokenize';
 
 describe('lexical tokenizer (D-32)', () => {
   it('carries its version', () => {
@@ -128,5 +137,81 @@ describe('per-token cost (CI timing failure on PR #23)', () => {
       globalThis.RegExp = Original;
     }
     expect(built).toBeLessThan(50);
+  });
+});
+
+describe('Italian stem tokens (D-10, D-55)', () => {
+  const on = { language: 'it', stemIt: true } as const;
+  const stems = (tokens: string[]) => tokens.filter((token) => token.startsWith(STEM_TOKEN_PREFIX));
+
+  it('adds one prefixed stem per Latin word and keeps the surface words', () => {
+    const tokens = lexicalTokens('Zorvello verde', on);
+    expect(tokens).toEqual(['zorvello', `${STEM_TOKEN_PREFIX}zorvell`, 'verde', `${STEM_TOKEN_PREFIX}verd`]);
+    expect(tokens.filter((token) => !token.startsWith(STEM_TOKEN_PREFIX))).toEqual(lexicalTokens('Zorvello verde'));
+  });
+
+  it('the singular and plural of one synthetic pair share the stem token', () => {
+    expect(stems(lexicalTokens('zorvello', on))).toEqual(stems(lexicalTokens('zorvelli', on)));
+    expect(stems(queryLexicalTokens('zorvelli', on))).toEqual([`${STEM_TOKEN_PREFIX}zorvell`]);
+  });
+
+  it('the stemmer reads the accent and the emitted stem is folded', () => {
+    expect(lexicalTokens('Zorverò', on)).toEqual(['zorvero', `${STEM_TOKEN_PREFIX}zorv`]);
+    expect(lexicalTokens('Zorvero', on)).toEqual(['zorvero', `${STEM_TOKEN_PREFIX}zorver`]);
+    expect(stems(lexicalTokens('Zorvellità', on)).every((token) => !/\p{M}|[àèìòù]/u.test(token))).toBe(true);
+  });
+
+  it('emits no stem token for other languages, no language, or with the switch off', () => {
+    for (const options of [
+      { language: 'en', stemIt: true },
+      { language: 'zh', stemIt: true },
+      { language: null, stemIt: true },
+      { language: 'it', stemIt: false },
+      { language: 'it' },
+    ]) {
+      expect(stems(lexicalTokens('zorvello verde', options))).toEqual([]);
+    }
+  });
+
+  it('adds no stem for stopwords, numbers, identifiers or Han text', () => {
+    expect(stems(lexicalTokens('della 2025 ZP-1234 规则', on))).toEqual([]);
+  });
+
+  it('compiles no regular expression per token with stemming on', () => {
+    const Original = globalThis.RegExp;
+    let built = 0;
+    const Counting = new Proxy(Original, {
+      construct(target, args, newTarget) {
+        built += 1;
+        return Reflect.construct(target, args, newTarget);
+      },
+    });
+    globalThis.RegExp = Counting;
+    try {
+      lexicalTokens("l'acqua dell'anno zorvelli verdi ".repeat(500), on);
+    } finally {
+      globalThis.RegExp = Original;
+    }
+    expect(built).toBeLessThan(50);
+  });
+});
+
+describe('per-language rules read from the language registry (D-11)', () => {
+  it('equal the constants the tokenizer used before', () => {
+    const rules = lexicalRegistryRules();
+    expect(rules.stopwords).toEqual(
+      new Set([...lexicalRules.stopwords.zh, ...lexicalRules.stopwords.en, ...lexicalRules.stopwords.it]),
+    );
+    expect(rules.hanStopwords).toEqual(new Set(lexicalRules.stopwords.zh));
+    expect(rules.elisionPrefixes).toEqual(lexicalRules.elisionPrefixes);
+    expect(rules.elisionSuffixes).toEqual(["'s"]);
+    expect(rules.foldAccents).toBe(true);
+  });
+
+  it('a stemmer is available for it only', () => {
+    expect(lexicalStemmerAvailable('it')).toBe(true);
+    expect(lexicalStemmerAvailable('en')).toBe(false);
+    expect(lexicalStemmerAvailable('zh')).toBe(false);
+    expect(lexicalStemmerAvailable('xx')).toBe(false);
   });
 });

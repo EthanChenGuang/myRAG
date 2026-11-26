@@ -1,4 +1,5 @@
 import { serializeTableRows } from '../ingest/text/table-rows';
+import type { LexicalOptions } from './options';
 import { LEXICAL_VERSION, lexicalText, lexicalTokens } from './tokenize';
 
 const LEGACY_PREFIX =
@@ -27,7 +28,7 @@ function stripLegacyContent(content: string): { title: string | null; body: stri
 }
 
 /** Builds lexical_text for a stored chunk (ingest, rag:relex, re-chunk). */
-export function chunkLexicalText(input: ChunkLexicalInput): string {
+export function chunkLexicalText(input: ChunkLexicalInput, options?: LexicalOptions): string {
   const { title, body } = stripLegacyContent(input.content);
   const path = [...input.sectionPath];
   if (title !== null && path.length === 0) path.unshift(title);
@@ -42,7 +43,7 @@ export function chunkLexicalText(input: ChunkLexicalInput): string {
   }
 
   const rows = input.tableRowSeparator ? serializeTableRows(body, { list_separator: input.tableRowSeparator }) : [];
-  return lexicalText(path, [...extras, body, ...rows].filter(Boolean).join('\n'));
+  return lexicalText(path, [...extras, body, ...rows].filter(Boolean).join('\n'), options);
 }
 
 export { LEXICAL_VERSION, lexicalTokens };
