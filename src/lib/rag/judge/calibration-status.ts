@@ -1,6 +1,7 @@
 import rawCalibration from '../../../../eval/config/judge-calibration.json';
 import rawGates from '../../../../eval/config/quality-gates.json';
 import { JudgeCalibrationSchema, QualityGatesSchema, type JudgeCalibration } from '@/lib/rag-eval/contracts.generated';
+import { getLanguageRegistry } from '@/lib/rag/lang/registry';
 
 /**
  * Which model judges count, for the Config UI (D-29, UI-SPEC 6.9 and 8.1). Read-only: the committed calibration file changes only
@@ -59,7 +60,6 @@ export interface JudgeCalibrationStatus {
 }
 
 const ROLES: readonly Role[] = ['nightly', 'online'];
-const LANGUAGE_ORDER: readonly string[] = ['zh', 'en', 'it'];
 const DAY_MS = 86_400_000;
 
 function floorsOf(gates: unknown): { floors: JudgeFloors; maxAgeDays: number } | null {
@@ -83,14 +83,15 @@ function recordedMs(recordedAt: string): number | null {
   return Number.isFinite(ms) ? ms : null;
 }
 
-function sortKey(cell: JudgeCalibrationCellView): [number, number, string, string] {
-  const language = LANGUAGE_ORDER.indexOf(cell.language);
-  return [ROLES.indexOf(cell.role), language < 0 ? LANGUAGE_ORDER.length : language, cell.library, cell.metric];
+/** Rows by role, then language in registry order (unknown codes last), then library and metric. */
+function sortKey(cell: JudgeCalibrationCellView, languageOrder: readonly string[]): [number, number, string, string] {
+  const language = languageOrder.indexOf(cell.language);
+  return [ROLES.indexOf(cell.role), language < 0 ? languageOrder.length : language, cell.library, cell.metric];
 }
 
-function compare(a: JudgeCalibrationCellView, b: JudgeCalibrationCellView): number {
-  const [ra, la, liba, ma] = sortKey(a);
-  const [rb, lb, libb, mb] = sortKey(b);
+function compare(a: JudgeCalibrationCellView, b: JudgeCalibrationCellView, languageOrder: readonly string[]): number {
+  const [ra, la, liba, ma] = sortKey(a, languageOrder);
+  const [rb, lb, libb, mb] = sortKey(b, languageOrder);
   return ra - rb || la - lb || liba.localeCompare(libb) || ma.localeCompare(mb);
 }
 
@@ -157,7 +158,8 @@ export function judgeCalibrationStatus(calibration: unknown, gates: unknown, tod
       valid_until: validUntilMs === null ? null : new Date(validUntilMs).toISOString().slice(0, 10),
     };
   });
-  cells.sort(compare);
+  const languageOrder = getLanguageRegistry().packs.map((pack) => pack.code);
+  cells.sort((a, b) => compare(a, b, languageOrder));
 
   if (!cells.some((cell) => cell.status === 'gating')) {
     warnings.push({ code: 'none_enforced', message: 'No judge is enforced: every judge score is report only, and no limit depends on a judge.' });

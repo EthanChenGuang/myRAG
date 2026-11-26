@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireAdminOrDeny } from '@/lib/admin-route-auth';
-import { currentJudgeCalibrationStatus } from '@/lib/rag/judge/calibration-status';
+import { currentJudgeCalibrationStatus } from '@/lib/rag';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

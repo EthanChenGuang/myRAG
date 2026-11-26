@@ -2,9 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod/v3';
 import { adminDenied, checkAdmin } from '@/lib/admin-route-auth';
 import { getDeploymentMode } from '@/lib/deployment-mode';
-import { validateGrantTenantKey } from '@/lib/rag';
-import { isTenantKey } from '@/lib/rag/ingest/writer';
-import { exportCalibrationCases } from '@/lib/rag/judge/calibration-export';
+import { exportCalibrationCases, validateGrantTenantKey } from '@/lib/rag';
 import { getSupabaseAdmin } from '@/lib/supabase';
 
 export const runtime = 'nodejs';
@@ -30,7 +28,7 @@ export async function GET(request: Request): Promise<Response> {
   const params = Object.fromEntries(new URL(request.url).searchParams.entries());
   const parsed = ExportQuery.safeParse(params);
   const tenant = parsed.success ? validateGrantTenantKey(parsed.data.tenant, getDeploymentMode()) : null;
-  if (!tenant || !tenant.ok || !isTenantKey(tenant.tenantKey)) {
+  if (!tenant || !tenant.ok) {
     return NextResponse.json(
       { success: false, error: 'tenant is required, must be a tenant key of this deployment mode, and no other parameter is accepted' },
       { status: 400, headers: NO_STORE },

@@ -321,7 +321,7 @@ describe('GET /api/rag/admin/judge-calibration', () => {
     expect(body.cells).toEqual([]);
     expect(body.warnings.map((warning: { code: string }) => warning.code)).toEqual(['none_enforced']);
     expect(body.running).toEqual({ nightly: null, online: null });
-    expect(typeof status.POST).toBe('undefined');
+    expect(Object.keys(status).filter((name) => ['POST', 'PUT', 'PATCH', 'DELETE'].includes(name))).toEqual([]);
   });
 });
 

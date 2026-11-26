@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { isReviewItemId, openReviewSession, REVIEW_NO_STORE, reviewNotFound, reviewUnavailable } from '@/lib/rag';
 import {
   AnswerCheckRequestSchema,
+  isReviewItemId,
+  openReviewSession,
   readAnswerCheck,
+  REVIEW_NO_STORE,
+  reviewNotFound,
+  reviewUnavailable,
   saveAnswerCheck,
   type AnswerCheckFailure,
   type AnswerCheckResult,
-} from '@/lib/rag/judge/answer-check';
+} from '@/lib/rag';
 
 export const runtime = 'nodejs';
 
