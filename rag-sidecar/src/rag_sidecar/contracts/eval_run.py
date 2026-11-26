@@ -39,6 +39,7 @@ StageName = Literal[
     "expand",
     "hyde",
     "decompose",
+    "terminology",
     "semantic_cache",
 ]
 
@@ -66,6 +67,7 @@ class StageTimeoutsMs(_Contract):
     expand: _TimeoutMs | None = None
     hyde: _TimeoutMs | None = None
     decompose: _TimeoutMs | None = None
+    terminology: _TimeoutMs | None = None
     semantic_cache: _TimeoutMs | None = None
 
 
