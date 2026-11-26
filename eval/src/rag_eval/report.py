@@ -22,6 +22,7 @@ from rag_sidecar.contracts.report import (
     SemanticCacheReport,
     SliceMetrics,
     StrategySlice,
+    TableSplitSlice,
     TransformOutcomeCounts,
 )
 
@@ -35,6 +36,7 @@ from rag_eval.metrics import (
     select_gate_population,
     slices_by,
     strategy_key,
+    table_split_report,
 )
 from rag_eval.native_review import MIN_GATED_ITEMS, REVIEWED_LANGUAGES, counts_in_gated_slices, review_backlog
 from rag_eval.paths import REPO_ROOT
@@ -601,6 +603,7 @@ def build_report(
             budgets = load_latency_budgets()
         answer_fields["query_layer"] = build_query_layer_report(traces, results, budgets)
         answer_fields["semantic_cache"] = build_semantic_cache_report(traces, results)
+        answer_fields["table_split"] = table_split_report(traces, golden, gate_split=manifest.golden_filter.gate_split)
     return EvalReport(
         run_id=manifest.run_id,
         tier=manifest.tier,
@@ -816,6 +819,68 @@ def _injection_section(report: EvalReport) -> list[str]:
         lines.extend(["| Detector:language | False-positive rate |", "|---|---|"])
         lines.extend(f"| {key} | {_cell(value)} |" for key, value in block.false_positive_rate.items())
         lines.append("")
+    return lines
+
+
+TABLE_SPLIT_TITLE = "Table split"
+TABLE_SPLIT_NOTE = (
+    "D-46, EVAL-18: row Recall@k counts an item when the chunk holding its gold row is within the top k; "
+    "header_in_context_rate is the share of retrieved row chunks that also hold the table header (items whose row chunk "
+    "was not retrieved are left out, see its n); answer_correct_rate is the deterministic value check (the gold value "
+    "present, no distractor value; ambiguous counts as not correct) and is not run without answers. The CI gate is "
+    "category:table_split on the noise-band metrics over counting dev items; zh and it stay report-only until a native "
+    "speaker approves their items. Rates are exact fractions shown with 4 decimals."
+)
+TABLE_SPLIT_STATUS = {"gated": "gated", "report_only": "report-only"}
+
+
+def _rate_cell(metric: MetricValue | None) -> str:
+    if metric is None:
+        return "not run"
+    shown = "n/a" if metric.value is None else f"{metric.value:.4f}"
+    return f"{shown} (n={metric.n})"
+
+
+def _table_split_row(name: str, block: TableSplitSlice) -> str:
+    cells = [
+        name,
+        TABLE_SPLIT_STATUS[block.status],
+        str(block.items),
+        str(block.counting_items),
+        _rate_cell(block.row_recall_at_5),
+        _rate_cell(block.row_recall_at_10),
+        _rate_cell(block.header_in_context_rate),
+        _rate_cell(block.answer_correct_rate),
+    ]
+    return "| " + " | ".join(cells) + " |"
+
+
+def _table_split_section(report: EvalReport) -> list[str]:
+    block = report.table_split
+    if block is None:
+        return []
+    lines = [
+        f"## {TABLE_SPLIT_TITLE}",
+        "",
+        TABLE_SPLIT_NOTE,
+        "",
+        f"- Answer mode: {'yes' if block.answer_mode else 'no (answer_correct_rate not run)'}",
+        "",
+        "| Slice | Status | Items | Counting | Row Recall@5 | Row Recall@10 | header_in_context_rate | answer_correct_rate |",
+        "|---|---|---|---|---|---|---|---|",
+        _table_split_row("overall", block.overall),
+        *(_table_split_row(language, metrics) for language, metrics in block.by_language.items()),
+        "",
+        "| Item | Language | Split | Counts in gate | Row rank | Header in context | Answer |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for row in block.items:
+        header = "n/a" if row.header_in_context is None else ("yes" if row.header_in_context else "no")
+        lines.append(
+            f"| {row.item_id} | {row.language} | {row.split} | {'yes' if row.counts_in_gate else 'no'} | "
+            f"{row.row_rank if row.row_rank is not None else '-'} | {header} | {row.answer_verdict or 'not run'} |"
+        )
+    lines.append("")
     return lines
 
 
@@ -1044,6 +1109,7 @@ def _render_markdown(report: EvalReport, budgets: LatencyBudgets | None = None) 
     lines.extend(_strategy_section(report))
     lines.extend(_groundedness_section(report, budgets))
     lines.extend(_injection_section(report))
+    lines.extend(_table_split_section(report))
     lines.extend(_query_layer_section(report))
     lines.extend(_semantic_cache_section(report))
     lines.extend(_backlog_section(report))

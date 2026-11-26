@@ -433,7 +433,7 @@ def test_table_split_row_recall_counts_rank_k_and_not_rank_k_plus_one():
     rows = {row.item_id: row for row in report.items}
     assert [rows[item.id].row_rank for item in items] == [5, 6, 10, 11]
     assert report.overall.row_recall_at_5.value == 0.25 and report.overall.row_recall_at_5.n == 4
-    assert report.overall.row_recall_at_10.value == 0.5 and report.overall.row_recall_at_10.n == 4
+    assert report.overall.row_recall_at_10.value == 0.75 and report.overall.row_recall_at_10.n == 4
 
 
 def test_table_split_header_in_context_needs_the_header_inside_the_row_chunk():

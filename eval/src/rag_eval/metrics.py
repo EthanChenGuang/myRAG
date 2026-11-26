@@ -1,25 +1,30 @@
 import re
 import unicodedata
+from fractions import Fraction
 from collections.abc import Callable, Iterable, Mapping
 from typing import Literal
 
 from rag_sidecar.contracts.answers import CitationRecord
 from rag_sidecar.contracts.eval_run import RagTrace, TraceInjection
 from rag_sidecar.contracts.feedback_loop import GatePopulationConfig
-from rag_sidecar.contracts.golden import AttackSpec, GoldenItem
+from rag_sidecar.contracts.golden import AttackSpec, GoldenItem, GoldSpan
+from rag_sidecar.contracts.languages import LANGUAGE_CODES
 from rag_sidecar.contracts.report import (
     GroundednessLabelCounts,
     ItemResult,
     MetricValue,
     QuestionKind,
     SliceMetrics,
+    TableSplitItemRow,
     TableSplitReport,
+    TableSplitSlice,
 )
 
 from rag_eval.bounds import upper_bound
 from rag_eval.config_files import load_gate_population
-from rag_eval.matching import chunk_matches_span
-from rag_eval.native_review import counts_in_gated_slices, report_only_reason
+from rag_eval.matching import chunk_matches_span, normalize_text
+from rag_eval.native_review import MIN_GATED_ITEMS, counts_in_gated_slices, report_only_reason
+from rag_eval.table_answer import score_table_answer
 
 _RECALL_FIELDS = {5: "spans_hit_at_5", 10: "spans_hit_at_10"}
 CROSS_LINGUAL = "cross_lingual"
@@ -507,6 +512,55 @@ def injection_metrics(
     }
 
 
+TABLE_SPLIT = "table_split"
+
+
+def _fraction(hits: int, n: int) -> MetricValue:
+    """Exact share as a float; n = 0 has no value (never a division by zero)."""
+    return MetricValue(value=float(Fraction(hits, n)) if n else None, n=n)
+
+
+def _row_and_header_spans(item: GoldenItem) -> tuple[GoldSpan, GoldSpan]:
+    """The row span and the header span of a table_split item: the header is the span naming the asked column."""
+    spans = list(item.gold_evidence)
+    if len(spans) < 2:
+        raise ValueError(f"table_split item {item.id!r} needs a row span and a header span")
+    header_index = 1
+    if item.table_answer is not None:
+        column = normalize_text(item.table_answer.column)
+        named = [index for index, span in enumerate(spans) if column and column in normalize_text(span.quote)]
+        if named:
+            header_index = named[0]
+    header = spans[header_index]
+    row = next(span for index, span in enumerate(spans) if index != header_index)
+    return row, header
+
+
+def _row_chunk(ranked, row: GoldSpan) -> tuple[int, object] | None:
+    for position, chunk in enumerate(ranked, start=1):
+        if chunk_matches_span(getattr(chunk, "document_name", None) or "", chunk.content, row):
+            return position, chunk
+    return None
+
+
+def _table_split_slice(rows: list[TableSplitItemRow], *, answer_mode: bool) -> TableSplitSlice:
+    counting = sum(1 for row in rows if row.counts_in_gate)
+    ranked = [row.row_rank for row in rows]
+    header = [row.header_in_context for row in rows if row.header_in_context is not None]
+    answer = None
+    if answer_mode:
+        answer = _fraction(sum(1 for row in rows if row.answer_verdict == "correct"), len(rows))
+    return TableSplitSlice(
+        status="gated" if counting >= MIN_GATED_ITEMS else "report_only",
+        items=len(rows),
+        counting_items=counting,
+        row_recall_at_5=_fraction(sum(1 for rank in ranked if rank is not None and rank <= 5), len(rows)),
+        row_recall_at_10=_fraction(sum(1 for rank in ranked if rank is not None and rank <= 10), len(rows)),
+        header_in_context_rate=_fraction(sum(1 for value in header if value), len(header)),
+        answer_correct_rate=answer,
+    )
+
+
 def table_split_report(
     traces: list[RagTrace],
     golden: list[GoldenItem],
@@ -514,4 +568,47 @@ def table_split_report(
     gate_split: str = "dev",
     rank_field: Literal["kept", "candidates"] = "kept",
 ) -> TableSplitReport | None:
-    return None
+    """D-46: row Recall@k (the chunk matching the row quote within the top k), header_in_context_rate (that chunk also holds
+    the header quote; items whose row chunk was not retrieved are left out of its denominator) and, when the run produced
+    answers, the deterministic answer check. Rows are sorted by language then item id; item order does not matter."""
+    items = sorted((item for item in golden if item.category == TABLE_SPLIT), key=lambda item: (item.language, item.id))
+    if not items:
+        return None
+    by_id = {trace.item_id: trace for trace in traces if trace.item_id is not None}
+    answer_mode = any(by_id[item.id].answer is not None for item in items if item.id in by_id)
+    rows: list[TableSplitItemRow] = []
+    for item in items:
+        trace = by_id.get(item.id)
+        if trace is None:
+            raise ValueError(f"no trace for golden item {item.id!r}")
+        row_span, header_span = _row_and_header_spans(item)
+        found = None if trace.refused else _row_chunk(trace.kept if rank_field == "kept" else trace.candidates, row_span)
+        verdict = None
+        if answer_mode:
+            answer = "" if trace.refused else (trace.answer or "")
+            verdict = score_table_answer(answer, item.table_answer) if item.table_answer is not None else "wrong"
+        rows.append(
+            TableSplitItemRow(
+                item_id=item.id,
+                language=item.language,
+                split=item.split,
+                counts_in_gate=item.split == gate_split and counts_in_gated_slices(item),
+                row_rank=found[0] if found else None,
+                header_in_context=(
+                    chunk_matches_span(getattr(found[1], "document_name", None) or "", found[1].content, header_span)
+                    if found
+                    else None
+                ),
+                answer_verdict=verdict,
+            )
+        )
+    languages = sorted(set(LANGUAGE_CODES) | {row.language for row in rows})
+    return TableSplitReport(
+        answer_mode=answer_mode,
+        overall=_table_split_slice(rows, answer_mode=answer_mode),
+        by_language={
+            language: _table_split_slice([row for row in rows if row.language == language], answer_mode=answer_mode)
+            for language in languages
+        },
+        items=rows,
+    )
