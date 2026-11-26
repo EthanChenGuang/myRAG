@@ -49,7 +49,10 @@ interface CaseResult {
   chunksWithoutIdentifiers: number;
   noDigitIndexed: string[];
   tableDocumentsWithRows: string[];
-  clusters: Array<{ language: string; section: string; clusterIds: number; memberCount: number | null; members: number }>;
+  clusters: Array<{ language: string; section: string; clusterIds: number; clustered: number; memberCount: number | null; members: number }>;
+  /** The duplicate threshold dupClusterThreshold gives the fixture profile with evalRun, and without it. */
+  evalThreshold: number;
+  shippedThreshold: number;
 }
 
 async function runCase(caseName: CaseName, mode: Mode): Promise<CaseResult> {
@@ -122,9 +125,10 @@ async function runCase(caseName: CaseName, mode: Mode): Promise<CaseResult> {
     const clusters: CaseResult['clusters'] = [];
     for (const language of LANGUAGES) {
       const sections = (
-        await db.query<{ section: string; cluster_ids: number; member_count: number | null; members: number }>(
-          `SELECT split_part(c.content, E'\\n', 1) AS section,
+        await db.query<{ section: string; cluster_ids: number; clustered: number; member_count: number | null; members: number }>(
+          `SELECT coalesce(c.metadata ->> 'section', '') AS section,
                   count(DISTINCT c.dup_cluster_id)::int AS cluster_ids,
+                  count(c.dup_cluster_id)::int AS clustered,
                   max(k.member_count)::int AS member_count,
                   count(*)::int AS members
              FROM document_chunks c
@@ -136,10 +140,22 @@ async function runCase(caseName: CaseName, mode: Mode): Promise<CaseResult> {
         )
       ).rows;
       for (const row of sections) {
-        clusters.push({ language, section: row.section, clusterIds: row.cluster_ids, memberCount: row.member_count, members: row.members });
+        clusters.push({
+          language,
+          section: row.section,
+          clusterIds: row.cluster_ids,
+          clustered: row.clustered,
+          memberCount: row.member_count,
+          members: row.members,
+        });
       }
     }
+    const { dupClusterThreshold } = await import('../../src/lib/rag/v2/tuning-params.ts');
+    const { getActiveProfile } = await import('../../src/lib/rag/embeddings/active-profile.ts');
+    const profileId = (await getActiveProfile()).id;
     return {
+      evalThreshold: dupClusterThreshold(profileId, { evalRun: true }),
+      shippedThreshold: dupClusterThreshold(profileId, { evalRun: false }),
       sqlSha256: { ...inProcess.sqlSha256 },
       dumpSha256: await digest(db),
       ...(plain ? { plainDumpSha256: plain.dump, plainSqlSha256: plain.sqlSha256 } : {}),
@@ -258,13 +274,25 @@ if (CASE !== undefined) {
     });
 
     for (const mode of ['single-tenant', 'multi-tenant'] as const) {
-      test(`${mode}: RAG_DUP_CLUSTERS clusters each template section of the ${COPIES} generated copies into one cluster`, () => {
+      test(`${mode}: RAG_DUP_CLUSTERS clusters the ${COPIES} generated copies of each template section, at the eval threshold`, () => {
         const clusters = get('clusters', mode);
-        assert.equal(clusters.clusters.length, LANGUAGES.length * 3, JSON.stringify(clusters.clusters));
-        for (const section of clusters.clusters) {
+        const sections = clusters.clusters.filter((section) => section.section !== '');
+        const markers = clusters.clusters.filter((section) => section.section === '');
+        assert.equal(sections.length, LANGUAGES.length * 3, JSON.stringify(clusters.clusters));
+        assert.equal(markers.length, LANGUAGES.length, 'one per-copy marker chunk group per language');
+        for (const marker of markers) assert.equal(marker.clustered, 0, JSON.stringify(marker));
+        for (const section of sections) {
           assert.equal(section.members, COPIES, JSON.stringify(section));
-          assert.equal(section.clusterIds, 1, JSON.stringify(section));
-          assert.equal(section.memberCount, COPIES, JSON.stringify(section));
+          assert.ok(section.clustered > 0, JSON.stringify(section));
+        }
+        assert.equal(clusters.shippedThreshold, 0.95, 'a fixture entry never reaches a caller without evalRun');
+        if (clusters.evalThreshold !== clusters.shippedThreshold) {
+          // D-49: the fixture-fitted threshold applies in the eval build, and puts every copy of a section into one cluster.
+          for (const section of sections) {
+            assert.equal(section.clustered, COPIES, JSON.stringify(section));
+            assert.equal(section.clusterIds, 1, JSON.stringify(section));
+            assert.equal(section.memberCount, COPIES, JSON.stringify(section));
+          }
         }
         assert.ok(Object.keys(clusters.sqlSha256).some((key) => key.startsWith('dup_clusters:')), JSON.stringify(clusters.sqlSha256));
       });
