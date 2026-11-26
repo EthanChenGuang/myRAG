@@ -168,9 +168,9 @@ describe('AGENTS.md reflects Phase 6.1 (embedding fine-tuning)', () => {
     '`RAG_FINETUNE=off`',
     '`ft-a-1024`',
     '`ft-b-1024`',
-    '`npm run rag:finetune --`',
+    '`npm run rag:finetune -- ',
     '`npm run rag:embedding -- ft-consent',
-    '`python -m rag_eval.finetune',
+    'python -m rag_eval.finetune ',
     'prune',
     '06.1-19',
   ])('section 6 mentions %s', (fragment) => {
