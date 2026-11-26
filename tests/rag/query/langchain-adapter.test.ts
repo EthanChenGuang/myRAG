@@ -370,9 +370,14 @@ describe('hyde', () => {
 
   test('the adapter never imports HydeRetriever or a VectorStore class', () => {
     const dir = join(process.cwd(), 'src/lib/rag/query/langchain');
+    let total = 0;
     for (const file of ['index.ts', 'chat-model.ts', 'capture.ts', 'errors.ts', 'fake.ts']) {
       const source = readFileSync(join(dir, file), 'utf8');
-      expect(source).not.toMatch(/HydeRetriever|VectorStore|retrievers\/hyde|vectorstores/u);
+      const imports = source.match(/^\s*(?:import|export)\b[^;]*?from\s*['"][^'"]+['"]/gmsu) ?? [];
+      total += imports.length;
+      for (const statement of imports) expect(statement).not.toMatch(/HydeRetriever|VectorStore|retrievers\/hyde|vectorstores/u);
+      expect(source).not.toMatch(/import\(\s*['"][^'"]*(?:hyde|vectorstores)/u);
     }
+    expect(total).toBeGreaterThan(10);
   });
 });

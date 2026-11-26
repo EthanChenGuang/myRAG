@@ -7,6 +7,7 @@ import { RunnableLambda } from '@langchain/core/runnables';
 import { CondensedQuerySchema, QueryVariantsSchema } from '@/lib/rag-eval/contracts.generated';
 import { loadPrompt, renderPrompt } from '../prompts/render';
 import contextualizePrompt from '../prompts/langchain.contextualize.v1.json';
+import hydePrompt from '../prompts/langchain.hyde.v1.json';
 import multiQueryPrompt from '../prompts/langchain.multi-query.v1.json';
 import type {
   CondenseInput,
@@ -19,7 +20,7 @@ import type {
   TransformHydeInput,
 } from '../transformer';
 import { CaptureRetriever } from './capture';
-import { invokeConfig, type ChatModelFactory } from './chat-model';
+import { invokeConfig, structured, type ChatModelFactory } from './chat-model';
 import { LangChainAdapterError, raceAbort, toAdapterError, type LangChainTransform } from './errors';
 
 export { CaptureRetriever } from './capture';
@@ -28,6 +29,7 @@ export { LangChainAdapterError } from './errors';
 
 const CONTEXTUALIZE_ID = 'langchain.contextualize';
 const MULTI_QUERY_ID = 'langchain.multi-query';
+const HYDE_ID = 'langchain.hyde';
 
 export interface LangChainTransformerDeps {
   /** The shared post-check step (transformer.ts QUERY_TRANSFORM_FINISHERS), so results have exactly the native shapes. */
@@ -124,8 +126,18 @@ export function createLangChainTransformer(options: CreateLangChainTransformerOp
     return finish.expand(input, output.data.queries);
   }
 
-  async function hyde(_input: TransformHydeInput): Promise<HydeResult> {
-    throw new LangChainAdapterError('unavailable', 'hyde');
+  /** A native port of LangChain's websearch HyDE template; HydeRetriever is not used (it embeds and searches itself). */
+  async function hyde(input: TransformHydeInput): Promise<HydeResult> {
+    const { query, language, protectedTokens, signal } = input;
+    const text = renderPrompt(loadPrompt(HYDE_ID, { [HYDE_ID]: hydePrompt }), { question: query }, { language, maxItems: 1, protectedTokens });
+    let passage: string;
+    try {
+      const output = await structured(options.chatModelFactory('hyde'), 'HypotheticalDocument', [new HumanMessage(text)], signal, 'hyde');
+      passage = output.passage;
+    } catch (error) {
+      return { variant: null, truncated: false, skipped: [skipOrThrow(error, signal, 'hyde')] };
+    }
+    return finish.hyde(input, passage);
   }
 
   return Object.freeze({
