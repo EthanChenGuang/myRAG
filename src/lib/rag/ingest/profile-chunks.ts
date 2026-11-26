@@ -1,6 +1,7 @@
 import { blockSplitterForIngest } from '@/lib/rag/lang/sentences';
 import { enrichChunkWithURLs } from '@/lib/url-extractor';
 import { chunkLexicalText } from '../lexical/chunk-text';
+import { ATTRIBUTE_HEADER_STAMP_KEY, ATTRIBUTE_HEADER_STAMP_NONE } from './attributes/header';
 import { lexicalStampMetadata, type IngestLexical } from './lexical-options';
 import { withEffectiveHeader, type ChunkerConfig } from './chunkers';
 import { chunkParentChild } from './chunkers/parent-child';
@@ -30,6 +31,11 @@ export interface ProfileDocument {
   tableHeaderRepeat?: 'profile' | 'always';
   /** The document's lexical options and stamps (plan 04.2-19); absent: default options and LEXICAL_VERSION. */
   lexical?: IngestLexical;
+  /**
+   * TPL-05 (D-26, D-27): the document's stored attribute header and stamp while RAG_ATTRIBUTE_HEADER is effectively on; null when it is on
+   * and the document has no stamped header (the chunks get the clearing value); absent while it is off (today's output).
+   */
+  attributeHeader?: { header: string; stamp: string | null } | null;
 }
 
 export interface BuiltProfileChunks {
@@ -74,8 +80,19 @@ export function buildProfileChunks(document: ProfileDocument, parseMarkdown: str
   }));
   const embeddingTexts: string[] = [];
   const stamps = lexicalStampMetadata(document.lexical);
+  const attribute = document.attributeHeader;
+  const headerStamp =
+    attribute === undefined ? {} : { [ATTRIBUTE_HEADER_STAMP_KEY]: attribute === null ? ATTRIBUTE_HEADER_STAMP_NONE : (attribute.stamp ?? ATTRIBUTE_HEADER_STAMP_NONE) };
+  const attributeHeader = attribute ? attribute.header : undefined;
   const children = cut.children.map((child, index): ProfileChildWrite => {
-    embeddingTexts.push(buildEmbeddingText({ section_path: child.section_path, content: child.content, template_header: document.templateHeader }));
+    embeddingTexts.push(
+      buildEmbeddingText({
+        section_path: child.section_path,
+        content: child.content,
+        template_header: document.templateHeader,
+        ...(attributeHeader !== undefined ? { attribute_header: attributeHeader } : {}),
+      }),
+    );
     return {
       content: child.content,
       chunk_index: index,
@@ -92,6 +109,7 @@ export function buildProfileChunks(document: ProfileDocument, parseMarkdown: str
         chunkKind: child.chunk_kind,
         metadata: child.metadata,
         documentFilename: document.filename,
+        ...(attributeHeader ? { attributeHeader } : {}),
       }, document.lexical?.resolved.options),
       metadata: {
         ...(enrichChunkWithURLs(child.content, child.metadata) as Record<string, unknown>),
@@ -100,6 +118,7 @@ export function buildProfileChunks(document: ProfileDocument, parseMarkdown: str
         chunk_position: index + 1,
         total_chunks: cut.children.length,
         ...stamps,
+        ...headerStamp,
       },
     };
   });

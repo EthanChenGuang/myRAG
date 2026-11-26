@@ -76,6 +76,9 @@ def record_baseline(
     _require_same("tier", [report.tier for report in reports])
     _require_same("deployment_mode", [report.deployment_mode for report in reports])
     _require_same("request_options", [report.request_options for report in reports])
+    _require_same("rag_mode", [report.rag_mode for report in reports])
+    _require_same("golden_set_version", [report.golden_set_version for report in reports])
+    _require_same("golden_manifest_sha256", [report.golden_manifest_sha256 for report in reports])
 
     per_run = [_slices(report) for report in reports]
     _require_same("slice set", [sorted(slices) for slices in per_run])
@@ -111,6 +114,9 @@ def record_baseline(
         embedder_version=first.embedder_version,
         embedder_source_sha256=first.embedder_source_sha256,
         run_config_hash=first.run_config_hash,
+        rag_mode=first.rag_mode,
+        golden_set_version=first.golden_set_version,
+        golden_manifest_sha256=first.golden_manifest_sha256,
         runs=[
             {"run_id": report.run_id, "run_config_hash": report.run_config_hash, "git_sha": sha, "created_at": stamp}
             for report, sha, stamp in zip(reports, shas, stamps)

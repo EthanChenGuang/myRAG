@@ -3,8 +3,8 @@ import type { PGlite } from '@electric-sql/pglite';
 /**
  * A small Supabase-js shaped client over PGlite for route tests that need real RLS. Each query runs in its own transaction as the
  * given role, with request.jwt.claim.sub set to the user, so the policies and SECURITY DEFINER helpers decide as on Supabase.
- * Supported: select (plain column list), update (with select for RETURNING), eq, in, contains, lt, gt, or (the mined_at/id keyset grammar),
- * order, limit, maybeSingle; auth.admin.getUserById reads auth.users as service_role.
+ * Supported: select (plain column list), insert and update (with select for RETURNING), eq, in, contains, lt, gt, or (the mined_at/id
+ * keyset grammar), order, limit, maybeSingle, rpc (named arguments); auth.admin.getUserById reads auth.users as service_role.
  * Every query is appended to `calls` as `<label>:<table>`.
  */
 
@@ -70,6 +70,7 @@ class Query implements PromiseLike<{ data: unknown; error: unknown }> {
   private limitCount: number | null = null;
   private single = false;
   private updateValues: Row | null = null;
+  private insertValues: Row | null = null;
 
   constructor(
     private readonly db: PGlite,
@@ -87,6 +88,11 @@ class Query implements PromiseLike<{ data: unknown; error: unknown }> {
 
   update(values: Row): this {
     this.updateValues = values;
+    return this;
+  }
+
+  insert(values: Row): this {
+    this.insertValues = values;
     return this;
   }
 
@@ -153,8 +159,24 @@ class Query implements PromiseLike<{ data: unknown; error: unknown }> {
 
   private async run(): Promise<{ data: unknown; error: unknown }> {
     this.options.calls.push(`${this.options.label}:${this.table}`);
-    const sql = this.updateValues ? this.updateSql(this.updateValues) : this.selectSql();
+    const sql = this.insertValues
+      ? this.insertSql(this.insertValues)
+      : this.updateValues
+        ? this.updateSql(this.updateValues)
+        : this.selectSql();
     return this.execute(sql);
+  }
+
+  private insertSql(values: Row): string {
+    const columns = Object.keys(values).map(ident);
+    const placeholders = Object.values(values).map((value) => {
+      this.params.push(value !== null && typeof value === 'object' && !Array.isArray(value) ? JSON.stringify(value) : value);
+      return `$${this.params.length}`;
+    });
+    return (
+      `WITH t AS (INSERT INTO public.${ident(this.table)} (${columns.join(', ')}) VALUES (${placeholders.join(', ')})` +
+      ` RETURNING ${this.columns}) SELECT to_jsonb(t) AS row FROM t`
+    );
   }
 
   private updateSql(values: Row): string {
@@ -198,9 +220,31 @@ class Query implements PromiseLike<{ data: unknown; error: unknown }> {
   }
 }
 
+async function rpc(db: PGlite, options: PgliteClientOptions, name: string, args: Row = {}): Promise<{ data: unknown; error: unknown }> {
+  options.calls.push(`${options.label}:rpc:${name}`);
+  const params: unknown[] = [];
+  const named = Object.entries(args).map(([key, value]) => {
+    params.push(value);
+    return `${ident(key)} => $${params.length}`;
+  });
+  try {
+    const value = await db.transaction(async (tx) => {
+      await tx.query("SELECT set_config('request.jwt.claim.sub', $1, true)", [options.userId ?? '']);
+      await tx.exec(`SET LOCAL ROLE ${options.role}`);
+      const result = await tx.query<{ value: unknown }>(`SELECT to_jsonb(public.${ident(name)}(${named.join(', ')})) AS value`, params);
+      return result.rows[0]?.value ?? null;
+    });
+    return { data: value, error: null };
+  } catch (error) {
+    const code = typeof (error as { code?: unknown }).code === 'string' ? (error as { code: string }).code : 'unknown';
+    return { data: null, error: { code, message: (error as Error).message } };
+  }
+}
+
 export function pgliteClient(db: PGlite, options: PgliteClientOptions) {
   return {
     from: (table: string) => new Query(db, table, options),
+    rpc: (name: string, args?: Row) => rpc(db, options, name, args),
     auth: {
       getUser: async () => ({ data: { user: options.userId ? { id: options.userId } : null }, error: null }),
       admin: {

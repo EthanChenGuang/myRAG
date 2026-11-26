@@ -167,18 +167,31 @@ for (const mode of MODES) {
     test('rows inserted by the fixture loader after the migrations carry the column defaults and the doc_type of their corpus document', async () => {
       await withFixture(mode, { migrations: true }, async ({ db }) => {
         await assertHasColumns(db, 'documents', DOCUMENT_COLUMNS);
-        const result = await db.query<{ id: string; doc_type: string; defaults: boolean }>(
+        const result = await db.query<{ id: string; doc_type: string; defaults: boolean; version: number }>(
           `SELECT id, doc_type,
-             (version = 1 AND is_current AND status = 'ready' AND doc_type_origin = 'fallback'
-               AND source = 'config_upload' AND processing_state = '{}'::jsonb) AS defaults
+             (is_current AND status = 'ready' AND doc_type_origin = 'fallback'
+               AND source = 'config_upload' AND processing_state = '{}'::jsonb) AS defaults,
+             version
            FROM documents ORDER BY id`,
         );
-        const expected = loadCorpus(REAL_CORPUS)
-          .documents.map((doc) => [doc.id, doc.docType, true])
+        // A fixture-meta version (05.2-28) replaces the column default 1; lineage versions (04.2-37) are seeded with their own version
+        // and the earlier one superseded (D-40), so only the latest version of a lineage keeps the defaults.
+        const corpusDocs = loadCorpus(REAL_CORPUS).documents;
+        const latestVersion = new Map<string, number>();
+        for (const doc of corpusDocs) {
+          if (doc.lineage) latestVersion.set(doc.lineage.id, Math.max(latestVersion.get(doc.lineage.id) ?? 0, doc.lineage.version));
+        }
+        const expected = corpusDocs
+          .map((doc) => [
+            doc.id,
+            doc.docType,
+            doc.lineage === undefined || doc.lineage.version === latestVersion.get(doc.lineage.id),
+            doc.lineage?.version ?? doc.version ?? 1,
+          ])
           .sort((a, b) => String(a[0]).localeCompare(String(b[0])));
         assert.ok(expected.length > 0);
         assert.deepEqual(
-          result.rows.map((row) => [row.id, row.doc_type, row.defaults]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+          result.rows.map((row) => [row.id, row.doc_type, row.defaults, row.version]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
           expected,
         );
       });

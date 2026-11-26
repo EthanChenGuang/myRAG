@@ -54,10 +54,10 @@ def _result_for(item: GoldenItem, index: int, provenance: str | None = None) -> 
     )
 
 
-# Plans 06-38 and 06-39 appended the Phase 6 items after the snapshot was saved; the snapshot keeps the earlier set.
+# Plans 06-38, 06-39 and 04.2-37 appended items after the snapshot was saved; the snapshot keeps the earlier set.
 CACHE_PAIR_CATEGORIES = frozenset({"cache_paraphrase", "cache_near_miss"})
 PHASE6_TAGS = frozenset(
-    {"phase6_protected_followup", "phase6_elliptical", "phase6_relative_time", "phase6_compound", "phase6_cross_lingual"}
+    {"phase6_protected_followup", "phase6_elliptical", "phase6_relative_time", "phase6_compound", "phase6_cross_lingual", "phase42"}
 )
 
 

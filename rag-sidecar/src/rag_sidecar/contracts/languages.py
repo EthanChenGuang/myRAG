@@ -10,7 +10,7 @@ import re
 from collections.abc import Iterable
 from functools import lru_cache
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, ClassVar, Literal
 
 from pydantic import (
     AfterValidator,
@@ -30,16 +30,18 @@ LANGUAGE_PACKS_FILE = "language-packs.json"
 Segmentation = Literal["intl_segmenter_han_bigrams", "whitespace"]
 GroundednessSupport = Literal["hhem_2_3", "hhem_2_1_open", "none"]
 
-# D-04 completeness: the parts a pack needs before a deployment may enable it, in this order.
-COMPLETENESS_PARTS: tuple[str, ...] = (
-    "segmentation",
-    "ocr_codes.docling",
-    "ocr_codes.llamaparse",
-    "rewrite_gate_lexicon",
-    "texts.strict_refusal",
-    "fixtures.corpus",
-    "fixtures.golden_slices",
-)
+# Phase 5.2 D-08: the named parameters each parameterized text must carry, in every language.
+TEXT_PLACEHOLDERS: dict[str, tuple[str, ...]] = {
+    "notices.calc_corrected": ("value",),
+    "labels.version": ("version",),
+    "labels.effective_from": ("date",),
+    "instructions.relevance": ("sentinel",),
+    "instructions.relevance_web": ("sentinel",),
+    "instructions.relevance_open": ("general_knowledge",),
+    "instructions.partial_answer": ("sentinel", "not_covered"),
+    "instructions.general_knowledge": ("general_knowledge",),
+    "instructions.web_separation": ("from_documents", "from_web"),
+}
 
 
 class _Contract(BaseModel):
@@ -66,19 +68,119 @@ class LanguageOcrCodes(_Contract):
     llamaparse: str | None = Field(default=None, min_length=1)
 
 
-class GroundednessStateTexts(_Contract):
-    verified: str
-    possibly_unreliable: str
-    not_checked: str
+_PLACEHOLDER_RE = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+
+class _TextGroup(_Contract):
+    """One group of fixed texts (Phase 5.2 D-08). A missing key is None and makes the pack incomplete; an empty text is invalid."""
+
+    _group: ClassVar[str] = ""
+
+    @model_validator(mode="after")
+    def _placeholders_match(self) -> _TextGroup:
+        for key in type(self).model_fields:
+            value = getattr(self, key)
+            if value is None:
+                continue
+            dotted = f"{self._group}.{key}"
+            found = set(_PLACEHOLDER_RE.findall(value))
+            declared = set(TEXT_PLACEHOLDERS.get(dotted, ()))
+            if found != declared:
+                missing = ", ".join(sorted(declared - found)) or "-"
+                undeclared = ", ".join(sorted(found - declared)) or "-"
+                raise ValueError(f"{dotted}: placeholder mismatch (missing {missing}; undeclared {undeclared})")
+        return self
+
+
+def _text() -> Any:
+    return Field(default=None, min_length=1)
+
+
+class NoticeTexts(_TextGroup):
+    _group: ClassVar[str] = "notices"
+
+    no_information: str | None = _text()
+    no_information_web: str | None = _text()
+    kb_unavailable: str | None = _text()
+    answer_truncated: str | None = _text()
+    link_removed: str | None = _text()
+    credential_request_blocked: str | None = _text()
+    credential_request_warning: str | None = _text()
+    not_confirmed: str | None = _text()
+    uncited: str | None = _text()
+    calc_corrected: str | None = _text()
+    calc_not_verified: str | None = _text()
+    document_updated_or_removed: str | None = _text()
+    prompt_too_long: str | None = _text()
+
+
+class LabelTexts(_TextGroup):
+    _group: ClassVar[str] = "labels"
+
+    from_documents: str | None = _text()
+    from_web: str | None = _text()
+    general_knowledge: str | None = _text()
+    not_covered: str | None = _text()
+    version: str | None = _text()
+    effective_from: str | None = _text()
+    older_version: str | None = _text()
+    badge_verified: str | None = _text()
+    badge_possibly_unreliable: str | None = _text()
+    badge_not_checked: str | None = _text()
+    badge_tooltip_verified: str | None = _text()
+    badge_tooltip_possibly_unreliable: str | None = _text()
+    badge_tooltip_not_checked: str | None = _text()
+
+
+class InstructionTexts(_TextGroup):
+    _group: ClassVar[str] = "instructions"
+
+    citation: str | None = _text()
+    citation_per_sentence: str | None = _text()
+    attached_documents: str | None = _text()
+    relevance: str | None = _text()
+    relevance_web: str | None = _text()
+    relevance_open: str | None = _text()
+    partial_answer: str | None = _text()
+    general_knowledge: str | None = _text()
+    web_separation: str | None = _text()
+    version: str | None = _text()
+    concise: str | None = _text()
+    calculation: str | None = _text()
 
 
 class LanguageTexts(_Contract):
-    strict_refusal: str | None = Field(default=None, min_length=1)
-    knowledge_base_unavailable: str
-    citation_instruction: str
-    attached_documents: str
-    groundedness_badges: GroundednessStateTexts
-    groundedness_tooltips: GroundednessStateTexts
+    notices: NoticeTexts
+    labels: LabelTexts
+    instructions: InstructionTexts
+
+
+_TEXT_GROUPS: tuple[tuple[str, type[_TextGroup]], ...] = (
+    ("notices", NoticeTexts),
+    ("labels", LabelTexts),
+    ("instructions", InstructionTexts),
+)
+
+# Every fixed-text key as `<group>.<key>`, in group then field order.
+TEXT_KEYS: tuple[str, ...] = tuple(f"{group}.{key}" for group, model in _TEXT_GROUPS for key in model.model_fields)
+
+
+# D-04 completeness (extended by Phase 5.2 D-08 to every text key): the parts a pack needs before a
+# deployment may enable it, in this order.
+COMPLETENESS_PARTS: tuple[str, ...] = (
+    "segmentation",
+    "ocr_codes.docling",
+    "ocr_codes.llamaparse",
+    "rewrite_gate_lexicon",
+    *(f"texts.{key}" for key in TEXT_KEYS),
+    "fixtures.corpus",
+    "fixtures.golden_slices",
+)
+
+
+def text_value(texts: LanguageTexts, dotted: str) -> str | None:
+    group, key = dotted.split(".", 1)
+    return getattr(getattr(texts, group), key)
 
 
 class LanguageFixtures(_Contract):
@@ -166,7 +268,7 @@ def pack_missing_parts(pack: LanguagePack) -> list[str]:
         "ocr_codes.docling": pack.ocr_codes.docling is not None,
         "ocr_codes.llamaparse": pack.ocr_codes.llamaparse is not None,
         "rewrite_gate_lexicon": pack.rewrite_gate_lexicon is not None,
-        "texts.strict_refusal": pack.texts.strict_refusal is not None,
+        **{f"texts.{key}": text_value(pack.texts, key) is not None for key in TEXT_KEYS},
         "fixtures.corpus": pack.fixtures.corpus,
         "fixtures.golden_slices": pack.fixtures.golden_slices,
     }

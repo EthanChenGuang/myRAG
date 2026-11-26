@@ -23,6 +23,7 @@ import { normalizeLexical } from '../../lexical/tokenize';
 import { getV2StartupVerdict } from '../startup';
 import type { TraceCollector as Collector } from '../../trace/collector';
 import type { TerminologyHashStage } from '../config-hash';
+import { effectiveQueryParams } from '../../query/query-params';
 
 export interface QueryStagesInput {
   input: RunRetrievalInput;
@@ -244,7 +245,6 @@ export async function runQueryStages(ctx: QueryStagesInput): Promise<QueryStages
   // D-08: the layer's max_searches and group limits replace the Phase 4 cap of three; every cut is recorded on the plan.
   let limits: VariantLimits = PHASE4_VARIANT_LIMITS;
   if (queryLayer) {
-    const { effectiveQueryParams } = await import('../../query/query-params');
     const queryParams = effectiveQueryParams(profile, profile === 'eval' ? stageOverrides?.queryLayer?.queryParams : undefined);
     limits = queryLayerVariantLimits(queryParams);
     if (term) {

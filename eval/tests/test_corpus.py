@@ -8,7 +8,7 @@ import pytest
 from rag_eval.corpus import load_corpus, main
 from rag_eval.paths import REPO_ROOT
 
-COMMITTED_CORPUS_SHA256 = "4d9bd0210cebe95433e3065f19414c92f328f1c9f4530cf437647438b230309b"
+COMMITTED_CORPUS_SHA256 = "8d202b8cec3701b6010e75fa97ab3968ad6d0183a6c40ae9937f2e12003714b3"
 META = '<!-- fixture-meta {"filename": "Policy Handbook.pdf", "image_url": "https://example.test/a.png"} -->'
 
 
@@ -247,7 +247,8 @@ def test_lineage_and_version_are_read_and_validated(tmp_path: Path):
 
 @pytest.mark.parametrize(
     "meta",
-    [{"lineage": "L"}, {"version": 1}, {"lineage": "", "version": 1}, {"lineage": "L", "version": 0}, {"lineage": "L", "version": 1.5}],
+    # A lone {"version": 1} is a valid document version since plan 05.2-28 (D-52).
+    [{"lineage": "L"}, {"lineage": "", "version": 1}, {"lineage": "L", "version": 0}, {"lineage": "L", "version": 1.5}],
 )
 def test_malformed_lineage_names_the_file(tmp_path: Path, meta):
     _write(tmp_path, "en/bad.en.md", f"<!-- fixture-meta {json.dumps(meta)} -->\n## A\n")

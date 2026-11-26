@@ -5,6 +5,7 @@ import { canonicalModelId, getEmbeddingProviderFor } from '../../embeddings/regi
 import { resolveEmbeddingTargets, type EmbeddingTarget } from '../embedding-targets';
 import { buildProfileChunks, liveProfilesByDocType, writeProfileChunks } from '../profile-chunks';
 import { buildEmbeddingText, EMBEDDING_TEXT_VERSION, templateHeaderFor } from '../text/embedding-text';
+import { attributeHeaderEnabled, documentHeadersFor, type StoredAttributeHeader } from '../attributes/header';
 import { effectiveEmbeddingTextVersion } from '../text/table-rows';
 import {
   IngestStageError,
@@ -172,7 +173,14 @@ function logProfileFailure(step: string, error: unknown): void {
  * before it is published (D-21). A failing active embedding target or a failing profile write fails the run, so no half-built version is
  * published; a failing other target leaves its vectors out and records a gap like the legacy chunks do.
  */
-async function dualWriteProfiles(ctx: StageContext, documentId: string, targets: EmbeddingTarget[], failed: Map<string, TargetFailure>, templateHeader: string): Promise<void> {
+async function dualWriteProfiles(
+  ctx: StageContext,
+  documentId: string,
+  targets: EmbeddingTarget[],
+  failed: Map<string, TargetFailure>,
+  templateHeader: string,
+  attributeHeader: StoredAttributeHeader | null | undefined,
+): Promise<void> {
   const identity = requireIdentity(ctx, 'embed');
   let rows;
   try {
@@ -199,6 +207,7 @@ async function dualWriteProfiles(ctx: StageContext, documentId: string, targets:
         languageAwareIngest: ctx.config?.languageAwareIngest,
         tableHeaderRepeat: ctx.config?.tableHeaderRepeat,
         lexical: await ingestLexical(ctx),
+        ...(attributeHeader !== undefined ? { attributeHeader } : {}),
       },
       ctx.work.parseText ?? '',
       profile,
@@ -256,6 +265,22 @@ async function dualWriteProfiles(ctx: StageContext, documentId: string, targets:
   }
 }
 
+/**
+ * TPL-05 (D-26): one read of the document's stored header per stage call while RAG_ATTRIBUTE_HEADER is effectively on (null: none stored);
+ * undefined while off, without any call.
+ */
+async function storedHeaderOf(ctx: StageContext): Promise<StoredAttributeHeader | null | undefined> {
+  if (!attributeHeaderEnabled(ctx.config) || !ctx.document) return undefined;
+  const identity = requireIdentity(ctx, 'embed');
+  try {
+    const found = await documentHeadersFor(identity.tenantKey, [ctx.document.id], { signal: ctx.signal, config: ctx.config, db: ctx.deps.db() });
+    return found.get(ctx.document.id) ?? null;
+  } catch (error) {
+    if (ctx.signal.aborted) throw error;
+    throw new IngestStageError('embed', 'attribute_header_read_failed');
+  }
+}
+
 function usableEmbedProgress(progress: EmbedProgress | undefined, targetIds: string[], total: number, batchCount: number): EmbedProgress | null {
   if (!progress) return null;
   if (progress.total !== total || progress.batchesDone <= 0 || progress.batchesDone >= batchCount) return null;
@@ -291,6 +316,7 @@ async function runEmbed(ctx: StageContext): Promise<StageOutcome> {
   const progress = usableEmbedProgress(ctx.state.embedProgress, targetIds, writes.length, batches.length);
   const gaps: Array<{ profileId: string; chunkIndex: number }> = progress ? progress.gaps.slice() : [];
   const templateHeader = templateHeaderFor(ctx.identity?.profile.embedding_text_template, ctx.work.templateRow);
+  const attributeHeader = await storedHeaderOf(ctx);
   let written = progress ? progress.written : 0;
   const firstPosition = progress ? progress.batchesDone : 0;
 
@@ -308,6 +334,7 @@ async function runEmbed(ctx: StageContext): Promise<StageOutcome> {
         section_path: write.section_path,
         content: write.content,
         template_header: templateHeader,
+        ...(attributeHeader ? { attribute_header: attributeHeader.header } : {}),
         table_row_separator: ctx.work.chunks[write.chunk_index]?.table_row_separator ?? null,
       }),
     );
@@ -361,7 +388,7 @@ async function runEmbed(ctx: StageContext): Promise<StageOutcome> {
     }
   }
 
-  if (dualWrite) await dualWriteProfiles(ctx, document.id, targets, failed, templateHeader);
+  if (dualWrite) await dualWriteProfiles(ctx, document.id, targets, failed, templateHeader, attributeHeader);
 
   ctx.work.chunksWritten = written;
   ctx.state.embeddingTargets = targetIds;
@@ -404,7 +431,7 @@ async function runDeferredEmbed(ctx: StageContext): Promise<StageOutcome> {
   }
   if (dualWrite) {
     const templateHeader = templateHeaderFor(ctx.identity?.profile.embedding_text_template, ctx.work.templateRow);
-    await dualWriteProfiles(ctx, document.id, targets, new Map(), templateHeader);
+    await dualWriteProfiles(ctx, document.id, targets, new Map(), templateHeader, await storedHeaderOf(ctx));
   }
   ctx.work.chunksWritten = written;
   ctx.state.embeddingTargets = targets.map((target) => target.profile.id);

@@ -40,23 +40,31 @@ const CONSUMERS: Record<string, (packs: Pack[]) => string[]> = {
     if (!same(suffixes.map((suffix) => `${suffix}\\b`), [ENGLISH_POSSESSIVE.source])) bad.push('elision_suffixes');
     return bad;
   },
-  'strict_refusal text': (packs) =>
-    packs.filter((pack) => pack.texts.strict_refusal !== noKnowledgeBaseResponse(pack.code)).map((p) => p.code),
+  // Phase 5.2 D-10: only English keeps today's refusal byte for byte; zh and it carry their own translation.
+  'no_information text (en)': (packs) =>
+    packs.filter((pack) => pack.code === 'en' && pack.texts.notices.no_information !== noKnowledgeBaseResponse(pack.code)).map((p) => p.code),
   'knowledge base unavailable notice': (packs) =>
-    packs.filter((pack) => pack.texts.knowledge_base_unavailable !== knowledgeBaseUnavailableMessage(pack.code)).map((p) => p.code),
+    packs.filter((pack) => pack.texts.notices.kb_unavailable !== knowledgeBaseUnavailableMessage(pack.code)).map((p) => p.code),
   'citation notices': (packs) =>
     packs
       .filter(
         (pack) =>
-          pack.texts.citation_instruction !== citationInstruction(pack.code) ||
-          pack.texts.attached_documents !== attachedDocumentsSentence(pack.code),
+          pack.texts.instructions.citation !== citationInstruction(pack.code) ||
+          pack.texts.instructions.attached_documents !== attachedDocumentsSentence(pack.code),
       )
       .map((p) => p.code),
   'groundedness badge texts': (packs) =>
     packs
       .filter((pack) => {
         const strings = answerQualityStrings(pack.code);
-        return !same(pack.texts.groundedness_badges, strings.badgeLabels) || !same(pack.texts.groundedness_tooltips, strings.badgeTooltips);
+        const { labels } = pack.texts;
+        const badges = { verified: labels.badge_verified, possibly_unreliable: labels.badge_possibly_unreliable, not_checked: labels.badge_not_checked };
+        const tooltips = {
+          verified: labels.badge_tooltip_verified,
+          possibly_unreliable: labels.badge_tooltip_possibly_unreliable,
+          not_checked: labels.badge_tooltip_not_checked,
+        };
+        return !same(badges, strings.badgeLabels) || !same(tooltips, strings.badgeTooltips);
       })
       .map((p) => p.code),
   'rewrite-gate lexicon key': (packs) =>

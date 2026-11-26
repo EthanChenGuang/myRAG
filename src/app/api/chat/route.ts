@@ -29,10 +29,12 @@ import {
   finishTrace,
   isSmallTalkResult,
   isV2Pipeline,
-  knowledgeBaseUnavailableLanguage,
-  knowledgeBaseUnavailableMessage,
-  noKnowledgeBaseResponse,
-  noKnowledgeBaseResponseLanguage,
+  createAnswerTurn,
+  kbUnavailableLanguage,
+  kbUnavailableText,
+  noInformationLanguage,
+  noInformationText,
+  readAnswerConfig,
   identifierSuggestionMessage,
   IDENTIFIER_NOT_FOUND,
   mintAnswerId,
@@ -1387,6 +1389,21 @@ export async function POST(req: Request) {
       userLanguage === 'en' && isSpanishText(getLastUserText(rawMessages))
         ? 'es'
         : userLanguage;
+    // Phase 5.2 D-09, D-10: one answer language and one text source per request; no detection while every 5.2 switch is off
+    const answerTurn = createAnswerTurn({
+      config: readAnswerConfig(),
+      question: getLastUserText(rawMessages),
+      history: rawMessages,
+      uiLanguage: userLanguage,
+      channel:
+        Boolean(data?.systemPromptOverride) ||
+        (typeof data?.chatId === 'string' && data.chatId.includes('whatsapp')) ||
+        rawMessages.some((message) => message.name?.includes('@s.whatsapp.net'))
+          ? 'whatsapp'
+          : 'web',
+      ragMode,
+    });
+    const registryAnswerLanguage = answerTurn.textsSource === 'registry' ? answerTurn.answerLanguage : null;
     console.log('[RAG MODE] Using mode:', ragMode, '| Effective disable RAG:', effectiveDisableRAG);
 
     // Extract reasoning settings early for enhanced RAG detection
@@ -1975,7 +1992,8 @@ IMPORTANT:
       capabilities: citationCapabilities,
       ragMode,
       modelId: model,
-      language: userLanguage,
+      language: registryAnswerLanguage ?? userLanguage,
+      ...(registryAnswerLanguage ? { textsSource: answerTurn.textsSource } : {}),
       config: generationConfig,
       facts: {
         mcp: useMcpForRequest || lastAssistantHasToolCall(rawMessages),
@@ -2475,10 +2493,10 @@ Context:
       });
 
       if (strictWithoutWebSearch) {
-        setRagLogOutcome('kb_unavailable', knowledgeBaseUnavailableLanguage(fallbackLanguage));
+        setRagLogOutcome('kb_unavailable', kbUnavailableLanguage(answerTurn, fallbackLanguage));
         const refusalMetadata = refusalStartMetadata();
         finishRagTrace();
-        const errorText = knowledgeBaseUnavailableMessage(fallbackLanguage);
+        const errorText = kbUnavailableText(answerTurn, fallbackLanguage);
         const stream = createUIMessageStream({
           execute: async ({ writer }) => {
             if (refusalMetadata) writer.write({ type: 'start', messageMetadata: refusalMetadata });
@@ -2511,13 +2529,13 @@ Context:
       // D-31, D-51: identifier_not_found adds the same-tenant suggestion sentence to the fixed text; no model call
       const suggestionText =
         retrievalResult?.reason === IDENTIFIER_NOT_FOUND
-          ? identifierSuggestionMessage(fallbackLanguage, retrievalResult.identifierSuggestions)
+          ? identifierSuggestionMessage(registryAnswerLanguage ?? fallbackLanguage, retrievalResult.identifierSuggestions)
           : '';
       const responseText = suggestionText
-        ? `${noKnowledgeBaseResponse(fallbackLanguage)}\n\n${suggestionText}`
-        : noKnowledgeBaseResponse(fallbackLanguage);
+        ? `${noInformationText(answerTurn, fallbackLanguage)}\n\n${suggestionText}`
+        : noInformationText(answerTurn, fallbackLanguage);
       ragTrace?.collector.setReviewContent({ answer: responseText, context });
-      setRagLogOutcome('refused_no_context', noKnowledgeBaseResponseLanguage(fallbackLanguage));
+      setRagLogOutcome('refused_no_context', noInformationLanguage(answerTurn, fallbackLanguage));
       const refusalMetadata = refusalStartMetadata();
       const refusalTraceId = ragTrace?.collector.traceId;
       finishRagTrace();

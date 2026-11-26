@@ -16,6 +16,7 @@ import { buildProfileChunks, writeProfileChunks, type BuiltProfileChunks, type C
 import { getProcessingProfile, profileFor, type DocType, type ProcessingProfile } from '../profiles/load';
 import { loadTenantRules } from '../rules/load';
 import { templateHeaderFor } from '../text/embedding-text';
+import { attributeHeaderEnabled, documentHeadersFor, type StoredAttributeHeader } from '../attributes/header';
 import { countTokens } from '../text/tokens';
 import { INGEST_SOURCES, type IngestSource } from '../types';
 import { IngestWriterError, createIngestWriter, isTenantKey, type IngestWriter, type ProfileVectors } from '../writer';
@@ -303,6 +304,36 @@ function parseDocument(row: Row): RechunkDocument {
   };
 }
 
+/**
+ * TPL-05 (D-26, D-27): the stored header of each document of a page, one batched read per tenant key of the page, each read naming that
+ * tenant only. While RAG_ATTRIBUTE_HEADER is effectively off: no call and an empty result (today's text). A document of a tenant whose read
+ * has no row gets null (the clearing stamp); the map never holds a header read for another tenant.
+ */
+type PageHeaders = Map<string, StoredAttributeHeader | null> | null;
+
+async function pageHeaders(db: RpcClient, signal: AbortSignal, page: readonly RechunkDocument[]): Promise<PageHeaders> {
+  if (!attributeHeaderEnabled(currentIngestConfig()) || page.length === 0) return null;
+  const byTenant = new Map<string, string[]>();
+  for (const doc of page) byTenant.set(doc.tenantKey, [...(byTenant.get(doc.tenantKey) ?? []), doc.id]);
+  const headers = new Map<string, StoredAttributeHeader | null>();
+  for (const [tenantKey, ids] of byTenant) {
+    let found: Map<string, StoredAttributeHeader>;
+    try {
+      found = await documentHeadersFor(tenantKey, ids, { signal, db });
+    } catch (error) {
+      if (signal.aborted) throw error;
+      throw new RunFailure('attribute_header_read_failed');
+    }
+    for (const id of ids) headers.set(`${tenantKey}|${id}`, found.get(id) ?? null);
+  }
+  return headers;
+}
+
+function headerOf(headers: PageHeaders, doc: RechunkDocument): StoredAttributeHeader | null | undefined {
+  if (headers === null) return undefined;
+  return headers.get(`${doc.tenantKey}|${doc.id}`) ?? null;
+}
+
 async function listDocuments(db: RpcClient, signal: AbortSignal, profile: ChunkingProfileRow, tenantKey: string | null, after: string | null, limit: number): Promise<RechunkDocument[]> {
   const rows = await callRpc(db, signal, 'rag_rechunk_documents', {
     p_profile_id: profile.id,
@@ -422,7 +453,14 @@ function processingProfileOf(doc: RechunkDocument) {
  * Cuts the document's stored parse output into the parents and children of the profile. Pure apart from the object-store read: the parser is
  * never called (D-21). A document with no stored parse output, an unknown type or nothing to index becomes a gap.
  */
-async function prepare(doc: RechunkDocument, profile: ChunkingProfileRow, signal: AbortSignal, warnings: Set<string>, scopeOf: ScopeOf): Promise<Prepared> {
+async function prepare(
+  doc: RechunkDocument,
+  profile: ChunkingProfileRow,
+  signal: AbortSignal,
+  warnings: Set<string>,
+  scopeOf: ScopeOf,
+  attributeHeader: StoredAttributeHeader | null | undefined,
+): Promise<Prepared> {
   const markdown = await loadParseText(doc, signal);
   if (markdown === null) return { kind: 'gap', reason: 'no_parse_output', detail: 'no_parse_output' };
   if (markdown.trim() === '') return { kind: 'gap', reason: 'failed', detail: 'empty_parse_output' };
@@ -440,7 +478,14 @@ async function prepare(doc: RechunkDocument, profile: ChunkingProfileRow, signal
   try {
     const templateHeader = templateHeaderFor(processing.embedding_text_template, doc.templateRow);
     built = buildProfileChunks(
-      { filename: doc.filename, chunker: cleaned.chunker, templateHeader, languageAwareIngest: currentIngestConfig().languageAwareIngest, tableHeaderRepeat: currentIngestConfig().tableHeaderRepeat },
+      {
+        filename: doc.filename,
+        chunker: cleaned.chunker,
+        templateHeader,
+        languageAwareIngest: currentIngestConfig().languageAwareIngest,
+        tableHeaderRepeat: currentIngestConfig().tableHeaderRepeat,
+        ...(attributeHeader !== undefined ? { attributeHeader } : {}),
+      },
       cleaned.markdown,
       profile,
     );
@@ -555,8 +600,8 @@ type Outcome =
  * and the binding profiles of the document's doc type and tenant (D-15), and writes them under the document's own tenant scope in one
  * transaction. A failing active target stops the run; a failing other target leaves its vectors out. A refusal by the writer (a tenant that does not match, a document that is no longer writable) leaves the document as a gap.
  */
-async function buildDocument(session: Session, doc: RechunkDocument): Promise<Outcome> {
-  const prepared = await prepare(doc, session.profile, session.signal, session.warnings, (tenantKey) => scopeFor(session, tenantKey));
+async function buildDocument(session: Session, doc: RechunkDocument, headers: PageHeaders): Promise<Outcome> {
+  const prepared = await prepare(doc, session.profile, session.signal, session.warnings, (tenantKey) => scopeFor(session, tenantKey), headerOf(headers, doc));
   if (prepared.kind === 'gap') return prepared;
 
   const writer = await writerFor(session, doc.tenantKey);
@@ -710,9 +755,10 @@ async function execute(input: RunRechunkInput, resumeOpen: boolean): Promise<Rec
         exhausted = true;
         break;
       }
+      const headers = await pageHeaders(input.db, signal, page);
       for (const doc of page) {
         signal.throwIfAborted();
-        const outcome = await buildDocument(session, doc);
+        const outcome = await buildDocument(session, doc, headers);
         if (outcome.kind === 'gap') {
           await callRpc(input.db, signal, 'rag_rechunk_record_gap', { p_run_id: run.runId, p_document_id: doc.id, p_reason: outcome.reason, p_detail: outcome.detail });
           gapped += 1;
@@ -847,8 +893,9 @@ export async function dryRunRechunk(input: DryRunRechunkInput): Promise<DryRunRe
       signal.throwIfAborted();
       const page = await listDocuments(input.db, signal, profile, tenantKey, after, batchSize);
       if (page.length === 0) break;
+      const headers = await pageHeaders(input.db, signal, page);
       for (const doc of page) {
-        const prepared = await prepare(doc, profile, signal, warnings, scopeOf);
+        const prepared = await prepare(doc, profile, signal, warnings, scopeOf, headerOf(headers, doc));
         const entry = entryOf(doc.tenantKey);
         if (prepared.kind === 'gap') {
           entry.gapDocuments += 1;

@@ -500,3 +500,231 @@ def test_absolute_zero_offenders_reach_the_gate_markdown_and_exit_code(tmp_path)
     markdown = (tmp_path / "out" / "gate.md").read_text(encoding="utf-8")
     assert "## Absolute-zero injection gate" in markdown
     assert "| category:injection | attack_success_rate |" in markdown
+
+
+# D-06, D-07, D-47: the absolute gate inside rag_eval.gate, the exit-code order and the set-version rule.
+
+GATES_PATH = Path(__file__).resolve().parents[1] / "config" / "quality-gates.json"
+
+
+def _clean(**overrides: float | None) -> dict[str, dict]:
+    return _slice_values(**{"correct_refusal_rate": 1.0, "false_refusal_rate": 0.0, **overrides})
+
+
+def _clean_report(**fields) -> EvalReport:
+    fields.setdefault("overall", _clean())
+    fields.setdefault("languages", {"en": _clean(), "zh": _clean()})
+    fields.setdefault("categories", {"general": _clean()})
+    return _report(**fields)
+
+
+def _ceiling_failing(**overrides: float | None) -> dict[str, dict]:
+    return _clean(correct_refusal_rate=0.8, **overrides)
+
+
+def _general_rows(count: int = 30) -> list[dict]:
+    return [
+        {
+            "item_id": f"en-g-{i:03d}",
+            "language": "en",
+            "category": "general",
+            "split": "dev",
+            "provenance": "synthetic_fixture",
+            "answerable": True,
+            "refused": False,
+            "span_count": 1,
+            "spans_hit_at_5": 1,
+            "spans_hit_at_10": 1,
+            "first_hit_rank": 1,
+        }
+        for i in range(count)
+    ]
+
+
+def _gate_run(tmp_path: Path, report: EvalReport, baseline: Baseline | None = None, *extra: str) -> int:
+    report_path = tmp_path / "report.json"
+    baseline_path = tmp_path / "baseline.json"
+    report_path.write_text(report.model_dump_json(), encoding="utf-8")
+    baseline_path.write_text((baseline or _baseline()).model_dump_json(), encoding="utf-8")
+    return main(
+        ["--report", str(report_path), "--baseline", str(baseline_path), "--noise", str(NOISE_PATH),
+         "--out", str(tmp_path / "out"), *extra]
+    )
+
+
+def _gate_json(tmp_path: Path) -> dict:
+    return json.loads((tmp_path / "out" / "gate.json").read_text(encoding="utf-8"))
+
+
+def test_without_gates_the_command_is_unchanged(tmp_path):
+    failing = _clean_report(overall=_ceiling_failing())
+    assert _gate_run(tmp_path, failing) == 0
+    assert "absolute" not in _gate_json(tmp_path)
+    assert "## Absolute gate" not in (tmp_path / "out" / "gate.md").read_text(encoding="utf-8")
+
+
+def test_exit_code_order(tmp_path, capsys):
+    gates = ("--gates", str(GATES_PATH))
+    assert _gate_run(tmp_path, _clean_report(), None, *gates) == 0
+    assert _gate_json(tmp_path)["absolute"]["passed"] is True
+
+    assert _gate_run(tmp_path, _clean_report(overall=_ceiling_failing()), None, *gates) == 11
+    assert "false_answer_rate_exceeded" in capsys.readouterr().err
+
+    assert _gate_run(tmp_path, _clean_report(items=_general_rows()), None, *gates) == 12
+    assert "no_answer_share_below_min" in capsys.readouterr().err
+
+    both = _clean_report(overall=_ceiling_failing(), items=_general_rows())
+    assert _gate_run(tmp_path, both, None, *gates) == 12
+    err = capsys.readouterr().err
+    assert "no_answer_share_below_min" in err and "false_answer_rate_exceeded" in err
+
+    regressed = _clean_report(overall=_ceiling_failing(recall_at_10=0.1))
+    assert _gate_run(tmp_path, regressed, None, *gates) == 11
+    err = capsys.readouterr().err
+    assert "false_answer_rate_exceeded" in err and "beyond the noise band" in err and "recall_at_10" in err
+
+    assert _gate_run(tmp_path, _clean_report(overall=_clean(recall_at_10=0.1)), None, *gates) == 10
+
+
+def test_mismatch_still_runs_and_prints_the_absolute_checks(tmp_path, capsys):
+    report = _clean_report(overall=_ceiling_failing(), golden_sha256="x" * 64)
+    assert _gate_run(tmp_path, report, None, "--gates", str(GATES_PATH)) == 2
+    err = capsys.readouterr().err
+    assert "golden_sha256 differs" in err and "false_answer_rate_exceeded" in err
+    gate = _gate_json(tmp_path)
+    assert gate["mismatches"] and gate["absolute"]["passed"] is False
+    markdown = (tmp_path / "out" / "gate.md").read_text(encoding="utf-8")
+    assert "MISMATCH (exit 2)" in markdown and "## Absolute gate" in markdown
+
+
+def test_report_mode_prints_but_keeps_the_noise_band_exit_code(tmp_path, capsys):
+    gates = ("--gates", str(GATES_PATH), "--gates-mode", "report")
+    assert _gate_run(tmp_path, _clean_report(overall=_ceiling_failing()), None, *gates) == 0
+    assert "false_answer_rate_exceeded" in capsys.readouterr().err
+    absolute = _gate_json(tmp_path)["absolute"]
+    assert (absolute["mode"], absolute["passed"]) == ("report", False)
+    regressed = _clean_report(overall=_ceiling_failing(recall_at_10=0.1))
+    assert _gate_run(tmp_path, regressed, None, *gates) == 10
+
+
+def test_gates_mode_without_gates_exits_2(tmp_path, capsys):
+    assert _gate_run(tmp_path, _clean_report(), None, "--gates-mode", "report") == 2
+    assert "--gates-mode needs --gates" in capsys.readouterr().err
+
+
+def test_invalid_gates_file_exits_2(tmp_path):
+    broken = tmp_path / "gates.json"
+    broken.write_text('{"ceilings": 1}', encoding="utf-8")
+    assert _gate_run(tmp_path, _clean_report(), None, "--gates", str(broken)) == 2
+    assert _gate_run(tmp_path, _clean_report(), None, "--gates", str(tmp_path / "missing.json")) == 2
+
+
+def test_crash_inside_the_absolute_gate_exits_70(tmp_path, monkeypatch, capsys):
+    import rag_eval.absolute_gate as absolute_module
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(absolute_module, "evaluate", boom)
+    assert _gate_run(tmp_path, _clean_report(), None, "--gates", str(GATES_PATH)) == EXIT_INTERNAL
+    assert "INTERNAL ERROR" in capsys.readouterr().err
+
+
+def test_rag_mode_difference_is_a_mismatch_and_a_missing_baseline_field_counts_as_strict():
+    result = evaluate_gate(_clean_report(rag_mode="balanced"), _baseline(), _noise())
+    assert any(problem.startswith("rag_mode differs") for problem in result.mismatches)
+    assert evaluate_gate(_clean_report(rag_mode="strict"), _baseline(), _noise()).mismatches == []
+    balanced = _baseline(rag_mode="balanced")
+    assert evaluate_gate(_clean_report(rag_mode="balanced"), balanced, _noise()).mismatches == []
+    assert "rag_mode" not in json.loads(_baseline().model_dump_json())
+
+
+SET_IDS = ["en-v-001", "en-v-002", "en-v-003"]
+
+
+def _manifest(changelog: list[dict], statuses: dict[str, str] | None = None):
+    from rag_sidecar.contracts.golden_lifecycle import GoldenSetManifest, manifest_hash
+
+    statuses = statuses or {}
+    items = []
+    for item_id in SET_IDS + [i for i in statuses if i not in SET_IDS]:
+        status = statuses.get(item_id, "active")
+        entry = {"id": item_id, "item_sha256": hashlib.sha256(item_id.encode()).hexdigest(), "status": status}
+        if status == "stale":
+            entry["stale_reason"] = "quote_not_found"
+        if status == "retired":
+            entry["retire_reason"] = "obsolete"
+        items.append(entry)
+    data = {"set_id": "fixture", "version": max(e["version"] for e in changelog), "items": items, "changelog": changelog}
+    data["manifest_sha256"] = manifest_hash(data)
+    return GoldenSetManifest.model_validate(data)
+
+
+def _entry(version: int, **lists: list[str]) -> dict:
+    return {"version": version, "date": f"2026-11-{20 + version:02d}", **lists}
+
+
+def _versioned(manifest_sha: str, version: int, **fields) -> EvalReport:
+    return _clean_report(golden_set_version=version, golden_manifest_sha256=manifest_sha, **fields)
+
+
+def test_equal_manifest_hash_passes_and_a_baseline_without_one_is_judged_as_before():
+    baseline = _baseline(golden_set_version=2, golden_manifest_sha256="a" * 64)
+    assert evaluate_gate(_versioned("a" * 64, 2), baseline, _noise()).mismatches == []
+    assert evaluate_gate(_versioned("b" * 64, 3), _baseline(), _noise()).mismatches == []
+
+
+def test_stale_only_changelog_tolerates_a_newer_set_version(tmp_path):
+    v1, v2 = _entry(1, added=SET_IDS), _entry(2)
+    newer = _manifest([v1, v2, _entry(3, stale=["en-v-002"])], {"en-v-002": "stale"})
+    baseline = _baseline(golden_set_version=2, golden_manifest_sha256="a" * 64)
+    report = _versioned(newer.manifest_sha256, 3)
+    assert evaluate_gate(report, baseline, _noise(), manifest=newer).mismatches == []
+    retired = _manifest([v1, v2, _entry(3, retired=["en-v-003"])], {"en-v-003": "retired"})
+    assert evaluate_gate(_versioned(retired.manifest_sha256, 3), baseline, _noise(), manifest=retired).mismatches == []
+
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(newer.model_dump_json(), encoding="utf-8")
+    assert _gate_run(tmp_path, report, baseline, "--manifest", str(manifest_path)) == 0
+
+
+def test_added_or_changed_item_in_a_newer_version_is_a_mismatch_with_the_re_record_hint():
+    baseline = _baseline(golden_set_version=2, golden_manifest_sha256="a" * 64)
+    v1, v2 = _entry(1, added=SET_IDS), _entry(2)
+    for change in ({"added": ["en-v-004"]}, {"changed": ["en-v-001"]}):
+        statuses = {"en-v-004": "active"} if "added" in change else None
+        newer = _manifest([v1, v2, _entry(3, **change)], statuses)
+        result = evaluate_gate(_versioned(newer.manifest_sha256, 3), baseline, _noise(), manifest=newer)
+        assert any("golden_set_version 2 -> 3" in problem for problem in result.mismatches)
+        assert result.mismatches[-1] == "re-record the baseline: npm run eval:baseline"
+
+
+def test_differing_manifest_hash_without_a_manifest_is_a_mismatch(tmp_path):
+    baseline = _baseline(golden_set_version=2, golden_manifest_sha256="a" * 64)
+    report = _versioned("b" * 64, 3)
+    result = evaluate_gate(report, baseline, _noise())
+    assert any(problem.startswith("golden_manifest_sha256 differs") for problem in result.mismatches)
+    assert _gate_run(tmp_path, report, baseline) == 2
+
+
+def test_manifest_of_another_set_or_an_older_report_version_is_a_mismatch():
+    baseline = _baseline(golden_set_version=2, golden_manifest_sha256="a" * 64)
+    newer = _manifest([_entry(1, added=SET_IDS), _entry(2), _entry(3, stale=["en-v-002"])], {"en-v-002": "stale"})
+    wrong = evaluate_gate(_versioned("c" * 64, 3), baseline, _noise(), manifest=newer)
+    assert any("is not the manifest of the report" in problem for problem in wrong.mismatches)
+    older = _baseline(golden_set_version=4, golden_manifest_sha256="a" * 64)
+    result = evaluate_gate(_versioned(newer.manifest_sha256, 3), older, _noise(), manifest=newer)
+    assert any("golden_set_version 4 -> 3" in problem for problem in result.mismatches)
+
+
+def test_tolerated_stale_items_leave_the_paired_comparison():
+    stale_id = "en-v-002"
+    newer = _manifest([_entry(1, added=SET_IDS), _entry(2), _entry(3, stale=[stale_id])], {stale_id: "stale"})
+    items = [_item("en-v-001"), _item(stale_id, rank=None)]
+    baseline_items = {"en-v-001": _item_row(_item("en-v-001")), stale_id: _item_row(_item(stale_id))}
+    baseline = _baseline(golden_set_version=2, golden_manifest_sha256="a" * 64, items=baseline_items)
+    report = _versioned(newer.manifest_sha256, 3, items=items)
+    result = evaluate_gate(report, baseline, _noise(), manifest=newer)
+    assert result.mismatches == [] and result.paired is not None
+    assert result.paired.all_zero is True

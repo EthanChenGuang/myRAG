@@ -55,6 +55,11 @@ export interface RunRelexInput {
   staleDictionary?: boolean;
   /** Operator scope for a candidate tenant key; default backfillScope (plan 04.2-13 pattern). */
   resolveScope?: (tenantKey: string) => Promise<BackfillScopeResult>;
+  /**
+   * RAG_ATTRIBUTE_HEADER as the run applies it (TPL-05, D-27): true reads the stored header of each candidate in step with its document
+   * and puts it into the rebuilt text. Absent or false: no header read (the fixture harness and today's callers).
+   */
+  attributeHeader?: boolean;
 }
 
 export interface RelexReport {
@@ -77,6 +82,7 @@ export interface DryRunRelexInput {
   config?: Pick<RagConfig, 'v2'>;
   staleDictionary?: boolean;
   resolveScope?: (tenantKey: string) => Promise<BackfillScopeResult>;
+  attributeHeader?: boolean;
 }
 
 export interface DryRunRelexReport {
@@ -153,7 +159,13 @@ interface RowSerialization {
   primary: string | null;
 }
 
-function lexicalTextOf(candidate: RelexCandidate, rows: RowSerialization | null, documentLanguage: string | null = null, options?: LexicalOptions): string {
+function lexicalTextOf(
+  candidate: RelexCandidate,
+  rows: RowSerialization | null,
+  documentLanguage: string | null = null,
+  options?: LexicalOptions,
+  attributeHeader?: string,
+): string {
   const separator = rows
     ? tableRowSeparator(rows.enabled, candidate.chunk_kind, tableRowLanguage({ chunkLanguage: candidate.language, documentLanguage, primary: rows.primary }))
     : null;
@@ -164,11 +176,31 @@ function lexicalTextOf(candidate: RelexCandidate, rows: RowSerialization | null,
     metadata: candidate.metadata,
     documentFilename: candidate.document_filename,
     ...(separator !== null ? { tableRowSeparator: separator } : {}),
+    ...(attributeHeader ? { attributeHeader } : {}),
   }, options);
 }
 
-function batchRow(candidate: RelexCandidate, rows: RowSerialization | null): BatchRow {
-  const lexical_text = lexicalTextOf(candidate, rows);
+/**
+ * TPL-05 (D-27): the stored header of each candidate in step with its document, one read per tenant key of the page; a candidate that is
+ * not in step keeps today's text. Empty without any call while RAG_ATTRIBUTE_HEADER is effectively off.
+ */
+async function pageHeaders(db: RpcClient, signal: AbortSignal, candidates: readonly RelexCandidate[], enabled: boolean | undefined): Promise<Map<string, string>> {
+  if (enabled !== true || candidates.length === 0) return new Map();
+  // Loaded here: the fixture harness imports this module before the app environment is set (env.ts validates at import).
+  const { chunkHeadersFor } = await import('../attributes/header');
+  try {
+    return await chunkHeadersFor(
+      candidates.map((candidate) => ({ chunkId: candidate.id, tenantKey: candidate.tenant_key })),
+      { signal, db },
+    );
+  } catch (error) {
+    if (signal.aborted) throw error;
+    throw new RelexInputError('rpc_failed:rag_attribute_headers', null);
+  }
+}
+
+function batchRow(candidate: RelexCandidate, rows: RowSerialization | null, attributeHeader?: string): BatchRow {
+  const lexical_text = lexicalTextOf(candidate, rows, null, undefined, attributeHeader);
   const row: BatchRow = { id: candidate.id, lexical_text };
   if (candidate.language === null) {
     const detected = detectLanguage(candidate.content);
@@ -220,10 +252,10 @@ async function listTableCandidates(
 }
 
 /** The table chunks of one page whose stored lexical_text differs from the text the switch state gives, with that text. */
-function staleTableRows(candidates: TableCandidate[], rows: RowSerialization): BatchRow[] {
+function staleTableRows(candidates: TableCandidate[], rows: RowSerialization, headers: Map<string, string>): BatchRow[] {
   const out: BatchRow[] = [];
   for (const candidate of candidates) {
-    const lexical_text = lexicalTextOf(candidate, rows, candidate.document_language);
+    const lexical_text = lexicalTextOf(candidate, rows, candidate.document_language, undefined, headers.get(candidate.id));
     if (lexical_text !== candidate.lexical_text) out.push({ id: candidate.id, lexical_text });
   }
   return out;
@@ -241,7 +273,7 @@ function rowSerializationOf(enabled: boolean | undefined): RowSerialization | nu
  * differ, keeping the version. With the switch off on a database without the function nothing can have been serialized, so it is skipped.
  */
 async function tablePass(
-  input: { db: RpcClient; signal: AbortSignal; batchSize: number; tenantKey: string | null; rows: RowSerialization; write: boolean },
+  input: { db: RpcClient; signal: AbortSignal; batchSize: number; tenantKey: string | null; rows: RowSerialization; write: boolean; attributeHeader?: boolean },
   onPage: (written: number, candidates: TableCandidate[], stale: BatchRow[]) => Promise<void>,
 ): Promise<number | null> {
   let after: string | null = null;
@@ -253,7 +285,7 @@ async function tablePass(
       return null;
     }
     if (candidates.length === 0) break;
-    const stale = staleTableRows(candidates, input.rows);
+    const stale = staleTableRows(candidates, input.rows, await pageHeaders(input.db, input.signal, candidates, input.attributeHeader));
     const written = input.write ? await writeBatch(input.db, input.signal, stale) : stale.length;
     total += written;
     await onPage(written, candidates, stale);
@@ -294,7 +326,8 @@ export async function runRelex(input: RunRelexInput): Promise<RelexReport> {
     const candidates = await listCandidates(input.db, signal, after, batchSize, tenantKey);
     if (candidates.length === 0) break;
 
-    const rows = candidates.map((candidate) => batchRow(candidate, rowSerialization));
+    const headers = await pageHeaders(input.db, signal, candidates, input.attributeHeader);
+    const rows = candidates.map((candidate) => batchRow(candidate, rowSerialization, headers.get(candidate.id)));
     const written = await writeBatch(input.db, signal, rows);
     batches += 1;
     updated += written;
@@ -314,7 +347,7 @@ export async function runRelex(input: RunRelexInput): Promise<RelexReport> {
   }
 
   const tables = await tablePass(
-    { db: input.db, signal, batchSize, tenantKey, rows: rowSerialization, write: true },
+    { db: input.db, signal, batchSize, tenantKey, rows: rowSerialization, write: true, attributeHeader: input.attributeHeader },
     async (written, candidates, stale) => {
       if (stale.length === 0) return;
       batches += 1;
@@ -359,7 +392,7 @@ export async function dryRunRelex(input: DryRunRelexInput): Promise<DryRunRelexR
   if (rowSerialization === null) return { tenants, total };
   // A chunk the version pass already counts is rewritten there with the switch applied, so the table pass would not touch it again.
   let tables = 0;
-  const installed = await tablePass({ db: input.db, signal, batchSize, tenantKey, rows: rowSerialization, write: false }, async (_count, candidates, stale) => {
+  const installed = await tablePass({ db: input.db, signal, batchSize, tenantKey, rows: rowSerialization, write: false, attributeHeader: input.attributeHeader }, async (_count, candidates, stale) => {
     for (const row of stale) {
       if (counted.has(row.id)) continue;
       const tenant = candidates.find((candidate) => candidate.id === row.id)?.tenant_key;
@@ -448,9 +481,15 @@ function chunkOptions(lexical: TenantLexical, language: string | null): LexicalO
   return lexical.options.stemIt ? { ...lexical.options, language } : lexical.options;
 }
 
-function stampedRow(candidate: RelexCandidate, rows: RowSerialization | null, lexical: TenantLexical, documentLanguage: string | null = null): BatchRow {
+function stampedRow(
+  candidate: RelexCandidate,
+  rows: RowSerialization | null,
+  lexical: TenantLexical,
+  documentLanguage: string | null = null,
+  attributeHeader?: string,
+): BatchRow {
   const detected = candidate.language === null ? detectLanguage(candidate.content) : null;
-  const lexical_text = lexicalTextOf(candidate, rows, documentLanguage, chunkOptions(lexical, candidate.language ?? detected));
+  const lexical_text = lexicalTextOf(candidate, rows, documentLanguage, chunkOptions(lexical, candidate.language ?? detected), attributeHeader);
   const row: BatchRow = { id: candidate.id, lexical_text, lexical_dict_version: lexical.stamp.dictVersion, lexical_patterns: lexical.stamp.patterns };
   if (detected !== null) row.language = detected;
   return row;
@@ -524,7 +563,7 @@ function startedLine(plan: StampedPlan, batchSize: number, after: string | null)
 }
 
 async function stampedTablePass(
-  input: { db: RpcClient; signal: AbortSignal; batchSize: number; plan: StampedPlan; rows: RowSerialization; write: boolean },
+  input: { db: RpcClient; signal: AbortSignal; batchSize: number; plan: StampedPlan; rows: RowSerialization; write: boolean; attributeHeader?: boolean },
   onPage: (written: number, stale: Array<{ tenantKey: string; row: BatchRow }>) => Promise<void>,
 ): Promise<number | null> {
   let after: string | null = null;
@@ -536,10 +575,11 @@ async function stampedTablePass(
       return null;
     }
     if (candidates.length === 0) break;
+    const headers = await pageHeaders(input.db, input.signal, candidates, input.attributeHeader);
     const stale: Array<{ tenantKey: string; row: BatchRow }> = [];
     for (const candidate of candidates) {
       const lexical = await input.plan.lexicalFor(candidate.tenant_key);
-      const lexical_text = lexicalTextOf(candidate, input.rows, candidate.document_language, chunkOptions(lexical, candidate.language));
+      const lexical_text = lexicalTextOf(candidate, input.rows, candidate.document_language, chunkOptions(lexical, candidate.language), headers.get(candidate.id));
       if (lexical_text === candidate.lexical_text) continue;
       stale.push({
         tenantKey: candidate.tenant_key,
@@ -579,9 +619,13 @@ async function runStampedRelex(input: RunRelexInput): Promise<RelexReport> {
     signal.throwIfAborted();
     const candidates = await listStampedCandidates(input.db, signal, plan, after, batchSize);
     if (candidates.length === 0) break;
+    const headers = await pageHeaders(input.db, signal, candidates, input.attributeHeader);
     const entries: Array<{ tenantKey: string; row: BatchRow }> = [];
     for (const candidate of candidates) {
-      entries.push({ tenantKey: candidate.tenant_key, row: stampedRow(candidate, rowSerialization, await plan.lexicalFor(candidate.tenant_key)) });
+      entries.push({
+        tenantKey: candidate.tenant_key,
+        row: stampedRow(candidate, rowSerialization, await plan.lexicalFor(candidate.tenant_key), null, headers.get(candidate.id)),
+      });
     }
     const written = await writeStamped(input.db, signal, plan.version, groupByTenant(entries));
     batches += 1;
@@ -596,7 +640,7 @@ async function runStampedRelex(input: RunRelexInput): Promise<RelexReport> {
 
   let tables: number | null | undefined;
   if (rowSerialization !== null && !plan.staleDictionary) {
-    tables = await stampedTablePass({ db: input.db, signal, batchSize, plan, rows: rowSerialization, write: true }, async (written, stale) => {
+    tables = await stampedTablePass({ db: input.db, signal, batchSize, plan, rows: rowSerialization, write: true, attributeHeader: input.attributeHeader }, async (written, stale) => {
       if (stale.length === 0) return;
       batches += 1;
       updated += written;
@@ -638,7 +682,7 @@ async function dryRunStampedRelex(input: DryRunRelexInput): Promise<DryRunRelexR
   const rowSerialization = rowSerializationOf(input.tableRowSerialization);
   if (rowSerialization === null || plan.staleDictionary) return { tenants, total };
   let tables = 0;
-  const installed = await stampedTablePass({ db: input.db, signal, batchSize, plan, rows: rowSerialization, write: false }, async (_count, stale) => {
+  const installed = await stampedTablePass({ db: input.db, signal, batchSize, plan, rows: rowSerialization, write: false, attributeHeader: input.attributeHeader }, async (_count, stale) => {
     for (const { tenantKey, row } of stale) {
       if (counted.has(row.id)) continue;
       tenants[tenantKey] = (tenants[tenantKey] ?? 0) + 1;

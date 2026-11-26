@@ -265,14 +265,14 @@ def test_report_without_citation_data_is_byte_identical_to_before(tmp_path: Path
         "32a7ce4be62475bb17902ebf30a9542a3a33caff485739546c7ee5806f9bf644"
     )
     assert hashlib.sha256(md_path.read_bytes()).hexdigest() == (
-        "8764e48576ea708a72344dfb96193ef347af84313589f6f232421d606377e053"
+        "c0d7622cece9bdb49c51bbe36e409b2d8a08483c1a17b5219663abc1afb93984"
     )
     json_path, md_path = write_report(report, tmp_path / "full", _budgets())
     assert hashlib.sha256(json_path.read_bytes()).hexdigest() == (
         "6051c3dcfe48f306e94a23e8d2e0f5dce07279dfc8ca16c2bbe46bbf7386d8d3"
     )
     assert hashlib.sha256(md_path.read_bytes()).hexdigest() == (
-        "2962dc9f9de4a47c1ea7d44bd55b685da6796ca69a8fcef7747f1db46f9ec7aa"
+        "8b6039856263de826cb31f1fc5408f66b7d7751e3250faab33a38dd808534df5"
     )
 
 
