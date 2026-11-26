@@ -136,6 +136,10 @@ jobs:
       - run: npm ci --ignore-scripts
       - name: Node runtime check
         run: node scripts/ci/check-node-runtime.mjs
+      - name: Zod isolation check (zod 4 stays nested under LangChain)
+        run: |
+          node scripts/ci/check-zod-isolation.mjs
+          node --test scripts/tests/check-zod-isolation.node-test.mjs
       - run: uv sync --directory eval --locked --all-extras
       - name: Config drift check
         run: node scripts/check-config.mjs

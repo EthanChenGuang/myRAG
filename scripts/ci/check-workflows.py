@@ -42,6 +42,8 @@ TS_JOB_NEEDLES = {
         "scripts/tests/check-language-literals.node-test.mjs",
         "scripts/ci/check-settings-classification.mjs",
         "scripts/tests/check-settings-classification.node-test.mjs",
+        "scripts/ci/check-zod-isolation.mjs",
+        "scripts/tests/check-zod-isolation.node-test.mjs",
     ),
 }
 # job -> the shard flag its test command must take from matrix.shard
