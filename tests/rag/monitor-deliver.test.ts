@@ -186,7 +186,7 @@ describe('deliverAlerts webhook channel', () => {
       else if (value && typeof value === 'object') Object.values(value).forEach(walk);
     };
     walk(body);
-    for (const value of strings) expect(value).toMatch(/^[A-Za-z0-9_.:|+\-]{1,256}$/);
+    for (const value of strings) expect(value).toMatch(/^[A-Za-z0-9_.:|+-]{1,256}$/);
   });
 
   it('tries a channel that failed on four earlier runs a fifth time, then leaves it failed', async () => {
