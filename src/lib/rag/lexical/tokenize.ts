@@ -1,29 +1,56 @@
+import rawRegistry from '../../../../config/rag/language-packs.json';
 import { splitAtIdentifiers } from '../ids/shapes';
-import type { LexicalOptions } from './options';
+import { parseLanguageRegistry } from '../lang/registry';
+import { DICT_TOKEN_PREFIX, STEM_TOKEN_PREFIX, type LexicalOptions } from './options';
 import rules from './rules.json';
+import { stemItalian } from './stem-it';
 
 export const LEXICAL_VERSION = 2;
 
 const CODE_PATTERN = new RegExp(rules.codePattern, 'giu');
 const zhSegmenter = new Intl.Segmenter('zh', { granularity: 'word' });
 const HAN_OR_OTHER = /(\p{Script=Han}+)|([^\p{Script=Han}]+)/gu;
-const ELISION_PREFIXES = [...rules.elisionPrefixes].sort((a, b) => b.length - a.length);
-const STOPWORDS = new Set<string>([...rules.stopwords.zh, ...rules.stopwords.en, ...rules.stopwords.it]);
-const ZH_STOP = new Set<string>(rules.stopwords.zh);
+// D-11: per-language rules come from the language registry (equality with the former constants is tested).
+const PACKS = parseLanguageRegistry(rawRegistry).packs;
+const ELISION_PREFIX_LIST = PACKS.flatMap((pack) => pack.folding.elision_prefixes);
+const ELISION_SUFFIX_LIST = PACKS.flatMap((pack) => pack.folding.elision_suffixes);
+const ELISION_PREFIXES = [...ELISION_PREFIX_LIST].sort((a, b) => b.length - a.length);
+const STOPWORDS = new Set<string>(PACKS.flatMap((pack) => pack.stopwords.lexical));
+const ZH_STOP = new Set<string>(
+  PACKS.filter((pack) => pack.segmentation === 'intl_segmenter_han_bigrams').flatMap((pack) => pack.stopwords.lexical),
+);
 
 const MAX_TOKEN_CHARS = 64;
 const MAX_QUERY_TOKENS = 64;
+/** D-55: dictionary and stem tokens lead the query list, at most this many. */
+export const MAX_ADDITIVE_QUERY_TOKENS = 16;
 const JOINED_SEP = /[-_./]/g;
-export const ENGLISH_POSSESSIVE = /'s\b/gi;
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function suffixPattern(suffixes: string[]): RegExp {
+  if (suffixes.length === 0) return /(?!)/g;
+  const body = suffixes.length === 1 ? escapeRegExp(suffixes[0]!) : `(?:${suffixes.map(escapeRegExp).join('|')})`;
+  return new RegExp(`${body}\\b`, 'gi');
+}
+
+export const ENGLISH_POSSESSIVE = suffixPattern(ELISION_SUFFIX_LIST);
+
+const STEM_IT_LANGUAGE = 'it';
+const STEMMERS = new Map<string, (word: string) => string>([[STEM_IT_LANGUAGE, stemItalian]]);
 
 function mapApostrophe(text: string): string {
   return text.replace(/[\u2018\u2019\u201B]/g, "'");
 }
 
+const COMBINING_MARKS = /\p{M}+/gu;
+
 function foldLatin(text: string): string {
   return text
     .normalize('NFD')
-    .replace(/\p{M}+/gu, '')
+    .replace(COMBINING_MARKS, '')
     .normalize('NFC');
 }
 
@@ -36,7 +63,7 @@ function joinedForm(code: string): string {
 }
 
 const ELISION_PATTERNS = ELISION_PREFIXES.map((prefix) => {
-  const escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escaped = escapeRegExp(prefix);
   return new RegExp(`(^|[^\\p{L}\\p{N}])${escaped}`, 'giu');
 });
 
@@ -84,14 +111,50 @@ function emitHanBigrams(seg: string, out: string[]): void {
 
 const LATIN_WORD = /[\p{L}\p{N}]+(?:'[\p{L}\p{N}]+)?/gu;
 
-function foldLatinRun(run: string): string[] {
+/** Additive-token state of one call; null when no option is active (the default path). */
+interface TokenizeContext {
+  stem: ((word: string) => string) | null;
+  /** Folded word -> unfolded spellings in order of appearance, so the stemmer reads accents (D-55). */
+  unfolded: Map<string, string[]>;
+  /** Chunk side keeps stem tokens next to their word; the query side lists them first. */
+  interleave: boolean;
+  additive: string[];
+}
+
+const UNFOLDED_WORD = /(?:(?!\p{Script=Han})[\p{L}\p{M}\p{N}])+/gu;
+const HAS_LETTER = /\p{L}/u;
+
+function unfoldedWords(text: string): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const match of text.matchAll(UNFOLDED_WORD)) {
+    const word = match[0];
+    const key = foldLatin(word);
+    const queue = out.get(key);
+    if (queue) queue.push(word);
+    else out.set(key, [word]);
+  }
+  return out;
+}
+
+function emitStem(piece: string, out: string[], ctx: TokenizeContext): void {
+  if (!ctx.stem || !HAS_LETTER.test(piece)) return;
+  const source = ctx.unfolded.get(piece)?.shift() ?? piece;
+  const token = STEM_TOKEN_PREFIX + foldLatin(ctx.stem(source));
+  if (!acceptsToken(token)) return;
+  if (ctx.interleave) out.push(token);
+  ctx.additive.push(token);
+}
+
+function foldLatinRun(run: string, ctx: TokenizeContext | null): string[] {
   const out: string[] = [];
   const folded = stripElisions(foldLatin(run));
   for (const part of folded.matchAll(LATIN_WORD)) {
     const raw = part[0] ?? '';
   const token = stripElisions(raw);
     const pieces = token.split("'").map((slice) => slice.trim()).filter(Boolean);
-    for (const piece of pieces) pushToken(piece, out);
+    for (const piece of pieces) {
+      if (pushToken(piece, out) && ctx) emitStem(piece, out, ctx);
+    }
   }
   return out;
 }
@@ -104,7 +167,7 @@ function segmentCodeParts(code: string): string[] {
   return out;
 }
 
-function segmentNonCode(text: string): string[] {
+function segmentNonCode(text: string, ctx: TokenizeContext | null): string[] {
   const prepared = stripElisions(text);
   const out: string[] = [];
   for (const run of prepared.matchAll(HAN_OR_OTHER)) {
@@ -115,23 +178,28 @@ function segmentNonCode(text: string): string[] {
       }
       for (const bigram of hanBigrams(han)) out.push(bigram);
     } else if (run[2]) {
-      for (const part of foldLatinRun(run[2])) out.push(part);
+      for (const part of foldLatinRun(run[2], ctx)) out.push(part);
     }
   }
   return out;
 }
 
-function pushToken(token: string, out: string[]): void {
-  if (token === '' || token.length > MAX_TOKEN_CHARS || FORBIDDEN.test(token)) return;
-  if (STOPWORDS.has(token)) return;
-  if (SINGLE_LATIN_LETTER.test(token)) return;
+function acceptsToken(token: string): boolean {
+  if (token === '' || token.length > MAX_TOKEN_CHARS || FORBIDDEN.test(token)) return false;
+  if (STOPWORDS.has(token)) return false;
+  return !SINGLE_LATIN_LETTER.test(token);
+}
+
+function pushToken(token: string, out: string[]): boolean {
+  if (!acceptsToken(token)) return false;
   out.push(token);
+  return true;
 }
 
 const FORBIDDEN = /['\\\s]/;
 const SINGLE_LATIN_LETTER = /^[a-z]$/u;
 
-function tokenizeNormalized(text: string): string[] {
+function tokenizeNormalized(text: string, ctx: TokenizeContext | null = null): string[] {
   const out: string[] = [];
   for (const piece of splitAtIdentifiers(text)) {
     if (piece.identifier) {
@@ -140,41 +208,86 @@ function tokenizeNormalized(text: string): string[] {
         for (const part of segmentCodeParts(piece.text)) out.push(part);
       }
     } else {
-      for (const part of segmentNonCode(piece.text)) out.push(part);
+      for (const part of segmentNonCode(piece.text, ctx)) out.push(part);
     }
   }
   return out;
 }
 
-/** Shared tokenizer for index-side lexical_text (order and duplicates kept by lexicalText). */
-export function lexicalTokens(text: string, _options?: LexicalOptions): string[] {
-  if (text === '') return [];
-  return tokenizeNormalized(normalize(text));
+const HAN_CHAR = /\p{Script=Han}/gu;
+const WHITESPACE_RUN = /\s+/gu;
+const APOSTROPHE = /'/g;
+
+/** D-08: Han terms of two or more characters, Latin terms of more than one word or with an elision. */
+function qualifiesAsDictionaryTerm(term: string): boolean {
+  if ((term.match(HAN_CHAR)?.length ?? 0) >= 2) return true;
+  return /\s/u.test(term) || term.includes("'");
 }
 
-export function lexicalText(prefix: string[], content: string, _options?: LexicalOptions): string {
-  const tokens = [...prefix.flatMap((part) => lexicalTokens(part)), ...lexicalTokens(content)];
+function dictionaryTokens(normalized: string, options: LexicalOptions | undefined): string[] {
+  const dictionary = options?.dictionary;
+  if (!dictionary) return [];
+  const out: string[] = [];
+  for (const { term } of dictionary.match(normalized)) {
+    const form = normalize(term).trim();
+    if (!qualifiesAsDictionaryTerm(form)) continue;
+    pushToken(DICT_TOKEN_PREFIX + form.replace(WHITESPACE_RUN, '_').replace(APOSTROPHE, '_'), out);
+  }
+  return out;
+}
+
+function stemmerFor(options: LexicalOptions | undefined): ((word: string) => string) | null {
+  if (options?.stemIt !== true || options.language !== STEM_IT_LANGUAGE) return null;
+  return lexicalStemmerAvailable(options.language) ? STEMMERS.get(options.language)! : null;
+}
+
+function contextFor(text: string, options: LexicalOptions | undefined, interleave: boolean): TokenizeContext | null {
+  const stem = stemmerFor(options);
+  if (!stem) return null;
+  return { stem, unfolded: unfoldedWords(mapApostrophe(text.normalize('NFKC')).toLowerCase()), interleave, additive: [] };
+}
+
+/** Shared tokenizer for index-side lexical_text (order and duplicates kept by lexicalText). */
+export function lexicalTokens(text: string, options?: LexicalOptions): string[] {
+  if (text === '') return [];
+  const normalized = normalize(text);
+  const tokens = tokenizeNormalized(normalized, contextFor(text, options, true));
+  const dictionary = dictionaryTokens(normalized, options);
+  return dictionary.length === 0 ? tokens : [...tokens, ...dictionary];
+}
+
+export function lexicalText(prefix: string[], content: string, options?: LexicalOptions): string {
+  const tokens = [...prefix.flatMap((part) => lexicalTokens(part, options)), ...lexicalTokens(content, options)];
   return tokens.join(' ');
 }
 
-export function queryLexicalTokens(text: string, _options?: LexicalOptions): string[] {
+export function queryLexicalTokens(text: string, options?: LexicalOptions): string[] {
   if (text === '') return [];
+  const normalized = normalize(text);
+  const ctx = contextFor(text, options, false);
+  const natural = tokenizeNormalized(normalized, ctx);
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const token of tokenizeNormalized(normalize(text))) {
+  for (const token of [...dictionaryTokens(normalized, options), ...(ctx?.additive ?? [])]) {
+    if (out.length >= MAX_ADDITIVE_QUERY_TOKENS) break;
     if (seen.has(token)) continue;
     seen.add(token);
     out.push(token);
+  }
+  for (const token of natural) {
     if (out.length >= MAX_QUERY_TOKENS) break;
+    if (seen.has(token)) continue;
+    seen.add(token);
+    out.push(token);
   }
   return out;
 }
 
 /** Whole and joined lexical forms for an identifier string (exact-id lookup). */
-export function identifierLexicalLookupForms(raw: string, _options?: LexicalOptions): string[] {
+export function identifierLexicalLookupForms(raw: string, options?: LexicalOptions): string[] {
   const normalized = normalize(raw);
   const joined = joinedForm(normalized);
-  const fromQuery = new Set(queryLexicalTokens(raw));
+  const fromQuery = new Set(queryLexicalTokens(raw, options));
   const allowed = new Set([normalized, joined]);
   const out: string[] = [];
   for (const token of fromQuery) {
@@ -185,12 +298,25 @@ export function identifierLexicalLookupForms(raw: string, _options?: LexicalOpti
   return out;
 }
 
-export const MAX_ADDITIVE_QUERY_TOKENS = 0;
-
-export function lexicalRegistryRules(): { stopwords: Set<string>; hanStopwords: Set<string>; elisionPrefixes: string[]; elisionSuffixes: string[]; foldAccents: boolean } {
-  return { stopwords: new Set(), hanStopwords: new Set(), elisionPrefixes: [], elisionSuffixes: [], foldAccents: false };
+/** The per-language rules the tokenizer reads from the registry (D-11 equality test). */
+export function lexicalRegistryRules(): {
+  stopwords: Set<string>;
+  hanStopwords: Set<string>;
+  elisionPrefixes: string[];
+  elisionSuffixes: string[];
+  foldAccents: boolean;
+} {
+  return {
+    stopwords: new Set(STOPWORDS),
+    hanStopwords: new Set(ZH_STOP),
+    elisionPrefixes: [...ELISION_PREFIX_LIST],
+    elisionSuffixes: [...ELISION_SUFFIX_LIST],
+    foldAccents: PACKS.every((pack) => pack.folding.accents),
+  };
 }
 
-export function lexicalStemmerAvailable(_language: string | null | undefined): boolean {
-  return false;
+/** True when the registry knows the language and an in-repo stemmer exists for it. */
+export function lexicalStemmerAvailable(language: string | null | undefined): boolean {
+  if (!language || !STEMMERS.has(language)) return false;
+  return PACKS.some((pack) => pack.code === language);
 }

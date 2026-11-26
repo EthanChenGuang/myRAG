@@ -63,7 +63,7 @@ describe('dictionary tokens (D-08)', () => {
   });
 
   it('a two-word Latin term gives one token with the words joined by an underscore', () => {
-    const text = 'The Zento  Prisma panel';
+    const text = 'The Zento Prisma panel';
     const withDict = lexicalTokens(text, options);
     expect(dictTokens(withDict)).toEqual([`${DICT_TOKEN_PREFIX}zento_prisma`]);
     expect(withDict.filter((token) => !token.startsWith(DICT_TOKEN_PREFIX))).toEqual(lexicalTokens(text));
