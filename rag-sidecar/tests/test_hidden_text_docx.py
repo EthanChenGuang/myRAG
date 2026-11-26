@@ -135,3 +135,151 @@ def test_every_image_stage_that_ships_the_rules_installs_the_hidden_text_extra(s
     syncs = [line for line in _stages()[stage] if "uv sync" in line]
     assert syncs
     assert all("--extra hidden-text" in line for line in syncs), syncs
+
+
+HIDDEN_CASES = [
+    ("white-text.docx", "color_near_background"),
+    ("tiny-size.docx", "font_too_small"),
+    ("comments.docx", "comment"),
+    ("tracked-deletion.docx", "tracked_deletion"),
+    ("vanish-by-style.docx", "vanished_run"),
+]
+VISIBLE_LINES = {
+    "white-text.docx": "VISIBLE_EN",
+    "tiny-size.docx": "VISIBLE_IT",
+    "comments.docx": "VISIBLE_ZH",
+    "tracked-deletion.docx": "VISIBLE_EN",
+    "vanish-by-style.docx": "VISIBLE_EN",
+}
+CLEAN_CASES = ["clean-plain.docx", "clean-styled.docx", "clean-empty.docx"]
+
+
+@pytest.mark.parametrize(("name", "reason"), HIDDEN_CASES)
+def test_each_word_hiding_technique_is_found_with_its_reason(client, name, reason):
+    generator = _generator()
+    report = report_for(client, name)
+
+    assert report.status == "hidden_found"
+    assert [span.reason for span in report.spans] == [reason]
+    assert report.spans[0].text == generator.HIDDEN_SENTENCE[name.removesuffix(".docx")]
+    reported = " ".join(span.text for span in report.spans)
+    for line in getattr(generator, VISIBLE_LINES[name]):
+        assert line not in reported
+
+
+def test_a_run_that_turns_vanish_off_inside_a_vanished_style_is_not_reported(client):
+    report = report_for(client, "vanish-by-style.docx")
+    assert _generator().UNVANISHED_IN_STYLE not in " ".join(span.text for span in report.spans)
+
+
+@pytest.mark.parametrize("name", CLEAN_CASES)
+def test_clean_word_fixtures_are_not_flagged(client, name):
+    report = report_for(client, name)
+
+    assert report.status == "clean", [(span.reason, span.text) for span in report.spans]
+    assert report.spans == [] and report.dropped == 0
+
+
+def test_a_word_file_with_no_run_is_clean_with_zero_spans():
+    from rag_sidecar.security import check_hidden_text
+
+    report = check_hidden_text((FIXTURE_DIR / "clean-empty.docx").read_bytes(), DOCX_MIME)
+    assert report.status == "clean" and report.spans == []
+
+
+def _refuse_member_reads(monkeypatch):
+    import zipfile
+
+    def refuse(self, *args, **kwargs):
+        raise AssertionError("a member was opened")
+
+    monkeypatch.setattr(zipfile.ZipFile, "open", refuse)
+
+
+def test_a_package_with_more_members_than_the_cap_is_refused_unread(client, monkeypatch):
+    from rag_sidecar.security.docx_checks import MAX_MEMBERS
+
+    data = _generator().too_many_members(MAX_MEMBERS + 1)
+    _refuse_member_reads(monkeypatch)
+    response = post_docx(client, data)
+    assert response.status_code == 422
+    assert response.json()["error"] == "unsafe_package"
+
+
+def test_a_member_whose_declared_size_exceeds_the_cap_is_refused_unread(client, monkeypatch):
+    from rag_sidecar.security.docx_checks import MAX_PART_BYTES
+
+    data = _generator().oversized_member(MAX_PART_BYTES + (1 << 20))
+    assert len(data) < 1 << 20
+    _refuse_member_reads(monkeypatch)
+    response = post_docx(client, data)
+    assert response.status_code == 422
+    assert response.json()["error"] == "unsafe_package"
+
+
+def test_a_package_whose_total_declared_size_exceeds_the_cap_is_refused_unread(client, monkeypatch):
+    from rag_sidecar.security.docx_checks import MAX_PART_BYTES, MAX_TOTAL_BYTES
+
+    members = MAX_TOTAL_BYTES // MAX_PART_BYTES + 1
+    data = _generator().oversized_package(members, MAX_PART_BYTES)
+    _refuse_member_reads(monkeypatch)
+    response = post_docx(client, data)
+    assert response.status_code == 422
+    assert response.json()["error"] == "unsafe_package"
+
+
+def test_a_part_with_an_internal_entity_definition_is_refused(client):
+    response = post_docx(client, _generator().entity_expansion())
+    assert response.status_code == 422
+    assert response.json()["error"] == "unsafe_package"
+
+
+def test_the_checker_raises_unsafe_package_for_entities():
+    from rag_sidecar.security import UnsafePackage, check_hidden_text
+
+    with pytest.raises(UnsafePackage):
+        check_hidden_text(_generator().entity_expansion(), DOCX_MIME)
+
+
+def test_a_file_that_is_not_a_zip_is_unreadable_not_clean(client):
+    response = post_docx(client, b"synthetic bytes that are not a package")
+    assert response.status_code == 422
+    assert response.json()["error"] == "unreadable_document"
+
+
+def test_a_password_protected_word_file_is_refused(client):
+    response = post_docx(client, b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\0" * 504)
+    assert response.status_code == 422
+    assert response.json()["error"] == "encrypted_document"
+
+
+_BLOCKED_DOCX_IMPORT = """
+import sys
+from pathlib import Path
+class _Block:
+    def find_spec(self, name, path=None, target=None):
+        if name.split(".")[0] in {"defusedxml", "docx", "lxml"}:
+            raise ImportError(f"blocked {name}")
+        return None
+sys.meta_path.insert(0, _Block())
+import rag_sidecar.security as security
+import rag_sidecar.main  # noqa: F401
+assert "defusedxml" not in sys.modules
+try:
+    security.check_hidden_text(Path(sys.argv[1]).read_bytes(), "%s")
+except security.CheckerUnavailable:
+    print("ok")
+""" % DOCX_MIME
+
+
+def test_the_word_checker_is_unavailable_without_the_extra():
+    done = subprocess.run(
+        [sys.executable, "-I", "-c", _BLOCKED_DOCX_IMPORT, str(FIXTURE_DIR / "clean-plain.docx")],
+        capture_output=True,
+        text=True,
+        env={"PYTHONPATH": str(SIDECAR_DIR / "src"), "RAG_SIDECAR_SECRET": ""},
+        check=False,
+        timeout=120,
+    )
+    assert done.returncode == 0, done.stderr[-2000:]
+    assert done.stdout.strip().endswith("ok")

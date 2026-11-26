@@ -38,9 +38,27 @@ VISIBLE_EN = (
     "Progress is reported at the start of every weekly meeting.",
 )
 
+VISIBLE_IT = (
+    "Il documento descrive le fasi principali del progetto.",
+    "Ogni fase ha un responsabile e una data di consegna.",
+    "Il riepilogo viene aggiornato alla fine di ogni mese.",
+)
+VISIBLE_ZH = (
+    "本文件介绍项目的主要阶段和每个阶段的目标。",
+    "每个阶段都有负责人和计划完成日期。",
+    "进度在每周例会开始时汇报一次。",
+)
+
 HIDDEN_SENTENCE = {
     "hidden-run": "This sentence is marked as vanished text in its run.",
+    "white-text": "This sentence is written in white on a white page.",
+    "tiny-size": "Questa frase usa un carattere troppo piccolo da leggere.",
+    "comments": "这条批注只出现在审阅窗格里。",
+    "tracked-deletion": "This sentence was removed with change tracking on.",
+    "vanish-by-style": "This sentence is hidden by a style it inherits from.",
 }
+# In vanish-by-style.docx this run sits in the vanishing style but turns vanish off itself, so it is visible.
+UNVANISHED_IN_STYLE = "This sentence turns the inherited hidden setting off."
 
 BASE_STYLES = (
     '<w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="22"/></w:rPr></w:rPrDefault>'
@@ -91,7 +109,12 @@ def write_zip(members: list[tuple[str, bytes]]) -> bytes:
     return buffer.getvalue()
 
 
-def package(body: str, styles: str = "", comments: list[str] | None = None) -> bytes:
+def package(
+    body: str,
+    styles: str = "",
+    comments: list[str] | None = None,
+    extra_relationships: str = "",
+) -> bytes:
     overrides = [("/word/document.xml", MAIN_CT), ("/word/styles.xml", STYLES_CT)]
     relationships = [("rId1", STYLES_REL, "styles.xml")]
     if comments is not None:
@@ -108,6 +131,7 @@ def package(body: str, styles: str = "", comments: list[str] | None = None) -> b
     document_rels = (
         f'{XML_DECL}<Relationships xmlns="{REL_NS}">'
         + "".join(f'<Relationship Id="{rid}" Type="{kind}" Target="{target}"/>' for rid, kind, target in relationships)
+        + extra_relationships
         + "</Relationships>"
     )
     members = [
@@ -131,16 +155,181 @@ def hidden_run() -> bytes:
     return package(body)
 
 
+def white_text() -> bytes:
+    body = (
+        para(run(VISIBLE_EN[0]))
+        + para(run(HIDDEN_SENTENCE["white-text"], '<w:color w:val="FFFFFF"/>'))
+        + para(run(VISIBLE_EN[1]))
+        + para(run(VISIBLE_EN[2]))
+    )
+    return package(body)
+
+
+def tiny_size() -> bytes:
+    body = (
+        para(run(VISIBLE_IT[0]))
+        + para(run(VISIBLE_IT[1]), run(" " + HIDDEN_SENTENCE["tiny-size"], '<w:sz w:val="2"/><w:szCs w:val="2"/>'))
+        + para(run(VISIBLE_IT[2]))
+    )
+    return package(body)
+
+
+def with_comments() -> bytes:
+    body = (
+        para(
+            '<w:commentRangeStart w:id="0"/>',
+            run(VISIBLE_ZH[0]),
+            '<w:commentRangeEnd w:id="0"/>',
+            '<w:r><w:commentReference w:id="0"/></w:r>',
+        )
+        + para(run(VISIBLE_ZH[1]))
+        + para(run(VISIBLE_ZH[2]))
+    )
+    return package(body, comments=[HIDDEN_SENTENCE["comments"]])
+
+
+def tracked_deletion() -> bytes:
+    deleted = (
+        '<w:del w:id="1" w:author="Editor">'
+        f'<w:r><w:delText xml:space="preserve">{escape(HIDDEN_SENTENCE["tracked-deletion"])}</w:delText></w:r>'
+        "</w:del>"
+    )
+    inserted = f'<w:ins w:id="2" w:author="Editor">{run(VISIBLE_EN[1])}</w:ins>'
+    body = para(run(VISIBLE_EN[0])) + para(deleted, inserted) + para(run(VISIBLE_EN[2]))
+    return package(body)
+
+
+def vanish_by_style() -> bytes:
+    styles = (
+        '<w:style w:type="paragraph" w:styleId="NoteBase"><w:name w:val="Note Base"/><w:basedOn w:val="Normal"/>'
+        "<w:rPr><w:vanish/></w:rPr></w:style>"
+        '<w:style w:type="paragraph" w:styleId="NoteText"><w:name w:val="Note Text"/><w:basedOn w:val="NoteBase"/>'
+        '<w:rPr><w:i/></w:rPr></w:style>'
+    )
+    note = '<w:pStyle w:val="NoteText"/>'
+    body = (
+        para(run(VISIBLE_EN[0]))
+        + para(run(HIDDEN_SENTENCE["vanish-by-style"]), ppr=note)
+        + para(run(UNVANISHED_IN_STYLE, '<w:vanish w:val="0"/>'), ppr=note)
+        + para(run(VISIBLE_EN[1]))
+        + para(run(VISIBLE_EN[2]))
+    )
+    return package(body, styles=styles)
+
+
 def clean_plain() -> bytes:
     return package(visible(*VISIBLE_EN))
 
 
+def clean_styled() -> bytes:
+    styles = (
+        '<w:style w:type="paragraph" w:styleId="Heading1"><w:name w:val="heading 1"/><w:basedOn w:val="Normal"/>'
+        '<w:rPr><w:b/><w:color w:val="2F5496"/><w:sz w:val="32"/></w:rPr></w:style>'
+        '<w:style w:type="paragraph" w:styleId="SmallPrint"><w:name w:val="Small Print"/><w:basedOn w:val="Normal"/>'
+        '<w:rPr><w:color w:val="595959"/><w:sz w:val="16"/></w:rPr></w:style>'
+        '<w:style w:type="character" w:styleId="Accent"><w:name w:val="Accent"/>'
+        '<w:rPr><w:color w:val="C00000"/></w:rPr></w:style>'
+        '<w:style w:type="table" w:styleId="BandedTable"><w:name w:val="Banded Table"/>'
+        '<w:tblStylePr w:type="firstRow"><w:rPr><w:color w:val="FFFFFF"/></w:rPr>'
+        '<w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="1F3864"/></w:tcPr></w:tblStylePr></w:style>'
+    )
+    white_bold = '<w:b/><w:color w:val="FFFFFF"/>'
+    header_cell = (
+        '<w:tc><w:tcPr><w:shd w:val="clear" w:color="auto" w:fill="1F3864"/></w:tcPr>'
+        f"{para(run('Item', white_bold))}</w:tc>"
+    )
+    # No direct cell shading: the dark fill comes from the table style's first-row formatting.
+    styled_header = f"<w:tc>{para(run('Owner', white_bold))}</w:tc>"
+    body_cell = f"<w:tc>{para(run('Weekly summary'))}</w:tc><w:tc>{para(run('Team lead'))}</w:tc>"
+    table = (
+        '<w:tbl><w:tblPr><w:tblStyle w:val="BandedTable"/></w:tblPr>'
+        f"<w:tr>{header_cell}{styled_header}</w:tr><w:tr>{body_cell}</w:tr></w:tbl>"
+    )
+    body = (
+        para(run("Project overview"), ppr='<w:pStyle w:val="Heading1"/>')
+        + para(run(VISIBLE_EN[0]), run(" Key point.", '<w:rStyle w:val="Accent"/>'))
+        + table
+        + para(run(VISIBLE_EN[1]), ppr='<w:shd w:val="clear" w:color="auto" w:fill="F2F2F2"/>')
+        + para(run(VISIBLE_EN[2]), run("1", '<w:vertAlign w:val="superscript"/><w:sz w:val="14"/>'))
+        + para(run("Prepared for internal planning only."), ppr='<w:pStyle w:val="SmallPrint"/>')
+        + para(run("Light text on a dark band.", '<w:color w:val="FFFFFF"/><w:shd w:val="clear" w:color="auto" w:fill="333333"/>'))
+        + para(run("Marked text.", '<w:highlight w:val="yellow"/>'))
+    )
+    external = (
+        '<Relationship Id="rId9" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" '
+        'Target="https://example.org/reference/overview" TargetMode="External"/>'
+    )
+    return package(body, styles=styles, extra_relationships=external)
+
+
+def clean_empty() -> bytes:
+    return package("<w:p/>")
+
+
 HIDDEN_FIXTURES = {
     "hidden-run.docx": (hidden_run, "vanished_run"),
+    "white-text.docx": (white_text, "color_near_background"),
+    "tiny-size.docx": (tiny_size, "font_too_small"),
+    "comments.docx": (with_comments, "comment"),
+    "tracked-deletion.docx": (tracked_deletion, "tracked_deletion"),
+    "vanish-by-style.docx": (vanish_by_style, "vanished_run"),
 }
 CLEAN_FIXTURES = {
     "clean-plain.docx": clean_plain,
+    "clean-styled.docx": clean_styled,
+    "clean-empty.docx": clean_empty,
 }
+
+
+# Hostile packages for the safety tests; built in memory by the tests, never written to the fixture folder.
+def too_many_members(count: int) -> bytes:
+    members = [(f"word/media/part{index:05d}.xml", b"<a/>") for index in range(count)]
+    return write_zip([("word/document.xml", document_xml(para(run(VISIBLE_EN[0]))).encode("utf-8")), *members])
+
+
+def oversized_member(size: int) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        info = zipfile.ZipInfo("word/document.xml", date_time=FIXED_DATE)
+        info.compress_type = zipfile.ZIP_DEFLATED
+        with archive.open(info, "w") as handle:
+            block = b" " * (1 << 20)
+            for _ in range(size // len(block)):
+                handle.write(block)
+    return buffer.getvalue()
+
+
+def oversized_package(members: int, size: int) -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for index in range(members):
+            info = zipfile.ZipInfo(f"word/media/blob{index}.bin", date_time=FIXED_DATE)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            with archive.open(info, "w") as handle:
+                block = b"\0" * (1 << 20)
+                for _ in range(size // len(block)):
+                    handle.write(block)
+    return buffer.getvalue()
+
+
+def entity_expansion() -> bytes:
+    entities = '<!ENTITY a "aaaaaaaaaa">' + "".join(
+        f'<!ENTITY {chr(98 + level)} "{("&" + chr(97 + level) + ";") * 10}">' for level in range(8)
+    )
+    document = (
+        f'{XML_DECL}<!DOCTYPE w:document [{entities}]>'
+        f'<w:document xmlns:w="{W_NS}"><w:body><w:p><w:r><w:t>&i;</w:t></w:r></w:p></w:body></w:document>'
+    )
+    return _with_document(document)
+
+
+def _with_document(document: str) -> bytes:
+    return write_zip(
+        [
+            ("[Content_Types].xml", f'{XML_DECL}<Types xmlns="{CT_NS}"/>'.encode("utf-8")),
+            ("word/document.xml", document.encode("utf-8")),
+        ]
+    )
 
 
 def build_fixtures() -> dict[str, bytes]:

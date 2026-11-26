@@ -1,16 +1,58 @@
 {
   "fixtures": {
+    "clean-empty.docx": {
+      "expected": "clean",
+      "hidden_text": null,
+      "reason": null,
+      "sha256": "ab3d0769c110691502163c1bbc8d6cd7cedcc50cfe32119faacfdff664a1c1e0"
+    },
     "clean-plain.docx": {
       "expected": "clean",
       "hidden_text": null,
       "reason": null,
       "sha256": "9ffc058b3e8bb17defe05125131e489cd65785294a4ebaf67d1429cea3aa5845"
     },
+    "clean-styled.docx": {
+      "expected": "clean",
+      "hidden_text": null,
+      "reason": null,
+      "sha256": "2680b63568669b9c50cf3625ebe6c4d56a3db63b596f25cee2e5887cb76ad3fa"
+    },
+    "comments.docx": {
+      "expected": "hidden_found",
+      "hidden_text": "这条批注只出现在审阅窗格里。",
+      "reason": "comment",
+      "sha256": "63f2eb5b1f139d1f84306bf0288c5719571643643d00e0f71ed2ac6e0e9269ff"
+    },
     "hidden-run.docx": {
       "expected": "hidden_found",
       "hidden_text": "This sentence is marked as vanished text in its run.",
       "reason": "vanished_run",
       "sha256": "506c56c0aa4a8fb67b9b1c911aff929247cdfaeea0432c83e60f52bc7b6b1c79"
+    },
+    "tiny-size.docx": {
+      "expected": "hidden_found",
+      "hidden_text": "Questa frase usa un carattere troppo piccolo da leggere.",
+      "reason": "font_too_small",
+      "sha256": "3816b0884520d986f30f41b13bee5350a3cd61afaabea6c85a26c64488484ccf"
+    },
+    "tracked-deletion.docx": {
+      "expected": "hidden_found",
+      "hidden_text": "This sentence was removed with change tracking on.",
+      "reason": "tracked_deletion",
+      "sha256": "1543c18697cbb776d84b42268b2ee7c49d5a3c7469950c0702188d291865b462"
+    },
+    "vanish-by-style.docx": {
+      "expected": "hidden_found",
+      "hidden_text": "This sentence is hidden by a style it inherits from.",
+      "reason": "vanished_run",
+      "sha256": "9200df341fc091dddbc289c031b1eb78b8071de4ae6663bcf88a87fb8d883a27"
+    },
+    "white-text.docx": {
+      "expected": "hidden_found",
+      "hidden_text": "This sentence is written in white on a white page.",
+      "reason": "color_near_background",
+      "sha256": "5cf267f24d0358b7f2953beb3c9cda8d236d74fcd1662812358a23097d265963"
     }
   },
   "generator": "eval/fixtures/security/generate_hidden_docx.py"
