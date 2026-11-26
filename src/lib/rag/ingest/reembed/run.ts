@@ -5,6 +5,7 @@ import { canonicalModelId, getEmbeddingProviderFor } from '../../embeddings/regi
 import type { EmbedOutput, EmbeddingProvider } from '../../embeddings/types';
 import type { DocType } from '../profiles/load';
 import { getProcessingProfile } from '../profiles/load';
+import { chunkHeadersFor } from '../attributes/header';
 import { buildEmbeddingText, templateHeaderFor } from '../text/embedding-text';
 import { countTokens } from '../text/tokens';
 import { ReembedWriterError, createReembedWriter, isTenantKey, type ReembedChunk, type ReembedRun } from '../writer';
@@ -157,7 +158,7 @@ function switchIsOff(): boolean {
  * The text ingest embeds for the chunk, rebuilt from stored columns only: the section path, the profile header rendered from the document's
  * stored columns, and the content. An unknown document type renders no header.
  */
-export function embeddingTextOf(chunk: ReembedChunk, warnings: Set<string>): string {
+export function embeddingTextOf(chunk: ReembedChunk, warnings: Set<string>, attributeHeader?: string | null): string {
   let header = '';
   if (chunk.docType) {
     try {
@@ -166,7 +167,23 @@ export function embeddingTextOf(chunk: ReembedChunk, warnings: Set<string>): str
       warnings.add('unknown_doc_type');
     }
   }
-  return buildEmbeddingText({ section_path: chunk.sectionPath, content: chunk.content, template_header: header });
+  return buildEmbeddingText({
+    section_path: chunk.sectionPath,
+    content: chunk.content,
+    template_header: header,
+    ...(attributeHeader !== undefined && attributeHeader !== null ? { attribute_header: attributeHeader } : {}),
+  });
+}
+
+/**
+ * TPL-05 (D-27): the stored header of each chunk of a batch that is in step with its document, one read per tenant key of the batch;
+ * an empty map without any call while RAG_ATTRIBUTE_HEADER is effectively off.
+ */
+export function inStepHeaders(db: RpcClient, chunks: ReadonlyArray<{ id: string; tenantKey: string }>, signal: AbortSignal): Promise<Map<string, string>> {
+  return chunkHeadersFor(
+    chunks.map((chunk) => ({ chunkId: chunk.id, tenantKey: chunk.tenantKey })),
+    { signal, db },
+  );
 }
 
 /**
@@ -316,7 +333,14 @@ export async function runReembed(input: RunReembedInput): Promise<ReembedReport>
   /** Embeds one batch and writes it; returns the failure reason, or null when the batch is stored. */
   async function processBatch(chunks: ReembedChunk[], phase: ReembedPhase, moveCursor: boolean): Promise<string | null> {
     signal.throwIfAborted();
-    const texts = chunks.map((chunk) => embeddingTextOf(chunk, warnings));
+    let headers: Map<string, string>;
+    try {
+      headers = await inStepHeaders(input.db, chunks, signal);
+    } catch (error) {
+      if (signal.aborted) throw error;
+      return 'attribute_header_read_failed';
+    }
+    const texts = chunks.map((chunk) => embeddingTextOf(chunk, warnings, headers.get(chunk.id)));
     let output: EmbedOutput;
     try {
       output = await provider.embedDocuments(texts, { dims: run.dims, signal });
@@ -426,9 +450,10 @@ export async function dryRunReembed(input: DryRunInput): Promise<DryRunReport> {
       signal.throwIfAborted();
       const chunks = await writer.previewBatch(profile.id, tenantKey, after, batchSize);
       if (chunks.length === 0) break;
+      const headers = await inStepHeaders(input.db, chunks, signal);
       for (const chunk of chunks) {
         const entry = (totals[chunk.tenantKey] ??= { chunks: 0, tokens: 0 });
-        entry.tokens += countTokens(embeddingTextOf(chunk, warnings));
+        entry.tokens += countTokens(embeddingTextOf(chunk, warnings, headers.get(chunk.id)));
       }
       after = (chunks[chunks.length - 1] as ReembedChunk).id;
     }
