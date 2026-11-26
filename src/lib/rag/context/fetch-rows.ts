@@ -62,3 +62,7 @@ export async function fetchAssemblyRows(
 
   return { documents, chunkMetadata };
 }
+
+export const VERSION_LABELS_MIGRATION_WARNING = '';
+
+export function resetVersionColumnsWarningForTests(): void {}
