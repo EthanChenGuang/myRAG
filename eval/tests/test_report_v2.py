@@ -364,3 +364,16 @@ def test_duplicate_flood_block_renders_only_with_flood_items(tmp_path: Path):
     block = md.split("## Duplicate flood (report-only)", 1)[1].split("\n## ", 1)[0]
     assert "| en | 1.000 (n=1) | 0.000 (n=1) |" in block
     assert "| overall | 1.000 (n=1) | 0.000 (n=1) |" in block
+
+
+def test_identifier_block_renders_only_with_identifier_items(tmp_path: Path):
+    item = _item("en-id-001", "en", answerable=True, category="identifier_near_miss")
+    item = item.model_copy(update={"tags": ["asked_identifier:QX-4471"]})
+    trace = _hit_trace("en-id-001")
+    trace = trace.model_copy(update={"kept": [trace.kept[0].model_copy(update={"identifiers_norm": ["qx4471"]})]})
+    report = _build([item], [trace])
+    block = _render(report, tmp_path).split("## Identifier near-miss (report-only)", 1)
+    assert len(block) == 2
+    assert "| overall | 1.000 (n=1) | 0.000 (n=1) |" in block[1].split("\n## ", 1)[0]
+    plain = _build([_item("en-general-001", "en", answerable=True)], [_hit_trace("en-general-001")])
+    assert "Identifier near-miss" not in _render(plain, tmp_path / "plain")

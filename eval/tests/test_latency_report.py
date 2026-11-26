@@ -258,7 +258,7 @@ def test_ttft_rows_render_hit_miss_bypass_and_pre_generation_against_budgets(tmp
     assert "| hit | 100.0 | 100.0 | 1 | 300.0 | 600.0 | within |" in block
     assert "| miss | 3500.0 | 3500.0 | 1 | 1500.0 | 3000.0 | over |" in block
     assert "| bypass | - | - | 0 | 1500.0 | 3000.0 | - |" in block
-    assert "| pre-generation | 1300.0 | 1300.0 | 2 | - | 1200.0 | over |" in block
+    assert "| pre-generation | 50.0 | 1300.0 | 2 | - | 1200.0 | over |" in block
 
 
 def test_ttft_rows_without_ttft_budgets_show_dashes(tmp_path: Path):

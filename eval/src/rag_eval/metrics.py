@@ -23,6 +23,7 @@ from rag_sidecar.contracts.report import (
 from rag_eval.bounds import upper_bound
 from rag_eval.config_files import load_gate_population
 from rag_eval.matching import chunk_matches_span, normalize_text
+from rag_eval.identifiers import is_near_miss, normalize_identifier
 from rag_eval.ndcg import gold_unit_first_hits, ndcg_at_context_k
 from rag_eval.native_review import MIN_GATED_ITEMS, counts_in_gated_slices, report_only_reason
 from rag_eval.table_answer import score_table_answer
@@ -121,6 +122,44 @@ def _context_fields(trace: RagTrace, item: GoldenItem) -> dict[str, object]:
     return fields
 
 
+IDENTIFIER_NEAR_MISS = "identifier_near_miss"
+ASKED_IDENTIFIER_TAG = "asked_identifier:"
+
+
+def _asked_identifier(item: GoldenItem) -> str:
+    for tag in item.tags:
+        if tag.startswith(ASKED_IDENTIFIER_TAG):
+            asked = normalize_identifier(tag[len(ASKED_IDENTIFIER_TAG) :])
+            if asked:
+                return asked
+    raise ValueError(f"{IDENTIFIER_NEAR_MISS} item {item.id!r} needs a tag {ASKED_IDENTIFIER_TAG}<spelling>")
+
+
+def _identifier_fields(trace: RagTrace, item: GoldenItem) -> dict[str, object]:
+    """D-32 on identifier_near_miss items: leak and precision over the kept chunks' normalized identifiers."""
+    if item.category != IDENTIFIER_NEAR_MISS:
+        return {}
+    asked = _asked_identifier(item)
+    if any(chunk.identifiers_norm is None for chunk in trace.kept):
+        return {}
+    carries = {chunk.chunk_id: asked in (chunk.identifiers_norm or []) for chunk in trace.kept}
+    leak = any(
+        not carries[chunk.chunk_id] and any(is_near_miss(asked, other) for other in chunk.identifiers_norm or [])
+        for chunk in trace.kept
+    )
+    if not item.answerable:
+        precise = trace.refused and not leak
+    else:
+        cited = [chunk_id for citation in trace.citations for chunk_id in citation.chunkIds]
+        precise = (
+            not trace.refused
+            and not leak
+            and any(carries.values())
+            and all(carries.get(chunk_id, False) for chunk_id in cited)
+        )
+    return {"identifier_precise": precise, "near_miss_leak": leak}
+
+
 def score_items(
     traces: list[RagTrace],
     golden: list[GoldenItem],
@@ -167,6 +206,7 @@ def score_items(
                 lexical_hit_at_10=_lexical_hit(trace, item, leg_ran=leg_ran),
                 report_only_reason=report_only_reason(item),
                 **_context_fields(trace, item),
+                **_identifier_fields(trace, item),
             )
         )
     return results

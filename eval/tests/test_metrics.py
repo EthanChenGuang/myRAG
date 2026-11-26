@@ -814,8 +814,12 @@ ID_DOC = "identifiers.en.md"
 
 
 def _identifier_item(item_id: str, asked: str | None, *, answerable: bool = True) -> GoldenItem:
-    item = _item(item_id, [(ID_DOC, "the asked record")] if answerable else None, category="identifier_near_miss")
-    return item.model_copy(update={"tags": [f"asked_identifier:{asked}"] if asked is not None else []})
+    item = _item(item_id, [(ID_DOC, "the asked record")], category="identifier_near_miss")
+    update: dict[str, object] = {"tags": [f"asked_identifier:{asked}"] if asked is not None else []}
+    if not answerable:
+        # D-32 no-answer identifier items; the GoldenItem category rule does not admit them yet (hand-off 04.2-12-golden-rule).
+        update.update(answerable=False, expected_answer=None, gold_evidence=[])
+    return item.model_copy(update=update)
 
 
 def _identifier_trace(item_id: str, chunks: list[list[str] | None], *, refused: bool = False, cited: list[int] = ()):
