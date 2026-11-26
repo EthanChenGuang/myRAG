@@ -21,6 +21,8 @@ ReviewReason = Literal[
     "claim_unsupported",
     "output_guard",
     "version_conflict",
+    "representative",
+    "re_review",
 ]
 
 

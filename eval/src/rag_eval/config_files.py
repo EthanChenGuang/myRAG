@@ -11,6 +11,7 @@ from typing import Callable, TypeVar
 
 from pydantic import BaseModel, ValidationError
 from rag_sidecar.contracts.feedback_loop import GatePopulationConfig
+from rag_sidecar.contracts.quality_gates import QualityGates, default_quality_gates
 from rag_sidecar.contracts.query import QueryParams
 from rag_sidecar.contracts.retrieval import (
     ChunkingSweepReport,
@@ -37,6 +38,7 @@ CONFIG_TARGETS: list[tuple[str, type[BaseModel], Callable[[], BaseModel]]] = [
         lambda: ChunkingSweepReport(profiles=[], provenance=ConfigProvenance(source="defaults")),
     ),
     ("eval/config/dup-cluster-params.json", DupClusterParamsFile, DupClusterParamsFile),
+    ("eval/config/quality-gates.json", QualityGates, default_quality_gates),
 ]
 
 PROTECTED_SOURCES = frozenset({"sweep", "calibration", "fixture", "live"})

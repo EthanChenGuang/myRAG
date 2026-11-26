@@ -1,0 +1,101 @@
+{
+  "$defs": {
+    "CompositionLanguageResult": {
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "minimum": 0,
+          "title": "Items",
+          "type": "integer"
+        },
+        "kinds": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "title": "Kinds",
+          "type": "object"
+        },
+        "language": {
+          "enum": [
+            "zh",
+            "en",
+            "it"
+          ],
+          "title": "Language",
+          "type": "string"
+        },
+        "min": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Min",
+          "type": "number"
+        },
+        "no_answer": {
+          "minimum": 0,
+          "title": "No Answer",
+          "type": "integer"
+        },
+        "result": {
+          "enum": [
+            "passed",
+            "failed",
+            "warning",
+            "insufficient_n"
+          ],
+          "title": "Result",
+          "type": "string"
+        },
+        "share": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Share"
+        },
+        "target": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Target",
+          "type": "number"
+        }
+      },
+      "required": [
+        "language",
+        "items",
+        "no_answer",
+        "min",
+        "target",
+        "result"
+      ],
+      "title": "CompositionLanguageResult",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "languages": {
+      "items": {
+        "$ref": "#/$defs/CompositionLanguageResult"
+      },
+      "title": "Languages",
+      "type": "array"
+    },
+    "missing_required_kinds": {
+      "items": {
+        "pattern": "^[a-z0-9_]+$",
+        "type": "string"
+      },
+      "title": "Missing Required Kinds",
+      "type": "array"
+    }
+  },
+  "title": "CompositionResult",
+  "type": "object"
+}

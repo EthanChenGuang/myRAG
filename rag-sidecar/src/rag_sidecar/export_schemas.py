@@ -193,6 +193,8 @@ from rag_sidecar.contracts.retrieval import (
     VersionRange,
 )
 from rag_sidecar.contracts.samples import build_samples
+from rag_sidecar.contracts.golden_lifecycle import GoldenSetManifest
+from rag_sidecar.contracts.quality_gates import AbsoluteGateResult, CompositionResult, QualityGates
 from rag_sidecar.contracts.templated import (
     AttributeDefinition,
     AttributeFilterConfig,
@@ -400,6 +402,10 @@ CONTRACTS: list[tuple[type[BaseModel], Mode]] = [
     (TerminologyCandidate, "serialization"),
     (TerminologyLexiconTerm, "serialization"),
     (TerminologyTranslationPair, "serialization"),
+    (QualityGates, "validation"),
+    (AbsoluteGateResult, "serialization"),
+    (CompositionResult, "serialization"),
+    (GoldenSetManifest, "validation"),
     (TerminologyLexicon, "serialization"),
     (SectionRuleSet, "validation"),
     (BoilerplateRule, "validation"),

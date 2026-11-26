@@ -57,7 +57,9 @@
           "no_source_opened",
           "claim_unsupported",
           "output_guard",
-          "version_conflict"
+          "version_conflict",
+          "representative",
+          "re_review"
         ],
         "type": "string"
       },

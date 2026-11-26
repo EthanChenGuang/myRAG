@@ -73,7 +73,7 @@ DictionaryRelation = Literal["synonym", "abbreviation", "translation", "misspell
 TrainingSplit = Literal["train", "held_out"]
 FailureLayer = Literal["retrieval", "rerank_or_assembly", "refusal", "generation", "groundedness", "injection"]
 GatePopulation = Literal["all", "production", "real"]
-RealProvenance = Literal["production", "human"]
+RealProvenance = Literal["production", "human", "historical"]
 
 MAX_LOG_CANDIDATES = 50
 MAX_QUERY_CHARS = 2000

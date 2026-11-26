@@ -1,5 +1,88 @@
 {
   "samples": {
+    "AbsoluteGateResult": {
+      "checks": [
+        {
+          "check": "false_answer_rate",
+          "denominator": 20,
+          "limit": 0.05,
+          "limit_kind": "max",
+          "measured": 0.0,
+          "numerator": 0,
+          "reason": null,
+          "result": "passed",
+          "slice": "overall"
+        },
+        {
+          "check": "false_answer_rate",
+          "denominator": 4,
+          "limit": 0.05,
+          "limit_kind": "max",
+          "measured": 0.0,
+          "numerator": 0,
+          "reason": "below_min_n",
+          "result": "insufficient_n",
+          "slice": "language:it"
+        },
+        {
+          "check": "faithfulness_floor",
+          "denominator": null,
+          "limit": 0.85,
+          "limit_kind": "min",
+          "measured": null,
+          "numerator": null,
+          "reason": "no_judge_report",
+          "result": "skipped",
+          "slice": "overall"
+        },
+        {
+          "check": "false_answer_rate",
+          "denominator": 20,
+          "limit": null,
+          "limit_kind": "max",
+          "measured": 0.0,
+          "numerator": 0,
+          "reason": "null_ceiling",
+          "result": "report_only",
+          "slice": "overall"
+        }
+      ],
+      "composition": {
+        "languages": [
+          {
+            "items": 40,
+            "kinds": {
+              "no_answer": 8
+            },
+            "language": "en",
+            "min": 0.15,
+            "no_answer": 8,
+            "result": "passed",
+            "share": 0.2,
+            "target": 0.2
+          },
+          {
+            "items": 12,
+            "kinds": {},
+            "language": "it",
+            "min": 0.15,
+            "no_answer": 2,
+            "result": "insufficient_n",
+            "share": null,
+            "target": 0.2
+          }
+        ],
+        "missing_required_kinds": []
+      },
+      "exit_code": 0,
+      "failed": [],
+      "mode": "enforce",
+      "passed": true,
+      "rag_mode": "strict",
+      "stale_count": 0,
+      "stale_result": "passed",
+      "stale_share": 0.0
+    },
     "ActivationEvidence": {
       "backfill_run_id": "01234567-0123-4012-8012-0123456789ab",
       "baseline_profile": "openai-3-small-1536",
@@ -1365,6 +1448,33 @@
       "scorer": "hhem_2_1_open",
       "total": 2,
       "unsupported": 0
+    },
+    "CompositionResult": {
+      "languages": [
+        {
+          "items": 40,
+          "kinds": {
+            "no_answer": 8
+          },
+          "language": "en",
+          "min": 0.15,
+          "no_answer": 8,
+          "result": "passed",
+          "share": 0.2,
+          "target": 0.2
+        },
+        {
+          "items": 12,
+          "kinds": {},
+          "language": "it",
+          "min": 0.15,
+          "no_answer": 2,
+          "result": "insufficient_n",
+          "share": null,
+          "target": 0.2
+        }
+      ],
+      "missing_required_kinds": []
     },
     "CondensedQuery": {
       "standalone": "Does the product warranty cover ERR_TIMEOUT, and how long is the warranty?",
@@ -5027,6 +5137,67 @@
       "review_status": "approved",
       "split": "dev",
       "tags": []
+    },
+    "GoldenSetManifest": {
+      "changelog": [
+        {
+          "added": [
+            "en-general-001",
+            "en-general-002",
+            "en-general-003"
+          ],
+          "changed": [],
+          "date": "2026-01-01",
+          "retired": [],
+          "stale": [],
+          "version": 1
+        },
+        {
+          "added": [],
+          "changed": [],
+          "date": "2026-02-01",
+          "retired": [
+            "en-general-003"
+          ],
+          "stale": [
+            "en-general-002"
+          ],
+          "version": 2
+        }
+      ],
+      "items": [
+        {
+          "id": "en-general-001",
+          "item_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "last_reviewed_at": "2026-01-01",
+          "retire_reason": null,
+          "stale_reason": null,
+          "stale_since": null,
+          "status": "active"
+        },
+        {
+          "id": "en-general-002",
+          "item_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "last_reviewed_at": null,
+          "retire_reason": null,
+          "stale_reason": "source_document_changed",
+          "stale_since": "2026-02-01",
+          "status": "stale"
+        },
+        {
+          "id": "en-general-003",
+          "item_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "last_reviewed_at": null,
+          "retire_reason": "duplicate_item",
+          "stale_reason": null,
+          "stale_since": null,
+          "status": "retired"
+        }
+      ],
+      "manifest_sha256": "6a8dd45355f33c6d6e25ff6534bcd51ee7d24f2e166d489c0a85ea28a580ecc7",
+      "schema_version": 1,
+      "set_id": "fixture",
+      "version": 2
     },
     "GoldenSplitManifest": {
       "assignments": {
@@ -13590,6 +13761,59 @@
       "partial": false,
       "passed": false,
       "score": 0.45
+    },
+    "QualityGates": {
+      "ceilings": {
+        "false_answer_rate": {
+          "balanced": null,
+          "flexible": null,
+          "strict": 0.05
+        },
+        "false_refusal_rate": {
+          "balanced": 0.25,
+          "flexible": 0.25,
+          "strict": 0.25
+        },
+        "min_n": 10
+      },
+      "composition": {
+        "excluded_categories": [
+          "small_talk"
+        ],
+        "min_items_per_language": 20,
+        "no_answer_share_min": 0.15,
+        "no_answer_share_target": 0.2,
+        "required_no_answer_kinds": []
+      },
+      "config_hash": null,
+      "floors": {
+        "nightly": {
+          "answer_relevance": 0.75,
+          "faithfulness": 0.85
+        },
+        "smoke": {}
+      },
+      "judge": {
+        "accuracy_floor": 0.8,
+        "kappa_floor": 0.6,
+        "length_bias_max_delta": 0.1,
+        "max_age_days": 35,
+        "min_labels_per_language": 100,
+        "pass_threshold": {
+          "answer_relevance": 0.7,
+          "faithfulness": 0.8
+        },
+        "perturbation_max_delta": 0.1,
+        "seed_min_labels_per_language": 50
+      },
+      "lifecycle": {
+        "max_stale_share": 0.1,
+        "re_review_days": 90
+      },
+      "provenance": {
+        "source": "defaults"
+      },
+      "schema_version": 1
     },
     "QuarantineReason": {
       "checker_version": "hidden-text@1",
