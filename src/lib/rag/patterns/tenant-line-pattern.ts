@@ -128,3 +128,34 @@ export async function checkTenantLinePattern(
   if (found.size === 0) return validation;
   return { ok: false, findings: ordered(found) };
 }
+
+export const TENANT_LINE_MATCH_WINDOW = 0;
+export const TENANT_LINE_DEFAULT_DEADLINE_MS = 0;
+
+export interface TenantLinePatternEntry {
+  id: string;
+  kind: TenantLinePatternKind;
+  pattern: string;
+  flags: string;
+}
+
+export interface TenantLineHit {
+  inputIndex: number;
+  patternId: string;
+  start: number;
+  end: number;
+}
+
+export type TenantLineMatchError = 'too_many_patterns' | 'too_many_lines' | 'invalid_pattern_id' | 'invalid_regex' | 'worker_failed';
+
+export type TenantLineMatchVerdict =
+  | { kind: 'ok'; hits: TenantLineHit[]; skipped: string[] }
+  | { kind: 'timeout' }
+  | { kind: 'error'; error: TenantLineMatchError };
+
+export async function matchTenantLinePatterns(
+  _request: { patterns: readonly TenantLinePatternEntry[]; lines: readonly string[] },
+  _options: { deadlineMs?: number; signal?: AbortSignal } = {},
+): Promise<TenantLineMatchVerdict> {
+  return { kind: 'error', error: 'worker_failed' };
+}
