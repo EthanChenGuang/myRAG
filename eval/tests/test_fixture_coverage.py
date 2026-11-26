@@ -26,6 +26,9 @@ INJECTION_PER_LANGUAGE_05_1_17 = 6
 # it->zh cross_lingual items; test_golden_phase6.py checks their kinds.
 PHASE6_PER_LANGUAGE_06_38 = 10
 CROSS_LINGUAL_ADDED_BY_PLAN_06_38 = 8
+# Plan 06-39: four cache_paraphrase and five cache_near_miss items per language; test_golden_phase6.py checks
+# their pairs.
+CACHE_PAIRS_PER_LANGUAGE_06_39 = 9
 PHASE6_RELATIVE_TIME_TAG = "phase6_relative_time"
 PER_LANGUAGE_CATEGORY = {
     "general": 6,
@@ -41,6 +44,8 @@ PER_LANGUAGE_CATEGORY = {
     "cross_lingual": 8,
     "selective_filter": 4,
     "small_talk": 2,
+    "cache_paraphrase": 4,
+    "cache_near_miss": 5,
 }
 PER_LANGUAGE_CATEGORY_OVERRIDES = {("en", "cross_lingual"): 13, ("it", "cross_lingual"): 13}
 # Tightest selective_filter in this corpus pins a single document (4–6 chunk rows of 71).
@@ -70,7 +75,7 @@ def test_corpus_has_one_image_caption_document():
 def test_single_language_items_forty_per_language(items):
     single = [item for item in items if item.category != "cross_lingual"]
     counts = collections.Counter(item.language for item in single)
-    per_language = INJECTION_PER_LANGUAGE_05_1_17 + PHASE6_PER_LANGUAGE_06_38
+    per_language = INJECTION_PER_LANGUAGE_05_1_17 + PHASE6_PER_LANGUAGE_06_38 + CACHE_PAIRS_PER_LANGUAGE_06_39
     assert len(single) == 102 + NO_ANSWER_ADDED_BY_PLAN_04_38 + per_language * len(LANGUAGES)
     expected = 40 + per_language
     assert {language: counts[language] for language in LANGUAGES} == {"zh": expected, "en": expected, "it": expected}
@@ -78,7 +83,7 @@ def test_single_language_items_forty_per_language(items):
 
 def test_twenty_six_cross_lingual_items_at_least_four_per_pair(items):
     cross = [item for item in items if item.category == "cross_lingual"]
-    per_language = INJECTION_PER_LANGUAGE_05_1_17 + PHASE6_PER_LANGUAGE_06_38
+    per_language = INJECTION_PER_LANGUAGE_05_1_17 + PHASE6_PER_LANGUAGE_06_38 + CACHE_PAIRS_PER_LANGUAGE_06_39
     assert len(items) == 102 + NO_ANSWER_ADDED_BY_PLAN_04_38 + per_language * len(LANGUAGES) + len(cross)
     assert len(cross) == PER_PAIR_MINIMUM * len(PAIRS) + CROSS_LINGUAL_ADDED_BY_PLAN_04_38 + CROSS_LINGUAL_ADDED_BY_PLAN_06_38
     counts = collections.Counter((item.language, item.evidence_language) for item in cross)
