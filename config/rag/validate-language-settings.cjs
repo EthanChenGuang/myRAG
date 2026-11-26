@@ -21,6 +21,57 @@ function parseLanguageList(raw) {
   return seen;
 }
 
+// Phase 5.2 D-08: every fixed-text key as `<group>.<key>`, in the field order of
+// rag_sidecar.contracts.languages (NoticeTexts, LabelTexts, InstructionTexts); tests/rag/lang/texts.test.ts
+// checks it against the generated LanguagePack schema.
+const TEXT_KEYS = Object.freeze([
+  'notices.no_information',
+  'notices.no_information_web',
+  'notices.kb_unavailable',
+  'notices.answer_truncated',
+  'notices.link_removed',
+  'notices.credential_request_blocked',
+  'notices.credential_request_warning',
+  'notices.not_confirmed',
+  'notices.uncited',
+  'notices.calc_corrected',
+  'notices.calc_not_verified',
+  'notices.document_updated_or_removed',
+  'notices.prompt_too_long',
+  'labels.from_documents',
+  'labels.from_web',
+  'labels.general_knowledge',
+  'labels.not_covered',
+  'labels.version',
+  'labels.effective_from',
+  'labels.older_version',
+  'labels.badge_verified',
+  'labels.badge_possibly_unreliable',
+  'labels.badge_not_checked',
+  'labels.badge_tooltip_verified',
+  'labels.badge_tooltip_possibly_unreliable',
+  'labels.badge_tooltip_not_checked',
+  'instructions.citation',
+  'instructions.citation_per_sentence',
+  'instructions.attached_documents',
+  'instructions.relevance',
+  'instructions.relevance_web',
+  'instructions.relevance_open',
+  'instructions.partial_answer',
+  'instructions.general_knowledge',
+  'instructions.web_separation',
+  'instructions.version',
+  'instructions.concise',
+  'instructions.calculation',
+]);
+
+function hasText(texts, dotted) {
+  const [group, key] = dotted.split('.');
+  const values = texts && Object.prototype.hasOwnProperty.call(texts, group) ? texts[group] : null;
+  if (!values || !Object.prototype.hasOwnProperty.call(values, key)) return false;
+  return typeof values[key] === 'string' && values[key] !== '';
+}
+
 // D-04 completeness parts, in the order src/lib/rag/lang/registry.ts COMPLETENESS_PARTS lists them.
 function packIsComplete(pack) {
   const ocr = pack.ocr_codes || {};
@@ -31,7 +82,7 @@ function packIsComplete(pack) {
     ocr.docling != null &&
     ocr.llamaparse != null &&
     pack.rewrite_gate_lexicon != null &&
-    texts.strict_refusal != null &&
+    TEXT_KEYS.every((key) => hasText(texts, key)) &&
     fixtures.corpus === true &&
     fixtures.golden_slices === true
   );
@@ -111,4 +162,4 @@ function normalizeLanguageSettings(rawSupported, rawPrimary, registry) {
   return { configured: true, languages, primary, monolingual: languages.length === 1 };
 }
 
-module.exports = { parseLanguageList, normalizeLanguageSettings, validateLanguageSettings };
+module.exports = { TEXT_KEYS, parseLanguageList, normalizeLanguageSettings, validateLanguageSettings };

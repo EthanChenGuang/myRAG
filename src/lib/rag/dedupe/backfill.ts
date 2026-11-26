@@ -21,6 +21,8 @@ export interface DupBackfillInput {
   resumeAfter?: string | null;
   signal?: AbortSignal;
   onBatch?: (info: DupBackfillBatchInfo) => void | Promise<void>;
+  /** Eval harness only (D-49): a fixture-fitted threshold applies. The rag:dup-clusters command never sets it. */
+  evalRun?: boolean;
 }
 
 export interface DupBackfillReport {
@@ -57,7 +59,7 @@ export async function runDupBackfill(input: DupBackfillInput): Promise<DupBackfi
     signal.throwIfAborted();
     const page = await listChunkText(input.db, input.tenantKey, { after, limit: batchSize }, signal);
     if (page.length === 0) break;
-    const batch = await clusterChunksForTenantKey(input.tenantKey, page, { db: input.db, signal });
+    const batch = await clusterChunksForTenantKey(input.tenantKey, page, { db: input.db, signal, ...(input.evalRun === true ? { evalRun: true } : {}) });
     report.batches += 1;
     report.hashed += batch.hashed;
     report.clustered += batch.clustered;

@@ -83,7 +83,9 @@ describe('ingest fixture mode is deterministic and maps filter ids', () => {
       const { rows } = await first.db.query<Row>('SELECT filename, is_current, status FROM documents WHERE id = $1', [mapped]);
       assert.equal(rows.length, 1, `${doc.relpath} maps to a written document`);
       assert.equal(rows[0]?.filename, doc.filename);
-      assert.equal(rows[0]?.is_current, true);
+      // Plan 04.2-37: an earlier version of a lineage is superseded by the later one (D-40).
+      const latest = Math.max(...corpus.documents.filter((other) => other.lineage?.id === doc.lineage?.id).map((other) => other.lineage?.version ?? 1));
+      assert.equal(rows[0]?.is_current, doc.lineage === undefined || doc.lineage.version === latest, `${doc.relpath} is_current`);
       if (!isPrechunkedOnlyDocument(doc.relpath)) assert.notEqual(mapped, doc.id, `${doc.relpath} was written by ingest()`);
     }
     const target = corpus.documents.find((doc) => !isPrechunkedOnlyDocument(doc.relpath));

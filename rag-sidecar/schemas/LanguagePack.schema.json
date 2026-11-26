@@ -15,28 +15,343 @@
       "title": "DoclingOcrCodes",
       "type": "object"
     },
-    "GroundednessStateTexts": {
+    "InstructionTexts": {
       "additionalProperties": false,
       "properties": {
-        "not_checked": {
-          "title": "Not Checked",
-          "type": "string"
+        "attached_documents": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Attached Documents"
         },
-        "possibly_unreliable": {
-          "title": "Possibly Unreliable",
-          "type": "string"
+        "calculation": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Calculation"
         },
-        "verified": {
-          "title": "Verified",
-          "type": "string"
+        "citation": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Citation"
+        },
+        "citation_per_sentence": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Citation Per Sentence"
+        },
+        "concise": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Concise"
+        },
+        "general_knowledge": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "General Knowledge"
+        },
+        "partial_answer": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Partial Answer"
+        },
+        "relevance": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Relevance"
+        },
+        "relevance_open": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Relevance Open"
+        },
+        "relevance_web": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Relevance Web"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        },
+        "web_separation": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Web Separation"
         }
       },
-      "required": [
-        "verified",
-        "possibly_unreliable",
-        "not_checked"
-      ],
-      "title": "GroundednessStateTexts",
+      "title": "InstructionTexts",
+      "type": "object"
+    },
+    "LabelTexts": {
+      "additionalProperties": false,
+      "properties": {
+        "badge_not_checked": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Badge Not Checked"
+        },
+        "badge_possibly_unreliable": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Badge Possibly Unreliable"
+        },
+        "badge_tooltip_not_checked": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Badge Tooltip Not Checked"
+        },
+        "badge_tooltip_possibly_unreliable": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Badge Tooltip Possibly Unreliable"
+        },
+        "badge_tooltip_verified": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Badge Tooltip Verified"
+        },
+        "badge_verified": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Badge Verified"
+        },
+        "effective_from": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Effective From"
+        },
+        "from_documents": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "From Documents"
+        },
+        "from_web": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "From Web"
+        },
+        "general_knowledge": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "General Knowledge"
+        },
+        "not_covered": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Not Covered"
+        },
+        "older_version": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Older Version"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Version"
+        }
+      },
+      "title": "LabelTexts",
       "type": "object"
     },
     "LanguageFixtures": {
@@ -147,25 +462,28 @@
     "LanguageTexts": {
       "additionalProperties": false,
       "properties": {
-        "attached_documents": {
-          "title": "Attached Documents",
-          "type": "string"
+        "instructions": {
+          "$ref": "#/$defs/InstructionTexts"
         },
-        "citation_instruction": {
-          "title": "Citation Instruction",
-          "type": "string"
+        "labels": {
+          "$ref": "#/$defs/LabelTexts"
         },
-        "groundedness_badges": {
-          "$ref": "#/$defs/GroundednessStateTexts"
-        },
-        "groundedness_tooltips": {
-          "$ref": "#/$defs/GroundednessStateTexts"
-        },
-        "knowledge_base_unavailable": {
-          "title": "Knowledge Base Unavailable",
-          "type": "string"
-        },
-        "strict_refusal": {
+        "notices": {
+          "$ref": "#/$defs/NoticeTexts"
+        }
+      },
+      "required": [
+        "notices",
+        "labels",
+        "instructions"
+      ],
+      "title": "LanguageTexts",
+      "type": "object"
+    },
+    "NoticeTexts": {
+      "additionalProperties": false,
+      "properties": {
+        "answer_truncated": {
           "anyOf": [
             {
               "minLength": 1,
@@ -176,17 +494,166 @@
             }
           ],
           "default": null,
-          "title": "Strict Refusal"
+          "title": "Answer Truncated"
+        },
+        "calc_corrected": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Calc Corrected"
+        },
+        "calc_not_verified": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Calc Not Verified"
+        },
+        "credential_request_blocked": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Credential Request Blocked"
+        },
+        "credential_request_warning": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Credential Request Warning"
+        },
+        "document_updated_or_removed": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Document Updated Or Removed"
+        },
+        "kb_unavailable": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Kb Unavailable"
+        },
+        "link_removed": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Link Removed"
+        },
+        "no_information": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "No Information"
+        },
+        "no_information_web": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "No Information Web"
+        },
+        "not_confirmed": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Not Confirmed"
+        },
+        "prompt_too_long": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prompt Too Long"
+        },
+        "uncited": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uncited"
         }
       },
-      "required": [
-        "knowledge_base_unavailable",
-        "citation_instruction",
-        "attached_documents",
-        "groundedness_badges",
-        "groundedness_tooltips"
-      ],
-      "title": "LanguageTexts",
+      "title": "NoticeTexts",
       "type": "object"
     }
   },

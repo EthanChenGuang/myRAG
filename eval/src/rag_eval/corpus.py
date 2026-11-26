@@ -4,6 +4,7 @@ import json
 import re
 import sys
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 
 from rag_sidecar.contracts.languages import LANGUAGE_CODES
@@ -47,6 +48,8 @@ class CorpusDocument:
     fixture_dup_template: str | None = None
     lineage: str | None = None
     version: int | None = None
+    version_label: str | None = None
+    effective_from: str | None = None
 
 
 def _js_trim(text: str) -> str:
@@ -110,18 +113,50 @@ def _parse_generate(raw: object, meta: dict, relpath: str) -> dict:
     for pair in substitutions:
         if not (isinstance(pair, list) and len(pair) == 2 and all(isinstance(part, str) for part in pair) and pair[0]):
             raise error
-    if "filename" in meta or "lineage" in meta or "version" in meta:
+    if any(key in meta for key in ("filename", "lineage", "version", "version_label", "effective_from")):
         raise error
     return {"count": int(count), "name": name, "substitutions": substitutions, "template_id": template_id}
 
 
 def _parse_lineage(meta: dict, relpath: str) -> tuple[str | None, int | None]:
-    if "lineage" not in meta and "version" not in meta:
+    if "lineage" not in meta:
         return None, None
     lineage, version = meta.get("lineage"), meta.get("version")
     if not isinstance(lineage, str) or not lineage or not _is_integer(version) or version < 1:
         raise ValueError(f"[Fixture Corpus] invalid lineage in {relpath}")
     return lineage, int(version)
+
+
+_ISO_DATE_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})$")
+
+
+def _is_iso_date(value: object) -> bool:
+    if not isinstance(value, str) or not _ISO_DATE_RE.match(value):
+        return False
+    try:
+        return date.fromisoformat(value).isoformat() == value
+    except ValueError:
+        return False
+
+
+def _parse_version_fields(meta: dict, relpath: str, has_lineage: bool) -> dict:
+    """version (only without a lineage), version_label and effective_from, as the TypeScript loader reads them (05.2 D-49, D-52)."""
+    fields: dict = {}
+    if not has_lineage and "version" in meta:
+        version = meta["version"]
+        if not _is_integer(version) or version < 1:
+            raise ValueError(f"[Fixture Corpus] invalid version in {relpath}")
+        fields["version"] = int(version)
+    if "version_label" in meta:
+        label = meta["version_label"]
+        if not isinstance(label, str) or not _js_trim(label) or len(label) > 64:
+            raise ValueError(f"[Fixture Corpus] invalid version_label in {relpath}")
+        fields["version_label"] = label
+    if "effective_from" in meta:
+        if not _is_iso_date(meta["effective_from"]):
+            raise ValueError(f"[Fixture Corpus] invalid effective_from in {relpath} (expected YYYY-MM-DD)")
+        fields["effective_from"] = meta["effective_from"]
+    return fields
 
 
 def _build_document(
@@ -132,6 +167,8 @@ def _build_document(
     fixture_dup_template: str | None = None,
     lineage: str | None = None,
     version: int | None = None,
+    version_label: str | None = None,
+    effective_from: str | None = None,
 ) -> CorpusDocument:
     language = relpath.split("/", 1)[0]
     parts: list[str] = []
@@ -164,6 +201,8 @@ def _build_document(
         fixture_dup_template=fixture_dup_template,
         lineage=lineage,
         version=version,
+        version_label=version_label,
+        effective_from=effective_from,
     )
 
 
@@ -212,8 +251,22 @@ def load_corpus(corpus_dir: Path) -> list[CorpusDocument]:
             documents.extend(_expand_template(relpath, lines, meta, _parse_generate(meta["generate"], meta, relpath)))
             continue
         lineage, version = _parse_lineage(meta, relpath)
+        fields = _parse_version_fields(meta, relpath, lineage is not None)
+        if lineage is None:
+            version = fields.get("version")
         filename = meta["filename"] if isinstance(meta.get("filename"), str) else relpath.rsplit("/", 1)[-1]
-        documents.append(_build_document(relpath, filename, lines, meta, lineage=lineage, version=version))
+        documents.append(
+            _build_document(
+                relpath,
+                filename,
+                lines,
+                meta,
+                lineage=lineage,
+                version=version,
+                version_label=fields.get("version_label"),
+                effective_from=fields.get("effective_from"),
+            )
+        )
 
     seen: set[str] = set()
     versions: set[tuple[str, int]] = set()
@@ -257,6 +310,12 @@ def _dump(corpus_dir: Path) -> str:
         if doc.lineage is not None:
             entry["lineage"] = doc.lineage
             entry["version"] = doc.version
+        elif doc.version is not None:
+            entry["version"] = doc.version
+        if doc.version_label is not None:
+            entry["version_label"] = doc.version_label
+        if doc.effective_from is not None:
+            entry["effective_from"] = doc.effective_from
         payload.append(entry)
     return json.dumps(payload, ensure_ascii=False, indent=2)
 

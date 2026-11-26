@@ -7,6 +7,7 @@ import type { EmbeddingProviderId } from '../../embeddings/types';
 import { getLanguageSettings } from '../../lang/settings';
 import { registryOrder } from '../../lang/registry';
 import { chunkLexicalText } from '../../lexical/chunk-text';
+import { chunkHeadersFor } from '../attributes/header';
 import { currentIngestConfig } from '../current-config';
 import { getIngestDeps } from '../deps';
 import type { PostPublishEvent } from '../post-publish';
@@ -287,6 +288,12 @@ async function flush(
   signal: AbortSignal,
 ): Promise<void> {
   if (translated.length > 0) {
+    // TPL-05 (D-27): the header of a source chunk in step with its document goes into the translation's lexical_text only (one read per
+    // flush, this tenant only); the translated content and the text embedded for it stay as they are.
+    const headers = await chunkHeadersFor(
+      translated.map((item) => ({ chunkId: item.chunk.chunkId, tenantKey })),
+      { signal, db },
+    );
     const vectors = await embedTexts(
       profile,
       translated.map((item) => item.content),
@@ -296,7 +303,12 @@ async function flush(
       chunk_id: item.chunk.chunkId,
       language: item.language,
       content: item.content,
-      lexical_text: chunkLexicalText({ sectionPath: [], content: item.content, chunkKind: item.chunk.chunkKind }),
+      lexical_text: chunkLexicalText({
+        sectionPath: [],
+        content: item.content,
+        chunkKind: item.chunk.chunkKind,
+        ...(headers.has(item.chunk.chunkId) ? { attributeHeader: headers.get(item.chunk.chunkId) } : {}),
+      }),
       source_content_hash: sourceContentHash(item.chunk.content),
       model: modelId,
       glossary_version: item.glossaryVersion,

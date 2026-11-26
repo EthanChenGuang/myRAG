@@ -1,4 +1,6 @@
 import { formatURLsForContext, type ExtractedURL } from '@/lib/url-extractor';
+import { readAnswerConfig } from '../generation/answer-config';
+import { neutralizeSentinel } from '../generation/sentinel';
 import { renderReferencedSection } from '../refs/resolve';
 import type { InjectionMarks } from '../security/injection-check';
 import { legacyKeepReason, legacyQueryTerms } from './relevance';
@@ -111,6 +113,8 @@ export interface AssembleOutput<C extends AssemblyCandidate = AssemblyCandidate>
   links: ExtractedURL[];
   refusalCandidate: boolean;
   blocks: ContextBlock[];
+  /** Sentinel tokens neutralized in the context (a rule switch on); absent when none was found. */
+  neutralizedSentinels?: number;
 }
 
 export const NO_CONTEXT_TEXT = 'No relevant context found.';
@@ -223,14 +227,17 @@ class BlockLabeller {
   readonly blocks: ContextBlock[] = [];
   private ordinal = 0;
 
-  constructor(private readonly labeler: CitationLabeler | undefined) {}
+  constructor(
+    private readonly labeler: CitationLabeler | undefined,
+    private readonly neutralize: (text: string) => string = (text) => text,
+  ) {}
 
   /** Block index to the label line written before it. */
   readonly headers = new Map<number, string>();
 
   /** Records the block; returns its label when a labeler is set and the block is not an image. */
   add(draft: DraftBlock): CitationLabel | null {
-    const unlabelled = { ...draft, title: blockTitle(draft) };
+    const unlabelled = { ...draft, title: this.neutralize(blockTitle(draft)) };
     if (!this.labeler || draft.isImage) {
       this.blocks.push({ ...unlabelled, alias: null });
       return null;
@@ -275,11 +282,15 @@ export function buildContext<C extends AssemblyCandidate>(
     if (!docById.has(doc.id)) docById.set(doc.id, doc);
   }
 
-  const labeller = new BlockLabeller(input.citationLabeler);
+  const sentinel = sentinelNeutralizer();
+  const labeller = new BlockLabeller(input.citationLabeler, sentinel.quiet);
   const marks = input.injectionMarks ?? null;
   const entries: WrapEntry[] = [];
-  let context = filtered.referencedContext;
-  const sections = input.referenced?.sections;
+  const sections = sentinel.on
+    ? input.referenced?.sections?.map((section) => (section.missing ? section : { ...section, text: sentinel.text(section.text) }))
+    : input.referenced?.sections;
+  // Section texts are counted above; the rendered string of the same sections is neutralized without counting them again.
+  let context = sections?.length ? sentinel.quiet(filtered.referencedContext) : sentinel.text(filtered.referencedContext);
   if (sections?.length) {
     const rendered = sections.map((section, sectionIndex) => {
       if (section.missing) {
@@ -331,7 +342,7 @@ export function buildContext<C extends AssemblyCandidate>(
         chunksByDocument.set(groupKey, []);
       }
       chunksByDocument.get(groupKey)!.push({
-        content: chunk.content,
+        content: sentinel.text(chunk.content),
         similarity: chunk.similarity,
         chunkNum,
         chunkId: chunk.chunk_id,
@@ -475,6 +486,9 @@ export function buildContext<C extends AssemblyCandidate>(
     if (wrapped !== null) context = wrapped;
   }
 
+  // Residual pass: document names, version lines and links rendered outside the block text.
+  context = sentinel.text(context);
+
   if (!context.trim()) {
     context = NO_CONTEXT_TEXT;
   }
@@ -522,7 +536,43 @@ export function buildContext<C extends AssemblyCandidate>(
     });
   });
 
-  return { context, usedDocuments, relevantChunks, kept, queryTerms, sourceImages, links, refusalCandidate, blocks: labeller.blocks };
+  return {
+    context,
+    usedDocuments,
+    relevantChunks,
+    kept,
+    queryTerms,
+    sourceImages,
+    links,
+    refusalCandidate,
+    blocks: labeller.blocks,
+    ...(sentinel.count > 0 ? { neutralizedSentinels: sentinel.count } : {}),
+  };
+}
+
+/**
+ * RESEARCH Pitfall 13: with RAG_CONTEXT_RELEVANCE_RULE or RAG_PARTIAL_ANSWER_RULE on, the no-answer sentinel is
+ * neutralized in retrieved text so a document cannot make the model refuse; with both off every text is returned as is.
+ */
+function sentinelNeutralizer() {
+  const config = readAnswerConfig();
+  const on = config.contextRelevanceRule || config.partialAnswerRule;
+  const state = { count: 0 };
+  return {
+    on,
+    get count() {
+      return state.count;
+    },
+    text(text: string): string {
+      if (!on) return text;
+      const result = neutralizeSentinel(text);
+      state.count += result.count;
+      return result.text;
+    },
+    quiet(text: string): string {
+      return on ? neutralizeSentinel(text).text : text;
+    },
+  };
 }
 
 export function assembleContext<C extends AssemblyCandidate>(input: AssembleInput<C>): AssembleOutput<C> {

@@ -1,5 +1,52 @@
 {
   "$defs": {
+    "AnswerCheckBudgets": {
+      "additionalProperties": false,
+      "description": "D-28, D-61: report-only budgets for the post-stream checks and the guard's per-delta overhead.",
+      "properties": {
+        "claim_check": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScorerBudget"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "groundedness_judge": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScorerBudget"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "output_guard": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScorerBudget"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "report_only": {
+          "const": true,
+          "default": true,
+          "title": "Report Only",
+          "type": "boolean"
+        }
+      },
+      "title": "AnswerCheckBudgets",
+      "type": "object"
+    },
     "GroundednessBudgets": {
       "additionalProperties": false,
       "properties": {
@@ -161,6 +208,9 @@
   },
   "additionalProperties": false,
   "properties": {
+    "answer_checks": {
+      "$ref": "#/$defs/AnswerCheckBudgets"
+    },
     "groundedness": {
       "anyOf": [
         {

@@ -186,7 +186,10 @@
             "duplicate_flood",
             "identifier_near_miss",
             "templated_collection",
-            "implicit_condition"
+            "implicit_condition",
+            "partial_answer",
+            "stale_version",
+            "off_topic_context"
           ],
           "title": "Category",
           "type": "string"
