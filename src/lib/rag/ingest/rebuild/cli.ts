@@ -10,6 +10,7 @@ export type ParsedRebuildArgs =
   | { ok: true; command: 'status'; runId: string | null }
   | { ok: true; command: 'record-eval'; runId: string; report: string }
   | { ok: true; command: 'activate' | 'rollback'; runId: string }
+  | { ok: true; command: 'rescan'; check: 'hidden_text' | 'links'; tenantKey: string | null; dryRun: boolean }
   | { ok: false; error: string };
 
 export interface CliIo {
@@ -19,6 +20,8 @@ export interface CliIo {
 
 const TAG = '[RAG Rebuild]';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const TENANT_KEY = /^(?:s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+const RESCAN_SWITCH = { hidden_text: 'RAG_HIDDEN_TEXT_CHECK', links: 'RAG_INGEST_LINK_CHECK' } as const;
 
 export const USAGE = [
   'usage: npm run rag:rebuild -- start --mechanism <reparse|rechunk|relex|reembed|recaption|retranslate> [--dry-run]',
@@ -26,6 +29,7 @@ export const USAGE = [
   '       npm run rag:rebuild -- record-eval <run_id> --report <gate.json>',
   '       npm run rag:rebuild -- activate <run_id>',
   '       npm run rag:rebuild -- rollback <run_id>',
+  '       npm run rag:rebuild -- rescan --check <hidden_text|links> [--tenant <key>] [--dry-run]',
 ].join('\n');
 
 export function parseRebuildArgs(argv: string[]): ParsedRebuildArgs {
@@ -69,6 +73,34 @@ export function parseRebuildArgs(argv: string[]): ParsedRebuildArgs {
       if (runId === undefined || !UUID.test(runId) || extra.length > 0) return { ok: false, error: `${command} needs one run id (UUID)` };
       return { ok: true, command, runId };
     }
+    case 'rescan': {
+      let check: 'hidden_text' | 'links' | null = null;
+      let tenantKey: string | null = null;
+      let dryRun = false;
+      for (let i = 0; i < rest.length; i += 1) {
+        const arg = rest[i] as string;
+        if (arg === '--dry-run') {
+          if (dryRun) return { ok: false, error: '--dry-run was given twice' };
+          dryRun = true;
+        } else if (arg === '--check' || arg === '--tenant') {
+          const value = rest[(i += 1)];
+          if (value === undefined || value.startsWith('--')) return { ok: false, error: `${arg} needs a value` };
+          if (arg === '--check') {
+            if (check !== null) return { ok: false, error: '--check was given twice' };
+            if (value !== 'hidden_text' && value !== 'links') return { ok: false, error: '--check must be hidden_text or links' };
+            check = value;
+          } else {
+            if (tenantKey !== null) return { ok: false, error: '--tenant was given twice' };
+            if (!TENANT_KEY.test(value)) return { ok: false, error: '--tenant must be s:default, u:<uuid> or o:<uuid>' };
+            tenantKey = value;
+          }
+        } else {
+          return { ok: false, error: `unknown option: ${arg}` };
+        }
+      }
+      if (check === null) return { ok: false, error: 'rescan needs --check' };
+      return { ok: true, command, check, tenantKey, dryRun };
+    }
     default:
       return { ok: false, error: command === undefined ? 'a command is required' : `unknown command: ${command}` };
   }
@@ -110,6 +142,39 @@ function printStart(result: StartRebuildResult, io: CliIo): void {
 }
 
 /**
+ * D-47: the security rescan, a separate explicit action. Exit 0 when every document was checked, 1 when some could not be (checker or
+ * database unavailable: run it again), 2 for bad arguments, 3 when the check is off. Prints counts and document ids only.
+ */
+async function rescan(
+  parsed: Extract<ParsedRebuildArgs, { command: 'rescan' }>,
+  io: CliIo,
+  signal: AbortSignal | undefined,
+  db: RpcClient | null | undefined,
+): Promise<number> {
+  const { rescanDocuments } = await import('../../security/rescan');
+  const result = await rescanDocuments(
+    { check: parsed.check, tenantKey: parsed.tenantKey, dryRun: parsed.dryRun },
+    { ...(db !== undefined ? { db } : {}), ...(signal ? { signal } : {}) },
+  );
+  if (!result.ok) {
+    if (result.reason === 'check_off') {
+      io.err(`${TAG} refused: ${RESCAN_SWITCH[parsed.check]} is off; set it to flag or quarantine first`);
+      return 3;
+    }
+    io.err(`${TAG} rescan failed (${result.reason})`);
+    return result.reason === 'invalid_tenant' || result.reason === 'invalid_check' ? 2 : 1;
+  }
+  const { report } = result;
+  const scope = parsed.tenantKey ?? 'every tenant';
+  io.out(`${TAG} rescan ${report.check} (${report.mode}) of ${scope}${report.dryRun ? ', dry run, nothing written' : ''}`);
+  io.out(`${TAG} ${report.checked} documents read, ${report.skipped} skipped, ${report.affectedIds.length} affected, ${report.quarantined} quarantined, ${report.flagged} flagged, ${report.unavailable} not checked`);
+  for (const id of report.affectedIds) io.out(`  ${id}`);
+  if (report.artifactsFailed > 0) io.err(`${TAG} ${report.artifactsFailed} stored parse outputs were not rewritten`);
+  if (report.unavailable > 0) io.err(`${TAG} ${report.unavailable} documents could not be checked; run the rescan again`);
+  return report.unavailable > 0 || report.artifactsFailed > 0 ? 1 : 0;
+}
+
+/**
  * CLI entry. Exit codes: 0 done, 1 database or environment failure, 2 bad arguments, 3 refused by the run's gate (activation, rollback,
  * evidence). Prints run ids and counts only, never document text.
  */
@@ -124,6 +189,7 @@ export async function main(argv: string[] = process.argv.slice(2), io: CliIo = c
     io.err(`${TAG} refused: set SUPABASE_SERVICE_ROLE_KEY`);
     return 1;
   }
+  if (parsed.command === 'rescan') return rescan(parsed, io, signal, deps.db);
   const run = await import('./run');
   const runDeps: RebuildDeps = { ...deps, ...(signal ? { signal } : {}) };
   try {

@@ -216,13 +216,8 @@ describe('the security fixture corpus is an absolute gate on the inline and the 
     (await harness.rows('SELECT status, is_current, hidden_text_check, metadata FROM documents WHERE id = $1', [documentId]))[0] as Row;
   const chunksOf = (documentId: string) => harness.rows('SELECT content, lexical_text, status FROM document_chunks WHERE document_id = $1', [documentId]);
   const normalized = (text: unknown) => String(text ?? '').replace(/\s/g, '');
-  /** An admin of the tenant: the personal owner, or the organization's owner. */
-  const adminOf = async (tenantKey: string): Promise<string> => {
-    const id = tenantKey.slice(2);
-    if (tenantKey.startsWith('u:')) return id;
-    const [org] = await harness.rows('SELECT owner_id FROM organizations WHERE id = $1', [id]);
-    return String(org?.owner_id);
-  };
+  /** The admin of both tenants in the rescan tests (see its before hook). */
+  const adminOf = async (_tenantKey: string): Promise<string> => QUEUED_IDS.userA;
 
   async function inline(fixture: GateCase, scope: TenantScope): Promise<{ status: string; documentId: string }> {
     const result = await m.ingest.ingest({
@@ -356,7 +351,9 @@ describe('the security fixture corpus is an absolute gate on the inline and the 
 
     before(async () => {
       await harness.db.exec("UPDATE documents SET status = 'deleted', is_current = false WHERE status <> 'deleted'");
-      await harness.db.query('INSERT INTO admin_users (id) VALUES ($1), ($2) ON CONFLICT DO NOTHING', [QUEUED_IDS.userA, QUEUED_IDS.userB]);
+      await harness.db.query('INSERT INTO admin_users (id) VALUES ($1) ON CONFLICT DO NOTHING', [QUEUED_IDS.userA]);
+      // User A administers its own tenant and, as an organization admin, tenant B.
+      await harness.db.query("INSERT INTO organization_members (organization_id, user_id, role) VALUES ($1, $2, 'admin')", [QUEUED_IDS.orgB, QUEUED_IDS.userA]);
       withChecks('off', 'off');
       // Tenant B: one hidden-text PDF, one off-allowlist link, two clean files. Tenant A: another hidden-text PDF and link file.
       for (const [name, scope] of [
