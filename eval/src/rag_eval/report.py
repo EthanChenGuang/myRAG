@@ -27,12 +27,14 @@ from rag_sidecar.contracts.report import (
 )
 
 from rag_eval.metrics import (
+    POPULATION_EXCLUSIONS,
     aggregate,
     citation_metrics,
     citation_run,
     groundedness_label_counts,
     injection_metrics,
     language_pair_key,
+    population_exclusions,
     select_gate_population,
     slices_by,
     strategy_key,
@@ -613,10 +615,12 @@ def build_report(
         approved_ids=approved_ids,
         population=population,
     )
+    exclusions = aggregated.pop(POPULATION_EXCLUSIONS)
     if aggregated["gate_population"] == "production":
         notes.append(PRODUCTION_GATE_NOTE)
     elif aggregated["gate_population"] == "real" and population is not None:
-        gated = [r for r in results if r.split == manifest.golden_filter.gate_split and counts_in_gated_slices(r)]
+        eligible, _ = population_exclusions([r for r in results if r.split == manifest.golden_filter.gate_split])
+        gated = [r for r in eligible if counts_in_gated_slices(r)]
         members, _ = select_gate_population(gated, approved_ids, population)
         notes.append(real_gate_note(members, manifest.golden_filter.gate_split, population))
     if gate_population_config is not None:
@@ -657,6 +661,8 @@ def build_report(
         pre_generation=compute_pre_generation(traces) if traces else None,
         notes=notes,
         native_review_backlog=review_backlog(golden),
+        stale_count=exclusions["stale_count"],
+        stale_share=exclusions["stale_share"],
         **aggregated,
         **answer_fields,
     )
