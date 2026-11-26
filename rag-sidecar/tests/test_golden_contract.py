@@ -517,3 +517,282 @@ def test_native_review_rejects_unknown_values():
 def test_provenance_is_unchanged_for_new_items():
     with pytest.raises(ValidationError):
         GoldenItem.model_validate(_table_item(provenance="llm_drafted"))
+
+
+# --- Phase 5.2 golden additions (plan 05.2-27, D-53) ---------------------------------------------------
+
+from rag_sidecar.contracts import golden as _golden  # noqa: E402
+
+
+def _neutral_span(document: str = "document-a.md", quote: str = "Item A takes 4 units.") -> dict:
+    return {"document": document, "section": "Section 1", "quote": quote}
+
+
+def _partial(**overrides) -> dict:
+    base = {
+        "covered": [_neutral_span()],
+        "uncovered_aspects": ["how many units item B takes"],
+        "forbidden_claims": [r"item b takes \d+ units"],
+    }
+    base.update(overrides)
+    return base
+
+
+def _partial_item(**overrides) -> dict:
+    base = _item(
+        "general",
+        id="en-partial-answer-001",
+        question="How many units do item A and item B take?",
+        expected_answer="Item A takes 4 units; the documents do not cover item B.",
+        gold_evidence=[_neutral_span()],
+    )
+    base["category"] = "partial_answer"
+    base["partial"] = _partial()
+    base.update(overrides)
+    return base
+
+
+def _versioned(document: str, quote: str, value: str, label: str) -> dict:
+    return {"span": _neutral_span(document, quote), "value": value, "version_label": label}
+
+
+def _versions(**overrides) -> dict:
+    base = {
+        "current": _versioned("document-b-v2.md", "Rule B allows 7 units.", "7 units", "v2"),
+        "stale": _versioned("document-b-v1.md", "Rule B allows 5 units.", "5 units", "v1"),
+        "historical": False,
+    }
+    base.update(overrides)
+    return base
+
+
+def _stale_item(**overrides) -> dict:
+    base = _item(
+        "general",
+        id="en-stale-version-001",
+        question="How many units does rule B allow?",
+        expected_answer="Rule B allows 7 units (v2).",
+        gold_evidence=[_neutral_span("document-b-v2.md", "Rule B allows 7 units.")],
+    )
+    base["category"] = "stale_version"
+    base["versions"] = _versions()
+    base.update(overrides)
+    return base
+
+
+def _off_topic(**overrides) -> dict:
+    base = {
+        "adjacent_quotes": [_neutral_span("document-c.md", "Item C takes 9 units.")],
+        "score_band": "below_threshold",
+    }
+    base.update(overrides)
+    return base
+
+
+def _off_topic_item(**overrides) -> dict:
+    base = _item("no_answer", id="en-off-topic-context-001", question="How many units does item D take?")
+    base["category"] = "off_topic_context"
+    base["off_topic"] = _off_topic()
+    base.update(overrides)
+    return base
+
+
+def test_phase52_categories_and_sets():
+    assert getattr(_golden, "ANSWER_RULE_CATEGORIES", None) == frozenset({"partial_answer", "stale_version", "off_topic_context"})
+    assert "off_topic_context" in _golden.UNANSWERABLE_CATEGORIES
+    assert "partial_answer" not in _golden.UNANSWERABLE_CATEGORIES
+    assert "stale_version" not in _golden.UNANSWERABLE_CATEGORIES
+
+
+def test_phase521_categories_are_not_added_here():
+    from typing import get_args
+
+    categories = set(get_args(_golden.Category))
+    assert {"partial_answer", "stale_version", "off_topic_context"} <= categories
+    assert not {"multi_step_calc", "context_overflow"} & categories
+
+
+def test_partial_answer_item_validates():
+    item = GoldenItem.model_validate(_partial_item())
+    assert item.partial is not None
+    assert item.partial.uncovered_aspects == ["how many units item B takes"]
+
+
+def test_partial_answer_without_partial_fails():
+    payload = _partial_item()
+    del payload["partial"]
+    with pytest.raises(ValidationError, match="partial is required exactly for partial_answer items"):
+        GoldenItem.model_validate(payload)
+
+
+def test_partial_on_another_category_fails():
+    payload = _partial_item(category="general")
+    with pytest.raises(ValidationError, match="partial is required exactly for partial_answer items"):
+        GoldenItem.model_validate(payload)
+
+
+def test_partial_covered_needs_a_span():
+    with pytest.raises(ValidationError):
+        GoldenItem.model_validate(_partial_item(partial=_partial(covered=[])))
+
+
+def test_partial_covered_spans_must_be_gold_evidence():
+    payload = _partial_item(partial=_partial(covered=[_neutral_span("document-z.md", "Item Z takes 2 units.")]))
+    with pytest.raises(ValidationError, match="covered spans must be gold_evidence spans"):
+        GoldenItem.model_validate(payload)
+
+
+def test_partial_needs_an_uncovered_aspect():
+    with pytest.raises(ValidationError):
+        GoldenItem.model_validate(_partial_item(partial=_partial(uncovered_aspects=[])))
+
+
+@pytest.mark.parametrize("claims", [[""], ["   "]])
+def test_partial_forbidden_claims_must_be_non_empty(claims):
+    with pytest.raises(ValidationError, match="forbidden_claims"):
+        GoldenItem.model_validate(_partial_item(partial=_partial(forbidden_claims=claims)))
+
+
+@pytest.mark.parametrize("claim", [r"(a)\1", r"(?P<x>a)(?P=x)", r"(?<x>a)\k<x>"])
+def test_partial_forbidden_claims_reject_backreferences(claim):
+    with pytest.raises(ValidationError, match="back-reference"):
+        GoldenItem.model_validate(_partial_item(partial=_partial(forbidden_claims=[claim])))
+
+
+def test_partial_forbidden_claims_must_compile():
+    with pytest.raises(ValidationError, match="forbidden_claims"):
+        GoldenItem.model_validate(_partial_item(partial=_partial(forbidden_claims=["(unclosed"])))
+
+
+def test_partial_aspects_must_not_repeat():
+    with pytest.raises(ValidationError, match="uncovered_aspects"):
+        GoldenItem.model_validate(_partial_item(partial=_partial(uncovered_aspects=["aspect b", "aspect b"])))
+
+
+def test_stale_version_item_validates():
+    item = GoldenItem.model_validate(_stale_item())
+    assert item.versions is not None
+    assert item.versions.current.version_label == "v2"
+    assert item.versions.historical is False
+
+
+def test_stale_version_without_versions_fails():
+    payload = _stale_item()
+    del payload["versions"]
+    with pytest.raises(ValidationError, match="versions is required exactly for stale_version items"):
+        GoldenItem.model_validate(payload)
+
+
+def test_versions_on_another_category_fails():
+    with pytest.raises(ValidationError, match="versions is required exactly for stale_version items"):
+        GoldenItem.model_validate(_stale_item(category="general"))
+
+
+def test_versions_need_distinct_values():
+    versions = _versions(stale=_versioned("document-b-v1.md", "Rule B allows 7 units.", "7 units", "v1"))
+    with pytest.raises(ValidationError, match="distinct values"):
+        GoldenItem.model_validate(_stale_item(versions=versions))
+
+
+def test_versions_need_distinct_labels():
+    versions = _versions(stale=_versioned("document-b-v1.md", "Rule B allows 5 units.", "5 units", "v2"))
+    with pytest.raises(ValidationError, match="distinct version labels"):
+        GoldenItem.model_validate(_stale_item(versions=versions))
+
+
+def test_versions_need_distinct_documents():
+    versions = _versions(stale=_versioned("document-b-v2.md", "Rule B allows 5 units.", "5 units", "v1"))
+    with pytest.raises(ValidationError, match="different documents"):
+        GoldenItem.model_validate(_stale_item(versions=versions))
+
+
+def test_versioned_value_must_occur_in_its_quote():
+    versions = _versions(current=_versioned("document-b-v2.md", "Rule B allows 7 units.", "8 units", "v2"))
+    with pytest.raises(ValidationError, match="value must occur in its span quote"):
+        GoldenItem.model_validate(_stale_item(versions=versions))
+
+
+def test_versioned_value_and_label_must_be_non_empty():
+    for field in ("value", "version_label"):
+        current = _versioned("document-b-v2.md", "Rule B allows 7 units.", "7 units", "v2")
+        current[field] = ""
+        with pytest.raises(ValidationError):
+            GoldenItem.model_validate(_stale_item(versions=_versions(current=current)))
+
+
+def test_current_span_must_be_gold_evidence_unless_historical():
+    payload = _stale_item(gold_evidence=[_neutral_span("document-b-v1.md", "Rule B allows 5 units.")])
+    with pytest.raises(ValidationError, match="current span must be a gold_evidence span"):
+        GoldenItem.model_validate(payload)
+    historical = _stale_item(
+        gold_evidence=[_neutral_span("document-b-v1.md", "Rule B allows 5 units.")],
+        versions=_versions(historical=True),
+    )
+    assert GoldenItem.model_validate(historical).versions.historical is True
+
+
+def test_historical_item_needs_the_stale_span_as_gold_evidence():
+    with pytest.raises(ValidationError, match="stale span must be a gold_evidence span"):
+        GoldenItem.model_validate(_stale_item(versions=_versions(historical=True)))
+
+
+def test_off_topic_item_validates_and_is_unanswerable():
+    item = GoldenItem.model_validate(_off_topic_item())
+    assert item.answerable is False
+    assert item.off_topic is not None
+    assert item.off_topic.score_band == "below_threshold"
+    above = GoldenItem.model_validate(_off_topic_item(off_topic=_off_topic(score_band="above_threshold")))
+    assert above.off_topic.score_band == "above_threshold"
+
+
+def test_off_topic_without_spec_fails():
+    payload = _off_topic_item()
+    del payload["off_topic"]
+    with pytest.raises(ValidationError, match="off_topic is required exactly for off_topic_context items"):
+        GoldenItem.model_validate(payload)
+
+
+def test_off_topic_on_another_category_fails():
+    with pytest.raises(ValidationError, match="off_topic is required exactly for off_topic_context items"):
+        GoldenItem.model_validate(_off_topic_item(category="no_answer"))
+
+
+def test_off_topic_item_must_not_be_answerable():
+    payload = _off_topic_item(answerable=True, expected_answer="Item D takes 9 units.", gold_evidence=[_neutral_span()])
+    with pytest.raises(ValidationError, match="if and only if answerable is false"):
+        GoldenItem.model_validate(payload)
+
+
+def test_off_topic_item_has_no_gold_evidence():
+    with pytest.raises(ValidationError):
+        GoldenItem.model_validate(_off_topic_item(gold_evidence=[_neutral_span()]))
+
+
+def test_off_topic_adjacent_quotes_are_spans_with_quotes():
+    with pytest.raises(ValidationError):
+        GoldenItem.model_validate(_off_topic_item(off_topic=_off_topic(adjacent_quotes=[])))
+    with pytest.raises(ValidationError):
+        GoldenItem.model_validate(
+            _off_topic_item(off_topic=_off_topic(adjacent_quotes=[{"document": "document-c.md", "section": "S"}]))
+        )
+    with pytest.raises(ValidationError):
+        GoldenItem.model_validate(
+            _off_topic_item(off_topic=_off_topic(adjacent_quotes=[{**_neutral_span(), "chunk_id": "c-1"}]))
+        )
+
+
+def test_off_topic_rejects_an_unknown_score_band():
+    with pytest.raises(ValidationError):
+        GoldenItem.model_validate(_off_topic_item(off_topic=_off_topic(score_band="at_threshold")))
+
+
+def test_off_topic_adjacent_quotes_must_not_repeat():
+    spans = [_neutral_span("document-c.md", "Item C takes 9 units.")] * 2
+    with pytest.raises(ValidationError, match="adjacent_quotes"):
+        GoldenItem.model_validate(_off_topic_item(off_topic=_off_topic(adjacent_quotes=spans)))
+
+
+def test_phase52_items_serialize_without_new_keys_when_unset():
+    plain = GoldenItem.model_validate(_item())
+    dumped = plain.model_dump(mode="json")
+    assert not {"partial", "versions", "off_topic"} & set(dumped)
