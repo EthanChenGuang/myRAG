@@ -14,7 +14,8 @@ type RetrievalResult = import('@/lib/rag').RetrievalResult;
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const PROFILES: Profile[] = ['chat', 'embed', 'voice', 'eval'];
-const QUERY = 'what is the refund policy';
+/** A fixture-corpus question the legacy pipeline answers in the smoke tier (golden item en-compound-001). */
+const QUERY = 'What are the refund windows for annual plans and for monthly plans?';
 const OPTIONS = { maxResults: 25, fallbackToLowerThreshold: true };
 const LANGUAGE_VARIABLES = ['RAG_SUPPORTED_LANGUAGES', 'RAG_PRIMARY_LANGUAGE'] as const;
 const CI_LANGUAGES = { RAG_SUPPORTED_LANGUAGES: 'zh,en,it', RAG_PRIMARY_LANGUAGE: 'en' } as const;
@@ -151,7 +152,8 @@ describe('shipped retrieval default (legacy) on a database without hybrid_search
   test('implicit default serves legacy without hybrid_search_chunks: same result as explicit legacy, no fallback, no [RAG Config] error', async () => {
     for (const profile of PROFILES) {
       const expected = await explicitLegacy(profile, true);
-      assert.ok(['ok', 'empty'].includes(expected.status), `${profile}: explicit legacy status ${expected.status} (${expected.reason})`);
+      assert.equal(expected.status, 'ok', `${profile}: explicit legacy status ${expected.status} (${expected.reason})`);
+      assert.ok(expected.candidates.length > 0 || (expected.voice?.results ?? []).length > 0, `${profile}: explicit legacy finds the corpus`);
       configure(undefined, true);
       const calls = hybridCalls();
       const actual = await run(profile);
