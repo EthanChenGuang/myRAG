@@ -77,6 +77,7 @@ The shipped defaults stay off (`RAG_QUERY_LAYER=false`, `RAG_SEMANTIC_CACHE=off`
 4. **Cache measured on the golden pairs.** Item runs send no `semantic_cache` override, so the eval route checks no cache in them (06-41). Hit/miss latency and near-miss hits are measured on the cache-pair run, probed at 0.2 and judged at the effective distance.
 5. **TDD.** In RED, the 13 check tests failed on assertions against stubs; the 9 spec/world tests failed with FileNotFoundError because the spec file arrived with GREEN. The verdict tests and their implementation are in one commit (`4c3dcb1`), with no separate RED commit.
 6. **`uv sync --locked --all-extras` in eval/ fails** because of pre-existing lockfile drift (as in 06-41/06-43). I installed with `uv sync --frozen --all-extras` and ran with `UV_FROZEN=1`. No lockfile change is committed.
+7. **Gate fix (branch `fix/phase6-gate`, 2026-11-26).** The (b) failure also had a small-talk part this summary did not name: `category:small_talk` correct refusal 1.0 -> 0.0 and the en/it/zh/overall refusal rates it pulled down. It was a labelling contradiction with D-10, resolved by CONTEXT A-11 (conversational scoring, small talk out of the refusal denominators). The compound drop was a fusion defect: the standalone query's hits are now interleaved ahead of the variant-fused order. The (d) failures came from a cold dynamic import in the v2 pipeline's layer hash. With all three fixes the comparison records PASS.
 
 ## Tests that failed before the change
 

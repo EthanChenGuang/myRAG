@@ -8,7 +8,7 @@
     "The item runs send no semantic_cache override, so the eval route checks no cache in them (06-41); the cache is measured on the golden cache pairs (--cache-pairs), probed at 0.2 and judged at the effective distance.",
     "The shipped defaults stay off: RAG_QUERY_LAYER=false and RAG_SEMANTIC_CACHE=off in src/lib/env.ts until the Phase 7 regression decides them."
   ],
-  "passed": false,
+  "passed": true,
   "phase": "06",
   "runs": [
     {
@@ -139,9 +139,13 @@
       "invalid_citation_rate": null,
       "name": "legacy-prechunked",
       "overall": {
+        "conversational_rate": {
+          "n": 3,
+          "value": 0.0
+        },
         "correct_refusal_rate": {
-          "n": 25,
-          "value": 0.68
+          "n": 22,
+          "value": 0.6363636363636364
         },
         "false_refusal_rate": {
           "n": 143,
@@ -178,7 +182,7 @@
         "RAG_PIPELINE": "legacy",
         "RAG_QUERY_LAYER": "false"
       },
-      "run_config_hash": "d1696792d558dc8f956a812c8cc209d8b553f8ff993c2c1487c5d0459d7a090c",
+      "run_config_hash": "4f12214f5f474bde2cb0577f43dd236c772f308cef0db242efdd5f7cf0f98614",
       "switches": {}
     },
     {
@@ -309,9 +313,13 @@
       "invalid_citation_rate": null,
       "name": "legacy-ingest",
       "overall": {
+        "conversational_rate": {
+          "n": 3,
+          "value": 0.0
+        },
         "correct_refusal_rate": {
-          "n": 30,
-          "value": 0.5333333333333333
+          "n": 27,
+          "value": 0.48148148148148145
         },
         "false_refusal_rate": {
           "n": 177,
@@ -348,7 +356,7 @@
         "RAG_PIPELINE": "legacy",
         "RAG_QUERY_LAYER": "false"
       },
-      "run_config_hash": "626f73515ebddd299f5d7f91b1d94c8581e63edbd39fc45907fb029eaec9fe57",
+      "run_config_hash": "579681a7613f2394dea6bf96a02827d10e1cf5ce22440433d99b27cf218a0490",
       "switches": {}
     },
     {
@@ -475,9 +483,13 @@
       "invalid_citation_rate": null,
       "name": "v2-all-off",
       "overall": {
+        "conversational_rate": {
+          "n": 3,
+          "value": 0.0
+        },
         "correct_refusal_rate": {
-          "n": 25,
-          "value": 0.36
+          "n": 22,
+          "value": 0.2727272727272727
         },
         "false_refusal_rate": {
           "n": 143,
@@ -513,7 +525,7 @@
       "run_config_env": {
         "RAG_PIPELINE": "v2"
       },
-      "run_config_hash": "6ed053d8670aafcfe3533214e29d02e83b4143e6928e2d67e8c5c5e3c7a3dc47",
+      "run_config_hash": "aac96c6a1c116f6887d29abd670114c6654f397e191084ce025581ce50d7d196",
       "switches": {}
     },
     {
@@ -641,9 +653,13 @@
       "invalid_citation_rate": null,
       "name": "query-layer-off",
       "overall": {
+        "conversational_rate": {
+          "n": 3,
+          "value": 0.0
+        },
         "correct_refusal_rate": {
-          "n": 25,
-          "value": 0.36
+          "n": 22,
+          "value": 0.2727272727272727
         },
         "false_refusal_rate": {
           "n": 143,
@@ -680,19 +696,13 @@
         "RAG_PIPELINE": "v2",
         "RAG_QUERY_LAYER": "false"
       },
-      "run_config_hash": "cde49760d65e90356ac2dcfcfbc844e1fa033a2de9055a4395b5414ff108be26",
+      "run_config_hash": "6e92bcf63328666968a381a7ffc19cb9b3fb1343e45e76023a920ab4655c73f4",
       "switches": {}
     },
     {
       "checks": [
         {
-          "detail": [
-            "category:small_talk:correct_refusal_rate 0.0000 < 0.9800 (query-layer-off 1.0000)",
-            "language:en:correct_refusal_rate 0.2222 < 0.3133 (query-layer-off 0.3333)",
-            "language:it:correct_refusal_rate 0.1250 < 0.2300 (query-layer-off 0.2500)",
-            "language:zh:correct_refusal_rate 0.3750 < 0.4800 (query-layer-off 0.5000)",
-            "overall:correct_refusal_rate 0.2400 < 0.3400 (query-layer-off 0.3600)"
-          ],
+          "detail": [],
           "measures": {
             "category:compound:mrr_delta": 0.01851851851851849,
             "category:compound:recall_at_10_delta": 0.0,
@@ -705,7 +715,7 @@
             "category:multi_turn:recall_at_5_delta": 0.0
           },
           "name": "slice_hold:query-layer-off",
-          "passed": false
+          "passed": true
         },
         {
           "detail": [],
@@ -845,9 +855,13 @@
       "invalid_citation_rate": null,
       "name": "query-layer-llamaindex",
       "overall": {
+        "conversational_rate": {
+          "n": 3,
+          "value": 1.0
+        },
         "correct_refusal_rate": {
-          "n": 25,
-          "value": 0.24
+          "n": 22,
+          "value": 0.2727272727272727
         },
         "false_refusal_rate": {
           "n": 143,
@@ -879,12 +893,12 @@
           "value": 0.12815170940170942
         }
       },
-      "passed": false,
+      "passed": true,
       "run_config_env": {
         "RAG_PIPELINE": "v2",
         "RAG_QUERY_LAYER": "true"
       },
-      "run_config_hash": "2bf36ad8b421228b669c6c456e55e635db8184992a64ffe9a4c9bd2a15b8973c",
+      "run_config_hash": "561b14c46798f7cb5bb6ead8830f5d22d79ad5291e3820aa4401bc80e10a811c",
       "switches": {}
     },
     {
@@ -1012,9 +1026,13 @@
       "invalid_citation_rate": null,
       "name": "query-layer-llamaindex-cache-off",
       "overall": {
+        "conversational_rate": {
+          "n": 3,
+          "value": 1.0
+        },
         "correct_refusal_rate": {
-          "n": 25,
-          "value": 0.24
+          "n": 22,
+          "value": 0.2727272727272727
         },
         "false_refusal_rate": {
           "n": 143,
@@ -1052,7 +1070,7 @@
         "RAG_QUERY_LAYER": "true",
         "RAG_SEMANTIC_CACHE": "off"
       },
-      "run_config_hash": "6fe731aeac68526eeafc2f890dca4dd53bc55ce73961a09987ae2286ead81032",
+      "run_config_hash": "e70be49d8c235dada6783a88da8f4238e270fc71d495f0364d2059972307279f",
       "switches": {}
     },
     {
@@ -1180,9 +1198,13 @@
       "invalid_citation_rate": null,
       "name": "query-layer-llamaindex-cache-on",
       "overall": {
+        "conversational_rate": {
+          "n": 3,
+          "value": 1.0
+        },
         "correct_refusal_rate": {
-          "n": 25,
-          "value": 0.24
+          "n": 22,
+          "value": 0.2727272727272727
         },
         "false_refusal_rate": {
           "n": 143,
@@ -1220,7 +1242,7 @@
         "RAG_QUERY_LAYER": "true",
         "RAG_SEMANTIC_CACHE": "pgvector"
       },
-      "run_config_hash": "316d37ec4cd72db2dc990d83eef1ff8113259f0486b125c2835102b7369a54bb",
+      "run_config_hash": "5437b80ec48bf8a023b48272a7d161462a1a7d174788e600e0be44af562264fc",
       "switches": {}
     },
     {
@@ -1234,14 +1256,14 @@
         {
           "detail": [],
           "measures": {
-            "hit_p50_ms": 3.0,
-            "hit_p95_ms": 14.0,
+            "hit_p50_ms": 4.0,
+            "hit_p95_ms": 11.0,
             "hits": 6.0,
             "max_ratio": 0.5,
-            "miss_p50_ms": 19.0,
-            "miss_p95_ms": 51.0,
+            "miss_p50_ms": 18.0,
+            "miss_p95_ms": 46.0,
             "misses": 36.0,
-            "ratio": 0.27450980392156865
+            "ratio": 0.2391304347826087
           },
           "name": "cache_latency",
           "passed": true
@@ -1282,7 +1304,7 @@
         "RAG_PIPELINE": "v2",
         "RAG_QUERY_LAYER": "true"
       },
-      "run_config_hash": "5d2bc59498c0eac5607c857066598837f49e181b70f10939851af56b66da1054",
+      "run_config_hash": "ebf56be8c4c63cb13aa7842ea48b347c30221c841d54e6059541df7447edb02f",
       "switches": {}
     }
   ],
@@ -1305,11 +1327,9 @@
       "checks": [
         "query-layer-llamaindex/slice_hold:query-layer-off"
       ],
-      "failed": [
-        "query-layer-llamaindex/slice_hold:query-layer-off"
-      ],
+      "failed": [],
       "label": "b",
-      "passed": false,
+      "passed": true,
       "title": "Layer on (LlamaIndex): multi_turn, compound, cross_lingual hold; no slice beyond the noise band"
     },
     {
