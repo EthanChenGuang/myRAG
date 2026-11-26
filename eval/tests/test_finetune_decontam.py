@@ -4,7 +4,12 @@ import pytest
 from rag_sidecar.contracts.golden import GoldenItem
 
 from rag_eval.finetune import decontam
-from rag_eval.finetune.decontam import golden_overlap, golden_test_document_ids, golden_test_documents, load_golden_questions
+from rag_eval.finetune.decontam import (
+    golden_overlap,
+    golden_test_document_ids,
+    golden_test_documents,
+    load_golden_questions,
+)
 from rag_eval.golden_io import load_golden
 from rag_eval.paths import REPO_ROOT
 

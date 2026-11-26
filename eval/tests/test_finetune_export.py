@@ -5,11 +5,12 @@ import stat
 import subprocess
 import sys
 
+import httpx
 import pytest
 from pydantic import ValidationError
 from rag_sidecar.contracts.finetune import ExportedChunk
 
-from rag_eval.finetune import bundle, cli, textnorm
+from rag_eval.finetune import bundle, cli, export, textnorm
 from rag_eval.paths import REPO_ROOT
 
 DOC_A = "00000000-0000-4000-8000-00000000000a"
@@ -95,7 +96,7 @@ def test_cli_passes_remaining_arguments_and_returns_the_exit_code(tmp_path, monk
 
 def test_cli_module_entry_point_train_not_available_in_this_build():
     result = subprocess.run(
-        [sys.executable, "-m", "rag_eval.finetune", "train"], capture_output=True, text=True, cwd=REPO_ROOT / "eval"
+        [sys.executable, "-m", "rag_eval.finetune", "train"], capture_output=True, text=True, check=False, cwd=REPO_ROOT / "eval"
     )
     assert result.returncode == 2
     assert "not available in this build" in result.stderr
@@ -103,7 +104,7 @@ def test_cli_module_entry_point_train_not_available_in_this_build():
 
 def test_cli_module_entry_point_unknown_command():
     result = subprocess.run(
-        [sys.executable, "-m", "rag_eval.finetune", "nonexistent"], capture_output=True, text=True, cwd=REPO_ROOT / "eval"
+        [sys.executable, "-m", "rag_eval.finetune", "nonexistent"], capture_output=True, text=True, check=False, cwd=REPO_ROOT / "eval"
     )
     assert result.returncode == 2
     assert "usage" in result.stderr
@@ -179,10 +180,6 @@ def test_bundle_write_jsonl_refuses_a_row_of_another_model(tmp_path):
 
 
 # --- export -----------------------------------------------------------------------------------------------------
-
-import httpx  # noqa: E402
-
-from rag_eval.finetune import export  # noqa: E402
 
 TENANT_A = "o:00000000-0000-4000-8000-0000000000aa"
 TENANT_B = "o:00000000-0000-4000-8000-0000000000bb"
