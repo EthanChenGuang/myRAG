@@ -61,12 +61,19 @@ export type TextMessageOptions = {
 
 export type LinkPreviewField = { ok: true; options: TextMessageOptions } | { ok: false }
 
-export const parseLinkPreviewField = (_value: unknown): LinkPreviewField => ({ ok: true, options: {} })
+/** The optional `linkPreview` field of a send request: absent or a boolean; `false` forces previews off for that message. */
+export const parseLinkPreviewField = (value: unknown): LinkPreviewField => {
+	if (value === undefined) return { ok: true, options: {} }
+	if (typeof value !== 'boolean') return { ok: false }
+	return { ok: true, options: value ? {} : { linkPreview: false } }
+}
 
-export const linkPreviewHostList = (_env: LinkPreviewEnv = process.env): string[] => []
+/** The configured preview host names, sorted; the health endpoint reports these and nothing else. */
+export const linkPreviewHostList = (env: LinkPreviewEnv = process.env): string[] => [...getLinkPreviewHosts(env)].sort()
 
 export const buildTextMessage = (
 	text: string,
 	env: LinkPreviewEnv = process.env,
-	_options: TextMessageOptions = {}
-): TextMessageContent => (allowsLinkPreview(text, env) ? { text } : { text, linkPreview: null })
+	options: TextMessageOptions = {}
+): TextMessageContent =>
+	options.linkPreview !== false && allowsLinkPreview(text, env) ? { text } : { text, linkPreview: null }

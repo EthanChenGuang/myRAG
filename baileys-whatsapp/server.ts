@@ -6,7 +6,7 @@ import type { WASocket } from './src/index.js'
 import P from 'pino'
 import crypto from 'crypto'
 import axios from 'axios'
-import { buildTextMessage, socketLinkPreviewConfig } from './src/Service/link-preview-policy.js'
+import { buildTextMessage, linkPreviewHostList, parseLinkPreviewField, socketLinkPreviewConfig } from './src/Service/link-preview-policy.js'
 
 const app = express()
 app.use(express.json())
@@ -300,6 +300,11 @@ app.post('/api/messages/send', async (req, res) => {
         if (!to || !message) {
             return res.status(400).json({ error: 'to and message required' })
         }
+
+        const linkPreview = parseLinkPreviewField(req.body.linkPreview)
+        if (!linkPreview.ok) {
+            return res.status(400).json({ error: 'linkPreview must be a boolean' })
+        }
         
         const session = sessions.get(sessionId) || (sessionId === 'default' ? { sock, status: connectionStatus } : null)
         
@@ -309,7 +314,7 @@ app.post('/api/messages/send', async (req, res) => {
         
         let messageContent: any
         if (type === 'text') {
-            messageContent = buildTextMessage(message)
+            messageContent = buildTextMessage(message, process.env, linkPreview.options)
         } else {
             return res.status(400).json({ error: 'Unsupported message type' })
         }
@@ -377,7 +382,8 @@ app.get('/health', (req, res) => {
     res.json({
         status: 'ok',
         whatsapp: connectionStatus,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        linkPreviewHosts: linkPreviewHostList()
     })
 })
 
@@ -432,11 +438,16 @@ app.post('/send-message', async (req, res) => {
             return res.status(400).json({ error: 'JID and message required' })
         }
 
+        const linkPreview = parseLinkPreviewField(req.body.linkPreview)
+        if (!linkPreview.ok) {
+            return res.status(400).json({ error: 'linkPreview must be a boolean' })
+        }
+
         if (!sock || connectionStatus !== 'connected') {
             return res.status(503).json({ error: 'WhatsApp not connected' })
         }
 
-        const result = await sock.sendMessage(jid, buildTextMessage(message))
+        const result = await sock.sendMessage(jid, buildTextMessage(message, process.env, linkPreview.options))
         res.json({ success: true, messageId: result?.key.id })
     } catch (error) {
         console.error('Error sending message:', error)
