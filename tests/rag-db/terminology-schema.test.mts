@@ -95,6 +95,13 @@ async function rejectsWith(run: () => Promise<unknown>, code: string, message?: 
   });
 }
 
+/** An expected failure inside an open transaction: the savepoint keeps the transaction usable for the statements after it. */
+async function rejectsInSavepoint(db: PGlite, run: () => Promise<unknown>, code: string): Promise<void> {
+  await db.exec('SAVEPOINT expected_failure');
+  await rejectsWith(run, code);
+  await db.exec('ROLLBACK TO SAVEPOINT expected_failure');
+}
+
 async function asRole<T>(db: PGlite, role: Role, run: () => Promise<T>): Promise<T> {
   await db.exec(`SET ROLE ${role}`);
   try {
@@ -278,11 +285,11 @@ for (const mode of MODES) {
       await inRollback(db, async () => {
         await insertEntry(db, { ...pair, target_language: LANG_2 });
         await insertEntry(db, { ...pair, target_language: 'zz' });
-        await rejectsWith(() => insertEntry(db, { ...pair, target_language: LANG_2, variants: ['term gamma delta'] }), '23505');
+        await rejectsInSavepoint(db, () => insertEntry(db, { ...pair, target_language: LANG_2, variants: ['term gamma delta'] }), '23505');
       });
       await inRollback(db, async () => {
         await insertEntry(db, { canonical: 'term alpha beta' });
-        await rejectsWith(() => insertEntry(db, { canonical: 'Term Alpha Beta', variants: ['alpha beta'] }), '23505');
+        await rejectsInSavepoint(db, () => insertEntry(db, { canonical: 'Term Alpha Beta', variants: ['alpha beta'] }), '23505');
         await insertEntry(db, { canonical: 'term alpha beta', language: LANG_1 });
         await insertEntry(db, { canonical: 'term alpha beta', layer_key: TENANT_B });
       });
@@ -292,7 +299,7 @@ for (const mode of MODES) {
       await inRollback(db, async () => {
         const shared = await insertEntry(db);
         await insertEntry(db, { layer_key: TENANT_B, variants: [], normalized_variants: [], suppresses_entry_id: shared });
-        await rejectsWith(() => insertEntry(db, { layer_key: TENANT_B, variants: [], normalized_variants: [], suppresses_entry_id: shared }), '23505');
+        await rejectsInSavepoint(db, () => insertEntry(db, { layer_key: TENANT_B, variants: [], normalized_variants: [], suppresses_entry_id: shared }), '23505');
         await insertEntry(db, { layer_key: TENANT_A, variants: [], normalized_variants: [], suppresses_entry_id: shared });
       });
     });
