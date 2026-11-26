@@ -285,11 +285,20 @@ describe('the re-recorded ingest baseline (T-03.1-104)', () => {
       .map((line) => JSON.parse(line) as { id: string; category: string })
       .filter((item) => item.category === 'table_split')
       .map((item) => item.id);
+    // Plan 06-38 added the Phase 6 query-layer items (phase6_* tags and small_talk) to golden.jsonl.
+    const phase6Ids = fs
+      .readFileSync(path.join(ROOT, 'eval/fixtures/golden.jsonl'), 'utf8')
+      .split('\n')
+      .filter((line) => line.trim() !== '')
+      .map((line) => JSON.parse(line) as { id: string; category: string; tags?: string[] })
+      .filter((item) => item.category === 'small_talk' || (item.tags ?? []).some((tag) => tag.startsWith('phase6_')))
+      .map((item) => item.id);
     const added = Object.keys(current.items).filter((id) => !(id in previous.items)).sort();
     assert.ok(parseIds.length >= 30);
+    assert.equal(phase6Ids.length, 38);
     assert.equal(injectionIds.length, 18);
     assert.equal(tableSplitIds.length, 15);
-    assert.deepEqual(added, [...parseIds, ...injectionIds, ...tableSplitIds].sort());
+    assert.deepEqual(added, [...parseIds, ...injectionIds, ...tableSplitIds, ...phase6Ids].sort());
     assert.notEqual(current.corpus_sha256, previous.corpus_sha256, 'the parse fixtures are part of the ingest corpus hash');
   });
 });
