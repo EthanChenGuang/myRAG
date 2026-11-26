@@ -1,3 +1,4 @@
+import json
 import pytest
 from rag_sidecar.contracts.eval_run import RagTrace
 from rag_sidecar.contracts.golden import GoldenItem
@@ -632,11 +633,16 @@ def test_table_split_is_gated_and_the_re_recorded_ingest_baseline_leaves_every_o
     else:
         assert not added
     moved = {"overall"} | {name for name in previous.slices if name.startswith("language:")}
+    # Plan 03.2-67 flipped the default of RAG_TABLE_HEADER_REPEAT to always: only table_split items moved, so the slices that hold
+    # them and those items are compared by test_the_03_2_67_baseline_moves_only_table_split_items_and_none_drops.
+    header_moved = moved | {"category:table_split"}
+    table_split_ids = {item_id for item_id in previous.items if item_id.startswith("ingest-table-split-")}
     for name, stats in previous.slices.items():
-        if golden_grew and name in moved:
+        if (golden_grew and name in moved) or name in header_moved:
             continue
         assert current.slices[name] == stats, name
-    assert {item_id: current.items[item_id] for item_id in previous.items} == previous.items
+    unchanged = set(previous.items) - table_split_ids
+    assert {item_id: current.items[item_id] for item_id in unchanged} == {item_id: previous.items[item_id] for item_id in unchanged}
     assert all(stat.spread == 0.0 for stats in current.slices.values() for stat in stats.values())
 
     golden = [
@@ -911,3 +917,36 @@ def test_identifier_slices_count_identifier_items_only():
     overall = aggregate(results)["overall"]
     assert overall.identifier_precision == MetricValue(value=0.5, n=2)
     assert overall.near_miss_leakage == MetricValue(value=0.5, n=2)
+
+
+def test_the_03_2_67_baseline_moves_only_table_split_items_and_none_drops():
+    """D-19 (plan 03.2-67): the ingest baseline re-recorded with RAG_TABLE_HEADER_REPEAT=always as the default."""
+    from pathlib import Path
+
+    from rag_sidecar.contracts.baseline import Baseline
+
+    root = Path(__file__).resolve().parents[1]
+    previous = Baseline.model_validate_json(
+        (root / "baselines" / "history" / "fixture-ingest-baseline.pre-03.2-67.json").read_text(encoding="utf-8")
+    )
+    current = Baseline.model_validate_json((root / "baselines" / "fixture-ingest-baseline.json").read_text(encoding="utf-8"))
+    decision = json.loads((root / "decisions" / "03.2-table-header-default.json").read_text(encoding="utf-8"))
+    assert decision["decision"] == "always"
+    assert {run.run_id for run in current.runs}.isdisjoint({run.run_id for run in previous.runs}), "not re-recorded"
+    assert current.corpus_sha256 == previous.corpus_sha256 and current.golden_sha256 == previous.golden_sha256
+    assert previous.items is not None and current.items is not None
+    assert set(current.items) == set(previous.items)
+    moved = sorted(item_id for item_id in previous.items if current.items[item_id] != previous.items[item_id])
+    assert moved and all(item_id.startswith("ingest-table-split-") for item_id in moved), moved
+    lower_is_better = {"false_refusal_rate"}
+    for item_id in moved:
+        for metric, before in previous.items[item_id].items():
+            after = current.items[item_id][metric]
+            for old, new in zip(before, after):
+                if old is None or new is None:
+                    assert old == new, (item_id, metric)
+                elif metric in lower_is_better:
+                    assert new <= old, (item_id, metric)
+                else:
+                    assert new >= old, (item_id, metric)
+    assert all(stat.spread == 0.0 for stats in current.slices.values() for stat in stats.values())

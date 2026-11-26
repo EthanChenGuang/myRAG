@@ -299,7 +299,7 @@ class EnvironmentConfig {
       RAG_SUPPORTED_LANGUAGES: process.env.RAG_SUPPORTED_LANGUAGES || '',
       RAG_PRIMARY_LANGUAGE: process.env.RAG_PRIMARY_LANGUAGE || '',
       RAG_LANGUAGE_AWARE_INGEST: process.env.RAG_LANGUAGE_AWARE_INGEST || 'off',
-      RAG_TABLE_HEADER_REPEAT: process.env.RAG_TABLE_HEADER_REPEAT || 'profile',
+      RAG_TABLE_HEADER_REPEAT: process.env.RAG_TABLE_HEADER_REPEAT || 'always',
       RAG_TABLE_ROW_SERIALIZATION: process.env.RAG_TABLE_ROW_SERIALIZATION || 'false',
       RAG_CAPTION_LANGUAGE: process.env.RAG_CAPTION_LANGUAGE || 'en',
       RAG_BGE_M3_SERVING: process.env.RAG_BGE_M3_SERVING || 'hosted',

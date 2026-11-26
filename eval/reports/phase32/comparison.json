@@ -279,7 +279,897 @@
       "failures": [],
       "wiring_proof": true,
       "recommendation": null,
-      "notes": []
+      "notes": [],
+      "runs": {
+        "off": "1a412c9e-501f-49c4-aaac-3ca005065f9a",
+        "on": "91c0a09f-57b6-4e37-afdb-564dea5f37c0"
+      },
+      "gated_rows": [
+        {
+          "slice": "category:cross_lingual",
+          "metric": "recall_at_5",
+          "n": 36,
+          "off": 0.305556,
+          "on": 0.305556,
+          "paired": {
+            "n": 36,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "category:cross_lingual",
+          "metric": "recall_at_10",
+          "n": 36,
+          "off": 0.305556,
+          "on": 0.305556,
+          "paired": {
+            "n": 36,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "category:cross_lingual",
+          "metric": "mrr",
+          "n": 36,
+          "off": 0.277778,
+          "on": 0.277778,
+          "paired": {
+            "n": 36,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "category:cross_lingual",
+          "metric": "false_refusal_rate",
+          "n": 36,
+          "off": 0.5,
+          "on": 0.5,
+          "paired": {
+            "n": 36,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "category:table_split",
+          "metric": "recall_at_5",
+          "n": 5,
+          "off": 1.0,
+          "on": 1.0,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "category:table_split",
+          "metric": "recall_at_10",
+          "n": 5,
+          "off": 1.0,
+          "on": 1.0,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "category:table_split",
+          "metric": "mrr",
+          "n": 5,
+          "off": 0.866667,
+          "on": 0.866667,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "category:table_split",
+          "metric": "false_refusal_rate",
+          "n": 5,
+          "off": 0.0,
+          "on": 0.0,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:en",
+          "metric": "recall_at_5",
+          "n": 96,
+          "off": 0.720486,
+          "on": 0.720486,
+          "paired": {
+            "n": 96,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:en",
+          "metric": "recall_at_10",
+          "n": 96,
+          "off": 0.720486,
+          "on": 0.720486,
+          "paired": {
+            "n": 96,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:en",
+          "metric": "mrr",
+          "n": 96,
+          "off": 0.632292,
+          "on": 0.632292,
+          "paired": {
+            "n": 96,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:en",
+          "metric": "correct_refusal_rate",
+          "n": 14,
+          "off": 0.571429,
+          "on": 0.571429,
+          "paired": {
+            "n": 14,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:en",
+          "metric": "false_refusal_rate",
+          "n": 96,
+          "off": 0.1875,
+          "on": 0.1875,
+          "paired": {
+            "n": 96,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:it",
+          "metric": "recall_at_5",
+          "n": 72,
+          "off": 0.662037,
+          "on": 0.662037,
+          "paired": {
+            "n": 72,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:it",
+          "metric": "recall_at_10",
+          "n": 72,
+          "off": 0.662037,
+          "on": 0.662037,
+          "paired": {
+            "n": 72,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:it",
+          "metric": "mrr",
+          "n": 72,
+          "off": 0.546296,
+          "on": 0.546296,
+          "paired": {
+            "n": 72,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:it",
+          "metric": "correct_refusal_rate",
+          "n": 14,
+          "off": 0.642857,
+          "on": 0.642857,
+          "paired": {
+            "n": 14,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:it",
+          "metric": "false_refusal_rate",
+          "n": 72,
+          "off": 0.236111,
+          "on": 0.236111,
+          "paired": {
+            "n": 72,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:zh",
+          "metric": "recall_at_5",
+          "n": 70,
+          "off": 0.659524,
+          "on": 0.659524,
+          "paired": {
+            "n": 70,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:zh",
+          "metric": "recall_at_10",
+          "n": 70,
+          "off": 0.716667,
+          "on": 0.716667,
+          "paired": {
+            "n": 70,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:zh",
+          "metric": "mrr",
+          "n": 70,
+          "off": 0.614762,
+          "on": 0.614762,
+          "paired": {
+            "n": 70,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:zh",
+          "metric": "correct_refusal_rate",
+          "n": 14,
+          "off": 0.571429,
+          "on": 0.571429,
+          "paired": {
+            "n": 14,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:zh",
+          "metric": "false_refusal_rate",
+          "n": 70,
+          "off": 0.242857,
+          "on": 0.242857,
+          "paired": {
+            "n": 70,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "overall",
+          "metric": "recall_at_5",
+          "n": 238,
+          "off": 0.684874,
+          "on": 0.684874,
+          "paired": {
+            "n": 238,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "overall",
+          "metric": "recall_at_10",
+          "n": 238,
+          "off": 0.701681,
+          "on": 0.701681,
+          "paired": {
+            "n": 238,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "overall",
+          "metric": "mrr",
+          "n": 238,
+          "off": 0.60112,
+          "on": 0.60112,
+          "paired": {
+            "n": 238,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "overall",
+          "metric": "correct_refusal_rate",
+          "n": 42,
+          "off": 0.595238,
+          "on": 0.595238,
+          "paired": {
+            "n": 42,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "overall",
+          "metric": "false_refusal_rate",
+          "n": 238,
+          "off": 0.218487,
+          "on": 0.218487,
+          "paired": {
+            "n": 238,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->it",
+          "metric": "recall_at_5",
+          "n": 5,
+          "off": 0.4,
+          "on": 0.4,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->it",
+          "metric": "recall_at_10",
+          "n": 5,
+          "off": 0.4,
+          "on": 0.4,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->it",
+          "metric": "mrr",
+          "n": 5,
+          "off": 0.4,
+          "on": 0.4,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->it",
+          "metric": "false_refusal_rate",
+          "n": 5,
+          "off": 0.2,
+          "on": 0.2,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->zh",
+          "metric": "recall_at_5",
+          "n": 9,
+          "off": 0.222222,
+          "on": 0.222222,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->zh",
+          "metric": "recall_at_10",
+          "n": 9,
+          "off": 0.222222,
+          "on": 0.222222,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->zh",
+          "metric": "mrr",
+          "n": 9,
+          "off": 0.166667,
+          "on": 0.166667,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->zh",
+          "metric": "false_refusal_rate",
+          "n": 9,
+          "off": 0.444444,
+          "on": 0.444444,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->en",
+          "metric": "recall_at_5",
+          "n": 5,
+          "off": 0.4,
+          "on": 0.4,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->en",
+          "metric": "recall_at_10",
+          "n": 5,
+          "off": 0.4,
+          "on": 0.4,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->en",
+          "metric": "mrr",
+          "n": 5,
+          "off": 0.4,
+          "on": 0.4,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->en",
+          "metric": "false_refusal_rate",
+          "n": 5,
+          "off": 0.6,
+          "on": 0.6,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->zh",
+          "metric": "recall_at_5",
+          "n": 9,
+          "off": 0.222222,
+          "on": 0.222222,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->zh",
+          "metric": "recall_at_10",
+          "n": 9,
+          "off": 0.222222,
+          "on": 0.222222,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->zh",
+          "metric": "mrr",
+          "n": 9,
+          "off": 0.166667,
+          "on": 0.166667,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->zh",
+          "metric": "false_refusal_rate",
+          "n": 9,
+          "off": 0.555556,
+          "on": 0.555556,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->en",
+          "metric": "recall_at_5",
+          "n": 4,
+          "off": 0.5,
+          "on": 0.5,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->en",
+          "metric": "recall_at_10",
+          "n": 4,
+          "off": 0.5,
+          "on": 0.5,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->en",
+          "metric": "mrr",
+          "n": 4,
+          "off": 0.5,
+          "on": 0.5,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->en",
+          "metric": "false_refusal_rate",
+          "n": 4,
+          "off": 0.5,
+          "on": 0.5,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->it",
+          "metric": "recall_at_5",
+          "n": 4,
+          "off": 0.25,
+          "on": 0.25,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->it",
+          "metric": "recall_at_10",
+          "n": 4,
+          "off": 0.25,
+          "on": 0.25,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->it",
+          "metric": "mrr",
+          "n": 4,
+          "off": 0.25,
+          "on": 0.25,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->it",
+          "metric": "false_refusal_rate",
+          "n": 4,
+          "off": 0.75,
+          "on": 0.75,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        }
+      ]
     },
     {
       "name": "table_header_repeat",
@@ -435,7 +1325,897 @@
       "failures": [],
       "wiring_proof": true,
       "recommendation": null,
-      "notes": []
+      "notes": [],
+      "runs": {
+        "off": "224401d6-dea7-4966-8019-54d56649b422",
+        "on": "2409bb81-803b-4316-8156-8691fbd85804"
+      },
+      "gated_rows": [
+        {
+          "slice": "category:cross_lingual",
+          "metric": "recall_at_5",
+          "n": 36,
+          "off": 0.305556,
+          "on": 0.305556,
+          "paired": {
+            "n": 36,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "category:cross_lingual",
+          "metric": "recall_at_10",
+          "n": 36,
+          "off": 0.305556,
+          "on": 0.305556,
+          "paired": {
+            "n": 36,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "category:cross_lingual",
+          "metric": "mrr",
+          "n": 36,
+          "off": 0.277778,
+          "on": 0.277778,
+          "paired": {
+            "n": 36,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "category:cross_lingual",
+          "metric": "false_refusal_rate",
+          "n": 36,
+          "off": 0.5,
+          "on": 0.5,
+          "paired": {
+            "n": 36,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "category:table_split",
+          "metric": "recall_at_5",
+          "n": 5,
+          "off": 1.0,
+          "on": 1.0,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "category:table_split",
+          "metric": "recall_at_10",
+          "n": 5,
+          "off": 1.0,
+          "on": 1.0,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "category:table_split",
+          "metric": "mrr",
+          "n": 5,
+          "off": 0.866667,
+          "on": 1.0,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 1,
+            "mean_d": 0.133333,
+            "ci_low": 0.0,
+            "ci_high": 0.4
+          },
+          "band": 0.02,
+          "beyond_band": true,
+          "direction": "up"
+        },
+        {
+          "slice": "category:table_split",
+          "metric": "false_refusal_rate",
+          "n": 5,
+          "off": 0.0,
+          "on": 0.0,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:en",
+          "metric": "recall_at_5",
+          "n": 96,
+          "off": 0.720486,
+          "on": 0.720486,
+          "paired": {
+            "n": 96,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:en",
+          "metric": "recall_at_10",
+          "n": 96,
+          "off": 0.720486,
+          "on": 0.720486,
+          "paired": {
+            "n": 96,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:en",
+          "metric": "mrr",
+          "n": 96,
+          "off": 0.632292,
+          "on": 0.639236,
+          "paired": {
+            "n": 96,
+            "n_nonzero": 1,
+            "mean_d": 0.006944,
+            "ci_low": 0.0,
+            "ci_high": 0.020833333333333332
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "up"
+        },
+        {
+          "slice": "language:en",
+          "metric": "correct_refusal_rate",
+          "n": 14,
+          "off": 0.571429,
+          "on": 0.571429,
+          "paired": {
+            "n": 14,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:en",
+          "metric": "false_refusal_rate",
+          "n": 96,
+          "off": 0.1875,
+          "on": 0.1875,
+          "paired": {
+            "n": 96,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:it",
+          "metric": "recall_at_5",
+          "n": 72,
+          "off": 0.662037,
+          "on": 0.662037,
+          "paired": {
+            "n": 72,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:it",
+          "metric": "recall_at_10",
+          "n": 72,
+          "off": 0.662037,
+          "on": 0.662037,
+          "paired": {
+            "n": 72,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:it",
+          "metric": "mrr",
+          "n": 72,
+          "off": 0.546296,
+          "on": 0.546296,
+          "paired": {
+            "n": 72,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:it",
+          "metric": "correct_refusal_rate",
+          "n": 14,
+          "off": 0.642857,
+          "on": 0.642857,
+          "paired": {
+            "n": 14,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:it",
+          "metric": "false_refusal_rate",
+          "n": 72,
+          "off": 0.236111,
+          "on": 0.236111,
+          "paired": {
+            "n": 72,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:zh",
+          "metric": "recall_at_5",
+          "n": 70,
+          "off": 0.659524,
+          "on": 0.659524,
+          "paired": {
+            "n": 70,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:zh",
+          "metric": "recall_at_10",
+          "n": 70,
+          "off": 0.716667,
+          "on": 0.716667,
+          "paired": {
+            "n": 70,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:zh",
+          "metric": "mrr",
+          "n": 70,
+          "off": 0.614762,
+          "on": 0.614762,
+          "paired": {
+            "n": 70,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:zh",
+          "metric": "correct_refusal_rate",
+          "n": 14,
+          "off": 0.571429,
+          "on": 0.571429,
+          "paired": {
+            "n": 14,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:zh",
+          "metric": "false_refusal_rate",
+          "n": 70,
+          "off": 0.242857,
+          "on": 0.242857,
+          "paired": {
+            "n": 70,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "overall",
+          "metric": "recall_at_5",
+          "n": 238,
+          "off": 0.684874,
+          "on": 0.684874,
+          "paired": {
+            "n": 238,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "overall",
+          "metric": "recall_at_10",
+          "n": 238,
+          "off": 0.701681,
+          "on": 0.701681,
+          "paired": {
+            "n": 238,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "overall",
+          "metric": "mrr",
+          "n": 238,
+          "off": 0.60112,
+          "on": 0.603922,
+          "paired": {
+            "n": 238,
+            "n_nonzero": 1,
+            "mean_d": 0.002801,
+            "ci_low": 0.0,
+            "ci_high": 0.008403361344537815
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "up"
+        },
+        {
+          "slice": "overall",
+          "metric": "correct_refusal_rate",
+          "n": 42,
+          "off": 0.595238,
+          "on": 0.595238,
+          "paired": {
+            "n": 42,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "overall",
+          "metric": "false_refusal_rate",
+          "n": 238,
+          "off": 0.218487,
+          "on": 0.218487,
+          "paired": {
+            "n": 238,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->it",
+          "metric": "recall_at_5",
+          "n": 5,
+          "off": 0.4,
+          "on": 0.4,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->it",
+          "metric": "recall_at_10",
+          "n": 5,
+          "off": 0.4,
+          "on": 0.4,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->it",
+          "metric": "mrr",
+          "n": 5,
+          "off": 0.4,
+          "on": 0.4,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->it",
+          "metric": "false_refusal_rate",
+          "n": 5,
+          "off": 0.2,
+          "on": 0.2,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->zh",
+          "metric": "recall_at_5",
+          "n": 9,
+          "off": 0.222222,
+          "on": 0.222222,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->zh",
+          "metric": "recall_at_10",
+          "n": 9,
+          "off": 0.222222,
+          "on": 0.222222,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->zh",
+          "metric": "mrr",
+          "n": 9,
+          "off": 0.166667,
+          "on": 0.166667,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->zh",
+          "metric": "false_refusal_rate",
+          "n": 9,
+          "off": 0.444444,
+          "on": 0.444444,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->en",
+          "metric": "recall_at_5",
+          "n": 5,
+          "off": 0.4,
+          "on": 0.4,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->en",
+          "metric": "recall_at_10",
+          "n": 5,
+          "off": 0.4,
+          "on": 0.4,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->en",
+          "metric": "mrr",
+          "n": 5,
+          "off": 0.4,
+          "on": 0.4,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->en",
+          "metric": "false_refusal_rate",
+          "n": 5,
+          "off": 0.6,
+          "on": 0.6,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->zh",
+          "metric": "recall_at_5",
+          "n": 9,
+          "off": 0.222222,
+          "on": 0.222222,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->zh",
+          "metric": "recall_at_10",
+          "n": 9,
+          "off": 0.222222,
+          "on": 0.222222,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->zh",
+          "metric": "mrr",
+          "n": 9,
+          "off": 0.166667,
+          "on": 0.166667,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->zh",
+          "metric": "false_refusal_rate",
+          "n": 9,
+          "off": 0.555556,
+          "on": 0.555556,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->en",
+          "metric": "recall_at_5",
+          "n": 4,
+          "off": 0.5,
+          "on": 0.5,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->en",
+          "metric": "recall_at_10",
+          "n": 4,
+          "off": 0.5,
+          "on": 0.5,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->en",
+          "metric": "mrr",
+          "n": 4,
+          "off": 0.5,
+          "on": 0.5,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->en",
+          "metric": "false_refusal_rate",
+          "n": 4,
+          "off": 0.5,
+          "on": 0.5,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->it",
+          "metric": "recall_at_5",
+          "n": 4,
+          "off": 0.25,
+          "on": 0.25,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->it",
+          "metric": "recall_at_10",
+          "n": 4,
+          "off": 0.25,
+          "on": 0.25,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->it",
+          "metric": "mrr",
+          "n": 4,
+          "off": 0.25,
+          "on": 0.25,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->it",
+          "metric": "false_refusal_rate",
+          "n": 4,
+          "off": 0.75,
+          "on": 0.75,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        }
+      ]
     },
     {
       "name": "table_row_serialization",
@@ -591,7 +2371,897 @@
       "failures": [],
       "wiring_proof": true,
       "recommendation": null,
-      "notes": []
+      "notes": [],
+      "runs": {
+        "off": "4bae9447-ff22-437f-aaa8-34601458290e",
+        "on": "1943f14a-c62d-40de-8b06-50174e69be01"
+      },
+      "gated_rows": [
+        {
+          "slice": "category:cross_lingual",
+          "metric": "recall_at_5",
+          "n": 36,
+          "off": 0.305556,
+          "on": 0.305556,
+          "paired": {
+            "n": 36,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "category:cross_lingual",
+          "metric": "recall_at_10",
+          "n": 36,
+          "off": 0.305556,
+          "on": 0.305556,
+          "paired": {
+            "n": 36,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "category:cross_lingual",
+          "metric": "mrr",
+          "n": 36,
+          "off": 0.277778,
+          "on": 0.277778,
+          "paired": {
+            "n": 36,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "category:cross_lingual",
+          "metric": "false_refusal_rate",
+          "n": 36,
+          "off": 0.5,
+          "on": 0.5,
+          "paired": {
+            "n": 36,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "category:table_split",
+          "metric": "recall_at_5",
+          "n": 5,
+          "off": 1.0,
+          "on": 1.0,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "category:table_split",
+          "metric": "recall_at_10",
+          "n": 5,
+          "off": 1.0,
+          "on": 1.0,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "category:table_split",
+          "metric": "mrr",
+          "n": 5,
+          "off": 0.866667,
+          "on": 0.9,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 1,
+            "mean_d": 0.033333,
+            "ci_low": 0.0,
+            "ci_high": 0.1
+          },
+          "band": 0.02,
+          "beyond_band": true,
+          "direction": "up"
+        },
+        {
+          "slice": "category:table_split",
+          "metric": "false_refusal_rate",
+          "n": 5,
+          "off": 0.0,
+          "on": 0.0,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:en",
+          "metric": "recall_at_5",
+          "n": 96,
+          "off": 0.720486,
+          "on": 0.710069,
+          "paired": {
+            "n": 96,
+            "n_nonzero": 1,
+            "mean_d": -0.010417,
+            "ci_low": -0.03125,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "down"
+        },
+        {
+          "slice": "language:en",
+          "metric": "recall_at_10",
+          "n": 96,
+          "off": 0.720486,
+          "on": 0.710069,
+          "paired": {
+            "n": 96,
+            "n_nonzero": 1,
+            "mean_d": -0.010417,
+            "ci_low": -0.03125,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "down"
+        },
+        {
+          "slice": "language:en",
+          "metric": "mrr",
+          "n": 96,
+          "off": 0.632292,
+          "on": 0.623611,
+          "paired": {
+            "n": 96,
+            "n_nonzero": 2,
+            "mean_d": -0.008681,
+            "ci_low": -0.03125,
+            "ci_high": 0.005208333333333333
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "down"
+        },
+        {
+          "slice": "language:en",
+          "metric": "correct_refusal_rate",
+          "n": 14,
+          "off": 0.571429,
+          "on": 0.571429,
+          "paired": {
+            "n": 14,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:en",
+          "metric": "false_refusal_rate",
+          "n": 96,
+          "off": 0.1875,
+          "on": 0.197917,
+          "paired": {
+            "n": 96,
+            "n_nonzero": 1,
+            "mean_d": 0.010417,
+            "ci_low": 0.0,
+            "ci_high": 0.03125
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "down"
+        },
+        {
+          "slice": "language:it",
+          "metric": "recall_at_5",
+          "n": 72,
+          "off": 0.662037,
+          "on": 0.662037,
+          "paired": {
+            "n": 72,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:it",
+          "metric": "recall_at_10",
+          "n": 72,
+          "off": 0.662037,
+          "on": 0.662037,
+          "paired": {
+            "n": 72,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:it",
+          "metric": "mrr",
+          "n": 72,
+          "off": 0.546296,
+          "on": 0.546296,
+          "paired": {
+            "n": 72,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:it",
+          "metric": "correct_refusal_rate",
+          "n": 14,
+          "off": 0.642857,
+          "on": 0.642857,
+          "paired": {
+            "n": 14,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:it",
+          "metric": "false_refusal_rate",
+          "n": 72,
+          "off": 0.236111,
+          "on": 0.236111,
+          "paired": {
+            "n": 72,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:zh",
+          "metric": "recall_at_5",
+          "n": 70,
+          "off": 0.659524,
+          "on": 0.659524,
+          "paired": {
+            "n": 70,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:zh",
+          "metric": "recall_at_10",
+          "n": 70,
+          "off": 0.716667,
+          "on": 0.716667,
+          "paired": {
+            "n": 70,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:zh",
+          "metric": "mrr",
+          "n": 70,
+          "off": 0.614762,
+          "on": 0.614762,
+          "paired": {
+            "n": 70,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:zh",
+          "metric": "correct_refusal_rate",
+          "n": 14,
+          "off": 0.571429,
+          "on": 0.571429,
+          "paired": {
+            "n": 14,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:zh",
+          "metric": "false_refusal_rate",
+          "n": 70,
+          "off": 0.242857,
+          "on": 0.242857,
+          "paired": {
+            "n": 70,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "overall",
+          "metric": "recall_at_5",
+          "n": 238,
+          "off": 0.684874,
+          "on": 0.680672,
+          "paired": {
+            "n": 238,
+            "n_nonzero": 1,
+            "mean_d": -0.004202,
+            "ci_low": -0.012605042016806723,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "down"
+        },
+        {
+          "slice": "overall",
+          "metric": "recall_at_10",
+          "n": 238,
+          "off": 0.701681,
+          "on": 0.697479,
+          "paired": {
+            "n": 238,
+            "n_nonzero": 1,
+            "mean_d": -0.004202,
+            "ci_low": -0.012605042016806723,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "down"
+        },
+        {
+          "slice": "overall",
+          "metric": "mrr",
+          "n": 238,
+          "off": 0.60112,
+          "on": 0.597619,
+          "paired": {
+            "n": 238,
+            "n_nonzero": 2,
+            "mean_d": -0.003501,
+            "ci_low": -0.012605042016806723,
+            "ci_high": 0.0021008403361344537
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "down"
+        },
+        {
+          "slice": "overall",
+          "metric": "correct_refusal_rate",
+          "n": 42,
+          "off": 0.595238,
+          "on": 0.595238,
+          "paired": {
+            "n": 42,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "overall",
+          "metric": "false_refusal_rate",
+          "n": 238,
+          "off": 0.218487,
+          "on": 0.222689,
+          "paired": {
+            "n": 238,
+            "n_nonzero": 1,
+            "mean_d": 0.004202,
+            "ci_low": 0.0,
+            "ci_high": 0.012605042016806723
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "down"
+        },
+        {
+          "slice": "pair:en->it",
+          "metric": "recall_at_5",
+          "n": 5,
+          "off": 0.4,
+          "on": 0.4,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->it",
+          "metric": "recall_at_10",
+          "n": 5,
+          "off": 0.4,
+          "on": 0.4,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->it",
+          "metric": "mrr",
+          "n": 5,
+          "off": 0.4,
+          "on": 0.4,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->it",
+          "metric": "false_refusal_rate",
+          "n": 5,
+          "off": 0.2,
+          "on": 0.2,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->zh",
+          "metric": "recall_at_5",
+          "n": 9,
+          "off": 0.222222,
+          "on": 0.222222,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->zh",
+          "metric": "recall_at_10",
+          "n": 9,
+          "off": 0.222222,
+          "on": 0.222222,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->zh",
+          "metric": "mrr",
+          "n": 9,
+          "off": 0.166667,
+          "on": 0.166667,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->zh",
+          "metric": "false_refusal_rate",
+          "n": 9,
+          "off": 0.444444,
+          "on": 0.444444,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->en",
+          "metric": "recall_at_5",
+          "n": 5,
+          "off": 0.4,
+          "on": 0.4,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->en",
+          "metric": "recall_at_10",
+          "n": 5,
+          "off": 0.4,
+          "on": 0.4,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->en",
+          "metric": "mrr",
+          "n": 5,
+          "off": 0.4,
+          "on": 0.4,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->en",
+          "metric": "false_refusal_rate",
+          "n": 5,
+          "off": 0.6,
+          "on": 0.6,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->zh",
+          "metric": "recall_at_5",
+          "n": 9,
+          "off": 0.222222,
+          "on": 0.222222,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->zh",
+          "metric": "recall_at_10",
+          "n": 9,
+          "off": 0.222222,
+          "on": 0.222222,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->zh",
+          "metric": "mrr",
+          "n": 9,
+          "off": 0.166667,
+          "on": 0.166667,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->zh",
+          "metric": "false_refusal_rate",
+          "n": 9,
+          "off": 0.555556,
+          "on": 0.555556,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->en",
+          "metric": "recall_at_5",
+          "n": 4,
+          "off": 0.5,
+          "on": 0.5,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->en",
+          "metric": "recall_at_10",
+          "n": 4,
+          "off": 0.5,
+          "on": 0.5,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->en",
+          "metric": "mrr",
+          "n": 4,
+          "off": 0.5,
+          "on": 0.5,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->en",
+          "metric": "false_refusal_rate",
+          "n": 4,
+          "off": 0.5,
+          "on": 0.5,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->it",
+          "metric": "recall_at_5",
+          "n": 4,
+          "off": 0.25,
+          "on": 0.25,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->it",
+          "metric": "recall_at_10",
+          "n": 4,
+          "off": 0.25,
+          "on": 0.25,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->it",
+          "metric": "mrr",
+          "n": 4,
+          "off": 0.25,
+          "on": 0.25,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->it",
+          "metric": "false_refusal_rate",
+          "n": 4,
+          "off": 0.75,
+          "on": 0.75,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        }
+      ]
     },
     {
       "name": "caption_language",
@@ -678,7 +3348,897 @@
       "failures": [],
       "wiring_proof": true,
       "recommendation": null,
-      "notes": []
+      "notes": [],
+      "runs": {
+        "off": "7dcc0c3e-2a3f-4d26-aa12-0b72ea19dbf8",
+        "on": "bf44ce90-6e3a-4840-852f-cd01536ceee1"
+      },
+      "gated_rows": [
+        {
+          "slice": "category:cross_lingual",
+          "metric": "recall_at_5",
+          "n": 36,
+          "off": 0.305556,
+          "on": 0.305556,
+          "paired": {
+            "n": 36,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "category:cross_lingual",
+          "metric": "recall_at_10",
+          "n": 36,
+          "off": 0.305556,
+          "on": 0.305556,
+          "paired": {
+            "n": 36,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "category:cross_lingual",
+          "metric": "mrr",
+          "n": 36,
+          "off": 0.277778,
+          "on": 0.277778,
+          "paired": {
+            "n": 36,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "category:cross_lingual",
+          "metric": "false_refusal_rate",
+          "n": 36,
+          "off": 0.5,
+          "on": 0.5,
+          "paired": {
+            "n": 36,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "category:table_split",
+          "metric": "recall_at_5",
+          "n": 5,
+          "off": 1.0,
+          "on": 1.0,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "category:table_split",
+          "metric": "recall_at_10",
+          "n": 5,
+          "off": 1.0,
+          "on": 1.0,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "category:table_split",
+          "metric": "mrr",
+          "n": 5,
+          "off": 0.866667,
+          "on": 0.866667,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "category:table_split",
+          "metric": "false_refusal_rate",
+          "n": 5,
+          "off": 0.0,
+          "on": 0.0,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:en",
+          "metric": "recall_at_5",
+          "n": 96,
+          "off": 0.720486,
+          "on": 0.720486,
+          "paired": {
+            "n": 96,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:en",
+          "metric": "recall_at_10",
+          "n": 96,
+          "off": 0.720486,
+          "on": 0.720486,
+          "paired": {
+            "n": 96,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:en",
+          "metric": "mrr",
+          "n": 96,
+          "off": 0.632292,
+          "on": 0.632292,
+          "paired": {
+            "n": 96,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:en",
+          "metric": "correct_refusal_rate",
+          "n": 14,
+          "off": 0.571429,
+          "on": 0.571429,
+          "paired": {
+            "n": 14,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:en",
+          "metric": "false_refusal_rate",
+          "n": 96,
+          "off": 0.1875,
+          "on": 0.1875,
+          "paired": {
+            "n": 96,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:it",
+          "metric": "recall_at_5",
+          "n": 72,
+          "off": 0.662037,
+          "on": 0.662037,
+          "paired": {
+            "n": 72,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:it",
+          "metric": "recall_at_10",
+          "n": 72,
+          "off": 0.662037,
+          "on": 0.662037,
+          "paired": {
+            "n": 72,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:it",
+          "metric": "mrr",
+          "n": 72,
+          "off": 0.546296,
+          "on": 0.546296,
+          "paired": {
+            "n": 72,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:it",
+          "metric": "correct_refusal_rate",
+          "n": 14,
+          "off": 0.642857,
+          "on": 0.642857,
+          "paired": {
+            "n": 14,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:it",
+          "metric": "false_refusal_rate",
+          "n": 72,
+          "off": 0.236111,
+          "on": 0.236111,
+          "paired": {
+            "n": 72,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:zh",
+          "metric": "recall_at_5",
+          "n": 70,
+          "off": 0.659524,
+          "on": 0.659524,
+          "paired": {
+            "n": 70,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:zh",
+          "metric": "recall_at_10",
+          "n": 70,
+          "off": 0.716667,
+          "on": 0.716667,
+          "paired": {
+            "n": 70,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:zh",
+          "metric": "mrr",
+          "n": 70,
+          "off": 0.614762,
+          "on": 0.614762,
+          "paired": {
+            "n": 70,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:zh",
+          "metric": "correct_refusal_rate",
+          "n": 14,
+          "off": 0.571429,
+          "on": 0.571429,
+          "paired": {
+            "n": 14,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:zh",
+          "metric": "false_refusal_rate",
+          "n": 70,
+          "off": 0.242857,
+          "on": 0.242857,
+          "paired": {
+            "n": 70,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "overall",
+          "metric": "recall_at_5",
+          "n": 238,
+          "off": 0.684874,
+          "on": 0.684874,
+          "paired": {
+            "n": 238,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "overall",
+          "metric": "recall_at_10",
+          "n": 238,
+          "off": 0.701681,
+          "on": 0.701681,
+          "paired": {
+            "n": 238,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "overall",
+          "metric": "mrr",
+          "n": 238,
+          "off": 0.60112,
+          "on": 0.60112,
+          "paired": {
+            "n": 238,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "overall",
+          "metric": "correct_refusal_rate",
+          "n": 42,
+          "off": 0.595238,
+          "on": 0.595238,
+          "paired": {
+            "n": 42,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "overall",
+          "metric": "false_refusal_rate",
+          "n": 238,
+          "off": 0.218487,
+          "on": 0.218487,
+          "paired": {
+            "n": 238,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->it",
+          "metric": "recall_at_5",
+          "n": 5,
+          "off": 0.4,
+          "on": 0.4,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->it",
+          "metric": "recall_at_10",
+          "n": 5,
+          "off": 0.4,
+          "on": 0.4,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->it",
+          "metric": "mrr",
+          "n": 5,
+          "off": 0.4,
+          "on": 0.4,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->it",
+          "metric": "false_refusal_rate",
+          "n": 5,
+          "off": 0.2,
+          "on": 0.2,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->zh",
+          "metric": "recall_at_5",
+          "n": 9,
+          "off": 0.222222,
+          "on": 0.222222,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->zh",
+          "metric": "recall_at_10",
+          "n": 9,
+          "off": 0.222222,
+          "on": 0.222222,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->zh",
+          "metric": "mrr",
+          "n": 9,
+          "off": 0.166667,
+          "on": 0.166667,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->zh",
+          "metric": "false_refusal_rate",
+          "n": 9,
+          "off": 0.444444,
+          "on": 0.444444,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->en",
+          "metric": "recall_at_5",
+          "n": 5,
+          "off": 0.4,
+          "on": 0.4,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->en",
+          "metric": "recall_at_10",
+          "n": 5,
+          "off": 0.4,
+          "on": 0.4,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->en",
+          "metric": "mrr",
+          "n": 5,
+          "off": 0.4,
+          "on": 0.4,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->en",
+          "metric": "false_refusal_rate",
+          "n": 5,
+          "off": 0.6,
+          "on": 0.6,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->zh",
+          "metric": "recall_at_5",
+          "n": 9,
+          "off": 0.222222,
+          "on": 0.222222,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->zh",
+          "metric": "recall_at_10",
+          "n": 9,
+          "off": 0.222222,
+          "on": 0.222222,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->zh",
+          "metric": "mrr",
+          "n": 9,
+          "off": 0.166667,
+          "on": 0.166667,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->zh",
+          "metric": "false_refusal_rate",
+          "n": 9,
+          "off": 0.555556,
+          "on": 0.555556,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->en",
+          "metric": "recall_at_5",
+          "n": 4,
+          "off": 0.5,
+          "on": 0.5,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->en",
+          "metric": "recall_at_10",
+          "n": 4,
+          "off": 0.5,
+          "on": 0.5,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->en",
+          "metric": "mrr",
+          "n": 4,
+          "off": 0.5,
+          "on": 0.5,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->en",
+          "metric": "false_refusal_rate",
+          "n": 4,
+          "off": 0.5,
+          "on": 0.5,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->it",
+          "metric": "recall_at_5",
+          "n": 4,
+          "off": 0.25,
+          "on": 0.25,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->it",
+          "metric": "recall_at_10",
+          "n": 4,
+          "off": 0.25,
+          "on": 0.25,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->it",
+          "metric": "mrr",
+          "n": 4,
+          "off": 0.25,
+          "on": 0.25,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->it",
+          "metric": "false_refusal_rate",
+          "n": 4,
+          "off": 0.75,
+          "on": 0.75,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        }
+      ]
     },
     {
       "name": "doc_translation",
@@ -1174,7 +4734,829 @@
       "failures": [],
       "wiring_proof": true,
       "recommendation": null,
-      "notes": []
+      "notes": [],
+      "runs": {
+        "off": "4606be06-373e-48bb-b2d3-7e8a4020b534",
+        "on": "b14756de-7383-44ae-b4d8-649480917375"
+      },
+      "gated_rows": [
+        {
+          "slice": "category:cross_lingual",
+          "metric": "recall_at_5",
+          "n": 36,
+          "off": 0.0,
+          "on": 0.0,
+          "paired": {
+            "n": 36,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "category:cross_lingual",
+          "metric": "recall_at_10",
+          "n": 36,
+          "off": 0.0,
+          "on": 0.0,
+          "paired": {
+            "n": 36,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "category:cross_lingual",
+          "metric": "mrr",
+          "n": 36,
+          "off": 0.0,
+          "on": 0.0,
+          "paired": {
+            "n": 36,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "category:cross_lingual",
+          "metric": "false_refusal_rate",
+          "n": 36,
+          "off": 1.0,
+          "on": 1.0,
+          "paired": {
+            "n": 36,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:en",
+          "metric": "recall_at_5",
+          "n": 91,
+          "off": 0.175824,
+          "on": 0.175824,
+          "paired": {
+            "n": 91,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:en",
+          "metric": "recall_at_10",
+          "n": 91,
+          "off": 0.175824,
+          "on": 0.175824,
+          "paired": {
+            "n": 91,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:en",
+          "metric": "mrr",
+          "n": 91,
+          "off": 0.141026,
+          "on": 0.141026,
+          "paired": {
+            "n": 91,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:en",
+          "metric": "correct_refusal_rate",
+          "n": 14,
+          "off": 1.0,
+          "on": 1.0,
+          "paired": {
+            "n": 14,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:en",
+          "metric": "false_refusal_rate",
+          "n": 91,
+          "off": 0.824176,
+          "on": 0.824176,
+          "paired": {
+            "n": 91,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:it",
+          "metric": "recall_at_5",
+          "n": 72,
+          "off": 0.083333,
+          "on": 0.083333,
+          "paired": {
+            "n": 72,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:it",
+          "metric": "recall_at_10",
+          "n": 72,
+          "off": 0.083333,
+          "on": 0.083333,
+          "paired": {
+            "n": 72,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:it",
+          "metric": "mrr",
+          "n": 72,
+          "off": 0.047454,
+          "on": 0.047454,
+          "paired": {
+            "n": 72,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:it",
+          "metric": "correct_refusal_rate",
+          "n": 14,
+          "off": 1.0,
+          "on": 1.0,
+          "paired": {
+            "n": 14,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:it",
+          "metric": "false_refusal_rate",
+          "n": 72,
+          "off": 0.916667,
+          "on": 0.916667,
+          "paired": {
+            "n": 72,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:zh",
+          "metric": "recall_at_5",
+          "n": 70,
+          "off": 0.085714,
+          "on": 0.085714,
+          "paired": {
+            "n": 70,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:zh",
+          "metric": "recall_at_10",
+          "n": 70,
+          "off": 0.085714,
+          "on": 0.085714,
+          "paired": {
+            "n": 70,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:zh",
+          "metric": "mrr",
+          "n": 70,
+          "off": 0.058333,
+          "on": 0.058333,
+          "paired": {
+            "n": 70,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:zh",
+          "metric": "correct_refusal_rate",
+          "n": 14,
+          "off": 1.0,
+          "on": 1.0,
+          "paired": {
+            "n": 14,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "language:zh",
+          "metric": "false_refusal_rate",
+          "n": 70,
+          "off": 0.914286,
+          "on": 0.914286,
+          "paired": {
+            "n": 70,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "overall",
+          "metric": "recall_at_5",
+          "n": 233,
+          "off": 0.120172,
+          "on": 0.120172,
+          "paired": {
+            "n": 233,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "overall",
+          "metric": "recall_at_10",
+          "n": 233,
+          "off": 0.120172,
+          "on": 0.120172,
+          "paired": {
+            "n": 233,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "overall",
+          "metric": "mrr",
+          "n": 233,
+          "off": 0.087268,
+          "on": 0.087268,
+          "paired": {
+            "n": 233,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "overall",
+          "metric": "correct_refusal_rate",
+          "n": 42,
+          "off": 1.0,
+          "on": 1.0,
+          "paired": {
+            "n": 42,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "overall",
+          "metric": "false_refusal_rate",
+          "n": 233,
+          "off": 0.879828,
+          "on": 0.879828,
+          "paired": {
+            "n": 233,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->it",
+          "metric": "recall_at_5",
+          "n": 5,
+          "off": 0.0,
+          "on": 0.0,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->it",
+          "metric": "recall_at_10",
+          "n": 5,
+          "off": 0.0,
+          "on": 0.0,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->it",
+          "metric": "mrr",
+          "n": 5,
+          "off": 0.0,
+          "on": 0.0,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->it",
+          "metric": "false_refusal_rate",
+          "n": 5,
+          "off": 1.0,
+          "on": 1.0,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->zh",
+          "metric": "recall_at_5",
+          "n": 9,
+          "off": 0.0,
+          "on": 0.0,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->zh",
+          "metric": "recall_at_10",
+          "n": 9,
+          "off": 0.0,
+          "on": 0.0,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->zh",
+          "metric": "mrr",
+          "n": 9,
+          "off": 0.0,
+          "on": 0.0,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:en->zh",
+          "metric": "false_refusal_rate",
+          "n": 9,
+          "off": 1.0,
+          "on": 1.0,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->en",
+          "metric": "recall_at_5",
+          "n": 5,
+          "off": 0.0,
+          "on": 0.0,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->en",
+          "metric": "recall_at_10",
+          "n": 5,
+          "off": 0.0,
+          "on": 0.0,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->en",
+          "metric": "mrr",
+          "n": 5,
+          "off": 0.0,
+          "on": 0.0,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->en",
+          "metric": "false_refusal_rate",
+          "n": 5,
+          "off": 1.0,
+          "on": 1.0,
+          "paired": {
+            "n": 5,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->zh",
+          "metric": "recall_at_5",
+          "n": 9,
+          "off": 0.0,
+          "on": 0.0,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->zh",
+          "metric": "recall_at_10",
+          "n": 9,
+          "off": 0.0,
+          "on": 0.0,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->zh",
+          "metric": "mrr",
+          "n": 9,
+          "off": 0.0,
+          "on": 0.0,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:it->zh",
+          "metric": "false_refusal_rate",
+          "n": 9,
+          "off": 1.0,
+          "on": 1.0,
+          "paired": {
+            "n": 9,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->en",
+          "metric": "recall_at_5",
+          "n": 4,
+          "off": 0.0,
+          "on": 0.0,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->en",
+          "metric": "recall_at_10",
+          "n": 4,
+          "off": 0.0,
+          "on": 0.0,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->en",
+          "metric": "mrr",
+          "n": 4,
+          "off": 0.0,
+          "on": 0.0,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->en",
+          "metric": "false_refusal_rate",
+          "n": 4,
+          "off": 1.0,
+          "on": 1.0,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->it",
+          "metric": "recall_at_5",
+          "n": 4,
+          "off": 0.0,
+          "on": 0.0,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->it",
+          "metric": "recall_at_10",
+          "n": 4,
+          "off": 0.0,
+          "on": 0.0,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->it",
+          "metric": "mrr",
+          "n": 4,
+          "off": 0.0,
+          "on": 0.0,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        },
+        {
+          "slice": "pair:zh->it",
+          "metric": "false_refusal_rate",
+          "n": 4,
+          "off": 1.0,
+          "on": 1.0,
+          "paired": {
+            "n": 4,
+            "n_nonzero": 0,
+            "mean_d": 0.0,
+            "ci_low": 0.0,
+            "ci_high": 0.0
+          },
+          "band": 0.02,
+          "beyond_band": false,
+          "direction": "none"
+        }
+      ]
     }
   ],
   "notes": [

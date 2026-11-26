@@ -229,7 +229,7 @@ export function loadIngestConfig(env: IngestEnvInput): IngestConfig {
     qwenFallback: parseChoice('RAG_QWEN_EMBED_FALLBACK', env.RAG_QWEN_EMBED_FALLBACK, ['openrouter', 'none'], 'openrouter', warnings),
     qwenPrimary: parseChoice('RAG_QWEN_EMBED_PRIMARY', env.RAG_QWEN_EMBED_PRIMARY, ['deepinfra', 'openrouter'], 'deepinfra', warnings),
     languageAwareIngest: parseChoice('RAG_LANGUAGE_AWARE_INGEST', env.RAG_LANGUAGE_AWARE_INGEST, ['off', 'on'], 'off', warnings),
-    tableHeaderRepeat: parseChoice('RAG_TABLE_HEADER_REPEAT', env.RAG_TABLE_HEADER_REPEAT, ['profile', 'always'], 'profile', warnings),
+    tableHeaderRepeat: parseChoice('RAG_TABLE_HEADER_REPEAT', env.RAG_TABLE_HEADER_REPEAT, ['profile', 'always'], 'always', warnings),
     tableRowSerialization: parseFlag('RAG_TABLE_ROW_SERIALIZATION', env.RAG_TABLE_ROW_SERIALIZATION, warnings),
     captionLanguage: parseChoice('RAG_CAPTION_LANGUAGE', env.RAG_CAPTION_LANGUAGE, ['en', 'document'], 'en', warnings),
     docTranslation: parseChoice('RAG_DOC_TRANSLATION', env.RAG_DOC_TRANSLATION, ['off', 'on'], 'off', warnings),

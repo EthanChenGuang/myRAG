@@ -123,7 +123,9 @@ describe('RAG_TABLE_ROW_SERIALIZATION off (D-21): index text is byte-identical t
       test(`${docType} long-table-${language}: unset and false`, async () => {
         const expected = (offSnapshot as Record<string, SnapshotChunk[]>)[`${docType}/${language}`];
         expect(expected?.length).toBeGreaterThan(0);
-        for (const env of [{}, { RAG_TABLE_ROW_SERIALIZATION: 'false' }] as IngestEnvInput[]) {
+        // The snapshot predates the header-repetition default of 03.2-67 (always), so header repetition is pinned at profile.
+        const header = { RAG_TABLE_HEADER_REPEAT: 'profile' };
+        for (const env of [header, { ...header, RAG_TABLE_ROW_SERIALIZATION: 'false' }] as IngestEnvInput[]) {
           expect(hashed(await ingestLongTable(language, docType, env))).toEqual(expected);
         }
       });
