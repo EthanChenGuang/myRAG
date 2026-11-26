@@ -8,8 +8,8 @@
 -- rows only for tenants that have a state row. An update stages -1 for the old row and +1 for the new one only when membership,
 -- lexical_tsv, tenant_key, chunking_profile_id or language changed. The AFTER triggers see the lexical_tsv the 0401 BEFORE trigger set.
 -- SECURITY DEFINER with an empty search_path because the writing role (an owner editing a chunk, an ingest RPC) has no grant on the
--- pending table; the functions take no caller input. EXECUTE is revoked from PUBLIC, anon and authenticated (service_role keeps it, as
--- 0410 does for the 0702 trigger functions). Idempotent; not folded into the setup files.
+-- pending table; the functions take no caller input. EXECUTE is revoked from PUBLIC, anon and authenticated and granted to service_role,
+-- and section 1 of 0410 carries a guarded entry for each, as for the 0702 trigger functions. Idempotent; not folded into the setup files.
 
 BEGIN;
 

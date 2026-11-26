@@ -152,6 +152,18 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_dismiss_effective_date_proposal(uuid, text, uuid) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_dismiss_effective_date_proposal(uuid, text, uuid) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_lexstats_chunks_delete()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_lexstats_chunks_delete() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_lexstats_chunks_delete() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_lexstats_chunks_insert()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_lexstats_chunks_insert() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_lexstats_chunks_insert() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_lexstats_chunks_update()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_lexstats_chunks_update() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_lexstats_chunks_update() TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_set_document_effective_dates(uuid, text, date, date, text, real, uuid)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_set_document_effective_dates(uuid, text, date, date, text, real, uuid) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_set_document_effective_dates(uuid, text, date, date, text, real, uuid) TO service_role;
