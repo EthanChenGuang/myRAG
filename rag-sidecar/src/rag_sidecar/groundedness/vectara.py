@@ -5,7 +5,7 @@ from collections.abc import Sequence
 
 import httpx
 
-from rag_sidecar.groundedness.scorer import VECTARA_SCORER, ScorerUnavailable
+from rag_sidecar.groundedness.scorer import VECTARA_SCORER, ResultCallback, ScorePair, ScorerUnavailable
 from rag_sidecar.settings import SidecarSettings
 
 logger = logging.getLogger("rag_sidecar.groundedness.vectara")
@@ -14,6 +14,7 @@ VECTARA_MODEL_NAME = "hhem_v2.3"
 EVALUATE_PATH = "/v2/evaluate_factual_consistency"
 CONNECT_TIMEOUT_S = 2.0
 TOTAL_TIMEOUT_S = 8.0
+MAX_CONCURRENT_REQUESTS = 4
 
 
 class VectaraScorer:
@@ -77,6 +78,30 @@ class VectaraScorer:
         if math.isnan(score) or score < 0.0 or score > 1.0:
             raise ScorerUnavailable("vectara_bad_response")
         return score
+
+    async def score_many(
+        self, pairs: Sequence[ScorePair], *, on_result: ResultCallback | None = None
+    ) -> list[float | None]:
+        if self._key is None:
+            raise ScorerUnavailable("vectara_not_configured")
+        gate = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+        results: list[float | None] = [None] * len(pairs)
+
+        async def one(position: int, premise_texts: Sequence[str], hypothesis: str) -> None:
+            async with gate:
+                try:
+                    value: float | None = await self.score(premise_texts, hypothesis)
+                except ScorerUnavailable:
+                    value = None
+                except Exception:
+                    logger.warning("[Groundedness] vectara unexpected error")
+                    value = None
+            results[position] = value
+            if on_result is not None:
+                on_result(position, value)
+
+        await asyncio.gather(*(one(i, premises, hypothesis) for i, (premises, hypothesis) in enumerate(pairs)))
+        return results
 
     async def aclose(self) -> None:
         if self._client is not None:
