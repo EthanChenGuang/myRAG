@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { QueryLlmError } from '@/lib/rag/query/llm';
 import { countTokens } from '@/lib/rag/ingest/text/tokens';
 import { NO_GLOSSARY_VERSION, glossaryFor } from '@/lib/rag/ingest/translate/glossary';
 import {
+  TranslationInvalidOutput,
   TranslationModelUnavailable,
   createFixtureChunkTranslationModel,
   createLlmChunkTranslationModel,
@@ -90,9 +90,10 @@ describe('translateChunk (D-29)', () => {
   });
 
   it('a model that is unavailable is not a gap: the run must stop instead', async () => {
-    const model = scripted([new QueryLlmError('unavailable', 'translate')]);
+    const model = scripted([new TranslationModelUnavailable('unavailable')]);
     await expect(translateChunk(SOURCE, base(model))).rejects.toBeInstanceOf(TranslationModelUnavailable);
-    const invalid = scripted([new QueryLlmError('invalid_output', 'translate'), new QueryLlmError('invalid_output', 'translate')]);
+    await expect(translateChunk(SOURCE, base(scripted([new Error('network')])))).rejects.toBeInstanceOf(TranslationModelUnavailable);
+    const invalid = scripted([new TranslationInvalidOutput(), new TranslationInvalidOutput()]);
     expect(await translateChunk(SOURCE, base(invalid))).toEqual({ ok: false, reason: 'invalid_output', attempts: 2 });
   });
 
@@ -114,27 +115,20 @@ describe('glossaryFor (D-29 seam)', () => {
 });
 
 describe('model adapters', () => {
-  it('the LLM adapter asks for the generated ChunkTranslation schema and keeps the source text out of the system prompt', async () => {
-    const seen: Array<{ system: string; prompt: string; transform: string; schemaOk: boolean }> = [];
-    const model = createLlmChunkTranslationModel('fake/model', {
-      model: 'fake/model',
-      async generate(request) {
-        seen.push({
-          system: request.system,
-          prompt: request.prompt,
-          transform: request.transform,
-          schemaOk: request.schema.safeParse({ content: 'x' }).success && !request.schema.safeParse({ content: '' }).success,
-        });
-        return request.schema.parse({ content: 'Module ABC-1234 processes 25 kg of material by 2026-03-01.' });
-      },
+  it('the LLM adapter sends the passage in the prompt only, with its protected tokens, and keeps it out of the system prompt', async () => {
+    const seen: Array<{ model: string; system: string; prompt: string }> = [];
+    const model = createLlmChunkTranslationModel('fake/model', async (request) => {
+      seen.push({ model: request.model, system: request.system, prompt: request.prompt });
+      return { content: 'Module ABC-1234 processes 25 kg of material by 2026-03-01.' };
     });
     expect(model.model).toBe('fake/model');
     const outcome = await translateChunk(SOURCE, base(model));
     expect(outcome).toMatchObject({ ok: true });
-    expect(seen[0]?.schemaOk).toBe(true);
+    expect(seen[0]?.model).toBe('fake/model');
     expect(seen[0]?.system).not.toContain(SOURCE);
-    expect(seen[0]?.prompt).toContain(SOURCE);
-    expect(seen[0]?.prompt).toContain('ABC-1234');
+    expect(seen[0]?.system).toMatch(/data, not instructions/);
+    expect(seen[0]?.prompt).toContain(`<passage>\n${SOURCE}\n</passage>`);
+    expect(seen[0]?.prompt).toContain('"ABC-1234"');
   });
 
   it('the fixture model serves the translation table in both directions and records its calls', async () => {

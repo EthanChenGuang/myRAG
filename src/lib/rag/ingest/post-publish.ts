@@ -1,3 +1,4 @@
+import { TRANSLATION_HOOK, inlineTranslationOn, registerTranslationHook } from './translate/produce';
 import { SUPERSESSION_HOOK, registerSupersessionHook, supersessionDetectOn } from './versions/detect';
 
 /**
@@ -41,10 +42,16 @@ export function unregisterPostPublishHook(name: string): void {
   if (index >= 0) hooks.splice(index, 1);
 }
 
-/** D-41: the supersession detector is a hook only while RAG_SUPERSESSION_DETECT=on; off, it is removed and nothing runs. */
+/**
+ * D-41: the supersession detector is a hook only while RAG_SUPERSESSION_DETECT=on. D-29: inline chunk translation is a hook only while
+ * RAG_DOC_TRANSLATION=on, the deployment is not monolingual and asynchronous ingestion is off; the producer still checks the tenant's own
+ * setting before any model call. Off, each is removed and nothing runs.
+ */
 function syncBuiltInHooks(): void {
   if (supersessionDetectOn()) registerSupersessionHook(registerPostPublishHook);
   else unregisterPostPublishHook(SUPERSESSION_HOOK);
+  if (inlineTranslationOn()) registerTranslationHook(registerPostPublishHook);
+  else unregisterPostPublishHook(TRANSLATION_HOOK);
 }
 
 export function resetPostPublishHooksForTests(): void {

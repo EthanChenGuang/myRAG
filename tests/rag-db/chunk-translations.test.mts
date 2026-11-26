@@ -430,7 +430,9 @@ describe('chunk translations follow their source chunk (0810, D-28 to D-31)', ()
         [TENANT_A],
       );
       assert.deepEqual(new Set(pending.rows.map((row) => row.chunk_id)), new Set([text.chunkId, table.chunkId]));
-      assert.equal(pending.rows.find((row) => row.chunk_id === text.chunkId)?.source_content_hash, 'h-text');
+      // 0820: the source hash is the sha256 of the content's UTF-8 bytes, whatever content_hash holds.
+      const textHash = crypto.createHash('sha256').update('fonte testo uno', 'utf8').digest('hex');
+      assert.equal(pending.rows.find((row) => row.chunk_id === text.chunkId)?.source_content_hash, textHash);
       const coverage = await fdb.query<{ language: string; translated: number; eligible: number }>('SELECT * FROM rag_translation_coverage($1)', [TENANT_A]);
       assert.deepEqual(coverage.rows.map((row) => ({ ...row, translated: Number(row.translated), eligible: Number(row.eligible) })), [
         { language: 'en', translated: 0, eligible: 2 },
@@ -438,7 +440,7 @@ describe('chunk translations follow their source chunk (0810, D-28 to D-31)', ()
 
       await fdb.query('SELECT rag_write_chunk_translations($1, $2::jsonb)', [
         TENANT_A,
-        JSON.stringify([translationRow(text.chunkId, 'en', 'text one', { source_content_hash: 'h-text' })]),
+        JSON.stringify([translationRow(text.chunkId, 'en', 'text one', { source_content_hash: textHash })]),
       ]);
       await fdb.query('SELECT rag_write_chunk_translations($1, $2::jsonb)', [
         TENANT_A,

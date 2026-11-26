@@ -16,6 +16,7 @@ export interface GlossaryScope {
 
 export const NO_GLOSSARY_VERSION = 'none';
 
+/** The terms to keep for one tenant and language pair. Returns no terms, version `none`, until XLG-05. */
 export async function glossaryFor(_scope: GlossaryScope, _source: string, _target: string): Promise<Glossary> {
-  return { version: '', terms: [{ source: '', target: '' }] };
+  return { version: NO_GLOSSARY_VERSION, terms: [] };
 }
