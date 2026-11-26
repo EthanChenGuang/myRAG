@@ -10,7 +10,7 @@ spec.loader.exec_module(check_workflows)
 
 
 def workflow(run: str) -> dict:
-    return {"jobs": {"ts": {"steps": [{"run": run}]}}}
+    return {"jobs": {"ts-tsx": {"steps": [{"run": run}]}}}
 
 
 class TsxCoverageTest(unittest.TestCase):
@@ -347,6 +347,62 @@ class NextBuildJobTest(unittest.TestCase):
 
     def test_a_workflow_without_the_job_has_nothing_to_check(self):
         self.assertEqual(self.errors_for(None), [])
+
+
+class TsJobsTest(unittest.TestCase):
+    def jobs(self) -> dict:
+        return check_workflows.load(check_workflows.PR)[0]["jobs"]
+
+    def errors_for(self, jobs: dict) -> list[str]:
+        errors: list[str] = []
+        check_workflows.check_ts_jobs(jobs, errors)
+        return errors
+
+    def test_repository_workflow_passes(self):
+        jobs = self.jobs()
+        self.assertNotIn("ts", jobs)
+        for name in check_workflows.TS_JOB_NEEDLES:
+            self.assertIn(name, check_workflows.PR_JOBS)
+            self.assertIn(name, jobs)
+        self.assertEqual(self.errors_for(jobs), [])
+
+    def test_a_dropped_check_is_reported(self):
+        jobs = self.jobs()
+        jobs["ts-checks"]["steps"] = [s for s in jobs["ts-checks"]["steps"] if "next typegen" not in str(s.get("run", ""))]
+        self.assertTrue(any("ts-checks is missing 'next typegen'" in e for e in self.errors_for(jobs)))
+
+    def test_a_check_moved_to_another_job_is_reported(self):
+        jobs = self.jobs()
+        jobs["ts-db"]["steps"] = [s for s in jobs["ts-db"]["steps"] if "tests/rag-db/" not in str(s.get("run", ""))]
+        jobs["ts-tsx"]["steps"].append({"run": "node --import tsx --test tests/rag-db/*.test.mts"})
+        self.assertTrue(any("ts-db is missing" in e for e in self.errors_for(jobs)))
+
+    def test_a_missing_shard_is_reported(self):
+        jobs = self.jobs()
+        jobs["ts-db"]["strategy"]["matrix"]["shard"] = ["1/4", "2/4", "3/4"]
+        self.assertTrue(any("ts-db matrix.shard" in e for e in self.errors_for(jobs)))
+
+    def test_a_shard_flag_not_from_the_matrix_is_reported(self):
+        jobs = self.jobs()
+        for step in jobs["ts-vitest"]["steps"]:
+            if "vitest run" in str(step.get("run", "")):
+                step["run"] = "npx vitest run --shard=1/2"
+        self.assertTrue(any("ts-vitest must pass --shard=" in e for e in self.errors_for(jobs)))
+
+    def test_a_long_timeout_is_reported(self):
+        jobs = self.jobs()
+        jobs["ts-tsx"]["timeout-minutes"] = 60
+        self.assertTrue(any("ts-tsx must set timeout-minutes" in e for e in self.errors_for(jobs)))
+
+    def test_the_root_ratchet_is_reported(self):
+        jobs = self.jobs()
+        jobs["ts-checks"]["steps"].append({"run": "node scripts/ci/tsc-ratchet.mjs --baseline scripts/ci/tsc-baseline.json"})
+        self.assertTrue(any("must run plain tsc" in e for e in self.errors_for(jobs)))
+
+    def test_continue_on_error_is_reported(self):
+        jobs = self.jobs()
+        jobs["ts-db"]["continue-on-error"] = True
+        self.assertTrue(any("continue-on-error" in e for e in self.errors_for(jobs)))
 
 
 if __name__ == "__main__":

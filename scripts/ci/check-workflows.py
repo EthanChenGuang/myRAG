@@ -22,7 +22,32 @@ TESTS_DIR = ROOT / "tests"
 TSX_GLOB = "tests/*.test.mts"
 TSX_COMMAND_RE = re.compile(r"node\s+--import\s+tsx\s+--test\b(?P<args>[^\n]*)")
 
-PR_JOBS = ["ts", "sibling-types", "voice-agent", "schema-parity", "python", "eval-smoke", "gate-negative-control", "docker-build", "next-build"]
+TS_JOB_NEEDLES = {
+    "ts-vitest": ("npx vitest run",),
+    "ts-db": ("node --import tsx --test", "tests/rag-db/*.test.mts"),
+    "ts-tsx": ("node --import tsx --test", TSX_GLOB, "tests/rag-e2e/*.test.mts", "nullglob"),
+    "ts-checks": (
+        "node scripts/check-config.mjs",
+        "scripts/check-config.test.mjs",
+        "scripts/tests/gen-zod.node-test.mjs",
+        "npm run typecheck:new",
+        "next typegen",
+        "npx tsc --noEmit -p tsconfig.json",
+        "scripts/tests/tsc-ratchet.node-test.mjs",
+        "scripts/tests/check-node-runtime.node-test.mjs",
+        "scripts/ci/check-workflows.py",
+        "scripts/ci/check-rag-boundary.mjs",
+        "scripts/tests/check-rag-boundary.node-test.mjs",
+        "scripts/ci/check-language-literals.mjs",
+        "scripts/tests/check-language-literals.node-test.mjs",
+        "scripts/ci/check-settings-classification.mjs",
+        "scripts/tests/check-settings-classification.node-test.mjs",
+    ),
+}
+# job -> the shard flag its test command must take from matrix.shard
+TS_SHARDED = {"ts-vitest": "--shard=", "ts-db": "--test-shard="}
+TS_TIMEOUT_MAX = 25
+PR_JOBS = [*TS_JOB_NEEDLES, "sibling-types", "voice-agent", "schema-parity", "python", "eval-smoke", "gate-negative-control", "docker-build", "next-build"]
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 USES_LINE_RE = re.compile(r"^\s*(?:-\s+)?uses:\s*(?P<ref>\S+)(?P<rest>.*)$")
 VERSION_COMMENT_RE = re.compile(r"^\s+#\s*v\d+(\.\d+){0,2}\s*$")
@@ -215,36 +240,7 @@ def check_pr(errors: list[str]) -> None:
         needs_eval = "eval" in body and ("pytest" in body or "test-rag" in body or "vitest" in body)
         if needs_eval and "uv sync --directory eval --locked --all-extras" not in body:
             errors.append(f"pr-smoke: job '{jname}' uses eval but does not sync it with --locked --all-extras")
-    ts = jobs.get("ts")
-    if ts is not None:
-        body = step_text(ts)
-        for needle in (
-            "npx vitest run",
-            "node --import tsx --test",
-            "tests/rag-db/",
-            "tests/rag-e2e/*.test.mts",
-            "nullglob",
-            "node scripts/check-config.mjs",
-            "scripts/check-config.test.mjs",
-            "scripts/tests/gen-zod.node-test.mjs",
-            "npm run typecheck:new",
-            "next typegen",
-            "npx tsc --noEmit -p tsconfig.json",
-            "scripts/tests/tsc-ratchet.node-test.mjs",
-            "scripts/ci/check-node-runtime.mjs",
-            "scripts/tests/check-node-runtime.node-test.mjs",
-            "scripts/ci/check-workflows.py",
-            "scripts/ci/check-rag-boundary.mjs",
-            "scripts/tests/check-rag-boundary.node-test.mjs",
-            "scripts/ci/check-language-literals.mjs",
-            "scripts/tests/check-language-literals.node-test.mjs",
-            "scripts/ci/check-settings-classification.mjs",
-            "scripts/tests/check-settings-classification.node-test.mjs",
-        ):
-            if needle not in body:
-                errors.append(f"pr-smoke: job ts is missing '{needle}'")
-        if "scripts/ci/tsc-baseline.json" in body or re.search(r"tsc-ratchet\.mjs(?![^\n]*--cwd)", body):
-            errors.append("pr-smoke: job ts must run plain tsc, not the root tsc ratchet or its baseline")
+    check_ts_jobs(jobs, errors)
     for jname, job in jobs.items():
         if re.search(r"tsc-ratchet\.mjs[^\n]*--write", step_text(job)):
             errors.append(f"pr-smoke: job {jname} must not run the tsc ratchet with --write")
@@ -293,7 +289,7 @@ def check_pr(errors: list[str]) -> None:
         body = step_text(sp)
         if "npm run gen:schemas" not in body or "git diff --exit-code" not in body:
             errors.append("pr-smoke: schema-parity must regenerate then git diff --exit-code")
-    for jname in ("ts", "schema-parity", "eval-smoke", "gate-negative-control"):
+    for jname in (*TS_JOB_NEEDLES, "schema-parity", "eval-smoke", "gate-negative-control"):
         job = jobs.get(jname)
         if job is not None and "npm ci" not in step_text(job):
             errors.append(f"pr-smoke: job {jname} must install with npm ci")
@@ -313,6 +309,44 @@ def check_pr(errors: list[str]) -> None:
         ):
             if needle not in body:
                 errors.append(f"pr-smoke: job docker-build is missing '{needle}'")
+
+
+def check_shards(jname: str, job: dict, flag: str, errors: list[str]) -> None:
+    """A sharded job must run every shard k/N for k = 1..N, and its test command must take the shard from the matrix."""
+    shards = ((job.get("strategy") or {}).get("matrix") or {}).get("shard")
+    if not isinstance(shards, list) or not shards:
+        errors.append(f"pr-smoke: job {jname} must list its shards in strategy.matrix.shard")
+        return
+    values = [str(v) for v in shards]
+    total = values[0].split("/")[-1]
+    expected = [f"{k}/{total}" for k in range(1, int(total) + 1)] if total.isdigit() and int(total) > 0 else None
+    if expected is None or values != expected:
+        errors.append(f"pr-smoke: job {jname} matrix.shard must be exactly 1/N..N/N, got {values!r}")
+    if f"{flag}${{{{ matrix.shard }}}}" not in step_text(job):
+        errors.append(f"pr-smoke: job {jname} must pass {flag}${{{{ matrix.shard }}}} to its test command")
+
+
+def check_ts_jobs(jobs: dict, errors: list[str]) -> None:
+    """The TypeScript checks run as parallel jobs; each one keeps its own required commands."""
+    for jname, needles in TS_JOB_NEEDLES.items():
+        job = jobs.get(jname)
+        if job is None:
+            continue
+        body = step_text(job)
+        for needle in (*needles, "scripts/ci/check-node-runtime.mjs"):
+            if needle not in body:
+                errors.append(f"pr-smoke: job {jname} is missing '{needle}'")
+        if "scripts/ci/tsc-baseline.json" in body or re.search(r"tsc-ratchet\.mjs(?![^\n]*--cwd)", body):
+            errors.append(f"pr-smoke: job {jname} must run plain tsc, not the root tsc ratchet or its baseline")
+        if "continue-on-error" in str(job):
+            errors.append(f"pr-smoke: job {jname} must not use continue-on-error")
+        timeout = job.get("timeout-minutes")
+        if not isinstance(timeout, int) or timeout > TS_TIMEOUT_MAX:
+            errors.append(f"pr-smoke: job {jname} must set timeout-minutes <= {TS_TIMEOUT_MAX}, got {timeout!r}")
+        if jname in TS_SHARDED:
+            check_shards(jname, job, TS_SHARDED[jname], errors)
+        elif (job.get("strategy") or {}).get("matrix"):
+            errors.append(f"pr-smoke: job {jname} is not a sharded job and must not use a matrix")
 
 
 def check_next_build(job: dict | None, errors: list[str]) -> None:
