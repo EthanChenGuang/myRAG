@@ -29,6 +29,7 @@ import { checkBypassReason, type CacheRetrievalOptions, type TurnFacts } from '.
 import { resolveHitSources } from '../cache/sources';
 import type { CacheHit, CacheKeyParts, CacheTicket, EntryProfile } from '../cache/types';
 import { resolveFinalResultCount } from '../config';
+import { effectiveVersionScope } from './filters';
 import type { RpcClient } from '../backend/supabase-rpc';
 
 export type QueryLayerShortCircuit = { kind: 'small_talk' } | { kind: 'cache_hit' };
@@ -323,6 +324,8 @@ async function runSemanticCacheStage(args: CacheStageInput): Promise<CacheStageR
     retrievalOptions: cacheRetrievalOptions(input),
     defaultMaxResults: resolveFinalResultCount(undefined, env.RAG_FINAL_RESULT_COUNT),
   };
+  const versionScope = effectiveVersionScope(ctx.config, profile, input.retrievalFilters?.versionScope).scope;
+  if (versionScope !== 'current') facts.versionScope = versionScope;
   const bypass = checkBypassReason(facts);
   if (bypass !== null) {
     record('disabled', `bypass=${bypass}`);

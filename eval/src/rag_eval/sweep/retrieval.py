@@ -492,6 +492,9 @@ def main(argv: list[str] | None = None) -> int:
     from rag_eval.sweep.chunking import register as register_chunking
 
     register_chunking(commands)
+    from rag_eval.sweep.diversity import register as register_diversity
+
+    register_diversity(commands)
     args = parser.parse_args(argv)
     return args.handler(args)
 

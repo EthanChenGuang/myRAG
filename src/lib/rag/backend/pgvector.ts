@@ -11,11 +11,13 @@ import type {
   BackendHealth,
   BackendLegs,
   BackendLegsMeta,
+  BackendCapabilities,
   BackendSearchRequest,
   BackendTranslationSearchRequest,
   RankedHit,
   RetrievalBackend,
   TranslationHit,
+  VersionScope,
 } from './types';
 
 export interface PgvectorBackendDeps {
@@ -43,6 +45,27 @@ interface HybridRow {
   document_metadata: Record<string, unknown> | null;
   document_content_preview: string | null;
   dense_mode: string | null;
+  dup_cluster_id?: string | null;
+  is_current?: boolean | null;
+  document_version?: number | null;
+}
+
+export const PGVECTOR_CAPABILITIES: Readonly<Required<BackendCapabilities>> = Object.freeze({ versionScope: true, identifierFilter: true });
+
+/** The p_version_scope argument for a scope, or null when the request reads current versions only (the argument is then left out). */
+export function versionScopeArg(scope: VersionScope | undefined): Record<string, string> | null {
+  if (scope === undefined || scope === 'current') return null;
+  if (scope === 'all') return { mode: 'all' };
+  return { mode: 'range', ...(scope.from ? { from: scope.from } : {}), ...(scope.to ? { to: scope.to } : {}) };
+}
+
+/** D-12, D-31: both arguments are spread in only when set, so a request without them sends today's body. */
+export function versionAndIdentifierArgs(scope: VersionScope | undefined, identifiersNorm: string[] | undefined): Record<string, unknown> {
+  const version = versionScopeArg(scope);
+  return {
+    ...(version ? { p_version_scope: version } : {}),
+    ...(identifiersNorm !== undefined ? { p_identifiers_norm: [...identifiersNorm] } : {}),
+  };
 }
 
 function mismatchKindOf(message: string): 'dims' | 'model' | 'vector' | 'provider' | 'startup' | 'not_active' | 'unknown_profile' {
@@ -80,6 +103,9 @@ function mapRow(row: HybridRow): RankedHit {
       metadata: row.document_metadata ?? {},
       contentPreview: row.document_content_preview ?? '',
     },
+    ...(typeof row.dup_cluster_id === 'string' && row.dup_cluster_id.length > 0 ? { dupClusterId: row.dup_cluster_id } : {}),
+    ...(typeof row.is_current === 'boolean' ? { isCurrent: row.is_current } : {}),
+    ...(typeof row.document_version === 'number' ? { documentVersion: row.document_version } : {}),
   };
 }
 
@@ -134,6 +160,7 @@ function buildRpcArgs(req: BackendSearchRequest, config: RagConfig): Record<stri
     ...(filters.dateRange?.includeUndated === true ? { p_include_undated: true } : {}),
     ...scopeArgs(filters),
     ...(filters.effectiveOn ? { p_effective_on: filters.effectiveOn } : {}),
+    ...versionAndIdentifierArgs(req.versionScope, req.identifiersNorm),
   };
 }
 
@@ -243,6 +270,7 @@ function buildTranslationArgs(req: BackendTranslationSearchRequest, config: RagC
 export function createPgvectorBackend(deps: PgvectorBackendDeps): RetrievalBackend {
   return {
     id: 'pgvector',
+    capabilities: PGVECTOR_CAPABILITIES,
     async search(req: BackendSearchRequest): Promise<BackendLegs> {
       assertTenantScope(req.scope);
       const client = deps.adminClient();

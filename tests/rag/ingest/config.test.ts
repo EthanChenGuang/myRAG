@@ -33,7 +33,7 @@ const DEFAULTS: IngestConfig = {
   qwenFallback: 'openrouter',
   qwenPrimary: 'deepinfra',
   languageAwareIngest: 'off',
-  tableHeaderRepeat: 'profile',
+  tableHeaderRepeat: 'always',
   tableRowSerialization: false,
   captionLanguage: 'en',
   docTranslation: 'off',

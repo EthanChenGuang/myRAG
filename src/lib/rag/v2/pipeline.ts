@@ -31,7 +31,7 @@ import {
 import { buildCacheHitResult, buildSmallTalkResult, buildV2Result, fusedHitsToVoiceChunks, requestRetrievalConfigHash } from './result';
 import { buildRetrievalFilters, effectiveOnFor } from '../query/filters';
 import { queryLanguage as detectQueryLanguage } from '../query/language';
-import type { RetrievalConfigHashQueryLayer } from './config-hash';
+import type { RetrievalConfigHashQueryLayer, TerminologyHashStage } from './config-hash';
 import { hasTranslationWork, planTranslationLegs, translationHashFields, type TranslationLegsPlan } from './translation-legs';
 import type { SemanticCacheSeam } from '../query/run-layer';
 import { variantDenseTexts } from '../query/variants';
@@ -104,6 +104,8 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
   let effectiveOn: string | undefined;
   let queryLayerHash: RetrievalConfigHashQueryLayer | undefined;
   let cacheTicket: RetrievalResult['cacheTicket'];
+  // D-21: set by the terminology stage before semantic_cache builds its key; enabled but not reached reads as unavailable.
+  let terminologyStage: TerminologyHashStage = spec('terminology', 'skip').enabled ? { enabled: true, version: null } : { enabled: false };
   const security = deps.securityConfig();
   if (security.injectionCheck !== 'off') warnInjectionCheckDisabled(config, security.injectionCheck);
 
@@ -153,6 +155,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
         translationHash: translationHashFields(await planTranslations(embedded.profile?.id ?? LEGACY_PROFILE.id), params),
         queryLayerHash: await layerHash(),
         ...(config.effectiveDates ? { effectiveOn: effectiveOnFor(config, deps.now()) } : {}),
+        terminology: terminologyStage,
       }),
   };
 
@@ -166,6 +169,9 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
       collector,
       stageOverrides: input.stageOverrides,
       cache: cacheSeam,
+      onTerminology: (stage) => {
+        terminologyStage = stage;
+      },
     });
     queryContext = query.queryContext;
     queryLanguage = query.queryLanguage;
@@ -245,9 +251,17 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
       filters: query.filters,
       bindings: { plan: bindingPlan, embeds: bindingEmbeds },
       ...(hasTranslationWork(translationPlan) ? { translations: translationPlan } : {}),
-      ...(query.terminology && query.terminology.expansionTokens.length > 0
-        ? { terminology: { tokens: query.terminology.expansionTokens, expansionWeight: query.terminology.expansionWeight } }
+      // D-31: term:0 is searched only when the stage's accounting kept it.
+      ...(query.terminology && query.terminology.termSearch && query.terminology.expansionTokens.length > 0
+        ? {
+            terminology: {
+              tokens: query.terminology.expansionTokens,
+              expansionWeight: query.terminology.expansionWeight,
+              reserveSlots: query.terminology.reserveSlots,
+            },
+          }
         : {}),
+      ...(query.terminology ? { terminologyDenseWeight: query.terminology.denseWeight } : {}),
     });
 
     const rank = await runRankStages({
@@ -334,6 +348,8 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
         stageOverrides: input.stageOverrides,
         rerank: rank.rerank,
         security,
+        versionScope: search.versionScope,
+        queryLanguage: query.queryLanguage,
       });
       assembly = context.assembly;
       candidates = context.candidates;
@@ -409,6 +425,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
     ...(effectiveOn ? { effectiveOn } : {}),
     ...(queryLayerHash ? { queryLayerHash } : {}),
     ...(cacheTicket ? { cacheTicket } : {}),
+    terminology: terminologyStage,
   });
 }
 

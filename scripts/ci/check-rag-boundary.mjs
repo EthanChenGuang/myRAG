@@ -139,7 +139,12 @@ const BACKFILL_RPC_RE = new RegExp(
   'g',
 );
 
+const TERMINOLOGY_DIR = 'src/lib/rag/terminology/';
+const TERMINOLOGY_RPC_RE = /\.rpc\s*\(\s*(['"`])rag_term_/g;
+const TERMINOLOGY_TABLE_RE = new RegExp(String.raw`\.from\s*(?:<[^>()]*>)?\s*\(\s*(['"\`])rag_term_`, 'g');
+
 const inSrc = (rel) => rel.startsWith('src/');
+const outsideTerminologyDir = (rel) => inSrc(rel) && !rel.startsWith(TERMINOLOGY_DIR);
 const outsideLedgerClient = (rel) => inSrc(rel) && rel !== LEDGER_CLIENT;
 const outsideBudgetClient = (rel) => inSrc(rel) && rel !== BUDGET_CLIENT;
 const outsideBackfillDir = (rel) => inSrc(rel) && !rel.startsWith(BACKFILL_DIR);
@@ -454,6 +459,12 @@ export const RULES = [
     description: 'backfill batch RPC called outside src/lib/rag/ingest/backfill/',
     appliesTo: outsideBackfillDir,
     find: (text) => regexMatches(BACKFILL_RPC_RE, text),
+  },
+  {
+    id: 'terminology-rpc',
+    description: 'rag_term_* RPC call or table access under src/ outside src/lib/rag/terminology/ (read through getTerminologyLexicon)',
+    appliesTo: outsideTerminologyDir,
+    find: (text) => [...regexMatches(TERMINOLOGY_RPC_RE, text), ...regexMatches(TERMINOLOGY_TABLE_RE, text)],
   },
   {
     id: 'rerank-http',

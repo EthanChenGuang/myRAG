@@ -1,4 +1,6 @@
+import { versionAndIdentifierArgs } from '../backend/pgvector';
 import { RetrievalBackendError, rpcRows, type RpcClient } from '../backend/supabase-rpc';
+import type { VersionScope } from '../backend/types';
 import { IDENTIFIER_PATTERN } from '../ids/shapes';
 import { queryLexicalTokens } from '../lexical/tokenize';
 import { classifyTaxId, type TaxIdScheme } from '../ids/tax-ids';
@@ -104,6 +106,9 @@ export interface ExactIdLookupOptions {
   client: RpcClient;
   signal: AbortSignal;
   limit?: number;
+  /** Passed through to the SQL function only when set; 'current' sends nothing. */
+  versionScope?: VersionScope;
+  identifiersNorm?: string[];
 }
 
 export interface ExactIdStageResult {
@@ -162,7 +167,12 @@ export async function exactIdLookup(scope: TenantScope, tokens: ExactIdToken[], 
   const { client, signal } = options;
   signal.throwIfAborted();
   const response = await client
-    .rpc(RPC_NAME, { p_tenant_key: scopeKey(scope).toLowerCase(), p_tokens: values, p_limit: options.limit ?? EXACT_ID_LIMIT })
+    .rpc(RPC_NAME, {
+      p_tenant_key: scopeKey(scope).toLowerCase(),
+      p_tokens: values,
+      p_limit: options.limit ?? EXACT_ID_LIMIT,
+      ...versionAndIdentifierArgs(options.versionScope, options.identifiersNorm),
+    })
     .abortSignal(signal);
   signal.throwIfAborted();
   if (response.error) throw new RetrievalBackendError(RPC_NAME, response.error.code ?? null);

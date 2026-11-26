@@ -17,6 +17,19 @@ export function cacheHitMetadata(hit: CacheHit): { ragTraceId: string; cache: 'h
   return { ragTraceId: hit.answer.trace_id, cache: 'hit' };
 }
 
+const WORDS_PER_DELTA = 4;
+
+/** D-27: a stored answer as text deltas of a few words each; the deltas concatenate to the stored text exactly. */
+export function cachedAnswerDeltas(text: string): string[] {
+  const words = text.match(/\s*\S+\s*/g);
+  if (!words || words.length <= 1) return [text];
+  const deltas: string[] = [];
+  for (let index = 0; index < words.length; index += WORDS_PER_DELTA) {
+    deltas.push(words.slice(index, index + WORDS_PER_DELTA).join(''));
+  }
+  return deltas;
+}
+
 /**
  * D-32: writes a cached answer through the normal UI message stream: start metadata, the sources part, the answer text and the
  * finish metadata with the (re-resolved) citations. No retrieval and no model call happen here.
@@ -37,7 +50,7 @@ export function streamCachedAnswer(hit: CacheHit, options: StreamCachedAnswerOpt
 
   const textId = options.textId ?? `text-${Date.now()}`;
   writer.write({ type: 'text-start', id: textId });
-  writer.write({ type: 'text-delta', id: textId, delta: answer.answer_text });
+  for (const delta of cachedAnswerDeltas(answer.answer_text)) writer.write({ type: 'text-delta', id: textId, delta });
   writer.write({ type: 'text-end', id: textId });
 
   const citations = answer.is_refusal ? [] : (answer.citations ?? []);
