@@ -21,7 +21,8 @@ ALTER TABLE public.rag_answer_records ADD CONSTRAINT rag_answer_records_review_r
 ALTER TABLE public.rag_review_items DROP CONSTRAINT IF EXISTS rag_review_items_reasons_check;
 ALTER TABLE public.rag_review_items ADD CONSTRAINT rag_review_items_reasons_check
   CHECK (reasons <@ ARRAY['feedback_negative', 'refusal_disputed', 'groundedness_flagged', 'refused_high_score', 'zero_results',
-                          'low_score', 'no_source_opened', 'claim_unsupported', 'output_guard', 'version_conflict']::text[]);
+                          'low_score', 'no_source_opened', 'claim_unsupported', 'output_guard', 'version_conflict',
+                          'representative', 're_review']::text[]);
 
 CREATE OR REPLACE FUNCTION public.rag_mine_failed_queries(p_since timestamptz, p_until timestamptz, p_config jsonb)
 RETURNS TABLE (tenant_key text, reason text, inserted integer)
