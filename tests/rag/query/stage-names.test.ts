@@ -14,7 +14,20 @@ function generatedStageNames(): string[] {
 }
 
 /** Stages the v2 graph runs internally; the eval contract does not let a caller disable or time them (Phase 4). */
-const V2_INTERNAL_STAGES = ['fuse', 'exact_id_lookup', 'translate', 'dedupe', 'rerank', 'refusal', 'expand_parents', 'compress'];
+const V2_INTERNAL_STAGES = [
+  'fuse',
+  'exact_id_lookup',
+  'translate',
+  'dedupe',
+  'rerank',
+  'refusal',
+  'expand_parents',
+  'compress',
+  'table_lookup',
+  'diversify',
+  'identifier_resolve',
+  'identifier_guard',
+];
 
 describe('stage names (D-05)', () => {
   test('every generated Pydantic StageName is a registered pipeline stage', () => {

@@ -112,7 +112,7 @@ describe('Phase 4.1 defaults-gate run configs', () => {
 });
 
 describe('run-config validation', () => {
-  test('the allow-list is RAG_PIPELINE, the Phase 4 RAG_ switches, the refusal floor, the value-constrained vendor settings, the five Phase 5.1 SEC switches and the 16 Phase 6 names', () => {
+  test('the allow-list is RAG_PIPELINE, the Phase 4 RAG_ switches, the refusal floor, the eight Phase 4.2 tuning switches, the value-constrained vendor settings, the five Phase 5.1 SEC switches and the 16 Phase 6 names', () => {
     assert.deepEqual([...RUN_CONFIG_ENV_ALLOWLIST].sort(), [
       'COHERE_API_KEY',
       'COHERE_BASE_URL',
@@ -120,12 +120,17 @@ describe('run-config validation', () => {
       'RAG_CONTEXT_EDGE_ORDER',
       'RAG_CONTEXT_TAGGING',
       'RAG_CONTEXT_TOKEN_BUDGET',
+      'RAG_DUP_CLUSTERS',
       'RAG_EXACT_SCAN_CUTOFF',
       'RAG_HNSW_ITERATIVE_SCAN',
+      'RAG_IDENTIFIER_FILTER',
+      'RAG_IDENTIFIER_INDEX',
       'RAG_INJECTION_CHECK',
       'RAG_INJECTION_LAKERA',
       'RAG_INJECTION_PROMPT_GUARD',
+      'RAG_LEXICAL_DICTIONARY',
       'RAG_LEXICAL_SEARCH',
+      'RAG_LEXICAL_STEM_IT',
       'RAG_LEXICAL_TRANSLATION',
       'RAG_PARENT_CHILD',
       'RAG_PIPELINE',
@@ -146,12 +151,15 @@ describe('run-config validation', () => {
       'RAG_RERANK_TIER_CHAT',
       'RAG_RERANK_TIER_VOICE',
       'RAG_RERANK_VOYAGE_MODEL_BY_LANG',
+      'RAG_RESULT_DIVERSITY',
       'RAG_SEMANTIC_CACHE',
       'RAG_SEMANTIC_CACHE_EMBED_STORE',
       'RAG_SEMANTIC_CACHE_MAX_DISTANCE',
       'RAG_SEMANTIC_CACHE_REFUSAL_TTL',
       'RAG_SEMANTIC_CACHE_TTL',
+      'RAG_TABLE_LOOKUP',
       'RAG_TOOL_RESULT_GUARD',
+      'RAG_VERSION_SCOPE',
       'VOYAGE_API_KEY',
       'VOYAGE_BASE_URL',
     ]);

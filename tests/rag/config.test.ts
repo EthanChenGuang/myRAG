@@ -23,9 +23,27 @@ afterEach(() => {
   warn.mockRestore();
 });
 
+const PHASE42_STAGES = ['table_lookup', 'diversify', 'identifier_resolve', 'identifier_guard'];
+
 function phase4Disabled(config: { disabledStages: ReadonlySet<string> }): string[] {
-  const queryLayer = new Set<string>(QUERY_LAYER_STAGES);
-  return [...config.disabledStages].filter((name) => !queryLayer.has(name)).sort();
+  const skip = new Set<string>([...QUERY_LAYER_STAGES, ...PHASE42_STAGES]);
+  return [...config.disabledStages].filter((name) => !skip.has(name)).sort();
+}
+
+const PHASE42_V2_FIELDS = [
+  'lexicalDictionary',
+  'lexicalStemIt',
+  'versionScope',
+  'tableLookup',
+  'dupClusters',
+  'resultDiversity',
+  'identifierIndex',
+  'identifierFilter',
+  'lexicalVersion',
+];
+
+function withoutPhase42(v2: object): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(v2).filter(([key]) => !PHASE42_V2_FIELDS.includes(key)));
 }
 
 function configWarnings(): string[] {
@@ -58,6 +76,10 @@ const CHAT_DEFAULTS = {
   hyde: 900,
   decompose: 800,
   semantic_cache: 150,
+  table_lookup: 1000,
+  diversify: 1000,
+  identifier_resolve: 1000,
+  identifier_guard: 1000,
 };
 
 describe('stage tables', () => {
@@ -86,6 +108,10 @@ describe('stage tables', () => {
       'hyde',
       'decompose',
       'semantic_cache',
+      'table_lookup',
+      'diversify',
+      'identifier_resolve',
+      'identifier_guard',
     ]);
   });
 
@@ -103,6 +129,8 @@ describe('stage tables', () => {
       expand_parents: 1000,
       translate: 300,
     });
+    expect(PROFILE_STAGE_DEFAULTS.voice).toMatchObject({ table_lookup: 500, identifier_resolve: 500, diversify: 300, identifier_guard: 300 });
+    expect(PROFILE_STAGE_DEFAULTS.eval).toMatchObject({ table_lookup: 1000, identifier_resolve: 1000, diversify: 1000, identifier_guard: 1000 });
   });
 });
 
@@ -186,6 +214,15 @@ describe('loadRagConfig', () => {
     });
     expect(config.v2.paramsOverride).toEqual({ candidate_pool_size: 50, rerank_input_cap: 60, final_top_k: 10 });
     expect(configWarnings().join(' ')).toMatch(/cap|foo/);
+  });
+
+  test('rerank_input_cap accepts 25..100 (D-41)', () => {
+    expect(loadRagConfig({ RAG_RETRIEVAL_PARAMS_OVERRIDE: 'cap=25' }).v2.paramsOverride).toEqual({ rerank_input_cap: 25 });
+    expect(loadRagConfig({ RAG_RETRIEVAL_PARAMS_OVERRIDE: 'cap=24' }).v2.paramsOverride).toEqual({});
+    expect(loadRagConfig({ RAG_RETRIEVAL_PARAMS_OVERRIDE: 'cap=101' }).v2.paramsOverride).toEqual({});
+    const text = configWarnings().join(' ');
+    expect(text).toContain('rerank_input_cap must be 25..100, entry ignored');
+    expect(text).not.toContain('50..100');
   });
 
   test('RAG_RERANKER=cohere removes rerank from disabledStages', () => {
@@ -472,7 +509,7 @@ describe('Phase 3.2 typed switches (D-47)', () => {
       disabledStages: phase4Disabled(rag),
       timeouts: rag.timeouts,
       exactIdLookup: rag.exactIdLookup,
-      v2: rag.v2,
+      v2: withoutPhase42(rag.v2),
       warnings: rag.warnings,
     }).toEqual({
       pipeline: 'legacy',
@@ -788,5 +825,140 @@ describe('retrieval backend (D-11, D-24)', () => {
     expect(loadRagConfig({ RAG_RETRIEVAL_BACKEND: 'qdrant' })).not.toBe(base);
     expect(loadRagConfig({ RAG_RETRIEVAL_BACKEND_VOICE: 'qdrant' })).not.toBe(base);
     expect(loadRagConfig({ RAG_VECTOR_SYNC_MAX_LAG_SECONDS: '60' })).not.toBe(base);
+  });
+});
+
+describe('Phase 4.2 tuning switches (D-04, D-40, D-42, D-53)', () => {
+  const BOOLEANS = [
+    ['RAG_LEXICAL_DICTIONARY', 'lexicalDictionary'],
+    ['RAG_LEXICAL_STEM_IT', 'lexicalStemIt'],
+    ['RAG_VERSION_SCOPE', 'versionScope'],
+    ['RAG_TABLE_LOOKUP', 'tableLookup'],
+    ['RAG_DUP_CLUSTERS', 'dupClusters'],
+    ['RAG_IDENTIFIER_INDEX', 'identifierIndex'],
+    ['RAG_IDENTIFIER_FILTER', 'identifierFilter'],
+  ] as const;
+  const PREREQS: Record<string, Record<string, string>> = {
+    RAG_VERSION_SCOPE: { RAG_LEXICAL_SEARCH: 'true' },
+    RAG_IDENTIFIER_FILTER: { RAG_IDENTIFIER_INDEX: 'true' },
+  };
+
+  test('unset: every switch is off, diversity is off, the lexical version is 2 and no warning is logged', () => {
+    const config = loadRagConfig({});
+    for (const [, field] of BOOLEANS) expect(config.v2[field], field).toBe(false);
+    expect(config.v2.resultDiversity).toBe('off');
+    expect(config.v2.lexicalVersion).toBe(2);
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test('unset: every pre-existing v2 field keeps its value', () => {
+    const rest = withoutPhase42(loadRagConfig({ RAG_PIPELINE: 'v2' }).v2);
+    expect(rest).toEqual({
+      lexicalSearch: false,
+      reranker: 'none',
+      rerankTier: { chat: 'quality', voice: 'fast' },
+      voyageModelByLang: {},
+      refusalThreshold: false,
+      refusalFloor: 'similarity',
+      edgeOrder: false,
+      compression: false,
+      tokenBudget: 6000,
+      parentChild: false,
+      iterativeScan: 'off',
+      exactScanCutoff: 0,
+      lexicalTranslation: false,
+      paramsOverride: {},
+      hasCohereKey: false,
+      hasVoyageKey: false,
+      domainEmbeddings: { enabled: false, maxLegs: 2, timeoutMs: 800 },
+    });
+  });
+
+  test.each(BOOLEANS)('%s accepts true and false', (name, field) => {
+    expect(loadRagConfig({ ...PREREQS[name], [name]: 'true' }).v2[field]).toBe(true);
+    expect(loadRagConfig({ ...PREREQS[name], [name]: 'TRUE' }).v2[field]).toBe(true);
+    expect(loadRagConfig({ ...PREREQS[name], [name]: 'false' }).v2[field]).toBe(false);
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test.each(BOOLEANS)('%s: any other value warns once and uses false', (name, field) => {
+    for (let i = 0; i < 3; i += 1) {
+      expect(loadRagConfig({ ...PREREQS[name], [name]: 'on' }).v2[field]).toBe(false);
+    }
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('[RAG Config]');
+  });
+
+  test('RAG_RESULT_DIVERSITY accepts off, collapse and mmr; anything else warns once and uses off', () => {
+    const clusters = { RAG_DUP_CLUSTERS: 'true' };
+    expect(loadRagConfig({ ...clusters, RAG_RESULT_DIVERSITY: 'off' }).v2.resultDiversity).toBe('off');
+    expect(loadRagConfig({ ...clusters, RAG_RESULT_DIVERSITY: 'collapse' }).v2.resultDiversity).toBe('collapse');
+    expect(loadRagConfig({ ...clusters, RAG_RESULT_DIVERSITY: 'MMR' }).v2.resultDiversity).toBe('mmr');
+    expect(configWarnings()).toEqual([]);
+    expect(loadRagConfig({ RAG_RESULT_DIVERSITY: 'random' }).v2.resultDiversity).toBe('off');
+    expect(loadRagConfig({ RAG_RESULT_DIVERSITY: 'random', RAG_PIPELINE: 'v2' }).v2.resultDiversity).toBe('off');
+    expect(configWarnings()).toHaveLength(1);
+    expect(configWarnings()[0]).toContain('RAG_RESULT_DIVERSITY');
+  });
+
+  test('identifier filter without the identifier index warns once and runs unfiltered', () => {
+    const a = loadRagConfig({ RAG_IDENTIFIER_FILTER: 'true' });
+    const b = loadRagConfig({ RAG_IDENTIFIER_FILTER: 'true', RAG_IDENTIFIER_INDEX: 'false' });
+    for (const config of [a, b]) {
+      expect(config.v2.identifierFilter).toBe(false);
+      expect(config.disabledStages.has('identifier_resolve')).toBe(true);
+      expect(config.disabledStages.has('identifier_guard')).toBe(true);
+    }
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('RAG_IDENTIFIER_INDEX');
+  });
+
+  test('version scope without the lexical leg warns once and scopes to current versions only', () => {
+    const config = loadRagConfig({ RAG_VERSION_SCOPE: 'true' });
+    loadRagConfig({ RAG_VERSION_SCOPE: 'true', RAG_LEXICAL_SEARCH: 'false' });
+    expect(config.v2.versionScope).toBe(false);
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('RAG_LEXICAL_SEARCH');
+    expect(loadRagConfig({ RAG_VERSION_SCOPE: 'true', RAG_LEXICAL_SEARCH: 'true' }).v2.versionScope).toBe(true);
+  });
+
+  test('collapse without duplicate clusters warns once and keeps the value', () => {
+    expect(loadRagConfig({ RAG_RESULT_DIVERSITY: 'collapse' }).v2.resultDiversity).toBe('collapse');
+    loadRagConfig({ RAG_RESULT_DIVERSITY: 'collapse', RAG_DUP_CLUSTERS: 'false' });
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('RAG_DUP_CLUSTERS');
+    expect(loadRagConfig({ RAG_RESULT_DIVERSITY: 'mmr' }).v2.resultDiversity).toBe('mmr');
+    expect(configWarnings()).toHaveLength(1);
+  });
+
+  test('changing any one of the eight variables returns a different configuration object', () => {
+    const base = loadRagConfig({});
+    for (const [name] of BOOLEANS) expect(loadRagConfig({ [name]: 'true' }), name).not.toBe(base);
+    expect(loadRagConfig({ RAG_RESULT_DIVERSITY: 'mmr' })).not.toBe(base);
+  });
+
+  test('the four stages are disabled while their switch is off', () => {
+    const off = loadRagConfig({});
+    for (const stage of PHASE42_STAGES) expect(off.disabledStages.has(stage as never), stage).toBe(true);
+    const on = loadRagConfig({
+      RAG_TABLE_LOOKUP: 'true',
+      RAG_DUP_CLUSTERS: 'true',
+      RAG_RESULT_DIVERSITY: 'collapse',
+      RAG_IDENTIFIER_INDEX: 'true',
+      RAG_IDENTIFIER_FILTER: 'true',
+    });
+    for (const stage of PHASE42_STAGES) expect(on.disabledStages.has(stage as never), stage).toBe(false);
+    expect(loadRagConfig({ RAG_RESULT_DIVERSITY: 'mmr' }).disabledStages.has('diversify' as never)).toBe(false);
+    expect(loadRagConfig({ RAG_IDENTIFIER_INDEX: 'true' }).disabledStages.has('identifier_resolve' as never)).toBe(true);
+  });
+
+  test('RAG_DISABLED_STAGES accepts the four stage names', () => {
+    const config = loadRagConfig({ RAG_TABLE_LOOKUP: 'true', RAG_DISABLED_STAGES: 'table_lookup,diversify,identifier_resolve,identifier_guard' });
+    for (const stage of PHASE42_STAGES) expect(config.disabledStages.has(stage as never), stage).toBe(true);
+    expect(configWarnings()).toEqual([]);
   });
 });
