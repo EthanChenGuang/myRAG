@@ -4,12 +4,18 @@ import crypto from 'node:crypto';
 import type { PGlite } from '@electric-sql/pglite';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createEmptyFixtureDatabase, type DeploymentMode } from '../../eval/harness/pglite-supabase.mts';
-import { loadMonitorAlertsConfig } from '../../src/lib/rag/monitor/alerts-config.ts';
-import { runDaily } from '../../src/lib/rag/monitor/daily.ts';
-import { RULE_KIND_REGISTRY, type AlertCandidate, type RuleKindRegistry } from '../../src/lib/rag/monitor/rule-registry.ts';
-import { dedupKey } from '../../src/lib/rag/monitor/rules.ts';
+import type { AlertCandidate, RuleKindRegistry } from '../../src/lib/rag/monitor/rule-registry.ts';
 import { createPgliteAdmin } from '../helpers/pglite-admin.ts';
 import { seedRetrievalLog, type SeedCell, type SeededRow } from '../helpers/retrieval-log-seed.ts';
+
+process.env.OPENAI_API_KEY ||= 'placeholder-openai-key';
+process.env.SUPABASE_SERVICE_ROLE_KEY ||= 'placeholder-service-role-key';
+process.env.NEXT_PUBLIC_SUPABASE_URL ||= 'http://127.0.0.1:9';
+process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||= 'placeholder-anon-key';
+const { loadMonitorAlertsConfig } = await import('../../src/lib/rag/monitor/alerts-config.ts');
+const { runDaily } = await import('../../src/lib/rag/monitor/daily.ts');
+const { RULE_KIND_REGISTRY } = await import('../../src/lib/rag/monitor/rule-registry.ts');
+const { dedupKey } = await import('../../src/lib/rag/monitor/rules.ts');
 
 const MODES: DeploymentMode[] = ['single-tenant', 'multi-tenant'];
 const ENV = { RAG_MONITOR: 'true', RAG_RETRIEVAL_LOG: 'ids' };
