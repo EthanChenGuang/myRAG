@@ -29,6 +29,7 @@ function loadProcessDocuments() {
 function loadIngestion() {
   return require('../../scripts/config-ui/rag-panels/ingestion.js') as {
     INGESTION_LABELS: Record<'en' | 'zh' | 'it', Record<string, string>>;
+    INGESTION_STATUS_FILTERS: Record<string, string[]>;
     ingestionLabel: (key: string, locale: 'en' | 'zh' | 'it', vars?: Record<string, unknown>) => string;
     buildJobRowView: (job: Record<string, unknown>, locale: 'en' | 'zh' | 'it', docType?: string) => Record<string, unknown>;
     buildJobDetailView: (job: Record<string, unknown>, locale: 'en' | 'zh' | 'it', docType?: string) => Record<string, unknown>;
@@ -306,5 +307,34 @@ describe('relocated ingestion settings region', () => {
       expect((html.match(new RegExp(`id="${id}"`, 'g')) || []).length).toBe(1);
     }
     expect(region).not.toMatch(/VOYAGE_API_KEY|type="password"|id="[A-Z0-9_]*(KEY|SECRET|TOKEN|PASSWORD)/);
+  });
+});
+
+describe('the held or skipped status filter includes pending_review (UI-SPEC decision 16, 12.8)', () => {
+  it('the other group asks for quarantined, skipped_duplicate and pending_review', () => {
+    const { INGESTION_STATUS_FILTERS } = loadIngestion();
+    expect(INGESTION_STATUS_FILTERS?.other).toEqual(['quarantined', 'skipped_duplicate', 'pending_review']);
+    expect(Object.values(INGESTION_STATUS_FILTERS ?? {}).flat().filter((s) => s === 'pending_review')).toHaveLength(1);
+  });
+
+  it('labels the group Held or skipped in en, zh and it, and in the static radio name', () => {
+    const { ingestionLabel } = loadIngestion();
+    expect(ingestionLabel('filter.other', 'en')).toBe('Held or skipped');
+    expect(ingestionLabel('filter.other', 'zh')).toBe('已暂缓或跳过');
+    expect(ingestionLabel('filter.other', 'it')).toBe('Trattenuti o saltati');
+    const html = fs.readFileSync(path.join(repoRoot, 'scripts/config-ui/index.html'), 'utf8');
+    expect(html).toContain('name="ingestion-status" value="other" aria-label="Held or skipped"');
+    expect(html).not.toContain('Quarantined or skipped');
+  });
+
+  it('a pending_review job reads Awaiting approval, with 等待批准 in zh, and is terminal for polling', () => {
+    const { buildJobRowView } = loadIngestion();
+    const { ingestJobStatusView } = loadStatusMonitor();
+    expect(buildJobRowView({ id: 'j1', status: 'pending_review', filename: 'a.pdf' }, 'en', '').statusLabel).toBe('Awaiting approval');
+    expect(buildJobRowView({ id: 'j1', status: 'pending_review', filename: 'a.pdf' }, 'zh', '').statusLabel).toBe('等待批准');
+    const view = ingestJobStatusView({ status: 'pending_review' }, 'it') as { label: string; terminal: boolean; icon?: string };
+    expect(view.label).toBe('In attesa di approvazione');
+    expect(view.terminal).toBe(true);
+    expect(view.icon).toBe('bi-hourglass');
   });
 });
