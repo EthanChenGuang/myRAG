@@ -323,6 +323,13 @@ def test_stale_scan_on_a_temp_corpus_changes_only_the_manifest(fixture_dir):
     assert by_id[quote_item.id]["status"] == "stale" and by_id[quote_item.id]["stale_reason"] == "quote_not_found"
 
 
+def test_corpus_documents_keeps_every_version_of_a_lineage_filename():
+    versions = [doc for doc in load_corpus(CORPUS_DIR) if doc.lineage is not None and doc.filename == "versioned-note.en.md"]
+    assert len(versions) == 2
+    text = golden_set.corpus_documents(versions)["versioned-note.en.md"]
+    assert all(doc.content in text for doc in versions)
+
+
 def test_stale_scan_of_the_committed_fixture_set_finds_nothing(capsys):
     items = load_golden(FIXTURE_GOLDEN)
     manifest = golden_set.load_manifest(FIXTURE_MANIFEST)
@@ -376,7 +383,14 @@ def test_committed_ingest_manifest_verifies_against_the_merged_ingest_set():
 
 
 def test_committed_manifests_start_at_version_one_all_active():
+    # Version 1 recorded the set when 05.3-06 created the manifests; version 2 (bump, train 30) added only the
+    # 36 Phase 4.2 items of plan 04.2-37 (tag phase42). Every item is still active.
+    phase42 = sorted(item.id for item in load_golden(FIXTURE_GOLDEN) if "phase42" in item.tags)
+    assert len(phase42) == 36
     for path in (FIXTURE_MANIFEST, INGEST_MANIFEST):
         manifest = golden_set.load_manifest(path)
-        assert manifest.version == 1
+        assert manifest.version == 2
+        assert [entry.version for entry in manifest.changelog] == [1, 2]
+        assert sorted(manifest.changelog[1].added) == phase42
+        assert not manifest.changelog[1].changed
         assert all(entry.status == "active" for entry in manifest.items)
