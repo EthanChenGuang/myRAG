@@ -15,7 +15,8 @@ export function blockedReplacements(
   const text = clientText('notices.credential_request_blocked', language);
   if (!text) return byPart;
   for (const range of verifySentenceRecordsSync(parts, blockedRanges) ?? []) {
-    byPart[range.part]?.push({ start: range.start, end: range.end, text });
+    const shown = parts[range.part] ?? '';
+    if (range.start < shown.length) byPart[range.part]?.push({ start: range.start, end: Math.min(range.end, shown.length), text });
   }
   return byPart.map((list, part) => normalizeReplacements(parts[part] ?? '', list));
 }

@@ -49,7 +49,7 @@ export function SentenceMark({ kind, index, text, lang, uiLanguage }: SentenceMa
               lang={langAttr}
               className={cn(
                 'relative inline-flex h-4 w-4 items-center justify-center rounded-full',
-                'cursor-default touch-manipulation after:absolute after:-inset-2',
+                'cursor-default touch-manipulation [-webkit-tap-highlight-color:transparent] after:absolute after:-inset-2',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6417]/60',
               )}
             >

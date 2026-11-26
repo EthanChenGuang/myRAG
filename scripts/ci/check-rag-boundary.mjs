@@ -18,6 +18,9 @@ export const ALLOWLIST = [
 // Dependency-free CommonJS files the config server requires (Phase 5.3 O-3 item 5); app code uses @/lib/rag.
 export const SHARED_CJS = /^config-gate\/[a-z0-9-]+\.cjs$/;
 
+// Generated, data-only modules the browser reads (Phase 5.2 D-12); importing the index from a client component would bundle the pipeline.
+export const CLIENT_DATA_MODULES = ['lang/texts.generated'];
+
 export const RETIRED_MODULES = [
   'enhanced-rag-retrieval',
   'retrieval-strategies',
@@ -410,7 +413,7 @@ export const RULES = [
     find: (text) =>
       importMatches(text, ({ spec }) => {
         const m = /(?:^|\/)lib\/rag\/(.+)$/.exec(specBase(spec));
-        if (!m || m[1] === 'index') return null;
+        if (!m || m[1] === 'index' || CLIENT_DATA_MODULES.includes(m[1])) return null;
         return SHARED_CJS.test(/(?:^|\/)lib\/rag\/(.+)$/.exec(spec)[1]) ? null : spec;
       }),
   },

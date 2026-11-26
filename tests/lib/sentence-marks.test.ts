@@ -236,3 +236,23 @@ describe('records from the server builder', () => {
     expect(rendered.match(/#mark-/g)).toHaveLength(2);
   });
 });
+
+describe('stripped trailing whitespace', () => {
+  test('a shown text without the persisted trailing newline verifies, and its marks stay inside the shown text', async () => {
+    const persisted = 'Alpha is one.\n\n| a |\n|---|\n| 1 |\n';
+    const shown = persisted.replace(/\s+$/, '');
+    const fact = record(persisted, 'Alpha is one.\n\n', { index: 0 });
+    const table = record(persisted, '| a |\n|---|\n| 1 |\n', { index: 1, kind: 'table' });
+    const verified = await verifySentenceRecords([shown], [fact, table]);
+    expect(verified).toEqual([fact, table]);
+    expect(insertSentenceMarks(shown, verified, uncited(verified))).toBe(
+      `Alpha is one.⁠[](${markHref('uncited', 0, 0)})\n\n| a |\n|---|\n| 1 |\n\n[](${markHref('uncited', 0, 1)})`,
+    );
+  });
+
+  test('a different text with the same prefix does not verify', async () => {
+    const persisted = 'Alpha is one. Beta.';
+    const fact = record(persisted, 'Alpha is one. ', { index: 0 });
+    expect(await verifySentenceRecords(['Alpha is one.'], [fact])).toEqual([]);
+  });
+});

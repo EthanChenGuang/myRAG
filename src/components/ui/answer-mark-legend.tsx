@@ -21,7 +21,13 @@ const KINDS: readonly SentenceMarkKind[] = ['uncited', 'unsupported'];
 
 /** `{text}: {n}`, with the full-width colon in zh (UI-SPEC 6.3); no plural form is needed. */
 export function legendItemText(text: string, count: number, language: string): string {
-  return language.toLowerCase().startsWith('zh') ? `${text}：${count}` : `${text}: ${count}`;
+  let shown = String(count);
+  try {
+    shown = new Intl.NumberFormat(language).format(count);
+  } catch {
+    // An unknown language tag keeps the plain digits.
+  }
+  return language.toLowerCase().startsWith('zh') ? `${text}：${shown}` : `${text}: ${shown}`;
 }
 
 /** The items that appeared after the first render, for the polite status region; '' when none did. */

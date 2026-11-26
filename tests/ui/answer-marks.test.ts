@@ -269,3 +269,11 @@ describe('ChatMessage sentence marks from the polled record', async () => {
     expect(html).toContain(`${EN.not_confirmed}: 1`);
   });
 });
+
+describe('legend counts', () => {
+  test('counts use the locale number format', () => {
+    expect(legendItemText('x', 1200, 'en')).toBe('x: 1,200');
+    expect(legendItemText('x', 1200, 'it')).toBe('x: 1200');
+    expect(legendItemText('x', 3, 'not a tag!')).toBe('x: 3');
+  });
+});

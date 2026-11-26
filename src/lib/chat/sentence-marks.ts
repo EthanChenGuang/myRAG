@@ -27,12 +27,17 @@ export interface PlannedMark {
 }
 
 const MARK_HREF_RE = /^#mark-(uncited|unsupported)-(0|[1-9]\d{0,5})-(0|[1-9]\d{0,5})$/;
-const HORIZONTAL_WS = /[ \t 　]/;
+const HORIZONTAL_WS = /[ \t\u00a0\u3000]/;
 const TRAILING_WS = /\s/u;
 /** Keeps a mark on the line of its sentence's last word. */
 const WORD_JOINER = '⁠';
 const NO_UNCITED_MARK: ReadonlySet<AnswerSentence['kind']> = new Set(['truncated', 'heading', 'code']);
 const HASH_CACHE_LIMIT = 256;
+/**
+ * The client strips trailing whitespace from a part before render (cleanToolCallMetadata). A hash match on the shown text plus one of
+ * these suffixes proves the persisted text; offsets are then clamped to the shown text.
+ */
+const TRAILING_SUFFIXES = ['', '\n', '\n\n', ' ', '\n\n\n', ' \n'] as const;
 
 const hashes = new Map<string, string>();
 const pending = new Map<string, Promise<string>>();
@@ -73,28 +78,47 @@ function splitsPair(text: string, at: number): boolean {
   return at > 0 && at < text.length && isHigh(text.charCodeAt(at - 1)) && !isHigh(text.charCodeAt(at));
 }
 
-function offsetsFit<T extends SentenceOffsets>(parts: readonly string[], record: T): string | undefined {
+function partOf(parts: readonly string[], record: SentenceOffsets): string | undefined {
   const { part, start, end } = record;
   if (!Number.isInteger(part) || part < 0 || part >= parts.length) return undefined;
   const text = parts[part];
   if (typeof text !== 'string') return undefined;
-  if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start || end > text.length) return undefined;
-  if (splitsPair(text, start) || splitsPair(text, end)) return undefined;
+  if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start) return undefined;
   return text;
+}
+
+function candidatesOf(text: string): string[] {
+  return TRAILING_SUFFIXES.map((suffix) => text + suffix);
+}
+
+/** Whether the record's offsets fit `full`; undefined while a needed hash is unknown. */
+function matches(record: SentenceOffsets, full: string): boolean | undefined {
+  const hash = hashes.get(full);
+  if (hash === undefined) return undefined;
+  if (hash !== record.text_hash || record.end > full.length) return false;
+  return !splitsPair(full, record.start) && !splitsPair(full, record.end);
 }
 
 /**
  * D-23: the records whose part text hashes to their text_hash, or undefined while a needed hash is not computed yet.
- * Offsets outside the part, an unknown part or a split surrogate pair never verify.
+ * Offsets outside the persisted part, an unknown part or a split surrogate pair never verify; a verified `end` may lie in the
+ * stripped trailing whitespace, so users clamp it to the shown text.
  */
 export function verifySentenceRecordsSync<T extends SentenceOffsets>(parts: readonly string[], records: readonly T[]): T[] | undefined {
   const kept: T[] = [];
   for (const record of records) {
-    const text = offsetsFit(parts, record);
+    const text = partOf(parts, record);
     if (text === undefined) continue;
-    const hash = hashes.get(text);
-    if (hash === undefined) return undefined;
-    if (hash === record.text_hash) kept.push(record);
+    let verified = false;
+    for (const full of candidatesOf(text)) {
+      const result = matches(record, full);
+      if (result === undefined) return undefined;
+      if (result) {
+        verified = true;
+        break;
+      }
+    }
+    if (verified && record.start <= text.length) kept.push(record);
   }
   return kept;
 }
@@ -103,8 +127,8 @@ export function verifySentenceRecordsSync<T extends SentenceOffsets>(parts: read
 export async function verifySentenceRecords<T extends SentenceOffsets>(parts: readonly string[], records: readonly T[]): Promise<T[]> {
   const needed = new Set<string>();
   for (const record of records) {
-    const text = offsetsFit(parts, record);
-    if (text !== undefined) needed.add(text);
+    const text = partOf(parts, record);
+    if (text !== undefined) for (const full of candidatesOf(text)) needed.add(text === full ? text : full);
   }
   await Promise.all([...needed].map((text) => partTextHash(text)));
   return verifySentenceRecordsSync(parts, records) ?? [];
@@ -171,8 +195,9 @@ function insertionPoint(
   markerEnds: ReadonlyMap<number, number>,
   code: ReadonlyArray<{ start: number; end: number }>,
 ): number | null {
-  if (record.end > text.length || record.start > record.end) return null;
-  let at = record.end;
+  const end = Math.min(record.end, text.length);
+  if (record.start >= text.length || record.start > end) return null;
+  let at = end;
   while (at > record.start && TRAILING_WS.test(text[at - 1]!)) at -= 1;
   for (;;) {
     let next = at;
@@ -207,6 +232,17 @@ export function planSentenceMarks(
   return planned;
 }
 
+/** The marks insertSentenceMarks places: planned marks whose sentence end is not inside a replaced range. */
+export function placedSentenceMarks(
+  text: string,
+  records: readonly AnswerSentence[],
+  kinds: ReadonlyMap<string, readonly SentenceMarkKind[]>,
+  replacements: readonly TextReplacement[] = [],
+): PlannedMark[] {
+  const blocked = normalizeReplacements(text, replacements);
+  return planSentenceMarks(text, records, kinds).filter((mark) => !blocked.some((r) => r.start < mark.at && mark.at <= r.end));
+}
+
 function tableSuffix(rest: string): string {
   if (rest.length === 0 || rest.startsWith('\n\n')) return '';
   return rest.startsWith('\n') ? '\n' : '\n\n';
@@ -224,7 +260,7 @@ export function insertSentenceMarks(
   replacements: readonly TextReplacement[] = [],
 ): string {
   const blocked = normalizeReplacements(text, replacements);
-  const marks = planSentenceMarks(text, records, kinds).filter((mark) => !blocked.some((r) => r.start < mark.at && mark.at <= r.end));
+  const marks = placedSentenceMarks(text, records, kinds, blocked);
   if (marks.length === 0 && blocked.length === 0) return text;
   const groups = new Map<number, PlannedMark[]>();
   for (const mark of marks) groups.set(mark.at, [...(groups.get(mark.at) ?? []), mark]);
