@@ -181,6 +181,8 @@ function initQueryLayerPanel() {
 
   if (clearButton && tenantInput && clearResult) {
     clearButton.addEventListener('click', async () => {
+      const key = tenantInput.value.trim();
+      if (key && typeof window.confirm === 'function' && !window.confirm(`Delete every cached answer for tenant ${key}? This cannot be undone.`)) return;
       clearButton.disabled = true;
       clearResult.className = 'text-sm min-w-0';
       clearResult.textContent = 'Clearing…';
