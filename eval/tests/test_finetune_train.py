@@ -10,7 +10,7 @@ from rag_sidecar.contracts.finetune import (
     TrainingRunConfig,
 )
 
-from rag_eval.finetune import bundle, cli, kit
+from rag_eval.finetune import bundle, cli, kit, train
 from rag_eval.finetune.config import load_finetune_config
 from rag_eval.finetune.miner import (
     DEV_FILE,
@@ -326,3 +326,322 @@ def test_kit_cli_dispatch_and_exit_codes(tmp_path, capsys):
     assert "record " not in captured.out + captured.err
     assert cli.COMMANDS["kit"] == "rag_eval.finetune.kit:main"
     assert kit.main(["--bundle", str(tmp_path / "missing"), "--out", str(tmp_path / "k3")]) == 2
+
+
+# --- Task 2: trainer wiring, report and probes ---------------------------------------------------------------
+
+
+class _Recorder:
+    def __init__(self, *args, **kwargs):
+        self.args = args
+        self.kwargs = kwargs
+
+
+class FakeCachedMNRL(_Recorder):
+    pass
+
+
+class FakeMNRL(_Recorder):
+    pass
+
+
+class FakeGIST(_Recorder):
+    pass
+
+
+class FakeCachedGIST(_Recorder):
+    pass
+
+
+class FakeMatryoshka(_Recorder):
+    pass
+
+
+class FakeArgs(_Recorder):
+    pass
+
+
+class FakeEvaluator(_Recorder):
+    def __call__(self, model):
+        return {"dev_cosine_ndcg@10": 0.5}
+
+
+class FakeDataset:
+    def __init__(self, columns):
+        self.columns = columns
+
+    @classmethod
+    def from_dict(cls, columns):
+        return cls(columns)
+
+    def __len__(self):
+        return len(next(iter(self.columns.values())))
+
+
+class FakeState:
+    global_step = 7
+    best_metric = 0.625
+    best_global_step = 4
+
+
+class FakeTrainer(_Recorder):
+    instances: list = []
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.state = FakeState()
+        FakeTrainer.instances.append(self)
+
+    def train(self):
+        class Output:
+            training_loss = 0.25
+
+        return Output()
+
+
+class FakeModel:
+    def __init__(self, dims=1024, tag="base"):
+        self.dims = dims
+        self.tag = tag
+        self.max_seq_length = 128
+        self.saved = None
+
+    def get_embedding_dimension(self):
+        return self.dims
+
+    def encode(self, texts, prompt=None, normalize_embeddings=False, **_):
+        import numpy as np
+
+        rows = []
+        for text in texts:
+            seed = int(hashlib.sha256(f"{prompt}|{text}".encode()).hexdigest()[:8], 16)
+            vector = np.random.default_rng(seed).normal(size=self.dims)
+            rows.append(vector / np.linalg.norm(vector) if normalize_embeddings else vector)
+        return np.stack(rows).astype("float32")
+
+    def save(self, path):
+        from pathlib import Path
+
+        Path(path).mkdir(parents=True, exist_ok=True)
+        (Path(path) / "model.safetensors").write_bytes(b"fake")
+        self.saved = path
+
+
+def fake_library():
+    return train.TrainLibrary(
+        training_arguments=FakeArgs,
+        no_duplicates="NO_DUPLICATES",
+        cached_mnrl=FakeCachedMNRL,
+        mnrl=FakeMNRL,
+        gist=FakeGIST,
+        cached_gist=FakeCachedGIST,
+        matryoshka=FakeMatryoshka,
+        ir_evaluator=FakeEvaluator,
+        dataset=FakeDataset,
+        trainer=FakeTrainer,
+    )
+
+
+def _kit(tmp_path, name="kit", **kwargs):
+    return build(make_bundle(tmp_path / f"b-{name}"), tmp_path, name=name, **kwargs)
+
+
+def _trainer_args(kit_dir, tmp_path, **kwargs):
+    manifest = kit.verify_kit(kit_dir)
+    recipe = train.effective_recipe(
+        kit.read_training_config(kit_dir).recipe, loss=kwargs.pop("loss", None), matryoshka=kwargs.pop("matryoshka", None)
+    )
+    return train.build_trainer_args(
+        model=FakeModel(),
+        recipe=recipe,
+        base=manifest.base_model,
+        data=train.load_kit_data(kit_dir),
+        output_dir=tmp_path / "ckpt",
+        lib=fake_library(),
+        **kwargs,
+    )
+
+
+def test_trainer_args_follow_the_default_recipe(tmp_path):
+    out = _kit(tmp_path)
+    built = _trainer_args(out, tmp_path, device="cpu")
+    loss = built["loss"]
+    assert set(loss) == {"ntuple", "pairs"} and loss["ntuple"] is loss["pairs"]
+    assert isinstance(loss["ntuple"], FakeCachedMNRL) and loss["ntuple"].kwargs["mini_batch_size"] == 32
+    args = built["args"].kwargs
+    assert args["batch_sampler"] == "NO_DUPLICATES"
+    assert args["seed"] == 42 and args["data_seed"] == 42
+    assert args["per_device_train_batch_size"] == 256
+    assert args["learning_rate"] == 2e-5 and args["warmup_ratio"] == 0.1 and args["num_train_epochs"] == 1
+    assert args["bf16"] is False
+    assert args["eval_strategy"] == "steps" and args["eval_steps"] == 100 and args["save_steps"] == 100
+    assert args["load_best_model_at_end"] is True and args["greater_is_better"] is True
+    assert args["metric_for_best_model"] == "eval_dev_cosine_ndcg@10"
+    datasets = built["train_dataset"]
+    assert set(datasets) == {"ntuple", "pairs"}
+    assert list(datasets["ntuple"].columns) == ["anchor", "positive", "negative_1", "negative_2", "negative_3"]
+    assert list(datasets["pairs"].columns) == ["anchor", "positive"]
+    assert len(datasets["ntuple"]) == 18 and len(datasets["pairs"]) == 12
+    cfg = load_finetune_config()
+    default = next(m for m in cfg.base_models if m.default)
+    assert args["prompts"]["anchor"] == default.query_prompt
+    evaluator = built["evaluator"].kwargs
+    assert len(evaluator["queries"]) == 4
+    assert evaluator["name"] == "dev" and evaluator["query_prompt"] == default.query_prompt
+    assert all(evaluator["relevant_docs"][q] <= set(evaluator["corpus"]) for q in evaluator["queries"])
+
+
+def test_trainer_args_bf16_only_when_supported(tmp_path):
+    out = _kit(tmp_path)
+    assert _trainer_args(out, tmp_path, device="cuda", bf16_supported=True)["args"].kwargs["bf16"] is True
+    assert _trainer_args(out, tmp_path, device="cuda", bf16_supported=False)["args"].kwargs["bf16"] is False
+
+
+def test_trainer_args_gist_losses_use_the_base_model_as_guide(tmp_path):
+    out = _kit(tmp_path)
+    guide = FakeModel(tag="guide")
+    cached = _trainer_args(out, tmp_path, device="cpu", loss="cached_gist", guide=guide)["loss"]["ntuple"]
+    assert isinstance(cached, FakeCachedGIST) and cached.kwargs["guide"] is guide
+    assert cached.kwargs["mini_batch_size"] == 32
+    plain = _trainer_args(out, tmp_path, device="cpu", loss="gist", guide=guide)["loss"]["pairs"]
+    assert isinstance(plain, FakeGIST) and plain.kwargs["guide"] is guide
+    with pytest.raises(ValueError):
+        _trainer_args(out, tmp_path, device="cpu", loss="gist")
+
+
+def test_trainer_args_matryoshka_wraps_the_loss(tmp_path):
+    out = _kit(tmp_path)
+    loss = _trainer_args(out, tmp_path, device="cpu", matryoshka=True)["loss"]["ntuple"]
+    assert isinstance(loss, FakeMatryoshka)
+    assert loss.kwargs["matryoshka_dims"] == [1024, 512, 256]
+    assert isinstance(loss.kwargs["loss"], FakeCachedMNRL)
+
+
+def _run(out, tmp_path, name="model", **kwargs):
+    FakeTrainer.instances.clear()
+    kwargs.setdefault("lib", fake_library())
+    kwargs.setdefault("model_factory", lambda spec, device: FakeModel())
+    kwargs.setdefault("trainer_factory", None)
+    kwargs.setdefault("installed", LIBRARIES)
+    kwargs.setdefault("device", "cpu")
+    return train.run_train(out, tmp_path / name, **kwargs)
+
+
+def test_run_train_writes_model_report_config_and_probes(tmp_path):
+    from rag_sidecar.contracts.finetune import PROBE_TEXTS, ProbeSet, TrainingRunReport
+
+    out = _kit(tmp_path)
+    result = _run(out, tmp_path)
+    assert result.exit_code == 0
+    model_dir = tmp_path / "model"
+    assert (model_dir / "model.safetensors").is_file()
+    report = TrainingRunReport.model_validate_json((model_dir / train.REPORT_FILE).read_text())
+    assert report.steps == 7 and report.best_step == 4 and report.best_dev_ndcg_at_10 == 0.625
+    assert report.final_train_loss == 0.25 and report.device == "cpu"
+    assert report.examples == {"ntuple": 18, "pairs": 12}
+    assert report.training_config_sha256 == bundle.sha256_file(model_dir / kit.TRAINING_CONFIG_FILE)
+    config = TrainingRunConfig.model_validate_json((model_dir / kit.TRAINING_CONFIG_FILE).read_text())
+    assert config.git_commit == GIT_COMMIT and config.seed == 42
+    probe = ProbeSet.model_validate_json((model_dir / train.PROBE_FILE).read_text())
+    assert tuple(probe.texts) == PROBE_TEXTS
+    default = next(m for m in load_finetune_config().base_models if m.default)
+    assert probe.query_prompt == default.query_prompt and probe.document_prompt == default.document_prompt
+    import numpy as np
+
+    for vector in probe.vectors:
+        assert abs(np.linalg.norm(vector) - 1.0) < 1e-3
+    assert not (model_dir / train.CHECKPOINT_DIR).exists()
+    trainer = FakeTrainer.instances[0]
+    assert trainer.kwargs["evaluator"] is not None and set(trainer.kwargs["train_dataset"]) == {"ntuple", "pairs"}
+
+
+def test_run_train_records_overrides_in_the_config(tmp_path):
+    out = _kit(tmp_path)
+    result = _run(out, tmp_path, loss="cached_gist", matryoshka=True)
+    assert result.exit_code == 0
+    config = TrainingRunConfig.model_validate_json((tmp_path / "model" / kit.TRAINING_CONFIG_FILE).read_text())
+    assert config.recipe.gist.enabled and config.recipe.gist.cached and config.recipe.matryoshka.enabled
+    assert isinstance(FakeTrainer.instances[0].kwargs["loss"]["ntuple"], FakeMatryoshka)
+
+
+def test_run_train_refuses_a_kit_with_a_test_row(tmp_path, capsys):
+    out = _kit(tmp_path)
+    _inject(out, DEV_FILE, lambda rows: rows.append({**rows[0], "split": "test"}))
+    result = _run(out, tmp_path)
+    assert result.exit_code == 1
+    assert "kit_contains_test" in capsys.readouterr().err
+    assert not (tmp_path / "model").exists() and not FakeTrainer.instances
+
+
+def test_run_train_refuses_library_drift_dims_and_existing_out(tmp_path, capsys):
+    out = _kit(tmp_path)
+    assert _run(out, tmp_path, installed={**LIBRARIES, "transformers": "5.99.0"}).exit_code == 2
+    assert "library_versions_differ" in capsys.readouterr().err
+    assert _run(out, tmp_path, installed={**LIBRARIES, "torch": "2.15.0+cu128"}).exit_code == 0
+    assert _run(out, tmp_path, name="m2", model_factory=lambda spec, device: FakeModel(dims=384)).exit_code == 2
+    assert "dims_mismatch" in capsys.readouterr().err
+    assert _run(out, tmp_path).exit_code == 2
+    assert "out_exists" in capsys.readouterr().err
+
+
+def test_train_cli_dispatch(tmp_path):
+    assert cli.COMMANDS["train"] == "rag_eval.finetune.train:main"
+    assert train.main(["--kit", str(tmp_path / "missing"), "--out", str(tmp_path / "m")]) == 2
+
+
+# --- finetune_train: a tiny StaticEmbedding model trained on CPU, no download --------------------------------
+
+
+def _tiny_model(texts, dims=1024, seed=3):
+    sentence_transformers = pytest.importorskip("sentence_transformers")
+    import numpy as np
+    from sentence_transformers.sentence_transformer.modules import StaticEmbedding
+    from tokenizers import Tokenizer, models, pre_tokenizers
+
+    vocab = {"[UNK]": 0}
+    for text in texts:
+        for word in text.lower().split():
+            vocab.setdefault(word, len(vocab))
+    tokenizer = Tokenizer(models.WordLevel(vocab=vocab, unk_token="[UNK]"))
+    tokenizer.pre_tokenizer = pre_tokenizers.Whitespace()
+    weights = np.random.default_rng(seed).normal(size=(len(vocab), dims)).astype(np.float32)
+    module = StaticEmbedding(tokenizer, embedding_weights=weights)
+    return sentence_transformers.SentenceTransformer(modules=[module], device="cpu")
+
+
+@pytest.mark.finetune_train
+def test_signatures_have_every_name_used():
+    pytest.importorskip("sentence_transformers")
+    assert train.check_signatures() == []
+
+
+@pytest.mark.finetune_train
+def test_tiny_cpu_training_smoke(tmp_path):
+    pytest.importorskip("sentence_transformers")
+    from rag_sidecar.contracts.finetune import ProbeSet, TrainingRunReport
+
+    cfg = load_finetune_config()
+    small = cfg.training.model_copy(update={"per_device_train_batch_size": 6, "mini_batch_size": 3, "eval_steps": 2})
+    cfg = cfg.model_copy(update={"training": small})
+    run_dir = make_bundle(tmp_path, n_ntuple=18, n_pairs=12, n_dev=4)
+    out = build(run_dir, tmp_path, config=cfg, library_versions=train.installed_versions())
+    texts = [_text(i) for i in range(40)] + [f"which entry lists {w} code {n}" for w in WORDS for n in range(400)]
+    result = train.run_train(
+        out,
+        tmp_path / "model",
+        device="cpu",
+        model_factory=lambda spec, device: _tiny_model(texts),
+        max_steps=5,
+    )
+    assert result.exit_code == 0
+    model_dir = tmp_path / "model"
+    assert (model_dir / "modules.json").is_file()
+    report = TrainingRunReport.model_validate_json((model_dir / train.REPORT_FILE).read_text())
+    assert report.steps == 5 and report.device == "cpu"
+    assert report.best_dev_ndcg_at_10 is not None
+    probe = ProbeSet.model_validate_json((model_dir / train.PROBE_FILE).read_text())
+    assert len(probe.vectors) == 3
+    import sentence_transformers
+
+    reloaded = sentence_transformers.SentenceTransformer(str(model_dir), device="cpu")
+    assert reloaded.get_embedding_dimension() == 1024
