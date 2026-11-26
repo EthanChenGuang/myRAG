@@ -8,7 +8,7 @@ from rag_sidecar.contracts.eval_run import RagTrace, RunManifest
 from rag_sidecar.contracts.feedback_loop import GatePopulationConfig
 from rag_sidecar.contracts.golden import GoldenItem, Provenance
 from rag_sidecar.contracts.judge import JudgeReport
-from rag_sidecar.contracts.latency import GroupBudget, LatencyBudgets, StageLatency
+from rag_sidecar.contracts.latency import CacheState, GroupBudget, LatencyBudgets, StageLatency
 from rag_sidecar.contracts.report import (
     BudgetedLatency,
     BudgetStatus,
@@ -157,6 +157,40 @@ def compute_latency(traces: list[RagTrace]) -> dict[str, StageLatency] | None:
         )
         for stage, values in sorted(by_stage.items())
     }
+
+
+CACHE_STATES: tuple[CacheState, ...] = get_args(CacheState)
+PRE_GENERATION_ROW = "pre-generation"
+TTFT_NOTE = (
+    "Report-only (D-25, D-27): TTFT is the server-side time to the first answer text delta, grouped by semantic cache "
+    f"state; pre-generation is the time until the generator call starts. Percentiles are nearest-rank, compared with "
+    f"the {LATENCY_PROFILE} ttft and pre_generation budgets in eval/config/latency-budgets.json. Traces without a cache "
+    "state are left out of the TTFT rows."
+)
+
+
+def _finite(value: float | None) -> bool:
+    return value is not None and math.isfinite(value) and value >= 0
+
+
+def compute_ttft(traces: list[RagTrace]) -> dict[CacheState, StageLatency] | None:
+    by_state: dict[str, list[float]] = {}
+    seen = False
+    for trace in traces:
+        if not _finite(trace.ttft_ms):
+            continue
+        seen = True
+        if trace.cache is not None:
+            by_state.setdefault(trace.cache, []).append(float(trace.ttft_ms))
+    if not seen:
+        return None
+    return {state: stat for state in CACHE_STATES if (stat := _latency_stat(by_state.get(state, [])))}
+
+
+def compute_pre_generation(traces: list[RagTrace]) -> dict[str, StageLatency] | None:
+    values = [float(trace.pre_generation_ms) for trace in traces if _finite(trace.pre_generation_ms)]
+    stat = _latency_stat(values)
+    return None if stat is None else {LATENCY_PROFILE: stat}
 
 
 SCORING_SCORERS = ("hhem_2_1_open", "hhem_2_3_vectara")
@@ -619,6 +653,8 @@ def build_report(
         k_values=list(K_VALUES),
         items=list(results),
         latency=compute_latency(traces) if traces else None,
+        ttft=compute_ttft(traces) if traces else None,
+        pre_generation=compute_pre_generation(traces) if traces else None,
         notes=notes,
         native_review_backlog=review_backlog(golden),
         **aggregated,
@@ -635,15 +671,64 @@ def _bound_cell(value: float | None) -> str:
     return "n/a" if value is None else f"{round(value, 3):.3f}"
 
 
+NDCG_LABEL = "nDCG@k"
+K_ZERO_LABEL = "k = 0"
+
+
+def _k_zero_cell(metric: MetricValue | None) -> str:
+    return "-" if metric is None or metric.value is None else str(int(metric.value))
+
+
 def _table(first_column: str, rows: dict[str, SliceMetrics]) -> list[str]:
     labels = [label for label, _ in _METRIC_COLUMNS] + [FALSE_REFUSAL_BOUND_LABEL]
+    with_ndcg = any(metrics.ndcg_at_context_k is not None for metrics in rows.values())
+    if with_ndcg:
+        labels += [NDCG_LABEL, K_ZERO_LABEL]
     header = "| " + " | ".join([first_column, *labels]) + " |"
     divider = "|" + "|".join(["---"] * (len(labels) + 1)) + "|"
     lines = [header, divider]
     for name, metrics in rows.items():
         cells = [_cell(getattr(metrics, field)) for _, field in _METRIC_COLUMNS]
         cells.append(_bound_cell(metrics.false_refusal_upper_95))
+        if with_ndcg:
+            cells.append(_optional_cell(metrics.ndcg_at_context_k))
+            cells.append(_k_zero_cell(metrics.k_zero))
         lines.append("| " + " | ".join([name, *cells]) + " |")
+    return lines
+
+
+DUPLICATE_FLOOD_CATEGORY = "duplicate_flood"
+NDCG_NOTE = (
+    "nDCG@k is report-only (D-07): k is the number of chunks sent to the model for each item, relevance is binary "
+    "by gold-span match, and the ideal DCG uses the gold unit count capped at k. k = 0 counts answerable items "
+    "whose context was empty or refused; they score 0."
+)
+DUPLICATE_FLOOD_NOTE = (
+    "Report-only (D-22): top-k redundancy is the largest share of kept chunks in one duplicate cluster (a chunk "
+    "without a cluster id is its own cluster); intent coverage is the share of items whose kept chunks hold gold "
+    "evidence of every intent (evidence group)."
+)
+
+
+def _per_language_rows(items: list[ItemResult]) -> dict[str, SliceMetrics]:
+    return {"overall": slices_by(items, lambda _r: "overall")["overall"], **slices_by(items, lambda r: r.language)}
+
+
+def _duplicate_flood_section(report: EvalReport) -> list[str]:
+    items = [item for item in report.items if item.category == DUPLICATE_FLOOD_CATEGORY]
+    if not items:
+        return []
+    lines = [
+        "## Duplicate flood (report-only)",
+        "",
+        DUPLICATE_FLOOD_NOTE,
+        "",
+        "| Slice | Top-k redundancy | Intent coverage |",
+        "|---|---|---|",
+    ]
+    for name, metrics in _per_language_rows(items).items():
+        lines.append(f"| {name} | {_optional_cell(metrics.topk_redundancy)} | {_optional_cell(metrics.intent_coverage)} |")
+    lines.append("")
     return lines
 
 
@@ -693,6 +778,76 @@ def _latency_section(latency: dict[str, StageLatency], budgets: LatencyBudgets) 
         lines.append(
             f"| {name} | {_ms(stat.p50_ms)} | {_ms(stat.p95_ms)} | {stat.n} | "
             f"{_ms(budget_p50)} | {_ms(budget_p95)} | {status} |"
+        )
+    lines.append("")
+    return lines
+
+
+def _status(stat: StageLatency | None, budget_p50: float | None, budget_p95: float | None) -> str:
+    if stat is None or (budget_p50 is None and budget_p95 is None):
+        return "-"
+    over = (budget_p50 is not None and stat.p50_ms > budget_p50) or (budget_p95 is not None and stat.p95_ms > budget_p95)
+    return "over" if over else "within"
+
+
+def _ttft_row(name: str, stat: StageLatency | None, budget_p50: float | None, budget_p95: float | None) -> str:
+    p50, p95, n = (stat.p50_ms, stat.p95_ms, stat.n) if stat is not None else (None, None, 0)
+    return (
+        f"| {name} | {_ms(p50)} | {_ms(p95)} | {n} | {_ms(budget_p50)} | {_ms(budget_p95)} | "
+        f"{_status(stat, budget_p50, budget_p95)} |"
+    )
+
+
+def _ttft_section(report: EvalReport, budgets: LatencyBudgets | None) -> list[str]:
+    if report.ttft is None and report.pre_generation is None:
+        return []
+    ttft_budgets = (budgets.ttft or {}).get(LATENCY_PROFILE, {}) if budgets is not None else {}
+    pre_budget = (budgets.pre_generation or {}).get(LATENCY_PROFILE) if budgets is not None else None
+    lines = [
+        "## Time to first token (report-only)",
+        "",
+        TTFT_NOTE,
+        "",
+        "| Row | p50 (ms) | p95 (ms) | n | Budget p50 (ms) | Budget p95 (ms) | Status |",
+        "|" + "|".join(["---"] * 7) + "|",
+    ]
+    ttft = report.ttft or {}
+    for state in CACHE_STATES:
+        budget = ttft_budgets.get(state)
+        lines.append(
+            _ttft_row(state, ttft.get(state), budget.p50_ms if budget else None, budget.p95_ms if budget else None)
+        )
+    pre = (report.pre_generation or {}).get(LATENCY_PROFILE)
+    lines.append(_ttft_row(PRE_GENERATION_ROW, pre, None, pre_budget.p95_ms if pre_budget else None))
+    lines.append("")
+    return lines
+
+
+IDENTIFIER_CATEGORY = "identifier_near_miss"
+IDENTIFIER_NOTE = (
+    "Report-only (D-32): identifier precision is the share of identifier_near_miss items whose context is about the "
+    "asked identifier only (answerable: no near-miss chunk, a kept chunk and every cited chunk carry the asked "
+    "identifier; no-answer: refused with no near-miss chunk); near-miss leakage is the share of items with a kept "
+    "chunk that carries a near-miss of the asked identifier and not the asked one. Traces without identifiers_norm "
+    "are not counted."
+)
+
+
+def _identifier_section(report: EvalReport) -> list[str]:
+    items = [item for item in report.items if item.category == IDENTIFIER_CATEGORY]
+    if not items:
+        return []
+    lines = [
+        "## Identifier near-miss (report-only)",
+        "",
+        IDENTIFIER_NOTE,
+        "",
+        "| Slice | Identifier precision | Near-miss leakage |",
+        "|---|---|---|",
+    ]
+    for name, metrics in _per_language_rows(items).items():
+        lines.append(
+            f"| {name} | {_optional_cell(metrics.identifier_precision)} | {_optional_cell(metrics.near_miss_leakage)} |"
         )
     lines.append("")
     return lines
@@ -1099,17 +1254,21 @@ def _render_markdown(report: EvalReport, budgets: LatencyBudgets | None = None) 
         "",
         BOUND_NOTE,
         "",
+        *([NDCG_NOTE, ""] if report.overall.ndcg_at_context_k is not None else []),
         *_report_only_section(report),
     ]
-    if budgets is None and (report.latency or report.groundedness_latency):
+    if budgets is None and (report.latency or report.groundedness_latency or report.ttft or report.pre_generation):
         budgets = load_latency_budgets()
     if report.latency and budgets is not None:
         lines.extend(_latency_section(report.latency, budgets))
+    lines.extend(_ttft_section(report, budgets))
     lines.extend(_citations_section(report))
     lines.extend(_strategy_section(report))
     lines.extend(_groundedness_section(report, budgets))
     lines.extend(_injection_section(report))
     lines.extend(_table_split_section(report))
+    lines.extend(_duplicate_flood_section(report))
+    lines.extend(_identifier_section(report))
     lines.extend(_query_layer_section(report))
     lines.extend(_semantic_cache_section(report))
     lines.extend(_backlog_section(report))
