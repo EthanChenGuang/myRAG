@@ -13,6 +13,8 @@ export interface ChunkLexicalInput {
   documentFilename?: string | null;
   /** D-21: the list separator of the block's language, set only for a table chunk while RAG_TABLE_ROW_SERIALIZATION is on. */
   tableRowSeparator?: string | null;
+  /** TPL-05 (D-26): the tenant's stored attribute header, one more part after the path prefix; absent, null or empty adds nothing. */
+  attributeHeader?: string | null;
 }
 
 function isImageChunk(chunkKind: string | null | undefined, metadata: Record<string, unknown> | null | undefined): boolean {
@@ -32,6 +34,7 @@ export function chunkLexicalText(input: ChunkLexicalInput, options?: LexicalOpti
   const { title, body } = stripLegacyContent(input.content);
   const path = [...input.sectionPath];
   if (title !== null && path.length === 0) path.unshift(title);
+  if (input.attributeHeader) path.push(input.attributeHeader);
 
   const extras: string[] = [];
   if (isImageChunk(input.chunkKind, input.metadata)) {
