@@ -452,4 +452,4 @@ def test_report_fields_are_optional_and_omitted():
     assert not set(item_fields) & set(dumped)
     flagged = ItemResult.model_validate({**item, **{name: True for name in item_fields}}).model_dump(mode="json")
     assert all(flagged[name] is True for name in item_fields)
-    _rejects(ItemResult, {**item, "named_document_hit": "yes"})
+    _rejects(ItemResult, {**item, "named_document_hit": "maybe"})

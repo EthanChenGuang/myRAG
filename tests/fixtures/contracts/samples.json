@@ -94,6 +94,33 @@
       "traceId": "0123456789abcdef0123456789abcdef",
       "updatedAt": "2026-01-01T00:00:10.000Z"
     },
+    "AttributeDefinition": {
+      "filterable": false,
+      "in_header": false,
+      "in_identifier_index": false,
+      "key": "alpha_code",
+      "soft": false,
+      "type": "code"
+    },
+    "AttributeFilterConfig": {
+      "id_cap": 2000,
+      "rules_version": 1,
+      "schema_version": 1,
+      "soft_weight": 0.5
+    },
+    "AttributeHeaderTemplate": {
+      "template": "{alpha_code}",
+      "version": 1
+    },
+    "AttributeImportRow": {
+      "attributes": {
+        "alpha_code": "X-1"
+      },
+      "source_key": "kb/doc-1"
+    },
+    "AttributeSchema": {
+      "definitions": []
+    },
     "BackfillDryRunReport": {
       "budget_usd": 10.0,
       "class_shares": {
@@ -870,6 +897,31 @@
       "n": 40,
       "passed": true,
       "real_n": 30
+    },
+    "BoilerplateReport": {
+      "cleaner_version": 1,
+      "lines_removed": 0,
+      "rules_version": 1,
+      "share": 0.0,
+      "tokens_removed": 0
+    },
+    "BoilerplateRule": {
+      "enabled": true,
+      "kind": "fragment",
+      "max_length": 12,
+      "min_page_share": 0.6,
+      "name": "short fragment"
+    },
+    "BoilerplateRulesConfig": {
+      "edge_lines": 3,
+      "fragment_max_length": 12,
+      "fragment_page_share": 0.6,
+      "max_line_tokens": 12,
+      "min_pages": 3,
+      "page_share": 0.6,
+      "review_share": 0.3,
+      "rules_version": 1,
+      "schema_version": 1
     },
     "CacheCheckRequest": {
       "embedding_profile_id": "openai-3-small-1536",
@@ -7206,6 +7258,23 @@
       "label": "Unit A",
       "value": "unit-a"
     },
+    "SectionRuleSet": {
+      "enabled": true,
+      "headings": [
+        {
+          "flags": "u",
+          "level": 1,
+          "name": "part_1",
+          "pattern": "^Part 1\\b",
+          "required": false,
+          "restart": false
+        }
+      ],
+      "name": "rule set one",
+      "require_increasing_numbers": false,
+      "skip_toc": true,
+      "toc_min_run": 3
+    },
     "SemanticCacheCalibration": {
       "profiles": [
         {
@@ -7346,6 +7415,11 @@
       ],
       "row_index": 0,
       "table_key": "table-0"
+    },
+    "TenantRulesFile": {
+      "boilerplate_rules": [],
+      "schema_version": 1,
+      "section_rule_sets": []
     },
     "TerminologyCandidate": {
       "corpus_df": 0,
@@ -7783,6 +7857,122 @@
         "ragMode": "strict",
         "traceId": "0123456789abcdef0123456789abcdef",
         "updatedAt": "2026-01-01T00:00:10.000Z"
+      }
+    },
+    "AttributeDefinition:full": {
+      "model": "AttributeDefinition",
+      "value": {
+        "filterable": true,
+        "in_header": true,
+        "in_identifier_index": true,
+        "key": "alpha_code",
+        "soft": false,
+        "type": "code"
+      }
+    },
+    "AttributeFilterConfig:full": {
+      "model": "AttributeFilterConfig",
+      "value": {
+        "id_cap": 1,
+        "rules_version": 2,
+        "schema_version": 1,
+        "soft_weight": 1.0
+      }
+    },
+    "AttributeHeaderTemplate:full": {
+      "model": "AttributeHeaderTemplate",
+      "value": {
+        "template": "{alpha_code} | {beta_label}",
+        "version": 2
+      }
+    },
+    "AttributeImportRow:full": {
+      "model": "AttributeImportRow",
+      "value": {
+        "attributes": {
+          "alpha_code": "X-1",
+          "beta_label": [
+            "value one",
+            "value two"
+          ]
+        },
+        "source": "upload",
+        "source_key": "kb/doc-1"
+      }
+    },
+    "AttributeSchema:full": {
+      "model": "AttributeSchema",
+      "value": {
+        "definitions": [
+          {
+            "filterable": true,
+            "in_header": true,
+            "in_identifier_index": true,
+            "key": "alpha_code",
+            "soft": false,
+            "type": "code"
+          },
+          {
+            "filterable": true,
+            "in_header": true,
+            "in_identifier_index": false,
+            "key": "beta_label",
+            "soft": true,
+            "type": "text_list"
+          }
+        ]
+      }
+    },
+    "BackfillManifestEntry:attributes": {
+      "model": "BackfillManifestEntry",
+      "value": {
+        "attributes": {
+          "alpha_code": "X-1",
+          "beta_label": [
+            "value one",
+            "value two"
+          ]
+        },
+        "doc_type": null,
+        "path": "/data/doc-1.pdf",
+        "source_key": "kb/doc-1",
+        "url": null
+      }
+    },
+    "BoilerplateReport:full": {
+      "model": "BoilerplateReport",
+      "value": {
+        "cleaner_version": 1,
+        "lines_removed": 6,
+        "rules_version": 2,
+        "share": 0.05,
+        "tokens_removed": 30
+      }
+    },
+    "BoilerplateRule:full": {
+      "model": "BoilerplateRule",
+      "value": {
+        "doc_type": "general",
+        "enabled": true,
+        "flags": "iu",
+        "kind": "line",
+        "name": "edge line",
+        "pattern": "^\\W+$",
+        "source": "upload"
+      }
+    },
+    "BoilerplateRulesConfig:full": {
+      "model": "BoilerplateRulesConfig",
+      "value": {
+        "edge_lines": 3,
+        "fragment_max_length": 12,
+        "fragment_page_share": 0.6,
+        "max_line_tokens": 12,
+        "min_pages": 3,
+        "page_share": 1.0,
+        "review_share": 0.3,
+        "rules_version": 2,
+        "schema_version": 1
       }
     },
     "CacheCheckResponse:miss": {
@@ -8225,6 +8415,532 @@
           "recall_at_5": {
             "n": 10,
             "value": 0.5
+          }
+        },
+        "query_layer": {
+          "budget_profile": "chat",
+          "gate_rules": {
+            "R1_PRONOUN": 3,
+            "R9_KEYWORDS": 1
+          },
+          "items": 4,
+          "items_with_plan": 4,
+          "llm_transform_share": {
+            "n": 4,
+            "value": 0.5
+          },
+          "protected_token_losses": 1,
+          "query_budget": {
+            "p50_ms": 600.0,
+            "p95_ms": 1200.0
+          },
+          "query_latency": {
+            "latency": {
+              "n": 4,
+              "p50_ms": 300.0,
+              "p95_ms": 900.0
+            },
+            "status": "within"
+          },
+          "query_latency_by_category": {
+            "multi_turn": {
+              "latency": {
+                "n": 2,
+                "p50_ms": 700.0,
+                "p95_ms": 1300.0
+              },
+              "status": "over"
+            }
+          },
+          "query_latency_by_language": {
+            "en": {
+              "latency": {
+                "n": 4,
+                "p50_ms": 300.0,
+                "p95_ms": 900.0
+              },
+              "status": "within"
+            }
+          },
+          "transforms": {
+            "condense": {
+              "disabled": 0,
+              "run": 3,
+              "skip_reasons": {},
+              "skipped": 0
+            },
+            "expand": {
+              "disabled": 0,
+              "run": 0,
+              "skip_reasons": {
+                "timeout": 1
+              },
+              "skipped": 1
+            },
+            "hyde": {
+              "disabled": 4,
+              "run": 0,
+              "skip_reasons": {},
+              "skipped": 0
+            }
+          }
+        },
+        "raw_invalid_markers": 1,
+        "request_options": {
+          "cache_seed_answer": null,
+          "citations": false,
+          "degrade": null,
+          "disabled_stages": null,
+          "domain_control_leg": null,
+          "embedding_bindings": null,
+          "embedding_profile": null,
+          "generator_model": null,
+          "groundedness": false,
+          "max_results": 10,
+          "organization_id": null,
+          "query_framework": null,
+          "query_layer": null,
+          "query_params": null,
+          "query_transforms": null,
+          "retrieval_filters": null,
+          "retrieval_overrides": null,
+          "semantic_cache": null,
+          "stage_timeouts_ms": null,
+          "user_id": null
+        },
+        "rerank_skipped_rate": {
+          "n": 4,
+          "value": 0.25
+        },
+        "run_config_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "run_id": "run-001",
+        "schema_version": 1,
+        "semantic_cache": {
+          "bypasses": {
+            "protected_tokens": 2
+          },
+          "checks": 4,
+          "failures": 1,
+          "hit_latency": {
+            "n": 1,
+            "p50_ms": 20.0,
+            "p95_ms": 20.0
+          },
+          "hit_rate": {
+            "n": 4,
+            "value": 0.25
+          },
+          "hits": 1,
+          "miss_latency": {
+            "n": 3,
+            "p50_ms": 400.0,
+            "p95_ms": 800.0
+          },
+          "misses": 3,
+          "near_miss_checks": 2,
+          "near_miss_wrong_hit_rate": {
+            "n": 2,
+            "value": 0.0
+          },
+          "near_miss_wrong_hits": 0
+        },
+        "tier": "smoke"
+      }
+    },
+    "EvalReport:phase33": {
+      "model": "EvalReport",
+      "value": {
+        "by_category": {
+          "general": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          }
+        },
+        "by_doc_type": {
+          "general": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          }
+        },
+        "by_language": {
+          "en": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          }
+        },
+        "by_language_category": {
+          "en:general": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          }
+        },
+        "by_language_pair": {
+          "en->zh": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          }
+        },
+        "by_provenance": {
+          "synthetic_fixture": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          }
+        },
+        "by_provenance_category": {
+          "synthetic_fixture/general": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          }
+        },
+        "by_question_kind": {
+          "fact_lookup": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          }
+        },
+        "by_split": {
+          "dev": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          }
+        },
+        "by_strategy": {
+          "chunk-alias": {
+            "citation_coverage": {
+              "n": 4,
+              "value": 0.75
+            },
+            "cited_gold_hit": {
+              "n": 4,
+              "value": 0.5
+            },
+            "faithfulness": null,
+            "generation_latency": {
+              "n": 4,
+              "p50_ms": 300.0,
+              "p95_ms": 900.0
+            },
+            "invalid_citation_rate": {
+              "n": 3,
+              "value": 0.0
+            },
+            "items": 4,
+            "raw_invalid_markers": 1
+          }
+        },
+        "citation_coverage": {
+          "n": 4,
+          "value": 0.75
+        },
+        "cited_gold_hit": {
+          "n": 4,
+          "value": 0.5
+        },
+        "corpus_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "deployment_mode": "single-tenant",
+        "embedder_id": "fixture-embedder",
+        "embedder_source_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "embedder_version": 1,
+        "gate_population": "all",
+        "golden_filter": {
+          "gate_split": "dev",
+          "review_statuses": [
+            "approved"
+          ]
+        },
+        "golden_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "groundedness_labels": {
+          "hhem_2_1_open": {
+            "en": {
+              "not_checked": 0,
+              "possibly_unreliable": 1,
+              "verified": 2
+            }
+          },
+          "none": {
+            "it": {
+              "not_checked": 1,
+              "possibly_unreliable": 0,
+              "verified": 0
+            }
+          }
+        },
+        "groundedness_latency": {
+          "hhem_2_1_open": {
+            "n": 3,
+            "p50_ms": 900.0,
+            "p95_ms": 1800.0
+          }
+        },
+        "injection": null,
+        "invalid_citation_rate": {
+          "n": 3,
+          "value": 0.0
+        },
+        "items": [
+          {
+            "answerable": true,
+            "attribute_filter_fallback": false,
+            "category": "general",
+            "doc_type": "general",
+            "evidence_language": null,
+            "first_hit_rank": 1,
+            "item_id": "en-general-001",
+            "language": "en",
+            "lexical_hit_at_10": true,
+            "named_document_hit": true,
+            "provenance": "synthetic_fixture",
+            "quantity_matched": true,
+            "question_kind": "fact_lookup",
+            "refused": false,
+            "rerank_status": "ok",
+            "span_count": 1,
+            "spans_hit_at_10": 1,
+            "spans_hit_at_5": 1,
+            "split": "dev",
+            "variant_correct": true,
+            "wrong_document_at_1": false
+          }
+        ],
+        "k_values": [
+          5,
+          10
+        ],
+        "latency": {
+          "embed": {
+            "n": 12,
+            "p50_ms": 4.0,
+            "p95_ms": 6.0
+          },
+          "retrieval_total": {
+            "n": 12,
+            "p50_ms": 12.0,
+            "p95_ms": 20.0
+          }
+        },
+        "lexical_leg_hit_rate_at_10": {
+          "n": 4,
+          "value": 0.75
+        },
+        "notes": [
+          "synthetic sample"
+        ],
+        "overall": {
+          "attribute_filter_fallback_rate": {
+            "n": 1,
+            "value": 0.0
+          },
+          "boilerplate_token_share": {
+            "n": 1,
+            "value": 0.0
+          },
+          "correct_refusal_rate": {
+            "n": 10,
+            "value": 0.5
+          },
+          "false_refusal_rate": {
+            "n": 10,
+            "value": 0.5
+          },
+          "false_refusal_upper_95": 0.25,
+          "mrr": {
+            "n": 10,
+            "value": 0.5
+          },
+          "named_document_recall": {
+            "n": 1,
+            "value": 1.0
+          },
+          "quantity_match_rate": {
+            "n": 1,
+            "value": 1.0
+          },
+          "recall_at_10": {
+            "n": 10,
+            "value": 0.5
+          },
+          "recall_at_5": {
+            "n": 10,
+            "value": 0.5
+          },
+          "variant_accuracy": {
+            "n": 1,
+            "value": 1.0
+          },
+          "wrong_document_at_1": {
+            "n": 1,
+            "value": 0.0
           }
         },
         "query_layer": {
@@ -9144,6 +9860,42 @@
         "tags": []
       }
     },
+    "GoldenItem:templated_collection": {
+      "model": "GoldenItem",
+      "value": {
+        "answerable": true,
+        "attack": null,
+        "category": "templated_collection",
+        "conversation": [
+          {
+            "content": "Tell me about the first part.",
+            "role": "user"
+          },
+          {
+            "content": "Which part?",
+            "role": "assistant"
+          }
+        ],
+        "evidence_language": null,
+        "expected_answer": "Value one.",
+        "gold_evidence": [
+          {
+            "document": "member-a.md",
+            "quote": "value one",
+            "section": "Part 1"
+          }
+        ],
+        "id": "en-templated-collection-001",
+        "language": "en",
+        "pair_of": null,
+        "provenance": "synthetic_fixture",
+        "question": "Which value does the first part give?",
+        "retrieval_filters": null,
+        "review_status": "approved",
+        "split": "dev",
+        "tags": []
+      }
+    },
     "GroundednessResult:not_checked": {
       "model": "GroundednessResult",
       "value": {
@@ -9153,6 +9905,49 @@
         "scorer": "none",
         "status": "not_checked",
         "truncated": false
+      }
+    },
+    "IngestFingerprintParts:chunk_prep": {
+      "model": "IngestFingerprintParts",
+      "value": {
+        "assumed_defaults": [
+          "switches"
+        ],
+        "chunk_prep": {
+          "boilerplate": {
+            "cleaner_version": 1,
+            "mode": "both",
+            "rule_fingerprint": "0000000000000000000000000000000000000000000000000000000000000000",
+            "rules_version": 1
+          },
+          "section_rules": {
+            "rule_set_id": "00000000-0000-4000-8000-000000000033",
+            "version": 1
+          }
+        },
+        "chunking_profile_id": "legacy",
+        "embedding_profile_id": "example-embedding",
+        "embedding_profile_version": 1,
+        "embedding_text_version": 1,
+        "language_pack_versions": {
+          "en": 1,
+          "it": 1,
+          "zh": 1
+        },
+        "lexical_version": 2,
+        "ocr_engine_codes": [
+          "en"
+        ],
+        "parser_used": "docling",
+        "parser_version": "2.0.0",
+        "processing_profile_id": "general",
+        "processing_profile_version": 1,
+        "switches": {
+          "caption_language": "en",
+          "language_aware_ingest": "off",
+          "table_header_repeat": "profile",
+          "table_row_serialization": "false"
+        }
       }
     },
     "InjectionDetectorConfig:lakera_min_level_null": {
@@ -9223,6 +10018,454 @@
           "tax_id_scheme": "unknown"
         },
         "tax_total": null
+      }
+    },
+    "LanguageRegistry:quantity": {
+      "model": "LanguageRegistry",
+      "value": {
+        "packs": [
+          {
+            "code": "zh",
+            "effective_date_end_patterns": [
+              "有效期\\s*(?:至|到)\\s*(?:19|20)\\d{2}\\s*年\\s*\\d{1,2}\\s*月\\s*\\d{1,2}\\s*日",
+              "(?<!截)至\\s*(?:19|20)\\d{2}\\s*年\\s*\\d{1,2}\\s*月\\s*\\d{1,2}\\s*日\\s*(?:止|为止|失效|废止)"
+            ],
+            "effective_date_patterns": [
+              "自\\s*(?:19|20)\\d{2}\\s*年\\s*\\d{1,2}\\s*月\\s*\\d{1,2}\\s*日\\s*起\\s*(?:施行|生效|实施|执行)"
+            ],
+            "fixtures": {
+              "corpus": true,
+              "golden_slices": true
+            },
+            "folding": {
+              "accents": true,
+              "elision_prefixes": [],
+              "elision_suffixes": []
+            },
+            "groundedness": "hhem_2_3",
+            "list_separator": "，",
+            "name": "Chinese",
+            "native_name": "中文",
+            "ocr_codes": {
+              "docling": {
+                "rapidocr": "ch"
+              },
+              "llamaparse": "ch_sim"
+            },
+            "pack_version": 1,
+            "rewrite_gate_lexicon": "zh",
+            "script": "Hani",
+            "segmentation": "intl_segmenter_han_bigrams",
+            "sentence_end": "。！？",
+            "stemmer": null,
+            "stopwords": {
+              "detection": [],
+              "lexical": [
+                "的",
+                "了",
+                "在",
+                "是",
+                "我",
+                "有",
+                "和",
+                "就",
+                "不",
+                "人",
+                "都",
+                "一",
+                "一个",
+                "上",
+                "也",
+                "很",
+                "到",
+                "说",
+                "要",
+                "去",
+                "你",
+                "会",
+                "着",
+                "没有",
+                "看",
+                "好",
+                "自己",
+                "这"
+              ]
+            },
+            "texts": {
+              "attached_documents": "与本问题相关的参考文档已附在对话中。",
+              "citation_instruction": "请使用 [S<编号>] 标记引用你所依据的来源，编号只能取自上方带标签的来源，例如 [S1] 或 [S1][S3]。不要引用标签中不存在的编号。",
+              "groundedness_badges": {
+                "not_checked": "未核验",
+                "possibly_unreliable": "可能不可靠",
+                "verified": "已核验"
+              },
+              "groundedness_tooltips": {
+                "not_checked": "这条回答无法与你的文档进行核对。",
+                "possibly_unreliable": "自动检查发现这条回答的部分内容可能没有文档支持。",
+                "verified": "自动检查认为这条回答有你的文档支持。"
+              },
+              "knowledge_base_unavailable": "知识库暂时无法访问，请稍后再试。",
+              "strict_refusal": "# Information Not Available\n\n## Knowledge Base Status\n- I couldn’t find this information in your knowledge base.\n- Web search is turned off, so I can’t look it up online.\n\nWould you like me to turn on web search and check? Do you want to upload a document that contains this information? Is there a specific detail you want me to focus on?"
+            },
+            "version_markers": [
+              "(?:19|20)\\d{2}\\s*年?",
+              "第[一二三四五六七八九十百\\d]+版",
+              "修订(?:版|稿)?",
+              "[vV]\\d+(?:\\.\\d+)*"
+            ]
+          },
+          {
+            "code": "en",
+            "effective_date_end_patterns": [
+              "\\b(?:valid|effective|in\\s+(?:force|effect))\\s+(?:until|through)\\b",
+              "\\bexpires\\s+on\\b"
+            ],
+            "effective_date_patterns": [
+              "\\beffective\\s+(?:from|as\\s+of|on)\\b",
+              "\\bin\\s+(?:force|effect)\\s+(?:from|as\\s+of)\\b"
+            ],
+            "fixtures": {
+              "corpus": true,
+              "golden_slices": true
+            },
+            "folding": {
+              "accents": true,
+              "elision_prefixes": [],
+              "elision_suffixes": [
+                "'s"
+              ]
+            },
+            "groundedness": "hhem_2_1_open",
+            "list_separator": ", ",
+            "name": "English",
+            "native_name": "English",
+            "ocr_codes": {
+              "docling": {
+                "rapidocr": "en"
+              },
+              "llamaparse": "en"
+            },
+            "pack_version": 1,
+            "rewrite_gate_lexicon": "en",
+            "script": "Latn",
+            "segmentation": "whitespace",
+            "sentence_end": ".!?",
+            "stemmer": null,
+            "stopwords": {
+              "detection": [
+                "the",
+                "and",
+                "of",
+                "to",
+                "is",
+                "are",
+                "was",
+                "were",
+                "be",
+                "been",
+                "for",
+                "with",
+                "that",
+                "this",
+                "it",
+                "as",
+                "on",
+                "at",
+                "by",
+                "from",
+                "or",
+                "not",
+                "have",
+                "has",
+                "will",
+                "can",
+                "if",
+                "within",
+                "you",
+                "your",
+                "we",
+                "our",
+                "an",
+                "which",
+                "any",
+                "all",
+                "such",
+                "than",
+                "their",
+                "its"
+              ],
+              "lexical": [
+                "a",
+                "an",
+                "the",
+                "and",
+                "or",
+                "but",
+                "in",
+                "on",
+                "at",
+                "to",
+                "for",
+                "of",
+                "as",
+                "by",
+                "with",
+                "from",
+                "is",
+                "are",
+                "was",
+                "were",
+                "be",
+                "been",
+                "being",
+                "have",
+                "has",
+                "had",
+                "do",
+                "does",
+                "did",
+                "will",
+                "would",
+                "could",
+                "should",
+                "may",
+                "might",
+                "what",
+                "which",
+                "who",
+                "whom",
+                "this",
+                "that",
+                "these",
+                "those",
+                "it",
+                "its",
+                "he",
+                "she",
+                "they",
+                "we",
+                "you",
+                "i",
+                "me",
+                "my",
+                "your",
+                "his",
+                "her",
+                "their",
+                "our"
+              ]
+            },
+            "texts": {
+              "attached_documents": "The reference documents for this question are attached to the conversation.",
+              "citation_instruction": "Cite the sources you use with [S<number>] markers taken only from the labelled sources above, for example [S1] or [S1][S3]. Never cite a number that is not in a label.",
+              "groundedness_badges": {
+                "not_checked": "Not Checked",
+                "possibly_unreliable": "Possibly Unreliable",
+                "verified": "Verified"
+              },
+              "groundedness_tooltips": {
+                "not_checked": "This answer could not be checked against your documents.",
+                "possibly_unreliable": "An automatic check found parts of this answer that your documents may not support.",
+                "verified": "An automatic check found this answer supported by your documents."
+              },
+              "knowledge_base_unavailable": "The knowledge base is temporarily unavailable. Please try again in a moment.",
+              "strict_refusal": "# Information Not Available\n\n## Knowledge Base Status\n- I couldn’t find this information in your knowledge base.\n- Web search is turned off, so I can’t look it up online.\n\nWould you like me to turn on web search and check? Do you want to upload a document that contains this information? Is there a specific detail you want me to focus on?"
+            },
+            "version_markers": [
+              "\\b(?:19|20)\\d{2}\\b",
+              "\\b[vV]\\d+(?:\\.\\d+)*\\b",
+              "\\brev\\.\\s*\\d*",
+              "\\brevised\\b",
+              "\\b\\d+(?:st|nd|rd|th)\\s+edition\\b"
+            ]
+          },
+          {
+            "code": "it",
+            "effective_date_end_patterns": [
+              "\\b(?:valid[oa]|in\\s+vigore|efficace)\\s+fino\\s+al\\b",
+              "\\bscade\\s+il\\b"
+            ],
+            "effective_date_patterns": [
+              "\\bin\\s+vigore\\s+dal\\b",
+              "\\ba\\s+decorrere\\s+dal\\b",
+              "\\befficace\\s+dal\\b"
+            ],
+            "fixtures": {
+              "corpus": true,
+              "golden_slices": true
+            },
+            "folding": {
+              "accents": true,
+              "elision_prefixes": [
+                "dell'",
+                "nell'",
+                "sull'",
+                "all'",
+                "dall'",
+                "quell'",
+                "un'",
+                "l'",
+                "d'",
+                "c'",
+                "s'"
+              ],
+              "elision_suffixes": []
+            },
+            "groundedness": "none",
+            "list_separator": ", ",
+            "name": "Italian",
+            "native_name": "Italiano",
+            "ocr_codes": {
+              "docling": {
+                "rapidocr": "it"
+              },
+              "llamaparse": "it"
+            },
+            "pack_version": 1,
+            "rewrite_gate_lexicon": "it",
+            "script": "Latn",
+            "segmentation": "whitespace",
+            "sentence_end": ".!?",
+            "stemmer": null,
+            "stopwords": {
+              "detection": [
+                "il",
+                "lo",
+                "la",
+                "le",
+                "gli",
+                "un",
+                "una",
+                "uno",
+                "di",
+                "del",
+                "della",
+                "dei",
+                "delle",
+                "degli",
+                "che",
+                "è",
+                "per",
+                "con",
+                "su",
+                "sono",
+                "non",
+                "nel",
+                "nella",
+                "alla",
+                "al",
+                "dal",
+                "dalla",
+                "si",
+                "come",
+                "più",
+                "anche",
+                "questo",
+                "questa",
+                "se",
+                "ha",
+                "hanno",
+                "entro",
+                "nei",
+                "sul",
+                "tra",
+                "fra",
+                "ogni"
+              ],
+              "lexical": [
+                "il",
+                "lo",
+                "la",
+                "i",
+                "gli",
+                "le",
+                "un",
+                "una",
+                "uno",
+                "di",
+                "a",
+                "da",
+                "in",
+                "con",
+                "su",
+                "per",
+                "tra",
+                "fra",
+                "e",
+                "ed",
+                "o",
+                "od",
+                "che",
+                "non",
+                "è",
+                "sono",
+                "del",
+                "della",
+                "dei",
+                "delle",
+                "al",
+                "allo",
+                "alla",
+                "agli",
+                "alle",
+                "dal",
+                "dallo",
+                "dalla",
+                "dai",
+                "dalle",
+                "nel",
+                "nello",
+                "nella",
+                "nei",
+                "nelle",
+                "sul",
+                "sullo",
+                "sulla",
+                "sui",
+                "sulle"
+              ]
+            },
+            "texts": {
+              "attached_documents": "I documenti di riferimento per questa domanda sono allegati alla conversazione.",
+              "citation_instruction": "Cita le fonti che usi con i marcatori [S<numero>] presi solo dalle fonti etichettate qui sopra, per esempio [S1] o [S1][S3]. Non citare mai un numero che non compare in un'etichetta.",
+              "groundedness_badges": {
+                "not_checked": "Non verificata",
+                "possibly_unreliable": "Forse inaffidabile",
+                "verified": "Verificata"
+              },
+              "groundedness_tooltips": {
+                "not_checked": "Non è stato possibile verificare questa risposta sui tuoi documenti.",
+                "possibly_unreliable": "Un controllo automatico ha trovato parti di questa risposta che i tuoi documenti potrebbero non supportare.",
+                "verified": "Un controllo automatico ha trovato questa risposta supportata dai tuoi documenti."
+              },
+              "knowledge_base_unavailable": "La base di conoscenza non è al momento disponibile. Riprova tra poco.",
+              "strict_refusal": "# Information Not Available\n\n## Knowledge Base Status\n- I couldn’t find this information in your knowledge base.\n- Web search is turned off, so I can’t look it up online.\n\nWould you like me to turn on web search and check? Do you want to upload a document that contains this information? Is there a specific detail you want me to focus on?"
+            },
+            "version_markers": [
+              "\\b(?:19|20)\\d{2}\\b",
+              "\\b[vV]\\d+(?:\\.\\d+)*\\b",
+              "\\brev\\.\\s*\\d*",
+              "\\b\\d+[ªa]?\\s+edizione\\b",
+              "\\bedizione\\b",
+              "\\brevisione\\b"
+            ]
+          }
+        ],
+        "quantity": {
+          "decimal_separators": [
+            ".",
+            ","
+          ],
+          "grouping_separators": [
+            ",",
+            " "
+          ],
+          "unit_symbols": [
+            "ab",
+            "cd"
+          ]
+        },
+        "schema_version": 1
       }
     },
     "LatencyBudgets:ttft": {
@@ -9862,6 +11105,150 @@
         ]
       }
     },
+    "RagTrace:phase33": {
+      "model": "RagTrace",
+      "value": {
+        "answer": "Value one.",
+        "attribute_filter": {
+          "applied": true,
+          "explicit": true,
+          "fallback": false,
+          "matched_attributes": 1,
+          "mode": "hard",
+          "resolved_documents": 2,
+          "too_broad": false
+        },
+        "candidates": [
+          {
+            "chunk_id": "chunk-001",
+            "content": "The first part gives value one.",
+            "document_id": "doc-001",
+            "document_name": "member-a.md",
+            "final_score": 0.85,
+            "fused_score": null,
+            "has_image": false,
+            "language": null,
+            "legs": {},
+            "match_reason": "vector",
+            "rank": 1,
+            "rerank_score": null,
+            "similarity": 0.82
+          },
+          {
+            "chunk_id": "chunk-002",
+            "content": "Office hours are nine to five.",
+            "document_id": "doc-002",
+            "document_name": null,
+            "final_score": null,
+            "fused_score": null,
+            "has_image": false,
+            "language": null,
+            "legs": {},
+            "match_reason": null,
+            "rank": 2,
+            "rerank_score": null,
+            "similarity": 0.41
+          }
+        ],
+        "citation_strategy": "chunk-alias",
+        "citations": [
+          {
+            "alias": "S1",
+            "chunkIds": [
+              "chunk-001"
+            ],
+            "documentId": "doc-001",
+            "documentName": "member-a.md",
+            "documentVersion": null,
+            "n": 1,
+            "page": null,
+            "quote": "The first part gives value one.",
+            "quoteHash": "8ce0aa222a8339916769a9552a8ffcc2834d2f6aa1101ab636571873bf2c7bb2",
+            "sectionPath": null,
+            "strategy": "chunk-alias"
+          }
+        ],
+        "config_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "context": "The first part gives value one.",
+        "context_tokens": null,
+        "effective_config": {
+          "deployment_mode": "single-tenant",
+          "embedding_model": "text-embedding-3-small",
+          "endpoint_version": "1",
+          "generator_model": null,
+          "rag_env": {
+            "RAG_BEHAVIOR_MODE": "strict"
+          },
+          "rag_prompt_sha256": {
+            "RAG_SYSTEM_PROMPT": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "security": null
+        },
+        "groundedness": null,
+        "injection": null,
+        "invalid_citations": 0,
+        "item_id": "en-general-001",
+        "kept": [
+          {
+            "chunk_id": "chunk-001",
+            "content": "The first part gives value one.",
+            "document_id": "doc-001",
+            "document_name": "member-a.md",
+            "kept_by": "similarity",
+            "rank": 1,
+            "similarity": 0.82,
+            "variant_index": 1
+          }
+        ],
+        "query": "Which value does the first part give?",
+        "query_context": {
+          "is_financial_query": false,
+          "is_temporal_query": false,
+          "required_precision": "medium",
+          "search_strategy": "semantic_only",
+          "suggested_threshold": 0.3
+        },
+        "query_language": null,
+        "query_plan": null,
+        "query_transforms": [
+          {
+            "kind": "rewrite",
+            "reason": null,
+            "status": null,
+            "text": "value of the first part",
+            "transform": null
+          }
+        ],
+        "refusal": null,
+        "refusal_reason": null,
+        "refused": false,
+        "retrieval_config_hash": null,
+        "retrieval_strategy": "standard",
+        "retrieval_versions": null,
+        "schema_version": 1,
+        "stage_counts": {},
+        "stage_latency_ms": {
+          "analyze": 1.5,
+          "embed": 4.0,
+          "generation": 0.0,
+          "search": 7.0
+        },
+        "stage_status": {
+          "analyze": "ok",
+          "embed": "ok",
+          "generation": "ok",
+          "search": "ok"
+        },
+        "used_documents": [
+          {
+            "document_id": "doc-001",
+            "image_url": "https://example.invalid/image.png",
+            "name": "member-a.md",
+            "similarity": 0.82
+          }
+        ]
+      }
+    },
     "RagTrace:phase42": {
       "model": "RagTrace",
       "value": {
@@ -10473,6 +11860,23 @@
         "schema_version": 2
       }
     },
+    "RetrievalFilters:attributes": {
+      "model": "RetrievalFilters",
+      "value": {
+        "attributes": {
+          "alpha_code": [
+            "X-1"
+          ]
+        },
+        "current_only": true,
+        "date_range": null,
+        "doc_types": null,
+        "document_ids": null,
+        "invoice": null,
+        "languages": null,
+        "sources": null
+      }
+    },
     "RetrievalFilters:scopes": {
       "model": "RetrievalFilters",
       "value": {
@@ -10628,6 +12032,36 @@
         "sub_question_coverage": true
       }
     },
+    "SectionRuleSet:full": {
+      "model": "SectionRuleSet",
+      "value": {
+        "doc_type": "general",
+        "enabled": true,
+        "headings": [
+          {
+            "flags": "u",
+            "level": 1,
+            "name": "part_1",
+            "pattern": "^Part 1\\b",
+            "required": true,
+            "restart": true
+          },
+          {
+            "flags": "u",
+            "level": 1,
+            "name": "part_2",
+            "pattern": "^Part 2\\b",
+            "required": false,
+            "restart": false
+          }
+        ],
+        "name": "rule set one",
+        "require_increasing_numbers": true,
+        "skip_toc": true,
+        "source": "upload",
+        "toc_min_run": 4
+      }
+    },
     "SupersessionCandidate:confirmed": {
       "model": "SupersessionCandidate",
       "value": {
@@ -10644,6 +12078,59 @@
           "title_match": true
         },
         "status": "confirmed"
+      }
+    },
+    "TenantRulesFile:full": {
+      "model": "TenantRulesFile",
+      "value": {
+        "boilerplate_rules": [
+          {
+            "doc_type": "general",
+            "enabled": true,
+            "flags": "iu",
+            "kind": "line",
+            "name": "edge line",
+            "pattern": "^\\W+$",
+            "source": "upload"
+          },
+          {
+            "enabled": true,
+            "kind": "fragment",
+            "max_length": 12,
+            "min_page_share": 0.6,
+            "name": "short fragment"
+          }
+        ],
+        "schema_version": 1,
+        "section_rule_sets": [
+          {
+            "doc_type": "general",
+            "enabled": true,
+            "headings": [
+              {
+                "flags": "u",
+                "level": 1,
+                "name": "part_1",
+                "pattern": "^Part 1\\b",
+                "required": true,
+                "restart": true
+              },
+              {
+                "flags": "u",
+                "level": 1,
+                "name": "part_2",
+                "pattern": "^Part 2\\b",
+                "required": false,
+                "restart": false
+              }
+            ],
+            "name": "rule set one",
+            "require_increasing_numbers": true,
+            "skip_toc": true,
+            "source": "upload",
+            "toc_min_run": 4
+          }
+        ]
       }
     },
     "TerminologyEntry:suppression": {

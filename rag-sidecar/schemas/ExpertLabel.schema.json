@@ -119,7 +119,8 @@
         "small_talk",
         "table_split",
         "duplicate_flood",
-        "identifier_near_miss"
+        "identifier_near_miss",
+        "templated_collection"
       ],
       "title": "Category",
       "type": "string"

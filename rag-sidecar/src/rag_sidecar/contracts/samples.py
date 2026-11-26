@@ -199,7 +199,7 @@ from rag_sidecar.contracts.ingest_settings import (
     QuerySettingEntry,
     SettingsClassification,
 )
-from rag_sidecar.contracts.languages import LANGUAGE_CODES, load_language_registry
+from rag_sidecar.contracts.languages import LANGUAGE_CODES, LanguageRegistry, load_language_registry
 from rag_sidecar.contracts.latency import GroundednessBudgets, ScorerBudget
 from rag_sidecar.contracts.parse_eval import (
     DuplicateCounts,
@@ -2552,8 +2552,222 @@ def _phase42_variants() -> dict[str, dict[str, Any]]:
     }
 
 
+_PHASE33_RULE_SET_ID = "00000000-0000-4000-8000-000000000033"
+
+
+def _phase33_heading(index: int, *, required: bool = False, restart: bool = False) -> dict[str, Any]:
+    return {
+        "pattern": f"^Part {index}\\b",
+        "flags": "u",
+        "name": f"part_{index}",
+        "level": 1,
+        "required": required,
+        "restart": restart,
+    }
+
+
+def _phase33_boilerplate_config() -> dict[str, Any]:
+    return {
+        "schema_version": 1,
+        "rules_version": 1,
+        "page_share": 0.6,
+        "edge_lines": 3,
+        "max_line_tokens": 12,
+        "min_pages": 3,
+        "fragment_max_length": 12,
+        "fragment_page_share": 0.6,
+        "review_share": 0.3,
+    }
+
+
+_PHASE33_NEUTRAL_TEXT = {
+    "How many leave days do employees get?": "Which value does the first part give?",
+    "Employees receive twenty days of leave per year.": "The first part gives value one.",
+    "Twenty days per year.": "Value one.",
+    "twenty days": "value one",
+    "Leave policy": "Part 1",
+    "handbook.md": "member-a.md",
+    "Tell me about leave.": "Tell me about the first part.",
+    "Which part of the policy?": "Which part?",
+    "leave days per year": "value of the first part",
+}
+
+
+def _phase33_neutral(value: Any) -> Any:
+    """Replace the shared sample sentences with neutral synthetic text in the Phase 3.3 variants."""
+    if isinstance(value, str):
+        return _PHASE33_NEUTRAL_TEXT.get(value, value)
+    if isinstance(value, list):
+        return [_phase33_neutral(entry) for entry in value]
+    if isinstance(value, dict):
+        return {key: _phase33_neutral(entry) for key, entry in value.items()}
+    return value
+
+
+def _phase33_models() -> dict[str, Any]:
+    from rag_sidecar.contracts.templated import (
+        AttributeDefinition,
+        AttributeFilterConfig,
+        AttributeHeaderTemplate,
+        AttributeImportRow,
+        AttributeSchema,
+        BoilerplateReport,
+        BoilerplateRule,
+        BoilerplateRulesConfig,
+        SectionRuleSet,
+        TenantRulesFile,
+    )
+
+    return {
+        "SectionRuleSet": SectionRuleSet.model_validate({"name": "rule set one", "headings": [_phase33_heading(1)]}),
+        "BoilerplateRule": BoilerplateRule.model_validate(
+            {"name": "short fragment", "kind": "fragment", "max_length": 12, "min_page_share": 0.6}
+        ),
+        "AttributeDefinition": AttributeDefinition(key="alpha_code", type="code"),
+        "AttributeSchema": AttributeSchema(),
+        "AttributeHeaderTemplate": AttributeHeaderTemplate(template="{alpha_code}", version=1),
+        "TenantRulesFile": TenantRulesFile(),
+        "AttributeImportRow": AttributeImportRow.model_validate(
+            {"source_key": "kb/doc-1", "attributes": {"alpha_code": "X-1"}}
+        ),
+        "BoilerplateRulesConfig": BoilerplateRulesConfig.model_validate(_phase33_boilerplate_config()),
+        "AttributeFilterConfig": AttributeFilterConfig(rules_version=1, soft_weight=0.5, id_cap=2000),
+        "BoilerplateReport": BoilerplateReport(
+            cleaner_version=1, rules_version=1, lines_removed=0, tokens_removed=0, share=0.0
+        ),
+    }
+
+
+def _phase33_variants() -> dict[str, dict[str, Any]]:
+    from rag_sidecar.contracts.templated import (
+        AttributeDefinition,
+        AttributeFilterConfig,
+        AttributeHeaderTemplate,
+        AttributeImportRow,
+        AttributeSchema,
+        BoilerplateReport,
+        BoilerplateRule,
+        BoilerplateRulesConfig,
+        SectionRuleSet,
+        TenantRulesFile,
+    )
+
+    rule_set = {
+        "name": "rule set one",
+        "doc_type": "general",
+        "source": "upload",
+        "enabled": True,
+        "headings": [_phase33_heading(1, required=True, restart=True), _phase33_heading(2)],
+        "require_increasing_numbers": True,
+        "skip_toc": True,
+        "toc_min_run": 4,
+    }
+    line_rule = {
+        "name": "edge line",
+        "kind": "line",
+        "doc_type": "general",
+        "source": "upload",
+        "enabled": True,
+        "pattern": "^\\W+$",
+        "flags": "iu",
+    }
+    definitions = [
+        {"key": "alpha_code", "type": "code", "filterable": True, "in_header": True, "in_identifier_index": True},
+        {"key": "beta_label", "type": "text_list", "filterable": True, "in_header": True, "soft": True},
+    ]
+    attributes = {"alpha_code": "X-1", "beta_label": ["value one", "value two"]}
+    full = {
+        "SectionRuleSet": SectionRuleSet.model_validate(rule_set),
+        "BoilerplateRule": BoilerplateRule.model_validate(line_rule),
+        "AttributeDefinition": AttributeDefinition.model_validate(definitions[0]),
+        "AttributeSchema": AttributeSchema.model_validate({"definitions": definitions}),
+        "AttributeHeaderTemplate": AttributeHeaderTemplate(template="{alpha_code} | {beta_label}", version=2),
+        "TenantRulesFile": TenantRulesFile.model_validate(
+            {
+                "schema_version": 1,
+                "section_rule_sets": [rule_set],
+                "boilerplate_rules": [
+                    line_rule,
+                    {"name": "short fragment", "kind": "fragment", "max_length": 12, "min_page_share": 0.6},
+                ],
+            }
+        ),
+        "AttributeImportRow": AttributeImportRow.model_validate(
+            {"source_key": "kb/doc-1", "source": "upload", "attributes": attributes}
+        ),
+        "BoilerplateRulesConfig": BoilerplateRulesConfig.model_validate(
+            {**_phase33_boilerplate_config(), "rules_version": 2, "page_share": 1}
+        ),
+        "AttributeFilterConfig": AttributeFilterConfig(rules_version=2, soft_weight=1.0, id_cap=1),
+        "BoilerplateReport": BoilerplateReport(
+            cleaner_version=1, rules_version=2, lines_removed=6, tokens_removed=30, share=0.05
+        ),
+    }
+    variants = {f"{name}:full": {"model": name, "value": model.model_dump(mode="json")} for name, model in full.items()}
+
+    trace = _phase33_neutral(_trace("Twenty days per year.").model_dump(mode="json"))
+    trace["kept"] = [{**trace["kept"][0], "variant_index": 1}, *trace["kept"][1:]]
+    trace["attribute_filter"] = {
+        "mode": "hard",
+        "explicit": True,
+        "matched_attributes": 1,
+        "resolved_documents": 2,
+        "applied": True,
+        "fallback": False,
+        "too_broad": False,
+    }
+    report = _eval_report().model_dump(mode="json")
+    metric = {"value": 1.0, "n": 1}
+    report["overall"] = {
+        **report["overall"],
+        "boilerplate_token_share": {"value": 0.0, "n": 1},
+        "named_document_recall": metric,
+        "wrong_document_at_1": {"value": 0.0, "n": 1},
+        "variant_accuracy": metric,
+        "quantity_match_rate": metric,
+        "attribute_filter_fallback_rate": {"value": 0.0, "n": 1},
+    }
+    report["items"] = [
+        {
+            **report["items"][0],
+            "named_document_hit": True,
+            "wrong_document_at_1": False,
+            "variant_correct": True,
+            "quantity_matched": True,
+            "attribute_filter_fallback": False,
+        },
+        *report["items"][1:],
+    ]
+    item = {**_phase33_neutral(_golden_item().model_dump(mode="json")), "id": "en-templated-collection-001", "category": "templated_collection"}
+    registry = load_language_registry().model_dump(mode="json")
+    registry["quantity"] = {
+        "unit_symbols": ["ab", "cd"],
+        "decimal_separators": [".", ","],
+        "grouping_separators": [",", " "],
+    }
+    parts = _models()["IngestFingerprintParts"].model_dump(mode="json")
+    parts["chunk_prep"] = {
+        "boilerplate": {"mode": "both", "cleaner_version": 1, "rules_version": 1, "rule_fingerprint": "0" * 64},
+        "section_rules": {"rule_set_id": _PHASE33_RULE_SET_ID, "version": 1},
+    }
+    checked = {
+        "RagTrace:phase33": RagTrace.model_validate(trace),
+        "EvalReport:phase33": EvalReport.model_validate(report),
+        "GoldenItem:templated_collection": GoldenItem.model_validate(item),
+        "LanguageRegistry:quantity": LanguageRegistry.model_validate(registry),
+        "IngestFingerprintParts:chunk_prep": IngestFingerprintParts.model_validate(parts),
+        "RetrievalFilters:attributes": RetrievalFilters.model_validate({"attributes": {"alpha_code": ["X-1"]}}),
+        "BackfillManifestEntry:attributes": BackfillManifestEntry.model_validate(
+            {"source_key": "kb/doc-1", "path": "/data/doc-1.pdf", "attributes": attributes}
+        ),
+    }
+    for key, model in checked.items():
+        variants[key] = {"model": key.split(":", 1)[0], "value": model.model_dump(mode="json")}
+    return variants
+
+
 def build_samples() -> dict[str, dict[str, Any]]:
-    models = {**_models(), **_feedback_loop_models(), **_phase42_models(), **_terminology_models()}
+    models = {**_models(), **_feedback_loop_models(), **_phase42_models(), **_terminology_models(), **_phase33_models()}
     samples = {name: model.model_dump(mode="json") for name, model in models.items()}
     variants: dict[str, dict[str, Any]] = {
         "AnswerRecord:pending_unlinked": {
@@ -2682,4 +2896,5 @@ def build_samples() -> dict[str, dict[str, Any]]:
     variants.update(_phase32_ingest_contract_variants())
     variants.update(_phase32_query_contract_variants())
     variants.update(_phase42_variants())
+    variants.update(_phase33_variants())
     return {"samples": samples, "variants": variants}
