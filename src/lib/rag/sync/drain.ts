@@ -1,52 +1,51 @@
-import { rpcRows, type RpcClient } from '@/lib/rag/backend/supabase-rpc';
+import { BackendNotReadyError } from '@/lib/rag/backend/external';
+import { RetrievalBackendError, type RpcClient } from '@/lib/rag/backend/supabase-rpc';
 import { isCanonicalTenantKey } from '@/lib/rag/backend/tenant-key';
-import type { VectorSyncSliceReport } from '@/lib/rag-eval/contracts.generated';
-import type { VectorPoint, VectorStore } from './stores/types';
+import { VectorSyncSliceReportSchema, type VectorSyncSliceReport } from '@/lib/rag-eval/contracts.generated';
+import {
+  checkpointRow,
+  claimBatch,
+  completeRows,
+  expandRow,
+  failRow,
+  readChunkRow,
+  readDocumentRows,
+  readSyncProfiles,
+  type OutboxRow,
+  type SyncProfile,
+} from './claim';
+import { logVectorSync, type VectorSyncLogSink } from './log';
+import { planChunkSync, planDocumentSync, type SyncPlan } from './servable';
+import type { VectorStore } from './stores/types';
+import { traceVectorSync, type VectorSyncTraceOptions } from './trace';
 
 export const DRAIN_DEFAULT_BUDGET_MS = 45_000;
 export const DRAIN_DEFAULT_BATCH = 100;
 export const DRAIN_LEASE_SECONDS = 120;
-const PAGE_LIMIT = 500;
+export const DRAIN_DEFAULT_PAGE = 100;
+const DEFAULT_MAX_SLICES = 10_000;
 const ERROR_CODE_RE = /^[a-z0-9_.:-]{1,200}$/;
-
-interface OutboxRow {
-  id: number | string;
-  target: string;
-  entity: 'chunk' | 'document' | 'profile' | 'tenant';
-  entity_id: string;
-  tenant_key: string | null;
-  profile_id: string | null;
-  enqueued_at: string;
-}
-
-interface SyncProfile {
-  profile_id: string;
-  dims: number;
-  storage: string;
-}
-
-interface SyncRow {
-  chunk_id: string;
-  document_id: string;
-  tenant_key: string;
-  vector: number[] | string;
-  lexical_text: string | null;
-  lexical_version: number | null;
-  content_hash: string | null;
-  doc_type: string | null;
-  doc_date: string | null;
-  language: string | null;
-  source: string | null;
-  chunking_profile_id: string | null;
-  parent_id: string | null;
-}
+/** A cursor that means "from the start": every chunk and document id sorts after it, and expand accepts it as a uuid. */
+const RESTART_CURSOR = '00000000-0000-0000-0000-000000000000';
+const CURSOR_SEPARATOR = '@';
 
 export interface DrainSliceOptions {
-  store: VectorStore;
+  /** One store, or several (one per enabled target). Rows of a target without a store fail with target_unavailable. */
+  store?: VectorStore;
+  stores?: VectorStore[];
   rpc: RpcClient;
   budgetMs?: number;
   batch?: number;
+  leaseSeconds?: number;
+  pageSize?: number;
   now?: () => number;
+  sink?: VectorSyncLogSink;
+  /** Langfuse options for the per-slice trace; false turns it off. Default: the environment's Langfuse config. */
+  trace?: VectorSyncTraceOptions | false;
+}
+
+export interface DrainUntilEmptyOptions extends DrainSliceOptions {
+  maxSlices?: number;
 }
 
 class DrainError extends Error {
@@ -57,179 +56,306 @@ class DrainError extends Error {
   }
 }
 
-async function call(rpc: RpcClient, fn: string, args: Record<string, unknown>): Promise<unknown[]> {
-  const signal = new AbortController().signal;
-  const response = await rpc.rpc(fn, args).abortSignal(signal);
-  if (response.error) throw new DrainError(`${fn}:${response.error.code ?? 'rpc_error'}`.toLowerCase());
-  return rpcRows(response.data);
+interface Group {
+  key: string;
+  rows: OutboxRow[];
+  head: OutboxRow;
 }
 
-function toVector(value: number[] | string): number[] {
-  if (Array.isArray(value)) return value.map(Number);
-  return String(value)
-    .replace(/^[{[]|[}\]]$/g, '')
-    .split(',')
-    .filter((x) => x.length > 0)
-    .map(Number);
+type GroupOutcome = 'done' | 'checkpointed';
+
+/** ensureCollection runs once per (store, profile) per process; a collection reported missing is ensured again. */
+const ensuredCollections = new WeakMap<VectorStore, Set<string>>();
+
+function groupKey(row: OutboxRow): string {
+  return JSON.stringify([row.target, row.entity, row.entity_id, row.tenant_key, row.profile_id]);
 }
 
-/** D-03: the payload is built field by field, so content or a document name can never ride along. */
-function toPoint(row: SyncRow): VectorPoint {
-  return {
-    id: String(row.chunk_id),
-    vector: toVector(row.vector),
-    payload: {
-      tenant_key: row.tenant_key,
-      document_id: String(row.document_id),
-      doc_type: row.doc_type,
-      doc_date: row.doc_date,
-      language: row.language,
-      source: row.source,
-      chunking_profile_id: row.chunking_profile_id,
-      parent_id: row.parent_id ? String(row.parent_id) : null,
-      lexical_text: row.lexical_text,
-      content_hash: row.content_hash,
-      lexical_version: row.lexical_version,
-    },
-  };
+/** D-04: rows naming the same (target, entity, entity_id, tenant_key, profile_id) are processed once. */
+function coalesce(rows: OutboxRow[]): Group[] {
+  const groups = new Map<string, Group>();
+  for (const row of rows) {
+    const key = groupKey(row);
+    const found = groups.get(key);
+    if (found) found.rows.push(row);
+    else groups.set(key, { key, rows: [row], head: row });
+  }
+  return [...groups.values()];
 }
 
-function errorCode(error: unknown): string {
-  const code = error instanceof DrainError ? error.code : 'drain_error';
+function isFresh(cursor: string | null | undefined): boolean {
+  return cursor === null || cursor === undefined || cursor === '' || cursor === RESTART_CURSOR;
+}
+
+/** One resume point for the group: a fresh row anywhere in the group restarts the whole entity; otherwise the rows must agree. */
+function groupCursor(group: Group): string | null {
+  const cursors = group.rows.map((row) => row.cursor);
+  if (cursors.some(isFresh)) return null;
+  return cursors.every((cursor) => cursor === cursors[0]) ? (cursors[0] as string) : null;
+}
+
+function parseDocumentCursor(cursor: string | null): { profileId: string; after: string } | null {
+  if (cursor === null) return null;
+  const at = cursor.lastIndexOf(CURSOR_SEPARATOR);
+  if (at <= 0) return null;
+  return { profileId: cursor.slice(0, at), after: cursor.slice(at + 1) };
+}
+
+function codeOf(error: unknown): string {
+  let code = 'store_error';
+  if (error instanceof DrainError) code = error.code;
+  else if (error instanceof RetrievalBackendError) code = `${error.rpc}:${error.code ?? 'rpc_error'}`.toLowerCase();
+  else if (error instanceof BackendNotReadyError) code = `backend_not_ready:${error.reason}`;
   return ERROR_CODE_RE.test(code) ? code : 'drain_error';
 }
 
+function isTenantMissing(error: unknown): boolean {
+  return error instanceof BackendNotReadyError && error.reason === 'tenant_missing';
+}
+
 /**
- * One time-sliced drain over one store (D-02, D-04): claim, read the current servable rows of each claimed entity, upsert them and
- * delete every other point of that entity, then complete. Rows are never trusted for content; the outbox only names what changed.
+ * One time-sliced drain (D-02, D-04, A-12): claim batches, coalesce them by entity, re-sync each entity from Supabase's current
+ * servable rows, and complete, checkpoint or fail every claimed row. The loop is bounded by its own budget, never by a request's
+ * abort signal (research Pitfall 9): once the budget is spent no new batch is claimed and no new group starts.
  */
 export async function drainSlice(options: DrainSliceOptions): Promise<VectorSyncSliceReport> {
-  const { store, rpc } = options;
+  const { rpc } = options;
   const now = options.now ?? Date.now;
   const budgetMs = options.budgetMs ?? DRAIN_DEFAULT_BUDGET_MS;
   const batch = options.batch ?? DRAIN_DEFAULT_BATCH;
+  const leaseSeconds = options.leaseSeconds ?? DRAIN_LEASE_SECONDS;
+  const pageSize = options.pageSize ?? DRAIN_DEFAULT_PAGE;
+  const stores = new Map<string, VectorStore>();
+  for (const store of [...(options.stores ?? []), ...(options.store ? [options.store] : [])]) stores.set(store.target, store);
+
   const started = now();
-  const report = { claimed: 0, upserted: 0, deleted: 0, failed: 0, dead: 0, lagSeconds: 0 };
+  const spent = (): boolean => now() - started >= budgetMs;
+  const counts = { claimed: 0, upserted: 0, deleted: 0, failed: 0, dead: 0, lagSeconds: 0 };
   let morePending = false;
+  let profiles: SyncProfile[] | null = null;
 
-  const profiles = (await call(rpc, 'rag_vector_sync_profiles', {})) as SyncProfile[];
-  const profileById = new Map(profiles.map((profile) => [profile.profile_id, profile]));
-  const ensured = new Set<string>();
+  async function syncedProfiles(): Promise<SyncProfile[]> {
+    if (profiles === null) profiles = [...(await readSyncProfiles(rpc))].sort((a, b) => (a.profile_id < b.profile_id ? -1 : 1));
+    return profiles;
+  }
 
-  async function profilesFor(row: OutboxRow): Promise<SyncProfile[]> {
-    const chosen = row.profile_id ? profiles.filter((p) => p.profile_id === row.profile_id) : profiles;
-    for (const profile of chosen) {
-      if (!ensured.has(profile.profile_id)) {
-        await store.ensureCollection({ profileId: profile.profile_id, dims: profile.dims });
-        ensured.add(profile.profile_id);
-      }
+  async function ensureCollection(store: VectorStore, profile: SyncProfile): Promise<void> {
+    let seen = ensuredCollections.get(store);
+    if (!seen) {
+      seen = new Set();
+      ensuredCollections.set(store, seen);
     }
+    if (seen.has(profile.profile_id)) return;
+    await store.ensureCollection({ profileId: profile.profile_id, dims: profile.dims });
+    seen.add(profile.profile_id);
+  }
+
+  function forgetCollection(store: VectorStore, profileId: string): void {
+    ensuredCollections.get(store)?.delete(profileId);
+  }
+
+  async function profilesFor(store: VectorStore, row: OutboxRow): Promise<SyncProfile[]> {
+    const all = await syncedProfiles();
+    const chosen = row.profile_id ? all.filter((p) => p.profile_id === row.profile_id) : all;
+    for (const profile of chosen) await ensureCollection(store, profile);
     return chosen;
   }
 
-  async function syncDocument(tenantKey: string, documentId: string, profile: SyncProfile): Promise<void> {
-    const points: VectorPoint[] = [];
-    let after: string | null = null;
-    for (;;) {
-      const rows = (await call(rpc, 'rag_vector_sync_document_rows', {
-        p_tenant_key: tenantKey,
-        p_document_id: documentId,
-        p_profile_id: profile.profile_id,
-        p_after: after,
-        p_limit: PAGE_LIMIT,
-      })) as SyncRow[];
-      for (const row of rows) points.push(toPoint(row));
-      if (rows.length < PAGE_LIMIT) break;
-      after = String(rows[rows.length - 1].chunk_id);
+  /** D-07: a store without the tenant answers BackendNotReadyError(tenant_missing); create it once and retry in this slice. */
+  async function upsert(store: VectorStore, profileId: string, tenantKey: string, plan: SyncPlan): Promise<void> {
+    if (plan.upserts.length === 0) return;
+    try {
+      counts.upserted += await store.upsert(profileId, tenantKey, plan.upserts);
+    } catch (error) {
+      if (!isTenantMissing(error)) throw error;
+      await store.ensureTenant(profileId, tenantKey);
+      counts.upserted += await store.upsert(profileId, tenantKey, plan.upserts);
     }
-    await store.ensureTenant(profile.profile_id, tenantKey);
-    if (points.length > 0) report.upserted += await store.upsert(profile.profile_id, tenantKey, points);
-    const keep = new Set(points.map((point) => point.id));
-    const stale = (await store.listDocumentIds(profile.profile_id, tenantKey, documentId)).filter((id) => !keep.has(id));
-    if (stale.length > 0) report.deleted += await store.deleteIds(profile.profile_id, tenantKey, stale);
   }
 
-  async function syncChunk(tenantKey: string, chunkId: string, profile: SyncProfile): Promise<void> {
-    const rows = (await call(rpc, 'rag_vector_sync_chunk_row', {
-      p_tenant_key: tenantKey,
-      p_chunk_id: chunkId,
-      p_profile_id: profile.profile_id,
-    })) as SyncRow[];
-    await store.ensureTenant(profile.profile_id, tenantKey);
-    if (rows.length > 0) report.upserted += await store.upsert(profile.profile_id, tenantKey, rows.map(toPoint));
-    else report.deleted += await store.deleteIds(profile.profile_id, tenantKey, [chunkId]);
+  /** A missing tenant holds no points, so there is nothing to list or delete. */
+  async function listIds(store: VectorStore, profileId: string, tenantKey: string, documentId: string): Promise<string[]> {
+    try {
+      return await store.listDocumentIds(profileId, tenantKey, documentId);
+    } catch (error) {
+      if (isTenantMissing(error)) return [];
+      throw error;
+    }
   }
 
-  /** Returns true when the row is finished and can be completed. */
-  async function processRow(row: OutboxRow): Promise<boolean> {
-    if (row.entity === 'tenant' || row.entity === 'profile') {
-      const [page] = (await call(rpc, 'rag_vector_sync_expand', { p_id: row.id, p_limit: batch })) as Array<{
-        next_cursor: string | null;
-        has_more: boolean;
-      }>;
-      if (page?.has_more) {
-        await call(rpc, 'rag_vector_sync_checkpoint', { p_id: row.id, p_cursor: page.next_cursor });
-        morePending = true;
-        return false;
+  async function remove(store: VectorStore, profileId: string, tenantKey: string, ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    try {
+      counts.deleted += await store.deleteIds(profileId, tenantKey, ids);
+    } catch (error) {
+      if (!isTenantMissing(error)) throw error;
+    }
+  }
+
+  async function checkpoint(group: Group, cursor: string): Promise<void> {
+    for (const row of group.rows) await checkpointRow(rpc, row.id, cursor);
+    morePending = true;
+  }
+
+  function requireTenant(row: OutboxRow): string {
+    if (!row.tenant_key || !isCanonicalTenantKey(row.tenant_key)) throw new DrainError('invalid_tenant_key');
+    return row.tenant_key;
+  }
+
+  /** D-02: the whole document under the row's tenant, per synced profile, page by page; A-12 cursor `<profile>@<last chunk id>`. */
+  async function syncDocument(store: VectorStore, group: Group): Promise<GroupOutcome> {
+    const row = group.head;
+    const tenantKey = requireTenant(row);
+    const resume = parseDocumentCursor(groupCursor(group));
+    const chosen = await profilesFor(store, row);
+    const resumeIndex = resume ? chosen.findIndex((p) => p.profile_id === resume.profileId) : -1;
+    for (let index = resumeIndex >= 0 ? resumeIndex : 0; index < chosen.length; index += 1) {
+      const profile = chosen[index];
+      let after: string | null = index === resumeIndex && resume ? resume.after : null;
+      for (;;) {
+        const rows = await readDocumentRows(rpc, { tenantKey, documentId: row.entity_id, profileId: profile.profile_id, after, limit: pageSize });
+        const through = rows.length >= pageSize ? String(rows[rows.length - 1].chunk_id) : null;
+        const storeIds = await listIds(store, profile.profile_id, tenantKey, row.entity_id);
+        const plan = planDocumentSync(tenantKey, rows, storeIds, { after, through });
+        await upsert(store, profile.profile_id, tenantKey, plan);
+        await remove(store, profile.profile_id, tenantKey, plan.deletes);
+        if (through === null) break;
+        after = through;
+        if (spent()) {
+          await checkpoint(group, `${profile.profile_id}${CURSOR_SEPARATOR}${after}`);
+          return 'checkpointed';
+        }
       }
-      return true;
     }
-    const tenantKey = row.tenant_key;
-    if (!tenantKey || !isCanonicalTenantKey(tenantKey)) throw new DrainError('invalid_tenant_key');
-    for (const profile of await profilesFor(row)) {
-      if (row.entity === 'document') await syncDocument(tenantKey, row.entity_id, profile);
-      else await syncChunk(tenantKey, row.entity_id, profile);
-    }
-    return true;
+    return 'done';
   }
 
-  while (now() - started < budgetMs) {
-    const claimed = (await call(rpc, 'rag_vector_sync_claim', { p_limit: batch, p_lease_seconds: DRAIN_LEASE_SECONDS })) as OutboxRow[];
+  async function syncChunk(store: VectorStore, group: Group): Promise<GroupOutcome> {
+    const row = group.head;
+    const tenantKey = requireTenant(row);
+    for (const profile of await profilesFor(store, row)) {
+      const current = await readChunkRow(rpc, { tenantKey, chunkId: row.entity_id, profileId: profile.profile_id });
+      const plan = planChunkSync(tenantKey, current, row.entity_id);
+      await upsert(store, profile.profile_id, tenantKey, plan);
+      await remove(store, profile.profile_id, tenantKey, plan.deletes);
+    }
+    return 'done';
+  }
+
+  /** Tenant and profile rows page through rag_vector_sync_expand into document rows; an empty tenant is removed from the store. */
+  async function expand(store: VectorStore, group: Group): Promise<GroupOutcome> {
+    const fresh = group.rows.find((row) => isFresh(row.cursor));
+    const driver =
+      fresh ?? [...group.rows].sort((a, b) => ((a.cursor ?? '') < (b.cursor ?? '') ? -1 : 1))[0];
+    let first = true;
+    for (;;) {
+      const page = await expandRow(rpc, driver.id, pageSize);
+      const empty = first && fresh !== undefined && isFresh(page.nextCursor) && !page.hasMore;
+      first = false;
+      if (empty && group.head.entity === 'tenant') {
+        const tenantKey = requireTenant(group.head);
+        for (const profile of await profilesFor(store, group.head)) {
+          try {
+            counts.deleted += await store.deleteTenant(profile.profile_id, tenantKey);
+          } catch (error) {
+            if (!isTenantMissing(error)) throw error;
+          }
+        }
+      }
+      if (!page.hasMore) return 'done';
+      if (spent()) {
+        await checkpoint(group, page.nextCursor ?? RESTART_CURSOR);
+        return 'checkpointed';
+      }
+    }
+  }
+
+  async function processGroup(group: Group): Promise<GroupOutcome> {
+    const store = stores.get(group.head.target);
+    if (!store) throw new DrainError('target_unavailable');
+    const row = group.head;
+    if (row.profile_id && !(await syncedProfiles()).some((p) => p.profile_id === row.profile_id)) return 'done';
+    try {
+      if (row.entity === 'tenant' || row.entity === 'profile') return await expand(store, group);
+      if (row.entity === 'document') return await syncDocument(store, group);
+      if (row.entity === 'chunk') return await syncChunk(store, group);
+      throw new DrainError('unknown_entity');
+    } catch (error) {
+      if (error instanceof BackendNotReadyError && error.reason === 'collection_missing') {
+        for (const profile of await syncedProfiles()) forgetCollection(store, profile.profile_id);
+      }
+      throw error;
+    }
+  }
+
+  async function failGroup(group: Group, error: unknown): Promise<void> {
+    const code = codeOf(error);
+    for (const row of group.rows) {
+      const state = await failRow(rpc, row.id, code);
+      counts.failed += 1;
+      if (state === 'dead') counts.dead += 1;
+    }
+  }
+
+  let stop = false;
+  while (!stop) {
+    if (spent()) {
+      morePending = true;
+      break;
+    }
+    const claimed = await claimBatch(rpc, { limit: batch, leaseSeconds });
     if (claimed.length === 0) {
       morePending = false;
       break;
     }
-    report.claimed += claimed.length;
-    const done: Array<number | string> = [];
+    counts.claimed += claimed.length;
     for (const row of claimed) {
       const lag = (now() - Date.parse(row.enqueued_at)) / 1000;
-      if (Number.isFinite(lag) && lag > report.lagSeconds) report.lagSeconds = lag;
-      if (row.target !== store.target) {
-        await call(rpc, 'rag_vector_sync_fail', { p_id: row.id, p_error: 'target_unavailable' });
-        report.failed += 1;
-        continue;
-      }
-      if (row.profile_id && !profileById.has(row.profile_id)) {
-        done.push(row.id);
+      if (Number.isFinite(lag) && lag > counts.lagSeconds) counts.lagSeconds = lag;
+    }
+    const done: Array<number | string> = [];
+    for (const group of coalesce(claimed)) {
+      if (stop || spent()) {
+        // Not started: hand the rows back at their own position without counting the attempt.
+        stop = true;
+        await checkpoint(group, groupCursor(group) ?? RESTART_CURSOR);
         continue;
       }
       try {
-        if (await processRow(row)) done.push(row.id);
+        const outcome = await processGroup(group);
+        if (outcome === 'done') done.push(...group.rows.map((row) => row.id));
       } catch (error) {
-        const [state] = (await call(rpc, 'rag_vector_sync_fail', { p_id: row.id, p_error: errorCode(error) })) as unknown[];
-        report.failed += 1;
-        if (state === 'dead') report.dead += 1;
+        await failGroup(group, error);
       }
     }
-    if (done.length > 0) await call(rpc, 'rag_vector_sync_complete', { p_ids: done });
-    morePending = claimed.length === batch || morePending;
+    await completeRows(rpc, done);
   }
-  if (now() - started >= budgetMs) morePending = true;
 
-  const elapsed = Math.max(0, Math.round(now() - started));
-  console.log(
-    `[Vector Sync] ${JSON.stringify({ target: store.target, claimed: report.claimed, upserted: report.upserted, deleted: report.deleted, failed: report.failed, dead: report.dead, elapsed_ms: elapsed })}`,
-  );
-  return {
+  const report = VectorSyncSliceReportSchema.parse({
     mode: 'drain',
-    claimed: report.claimed,
-    upserted: report.upserted,
-    deleted: report.deleted,
-    failed: report.failed,
-    dead: report.dead,
-    lag_seconds: Math.max(0, Number(report.lagSeconds.toFixed(3))),
-    elapsed_ms: elapsed,
+    claimed: counts.claimed,
+    upserted: counts.upserted,
+    deleted: counts.deleted,
+    failed: counts.failed,
+    dead: counts.dead,
+    lag_seconds: Math.max(0, Number(counts.lagSeconds.toFixed(3))),
+    elapsed_ms: Math.max(0, Math.round(now() - started)),
     budget_ms: Math.max(0, Math.round(budgetMs)),
     more_pending: morePending,
-  };
+  });
+  logVectorSync(report, options.sink);
+  if (options.trace !== false) traceVectorSync(report, options.trace ?? {});
+  return report;
+}
+
+/** The CLI and backfill path (D-04 c): slices until nothing is claimable; each slice keeps its own budget and log line. */
+export async function drainUntilEmpty(options: DrainUntilEmptyOptions): Promise<VectorSyncSliceReport[]> {
+  const reports: VectorSyncSliceReport[] = [];
+  const maxSlices = options.maxSlices ?? DEFAULT_MAX_SLICES;
+  for (let i = 0; i < maxSlices; i += 1) {
+    const report = await drainSlice(options);
+    reports.push(report);
+    if (!report.more_pending) break;
+  }
+  return reports;
 }

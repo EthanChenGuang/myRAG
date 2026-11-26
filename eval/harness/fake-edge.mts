@@ -43,7 +43,7 @@ const RPC_ARGUMENTS: Record<string, { vector: string; allowed: string[] }> = {
   },
 };
 
-// Phase 7 vector sync and re-validation RPCs (0703-0705): served by the generic path, with exactly these argument names.
+// Phase 7 vector sync and re-validation RPCs (0703-0705) and reconcile RPCs (0707): served by the generic path, with exactly these argument names.
 const VECTOR_SYNC_RPC_ARGUMENTS: Record<string, readonly string[]> = {
   rag_vector_sync_claim: ['p_limit', 'p_lease_seconds'],
   rag_vector_sync_complete: ['p_ids'],
@@ -57,6 +57,12 @@ const VECTOR_SYNC_RPC_ARGUMENTS: Record<string, readonly string[]> = {
   rag_vector_sync_chunk_row: ['p_tenant_key', 'p_chunk_id', 'p_profile_id'],
   rag_vector_sync_profiles: [],
   rag_backend_readiness: ['p_target', 'p_profile_id', 'p_tenant_key'],
+  rag_vector_sync_reconcile_summary: ['p_tenant_key', 'p_profile_id'],
+  rag_vector_sync_bucket_rows: ['p_tenant_key', 'p_profile_id', 'p_bucket', 'p_after', 'p_limit'],
+  rag_vector_sync_tenants: ['p_target', 'p_profile_id'],
+  rag_vector_sync_enqueue_repair: ['p_target', 'p_entity', 'p_entity_id', 'p_tenant_key', 'p_profile_id'],
+  rag_set_backend_index_state: ['p_target', 'p_profile_id', 'p_tenant_key', 'p_state', 'p_supabase_count', 'p_backend_count', 'p_error'],
+  rag_vector_sync_prune: ['p_days'],
 };
 
 const GENERIC_RPC_NAME = /^(?:rag_[a-z0-9_]+|match_chunks_by_profile|hybrid_search_chunks|hybrid_search_translations)$/;

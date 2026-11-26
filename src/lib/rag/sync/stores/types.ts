@@ -57,8 +57,16 @@ export interface StoreSearchRequest {
   signal: AbortSignal;
 }
 
+export interface StoreScanPoint {
+  id: string;
+  documentId: string;
+  contentHash: string | null;
+  /** The payload's lexical_version; reconcile's content digest covers it (D-05). A store that omits it reads as null. */
+  lexicalVersion?: number | null;
+}
+
 export interface StoreScanPage {
-  points: Array<{ id: string; documentId: string; contentHash: string | null }>;
+  points: StoreScanPoint[];
   next: string | null;
 }
 
