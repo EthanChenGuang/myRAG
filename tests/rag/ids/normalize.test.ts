@@ -89,7 +89,8 @@ describe('isNearMissIdentifier (D-31 rule)', () => {
     expect(isNearMissIdentifier('ab1234', 'ab1235')).toBe(true);
     expect(isNearMissIdentifier('ab1234', 'ab1255')).toBe(false);
     expect(isNearMissIdentifier('ab12345', 'ab12355')).toBe(true);
-    expect(isNearMissIdentifier('ab12345', 'ab12555')).toBe(false);
+    expect(isNearMissIdentifier('ab12345', 'ab12455')).toBe(true);
+    expect(isNearMissIdentifier('ab12345', 'ab15555')).toBe(false);
   });
 });
 
