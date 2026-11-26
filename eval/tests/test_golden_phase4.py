@@ -32,8 +32,9 @@ PRE_EXISTING_COUNT = 126
 # test_golden_phase6.py cover them.
 LATER_PHASE_CATEGORIES = frozenset({"injection", "injection_evasive", "small_talk", "cache_paraphrase", "cache_near_miss"})
 # Plan 06-38 adds Phase 6 items under these tags (and small_talk); test_golden_phase6.py covers them.
+# Plan 04.2-37 adds Phase 4.2 items under the tag phase42; test_golden_phase42.py covers them.
 LATER_PHASE_TAGS = frozenset(
-    {"phase6_protected_followup", "phase6_elliptical", "phase6_relative_time", "phase6_compound", "phase6_cross_lingual"}
+    {"phase6_protected_followup", "phase6_elliptical", "phase6_relative_time", "phase6_compound", "phase6_cross_lingual", "phase42"}
 )
 # Plan 05.3-15 adds implicit_condition and near-miss no-answer items under this tag; test_golden_phase53.py covers them.
 LATER_PHASE_TAGS = LATER_PHASE_TAGS | {"phase53_fixture"}

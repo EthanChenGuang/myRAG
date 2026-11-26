@@ -49,6 +49,9 @@ class DirectoryWorkspaceSource:
                 documents.append(
                     WorkspaceDocument(id=doc.relpath, filename=doc.filename, chunks=[chunk.text for chunk in doc.chunks])
                 )
+        # A template file yields generated documents under other names (04.2-28); it is never read again as a plain file.
+        for language in CORPUS_LANGUAGES:
+            seen.update(file.resolve() for file in (corpus_root / language).glob("*.md"))
         for file in sorted(root.rglob("*")):
             if not file.is_file() or file.suffix.lower() not in _PLAIN_SUFFIXES or file.resolve() in seen:
                 continue

@@ -118,8 +118,16 @@ export { validateChunkingProfile } from './chunking/validate';
 export type { ChunkingFinding, ChunkingValidationContext, ChunkingValidationResult } from './chunking/validate';
 export { getChunkingSweepReport, getChunkingDecisions, ChunkingReportInvalid } from './chunking/report';
 export type { ChunkingReportCode } from './chunking/report';
-export { refusalCalibrationStatus, currentRefusalCalibrationStatus } from './refusal/status';
+export { refusalCalibrationStatus, currentRefusalCalibrationStatus, currentRefusalCalibrationInputs } from './refusal/status';
 export type { RefusalCalibrationStatus } from './refusal/status';
+export { judgeCalibrationStatus, currentJudgeCalibrationStatus } from './judge/calibration-status';
+export type { JudgeCalibrationStatus, JudgeCalibrationWarning, JudgeCalibrationCellView } from './judge/calibration-status';
+export { exportCalibrationCases } from './judge/calibration-export';
+export type { CalibrationCase, CalibrationExport, CalibrationExportResult } from './judge/calibration-export';
+export { AnswerCheckRequestSchema, readAnswerCheck, saveAnswerCheck } from './judge/answer-check';
+export type { AnswerCheck, AnswerCheckFailure, AnswerCheckResult, AnswerCheckVerdicts } from './judge/answer-check';
+export { pendingCells, proposedPendingCells, PENDING_KEY_CATEGORIES, PENDING_KEYS } from './refusal/pending';
+export type { CellPending, PendingAlert, PendingChangeRecord, PendingCells } from './refusal/pending';
 export type {
   Candidate,
   HistoryTurn,
@@ -184,11 +192,20 @@ export {
   type AnswerLanguageOptions,
 } from './generation/answer-language';
 export {
+  kbUnavailableLanguage,
+  kbUnavailableText,
   knowledgeBaseUnavailableLanguage,
   knowledgeBaseUnavailableMessage,
+  LEGACY_NO_INFORMATION_EN,
+  LEGACY_NO_INFORMATION_ES,
+  noInformationLanguage,
+  noInformationText,
   noKnowledgeBaseResponse,
   noKnowledgeBaseResponseLanguage,
 } from './generation/messages';
+export { readAnswerConfig, type AnswerConfig } from './generation/answer-config';
+export { createAnswerTurn, type AnswerChannel, type AnswerTurn, type TextsSource } from './generation/answer-turn';
+export { resolveAnswerLanguage, previousTurnLanguage, type AnswerLanguageSource } from './lang/answer-language';
 export { identifierSuggestionMessage } from './generation/messages';
 export { IDENTIFIER_NOT_FOUND } from './v2/result';
 export type { IdentifierFilterSummary } from './types';
@@ -581,5 +598,45 @@ export type {
   ListAttributeDefinitionsResult,
   UpsertAttributeDefinitionResult,
 } from './ingest/attributes/schema';
+export {
+  adminTenantKeys,
+  claimEvalRunRequests,
+  closeEvalRunRequest,
+  decodeEvalRunCursor,
+  EVAL_RUN_CLAIM_MAX,
+  EVAL_RUN_PAGE_MAX,
+  EvalRunResultSummarySchema,
+  listEvalRunRequests,
+  ReasonCodeSchema,
+  requestTenantNightly,
+  type EvalRunRequest,
+} from './config-gate/eval-run-requests';
+export { attributeHeaderEnabled, getHeaderTemplate, listStaleHeaderDocuments, setHeaderTemplate } from './ingest/attributes/header';
+export type {
+  GetHeaderTemplateResult,
+  HeaderTemplate,
+  HeaderTemplateError,
+  HeaderTemplateFailure,
+  ListStaleHeaderDocumentsResult,
+  SetHeaderTemplateResult,
+  StaleHeaderDocument,
+} from './ingest/attributes/header';
+export { renderPendingHeaders } from './ingest/attributes/apply';
 export { isSecretName, RAG_AFFECTING_NAMES, ragAffectingDiff, ragSettingsCanonical, ragSettingsHash } from './config-gate/settings-hash';
 export type { SettingValues } from './config-gate/settings-hash';
+export {
+  buildChangeRecord,
+  cachedCheck,
+  CHECK_CACHE_MS,
+  CHECK_DIR,
+  decideSave,
+  insertChangeRecord,
+  latestCheck,
+  listChangeRecords,
+  normaliseGateMode,
+  OVERRIDE_REASON_MAX,
+  OVERRIDE_REASON_MIN,
+  readCheck,
+  writeCheck,
+} from './config-gate/gate-core';
+export type { BuildChangeRecordInput, ChangeRecordClient, ChangeRecordRow, DecideSaveOptions, RagGateInput, SaveDecision } from './config-gate/gate-core';

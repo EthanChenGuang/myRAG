@@ -41,7 +41,7 @@ export function stratumOf(candidate: Pick<SampleCandidate, 'ext' | 'size'>): str
 }
 
 /** mulberry32 seeded from sha256(seed, salt): the same batch draws the same sample on every resume. */
-function seededRandom(seed: string, salt: string): () => number {
+export function seededRandom(seed: string, salt: string): () => number {
   let state = createHash('sha256').update(seed).update('\u0000').update(salt).digest().readUInt32LE(0);
   return () => {
     state = (state + 0x6d2b79f5) >>> 0;

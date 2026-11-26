@@ -42,6 +42,11 @@ interface DumpDocument {
   language: string;
   doc_type: string;
   chunks: DumpChunk[];
+  fixture_dup_template?: string;
+  lineage?: string;
+  version?: number;
+  version_label?: string;
+  effective_from?: string;
 }
 
 const tmpDirs: string[] = [];
@@ -76,13 +81,19 @@ describe('fixture corpus loaders', () => {
     expect(dump.status, dump.stderr).toBe(0);
     const python = JSON.parse(dump.stdout) as DumpDocument[];
 
-    expect(loaded.documents).toHaveLength(28);
+    // 34 documents, the six 05.3-15 documents and the 109 Phase 4.2 documents of plan 04.2-37 (90 of them generated from three templates).
+    expect(loaded.documents).toHaveLength(34 + 6 + 109);
     const fromTs = loaded.documents.map((doc) => ({
       relpath: doc.relpath,
       filename: doc.filename,
       language: doc.language,
       doc_type: doc.docType,
       chunks: doc.chunks.map((chunk) => ({ index: chunk.index, section: chunk.section, text: chunk.text, stored: chunk.stored })),
+      ...(doc.fixtureDupTemplate !== undefined ? { fixture_dup_template: doc.fixtureDupTemplate } : {}),
+      ...(doc.lineage !== undefined ? { lineage: doc.lineage.id, version: doc.lineage.version } : {}),
+      ...(doc.lineage === undefined && doc.version !== undefined ? { version: doc.version } : {}),
+      ...(doc.versionLabel !== undefined ? { version_label: doc.versionLabel } : {}),
+      ...(doc.effectiveFrom !== undefined ? { effective_from: doc.effectiveFrom } : {}),
     }));
     expect(fromTs).toEqual(python);
     for (const doc of loaded.documents) {

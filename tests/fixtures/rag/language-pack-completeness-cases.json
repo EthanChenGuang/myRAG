@@ -1,12 +1,680 @@
 {
-  "description": "Phase 3.2 D-04: one shipped pack with one completeness part removed; read by rag-sidecar/tests/test_language_registry.py and tests/rag/lang-registry.test.ts.",
+  "description": "Phase 3.2 D-04 (texts per key since Phase 5.2 D-08): one shipped pack with one completeness part removed; read by rag-sidecar/tests/test_language_registry.py and tests/rag/lang-registry.test.ts.",
   "cases": [
-    { "name": "no_segmentation", "base": "en", "change": { "op": "set", "path": ["segmentation"], "value": null }, "missing": ["segmentation"] },
-    { "name": "no_docling_ocr_code", "base": "zh", "change": { "op": "delete", "path": ["ocr_codes", "docling"] }, "missing": ["ocr_codes.docling"] },
-    { "name": "no_llamaparse_ocr_code", "base": "zh", "change": { "op": "delete", "path": ["ocr_codes", "llamaparse"] }, "missing": ["ocr_codes.llamaparse"] },
-    { "name": "no_rewrite_gate_lexicon", "base": "it", "change": { "op": "set", "path": ["rewrite_gate_lexicon"], "value": null }, "missing": ["rewrite_gate_lexicon"] },
-    { "name": "no_strict_refusal", "base": "en", "change": { "op": "delete", "path": ["texts", "strict_refusal"] }, "missing": ["texts.strict_refusal"] },
-    { "name": "no_fixture_corpus", "base": "it", "change": { "op": "set", "path": ["fixtures", "corpus"], "value": false }, "missing": ["fixtures.corpus"] },
-    { "name": "no_golden_slices", "base": "zh", "change": { "op": "set", "path": ["fixtures", "golden_slices"], "value": false }, "missing": ["fixtures.golden_slices"] }
+    {
+      "name": "no_segmentation",
+      "base": "en",
+      "change": {
+        "op": "set",
+        "path": [
+          "segmentation"
+        ],
+        "value": null
+      },
+      "missing": [
+        "segmentation"
+      ]
+    },
+    {
+      "name": "no_docling_ocr_code",
+      "base": "zh",
+      "change": {
+        "op": "delete",
+        "path": [
+          "ocr_codes",
+          "docling"
+        ]
+      },
+      "missing": [
+        "ocr_codes.docling"
+      ]
+    },
+    {
+      "name": "no_llamaparse_ocr_code",
+      "base": "zh",
+      "change": {
+        "op": "delete",
+        "path": [
+          "ocr_codes",
+          "llamaparse"
+        ]
+      },
+      "missing": [
+        "ocr_codes.llamaparse"
+      ]
+    },
+    {
+      "name": "no_rewrite_gate_lexicon",
+      "base": "it",
+      "change": {
+        "op": "set",
+        "path": [
+          "rewrite_gate_lexicon"
+        ],
+        "value": null
+      },
+      "missing": [
+        "rewrite_gate_lexicon"
+      ]
+    },
+    {
+      "name": "no_notices_no_information",
+      "base": "zh",
+      "change": {
+        "op": "delete",
+        "path": [
+          "texts",
+          "notices",
+          "no_information"
+        ]
+      },
+      "missing": [
+        "texts.notices.no_information"
+      ]
+    },
+    {
+      "name": "no_notices_no_information_web",
+      "base": "en",
+      "change": {
+        "op": "set",
+        "path": [
+          "texts",
+          "notices",
+          "no_information_web"
+        ],
+        "value": null
+      },
+      "missing": [
+        "texts.notices.no_information_web"
+      ]
+    },
+    {
+      "name": "no_notices_kb_unavailable",
+      "base": "it",
+      "change": {
+        "op": "delete",
+        "path": [
+          "texts",
+          "notices",
+          "kb_unavailable"
+        ]
+      },
+      "missing": [
+        "texts.notices.kb_unavailable"
+      ]
+    },
+    {
+      "name": "no_notices_answer_truncated",
+      "base": "zh",
+      "change": {
+        "op": "set",
+        "path": [
+          "texts",
+          "notices",
+          "answer_truncated"
+        ],
+        "value": null
+      },
+      "missing": [
+        "texts.notices.answer_truncated"
+      ]
+    },
+    {
+      "name": "no_notices_link_removed",
+      "base": "en",
+      "change": {
+        "op": "delete",
+        "path": [
+          "texts",
+          "notices",
+          "link_removed"
+        ]
+      },
+      "missing": [
+        "texts.notices.link_removed"
+      ]
+    },
+    {
+      "name": "no_notices_credential_request_blocked",
+      "base": "it",
+      "change": {
+        "op": "set",
+        "path": [
+          "texts",
+          "notices",
+          "credential_request_blocked"
+        ],
+        "value": null
+      },
+      "missing": [
+        "texts.notices.credential_request_blocked"
+      ]
+    },
+    {
+      "name": "no_notices_credential_request_warning",
+      "base": "zh",
+      "change": {
+        "op": "delete",
+        "path": [
+          "texts",
+          "notices",
+          "credential_request_warning"
+        ]
+      },
+      "missing": [
+        "texts.notices.credential_request_warning"
+      ]
+    },
+    {
+      "name": "no_notices_not_confirmed",
+      "base": "en",
+      "change": {
+        "op": "set",
+        "path": [
+          "texts",
+          "notices",
+          "not_confirmed"
+        ],
+        "value": null
+      },
+      "missing": [
+        "texts.notices.not_confirmed"
+      ]
+    },
+    {
+      "name": "no_notices_uncited",
+      "base": "it",
+      "change": {
+        "op": "delete",
+        "path": [
+          "texts",
+          "notices",
+          "uncited"
+        ]
+      },
+      "missing": [
+        "texts.notices.uncited"
+      ]
+    },
+    {
+      "name": "no_notices_calc_corrected",
+      "base": "zh",
+      "change": {
+        "op": "set",
+        "path": [
+          "texts",
+          "notices",
+          "calc_corrected"
+        ],
+        "value": null
+      },
+      "missing": [
+        "texts.notices.calc_corrected"
+      ]
+    },
+    {
+      "name": "no_notices_calc_not_verified",
+      "base": "en",
+      "change": {
+        "op": "delete",
+        "path": [
+          "texts",
+          "notices",
+          "calc_not_verified"
+        ]
+      },
+      "missing": [
+        "texts.notices.calc_not_verified"
+      ]
+    },
+    {
+      "name": "no_notices_document_updated_or_removed",
+      "base": "it",
+      "change": {
+        "op": "set",
+        "path": [
+          "texts",
+          "notices",
+          "document_updated_or_removed"
+        ],
+        "value": null
+      },
+      "missing": [
+        "texts.notices.document_updated_or_removed"
+      ]
+    },
+    {
+      "name": "no_notices_prompt_too_long",
+      "base": "zh",
+      "change": {
+        "op": "delete",
+        "path": [
+          "texts",
+          "notices",
+          "prompt_too_long"
+        ]
+      },
+      "missing": [
+        "texts.notices.prompt_too_long"
+      ]
+    },
+    {
+      "name": "no_labels_from_documents",
+      "base": "en",
+      "change": {
+        "op": "set",
+        "path": [
+          "texts",
+          "labels",
+          "from_documents"
+        ],
+        "value": null
+      },
+      "missing": [
+        "texts.labels.from_documents"
+      ]
+    },
+    {
+      "name": "no_labels_from_web",
+      "base": "it",
+      "change": {
+        "op": "delete",
+        "path": [
+          "texts",
+          "labels",
+          "from_web"
+        ]
+      },
+      "missing": [
+        "texts.labels.from_web"
+      ]
+    },
+    {
+      "name": "no_labels_general_knowledge",
+      "base": "zh",
+      "change": {
+        "op": "set",
+        "path": [
+          "texts",
+          "labels",
+          "general_knowledge"
+        ],
+        "value": null
+      },
+      "missing": [
+        "texts.labels.general_knowledge"
+      ]
+    },
+    {
+      "name": "no_labels_not_covered",
+      "base": "en",
+      "change": {
+        "op": "delete",
+        "path": [
+          "texts",
+          "labels",
+          "not_covered"
+        ]
+      },
+      "missing": [
+        "texts.labels.not_covered"
+      ]
+    },
+    {
+      "name": "no_labels_version",
+      "base": "it",
+      "change": {
+        "op": "set",
+        "path": [
+          "texts",
+          "labels",
+          "version"
+        ],
+        "value": null
+      },
+      "missing": [
+        "texts.labels.version"
+      ]
+    },
+    {
+      "name": "no_labels_effective_from",
+      "base": "zh",
+      "change": {
+        "op": "delete",
+        "path": [
+          "texts",
+          "labels",
+          "effective_from"
+        ]
+      },
+      "missing": [
+        "texts.labels.effective_from"
+      ]
+    },
+    {
+      "name": "no_labels_older_version",
+      "base": "en",
+      "change": {
+        "op": "set",
+        "path": [
+          "texts",
+          "labels",
+          "older_version"
+        ],
+        "value": null
+      },
+      "missing": [
+        "texts.labels.older_version"
+      ]
+    },
+    {
+      "name": "no_labels_badge_verified",
+      "base": "it",
+      "change": {
+        "op": "delete",
+        "path": [
+          "texts",
+          "labels",
+          "badge_verified"
+        ]
+      },
+      "missing": [
+        "texts.labels.badge_verified"
+      ]
+    },
+    {
+      "name": "no_labels_badge_possibly_unreliable",
+      "base": "zh",
+      "change": {
+        "op": "set",
+        "path": [
+          "texts",
+          "labels",
+          "badge_possibly_unreliable"
+        ],
+        "value": null
+      },
+      "missing": [
+        "texts.labels.badge_possibly_unreliable"
+      ]
+    },
+    {
+      "name": "no_labels_badge_not_checked",
+      "base": "en",
+      "change": {
+        "op": "delete",
+        "path": [
+          "texts",
+          "labels",
+          "badge_not_checked"
+        ]
+      },
+      "missing": [
+        "texts.labels.badge_not_checked"
+      ]
+    },
+    {
+      "name": "no_labels_badge_tooltip_verified",
+      "base": "it",
+      "change": {
+        "op": "set",
+        "path": [
+          "texts",
+          "labels",
+          "badge_tooltip_verified"
+        ],
+        "value": null
+      },
+      "missing": [
+        "texts.labels.badge_tooltip_verified"
+      ]
+    },
+    {
+      "name": "no_labels_badge_tooltip_possibly_unreliable",
+      "base": "zh",
+      "change": {
+        "op": "delete",
+        "path": [
+          "texts",
+          "labels",
+          "badge_tooltip_possibly_unreliable"
+        ]
+      },
+      "missing": [
+        "texts.labels.badge_tooltip_possibly_unreliable"
+      ]
+    },
+    {
+      "name": "no_labels_badge_tooltip_not_checked",
+      "base": "en",
+      "change": {
+        "op": "set",
+        "path": [
+          "texts",
+          "labels",
+          "badge_tooltip_not_checked"
+        ],
+        "value": null
+      },
+      "missing": [
+        "texts.labels.badge_tooltip_not_checked"
+      ]
+    },
+    {
+      "name": "no_instructions_citation",
+      "base": "it",
+      "change": {
+        "op": "delete",
+        "path": [
+          "texts",
+          "instructions",
+          "citation"
+        ]
+      },
+      "missing": [
+        "texts.instructions.citation"
+      ]
+    },
+    {
+      "name": "no_instructions_citation_per_sentence",
+      "base": "zh",
+      "change": {
+        "op": "set",
+        "path": [
+          "texts",
+          "instructions",
+          "citation_per_sentence"
+        ],
+        "value": null
+      },
+      "missing": [
+        "texts.instructions.citation_per_sentence"
+      ]
+    },
+    {
+      "name": "no_instructions_attached_documents",
+      "base": "en",
+      "change": {
+        "op": "delete",
+        "path": [
+          "texts",
+          "instructions",
+          "attached_documents"
+        ]
+      },
+      "missing": [
+        "texts.instructions.attached_documents"
+      ]
+    },
+    {
+      "name": "no_instructions_relevance",
+      "base": "it",
+      "change": {
+        "op": "set",
+        "path": [
+          "texts",
+          "instructions",
+          "relevance"
+        ],
+        "value": null
+      },
+      "missing": [
+        "texts.instructions.relevance"
+      ]
+    },
+    {
+      "name": "no_instructions_relevance_web",
+      "base": "zh",
+      "change": {
+        "op": "delete",
+        "path": [
+          "texts",
+          "instructions",
+          "relevance_web"
+        ]
+      },
+      "missing": [
+        "texts.instructions.relevance_web"
+      ]
+    },
+    {
+      "name": "no_instructions_relevance_open",
+      "base": "en",
+      "change": {
+        "op": "set",
+        "path": [
+          "texts",
+          "instructions",
+          "relevance_open"
+        ],
+        "value": null
+      },
+      "missing": [
+        "texts.instructions.relevance_open"
+      ]
+    },
+    {
+      "name": "no_instructions_partial_answer",
+      "base": "it",
+      "change": {
+        "op": "delete",
+        "path": [
+          "texts",
+          "instructions",
+          "partial_answer"
+        ]
+      },
+      "missing": [
+        "texts.instructions.partial_answer"
+      ]
+    },
+    {
+      "name": "no_instructions_general_knowledge",
+      "base": "zh",
+      "change": {
+        "op": "set",
+        "path": [
+          "texts",
+          "instructions",
+          "general_knowledge"
+        ],
+        "value": null
+      },
+      "missing": [
+        "texts.instructions.general_knowledge"
+      ]
+    },
+    {
+      "name": "no_instructions_web_separation",
+      "base": "en",
+      "change": {
+        "op": "delete",
+        "path": [
+          "texts",
+          "instructions",
+          "web_separation"
+        ]
+      },
+      "missing": [
+        "texts.instructions.web_separation"
+      ]
+    },
+    {
+      "name": "no_instructions_version",
+      "base": "it",
+      "change": {
+        "op": "set",
+        "path": [
+          "texts",
+          "instructions",
+          "version"
+        ],
+        "value": null
+      },
+      "missing": [
+        "texts.instructions.version"
+      ]
+    },
+    {
+      "name": "no_instructions_concise",
+      "base": "zh",
+      "change": {
+        "op": "delete",
+        "path": [
+          "texts",
+          "instructions",
+          "concise"
+        ]
+      },
+      "missing": [
+        "texts.instructions.concise"
+      ]
+    },
+    {
+      "name": "no_instructions_calculation",
+      "base": "en",
+      "change": {
+        "op": "set",
+        "path": [
+          "texts",
+          "instructions",
+          "calculation"
+        ],
+        "value": null
+      },
+      "missing": [
+        "texts.instructions.calculation"
+      ]
+    },
+    {
+      "name": "no_fixture_corpus",
+      "base": "it",
+      "change": {
+        "op": "set",
+        "path": [
+          "fixtures",
+          "corpus"
+        ],
+        "value": false
+      },
+      "missing": [
+        "fixtures.corpus"
+      ]
+    },
+    {
+      "name": "no_golden_slices",
+      "base": "zh",
+      "change": {
+        "op": "set",
+        "path": [
+          "fixtures",
+          "golden_slices"
+        ],
+        "value": false
+      },
+      "missing": [
+        "fixtures.golden_slices"
+      ]
+    }
   ]
 }

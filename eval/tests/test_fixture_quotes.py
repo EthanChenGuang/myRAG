@@ -20,29 +20,75 @@ def items():
 
 
 @pytest.fixture(scope="module")
-def documents():
-    return {doc.filename: doc for doc in load_corpus(CORPUS_DIR)}
+def loaded():
+    """Every loaded document, generated template copies (04.2-28) included."""
+    return load_corpus(CORPUS_DIR)
 
 
-def test_every_gold_span_matches_a_chunk_of_its_named_document(items, documents):
+@pytest.fixture(scope="module")
+def documents(loaded):
+    return {doc.filename: doc for doc in loaded}
+
+
+@pytest.fixture(scope="module")
+def by_name(loaded):
+    """Filename to documents: the versions of one lineage share their filename (04.2-28)."""
+    grouped: dict[str, list] = {}
+    for doc in loaded:
+        grouped.setdefault(doc.filename, []).append(doc)
+    return grouped
+
+
+def test_every_gold_span_matches_a_chunk_of_its_named_document(items, by_name):
     spans = [(item.id, span) for item in items for span in item.gold_evidence]
     assert len(spans) >= 48
     for item_id, span in spans:
-        assert span.document in documents, (item_id, span.document)
+        assert span.document in by_name, (item_id, span.document)
         matches = [
-            chunk for chunk in documents[span.document].chunks if chunk_matches_span(span.document, chunk.text, span)
+            chunk for doc in by_name[span.document] for chunk in doc.chunks if chunk_matches_span(span.document, chunk.text, span)
         ]
         assert matches, (item_id, span.document, span.quote)
         assert all(chunk.section == span.section for chunk in matches), (item_id, span.section)
 
 
-def test_gold_span_does_not_match_chunks_of_other_documents(items, documents):
+def test_a_versioned_gold_span_matches_exactly_one_version(items, by_name):
+    versioned = 0
     for item in items:
         for span in item.gold_evidence:
-            for name, doc in documents.items():
-                if name == span.document:
-                    continue
-                assert not any(chunk_matches_span(span.document, chunk.text, span) for chunk in doc.chunks)
+            docs = by_name[span.document]
+            if len(docs) < 2:
+                continue
+            versioned += 1
+            hits = [doc.version for doc in docs if any(chunk_matches_span(span.document, c.text, span) for c in doc.chunks)]
+            assert len(hits) == 1, (item.id, span.quote, hits)
+    assert versioned >= 6
+
+
+def _templates_of(loaded, document: str) -> set[str]:
+    return {doc.fixture_dup_template for doc in loaded if doc.filename == document} - {None}
+
+
+def test_gold_span_does_not_match_chunks_of_other_documents(items, loaded):
+    for item in items:
+        for span in item.gold_evidence:
+            templates = _templates_of(loaded, span.document)
+            # Generated copies of one template repeat the same passage by design (D-20); each copy's span names its copy.
+            others = [doc for doc in loaded if doc.filename != span.document and doc.fixture_dup_template not in templates]
+            for doc in others:
+                assert not any(chunk_matches_span(span.document, chunk.text, span) for chunk in doc.chunks), (item.id, doc.relpath)
+
+
+def test_generated_copy_spans_match_only_copies_of_their_template(items, loaded):
+    copies = 0
+    for item in items:
+        for span in item.gold_evidence:
+            templates = _templates_of(loaded, span.document)
+            if not templates:
+                continue
+            copies += 1
+            for doc in [doc for doc in loaded if doc.fixture_dup_template not in templates]:
+                assert not any(chunk_matches_span(span.document, c.text, span) for c in doc.chunks), (item.id, doc.relpath)
+    assert copies >= 9 * 30
 
 
 def test_no_answer_items_carry_no_spans_and_answerable_ones_carry_at_least_one(items):

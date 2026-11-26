@@ -3682,6 +3682,142 @@ def _phase52_variants() -> dict[str, Any]:
     }
 
 
+def _phase52_eval_variants() -> dict[str, Any]:
+    """Plan 05.2-27: neutral samples for the golden structures, trace fields, report metrics and budgets."""
+
+    def span(document: str, quote: str) -> dict[str, Any]:
+        return {"document": document, "section": "Section 1", "quote": quote}
+
+    def item(item_id: str, category: str, **fields: Any) -> dict[str, Any]:
+        base: dict[str, Any] = {
+            "id": item_id,
+            "question": "How many units does item A take?",
+            "language": "en",
+            "category": category,
+            "answerable": True,
+            "review_status": "approved",
+            "provenance": "synthetic_fixture",
+            "split": "dev",
+        }
+        base.update(fields)
+        return GoldenItem.model_validate(base).model_dump(mode="json")
+
+    covered = span("document-a.md", "Item A takes 4 units.")
+    current = span("document-b-v2.md", "Rule B allows 7 units.")
+    stale = span("document-b-v1.md", "Rule B allows 5 units.")
+    metric = {"value": 0.0, "n": 4}
+    rule_metric = {"overall": metric, "by_language": {"en": metric}, "by_category": {"partial_answer": metric}}
+    trace = _trace("Item A takes 4 units. [S1]").model_dump(mode="json")
+    trace.update(
+        {
+            "answer_language": "en",
+            "sentences": [
+                {
+                    "index": 0,
+                    "part": 0,
+                    "start": 0,
+                    "end": 26,
+                    "kind": "sentence",
+                    "text_hash": _HASH_A,
+                    "factual": True,
+                    "cited": True,
+                    "reason": "judge_not_configured",
+                }
+            ],
+            "refusal_origin": "model_relevance",
+            "output_guard": {"mode": "flag", "rules_version": "1", "links_checked": 1},
+            "residual_output_findings": {"links": 0, "credential_matches": 0},
+            "version_conflict": {
+                "document_ids": ["doc-001", "doc-002"],
+                "latest_document_id": "doc-002",
+                "group_rule": "title_match",
+            },
+            "mixed_versions": False,
+            "finish_reason": "stop",
+            "answer_rules_parts": ["relevance", "partial_answer"],
+            "notices": [{"kind": "judge_not_configured", "text": "Notice A.", "language": "en"}],
+        }
+    )
+    report = _eval_report().model_dump(mode="json")
+    report["answer_rules"] = {
+        name: rule_metric
+        for name in (
+            "uncited_sentence_rate",
+            "unsupported_addition_rate",
+            "covered_part_answered",
+            "current_value_rate",
+            "mixed_versions_rate",
+            "adjacent_repurpose_rate",
+            "truncation_rate",
+        )
+    }
+    report["by_strategy"] = {"chunk-alias": {"items": 4, "uncited_sentence_rate": metric}}
+    budgets = _latency_budgets().model_dump(mode="json")
+    budgets["answer_checks"] = {
+        "claim_check": {"p50_ms": 2000, "p95_ms": 6000},
+        "groundedness_judge": {"p50_ms": 5000, "p95_ms": 10000},
+        "output_guard": {"p50_ms": 1, "p95_ms": 2},
+        "report_only": True,
+    }
+    return {
+        "GoldenItem:partial_answer": {
+            "model": "GoldenItem",
+            "value": item(
+                "en-partial-answer-001",
+                "partial_answer",
+                question="How many units do item A and item B take?",
+                expected_answer="Item A takes 4 units; the documents do not cover item B.",
+                gold_evidence=[covered],
+                partial={
+                    "covered": [covered],
+                    "uncovered_aspects": ["how many units item B takes"],
+                    "forbidden_claims": [r"item b takes \d+ units"],
+                },
+            ),
+        },
+        "GoldenItem:stale_version": {
+            "model": "GoldenItem",
+            "value": item(
+                "en-stale-version-001",
+                "stale_version",
+                question="How many units does rule B allow?",
+                expected_answer="Rule B allows 7 units (v2).",
+                gold_evidence=[current],
+                versions={
+                    "current": {"span": current, "value": "7 units", "version_label": "v2"},
+                    "stale": {"span": stale, "value": "5 units", "version_label": "v1"},
+                    "historical": False,
+                },
+            ),
+        },
+        "GoldenItem:off_topic_context": {
+            "model": "GoldenItem",
+            "value": item(
+                "en-off-topic-context-001",
+                "off_topic_context",
+                question="How many units does item D take?",
+                answerable=False,
+                off_topic={
+                    "adjacent_quotes": [span("document-c.md", "Item C takes 9 units.")],
+                    "score_band": "above_threshold",
+                },
+            ),
+        },
+        "RagTrace:phase52_answer_fields": {
+            "model": "RagTrace",
+            "value": RagTrace.model_validate(trace).model_dump(mode="json"),
+        },
+        "EvalReport:answer_rules": {
+            "model": "EvalReport",
+            "value": EvalReport.model_validate(report).model_dump(mode="json"),
+        },
+        "LatencyBudgets:answer_checks": {
+            "model": "LatencyBudgets",
+            "value": LatencyBudgets.model_validate(budgets).model_dump(mode="json"),
+        },
+    }
+
+
 def build_samples() -> dict[str, dict[str, Any]]:
     models = {
         **_models(),
@@ -3823,4 +3959,5 @@ def build_samples() -> dict[str, dict[str, Any]]:
     variants.update(_phase42_variants())
     variants.update(_phase33_variants())
     variants.update(_phase52_variants())
+    variants.update(_phase52_eval_variants())
     return {"samples": samples, "variants": variants}

@@ -28,7 +28,7 @@ from rag_sidecar.contracts.finetune import (
 )
 from rag_sidecar.contracts.languages import LANGUAGE_CODES
 
-from rag_eval.corpus import CORPUS_LANGUAGES, load_corpus
+from rag_eval.corpus import CORPUS_LANGUAGES, CorpusDocument, load_corpus
 from rag_eval.draft.sources import _STORED_PREFIX
 from rag_eval.finetune import bundle
 from rag_eval.finetune.config import load_finetune_config
@@ -248,6 +248,26 @@ class SupabaseExportSource:
             )
 
 
+def fixture_export_documents(corpus_root: Path) -> list[CorpusDocument]:
+    """The fixture corpus documents a fixture export reads.
+
+    Like the REST source (is_current=eq.true), only the latest version of a fixture-meta lineage is a current document. The
+    generated duplicate-passage copies (04.2-37) exist to test duplicate clustering at retrieval time: thirty near-identical
+    documents per language make every pair drawn from them unanswerable for any model, so the fixture fine-tune corpus
+    leaves them out.
+    """
+    docs = load_corpus(corpus_root)
+    latest: dict[str, int] = {}
+    for doc in docs:
+        if doc.lineage is not None and doc.version is not None:
+            latest[doc.lineage] = max(latest.get(doc.lineage, 0), doc.version)
+    return [
+        doc
+        for doc in docs
+        if (doc.lineage is None or doc.version == latest[doc.lineage]) and doc.fixture_dup_template is None
+    ]
+
+
 class FixtureExportSource:
     """The committed fixture corpus as one tenant's documents; ids are derived from tenant and path, no HTTP."""
 
@@ -256,7 +276,7 @@ class FixtureExportSource:
         corpus_root, only = root, None
         if root.name in CORPUS_LANGUAGES and not any((root / lang).is_dir() for lang in CORPUS_LANGUAGES):
             corpus_root, only = root.parent, root.name
-        self._docs = [doc for doc in load_corpus(corpus_root) if only is None or doc.language == only]
+        self._docs = [doc for doc in fixture_export_documents(corpus_root) if only is None or doc.language == only]
 
     def consent(self, tenants: list[str], purpose: str) -> None:
         return None

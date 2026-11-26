@@ -49,6 +49,9 @@ export interface NormalizedLanguageSettings {
   monolingual: boolean;
 }
 
+/** Phase 5.2 D-08: every fixed-text key as `<group>.<key>`. */
+export const TEXT_KEYS: readonly string[];
+
 export function parseLanguageList(raw: string | readonly string[] | null | undefined): string[];
 export function normalizeLanguageSettings(
   rawSupported: string | null | undefined,

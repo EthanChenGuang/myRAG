@@ -63,7 +63,9 @@ def _parse_files():
 
 def _fixture_files():
     corpus = sorted((FIXTURES / "corpus").rglob("*.md")) + [FIXTURES / "golden.jsonl", FIXTURES / "split-manifest.json"]
-    assert len(corpus) == 30
+    # 34 documents, golden.jsonl and the split manifest, the 22 Phase 4.2 files of plan 04.2-37 (templates included)
+    # and the six 05.3-15 documents.
+    assert len(corpus) == 36 + 22 + 6
     ingest = _ingest_files()
     assert len(ingest) == INGEST_FILE_COUNT
     parse_files = _parse_files()

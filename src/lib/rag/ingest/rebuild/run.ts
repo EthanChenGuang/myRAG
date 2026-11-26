@@ -5,6 +5,7 @@ import { rpcRows, type RpcClient } from '../../backend/supabase-rpc';
 import { backfillScope } from '../../tenant/backfill-scope';
 import type { TenantScope } from '../../tenant/scope';
 import { HIDDEN_TEXT_SANITIZED_KEY, isArtifactName, loadArtifact, versionPrefix } from '../artifacts';
+import { attributeHeaderEnabled, listStaleHeaderDocuments } from '../attributes/header';
 import { optionsOf } from '../change-doc-type';
 import { getIngestDeps } from '../deps';
 import { enqueueIngest } from '../enqueue';
@@ -90,6 +91,8 @@ export interface RebuildDeps {
   /** The tenant scope a document is re-ingested under. Default: the operator backfill scope resolver. */
   scopeFor?: (tenantKey: string, signal: AbortSignal) => Promise<TenantScope | null>;
   signal?: AbortSignal;
+  /** The stale-header listing (TPL-05, D-27) a rechunk rebuild reads while RAG_ATTRIBUTE_HEADER is on. Default: listStaleHeaderDocuments. */
+  listStaleHeaders?: typeof listStaleHeaderDocuments;
 }
 
 export interface StartRebuildInput {
@@ -219,6 +222,45 @@ async function loadCandidates(db: RpcClient, signal: AbortSignal): Promise<Rebui
     after = candidates[candidates.length - 1]?.documentId ?? null;
     if (after === null) return candidates;
   }
+}
+
+const STALE_PAGE = 499;
+
+/**
+ * TPL-05 (D-27): the candidates whose served chunks carry another header state than their document, read once per tenant key of the
+ * candidates (keyset pages), and a digest over the sorted (tenant key, document id, document stamp) triples. Only candidates of the tenant
+ * whose listing named them count.
+ */
+async function staleHeaderSelection(
+  db: RpcClient,
+  candidates: readonly RebuildCandidate[],
+  deps: RebuildDeps,
+  signal: AbortSignal,
+): Promise<{ ids: Set<string>; digest: string | undefined }> {
+  const list = deps.listStaleHeaders ?? listStaleHeaderDocuments;
+  const byTenant = new Map<string, Set<string>>();
+  for (const candidate of candidates) byTenant.set(candidate.tenantKey, (byTenant.get(candidate.tenantKey) ?? new Set()).add(candidate.documentId));
+  const ids = new Set<string>();
+  const triples: Array<[string, string, string | null]> = [];
+  for (const tenantKey of [...byTenant.keys()].sort()) {
+    const own = byTenant.get(tenantKey) as Set<string>;
+    let after: string | null = null;
+    for (;;) {
+      const page = await list(tenantKey, { signal, db, after, limit: STALE_PAGE });
+      if (!page.ok) throw new RebuildUnavailable('rag_attribute_header_stale', 'unavailable');
+      for (const item of page.items) {
+        if (!own.has(item.documentId) || ids.has(item.documentId)) continue;
+        ids.add(item.documentId);
+        triples.push([tenantKey, item.documentId, item.stamp]);
+      }
+      const last = page.items[page.items.length - 1];
+      if (!page.more || !last) break;
+      after = last.documentId;
+    }
+  }
+  if (triples.length === 0) return { ids, digest: undefined };
+  triples.sort((a, b) => (a[0] + '|' + a[1] < b[0] + '|' + b[1] ? -1 : 1));
+  return { ids, digest: createHash('sha256').update(canonicalJson(triples)).digest('hex') };
 }
 
 async function defaultScopeFor(tenantKey: string, signal: AbortSignal): Promise<TenantScope | null> {
@@ -427,8 +469,10 @@ export async function startRebuild(input: StartRebuildInput, deps: RebuildDeps =
   const signal = deps.signal ?? new AbortController().signal;
   const db = dbOf(deps);
   const proposal = coverageProposal(deps.saved ?? savedFingerprintValues());
-  const settingsHash = rebuildSettingsHash(mechanism, proposal);
-  const selection = selectAffected(await loadCandidates(db, signal), mechanism, proposal);
+  const candidates = await loadCandidates(db, signal);
+  const staleHeader = mechanism === 'rechunk' && attributeHeaderEnabled() ? await staleHeaderSelection(db, candidates, deps, signal) : null;
+  const settingsHash = rebuildSettingsHash(mechanism, proposal, staleHeader?.digest);
+  const selection = selectAffected(candidates, mechanism, proposal, staleHeader?.ids);
   const ingestAsync = deps.ingestAsync ? deps.ingestAsync() : queueConfigFromProcessEnv().ingestAsync;
   const legacy = mechanism === 'rechunk' && selection.documents.length > 0 ? await legacyChildTokens(db, signal) : undefined;
   const plan = planRebuild(mechanism, selection, { ingestAsync, settingsHash, ...(legacy ? { legacyChildTokens: legacy } : {}) });

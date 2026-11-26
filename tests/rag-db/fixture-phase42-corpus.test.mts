@@ -13,13 +13,12 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const REAL_CORPUS = path.join(REPO_ROOT, 'eval/fixtures/corpus');
 const MODES: DeploymentMode[] = ['single-tenant', 'multi-tenant'];
 
-// The committed prechunked corpus before plan 04.2-28 (eval/baselines/fixture-baseline.json). Plan 04.2-37 adds the Phase 4.2 fixture
-// files and re-records this hash and the two dump digests below together with the baselines. Plan 05.3-15 re-recorded them for its six
-// new corpus documents.
-const COMMITTED_CORPUS_SHA256 = '24a83817b38689cc3b637a0a78d3dd736f8e0c2a9bca742ff4ae8a8157756154';
+// The committed prechunked corpus with the 04.1.1-10, 05.2-28, 04.2-37 and 05.3-15 fixture files (re-pinned on the merge of train 30
+// into 05.3-16, eval/baselines/fixture-baseline.json); this hash and the two dump digests below are re-recorded together with the baselines.
+const COMMITTED_CORPUS_SHA256 = 'bd839f9709028ceba3f8a14d7d3f6bf6470ffaf8bc7da555856d8c2845be6a9f';
 const COMMITTED_DUMP_SHA256: Record<DeploymentMode, string> = {
-  'single-tenant': '4c076d38500afbf97d871b331234309705d1b534ace77da39a041bfb31f7d297',
-  'multi-tenant': 'dd97569a7c3cfba19c8b0e43c3ea09644d1ebe39c279b76b6e58b618ee974c61',
+  'single-tenant': '0edb064e4875194c4eeecb3c47062c468cf44fe68e0c12ac6eddbc416616ed10',
+  'multi-tenant': '94a87974a36f06cfbd550ad54ef45fb6a0b740cf53e45a96d8f2c7e51e4bfc39',
 };
 const DUMP_DOCUMENT_COLUMNS =
   'id, filename, content, metadata, status, is_current, version, lineage_id, source, source_key, tenant_key, superseded_by, doc_type, user_id, created_at';
@@ -117,7 +116,9 @@ describe('corpus loaders on a Phase 4.2 corpus', () => {
     const loaded = loadCorpus(REAL_CORPUS);
     assert.equal(loaded.corpusSha256, COMMITTED_CORPUS_SHA256);
     assert.equal(pythonCorpus('sha256', REAL_CORPUS).trim(), COMMITTED_CORPUS_SHA256);
-    assert.ok(loaded.documents.every((doc) => doc.fixtureDupTemplate === undefined && doc.lineage === undefined));
+    // Plan 04.2-37: thirty generated copies per language and one two-version lineage per language.
+    assert.equal(loaded.documents.filter((doc) => doc.fixtureDupTemplate !== undefined).length, 90);
+    assert.equal(loaded.documents.filter((doc) => doc.lineage !== undefined).length, 6);
   });
 });
 

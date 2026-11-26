@@ -234,7 +234,11 @@ def relabel(
 
 
 def corpus_documents(corpus: Iterable[CorpusDocument]) -> dict[str, str]:
-    return {doc.filename: doc.content for doc in corpus}
+    # The versions of one fixture-meta lineage (04.2-37) share a filename; a quote counts when any version holds it.
+    documents: dict[str, str] = {}
+    for doc in corpus:
+        documents[doc.filename] = f"{documents[doc.filename]}\n\n{doc.content}" if doc.filename in documents else doc.content
+    return documents
 
 
 def _stale_reason(item: GoldenItem, documents: Mapping[str, str]) -> str | None:

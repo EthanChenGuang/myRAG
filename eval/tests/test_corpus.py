@@ -8,8 +8,8 @@ import pytest
 from rag_eval.corpus import load_corpus, main
 from rag_eval.paths import REPO_ROOT
 
-# Re-recorded by plan 05.3-15 (six new corpus documents).
-COMMITTED_CORPUS_SHA256 = "24a83817b38689cc3b637a0a78d3dd736f8e0c2a9bca742ff4ae8a8157756154"
+# Re-recorded on the merge of train 30 into 05.3-16 (train 30 corpus plus the six 05.3-15 documents).
+COMMITTED_CORPUS_SHA256 = "bd839f9709028ceba3f8a14d7d3f6bf6470ffaf8bc7da555856d8c2845be6a9f"
 META = '<!-- fixture-meta {"filename": "Policy Handbook.pdf", "image_url": "https://example.test/a.png"} -->'
 
 
@@ -248,7 +248,8 @@ def test_lineage_and_version_are_read_and_validated(tmp_path: Path):
 
 @pytest.mark.parametrize(
     "meta",
-    [{"lineage": "L"}, {"version": 1}, {"lineage": "", "version": 1}, {"lineage": "L", "version": 0}, {"lineage": "L", "version": 1.5}],
+    # A lone {"version": 1} is a valid document version since plan 05.2-28 (D-52).
+    [{"lineage": "L"}, {"lineage": "", "version": 1}, {"lineage": "L", "version": 0}, {"lineage": "L", "version": 1.5}],
 )
 def test_malformed_lineage_names_the_file(tmp_path: Path, meta):
     _write(tmp_path, "en/bad.en.md", f"<!-- fixture-meta {json.dumps(meta)} -->\n## A\n")

@@ -43,16 +43,16 @@ NOT_APPLY = {"en": "does not apply", "it": "non si applica", "zh": "不适用"}
 SUBJECT_CODE = re.compile(r"\b[A-Z]{2}-\d{2,3}\b")
 # Per new near-miss item: words of the asked fact that the subject's passage must not contain.
 ABSENT_FACT_TERMS = {
-    "en-no-answer-011": ("battery life", "hours"),
+    "en-no-answer-017": ("battery life", "hours"),
     "en-no-answer-013": ("gram", "weigh"),
     "en-no-answer-014": ("temperature",),
     "en-no-answer-015": ("price", "euro"),
     "en-no-answer-016": ("cable", "metre"),
-    "it-no-answer-012": ("autonomia", "durata"),
+    "it-no-answer-018": ("autonomia", "durata"),
     "it-no-answer-014": ("grammi", "pesa"),
     "it-no-answer-015": ("temperatura",),
     "it-no-answer-016": ("prezzo", "euro"),
-    "zh-no-answer-011": ("续航", "小时"),
+    "zh-no-answer-017": ("续航", "小时"),
     "zh-no-answer-012": ("克", "重量"),
     "zh-no-answer-015": ("温度",),
     "zh-no-answer-016": ("价格", "元"),
