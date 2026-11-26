@@ -142,6 +142,8 @@ export {
   noKnowledgeBaseResponseLanguage,
 } from './generation/messages';
 export { readFeedbackLoopConfig } from './feedback-loop/config';
+export { EMBED_FEEDBACK_AUDIENCE, mintEmbedFeedbackToken, verifyEmbedFeedbackToken } from './feedback-loop/embed-token';
+export type { EmbedFeedbackTokenClaims } from './feedback-loop/embed-token';
 export { readGenerationConfig } from './generation/config';
 export { detectLanguage } from './lang/detect';
 export type { Language } from './lang/registry';
