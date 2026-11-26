@@ -55,19 +55,38 @@ export function createPgliteAdmin(db: PGlite, options: PgliteAdminOptions = {}) 
     return shape;
   };
 
+  const argCache = new Map<string, Set<string>>();
+  /** Named arguments of a PostgreSQL array type (text[], uuid[]): bound as arrays, as PostgREST does, not as JSON. */
+  const procArrayArgs = async (fn: string) => {
+    const cached = argCache.get(fn);
+    if (cached) return cached;
+    const result = await db.query<{ name: string }>(
+      `SELECT a.name FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+         CROSS JOIN LATERAL unnest(p.proargnames, p.proargtypes::oid[]) AS a(name, type)
+         JOIN pg_type t ON t.oid = a.type
+        WHERE n.nspname = 'public' AND p.proname = $1 AND t.typcategory = 'A'`,
+      [fn],
+    );
+    const names = new Set(result.rows.map((row) => row.name));
+    argCache.set(fn, names);
+    return names;
+  };
+
   const admin = {
     queries,
-    /** supabase-js rpc over named arguments: objects and arrays bind as JSON, a scalar return is unwrapped. */
+    /** supabase-js rpc over named arguments: objects and arrays bind as JSON (arrays as arrays for array-typed arguments). */
     async rpc(fn: string, args: Row = {}): Promise<Result> {
       const name = identifier(fn);
       const params: unknown[] = [];
-      const named = Object.entries(args).map(([key, value]) => {
-        params.push(value !== null && typeof value === 'object' ? JSON.stringify(value) : value);
-        return `${identifier(key)} => $${params.length}`;
-      });
-      const sql = `SELECT * FROM public.${name}(${named.join(', ')})`;
-      queries.push({ sql, params: [...params] });
       try {
+        const arrayArgs = await procArrayArgs(fn);
+        const named = Object.entries(args).map(([key, value]) => {
+          const asArray = Array.isArray(value) && arrayArgs.has(key);
+          params.push(!asArray && value !== null && typeof value === 'object' ? JSON.stringify(value) : value);
+          return `${identifier(key)} => $${params.length}`;
+        });
+        const sql = `SELECT * FROM public.${name}(${named.join(', ')})`;
+        queries.push({ sql, params: [...params] });
         const shape = await procShape(fn);
         const rows = plain((await execute(sql, params)).rows);
         if (shape.table) return { data: rows, error: null };
@@ -222,6 +241,10 @@ export function createPgliteAdmin(db: PGlite, options: PgliteAdminOptions = {}) 
         },
         lt(column: string, value: unknown) {
           where.push(`${identifier(column)} < ${bind(value)}`);
+          return builder;
+        },
+        ilike(column: string, pattern: string) {
+          where.push(`${identifier(column)} ILIKE ${bind(pattern)}`);
           return builder;
         },
         range(from: number, to: number) {
