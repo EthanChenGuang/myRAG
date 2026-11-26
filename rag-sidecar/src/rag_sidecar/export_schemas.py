@@ -153,6 +153,18 @@ from rag_sidecar.contracts.retrieval import (
     VersionRange,
 )
 from rag_sidecar.contracts.samples import build_samples
+from rag_sidecar.contracts.templated import (
+    AttributeDefinition,
+    AttributeFilterConfig,
+    AttributeHeaderTemplate,
+    AttributeImportRow,
+    AttributeSchema,
+    BoilerplateReport,
+    BoilerplateRule,
+    BoilerplateRulesConfig,
+    SectionRuleSet,
+    TenantRulesFile,
+)
 from rag_sidecar.contracts.terminology import (
     TerminologyCandidate,
     TerminologyEntry,
@@ -329,6 +341,16 @@ CONTRACTS: list[tuple[type[BaseModel], Mode]] = [
     (TerminologyLexiconTerm, "serialization"),
     (TerminologyTranslationPair, "serialization"),
     (TerminologyLexicon, "serialization"),
+    (SectionRuleSet, "validation"),
+    (BoilerplateRule, "validation"),
+    (AttributeDefinition, "validation"),
+    (AttributeSchema, "validation"),
+    (AttributeHeaderTemplate, "validation"),
+    (TenantRulesFile, "validation"),
+    (AttributeImportRow, "validation"),
+    (BoilerplateRulesConfig, "validation"),
+    (AttributeFilterConfig, "validation"),
+    (BoilerplateReport, "serialization"),
 ]
 
 

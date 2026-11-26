@@ -1,5 +1,79 @@
 {
   "$defs": {
+    "ChunkPrepBoilerplatePart": {
+      "additionalProperties": false,
+      "description": "Cleaning state of a document prepared while `RAG_PAGE_BOILERPLATE` is on (Phase 3.3 D-13).",
+      "properties": {
+        "cleaner_version": {
+          "minimum": 1,
+          "title": "Cleaner Version",
+          "type": "integer"
+        },
+        "mode": {
+          "enum": [
+            "detect",
+            "rules",
+            "both"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "rule_fingerprint": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Rule Fingerprint",
+          "type": "string"
+        },
+        "rules_version": {
+          "minimum": 1,
+          "title": "Rules Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "mode",
+        "cleaner_version",
+        "rules_version",
+        "rule_fingerprint"
+      ],
+      "title": "ChunkPrepBoilerplatePart",
+      "type": "object"
+    },
+    "ChunkPrepPart": {
+      "additionalProperties": false,
+      "description": "Optional fingerprint part of the shared chunk preparation; present only when a writer sets it (D-13, F-22).",
+      "properties": {
+        "boilerplate": {
+          "$ref": "#/$defs/ChunkPrepBoilerplatePart"
+        },
+        "section_rules": {
+          "$ref": "#/$defs/ChunkPrepSectionRulesPart"
+        }
+      },
+      "title": "ChunkPrepPart",
+      "type": "object"
+    },
+    "ChunkPrepSectionRulesPart": {
+      "additionalProperties": false,
+      "description": "Rule set a document was cut by while `RAG_SECTION_RULES` is on (Phase 3.3 D-17).",
+      "properties": {
+        "rule_set_id": {
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+          "title": "Rule Set Id",
+          "type": "string"
+        },
+        "version": {
+          "minimum": 1,
+          "title": "Version",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "rule_set_id",
+        "version"
+      ],
+      "title": "ChunkPrepSectionRulesPart",
+      "type": "object"
+    },
     "FingerprintSwitches": {
       "additionalProperties": false,
       "description": "State of this phase's ingestion-side switches, as the raw variable values (D-13, D-19, D-21, D-23).",
@@ -70,6 +144,9 @@
       },
       "title": "Assumed Defaults",
       "type": "array"
+    },
+    "chunk_prep": {
+      "$ref": "#/$defs/ChunkPrepPart"
     },
     "chunking_profile_id": {
       "maxLength": 128,

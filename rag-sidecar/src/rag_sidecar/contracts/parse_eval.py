@@ -7,7 +7,9 @@ from pydantic import Field, field_validator, model_validator
 
 from rag_sidecar.contracts.ingest import DocType
 from rag_sidecar.contracts.routing import PageSignal, ParseTier, Preset
+from rag_sidecar.contracts.omit import omit_none_schema
 from rag_sidecar.contracts.sidecar import _Contract
+from rag_sidecar.contracts.templated import AttributeValues
 
 
 class BackfillManifestEntry(_Contract):
@@ -15,6 +17,9 @@ class BackfillManifestEntry(_Contract):
     path: str | None = None
     url: str | None = None
     doc_type: DocType | None = None
+    attributes: AttributeValues | None = Field(
+        default=None, exclude_if=lambda value: value is None, json_schema_extra=omit_none_schema
+    )
 
     @model_validator(mode="after")
     def _exactly_one_location(self) -> BackfillManifestEntry:

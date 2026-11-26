@@ -45,6 +45,12 @@ class SliceMetrics(_Contract):
     intent_coverage: MetricValue | None = _optional_metric()
     identifier_precision: MetricValue | None = _optional_metric()
     near_miss_leakage: MetricValue | None = _optional_metric()
+    boilerplate_token_share: MetricValue | None = _optional_metric()
+    named_document_recall: MetricValue | None = _optional_metric()
+    wrong_document_at_1: MetricValue | None = _optional_metric()
+    variant_accuracy: MetricValue | None = _optional_metric()
+    quantity_match_rate: MetricValue | None = _optional_metric()
+    attribute_filter_fallback_rate: MetricValue | None = _optional_metric()
 
 
 class ItemResult(_Contract):
@@ -78,6 +84,13 @@ class ItemResult(_Contract):
     intent_coverage: bool | None = Field(default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema)
     identifier_precise: bool | None = Field(default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema)
     near_miss_leak: bool | None = Field(default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema)
+    named_document_hit: bool | None = Field(default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema)
+    wrong_document_at_1: bool | None = Field(default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema)
+    variant_correct: bool | None = Field(default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema)
+    quantity_matched: bool | None = Field(default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema)
+    attribute_filter_fallback: bool | None = Field(
+        default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema
+    )
 
 
 class NativeReviewBacklogEntry(_Contract):
