@@ -295,6 +295,18 @@
       ]
     },
     {
+      "name": "RAG_CONFIG_GATE",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Pre-save setting check in the Config UI: off | warn | enforce (off saves at once, as before)."
+    },
+    {
+      "name": "RAG_CONFIG_GATE_LIVE",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Adds a live chat-model layer to the setting check; no effect while RAG_CONFIG_GATE=off."
+    },
+    {
       "name": "RAG_CONTEXT_COMPRESSION",
       "status": "managed",
       "knownGaps": []
@@ -699,6 +711,30 @@
       "name": "RAG_LEXICAL_STEM_IT",
       "status": "managed",
       "knownGaps": []
+    },
+    {
+      "name": "RAG_MONITOR",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Daily monitor over the retrieval log; off runs nothing, stores nothing and its routes answer 404."
+    },
+    {
+      "name": "RAG_MONITOR_WEBHOOK_SECRET",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Optional HMAC-SHA256 signing secret for monitor webhook deliveries, at least 32 characters."
+    },
+    {
+      "name": "RAG_MONITOR_WEBHOOK_URL",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Optional https:// admin webhook for monitor alerts; treated as a secret, never shown or logged."
+    },
+    {
+      "name": "RAG_REPRESENTATIVE_SAMPLE",
+      "status": "managed",
+      "knownGaps": [],
+      "description": "Weekly representative sample of real questions into the review queue; needs masked_query logging and expert review."
     },
     {
       "name": "RAG_VERSION_SCOPE",

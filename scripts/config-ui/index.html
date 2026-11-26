@@ -9952,6 +9952,95 @@
                                                 </div>
                                             </div>
                                             <!-- rag-phase032-settings:end -->
+                                            <!-- rag-phase053-settings:start -->
+                                            <div id="rag-phase053-settings" class="hidden">
+                                                <div data-rag-settings-group="gate">
+                                                    <div class="form-control mb-4">
+                                                        <label class="label" for="RAG_CONFIG_GATE">
+                                                            <span class="label-text" data-rag-i18n="settings.gate.label">Check settings before saving</span>
+                                                        </label>
+                                                        <select id="RAG_CONFIG_GATE" name="RAG_CONFIG_GATE" autocomplete="off" aria-describedby="rag-config-gate-help" class="select select-bordered select-sm w-full">
+                                                            <option value="off" data-rag-i18n="mode.off" selected>Off: settings are saved at once, as before</option>
+                                                            <option value="warn" data-rag-i18n="mode.warn">Warn: the result is shown, saving is never blocked</option>
+                                                            <option value="enforce" data-rag-i18n="mode.enforce">Enforce: a save needs a passed check or a reason</option>
+                                                        </select>
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-config-gate-help" data-rag-i18n="settings.gate.help">Covers settings that change how answers are produced. Other settings are saved without a check.</span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_CONFIG_GATE</code>
+                                                        </div>
+                                                    </div>
+                                                    <div class="form-control mb-4">
+                                                        <label class="label" for="RAG_CONFIG_GATE_LIVE">
+                                                            <span class="label-text" data-rag-i18n="settings.live.label">Also ask the live chat model</span>
+                                                        </label>
+                                                        <select id="RAG_CONFIG_GATE_LIVE" name="RAG_CONFIG_GATE_LIVE" autocomplete="off" aria-describedby="rag-config-gate-live-help" class="select select-bordered select-sm w-full">
+                                                            <option value="false" data-rag-i18n="settings.live.off" selected>Off: built-in test questions only, no model call</option>
+                                                            <option value="true" data-rag-i18n="settings.live.on">On: the proposed chat model also answers a fixed sample (uses model credit)</option>
+                                                        </select>
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-config-gate-live-help" data-rag-i18n="warn.liveNeedsGate">The live model check has no effect while setting checks are off.</span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_CONFIG_GATE_LIVE</code>
+                                                        </div>
+                                                    </div>
+                                                    <p class="text-xs text-base-content/70" data-rag-i18n="settings.saveHint">These settings are saved with Save All Changes at the top of the page and apply after the app restarts.</p>
+                                                </div>
+                                                <div data-rag-settings-group="monitor">
+                                                    <div class="form-control mb-4">
+                                                        <label class="label" for="RAG_MONITOR">
+                                                            <span class="label-text" data-rag-i18n="settings.monitor.label">Daily monitoring</span>
+                                                        </label>
+                                                        <select id="RAG_MONITOR" name="RAG_MONITOR" autocomplete="off" aria-describedby="rag-monitor-help" class="select select-bordered select-sm w-full">
+                                                            <option value="false" data-rag-i18n="value.off" selected>Off</option>
+                                                            <option value="true" data-rag-i18n="value.on">On</option>
+                                                        </select>
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-monitor-help" data-rag-i18n="settings.monitor.help">Off: nothing runs and nothing is stored.</span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_MONITOR</code>
+                                                        </div>
+                                                    </div>
+                                                    <div class="form-control mb-4">
+                                                        <label class="label" for="RAG_MONITOR_WEBHOOK_URL">
+                                                            <span class="label-text" data-rag-i18n="settings.webhook.label">Admin webhook URL</span>
+                                                        </label>
+                                                        <input type="url" id="RAG_MONITOR_WEBHOOK_URL" name="RAG_MONITOR_WEBHOOK_URL" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://…" aria-describedby="rag-monitor-webhook-url-help" class="input input-bordered input-sm w-full">
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-monitor-webhook-url-help" data-rag-i18n="settings.webhook.help">Optional. Each alert is posted here as JSON with counts and ids. HTTPS only.</span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_MONITOR_WEBHOOK_URL</code>
+                                                        </div>
+                                                    </div>
+                                                    <div class="form-control mb-4">
+                                                        <label class="label" for="RAG_MONITOR_WEBHOOK_SECRET">
+                                                            <span class="label-text" data-rag-i18n="settings.secret.label">Webhook signing secret</span>
+                                                        </label>
+                                                        <div class="flex gap-2">
+                                                            <input type="password" id="RAG_MONITOR_WEBHOOK_SECRET" name="RAG_MONITOR_WEBHOOK_SECRET" autocomplete="off" spellcheck="false" placeholder="At least 32 characters…" aria-describedby="rag-monitor-webhook-secret-help" class="input input-bordered input-sm flex-1 w-full">
+                                                            <button type="button" class="btn btn-square btn-outline btn-sm" data-for="RAG_MONITOR_WEBHOOK_SECRET" aria-label="Show or hide the webhook secret">👁️</button>
+                                                        </div>
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-monitor-webhook-secret-help" data-rag-i18n="settings.secret.help">Optional. At least 32 characters. When set, each delivery is signed with HMAC-SHA256.</span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_MONITOR_WEBHOOK_SECRET</code>
+                                                        </div>
+                                                    </div>
+                                                    <p class="text-xs text-base-content/70" data-rag-i18n="settings.saveHint">These settings are saved with Save All Changes at the top of the page and apply after the app restarts.</p>
+                                                </div>
+                                                <div data-rag-settings-group="sample">
+                                                    <div class="form-control mb-4">
+                                                        <label class="label" for="RAG_REPRESENTATIVE_SAMPLE">
+                                                            <span class="label-text" data-rag-i18n="settings.sample.label">Weekly sampling</span>
+                                                        </label>
+                                                        <select id="RAG_REPRESENTATIVE_SAMPLE" name="RAG_REPRESENTATIVE_SAMPLE" autocomplete="off" aria-describedby="rag-representative-sample-help" class="select select-bordered select-sm w-full">
+                                                            <option value="false" data-rag-i18n="value.off" selected>Off</option>
+                                                            <option value="true" data-rag-i18n="value.on">On</option>
+                                                        </select>
+                                                        <div class="label flex-wrap gap-1">
+                                                            <span class="label-text-alt" id="rag-representative-sample-help" data-rag-i18n="settings.sample.help">On: each week a sample of all real questions, spread across topic groups, languages and channels, is added to the review queue.</span>
+                                                            <code class="font-mono text-xs break-all" translate="no">RAG_REPRESENTATIVE_SAMPLE</code>
+                                                        </div>
+                                                    </div>
+                                                    <p class="text-xs text-base-content/70" data-rag-i18n="settings.saveHint">These settings are saved with Save All Changes at the top of the page and apply after the app restarts.</p>
+                                                </div>
+                                            </div>
+                                            <!-- rag-phase053-settings:end -->
                                         </div>
                                     </section>
 
@@ -11248,7 +11337,7 @@
                     this.showSaveIndicator();
                     console.log('Config saved successfully');
 
-                    const shortSecrets = ['RAG_EVAL_SECRET', 'RAG_SIDECAR_SECRET', 'RAG_VOICE_TOKEN_SECRET', 'VOYAGE_API_KEY', 'DEEPINFRA_API_KEY', 'COHERE_API_KEY', 'LAKERA_GUARD_API_KEY', 'RAG_VECTOR_SYNC_SECRET'].filter((name) => {
+                    const shortSecrets = ['RAG_EVAL_SECRET', 'RAG_SIDECAR_SECRET', 'RAG_VOICE_TOKEN_SECRET', 'VOYAGE_API_KEY', 'DEEPINFRA_API_KEY', 'COHERE_API_KEY', 'LAKERA_GUARD_API_KEY', 'RAG_VECTOR_SYNC_SECRET', 'RAG_MONITOR_WEBHOOK_SECRET'].filter((name) => {
                         const value = this.config[name];
                         return typeof value === 'string' && value.length > 0 && value.length < 32;
                     });
