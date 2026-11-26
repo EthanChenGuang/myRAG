@@ -200,6 +200,13 @@ function assembleInput(documents: Map<string, AssemblyDocumentRow>, over: Partia
   };
 }
 
+/** Off already fills documentVersion from a row's version column; every other key must match. */
+function withoutVersion<T extends { documentVersion: number | null }>(value: T): Omit<T, 'documentVersion'> {
+  const copy: Partial<T> = { ...value };
+  delete copy.documentVersion;
+  return copy as Omit<T, 'documentVersion'>;
+}
+
 const VARIANTS: Array<[string, Partial<AssembleInput>]> = [
   ['plain', {}],
   ['labelled', { citationLabeler: createCitationLabeler() }],
@@ -212,7 +219,7 @@ describe('version labels in assembly (D-48, D-50)', () => {
     const without = assembleContext(assembleInput(baseRows(), over));
     const withColumns = assembleContext(assembleInput(versionRows('B-2'), over));
     expect(withColumns.context).toBe(without.context);
-    expect(withColumns.blocks.map(({ documentVersion: _v, ...rest }) => rest)).toEqual(without.blocks.map(({ documentVersion: _v, ...rest }) => rest));
+    expect(withColumns.blocks.map(withoutVersion)).toEqual(without.blocks.map(withoutVersion));
     for (const block of withColumns.blocks) {
       expect(Object.prototype.hasOwnProperty.call(block, 'versionLabel')).toBe(false);
       expect(Object.prototype.hasOwnProperty.call(block, 'effectiveFrom')).toBe(false);
@@ -333,7 +340,6 @@ describe('version label and date on citation records (D-50, UI-SPEC 6.7)', () =>
       expect(record).not.toHaveProperty('versionLabel');
       expect(record).not.toHaveProperty('effectiveFrom');
     }
-    const strip = ({ documentVersion: _v, ...rest }: (typeof records)[number]) => rest;
-    expect(records.map(strip)).toEqual(recordsFor(baseRows()).map(strip));
+    expect(records.map(withoutVersion)).toEqual(recordsFor(baseRows()).map(withoutVersion));
   });
 });
