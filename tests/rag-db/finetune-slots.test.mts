@@ -218,8 +218,12 @@ for (const mode of MODES) {
       await db.query("UPDATE public.embedding_profiles SET status = 'active', previous_active_id = $2 WHERE id = $1", [profileId, previous]);
     }
 
-    async function evidenceFor(profileId: string): Promise<Record<string, unknown>> {
-      const run = await db.query<{ id: string }>("INSERT INTO public.embedding_backfill_runs (profile_id, status) VALUES ($1, 'completed') RETURNING id", [profileId]);
+    // A run row of a slot holding a tenant-scope version must name that tenant (0654 backfill-run guard), so the forced-state test passes one.
+    async function evidenceFor(profileId: string, runTenant: string | null = null): Promise<Record<string, unknown>> {
+      const run = await db.query<{ id: string }>("INSERT INTO public.embedding_backfill_runs (profile_id, tenant_key, status) VALUES ($1, $2, 'completed') RETURNING id", [
+        profileId,
+        runTenant,
+      ]);
       return {
         target_profile: profileId,
         baseline_profile: LEGACY,
@@ -398,9 +402,9 @@ for (const mode of MODES) {
           await db.query('SELECT pg_catalog.set_config($1, $2, true)', [OP_GUC, 'on']);
           await db.query("UPDATE public.embedding_profiles SET model = 'ft-forced-v1', query_instruction = 'q' WHERE id = $1", [SLOT_A]);
           await db.query("UPDATE public.embedding_model_versions SET status = 'bound', bound_slot = $1 WHERE id = 'ft-forced-v1'", [SLOT_A]);
-          assert.match(await recordEvidence(SLOT_A), /slot_refused: tenant_scope_global/);
+          assert.match(await recordEvidence(SLOT_A, await evidenceFor(SLOT_A, tenantA)), /slot_refused: tenant_scope_global/);
           await db.query('SELECT pg_catalog.set_config($1, $2, true)', [OP_GUC, '']);
-          assert.match(await recordEvidence(SLOT_A), /slot_refused: tenant_scope_global/);
+          assert.match(await recordEvidence(SLOT_A, await evidenceFor(SLOT_A, tenantA)), /slot_refused: tenant_scope_global/);
           assert.match(await outcome(db, 'SELECT * FROM public.rag_set_embedding_profile_status($1, $2, $3)', [SLOT_A, 'backfilling', 'op']), /slot_refused: tenant_scope_global/);
           assert.match(await outcome(db, 'SELECT * FROM public.rag_reembed_start_run($1, $2, $3)', [SLOT_A, null, 'op']), /slot_refused: tenant_scope_global/);
           await insertDocument(2);

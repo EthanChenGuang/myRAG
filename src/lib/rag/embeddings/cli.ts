@@ -25,7 +25,7 @@ export type ParsedEmbeddingArgs =
   | { ok: true; command: 'ft-models-register'; cardPath: string }
   | { ok: true; command: 'ft-models-list' }
   | { ok: true; command: 'ft-models-retire'; versionId: string }
-  | { ok: true; command: 'ft-bind'; slot: FinetuneSlotId; versionId: string }
+  | { ok: true; command: 'ft-bind'; slot: FinetuneSlotId; versionId: string; docTypes: string[] | null }
   | { ok: true; command: 'ft-clear'; slot: FinetuneSlotId; batch: number }
   | { ok: true; command: 'ft-release-rollback' }
   | { ok: true; command: 'ft-check'; slot: FinetuneSlotId }
@@ -67,7 +67,7 @@ export const USAGE = [
   '       npm run rag:embedding -- ft-models register <card.json>',
   '       npm run rag:embedding -- ft-models list',
   '       npm run rag:embedding -- ft-models retire <versionId>',
-  '       npm run rag:embedding -- ft-bind ft-a-1024|ft-b-1024 <versionId>',
+  '       npm run rag:embedding -- ft-bind ft-a-1024|ft-b-1024 <versionId> [--doc-types <docType,...|all>]',
   '       npm run rag:embedding -- ft-clear ft-a-1024|ft-b-1024 [--batch <1..10000>]',
   '       npm run rag:embedding -- ft-release-rollback --ack drop-rollback',
   '       npm run rag:embedding -- ft-check ft-a-1024|ft-b-1024',
@@ -137,6 +137,19 @@ export type FinetuneParsedArgs = Extract<ParsedEmbeddingArgs, { ok: true; comman
 
 export function isFinetuneCommand(parsed: ParsedEmbeddingArgs): parsed is FinetuneParsedArgs {
   return parsed.ok && parsed.command.startsWith('ft-');
+}
+
+/**
+ * `--doc-types <docType,...|all>`: `all` expands to every doc type of the deployment's doc type list (the six ids of the generated contract,
+ * which the 0440 check constraint also names); otherwise known ids, comma-separated, returned sorted and without repeats.
+ */
+export function parseDocTypeList(raw: string): { ok: true; docTypes: string[] } | { ok: false; error: string } {
+  if (raw === 'all') return { ok: true, docTypes: [...DOC_TYPES].sort() };
+  const entries = raw.split(',').map((entry) => entry.trim());
+  if (entries.some((entry) => entry === '')) return { ok: false, error: '--doc-types needs doc types separated by commas, or all' };
+  const unknown = entries.find((entry) => !DOC_TYPES.includes(entry));
+  if (unknown !== undefined) return { ok: false, error: `unknown doc type: ${unknown}` };
+  return { ok: true, docTypes: [...new Set(entries)].sort() };
 }
 
 const slotArgument = (value: string | undefined): FinetuneSlotId | null => (value !== undefined && FT_SLOTS.includes(value) ? (value as FinetuneSlotId) : null);
@@ -218,8 +231,14 @@ export function parseEmbeddingArgs(argv: string[]): ParsedEmbeddingArgs {
       const slot = slotArgument(rest[0]);
       const versionId = rest[1];
       if (slot === null) return { ok: false, error: 'ft-bind needs a slot: ft-a-1024 or ft-b-1024' };
-      if (rest.length !== 2 || versionId === undefined || !VERSION_ID.test(versionId)) return { ok: false, error: 'ft-bind needs <slot> <versionId>' };
-      return { ok: true, command: 'ft-bind', slot, versionId };
+      if (rest.length < 2 || versionId === undefined || !VERSION_ID.test(versionId)) return { ok: false, error: 'ft-bind needs <slot> <versionId>' };
+      const flags = parseFlags('ft-bind', rest.slice(2), ['--doc-types']);
+      if (!flags.ok) return flags;
+      const raw = flags.values.get('--doc-types');
+      if (raw === undefined) return { ok: true, command: 'ft-bind', slot, versionId, docTypes: null };
+      const docTypes = parseDocTypeList(raw);
+      if (!docTypes.ok) return docTypes;
+      return { ok: true, command: 'ft-bind', slot, versionId, docTypes: docTypes.docTypes };
     }
     case 'ft-clear': {
       const slot = slotArgument(rest[0]);
@@ -336,6 +355,11 @@ async function runFinetuneCommand(parsed: FinetuneParsedArgs, io: CliIo, deps: E
           }
           io.out(`[Embedding] next: npm run rag:embedding -- ft-clear ${slot.slot}`);
         }
+        for (const binding of result.deactivatedBindings) {
+          io.out(
+            `[Embedding] binding ${binding.id} (${binding.docType}, ${binding.tenantKey ?? 'deployment'}) of ${binding.profileId} was ${binding.status} and is now available: its queries use the global profile`,
+          );
+        }
         for (const uri of result.artifactUris) io.out(`[Embedding] next: delete the weights at ${uri} (an operator step outside this command)`);
         const prune = ops.pruneCommand(parsed.tenantKey, parsed.pruneRoot);
         io.out(`[Embedding] retention: ${parsed.pruneRoot ? prune.join(' ') : `${prune.join(' ')} [--root <bundles dir>]`}`);
@@ -381,10 +405,17 @@ async function runFinetuneCommand(parsed: FinetuneParsedArgs, io: CliIo, deps: E
         return 0;
       }
       case 'ft-bind': {
-        const result = await ops.bindSlot(parsed.slot, parsed.versionId, cliActor());
+        const result = await ops.bindSlot(parsed.slot, parsed.versionId, cliActor(), parsed.docTypes);
         if (!result.ok) return refused(result);
-        io.out(`[Embedding] bound ${result.version.id} to ${result.slot} (no vector written; the slot is unscoped and uses the global EMB-05 path)`);
-        for (const line of ops.bindGuidance(result.slot, result.version)) io.out(`[Embedding] ${line}`);
+        if (result.docTypes) {
+          io.out(
+            `[Embedding] bound ${result.version.id} to ${result.slot} scoped to ${result.docTypes.join(',')} (no vector written; the slot serves only through 3.1.1 bindings, never globally)`,
+          );
+        } else {
+          io.out(`[Embedding] bound ${result.version.id} to ${result.slot} (no vector written; the slot is unscoped and uses the global EMB-05 path)`);
+        }
+        const scope = result.docTypes ? { docTypes: result.docTypes, tenantKey: result.version.scope === 'tenant' ? (result.version.tenantKeys[0] ?? null) : null } : undefined;
+        for (const line of ops.bindGuidance(result.slot, result.version, scope)) io.out(`[Embedding] ${line}`);
         return 0;
       }
       case 'ft-clear': {

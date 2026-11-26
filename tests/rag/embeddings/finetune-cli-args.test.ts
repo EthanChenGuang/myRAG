@@ -60,8 +60,8 @@ describe('rag:embedding ft-* argument parsing', () => {
   });
 
   it('accepts ft-bind only for the two fixed slots', () => {
-    expect(parseEmbeddingArgs(['ft-bind', 'ft-a-1024', VERSION])).toEqual({ ok: true, command: 'ft-bind', slot: 'ft-a-1024', versionId: VERSION });
-    expect(parseEmbeddingArgs(['ft-bind', 'ft-b-1024', VERSION])).toEqual({ ok: true, command: 'ft-bind', slot: 'ft-b-1024', versionId: VERSION });
+    expect(parseEmbeddingArgs(['ft-bind', 'ft-a-1024', VERSION])).toEqual({ ok: true, command: 'ft-bind', slot: 'ft-a-1024', versionId: VERSION, docTypes: null });
+    expect(parseEmbeddingArgs(['ft-bind', 'ft-b-1024', VERSION])).toEqual({ ok: true, command: 'ft-bind', slot: 'ft-b-1024', versionId: VERSION, docTypes: null });
     for (const argv of [['ft-bind', 'ft-c-1024', VERSION], ['ft-bind', 'voyage-4-large-1024', VERSION], ['ft-bind', 'ft-a-1024'], ['ft-bind', 'ft-a-1024', 'bad version'], ['ft-bind', 'ft-a-1024', VERSION, 'extra']]) {
       expect(parseEmbeddingArgs(argv).ok, argv.join(' ')).toBe(false);
     }
@@ -98,6 +98,33 @@ describe('rag:embedding ft-* argument parsing', () => {
   });
 });
 
+describe('ft-bind --doc-types', () => {
+  it('takes a comma-separated list of known doc types, sorted and unique, or all', () => {
+    expect(parseEmbeddingArgs(['ft-bind', 'ft-a-1024', VERSION, '--doc-types', 'general,contract_legal,general'])).toEqual({
+      ok: true,
+      command: 'ft-bind',
+      slot: 'ft-a-1024',
+      versionId: VERSION,
+      docTypes: ['contract_legal', 'general'],
+    });
+    const all = parseEmbeddingArgs(['ft-bind', 'ft-a-1024', VERSION, '--doc-types', 'all']);
+    expect(all.ok && all.command === 'ft-bind' ? all.docTypes : null).toEqual(
+      ['contract_legal', 'financial_report', 'general', 'invoice_receipt', 'product_technical', 'scanned_image'],
+    );
+  });
+
+  it('refuses an unknown doc type, an empty entry, a missing value and another flag', () => {
+    for (const argv of [
+      ['ft-bind', 'ft-a-1024', VERSION, '--doc-types', 'unknown_type'],
+      ['ft-bind', 'ft-a-1024', VERSION, '--doc-types', 'general,'],
+      ['ft-bind', 'ft-a-1024', VERSION, '--doc-types'],
+      ['ft-bind', 'ft-a-1024', VERSION, '--tenant', 's:default'],
+    ]) {
+      expect(parseEmbeddingArgs(argv).ok).toBe(false);
+    }
+  });
+});
+
 describe('post-bind guidance', () => {
   it('names the global re-embed for an unscoped slot and the tenant-filtered binding backfill for a scoped one', async () => {
     const { bindGuidance } = await import('@/lib/rag/embeddings/finetune-ops');
@@ -107,8 +134,12 @@ describe('post-bind guidance', () => {
     expect(unscoped).toContain('RAG_FT_SLOT_B_QUERY_PROMPT="query: "');
     expect(unscoped).toContain('npm run rag:reembed -- --profile ft-b-1024');
     expect(unscoped).not.toContain('--tenant');
-    const scoped = bindGuidance('ft-a-1024', version, TENANT).join('\n');
+    const scoped = bindGuidance('ft-a-1024', version, { docTypes: ['contract_legal'], tenantKey: TENANT }).join('\n');
     expect(scoped).toContain(`npm run rag:reembed -- --profile ft-a-1024 --tenant ${TENANT}`);
     expect(scoped).toContain('binding backfill');
+    expect(scoped).toContain(`npm run rag:embedding -- bind contract_legal ft-a-1024 --tenant ${TENANT}`);
+    expect(scoped).toContain('activate-binding');
+    expect(scoped).not.toMatch(/npm run rag:reembed -- --profile ft-a-1024(?! --tenant)/);
+    expect(scoped).not.toMatch(/rag:embedding -- activate (?!-binding)/);
   });
 });
