@@ -75,6 +75,8 @@ function collect(
     endedAt,
     stages,
   };
+  const timing = collector.timing();
+  if (timing) trace.timing = timing;
   if (reviewCandidate) {
     trace.review = { ...(query !== undefined ? { query } : {}), ...collector.reviewContent() };
   } else if (config.captureContent) {

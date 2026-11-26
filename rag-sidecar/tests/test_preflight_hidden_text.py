@@ -69,9 +69,28 @@ class RecordingChecker:
 _UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 
 
+_DURATION_KEYS = frozenset({"ms", "timing_ms"})
+
+
+def _without_durations(value: Any) -> Any:
+    """Wall-clock durations replaced by a marker; the keys stay, so which stages were timed still compares."""
+    if isinstance(value, dict):
+        return {
+            key: (
+                {stage: "<ms>" for stage in item}
+                if key == "timings" and isinstance(item, dict)
+                else "<ms>" if key in _DURATION_KEYS and isinstance(item, int) else _without_durations(item)
+            )
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_without_durations(item) for item in value]
+    return value
+
+
 def _stable(value: Any) -> str:
-    """A dump with the random cache ids replaced, so two runs of the same job compare equal."""
-    return _UUID.sub("<id>", json.dumps(value, sort_keys=True, default=str))
+    """A dump with the random cache ids and wall-clock durations replaced, so two runs of the same job compare equal."""
+    return _UUID.sub("<id>", json.dumps(_without_durations(value), sort_keys=True, default=str))
 
 
 def _process(env: Env) -> JobOutcome:

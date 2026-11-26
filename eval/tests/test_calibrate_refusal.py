@@ -368,9 +368,18 @@ def _empty_thresholds(tmp_path: Path) -> Path:
     return path
 
 
+def _unset_calibration(tmp_path: Path) -> Path:
+    """A calibration config without targets_by_mode, so the Phase 4 cases keep their one-cell world."""
+    path = tmp_path / "calibration-unset.json"
+    if not path.is_file():
+        write_config_atomically(path, finalize_config(RefusalCalibrationConfig()))
+    return path
+
+
 def _calibrate(tmp_path: Path, runner, golden: Path, **kwargs):
     if "thresholds_path" not in kwargs:
         kwargs["thresholds_path"] = _empty_thresholds(tmp_path)
+    kwargs.setdefault("calibration_path", _unset_calibration(tmp_path))
     kwargs.setdefault("floor_path", tmp_path / "fixture-score-calibration.json")
     return run_refusal_calibration(
         V2_RECOMMENDED, tmp_path / "out", golden=golden, runner=runner, now=DAY, **kwargs
@@ -523,7 +532,13 @@ def test_run_twice_with_unchanged_inputs_is_a_byte_identical_no_op(tmp_path):
     _calibrate(tmp_path, _Runner(scores), golden)
     first = {n: (out / n).read_bytes() for n in ("refusal-calibration-result.json", "report.md")}
     again = run_refusal_calibration(
-        V2_RECOMMENDED, out, golden=golden, runner=_Runner(scores), now="2027-02-02", thresholds_path=_empty_thresholds(tmp_path)
+        V2_RECOMMENDED,
+        out,
+        golden=golden,
+        runner=_Runner(scores),
+        now="2027-02-02",
+        thresholds_path=_empty_thresholds(tmp_path),
+        calibration_path=_unset_calibration(tmp_path),
     )
     second = {n: (out / n).read_bytes() for n in ("refusal-calibration-result.json", "report.md")}
     assert first == second
@@ -697,6 +712,7 @@ def _patch_cli(monkeypatch, tmp_path: Path, scores, *, thresholds: Path | None =
     runner = _Runner(scores)
     monkeypatch.setattr(refusal_module, "_default_runner", runner)
     monkeypatch.setattr(refusal_module, "FLOOR_PATH", tmp_path / "fixture-score-calibration.json")
+    monkeypatch.setattr(refusal_module, "CALIBRATION_PATH", _unset_calibration(tmp_path))
     if thresholds is not None:
         monkeypatch.setattr(refusal_module, "THRESHOLDS_PATH", thresholds)
     return runner
@@ -747,3 +763,299 @@ def test_run_records_the_thresholds_path_relative_to_the_repo_root(tmp_path, mon
     assert result.thresholds_path == "thresholds.json"
     written = (tmp_path / "out" / "refusal-calibration-result.json").read_text(encoding="utf-8")
     assert str(tmp_path) not in written
+
+
+# ---------------------------------------------------------------------------
+# Phase 4.2 plan 07: per-mode operating points with the full sweep (D-23, D-24, D-46)
+# ---------------------------------------------------------------------------
+
+from rag_sidecar.contracts.retrieval import RefusalModeTargets
+
+from rag_eval.calibrate.refusal import cell_key, fit_threshold_capped, sweep_candidates
+
+DATA = Path(__file__).resolve().parent / "data"
+MODES_UNSET_SNAPSHOT = DATA / "refusal-thresholds-modes-unset.json"
+D23_TARGETS = {
+    "strict": RefusalModeTargets(max_false_answer=0.05),
+    "balanced": RefusalModeTargets(target_false_refusal=None),
+    "flexible": RefusalModeTargets(target_false_refusal=None),
+}
+MODE_CONFIG = RefusalCalibrationConfig(targets_by_mode=D23_TARGETS)
+KEY_BASE = KEY_ZH_SAME
+
+
+def _mode_calibration(tmp_path: Path) -> Path:
+    path = tmp_path / "calibration-modes.json"
+    write_config_atomically(path, finalize_config(MODE_CONFIG))
+    return path
+
+
+def _snapshot_rows() -> list[CalibrationRow]:
+    """The synthetic world the pre-plan code turned into eval/tests/data/refusal-thresholds-modes-unset.json."""
+
+    def row(i, split, ans, score, lang, pairing):
+        return CalibrationRow(
+            item_id=f"{lang}-{pairing}-{split}-{i}",
+            split=split,
+            answerable=ans,
+            score=score,
+            key=f"cohere|fake-quality-v1|{lang}|{pairing}",
+            provider="cohere",
+            model="fake-quality-v1",
+            query_language=lang,
+            pairing=pairing,
+            tokenizer_version=2,
+            rerank_text_version=1,
+            config_hash=HASH,
+        )
+
+    rows: list[CalibrationRow] = []
+    for lang, off in (("zh", 0.0), ("en", 0.03), ("it", -0.02)):
+        for split, ans, values in (
+            ("dev", True, [0.9, 0.82, 0.71, 0.66, 0.58, 0.44, 0.93]),
+            ("dev", False, [0.21, 0.35, 0.52, 0.61]),
+            ("test", True, [0.88, 0.74, 0.69, 0.31]),
+            ("test", False, [0.12, 0.47]),
+        ):
+            rows += [row(i, split, ans, s + off, lang, "same") for i, s in enumerate(values)]
+        rows += [row(i, "dev", True, s, lang, "cross") for i, s in enumerate([0.8, 0.5])]
+        rows.append(row(0, "dev", False, 0.3, lang, "cross"))
+    return rows
+
+
+def _thresholds_text(config: RefusalCalibrationConfig) -> str:
+    records = calibrate_cells(_snapshot_rows(), config, source="fixture", noise_floor=0.02, now="2026-11-26")
+    merged = merge_thresholds(RefusalThresholds(cells=[]), [r.cell for r in records], tokenizer_version=2, rerank_text_version=1)
+    return json.dumps(merged.model_dump(mode="json"), sort_keys=True, indent=2, ensure_ascii=False) + "\n"
+
+
+def _first_difference(a: str, b: str) -> str:
+    for n, (x, y) in enumerate(zip(a.splitlines(), b.splitlines()), start=1):
+        if x != y:
+            return f"line {n}: expected {x!r}, got {y!r}"
+    return f"length differs: expected {len(a.splitlines())} lines, got {len(b.splitlines())}"
+
+
+def test_cell_key_appends_the_mode_only_when_given():
+    assert cell_key("cohere", "m", "zh", "same") == "cohere|m|zh|same"
+    assert cell_key("cohere", "m", "zh", "same", None) == "cohere|m|zh|same"
+    assert cell_key("cohere", "m", "zh", "same", "strict") == "cohere|m|zh|same|strict"
+
+
+def test_fit_threshold_keeps_its_result_and_exposes_every_candidate():
+    answerable, no_answer = [0.9, 0.8, 0.7, 0.6, 0.55], [0.2, 0.3, 0.5]
+    fit = fit_threshold(answerable, no_answer, 0.05)
+    assert fit.threshold == pytest.approx(0.525)
+    assert (fit.false_refusal, fit.correct_refusal) == (0.0, 1.0)
+    rows = fit.candidates
+    assert rows == sweep_candidates(answerable, no_answer)
+    assert len(rows) == len(set(answerable) | set(no_answer)) + 1
+    assert rows[0].threshold == -math.inf
+    assert (rows[0].false_refusal, rows[0].false_answer) == (0.0, 1.0)
+    assert rows[-1].false_refusal == 1.0 and rows[-1].false_answer == 0.0
+    for row in rows:
+        refused_answerable = sum(1 for s in answerable if s < row.threshold)
+        answered_no_answer = sum(1 for s in no_answer if s >= row.threshold)
+        assert (row.false_refusals, row.false_answers) == (refused_answerable, answered_no_answer)
+        assert row.false_refusal == pytest.approx(refused_answerable / 5)
+        assert row.false_answer == pytest.approx(answered_no_answer / 3)
+        assert (row.answerable, row.no_answer) == (5, 3)
+
+
+def test_fit_threshold_capped_takes_the_lowest_false_refusal_whose_false_answer_meets_the_cap():
+    answerable, no_answer = [0.9, 0.8, 0.7, 0.6, 0.4], [0.2, 0.3, 0.5]
+    shared = fit_threshold(answerable, no_answer, 0.05)
+    assert shared.threshold == pytest.approx(0.35)
+    strict = fit_threshold_capped(answerable, no_answer, 0.05)
+    assert strict is not None
+    assert strict.threshold == pytest.approx(0.55)
+    assert strict.false_refusal == pytest.approx(0.2)
+    assert strict.correct_refusal == 1.0
+
+
+def test_fit_threshold_capped_ties_go_to_the_lower_threshold():
+    strict = fit_threshold_capped([0.9], [0.1, 0.3], 0.5)
+    assert strict is not None
+    assert strict.threshold == pytest.approx(0.2)
+    assert strict.false_refusal == 0.0
+
+
+def test_fit_threshold_capped_returns_none_when_only_refusing_every_answerable_item_meets_the_cap():
+    assert fit_threshold_capped([0.1, 0.2], [0.8, 0.9], 0.05) is None
+
+
+def test_fit_cells_without_targets_by_mode_returns_the_base_keys_only():
+    rows = _dev_rows([0.9, 0.8, 0.7, 0.6, 0.55], [0.2, 0.3, 0.5])
+    assert list(fit_cells(rows, RefusalCalibrationConfig(targets_by_mode=None), environment="fixture")) == [KEY_BASE]
+
+
+def test_fit_cells_with_targets_by_mode_adds_one_cell_per_mode():
+    rows = _dev_rows([0.9, 0.8, 0.7, 0.6, 0.55, 0.4], [0.2, 0.3, 0.5])
+    fits = fit_cells(rows, MODE_CONFIG, environment="fixture")
+    assert sorted(fits) == sorted([KEY_BASE, f"{KEY_BASE}|strict", f"{KEY_BASE}|balanced", f"{KEY_BASE}|flexible"])
+    base = fits[KEY_BASE]
+    assert base.mode is None and base.threshold == pytest.approx(0.35)
+    assert fits[f"{KEY_BASE}|strict"].mode == "strict"
+    assert fits[f"{KEY_BASE}|strict"].threshold == pytest.approx(0.525)
+    for mode in ("balanced", "flexible"):
+        fit = fits[f"{KEY_BASE}|{mode}"]
+        assert (fit.mode, fit.threshold, fit.dev) == (mode, base.threshold, base.dev)
+    for fit in fits.values():
+        assert fit.base_key == KEY_BASE
+
+
+def test_balanced_with_its_own_target_uses_it_and_null_uses_the_shared_target():
+    rows = _dev_rows([0.9, 0.8, 0.7, 0.6, 0.55, 0.4], [0.2, 0.3, 0.5])
+    config = RefusalCalibrationConfig(
+        targets_by_mode={"balanced": RefusalModeTargets(target_false_refusal=0.2), "flexible": RefusalModeTargets()}
+    )
+    fits = fit_cells(rows, config, environment="fixture")
+    assert sorted(fits) == sorted([KEY_BASE, f"{KEY_BASE}|balanced", f"{KEY_BASE}|flexible"])
+    assert fits[f"{KEY_BASE}|balanced"].threshold == pytest.approx(fit_threshold([0.9, 0.8, 0.7, 0.6, 0.55, 0.4], [0.2, 0.3, 0.5], 0.2).threshold)
+    assert fits[f"{KEY_BASE}|flexible"].threshold == fits[KEY_BASE].threshold
+
+
+def test_strict_cell_without_a_candidate_under_the_cap_is_uncalibrated_without_a_threshold():
+    rows = _dev_rows([0.2, 0.3, 0.4, 0.45, 0.5], [0.8, 0.9, 0.95]) + [_row("t0", "test", True, 0.9), _row("t1", "test", False, 0.1)]
+    records = {r.cell.key: r for r in calibrate_cells(rows, MODE_CONFIG, source="fixture", noise_floor=0.02, now=DAY)}
+    strict = records[f"{KEY_BASE}|strict"]
+    assert strict.cell.status == "uncalibrated"
+    assert strict.cell.threshold is None
+    assert strict.fit_status == "cap_not_met"
+
+
+def test_thresholds_with_targets_unset_are_byte_identical_to_the_pre_plan_dump():
+    expected = MODES_UNSET_SNAPSHOT.read_text(encoding="utf-8")
+    actual = _thresholds_text(RefusalCalibrationConfig())
+    assert actual == expected, _first_difference(expected, actual)
+    payload = json.loads(actual)
+    assert payload["schema_version"] == 1
+    assert all("mode" not in cell for cell in payload["cells"])
+
+
+def test_thresholds_with_targets_set_carry_mode_cells_under_schema_version_2():
+    payload = json.loads(_thresholds_text(MODE_CONFIG))
+    assert payload["schema_version"] == 2
+    keys = [c["key"] for c in payload["cells"]]
+    for base in ("cohere|fake-quality-v1|zh|same", "cohere|fake-quality-v1|en|cross"):
+        assert {base, f"{base}|strict", f"{base}|balanced", f"{base}|flexible"} <= set(keys)
+    for cell in payload["cells"]:
+        assert ("mode" in cell) == (cell["key"].count("|") == 4)
+        assert "candidates" not in cell and "sweep" not in cell
+    RefusalThresholds.model_validate(payload)
+
+
+def test_base_cells_are_unchanged_when_targets_by_mode_is_set():
+    plain = {r.cell.key: r for r in calibrate_cells(_snapshot_rows(), CONFIG, source="fixture", noise_floor=0.02, now=DAY)}
+    moded = {r.cell.key: r for r in calibrate_cells(_snapshot_rows(), MODE_CONFIG, source="fixture", noise_floor=0.02, now=DAY)}
+    for key, record in plain.items():
+        assert moded[key] == record
+
+
+def test_each_mode_cell_has_its_own_holdout_check_and_evaluation_count():
+    rows = _snapshot_rows()
+    records = {r.cell.key: r for r in calibrate_cells(rows, MODE_CONFIG, source="fixture", noise_floor=0.02, now=DAY)}
+    strict = records[f"{KEY_BASE}|strict"]
+    assert strict.cell.mode == "strict"
+    assert strict.cell.holdout_evaluations == 1
+    assert strict.holdout_basis == "false_answer"
+    assert strict.holdout_pass_limit == pytest.approx(0.05 + max(0.02, 1 / 2))
+    assert strict.input_hash != records[KEY_BASE].input_hash
+    assert records[KEY_BASE].holdout_basis is None
+    for mode in ("balanced", "flexible"):
+        record = records[f"{KEY_BASE}|{mode}"]
+        assert record.cell.holdout == records[KEY_BASE].cell.holdout
+        assert record.holdout_pass_limit == records[KEY_BASE].holdout_pass_limit
+        assert record.cell.holdout_evaluations == 1
+    again = {
+        r.cell.key: r
+        for r in calibrate_cells(
+            rows,
+            MODE_CONFIG,
+            source="fixture",
+            noise_floor=0.02,
+            now="2027-01-01",
+            previous={k: refusal_module.PreviousCell(holdout_evaluations=1, input_hash=r.input_hash, recorded_at=DAY) for k, r in records.items()},
+        )
+    }
+    assert again[f"{KEY_BASE}|strict"].cell.holdout_evaluations == 1
+    assert again[f"{KEY_BASE}|strict"].cell.recorded_at == DAY
+
+
+def test_mode_cells_go_stale_on_a_tokenizer_change_like_base_cells():
+    records = calibrate_cells(_snapshot_rows(), MODE_CONFIG, source="fixture", noise_floor=0.02, now=DAY)
+    existing = merge_thresholds(RefusalThresholds(cells=[]), [r.cell for r in records], tokenizer_version=2, rerank_text_version=1)
+    newer = [r.cell.model_copy(update={"tokenizer_version": 3}) for r in records if r.cell.query_language == "zh"]
+    merged = merge_thresholds(existing, newer, tokenizer_version=3, rerank_text_version=1)
+    assert {c.query_language for c in merged.cells} == {"zh"}
+    assert any(c.mode == "strict" for c in merged.cells)
+    assert merged.schema_version == 2
+
+
+def test_compare_cross_same_reads_base_cells_only():
+    records = calibrate_cells(_snapshot_rows(), MODE_CONFIG, source="fixture", noise_floor=0.02, now=DAY)
+    plain = calibrate_cells(_snapshot_rows(), CONFIG, source="fixture", noise_floor=0.02, now=DAY)
+    assert compare_cross_same(records, 0.02) == compare_cross_same(plain, 0.02)
+
+
+def test_run_with_targets_records_the_full_sweep_on_the_result_not_in_the_thresholds_file(tmp_path):
+    golden, _, scores = _world(tmp_path)
+    target = _empty_thresholds(tmp_path)
+    result = _calibrate(tmp_path, _Runner(scores), golden, write=True, thresholds_path=target, calibration_path=_mode_calibration(tmp_path))
+    assert [r.cell.key for r in result.cells] == [KEY_BASE, f"{KEY_BASE}|balanced", f"{KEY_BASE}|flexible", f"{KEY_BASE}|strict"]
+    (sweep,) = result.sweeps
+    assert sweep.key == KEY_BASE
+    assert len(sweep.candidates) == len(set(DEV_ANSWERABLE) | set(DEV_NO_ANSWER)) + 1
+    for row in sweep.candidates:
+        assert row.dev.answerable_count == len(DEV_ANSWERABLE) and row.dev.no_answer_count == len(DEV_NO_ANSWER)
+        assert row.holdout is not None
+        assert row.holdout.answerable_count == len(TEST_ANSWERABLE) and row.holdout.no_answer_count == len(TEST_NO_ANSWER)
+        assert row.dev.false_answer_rate_upper_bound == pytest.approx(upper_bound(row.dev.false_answer_count, len(DEV_NO_ANSWER)))
+    chosen = {mode for row in sweep.candidates for mode in row.chosen_by}
+    assert chosen == {"*", "strict", "balanced", "flexible"}
+    on_disk = json.loads((tmp_path / "out" / "refusal-calibration-result.json").read_text(encoding="utf-8"))
+    assert on_disk["sweeps"][0]["candidates"]
+    written = target.read_text(encoding="utf-8")
+    assert "candidates" not in written and "false_answer" not in written
+    assert json.loads(written)["schema_version"] == 2
+
+
+def test_run_without_targets_still_records_the_sweep_and_leaves_cells_as_before(tmp_path):
+    golden, _, scores = _world(tmp_path)
+    result = _calibrate(tmp_path, _Runner(scores), golden)
+    assert [r.cell.key for r in result.cells] == [KEY_BASE]
+    (sweep,) = result.sweeps
+    assert {mode for row in sweep.candidates for mode in row.chosen_by} == {"*"}
+    on_disk = json.loads((tmp_path / "out" / "refusal-calibration-result.json").read_text(encoding="utf-8"))
+    assert "targets_by_mode" not in on_disk
+    assert "holdout_basis" not in on_disk["cells"][0]
+
+
+def test_sweep_has_no_holdout_rates_for_a_cell_whose_test_split_was_never_read(tmp_path):
+    rows = _dev_rows([0.9, 0.8, 0.7, 0.6, 0.55], [0.2, 0.3]) + [_row("t0", "test", True, 0.9), _row("t1", "test", False, 0.1)]
+    records = calibrate_cells(rows, MODE_CONFIG, source="fixture", noise_floor=0.02, now=DAY)
+    sweeps = refusal_module.build_sweeps(rows, records)
+    (sweep,) = sweeps
+    assert sweep.candidates and all(row.holdout is None for row in sweep.candidates)
+    assert all(row.chosen_by == [] for row in sweep.candidates)
+
+
+def test_report_shows_the_sweep_the_chosen_rows_and_which_error_each_mode_favours(tmp_path):
+    golden, _, scores = _world(tmp_path)
+    result = _calibrate(tmp_path, _Runner(scores), golden, calibration_path=_mode_calibration(tmp_path))
+    report = (tmp_path / "out" / "report.md").read_text(encoding="utf-8")
+    assert report == render_report(result)
+    assert "## Candidate sweep" in report
+    assert "## Operating points per mode" in report
+    assert "false-answer" in report
+    assert "strict" in report and "balanced" in report and "flexible" in report
+    assert "strict favours fewer false answers" in report
+    assert "balanced favours fewer false refusals" in report
+    assert "flexible favours fewer false refusals" in report
+    strict = next(r for r in result.cells if r.cell.mode == "strict")
+    assert f"{strict.cell.threshold:.4f}" in report
+    no_answer = len(DEV_NO_ANSWER)
+    assert f"n={no_answer}" in report
+    assert "95% upper" in report
+    sweep_lines = [line for line in report.splitlines() if line.startswith("| ") and "chosen" not in line.lower()]
+    assert sum(1 for line in sweep_lines if "strict" in line) >= 1

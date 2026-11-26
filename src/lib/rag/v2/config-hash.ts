@@ -77,6 +77,16 @@ export interface RetrievalConfigHashQueryLayer {
   transforms: Record<string, boolean>;
 }
 
+/** D-34: only the entries of the Phase 4.2 switches that are on; absent while every switch is off. */
+export interface RetrievalConfigHashTuning {
+  table_lookup?: { min_cells: number; limit: number; weight: number };
+  diversity?: { mode: 'collapse' } | { mode: 'mmr'; mmr_lambda: number; mmr_window_factor: number };
+  version_scope?: true;
+  identifier_filter?: true;
+  dup_clusters?: true;
+  identifier_index?: true;
+}
+
 export interface RetrievalConfigHashInput {
   backendId: string;
   embeddingProfileId: string;
@@ -99,6 +109,8 @@ export interface RetrievalConfigHashInput {
   queryLayer?: RetrievalConfigHashQueryLayer | null;
   /** XLG-04: present only when translation legs run for the request (RAG_DOC_TRANSLATION on and the tenant has translations). */
   docTranslation?: { switch: 'on'; languages: string[]; weight: number } | null;
+  /** D-34: present only while a Phase 4.2 query or index switch is on (tuningHashComponent). */
+  tuning?: RetrievalConfigHashTuning | null;
 }
 
 function sortKeys(value: unknown): unknown {
@@ -145,6 +157,7 @@ function buildPayload(input: RetrievalConfigHashInput): Record<string, unknown> 
     ...(input.effectiveOn ? { effective_on: input.effectiveOn } : {}),
     ...(input.queryLayer ? { query_layer: input.queryLayer } : {}),
     ...(input.docTranslation ? { doc_translation: input.docTranslation } : {}),
+    ...(input.tuning && Object.keys(input.tuning).length > 0 ? { tuning: input.tuning } : {}),
   };
 }
 

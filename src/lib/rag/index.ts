@@ -14,6 +14,11 @@ export { loadRagConfig, effectiveLexicalVersion, CORE_STAGES, OPTIONAL_STAGES, P
 export type { RagConfig, StageName } from './config';
 export { createTraceCollector } from './trace/collector';
 export type { TraceCollector, StageEntry } from './trace/collector';
+export { isTraceId } from './trace/collector';
+export type { TraceCacheState, TraceTiming } from './trace/collector';
+export { withFirstTextDelta, awaitPreGenerationDelay, setPreGenerationDelayForTests, resetPreGenerationDelayForTests } from './trace/ttft';
+export { postLangfuseScores } from './trace/scores';
+export type { LangfuseScoreInput, PostScoresResult } from './trace/scores';
 export { finishTrace } from './trace/finish';
 export type { FinishTraceOptions } from './trace/finish';
 export { isTenantScope, scopeKey } from './tenant/scope';
