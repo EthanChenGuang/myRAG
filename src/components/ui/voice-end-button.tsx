@@ -41,7 +41,7 @@ export function VoiceEndButton({ isActive, onClick, disabled }: VoiceEndButtonPr
                 type="button"
                 onClick={onClick}
                 className={cn(
-                    "inline-flex w-9 h-9 items-center justify-center rounded-tl-xl rounded-tr-xl rounded-bl-xl rounded-br-3xl transition-all duration-200 group relative",
+                    "inline-flex w-9 h-9 items-center justify-center rounded-full transition-[background-color,transform] duration-200 group relative",
                     "bg-[#FF6417] hover:bg-[#E55000] dark:bg-[#E6E6E6] dark:hover:bg-[#D4D4D4]",
                     "disabled:opacity-50 disabled:cursor-not-allowed"
                 )}

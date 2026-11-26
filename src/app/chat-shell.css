@@ -1,0 +1,842 @@
+/*
+ * Chat shell: glass top bar, bottom-pinned composer dock, pill controls and bubble tokens.
+ * Contract: .planning/quick/2026-11-25-chat-ui-redesign/chat-ui-redesign-UI-SPEC.md
+ * Imported after globals.css, so equal-specificity rules here win.
+ */
+
+:root {
+  --chat-canvas-rgb: 255 241 229;
+  --chat-canvas: rgb(var(--chat-canvas-rgb));
+  --chat-surface: #fffaf6;
+  --chat-bubble: #f3e2d3;
+  --chat-ink: #2b2521;
+  --chat-ink-muted: #6b5f56;
+  --chat-ink-faint: #7a6d63;
+  --chat-hairline: rgba(110, 70, 40, 0.14);
+  --chat-hover: rgba(110, 70, 40, 0.08);
+  --chat-press: rgba(110, 70, 40, 0.14);
+  --chat-accent: #f2611a;
+  --chat-accent-ink: #b8430e;
+  --chat-focus: rgba(242, 97, 26, 0.55);
+  --chat-card-shadow: 0 8px 24px -12px rgba(60, 30, 10, 0.28), 0 1px 2px rgba(60, 30, 10, 0.06);
+  --chat-glass-fill: rgba(255, 250, 246, 0.46);
+  --chat-glass-border: rgba(0, 0, 0, 0.08);
+  --chat-glass-shadow: 0 6px 18px -8px rgba(60, 30, 10, 0.22), 0 1px 2px rgba(60, 30, 10, 0.06);
+  --chat-bar-h: 56px;
+  --chat-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.dark {
+  --chat-canvas-rgb: 33 33 33;
+  --chat-surface: #2c2b29;
+  --chat-bubble: #323130;
+  --chat-ink: #ece7e2;
+  --chat-ink-muted: #b4aca5;
+  --chat-ink-faint: #9c948d;
+  --chat-hairline: rgba(255, 236, 220, 0.1);
+  --chat-hover: rgba(255, 236, 220, 0.08);
+  --chat-press: rgba(255, 236, 220, 0.14);
+  --chat-accent: #ff7a33;
+  --chat-accent-ink: #ffa36e;
+  --chat-focus: rgba(255, 122, 51, 0.6);
+  --chat-glass-fill: rgba(56, 55, 53, 0.4);
+  --chat-glass-border: rgba(255, 255, 255, 0.12);
+  --chat-glass-shadow: 0 8px 20px -8px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --chat-card-shadow: 0 10px 28px -12px rgba(0, 0, 0, 0.55), 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+html.light {
+  color-scheme: light;
+}
+
+html.dark {
+  color-scheme: dark;
+}
+
+/* ---------- Top bar: floating capsules over a progressive blur ---------- */
+
+html .header-container.chat-topbar {
+  position: fixed !important;
+  top: 0 !important;
+  height: auto !important;
+  min-height: calc(var(--chat-bar-h) + env(safe-area-inset-top, 0px));
+  padding-top: env(safe-area-inset-top, 0px) !important;
+  transform: translate3d(0, var(--chat-vv-top, 0px), 0) !important;
+  contain: none;
+  background-color: transparent !important;
+  border: 0;
+  box-shadow: none;
+  pointer-events: none;
+  font-family: var(--font-chat-ui), ui-sans-serif, system-ui, sans-serif;
+  color: var(--chat-ink);
+}
+
+/* Two stacked layers: a light blur with the canvas tint over the whole band, a heavy blur near the top edge.
+   Both fade out ~32px below the capsules, so text dissolves with no edge. */
+html .header-container.chat-topbar::before,
+html .header-container.chat-topbar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: calc(100% + 32px);
+  z-index: -1;
+  pointer-events: none;
+}
+
+html .header-container.chat-topbar::before {
+  background: linear-gradient(
+    to bottom,
+    rgb(var(--chat-canvas-rgb) / 0.94) 0,
+    rgb(var(--chat-canvas-rgb) / 0.72) 45%,
+    rgb(var(--chat-canvas-rgb) / 0) 100%
+  );
+}
+
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  html .header-container.chat-topbar::before {
+    background: linear-gradient(
+      to bottom,
+      rgb(var(--chat-canvas-rgb) / 0.78) 0,
+      rgb(var(--chat-canvas-rgb) / 0.45) 50%,
+      rgb(var(--chat-canvas-rgb) / 0) 100%
+    );
+    -webkit-backdrop-filter: blur(6px) saturate(130%);
+    backdrop-filter: blur(6px) saturate(130%);
+    -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 55%, transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 0, #000 55%, transparent 100%);
+  }
+
+  html .header-container.chat-topbar::after {
+    -webkit-backdrop-filter: blur(20px) saturate(130%);
+    backdrop-filter: blur(20px) saturate(130%);
+    -webkit-mask-image: linear-gradient(to bottom, #000 0, #000 35%, transparent 70%);
+    mask-image: linear-gradient(to bottom, #000 0, #000 35%, transparent 70%);
+  }
+}
+
+@media (min-width: 1024px) {
+  html .header-container.chat-topbar {
+    min-height: 4rem;
+  }
+}
+
+/* ---------- Glass capsules ---------- */
+
+.chat-capsule {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 9999px;
+  background-color: var(--chat-surface);
+  border: 0.5px solid var(--chat-glass-border);
+  box-shadow: var(--chat-glass-shadow);
+}
+
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .chat-capsule {
+    background-color: var(--chat-glass-fill);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(20px) saturate(180%);
+  }
+}
+
+.chat-title-capsule {
+  height: 46px;
+  padding: 0 18px;
+}
+
+.chat-title-capsule__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+
+@media (min-width: 1024px) {
+  .chat-title-capsule {
+    height: 42px;
+  }
+}
+
+/* Phone and tablet bar: 44px capsules, 16px side margin, 12px between capsules, 8px below the safe area. */
+@media (max-width: 1023px) {
+  html .chat-topbar__row {
+    height: auto;
+    min-height: var(--chat-bar-h);
+    padding: 8px max(16px, env(safe-area-inset-right, 0px)) 4px max(16px, env(safe-area-inset-left, 0px));
+  }
+
+  .chat-topbar__mobile,
+  .chat-topbar__mobile > div:first-child {
+    gap: 12px;
+  }
+
+  .chat-capsule--round {
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .chat-title-capsule {
+    height: 44px;
+    min-width: 110px;
+    padding: 0 20px;
+    justify-content: center;
+  }
+
+  .chat-capsule--actions {
+    height: 44px;
+    padding: 0 2px;
+    gap: 6px;
+  }
+
+  /* 44px hit area, 32px visible avatar disc inset inside the capsule. */
+  html .header-container .chat-capsule--actions button.chat-avatar-pill {
+    width: 44px;
+    height: 44px;
+    border: 6px solid transparent;
+    background-clip: padding-box;
+  }
+}
+
+/* ---------- Pills ---------- */
+
+.chat-pill-icon,
+.chat-model-pill,
+.chat-avatar-pill,
+.chat-source-pill {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: background-color 150ms ease-out, transform 120ms ease-out, box-shadow 150ms ease-out;
+}
+
+html .chat-pill-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px !important;
+  background-color: transparent !important;
+  color: var(--chat-ink);
+}
+
+html .chat-pill-icon:hover,
+html .chat-model-pill:hover,
+html .chat-avatar-pill:hover {
+  background-color: var(--chat-hover) !important;
+}
+
+html .chat-pill-icon:active,
+html .chat-model-pill:active,
+html .chat-avatar-pill:active {
+  transform: scale(0.96);
+  background-color: var(--chat-press) !important;
+}
+
+html .chat-pill-icon.is-ghost-active {
+  background-color: rgba(147, 51, 234, 0.14) !important;
+  color: #7e22ce;
+}
+
+html.dark .chat-pill-icon.is-ghost-active {
+  background-color: rgba(168, 85, 247, 0.2) !important;
+  color: #d8b4fe;
+}
+
+/* globals.css tints every header button (".dark .header-container button", !important); pills stay clear. */
+html .header-container button.chat-pill-icon,
+html .header-container button.chat-model-pill {
+  background-color: transparent !important;
+}
+
+html .header-container button.chat-avatar-pill {
+  background-color: var(--chat-hover) !important;
+}
+
+html .header-container button.chat-pill-icon:hover,
+html .header-container button.chat-model-pill:hover,
+html .header-container button.chat-model-pill.is-open,
+html .header-container button.chat-avatar-pill:hover {
+  background-color: var(--chat-hover) !important;
+}
+
+html .header-container button.chat-pill-icon:active,
+html .header-container button.chat-model-pill:active,
+html .header-container button.chat-avatar-pill:active {
+  background-color: var(--chat-press) !important;
+}
+
+html .header-container button.chat-pill-icon.is-ghost-active {
+  background-color: rgba(147, 51, 234, 0.14) !important;
+}
+
+html.dark .header-container button.chat-pill-icon.is-ghost-active {
+  background-color: rgba(168, 85, 247, 0.2) !important;
+}
+
+.chat-pill-group > * {
+  border-radius: 9999px;
+}
+
+.chat-pill-group button {
+  border-radius: 9999px !important;
+}
+
+html .chat-model-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px 0 14px;
+  border-radius: 9999px;
+  background-color: transparent !important;
+  color: var(--chat-ink);
+}
+
+html .chat-model-pill.is-open {
+  background-color: var(--chat-hover) !important;
+}
+
+.chat-model-pill__label {
+  font-family: var(--font-chat-ui), ui-sans-serif, system-ui, sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+
+.chat-model-pill__chevron {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--chat-ink-muted);
+}
+
+html .chat-avatar-pill {
+  background-color: var(--chat-hover) !important;
+  border: 0.5px solid var(--chat-hairline);
+  color: var(--chat-ink);
+}
+
+.chat-pill-icon:focus-visible,
+.chat-model-pill:focus-visible,
+.chat-avatar-pill:focus-visible,
+.chat-source-pill:focus-visible,
+.chat-sidebar-row:focus-visible,
+.chat-composer-card button:focus-visible {
+  outline: 2px solid var(--chat-focus) !important;
+  outline-offset: 2px;
+}
+
+/* ---------- Composer dock ---------- */
+
+.chat-dock {
+  bottom: var(--chat-kb-inset, 0px) !important;
+  padding-bottom: max(8px, env(safe-area-inset-bottom, 0px)) !important;
+  isolation: isolate;
+}
+
+html[data-chat-keyboard='open'] .chat-dock {
+  padding-bottom: 8px !important;
+}
+
+/* Progressive blur behind the dock, strongest at the bottom edge: messages dissolve under it instead of being cut. */
+.chat-dock::before,
+.chat-dock::after {
+  content: '';
+  position: absolute;
+  inset: -48px 0 0 0;
+  z-index: -1;
+  pointer-events: none;
+}
+
+.chat-dock::before {
+  background: linear-gradient(
+    to top,
+    rgb(var(--chat-canvas-rgb) / 0.94) 0,
+    rgb(var(--chat-canvas-rgb) / 0.8) 55%,
+    rgb(var(--chat-canvas-rgb) / 0) 100%
+  );
+}
+
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  .chat-dock::before {
+    background: linear-gradient(
+      to top,
+      rgb(var(--chat-canvas-rgb) / 0.8) 0,
+      rgb(var(--chat-canvas-rgb) / 0.5) 50%,
+      rgb(var(--chat-canvas-rgb) / 0) 100%
+    );
+    -webkit-backdrop-filter: blur(6px) saturate(160%);
+    backdrop-filter: blur(6px) saturate(160%);
+    -webkit-mask-image: linear-gradient(to top, #000 0, #000 50%, transparent 100%);
+    mask-image: linear-gradient(to top, #000 0, #000 50%, transparent 100%);
+  }
+
+  .chat-dock::after {
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+    backdrop-filter: blur(18px) saturate(160%);
+    -webkit-mask-image: linear-gradient(to top, #000 0, #000 30%, transparent 65%);
+    mask-image: linear-gradient(to top, #000 0, #000 30%, transparent 65%);
+  }
+}
+
+/* The initial-view dock lets taps through its empty area; the pseudo layer must not catch them either. */
+#mobile-dock.chat-dock > * {
+  pointer-events: auto;
+}
+
+@media (max-width: 639px) {
+  .chat-dock {
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+
+  .chat-dock .chat-input-container > .flex {
+    padding: 0;
+  }
+}
+
+/* Card */
+html .chat-input-container form.chat-composer-card {
+  background: transparent !important;
+  border: 0.5px solid var(--chat-hairline);
+  border-radius: 24px !important;
+  box-shadow: var(--chat-card-shadow) !important;
+  padding: 6px !important;
+  margin: 0 !important;
+  font-family: var(--font-chat-ui), ui-sans-serif, system-ui, sans-serif;
+}
+
+@media (min-width: 640px) {
+  html .chat-input-container form.chat-composer-card {
+    margin-bottom: 2rem !important;
+  }
+}
+
+html .chat-input-container form.chat-composer-card:focus-within {
+  border-color: var(--chat-focus);
+}
+
+.chat-composer-fill {
+  background-color: var(--chat-surface);
+}
+
+.chat-input-container textarea::placeholder {
+  color: var(--chat-ink-faint) !important;
+  -webkit-text-fill-color: var(--chat-ink-faint) !important;
+  opacity: 1;
+}
+
+.chat-input-container textarea {
+  caret-color: var(--chat-accent) !important;
+}
+
+.chat-composer-card button {
+  border-radius: 9999px !important;
+}
+
+.chat-composer-card button:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+/* Model pill in the composer tool row */
+html .chat-composer-card button.chat-composer-model-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 36px;
+  max-width: 168px;
+  padding: 0 10px 0 13px;
+  border: 0.5px solid var(--chat-hairline);
+  background-color: var(--chat-hover);
+  color: var(--chat-ink);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  transition: background-color 150ms ease-out, transform 120ms ease-out;
+}
+
+html .chat-composer-card button.chat-composer-model-pill:hover,
+html .chat-composer-card button.chat-composer-model-pill.is-open {
+  background-color: var(--chat-press);
+}
+
+.chat-composer-model-pill svg {
+  color: var(--chat-ink-muted);
+}
+
+.chat-composer-model-pill__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------- Phone composer: one-line capsule at rest, card while in use ---------- */
+
+@media (max-width: 639px) {
+  /* The travelling comet border reads as a stray orange arc on the small card. */
+  .chat-composer-comet {
+    display: none;
+  }
+
+  .chat-composer-fill {
+    background-color: var(--chat-surface);
+  }
+
+  @supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+    .chat-composer-fill {
+      background-color: var(--chat-glass-fill);
+      -webkit-backdrop-filter: blur(20px) saturate(180%);
+      backdrop-filter: blur(20px) saturate(180%);
+    }
+  }
+
+  html .chat-input-container form.chat-composer-card {
+    border-color: var(--chat-glass-border);
+    box-shadow: var(--chat-glass-shadow) !important;
+    transition: border-radius 220ms var(--chat-ease), padding 220ms var(--chat-ease);
+  }
+
+  .chat-composer-text-row {
+    transition: margin-bottom 220ms var(--chat-ease), padding 220ms var(--chat-ease);
+  }
+
+  .chat-input-container textarea {
+    transition: height 220ms var(--chat-ease), padding 220ms var(--chat-ease);
+  }
+
+  /* Round tool buttons are filled discs, like the send button, not outlined rings. */
+  html .chat-composer-tools button.dropdown-trigger,
+  html .chat-composer-secondary > button:not(.chat-composer-model-pill) {
+    border-color: transparent !important;
+    background-color: var(--chat-hover) !important;
+  }
+
+  html .chat-composer-tools button.dropdown-trigger:active,
+  html .chat-composer-secondary > button:not(.chat-composer-model-pill):active {
+    background-color: var(--chat-press) !important;
+  }
+
+  .chat-input-container[data-composer='collapsed'] form.chat-composer-card {
+    padding: 5px !important;
+    border-radius: 9999px !important;
+  }
+
+  .chat-input-container[data-composer='collapsed'] .chat-composer-fill {
+    border-radius: 9999px;
+  }
+
+  .chat-input-container[data-composer='collapsed'] .chat-composer-text-row {
+    margin-bottom: 0 !important;
+    padding-left: 36px;
+    padding-right: 106px;
+  }
+
+  .chat-input-container[data-composer='collapsed'] textarea {
+    height: 40px !important;
+    min-height: 40px !important;
+    padding-top: 8px !important;
+    padding-bottom: 8px !important;
+    overflow: hidden !important;
+    white-space: nowrap !important;
+    text-overflow: ellipsis;
+  }
+
+  /* Taps on the empty middle of the capsule reach the textarea itself, so iOS opens the keyboard in the same gesture. */
+  .chat-input-container[data-composer='collapsed'] .chat-composer-tools,
+  .chat-input-container[data-composer='collapsed'] .chat-composer-tools div {
+    pointer-events: none;
+  }
+
+  .chat-input-container[data-composer='collapsed'] .chat-composer-tools {
+    padding: 2px 0 !important;
+  }
+
+  .chat-input-container[data-composer='collapsed'] .chat-composer-tools button {
+    pointer-events: auto;
+  }
+
+  .chat-input-container[data-composer='collapsed'] .chat-composer-tools > div > div:first-child {
+    margin-left: 0;
+  }
+
+  .chat-input-container[data-composer='collapsed'] .chat-composer-secondary {
+    display: none;
+  }
+
+  .chat-input-container[data-composer='collapsed'] .chat-composer-tools {
+    padding-inline: 0 !important;
+  }
+
+  .chat-composer-trailing,
+  .chat-composer-trailing > .flex {
+    gap: 8px;
+  }
+
+  .chat-composer-tools > .flex > .flex:first-child,
+  .chat-composer-secondary {
+    gap: 8px;
+  }
+
+  .chat-input-container[data-composer='expanded'] textarea {
+    padding-left: 14px !important;
+    padding-right: 14px !important;
+    padding-top: 12px !important;
+  }
+
+  .chat-input-container[data-composer='expanded'] .chat-composer-secondary {
+    animation: chat-composer-reveal 200ms var(--chat-ease) both;
+  }
+
+  /* Disclaimer only on the empty welcome screen at rest; conversations and the open keyboard keep the space. */
+  .chat-dock:not(#mobile-dock) .chat-disclaimer--compact,
+  .chat-input-container[data-composer='expanded'] .chat-disclaimer--compact {
+    display: none;
+  }
+}
+
+@keyframes chat-composer-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------- Scroll-to-latest button ---------- */
+
+html .chat-scroll-fab {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(100% + 12px);
+  margin-inline: auto;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  color: var(--chat-ink);
+  background-color: var(--chat-surface);
+  border: 0.5px solid var(--chat-glass-border);
+  box-shadow: var(--chat-glass-shadow);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+@supports ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
+  html .chat-scroll-fab {
+    background-color: var(--chat-glass-fill);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(20px) saturate(180%);
+  }
+}
+
+html .chat-scroll-fab:hover {
+  background-color: var(--chat-surface);
+}
+
+html .chat-scroll-fab:focus-visible {
+  outline: 2px solid var(--chat-focus);
+  outline-offset: 2px;
+}
+
+/* Disclaimer */
+.chat-disclaimer {
+  margin: 0;
+  text-align: center;
+  font-family: var(--font-chat-ui), ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--chat-ink-faint);
+}
+
+.chat-disclaimer--compact {
+  font-size: 11px;
+  padding: 4px 8px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------- Message list ---------- */
+
+html .chat-scroll {
+  -webkit-mask-image: none;
+  mask-image: none;
+  overscroll-behavior-y: contain;
+}
+
+.chat-list {
+  padding-top: max(0px, calc(env(safe-area-inset-top, 0px) - 16px));
+  padding-bottom: calc(var(--chat-dock-h, 120px) + var(--chat-kb-inset, 0px) + 24px) !important;
+}
+
+/* User bubble (rendered by chat-message.tsx; styled here to keep that file untouched). */
+#main-chat-container .chat-message.rounded-\[20px\] {
+  background-color: var(--chat-bubble) !important;
+  border-radius: 22px !important;
+  padding: 10px 16px !important;
+  color: var(--chat-ink);
+}
+
+/* Assistant action row: 32px and 28px icon buttons become pills. */
+#main-chat-container button.rounded-md.w-8.h-8,
+#main-chat-container button.rounded-md.w-7.h-7,
+#main-chat-container button.rounded-md.w-6.h-8 {
+  border-radius: 9999px !important;
+}
+
+#main-chat-container button.rounded-md.w-8.h-8:hover,
+#main-chat-container button.rounded-md.w-7.h-7:hover {
+  background-color: var(--chat-hover) !important;
+}
+
+/* Sources pill */
+html .chat-source-pill {
+  color: var(--chat-accent-ink);
+  border: 0.5px solid var(--chat-hairline);
+  background-color: transparent;
+}
+
+html .chat-source-pill:hover:not(:disabled),
+html .chat-source-pill.is-open {
+  background-color: var(--chat-hover);
+}
+
+.chat-source-pill__count {
+  background-color: var(--chat-hover);
+  color: var(--chat-ink-muted);
+}
+
+/* ---------- Settings sheet (phone toolbar menu) ---------- */
+
+[data-mobile-tools='true'] {
+  border-radius: 20px !important;
+  box-shadow: var(--chat-card-shadow), 0 16px 40px -16px rgba(60, 30, 10, 0.25) !important;
+}
+
+[data-mobile-tools='true'] > div {
+  background-color: var(--chat-surface) !important;
+  border: 0.5px solid var(--chat-hairline);
+  border-radius: 20px !important;
+  padding: 6px !important;
+}
+
+[data-mobile-tools='true'] button {
+  background-color: transparent !important;
+  color: var(--chat-ink) !important;
+  border-radius: 14px !important;
+  font-family: var(--font-chat-ui), ui-sans-serif, system-ui, sans-serif;
+  font-size: 15px !important;
+  min-height: 48px;
+}
+
+[data-mobile-tools='true'] button:hover,
+[data-mobile-tools='true'] button:active {
+  background-color: var(--chat-hover) !important;
+}
+
+[data-mobile-tools='true'] button:focus-visible {
+  outline: 2px solid var(--chat-focus) !important;
+  outline-offset: -2px;
+}
+
+[data-mobile-tools='true'] svg {
+  stroke-width: 1.75;
+  color: var(--chat-ink-muted);
+}
+
+/* ---------- Sidebar rows ---------- */
+
+.chat-sidebar-row {
+  min-height: 40px;
+  font-family: var(--font-chat-ui), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* ---------- Empty state on phones ---------- */
+
+@media (max-width: 639px) {
+  html .mobile-welcome-container {
+    margin-top: 0 !important;
+    padding-top: calc(var(--chat-bar-h) + env(safe-area-inset-top, 0px));
+    padding-bottom: var(--chat-dock-h, 160px);
+    min-height: 0;
+  }
+
+  html .mobile-welcome-container h1.welcome-text {
+    font-size: 1.625rem !important;
+    line-height: 1.2;
+    letter-spacing: -0.02em;
+  }
+}
+
+.welcome-text {
+  text-wrap: balance;
+}
+
+/* ---------- Fallbacks and preferences ---------- */
+
+@media (prefers-reduced-transparency: reduce) {
+  html .header-container.chat-topbar::before {
+    background: linear-gradient(to bottom, var(--chat-canvas) 0, var(--chat-canvas) 60%, rgb(var(--chat-canvas-rgb) / 0) 100%) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  .chat-dock::before {
+    background: linear-gradient(to top, var(--chat-canvas) 0, var(--chat-canvas) 60%, rgb(var(--chat-canvas-rgb) / 0) 100%) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+
+  html .header-container.chat-topbar::after,
+  .chat-dock::after {
+    display: none;
+  }
+
+  .chat-capsule,
+  html .chat-scroll-fab,
+  .chat-composer-fill {
+    background-color: var(--chat-surface) !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-pill-icon,
+  .chat-model-pill,
+  .chat-avatar-pill,
+  .chat-source-pill {
+    transition: none;
+  }
+
+  .chat-input-container form.chat-composer-card,
+  .chat-composer-text-row,
+  .chat-input-container textarea {
+    transition: none !important;
+  }
+
+  .chat-input-container[data-composer='expanded'] .chat-composer-secondary {
+    animation: none;
+  }
+
+  .chat-pill-icon:active,
+  .chat-model-pill:active,
+  .chat-avatar-pill:active,
+  .chat-composer-card button:active:not(:disabled) {
+    transform: none;
+  }
+}

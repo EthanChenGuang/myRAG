@@ -1,8 +1,7 @@
 'use client';
 
-import { PanelLeft, SquarePen, ChevronDown, Ghost } from 'lucide-react';
+import { PanelLeft, SquarePen, Ghost } from 'lucide-react';
 import { useAuth } from '@/components/providers/auth-provider';
-import { ModelSelector } from './model-selector';
 import { ThemeToggle } from './theme-toggle';
 import { ShareChatButton } from './share-chat-button';
 import { usePathname } from 'next/navigation';
@@ -13,10 +12,8 @@ import { useShallow } from 'zustand/react/shallow';
 import { UserMenu } from './user-menu';
 import { PermanentDocUploadButton } from './permanent-doc-upload-button';
 import { MobileToolbarFixed } from './mobile-toolbar-fixed';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import type { ProcessedDocument } from './permanent-doc-upload-button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { useTheme } from '@/components/theme-provider';
 import { useLanguage } from '@/components/providers/language-provider';
 import { useAdminStore, useAdmin } from '@/lib/admin-store';
 import Image from 'next/image';
@@ -40,112 +37,15 @@ export function Header({ onNewChat, onToggleSidebar, isSidebarOpen }: HeaderProp
   const { isGhostMode, toggleGhostMode, hasUnsavedGhostMessages } = useGhostModeStore();
   const [isPermanentDocProcessing, setIsPermanentDocProcessing] = useState(false);
   const [permanentDoc, setPermanentDoc] = useState<ProcessedDocument | null>(null);
-  const { theme } = useTheme();
   const { t } = useLanguage();
-  const isDarkMode = theme === 'dark';
-  const dropdownBgColor = isDarkMode ? '#2F2F2F' : '#EFE1D5';
-  const dropdownBorder = isDarkMode ? '1px solid #2F2F2F' : '1px solid #EFE1D5';
 
-  // Separate dropdown states for each ModelSelector instance
-  const [isModelDropdownOpenClosed, setIsModelDropdownOpenClosed] = useState(false);
-  const [isModelDropdownOpenOpen, setIsModelDropdownOpenOpen] = useState(false);
-  const [isModelDropdownOpenMobile, setIsModelDropdownOpenMobile] = useState(false);
-  const [isMcpDropdownOpen, setIsMcpDropdownOpen] = useState(false);
-
-  const modelDropdownRef = useRef<HTMLDivElement>(null);
-  const modelTriggerRef = useRef<HTMLButtonElement>(null);
-  const modelDropdownOpenRef = useRef<HTMLDivElement>(null);
-  const modelTriggerOpenRef = useRef<HTMLButtonElement>(null);
-  const modelDropdownMobileRef = useRef<HTMLDivElement>(null);
-  const modelTriggerMobileRef = useRef<HTMLButtonElement>(null);
-  const mcpDropdownRef = useRef<HTMLDivElement>(null);
-  const mcpTriggerRef = useRef<HTMLButtonElement>(null);
   const { isAdmin } = useAdmin();
   const [headerLogoType, setHeaderLogoType] = useState<string>('text');
   const [headerLogoText, setHeaderLogoText] = useState<string>('myRAG');
   const [headerLogoUrl, setHeaderLogoUrl] = useState<string | null>(null);
-  const [sidebarWidth, setSidebarWidth] = useState(256); // Default sidebar width
 
   // Show TextSizeSlider whenever there's a current chat (saved or ghost)
   const hasActiveChat = Boolean(currentChatId);
-
-  // Handle dynamic sidebar width for proper positioning
-  useEffect(() => {
-    const updateSidebarWidth = () => {
-      // On larger screens, use 256px, on smaller screens adjust as needed
-      if (typeof window !== 'undefined') {
-        const width = window.innerWidth >= 1024 ? 256 : (window.innerWidth >= 768 ? 256 : 0);
-        setSidebarWidth(width);
-      }
-    };
-
-    // Initial calculation
-    updateSidebarWidth();
-
-    // Update on resize
-    window.addEventListener('resize', updateSidebarWidth);
-
-    return () => {
-      window.removeEventListener('resize', updateSidebarWidth);
-    };
-  }, []);
-
-  // Handle clicks outside the model dropdown
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      // If dropdown is open and the click is outside both the dropdown and its trigger
-      if (isModelDropdownOpenClosed && modelDropdownRef.current && modelTriggerRef.current) {
-        if (
-          !modelDropdownRef.current.contains(event.target as Node) &&
-          !modelTriggerRef.current.contains(event.target as Node) &&
-          (!modelDropdownOpenRef.current || !modelDropdownOpenRef.current.contains(event.target as Node)) &&
-          (!modelTriggerOpenRef.current || !modelTriggerOpenRef.current.contains(event.target as Node))
-        ) {
-          setIsModelDropdownOpenClosed(false);
-        }
-      }
-
-      if (isModelDropdownOpenOpen && modelDropdownRef.current && modelTriggerRef.current) {
-        if (
-          !modelDropdownRef.current.contains(event.target as Node) &&
-          !modelTriggerRef.current.contains(event.target as Node) &&
-          (!modelDropdownOpenRef.current || !modelDropdownOpenRef.current.contains(event.target as Node)) &&
-          (!modelTriggerOpenRef.current || !modelTriggerOpenRef.current.contains(event.target as Node))
-        ) {
-          setIsModelDropdownOpenOpen(false);
-        }
-      }
-
-      if (isModelDropdownOpenMobile && modelDropdownMobileRef.current && modelTriggerMobileRef.current) {
-        if (
-          !modelDropdownMobileRef.current.contains(event.target as Node) &&
-          !modelTriggerMobileRef.current.contains(event.target as Node)
-        ) {
-          setIsModelDropdownOpenMobile(false);
-        }
-      }
-
-      // Same check for MCP dropdown
-      if (isMcpDropdownOpen && mcpDropdownRef.current && mcpTriggerRef.current) {
-        if (
-          !mcpDropdownRef.current.contains(event.target as Node) &&
-          !mcpTriggerRef.current.contains(event.target as Node)
-        ) {
-          setIsMcpDropdownOpen(false);
-        }
-      }
-    };
-
-    // Add event listener when either dropdown is open
-    if (isModelDropdownOpenClosed || isModelDropdownOpenOpen || isModelDropdownOpenMobile || isMcpDropdownOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    // Cleanup
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isModelDropdownOpenClosed, isModelDropdownOpenOpen, isModelDropdownOpenMobile, isMcpDropdownOpen]);
 
   // Initialize header logo configuration
   useEffect(() => {
@@ -213,23 +113,6 @@ export function Header({ onNewChat, onToggleSidebar, isSidebarOpen }: HeaderProp
     setIsPermanentDocProcessing(false);
   };
 
-  const handleMcpDropdownOpenChange = (open: boolean) => {
-    setIsMcpDropdownOpen(open);
-  };
-
-  // New separate handler functions for each ModelSelector dropdown
-  const handleModelDropdownClosedChange = (open: boolean) => {
-    setIsModelDropdownOpenClosed(open);
-  };
-
-  const handleModelDropdownOpenChange = (open: boolean) => {
-    setIsModelDropdownOpenOpen(open);
-  };
-
-  const handleModelDropdownMobileChange = (open: boolean) => {
-    setIsModelDropdownOpenMobile(open);
-  };
-
   const handleGhostModeToggle = () => {
     if (!isGhostMode) {
       // Enabling ghost mode - no confirmation needed
@@ -251,7 +134,7 @@ export function Header({ onNewChat, onToggleSidebar, isSidebarOpen }: HeaderProp
   return (
     <div className={cn(
       "fixed top-0",
-      "header-container",
+      "header-container chat-topbar",
       isSidebarOpen ? "lg:left-64 left-0 right-0" : "left-0 right-0"
     )}
       style={{ zIndex: 60 }}>
@@ -318,154 +201,46 @@ export function Header({ onNewChat, onToggleSidebar, isSidebarOpen }: HeaderProp
         }
       `}</style>
 
-      <div className="relative flex items-center justify-between h-16 px-3 sm:px-6 bg-transparent pointer-events-auto">
+      <div className="chat-topbar__row relative flex items-center justify-between h-14 lg:h-16 px-3 sm:px-5 bg-transparent pointer-events-none">
         {/* Desktop Layout (1024px and up) */}
         <div className="hidden lg:flex items-center justify-between w-full">
-          {/* Left section with conditional layout based on sidebar state */}
-          <div className="flex items-center gap-2 pointer-events-auto z-20">
-            {/* Show sidebar toggle only when sidebar is closed */}
+          <div className="flex items-center gap-2 z-20">
             {!isSidebarOpen && (
-              <PortalTooltip content={t('openSidebar')} align="right">
-                <button
-                  onClick={onToggleSidebar}
-                  className={cn(
-                    "flex items-center justify-center w-9 h-9 text-gray-700 dark:text-gray-200 rounded-lg transition-colors group relative backdrop-blur-md",
-                    "bg-[#FFE0D0]/30 hover:bg-[#FFE0D0] dark:bg-[#2F2F2F]/30 dark:hover:bg-[#424242]"
-                  )}
-                >
-                  <PanelLeft className="h-5 w-5" />
-                  <span className="sr-only">{t('openSidebar')}</span>
-                </button>
-              </PortalTooltip>
-            )}
-
-            {/* New chat button - only show when sidebar is closed and user is authenticated */}
-            {!isSidebarOpen && onNewChat && (!isAuthEnabled || user) && (
-              <PortalTooltip content={t('newChat')}>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onNewChat();
-                  }}
-                  className={cn(
-                    "flex items-center justify-center w-9 h-9 text-gray-700 dark:text-gray-200 rounded-lg transition-colors group relative backdrop-blur-md",
-                    "bg-[#FFE0D0]/30 hover:bg-[#FFE0D0] dark:bg-[#2F2F2F]/30 dark:hover:bg-[#424242]"
-                  )}
-                >
-                  <SquarePen className="h-5 w-5" />
-                  <span className="sr-only">{t('newChat')}</span>
-                </button>
-              </PortalTooltip>
-            )}
-
-            {/* Model selector - show when sidebar is closed */}
-            {!isSidebarOpen && (
-              <div className="flex items-center ml-2">
-                <DropdownMenu open={isModelDropdownOpenClosed} onOpenChange={handleModelDropdownClosedChange}>
-                  <PortalTooltip content={t('modelSelector')}>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        ref={modelTriggerRef}
-                        className={cn(
-                          "inline-flex items-center h-9 px-3 border border-[#FFE0D0]/50 dark:border-[#2F2F2F]/50 rounded-md transition-colors backdrop-blur-md",
-                          isModelDropdownOpenClosed
-                            ? "bg-[#FFE8DC] dark:bg-[#2E2E2E]"
-                            : "hover:bg-[#FFE0D0] dark:hover:bg-[#424242] bg-transparent"
-                        )}
-                      >
-                        <span className="font-medium text-sm truncate max-w-[140px] md:max-w-none text-gray-700 dark:text-gray-200">
-                          {headerLogoText}
-                        </span>
-                        <ChevronDown className="h-3 w-3 ml-2 opacity-60 flex-shrink-0 text-gray-700 dark:text-gray-200" />
-                      </button>
-                    </DropdownMenuTrigger>
-                  </PortalTooltip>
-                  <DropdownMenuContent
-                    ref={modelDropdownRef}
-                    align="start"
-                    side="bottom"
-                    sideOffset={4}
-                    className="w-72 rounded-xl"
-                    style={{
-                      backgroundColor: 'transparent',
-                      border: 'none',
-                      boxShadow: '0 10px 40px -5px rgba(0, 0, 0, 0.15), 0 4px 25px -2px rgba(0, 0, 0, 0.1)',
-                      padding: 0,
-                      overflow: 'hidden',
-                      borderRadius: '12px',
-                      zIndex: 9999
-                    }}
-                    forceMount
+              <div className="chat-capsule pointer-events-auto">
+                <PortalTooltip content={t('openSidebar')} align="right">
+                  <button
+                    onClick={onToggleSidebar}
+                    className="chat-pill-icon h-9 w-9 group relative"
                   >
-                    <ModelSelector />
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                    <PanelLeft className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
+                    <span className="sr-only">{t('openSidebar')}</span>
+                  </button>
+                </PortalTooltip>
+
+                {onNewChat && (!isAuthEnabled || user) && (
+                  <PortalTooltip content={t('newChat')}>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onNewChat();
+                      }}
+                      className="chat-pill-icon h-9 w-9 group relative"
+                    >
+                      <SquarePen className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
+                      <span className="sr-only">{t('newChat')}</span>
+                    </button>
+                  </PortalTooltip>
+                )}
               </div>
             )}
+
+            <div className="chat-capsule chat-title-capsule pointer-events-auto">
+              <span className="chat-title-capsule__label" translate="no">{headerLogoText}</span>
+            </div>
           </div>
 
-          {/* When sidebar is open, show model selector in the right place */}
-          {isSidebarOpen && (
-            <div
-              className="fixed left-0 top-0 h-16 flex items-center pointer-events-none z-20"
-              style={{
-                marginLeft: `${sidebarWidth}px`, // Position exactly at the edge of sidebar
-                paddingLeft: '0.75rem' // Match ChatGPT spacing
-              }}
-            >
-              <div className="pointer-events-auto">
-                <DropdownMenu open={isModelDropdownOpenOpen} onOpenChange={handleModelDropdownOpenChange}>
-                  <PortalTooltip content={t('modelSelector')}>
-                    <DropdownMenuTrigger asChild>
-                      <button
-                        ref={modelTriggerOpenRef}
-                        className={cn(
-                          "inline-flex items-center h-9 px-3 border border-[#FFE0D0]/50 dark:border-[#2F2F2F]/50 rounded-md transition-colors backdrop-blur-md",
-                          isModelDropdownOpenOpen
-                            ? "bg-[#FFE8DC] dark:bg-[#2E2E2E]"
-                            : "hover:bg-[#FFE0D0] dark:hover:bg-[#424242] bg-transparent"
-                        )}
-                        style={{
-                          // Ensure consistent appearance across browsers
-                          WebkitAppearance: 'none',
-                          MozAppearance: 'none'
-                        }}
-                      >
-                        <span className="font-medium text-sm truncate max-w-[140px] md:max-w-none text-gray-700 dark:text-gray-200">
-                          {headerLogoText}
-                        </span>
-                        <ChevronDown className="h-3 w-3 ml-2 opacity-60 flex-shrink-0 text-gray-700 dark:text-gray-200" />
-                      </button>
-                    </DropdownMenuTrigger>
-                  </PortalTooltip>
-                  <DropdownMenuContent
-                    ref={modelDropdownOpenRef}
-                    align="start"
-                    side="bottom"
-                    sideOffset={4}
-                    className="w-72 rounded-xl"
-                    style={{
-                      backgroundColor: 'transparent',
-                      border: 'none',
-                      boxShadow: '0 10px 40px -5px rgba(0, 0, 0, 0.15), 0 4px 25px -2px rgba(0, 0, 0, 0.1)',
-                      padding: 0,
-                      overflow: 'hidden',
-                      borderRadius: '12px'
-                    }}
-                    forceMount
-                  >
-                    <ModelSelector />
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </div>
-          )}
-
-          {/* Right section */}
-          <div className="flex items-center pointer-events-auto min-w-[80px] z-20">
-            <div className={cn(
-              "flex items-center border border-[#FFE0D0] dark:border-[#2F2F2F] rounded-lg mr-2 sm:mr-4 backdrop-blur-md"
-            )} style={{ background: 'transparent' }}>
+          <div className="chat-capsule flex items-center gap-0.5 pointer-events-auto z-20">
+            <div className="chat-pill-group flex items-center gap-0.5">
               {!isAuthPage && hasActiveChat ? (
                 <TextSizeSlider />
               ) : (
@@ -485,9 +260,7 @@ export function Header({ onNewChat, onToggleSidebar, isSidebarOpen }: HeaderProp
                     onProcessingStart={handlePermanentDocProcessingStart}
                     onProcessingComplete={handlePermanentDocProcessingComplete}
                     onProcessingError={handlePermanentDocProcessingError}
-                    className={cn(
-                      "flex items-center justify-center w-9 h-9 text-gray-700 dark:text-gray-200 bg-transparent hover:bg-[#FFE0D0] dark:bg-transparent dark:hover:bg-[#424242] transition-colors group relative backdrop-blur-md"
-                    )}
+                    className="chat-pill-icon h-9 w-9 group relative"
                   />
                   <PortalTooltip content={t('useIncognitoChat')}>
                     <button
@@ -497,103 +270,54 @@ export function Header({ onNewChat, onToggleSidebar, isSidebarOpen }: HeaderProp
                       }}
                       onClick={handleGhostModeToggle}
                       className={cn(
-                        "flex items-center justify-center w-10 h-10 rounded-lg text-gray-700 dark:text-gray-200 transition-colors group relative backdrop-blur-md",
-                        isGhostMode
-                          ? "bg-purple-500/20 hover:bg-purple-500/30 dark:bg-purple-600/20 dark:hover:bg-purple-600/30 text-purple-600 dark:text-purple-400"
-                          : "bg-transparent hover:bg-[#FFE0D0] dark:bg-transparent dark:hover:bg-[#424242]"
+                        "chat-pill-icon h-9 w-9 group relative",
+                        isGhostMode && "is-ghost-active"
                       )}
                     >
-                      <Ghost className="h-5 w-5" />
-                      <span className="sr-only">Toggle Ghost Mode</span>
+                      <Ghost className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
+                      <span className="sr-only">{t('useIncognitoChat')}</span>
                     </button>
                   </PortalTooltip>
                 </>
               )}
             </div>
-            {/* WhatsApp Connection Button */}
             {!isAuthPage && user && (
-              <div className="mr-2 flex items-center">
+              <div className="flex items-center">
                 <WhatsAppConnectionButton />
               </div>
             )}
             {!isAuthPage && (
-              <div className="mt-1">
-                <UserMenu email={user?.email} onSignOut={user ? signOut : undefined} />
-              </div>
+              <UserMenu email={user?.email} onSignOut={user ? signOut : undefined} />
             )}
           </div>
         </div>
 
-        {/* Mobile + Tablet Layout (smaller than 1024px) */}
-        <div className="flex lg:hidden items-center justify-between w-full gap-3">
-          {/* Left section - Hamburger menu */}
-          <div className="flex items-center pointer-events-auto z-20">
-            <button
-              onClick={onToggleSidebar}
-              className={cn(
-                "flex items-center justify-center w-10 h-10 text-gray-700 dark:text-gray-200 rounded-lg transition-colors group relative backdrop-blur-md",
-                "bg-[#FFE0D0]/30 hover:bg-[#FFE0D0] dark:bg-[#2F2F2F]/30 dark:hover:bg-[#424242]"
-              )}
-            >
-              <PanelLeft className="h-5 w-5" />
-              <span className="sr-only">{t('openSidebar')}</span>
-            </button>
-          </div>
-
-          {/* Center section - Model selector */}
-          <div className="flex items-center justify-center flex-1 px-2 pointer-events-auto z-20">
-            <DropdownMenu open={isModelDropdownOpenMobile} onOpenChange={handleModelDropdownMobileChange}>
-              <PortalTooltip content={t('modelSelector')}>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    ref={modelTriggerMobileRef}
-                    className={cn(
-                      "inline-flex items-center h-9 px-3 border border-[#FFE0D0]/50 dark:border-[#2F2F2F]/50 rounded-md transition-colors backdrop-blur-md",
-                      isModelDropdownOpenMobile
-                        ? "bg-[#FFE8DC] dark:bg-[#2E2E2E]"
-                        : "hover:bg-[#FFE0D0] dark:hover:bg-[#424242] bg-transparent"
-                    )}
-                  >
-                    <span className="font-medium text-sm truncate max-w-[140px] text-gray-700 dark:text-gray-200">
-                      {headerLogoText}
-                    </span>
-                    <ChevronDown className="h-3 w-3 ml-2 opacity-60 flex-shrink-0 text-gray-700 dark:text-gray-200" />
-                  </button>
-                </DropdownMenuTrigger>
-              </PortalTooltip>
-              <DropdownMenuContent
-                ref={modelDropdownMobileRef}
-                align="center"
-                side="bottom"
-                sideOffset={4}
-                className="w-72 rounded-xl"
-                style={{
-                  backgroundColor: 'transparent',
-                  border: 'none',
-                  boxShadow: '0 10px 40px -5px rgba(0, 0, 0, 0.15), 0 4px 25px -2px rgba(0, 0, 0, 0.1)',
-                  padding: 0,
-                  overflow: 'hidden',
-                  borderRadius: '12px'
-                }}
-                forceMount
+        {/* Mobile + Tablet Layout (smaller than 1024px): floating glass capsules */}
+        <div className="chat-topbar__mobile flex lg:hidden items-center justify-between w-full gap-2">
+          <div className="flex items-center gap-2 min-w-0 z-20">
+            <div className="chat-capsule chat-capsule--round pointer-events-auto">
+              <button
+                onClick={onToggleSidebar}
+                className="chat-pill-icon h-10 w-10 group relative"
               >
-                <ModelSelector />
-              </DropdownMenuContent>
-            </DropdownMenu>
+                <PanelLeft className="h-5 w-5" strokeWidth={1.75} aria-hidden="true" />
+                <span className="sr-only">{t('openSidebar')}</span>
+              </button>
+            </div>
+
+            <div className="chat-capsule chat-title-capsule pointer-events-auto min-w-0">
+              <span className="chat-title-capsule__label" translate="no">{headerLogoText}</span>
+            </div>
           </div>
 
-          {/* Right section - Mobile toolbar and user menu */}
-          <div className="flex items-center gap-3 pointer-events-auto z-20">
-            {/* Mobile Toolbar - contains theme, text size, share, documents */}
-            {!isAuthPage && (!isAuthEnabled || user) && (
-              <MobileToolbarFixed />
-            )}
-
-            {/* User Menu */}
-            {!isAuthPage && (
+          {!isAuthPage && (
+            <div className="chat-capsule chat-capsule--actions flex items-center pointer-events-auto z-20">
+              {(!isAuthEnabled || user) && (
+                <MobileToolbarFixed />
+              )}
               <UserMenu email={user?.email} onSignOut={user ? signOut : undefined} />
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

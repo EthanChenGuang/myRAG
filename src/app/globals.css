@@ -3786,11 +3786,10 @@ body.keyboard-visible .fixed.top-0.z-\[99\] {
 /* High DPI mobile screens */
 @media (max-width: 640px) and (-webkit-min-device-pixel-ratio: 2) {
 
-  /* Crisp rendering on high DPI displays */
+  /* Crisp rendering on high DPI displays. No blanket transform here: a transform on every
+     element makes each one a containing block, so position: fixed bars stop pinning to the viewport. */
   * {
     -webkit-font-smoothing: subpixel-antialiased;
-    transform: translateZ(0);
-    -webkit-transform: translateZ(0);
   }
 }
 

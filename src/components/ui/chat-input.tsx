@@ -17,6 +17,8 @@ import { VideoGenerationButton } from './video-generation-button';
 import { ExtendedFormEvent } from '@/types/events';
 import type { ProcessedDocument } from './permanent-doc-upload-button';
 import { UnifiedUploadButton } from './unified-upload-button';
+import { ComposerModelPill } from './composer-model-pill';
+import { getComposerState } from '@/lib/chat-composer-state';
 import { useChatStore } from '@/lib/chat-store';
 import { useShallow } from 'zustand/react/shallow';
 import { v4 as uuidv4 } from 'uuid';
@@ -213,6 +215,12 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
 }, ref) {
   const formRef = useRef<HTMLFormElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [isComposerFocused, setIsComposerFocused] = useState(false);
+  const [isModelMenuOpen, setIsModelMenuOpen] = useState(false);
+  const composerBlurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (composerBlurTimerRef.current) clearTimeout(composerBlurTimerRef.current);
+  }, []);
   const tempDocInputRef = useRef<HTMLInputElement>(null);
   const { isEnabled: isWebSearchEnabled, isAvailable: isWebSearchAvailable, toggleWebSearch } = useWebSearchStore();
   const { file, fileUrl, fileType, clearFile } = useFileUploadStore();
@@ -3232,7 +3240,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
       return (
         <button
           className={cn(
-            "inline-flex h-9 w-9 items-center justify-center rounded-tl-xl rounded-tr-xl rounded-bl-xl rounded-br-3xl transition-colors",
+            "chat-send-button inline-flex h-9 w-9 items-center justify-center rounded-full transition-colors",
             "bg-[#FF6417] dark:bg-[#FF6417] hover:bg-[#E55000] dark:hover:bg-[#E55000]",
             "group relative focus:outline-none"
           )}
@@ -3313,7 +3321,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
         type={parentIsLoading ? "button" : "submit"}
         onClick={handleButtonClick}
         className={cn(
-          "inline-flex h-9 w-9 items-center justify-center rounded-tl-xl rounded-tr-xl rounded-bl-xl rounded-br-3xl transition-all duration-200 group relative",
+          "chat-send-button inline-flex h-9 w-9 items-center justify-center rounded-full transition-[background-color,transform] duration-150 group relative",
           parentIsLoading
             ? "bg-red-500 hover:bg-red-600 dark:bg-red-700 dark:hover:bg-red-800"
             : isDisabled || !input.trim()
@@ -3669,7 +3677,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
     .chat-input-container .flex-1.relative > textarea,
     .chat-input-container .flex-1.relative > div:first-child {
       /* Use explicit font stack to ensure consistency */
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
+      font-family: var(--font-chat-ui), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif !important;
       font-size: ${fontSize} !important; /* Configurable size from environment */
       line-height: ${lineHeight} !important; /* Proportional line height */
       font-weight: 400 !important;
@@ -3794,79 +3802,8 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
         box-sizing: border-box !important;
       }
       
-      /* Desktop browsers - handled by body classes in globals.css */
-      
-      /* Safari iOS specific - PROPER safe area padding */
-      @supports (-webkit-touch-callout: none) {
-        @media (max-width: 639px) {
-          .chat-input-container {
-            /* Use both constant() and env() for compatibility */
-            padding-bottom: constant(safe-area-inset-bottom) !important;
-            padding-bottom: env(safe-area-inset-bottom) !important;
-            /* Minimum padding fallback if safe area is 0 */
-            min-height: calc(100px + constant(safe-area-inset-bottom));
-            min-height: calc(100px + env(safe-area-inset-bottom));
-          }
-        }
-      }
-      
-      /* Chrome iOS specific - needs extra bottom padding */
-      @supports (not (-webkit-touch-callout: none)) {
-        @media (max-width: 639px) and (pointer: coarse) {
-          .chat-input-container {
-            padding-bottom: max(env(safe-area-inset-bottom, 0px), 24px) !important;
-            min-height: calc(100px + env(safe-area-inset-bottom));
-          }
-        }
-      }
-      
-      /* Chrome iOS specific positioning using JavaScript-added class */
-      /* Chrome iOS has a taller browser bar (~50px) than Safari, plus disclaimer (~30px) needs space */
-      .chrome-ios .chat-input-container {
-        padding-bottom: env(safe-area-inset-bottom, 0px) !important;
-      }
-      
-      .chrome-ios .chat-input-container form {
-        margin-bottom: 0px !important;
-      }
-      
-      /* Chrome iOS needs extra disclaimer padding since base was reduced for Safari */
-      .chrome-ios .chat-input-container > div:last-child {
-        padding-bottom: 0px !important;
-      }
+      /* Bottom inset, glass and card surface come from .chat-dock / .chat-composer-card in chat-shell.css */
 
-      /* ENHANCED FORM STYLING WITH BETTER TOUCH TARGETS */
-      .chat-input-container form {
-        background: #EFE1D5 !important;
-        border-radius: 28px !important;
-        padding: 6px !important;
-        margin: 8px !important;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.05) !important;
-        transition: box-shadow 0.2s ease-out;
-        -webkit-tap-highlight-color: transparent;
-        tap-highlight-color: transparent;
-        touch-action: manipulation;
-      }
-      
-      /* Safari specific - tighter bottom margin */
-      @supports (-webkit-touch-callout: none) {
-        .chat-input-container form {
-          margin: 8px 8px 4px 8px !important;
-        }
-      }
-
-      .dark .chat-input-container form {
-        background: #3a3a3a !important;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.2) !important;
-        margin: 8px 8px 0px 8px !important; /* Consistent with light mode */
-        margin-bottom: 0px !important;
-        padding-bottom: 6px !important; /* Increased for better touch targets */
-        /* Enhanced touch interaction for dark mode */
-        -webkit-tap-highlight-color: transparent;
-        tap-highlight-color: transparent;
-        touch-action: manipulation;
-      }
-      
       /* ENHANCED TEXTAREA WITH BETTER TOUCH INTERACTION */
       .chat-input-container textarea {
         padding: 12px 18px 16px 18px !important; /* Reduced bottom padding to prevent overlap with tool buttons */
@@ -3982,90 +3919,15 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
       color: #ccc;
     }
     
-    /* ENHANCED MOBILE KEYBOARD HANDLING WITH VIEWPORT DETECTION */
+    /* Keyboard placement is handled by useChatViewport (--chat-kb-inset) and .chat-dock in chat-shell.css */
     @supports (-webkit-touch-callout: none) {
-      /* iOS Safari specific fixes with enhanced viewport handling */
       @media (max-width: 639px) {
-        .chat-input-container {
-          /* Let parent handle positioning */
-          position: relative !important;
-          /* Force safe area on actual iOS devices - add extra padding to move UP */
-          padding-bottom: calc(constant(safe-area-inset-bottom) + 25px) !important;
-          padding-bottom: calc(env(safe-area-inset-bottom) + 25px) !important;
-        }
-        
-        /* Dynamic viewport height calculation for keyboard state */
-        body {
-          /* Set custom property for actual viewport height */
-          --actual-vh: calc(var(--vh, 1vh) * 100);
-          --keyboard-visible-vh: var(--keyboard-visible-vh, var(--actual-vh));
-        }
-        
-        /* When keyboard is visible, maintain relative positioning */
-        body.keyboard-visible .chat-input-container {
-          position: relative !important;
-        }
-        
-        /* Hide suggestions when keyboard is open to prevent overlap */
         body.keyboard-visible .suggestion-list {
           display: none !important;
-          visibility: hidden !important;
-          opacity: 0 !important;
-        }
-        
-        /* ENHANCED IOS SAFARI SPECIFIC TEXTAREA FIXES */
-        body.keyboard-visible .chat-input-container textarea {
-          transform: translateZ(0);
-          -webkit-transform: translateZ(0);
-          /* Prevent iOS from zooming on focus - critical for UX */
-          font-size: max(16px, 1rem) !important;
-          /* Improve scrolling behavior */
-          -webkit-overflow-scrolling: touch;
-          overflow-scrolling: touch;
-          /* Fix iOS Safari input focus issues */
-          -webkit-appearance: none;
-          appearance: none;
-          /* Prevent iOS Safari from adding default styling */
-          border-radius: 12px !important;
-          /* Fix scroll position jumping */
-          scroll-behavior: smooth;
-          /* Prevent iOS momentum scrolling issues */
-          overscroll-behavior: contain;
-          /* Better text rendering during input */
-          -webkit-text-fill-color: currentColor;
-          -webkit-opacity: 1;
-        }
-        
-        /* Fix iOS Safari scroll restoration after keyboard hide */
-        body.keyboard-hidden .chat-input-container textarea {
-          scroll-behavior: auto;
-          /* Restore smooth scrolling after keyboard animation */
-          transition: scroll-behavior 0.1s ease;
-        }
-        
-        /* iOS Safari focus state improvements */
-        .chat-input-container textarea:focus {
-          /* Prevent iOS from adding default focus styles */
-          -webkit-appearance: none;
-          appearance: none;
-          /* Remove outline on mobile */
-          outline: none !important;
-        }
-        
-        /* Prevent viewport shifts during keyboard animation */
-        body.keyboard-transitioning {
-          overflow: hidden !important;
-        }
-        
-        /* Optimize for smooth keyboard transitions */
-        body.keyboard-transitioning .chat-input-container {
-          will-change: bottom, transform !important;
-          transform: translateZ(0) !important;
-          -webkit-transform: translateZ(0) !important;
         }
       }
     }
-    
+
     /* iOS-SPECIFIC FIXES: Hide duplicate disclaimer and position scroll button */
     @supports (-webkit-touch-callout: none) {
       @media (max-width: 639px) {
@@ -4081,80 +3943,13 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
       }
     }
     
-    /* ENHANCED ANDROID CHROME SPECIFIC OPTIMIZATIONS */
-    /* IMPORTANT: gate to touch devices so desktop Chrome at narrow widths doesn't get "mobile-fixed" input */
-    @supports (not (-webkit-touch-callout: none)) and (-webkit-appearance: none) {
-      @media (max-width: 639px) and (pointer: coarse) {
-        /* CRITICAL FIX: When inside #mobile-dock (initial view), use relative positioning
-           to allow parent flex container to stack suggestions above input properly */
-        #mobile-dock .chat-input-container {
-          position: relative !important;
-          bottom: auto !important;
-          width: 100% !important;
-        }
-        
-        /* Only apply fixed positioning when NOT inside #mobile-dock */
-        .chat-input-container:not(#mobile-dock .chat-input-container) {
-          position: fixed !important;
-          /* Position 28px from bottom to leave room for mobile disclaimer text below */
-          bottom: max(28px, calc(28px + var(--safe-area-inset-bottom))) !important;
-        }
-        
-        /* Enhanced Android keyboard handling with viewport units */
-        body.keyboard-visible .chat-input-container:not(#mobile-dock .chat-input-container) {
-          position: fixed !important;
-          /* Use svh (small viewport height) for Android keyboard */
-          bottom: max(0px, calc(100svh - var(--keyboard-visible-vh, 100svh))) !important;
-          /* Fallback for older Android versions */
-          bottom: max(0px, var(--keyboard-adjusted-bottom, 0px)) !important;
-          /* Smooth transition for Android keyboard */
-          transition: bottom 0.2s ease-out !important;
-        }
-        
-        /* Android specific textarea optimizations */
-        .chat-input-container textarea {
-          /* Prevent Android zoom on focus */
-          font-size: max(16px, 1rem) !important;
-          /* Better touch scrolling */
-          overscroll-behavior: contain;
-          /* Optimize rendering */
-          will-change: scroll-position;
-        }
-        
-        /* Android keyboard transition optimization */
-        body.keyboard-visible .chat-input-container textarea {
-          /* Maintain font size during keyboard transition */
-          font-size: max(16px, 1rem) !important;
-          /* Prevent text jumping */
-          line-height: 1.5 !important;
-        }
+    @media (max-width: 639px) and (pointer: coarse) {
+      .chat-input-container textarea {
+        font-size: max(16px, 1rem) !important;
+        overscroll-behavior: contain;
       }
     }
-    
-    /* UNIVERSAL MOBILE VIEWPORT HANDLING */
-    @media (max-width: 639px) {
-      /* Support for newer viewport units across all mobile browsers */
-      @supports (height: 100dvh) {
-        .chat-input-container {
-          /* Use dynamic viewport height when available */
-          min-height: calc(100px + env(safe-area-inset-bottom, 0px)) !important;
-        }
-        
-        body.keyboard-visible .chat-input-container {
-          /* Better keyboard positioning with dvh */
-          bottom: max(0px, calc(100dvh - 100svh)) !important;
-        }
-      }
-      
-      /* Fallback for browsers without new viewport unit support */
-      @supports (not (height: 100dvh)) {
-        body.keyboard-visible .chat-input-container {
-          /* Use JavaScript-calculated values */
-          bottom: var(--keyboard-adjusted-bottom, 0px) !important;
-        }
-      }
-    }
-    
+
     /* ENHANCED TOUCH TARGETS AND BUTTON INTERACTIONS */
     /* Only apply on actual touch devices, not desktop browsers at narrow widths */
     @media (max-width: 639px) and (pointer: coarse) {
@@ -4270,21 +4065,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
     @media (max-width: 639px) {
       /* Optimize rendering performance */
       .chat-input-container {
-        /* Enable hardware acceleration */
-        will-change: transform, opacity !important;
-        transform: translateZ(0) !important;
-        -webkit-transform: translateZ(0) !important;
-        /* Better composition layer */
         isolation: isolate;
-      }
-      
-      /* Optimize form rendering */
-      .chat-input-container form {
-        /* Enable hardware acceleration */
-        transform: translateZ(0) !important;
-        -webkit-transform: translateZ(0) !important;
-        /* Better repaint performance */
-        contain: layout style paint !important;
       }
       
       /* Optimize textarea rendering */
@@ -4559,6 +4340,28 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
   // onClick={handleClearFile}
 
   // Now update the JSX to include our document selector and document tags
+  const composerState = getComposerState({
+    focused: isComposerFocused,
+    text: input,
+    hasAttachment: Boolean(tempDoc || processingDoc || file || multiFileStore.files.length > 0),
+    hasActiveTool: getActiveToolType() !== null,
+    menuOpen: isModelMenuOpen || isPrimaryModalOpen || isSecondaryModalOpen || isMCPModalOpen,
+    isRecording: isRecording || isTranscribing,
+  });
+
+  const handleComposerFocus = () => {
+    if (composerBlurTimerRef.current) clearTimeout(composerBlurTimerRef.current);
+    setIsComposerFocused(true);
+  };
+
+  // Collapse a beat after blur so a tap on a tool-row button lands before the row reflows.
+  const handleComposerBlur = () => {
+    if (composerBlurTimerRef.current) clearTimeout(composerBlurTimerRef.current);
+    composerBlurTimerRef.current = setTimeout(() => {
+      if (document.activeElement !== textareaRef.current) setIsComposerFocused(false);
+    }, 160);
+  };
+
   return (
     <>
       {/* Add animation styles */}
@@ -4573,7 +4376,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
 
       {/* Suggestion buttons are now rendered in the main page component for proper layout */}
 
-      <div className={cn("chat-input-container relative z-50", className)}>
+      <div className={cn("chat-input-container relative z-50", className)} data-composer={composerState}>
         {/* Voice Mode Overlay moved here to share stacking context with the input form */}
         {VOICE_MODE_ENABLED && (
           <VoiceModeOverlay
@@ -4600,11 +4403,9 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
             onSubmit={handleFormSubmit}
             onClick={handleFormClick}
             className={cn(
-              'relative rounded-3xl p-1 w-full sm:max-w-full lg:max-w-[52rem] border border-[#D4C0B6]/20 dark:border-gray-600/20',
-              // Force opaque background in voice mode with !important to ensure no bleed-through
-              isVoiceModeActive
-                ? '!bg-[#EFE1D5] dark:!bg-[#2F2F2F] !opacity-100 shadow-xl'
-                : 'bg-[#EFE1D5]/70 dark:bg-[#2F2F2F]/70 backdrop-blur-sm',
+              'chat-composer-card relative rounded-3xl p-1 w-full sm:max-w-full lg:max-w-[52rem]',
+              // Voice mode keeps the card fully opaque so the overlay text never bleeds through
+              isVoiceModeActive && '!opacity-100 shadow-xl',
               'sm:mb-8',
               'rounded-3xl', // Consistent radius
               // Only apply opacity reduction if NOT in voice mode (or force it off)
@@ -4615,7 +4416,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
             {/* Animated Gradient Border - SVG Implementation */}
             <div
               ref={containerRef}
-              className="absolute -inset-[1px] pointer-events-none z-30"
+              className="chat-composer-comet absolute -inset-[1px] pointer-events-none z-30"
               style={{
                 '--perimeter': perimeter,
                 overflow: 'visible',
@@ -4669,7 +4470,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
             </div>
 
             {/* Background Layer - 80% opacity for aesthetic */}
-            <div className="absolute inset-0 rounded-3xl bg-[#EFE1D5]/80 dark:bg-[#2F2F2F]/80 backdrop-blur-sm z-10" />
+            <div className="chat-composer-fill absolute inset-0 rounded-3xl z-10" aria-hidden="true" />
             <div className={cn("relative px-2 sm:px-1 flex flex-col z-20", isLongInput && "max-h-[400px]")}>
 
               {/* Document preview - Minimal design */}
@@ -4806,7 +4607,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
               )}
 
               <div className="flex flex-col flex-1 min-h-0 overflow-x-hidden cursor-text">
-                <div className={cn("flex items-center gap-2", isTextareaExpanded ? "mb-12" : "mb-10", "sm:mb-12")}>
+                <div className={cn("chat-composer-text-row flex items-center gap-2", isTextareaExpanded ? "mb-12" : "mb-10", "sm:mb-12")}>
                   <div className="flex-1 max-h-[250px] min-h-[40px] relative overflow-x-hidden">
                     {/* Subtle text indicator positioned to the right */}
                     {hasNegativePrompt && videoGenSettings && (
@@ -4827,6 +4628,8 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
                       disabled={parentIsLoading || isProcessingDoc || isRecording || isTranscribing || isMediaLoading}
                       className="w-full resize-none bg-transparent px-3 focus:outline-none placeholder-gray-500 dark:placeholder-gray-400 max-h-[250px] overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600 scrollbar-track-transparent py-2 sm:py-3 leading-6 sm:leading-relaxed min-h-[42px] mobile-textarea relative z-10 text-gray-900 dark:text-gray-100 whitespace-pre-wrap break-words"
                       onKeyDown={handleKeyDown}
+                      onFocus={handleComposerFocus}
+                      onBlur={handleComposerBlur}
                       style={{
                         WebkitTapHighlightColor: 'transparent'
                       }}
@@ -4852,9 +4655,17 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
                   </div>
                 </div>
               </div>
-              <div className="absolute bottom-0 left-0 right-0 py-1 px-1 sm:px-1.5 rounded-b-3xl cursor-default">
+              <div
+                className="chat-composer-tools absolute bottom-0 left-0 right-0 py-1 px-1 sm:px-1.5 rounded-b-3xl cursor-default"
+                onMouseDown={(e) => {
+                  // Keep the keyboard up while the user taps a tool-row control
+                  if (document.activeElement === textareaRef.current && !(e.target as HTMLElement).closest('textarea')) {
+                    e.preventDefault();
+                  }
+                }}
+              >
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1 ml-2">
+                  <div className="flex items-center gap-1 ml-2 min-w-0">
                     <UnifiedUploadButton
                       disabled={parentIsLoading || isProcessingDoc || Boolean(file)}
                       onTempDocUpload={handleTempDocUpload}
@@ -4876,7 +4687,12 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
                       }}
                     />
 
-                    <div className="w-0.5"></div> {/* Smaller spacer */}
+                    <div className="chat-composer-secondary flex items-center gap-1 min-w-0">
+                    <ComposerModelPill
+                      open={isModelMenuOpen}
+                      onOpenChange={setIsModelMenuOpen}
+                      disabled={isVoiceModeActive}
+                    />
 
                     {/* Mobile Layout - Show Tools button and Active Tool Indicator */}
                     {isMobile && (
@@ -5001,8 +4817,11 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
                         )}
                       </>
                     )}
+                    </div>
                   </div>
-                  {renderButton()}
+                  <div className="chat-composer-trailing flex flex-shrink-0 items-center">
+                    {renderButton()}
+                  </div>
                 </div>
               </div>
             </div>
@@ -5043,17 +4862,9 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
         />
 
         {/* Mobile disclaimer text - inside chat-input-container so it's visible in fixed mobile dock */}
-        <div
-          className="sm:hidden w-full text-center pointer-events-none bg-[#FFF1E5] dark:bg-[#212121]"
-          style={{
-            paddingTop: '4px',
-            paddingBottom: '6px'
-          }}
-        >
-          <p className="text-gray-500 dark:text-gray-400 text-center" style={{ fontSize: '10px' }}>
-            {t('mobileDisclaimer')}
-          </p>
-        </div>
+        <p className="chat-disclaimer chat-disclaimer--compact sm:hidden pointer-events-none">
+          {t('mobileDisclaimer')}
+        </p>
 
 
       </div>
