@@ -82,6 +82,7 @@
   "RAG_MIN_CONFIDENCE": "0.7",
   "RAG_MMR_LAMBDA": "0.85",
   "RAG_MULTI_PASS": "true",
+  "RAG_OPENAI_EMBEDDINGS_VIA": "openai",
   "RAG_OUTPUT_LINK_ALLOWLIST": "",
   "RAG_PARENT_CHILD": "false",
   "RAG_PARSER": "llamaparse",

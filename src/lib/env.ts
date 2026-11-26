@@ -282,6 +282,7 @@ class EnvironmentConfig {
       RAG_DOMAIN_EMBEDDING_TIMEOUT_MS: process.env.RAG_DOMAIN_EMBEDDING_TIMEOUT_MS || '800',
       RAG_QWEN_EMBED_FALLBACK: process.env.RAG_QWEN_EMBED_FALLBACK || 'openrouter',
       RAG_QWEN_EMBED_PRIMARY: process.env.RAG_QWEN_EMBED_PRIMARY || 'deepinfra',
+      RAG_OPENAI_EMBEDDINGS_VIA: process.env.RAG_OPENAI_EMBEDDINGS_VIA || 'openai',
       RAG_PARSE_ROUTING: process.env.RAG_PARSE_ROUTING || 'fixed',
       RAG_PARSER_ALLOW_CLOUD: process.env.RAG_PARSER_ALLOW_CLOUD || 'true',
       RAG_PARSE_PREMIUM_PAGE_BUDGET: process.env.RAG_PARSE_PREMIUM_PAGE_BUDGET || '0',
