@@ -1,6 +1,6 @@
 import type { NextResponse } from 'next/server';
 import { z } from 'zod/v3';
-import type { EffectiveDatesFailure, EffectiveDatesItem } from '@/lib/rag';
+import { MAX_VERSION_LABEL_LENGTH, type EffectiveDatesFailure, type EffectiveDatesItem } from '@/lib/rag';
 import { jsonNoStore } from '../upload-approvals/_lib';
 
 export { IdSchema, OrganizationIdSchema, admission, invalidRequest, issues, jsonNoStore, refuseBody } from '../upload-approvals/_lib';
@@ -19,6 +19,18 @@ export const EffectiveDateSchema = z
   .regex(ISO_DATE, 'Expected a date as YYYY-MM-DD')
   .refine(realDate, 'Not a calendar date')
   .nullable();
+
+/**
+ * The optional version label of the dates editor (D-49, UI-SPEC 6.14): trimmed, at most 40 characters, no control characters; an empty
+ * string or null clears it. The same rule as the 0941 column check.
+ */
+export const VersionLabelSchema = z
+  .string()
+  .trim()
+  .max(MAX_VERSION_LABEL_LENGTH, `At most ${MAX_VERSION_LABEL_LENGTH} characters`)
+  .refine((value) => !/\p{Cc}/u.test(value), 'Control characters are not allowed')
+  .nullable()
+  .optional();
 
 /** Fixed answers for the reason words of the service; an unknown and a foreign document id get the same 404. */
 export function datesFailure(reason: EffectiveDatesFailure): NextResponse {
@@ -47,6 +59,7 @@ export function projectDates(item: EffectiveDatesItem) {
     effective_to: item.effectiveTo,
     origin: item.origin,
     confidence: item.confidence,
+    version_label: item.versionLabel,
     proposal: item.proposal
       ? {
           from: item.proposal.from,
