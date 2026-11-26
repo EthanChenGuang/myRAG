@@ -227,23 +227,32 @@ def test_http_failure_message_carries_no_key_or_content():
     assert "secret customer text" not in str(excinfo.value)
 
 
+# Plan 04.2-37: 36 Phase 4.2 documents in en and zh, 37 in it (30 generated copies of a template each).
 def test_directory_source_matches_corpus_output_for_one_language():
     docs = DirectoryWorkspaceSource(REPO_ROOT / "eval" / "fixtures" / "corpus" / "en").documents()
     expected = [d for d in load_corpus(REPO_ROOT / "eval" / "fixtures" / "corpus") if d.language == "en"]
-    assert len(docs) == 7
-    assert sorted(d.filename for d in docs) == sorted(d.filename for d in expected)
-    by_name = {d.filename: d for d in expected}
+    assert len(docs) == 7 + 36
+    assert sorted(d.id for d in docs) == sorted(d.relpath for d in expected)
+    by_relpath = {d.relpath: d for d in expected}
     for doc in docs:
-        assert doc.chunks == [chunk.text for chunk in by_name[doc.filename].chunks]
+        assert doc.chunks == [chunk.text for chunk in by_relpath[doc.id].chunks]
 
 
 def test_directory_source_reads_every_language_and_plain_files(tmp_path):
     docs = DirectoryWorkspaceSource(REPO_ROOT / "eval" / "fixtures" / "corpus").documents()
-    assert len(docs) == 19
+    assert len(docs) == 19 + 36 + 36 + 37
     (tmp_path / "notes.txt").write_text("A plain note about widgets.", encoding="utf-8")
     (tmp_path / "empty.md").write_text("  \n", encoding="utf-8")
     plain = DirectoryWorkspaceSource(tmp_path).documents()
     assert [(d.filename, d.chunks) for d in plain] == [("notes.txt", ["A plain note about widgets."])]
+
+
+def test_directory_source_does_not_read_a_corpus_template_as_a_plain_file(tmp_path):
+    (tmp_path / "en").mkdir()
+    meta = '{"generate":{"count":2,"name":"copy-{n}.en.md","substitutions":[],"template_id":"t-en"}}'
+    (tmp_path / "en" / "passage.template.en.md").write_text(f"<!-- fixture-meta {meta} -->\n## Heading\n\nShared text.\n", encoding="utf-8")
+    docs = DirectoryWorkspaceSource(tmp_path).documents()
+    assert sorted(d.id for d in docs) == ["en/copy-01.en.md", "en/copy-02.en.md"]
 
 
 def test_directory_source_with_no_documents_is_empty(tmp_path):
