@@ -1,7 +1,6 @@
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
 import type { BaseMessageLike } from '@langchain/core/messages';
 import { ChatOpenAI } from '@langchain/openai';
-import type { ZodType, ZodTypeDef } from 'zod/v3';
 import {
   CondensedQuerySchema,
   HypotheticalDocumentSchema,
@@ -40,13 +39,25 @@ export type ChatModelFactory = () => BaseChatModel;
 export function createChatModel(options: ChatModelOptions, transform: LangChainTransform = 'condense'): BaseChatModel {
   const apiKey = (options.apiKey ?? '').trim();
   const model = options.model.trim();
+  if (apiKey === '' || model === '') throw new LangChainAdapterError('unavailable', transform);
   return new ChatOpenAI({
     model,
     apiKey,
+    temperature: 0,
+    maxRetries: 0,
+    callbacks: [],
+    modelKwargs: { provider: { ...OPENROUTER_PROVIDER_PREFERENCES } },
+    configuration: {
+      baseURL: OPENROUTER_BASE_URL,
+      maxRetries: 0,
+      ...(options.headers ? { defaultHeaders: { ...options.headers } } : {}),
+    },
   });
 }
 
-type StructuredContract<T> = { json: Record<string, unknown>; zod: ZodType<T, ZodTypeDef, unknown> };
+/** The part of a generated zod/v3 schema the adapter uses; the adapter may not import zod itself (D-18 allow-list). */
+type SafeParser<T> = { safeParse(value: unknown): { success: true; data: T } | { success: false } };
+type StructuredContract<T> = { json: Record<string, unknown>; zod: SafeParser<T> };
 
 export const STRUCTURED_CONTRACTS = Object.freeze({
   CondensedQuery: { json: condensedQueryJson, zod: CondensedQuerySchema } as StructuredContract<CondensedQuery>,
@@ -76,6 +87,7 @@ export async function structured<N extends StructuredContractName>(
   const { json, zod } = STRUCTURED_CONTRACTS[contract] as StructuredContract<ContractOutput<N>>;
   const runnable = chatModel.withStructuredOutput(json, { method: 'jsonSchema', name: contract });
   const output = await raceAbort(() => runnable.invoke(messages, invokeConfig(signal)), signal, transform);
-  void zod;
-  return output as ContractOutput<N>;
+  const parsed = zod.safeParse(output);
+  if (!parsed.success) throw new LangChainAdapterError('invalid_output', transform);
+  return parsed.data;
 }

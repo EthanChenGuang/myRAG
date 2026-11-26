@@ -198,18 +198,19 @@ export class FakeLangChainChatModel extends FakeChatModel {
     return { generations: [{ message: new AIMessage(text), text }], llmOutput: {} };
   }
 
-  withStructuredOutput<RunOutput extends Record<string, unknown> = Record<string, unknown>>(
-    schema: Record<string, unknown>,
-    config?: { name?: string; method?: string },
-  ): Runnable<BaseLanguageModelInput, RunOutput> {
-    const name = config?.name ?? String(schema.title ?? '');
+  /** One signature that satisfies every BaseChatModel overload; the fake only reads the contract name. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- must be assignable to each base overload's output type
+  withStructuredOutput(schema: unknown, config?: unknown): Runnable<BaseLanguageModelInput, any> {
+    const json = (schema ?? {}) as Record<string, unknown>;
+    const options = (config ?? {}) as { name?: string; method?: string };
+    const name = options.name ?? String(json.title ?? '');
     const transform = STRUCTURED_TRANSFORM[name];
     if (!transform) throw new Error(`[Fake LangChain] unknown structured contract ${name}`);
-    this.structuredRequests.push({ name, method: config?.method ?? null, schema });
+    this.structuredRequests.push({ name, method: options.method ?? null, schema: json });
     return RunnableLambda.from(async (input: BaseLanguageModelInput, runConfig?: RunnableConfig) => {
       const { entry, output } = await this.answer(transform, 'structured', messagesOf(input), runConfig ?? {});
-      return (entry?.fail === 'invalid' ? (entry.output ?? INVALID_OUTPUT) : output) as RunOutput;
-    }) as unknown as Runnable<BaseLanguageModelInput, RunOutput>;
+      return entry?.fail === 'invalid' ? (entry.output ?? INVALID_OUTPUT) : output;
+    });
   }
 
   readonly structuredRequests: Array<{ name: string; method: string | null; schema: Record<string, unknown> }> = [];
