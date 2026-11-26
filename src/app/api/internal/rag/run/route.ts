@@ -31,6 +31,7 @@ import {
   runRetrieval,
   scopeKey,
   scoreAnswerGroundedness,
+  topkRedundancy,
   type AnswerGroundedness,
   type CitationSession,
   type ClaudeTurnFacts,
@@ -52,7 +53,6 @@ import {
   type EvalConversationTurn,
 } from '@/lib/rag-eval/answer';
 import type { CitationRecord } from '@/lib/rag-eval/contracts.generated';
-import { topkRedundancy } from '@/lib/rag/v2/diversify';
 
 export const runtime = 'nodejs';
 
