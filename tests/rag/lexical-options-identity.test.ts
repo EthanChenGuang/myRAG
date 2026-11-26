@@ -46,6 +46,9 @@ const INERT: Array<[string, LexicalOptions]> = [
   ['stemming on without a language', { language: null, stemIt: true }],
   ['null dictionary', { dictionary: null }],
   ['dictionary without matches', { dictionary: { version: 's0.w0', match: () => [] } }],
+  ['quantity undefined', { quantity: undefined }],
+  ['quantity null', { quantity: null }],
+  ['quantity false', { quantity: false }],
 ];
 
 const corpus = corpusFiles(CORPUS).map((file) => [path.relative(ROOT, file), fs.readFileSync(file, 'utf8')] as const);
