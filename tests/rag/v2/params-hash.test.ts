@@ -599,3 +599,70 @@ describe('computeRetrievalConfigHash tuning block (04.2-06, D-34, D-42)', () => 
     expect(hash(0.5)).not.toBe(hash(0.7));
   });
 });
+
+describe('lexical dictionary version and identifier patterns in the hash (04.2-22, D-34)', () => {
+  const STAMP = { dictVersion: 's2.w5', patterns: 'pabcdef012345' };
+
+  beforeEach(() => {
+    resetRagConfigForTests();
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    setRetrievalBackendForTests({ id: 'pgvector' } as unknown as RetrievalBackend);
+    setActiveChunkingProfilesForTests({ general: 'legacy' });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    resetRetrievalBackendForTests();
+    resetActiveChunkingProfilesForTests();
+    resetRagConfigForTests();
+  });
+
+  function requestInput(env: Record<string, string> = {}, lexicalStamp?: typeof STAMP | { dictVersion: string | null; patterns: string | null }) {
+    return {
+      input: { scope: null, query: 'q', profile: 'chat', signal: new AbortController().signal } as RunRetrievalInput,
+      config: baseConfig({ RAG_LEXICAL_SEARCH: 'true', ...env }),
+      profile: 'chat' as const,
+      embeddingProfileId: 'openai-3-small-1536',
+      queryLanguage: 'en',
+      security: readSecurityConfig({}),
+      ...(lexicalStamp ? { lexicalStamp } : {}),
+    };
+  }
+
+  it('with the switches off a stamp keeps the pinned off-hash', async () => {
+    expect(await requestRetrievalConfigHash(requestInput({}, STAMP))).toBe(PINNED_REQUEST_OFF_HASH);
+  });
+
+  it('dictionary on adds the version string; a new version gives a new hash', async () => {
+    const config = baseConfig({ RAG_LEXICAL_SEARCH: 'true', RAG_LEXICAL_DICTIONARY: 'true' });
+    expect(tuningHashComponent(config, effectiveTuningParams('chat', config, null), STAMP)).toEqual({ lexical_dictionary_version: 's2.w5' });
+    const first = await requestRetrievalConfigHash(requestInput({ RAG_LEXICAL_DICTIONARY: 'true' }, STAMP));
+    const second = await requestRetrievalConfigHash(requestInput({ RAG_LEXICAL_DICTIONARY: 'true' }, { ...STAMP, dictVersion: 's2.w6' }));
+    const without = await requestRetrievalConfigHash(requestInput({ RAG_LEXICAL_DICTIONARY: 'true' }));
+    expect(new Set([first, second, without]).size).toBe(3);
+  });
+
+  it('dictionary on without a loaded version records it as unavailable', () => {
+    const config = baseConfig({ RAG_LEXICAL_SEARCH: 'true', RAG_LEXICAL_DICTIONARY: 'true' });
+    expect(tuningHashComponent(config, effectiveTuningParams('chat', config, null), { dictVersion: null, patterns: null })).toEqual({
+      lexical_dictionary_version: 'lexical_dictionary:unavailable',
+    });
+  });
+
+  it('identifier index on adds the patterns fingerprint next to identifier_index', async () => {
+    const config = baseConfig({ RAG_LEXICAL_SEARCH: 'true', RAG_IDENTIFIER_INDEX: 'true' });
+    expect(tuningHashComponent(config, effectiveTuningParams('chat', config, null), STAMP)).toEqual({
+      identifier_index: true,
+      identifier_patterns: 'pabcdef012345',
+    });
+    const a = await requestRetrievalConfigHash(requestInput({ RAG_IDENTIFIER_INDEX: 'true' }, STAMP));
+    const b = await requestRetrievalConfigHash(requestInput({ RAG_IDENTIFIER_INDEX: 'true' }, { ...STAMP, patterns: 'p000000000000' }));
+    expect(a).not.toBe(b);
+  });
+
+  it('with a switch off a changed dictionary or pattern set does not change the hash', async () => {
+    const stemOnly = (stamp: typeof STAMP) => requestRetrievalConfigHash(requestInput({ RAG_LEXICAL_STEM_IT: 'true' }, stamp));
+    expect(await stemOnly(STAMP)).toBe(await stemOnly({ dictVersion: 's9.w9', patterns: 'p999999999999' }));
+    expect(await stemOnly(STAMP)).toBe(await requestRetrievalConfigHash(requestInput({ RAG_LEXICAL_STEM_IT: 'true' })));
+  });
+});

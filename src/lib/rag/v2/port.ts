@@ -2,6 +2,7 @@ import type { BackendLegs, BackendSearchRequest, RankedHit, RetrievalBackend, Re
 import { LEGACY_PROFILE } from '../embeddings/active-profile';
 import type { QueryEmbedding } from '../embeddings/query-embedding';
 import { rrf, type FusedHit, type RankedList } from '../fusion/rrf';
+import type { LexicalOptions } from '../lexical/options';
 import { queryLexicalTokens } from '../lexical/tokenize';
 import { variantDenseTexts } from '../query/variants';
 import type { RetrievalPort, RetrievalPortHit, RetrievalPortLists, RetrievalPortVariant } from '../query/port-types';
@@ -27,6 +28,8 @@ export interface RetrievalPortContext {
   identifiersNorm?: string[];
   /** D-18: factor on the dense leg weight for a variant of kind terminology; absent means 1. */
   terminologyDenseWeight?: number;
+  /** LANG-07: the tenant's query-side lexical options; absent tokenizes with the defaults. */
+  lexicalOptions?: LexicalOptions;
 }
 
 /** Server-side view of a port: the search stage reads the collected legs; the framework only ever sees `port`. */
@@ -40,6 +43,12 @@ export interface RetrievalPortHandle {
 
 function lexicalLanguagesFor(variant: QueryVariant): string[] | null {
   return variant.kind === 'translated' && variant.language ? [variant.language] : null;
+}
+
+/** A translated variant is stemmed in its own language, never in the question's. */
+function variantLexicalOptions(options: LexicalOptions | undefined, variant: QueryVariant): LexicalOptions | undefined {
+  if (!options?.stemIt || variant.kind !== 'translated' || !variant.language) return options;
+  return { ...options, language: variant.language };
 }
 
 /** The one backend request a variant makes, shared by the native search and the port. */
@@ -56,6 +65,8 @@ export function variantSearchRequest(args: {
   versionScope?: VersionScope;
   /** D-31: set only while the identifier filter applies, so a default request sends today's request object. */
   identifiersNorm?: string[];
+  /** LANG-07: the tenant's query-side lexical options; absent tokenizes with the defaults. */
+  lexicalOptions?: LexicalOptions;
 }): BackendSearchRequest {
   const { variant, embedding } = args;
   // P-6: a dense-only variant (HyDE) sends no lexical tokens, so it contributes no lexical list.
@@ -65,7 +76,7 @@ export function variantSearchRequest(args: {
     scope: args.scope,
     embeddingProfileId: embedding.profile?.id ?? LEGACY_PROFILE.id,
     denseVector: embedding.vector,
-    lexicalTokens: useLexical ? queryLexicalTokens(variant.text) : [],
+    lexicalTokens: useLexical ? queryLexicalTokens(variant.text, variantLexicalOptions(args.lexicalOptions, variant)) : [],
     lexicalLanguages: lexicalLanguagesFor(variant),
     filters: args.filters,
     denseLimit: args.pool,
@@ -149,6 +160,7 @@ export function createRetrievalPort(ctx: RetrievalPortContext): RetrievalPortHan
           chunkingProfileOverride: ctx.chunkingProfileOverride ?? null,
           ...(ctx.versionScope !== undefined ? { versionScope: ctx.versionScope } : {}),
           ...(ctx.identifiersNorm !== undefined ? { identifiersNorm: ctx.identifiersNorm } : {}),
+          ...(ctx.lexicalOptions ? { lexicalOptions: ctx.lexicalOptions } : {}),
         }),
       );
       collected.set(index, legs);
