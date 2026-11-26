@@ -62,6 +62,8 @@ export interface TerminologyOutcome {
   termSearch: boolean;
   /** D-18: factor on the dense leg weight in force for the terminology variant's dense list. */
   denseWeight: number;
+  /** D-34: rerank-input places term:0-only hits may take; 0 turns the reservation off. */
+  reserveSlots: number;
 }
 
 function terminologyDetail(value: TerminologyOutcome): string {
@@ -107,6 +109,7 @@ export async function runTerminologyStage(args: {
         capped: expansion.capped,
         termSearch: expansion.tokens.length > 0,
         denseWeight: params.dense_weight,
+        reserveSlots: params.reserve_slots,
       };
     },
     args.collector,
