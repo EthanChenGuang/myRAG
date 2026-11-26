@@ -15,7 +15,12 @@ from typing import Any, Protocol
 import numpy as np
 
 from rag_eval.finetune.textnorm import char_ngrams, normalize
-from rag_eval.finetune.vectors_io import VectorFileShapeError, VectorSet, read_chunk_vectors, read_query_vectors
+from rag_eval.finetune.vectors_io import (
+    VectorFileShapeError,
+    VectorSet,
+    read_chunk_vectors,
+    read_query_vectors,
+)
 
 FINETUNE_EXTRA_HINT = "the finetune extra is not installed (uv sync --extra finetune)"
 
@@ -61,9 +66,12 @@ class StoredVectorsEncoder:
         q_dims, d_dims = self._queries[1].shape[1], self._documents[1].shape[1]
         if q_dims != d_dims:
             raise VectorFileShapeError("query_chunk_dims_mismatch")
-        if isinstance(queries, VectorSet) and isinstance(documents, VectorSet):
-            if queries.header.model != documents.header.model or queries.header.profile_id != documents.header.profile_id:
-                raise VectorFileShapeError("query_chunk_profile_mismatch")
+        both_stored = isinstance(queries, VectorSet) and isinstance(documents, VectorSet)
+        if both_stored and (queries.header.model, queries.header.profile_id) != (
+            documents.header.model,
+            documents.header.profile_id,
+        ):
+            raise VectorFileShapeError("query_chunk_profile_mismatch")
         self.dims = int(d_dims)
 
     @staticmethod

@@ -18,7 +18,11 @@ from typing import Literal
 
 import numpy as np
 from pydantic import ValidationError
-from rag_sidecar.contracts.finetune import ChunkVectorRow, QueryVectorRow, VectorFileHeader
+from rag_sidecar.contracts.finetune import (
+    ChunkVectorRow,
+    QueryVectorRow,
+    VectorFileHeader,
+)
 
 VECTORS_DIR = "vectors"
 QUERY_PREFIX = "query-vectors."
