@@ -1,0 +1,59 @@
+{
+  "$defs": {
+    "ClaimJudgementItem": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_ref": {
+          "anyOf": [
+            {
+              "pattern": "^S[1-9][0-9]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Evidence Ref"
+        },
+        "index": {
+          "minimum": 0,
+          "title": "Index",
+          "type": "integer"
+        },
+        "verdict": {
+          "enum": [
+            "supported",
+            "unsupported",
+            "not_enough_info"
+          ],
+          "title": "Verdict",
+          "type": "string"
+        }
+      },
+      "required": [
+        "index",
+        "verdict"
+      ],
+      "title": "ClaimJudgementItem",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "D-25: the structured output of the in-app judge, one item per sentence.",
+  "properties": {
+    "judgements": {
+      "items": {
+        "$ref": "#/$defs/ClaimJudgementItem"
+      },
+      "maxItems": 40,
+      "title": "Judgements",
+      "type": "array"
+    }
+  },
+  "required": [
+    "judgements"
+  ],
+  "title": "ClaimJudgement",
+  "type": "object"
+}

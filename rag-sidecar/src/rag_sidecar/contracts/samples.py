@@ -2554,8 +2554,240 @@ def _phase42_variants() -> dict[str, dict[str, Any]]:
     }
 
 
+def _phase52_models() -> dict[str, Any]:
+    from rag_sidecar.contracts.answer_checks import (  # noqa: PLC0415
+        AnswerChecks,
+        AnswerNotice,
+        AnswerSentence,
+        BlockedRange,
+        ClaimsSummary,
+        OutputGuardSummary,
+        VersionConflict,
+    )
+    from rag_sidecar.contracts.claims import (  # noqa: PLC0415
+        ClaimCheckRequest,
+        ClaimCheckResult,
+        ClaimInput,
+        ClaimJudgement,
+        ClaimJudgementItem,
+        ClaimPremise,
+        ClaimVerdict,
+        GroundednessJudgeThresholdCell,
+        GroundednessJudgeThresholds,
+    )
+    from rag_sidecar.contracts.output_guard import (  # noqa: PLC0415
+        CredentialRule,
+        ObfuscationPattern,
+        OutputCapCell,
+        OutputCaps,
+        OutputGuardRules,
+    )
+    from rag_sidecar.contracts.security_events import (  # noqa: PLC0415
+        LinkPreviewStatus,
+        SecurityAlert,
+        SecurityAlertView,
+        SecurityEvent,
+        SecurityEventView,
+        SecurityUploaderView,
+        UploaderHold,
+    )
+
+    part_hash = hashlib.sha256("First sentence. Second sentence.".encode("utf-8")).hexdigest()
+    sentence = AnswerSentence(
+        index=0, part=0, start=0, end=15, kind="sentence", text_hash=part_hash, factual=True, cited=True,
+        support="supported", scorer="hhem_2_1_open",
+    )
+    guard = OutputGuardSummary(
+        mode="enforce",
+        rules_version="1",
+        links_checked=2,
+        links_removed=1,
+        credential_blocked=1,
+        rule_ids=["rule-1"],
+        event_ids=["00000000-0000-4000-8000-0000000000e1"],
+        source_chunk_ids=["chunk-001"],
+        blocked_ranges=[BlockedRange(part=0, start=16, end=32, text_hash=part_hash)],
+    )
+    conflict = VersionConflict(
+        document_ids=["doc-0001", "doc-0002"], latest_document_id="doc-0002", group_rule="supersession_link"
+    )
+    claims = ClaimsSummary(total=2, unsupported=0, not_checked=1, reasons={"too_many": 1}, scorer="hhem_2_1_open")
+    uploader = "00000000-0000-4000-8000-0000000000c1"
+    admin = "00000000-0000-4000-8000-0000000000c2"
+    return {
+        "AnswerSentence": sentence,
+        "AnswerNotice": AnswerNotice(kind="uncited", text="This sentence has no source.", language="en"),
+        "ClaimsSummary": claims,
+        "OutputGuardSummary": guard,
+        "VersionConflict": conflict,
+        "AnswerChecks": AnswerChecks(
+            sentences=[
+                sentence,
+                AnswerSentence(
+                    index=1, part=0, start=16, end=32, kind="sentence", text_hash=part_hash, factual=True,
+                    cited=False, reason="too_many",
+                ),
+            ],
+            output_guard=guard,
+            version_conflict=conflict,
+            claims=claims,
+            truncated=False,
+            finish_reason="stop",
+            text_language="en",
+        ),
+        "ClaimCheckRequest": ClaimCheckRequest(
+            request_id="req-0001",
+            language="en",
+            premises=[ClaimPremise(ref="S1", text="A neutral premise sentence.")],
+            claims=[ClaimInput(index=0, hypothesis="A neutral claim sentence.", premise_refs=["S1"])],
+            allow_vectara=False,
+        ),
+        "ClaimCheckResult": ClaimCheckResult(
+            claims=[
+                ClaimVerdict(index=0, status="scored", scorer="hhem_2_1_open", score=0.81),
+                ClaimVerdict(index=1, status="not_checked", scorer="none", reason="too_many"),
+            ],
+            latency_ms=420,
+        ),
+        "ClaimJudgement": ClaimJudgement(
+            judgements=[
+                ClaimJudgementItem(index=0, verdict="supported", evidence_ref="S1"),
+                ClaimJudgementItem(index=1, verdict="not_enough_info"),
+            ]
+        ),
+        "GroundednessJudgeThresholds": GroundednessJudgeThresholds(
+            cells=[
+                GroundednessJudgeThresholdCell(
+                    judge_model="judge/model-j",
+                    judge_version="judge-v1",
+                    language="it",
+                    max_unsupported_share=0.2,
+                    recall=0.8,
+                    precision=0.9,
+                    source="fixture",
+                    run_ids=["run-0001"],
+                    config_hash="c" * 64,
+                )
+            ]
+        ),
+        "OutputCaps": OutputCaps(
+            cells=[OutputCapCell(mode="strict", source="default"), OutputCapCell(mode="balanced", source="default")]
+        ),
+        "OutputGuardRules": OutputGuardRules(
+            version="1",
+            credential_rules=[
+                CredentialRule(id="rule-1", language="en", request_terms=["send me"], secret_terms=["password"])
+            ],
+            obfuscation_patterns=[ObfuscationPattern(id="rule-2", pattern=r"h\s*t\s*t\s*p")],
+            opaque_schemes=["data", "javascript"],
+        ),
+        "SecurityEvent": SecurityEvent(
+            tenant_key="s:default",
+            source="output_guard",
+            action="removed",
+            detector="output_guard",
+            rule_ids=["rule-1"],
+            document_id="doc-0001",
+            chunk_id="chunk-001",
+            uploader_id=uploader,
+            trace_id="0123456789abcdef0123456789abcdef",
+        ),
+        "SecurityAlert": SecurityAlert(
+            id="00000000-0000-4000-8000-0000000000f1",
+            tenant_key="s:default",
+            uploader_id=uploader,
+            event_count=6,
+            window_start="2026-01-01T00:00:00Z",
+            window_end="2026-01-02T00:00:00Z",
+            status="open",
+        ),
+        "UploaderHold": UploaderHold(
+            tenant_key="s:default",
+            user_id=uploader,
+            created_by=admin,
+            reason="Repeated flagged uploads.",
+            created_at="2026-01-02T00:00:00Z",
+        ),
+        "SecurityEventView": SecurityEventView(
+            id="00000000-0000-4000-8000-0000000000e1",
+            created_at="2026-01-01T00:00:05Z",
+            tenant_key="s:default",
+            workspace_name="Workspace A",
+            source="output_guard",
+            action="removed",
+            detector="output_guard",
+            rule_ids=["rule-1"],
+            document_id="doc-0001",
+            file_name="document-a.pdf",
+            uploader_id=uploader,
+            uploader_name="Uploader A",
+        ),
+        "SecurityAlertView": SecurityAlertView(
+            id="00000000-0000-4000-8000-0000000000f1",
+            tenant_key="s:default",
+            workspace_name="Workspace A",
+            uploader_id=uploader,
+            uploader_name="Uploader A",
+            event_count=6,
+            window_hours=24,
+            threshold=5,
+            opened_at="2026-01-02T00:00:00Z",
+            status="open",
+        ),
+        "SecurityUploaderView": SecurityUploaderView(
+            user_id=uploader,
+            display_name="Uploader A",
+            tenant_key="s:default",
+            workspace_name="Workspace A",
+            event_count=6,
+            last_event_at="2026-01-01T23:00:00Z",
+        ),
+        "LinkPreviewStatus": LinkPreviewStatus(
+            state="mismatch", preview_hosts=["host.example", "other.example"], hosts_not_allowlisted=["other.example"]
+        ),
+    }
+
+
+def _phase52_variants() -> dict[str, Any]:
+    from rag_sidecar.contracts.answer_checks import AnswerChecks  # noqa: PLC0415
+
+    checks = _phase52_models()["AnswerChecks"]
+    return {
+        "AnswerRecord:with_checks": {
+            "model": "AnswerRecord",
+            "value": _answer_record()
+            .model_copy(update={"checks": checks, "textsSource": "registry"})
+            .model_dump(mode="json"),
+        },
+        "AnswerChecks:empty": {"model": "AnswerChecks", "value": AnswerChecks().model_dump(mode="json")},
+        "CitationRecord:version_label": {
+            "model": "CitationRecord",
+            "value": _citation_record()
+            .model_copy(update={"versionLabel": "v2", "effectiveFrom": date(2025, 3, 1)})
+            .model_dump(mode="json"),
+        },
+        "OutputCaps:sweep": {
+            "model": "OutputCaps",
+            "value": {
+                "schema_version": 1,
+                "cells": [
+                    {"mode": "strict", "limit": 600, "source": "sweep", "run_ids": ["run-0001"], "config_hash": "h-1"},
+                    {"mode": "balanced", "limit": None, "source": "default"},
+                ],
+            },
+        },
+        "LinkPreviewStatus:unknown": {"model": "LinkPreviewStatus", "value": {"state": "unknown"}},
+    }
+
+
 def build_samples() -> dict[str, dict[str, Any]]:
-    models = {**_models(), **_feedback_loop_models(), **_phase42_models(), **_terminology_models()}
+    models = {
+        **_models(),
+        **_feedback_loop_models(),
+        **_phase42_models(),
+        **_terminology_models(),
+        **_phase52_models(),
+    }
     samples = {name: model.model_dump(mode="json") for name, model in models.items()}
     variants: dict[str, dict[str, Any]] = {
         "AnswerRecord:pending_unlinked": {
@@ -2684,4 +2916,5 @@ def build_samples() -> dict[str, dict[str, Any]]:
     variants.update(_phase32_ingest_contract_variants())
     variants.update(_phase32_query_contract_variants())
     variants.update(_phase42_variants())
+    variants.update(_phase52_variants())
     return {"samples": samples, "variants": variants}
