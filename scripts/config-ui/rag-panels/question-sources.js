@@ -440,12 +440,188 @@ function questionSourcesSettingsWarnings(values) {
   return out;
 }
 
-function questionSourcesReadHeader() {
-  return [];
+// ---------------------------------------------------------------------------------------------------------------------------------------
+// Import file handling (UI-SPEC 6.10.3): pure, in the browser only. Rows are never rendered, logged or stored; errors name a line number.
+
+function questionSourcesUtf8Length(value) {
+  const str = String(value);
+  if (typeof TextEncoder === 'function') return new TextEncoder().encode(str).length;
+  let bytes = 0;
+  for (const ch of str) {
+    const code = ch.codePointAt(0);
+    bytes += code < 0x80 ? 1 : code < 0x800 ? 2 : code < 0x10000 ? 3 : 4;
+  }
+  return bytes;
 }
 
-function questionSourcesBatches() {
-  return [];
+function questionSourcesStripBom(text) {
+  const value = String(text === undefined || text === null ? '' : text);
+  return value.charCodeAt(0) === 0xfeff ? value.slice(1) : value;
+}
+
+/** RFC 4180 records with the physical line each starts on (the route's csvRecords). An unclosed quote is { ok: false, line }. */
+function questionSourcesCsvRecords(text, maxRecords) {
+  const records = [];
+  let record = [];
+  let field = '';
+  let quoted = false;
+  let quoteLine = 1;
+  let line = 1;
+  let recordLine = 1;
+  const push = () => {
+    record.push(field);
+    if (!(record.length === 1 && record[0] === '')) records.push({ cells: record, line: recordLine });
+    record = [];
+    field = '';
+  };
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (quoted) {
+      if (char === '"') {
+        if (text[index + 1] === '"') {
+          field += '"';
+          index += 1;
+        } else quoted = false;
+      } else {
+        if (char === '\n') line += 1;
+        field += char;
+      }
+      continue;
+    }
+    if (char === '"' && field === '') {
+      quoted = true;
+      quoteLine = line;
+    } else if (char === ',') {
+      record.push(field);
+      field = '';
+    } else if (char === '\n' || char === '\r') {
+      push();
+      if (char === '\r' && text[index + 1] === '\n') index += 1;
+      line += 1;
+      recordLine = line;
+      if (maxRecords && records.length > maxRecords) return { ok: true, records, truncated: true };
+    } else field += char;
+  }
+  if (quoted) return { ok: false, line: quoteLine };
+  if (field !== '' || record.length > 0) push();
+  return { ok: true, records, truncated: false };
+}
+
+function questionSourcesJsonObject(line) {
+  try {
+    const value = JSON.parse(line);
+    return value !== null && typeof value === 'object' && !Array.isArray(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The file's format: its extension or type first, then its first character ({ means JSON lines). */
+function questionSourcesFileFormat(name, type, text) {
+  const lower = String(name || '').toLowerCase();
+  if (/\.(jsonl|ndjson)$/.test(lower) || /ndjson|jsonl/.test(String(type || ''))) return 'jsonl';
+  if (/\.csv$/.test(lower) || /csv/.test(String(type || ''))) return 'csv';
+  return questionSourcesStripBom(text).trimStart().startsWith('{') ? 'jsonl' : 'csv';
+}
+
+/** The CSV header cells (trimmed) or the keys of the first JSON line; [] when the first line holds no column. */
+function questionSourcesReadHeader(text, format) {
+  const body = questionSourcesStripBom(text);
+  if (format === 'jsonl') {
+    const first = body.split(/\r?\n/).find((l) => l.trim() !== '');
+    const obj = first === undefined ? null : questionSourcesJsonObject(first);
+    return obj ? Object.keys(obj) : [];
+  }
+  const parsed = questionSourcesCsvRecords(body, 1);
+  if (!parsed.ok || parsed.records.length === 0) return [];
+  const header = parsed.records[0].cells.map((c) => c.trim());
+  return header.some((h) => h !== '') ? header : [];
+}
+
+/**
+ * Pure: the whole file read once. { ok: true, format, columns, rows } or { ok: false, reason: 'badFormat' | 'noColumn' | 'tooLarge', line }.
+ * More than maxRows data rows is tooLarge; a malformed JSON line or an unclosed CSV quote is badFormat with its line number.
+ */
+function questionSourcesParseFile(text, format) {
+  const body = questionSourcesStripBom(text);
+  const max = QUESTION_SOURCES_LIMITS.maxRows;
+  if (format === 'jsonl') {
+    const lines = body.split(/\r?\n/);
+    const entries = [];
+    lines.forEach((l, i) => {
+      if (l.trim() !== '') entries.push({ text: l, line: i + 1 });
+    });
+    const columns = entries.length > 0 ? questionSourcesReadHeader(entries[0].text, 'jsonl') : [];
+    if (columns.length === 0) return { ok: false, reason: 'noColumn', line: entries.length > 0 ? entries[0].line : 1 };
+    if (entries.length > max) return { ok: false, reason: 'tooLarge' };
+    const rows = [];
+    for (const entry of entries) {
+      const obj = questionSourcesJsonObject(entry.text);
+      if (!obj) return { ok: false, reason: 'badFormat', line: entry.line };
+      rows.push(obj);
+    }
+    return { ok: true, format: 'jsonl', columns, rows };
+  }
+  const parsed = questionSourcesCsvRecords(body, max + 1);
+  if (!parsed.ok) return { ok: false, reason: 'badFormat', line: parsed.line };
+  if (parsed.records.length === 0) return { ok: false, reason: 'noColumn', line: 1 };
+  const columns = parsed.records[0].cells.map((c) => c.trim());
+  if (!columns.some((c) => c !== '')) return { ok: false, reason: 'noColumn', line: parsed.records[0].line };
+  if (parsed.truncated || parsed.records.length - 1 > max) return { ok: false, reason: 'tooLarge' };
+  return { ok: true, format: 'csv', columns, rows: parsed.records.slice(1).map((r) => r.cells) };
+}
+
+/** Pure: the question of each row from one column; a missing or non-text value is an empty row (counted by the server). */
+function questionSourcesExtract(parsed, columnIndex) {
+  if (!parsed || !parsed.ok) return [];
+  const name = parsed.columns[columnIndex];
+  const cap = QUESTION_SOURCES_LIMITS.maxQuestionChars;
+  return parsed.rows.map((row) => {
+    const value = parsed.format === 'jsonl' ? (row && typeof row[name] === 'string' ? row[name] : '') : typeof row[columnIndex] === 'string' ? row[columnIndex] : '';
+    const chars = Array.from(value);
+    return chars.length > cap ? chars.slice(0, cap).join('') : value;
+  });
+}
+
+/**
+ * Splits questions into batches whose JSON body ({ ...envelope, rows }) stays at or under maxBytes, at most 2,000 rows each, every
+ * question once and in order. Without an envelope, room for the largest request fields is reserved.
+ */
+function questionSourcesBatches(questions, maxBytes, envelope) {
+  const list = Array.isArray(questions) ? questions : [];
+  const limit = typeof maxBytes === 'number' && maxBytes > 0 ? maxBytes : QUESTION_SOURCES_LIMITS.maxBatchBytes;
+  const base = envelope && typeof envelope === 'object' ? questionSourcesUtf8Length(JSON.stringify({ ...envelope, rows: [] })) : 1024;
+  const batches = [];
+  let current = [];
+  let size = base;
+  for (const question of list) {
+    const cost = questionSourcesUtf8Length(JSON.stringify(String(question))) + (current.length > 0 ? 1 : 0);
+    if (current.length > 0 && (size + cost > limit || current.length >= QUESTION_SOURCES_LIMITS.maxBatchRows)) {
+      batches.push(current);
+      current = [];
+      size = base;
+    }
+    size += questionSourcesUtf8Length(JSON.stringify(String(question))) + (current.length > 0 ? 1 : 0);
+    current.push(question);
+  }
+  if (current.length > 0) batches.push(current);
+  return batches;
+}
+
+const QUESTION_SOURCES_COUNT_FIELDS = ['read', 'added', 'duplicates', 'rejected_pii', 'truncated', 'empty'];
+
+function questionSourcesEmptyCounts() {
+  return { read: 0, added: 0, duplicates: 0, rejected_pii: 0, truncated: 0, empty: 0, by_language: {} };
+}
+
+/** Pure: adds one batch answer to the running sums (named fields only). */
+function questionSourcesAddCounts(sums, body) {
+  const out = { ...sums, by_language: { ...sums.by_language } };
+  const b = body && typeof body === 'object' ? body : {};
+  for (const field of QUESTION_SOURCES_COUNT_FIELDS) if (typeof b[field] === 'number' && Number.isFinite(b[field])) out[field] += b[field];
+  const langs = b.by_language && typeof b.by_language === 'object' ? b.by_language : {};
+  for (const code of Object.keys(langs)) if (typeof langs[code] === 'number' && Number.isFinite(langs[code])) out.by_language[code] = (out.by_language[code] || 0) + langs[code];
+  return out;
 }
 
 class QuestionSourcesPanel {
@@ -1002,9 +1178,295 @@ class QuestionSourcesPanel {
   // -------------------------------------------------------------------------------------------------------------------------------------
   // Import questions (UI-SPEC 6.10.3)
 
-  buildImportView() {}
+  buildImportView() {
+    const view = this.views.import;
+    const fileId = 'rag-question-sources-file';
+    const columnId = 'rag-question-sources-column';
+    const ids = { fileMessage: 'rag-question-sources-file-message', columnHelp: 'rag-question-sources-column-help', chooseFirst: 'rag-question-sources-choose-first' };
+    this.imp = { parsed: null, running: false, sums: null, checkedKey: null, phase: 'idle' };
+    this.importNeeds = this.el('div', { className: 'min-w-0' });
+    this.importFile = this.el('input', {
+      className: 'file-input file-input-bordered file-input-sm w-full max-w-md',
+      attrs: { type: 'file', id: fileId, accept: '.csv,.jsonl,text/csv,application/x-ndjson', 'aria-describedby': ids.fileMessage },
+      on: { change: () => this.onImportFile() },
+    });
+    this.importFileMessage = this.el('p', { className: 'text-xs mt-1 empty:hidden max-w-prose', attrs: { id: ids.fileMessage, 'data-question-sources-file-message': '' } });
+    this.importColumn = this.el('select', {
+      className: 'select select-bordered select-sm w-full max-w-md',
+      attrs: { id: columnId, 'aria-describedby': ids.columnHelp },
+      on: { change: () => this.onImportColumn() },
+    });
+    this.importColumn.disabled = true;
+    this.importCheck = this.el('button', { className: 'btn btn-primary btn-sm', attrs: { type: 'button', 'aria-describedby': ids.chooseFirst }, on: { click: () => this.runImport(true) } }, [
+      this.t('action.checkFile'),
+    ]);
+    this.importRun = this.el('button', { className: 'btn btn-primary btn-sm', attrs: { type: 'button' }, on: { click: () => this.runImport(false) } }, [this.t('action.import')]);
+    this.importReset = this.el('button', { className: 'btn btn-outline btn-sm', attrs: { type: 'button' }, on: { click: () => this.resetImport(true) } }, [this.t('action.reset')]);
+    this.importChooseFirst = this.el('p', { className: 'text-xs text-base-content/70 empty:hidden', text: this.t('import.chooseFirst'), attrs: { id: ids.chooseFirst } });
+    this.importActions = this.el('div', { className: 'flex flex-wrap items-center gap-2' });
+    this.importProgress = this.el('div', { className: 'flex flex-col gap-1 max-w-md min-w-0' });
+    this.importProgress.hidden = true;
+    this.importResult = this.el('div', { className: 'flex flex-col gap-4 min-w-0' });
+    this.importForm = this.el('div', { className: 'flex flex-col gap-4 min-w-0' }, [
+      this.el('p', { className: 'text-sm max-w-prose', text: this.t('import.explain') }),
+      this.el('div', { className: 'form-control' }, [
+        this.el('label', { className: 'label', attrs: { for: fileId } }, [this.el('span', { className: 'label-text', text: this.t('import.file.label') })]),
+        this.importFile,
+        this.importFileMessage,
+      ]),
+      this.el('div', { className: 'form-control' }, [
+        this.el('label', { className: 'label', attrs: { for: columnId } }, [this.el('span', { className: 'label-text', text: this.t('import.column.label') })]),
+        this.importColumn,
+        this.el('div', { className: 'label' }, [this.el('span', { className: 'label-text-alt', text: this.t('import.column.help'), attrs: { id: ids.columnHelp } })]),
+      ]),
+      this.importActions,
+      this.importProgress,
+      this.importResult,
+    ]);
+    view.replaceChildren(this.importNeeds, this.importForm);
+    this.resetImport(false);
+  }
 
-  renderImportGate() {}
+  renderImportGate() {
+    if (!this.importForm) return;
+    const { gatesUiAlert } = QUESTION_SOURCES_GATES;
+    const on = this.switches().review;
+    this.importForm.hidden = !on;
+    if (on) {
+      this.importNeeds.replaceChildren();
+      if (!this.importForm.parentNode) this.views.import.appendChild(this.importForm);
+      return;
+    }
+    if (this.imp.running) return;
+    this.importForm.remove();
+    this.importNeeds.replaceChildren(gatesUiAlert('warning', 'bi-exclamation-triangle', this.m('import.needs.review', { variable: 'RAG_DOMAIN_EXPERT_REVIEW' }), []));
+  }
+
+  onWorkspaceChange() {
+    if (this.imp && !this.imp.running && this.imp.parsed) this.clearImportResult();
+  }
+
+  importFileError(key, vars) {
+    const { gatesUiStatus } = QUESTION_SOURCES_GATES;
+    this.importFileMessage.replaceChildren();
+    this.importFileMessage.classList.toggle('text-error', Boolean(key));
+    if (key) {
+      QUESTION_SOURCES_GATES.gatesUiAppendMessage(this.importFileMessage, this.m(key, vars));
+      this.importFile.setAttribute('aria-invalid', 'true');
+      gatesUiStatus(this.hosts.status, this.m(key, vars), true);
+    } else this.importFile.removeAttribute('aria-invalid');
+  }
+
+  tooLargeVars() {
+    return { size: '10 MB', rows: questionSourcesCount(QUESTION_SOURCES_LIMITS.maxRows, this.locale) };
+  }
+
+  setImportActions(buttons) {
+    this.importActions.replaceChildren(...buttons);
+    if (buttons.includes(this.importCheck)) this.importActions.appendChild(this.importChooseFirst);
+  }
+
+  clearImportResult() {
+    this.imp.sums = null;
+    this.imp.checkedKey = null;
+    this.importResult.replaceChildren();
+    this.importProgress.hidden = true;
+    this.importProgress.replaceChildren();
+    this.importCheck.disabled = !this.imp.parsed;
+    this.importChooseFirst.textContent = this.imp.parsed ? '' : this.t('import.chooseFirst');
+    if (this.imp.parsed) this.importCheck.removeAttribute('aria-describedby');
+    else this.importCheck.setAttribute('aria-describedby', this.importChooseFirst.getAttribute('id'));
+    this.setImportActions([this.importCheck]);
+  }
+
+  resetImport(focus) {
+    this.imp.parsed = null;
+    this.imp.phase = 'idle';
+    this.importFile.value = '';
+    this.importColumn.replaceChildren();
+    this.importColumn.disabled = true;
+    this.importFileError(null);
+    this.clearImportResult();
+    if (focus) this.importFile.focus();
+  }
+
+  async onImportFile() {
+    if (this.imp.running) return;
+    const files = this.importFile.files;
+    const file = files && files.length > 0 ? files[0] : null;
+    this.imp.parsed = null;
+    this.importColumn.replaceChildren();
+    this.importColumn.disabled = true;
+    this.importFileError(null);
+    this.clearImportResult();
+    if (!file) return;
+    if (typeof file.size === 'number' && file.size > QUESTION_SOURCES_LIMITS.maxFileBytes) return this.importFileError('import.tooLarge', this.tooLargeVars());
+    let content;
+    try {
+      content = await file.text();
+    } catch {
+      return this.importFileError('import.badFormat', { line: questionSourcesCount(1, this.locale) });
+    }
+    if (questionSourcesUtf8Length(content) > QUESTION_SOURCES_LIMITS.maxFileBytes) return this.importFileError('import.tooLarge', this.tooLargeVars());
+    const parsed = questionSourcesParseFile(content, questionSourcesFileFormat(file.name, file.type, content));
+    content = null;
+    if (!parsed.ok) {
+      if (parsed.reason === 'tooLarge') return this.importFileError('import.tooLarge', this.tooLargeVars());
+      if (parsed.reason === 'noColumn') return this.importFileError('import.noColumn');
+      return this.importFileError('import.badFormat', { line: questionSourcesCount(parsed.line, this.locale) });
+    }
+    const usable = parsed.columns.map((name, index) => ({ name, index })).filter((c) => c.name !== '');
+    if (usable.length === 0) return this.importFileError('import.noColumn');
+    this.imp.parsed = parsed;
+    const preferred = usable.find((c) => /^(question|query)$/i.test(c.name)) || usable[0];
+    this.importColumn.replaceChildren(...usable.map((c) => this.el('option', { text: c.name, attrs: { value: String(c.index) } })));
+    this.importColumn.value = String(preferred.index);
+    this.importColumn.disabled = false;
+    this.clearImportResult();
+  }
+
+  onImportColumn() {
+    if (!this.imp.running) this.clearImportResult();
+  }
+
+  importControlsDisabled(disabled) {
+    this.importFile.disabled = disabled;
+    this.importColumn.disabled = disabled || !this.imp.parsed;
+    for (const button of [this.importCheck, this.importRun, this.importReset]) button.disabled = disabled;
+  }
+
+  renderImportProgress(done, total) {
+    const bar = this.el('progress', { className: 'progress progress-primary w-full', attrs: { max: String(total), value: String(done), 'aria-label': this.t('import.barLabel') } });
+    this.importProgress.replaceChildren(
+      bar,
+      this.el('p', { className: 'text-xs tabular-nums', text: this.t('import.progress', { done: questionSourcesCount(done, this.locale), total: questionSourcesCount(total, this.locale) }) }),
+    );
+    this.importProgress.hidden = false;
+  }
+
+  /** The counts list and the by-language table; counts only (UI-SPEC 11 rule 8). */
+  renderImportCounts(sums, dryRun, headingKey) {
+    const rows = [
+      ['import.count.read', sums.read],
+      [dryRun ? 'import.count.wouldAdd' : 'import.count.added', sums.added],
+      ['import.count.duplicates', sums.duplicates],
+      ['import.count.rejected', sums.rejected_pii],
+      ['import.count.truncated', sums.truncated],
+      ['import.count.empty', sums.empty],
+    ];
+    const caption = this.t('import.counts.caption');
+    const body = this.el(
+      'tbody',
+      null,
+      rows.map(([key, value]) =>
+        this.el('tr', null, [
+          this.el('th', { className: 'font-normal text-sm', text: this.t(key), attrs: { scope: 'row' } }),
+          this.el('td', { className: 'text-sm text-right tabular-nums', text: questionSourcesCount(value, this.locale) }),
+        ]),
+      ),
+    );
+    const table = this.el(
+      'div',
+      {
+        className: 'overflow-x-auto rounded-lg max-w-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2',
+        attrs: { tabindex: '0', role: 'region', 'aria-label': caption, 'data-question-sources-counts': '' },
+      },
+      [
+        this.el('table', { className: 'table table-sm' }, [
+          this.el('caption', { className: 'sr-only', text: caption }),
+          this.el('thead', null, [
+            this.el('tr', null, [
+              this.el('th', { className: 'text-xs font-semibold', text: caption, attrs: { scope: 'col' } }),
+              this.el('th', { className: 'text-xs font-semibold text-right', text: this.t('import.col.count'), attrs: { scope: 'col' } }),
+            ]),
+          ]),
+          body,
+        ]),
+      ],
+    );
+    const nodes = [this.el('h4', { className: 'text-base font-semibold', text: this.t(headingKey) }), table];
+    const langs = Object.keys(sums.by_language)
+      .sort((x, y) => sums.by_language[y] - sums.by_language[x] || (x < y ? -1 : 1))
+      .map((code) => ({ code, name: QUESTION_SOURCES_GATES.gatesUiLanguageName(code, this.locale), count: questionSourcesCount(sums.by_language[code], this.locale) }));
+    if (langs.length > 0) nodes.push(this.languageTable(langs, this.t('sample.byLanguage'), this.t('import.col.questions')));
+    return nodes;
+  }
+
+  async runImport(dryRun) {
+    const parsed = this.imp.parsed;
+    if (this.imp.running || !parsed) return;
+    const { gatesUiSpinner, gatesUiErrorAlert, gatesUiAlert, gatesUiStatus } = QUESTION_SOURCES_GATES;
+    const columnIndex = Number(this.importColumn.value);
+    const column = String(parsed.columns[columnIndex] || '').slice(0, QUESTION_SOURCES_LIMITS.maxColumnChars);
+    if (!column) return this.importFileError('import.noColumn');
+    const questions = questionSourcesExtract(parsed, columnIndex);
+    const envelope = { format: parsed.format, column, dry_run: dryRun };
+    if (this.organizationId) envelope.organizationId = this.organizationId;
+    const batches = questionSourcesBatches(questions, QUESTION_SOURCES_LIMITS.maxBatchBytes, envelope);
+    const total = questions.length;
+    const pressed = dryRun ? this.importCheck : this.importRun;
+    this.imp.running = true;
+    this.importResult.replaceChildren();
+    this.importControlsDisabled(true);
+    pressed.replaceChildren(gatesUiSpinner(), this.t(dryRun ? 'action.checkFile' : 'action.import'));
+    this.renderImportProgress(0, total);
+    let sums = questionSourcesEmptyCounts();
+    let done = 0;
+    let failure = null;
+    let failedAt = 0;
+    for (const rows of batches) {
+      const result = await this.request(QUESTION_SOURCES_IMPORT_API, { method: 'POST', body: JSON.stringify({ ...envelope, rows }) }, QUESTION_SOURCES_LIMITS.batchTimeoutMs);
+      if (!result.ok) {
+        failure = result;
+        failedAt = done;
+        break;
+      }
+      sums = questionSourcesAddCounts(sums, result.body);
+      done += rows.length;
+      this.renderImportProgress(done, total);
+    }
+    this.imp.running = false;
+    pressed.replaceChildren(this.t(dryRun ? 'action.checkFile' : 'action.import'));
+    this.importControlsDisabled(false);
+    this.importProgress.hidden = true;
+    const key = String(columnIndex) + '|' + (this.organizationId || '');
+    if (failure) {
+      const nodes = [];
+      if (done > 0) nodes.push(...this.renderImportCounts(sums, dryRun, dryRun ? 'import.result.check' : 'import.result.done'));
+      const interrupted = this.m('import.interrupted', { done: questionSourcesCount(done, this.locale), total: questionSourcesCount(total, this.locale) });
+      nodes.push(gatesUiAlert('warning', 'bi-exclamation-triangle', interrupted, []));
+      let mapped;
+      if (failure.status === 400) mapped = this.m('import.badFormat', { line: questionSourcesCount(failedAt + (parsed.format === 'csv' ? 2 : 1), this.locale) });
+      else if (failure.status === 413) mapped = this.m('import.tooLarge', this.tooLargeVars());
+      else {
+        mapped = this.mapError(failure, 'tab.import', true);
+        if (mapped.kind === 'signIn' || mapped.kind === 'switchedOff') nodes.unshift(gatesUiErrorAlert(mapped, this.locale, () => this.renderImportGate()));
+      }
+      this.importResult.replaceChildren(...nodes);
+      gatesUiStatus(this.hosts.status, mapped, true);
+      this.setImportActions(dryRun ? [this.importCheck, this.importReset] : [this.importRun, this.importReset]);
+      return;
+    }
+    this.imp.sums = sums;
+    if (dryRun) {
+      this.imp.checkedKey = key;
+      const nodes = this.renderImportCounts(sums, true, 'import.result.check');
+      if (sums.added > 0) {
+        this.setImportActions([this.importRun, this.importReset]);
+        this.setStatus(this.t('import.result.check'));
+      } else {
+        nodes.push(this.el('p', { className: 'text-sm max-w-prose', text: this.t('import.nothingNew') }));
+        this.setImportActions([this.importReset]);
+        this.setStatus(this.t('import.nothingNew'));
+      }
+      this.importResult.replaceChildren(...nodes);
+      return;
+    }
+    const message = this.t('import.done', { count: questionSourcesCount(sums.added, this.locale) });
+    this.importResult.replaceChildren(...this.renderImportCounts(sums, false, 'import.result.done'), this.el('p', { className: 'text-sm max-w-prose', text: message }));
+    this.setImportActions([this.importReset]);
+    this.setStatus(message);
+  }
 
   // -------------------------------------------------------------------------------------------------------------------------------------
   // Settings (UI-SPEC 6.12, the sample group)
@@ -1092,8 +1554,12 @@ if (typeof module !== 'undefined' && module.exports) {
     questionSourcesSampleView,
     questionSourcesPilotView,
     questionSourcesSettingsWarnings,
+    questionSourcesFileFormat,
     questionSourcesReadHeader,
+    questionSourcesParseFile,
+    questionSourcesExtract,
     questionSourcesBatches,
+    questionSourcesAddCounts,
     QuestionSourcesPanel,
     initQuestionSourcesPanel,
   };
