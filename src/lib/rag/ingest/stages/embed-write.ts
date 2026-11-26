@@ -17,6 +17,7 @@ import {
 } from '../types';
 import { HiddenSpanWriteError, assertNoHiddenSpans, type SpanCheckedChunk } from '../../security/hidden-text';
 import { IngestWriterError, chunkIdFor, profileRowIdFor, type ChunkWrite, type ProfileVectors } from '../writer';
+import { indexDocumentForLookup } from '../write-indexers';
 
 const MAX_BATCH_BYTES = 1_000_000;
 const BYTES_PER_VECTOR_DIM = 20;
@@ -418,12 +419,31 @@ async function writeCaptionLanguages(ctx: StageContext, documentId: string): Pro
   if (items.length > 0) await ctx.writer.setImageChunkLanguages(documentId, items);
 }
 
+/** RAG_TABLE_LOOKUP and RAG_IDENTIFIER_INDEX as the running process has them (the typed RAG configuration). */
+async function lookupIndexSwitches(): Promise<{ tables: boolean; identifiers: boolean }> {
+  const [{ loadRagConfig }, { getRagDeps }] = await Promise.all([import('../../config'), import('../../deps')]);
+  const { v2 } = loadRagConfig(getRagDeps().ragEnv());
+  return { tables: v2.tableLookup, identifiers: v2.identifierIndex };
+}
+
+/**
+ * RET-12, RET-15 (D-15, D-28): with a switch on, the version's table rows and identifiers are written after its chunks, for every chunking
+ * profile written at ingestion. Non-fatal: a failure leaves a warning code on the result and the backfills repair it; no new stage.
+ */
+async function indexForLookup(ctx: StageContext, documentId: string): Promise<void> {
+  const switches = await lookupIndexSwitches();
+  if (!switches.tables && !switches.identifiers) return;
+  const report = await indexDocumentForLookup({ writer: ctx.writer, scope: ctx.input.scope, documentId, ...switches, signal: ctx.signal });
+  for (const warning of report.warnings) if (!ctx.warnings.includes(warning)) ctx.warnings.push(warning);
+}
+
 async function runWrite(ctx: StageContext): Promise<StageOutcome> {
   if (ctx.work.chunksWritten !== ctx.work.chunks.length) return { kind: 'fail', reason: 'write_incomplete' };
   // The text the chunker consumed (after the injection scan, which never changes it), stored once per version for the readers of documents.content.
   const document = requireDocument(ctx, 'write');
   if (ctx.work.parseText) await ctx.writer.setFields(document.id, { content: ctx.work.parseText });
   await writeCaptionLanguages(ctx, document.id);
+  await indexForLookup(ctx, document.id);
   return { kind: 'next' };
 }
 

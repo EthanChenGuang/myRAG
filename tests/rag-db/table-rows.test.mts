@@ -329,7 +329,7 @@ for (const mode of MODES) {
 
     test('rag_index_backfill_documents lists ready current and superseded documents, not provisional or unfinished ones, of the tenant only', async () => {
       await assertIndexerFunctions(db);
-      await db.query('DELETE FROM documents');
+      await db.exec('DELETE FROM rag_table_rows; DELETE FROM document_chunks; DELETE FROM documents;');
       const current = await insertDocument('A');
       const superseded = await insertDocument('A', { isCurrent: false, supersededBy: current });
       await insertDocument('A', { provisional: true });
@@ -357,58 +357,6 @@ for (const mode of MODES) {
     });
   });
 }
-
-describe('single-tenant: indexDocumentForLookup writes table rows through the tenant-bound writer', () => {
-  let db: PGlite;
-  const fixtureDb = (): PGlite => db;
-
-  before(async () => {
-    ({ db } = await createEmptyFixtureDatabase({ deploymentMode: 'single-tenant' }));
-  });
-
-  after(async () => {
-    await db?.close();
-  });
-
-  test('a seeded document gets its rows for every profile; a header-less continuation chunk joins the table', async () => {
-    await assertIndexerFunctions(fixtureDb());
-    const { createIngestWriter } = await import('@/lib/rag/ingest/writer');
-    const { indexDocumentForLookup } = await import('@/lib/rag/ingest/write-indexers');
-    const { mintScope } = await import('@/lib/rag/tenant/scope');
-    const documentId = crypto.randomUUID();
-    await db.query("INSERT INTO documents (id, filename, content, status, is_current, lineage_id) VALUES ($1, 'rows.md', '', 'ready', true, $1)", [documentId]);
-    const chunk = async (index: number, content: string, profile = 'legacy'): Promise<string> => {
-      const id = crypto.randomUUID();
-      await db.query(
-        "INSERT INTO document_chunks (id, document_id, content, metadata, chunk_index, chunking_profile_id, section_path) VALUES ($1, $2, $3, '{}'::jsonb, $4, $5, ARRAY['Zorvat'])",
-        [id, documentId, content, index, profile],
-      );
-      return id;
-    };
-    const first = await chunk(0, `Brelo tasku.\n\n${TABLE}`);
-    const second = await chunk(1, '| tiro 63 | salvo | 11 |');
-    await chunk(0, TABLE, 'p-alt');
-    const scope = mintScope('single', null, null);
-    const writer = createIngestWriter({ db: serviceRpc(db), scope, signal: new AbortController().signal });
-    const report = await indexDocumentForLookup({ writer, scope, documentId, tables: true, identifiers: false, signal: new AbortController().signal });
-    assert.deepEqual(report.warnings, []);
-    assert.equal(report.tables?.rowsWritten, 5);
-    const rows = await db.query<Row>('SELECT chunking_profile_id, table_key, row_index, cells, chunk_ids FROM rag_table_rows WHERE document_id = $1 ORDER BY chunking_profile_id, row_index', [documentId]);
-    assert.deepEqual(
-      rows.rows.map((row) => [row.chunking_profile_id, row.table_key, row.row_index]),
-      [
-        ['legacy', `${documentId}:t0`, 0],
-        ['legacy', `${documentId}:t0`, 1],
-        ['legacy', `${documentId}:t0`, 2],
-        ['p-alt', `${documentId}:t0`, 0],
-        ['p-alt', `${documentId}:t0`, 1],
-      ],
-    );
-    assert.deepEqual(rows.rows[2]?.cells, { Kelmo: 'tiro 63', Darvi: 'salvo', Quenta: '11' });
-    assert.deepEqual(rows.rows[2]?.chunk_ids, [second]);
-    assert.deepEqual(rows.rows[0]?.chunk_ids, [first]);
-  });
-});
 
 describe('write stage on the two-tenant fixture: RAG_TABLE_LOOKUP (D-15, D-45, T-04.2-65)', () => {
   let fixture: TwoTenantDatabase;
@@ -467,7 +415,9 @@ describe('write stage on the two-tenant fixture: RAG_TABLE_LOOKUP (D-15, D-45, T
     objectStoreModule.setObjectStoreForTests((await import('../helpers/fake-object-store')).createFakeObjectStore());
     ingestConfig.resetIngestConfigForTests();
     ingestDeps.setIngestDepsForTests({ ingestEnv: () => ({ RAG_EMBEDDING_PROFILES: 'off' }) });
-    ragDeps.setRagDepsForTests({ ragEnv: () => ({ RAG_TABLE_LOOKUP: tableLookup }) });
+    ragDeps.setRagDepsForTests({
+      ragEnv: () => ({ RAG_TABLE_LOOKUP: tableLookup, ...(process.env.RAG_PIPELINE ? { RAG_PIPELINE: process.env.RAG_PIPELINE } : {}) }),
+    });
   });
 
   afterEach(() => {
@@ -587,5 +537,58 @@ describe('write stage on the two-tenant fixture: RAG_TABLE_LOOKUP (D-15, D-45, T
     } finally {
       await fixture.db.query('ALTER FUNCTION public.rag_write_table_rows_disabled(text, uuid, text, jsonb) RENAME TO rag_write_table_rows');
     }
+  });
+});
+
+// Runs after the two-tenant suite, whose before() sets the fixture environment the app modules read at import.
+describe('single-tenant: indexDocumentForLookup writes table rows through the tenant-bound writer', () => {
+  let db: PGlite;
+  const fixtureDb = (): PGlite => db;
+
+  before(async () => {
+    ({ db } = await createEmptyFixtureDatabase({ deploymentMode: 'single-tenant' }));
+  });
+
+  after(async () => {
+    await db?.close();
+  });
+
+  test('a seeded document gets its rows for every profile; a header-less continuation chunk joins the table', async () => {
+    await assertIndexerFunctions(fixtureDb());
+    const { createIngestWriter } = await import('@/lib/rag/ingest/writer');
+    const { indexDocumentForLookup } = await import('@/lib/rag/ingest/write-indexers');
+    const { mintScope } = await import('@/lib/rag/tenant/scope');
+    const documentId = crypto.randomUUID();
+    await db.query("INSERT INTO documents (id, filename, content, status, is_current, lineage_id) VALUES ($1, 'rows.md', '', 'ready', true, $1)", [documentId]);
+    const chunk = async (index: number, content: string, profile = 'legacy'): Promise<string> => {
+      const id = crypto.randomUUID();
+      await db.query(
+        "INSERT INTO document_chunks (id, document_id, content, metadata, chunk_index, chunking_profile_id, section_path) VALUES ($1, $2, $3, '{}'::jsonb, $4, $5, ARRAY['Zorvat'])",
+        [id, documentId, content, index, profile],
+      );
+      return id;
+    };
+    const first = await chunk(0, `Brelo tasku.\n\n${TABLE}`);
+    const second = await chunk(1, '| tiro 63 | salvo | 11 |');
+    await chunk(0, TABLE, 'p-alt');
+    const scope = mintScope('single', null, null);
+    const writer = createIngestWriter({ db: serviceRpc(db), scope, signal: new AbortController().signal });
+    const report = await indexDocumentForLookup({ writer, scope, documentId, tables: true, identifiers: false, signal: new AbortController().signal });
+    assert.deepEqual(report.warnings, []);
+    assert.equal(report.tables?.rowsWritten, 5);
+    const rows = await db.query<Row>('SELECT chunking_profile_id, table_key, row_index, cells, chunk_ids FROM rag_table_rows WHERE document_id = $1 ORDER BY chunking_profile_id, row_index', [documentId]);
+    assert.deepEqual(
+      rows.rows.map((row) => [row.chunking_profile_id, row.table_key, row.row_index]),
+      [
+        ['legacy', `${documentId}:t0`, 0],
+        ['legacy', `${documentId}:t0`, 1],
+        ['legacy', `${documentId}:t0`, 2],
+        ['p-alt', `${documentId}:t0`, 0],
+        ['p-alt', `${documentId}:t0`, 1],
+      ],
+    );
+    assert.deepEqual(rows.rows[2]?.cells, { Kelmo: 'tiro 63', Darvi: 'salvo', Quenta: '11' });
+    assert.deepEqual(rows.rows[2]?.chunk_ids, [second]);
+    assert.deepEqual(rows.rows[0]?.chunk_ids, [first]);
   });
 });
