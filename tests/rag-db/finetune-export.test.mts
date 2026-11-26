@@ -283,7 +283,6 @@ after(async () => {
 describe('npm run rag:finetune over the fake edge (two tenants)', () => {
   const FT_ENV = { RAG_FINETUNE: 'on' };
   let fixture: import('../../eval/harness/two-tenant.mts').TwoTenantDatabase;
-  let edge: import('../../eval/harness/fake-edge.mts').FakeEdge;
   let cli: typeof import('@/lib/rag/finetune/cli');
   let bundleIo: typeof import('@/lib/rag/finetune/bundle-io');
   let ingestDeps: typeof import('@/lib/rag/ingest/deps');
@@ -298,7 +297,7 @@ describe('npm run rag:finetune over the fake edge (two tenants)', () => {
     ids = twoTenant.TWO_TENANT_IDS;
     tenantA = `u:${ids.userA}`;
     tenantB = `u:${ids.userB}`;
-    ({ fixture, edge } = await acquireEdge());
+    ({ fixture } = await acquireEdge());
     cli = await import('@/lib/rag/finetune/cli');
     bundleIo = await import('@/lib/rag/finetune/bundle-io');
     ingestDeps = await import('@/lib/rag/ingest/deps');
@@ -383,7 +382,6 @@ describe('npm run rag:finetune -- embed-queries over the fake edge', () => {
   const PROFILE = 'voyage-4-large-1024';
   const MODEL = 'voyage-4-large';
   let fixture: import('../../eval/harness/two-tenant.mts').TwoTenantDatabase;
-  let edge: import('../../eval/harness/fake-edge.mts').FakeEdge;
   let cli: typeof import('@/lib/rag/finetune/cli');
   let bundleIo: typeof import('@/lib/rag/finetune/bundle-io');
   let ingestDeps: typeof import('@/lib/rag/ingest/deps');
@@ -407,7 +405,7 @@ describe('npm run rag:finetune -- embed-queries over the fake edge', () => {
     const twoTenant = await import('../../eval/harness/two-tenant.mts');
     tenantA = `u:${twoTenant.TWO_TENANT_IDS.userA}`;
     tenantB = `u:${twoTenant.TWO_TENANT_IDS.userB}`;
-    ({ fixture, edge } = await acquireEdge());
+    ({ fixture } = await acquireEdge());
     cli = await import('@/lib/rag/finetune/cli');
     bundleIo = await import('@/lib/rag/finetune/bundle-io');
     ingestDeps = await import('@/lib/rag/ingest/deps');
