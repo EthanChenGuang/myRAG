@@ -15,6 +15,7 @@ import {
   wait,
   type Json,
   type ImpactPage,
+  type Reply,
 } from './helpers/ingest-impact-harness';
 
 type Guard = (next: Json, saved: Json, options?: Json) => Promise<unknown>;
@@ -458,7 +459,7 @@ function rowsOf(table: ReturnType<typeof rebuildsTable>) {
   return table ? table.querySelectorAll('tbody tr') : [];
 }
 
-function coverageWith(extra: Json): Json {
+function coverageWith(extra: Json): Reply {
   return { status: 200, body: coverageAnswer(extra) };
 }
 
