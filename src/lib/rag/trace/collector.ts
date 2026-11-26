@@ -4,6 +4,13 @@ import type { Profile, StageFailureReason, StageRecord, StageRunStatus } from '.
 
 const TRACE_ID = /^[0-9a-f]{32}$/;
 
+const CACHE_STATES: ReadonlySet<string> = new Set<TraceCacheState>(['hit', 'miss', 'bypass']);
+
+/** True for a 32-character lowercase hex trace id, the shape every collector produces. */
+export function isTraceId(value: unknown): value is string {
+  return typeof value === 'string' && TRACE_ID.test(value);
+}
+
 const STAGE_COUNT_KEY = /^[a-z][a-z0-9_]{0,63}$/;
 
 export function sanitizeStageCounts(raw: Record<string, number>): Record<string, number> | undefined {
@@ -87,6 +94,14 @@ export function createTraceCollector(options: TraceCollectorOptions): TraceColle
   const traceId = normaliseTraceId(deps.randomId());
   const startedAt = deps.now();
   let review: ReviewContent | null = null;
+  let requestStart: number | null = null;
+  let preGenerationMs: number | null = null;
+  let ttftMs: number | null = null;
+  let cacheState: TraceCacheState = 'bypass';
+  const elapsedSince = (start: number): number => {
+    const elapsed = deps.now() - start;
+    return Number.isFinite(elapsed) ? Math.max(0, elapsed) : 0;
+  };
 
   return {
     traceId,
@@ -122,11 +137,30 @@ export function createTraceCollector(options: TraceCollectorOptions): TraceColle
       review = { ...review, ...content };
     },
     reviewContent: () => (review ? { ...review } : null),
-    markRequestStart() {},
-    markGenerationStart() {},
-    markFirstTextDelta() {},
-    setCacheState() {},
-    timing: () => null,
+    markRequestStart(at) {
+      if (requestStart !== null) return;
+      const value = at ?? deps.now();
+      if (Number.isFinite(value)) requestStart = value;
+    },
+    markGenerationStart() {
+      if (requestStart === null || preGenerationMs !== null) return;
+      preGenerationMs = elapsedSince(requestStart);
+    },
+    markFirstTextDelta() {
+      if (requestStart === null || ttftMs !== null) return;
+      ttftMs = elapsedSince(requestStart);
+    },
+    setCacheState(state) {
+      if (CACHE_STATES.has(state)) cacheState = state;
+    },
+    timing() {
+      if (requestStart === null) return null;
+      return {
+        ...(preGenerationMs !== null ? { pre_generation_ms: preGenerationMs } : {}),
+        ...(ttftMs !== null ? { ttft_ms: ttftMs } : {}),
+        cache: cacheState,
+      };
+    },
     toStageStatus() {
       const status: Record<string, StageRunStatus> = {};
       for (const record of records) status[record.name] = record.status;

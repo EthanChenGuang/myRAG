@@ -233,7 +233,7 @@ describe('request timing on the root (D-25)', () => {
     assert.ok(root);
     assert.equal(Number(root.attributes[`${ATTR}ttft_ms`]), timing.ttft_ms);
     assert.equal(Number(root.attributes[`${ATTR}pre_generation_ms`]), timing.pre_generation_ms);
-    assert.equal(root.attributes[`${ATTR}cache`], 'miss');
+    assert.equal(JSON.parse(String(root.attributes[`${ATTR}cache`])), 'miss');
     for (const span of fake.spans.filter((candidate) => candidate.name !== 'rag-request')) {
       for (const key of TIMING_KEYS) assert.ok(!(`${ATTR}${key}` in span.attributes), `${span.name} ${key}`);
     }
