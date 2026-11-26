@@ -640,3 +640,8 @@ export {
   writeCheck,
 } from './config-gate/gate-core';
 export type { BuildChangeRecordInput, ChangeRecordClient, ChangeRecordRow, DecideSaveOptions, RagGateInput, SaveDecision } from './config-gate/gate-core';
+export { monitorSettings } from './monitor/config';
+export type { MonitorSettings } from './monitor/config';
+export { setAlertStatus } from './monitor/alerts-store';
+export { alertForAdmin, alertFromRow, listAlerts, MAX_ALERTS_PAGE, monitorSummary } from './monitor/alerts-read';
+export type { AlertStatusFilter, ListAlertsResult, MonitorSummary } from './monitor/alerts-read';

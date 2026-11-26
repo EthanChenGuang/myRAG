@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
 import { adminDenied, checkAdmin } from '@/lib/admin-route-auth';
-import { alertForAdmin } from '@/lib/rag/monitor/alerts-read';
-import { setAlertStatus } from '@/lib/rag/monitor/alerts-store';
-import { monitorSettings } from '@/lib/rag/monitor/config';
+import { alertForAdmin, monitorSettings, setAlertStatus } from '@/lib/rag';
 import { getSupabaseAdmin } from '@/lib/supabase';
 
 export const runtime = 'nodejs';

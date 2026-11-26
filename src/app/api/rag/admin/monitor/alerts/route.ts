@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod/v3';
 import { adminDenied, checkAdmin } from '@/lib/admin-route-auth';
-import { listAlerts, MAX_ALERTS_PAGE, monitorSummary } from '@/lib/rag/monitor/alerts-read';
-import { monitorSettings } from '@/lib/rag/monitor/config';
+import { listAlerts, MAX_ALERTS_PAGE, monitorSettings, monitorSummary } from '@/lib/rag';
 import { getSupabaseAdmin } from '@/lib/supabase';
 
 export const runtime = 'nodejs';
