@@ -39,3 +39,7 @@ export function noKnowledgeBaseResponse(language: string): string {
 
 Would you like me to turn on web search and check? Do you want to upload a document that contains this information? Is there a specific detail you want me to focus on?`;
 }
+
+export function identifierSuggestionMessage(_language: string | null | undefined, _suggestions: readonly string[] | undefined): string {
+  return '';
+}

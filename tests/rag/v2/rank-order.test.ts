@@ -36,6 +36,17 @@ vi.mock('@/lib/rag/v2/diversify', async (importOriginal) => {
   };
 });
 
+vi.mock('@/lib/rag/retrieval/identifiers', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/rag/retrieval/identifiers')>();
+  return {
+    ...actual,
+    guardNearMisses: (...args: Parameters<typeof actual.guardNearMisses>) => {
+      calls.push('identifier_guard');
+      return actual.guardNearMisses(...args);
+    },
+  };
+});
+
 vi.mock('@/lib/rag/v2/subq-coverage', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/rag/v2/subq-coverage')>();
   return {
@@ -106,8 +117,12 @@ function orderedReranker(): Reranker {
   };
 }
 
-async function run(diversity: string, options: { coverage?: boolean; finalTopK?: number } = {}) {
-  const env = { ...BASE_ENV, RAG_RESULT_DIVERSITY: diversity };
+async function run(diversity: string, options: { coverage?: boolean; finalTopK?: number; identifiers?: boolean } = {}) {
+  const env: Record<string, string> = {
+    ...BASE_ENV,
+    RAG_RESULT_DIVERSITY: diversity,
+    ...(options.identifiers ? { RAG_IDENTIFIER_INDEX: 'true', RAG_IDENTIFIER_FILTER: 'true' } : {}),
+  };
   uninstallDeps();
   installDeps({ ragEnv: () => env });
   setRerankerFactoryForTests(() => orderedReranker());
@@ -128,6 +143,7 @@ async function run(diversity: string, options: { coverage?: boolean; finalTopK?:
     variants: VARIANTS,
     finalTopK: options.finalTopK ?? 2,
     ...(coverage ? { queryPlan: PLAN, coverage: { enabled: true, topK: options.finalTopK ?? 2 } } : {}),
+    ...(options.identifiers ? { identifiers: { askedNorms: ['vorpel4'], patterns: [] } } : {}),
   });
   return { out, collector };
 }
@@ -157,6 +173,24 @@ describe('rank stage order with diversify (D-21, D-48, D-38 h)', () => {
     expect(ids(out.survivors).slice(0, 2)).toEqual(['c0', 'c5']);
     expect(ids(out.survivors)).not.toContain('c1');
     expect(out.alsoIn?.get('c0')?.map((entry) => entry.documentId)).toEqual(['d1', 'd2', 'd3']);
+  });
+
+  it('runs the identifier guard between refusal and diversify while the filter is on (D-31, D-51)', async () => {
+    const { out, collector } = await run('collapse', { identifiers: true });
+    expect(calls).toEqual(['rerank', 'refusal', 'identifier_guard', 'diversify', 'reservation']);
+    const names = collector.stages().map((stage) => stage.name);
+    expect(names.indexOf('refusal')).toBeLessThan(names.indexOf('identifier_guard'));
+    expect(names.indexOf('identifier_guard')).toBeLessThan(names.indexOf('diversify'));
+    const guard = collector.stages().find((stage) => stage.name === 'identifier_guard');
+    expect(guard?.status).toBe('ok');
+    expect(guard?.counts).toEqual({ dropped: 0 });
+    expect(out.identifierGuard).toEqual({ dropped: 0 });
+  });
+
+  it('records no identifier guard while the filter is off', async () => {
+    const { collector } = await run('collapse');
+    expect(calls).not.toContain('identifier_guard');
+    expect(collector.stages().some((stage) => stage.name === 'identifier_guard')).toBe(false);
   });
 
   it('keeps the reservation inside the refusal stage while diversity is off', async () => {
