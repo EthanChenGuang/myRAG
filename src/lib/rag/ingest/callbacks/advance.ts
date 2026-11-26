@@ -474,6 +474,8 @@ export async function handleAdvance(jobId: string, body: AdvanceBody, options: {
   try {
     let job = await getJobInternal(jobId, { signal });
     if (!job) return refuse(404, 'job_not_found');
+    // D-29: a translate job runs only through the translate callback; a worker that does not know the kind is refused here.
+    if (job.kind === 'translate') return refuse(409, 'kind_mismatch');
     if (isTerminal(job)) {
       return reply(body.worker_id, { stage: job.status, done: true, status: job.status, ...(job.error_class ? { reason: job.error_class } : {}) });
     }

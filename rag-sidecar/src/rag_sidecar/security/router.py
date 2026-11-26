@@ -26,6 +26,7 @@ from rag_sidecar.security.hidden_text import (
     CheckerUnavailable,
     EncryptedDocument,
     UnreadableDocument,
+    UnsafePackage,
     cached_rules,
     check_hidden_text,
 )
@@ -95,6 +96,8 @@ def build_hidden_text_router(settings: SidecarSettings, timeout_s: float = CHECK
                 return _error(422, "encrypted_document")
             except UnreadableDocument:
                 return _error(422, "unreadable_document")
+            except UnsafePackage:
+                return _error(422, "unsafe_package")
             except TimeoutError:
                 logger.warning("[RAG Security] hidden-text check timed out", extra={"timeout_s": timeout_s})
                 return _error(504, "hidden_text_timeout")

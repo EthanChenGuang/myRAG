@@ -257,7 +257,7 @@ jobs:
           enable-cache: true
           cache-dependency-glob: '**/uv.lock'
       - run: uv sync --directory rag-sidecar --locked --extra chunking
-      - run: uv sync --directory rag-sidecar --locked --extra preflight
+      - run: uv sync --directory rag-sidecar --locked --extra preflight --extra hidden-text
       - run: uv sync --directory eval --locked --all-extras
       - name: Fill the tiktoken encoding cache (tests never download it)
         run: python3 scripts/ci/fill-tiktoken-cache.py

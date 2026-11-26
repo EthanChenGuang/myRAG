@@ -18,6 +18,8 @@ const REVIEW_TAG = 'review_candidate';
 export type TraceStage = StageRecord & { attributes?: Record<string, string | number | boolean> };
 
 export interface CollectedTrace {
+  /** Root observation name; defaults to rag-request. */
+  name?: string;
   traceId: string;
   tenantKey: string;
   profile: string;
@@ -138,7 +140,7 @@ export async function exportTrace(trace: CollectedTrace, options: ExportTraceOpt
     ...(content?.chunks !== undefined ? { output: maskPII({ chunks: content.chunks }) } : {}),
   };
 
-  const root = startObservation('rag-request', rootAttributes, {
+  const root = startObservation(trace.name ?? 'rag-request', rootAttributes, {
     startTime: new Date(trace.startedAt),
     parentSpanContext: {
       traceId: trace.traceId,

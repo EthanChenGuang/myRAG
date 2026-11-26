@@ -4810,6 +4810,7 @@
         "routing": "tiered",
         "routing_config_version": "1",
         "row_serialization": false,
+        "target_language": null,
         "vlm_detect": false,
         "vlm_model": null
       },
@@ -4988,6 +4989,7 @@
       "routing": "tiered",
       "routing_config_version": "1",
       "row_serialization": false,
+      "target_language": null,
       "vlm_detect": false,
       "vlm_model": null
     },
@@ -7333,6 +7335,17 @@
       "chunk_id": "chunk-0001",
       "document_id": "00000000-0000-4000-8000-000000000001",
       "quote": "ships in a red box"
+    },
+    "TranslateCallbackRequest": {
+      "deadline_ms": 40000,
+      "worker_id": "worker-1"
+    },
+    "TranslateCallbackResponse": {
+      "outcome": "continue",
+      "reason": "time_budget",
+      "remaining": 3,
+      "status": null,
+      "worker_id": "worker-1"
     },
     "TranslationSettings": {
       "enabled": true,

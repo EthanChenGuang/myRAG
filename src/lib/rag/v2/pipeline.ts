@@ -32,6 +32,7 @@ import { buildCacheHitResult, buildSmallTalkResult, buildV2Result, fusedHitsToVo
 import { buildRetrievalFilters, effectiveOnFor } from '../query/filters';
 import { queryLanguage as detectQueryLanguage } from '../query/language';
 import type { RetrievalConfigHashQueryLayer } from './config-hash';
+import { hasTranslationWork, planTranslationLegs, translationHashFields, type TranslationLegsPlan } from './translation-legs';
 import type { SemanticCacheSeam } from '../query/run-layer';
 import { variantDenseTexts } from '../query/variants';
 
@@ -120,6 +121,24 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
     queryLayerHash ??= await queryLayerHashFor(input, config, profile);
     return queryLayerHash;
   };
+  // XLG-04: one translation state lookup per request and embedding profile, shared by the cache key and the search stage.
+  const translationPlans = new Map<string, Promise<TranslationLegsPlan>>();
+  const planTranslations = (embeddingProfileId: string): Promise<TranslationLegsPlan> => {
+    let pending = translationPlans.get(embeddingProfileId);
+    if (!pending) {
+      pending = planTranslationLegs({
+        profile,
+        config,
+        scope,
+        queryLanguage: detectQueryLanguage(input.query),
+        embeddingProfileId,
+        signal,
+      });
+      translationPlans.set(embeddingProfileId, pending);
+    }
+    return pending;
+  };
+  let translationPlan: TranslationLegsPlan | null = null;
   const cacheSeam: SemanticCacheSeam = {
     embed: async (text, embedSignal) => (await embedForRetrieval(input, [text], embedSignal))[0]!,
     retrievalConfigHash: async (embedded) =>
@@ -131,6 +150,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
         queryLanguage: detectQueryLanguage(input.query),
         security,
         bindingHash: bindingHashFields(await planBindingsEarly()),
+        translationHash: translationHashFields(await planTranslations(embedded.profile?.id ?? LEGACY_PROFILE.id), params),
         queryLayerHash: await layerHash(),
         ...(config.effectiveDates ? { effectiveOn: effectiveOnFor(config, deps.now()) } : {}),
       }),
@@ -207,6 +227,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
       'embed',
     );
     embedding = variantEmbeddings[0]!;
+    translationPlan = await planTranslations(embedding.profile?.id ?? LEGACY_PROFILE.id);
 
     const search = await runSearchStages({
       input,
@@ -223,6 +244,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
       ...(query.queryLayer ? { trackStandalone: true } : {}),
       filters: query.filters,
       bindings: { plan: bindingPlan, embeds: bindingEmbeds },
+      ...(hasTranslationWork(translationPlan) ? { translations: translationPlan } : {}),
     });
 
     const rank = await runRankStages({
@@ -378,6 +400,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
     injectionStalled,
     security,
     ...(bindingPlan ? { bindingHash: bindingHashFields(bindingPlan) } : {}),
+    ...(translationPlan ? { translationHash: translationHashFields(translationPlan, params) } : {}),
     queryPlan,
     ...(layerTranslate ? { layerTranslate } : {}),
     ...(effectiveOn ? { effectiveOn } : {}),

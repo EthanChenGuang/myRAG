@@ -1,4 +1,6 @@
-import { TRANSLATION_HOOK, inlineTranslationOn, registerTranslationHook } from './translate/produce';
+import { queueConfigFromProcessEnv, type QueueConfig } from './queue-config';
+import { enqueueTranslateJobs } from './translate/enqueue';
+import { TRANSLATION_HOOK, registerTranslationHook, translationAfterPublishOn } from './translate/produce';
 import { SUPERSESSION_HOOK, registerSupersessionHook, supersessionDetectOn } from './versions/detect';
 
 /**
@@ -42,16 +44,43 @@ export function unregisterPostPublishHook(name: string): void {
   if (index >= 0) hooks.splice(index, 1);
 }
 
+/** Enqueuing makes a few ledger calls and no model call. */
+export const QUEUED_TRANSLATION_HOOK_TIMEOUT_MS = 10_000;
+
+let queueConfigSource: () => QueueConfig = queueConfigFromProcessEnv;
+
+/** Tests only: the queue configuration the translation hook reads (the process one is frozen at import). */
+export function setPostPublishQueueConfigForTests(source: (() => QueueConfig) | null): void {
+  queueConfigSource = source ?? queueConfigFromProcessEnv;
+}
+
+function asyncIngestOn(): boolean {
+  try {
+    return queueConfigSource().ingestAsync;
+  } catch {
+    return false;
+  }
+}
+
 /**
- * D-41: the supersession detector is a hook only while RAG_SUPERSESSION_DETECT=on. D-29: inline chunk translation is a hook only while
- * RAG_DOC_TRANSLATION=on, the deployment is not monolingual and asynchronous ingestion is off; the producer still checks the tenant's own
- * setting before any model call. Off, each is removed and nothing runs.
+ * D-41: the supersession detector is a hook only while RAG_SUPERSESSION_DETECT=on. D-29: chunk translation is a hook only while
+ * RAG_DOC_TRANSLATION=on and the deployment is not monolingual: with asynchronous ingestion off it translates inline within its budget,
+ * with it on it only enqueues ledger jobs of kind translate (enqueueTranslateJob, one per target) for the worker. Both check the tenant's
+ * own setting first. Off, each is removed and nothing runs.
  */
 function syncBuiltInHooks(): void {
   if (supersessionDetectOn()) registerSupersessionHook(registerPostPublishHook);
   else unregisterPostPublishHook(SUPERSESSION_HOOK);
-  if (inlineTranslationOn()) registerTranslationHook(registerPostPublishHook);
-  else unregisterPostPublishHook(TRANSLATION_HOOK);
+  if (!translationAfterPublishOn()) unregisterPostPublishHook(TRANSLATION_HOOK);
+  else if (asyncIngestOn()) {
+    registerPostPublishHook(
+      TRANSLATION_HOOK,
+      async (event, signal) => {
+        await enqueueTranslateJobs(event, signal);
+      },
+      { timeoutMs: QUEUED_TRANSLATION_HOOK_TIMEOUT_MS },
+    );
+  } else registerTranslationHook(registerPostPublishHook);
 }
 
 export function resetPostPublishHooksForTests(): void {

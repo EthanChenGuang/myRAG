@@ -24,6 +24,8 @@ from rag_sidecar.contracts.queue import (
     IngestionJob,
     ParseExternalRequest,
     ParseExternalResponse,
+    TranslateCallbackRequest,
+    TranslateCallbackResponse,
 )
 from rag_sidecar.ingest.app_client import AppAuthError, AppTransientError
 from rag_sidecar.ingest.cache_keys import options_hash
@@ -40,6 +42,11 @@ logger = logging.getLogger(__name__)
 ADVANCE_DEADLINE_MS = 40_000
 MAX_ADVANCE_CALLS = 200
 MAX_PARSE_POLLS = 400
+# D-29: one translate callback is bounded by the route's limit; the worker calls again while chunks remain.
+TRANSLATE_DEADLINE_MS = 40_000
+MAX_TRANSLATE_CALLS = 100
+# The app's retry reasons; anything else is recorded as translate_failed, so the error class stays a fixed vocabulary.
+_TRANSLATE_RETRY_REASONS = frozenset({"model_unavailable", "write_failed", "unavailable", "aborted", "invalid_argument", "incomplete"})
 
 # The chain has no tier of its own; the attempt row names the delegation instead of a conversion preset.
 FIXED_CHAIN_PARSER = "chain"
@@ -239,6 +246,31 @@ async def _advance_until_done(
     return await _fail(deps, job, "advance_stalled", retryable=True)
 
 
+async def _translate(deps: WorkerDeps, job: IngestionJob) -> JobOutcome:
+    """A job of kind translate (D-29): the app translates in time-boxed slices; the worker only claims, calls back and fails retryably.
+
+    Nothing is downloaded, parsed or cached here. A slice that ran out of time answers continue with the chunks remaining, and the
+    worker calls again at once; a slice that made no progress, or too many slices, fail the job retryably under the ledger's rules.
+    """
+    remaining: int | None = None
+    for _ in range(MAX_TRANSLATE_CALLS):
+        response: TranslateCallbackResponse = await deps.app.translate(
+            job.id, TranslateCallbackRequest(worker_id=deps.worker_id, deadline_ms=TRANSLATE_DEADLINE_MS)
+        )
+        if response.outcome == "done":
+            status = response.status or "ready"
+            if status in TERMINAL_SUCCESS:
+                return JobOutcome(status=status)
+            return JobOutcome(status=status, error_class=response.reason)
+        if response.outcome == "retry":
+            reason = response.reason if response.reason in _TRANSLATE_RETRY_REASONS else "failed"
+            return await _fail(deps, job, f"translate_{reason}", retryable=True)
+        if remaining is not None and response.remaining is not None and response.remaining >= remaining:
+            return await _fail(deps, job, "translate_no_progress", retryable=True)
+        remaining = response.remaining
+    return await _fail(deps, job, "translate_stalled", retryable=True)
+
+
 def _needs_begin(job: IngestionJob) -> bool:
     """A backfill ingest job is enqueued without a document row; it gets one at its first claim (D-31). Dry runs never do."""
     return job.kind == "ingest" and job.batch_id is not None and job.document_id is None
@@ -274,6 +306,8 @@ def _resume_parse_cache(job: IngestionJob) -> str | None:
 async def process_job(job: IngestionJob, deps: WorkerDeps) -> JobOutcome:
     """Runs one claimed job. The returned outcome says how it ended; nothing document-related is logged."""
     try:
+        if job.kind == "translate":
+            return await _translate(deps, job)
         if job.settings.routing not in ("fixed", "tiered"):
             return await _fail(deps, job, "routing_not_supported", retryable=False)
         if job.kind == "dry_run" and job.settings.routing != "tiered":

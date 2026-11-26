@@ -7,7 +7,7 @@ import type { RagConfig, StageName } from '../../config';
 import { getRagDeps, type RagDeps } from '../../deps';
 import { dedupeAndCap, type DedupeCounts, type DedupeResult } from '../../fusion/dedupe';
 import { rrf, type FusedHit, type RankedList } from '../../fusion/rrf';
-import { getEmbeddingProfileById } from '../../embeddings/active-profile';
+import { getEmbeddingProfileById, LEGACY_PROFILE } from '../../embeddings/active-profile';
 import {
   embedQueries,
   embedQueriesForEvalProfile,
@@ -24,6 +24,14 @@ import { getV2StartupVerdict } from '../startup';
 import { evalChunkingOverride } from '../overrides';
 import { createRetrievalPort, listsFromLegs, variantSearchRequest, type RetrievalPortHandle } from '../port';
 import { bindingFailureDetail, hasBindingWork, runBindingLegs, type BindingEmbed, type BindingLegsOutput, type BindingLegsPlan } from './binding-legs';
+import {
+  hasTranslationWork,
+  preferOriginalHits,
+  runTranslationLegs,
+  translationDetail,
+  type TranslationLegsOutput,
+  type TranslationLegsPlan,
+} from '../translation-legs';
 import type { RetrievalParams } from '@/lib/rag-eval/contracts.generated';
 import type { SearchDelegate } from '../../query/port-types';
 
@@ -47,6 +55,8 @@ export interface SearchStagesInput {
   bindings?: { plan: BindingLegsPlan; embeds: readonly Promise<BindingEmbed>[] };
   /** A query framework fusing the variant lists through a scope-bound port (D-18); absent means native RRF. */
   searchDelegate?: SearchDelegate;
+  /** Planned translation legs (XLG-04, D-30); absent or empty runs none. */
+  translations?: TranslationLegsPlan;
 }
 
 function evalEmbeddingProfileId(input: RunRetrievalInput): string | undefined {
@@ -314,8 +324,29 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
         })
       : Promise.resolve(null);
 
+  const translations = hasTranslationWork(ctx.translations) ? ctx.translations : null;
+  const originalText = variants.find((variant) => variant.kind === 'original')?.text ?? input.query;
+  const runTranslations = (stageSignal: AbortSignal): Promise<TranslationLegsOutput | null> =>
+    translations
+      ? runTranslationLegs({
+          backend,
+          scope,
+          plan: translations,
+          queryText: originalText,
+          queryEmbedding: embedding,
+          embeddingProfileId: embedding.profile?.id ?? LEGACY_PROFILE.id,
+          filters,
+          params,
+          lexicalEnabled: lexicalEnabled && verdict.icuAvailable,
+          signal: stageSignal,
+          timeoutMs: Math.max(1, searchSpec.timeoutMs - BINDING_STAGE_MARGIN_MS),
+          ...(chunkingOverride ? { chunkingProfileOverride: chunkingOverride } : {}),
+        })
+      : Promise.resolve(null);
+
   const runDelegatedSearch = async (stageSignal: AbortSignal, delegate: SearchDelegate) => {
     const domainPending = runDomainLegs(stageSignal);
+    const translationPending = runTranslations(stageSignal);
     const handle = createRetrievalPort({
       scope,
       backend,
@@ -339,11 +370,13 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     }
     const legsByVariant = handle.collectedLegs();
     const domain = await domainPending;
+    const translation = await translationPending;
     return {
       legsByVariant,
       denseTotal: legsByVariant.reduce((total, legs) => total + legs.dense.length, 0),
       lexicalTotal: legsByVariant.reduce((total, legs) => total + legs.lexical.length, 0),
       domain,
+      translation,
       delegated: { handle, order: order as string[] } as DelegatedFusion | null,
     };
   };
@@ -353,6 +386,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     let denseTotal = 0;
     let lexicalTotal = 0;
     const domainPending = runDomainLegs(stageSignal);
+    const translationPending = runTranslations(stageSignal);
     const legsByVariant = await Promise.all(
       variants.map(async (variant, index) => {
         const legs = await backend.search(
@@ -373,19 +407,36 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       }),
     );
     const domain = await domainPending;
-    return { legsByVariant, denseTotal, lexicalTotal, domain, delegated: null as DelegatedFusion | null };
+    const translation = await translationPending;
+    return { legsByVariant, denseTotal, lexicalTotal, domain, translation, delegated: null as DelegatedFusion | null };
   };
 
   type SearchResult = Awaited<ReturnType<typeof runBackendSearch>>;
 
-  const searchCounts = (value: { denseTotal: number; lexicalTotal: number; domain: BindingLegsOutput | null }) => ({
+  const searchCounts = (value: {
+    denseTotal: number;
+    lexicalTotal: number;
+    domain: BindingLegsOutput | null;
+    translation: TranslationLegsOutput | null;
+  }) => ({
     dense: value.denseTotal,
     lexical: value.lexicalTotal,
     ...(value.domain ? value.domain.counts : {}),
+    ...(value.translation ? value.translation.counts : {}),
   });
+
+  const extraFailed = (value: SearchResult): boolean =>
+    (value.domain !== null && value.domain.failures.length > 0) || (value.translation !== null && value.translation.failures.length > 0);
+  const extraDetail = (value: SearchResult): string | undefined => {
+    const parts = [value.domain ? bindingFailureDetail(value.domain.failures) : undefined, translationDetail(value.translation)].filter(
+      (part): part is string => part !== undefined,
+    );
+    return parts.length > 0 ? parts.join(';') : undefined;
+  };
 
   let searchValue: Awaited<ReturnType<typeof runBackendSearch>>['legsByVariant'];
   let domainLists: RankedList[] = [];
+  let translationOutput: TranslationLegsOutput | null = null;
   let delegated: DelegatedFusion | null = null;
   if (icuSkipLexical) {
     const startedAt = collector.now();
@@ -406,13 +457,15 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     }
     searchValue = searched.legsByVariant;
     domainLists = searched.domain?.lists ?? [];
+    translationOutput = searched.translation;
     delegated = searched.delegated;
+    const translationNote = translationDetail(searched.translation);
     collector.record({
       name: 'search',
       status: 'degraded',
       startedAt,
       endedAt: collector.now(),
-      detail: 'lexical_icu_unavailable',
+      detail: translationNote ? `lexical_icu_unavailable;${translationNote}` : 'lexical_icu_unavailable',
       counts: searchCounts(searched),
       candidatesOut: searched.denseTotal + searched.lexicalTotal,
     });
@@ -427,11 +480,11 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
           candidatesOut: (value) => value.denseTotal + value.lexicalTotal,
           counts: searchCounts,
           ...(ctx.searchDelegate ? { failureDetail: delegateFailureDetail } : {}),
-          ...(bindings
+          ...(bindings || translations
             ? {
-                // D-19: a dropped binding leg degrades the stage; the global legs and the answer continue.
-                status: (value) => (value.domain && value.domain.failures.length > 0 ? 'degraded' : 'ok'),
-                detail: (value) => (value.domain ? bindingFailureDetail(value.domain.failures) : undefined),
+                // D-19, D-30: a dropped binding or translation leg degrades the stage; the original legs and the answer continue.
+                status: (value) => (extraFailed(value) ? 'degraded' : 'ok'),
+                detail: extraDetail,
               }
             : {}),
         },
@@ -440,8 +493,12 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     );
     searchValue = searched.legsByVariant;
     domainLists = searched.domain?.lists ?? [];
+    translationOutput = searched.translation;
     delegated = searched.delegated;
   }
+  // Mapped to source chunks before fusion; a chunk the original legs also found keeps the original hit (D-30).
+  const translationLists =
+    translationOutput && translationOutput.lists.length > 0 ? preferOriginalHits(translationOutput.lists, legHitsByChunkId(searchValue)) : [];
 
   let exactList: RankedList | null = null;
   if (config.exactIdLookup) {
@@ -469,7 +526,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       spec('fuse', 'throw'),
       signal,
       () => {
-        const extraLists = [...(exactList ? [exactList] : []), ...domainLists];
+        const extraLists = [...(exactList ? [exactList] : []), ...domainLists, ...translationLists];
         let fusedHits: FusedHit[];
         if (delegated) {
           fusedHits = delegatedFusion(delegated, extraLists, params.rrf_k);

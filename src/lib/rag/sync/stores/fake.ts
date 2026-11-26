@@ -152,7 +152,12 @@ export function createFakeVectorStore(target: VectorSyncTarget = 'qdrant'): Fake
       const all = sorted(partition(profileId, tenantKey)).filter((point) => page.after === null || point.id > page.after);
       const slice = all.slice(0, page.limit);
       return {
-        points: slice.map((point) => ({ id: point.id, documentId: point.payload.document_id, contentHash: point.payload.content_hash })),
+        points: slice.map((point) => ({
+          id: point.id,
+          documentId: point.payload.document_id,
+          contentHash: point.payload.content_hash,
+          lexicalVersion: point.payload.lexical_version,
+        })),
         next: all.length > page.limit && slice.length > 0 ? slice[slice.length - 1].id : null,
       };
     },

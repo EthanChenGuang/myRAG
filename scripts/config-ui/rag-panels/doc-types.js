@@ -81,6 +81,8 @@ async function fetchUploadPickerDefault(organizationId) {
     enabled: Boolean(body.enabled),
     docType: body.docType || 'auto',
     origin: body.origin,
+    tags: body.tags && typeof body.tags === 'object' ? body.tags : null,
+    replaces: body.replaces && typeof body.replaces === 'object' ? body.replaces : null,
     error: null,
   };
 }

@@ -22,6 +22,7 @@ import { getRagDeps } from '../deps';
 import type { SecurityConfig } from '../security/config';
 import { computeRetrievalConfigHash, securityHashComponent, type RetrievalConfigHashQueryLayer } from './config-hash';
 import { effectiveRetrievalParams } from './retrieval-params';
+import type { TranslationHashField } from './translation-legs';
 import type { AssembleOutput } from '../context/assemble';
 import type { QueryPlan, RetrievalParams } from '@/lib/rag-eval/contracts.generated';
 
@@ -47,6 +48,8 @@ export interface BuildV2ResultInput {
   security?: SecurityConfig;
   /** The planned binding legs (bindingHashFields); empty when none is planned. */
   bindingHash?: { embeddingBindings?: Record<string, string>; domainControlLeg?: string };
+  /** The translation legs that ran (translationHashFields); empty when none ran. */
+  translationHash?: TranslationHashField;
   /** The query layer's plan; absent while the layer is off, so the result stays identical to Phase 4. */
   queryPlan?: QueryPlan | null;
   /** True when the query layer served the translate stage (D-24): its record is then soft like the other layer stages. */
@@ -67,6 +70,8 @@ export interface RequestConfigHashInput {
   queryLanguage: string | null;
   security: SecurityConfig;
   bindingHash?: { embeddingBindings?: Record<string, string>; domainControlLeg?: string };
+  /** The translation legs that ran (translationHashFields); empty when none ran. */
+  translationHash?: TranslationHashField;
   queryLayerHash?: RetrievalConfigHashQueryLayer;
   effectiveOn?: string;
 }
@@ -102,6 +107,7 @@ export async function requestRetrievalConfigHash(ctx: RequestConfigHashInput): P
     },
     security: securityHashComponent(security, { multiTenant: isMultiTenant() }),
     ...(ctx.bindingHash ?? {}),
+    ...(ctx.translationHash ?? {}),
     ...(ctx.queryLayerHash ? { queryLayer: ctx.queryLayerHash } : {}),
     ...(ctx.effectiveOn ? { effectiveOn: ctx.effectiveOn } : {}),
   });
@@ -261,6 +267,7 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
     queryLanguage,
     security,
     ...(ctx.bindingHash ? { bindingHash: ctx.bindingHash } : {}),
+    ...(ctx.translationHash ? { translationHash: ctx.translationHash } : {}),
     ...(ctx.queryLayerHash ? { queryLayerHash: ctx.queryLayerHash } : {}),
     ...(ctx.effectiveOn ? { effectiveOn: ctx.effectiveOn } : {}),
   });

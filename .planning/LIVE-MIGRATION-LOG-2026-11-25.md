@@ -538,3 +538,37 @@ Applied to `<live-project-ref>` from the orchestrator session through Supabase M
 ### Verification
 - **Functions:** both functions 0819 adds (`rag_supersession_peers`, `rag_supersession_replace_target`) are SECURITY INVOKER with `search_path=""`; EXECUTE is granted to service_role only, with no anon or authenticated grant.
 - **Runtime:** the supersession peer detector runs only with `RAG_SUPERSESSION_DETECT=on`; it is off in production, so applying 0819 changes no live behaviour.
+
+## Train 23: 0707 and 0821 (to apply after train 23 reaches `origin/main`)
+
+Branch `ci/merge-train-23`, built on `origin/main` d2a3dd6e (train 22, the 07-06 plan and PR #105). Nothing below has been applied live yet; the orchestrator applies it after the train merges.
+
+### Merged plans
+| Branch | Plan | Migration |
+|---|---|---|
+| `exec/03.2-50` | 03.2-50 queued translate jobs | none |
+| `exec/03.2-51` | 03.2-51 chunk translations as additive retrieval legs | 0821_translation_query_state |
+| `exec/07-11` (contains 07-09) | 07-09 full vector sync drain engine, 07-11 vector sync reconcile | 0707_vector_sync_reconcile |
+| `exec/03.2-60` | 03.2-60 document tags panel and queue controls (Config UI) | none |
+| `exec/03.2-65` | 03.2-65 migration block apply gate (tests only) | none |
+| `exec/03.2-36` | 03.2-36 Word hidden-text checker (sidecar `hidden-text` extra) | none |
+| `chore/rederive-ingest-floor` | `eval/config/defaults-gate.json` ingest floor re-derived by the tool | none |
+
+### Migrations to apply live, in order
+| # | File | Notes |
+|---|---|---|
+| 1 | `0707_vector_sync_reconcile.sql` | Needs 0701-0705 (live). 0706 belongs to 07-10, not in this train; 0707 does not depend on it. |
+| 2 | `0821_translation_query_state.sql` | Needs 0810 and 0820 (live) and `rag_assert_tenant_key`. Not folded into the setup files. |
+
+Neither file has a `.single-tenant`/`.multi-tenant` variant, and no migration number collides (no renumbering in this train). Both define SECURITY INVOKER functions with `search_path=''`, service_role only.
+
+### Operator actions
+- 03.2-50: deploy the sidecar first, then the app. Upgrade every sidecar before turning on `RAG_DOC_TRANSLATION` with `RAG_INGEST_ASYNC`. No database change; 0810 and 0820 must be live.
+- 03.2-51: apply 0821. A live comparison needs real translations (`npm run rag:translate` on a test tenant) and a multilingual embedding profile.
+- 03.2-36: rebuild the sidecar image to ship the Word checker; a local run needs `uv sync --extra hidden-text` (or `docling`).
+- 07-09, 07-11, 03.2-60, 03.2-65: none (vector sync targets stay disabled; real Qdrant and Weaviate drift runs are in the 07-16 canary job). Standing rule from 03.2-65: if any file below 0801 is re-run live, re-run 0801-0820 after it.
+
+### Deviations
+- One merge conflict: `eval/harness/fake-edge.mts` (03.2-51 vs the 07-04/07-09 vector sync RPC table on trunk). Kept trunk's `VECTOR_SYNC_RPC_ARGUMENTS` table and added 03.2-51's `hybrid_search_translations` to `GENERIC_RPC_NAME`.
+- No merge-fix commits, no migration renumbering.
+- `rag-sidecar/tests/test_preflight_hidden_text.py::test_off_makes_no_check_and_sends_and_records_exactly_what_it_did_before` (03.2-36) failed once in the full sidecar run and passed on every rerun: it compares job dumps that include the parse attempt's wall-clock `ms`. Left as is; flagged for a follow-up.
