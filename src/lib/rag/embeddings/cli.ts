@@ -384,6 +384,7 @@ async function runFinetuneCommand(parsed: FinetuneParsedArgs, io: CliIo, deps: E
         const result = await ops.bindSlot(parsed.slot, parsed.versionId, cliActor());
         if (!result.ok) return refused(result);
         io.out(`[Embedding] bound ${result.version.id} to ${result.slot} (no vector written; the slot is unscoped and uses the global EMB-05 path)`);
+        for (const line of ops.bindGuidance(result.slot, result.version)) io.out(`[Embedding] ${line}`);
         return 0;
       }
       case 'ft-clear': {
@@ -402,9 +403,17 @@ async function runFinetuneCommand(parsed: FinetuneParsedArgs, io: CliIo, deps: E
         );
         return 0;
       }
-      case 'ft-check':
-        io.err('[Embedding] ft-check is not available in this build');
-        return 2;
+      case 'ft-check': {
+        const { checkFinetuneProbe } = await import('./finetune-slot');
+        const result = await checkFinetuneProbe(parsed.slot === 'ft-a-1024' ? 'a' : 'b');
+        const cosine = result.minCosine === null ? 'n/a' : result.minCosine.toFixed(6);
+        if (result.ok) {
+          io.out(`[Embedding] ${parsed.slot} probe ok minCosine=${cosine}: the endpoint serves the registered weights and prompts`);
+          return 0;
+        }
+        io.err(`[Embedding] ${parsed.slot} probe failed: ${result.reason} minCosine=${cosine}; do not re-embed or activate this slot`);
+        return 1;
+      }
     }
   } catch (error) {
     if (error instanceof ProfileUnavailableError) {
