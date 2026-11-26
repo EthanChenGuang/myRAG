@@ -261,9 +261,9 @@ if (MODE === undefined) {
     console.warn = () => undefined;
     console.error = () => undefined;
     globalThis.setTimeout = ((handler: TimerHandler, delay?: number, ...rest: unknown[]) => {
-      const timer = realSetTimeout(handler as () => void, delay, ...rest);
+      const timer = realSetTimeout(handler as () => void, delay, ...rest) as unknown as NodeJS.Timeout;
       return typeof delay === 'number' && delay >= LONG_TIMER_MS ? timer.unref() : timer;
-    }) as typeof setTimeout;
+    }) as unknown as typeof setTimeout;
 
     const workStorage = (await import('next/dist/server/app-render/work-async-storage.external.js')) as unknown as Pick<NextScope, 'workAsyncStorage'>;
     const unitStorage = (await import('next/dist/server/app-render/work-unit-async-storage.external.js')) as unknown as Pick<NextScope, 'workUnitAsyncStorage'>;

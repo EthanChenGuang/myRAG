@@ -112,7 +112,7 @@ function minerDb(): MinerDb {
           return run.then(onFulfilled, onRejected);
         },
       };
-      return builder;
+      return builder as unknown as ReturnType<MinerDb['from']>;
     },
   };
 }

@@ -317,7 +317,7 @@ for (const mode of MODES) {
         assert.deepEqual(rows.map((row) => [row.row_index, row.matched_cells, row.chunk_ids]), [[2, 2, [chunks.main]]]);
         assert.deepEqual(rows[0]!.header, HEADER);
         assert.deepEqual(rows[0]!.cells, { Kelmo: 'plin', Darvi: 'mepra', Quenta: 'sefa', Zemo: 'brel' });
-        const all = await tableLookup(await scopeA(), ['sorna', 'kibe'], params, { client: serviceRpc(db), signal: new AbortController().signal, versionScope: { mode: 'all' } });
+        const all = await tableLookup(await scopeA(), ['sorna', 'kibe'], params, { client: serviceRpc(db), signal: new AbortController().signal, versionScope: 'all' });
         assert.deepEqual(all.map((row) => row.document_id), [docs.older]);
       });
 
