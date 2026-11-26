@@ -250,6 +250,27 @@ export async function runAttributesImport(input: AttributesImportInput, deps: At
     return { ...base, exitCode: 2, status: 'report_only', errors, batches: batches.length, dryRun };
   }
 
-  io.err(`${LOG} the apply pass is not available yet`);
-  return { ...base, exitCode: 1, status: 'failed', errors, batches: batches.length, dryRun };
+  const applied = emptyTotals();
+  const changed = new Set<string>();
+  for (const [index, batch] of batches.entries()) {
+    const result = await importAttributeRows(db, tenantKey, batch, { dryRun: false, signal });
+    if (!result.ok) {
+      io.err(`${LOG} failed at batch ${index + 1} of ${batches.length}: ${result.reason}; ${index} of ${batches.length} batches applied`);
+      io.err(`${LOG} applied batches stay applied; running the same file again completes the import`);
+      return { ...base, exitCode: 1, status: 'failed', errors, batches: batches.length, batchesApplied: index, dryRun, applied, changedDocumentIds: [...changed] };
+    }
+    addTotals(applied, result);
+    for (const id of result.changedDocumentIds) changed.add(id);
+    io.out(
+      `${LOG} batch ${index + 1} of ${batches.length}: documents changed ${result.documentsChanged}, unchanged ${result.documentsUnchanged}, ` +
+        `rows staged ${result.staged}, chunk rows updated ${result.chunksUpdated}`,
+    );
+  }
+  io.out(`${LOG} documents changed: ${applied.documentsChanged}`);
+  io.out(`${LOG} documents unchanged: ${applied.documentsUnchanged}`);
+  io.out(`${LOG} rows staged: ${applied.staged}`);
+  io.out(`${LOG} staged rows unchanged: ${applied.stagedUnchanged}`);
+  io.out(`${LOG} chunk rows updated: ${applied.chunksUpdated} in ${batches.length} batches`);
+  io.out(`${LOG} vector sync outbox rows added: ${applied.outboxRows}`);
+  return { ...base, exitCode: 0, status: 'done', errors, batches: batches.length, batchesApplied: batches.length, dryRun, applied, changedDocumentIds: [...changed] };
 }
