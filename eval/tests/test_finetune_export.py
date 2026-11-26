@@ -94,9 +94,9 @@ def test_cli_passes_remaining_arguments_and_returns_the_exit_code(tmp_path, monk
     assert probe.SEEN == [["--x", "1"]]
 
 
-def test_cli_module_entry_point_train_not_available_in_this_build():
+def test_cli_module_entry_point_card_not_available_in_this_build():
     result = subprocess.run(
-        [sys.executable, "-m", "rag_eval.finetune", "train"], capture_output=True, text=True, check=False, cwd=REPO_ROOT / "eval"
+        [sys.executable, "-m", "rag_eval.finetune", "card"], capture_output=True, text=True, check=False, cwd=REPO_ROOT / "eval"
     )
     assert result.returncode == 2
     assert "not available in this build" in result.stderr
