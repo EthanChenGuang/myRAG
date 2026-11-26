@@ -248,6 +248,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
       variants: query.variants,
       variantEmbeddings,
       ...(query.queryLayer ? { trackStandalone: true } : {}),
+      ...(query.queryLayer?.searchDelegate ? { searchDelegate: query.queryLayer.searchDelegate } : {}),
       filters: query.filters,
       bindings: { plan: bindingPlan, embeds: bindingEmbeds },
       ...(hasTranslationWork(translationPlan) ? { translations: translationPlan } : {}),

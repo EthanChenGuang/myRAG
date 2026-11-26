@@ -1,6 +1,6 @@
 import { QueryTranslationSchema, type QueryPlan } from '@/lib/rag-eval/contracts.generated';
 import { logger } from '@/lib/logger';
-import type { QueryLayerConfig, QueryTransformSwitches, RagConfig, StageName } from '../config';
+import type { QueryFramework, QueryLayerConfig, QueryTransformSwitches, RagConfig, StageName } from '../config';
 import { getRagDeps } from '../deps';
 import { runStage, stageSpec, StageError, type StageSpec } from '../pipeline';
 import type { TenantScope } from '../tenant/scope';
@@ -16,7 +16,17 @@ import { buildQueryPlan, planToVariants, type SkippedTransform } from './plan';
 import { effectiveQueryParams } from './query-params';
 import { needsRewrite, type GateResult, type Lang } from './rewrite-gate';
 import { routeTransforms, type RoutedTransform, type RoutedTransforms } from './router';
-import { getQueryTransformer, type CondenseResult, type DecomposeResult, type ExpandResult, type HydeResult, type QueryTransformer } from './transformer';
+import {
+  getQueryTransformer,
+  loadQueryFramework,
+  type CondenseResult,
+  type DecomposeResult,
+  type ExpandResult,
+  type HydeResult,
+  type QueryFrameworkRuntime,
+  type QueryTransformer,
+} from './transformer';
+import type { SearchDelegate } from './port-types';
 import { queryLayerTranslator, type QueryLayerTranslateContext } from './translate';
 import type { TranslatedQuery } from './variants';
 import { getActiveProfile, LEGACY_PROFILE } from '../embeddings/active-profile';
@@ -50,6 +60,8 @@ export interface QueryLayerOutcome {
   cacheTicket?: CacheTicket;
   /** The standalone query's embedding from the cache stage; the embed stage reuses it instead of embedding the text again. */
   precomputed?: { text: string; embedding: QueryEmbedding };
+  /** LangChain (D-17): fuses the variant lists through EnsembleRetriever over the scope-bound port; absent keeps native RRF. */
+  searchDelegate?: SearchDelegate;
 }
 
 /** What the pipeline lends the semantic_cache stage, so its key and vector equal what the retrieval stages use. */
@@ -385,6 +397,36 @@ async function runSemanticCacheStage(args: CacheStageInput): Promise<CacheStageR
   return { ticket, precomputed };
 }
 
+let frameworkLoadFailureLogged = false;
+
+/**
+ * The framework the router chose (voice is always native, D-22). LangChain is loaded with a dynamic import and its wait
+ * and cold import time are traced as framework_import; if it cannot be loaded the request runs native, recorded skipped.
+ */
+async function frameworkRuntime(framework: QueryFramework, model: string, collector: TraceCollector): Promise<QueryFrameworkRuntime> {
+  if (framework === 'llamaindex') return { transformer: getQueryTransformer('llamaindex'), searchDelegate: null, importMs: null };
+  const startedAt = collector.now();
+  try {
+    const runtime = await loadQueryFramework(framework, { model });
+    collector.record({
+      name: 'framework_import',
+      status: 'ok',
+      startedAt,
+      endedAt: collector.now(),
+      detail: framework,
+      ...(runtime.importMs !== null ? { counts: { import_ms: runtime.importMs } } : {}),
+    });
+    return runtime;
+  } catch {
+    collector.record({ name: 'framework_import', status: 'skipped', reason: 'failed', startedAt, endedAt: collector.now(), detail: framework });
+    if (!frameworkLoadFailureLogged) {
+      frameworkLoadFailureLogged = true;
+      console.warn('[Query Layer] The LangChain adapter could not be loaded; the request runs the native framework', { framework });
+    }
+    return { transformer: getQueryTransformer('llamaindex'), searchDelegate: null, importMs: null };
+  }
+}
+
 export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOutcome> {
   const { input, config, profile, signal, collector, stageOverrides } = ctx;
   const deps = getRagDeps();
@@ -443,7 +485,8 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
     profile,
     embeddingProfileId,
   });
-  const transformer: QueryTransformer = getQueryTransformer(route.framework);
+  const runtime = await frameworkRuntime(route.framework, layer.model, collector);
+  const transformer: QueryTransformer = runtime.transformer;
   const skipped: SkippedTransform[] = [];
   const skip = (transform: PlanTransform, reason: SkippedTransform['reason']) => {
     if (!skipped.some((entry) => entry.transform === transform && entry.reason === reason)) skipped.push({ transform, reason });
@@ -649,5 +692,6 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
     ...(cached.hit ? { cacheHit: cached.hit } : {}),
     ...(cached.ticket ? { cacheTicket: cached.ticket } : {}),
     ...(cached.precomputed ? { precomputed: cached.precomputed } : {}),
+    ...(runtime.searchDelegate ? { searchDelegate: runtime.searchDelegate } : {}),
   };
 }

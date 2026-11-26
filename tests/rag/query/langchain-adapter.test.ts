@@ -10,7 +10,7 @@ import {
   type FakeLangChainTable,
 } from '@/lib/rag/query/langchain/fake';
 import { createLangChainTransformer } from '@/lib/rag/query/langchain';
-import { QUERY_TRANSFORM_FINISHERS, getQueryTransformer, type QueryTransformer } from '@/lib/rag/query/transformer';
+import { QUERY_TRANSFORM_FINISHERS, type QueryTransformer } from '@/lib/rag/query/transformer';
 import { llamaindexCondense } from '@/lib/rag/query/llamaindex/condense';
 import { nativeExpand } from '@/lib/rag/query/llamaindex/expand';
 import { nativeHyde } from '@/lib/rag/query/llamaindex/hyde';
@@ -45,11 +45,7 @@ const EXPAND_QUERY = 'setup steps for module QX-210';
 
 function langchain(entries: FakeLangChainEntry[] | FakeLangChainTable): { transformer: QueryTransformer; fake: FakeLangChainChatModel } {
   const fake = createFakeLangChainChatModel({ table: Array.isArray(entries) ? table(entries) : entries });
-  const native = getQueryTransformer('llamaindex');
-  const transformer = createLangChainTransformer({
-    chatModelFactory: () => fake,
-    deps: { finish: QUERY_TRANSFORM_FINISHERS, decompose: native.decompose, translate: native.translate },
-  });
+  const transformer = createLangChainTransformer({ chatModelFactory: () => fake, deps: { finish: QUERY_TRANSFORM_FINISHERS } });
   return { transformer, fake };
 }
 

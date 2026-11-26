@@ -70,8 +70,14 @@ function semanticCacheIo(deps: RagDeps): SemanticCacheIo {
   };
 }
 
+/** LangSmith/LangChain tracing switches as LangChain itself reads them (process.env); names only matter to the config check. */
+export function langchainTracingEnv(source: Readonly<Record<string, string | undefined>> = process.env): Record<string, string | undefined> {
+  return Object.fromEntries(Object.entries(source).filter(([name]) => /^(?:LANGSMITH_|LANGCHAIN_TRACING)/u.test(name)));
+}
+
 function readRagEnvInput(): RagEnvInput {
   return {
+    ...langchainTracingEnv(),
     RAG_PIPELINE: process.env.RAG_PIPELINE ?? env.RAG_PIPELINE,
     pipelineSourceHint: pipelineSourceOf(getRagDeps().rawPipelineEnv().RAG_PIPELINE),
     RAG_DISABLED_STAGES: process.env.RAG_DISABLED_STAGES ?? env.RAG_DISABLED_STAGES,

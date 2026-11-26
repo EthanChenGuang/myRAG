@@ -108,8 +108,17 @@ function wait(ms: number, signal: AbortSignal | undefined): Promise<void> {
   });
 }
 
+/** The translate prompt names its target code as `target_language to "xx"` (shared.translate.v1). */
+const TRANSLATE_TARGET = /target_language to "([a-z]{2})"/u;
+
+function entryTarget(entry: FakeLangChainEntry): string | undefined {
+  if (entry.transform !== 'translate') return undefined;
+  if (entry.target_language) return entry.target_language;
+  return (entry.output as { target_language?: string } | undefined)?.target_language;
+}
+
 /** Documented defaults when no entry matches: pass-through condense, no variants, the query as the HyDE passage. */
-function defaultOutput(transform: LangChainTransform, query: string): unknown {
+function defaultOutput(transform: LangChainTransform, query: string, target?: string): unknown {
   switch (transform) {
     case 'condense':
       return { standalone: query, unchanged: true };
@@ -120,7 +129,7 @@ function defaultOutput(transform: LangChainTransform, query: string): unknown {
     case 'hyde':
       return { passage: query };
     case 'translate':
-      return { target_language: 'en', text: '' };
+      return { target_language: target ?? 'en', text: '' };
   }
 }
 
@@ -148,11 +157,16 @@ export class FakeLangChainChatModel extends FakeChatModel {
     return 'fake-langchain';
   }
 
-  /** The entry whose query is the last message, else the longest table query that occurs in the prompt. */
-  private find(transform: LangChainTransform, messages: FakeMessage[]): FakeLangChainEntry | undefined {
+  /**
+   * The entry whose query is the last message, else the longest table query that occurs in the prompt. A translate call
+   * prefers the entry for its target, as the native fake does.
+   */
+  private find(transform: LangChainTransform, messages: FakeMessage[], target?: string): FakeLangChainEntry | undefined {
     const prompt = normalizeFakeQuery(messages.map(messageText).join('\n'));
     const last = messages.length > 0 ? normalizeFakeQuery(messageText(messages[messages.length - 1])) : '';
-    const candidates = (this.byTransform.get(transform) ?? []).filter((entry) => prompt.includes(normalizeFakeQuery(entry.query)));
+    const matching = (this.byTransform.get(transform) ?? []).filter((entry) => prompt.includes(normalizeFakeQuery(entry.query)));
+    const forTarget = target ? matching.filter((entry) => entryTarget(entry) === target) : [];
+    const candidates = forTarget.length > 0 ? forTarget : matching;
     const exact = candidates.find((entry) => normalizeFakeQuery(entry.query) === last);
     if (exact) return exact;
     return candidates.sort((a, b) => normalizeFakeQuery(b.query).length - normalizeFakeQuery(a.query).length)[0];
@@ -164,14 +178,16 @@ export class FakeLangChainChatModel extends FakeChatModel {
     messages: FakeMessage[],
     config: { signal?: AbortSignal } & object,
   ): Promise<{ entry: FakeLangChainEntry | undefined; output: unknown; query: string }> {
-    const entry = this.find(transform, messages);
     const prompt = messages.map(messageText).join('\n');
+    const target = transform === 'translate' ? TRANSLATE_TARGET.exec(prompt)?.[1] : undefined;
+    const entry = this.find(transform, messages, target);
     this.calls.push({ transform, mode, matched: entry?.query ?? null, prompt, config: describeConfig(config) });
     if (config.signal?.aborted) await wait(0, config.signal);
     if (entry?.delay_ms && entry.delay_ms > 0) await wait(entry.delay_ms, config.signal);
     if (entry?.fail === 'error') throw new Error('fake chat model error');
     const query = entry?.query ?? (messages.length > 0 ? messageText(messages[messages.length - 1]) : '');
-    return { entry, output: entry?.output ?? defaultOutput(transform, query), query };
+    if (target && entry?.output !== undefined && entryTarget(entry) !== target) return { entry, output: defaultOutput(transform, query, target), query };
+    return { entry, output: entry?.output ?? defaultOutput(transform, query, target), query };
   }
 
   private textTransform(messages: FakeMessage[]): LangChainTransform {
