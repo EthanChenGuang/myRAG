@@ -17,6 +17,7 @@ interface ChatMessageProps {
   sessionId?: string; // Add sessionId for MCP tool persistence
   onFollowupSelect?: (question: string) => void;
   followupsDisabled?: boolean;
+  onRefusalFeedback?: (messageId: string, value: RefusalFeedbackValue) => void;
 }
 
 // Then forward declare the ChatMessage component for the export
@@ -76,6 +77,10 @@ import { pickAnswerMetadata } from '@/lib/chat/answer-metadata'
 import { useAnswerRecordsStore } from '@/lib/stores/answer-records-store'
 import { GroundednessBadge } from './groundedness-badge'
 import { AnswerFeedback } from './answer-feedback'
+import { RefusalFeedback } from './refusal-feedback'
+import { pickRefusalMetadata, type RefusalFeedbackValue } from '@/lib/chat/answer-metadata'
+import { registerMessageTrace, setSourcesMessage, shouldShowRefusalControl } from '@/lib/chat/refusal-feedback-client'
+import { useGhostModeStore } from '@/lib/ghost-mode-store'
 import { imageLinkHref, isAllowedImageUrl } from '@/lib/safe-image-hosts'
 import { splitFollowups } from '@/lib/chat/followups'
 import { answerQualityStrings } from '@/translations/answer-quality'
@@ -2714,6 +2719,7 @@ ChatMessage = function ({
   sessionId,
   onFollowupSelect,
   followupsDisabled = false,
+  onRefusalFeedback,
   ...props
 }: ChatMessageProps) {
   const { theme } = useTheme();
@@ -2750,6 +2756,18 @@ ChatMessage = function ({
   const answerId = answerMetadata?.answerId;
   const answerDocuments = useAnswerRecordsStore((s) => (answerId ? s.records[answerId]?.documents : undefined));
   const citationMessageId = answerMetadata ? message.id : undefined;
+  const isGhostChat = useGhostModeStore((s) => s.isGhostMode);
+  const metadataRecord = messageMetadata && typeof messageMetadata === 'object' ? (messageMetadata as Record<string, unknown>) : undefined;
+  const messageTraceId = isAI && typeof metadataRecord?.ragTraceId === 'string' ? metadataRecord.ragTraceId : undefined;
+  const refusalFeedback = isAI ? pickRefusalMetadata(metadataRecord).refusalFeedback ?? null : null;
+  const actionRowRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!messageTraceId || isGhostChat) return;
+    registerMessageTrace(message.id, messageTraceId);
+    if (isLastMessage) setSourcesMessage(message.id);
+    return () => registerMessageTrace(message.id, undefined);
+  }, [message.id, messageTraceId, isGhostChat, isLastMessage]);
   const [isContentChanging, setIsContentChanging] = useState(false);
   const prevContentRef = useRef(message.content);
   // Document sources state removed - no longer needed
@@ -4881,12 +4899,28 @@ ChatMessage = function ({
                 // Debug: Render check with conditions
 
                 if (isAI && messageContent.text && !isThinking && !isStreamingMessage) {
+                  const showRefusal = messageTraceId !== undefined && shouldShowRefusalControl({
+                    role: message.role,
+                    finished: !isStreaming,
+                    metadata: metadataRecord,
+                    isGhostMode: isGhostChat,
+                    chatId: null,
+                  });
                   return (
                     <>
+                      {showRefusal && messageTraceId && (
+                        <RefusalFeedback
+                          traceId={messageTraceId}
+                          initial={refusalFeedback}
+                          onSaved={onRefusalFeedback ? (value) => onRefusalFeedback(message.id, value) : undefined}
+                          focusFallback={() => actionRowRef.current?.querySelector<HTMLButtonElement>('button')?.focus()}
+                        />
+                      )}
                       {/* Sources Button - Only show when relevant */}
                       <SourcesButtonContainer messageContent={messageContent} isLastMessage={isLastMessage} />
                       {/* Existing Action Buttons */}
                       <div
+                        ref={actionRowRef}
                         className={cn(
                           "flex items-center transition-opacity duration-200",
                           fontSpacingConfig[fontFamily]?.gap || 'gap-1.5',

@@ -6,6 +6,8 @@ import { useLanguage } from '@/components/providers/language-provider';
 import { useSources, type Source } from '@/components/providers/sources-provider';
 import { useChatStore } from '@/lib/chat-store';
 import { useCitationFocusStore } from '@/lib/stores/citation-focus-store';
+import { useGhostModeStore } from '@/lib/ghost-mode-store';
+import { postSourceOpened, setSourcesMessage, traceForMessage } from '@/lib/chat/refusal-feedback-client';
 import { answerQualityStrings } from '@/translations/answer-quality';
 
 export interface CitationChipProps {
@@ -29,6 +31,10 @@ export function CitationChip({ n, messageId, buildSources, className }: Citation
     setSources(buildSources());
     focusCitation({ chatId: currentChatId, messageId, n });
     trackedSetIsSourcesOpen(true, 'CitationChip_USER_CLICK');
+    setSourcesMessage(messageId);
+    const traceId = traceForMessage(messageId);
+    const incognito = useGhostModeStore.getState().isGhostMode || Boolean(currentChatId?.startsWith('ghost-'));
+    if (traceId && !incognito) postSourceOpened(traceId, `citation:${n}`);
   };
 
   return (

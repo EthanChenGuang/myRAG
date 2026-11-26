@@ -23,8 +23,8 @@ import { isMultiTenant } from '@/lib/deployment-mode';
 import type { Chat } from '@/lib/supabase';
 import type { ExtendedMessage, APIMessage, ContentPart, DocumentContent } from '@/types/chat';
 import { toAPIMessage, toDBMessages, updateMessages, appendMessage, toExtendedMessages, fromUIMessage } from '@/types/chat';
-import { extractStreamAnswerMetadata, type StreamAnswerMetadata } from '@/lib/chat/answer-metadata';
-import { useAnswerRecords } from '@/lib/chat/use-answer-records';
+import { extractStreamAnswerMetadata, withRefusalFeedback, type RefusalFeedbackValue, type StreamAnswerMetadata } from '@/lib/chat/answer-metadata';
+import { canSaveMessages, isPersistedChatId, useAnswerRecords } from '@/lib/chat/use-answer-records';
 import { motion, useScroll, useSpring, AnimatePresence } from 'framer-motion';
 import { createChat, updateChat } from '@/lib/chat-store';
 import { nanoid } from 'nanoid';
@@ -2544,6 +2544,14 @@ export default function Home() {
 
   const isResponseInFlight = isChatLoading || isStreaming;
 
+  const handleRefusalFeedback = (messageId: string, value: RefusalFeedbackValue) => {
+    setMessages((previous) => withRefusalFeedback(previous, messageId, value));
+    const next = withRefusalFeedback(messages, messageId, value);
+    if (next !== messages && !isGhostMode && !isSwitchingChat && isPersistedChatId(currentChatId) && canSaveMessages(next)) {
+      debouncedSave(currentChatId, next);
+    }
+  };
+
   const handleFollowupSelect = (question: string) => {
     if (isResponseInFlight) return;
     setInput(question);
@@ -4630,6 +4638,7 @@ export default function Home() {
                               sessionId={sessionIdRef.current || undefined}
                               onFollowupSelect={handleFollowupSelect}
                               followupsDisabled={isResponseInFlight}
+                              onRefusalFeedback={handleRefusalFeedback}
                             />
                           );
                         })}
