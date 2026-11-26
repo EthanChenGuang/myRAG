@@ -543,7 +543,8 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
         return ctx.trackStandalone ? withStandaloneSimilarity(fusedHits, variants, searchValue) : fusedHits;
       },
       collector,
-      { candidatesOut: (value) => value.length },
+      // A framework delegate's fusion is marked in the trace; the native fuse record is unchanged.
+      { candidatesOut: (value) => value.length, ...(delegated ? { counts: () => ({ delegated: 1 }) } : {}) },
     ),
     'fuse',
   );

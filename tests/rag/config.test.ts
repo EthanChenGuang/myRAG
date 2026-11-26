@@ -759,6 +759,13 @@ describe('query layer', () => {
     expect(logged[0]).toContain('@langchain');
   });
 
+  test('the default RagEnvInput carries the tracing variables LangChain reads from process.env', async () => {
+    const { langchainTracingEnv } = await import('@/lib/rag/deps');
+    expect(
+      langchainTracingEnv({ LANGSMITH_TRACING: 'true', LANGCHAIN_TRACING_V2: 'false', LANGCHAIN_API_KEY: 'x', RAG_PIPELINE: 'v2' }),
+    ).toEqual({ LANGSMITH_TRACING: 'true', LANGCHAIN_TRACING_V2: 'false' });
+  });
+
   test('the shipped resolver finds the installed @langchain packages', () => {
     setLangChainResolverForTests(null);
     expect(loadRagConfig({ RAG_PIPELINE: 'v2', RAG_QUERY_LAYER: 'true', RAG_QUERY_FRAMEWORK: 'langchain' }).queryLayer.framework).toBe('langchain');
