@@ -378,3 +378,78 @@ def test_registry_quantity_block():
         {"grouping_separators": [",", ".", " ", "'", "_"]},
     ):
         _rejects(LanguageRegistry, {**_registry(), "quantity": _quantity(**bad)})
+
+
+# --- retrieval filter, golden, trace and report (D-29, D-30, D-36, F-25, F-26)
+
+SAMPLES = json.loads((REPO_ROOT / "tests" / "fixtures" / "contracts" / "samples.json").read_text(encoding="utf-8"))
+
+
+def test_retrieval_filter_attributes():
+    from rag_sidecar.contracts.retrieval import RetrievalFilters
+
+    assert "attributes" not in RetrievalFilters().model_dump(mode="json")
+    ok = {"attributes": {"alpha_code": ["x1"], "beta_label": ["v1", "v2"]}}
+    assert RetrievalFilters.model_validate(ok).model_dump(mode="json")["attributes"] == ok["attributes"]
+    assert len(RetrievalFilters.model_validate({"attributes": {f"key_{i}": ["v"] for i in range(30)}}).attributes) == 30
+    for bad in (
+        {},
+        {"alpha_code": []},
+        {"alpha_code": "x1"},
+        {"Alpha": ["x"]},
+        {"alpha_code": ["x" * 201]},
+        {"alpha_code": [f"v{i}" for i in range(51)]},
+        {"alpha_code": ["v", "v"]},
+        {f"key_{i}": ["v"] for i in range(31)},
+    ):
+        _rejects(RetrievalFilters, {"attributes": bad})
+
+
+def test_golden_item_accepts_templated_collection():
+    from rag_sidecar.contracts.golden import GoldenItem
+
+    item = {**SAMPLES["samples"]["GoldenItem"], "id": "en-tpl-001", "category": "templated_collection"}
+    assert GoldenItem.model_validate(item).category == "templated_collection"
+    unanswerable = {**item, "answerable": False, "gold_evidence": [], "expected_answer": None}
+    _rejects(GoldenItem, unanswerable)
+
+
+def test_trace_attribute_filter_holds_counts_and_flags_only():
+    from rag_sidecar.contracts import eval_run
+    from rag_sidecar.contracts.eval_run import RagTrace, TraceKeptChunk
+
+    TraceAttributeFilter = getattr(eval_run, "TraceAttributeFilter", None)
+    assert TraceAttributeFilter is not None, "TraceAttributeFilter is defined"
+    trace = SAMPLES["samples"]["RagTrace"]
+    dumped = RagTrace.model_validate(trace).model_dump(mode="json")
+    assert dumped == trace and "attribute_filter" not in dumped
+    block = {"mode": "hard", "explicit": True, "matched_attributes": 2, "resolved_documents": 3, "applied": True, "fallback": False, "too_broad": False}
+    assert RagTrace.model_validate({**trace, "attribute_filter": block}).model_dump(mode="json")["attribute_filter"] == block
+    for name, field in TraceAttributeFilter.model_fields.items():
+        if name != "mode":
+            assert field.annotation in (int, bool), name
+    _rejects(TraceAttributeFilter, {**block, "mode": "off"})
+    _rejects(TraceAttributeFilter, {**block, "resolved_documents": -1})
+    _rejects(TraceAttributeFilter, {**block, "values": ["x"]})
+    kept = trace["kept"][0]
+    assert "variant_index" not in TraceKeptChunk.model_validate(kept).model_dump(mode="json")
+    assert TraceKeptChunk.model_validate({**kept, "variant_index": 0}).variant_index == 0
+    _rejects(TraceKeptChunk, {**kept, "variant_index": -1})
+
+
+def test_report_fields_are_optional_and_omitted():
+    from rag_sidecar.contracts.report import EvalReport, ItemResult, SliceMetrics
+
+    report = SAMPLES["samples"]["EvalReport"]
+    assert EvalReport.model_validate(report).model_dump(mode="json") == report
+    slice_fields = ("boilerplate_token_share", "named_document_recall", "wrong_document_at_1", "variant_accuracy", "quantity_match_rate", "attribute_filter_fallback_rate")
+    overall = report["overall"]
+    populated = SliceMetrics.model_validate({**overall, **{name: {"value": 0.5, "n": 2} for name in slice_fields}}).model_dump(mode="json")
+    assert all(populated[name] == {"value": 0.5, "n": 2} for name in slice_fields)
+    item_fields = ("named_document_hit", "wrong_document_at_1", "variant_correct", "quantity_matched", "attribute_filter_fallback")
+    item = report["items"][0]
+    dumped = ItemResult.model_validate(item).model_dump(mode="json")
+    assert not set(item_fields) & set(dumped)
+    flagged = ItemResult.model_validate({**item, **{name: True for name in item_fields}}).model_dump(mode="json")
+    assert all(flagged[name] is True for name in item_fields)
+    _rejects(ItemResult, {**item, "named_document_hit": "yes"})
