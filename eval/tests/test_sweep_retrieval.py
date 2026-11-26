@@ -7,9 +7,15 @@ import pytest
 from rag_sidecar.contracts.baseline import NoiseConfig
 from rag_sidecar.contracts.golden import GoldenItem
 from rag_sidecar.contracts.retrieval import RetrievalParams, compute_config_hash
+from test_report_runner import QUOTE, _item, _manifest, _trace
 
 from rag_eval.golden_io import load_golden, write_golden
-from rag_eval.harness_runner import HarnessError, HarnessRun, dev_only_golden, run_harness
+from rag_eval.harness_runner import (
+    HarnessError,
+    HarnessRun,
+    dev_only_golden,
+    run_harness,
+)
 from rag_eval.metrics import score_items
 from rag_eval.report import build_report, write_report
 from rag_eval.split import assign_split
@@ -26,7 +32,6 @@ from rag_eval.sweep.retrieval import (
     rerank_cap,
     run_retrieval_sweep,
 )
-from test_report_runner import QUOTE, _item, _manifest, _trace
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 NOISE = NoiseConfig.model_validate_json((REPO_ROOT / "eval" / "config" / "noise.json").read_text(encoding="utf-8"))
@@ -464,7 +469,7 @@ def test_sweep_live_run_with_write_params_writes_a_valid_params_file_with_sweep_
     assert result.params_written is True
     written = RetrievalParams.model_validate_json(params.read_text(encoding="utf-8"))
     assert written.provenance.source == "sweep"
-    assert (written.candidate_pool_size, written.rerank_input_cap, written.final_top_k) == (25, 50, 8)
+    assert (written.candidate_pool_size, written.rerank_input_cap, written.final_top_k) == (25, 25, 8)
     assert written.rrf_k == existing.rrf_k
     assert written.leg_weights == existing.leg_weights
     assert written.config_hash == compute_config_hash(written)

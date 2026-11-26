@@ -2,9 +2,9 @@ import math
 
 import pytest
 from rag_sidecar.contracts.golden import GoldenItem
+from test_report_runner import _trace
 
 from rag_eval.ndcg import gold_unit_first_hits, ndcg_at_context_k
-from test_report_runner import _trace
 
 QUOTE_A = "the first synthetic statement about the sample value"
 QUOTE_B = "a second synthetic statement about another sample value"
