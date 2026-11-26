@@ -7855,6 +7855,258 @@
                                     </div>
                                 </div>
 
+                                <!-- Answer rules and output safety -->
+                                <div id="rag-answer-rules" class="card bg-base-200 shadow-md mt-6 min-w-0">
+                                    <div class="card-body min-w-0">
+                                        <h3 class="text-lg font-semibold mb-2 text-balance" data-rag-i18n="card.title">Answer rules and output safety</h3>
+                                        <p class="text-base-content/70 mb-4 max-w-prose break-words" data-rag-i18n="card.description">Rules added to the answer prompt, checks that run after the answer, and limits on what an answer may contain. All off by default; with every switch off, answers are unchanged.</p>
+                                        <div id="rag-answer-rules-alerts" class="min-w-0" role="status" aria-live="polite"></div>
+                                        <section aria-labelledby="rag-answer-rules-group-texts" data-answer-rules-group="texts">
+                                            <h4 id="rag-answer-rules-group-texts" class="text-base font-semibold mt-6 mb-2 text-balance" data-rag-i18n="group.texts">Texts in the language of the question</h4>
+                                            <div class="form-control mb-2">
+                                                <label class="label cursor-pointer justify-start gap-3">
+                                                    <input type="checkbox" id="RAG_REGISTRY_TEXTS" name="RAG_REGISTRY_TEXTS" class="checkbox checkbox-primary" aria-describedby="RAG_REGISTRY_TEXTS-help">
+                                                    <span class="label-text min-w-0 break-words" data-rag-i18n="RAG_REGISTRY_TEXTS">Use the language registry for the refusal, notices and badge texts</span>
+                                                </label>
+                                                <label class="label pl-8">
+                                                    <span id="RAG_REGISTRY_TEXTS-help" class="label-text-alt min-w-0 break-words text-base-content/70"><span data-rag-i18n="RAG_REGISTRY_TEXTS.help">Off keeps today’s texts. English answers read the same either way. Needs supported languages.</span> <code translate="no">RAG_REGISTRY_TEXTS</code></span>
+                                                </label>
+                                            </div>
+                                        </section>
+                                        <section aria-labelledby="rag-answer-rules-group-claims" data-answer-rules-group="claims">
+                                            <h4 id="rag-answer-rules-group-claims" class="text-base font-semibold mt-6 mb-2 text-balance" data-rag-i18n="group.claims">What an answer may claim</h4>
+                                            <div class="form-control mb-2">
+                                                <label class="label cursor-pointer justify-start gap-3">
+                                                    <input type="checkbox" id="RAG_PARTIAL_ANSWER_RULE" name="RAG_PARTIAL_ANSWER_RULE" class="checkbox checkbox-primary" aria-describedby="RAG_PARTIAL_ANSWER_RULE-help">
+                                                    <span class="label-text min-w-0 break-words" data-rag-i18n="RAG_PARTIAL_ANSWER_RULE">Answer the covered part and name what the documents do not cover</span>
+                                                </label>
+                                                <label class="label pl-8">
+                                                    <span id="RAG_PARTIAL_ANSWER_RULE-help" class="label-text-alt min-w-0 break-words text-base-content/70"><span data-rag-i18n="RAG_PARTIAL_ANSWER_RULE.help">Strict mode. Balanced mode labels anything that is not from the documents.</span> <code translate="no">RAG_PARTIAL_ANSWER_RULE</code></span>
+                                                </label>
+                                            </div>
+                                            <div class="form-control mb-2">
+                                                <label class="label cursor-pointer justify-start gap-3">
+                                                    <input type="checkbox" id="RAG_CONTEXT_RELEVANCE_RULE" name="RAG_CONTEXT_RELEVANCE_RULE" class="checkbox checkbox-primary" aria-describedby="RAG_CONTEXT_RELEVANCE_RULE-help">
+                                                    <span class="label-text min-w-0 break-words" data-rag-i18n="RAG_CONTEXT_RELEVANCE_RULE">Do not answer from documents on a neighbouring subject</span>
+                                                </label>
+                                                <label class="label pl-8">
+                                                    <span id="RAG_CONTEXT_RELEVANCE_RULE-help" class="label-text-alt min-w-0 break-words text-base-content/70"><span data-rag-i18n="RAG_CONTEXT_RELEVANCE_RULE.help">Strict mode gives the “information not available” text; other modes label a general answer.</span> <code translate="no">RAG_CONTEXT_RELEVANCE_RULE</code></span>
+                                                </label>
+                                            </div>
+                                            <div class="form-control mb-2">
+                                                <label class="label cursor-pointer justify-start gap-3">
+                                                    <input type="checkbox" id="RAG_VERSION_LABELS" name="RAG_VERSION_LABELS" class="checkbox checkbox-primary" aria-describedby="RAG_VERSION_LABELS-help">
+                                                    <span class="label-text min-w-0 break-words" data-rag-i18n="RAG_VERSION_LABELS">Label each document’s version and effective date, and answer from the latest</span>
+                                                </label>
+                                                <label class="label pl-8">
+                                                    <span id="RAG_VERSION_LABELS-help" class="label-text-alt min-w-0 break-words text-base-content/70"><span data-rag-i18n="RAG_VERSION_LABELS.help">Two versions that disagree are sent to Versions and dates for your decision. Apply the version-label migration first.</span> <code translate="no">RAG_VERSION_LABELS</code></span>
+                                                </label>
+                                            </div>
+                                        </section>
+                                        <section aria-labelledby="rag-answer-rules-group-sources" data-answer-rules-group="sources">
+                                            <h4 id="rag-answer-rules-group-sources" class="text-base font-semibold mt-6 mb-2 text-balance" data-rag-i18n="group.sources">A source for every sentence</h4>
+                                            <div class="form-control mb-2">
+                                                <label class="label cursor-pointer justify-start gap-3">
+                                                    <input type="checkbox" id="RAG_CITATION_PER_SENTENCE" name="RAG_CITATION_PER_SENTENCE" class="checkbox checkbox-primary" aria-describedby="RAG_CITATION_PER_SENTENCE-help">
+                                                    <span class="label-text min-w-0 break-words" data-rag-i18n="RAG_CITATION_PER_SENTENCE">Ask for a source on every factual sentence and mark sentences without one</span>
+                                                </label>
+                                                <label class="label pl-8">
+                                                    <span id="RAG_CITATION_PER_SENTENCE-help" class="label-text-alt min-w-0 break-words text-base-content/70"><span data-rag-i18n="RAG_CITATION_PER_SENTENCE.help">Needs inline citations or Claude Citations.</span> <code translate="no">RAG_CITATION_PER_SENTENCE</code></span>
+                                                </label>
+                                            </div>
+                                            <div class="form-control mb-2">
+                                                <label class="label cursor-pointer justify-start gap-3">
+                                                    <input type="checkbox" id="RAG_CLAIM_CHECK" name="RAG_CLAIM_CHECK" class="checkbox checkbox-primary" aria-describedby="RAG_CLAIM_CHECK-help">
+                                                    <span class="label-text min-w-0 break-words" data-rag-i18n="RAG_CLAIM_CHECK">Check each sentence against the documents after the answer</span>
+                                                </label>
+                                                <label class="label pl-8">
+                                                    <span id="RAG_CLAIM_CHECK-help" class="label-text-alt min-w-0 break-words text-base-content/70"><span data-rag-i18n="RAG_CLAIM_CHECK.help">Runs after the stream ends. It never delays, deletes or blocks text. Needs groundedness scoring.</span> <code translate="no">RAG_CLAIM_CHECK</code></span>
+                                                </label>
+                                            </div>
+                                            <div class="form-control mb-2">
+                                                <label class="label cursor-pointer justify-start gap-3">
+                                                    <input type="checkbox" id="RAG_GROUNDEDNESS_LLM_JUDGE" name="RAG_GROUNDEDNESS_LLM_JUDGE" class="checkbox checkbox-primary" aria-describedby="RAG_GROUNDEDNESS_LLM_JUDGE-help">
+                                                    <span class="label-text min-w-0 break-words" data-rag-i18n="RAG_GROUNDEDNESS_LLM_JUDGE">Use a judge model for languages the groundedness scorer does not cover</span>
+                                                </label>
+                                                <label class="label pl-8">
+                                                    <span id="RAG_GROUNDEDNESS_LLM_JUDGE-help" class="label-text-alt min-w-0 break-words text-base-content/70"><span data-rag-i18n="RAG_GROUNDEDNESS_LLM_JUDGE.help">Off keeps “Not checked” for those languages.</span> <code translate="no">RAG_GROUNDEDNESS_LLM_JUDGE</code></span>
+                                                </label>
+                                            </div>
+                                            <div class="form-control mb-2 min-w-0">
+                                                <label class="label" for="RAG_GROUNDEDNESS_JUDGE_MODEL">
+                                                    <span class="label-text min-w-0 break-words" data-rag-i18n="RAG_GROUNDEDNESS_JUDGE_MODEL">Judge model</span>
+                                                </label>
+                                                <input type="text" id="RAG_GROUNDEDNESS_JUDGE_MODEL" name="RAG_GROUNDEDNESS_JUDGE_MODEL" autocomplete="off" spellcheck="false" translate="no" aria-describedby="rag-answer-rules-judge-egress"
+                                                    class="input input-bordered w-full font-mono">
+                                                <label class="label">
+                                                    <span id="rag-answer-rules-judge-egress" class="label-text-alt min-w-0 break-words text-base-content"><span aria-hidden="true">⚠️</span> <span data-rag-i18n="judge.egress">Answer sentences and the document passages sent with them go to this model’s provider. Choose a model from a different family than the answer model.</span> <code translate="no">RAG_GROUNDEDNESS_JUDGE_MODEL</code></span>
+                                                </label>
+                                            </div>
+                                            <div id="rag-answer-rules-judge-calibration" class="min-w-0"></div>
+                                        </section>
+                                        <section aria-labelledby="rag-answer-rules-group-length" data-answer-rules-group="length">
+                                            <h4 id="rag-answer-rules-group-length" class="text-base font-semibold mt-6 mb-2 text-balance" data-rag-i18n="group.length">Answer length</h4>
+                                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4" data-answer-cap="controls">
+                                                <label class="form-control min-w-0">
+                                                    <span class="label"><span class="label-text min-w-0 break-words" data-rag-i18n="cap.mode">Limit</span></span>
+                                                    <select class="select select-bordered w-full" data-answer-cap="mode" aria-describedby="rag-answer-rules-cap-help">
+                                                        <option value="off" data-rag-i18n="cap.mode.off">Off</option>
+                                                        <option value="auto" data-rag-i18n="cap.mode.auto">Chosen by evaluation</option>
+                                                        <option value="fixed" data-rag-i18n="cap.mode.fixed">Fixed limit</option>
+                                                    </select>
+                                                </label>
+                                                <label class="form-control min-w-0" data-answer-cap="value-field" hidden>
+                                                    <span class="label"><span class="label-text min-w-0 break-words" data-rag-i18n="cap.value">Limit in tokens</span></span>
+                                                    <input type="number" min="256" step="1" inputmode="numeric" autocomplete="off" class="input input-bordered w-full tabular-nums" data-answer-cap="value" aria-describedby="rag-answer-rules-cap-error rag-answer-rules-cap-help">
+                                                    <span class="label"><span id="rag-answer-rules-cap-error" class="label-text-alt min-w-0 break-words text-error" data-answer-cap="value-error" data-rag-i18n-template="cap.belowFloor" data-template="Enter {n} or more." aria-live="polite"></span></span>
+                                                </label>
+                                            </div>
+                                            <input type="hidden" id="RAG_MAX_OUTPUT_TOKENS" name="RAG_MAX_OUTPUT_TOKENS" value="off">
+                                            <p id="rag-answer-rules-cap-help" class="text-xs text-base-content/70 mt-1 max-w-prose break-words"><span data-rag-i18n="cap.help">Applies to strict and balanced answers that use the knowledge base. Not applied when a request sets its own limit or reasoning is on. The refusal text is never cut.</span> <code translate="no">RAG_MAX_OUTPUT_TOKENS</code></p>
+                                            <div id="rag-answer-rules-caps" class="min-w-0"></div>
+                                        </section>
+                                        <section aria-labelledby="rag-answer-rules-group-guard" data-answer-rules-group="guard">
+                                            <h4 id="rag-answer-rules-group-guard" class="text-base font-semibold mt-6 mb-2 text-balance" data-rag-i18n="group.guard">Links and sign-in requests in answers</h4>
+                                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div class="form-control min-w-0">
+                                                    <label class="label" for="RAG_OUTPUT_GUARD">
+                                                        <span class="label-text min-w-0 break-words" data-rag-i18n="RAG_OUTPUT_GUARD">Answer guard</span>
+                                                    </label>
+                                                    <select id="RAG_OUTPUT_GUARD" name="RAG_OUTPUT_GUARD" class="select select-bordered w-full" aria-describedby="RAG_OUTPUT_GUARD-help">
+                                                        <option value="off" data-rag-i18n="guard.off">Off</option>
+                                                        <option value="flag" data-rag-i18n="guard.flag">Record only</option>
+                                                        <option value="enforce" data-rag-i18n="guard.enforce">Remove and block</option>
+                                                    </select>
+                                                    <label class="label">
+                                                        <span id="RAG_OUTPUT_GUARD-help" class="label-text-alt min-w-0 break-words text-base-content/70"><code translate="no">RAG_OUTPUT_GUARD</code></span>
+                                                    </label>
+                                                </div>
+                                            </div>
+                                            <div id="rag-answer-rules-guard-now" class="min-w-0" aria-live="polite"></div>
+                                            <div id="rag-answer-rules-allowlist" class="min-w-0"></div>
+                                            <div id="rag-answer-rules-guard-rules" class="min-w-0"></div>
+                                        </section>
+                                        <section aria-labelledby="rag-answer-rules-group-events" data-answer-rules-group="events">
+                                            <h4 id="rag-answer-rules-group-events" class="text-base font-semibold mt-6 mb-2 text-balance" data-rag-i18n="group.events">Security events and uploaders</h4>
+                                            <div class="form-control mb-2">
+                                                <label class="label cursor-pointer justify-start gap-3">
+                                                    <input type="checkbox" id="RAG_SECURITY_EVENTS" name="RAG_SECURITY_EVENTS" class="checkbox checkbox-primary" aria-describedby="RAG_SECURITY_EVENTS-help">
+                                                    <span class="label-text min-w-0 break-words" data-rag-i18n="RAG_SECURITY_EVENTS">Record security events with the document’s uploader</span>
+                                                </label>
+                                                <label class="label pl-8">
+                                                    <span id="RAG_SECURITY_EVENTS-help" class="label-text-alt min-w-0 break-words text-base-content/70"><span data-rag-i18n="RAG_SECURITY_EVENTS.help">Stores ids only: no question, answer or document text.</span> <code translate="no">RAG_SECURITY_EVENTS</code></span>
+                                                </label>
+                                            </div>
+                                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div class="form-control min-w-0">
+                                                    <label class="label" for="RAG_UPLOADER_ALERT_THRESHOLD">
+                                                        <span class="label-text min-w-0 break-words" data-rag-i18n="RAG_UPLOADER_ALERT_THRESHOLD">Alert level: events from one uploader</span>
+                                                    </label>
+                                                    <input type="number" id="RAG_UPLOADER_ALERT_THRESHOLD" name="RAG_UPLOADER_ALERT_THRESHOLD" min="0" step="1" placeholder="0" inputmode="numeric" autocomplete="off" class="input input-bordered w-full tabular-nums" aria-describedby="RAG_UPLOADER_ALERT_THRESHOLD-help">
+                                                    <label class="label">
+                                                        <span id="RAG_UPLOADER_ALERT_THRESHOLD-help" class="label-text-alt min-w-0 break-words text-base-content/70"><span data-rag-i18n="RAG_UPLOADER_ALERT_THRESHOLD.help">An alert opens above this number. 0 means no alerts.</span> <code translate="no">RAG_UPLOADER_ALERT_THRESHOLD</code></span>
+                                                    </label>
+                                                </div>
+                                                <div class="form-control min-w-0">
+                                                    <label class="label" for="RAG_UPLOADER_ALERT_WINDOW_HOURS">
+                                                        <span class="label-text min-w-0 break-words" data-rag-i18n="RAG_UPLOADER_ALERT_WINDOW_HOURS">Window in hours</span>
+                                                    </label>
+                                                    <input type="number" id="RAG_UPLOADER_ALERT_WINDOW_HOURS" name="RAG_UPLOADER_ALERT_WINDOW_HOURS" min="1" max="720" step="1" placeholder="24" inputmode="numeric" autocomplete="off" class="input input-bordered w-full tabular-nums" aria-describedby="RAG_UPLOADER_ALERT_WINDOW_HOURS-help">
+                                                    <label class="label">
+                                                        <span id="RAG_UPLOADER_ALERT_WINDOW_HOURS-help" class="label-text-alt min-w-0 break-words text-base-content/70"><code translate="no">RAG_UPLOADER_ALERT_WINDOW_HOURS</code></span>
+                                                    </label>
+                                                </div>
+                                                <div class="form-control min-w-0">
+                                                    <label class="label" for="RAG_UPLOADER_HOLD">
+                                                        <span class="label-text min-w-0 break-words" data-rag-i18n="RAG_UPLOADER_HOLD">Hold uploads</span>
+                                                    </label>
+                                                    <select id="RAG_UPLOADER_HOLD" name="RAG_UPLOADER_HOLD" class="select select-bordered w-full" aria-describedby="RAG_UPLOADER_HOLD-help">
+                                                        <option value="off" data-rag-i18n="hold.mode.off">Never</option>
+                                                        <option value="manual" data-rag-i18n="hold.mode.manual">When an admin chooses</option>
+                                                        <option value="auto" data-rag-i18n="hold.mode.auto">Automatically when an alert opens</option>
+                                                    </select>
+                                                    <label class="label">
+                                                        <span id="RAG_UPLOADER_HOLD-help" class="label-text-alt min-w-0 break-words text-base-content/70"><span data-rag-i18n="RAG_UPLOADER_HOLD.help">Held uploads wait in Upload approvals. Documents that are already searchable are not touched.</span> <code translate="no">RAG_UPLOADER_HOLD</code></span>
+                                                    </label>
+                                                </div>
+                                            </div>
+                                            <div id="rag-answer-rules-events-actions" class="min-w-0"></div>
+                                        </section>
+                                        <section aria-labelledby="rag-answer-rules-group-calc" data-answer-rules-group="calc" hidden>
+                                            <h4 id="rag-answer-rules-group-calc" class="text-base font-semibold mt-6 mb-2 text-balance" data-rag-i18n="group.calc">Calculations</h4>
+                                            <div id="rag-answer-rules-calc" class="min-w-0"></div>
+                                        </section>
+                                        <section aria-labelledby="rag-answer-rules-group-budget" data-answer-rules-group="budget" hidden>
+                                            <h4 id="rag-answer-rules-group-budget" class="text-base font-semibold mt-6 mb-2 text-balance" data-rag-i18n="group.budget">Prompt size</h4>
+                                            <div id="rag-answer-rules-budget" class="min-w-0"></div>
+                                        </section>
+                                        <script>
+                                        (function () {
+                                            var card = document.getElementById('rag-answer-rules');
+                                            var hidden = document.getElementById('RAG_MAX_OUTPUT_TOKENS');
+                                            if (!card || !hidden) return;
+                                            var mode = card.querySelector('[data-answer-cap="mode"]');
+                                            var amount = card.querySelector('[data-answer-cap="value"]');
+                                            var amountField = card.querySelector('[data-answer-cap="value-field"]');
+                                            var amountError = card.querySelector('[data-answer-cap="value-error"]');
+                                            if (!mode || !amount || !amountField || !amountError) return;
+                                            var FIXED = /^[1-9][0-9]*$/;
+                                            var proto = Object.getPrototypeOf(hidden);
+                                            var native = proto ? Object.getOwnPropertyDescriptor(proto, 'value') : null;
+                                            function floor() {
+                                                var n = parseInt(amount.getAttribute('min') || '', 10);
+                                                return n > 0 ? n : 1;
+                                            }
+                                            function clearInvalid() {
+                                                amount.removeAttribute('aria-invalid');
+                                                amountError.textContent = '';
+                                            }
+                                            function show(value) {
+                                                var text = String(value == null ? '' : value).trim();
+                                                clearInvalid();
+                                                if (text === 'auto') {
+                                                    mode.value = 'auto';
+                                                } else if (FIXED.test(text)) {
+                                                    mode.value = 'fixed';
+                                                    amount.value = text;
+                                                } else {
+                                                    mode.value = 'off';
+                                                }
+                                                amountField.hidden = mode.value !== 'fixed';
+                                            }
+                                            if (native && native.get && native.set) {
+                                                Object.defineProperty(hidden, 'value', {
+                                                    configurable: true,
+                                                    get: function () { return native.get.call(hidden); },
+                                                    set: function (next) { native.set.call(hidden, next); show(native.get.call(hidden)); }
+                                                });
+                                            }
+                                            function write() {
+                                                var next = mode.value === 'auto' ? 'auto' : 'off';
+                                                amountField.hidden = mode.value !== 'fixed';
+                                                if (mode.value === 'fixed') {
+                                                    var text = String(amount.value || '').trim();
+                                                    if (text === '') return;
+                                                    if (!FIXED.test(text) || parseInt(text, 10) < floor()) {
+                                                        amount.setAttribute('aria-invalid', 'true');
+                                                        amountError.textContent = (amountError.getAttribute('data-template') || 'Enter {n} or more.').replace('{n}', String(floor()));
+                                                        return;
+                                                    }
+                                                    next = text;
+                                                }
+                                                clearInvalid();
+                                                if (hidden.value === next) return;
+                                                hidden.value = next;
+                                                hidden.dispatchEvent(new Event('change', { bubbles: true }));
+                                            }
+                                            mode.addEventListener('change', write);
+                                            amount.addEventListener('change', write);
+                                            show(hidden.value);
+                                        })();
+                                        </script>
+                                    </div>
+                                </div>
+
                                 <!-- Info Box -->
                                 <div class="alert alert-info mt-6">
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"

@@ -282,6 +282,16 @@
       "knownGaps": []
     },
     {
+      "name": "RAG_CITATION_PER_SENTENCE",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_CLAIM_CHECK",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_CLAUDE_CITATIONS",
       "status": "managed",
       "knownGaps": []
@@ -301,6 +311,11 @@
     },
     {
       "name": "RAG_CONTEXT_EDGE_ORDER",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_CONTEXT_RELEVANCE_RULE",
       "status": "managed",
       "knownGaps": []
     },
@@ -567,6 +582,16 @@
       "knownGaps": []
     },
     {
+      "name": "RAG_GROUNDEDNESS_JUDGE_MODEL",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_GROUNDEDNESS_LLM_JUDGE",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS",
       "status": "managed",
       "knownGaps": []
@@ -697,6 +722,51 @@
     },
     {
       "name": "RAG_LEXICAL_STEM_IT",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_MAX_OUTPUT_TOKENS",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_OUTPUT_GUARD",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_PARTIAL_ANSWER_RULE",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_REGISTRY_TEXTS",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_SECURITY_EVENTS",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_UPLOADER_ALERT_THRESHOLD",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_UPLOADER_ALERT_WINDOW_HOURS",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_UPLOADER_HOLD",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_VERSION_LABELS",
       "status": "managed",
       "knownGaps": []
     },
