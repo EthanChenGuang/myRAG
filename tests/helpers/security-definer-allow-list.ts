@@ -8,6 +8,8 @@ import type { AllowListEntry } from './sql-function-acl';
  * Service-role-only definers such as rag_purge_retrieval_log(integer,integer), rag_feedback_loop_on_chat_delete() and
  * rag_mine_failed_queries(timestamptz,timestamptz,jsonb) are deliberately absent: their lock is section 1 of 0410, and
  * tests/rag-db/retrieval-log-purge.test.mts and tests/rag-db/review-items-mining.test.mts assert they never appear here.
+ * The Phase 5.2 functions of 0941 and 0943 (rag_set_document_version_label, rag_record_security_events, the uploader hold and alert functions and
+ * the three rag_list_security_* readers) are SECURITY INVOKER and service_role only; tests/rag-db/security-alerts.test.mts asserts they never appear here.
  */
 export const AUTHENTICATED_ALLOW_LIST: Record<string, AllowListEntry> = {
   'delete_folder(uuid,boolean)': { anon: false, reason: 'called with the user session from chat-store.ts and /api/folders/[id]; checks auth.uid() ownership' },
