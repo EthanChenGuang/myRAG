@@ -25,9 +25,17 @@
       "type": "string"
     },
     "document_id": {
-      "minLength": 1,
-      "title": "Document Id",
-      "type": "string"
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Document Id"
     },
     "file_name": {
       "anyOf": [
@@ -125,8 +133,7 @@
     "tenant_key",
     "source",
     "action",
-    "detector",
-    "document_id"
+    "detector"
   ],
   "title": "SecurityEventView",
   "type": "object"

@@ -47,9 +47,15 @@ export interface KoyebSessionResponse {
   expiresAt?: string;
 }
 
+/** Per-message send options; `linkPreview: false` asks the Baileys service never to fetch a preview for the text. */
+export interface TextMessageOptions {
+  linkPreview?: false;
+}
+
 export interface KoyebMessagePayload {
   sessionId: string;
   to: string;
+  linkPreview?: false;
   message: {
     text?: string;
     image?: {
