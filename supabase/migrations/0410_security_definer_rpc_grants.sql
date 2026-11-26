@@ -760,6 +760,10 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_purge_hook_identifiers(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_purge_hook_identifiers(text, uuid, uuid[]) TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_purge_hook_duplicate_clusters(text, uuid, uuid[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_purge_hook_duplicate_clusters(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_purge_hook_duplicate_clusters(text, uuid, uuid[]) TO service_role;
+  END IF;
 END
 $service_role_only$;
 
