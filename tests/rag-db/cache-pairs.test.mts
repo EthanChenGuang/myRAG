@@ -46,11 +46,11 @@ function syntheticGolden(): GoldenItem[] {
     question: 'What is the refund window for annual plans!',
     pair_of: anchor.id,
   });
-  const numberAnchor = GoldenItemSchema.parse({ ...anchor, id: 'en-general-901', question: 'What is the refund window for annual plans with two seats?' });
+  const numberAnchor = GoldenItemSchema.parse({ ...anchor, id: 'en-general-901', question: 'What is the refund window for annual plans when the subscription covers two seats in one account?' });
   const numberNearMiss = GoldenItemSchema.parse({
     ...codeNearMiss,
     id: 'en-cache-near-miss-901',
-    question: 'What is the refund window for annual plans with three seats?',
+    question: 'What is the refund window for annual plans when the subscription covers three seats in one account?',
     pair_of: numberAnchor.id,
     tags: ['near_miss_number'],
     gold_evidence: anchor.gold_evidence,
