@@ -1,7 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { z } from 'zod/v3';
-import { isTenantScope, type TenantScope } from '@/lib/rag';
-import { readAnswerConfig } from '@/lib/rag/generation/answer-config';
+import { isTenantScope, readAnswerConfig, type TenantScope } from '@/lib/rag';
 import {
   AnswerChecksSchema,
   AnswerRecordSchema,
