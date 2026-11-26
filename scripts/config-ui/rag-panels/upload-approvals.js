@@ -31,7 +31,7 @@ const UPLOAD_APPROVALS_LABELS = {
     'action.rejectAria': 'Reject upload: {file}',
     'action.keepUpload': 'Keep upload',
     'reject.title': 'Reject {file}?',
-    'reject.body': "The upload is removed and never becomes searchable. The uploader is not notified. This can't be undone.",
+    'reject.body': 'The upload is removed and never becomes searchable. The uploader is not notified. This can’t be undone.',
     'reject.running': 'Rejecting…',
     'reject.done': '{file} is rejected and removed.',
     'pending.off': 'Upload approval is off, so uploads become searchable as soon as they are processed.',
@@ -353,6 +353,19 @@ function uploadApprovalsLegacyWarning(mode, pipeline) {
   return value !== 'off' && uploadApprovalsText(pipeline).trim() !== 'unified';
 }
 
+/**
+ * The hold-line badge with base-content text, an info border and an info icon: outline info text on the light theme's base
+ * colours is below 4.5:1 (the call plans 56 and 57 made for their badges).
+ */
+function uploadApprovalsReadableBadge(holdLine) {
+  const badge = holdLine && holdLine.querySelector('.badge');
+  if (!badge) return;
+  badge.classList.remove('badge-info');
+  badge.classList.add('border-info', 'text-base-content');
+  const icon = badge.querySelector('i');
+  if (icon) icon.classList.add('text-info');
+}
+
 class UploadApprovalsPanel {
   constructor(root) {
     this.root = root;
@@ -541,8 +554,8 @@ class UploadApprovalsPanel {
 
   userEl(user, className) {
     if (!user) return this.el('span', { className, text: this.t('uploader.none') });
-    if (user.isId) return this.el('span', { className: 'font-mono text-xs break-all' + (className ? ' ' + className : ''), text: user.id, attrs: { translate: 'no' } });
-    return this.el('span', { className: 'break-words' + (className ? ' ' + className : ''), text: user.display });
+    if (user.isId) return this.el('span', { className: 'font-mono text-xs break-all', text: user.id, attrs: { translate: 'no' } });
+    return this.el('span', { className: '[overflow-wrap:anywhere]' + (className ? ' ' + className : ''), text: user.display });
   }
 
   sourceEl(row) {
@@ -691,7 +704,7 @@ class UploadApprovalsPanel {
           this.th(this.t('col.source'), 'hidden lg:table-cell'),
           this.th(this.t('col.docType'), 'hidden md:table-cell'),
           this.th(this.t('col.uploaded'), 'hidden md:table-cell'),
-          this.th(this.t('col.actions')),
+          this.th(this.t('col.actions'), 'hidden md:table-cell'),
         ]),
       ]),
     );
@@ -703,16 +716,16 @@ class UploadApprovalsPanel {
 
   renderRow(row) {
     const ui = uploadApprovalsUiLib();
-    const fileCell = this.el('th', { className: 'align-top font-normal min-w-0', attrs: { scope: 'row' } }, [
-      this.el('span', { className: 'block text-sm font-semibold break-words', text: row.file }),
-      this.el('div', { className: 'mt-1' }, [
-        ui.ragUiHoldLine(this.doc, {
-          tone: 'info',
-          icon: 'hourglass',
-          word: ui.ragUiLabel('status.pending_review', this.locale),
-          reason: this.el('span', { className: 'text-xs min-w-0 break-words', text: this.t(row.newVersion ? 'pending.newVersion' : 'pending.reason') }),
-        }),
-      ]),
+    const holdLine = ui.ragUiHoldLine(this.doc, {
+      tone: 'info',
+      icon: 'hourglass',
+      word: ui.ragUiLabel('status.pending_review', this.locale),
+      reason: this.el('span', { className: 'text-xs min-w-0 break-words', text: this.t(row.newVersion ? 'pending.newVersion' : 'pending.reason') }),
+    });
+    uploadApprovalsReadableBadge(holdLine);
+    const fileCell = this.el('th', { className: 'block md:table-cell align-top font-normal min-w-0 lg:min-w-48', attrs: { scope: 'row' } }, [
+      this.el('span', { className: 'block text-sm font-semibold [overflow-wrap:anywhere]', text: row.file }),
+      this.el('div', { className: 'mt-1' }, [holdLine]),
       this.el('div', { className: 'md:hidden mt-1 flex flex-col gap-1 text-xs text-base-content/70' }, [
         this.userEl(row.uploader),
         this.timeEl(row.uploadedAt),
@@ -730,13 +743,13 @@ class UploadApprovalsPanel {
     });
     approve.addEventListener('click', () => this.approve(row, approve, reject));
     reject.addEventListener('click', () => this.reject(row, reject, approve));
-    return this.el('tr', { attrs: { 'data-upload-approvals-row': row.id } }, [
+    return this.el('tr', { className: 'flex flex-col md:table-row', attrs: { 'data-upload-approvals-row': row.id } }, [
       fileCell,
       this.el('td', { className: 'align-top hidden md:table-cell' }, [this.userEl(row.uploader, 'text-sm')]),
       this.el('td', { className: 'align-top hidden lg:table-cell' }, [this.sourceEl(row)]),
       this.el('td', { className: 'align-top hidden md:table-cell break-words', text: row.docTypeLabel || '—' }),
-      this.el('td', { className: 'align-top hidden md:table-cell tabular-nums' }, [this.timeEl(row.uploadedAt)]),
-      this.el('td', { className: 'align-top' }, [this.el('div', { className: 'flex flex-col md:flex-row flex-wrap gap-2' }, [approve, reject])]),
+      this.el('td', { className: 'align-top hidden md:table-cell tabular-nums lg:whitespace-nowrap' }, [this.timeEl(row.uploadedAt)]),
+      this.el('td', { className: 'block md:table-cell align-top pt-0 md:pt-2' }, [this.el('div', { className: 'flex flex-col gap-2 md:min-w-max' }, [approve, reject])]),
     ]);
   }
 
@@ -883,18 +896,22 @@ class UploadApprovalsPanel {
     this.exemptHost.replaceChildren(...nodes);
   }
 
+  /**
+   * The two selects are panel state, not settings: their change events stop here so the page's auto-save does not record
+   * them as config keys.
+   */
   renderExemptionForm() {
     const kindId = 'rag-upload-approvals-exempt-kind';
     const refId = 'rag-upload-approvals-exempt-ref';
     const reasonId = 'rag-upload-approvals-exempt-reason';
     const helpId = 'rag-upload-approvals-exempt-help';
-    const kind = this.el('select', { className: 'select select-bordered select-sm w-full', id: kindId, attrs: { autocomplete: 'off', 'aria-describedby': helpId } }, [
+    const kind = this.el('select', { className: 'select select-bordered select-sm w-full', id: kindId, attrs: { name: 'exemption-kind', autocomplete: 'off', 'aria-describedby': helpId } }, [
       this.el('option', { text: this.t('exempt.chooseKind'), attrs: { value: '' } }),
       ...UPLOAD_APPROVALS_KINDS.map((k) => this.el('option', { text: this.t('exempt.kind.' + k), attrs: { value: k } })),
     ]);
     kind.value = this.form.kind;
     const choices = this.form.kind ? this.exemptions.choices[this.form.kind] || [] : [];
-    const ref = this.el('select', { className: 'select select-bordered select-sm w-full', id: refId, attrs: { autocomplete: 'off' } }, [
+    const ref = this.el('select', { className: 'select select-bordered select-sm w-full', id: refId, attrs: { name: 'exemption-name', autocomplete: 'off' } }, [
       this.el('option', { text: this.t('exempt.chooseName'), attrs: { value: '' } }),
       ...choices.map((c) => this.el('option', { text: c.display, attrs: { value: c.ref, translate: c.display === c.ref ? 'no' : null } })),
     ]);
@@ -913,13 +930,15 @@ class UploadApprovalsPanel {
     add.disabled = !ready;
     const reasonText = this.form.kind && choices.length === 0 ? this.t('exempt.noChoices') : this.t('exempt.needBoth');
     const reason = this.el('p', { className: 'text-xs text-base-content/70 mt-2', id: reasonId, text: reasonText, attrs: { hidden: ready } });
-    kind.addEventListener('change', () => {
+    kind.addEventListener('change', (event) => {
+      if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
       this.form = { kind: UPLOAD_APPROVALS_KINDS.includes(kind.value) ? kind.value : '', ref: '' };
       this.renderExemptions();
       const next = this.doc.getElementById(kindId);
       if (next && typeof next.focus === 'function') next.focus();
     });
-    ref.addEventListener('change', () => {
+    ref.addEventListener('change', (event) => {
+      if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
       this.form = { kind: this.form.kind, ref: uploadApprovalsText(ref.value) };
       this.renderExemptions();
       const next = this.doc.getElementById(refId);

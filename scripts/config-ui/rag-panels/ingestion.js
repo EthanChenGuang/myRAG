@@ -1097,9 +1097,9 @@ class IngestionPanel {
         const statusTd = document.createElement('td');
         if (view.status === 'pending_review') {
           const badge = document.createElement('span');
-          badge.className = 'badge badge-sm badge-info badge-outline gap-1';
+          badge.className = 'badge badge-sm badge-outline border-info text-base-content gap-1';
           const icon = document.createElement('i');
-          icon.className = 'bi bi-hourglass';
+          icon.className = 'bi bi-hourglass text-info';
           icon.setAttribute('aria-hidden', 'true');
           const word = document.createElement('span');
           word.textContent = view.statusLabel;

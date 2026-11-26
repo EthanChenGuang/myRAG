@@ -111,9 +111,11 @@ describe('Pending: the table and the hold line (UI-SPEC 6.6, 9.11)', () => {
     expect(fileCell.getAttribute('scope')).toBe('row');
     expect(fileCell.textContent).toContain('report-1.pdf');
     const badge = fileCell.querySelector('.badge')!;
-    expect(badge.className).toContain('badge-info');
     expect(badge.className).toContain('badge-outline');
+    expect(badge.className).toContain('border-info');
+    expect(badge.className).toContain('text-base-content');
     expect(badge.querySelector('i')!.className).toContain('bi-hourglass');
+    expect(badge.querySelector('i')!.className).toContain('text-info');
     expect(badge.textContent).toBe('Awaiting approval');
     expect(fileCell.textContent).toContain('Held out of answers until an admin approves it.');
     expect(rows[1]!.querySelector('th')!.textContent).toContain('New version of a document in use. The current version keeps answering until you approve.');
@@ -481,6 +483,20 @@ describe('Exemptions (UI-SPEC 6.6)', () => {
     expect(posts[0]!.body).toEqual({ kind: 'uploader', ref: '40000000-0000-4000-8000-000000000007' });
     expect(page.calls('exemptions')).toHaveLength(2);
     expect(page.status().textContent).toBe('Exemption added: member7@example.test.');
+  });
+
+  it('the form selects keep their change events from the page auto-save (they are not settings)', async () => {
+    const page = await openExemptions();
+    let stopped = 0;
+    const stopPropagation = () => void (stopped += 1);
+    const kind = page.doc.getElementById('rag-upload-approvals-exempt-kind')!;
+    kind.value = 'connector';
+    kind.dispatch('change', { stopPropagation });
+    const ref = page.doc.getElementById('rag-upload-approvals-exempt-ref')!;
+    ref.value = '70000000-0000-4000-8000-000000000001';
+    ref.dispatch('change', { stopPropagation });
+    expect(stopped).toBe(2);
+    expect(buttonByText(page.panel('exemptions'), 'Add exemption').disabled).toBe(false);
   });
 
   it('Remove exemption sends DELETE with the id and the workspace, without a dialog', async () => {
