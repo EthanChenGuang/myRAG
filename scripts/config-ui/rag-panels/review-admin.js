@@ -645,7 +645,7 @@ class ReviewAdminPanel {
     const dateField = (id, labelKey, value, hook) => {
       const field = this.el('input', {
         className: 'input input-bordered input-sm w-full',
-        attrs: { id, type: 'date', 'aria-describedby': `${helpId} ${errorId}`, [hook]: true, 'data-review-admin-action': true },
+        attrs: { id, name: hook.replace('data-', ''), type: 'date', autocomplete: 'off', 'aria-describedby': `${helpId} ${errorId}`, [hook]: true, 'data-review-admin-action': true },
       });
       field.value = value;
       return {
@@ -824,7 +824,7 @@ class ReviewAdminPanel {
   }
 
   heading(text, level) {
-    return this.el(level || 'h4', { className: level === 'h5' ? 'text-sm font-semibold mb-2' : 'text-base font-semibold mb-2', text });
+    return this.el(level || 'h4', { className: level === 'h5' ? 'text-sm font-semibold text-balance mb-2' : 'text-base font-semibold text-balance mb-2', text });
   }
 
   fieldError(id) {
@@ -892,7 +892,7 @@ class ReviewAdminPanel {
     }
     const wrap = this.el('div', { className: 'flex flex-col gap-4 mb-4' });
     const selectId = this.h.nextId('review-admin-tenant');
-    const select = this.el('select', { className: 'select select-bordered select-sm w-full max-w-md', attrs: { id: selectId, 'data-review-admin-tenant': true } });
+    const select = this.el('select', { className: 'select select-bordered select-sm w-full max-w-md', attrs: { id: selectId, name: 'review-admin-workspace', 'data-review-admin-tenant': true } });
     for (const workspace of workspaces) select.appendChild(this.el('option', { text: workspace.name, attrs: { value: workspace.key } }));
     select.appendChild(this.el('option', { text: this.t('tenant.other'), attrs: { value: REVIEW_ADMIN_OTHER } }));
     select.value = this.choice;
@@ -911,8 +911,8 @@ class ReviewAdminPanel {
       const helpId = `${inputId}-help`;
       const errorId = `${inputId}-error`;
       const field = this.el('input', {
-        className: 'input input-bordered input-sm w-full max-w-md font-mono',
-        attrs: { id: inputId, type: 'text', autocomplete: 'off', spellcheck: 'false', translate: 'no', 'aria-describedby': `${helpId} ${errorId}`, 'data-review-admin-key': true },
+        className: 'input input-bordered input-sm w-full max-w-md min-w-0 flex-1 font-mono',
+        attrs: { id: inputId, name: 'review-admin-tenant-key', type: 'text', autocomplete: 'off', spellcheck: 'false', translate: 'no', 'aria-describedby': `${helpId} ${errorId}`, 'data-review-admin-key': true },
       });
       field.value = this.customKey;
       const error = this.fieldError(errorId);
@@ -1075,8 +1075,8 @@ class ReviewAdminPanel {
     const helpId = `${inputId}-help`;
     const errorId = `${inputId}-error`;
     const field = this.el('input', {
-      className: 'input input-bordered input-sm w-full max-w-md font-mono',
-      attrs: { id: inputId, type: 'text', autocomplete: 'off', spellcheck: 'false', translate: 'no', 'aria-describedby': `${helpId} ${errorId}`, 'data-review-admin-grant-input': true },
+      className: 'input input-bordered input-sm w-full max-w-md min-w-0 flex-1 font-mono',
+      attrs: { id: inputId, name: 'review-admin-user-id', type: 'text', autocomplete: 'off', spellcheck: 'false', translate: 'no', 'aria-describedby': `${helpId} ${errorId}`, 'data-review-admin-grant-input': true },
     });
     const error = this.fieldError(errorId);
     const button = this.el('button', { className: 'btn btn-primary btn-sm', text: this.t('action.grant'), attrs: { type: 'button', 'data-review-admin-grant': true, 'data-review-admin-action': true } });
@@ -1151,7 +1151,7 @@ class ReviewAdminPanel {
     const backdropButton = this.el('button', { text: keep, attrs: { type: 'button', tabindex: '-1' } });
     const dialog = this.el('dialog', { className: 'modal', attrs: { 'aria-labelledby': titleId, 'aria-describedby': bodyId, 'data-review-admin-dialog': kind } }, [
       this.el('div', { className: 'modal-box overscroll-contain' }, [
-        this.el('h3', { className: 'text-base font-semibold break-words', text: title, attrs: { id: titleId } }),
+        this.el('h3', { className: 'text-base font-semibold text-balance break-words', text: title, attrs: { id: titleId } }),
         this.el('p', { className: 'text-sm mt-2 max-w-prose', text: body, attrs: { id: bodyId } }),
         this.el('div', { className: 'modal-action flex-wrap' }, [keepButton, confirmButton]),
       ]),
@@ -1245,7 +1245,7 @@ class ReviewAdminPanel {
   renderLogLevel() {
     const selectId = this.h.nextId('review-admin-log');
     const helpId = `${selectId}-help`;
-    const select = this.el('select', { className: 'select select-bordered select-sm w-full max-w-md', attrs: { id: selectId, 'aria-describedby': helpId, 'data-review-admin-log': true } });
+    const select = this.el('select', { className: 'select select-bordered select-sm w-full max-w-md', attrs: { id: selectId, name: 'review-admin-log-level', 'aria-describedby': helpId, 'data-review-admin-log': true } });
     for (const level of REVIEW_ADMIN_LOG_LEVELS) select.appendChild(this.el('option', { text: this.levelText(level), attrs: { value: level } }));
     select.value = this.settings.retrievalLog;
     const noMining = this.el('p', { className: 'text-xs text-base-content/70 mt-1 max-w-prose', text: this.t('log.noMining'), attrs: { 'data-review-admin-no-mining': true } });
