@@ -188,7 +188,8 @@ function isAt(char: string): boolean {
 function isHostish(char: string): boolean {
   return isLabelChar(char) || isDot(char) || isAt(char) || char === '+';
 }
-function isUrlBody(char: string): boolean {
+/** A character that can continue a URL (no whitespace, CJK, quote, angle or square bracket). */
+export function isUrlBody(char: string): boolean {
   if (char === '' || isTerminator(char) || NOT_URL_BODY.has(char)) return false;
   const code = char.charCodeAt(0);
   return code > 0x1f && code !== 0x7f;

@@ -116,9 +116,10 @@ describe('createOutputGuard', () => {
     const long = `https://other.test/${'a'.repeat(3000)}`;
     const blocked = feedByChar(`Go ${long} end`, policy());
     expect(blocked.out).toBe(`Go ${PLACEHOLDER} end`);
-    expect(blocked.maxHeld).toBeLessThanOrEqual(2048 + 1);
     const kept = `https://allowed.test/${'a'.repeat(3000)}`;
-    expect(feedByChar(`Go ${kept} end`, policy()).out).toBe(`Go ${kept} end`);
+    const keptResult = feedByChar(`Go ${kept} end`, policy());
+    expect(keptResult.out).toBe(`Go ${kept} end`);
+    expect(keptResult.maxHeld).toBeLessThanOrEqual(2048);
   });
 
   it('decides Markdown link text longer than the bound at the bound', () => {
