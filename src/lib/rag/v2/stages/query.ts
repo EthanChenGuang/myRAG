@@ -15,6 +15,9 @@ import type { TraceCollector } from '../../trace/collector';
 import type { Profile, QueryVariant, ReferencedState, RunRetrievalInput, StageOverrides } from '../../types';
 import type { QueryLayerOutcome, SemanticCacheSeam } from '../../query/run-layer';
 import type { QueryLanguage } from '../../refusal/gate';
+import type { TerminologyMatch } from '@/lib/rag-eval/contracts.generated';
+import { expandMatches, terminologyParams } from '../../terminology/expand';
+import { terminologyMatcherFor } from '../../terminology/load';
 
 export interface QueryStagesInput {
   input: RunRetrievalInput;
@@ -36,6 +39,67 @@ export interface QueryStagesOutput {
   variants: QueryVariant[];
   /** D-11: the query layer's whole outcome; absent while the layer is off. */
   queryLayer?: QueryLayerOutcome;
+  /** D-20: what the terminology stage applied to retrieval; null when it was disabled, skipped or not reached. */
+  terminology: TerminologyOutcome | null;
+}
+
+/** D-20: the matches and version applied to retrieval, plus the expansion the search group turns into the term:0 list. */
+export interface TerminologyOutcome {
+  matches: TerminologyMatch[];
+  version: string;
+  expansionTokens: string[];
+  /** D-16: factor on the lexical leg weight in force for the term:0 list. */
+  expansionWeight: number;
+  capped: boolean;
+}
+
+function terminologyDetail(value: TerminologyOutcome): string {
+  return `matches=${value.matches.length} tokens=${value.expansionTokens.length} capped=${value.capped} version=${value.version}`;
+}
+
+function terminologyCounts(value: TerminologyOutcome, versions: { shared: number; workspace: number }): Record<string, number> {
+  return {
+    matches: value.matches.length,
+    tokens: value.expansionTokens.length,
+    capped: value.capped ? 1 : 0,
+    shared_version: versions.shared,
+    workspace_version: versions.workspace,
+  };
+}
+
+/**
+ * D-15: the terminology stage on the standalone query only. A load failure or a timeout records skipped (the request is then
+ * degraded by deriveStatus); the detail and counts never carry query, variant or canonical text (D-21).
+ */
+export async function runTerminologyStage(args: {
+  standalone: string;
+  scope: TenantScope;
+  spec: StageSpec;
+  signal: AbortSignal;
+  collector: TraceCollector;
+}): Promise<TerminologyOutcome | null> {
+  const params = terminologyParams();
+  const versions = { shared: 0, workspace: 0 };
+  const outcome = await runStage(
+    args.spec,
+    args.signal,
+    async (stageSignal): Promise<TerminologyOutcome> => {
+      const { dictionary, matcher } = await terminologyMatcherFor(args.scope, { signal: stageSignal, minHanChars: params.min_han_chars });
+      versions.shared = dictionary.sharedVersion;
+      versions.workspace = dictionary.workspaceVersion;
+      const expansion = expandMatches(args.standalone, matcher.match(args.standalone), params);
+      return {
+        matches: expansion.matches,
+        version: dictionary.version,
+        expansionTokens: expansion.tokens,
+        expansionWeight: params.expansion_weight,
+        capped: expansion.capped,
+      };
+    },
+    args.collector,
+    { detail: terminologyDetail, counts: (value) => terminologyCounts(value, versions) },
+  );
+  return outcome.skipped ? null : outcome.value;
 }
 
 /** D-04: the layer runs only when the configuration turned it on (v2 only); an eval request can switch it off, never on. */
@@ -73,10 +137,28 @@ export async function runQueryStages(ctx: QueryStagesInput): Promise<QueryStages
   const queryContext = analysis.skipped ? defaultQueryContext() : analysis.value;
   const language = queryLanguage(input.query);
 
+  // D-15: after the last query transform and before semantic_cache and embed, on the standalone query only.
+  let terminology: TerminologyOutcome | null = null;
+  let terminologyRan = false;
+  const terminologyStage = async (standalone: string): Promise<void> => {
+    terminologyRan = true;
+    terminology = await runTerminologyStage({ standalone, scope, spec: spec('terminology', 'skip'), signal, collector });
+  };
+
   let queryLayer: QueryLayerOutcome | undefined;
   if (queryLayerActive(config, profile, stageOverrides)) {
     const { runQueryLayer } = await import('../../query/run-layer');
-    queryLayer = await runQueryLayer({ input, config, profile, signal, collector, stageOverrides, scope, ...(ctx.cache ? { cache: ctx.cache } : {}) });
+    queryLayer = await runQueryLayer({
+      input,
+      config,
+      profile,
+      signal,
+      collector,
+      stageOverrides,
+      scope,
+      ...(ctx.cache ? { cache: ctx.cache } : {}),
+      afterTransforms: terminologyStage,
+    });
   }
 
   let translated: TranslatedQuery[] = [];
@@ -97,6 +179,9 @@ export async function runQueryStages(ctx: QueryStagesInput): Promise<QueryStages
     );
     if (!translation.skipped) translated = translation.value;
   }
+
+  // The layer runs the stage after its parallel group; without the layer (or when it stood down early) it runs here, after translate.
+  if (!terminologyRan && queryLayer?.shortCircuit?.kind !== 'small_talk') await terminologyStage(input.query);
 
   const built = buildRetrievalFilters({
     explicit: input.retrievalFilters,
@@ -129,5 +214,6 @@ export async function runQueryStages(ctx: QueryStagesInput): Promise<QueryStages
     filters,
     variants,
     ...(queryLayer ? { queryLayer } : {}),
+    terminology,
   };
 }

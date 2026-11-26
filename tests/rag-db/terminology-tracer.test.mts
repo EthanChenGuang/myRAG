@@ -55,14 +55,15 @@ async function postEval(query: string, itemId: string) {
   return json;
 }
 
+/** The app env is a snapshot taken at import; the switch is flipped per request through the deps seam. */
 async function withTerminology<T>(value: 'true' | 'false', fn: () => Promise<T>): Promise<T> {
-  const previous = process.env.RAG_TERMINOLOGY;
-  process.env.RAG_TERMINOLOGY = value;
+  const deps = await import('../../src/lib/rag/deps.ts');
+  const previous = deps.getRagDeps().ragEnv;
+  deps.setRagDepsForTests({ ragEnv: () => ({ ...previous(), RAG_TERMINOLOGY: value }) });
   try {
     return await fn();
   } finally {
-    if (previous === undefined) delete process.env.RAG_TERMINOLOGY;
-    else process.env.RAG_TERMINOLOGY = previous;
+    deps.setRagDepsForTests({ ragEnv: previous });
   }
 }
 
@@ -70,7 +71,8 @@ async function expectedTermContribution(): Promise<number> {
   const { loadRagConfig } = await import('../../src/lib/rag/config.ts');
   const { effectiveRetrievalParams } = await import('../../src/lib/rag/v2/retrieval-params.ts');
   const { TerminologyParamsSchema } = await import('../../src/lib/rag-eval/contracts.generated.ts');
-  const params = effectiveRetrievalParams('eval', loadRagConfig(process.env));
+  const { getRagDeps } = await import('../../src/lib/rag/deps.ts');
+  const params = effectiveRetrievalParams('eval', loadRagConfig(getRagDeps().ragEnv()));
   const lexicalWeight = params.leg_weights?.lexical ?? 1;
   const expansionWeight = TerminologyParamsSchema.parse({}).expansion_weight;
   return (expansionWeight * lexicalWeight) / (params.rrf_k + 1);

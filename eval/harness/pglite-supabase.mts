@@ -8,6 +8,7 @@ import { vector } from '@electric-sql/pglite-pgvector';
 import type { RpcClient, RpcRequest, RpcResponse } from '@/lib/rag/backend/supabase-rpc';
 import { detectLanguage } from '@/lib/rag/lang/detect';
 import { LEXICAL_VERSION, chunkLexicalText } from '@/lib/rag/lexical/chunk-text';
+import { normalizeLexical } from '@/lib/rag/lexical/tokenize';
 import { runRelex } from '@/lib/rag/ingest/relex/run';
 import { loadCorpus, type CorpusDocument } from './corpus.mts';
 import type { FakeEdge } from './fake-edge.mts';
@@ -251,6 +252,45 @@ export async function prechunkedWriter(db: PGlite, deploymentMode: DeploymentMod
   };
 }
 
+/** D-27: one dictionary row for a fixture database, written as the database owner (the writer RPCs are plan 04's). */
+export interface TerminologySeedRow {
+  /** 'shared' or a tenant key of the fixture's deployment mode. */
+  layer: string;
+  canonical: string;
+  variants: string[];
+  language: string;
+  kind: 'synonym' | 'abbreviation' | 'alias' | 'identifier' | 'translation' | 'misspelling';
+  mode: 'one_way' | 'equivalent';
+  source_language?: string | null;
+  target_language?: string | null;
+}
+
+/** Inserts the rows and a version-1 layer row per layer; normalized_variants come from the tokenizer's normalizer (D-09). */
+export async function seedTerminology(db: PGlite, rows: readonly TerminologySeedRow[]): Promise<void> {
+  if (rows.length === 0) return;
+  for (const layer of new Set(rows.map((row) => row.layer))) {
+    await db.query('INSERT INTO public.rag_term_layers (layer_key, version) VALUES ($1, 1) ON CONFLICT (layer_key) DO NOTHING', [layer]);
+  }
+  for (const row of rows) {
+    await db.query(
+      `INSERT INTO public.rag_term_entries
+         (layer_key, canonical, variants, normalized_variants, language, kind, mode, source_language, target_language)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [
+        row.layer,
+        row.canonical,
+        row.variants,
+        row.variants.map((variant) => normalizeLexical(variant)),
+        row.language,
+        row.kind,
+        row.mode,
+        row.source_language ?? null,
+        row.target_language ?? null,
+      ],
+    );
+  }
+}
+
 export async function createFixtureDatabase(options: {
   deploymentMode: DeploymentMode;
   corpusDir: string;
@@ -272,6 +312,8 @@ export async function createFixtureDatabase(options: {
   tableSplitDocType?: string;
   /** Ingest mode only: ingestion switches layered over the build's fixed ingest env. */
   ingestEnv?: Record<string, string>;
+  /** D-27: dictionary rows written after the corpus load, in either fixture mode. */
+  terminologySeed?: readonly TerminologySeedRow[];
 }): Promise<FixtureDatabase> {
   const { deploymentMode, corpusDir } = options;
   if (deploymentMode !== 'single-tenant' && deploymentMode !== 'multi-tenant') {
@@ -284,7 +326,7 @@ export async function createFixtureDatabase(options: {
   if (fixtureMode === 'ingest') {
     // Loaded on demand: the ingest code reads its environment at import time, which prechunked runs must not disturb.
     const { buildIngestFixtureDatabase } = await import('./ingest-mode.mts');
-    return buildIngestFixtureDatabase({
+    const built = await buildIngestFixtureDatabase({
       deploymentMode,
       corpusDir,
       processEnv: options.processEnv,
@@ -297,6 +339,15 @@ export async function createFixtureDatabase(options: {
       ...(options.tableSplit && options.tableSplitDocType ? { tableSplitDocType: options.tableSplitDocType } : {}),
       ...(options.ingestEnv ? { ingestEnv: options.ingestEnv } : {}),
     });
+    if (options.terminologySeed?.length) {
+      try {
+        await seedTerminology(built.db, options.terminologySeed);
+      } catch (error) {
+        await built.db.close().catch(() => undefined);
+        throw error;
+      }
+    }
+    return built;
   }
   if (options.tableSplit) throw new Error('[Fixture DB] the table_split tenants need the ingest fixture mode');
   if (options.chunkingProfiles?.length) throw new Error('[Fixture DB] chunking profiles are seeded only in the ingest fixture mode');
@@ -307,6 +358,7 @@ export async function createFixtureDatabase(options: {
   try {
     const writer = await prechunkedWriter(db, deploymentMode);
     for (const doc of corpus.documents) await writer(doc);
+    if (options.terminologySeed?.length) await seedTerminology(db, options.terminologySeed);
     if (options.relex ?? (options.migrations !== false)) {
       await runFixtureRelex(db);
       sqlSha256[LEXICAL_SHA_KEY] = crypto.createHash('sha256').update(String(LEXICAL_VERSION)).digest('hex');

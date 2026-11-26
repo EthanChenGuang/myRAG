@@ -57,7 +57,12 @@ export interface SearchStagesInput {
   searchDelegate?: SearchDelegate;
   /** Planned translation legs (XLG-04, D-30); absent or empty runs none. */
   translations?: TranslationLegsPlan;
+  /** D-16: the terminology stage's expansion; non-empty tokens add one lexical-only term:0 list. */
+  terminology?: { tokens: readonly string[]; expansionWeight: number } | null;
 }
+
+/** D-16: the expansion list id; no dense/lexical prefix, so nothing that inspects list ids by prefix counts it as a leg. */
+export const TERMINOLOGY_LIST_ID = 'term:0';
 
 function evalEmbeddingProfileId(input: RunRetrievalInput): string | undefined {
   return input.profile === 'eval' ? input.options?.embeddingProfile : undefined;
@@ -344,9 +349,32 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
         })
       : Promise.resolve(null);
 
+  // D-16: one lexical-only call (no vector, dense limit 0) under the same scope, filters and chunking override as the other legs.
+  const termTokens = ctx.terminology && lexicalEnabled && verdict.icuAvailable ? [...ctx.terminology.tokens] : [];
+  const runTermLeg = (stageSignal: AbortSignal): Promise<RankedHit[] | null> =>
+    termTokens.length > 0
+      ? backend
+          .search({
+            scope,
+            embeddingProfileId: embedding.profile?.id ?? LEGACY_PROFILE.id,
+            denseVector: null,
+            lexicalTokens: termTokens,
+            lexicalLanguages: null,
+            filters,
+            denseLimit: 0,
+            lexicalLimit: pool,
+            signal: stageSignal,
+            ...(chunkingOverride ? { chunkingProfileOverride: chunkingOverride } : {}),
+          })
+          .then((legs) => legs.lexical)
+      : Promise.resolve(null);
+
   const runDelegatedSearch = async (stageSignal: AbortSignal, delegate: SearchDelegate) => {
     const domainPending = runDomainLegs(stageSignal);
     const translationPending = runTranslations(stageSignal);
+    const termPending = runTermLeg(stageSignal);
+    // Awaited below; a delegate failure first must not leave the term call's rejection unhandled.
+    termPending.catch(() => undefined);
     const handle = createRetrievalPort({
       scope,
       backend,
@@ -371,12 +399,14 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     const legsByVariant = handle.collectedLegs();
     const domain = await domainPending;
     const translation = await translationPending;
+    const term = await termPending;
     return {
       legsByVariant,
       denseTotal: legsByVariant.reduce((total, legs) => total + legs.dense.length, 0),
       lexicalTotal: legsByVariant.reduce((total, legs) => total + legs.lexical.length, 0),
       domain,
       translation,
+      term,
       delegated: { handle, order: order as string[] } as DelegatedFusion | null,
     };
   };
@@ -387,8 +417,9 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     let lexicalTotal = 0;
     const domainPending = runDomainLegs(stageSignal);
     const translationPending = runTranslations(stageSignal);
-    const legsByVariant = await Promise.all(
-      variants.map(async (variant, index) => {
+    const [term, ...legsByVariant] = await Promise.all([
+      runTermLeg(stageSignal),
+      ...variants.map(async (variant, index) => {
         const legs = await backend.search(
           variantSearchRequest({
             scope,
@@ -405,10 +436,10 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
         lexicalTotal += legs.lexical.length;
         return legs;
       }),
-    );
+    ]) as [RankedHit[] | null, ...BackendLegs[]];
     const domain = await domainPending;
     const translation = await translationPending;
-    return { legsByVariant, denseTotal, lexicalTotal, domain, translation, delegated: null as DelegatedFusion | null };
+    return { legsByVariant, denseTotal, lexicalTotal, domain, translation, term, delegated: null as DelegatedFusion | null };
   };
 
   type SearchResult = Awaited<ReturnType<typeof runBackendSearch>>;
@@ -418,11 +449,13 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     lexicalTotal: number;
     domain: BindingLegsOutput | null;
     translation: TranslationLegsOutput | null;
+    term: RankedHit[] | null;
   }) => ({
     dense: value.denseTotal,
     lexical: value.lexicalTotal,
     ...(value.domain ? value.domain.counts : {}),
     ...(value.translation ? value.translation.counts : {}),
+    ...(value.term ? { term: value.term.length } : {}),
   });
 
   const extraFailed = (value: SearchResult): boolean =>
@@ -438,6 +471,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
   let domainLists: RankedList[] = [];
   let translationOutput: TranslationLegsOutput | null = null;
   let delegated: DelegatedFusion | null = null;
+  let termHits: RankedHit[] | null = null;
   if (icuSkipLexical) {
     const startedAt = collector.now();
     let searched: SearchResult;
@@ -459,6 +493,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     domainLists = searched.domain?.lists ?? [];
     translationOutput = searched.translation;
     delegated = searched.delegated;
+    termHits = searched.term;
     const translationNote = translationDetail(searched.translation);
     collector.record({
       name: 'search',
@@ -495,6 +530,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     domainLists = searched.domain?.lists ?? [];
     translationOutput = searched.translation;
     delegated = searched.delegated;
+    termHits = searched.term;
   }
   // Mapped to source chunks before fusion; a chunk the original legs also found keeps the original hit (D-30).
   const translationLists =
@@ -521,12 +557,18 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     }
   }
 
+  // D-16: weight = expansion_weight × the lexical leg weight in force, so the list stays a fraction of the lexical leg.
+  const termList: RankedList | null =
+    termHits && termHits.length > 0 && ctx.terminology
+      ? { id: TERMINOLOGY_LIST_ID, weight: ctx.terminology.expansionWeight * (params.leg_weights?.lexical ?? 1), hits: termHits }
+      : null;
+
   const fused = requireValue(
     await runStage(
       spec('fuse', 'throw'),
       signal,
       () => {
-        const extraLists = [...(exactList ? [exactList] : []), ...domainLists, ...translationLists];
+        const extraLists = [...(exactList ? [exactList] : []), ...domainLists, ...translationLists, ...(termList ? [termList] : [])];
         let fusedHits: FusedHit[];
         if (delegated) {
           fusedHits = delegatedFusion(delegated, extraLists, params.rrf_k);
