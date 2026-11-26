@@ -5,9 +5,9 @@ from types import SimpleNamespace
 
 import pytest
 from finetune_fakes import FakeQueryLLM
-from rag_sidecar.contracts.finetune import SyntheticQueryBatch
+from rag_sidecar.contracts.finetune import SyntheticQueryBatch, TokenPrice
 
-from rag_eval.finetune import llm
+from rag_eval.finetune import budget, llm
 from rag_eval.finetune.config import load_finetune_config
 from rag_eval.paths import REPO_ROOT
 
@@ -234,3 +234,57 @@ def test_llm_module_loads_without_importing_anthropic():
         check=True,
     )
     assert json.loads(result.stdout.strip()) is False
+
+
+# --- budget ---------------------------------------------------------------------------------------------------------
+
+PRICE = TokenPrice(input_usd_per_mtok=3.0, output_usd_per_mtok=15.0)
+
+
+def test_budget_token_estimate_uses_chars_per_token_by_script():
+    assert budget.estimate_tokens("a" * 40, "en") == 10
+    assert budget.estimate_tokens("a" * 40, "it") == 10
+    assert budget.estimate_tokens("字" * 30, "zh") == 20
+    assert budget.estimate_tokens("a" * 41, "en") == 11
+    assert budget.estimate_tokens("", "en") == 0
+
+
+def test_budget_cost_is_none_when_a_price_is_missing():
+    usage = llm.Usage(input_tokens=1_000_000, output_tokens=100_000)
+    assert budget.cost_usd(usage, PRICE) == pytest.approx(3.0 + 1.5)
+    assert budget.cost_usd(usage, TokenPrice(input_usd_per_mtok=3.0)) is None
+    assert budget.cost_usd(usage, TokenPrice()) is None
+
+
+def test_budget_projection_reports_tokens_and_cost_or_none():
+    projected = budget.project(llm.Usage(2_000_000, 0), PRICE)
+    assert (projected.input_tokens, projected.output_tokens, projected.cost_usd) == (2_000_000, 0, pytest.approx(6.0))
+    unknown = budget.project(llm.Usage(10, 10), TokenPrice())
+    assert unknown.cost_usd is None and unknown.input_tokens == 10
+
+
+def test_budget_would_exceed_is_true_before_the_call_that_crosses_the_limit():
+    meter = budget.Budget(limit_usd=1.0, price=PRICE)
+    step = llm.Usage(input_tokens=100_000, output_tokens=20_000)  # 0.3 + 0.3 = 0.6 USD
+    assert meter.would_exceed(step) is False
+    meter.charge(step)
+    assert meter.spent_usd == pytest.approx(0.6)
+    assert meter.would_exceed(step) is True
+    assert meter.would_exceed(llm.Usage(input_tokens=100_000, output_tokens=0)) is False
+    assert meter.usage == step
+    assert meter.remaining_usd == pytest.approx(0.4)
+
+
+def test_budget_charges_what_was_spent_even_past_the_limit():
+    meter = budget.Budget(limit_usd=0.1, price=PRICE)
+    meter.charge(llm.Usage(input_tokens=1_000_000, output_tokens=0))
+    assert meter.spent_usd == pytest.approx(3.0)
+    assert meter.exhausted is True
+    assert meter.remaining_usd == 0.0
+
+
+def test_budget_refuses_unknown_prices_and_negative_limits():
+    with pytest.raises(budget.BudgetUnenforceable):
+        budget.Budget(limit_usd=1.0, price=TokenPrice(input_usd_per_mtok=1.0))
+    with pytest.raises(ValueError):
+        budget.Budget(limit_usd=-1.0, price=PRICE)
