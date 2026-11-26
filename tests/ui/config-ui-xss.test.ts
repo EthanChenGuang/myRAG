@@ -353,3 +353,160 @@ describe('Config UI index.html renders untrusted data as text (XSS)', () => {
 });
 
 void flush;
+
+// Phase 5.2 plan 36: the answer-rules card (UI-SPEC section 11). Every server string and every page value it shows is text.
+
+const ANSWER_RULES_JS_LINK = 'javascript:PWNED(1)';
+const ANSWER_RULES_SCRIPT = `<script>PWNED(1)</script>`;
+
+function answerRulesDoc(allowlistField: string | null) {
+  const doc = new FakeDocument();
+  const card = host(doc, 'rag-answer-rules');
+  for (const id of [
+    'rag-answer-rules-alerts',
+    'rag-answer-rules-judge-calibration',
+    'rag-answer-rules-caps',
+    'rag-answer-rules-guard-now',
+    'rag-answer-rules-allowlist',
+    'rag-answer-rules-guard-rules',
+    'rag-answer-rules-events-actions',
+  ]) {
+    const el = doc.createElement('div');
+    el.id = id;
+    card.appendChild(el);
+  }
+  const amount = doc.createElement('input');
+  amount.setAttribute('data-answer-cap', 'value');
+  card.appendChild(amount);
+  const judgeModel = doc.createElement('input');
+  judgeModel.id = 'RAG_GROUNDEDNESS_JUDGE_MODEL';
+  judgeModel.value = XSS_PAYLOAD;
+  card.appendChild(judgeModel);
+  const guard = doc.createElement('select');
+  guard.id = 'RAG_OUTPUT_GUARD';
+  guard.value = 'enforce';
+  card.appendChild(guard);
+  if (allowlistField !== null) {
+    const area = doc.createElement('textarea');
+    area.id = 'RAG_OUTPUT_LINK_ALLOWLIST';
+    area.value = allowlistField;
+    doc.body.appendChild(area);
+  }
+  return doc;
+}
+
+function answerRulesSummary() {
+  return {
+    caps: [
+      { mode: 'strict', limit: null, source: 'default' },
+      { mode: 'balanced', limit: 700, source: 'sweep' },
+    ],
+    floor: 300,
+    judgeLanguages: [
+      { language: XSS_PAYLOAD, calibrated: false },
+      { language: ANSWER_RULES_JS_LINK, calibrated: true },
+    ],
+    sameFamily: true,
+    allowlist: [XSS_PAYLOAD, ANSWER_RULES_JS_LINK, ANSWER_RULES_SCRIPT],
+    rulesVersion: `${XSS_PAYLOAD}${ANSWER_RULES_JS_LINK}`,
+    ruleCounts: { zh: 1, en: 2, it: 3 },
+  };
+}
+
+async function runAnswerRules(doc: FakeDocument, reply: unknown) {
+  const context = makeContext(doc, {
+    navigator: { language: 'en-US', clipboard: { writeText: async () => {} } },
+    fetch: async () => jsonResponse(reply),
+    setTimeout,
+    clearTimeout,
+    AbortController,
+    Intl,
+    URL,
+  });
+  for (const file of ['rag-panels/rag-ui.js', 'rag-panels/answer-rules.js']) {
+    new vm.Script(fs.readFileSync(path.join(configUiDir, file), 'utf8'), { filename: file }).runInContext(context);
+  }
+  await (context.initAnswerRulesPanel as () => Promise<unknown>)();
+  await flush(10);
+}
+
+function expectAnswerRulesSafe(doc: FakeDocument) {
+  expectNoInjection(doc);
+  const all = [doc.documentElement, ...doc.documentElement.querySelectorAll('*')];
+  expect(all.filter((el) => ['a', 'img', 'script', 'iframe'].includes(el.tagName)).map((el) => el.tagName)).toEqual([]);
+  for (const el of all) {
+    for (const [name, value] of el.attributes) {
+      expect(name.startsWith('on'), `${el.tagName} ${name}`).toBe(false);
+      expect(['href', 'src', 'title', 'style'].includes(name), `${el.tagName} ${name}`).toBe(false);
+      expect(value.includes('PWNED'), `${el.tagName} ${name}=${value}`).toBe(name === 'value');
+    }
+  }
+  expect(doc.innerHtmlWrites).toBe(0);
+}
+
+describe('rag-panels/answer-rules.js renders server data and page values as text (XSS, UI-SPEC section 11)', () => {
+  it('allowlist entries, language codes and the rule-set version from the summary create no element and no link', async () => {
+    const doc = answerRulesDoc(null);
+    await runAnswerRules(doc, answerRulesSummary());
+    expectAnswerRulesSafe(doc);
+    const list = doc.getElementById('rag-answer-rules-allowlist')!;
+    expect(list.querySelectorAll('li code').map((c) => c.textContent)).toEqual([XSS_PAYLOAD, ANSWER_RULES_JS_LINK, ANSWER_RULES_SCRIPT]);
+    expect(doc.getElementById('rag-answer-rules-judge-calibration')!.textContent).toContain(ANSWER_RULES_JS_LINK);
+    expect(doc.getElementById('rag-answer-rules-guard-rules')!.textContent).toContain(XSS_PAYLOAD);
+  });
+
+  it('allowlist lines of the page field and the judge model id create no element and no link', async () => {
+    const doc = answerRulesDoc(`${XSS_PAYLOAD}\n${ANSWER_RULES_JS_LINK},${ANSWER_RULES_SCRIPT}`);
+    await runAnswerRules(doc, answerRulesSummary());
+    expectAnswerRulesSafe(doc);
+    const codes = doc.getElementById('rag-answer-rules-allowlist')!.querySelectorAll('li code').map((c) => c.textContent);
+    expect(codes).toHaveLength(3);
+    expect(codes.join(' ')).toMatch(/pwned/i);
+    expect(doc.getElementById('rag-answer-rules-alerts')!.querySelector('[data-answer-rules-warning="warn.judgeSameFamily"]')).not.toBeNull();
+  });
+
+  it('a server error message is not shown and creates nothing', async () => {
+    const doc = answerRulesDoc(null);
+    await runAnswerRules(doc, { error: XSS_PAYLOAD, code: ANSWER_RULES_JS_LINK });
+    expectNoInjection(doc, false);
+    expect(doc.body.textContent).not.toContain('PWNED');
+  });
+
+  it('answer-rules.js has no innerHTML, inline handler, anchor or link attribute in its source', () => {
+    const source = fs.readFileSync(path.join(configUiDir, 'rag-panels/answer-rules.js'), 'utf8');
+    expect(source).not.toMatch(/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function/);
+    expect(source).not.toMatch(/\bon[a-z]+\s*=|setAttribute\(\s*['"]on/i);
+    expect(source).not.toMatch(/createElement\(\s*['"]a['"]|ragUiEl\([^)]*['"]a['"]|this\.el\(\s*['"]a['"]/);
+    expect(source).not.toMatch(/['"](href|src|srcdoc|formaction)['"]\s*:|\.href\s*=|\.src\s*=|mailto:/);
+  });
+
+  it('the English copy of ANSWER_RULES_LABELS names no subject area', async () => {
+    const mod = (await import('../../scripts/config-ui/rag-panels/answer-rules.js')) as unknown as {
+      ANSWER_RULES_LABELS?: { en: Record<string, string> };
+      default?: { ANSWER_RULES_LABELS: { en: Record<string, string> } };
+    };
+    const labels = mod.ANSWER_RULES_LABELS ?? mod.default!.ANSWER_RULES_LABELS;
+    const denylist = [
+      /travel/i,
+      /lodging/i,
+      /hotel/i,
+      /accommodation/i,
+      /per diem/i,
+      /leave day/i,
+      /annual leave/i,
+      /vacation/i,
+      /salar/i,
+      /payroll/i,
+      /restaurant/i,
+      /\bmeal/i,
+      /\bvpn\b/i,
+      /password/i,
+      /branch office/i,
+      /reimburse/i,
+      /expense/i,
+    ];
+    for (const [key, value] of Object.entries(labels.en)) {
+      for (const word of denylist) expect(value, `${key} ${word}`).not.toMatch(word);
+    }
+  });
+});
