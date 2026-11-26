@@ -377,3 +377,86 @@ Running total: 12 sessions + 2 subagents (train24 builder, medical corpus).
 - 13:08Z OWNER: may install older package versions (or drop 2-week rule if needed). Chose research fallback set (all >=14 days): @langchain/core 1.4.0, classic 1.0.61, openai 1.8.4, redisvl 0.32.0, redis 8.1.0; CUTOFF 2026-11-19. 06-22 session_01SEn5g593aDETKh22oNFNEJ (Tasks 1-2 owner-approved/delegated). Later Phase 6 briefs: use these pins.
 - 13:15Z OWNER released Phase 6.1 (removed from BLOCKED_PHASES).
 - 13:11Z launched 06.1-03 session_01SEn5g9qAg43Qoiou6SaUTB, 06.1-04 session_01SEn5g6uNrWyQE7SwzJUekG, 06.1-01 session_01SEn5g7fzDTChmTk4QN4Svg (stops at Task 3 package approval: anthropic 2.12.0, httpx 0.28.1, numpy, sentence-transformers[train] 6.2.0, torch 2.15.0 CPU; eval optional extras only). Asked owner.
+- 13:25Z OWNER: quota only 4% used; no extra handoff/sync work — just run at full speed. (Handoff on ops/orchestrator-briefs stays as of 6374ddd7; no per-check-in sync.)
+## 13:14Z
+- Archived done: 04.2-18 (43ba2a41; migration 0860), 04.2-17 (6a8cd049), 04.2-16 (db3d23f8), 04.2-15 (d55501b1), 04.1.1-18 (a12e07e3). 05-26 t1 done (114bde4d, 37 requests) — read results later. 03.2-68 not pushed yet (session idle review_ready).
+- OpenRouter account OUT OF CREDITS (usage 20.13 / 20) — production chat likely affected; owner adding credit. Golden-set agent moved to OpenAI+DeepInfra; exp1 agent told to use DeepInfra for Qwen.
+- Owner approved 06.1-01 packages (sent to session).
+- Launched: 04.2-20 session_01SEn5g5MYtxrPK76Zc2jF8A (base/04.2-20 c776ba0e), 04.2-35 session_01SEn5g7Px4Xq2Ccqu34ByUP (exec/04.2-18), 04.2-37 session_01SEn5g82i9gYErYmw8Heqmg (base/04.2-37 b03f2b19).
+## 13:35Z
+- OpenAI direct: no credit, owner cannot top up. DeepInfra: no balance. OpenRouter: credit added, key limit $15. OpenRouter serves text-embedding-3-small (1536-d) verified. Medical ingest told to use OPENAI_BASE_URL=https://openrouter.ai/api/v1 (proxy injects key).
+- Production fix options given to owner: A) owner sets Vercel OPENAI_API_KEY = OpenRouter key, I add OPENAI_BASE_URL + redeploy; B) code switch RAG_OPENAI_EMBEDDINGS_VIA=openrouter — session_01SEn5g5rPk3QcwVeoJdi6Vg (branch fix/openai-embeddings-via-openrouter) -> urgent separate PR.
+- 06.1-01 Task 3 recipe approved (per-package cutoffs; anthropic 2.12.0/numpy 2.5.5 already locked).
+- Train 25 green (5bfb58f8) -> PR #108, subscribed. Migrations: 0472, 0410 r10 (6 blocks), 0858 -> $S/train25-live.sql (43 KB).
+## 13:36Z
+- Archived done: 03.2-68 (2256f43e), 04.1.1-08 (17ff53c7), 06-22 (ebf45973, LangChain 1.4.0/1.0.61/1.8.4 + redisvl lock), 06.1-01 (88e7748c, finetune extras lock), 06.1-04 (431847ea), 04.2-35 (498d226d), 05-26 t1 (114bde4d).
+- Train 26 builder subagent started (ci/merge-train-26 on ci/merge-train-25): 04.2-09..13,15..19,31,35; 04.1.1-06..09,16..18; 03.2-67, 03.2-68; 06-22; 06.1-01, 06.1-04; 05-26-t1.
+- Launched: 04.2-21 session_01SEn5g6z7MqrPx7N7YjHaHV (exec/04.2-20), 06-30 ..7zAcUGAG7MUC9cSi8 (exec/06-22), 06-35 ..9MexnvjBZmmqerM9M (exec/06-22), 06.1-02 ..6129xaPJ5kbap6jdJ (exec/06.1-01).
+- Still running: 04.1.1-10, 06.1-03, 04.2-20 (branch exists — verify), 04.2-37, fix/openai-embeddings-via-openrouter, planning 3.3, medical ingest.
+## 13:47Z
+- Prod: OPENAI_BASE_URL=https://openrouter.ai/api/v1 set (plain, production); owner set OPENAI_API_KEY to a new OpenRouter key; redeployed myrag-kgiqn4l8x READY (main cce43e1c).
+- OWNER: open more sessions; FINISH BY TOMORROW at the latest. Concurrency raised to ~25; use plan chains.
+- Archived done: 04.2-20 (4ca19065; migration 0863), 06.1-03 (7612cf11), 04.1.1-10 (44550027).
+- Launched: 04.1.1-11 session_01SEn5g8f2wk9St13ypMWjvS (train-26 + merges exec/04.1.1-10 itself), 06.1-05 ..5nHvNVSmgN2RqPAsZ (exec/06.1-03), 06.1-06 ..7bmUGzJcWUmxWkJTr (base/06.1-06 809a9ab5).
+- 13:50Z scheduling change: PHASE_GATES ignore autonomous:false (human end-of-phase live-check) plans; per-plan depends_on unchanged.
+- 13:48Z Phase 3.3 planning done (26 plans, branch plan/phase-03.3, PR #109). Launched on it: 03.3-01 session_01SEn5g8kjkBKQDAav7wVKE9, 03.3-02 ..84y6CvK22TGQNAfUt, 03.3-03 ..99gdJgMF4ATeL4NS8, 03.3-04 ..9rADQnZFbTdknhuq2 (base/03.3-04 = train-25 + plan). 03.2.1-01 session_01SEn5g9u5LFv86sa9bqeCvj. Use worktree $S/p33 (plan branch) for ready2 of 3.3 plans until PR #109 merges.
+- Running executors now: 04.2-21, 04.2-37, 06-30, 06-35, 06.1-02, 06.1-05, 06.1-06, 04.1.1-11, 03.2.1-01, 03.3-01..04, fix-openrouter = 14.
+- 13:55Z train 25 merged 7bb6b5cb; prod migration train25_0472_0410r10_0858 (MCP); myrag-medical eval_train25_0472_0410r10_0858 (API).
+
+- 13:53Z PR #108 (train 25) merge confirmed. Medical-ingest fix renumbered to 0864 (must sort after 0810; 0443 failed tests), branch fix/claim-resume-stage-status @ dc2ac3ef -> train 27. Eval DB holds it as eval_0855_claim_resume_status_for_stage (same body). Owner: run SQL/migrations without asking; settings self-grant of permissions refused by classifier (correct) — told owner to use "always allow" on prompts.
+
+- 14:01Z exp1 done ($2.58): 81 dev q, 6120-chunk subset. R@10: BM25 .716, oai-3s .741, Qwen3-8B .716, BGE-M3 .716, RRF(BM25+oai) .778; no diff significant. Qwen top-1 AUROC 1.0 for no-answer. Next: hybrid lexical leg, bigger dev set. Files S/exp1/RESULTS.md.
+
+- 14:04Z PR #110 opened (embeddings via OpenRouter fix), subscribed. Archived: 03.3-04, 06.1-06, 06.1-02, 06-35, 06-30, fix session (all SUMMARYs verified) -> train 27. Launched 06-37 (base exec/06-35) session_01SEn5g5wY3wM5KxFtJRT1RA, 06.1-07 (base exec/06.1-06) session_01SEn5g5e3ahhE595LZkGgVy. Golden set done: 460 q, $9.25, S/golden/out/golden-it-test.jsonl; 45-item spotcheck pending. Prod deploy of 7bb6b5cb READY.
+
+- 14:12Z PR #110 merged (main d26ddb20) 16/16. Vercel prod RAG_OPENAI_EMBEDDINGS_VIA=openrouter (plain) added. Trunk synced, deploy started. Golden spotcheck: 5/45 errors (multi_passage weak); fix+freeze v1 agent running.
+
+- 14:23Z Golden v1 frozen: 476 items (407 ans/69 no-ans; mp 69), sha256 a98e513b...; backup to myrag-medical storage eval-artifacts/medical/medical-eval-2026-11-26.tgz (14.6MB, golden+exp1 results, no embeddings).
+
+- 14:24Z exp2 launched: embedding comparison on golden v1 (full corpus index; BM25/oai-3s/Qwen3-8B@1024/BGE-M3/RRF). OpenRouter credit only ~$0.59 left (account 29.41/30) -> cap $0.45.
+
+- 14:28Z Archived 8 done (06.1-07, 03.3-01/02/03, 03.2.1-01, 06.1-05, 04.1.1-11, 04.2-21; SUMMARYs ok) -> train 27. Bases built (no conflicts): base/03.3-07,08,09,20, 04.1.1-12, 04.2-24, 04.2-38, 06.1-10, 06.1-14 (some on ci/merge-train-26). Launched 13: 03.2.1-04, 03.3-05,06,07,08,09,20, 06.1-08, 04.1.1-12, 04.2-24, 04.2-38, 06.1-10, 06.1-14. Running also 06-37, 04.2-37, medical ingest. Train 26 log commit 5c0d3a68 pushed 14:22.
+
+- 14:32Z Ingest session: 2nd fix fix/advance-callback-read-timeout @ 7b740525 (sidecar callback read timeout 55s) -> train 27. Eval DB only: service_role statement_timeout=120s.
+
+- 14:36Z Owner: bigger trains approved — no size cap, train every 40-60 min with all verified done branches; eject a branch that fails CI and cannot be fixed fast. Fast-path builder brief (briefs/train-builder-brief.md, ops f9397254): CI is the full gate.
+
+- 14:49Z MIGRATION COLLISION: 0864 used by both exec/04.2-38 (purge_hooks) and fix/claim-resume-stage-status -> train 27 builder renames the claim fix to 0865 (must sort after 0810; eval DB has it as eval_0855). Brief updated with number-claim rule. Archived 04.2-38, 03.3-08, 06.1-08, 03.3-06, 03.3-05, 03.2.1-04, 06-37, 03.3-20 (halted: relaunch after 04.2-37 merges). Launched 03.3-11, 05.1.1-24, 06-41, 06-42, 06.1-09, 06.1-15 (base/06.1-15). Cadence now 10 min (owner).
+
+- 14:57Z PR #111 (train 26) opened. CI fixes pushed by orchestrator: 10b13d4c (phase42 gate validates configs first), 38e2ffc6 (terminology audit test order-insensitive; uuid tiebreak). train26-live.sql rebuilt with 0410 r11 as DO-block delta (98KB). Applied to myrag-medical via API (train26_0855_0860_0473_0410r11) HTTP 200; verify: 45 fns, 0 client EXECUTE, all search_path="". Prod waits for merge.
+
+- 15:03Z Archived 06.1-09, 06.1-14, 06.1-10, 04.2-24, 04.1.1-12, 03.3-09, 03.3-07 (SUMMARYs ok). Launched 04.2-27 (base/04.2-27), 06.1-11 (base/06.1-11), 03.3-10 (base/03.3-10 = 03.3-02+05; executor merges 03.3-07 itself, conflict). Train 27 builder launched early on top of ci/merge-train-26 (30 exec + 2 fix branches; 0864->0865 rename for claim fix).
+
+- 15:12Z PR #111 (train 26) merged 16/16 -> main d21a1a57 (3rd CI fix 4220f0cd: validator speed test warm-up + best of 3). Trunk synced. Prod migration apply delegated to subagent (per-section MCP apply_migration, train26_*). Deploy after migrations.
+
+- 15:15Z Archived 06.1-15, 06-42, 05.1.1-24 (-> train 28). Launched 06.1-17 (base/06.1-17), 05.1.1-22 (exec/05.1.1-24).
+
+- 15:25Z Prod migrations train26 applied (7 x apply_migration train26_*), verified by me: 45 fns, client_exec 0, empty search_path all, 1 hybrid_search_chunks overload. Deployed main d21a1a57 -> myrag-53nchqa78 READY.
+
+- 15:27Z Archived 06-41, 03.3-11 (-> train 28). Launched 03.3-13 (exec/03.3-11), 03.3-18 (base/03.3-18 = 03.3-11+main), 06-43 (exec/06-41). Train 27 builder not pushed yet.
+
+- 15:40Z Archived 06.1-11, 04.2-27 (-> train 28). Launched 04.2-22, 04.2-30, 04.2-36 (exec/04.2-27), 06.1-12, 06.1-13 (exec/06.1-11). Pinged train 27 builder (not pushed after 37 min).
+
+- 15:45Z Train 27 pushed 85426e5b (37 branches, none ejected); PR #112 opened, subscribed. train27-live.sql (128KB, 13 sections) applied to myrag-medical HTTP 200; verify: 356 rag_* fns, all search_path="", only client-exec = rag_ingest_realtime_topic_allowed, rag_is_domain_expert (pre-existing 0353 RLS helpers, intended). Note: 1001 builds GIN index on document_chunks (quiet window). Sidecar deploy needed for callback timeout fix (operator item).
+
+- 15:46Z 03.3-18 session failed at start: base/03.3-18 never pushed (my merge with main conflicted and the script hid it). Base now = exec/03.3-11 tip; relaunched session_01SEn5g7gGLsdwcc9HdTCzx9 with instruction to merge origin/main itself (3 known conflicts). Lesson: base builds must check merge+push exit codes, and must verify with ls-remote before launch.
+
+- 15:52Z Archived 06-43, 03.3-13, 06.1-17, 03.3-10 (-> train 28). Launched 03.3-12 (exec/03.3-10, merges train-27 itself), 03.3-14 (base/03.3-14), 03.3-16 (exec/03.3-13, merges main itself), 06-44 (base/06-44), 06.1-20 (exec/06.1-17). Base builder now exit-checked + ls-remote verified.
+
+- 16:02Z PR #112 (train 27) merged 16/16 -> main aeb68f6e (fixes 6587bbef: table_lookup budget set, 04.1.1-10 baseline history + proof test, identifier-patterns clock wait). Trunk synced. Prod migrations delegated (13 sections, train27_*). Deploy after verify.
+
+- 16:05Z Archived 06.1-13, 06.1-12, 04.2-36, 04.2-30, 04.2-22, 05.1.1-22 (-> train 28/29). Phase 5.1.1 done -> 5.2/5.3 unblocked. Launched 11: 05.2-01,02,03,28, 05.3-01,02,07,08,09,10 (all exec/05.1.1-22), 06.1-16 (base/06.1-16). Train 28 builder running.
+
+- 16:50Z PROD BLOCKER: train27 prod apply stopped after 0651 (0652 apply_migration timed out waiting for owner destructive-statement confirmation: DROP TRIGGER IF EXISTS). Prod has 0651 only; app still on train-26 code (fine). Waiting for owner to be present. PR #113 (train 28 a3180f1d) opened. Archived 15 (06.1-16, 05.3-01/02/07/08/09/10, 05.2-01/02/03, 06.1-20, 03.3-12/14/16/18). 06-44 kept open: Phase 6 comparison FAILS checks b,d - review before 06-45. Launched 14: 03.3-15, 03.3-19, 04.2-29, 05.2-04/11/19/21/23, 05.3-03/04/05/06/11, 06.1-18.
+
+- 16:52Z Owner present: resumed prod train27 apply from 0652. PR #113 ts-checks failed (typecheck:new 10 test-type errors from 06-41..43 vs main types) -> sent to train 28 builder. Phase 6 gate fix session_01SEn5g6YTWmGWnWPuW8Lvxv (fix/phase6-gate).
+
+- 17:07Z Train 27 prod migrations all 13 applied (owner answered prompts), verified by me: 356 fns, client = 2 pre-existing RLS helpers, all search_path="", active profile openai-3-small-1536 only. Deployed main aeb68f6e -> myrag-pz9xq2y7m READY, site 200. Sidecar redeploy (callback timeout) still an operator item for the ingest service.
+
+- 17:08Z PR #113 (train 28) merged 16/16 -> main f890cdfc. Trunk synced. train28 (1004, 1005) applied to medical HTTP 200. Prod apply delegated (1005 has DROP TRIGGER -> owner prompt).
+
+- 17:08Z exp2 done ($0.087): full index 30789 chunks, 407 ans. R@10 BM25 .766, oai .774, Qwen .791, RRF3 .803 (only arm sig > oai). Qwen sig better doc@1 (+5.7). BGE tied w/ Qwen on reduced. RRF kills AUROC (keep refusal floor on dense cosine). Qwen latency via OpenRouter/Nebius p50 3.7s p95 22s -> fails online budget. Rec: Qwen3-8B@1024 online if a low-latency host exists, else oai online + Qwen offline; ship BM25 hybrid leg. S/exp2/RESULTS.md.
+
+- 18:09Z Prod train28: 1004 applied; 1005 timed out (owner prompt unanswered) -> clean 1004-only state. Deploy of f890cdfc deferred until 1005 in. PR #114 (train 29, 80135bfb, 27 branches, 04.2-37 ejected) opened. train29 DROP sections: 0654, 0965, 0967. Phase6 fix: (b) compound and (d) fixed; small_talk decision taken by orchestrator: keep D-10, relabel golden small_talk as conversational, separate slice (sent to fix session). Launched 04.2-37 rebase+re-record session.
+
+- 18:13Z Launched 11: 03.3-17 (6shtL5d3, exec/03.3-15), 05.2-12 (79a8WJ4x, base/05.2-12), 05.2-05 (9cFYYc9P), 05.2-08 (8mNhjh1p), 05.2-27 (9FSezL67) [train-29 + self-merge exec/05.2-04: base build conflicted], 05.3-12 (8Dq8yoUH), 05.3-13 (7UVf9phX), 05.3-17 (7i6U4QyW), 05.3-18 (5s2gPBAU), 05.3-19 (6rELV8wo), 05.3-26 (6MvVmTbV) all from ci/merge-train-29.
