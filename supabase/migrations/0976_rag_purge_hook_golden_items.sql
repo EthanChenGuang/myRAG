@@ -94,6 +94,19 @@ $fn$;
 REVOKE ALL ON FUNCTION public.rag_purge_hook_golden_items(text, uuid, uuid[]) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.rag_purge_hook_golden_items(text, uuid, uuid[]) TO service_role;
 
+-- Phase 6.3 store inventory. Guarded: this file creates no Phase 6.3 object. Phase 6.3's rag_purge_store_inventory() (0728) was not
+-- on trunk when this plan ran, so the block only reports; plan 06.3-19 lists rag_golden_evidence_index and rag_judge_labels (store
+-- golden_items, handling purge_step) from the "DATA-24 purge hooks" section of 05.3-PLAN-INDEX.md.
+DO $do$
+BEGIN
+  IF pg_catalog.to_regprocedure('public.rag_purge_store_inventory()') IS NULL THEN
+    RAISE NOTICE '[0976] rag_purge_store_inventory() is missing; registration left to Phase 6.3';
+    RETURN;
+  END IF;
+  RAISE NOTICE '[0976] rag_purge_store_inventory() exists; it lists the golden_items stores itself';
+END
+$do$;
+
 NOTIFY pgrst, 'reload schema';
 
 COMMIT;

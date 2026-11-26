@@ -45,7 +45,13 @@ export const PHASE53_SERVICE_ROLE_FUNCTIONS: ReadonlyArray<{ signature: string; 
   },
   { signature: 'rag_monitor_cluster_shares(text,timestampwithtimezone)', kind: 'invoker' },
   { signature: 'rag_review_items_enqueue_re_review(text,jsonb)', kind: 'invoker' },
+  { signature: 'rag_purge_hook_golden_items(text,uuid,uuid[])', kind: 'invoker' },
 ];
+
+/** Functions a 0960 to 0979 file may re-create but does not own, with the reason; left out of the phase sweep and definer check. */
+const NOT_PHASE_OWNED_FUNCTIONS = new Map<string, string>([
+  ['rag_purge_store_inventory()', 'Phase 6.3 function re-created by 0976'],
+]);
 
 /** Tables of the block that must never be folded into a setup file, checked by name as well as by the inventory diff. */
 const NOT_FOLDED_NAMES = ['rag_monitor_runs', 'rag_monitor_alert_evidence', 'rag_monitor_cluster_shares', 'rag_review_items_enqueue_re_review'];
@@ -119,7 +125,10 @@ for (const mode of MODES) {
       ({ db: full } = await createEmptyFixtureDatabase({ deploymentMode: mode }));
       withoutPhase = await buildWithout(mode, (file) => PHASE_FILE.test(file));
       const [a, b] = [await inventory(withoutPhase), await inventory(full)];
-      phaseFunctions = b.functions.filter((name) => !a.functions.includes(name)).map(normalise);
+      phaseFunctions = b.functions
+        .filter((name) => !a.functions.includes(name))
+        .map(normalise)
+        .filter((signature) => !NOT_PHASE_OWNED_FUNCTIONS.has(signature));
       phaseTables = b.tables.filter((name) => !a.tables.includes(name));
     });
 

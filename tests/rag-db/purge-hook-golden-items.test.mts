@@ -111,6 +111,17 @@ function candidate(documentId: unknown, kept?: boolean): Record<string, unknown>
   return entry;
 }
 
+function findCount(value: unknown, key: string): number {
+  if (value === null || typeof value !== 'object') return -1;
+  const record = value as Record<string, unknown>;
+  if (key in record) return Number(record[key]);
+  for (const nested of Object.values(record)) {
+    const found = findCount(nested, key);
+    if (found >= 0) return found;
+  }
+  return -1;
+}
+
 async function resetData(db: PGlite): Promise<void> {
   await db.exec(`
     DELETE FROM public.rag_golden_evidence_index;
@@ -299,6 +310,28 @@ for (const mode of MODES) {
       });
     }
 
+    test('the Phase 6.3 purge of the lineage removes its evidence and labels and counts them under golden_items', async (t) => {
+      const present = await db.query<{ ok: boolean }>(
+        "SELECT to_regprocedure('public.rag_purge_lineage(text,uuid,jsonb,jsonb)') IS NOT NULL AS ok",
+      );
+      if (!present.rows[0]!.ok) {
+        console.log('[Purge Hook Test] Phase 6.3 purge not on this checkout; skipped');
+        t.skip('Phase 6.3 purge not on this checkout');
+        return;
+      }
+      const r = await db.query<{ counts: unknown }>(
+        'SELECT counts FROM public.rag_purge_lineage($1, $2, $3::jsonb, $4::jsonb)',
+        [TENANT_A, lineage, JSON.stringify({ kind: 'admin', id: LABELLER }), JSON.stringify({ code: 'added_in_error', note: 'synthetic test purge' })],
+      );
+      assert.ok(findCount(r.rows[0]!.counts, 'golden_items') >= 3, JSON.stringify(r.rows[0]!.counts));
+      const rows = await evidence(db);
+      assert.deepEqual(rows.filter((row) => row.tenant_key === TENANT_A && (row.document_id === v1 || row.document_id === v2)), []);
+      assert.ok(rows.some((row) => row.tenant_key === TENANT_B && row.document_id === v1), 'tenant B keeps its rows');
+      const labels = await labelledItems(db);
+      assert.ok(!labels.includes(r1));
+      assert.ok(labels.includes(r4));
+    });
+
     test('a key of the other deployment mode raises 22023', async () => {
       await assert.rejects(() => hook(db, OTHER_MODE_KEY, lineage, [v1]), (error: unknown) => codeOf(error) === '22023');
     });
@@ -345,6 +378,69 @@ for (const mode of MODES) {
         assert.deepEqual(await pending(db, TENANT_A), ['i1']);
       } finally {
         await db.close();
+      }
+    });
+  });
+}
+
+for (const mode of MODES) {
+  describe(`0976 and the Phase 6.3 store inventory (${mode})`, () => {
+    let db: PGlite;
+    let hasInventory = false;
+    let hasPurge = false;
+
+    before(async () => {
+      ({ db } = await createEmptyFixtureDatabase({ deploymentMode: mode }));
+      const r = await db.query<{ inventory: boolean; purge: boolean }>(
+        `SELECT to_regprocedure('public.rag_purge_store_inventory()') IS NOT NULL AS inventory,
+                EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+                         WHERE n.nspname = 'public' AND p.proname = 'rag_purge_lineage') AS purge`,
+      );
+      hasInventory = r.rows[0]!.inventory;
+      hasPurge = r.rows[0]!.purge;
+    });
+
+    after(async () => {
+      await db?.close();
+    });
+
+    test('without the inventory, 0976 creates no Phase 6.3 object and applies twice', async (t) => {
+      if (hasInventory) {
+        t.skip('Phase 6.3 inventory present on this checkout');
+        return;
+      }
+      await applyMigrationFiles(db, [MIGRATION, MIGRATION]);
+      const r = await db.query<{ inventory: string | null; foreign: string | null; hooks: number }>(
+        `SELECT to_regprocedure('public.rag_purge_store_inventory()')::text AS inventory,
+                to_regprocedure('public.rag_purge_foreign_stores(text,uuid,uuid[])')::text AS foreign,
+                (SELECT count(*)::int FROM pg_proc WHERE proname = 'rag_purge_hook_golden_items') AS hooks`,
+      );
+      assert.equal(r.rows[0]!.inventory, null);
+      assert.equal(r.rows[0]!.foreign, null);
+      assert.equal(r.rows[0]!.hooks, 1);
+    });
+
+    test('with the inventory, it lists both golden_items stores and stays service_role only', async (t) => {
+      if (!hasInventory) {
+        console.log('[Purge Hook Test] Phase 6.3 inventory not on this checkout; skipped');
+        t.skip('Phase 6.3 inventory not on this checkout');
+        return;
+      }
+      const rows = await db.query<{ relation: string; store_id: string; handling: string; reason: string }>(
+        "SELECT relation, store_id, handling, reason FROM public.rag_purge_store_inventory() WHERE store_id = 'golden_items' ORDER BY relation",
+      );
+      const relations = rows.rows.map((row) => row.relation.replace(/^public\./, ''));
+      assert.ok(relations.includes('rag_golden_evidence_index'));
+      assert.ok(relations.includes('rag_judge_labels'));
+      for (const row of rows.rows) {
+        assert.equal(row.handling, 'purge_step');
+        assert.ok(row.reason.length > 0);
+      }
+      for (const role of ['anon', 'authenticated'] as const) {
+        await assert.rejects(
+          () => asRole(db, role, () => db.query('SELECT * FROM public.rag_purge_store_inventory()')),
+          (error: unknown) => codeOf(error) === '42501',
+        );
       }
     });
   });
