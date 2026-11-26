@@ -4,7 +4,6 @@ import json
 import subprocess
 from pathlib import Path
 
-import pytest
 from rag_sidecar.contracts.eval_run import RagTrace, RunManifest
 from rag_sidecar.contracts.golden import GoldenItem
 
@@ -15,8 +14,7 @@ QUOTE = "the blue widget stores seven marbles"
 MARKERS = ("markerquestiontext", "markeranswertext", "markerchunktext", DOC)
 
 
-@pytest.fixture
-def private_root(tmp_path, monkeypatch):
+def make_private_root(tmp_path, monkeypatch):
     repo = tmp_path / "repo"
     private = repo / "eval" / "golden" / "private"
     private.mkdir(parents=True)
