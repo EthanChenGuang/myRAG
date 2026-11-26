@@ -102,6 +102,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
   let injectionStalled = false;
   let bindingPlan: BindingLegsPlan | null = null;
   let queryPlan: RetrievalResult['queryPlan'] | null = null;
+  let layerTranslate = false;
   const security = deps.securityConfig();
   if (security.injectionCheck !== 'off') warnInjectionCheckDisabled(config, security.injectionCheck);
 
@@ -118,6 +119,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
     queryContext = query.queryContext;
     queryLanguage = query.queryLanguage;
     queryPlan = query.queryLayer?.plan ?? null;
+    layerTranslate = query.queryLayer?.handledTranslate === true;
 
     // D-10: small talk under the layer skips the search, rank and context groups; the model answers without KB context.
     if (query.queryLayer?.shortCircuit?.kind === 'small_talk') {
@@ -188,6 +190,19 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
       stageOverrides: input.stageOverrides,
       variants: query.variants,
       dedupeCounts: search.dedupeCounts,
+      queryContext: query.queryContext,
+      ...(query.queryLayer
+        ? {
+            queryPlan,
+            coverage: {
+              enabled: params.sub_question_coverage,
+              topK:
+                profile === 'voice'
+                  ? (validResultCount(input.options?.maxResults) ?? VOICE_DEFAULT_MATCH_COUNT)
+                  : params.final_top_k,
+            },
+          }
+        : {}),
     });
     refusal = rank.decision;
 
@@ -314,6 +329,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
     security,
     ...(bindingPlan ? { bindingHash: bindingHashFields(bindingPlan) } : {}),
     queryPlan,
+    ...(layerTranslate ? { layerTranslate } : {}),
   });
 }
 

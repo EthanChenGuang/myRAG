@@ -1,0 +1,8 @@
+{
+  "name": "query-layer-off",
+  "env": {
+    "RAG_PIPELINE": "v2",
+    "RAG_QUERY_LAYER": "false"
+  },
+  "overrides": null
+}

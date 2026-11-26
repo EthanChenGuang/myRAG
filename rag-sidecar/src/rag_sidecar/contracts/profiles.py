@@ -130,6 +130,8 @@ class BindingCandidateResult(_Contract):
     other_slice_regressions: list[str]
     refusal_regressions: list[str]
     latency_ms: dict[str, Annotated[float, Field(ge=0)] | None] = Field(default_factory=dict)
+    supported_languages: list[str] = Field(default_factory=list)
+    undeclared_languages: list[str] = Field(default_factory=list)
     recommended: bool
 
     @model_validator(mode="after")

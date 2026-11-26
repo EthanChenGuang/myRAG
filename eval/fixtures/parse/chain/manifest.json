@@ -138,6 +138,23 @@
       }
     },
     {
+      "class": "scan_zh_it",
+      "doc_type": "general",
+      "file_sha256": "9d98a980420948c2cfb6ad2025cf5d6057d2df62b7914e8f917ff3ef2ed14ae0",
+      "id": "scan-zh-it",
+      "language": "zh",
+      "mime": "application/pdf",
+      "page_count": 1,
+      "path": "pdf/scan-zh-it.pdf",
+      "profile_id": "general@1",
+      "recorded": {
+        "artifacts": {
+          "docling.json": "chain/scan-zh-it.docling.json"
+        },
+        "parse_result": "chain/scan-zh-it.parse.json"
+      }
+    },
+    {
       "class": "table",
       "doc_type": "general",
       "file_sha256": "5bcd8b32b8143c2d5e62f1521f4f32bc89d4088cf9ad628f53da628ac62b2416",

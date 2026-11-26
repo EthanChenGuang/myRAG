@@ -278,12 +278,14 @@ describe('buildRetrievalLogRow language fields (D-03a)', () => {
 });
 
 describe('writeRetrievalLog (D-03, D-27)', () => {
+  // The tenant inherits masked_query: these cases are about the insert itself; the D-06 setting is covered in settings-purge.test.ts.
+  const INHERIT = { globalLevel: 'masked_query' as const, client: recordingAdmin(() => ({ data: null, error: null })).admin };
   const row = () => buildRetrievalLogRow(input({ mode: 'masked_query', query: 'private question about the second report' }));
 
   it('inserts the row and asks for the tenant key back', async () => {
     const lines: string[] = [];
     const { admin, calls } = recordingAdmin(() => ({ data: { id: 'row-1', tenant_key: `o:${ORG_A}` }, error: null }));
-    await writeRetrievalLog(row(), { expectedTenantKey: `o:${ORG_A}`, client: admin, log: (line) => lines.push(line) });
+    await writeRetrievalLog(row(), { expectedTenantKey: `o:${ORG_A}`, settings: INHERIT, client: admin, log: (line) => lines.push(line) });
     expect(calls).toHaveLength(1);
     expect(calls[0]!.table).toBe('rag_retrieval_log');
     expect(calls[0]!.ops.map((op) => op.op)).toEqual(expect.arrayContaining(['insert', 'select']));
@@ -304,7 +306,7 @@ describe('writeRetrievalLog (D-03, D-27)', () => {
         },
       } as unknown as SupabaseClient;
       let settled = false;
-      const pending = writeRetrievalLog(row(), { expectedTenantKey: `o:${ORG_A}`, client: hanging, log: (line) => lines.push(line) }).then(() => {
+      const pending = writeRetrievalLog(row(), { expectedTenantKey: `o:${ORG_A}`, settings: INHERIT, client: hanging, log: (line) => lines.push(line) }).then(() => {
         settled = true;
       });
       await vi.advanceTimersByTimeAsync(1900);
@@ -325,7 +327,7 @@ describe('writeRetrievalLog (D-03, D-27)', () => {
     const { admin, calls } = recordingAdmin((call) =>
       call.ops.some((op) => op.op === 'insert') ? { data: { id: 'row-9', tenant_key: `o:${ORG_B}` }, error: null } : { data: null, error: null },
     );
-    await writeRetrievalLog(row(), { expectedTenantKey: `o:${ORG_A}`, client: admin, log: (line) => lines.push(line) });
+    await writeRetrievalLog(row(), { expectedTenantKey: `o:${ORG_A}`, settings: INHERIT, client: admin, log: (line) => lines.push(line) });
     expect(calls).toHaveLength(2);
     const remove = calls[1]!;
     expect(remove.table).toBe('rag_retrieval_log');
@@ -339,7 +341,7 @@ describe('writeRetrievalLog (D-03, D-27)', () => {
     const lines: string[] = [];
     const { admin } = recordingAdmin(() => ({ data: null, error: { message: 'duplicate key private question about the second report', code: '23505' } }));
     await expect(
-      writeRetrievalLog(row(), { expectedTenantKey: `o:${ORG_A}`, client: admin, log: (line) => lines.push(line) }),
+      writeRetrievalLog(row(), { expectedTenantKey: `o:${ORG_A}`, settings: INHERIT, client: admin, log: (line) => lines.push(line) }),
     ).resolves.toBeUndefined();
     expect(lines).toHaveLength(1);
     const line = lines[0]!;
@@ -355,8 +357,8 @@ describe('writeRetrievalLog (D-03, D-27)', () => {
   it('never throws when the client throws or is missing', async () => {
     const lines: string[] = [];
     const throwing = { from: () => { throw new TypeError('boom private question'); } } as unknown as SupabaseClient;
-    await writeRetrievalLog(row(), { expectedTenantKey: `o:${ORG_A}`, client: throwing, log: (line) => lines.push(line) });
-    await writeRetrievalLog(row(), { expectedTenantKey: `o:${ORG_A}`, client: null, log: (line) => lines.push(line) });
+    await writeRetrievalLog(row(), { expectedTenantKey: `o:${ORG_A}`, settings: INHERIT, client: throwing, log: (line) => lines.push(line) });
+    await writeRetrievalLog(row(), { expectedTenantKey: `o:${ORG_A}`, settings: INHERIT, client: null, log: (line) => lines.push(line) });
     expect(lines).toHaveLength(2);
     expect(lines[0]).toContain('TypeError');
     expect(lines.join('\n')).not.toContain('private question');

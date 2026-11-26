@@ -15,6 +15,8 @@ export interface FinishTraceOptions {
   flushTimeoutMs?: number;
   /** Who asked and through which channel; without a channel no retrieval log row is written. */
   logContext?: LogContext;
+  /** Query text read only by the retrieval log (language detection, masked_query); never exported to Langfuse. */
+  logQuery?: string;
 }
 
 const LOGGED_PROFILES: ReadonlySet<string> = new Set(['chat', 'embed', 'voice']);
@@ -42,7 +44,7 @@ function scheduleRetrievalLog(collector: TraceCollector, result: RetrievalResult
         latencyMs: totalLatency(collector),
         logContext: context,
         mode,
-        query: options.query,
+        query: options.logQuery ?? options.query,
       });
       await writeRetrievalLog(row, { expectedTenantKey: collector.tenantKey });
     } catch {

@@ -98,6 +98,11 @@ async function main(): Promise<number> {
     // The SEC overlay decides the injection report's configuration label (recommended is gated at absolute zero, D-14).
     const security = SEC_LOG_SWITCHES.filter((name) => runConfig.env[name] !== undefined).map((name) => `${name}=${runConfig.env[name]}`);
     if (security.length > 0) console.log(`[Eval Harness] run-config ${runConfig.name} SEC switches: ${security.join(', ')}`);
+    // D-39: with the layer on, the in-process run answers every query-LLM call from the fake table.
+    const queryLayer = Object.keys(runConfig.env)
+      .filter((name) => name.startsWith('RAG_QUERY_') || name.startsWith('RAG_SEMANTIC_CACHE'))
+      .map((name) => `${name}=${runConfig.env[name]}`);
+    if (queryLayer.length > 0) console.log(`[Eval Harness] run-config ${runConfig.name} query-layer switches: ${queryLayer.join(', ')}`);
   }
 
   const requestOptions: EvalRequestOptions = {};

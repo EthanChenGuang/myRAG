@@ -1,9 +1,11 @@
+import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { AnswerFeedbackValue, AnswerRecordRow } from '@/lib/answers/store';
 import { citedQuotesOf, exchangeForAnswer, recordTenantKey } from '@/lib/answers/exchange';
 import { isMultiTenant } from '@/lib/deployment-mode';
 import type { AnswerFeedbackRequest } from '@/lib/rag-eval/contracts.generated';
 import { getSupabaseAdmin } from '@/lib/supabase';
+import { readFeedbackLoopConfig } from '../feedback-loop/config';
 import { readLangfuseConfig, type LangfuseConfig } from '../trace/config';
 import { maskPII } from '../trace/mask';
 import { exportReviewCandidate, type ReviewCandidateInput, type ReviewExportOptions, type ReviewExportStatus } from '../trace/review-export';
@@ -19,6 +21,8 @@ export interface SubmitAnswerFeedbackDeps {
   postScores: (scores: readonly LangfuseScoreInput[], options: PostScoresOptions) => Promise<PostScoresResult>;
   exportReview: (input: ReviewCandidateInput, options: ReviewExportOptions) => Promise<ReviewExportStatus>;
   langfuseTimeoutMs: number;
+  /** D-10: the vote is mirrored onto rag_retrieval_log only while the log is on. */
+  retrievalLogEnabled: () => boolean;
 }
 
 export interface SubmitAnswerFeedbackInput {
@@ -46,6 +50,7 @@ const defaultDeps: SubmitAnswerFeedbackDeps = {
   postScores: postLangfuseScores,
   exportReview: exportReviewCandidate,
   langfuseTimeoutMs: LANGFUSE_TIMEOUT_MS,
+  retrievalLogEnabled: () => readFeedbackLoopConfig().retrievalLog !== 'off',
 };
 
 function errorCode(error: unknown): string {
@@ -114,6 +119,64 @@ async function reviewTexts(admin: SupabaseClient, row: AnswerRecordRow, userId: 
   return exchangeForAnswer(chat.messages, row.id) ?? { query: '', answer: '' };
 }
 
+const TENANT_KEY_RE = /^(s:default|[ou]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+const MIRROR_TIMEOUT_MS = 2000;
+
+export interface MirrorVoteOptions {
+  client: SupabaseClient;
+  /** The answer record's tenant_key; the update never reaches a row of another tenant. */
+  tenantKey: string;
+  /** feedback_at, the stored vote's updatedAt. */
+  at: string;
+  timeoutMs?: number;
+  log?: (line: string) => void;
+}
+
+/**
+ * D-10: copies the vote onto the rag_retrieval_log row with the same trace_id and tenant_key (feedback_kind 'answer').
+ * A missing row is a no-op. Best effort: never throws; a failure gives one codes-only [Feedback Loop] line.
+ */
+export async function mirrorVoteToRetrievalLog(
+  traceId: string,
+  vote: AnswerFeedbackValue['vote'],
+  reasons: readonly string[],
+  options: MirrorVoteOptions,
+): Promise<void> {
+  const log = options.log ?? ((line: string) => console.warn(line));
+  const report = (error: string): void => {
+    try {
+      const trace = createHash('sha256').update(traceId).digest('hex').slice(0, 12);
+      log(`[Feedback Loop] ${JSON.stringify({ code: 'vote_mirror_failed', trace, error })}`);
+    } catch {
+      // logging must never affect the request
+    }
+  };
+  try {
+    if (traceId === '' || !TENANT_KEY_RE.test(options.tenantKey)) return;
+    const update = options.client
+      .from('rag_retrieval_log')
+      .update({ feedback_vote: vote === 'helpful' ? 1 : -1, feedback_kind: 'answer', feedback_reasons: [...reasons], feedback_at: options.at })
+      .eq('trace_id', traceId)
+      .eq('tenant_key', options.tenantKey);
+    const result = await withTimeout(Promise.resolve(update), options.timeoutMs ?? MIRROR_TIMEOUT_MS);
+    if (result === 'timeout') {
+      report('timeout');
+      return;
+    }
+    if (result.error) report(typeof result.error.code === 'string' && result.error.code !== '' ? result.error.code : 'db_error');
+  } catch (error) {
+    report(error instanceof Error ? error.name || 'error' : 'unknown');
+  }
+}
+
+function mirrorEnabled(deps: SubmitAnswerFeedbackDeps): boolean {
+  try {
+    return deps.retrievalLogEnabled();
+  } catch {
+    return false;
+  }
+}
+
 async function reportFeedback(row: AnswerRecordRow, feedback: AnswerFeedbackValue, userId: string, admin: SupabaseClient, deps: SubmitAnswerFeedbackDeps): Promise<void> {
   const config = deps.langfuse();
   const box = deps.langfuseTimeoutMs;
@@ -123,6 +186,16 @@ async function reportFeedback(row: AnswerRecordRow, feedback: AnswerFeedbackValu
     const tasks: Array<Promise<void>> = [];
     if (row.trace_id) {
       const traceId = row.trace_id;
+      if (mirrorEnabled(deps)) {
+        tasks.push(
+          mirrorVoteToRetrievalLog(traceId, feedback.vote, feedback.reasons ?? [], {
+            client: admin,
+            tenantKey: recordTenantKey(row, deps.multiTenant()),
+            at: feedback.updatedAt,
+            timeoutMs: box,
+          }),
+        );
+      }
       const comment = scoreComment(feedback);
       tasks.push(
         (async () => {

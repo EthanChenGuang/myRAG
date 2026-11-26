@@ -18,6 +18,7 @@ import {
 import { getProcessingProfile } from '@/lib/rag/ingest/profiles/load';
 import { publishStage } from '@/lib/rag/ingest/stages/publish';
 import { EMBEDDING_TEXT_VERSION } from '@/lib/rag/ingest/text/embedding-text';
+import { effectiveEmbeddingTextVersion } from '@/lib/rag/ingest/text/table-rows';
 import { emptyIngestState, type StageContext } from '@/lib/rag/ingest/types';
 import type { DocumentFields, IngestWriter } from '@/lib/rag/ingest/writer';
 import { resetLanguageSettingsForTests } from '@/lib/rag/lang/settings';
@@ -203,6 +204,17 @@ describe('collectFingerprintParts and the publish stage', () => {
     });
   });
 
+  test('RAG_TABLE_ROW_SERIALIZATION: the parts carry the effective embedding-text version and the hash changes with the switch (D-21)', () => {
+    const off = collectFingerprintParts(contextFor({}, []));
+    const on = collectFingerprintParts(contextFor({ RAG_TABLE_ROW_SERIALIZATION: 'true' }, []));
+    expect(off.embedding_text_version).toBe(effectiveEmbeddingTextVersion(EMBEDDING_TEXT_VERSION, false));
+    expect(off.embedding_text_version).toBe(EMBEDDING_TEXT_VERSION);
+    expect(on.embedding_text_version).toBe(effectiveEmbeddingTextVersion(EMBEDDING_TEXT_VERSION, true));
+    expect(on.lexical_version).toBe(off.lexical_version);
+    expect(buildIngestFingerprint(on)).not.toBe(buildIngestFingerprint(off));
+    expect(expectedFingerprintFor(off, { RAG_TABLE_ROW_SERIALIZATION: 'true' }).fingerprint).toBe(buildIngestFingerprint(on));
+  });
+
   test('typing the supported languages in another order gives one fingerprint', () => {
     const first = buildIngestFingerprint(collectFingerprintParts(contextFor({}, [])));
     process.env.RAG_SUPPORTED_LANGUAGES = 'zh,it';
@@ -255,8 +267,23 @@ describe('expectedFingerprintFor', () => {
   });
 
   test('a proposed switch value changes the matching part only', () => {
-    const expected = expectedFingerprintFor(baseParts(), { RAG_TABLE_ROW_SERIALIZATION: 'true' });
-    expect(expected.parts).toEqual(baseParts({ switches: { ...baseParts().switches, table_row_serialization: 'true' } }));
+    const expected = expectedFingerprintFor(baseParts(), { RAG_TABLE_HEADER_REPEAT: 'always' });
+    expect(expected.parts).toEqual(baseParts({ switches: { ...baseParts().switches, table_header_repeat: 'always' } }));
+  });
+
+  test('RAG_TABLE_ROW_SERIALIZATION moves its switch part and the effective embedding-text version together, both ways (D-21)', () => {
+    const on = expectedFingerprintFor(baseParts(), { RAG_TABLE_ROW_SERIALIZATION: 'true' });
+    expect(on.parts).toEqual(
+      baseParts({
+        embedding_text_version: effectiveEmbeddingTextVersion(EMBEDDING_TEXT_VERSION, true),
+        switches: { ...baseParts().switches, table_row_serialization: 'true' },
+      }),
+    );
+    expect(on.fingerprint).not.toBe(buildIngestFingerprint(baseParts()));
+    const back = expectedFingerprintFor(on.parts, { RAG_TABLE_ROW_SERIALIZATION: 'false' });
+    expect(back.parts).toEqual(baseParts());
+    expect(back.fingerprint).toBe(buildIngestFingerprint(baseParts()));
+    expect(expectedFingerprintFor(on.parts, { RAG_TABLE_ROW_SERIALIZATION: 'true' }).parts).toEqual(on.parts);
   });
 
   test('a proposed language set changes the OCR codes of a LlamaParse document, not of a Docling document reading the same first language', () => {

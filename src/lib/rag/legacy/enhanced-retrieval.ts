@@ -97,14 +97,190 @@ function evalRpcThreshold(threshold: number, profileRequireActive: boolean): num
   return Number.isFinite(parsed) ? parsed : threshold;
 }
 
-function search(env: SearchEnv, vector: number[], matchCount: number, threshold: number): Promise<RawChunk[]> {
-  return searchByEmbedding(
-    env.scope,
-    { vector, profile: env.profile },
+/** One vector search: rows strictly above rpcThreshold, best similarity first, at most matchCount. */
+export interface LegacyPoolPass {
+  threshold: number;
+  rpcThreshold: number;
+  matchCount: number;
+}
+
+/** The searches legacySearch runs for a query; the v2 legacy_rule floor replays them over its dense candidates. */
+export interface LegacyPoolRule {
+  strategy: TemporalQueryContext['searchStrategy'];
+  maxResults: number;
+  primary: LegacyPoolPass;
+  /** Null when the analyser threshold is at or below 0.35: legacy never falls back then. */
+  fallback: LegacyPoolPass | null;
+  /** The fallback runs when the first pass kept fewer results than this. */
+  fallbackBelow: number;
+}
+
+export function legacyPoolRule(input: {
+  queryContext: TemporalQueryContext;
+  thresholds: SearchThresholds;
+  maxResults: number;
+  fallbackToLowerThreshold: boolean;
+  profileRequireActive: boolean;
+}): LegacyPoolRule {
+  const { queryContext, thresholds, maxResults, fallbackToLowerThreshold, profileRequireActive } = input;
+  const pass = (threshold: number, matchCount: number): LegacyPoolPass => ({
+    threshold,
+    rpcThreshold: evalRpcThreshold(threshold, profileRequireActive),
     matchCount,
-    evalRpcThreshold(threshold, env.profileRequireActive),
-    { client: env.client, signal: env.signal, requireActive: env.profileRequireActive },
-  );
+  });
+  const scaled = scaleThreshold(thresholds, queryContext.suggestedThreshold);
+  let primary: LegacyPoolPass;
+  switch (queryContext.searchStrategy) {
+    case 'exact_match':
+      primary = pass(Math.max(scaled, thresholds.exactFloor), Math.min(maxResults * 2, 50));
+      break;
+    case 'multi_stage':
+    case 'temporal_boost':
+      primary = pass(scaled, maxResults * 2);
+      break;
+    default:
+      primary = pass(scaled, maxResults);
+  }
+  return {
+    strategy: queryContext.searchStrategy,
+    maxResults,
+    primary,
+    fallback: queryContext.suggestedThreshold > 0.35 ? pass(thresholds.fallback, maxResults) : null,
+    fallbackBelow: fallbackToLowerThreshold ? 3 : 1,
+  };
+}
+
+/** The legacy voice search: one dense pass at a low threshold, five times the answer count, no analyser and no fallback. */
+export const LEGACY_VOICE_DEFAULT_MATCH_COUNT = 5;
+const LEGACY_VOICE_SEARCH_MULTIPLIER = 5;
+const LEGACY_VOICE_SEARCH_THRESHOLD = 0.15;
+
+export function legacyVoicePoolRule(thresholds: SearchThresholds, matchCount: number): LegacyPoolRule {
+  const threshold = scaleThreshold(thresholds, LEGACY_VOICE_SEARCH_THRESHOLD);
+  const count = matchCount * LEGACY_VOICE_SEARCH_MULTIPLIER;
+  return {
+    strategy: 'semantic_only',
+    maxResults: count,
+    primary: { threshold, rpcThreshold: threshold, matchCount: count },
+    fallback: null,
+    fallbackBelow: 0,
+  };
+}
+
+const STRATEGY_NAMES: Record<TemporalQueryContext['searchStrategy'], string> = {
+  exact_match: 'Exact Match (Temporal/Financial Precision)',
+  multi_stage: 'Multi-Stage (Temporal + Financial)',
+  temporal_boost: 'Temporal Boosted',
+  semantic_only: 'Semantic Only',
+};
+
+/** What the strategy keeps of the first search: scoring, the temporal filters, the final count. */
+export function legacyFirstPass(rule: LegacyPoolRule, context: TemporalQueryContext, chunks: RawChunk[]): Candidate[] {
+  const { maxResults } = rule;
+  if (!chunks || chunks.length === 0) {
+    if (rule.strategy === 'exact_match') logger.db(`[Enhanced RAG] No chunks found with threshold ${rule.primary.threshold}`);
+    if (rule.strategy === 'multi_stage') logger.db(`[Enhanced RAG] Stage 1 (semantic) found no results`);
+    return [];
+  }
+  switch (rule.strategy) {
+    case 'exact_match': {
+      const scoredResults = chunks
+        .map((chunk) => processChunkResult(chunk, context))
+        .filter((result) => {
+          if (context.isTemporalQuery && context.requireTemporalMatch) {
+            const validation = validateTemporalMatch(result.metadata, context);
+            return validation.isValid && validation.score >= 0.8;
+          }
+          return true;
+        })
+        .sort((a, b) => b.final_score - a.final_score)
+        .slice(0, maxResults);
+      logger.db(`[Enhanced RAG] Exact match found ${scoredResults.length} qualifying chunks`);
+      return scoredResults;
+    }
+    case 'multi_stage': {
+      const processedResults = chunks
+        .map((chunk) => processChunkResult(chunk, context))
+        .filter((result) => {
+          if (context.isTemporalQuery) {
+            const validation = validateTemporalMatch(result.metadata, context);
+            return validation.isValid && validation.score >= 0.5;
+          }
+          return true;
+        })
+        .sort((a, b) => b.final_score - a.final_score);
+      const finalResults = ensureResultDiversity(processedResults, maxResults);
+      logger.db(`[Enhanced RAG] Multi-stage completed: ${chunks.length} → ${processedResults.length} → ${finalResults.length}`);
+      return finalResults;
+    }
+    case 'temporal_boost': {
+      const results = chunks
+        .map((chunk) => processChunkResult(chunk, context))
+        .sort((a, b) => b.final_score - a.final_score)
+        .slice(0, maxResults);
+      logger.db(`[Enhanced RAG] Temporal boost found ${results.length} chunks`);
+      return results;
+    }
+    default: {
+      const results = chunks.map((chunk) => processChunkResult(chunk, context));
+      logger.db(`[Enhanced RAG] Semantic-only found ${results.length} chunks`);
+      return results;
+    }
+  }
+}
+
+export function legacyNeedsFallback(rule: LegacyPoolRule, firstPassCount: number): boolean {
+  return rule.fallback !== null && firstPassCount < rule.fallbackBelow;
+}
+
+/** Appends the fallback rows the first pass did not already hold, scored without the analyser's boosts. */
+export function legacyMergeFallback(results: Candidate[], fallbackChunks: RawChunk[]): Candidate[] {
+  const fallbackContext: TemporalQueryContext = {
+    isTemporalQuery: false,
+    isFinancialQuery: false,
+    isSpecificDataQuery: false,
+    timeframe: null,
+    financialMetrics: [],
+    requiredPrecision: 'low',
+    suggestedThreshold: LEGACY_FALLBACK_THRESHOLD,
+    searchStrategy: 'semantic_only',
+    requireTemporalMatch: false,
+    reasoningText: 'Fallback retrieval',
+  };
+  const fallbackResults = (fallbackChunks || []).map((chunk) => processChunkResult(chunk, fallbackContext));
+  logger.db(`[Enhanced RAG] Fallback found ${fallbackResults.length} chunks`);
+  const merged = [...results];
+  const existingIds = new Set(merged.map((r) => r.chunk_id));
+  for (const res of fallbackResults) {
+    if (!existingIds.has(res.chunk_id)) {
+      merged.push(res);
+      existingIds.add(res.chunk_id);
+    }
+  }
+  return merged;
+}
+
+/** The rows one pass of the vector RPC returns from a candidate list: strictly above the threshold, best first, capped. */
+function passOver(rows: readonly RawChunk[], pass: LegacyPoolPass): RawChunk[] {
+  return rows
+    .filter((row) => Number.isFinite(row.similarity) && row.similarity > pass.rpcThreshold)
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, pass.matchCount);
+}
+
+/** The pool legacySearch would return if the vector RPC held exactly these rows. */
+export function legacyPoolFromRows(rule: LegacyPoolRule, context: TemporalQueryContext, rows: readonly RawChunk[]): Candidate[] {
+  const results = legacyFirstPass(rule, context, passOver(rows, rule.primary));
+  if (!legacyNeedsFallback(rule, results.length) || rule.fallback === null) return results;
+  return legacyMergeFallback(results, passOver(rows, rule.fallback));
+}
+
+function search(env: SearchEnv, vector: number[], pass: LegacyPoolPass): Promise<RawChunk[]> {
+  return searchByEmbedding(env.scope, { vector, profile: env.profile }, pass.matchCount, pass.rpcThreshold, {
+    client: env.client,
+    signal: env.signal,
+    requireActive: env.profileRequireActive,
+  });
 }
 
 export function legacyAnalyze(query: string): TemporalQueryContext {
@@ -116,57 +292,39 @@ export function legacyAnalyze(query: string): TemporalQueryContext {
   return queryContext;
 }
 
+const STRATEGY_LOGS: Record<TemporalQueryContext['searchStrategy'], string> = {
+  exact_match: 'exact match retrieval',
+  multi_stage: 'multi-stage retrieval',
+  temporal_boost: 'temporal boosted retrieval',
+  semantic_only: 'semantic-only retrieval',
+};
+
 export async function legacySearch(
   input: LegacySearchInput,
 ): Promise<{ results: Candidate[]; retrievalStrategy: string }> {
   const { embedding, queryContext, maxResults, fallbackToLowerThreshold } = input;
   const profile = input.profile ?? null;
+  const profileRequireActive = input.profileRequireActive !== false;
+  const thresholds = searchThresholdsFor(profile);
   const searchEnv: SearchEnv = {
     scope: input.scope,
     client: input.client,
     signal: input.signal,
     profile,
-    thresholds: searchThresholdsFor(profile),
-    profileRequireActive: input.profileRequireActive !== false,
+    thresholds,
+    profileRequireActive,
   };
+  const rule = legacyPoolRule({ queryContext, thresholds, maxResults, fallbackToLowerThreshold, profileRequireActive });
 
-  let results: Candidate[] = [];
-  let retrievalStrategy = '';
-
-  switch (queryContext.searchStrategy) {
-    case 'exact_match':
-      results = await exactMatchRetrieval(embedding, queryContext, maxResults, searchEnv);
-      retrievalStrategy = 'Exact Match (Temporal/Financial Precision)';
-      break;
-
-    case 'multi_stage':
-      results = await multiStageRetrieval(embedding, queryContext, maxResults, searchEnv);
-      retrievalStrategy = 'Multi-Stage (Temporal + Financial)';
-      break;
-
-    case 'temporal_boost':
-      results = await temporalBoostedRetrieval(embedding, queryContext, maxResults, searchEnv);
-      retrievalStrategy = 'Temporal Boosted';
-      break;
-
-    default:
-      results = await semanticOnlyRetrieval(embedding, queryContext, maxResults, searchEnv);
-      retrievalStrategy = 'Semantic Only';
-  }
+  logger.db(`[Enhanced RAG] Executing ${STRATEGY_LOGS[rule.strategy]}`);
+  let results = legacyFirstPass(rule, queryContext, await search(searchEnv, embedding, rule.primary));
+  let retrievalStrategy = STRATEGY_NAMES[rule.strategy];
 
   // We check if we have very few results (less than 3) to ensure we provide some context
-  if ((results.length === 0 || (results.length < 3 && fallbackToLowerThreshold)) && queryContext.suggestedThreshold > 0.35) {
+  if (legacyNeedsFallback(rule, results.length) && rule.fallback !== null) {
     logger.db(`[Enhanced RAG] Few or no results found (${results.length}), trying fallback with lower threshold`);
-    const fallbackResults = await fallbackRetrieval(embedding, maxResults, searchEnv);
-
-    const existingIds = new Set(results.map((r) => r.chunk_id));
-    for (const res of fallbackResults) {
-      if (!existingIds.has(res.chunk_id)) {
-        results.push(res);
-        existingIds.add(res.chunk_id);
-      }
-    }
-
+    logger.db(`[Enhanced RAG] Executing fallback retrieval with threshold ${rule.fallback.threshold}`);
+    results = legacyMergeFallback(results, await search(searchEnv, embedding, rule.fallback));
     retrievalStrategy += ' + Fallback';
   }
 
@@ -185,146 +343,6 @@ export function legacyRank(results: Candidate[], _queryContext: TemporalQueryCon
     }
   }
 
-  return results;
-}
-
-async function exactMatchRetrieval(
-  queryEmbedding: number[],
-  context: TemporalQueryContext,
-  maxResults: number,
-  searchEnv: SearchEnv,
-): Promise<Candidate[]> {
-  logger.db(`[Enhanced RAG] Executing exact match retrieval`);
-
-  const threshold = Math.max(scaleThreshold(searchEnv.thresholds, context.suggestedThreshold), searchEnv.thresholds.exactFloor);
-
-  const chunks = await search(searchEnv, queryEmbedding, Math.min(maxResults * 2, 50), threshold);
-
-  if (!chunks || chunks.length === 0) {
-    logger.db(`[Enhanced RAG] No chunks found with threshold ${threshold}`);
-    return [];
-  }
-
-  const scoredResults = chunks
-    .map((chunk) => processChunkResult(chunk, context))
-    .filter((result) => {
-      if (context.isTemporalQuery && context.requireTemporalMatch) {
-        const validation = validateTemporalMatch(result.metadata, context);
-        return validation.isValid && validation.score >= 0.8;
-      }
-      return true;
-    })
-    .sort((a, b) => b.final_score - a.final_score)
-    .slice(0, maxResults);
-
-  logger.db(`[Enhanced RAG] Exact match found ${scoredResults.length} qualifying chunks`);
-  return scoredResults;
-}
-
-async function multiStageRetrieval(
-  queryEmbedding: number[],
-  context: TemporalQueryContext,
-  maxResults: number,
-  searchEnv: SearchEnv,
-): Promise<Candidate[]> {
-  logger.db(`[Enhanced RAG] Executing multi-stage retrieval`);
-
-  const stage1Threshold = scaleThreshold(searchEnv.thresholds, context.suggestedThreshold);
-  const stage1Count = maxResults * 2;
-  const stage1Chunks = await search(searchEnv, queryEmbedding, stage1Count, stage1Threshold);
-
-  if (!stage1Chunks || stage1Chunks.length === 0) {
-    logger.db(`[Enhanced RAG] Stage 1 (semantic) found no results`);
-    return [];
-  }
-
-  const processedResults = stage1Chunks
-    .map((chunk) => processChunkResult(chunk, context))
-    .filter((result) => {
-      if (context.isTemporalQuery) {
-        const validation = validateTemporalMatch(result.metadata, context);
-        return validation.isValid && validation.score >= 0.5;
-      }
-      return true;
-    })
-    .sort((a, b) => b.final_score - a.final_score);
-
-  const finalResults = ensureResultDiversity(processedResults, maxResults);
-
-  logger.db(`[Enhanced RAG] Multi-stage completed: ${stage1Chunks.length} → ${processedResults.length} → ${finalResults.length}`);
-  return finalResults;
-}
-
-async function temporalBoostedRetrieval(
-  queryEmbedding: number[],
-  context: TemporalQueryContext,
-  maxResults: number,
-  searchEnv: SearchEnv,
-): Promise<Candidate[]> {
-  logger.db(`[Enhanced RAG] Executing temporal boosted retrieval`);
-
-  const chunks = await search(searchEnv, queryEmbedding, maxResults * 2, scaleThreshold(searchEnv.thresholds, context.suggestedThreshold));
-
-  if (!chunks || chunks.length === 0) {
-    return [];
-  }
-
-  const results = chunks
-    .map((chunk) => processChunkResult(chunk, context))
-    .sort((a, b) => b.final_score - a.final_score)
-    .slice(0, maxResults);
-
-  logger.db(`[Enhanced RAG] Temporal boost found ${results.length} chunks`);
-  return results;
-}
-
-async function semanticOnlyRetrieval(
-  queryEmbedding: number[],
-  context: TemporalQueryContext,
-  maxResults: number,
-  searchEnv: SearchEnv,
-): Promise<Candidate[]> {
-  logger.db(`[Enhanced RAG] Executing semantic-only retrieval`);
-
-  const chunks = await search(searchEnv, queryEmbedding, maxResults, scaleThreshold(searchEnv.thresholds, context.suggestedThreshold));
-
-  if (!chunks || chunks.length === 0) {
-    return [];
-  }
-
-  const results = chunks.map((chunk) => processChunkResult(chunk, context));
-  logger.db(`[Enhanced RAG] Semantic-only found ${results.length} chunks`);
-  return results;
-}
-
-async function fallbackRetrieval(
-  queryEmbedding: number[],
-  maxResults: number,
-  searchEnv: SearchEnv,
-): Promise<Candidate[]> {
-  logger.db(`[Enhanced RAG] Executing fallback retrieval with threshold ${searchEnv.thresholds.fallback}`);
-
-  const chunks = await search(searchEnv, queryEmbedding, maxResults, searchEnv.thresholds.fallback);
-
-  if (!chunks || chunks.length === 0) {
-    return [];
-  }
-
-  const fallbackContext: TemporalQueryContext = {
-    isTemporalQuery: false,
-    isFinancialQuery: false,
-    isSpecificDataQuery: false,
-    timeframe: null,
-    financialMetrics: [],
-    requiredPrecision: 'low',
-    suggestedThreshold: LEGACY_FALLBACK_THRESHOLD,
-    searchStrategy: 'semantic_only',
-    requireTemporalMatch: false,
-    reasoningText: 'Fallback retrieval',
-  };
-
-  const results = chunks.map((chunk) => processChunkResult(chunk, fallbackContext));
-  logger.db(`[Enhanced RAG] Fallback found ${results.length} chunks`);
   return results;
 }
 

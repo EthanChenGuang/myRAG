@@ -5,6 +5,7 @@ import {
   buildSourceKey,
   currentIngestConfig,
   ingest,
+  legacyUploadRoute,
   nangoOwnerScope,
   submitIngest,
   type EnqueueResult,
@@ -57,7 +58,9 @@ export class NangoIngestError extends Error {
  */
 export function nangoPipeline(): NangoPipeline {
   try {
-    return currentIngestConfig().pipeline === 'unified' ? 'unified' : 'legacy';
+    const config = currentIngestConfig();
+    // D-16: language-aware ingestion sends syncs to the unified pipeline even under RAG_INGEST_PIPELINE=legacy.
+    return config.pipeline === 'unified' || legacyUploadRoute(config) === 'unified' ? 'unified' : 'legacy';
   } catch {
     logger.warn('Nango', 'ingest switch unavailable, using the legacy pipeline');
     return 'legacy';

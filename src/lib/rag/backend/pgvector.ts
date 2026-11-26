@@ -120,6 +120,7 @@ function buildRpcArgs(req: BackendSearchRequest, config: RagConfig): Record<stri
     p_amount_max: filters.invoice?.amountMax ?? null,
     p_currency: filters.invoice?.currency ?? null,
     p_chunking_override: req.chunkingProfileOverride ?? null,
+    ...(filters.dateRange?.includeUndated === true ? { p_include_undated: true } : {}),
   };
 }
 

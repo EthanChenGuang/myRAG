@@ -1,0 +1,210 @@
+{
+  "general/zh": [
+    {
+      "chunk_kind": "text",
+      "content": "aa5891ec33d8860bd9f55b2ac0fcefaa3f84293a3cc47031b8c10f8d581bd4e5",
+      "lexical_text": "f60de39f9b2ba8f7f3c79dd1b3ba423d573c80199f85277c6eb9c30820dfed9c",
+      "embedding_text": "568cbaa356233c768f83cae16764b226381322248f56e7c4bddd5ea884a768eb",
+      "embedding_text_version": 1
+    },
+    {
+      "chunk_kind": "table",
+      "content": "711923b785a1b713b25f5adac14671c14623df1de80c2053e841790c15588ccb",
+      "lexical_text": "f042b3762fa86805b82bbde83f05f144afda547bfea781eec67654082248c816",
+      "embedding_text": "9a5e00d306ec801ea19ac2611d77e7cd7cd06dc47241bef11a01fbd180018a03",
+      "embedding_text_version": 1
+    },
+    {
+      "chunk_kind": "table",
+      "content": "254d92a37b951f3be2de7c142e75550ea24b0cac7a4cff639ed1b6b32780c681",
+      "lexical_text": "36f6f5b898d58293d58d7aefb04a8246ab552e96a7a46fb51148d4247d2ec96c",
+      "embedding_text": "25319ffec695dc760835f009345ecb3438e5f0c7a5cddae2e598938752adfc2b",
+      "embedding_text_version": 1
+    },
+    {
+      "chunk_kind": "text",
+      "content": "b9d44a310fc0012bddfc4e6757172f51b01b590226bc82d31eeb7913cfe775e6",
+      "lexical_text": "2b02fc7f9f1b2b2f71d9d6d4a327e12d52b02cdeab9c0a3d81ea9ccbf2e8dc48",
+      "embedding_text": "11714aabf5d269c5534f37cc37eaeb958aefb7c0e8d10c6bb5f55e9e88f136b3",
+      "embedding_text_version": 1
+    }
+  ],
+  "general/en": [
+    {
+      "chunk_kind": "text",
+      "content": "41b1ebc5097ec8a876eb4f27245d53b3c126b3ee2f36e0abc1b20c78c6185c28",
+      "lexical_text": "ca1a3791a326d9091556e2adaa3b2e6f0022ec2e9d578f2570a878e1b70f6784",
+      "embedding_text": "17ef02b23f6c8f52c454f1cf7d06e203c8deb002115df6ea927791be270780e6",
+      "embedding_text_version": 1
+    },
+    {
+      "chunk_kind": "table",
+      "content": "45cd334575dd38bc5fcbbac1e18de7172fc3b6bf6e2b65bcd46d2fe8ed3acb8c",
+      "lexical_text": "a279f9fece0d545952139930ed157c6203a729eadec7cc378c1e36930850784f",
+      "embedding_text": "63d851108b566fa0a6f52b71caa212b3af0596ae8c026fca3ed2b1e44ee8dfab",
+      "embedding_text_version": 1
+    },
+    {
+      "chunk_kind": "text",
+      "content": "4ee28c4ba3e4fec952b11296cf6219c28ec72e5a2082c4277173917899169b5f",
+      "lexical_text": "607fc2ca6471ee739c1c5dc67314a95170ba049b19616d2646d40aed0a9280bc",
+      "embedding_text": "518d329f608b1fe9d4256e761e5fb0b02926e613587e0f62ca15ac96b2e3d88b",
+      "embedding_text_version": 1
+    }
+  ],
+  "general/it": [
+    {
+      "chunk_kind": "text",
+      "content": "56304f7e1be35dd04bb7d6dad748c39ffcbff4a5de6ff7eb1ffca303bd39d732",
+      "lexical_text": "9e4f99dfd29cc1e54088e4253b213449767dc40f90a2a600399a3197a06bd1d2",
+      "embedding_text": "15033f15f47a92a051737de81d64b102745816eb605a45131a481e578af4deba",
+      "embedding_text_version": 1
+    },
+    {
+      "chunk_kind": "table",
+      "content": "f6c1a0375fe4233478124ffc24509f3e895d21707661b4fd0a13917ae5c38e20",
+      "lexical_text": "6f9c3cab75751ddf2ddc4bc5f7b96e092e93495a74f7c16efacfa7f7519d0540",
+      "embedding_text": "8886aaa28a65f456d89787efeaf24d1e840776f2c2c83dbbe567b31be0300d57",
+      "embedding_text_version": 1
+    },
+    {
+      "chunk_kind": "table",
+      "content": "6d3d2315a920c64677249b830247ca345133f4134179549253450a1a6ce746c0",
+      "lexical_text": "ee743a7c293cd9853e27d450fbb4d569001b463c6bda59d140c5ef9ef4a64112",
+      "embedding_text": "b3e71f557748818d7f6c404953c94243458d8c991675cd3fae0179f0680ff17a",
+      "embedding_text_version": 1
+    },
+    {
+      "chunk_kind": "text",
+      "content": "0b00297ebba6529c028b525dad02d0b2ba1cc160ab7925db7de49591e490f030",
+      "lexical_text": "a44586b79d0cf4a4aa8b1ce7e0de0567a197e7c95a8d10f8342c7539dcd0542f",
+      "embedding_text": "809404d13995b522f0893d757fe58631ef12b2781edc4e3a0078ecc3d660fe3c",
+      "embedding_text_version": 1
+    }
+  ],
+  "financial_report/zh": [
+    {
+      "chunk_kind": "text",
+      "content": "6e5034633025c99f2adc1cba6ea10f15f397393c50869ab5481b05607215b3ab",
+      "lexical_text": "0c0442a7664be631c5cdd91f31cba6e395d90979ff409de7ddefd41b73a48260",
+      "embedding_text": "b9e0f6f40e27da228e2afbcdd4feb858c57655839fcf4d020b982ab425ac7aab",
+      "embedding_text_version": 1
+    },
+    {
+      "chunk_kind": "table",
+      "content": "d9c68d583f2ad0dded45b3792fb6de672ca65197c2a41bf6389eb92a6ba9a076",
+      "lexical_text": "576eef7e13cd603329c519c30db44499f91dfca6615966cf2ed44f24e505f989",
+      "embedding_text": "8ac9ebb6685bcdee5d04fde3e7206ccff580db8eb54532fc039b556b4a6c6de5",
+      "embedding_text_version": 1
+    },
+    {
+      "chunk_kind": "table",
+      "content": "9b42417c85d656641901229eab864183bcc166c78dbe2173ba6e3f9ad0b4d3bc",
+      "lexical_text": "d89aba2c41ad3f0528e69558d6b9da37b47d560c12c1b86fbcaba4163c106881",
+      "embedding_text": "a1d86cc81dbf923a0fa5046249ee11ba0d8cce2e904004ec64805255c8e2b7ba",
+      "embedding_text_version": 1
+    },
+    {
+      "chunk_kind": "table",
+      "content": "6d40b680fa0fb4e994c877aa0e254d5e704434eeac0307a952c12f9211e0f650",
+      "lexical_text": "72a080e1f5446c35ff97e17f0984de7f75f07a2304fdf92e7f23d2fc0d872b28",
+      "embedding_text": "a2c2fd807e3474746996016a2716ac73e63922e83f45f384f15dc4fe3fc4f59c",
+      "embedding_text_version": 1
+    },
+    {
+      "chunk_kind": "table",
+      "content": "320ebcf19da68871cc2c59eb67d7c6e777469a81b55b914937afe5fa10b9febe",
+      "lexical_text": "b1f704ce1ee9205e96587731ef4fa9d87f0839dbe6c33ce92686369740db10fb",
+      "embedding_text": "a1cdab4443ea62c662ff14115c978d2176cf0aa61ce008c77897048669bd2982",
+      "embedding_text_version": 1
+    },
+    {
+      "chunk_kind": "text",
+      "content": "e5fb85343c9d4d5e885168fed78d10c9e3c33da912cf6def789e7a3bf2157bb2",
+      "lexical_text": "d22798faf5897ca0d2b8d7c09dc000a9ac472451486e53d6d51f609048f93168",
+      "embedding_text": "bdf53e4f82717737db24c3b3b804f1f3850e0e242133082429e358cfd4cb567b",
+      "embedding_text_version": 1
+    }
+  ],
+  "financial_report/en": [
+    {
+      "chunk_kind": "text",
+      "content": "303a0a363e8e7a4ea4c86ac4154483fe44561dc0f6fbd7351e42ca4e1e836948",
+      "lexical_text": "f8133372c3d6709277aa23cb2b513066a47432f4b50e16c0bac0d0ac422de4b9",
+      "embedding_text": "256549c56e8141bdb2203058c415fee28088a69edf1791fd6c5341168c157c40",
+      "embedding_text_version": 1
+    },
+    {
+      "chunk_kind": "table",
+      "content": "2e0e614d021f84fc49d78b5fa1c821b725a149d6b4101c1b98295ad68395abf4",
+      "lexical_text": "19bf1515d01b967ffbb56af627092f411cf2c3e1b7029ec05fd3ec91c01dfe44",
+      "embedding_text": "c46c83f8aa1a657f57a5d5bf7da788c1ec9bad2ef3385a41be10241cb910d927",
+      "embedding_text_version": 1
+    },
+    {
+      "chunk_kind": "table",
+      "content": "b6479f6658968d94d6fcdce74759aca86d0e7a6fd934f464d967165d55aedd59",
+      "lexical_text": "eddef81a2d447066c2bdf1f005446174b593892bbfe104664a2b7d51f456b843",
+      "embedding_text": "a20cdf73d9554e23afd35dff2f24c7dabe36b9a1321baabd8bd99fd970a5a517",
+      "embedding_text_version": 1
+    },
+    {
+      "chunk_kind": "table",
+      "content": "1d35863837a34fac650a5b31b180a35205187052a1047586a85fbdfc45cc7dfd",
+      "lexical_text": "847e3d5584763e988befcfe70b9ddfc998fd3e714639d359d8cb099230282cea",
+      "embedding_text": "c3430e6f7b9bdafe72be80d786dc6a9d8f8bc816de75d9c435811730a98d2fe6",
+      "embedding_text_version": 1
+    },
+    {
+      "chunk_kind": "text",
+      "content": "a797308621d43ebeced03aed38688d6a7bb604834f807e1b780ca8e7635a876f",
+      "lexical_text": "3a4024e4ac362dbffaf6f7ed79b654acc029627e5b6515ea8880848a112fac4e",
+      "embedding_text": "8355dce558b788cdb5102cb519e79735b3791ce986e3e421b32b80c2c4be81f1",
+      "embedding_text_version": 1
+    }
+  ],
+  "financial_report/it": [
+    {
+      "chunk_kind": "text",
+      "content": "4cbdc5e41596bf31be3b237db45239cc5e904534a222c944ef99470d9d3cd469",
+      "lexical_text": "467873f15a4b7b5d391fda2cbdfd59abeba384822a585fe14327c8308df31560",
+      "embedding_text": "f8ac5b4a42d51ffbc6a3d563c73e7503f1d1f2872bfc331ae5cdc7c941e06d36",
+      "embedding_text_version": 1
+    },
+    {
+      "chunk_kind": "table",
+      "content": "3c2f90698d890f4b16de7a425bbce67fd6c054c728b21f00ee39bcdfc8b8a4b9",
+      "lexical_text": "9e6d6c0b4d8a0c4ef767ea2a7289cf4f576349a976ef443efc8915c03254d41e",
+      "embedding_text": "517f4c8b5c432b123c6bb7bbe5784165b6281b25fe42b86c6d622cc870298f40",
+      "embedding_text_version": 1
+    },
+    {
+      "chunk_kind": "table",
+      "content": "fd6af6de56c1c7470ea62eb9927ddccf4ebc51778f348ec673b9c8fd14bf0328",
+      "lexical_text": "dbfc4efd1204d0d9f6a94d85cfc60a570c94c68206be9ec3227477fb142e2973",
+      "embedding_text": "a928197f44880e9dd86acb24a4d3df4d7a8d78d302ce95d4a66ca502b6b0fc64",
+      "embedding_text_version": 1
+    },
+    {
+      "chunk_kind": "table",
+      "content": "a1c985abdbca8787980d3f9ad8dbe0781958dc3836262d8ff86cbbae69bcca3c",
+      "lexical_text": "e71a4958ad97e7a798ce6b20abfd06bf587e5de20cab8f918053e40d2e2630a9",
+      "embedding_text": "96929e0a58f8d61018af4347aea15389ce6a1f0c0637f3ba3832f7cb3ed32619",
+      "embedding_text_version": 1
+    },
+    {
+      "chunk_kind": "table",
+      "content": "9d33e2e252133b2bd6c68383d987a3f4620d291e6936ce991d992101f1635c36",
+      "lexical_text": "1f2ece795033400a43155729f20c8040319a2642afbd54c8b385f26ecd53aba1",
+      "embedding_text": "6dd7d5603a47b3a2739ef85ecf2cda43224dd00a0b496be68583e68c2a7bf686",
+      "embedding_text_version": 1
+    },
+    {
+      "chunk_kind": "text",
+      "content": "7ca1dd73dc4e5a1cb20ec8df24f03008d9656b0cc870a15b222f5b354423e96d",
+      "lexical_text": "1d9a368924531515b5fb6c999e6f82132666e928fbd1b2a4b327946efcfefcef",
+      "embedding_text": "442076010e617378ec9e04e5f6cad6f84949da6f03e7fb81bdf4ad759efefabc",
+      "embedding_text_version": 1
+    }
+  ]
+}

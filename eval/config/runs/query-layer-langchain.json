@@ -1,0 +1,9 @@
+{
+  "name": "query-layer-langchain",
+  "env": {
+    "RAG_PIPELINE": "v2",
+    "RAG_QUERY_LAYER": "true",
+    "RAG_QUERY_FRAMEWORK": "langchain"
+  },
+  "overrides": null
+}

@@ -1,3 +1,4 @@
+import { serializeTableRows } from '../ingest/text/table-rows';
 import { LEXICAL_VERSION, lexicalText, lexicalTokens } from './tokenize';
 
 const LEGACY_PREFIX =
@@ -9,6 +10,8 @@ export interface ChunkLexicalInput {
   chunkKind?: string | null;
   metadata?: Record<string, unknown> | null;
   documentFilename?: string | null;
+  /** D-21: the list separator of the block's language, set only for a table chunk while RAG_TABLE_ROW_SERIALIZATION is on. */
+  tableRowSeparator?: string | null;
 }
 
 function isImageChunk(chunkKind: string | null | undefined, metadata: Record<string, unknown> | null | undefined): boolean {
@@ -38,7 +41,8 @@ export function chunkLexicalText(input: ChunkLexicalInput): string {
     if (typeof imageContext === 'string' && imageContext !== '') extras.push(imageContext);
   }
 
-  return lexicalText(path, [...extras, body].filter(Boolean).join('\n'));
+  const rows = input.tableRowSeparator ? serializeTableRows(body, { list_separator: input.tableRowSeparator }) : [];
+  return lexicalText(path, [...extras, body, ...rows].filter(Boolean).join('\n'));
 }
 
 export { LEXICAL_VERSION, lexicalTokens };

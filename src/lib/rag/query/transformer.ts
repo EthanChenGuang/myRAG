@@ -4,20 +4,23 @@ import { llamaindexCondense, type CondenseInput, type CondenseResult } from './l
 import { nativeDecompose, type DecomposeInput, type DecomposeResult } from './llamaindex/decompose';
 import { nativeExpand, type ExpandInput, type ExpandResult } from './llamaindex/expand';
 import { nativeHyde, type HydeInput, type HydeResult } from './llamaindex/hyde';
+import { nativeTranslate, type NativeTranslateInput, type NativeTranslateResult } from './llamaindex/translate';
 
 export type { CondenseInput, CondenseResult } from './llamaindex/condense';
 export type { DecomposeResult } from './llamaindex/decompose';
 export type { ExpandResult } from './llamaindex/expand';
 export type { HydeResult } from './llamaindex/hyde';
+export type { NativeTranslateResult as TranslateResult } from './llamaindex/translate';
 
 /** The shared transform inputs; the implementation supplies its own client (D-02). */
 export type TransformExpandInput = Omit<ExpandInput, 'deps'>;
 export type TransformHydeInput = Omit<HydeInput, 'deps'>;
 export type TransformDecomposeInput = Omit<DecomposeInput, 'deps'>;
+export type TransformTranslateInput = Omit<NativeTranslateInput, 'deps'>;
 
 /**
  * D-02: the one framework seam. Only the LLM-generating step differs between frameworks; the gate, router, post-checks,
- * budgets, plan and tracing are shared. Translate follows in 06-23.
+ * budgets, plan and tracing are shared.
  */
 export interface QueryTransformer {
   readonly framework: QueryFramework;
@@ -25,6 +28,7 @@ export interface QueryTransformer {
   expand(input: TransformExpandInput): Promise<ExpandResult>;
   hyde(input: TransformHydeInput): Promise<HydeResult>;
   decompose(input: TransformDecomposeInput): Promise<DecomposeResult>;
+  translate(input: TransformTranslateInput): Promise<NativeTranslateResult>;
 }
 
 const NATIVE_TRANSFORMER: QueryTransformer = Object.freeze({
@@ -33,6 +37,7 @@ const NATIVE_TRANSFORMER: QueryTransformer = Object.freeze({
   expand: (input: TransformExpandInput) => nativeExpand({ ...input, deps: getRagDeps() }),
   hyde: (input: TransformHydeInput) => nativeHyde({ ...input, deps: getRagDeps() }),
   decompose: (input: TransformDecomposeInput) => nativeDecompose({ ...input, deps: getRagDeps() }),
+  translate: (input: TransformTranslateInput) => nativeTranslate({ ...input, deps: getRagDeps() }),
 });
 
 const TRANSFORMERS: Readonly<Record<QueryFramework, QueryTransformer | null>> = Object.freeze({
