@@ -272,7 +272,7 @@ describe('section-rules route', () => {
   it('lists the rule sets of the workspace as an allow-list without tenant key or actor', async () => {
     const loaded = await load();
     state.session = { id: ADMIN_ID };
-    const answer = await loaded.sectionRules.GET(req('/api/rag/admin/section-rules?organizationId=ignored-in-single'));
+    const answer = await loaded.sectionRules.GET(req(`/api/rag/admin/section-rules?organizationId=${ORG_P}`));
     expect(answer.status).toBe(200);
     expect(answer.headers.get('cache-control')).toBe('no-store');
     expect(await answer.json()).toEqual({ success: true, items: [SET_JSON] });
