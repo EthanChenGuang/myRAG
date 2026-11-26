@@ -107,8 +107,8 @@ describe('Phase 4.4 lexical scoring controls in the Config UI (04.4-01, D-39)', 
   });
 
   it.each([
-    ['RAG_LEXICAL_BM25_K1', '0.5', '3', '1.2'],
-    ['RAG_LEXICAL_BM25_B', '0', '1', '0.75'],
+    ['RAG_LEXICAL_BM25_K1', '0.5', '3', '1.2…'],
+    ['RAG_LEXICAL_BM25_B', '0', '1', '0.75…'],
   ])('%s is a bounded number input', (name, min, max, placeholder) => {
     const tag = openingTag(name);
     expect(attr(tag, 'type')).toBe('number');
@@ -125,7 +125,7 @@ describe('Phase 4.4 lexical scoring controls in the Config UI (04.4-01, D-39)', 
     for (const name of NAMES) {
       const describedBy = attr(openingTag(name), 'aria-describedby');
       expect(describedBy, name).toBe(helpId(name));
-      expect([...html.matchAll(new RegExp(`id="${describedBy}"`, 'g'))], describedBy).toHaveLength(1);
+      expect([...html.matchAll(new RegExp(`id="${helpId(name)}"`, 'g'))], name).toHaveLength(1);
       expect(html, name).toContain(`data-rag-i18n="${name}.label"`);
       expect(html, name).toContain(`data-rag-i18n="${name}.help"`);
       expect(html, name).toContain(`<span translate="no">${name}</span>`);
@@ -138,5 +138,136 @@ describe('Phase 4.4 lexical scoring controls in the Config UI (04.4-01, D-39)', 
     expect(help('RAG_LEXICAL_SCORING')).toContain('RAG_LEXICAL_SEARCH');
     expect(help('RAG_LEXICAL_BM25_K1').toLowerCase()).toContain('term-frequency saturation');
     expect(help('RAG_LEXICAL_BM25_B').toLowerCase()).toContain('length normalisation');
+  });
+});
+
+const NOTE_ID = 'rag-lexical-scoring-needs-lexical';
+const PARAMS = ['RAG_LEXICAL_BM25_K1', 'RAG_LEXICAL_BM25_B'] as const;
+
+interface StubControl {
+  id: string;
+  value: string;
+  checked: boolean;
+  disabled: boolean;
+  hidden: boolean;
+  attributes: Map<string, string>;
+  setAttribute(name: string, value: string): void;
+  removeAttribute(name: string): void;
+  getAttribute(name: string): string | null;
+}
+
+function stubControl(id: string, init: Partial<Pick<StubControl, 'value' | 'checked' | 'hidden'>> = {}): StubControl {
+  const attributes = new Map<string, string>();
+  return {
+    id,
+    value: init.value ?? '',
+    checked: init.checked ?? false,
+    disabled: false,
+    hidden: init.hidden ?? true,
+    attributes,
+    setAttribute(name, value) {
+      attributes.set(name, value);
+    },
+    removeAttribute(name) {
+      attributes.delete(name);
+    },
+    getAttribute(name) {
+      return attributes.has(name) ? attributes.get(name)! : null;
+    },
+  };
+}
+
+function lexicalScoringMethod(): (this: unknown) => void {
+  const signature = 'updateLexicalScoringControls() {';
+  const start = html.indexOf(signature);
+  expect(start, signature).toBeGreaterThan(-1);
+  let depth = 0;
+  let end = start + signature.length - 1;
+  for (; end < html.length; end += 1) {
+    if (html[end] === '{') depth += 1;
+    if (html[end] === '}') {
+      depth -= 1;
+      if (depth === 0) break;
+    }
+  }
+  const body = html.slice(start + signature.length, end);
+  return new Function('document', `return function () {${body}};`) as never;
+}
+
+function runWiring(state: { mode: string; lexical: boolean; k1?: string; b?: string }) {
+  const controls = new Map<string, StubControl>([
+    ['RAG_LEXICAL_SCORING', stubControl('RAG_LEXICAL_SCORING', { value: state.mode })],
+    ['RAG_LEXICAL_SEARCH', stubControl('RAG_LEXICAL_SEARCH', { checked: state.lexical })],
+    ['RAG_LEXICAL_BM25_K1', stubControl('RAG_LEXICAL_BM25_K1', { value: state.k1 ?? '1.4' })],
+    ['RAG_LEXICAL_BM25_B', stubControl('RAG_LEXICAL_BM25_B', { value: state.b ?? '0.6' })],
+    [NOTE_ID, stubControl(NOTE_ID, { hidden: true })],
+  ]);
+  const doc = { getElementById: (id: string) => controls.get(id) ?? null };
+  const factory = lexicalScoringMethod() as unknown as (d: typeof doc) => () => void;
+  factory(doc).call({});
+  return controls;
+}
+
+describe('Phase 4.4 lexical scoring dependency wiring in the Config UI (04.4-06, D-39)', () => {
+  it('ts_rank_cd disables both parameters with aria-disabled and keeps their values', () => {
+    const controls = runWiring({ mode: 'ts_rank_cd', lexical: true, k1: '1.4', b: '0.6' });
+    for (const name of PARAMS) {
+      expect(controls.get(name)!.disabled, name).toBe(true);
+      expect(controls.get(name)!.getAttribute('aria-disabled'), name).toBe('true');
+    }
+    expect(controls.get('RAG_LEXICAL_BM25_K1')!.value).toBe('1.4');
+    expect(controls.get('RAG_LEXICAL_BM25_B')!.value).toBe('0.6');
+  });
+
+  it('bm25 enables both parameters and removes aria-disabled', () => {
+    const controls = runWiring({ mode: 'bm25', lexical: true });
+    for (const name of PARAMS) {
+      expect(controls.get(name)!.disabled, name).toBe(false);
+      expect(controls.get(name)!.getAttribute('aria-disabled'), name).toBeNull();
+    }
+    expect(controls.get(NOTE_ID)!.hidden).toBe(true);
+  });
+
+  it('bm25 with lexical search off shows the dependency note and leaves the select editable', () => {
+    const controls = runWiring({ mode: 'bm25', lexical: false });
+    expect(controls.get(NOTE_ID)!.hidden).toBe(false);
+    expect(controls.get('RAG_LEXICAL_SCORING')!.disabled).toBe(false);
+    expect(controls.get('RAG_LEXICAL_SCORING')!.getAttribute('aria-describedby')).toBe(`rag-lexical-scoring-help ${NOTE_ID}`);
+  });
+
+  it('ts_rank_cd with lexical search off shows no note, since nothing is ignored', () => {
+    const controls = runWiring({ mode: 'ts_rank_cd', lexical: false });
+    expect(controls.get(NOTE_ID)!.hidden).toBe(true);
+    expect(controls.get('RAG_LEXICAL_SCORING')!.getAttribute('aria-describedby')).toBe('rag-lexical-scoring-help');
+  });
+
+  it('the wiring runs after the fields are populated and on change of the select and the lexical switch', () => {
+    const populate = /populateFields\(\) \{([\s\S]*?)\n {12}\}/.exec(html)?.[1] ?? '';
+    expect(populate).toContain('this.updateLexicalScoringControls()');
+    for (const id of ['RAG_LEXICAL_SCORING', 'RAG_LEXICAL_SEARCH']) {
+      expect(html, id).toMatch(new RegExp(`\\['RAG_LEXICAL_SCORING', 'RAG_LEXICAL_SEARCH'\\]|getElementById\\('${id}'\\)[\\s\\S]{0,120}addEventListener\\('change'`));
+    }
+  });
+
+  it('the dependency note is a hidden status line, linked from the select, with i18n and neutral copy', () => {
+    const note = new RegExp(`<p\\b([^>]*)\\bid="${NOTE_ID}"([^>]*)>([\\s\\S]*?)</p>`).exec(html);
+    expect(note, NOTE_ID).not.toBeNull();
+    const attrs = `${note![1]}${note![2]}`;
+    expect(attrs).toContain('role="status"');
+    expect(attrs).toMatch(/\shidden(\s|$)/);
+    expect(attrs).toContain('data-rag-i18n="RAG_LEXICAL_SCORING.needsLexical"');
+    expect(attrs).not.toMatch(/\bflex\b/);
+    expect(note![3]).toContain('RAG_LEXICAL_SEARCH');
+    expect(attr(openingTag('RAG_LEXICAL_SCORING'), 'autocomplete')).toBe('off');
+  });
+
+  it('the help and note copy contains no example-domain words', () => {
+    const domainWords = /travel|lodging|hotel|leave days|salar|restaurant|\bfaq\b|vpn|password|branch|reimburs|expense|vacation/i;
+    const ids = [...NAMES.map(helpId), NOTE_ID];
+    for (const id of ids) {
+      const text = new RegExp(`<p\\b[^>]*\\bid="${id}"[^>]*>([\\s\\S]*?)</p>`).exec(html)?.[1] ?? '';
+      expect(text, id).not.toBe('');
+      expect(text, id).not.toMatch(domainWords);
+    }
   });
 });
