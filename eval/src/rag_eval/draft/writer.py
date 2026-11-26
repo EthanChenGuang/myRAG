@@ -12,7 +12,14 @@ from rag_sidecar.contracts.golden import DraftedItemProposal, GoldenItem, Split
 from rag_eval.golden_io import write_golden
 from rag_eval.matching import normalize_text
 from rag_eval.paths import REPO_ROOT
-from rag_eval.split import DOCGROUP_SPLIT_RULE, assign_split, freeze_group_splits, freeze_splits, load_group_manifest, load_manifest
+from rag_eval.split import (
+    DOCGROUP_SPLIT_RULE,
+    assign_split,
+    freeze_group_splits,
+    freeze_splits,
+    load_group_manifest,
+    load_manifest,
+)
 
 PRIVATE_DIR = REPO_ROOT / "eval" / "golden" / "private"
 DEFAULT_MANIFEST = PRIVATE_DIR / "split-manifest.json"

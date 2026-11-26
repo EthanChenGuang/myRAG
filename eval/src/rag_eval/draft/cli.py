@@ -8,7 +8,11 @@ from typing import Any
 
 from rag_eval.draft.claude_drafter import draft_with_claude
 from rag_eval.draft.config import DEFAULT_CONFIG_PATH, load_draft_config
-from rag_eval.draft.paraphrase import PARAPHRASE_STYLES, claude_paraphraser, paraphrase_items
+from rag_eval.draft.paraphrase import (
+    PARAPHRASE_STYLES,
+    claude_paraphraser,
+    paraphrase_items,
+)
 from rag_eval.draft.ragas_drafter import GenerateFn, draft_with_ragas
 from rag_eval.draft.sources import DirectoryWorkspaceSource, SupabaseWorkspaceSource, WorkspaceDocument
 from rag_eval.draft.verify import index_documents, verify_proposal

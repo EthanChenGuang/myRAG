@@ -11,7 +11,11 @@ from rag_sidecar.contracts.golden import GoldenItem, GoldSpan
 from rag_eval.draft import writer
 from rag_eval.draft.cli import main
 from rag_eval.draft.config import DEFAULT_CONFIG_PATH, load_draft_config
-from rag_eval.draft.paraphrase import PARAPHRASE_STYLES, PARAPHRASE_TOOL_NAME, paraphrase_items
+from rag_eval.draft.paraphrase import (
+    PARAPHRASE_STYLES,
+    PARAPHRASE_TOOL_NAME,
+    paraphrase_items,
+)
 from rag_eval.golden_io import load_golden, write_golden
 from rag_eval.metrics import ItemResult, aggregate
 from rag_eval.split import document_groups, write_manifest
@@ -256,7 +260,12 @@ def test_styles_are_neutral_and_named():
 
 
 def test_paraphrase_in_a_docgroup_domain_set_keeps_each_variant_in_its_parents_group_and_split(private_root):
-    from rag_eval.split import DOCGROUP_SPLIT_RULE, freeze_group_splits, load_group_manifest, plan_group_splits
+    from rag_eval.split import (
+        DOCGROUP_SPLIT_RULE,
+        freeze_group_splits,
+        load_group_manifest,
+        plan_group_splits,
+    )
 
     path = private_root / "domain" / "group" / "golden.jsonl"
     path.parent.mkdir(parents=True)

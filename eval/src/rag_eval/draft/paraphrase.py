@@ -1,6 +1,7 @@
 """D-53 paraphrased coverage variants: provenance paraphrased, tags paraphrase_of:<parent id> and style:<name>, review_status draft."""
 
-from typing import Any, Callable, Sequence
+from collections.abc import Callable, Sequence
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from rag_sidecar.contracts.golden import DraftedItemProposal, GoldenItem

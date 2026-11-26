@@ -3,9 +3,20 @@
 import json
 
 from rag_sidecar.contracts.feedback_loop import GatePopulationConfig
-from test_review_queue import _App, _domain_dir, _golden_line, _install, _promote_db, private_root  # noqa: F401
+from test_review_queue import (  # noqa: F401
+    _App,
+    _domain_dir,
+    _golden_line,
+    _install,
+    _promote_db,
+    private_root,
+)
 
-from rag_eval.config_files import GATE_POPULATION_PATH, load_gate_population, write_gate_population
+from rag_eval.config_files import (
+    GATE_POPULATION_PATH,
+    load_gate_population,
+    write_gate_population,
+)
 from rag_eval.golden_io import load_golden
 
 
