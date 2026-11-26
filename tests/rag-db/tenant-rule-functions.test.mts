@@ -457,7 +457,8 @@ describe('rag_tenant_rules_for (multi-tenant)', () => {
   });
 
   test('a disabled rule set is skipped and the next level answers; with no row the rule set part is empty', async () => {
-    await saveSet(db, A_ADMIN, KEY_A, { ...(await rows(db, SET_LIST, [A_ADMIN, KEY_A])).map(toBody).find((body) => body.id === sets.both)!, enabled: false }, sets.both);
+    const { id: _id, ...stored } = (await rows(db, SET_LIST, [A_ADMIN, KEY_A])).map(toBody).find((body) => body.id === sets.both)!;
+    assert.equal((await saveSet(db, A_ADMIN, KEY_A, { ...stored, enabled: false }, sets.both)).version, 2);
     assert.deepEqual((await read(KEY_A, 'general', 'upload')).ruleSets.map((row) => row.id), [sets.type]);
     await rows(db, SET_DELETE, [A_ADMIN, KEY_A, sets.type]);
     await rows(db, SET_DELETE, [A_ADMIN, KEY_A, sets.source]);
