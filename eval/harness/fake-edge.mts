@@ -59,7 +59,7 @@ const VECTOR_SYNC_RPC_ARGUMENTS: Record<string, readonly string[]> = {
   rag_backend_readiness: ['p_target', 'p_profile_id', 'p_tenant_key'],
 };
 
-const GENERIC_RPC_NAME = /^(?:rag_[a-z0-9_]+|match_chunks_by_profile|hybrid_search_chunks)$/;
+const GENERIC_RPC_NAME = /^(?:rag_[a-z0-9_]+|match_chunks_by_profile|hybrid_search_chunks|hybrid_search_translations)$/;
 const FIXTURE_SERVICE_ROLE_KEY = 'fixture-service-role-key-placeholder';
 const VECTOR_ARGUMENT_TYPES = new Set(['vector', 'halfvec']);
 const JSON_ARGUMENT_TYPES = new Set(['json', 'jsonb']);
