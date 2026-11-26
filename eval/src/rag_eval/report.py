@@ -7,6 +7,7 @@ from typing import get_args
 from rag_sidecar.contracts.eval_run import RagTrace, RunManifest
 from rag_sidecar.contracts.feedback_loop import GatePopulationConfig
 from rag_sidecar.contracts.golden import GoldenItem, Provenance
+from rag_sidecar.contracts.golden_lifecycle import GoldenSetManifest
 from rag_sidecar.contracts.judge import JudgeReport
 from rag_sidecar.contracts.latency import CacheState, GroupBudget, LatencyBudgets, StageLatency
 from rag_sidecar.contracts.report import (
@@ -601,6 +602,7 @@ def build_report(
     supported_languages: tuple[str, ...] | None = None,
     gate_population_config: tuple[GatePopulationConfig, str] | None = None,
     budgets: LatencyBudgets | None = None,
+    golden_manifest: GoldenSetManifest | None = None,
 ) -> EvalReport:
     notes: list[str] = []
     if any(item.language == "zh" for item in golden):
@@ -614,6 +616,7 @@ def build_report(
         gate_split=manifest.golden_filter.gate_split,
         approved_ids=approved_ids,
         population=population,
+        statuses={entry.id: entry.status for entry in golden_manifest.items} if golden_manifest is not None else None,
     )
     exclusions = aggregated.pop(POPULATION_EXCLUSIONS)
     if aggregated["gate_population"] == "production":
@@ -663,6 +666,9 @@ def build_report(
         native_review_backlog=review_backlog(golden),
         stale_count=exclusions["stale_count"],
         stale_share=exclusions["stale_share"],
+        rag_mode=manifest.rag_mode,
+        golden_set_version=golden_manifest.version if golden_manifest is not None else None,
+        golden_manifest_sha256=golden_manifest.manifest_sha256 if golden_manifest is not None else None,
         **aggregated,
         **answer_fields,
     )
@@ -1203,6 +1209,26 @@ def _backlog_section(report: EvalReport) -> list[str]:
     return lines
 
 
+def _false_answer(metrics: SliceMetrics) -> MetricValue:
+    if metrics.false_answer_rate is not None:
+        return metrics.false_answer_rate
+    correct = metrics.correct_refusal_rate
+    return MetricValue(value=None if correct.value is None else 1 - correct.value, n=correct.n)
+
+
+def _lifecycle_lines(report: EvalReport) -> list[str]:
+    """D-07, D-46: RAG mode, golden-set version and manifest hash, stale share, false-answer next to correct-refusal rate."""
+    version = report.golden_set_version if report.golden_set_version is not None else "n/a"
+    manifest = report.golden_manifest_sha256[:12] if report.golden_manifest_sha256 else "n/a"
+    return [
+        f"- RAG mode: {report.rag_mode}",
+        f"- Golden set: version {version}, manifest {manifest}",
+        f"- Stale items: {report.stale_count} (share {round(report.stale_share, 3):.3f})",
+        f"- Refusals (overall): correct refusal {_cell(report.overall.correct_refusal_rate)}, "
+        f"false answer {_cell(_false_answer(report.overall))}",
+    ]
+
+
 def _render_markdown(report: EvalReport, budgets: LatencyBudgets | None = None) -> str:
     lines = [
         f"# Eval report: {report.run_id}",
@@ -1216,6 +1242,7 @@ def _render_markdown(report: EvalReport, budgets: LatencyBudgets | None = None) 
         f"- Gate population: {report.gate_population}",
         f"- Corpus sha256: {report.corpus_sha256 or 'n/a'}",
         f"- Embedder: {report.embedder_id or 'n/a'} (version {report.embedder_version if report.embedder_version is not None else 'n/a'})",
+        *_lifecycle_lines(report),
         "",
         ("Rates are rounded to 3 decimals for display; report.json holds the unrounded values. "
          "n is the number of items behind each rate."),

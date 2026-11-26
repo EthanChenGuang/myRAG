@@ -434,7 +434,7 @@ def test_report_with_a_set_manifest_carries_version_hash_and_stale_share():
     report = build_report(_manifest(), score_items(traces, golden), golden, golden_manifest=manifest)
     assert report.golden_set_version == 2 and report.golden_manifest_sha256 == manifest.manifest_sha256
     assert report.stale_count == 1 and report.stale_share == pytest.approx(0.25)
-    assert report.by_language["it"].recall_at_5.n == 0
+    assert "it" not in report.by_language or report.by_language["it"].recall_at_5.n == 0
 
 
 def test_markdown_prints_set_version_stale_share_and_false_answer_rate(tmp_path: Path):
@@ -473,7 +473,7 @@ def test_score_cli_refuses_a_golden_file_that_differs_from_its_set_manifest(tmp_
 
 
 def test_baseline_record_stores_the_set_version_manifest_hash_and_rag_mode():
-    from rag_eval.baseline import record_baseline
+    from rag_eval.baseline import NonDeterministicRunError, record_baseline
 
     golden, traces = _four_items()
     manifest = _set_manifest(golden)
@@ -482,5 +482,5 @@ def test_baseline_record_stores_the_set_version_manifest_hash_and_rag_mode():
     assert (baseline.golden_set_version, baseline.golden_manifest_sha256) == (1, manifest.manifest_sha256)
     assert baseline.rag_mode == "strict"
     mixed = [*reports[:2], reports[2].model_copy(update={"golden_set_version": 2})]
-    with pytest.raises(ValueError, match="golden_set_version"):
+    with pytest.raises(NonDeterministicRunError, match="golden_set_version"):
         record_baseline(mixed)

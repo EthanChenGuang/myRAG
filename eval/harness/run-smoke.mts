@@ -15,6 +15,11 @@ const DEFAULT_BASELINES: Record<FixtureMode, string> = {
   ingest: path.join(REPO_ROOT, 'eval/baselines/fixture-ingest-baseline.json'),
 };
 const DEFAULT_GOLDEN = 'eval/fixtures/golden.jsonl';
+// D-46: the golden-set manifest of each fixture mode's default golden files; a --golden override has none unless given.
+const DEFAULT_GOLDEN_MANIFESTS: Record<FixtureMode, string> = {
+  prechunked: 'eval/fixtures/golden.manifest.json',
+  ingest: 'eval/fixtures/ingest/golden-ingest.manifest.json',
+};
 const NOISE_PATH = path.join(REPO_ROOT, 'eval/config/noise.json');
 const SEC_LOG_SWITCHES = ['RAG_CONTEXT_TAGGING', 'RAG_INJECTION_CHECK', 'RAG_INJECTION_PROMPT_GUARD', 'RAG_INJECTION_LAKERA', 'RAG_TOOL_RESULT_GUARD'] as const;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -54,9 +59,33 @@ async function main(): Promise<number> {
       'table-header-repeat': { type: 'string' },
       'cache-pairs': { type: 'boolean', default: false },
       'allow-live-cache': { type: 'boolean', default: false },
+      gates: { type: 'string' },
+      'gates-mode': { type: 'string' },
+      'golden-manifest': { type: 'string' },
     },
     strict: true,
   });
+
+  // D-06, O-1: --gates adds the absolute gate to the noise-band gate; --gates-mode report prints it without changing the exit code.
+  const gatesFile = values.gates?.trim();
+  if (gatesFile !== undefined && gatesFile === '') {
+    console.error('[Eval Harness] --gates must not be empty');
+    return 2;
+  }
+  const gatesMode = values['gates-mode'];
+  if (gatesMode !== undefined && gatesFile === undefined) {
+    console.error('[Eval Harness] --gates-mode needs --gates');
+    return 2;
+  }
+  if (gatesMode !== undefined && gatesMode !== 'enforce' && gatesMode !== 'report') {
+    console.error('[Eval Harness] --gates-mode must be enforce or report');
+    return 2;
+  }
+  const goldenManifestFlag = values['golden-manifest']?.trim();
+  if (goldenManifestFlag !== undefined && goldenManifestFlag === '') {
+    console.error('[Eval Harness] --golden-manifest must not be empty');
+    return 2;
+  }
 
   const deploymentMode = values['deployment-mode'];
   if (deploymentMode !== 'single-tenant' && deploymentMode !== 'multi-tenant') {
@@ -166,6 +195,19 @@ async function main(): Promise<number> {
     console.error('[Eval Harness] golden file failed Pydantic validation; nothing was run');
     return 2;
   }
+  const goldenManifest =
+    goldenManifestFlag !== undefined
+      ? path.resolve(goldenManifestFlag)
+      : values.golden === undefined
+        ? path.resolve(REPO_ROOT, DEFAULT_GOLDEN_MANIFESTS[fixtureMode])
+        : undefined;
+  if (goldenManifest !== undefined) {
+    const verifyArgs = ['verify', ...goldenFiles.flatMap((file) => ['--golden', file]), '--manifest', goldenManifest];
+    if (runPython('rag_eval.golden_set', verifyArgs) !== 0) {
+      console.error('[Eval Harness] golden files do not match their golden-set manifest; nothing was run');
+      return 2;
+    }
+  }
   const result = await runEval({
     goldenPath,
     corpusDir: path.resolve(values.corpus as string),
@@ -206,6 +248,7 @@ async function main(): Promise<number> {
     result.runPath,
     '--out',
     outDir,
+    ...(goldenManifest !== undefined ? ['--golden-manifest', goldenManifest] : []),
   ]);
   if (scoreCode !== 0) return scoreCode;
   console.log(`[Eval Harness] report: ${path.join(outDir, 'report.md')}`);
@@ -221,6 +264,9 @@ async function main(): Promise<number> {
     NOISE_PATH,
     '--out',
     outDir,
+    ...(goldenManifest !== undefined ? ['--manifest', goldenManifest] : []),
+    ...(gatesFile !== undefined ? ['--gates', path.resolve(gatesFile)] : []),
+    ...(gatesMode !== undefined ? ['--gates-mode', gatesMode] : []),
   ]);
   console.log(`[Eval Harness] gate: ${path.join(outDir, 'gate.md')}`);
   return gateCode;
