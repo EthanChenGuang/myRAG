@@ -100,6 +100,24 @@ describe('pinned eval env', () => {
     for (const name of Object.keys(pinned)) expect(name).not.toMatch(/^(WEAVIATE|QDRANT)_/);
   });
 
+  test('pins the eight Phase 4.2 retrieval tuning switches off (D-04, D-53)', () => {
+    const expected = {
+      RAG_LEXICAL_DICTIONARY: 'false',
+      RAG_LEXICAL_STEM_IT: 'false',
+      RAG_VERSION_SCOPE: 'false',
+      RAG_TABLE_LOOKUP: 'false',
+      RAG_DUP_CLUSTERS: 'false',
+      RAG_RESULT_DIVERSITY: 'off',
+      RAG_IDENTIFIER_INDEX: 'false',
+      RAG_IDENTIFIER_FILTER: 'false',
+    };
+    const pinned = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'eval/config/rag-eval-env.json'), 'utf8'));
+    for (const [name, value] of Object.entries(expected)) {
+      expect(pinned, `${name} is pinned`).toHaveProperty(name);
+      expect(pinned[name], name).toBe(value);
+    }
+  });
+
   test('eval-env --check exits 0', () => {
     const result = spawnSync('npx', ['tsx', 'eval/harness/eval-env.mts', '--check'], { cwd: REPO_ROOT, encoding: 'utf8' });
     expect(result.status).toBe(0);

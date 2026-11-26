@@ -111,6 +111,11 @@
       "side": "query"
     },
     {
+      "name": "RAG_DUP_CLUSTERS",
+      "side": "ingestion",
+      "mechanism": "reparse"
+    },
+    {
       "name": "RAG_EFFECTIVE_DATES",
       "side": "query"
     },
@@ -233,6 +238,15 @@
       "side": "query"
     },
     {
+      "name": "RAG_IDENTIFIER_FILTER",
+      "side": "query"
+    },
+    {
+      "name": "RAG_IDENTIFIER_INDEX",
+      "side": "ingestion",
+      "mechanism": "reparse"
+    },
+    {
       "name": "RAG_INGEST_ASYNC",
       "side": "query"
     },
@@ -298,8 +312,18 @@
       "mechanism": "rechunk"
     },
     {
+      "name": "RAG_LEXICAL_DICTIONARY",
+      "side": "ingestion",
+      "mechanism": "relex"
+    },
+    {
       "name": "RAG_LEXICAL_SEARCH",
       "side": "query"
+    },
+    {
+      "name": "RAG_LEXICAL_STEM_IT",
+      "side": "ingestion",
+      "mechanism": "relex"
     },
     {
       "name": "RAG_LEXICAL_TRANSLATION",
@@ -513,6 +537,10 @@
       "side": "query"
     },
     {
+      "name": "RAG_RESULT_DIVERSITY",
+      "side": "query"
+    },
+    {
       "name": "RAG_RETRIEVAL_BACKEND",
       "side": "query"
     },
@@ -603,6 +631,11 @@
       "mechanism": "rechunk"
     },
     {
+      "name": "RAG_TABLE_LOOKUP",
+      "side": "both",
+      "mechanism": "reparse"
+    },
+    {
       "name": "RAG_TABLE_ROW_SERIALIZATION",
       "side": "ingestion",
       "mechanism": "rechunk"
@@ -633,6 +666,10 @@
     },
     {
       "name": "RAG_VECTOR_SYNC_SECRET",
+      "side": "query"
+    },
+    {
+      "name": "RAG_VERSION_SCOPE",
       "side": "query"
     },
     {

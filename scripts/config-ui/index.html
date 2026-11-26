@@ -6648,6 +6648,79 @@
                                             </div>
                                         </div>
 
+                                        <div id="rag-tuning-switches" class="border border-base-300 rounded-lg p-4 mb-4 space-y-4">
+                                            <h4 class="font-semibold text-sm text-balance" data-rag-i18n="heading">Retrieval tuning switches (off = current behaviour)</h4>
+                                            <p class="label-text-alt text-base-content/70 max-w-prose" data-rag-i18n="intro">Some of these switches change what is stored with each document. Each of those has a line that starts with “Stored documents” and names the command that rebuilds them; add <code class="font-mono text-xs" translate="no">--dry-run</code> to see the count first. In the commands, <code class="font-mono text-xs" translate="no">&lt;key&gt;</code> is the tenant key: <code class="font-mono text-xs" translate="no">s:default</code> in single-tenant mode, <code class="font-mono text-xs" translate="no">o:&lt;organization id&gt;</code> in multi-tenant mode.</p>
+                                            <div class="space-y-4">
+                                                <div class="flex flex-col gap-1">
+                                                    <label class="flex items-center gap-2 cursor-pointer">
+                                                        <input type="checkbox" id="RAG_LEXICAL_DICTIONARY" name="RAG_LEXICAL_DICTIONARY" class="checkbox checkbox-primary" aria-describedby="rag-lexical-dictionary-help">
+                                                        <span class="label-text"><span data-rag-i18n="RAG_LEXICAL_DICTIONARY.label">Dictionary terms as single search terms</span> (<span translate="no">RAG_LEXICAL_DICTIONARY</span>)</span>
+                                                    </label>
+                                                    <p class="label-text-alt text-base-content/70 pl-8 max-w-prose" id="rag-lexical-dictionary-help" data-rag-i18n="RAG_LEXICAL_DICTIONARY.help">A term from the workspace’s terminology dictionary matches as one term in keyword search, even when it is several words or characters long.</p>
+                                                </div>
+                                                <div class="flex flex-col gap-1">
+                                                    <label class="flex items-center gap-2 cursor-pointer">
+                                                        <input type="checkbox" id="RAG_LEXICAL_STEM_IT" name="RAG_LEXICAL_STEM_IT" class="checkbox checkbox-primary" aria-describedby="rag-lexical-stem-it-help">
+                                                        <span class="label-text"><span data-rag-i18n="RAG_LEXICAL_STEM_IT.label">Italian stemming</span> (<span translate="no">RAG_LEXICAL_STEM_IT</span>)</span>
+                                                    </label>
+                                                    <p class="label-text-alt text-base-content/70 pl-8 max-w-prose" id="rag-lexical-stem-it-help" data-rag-i18n="RAG_LEXICAL_STEM_IT.help">In Italian text, singular and plural forms of a word match each other in keyword search. Other languages are not changed.</p>
+                                                </div>
+                                            </div>
+                                            <div class="space-y-4 border-t border-base-300 pt-4">
+                                                <div class="flex flex-col gap-1">
+                                                    <label class="flex items-center gap-2 cursor-pointer">
+                                                        <input type="checkbox" id="RAG_VERSION_SCOPE" name="RAG_VERSION_SCOPE" class="checkbox checkbox-primary" aria-describedby="rag-version-scope-help">
+                                                        <span class="label-text"><span data-rag-i18n="RAG_VERSION_SCOPE.label">Version scope filter</span> (<span translate="no">RAG_VERSION_SCOPE</span>)</span>
+                                                    </label>
+                                                    <p class="label-text-alt text-base-content/70 pl-8 max-w-prose" id="rag-version-scope-help" data-rag-i18n="RAG_VERSION_SCOPE.help">Lets a request ask for earlier versions of a document: all versions, or those of a period. A request that does not ask gets current versions only.</p>
+                                                </div>
+                                            </div>
+                                            <div class="space-y-4 border-t border-base-300 pt-4">
+                                                <div class="flex flex-col gap-1">
+                                                    <label class="flex items-center gap-2 cursor-pointer">
+                                                        <input type="checkbox" id="RAG_TABLE_LOOKUP" name="RAG_TABLE_LOOKUP" class="checkbox checkbox-primary" aria-describedby="rag-table-lookup-help">
+                                                        <span class="label-text"><span data-rag-i18n="RAG_TABLE_LOOKUP.label">Table row lookup</span> (<span translate="no">RAG_TABLE_LOOKUP</span>)</span>
+                                                    </label>
+                                                    <p class="label-text-alt text-base-content/70 pl-8 max-w-prose" id="rag-table-lookup-help" data-rag-i18n="RAG_TABLE_LOOKUP.help">Finds the table rows whose cells match the values named in a question and adds them to the results, with the table header.</p>
+                                                </div>
+                                            </div>
+                                            <div class="space-y-4 border-t border-base-300 pt-4">
+                                                <div class="flex flex-col gap-1">
+                                                    <label class="flex items-center gap-2 cursor-pointer">
+                                                        <input type="checkbox" id="RAG_DUP_CLUSTERS" name="RAG_DUP_CLUSTERS" class="checkbox checkbox-primary" aria-describedby="rag-dup-clusters-help">
+                                                        <span class="label-text"><span data-rag-i18n="RAG_DUP_CLUSTERS.label">Duplicate clusters</span> (<span translate="no">RAG_DUP_CLUSTERS</span>)</span>
+                                                    </label>
+                                                    <p class="label-text-alt text-base-content/70 pl-8 max-w-prose" id="rag-dup-clusters-help" data-rag-i18n="RAG_DUP_CLUSTERS.help">Groups passages that repeat, word for word or nearly, across documents of one workspace. Every document keeps its own copy.</p>
+                                                </div>
+                                                <div class="form-control">
+                                                    <label class="label" for="RAG_RESULT_DIVERSITY"><span class="label-text" data-rag-i18n="RAG_RESULT_DIVERSITY.label">Result diversity</span></label>
+                                                    <select id="RAG_RESULT_DIVERSITY" name="RAG_RESULT_DIVERSITY" translate="no" aria-describedby="rag-result-diversity-help" class="select select-bordered w-full max-w-xs">
+                                                        <option value="off" selected>off</option>
+                                                        <option value="collapse">collapse</option>
+                                                        <option value="mmr">mmr</option>
+                                                    </select>
+                                                    <p class="label-text-alt text-base-content/70 max-w-prose mt-1" id="rag-result-diversity-help" data-rag-i18n="RAG_RESULT_DIVERSITY.help"><code class="font-mono text-xs" translate="no">off</code> keeps every result. <code class="font-mono text-xs" translate="no">collapse</code> keeps the best passage of each duplicate cluster and lists the other documents under its citation. <code class="font-mono text-xs" translate="no">mmr</code> does the same, then prefers passages that differ from each other.</p>
+                                                </div>
+                                            </div>
+                                            <div class="space-y-4 border-t border-base-300 pt-4">
+                                                <div class="flex flex-col gap-1">
+                                                    <label class="flex items-center gap-2 cursor-pointer">
+                                                        <input type="checkbox" id="RAG_IDENTIFIER_INDEX" name="RAG_IDENTIFIER_INDEX" class="checkbox checkbox-primary" aria-describedby="rag-identifier-index-help">
+                                                        <span class="label-text"><span data-rag-i18n="RAG_IDENTIFIER_INDEX.label">Identifier index</span> (<span translate="no">RAG_IDENTIFIER_INDEX</span>)</span>
+                                                    </label>
+                                                    <p class="label-text-alt text-base-content/70 pl-8 max-w-prose" id="rag-identifier-index-help" data-rag-i18n="RAG_IDENTIFIER_INDEX.help">Stores the identifiers found in each passage in one normalized form, so different spellings of one identifier match each other.</p>
+                                                </div>
+                                                <div class="flex flex-col gap-1">
+                                                    <label class="flex items-center gap-2 cursor-pointer">
+                                                        <input type="checkbox" id="RAG_IDENTIFIER_FILTER" name="RAG_IDENTIFIER_FILTER" class="checkbox checkbox-primary" aria-describedby="rag-identifier-filter-help">
+                                                        <span class="label-text"><span data-rag-i18n="RAG_IDENTIFIER_FILTER.label">Identifier filter</span> (<span translate="no">RAG_IDENTIFIER_FILTER</span>)</span>
+                                                    </label>
+                                                    <p class="label-text-alt text-base-content/70 pl-8 max-w-prose" id="rag-identifier-filter-help" data-rag-i18n="RAG_IDENTIFIER_FILTER.help">When a question names an identifier this workspace has, retrieval is limited to the passages that carry it, and passages about a look-alike identifier are left out. Needs the identifier index.</p>
+                                                </div>
+                                            </div>
+                                        </div>
+
                                         <div class="form-control mb-4">
                                             <label class="label">
                                                 <span class="label-text">Embedded chat tenant</span>

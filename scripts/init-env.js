@@ -379,6 +379,22 @@ RAG_HNSW_ITERATIVE_SCAN=off
 RAG_EXACT_SCAN_CUTOFF=0
 # Query translation before lexical tokenization
 RAG_LEXICAL_TRANSLATION=false
+# Dictionary terms match as single lexical tokens (needs relex)
+RAG_LEXICAL_DICTIONARY=false
+# Italian stemming in lexical text (needs relex)
+RAG_LEXICAL_STEM_IT=false
+# Requests may ask for earlier document versions (needs RAG_LEXICAL_SEARCH=true)
+RAG_VERSION_SCOPE=false
+# Structured table row lookup (needs the table-rows backfill)
+RAG_TABLE_LOOKUP=false
+# Group near-duplicate passages across documents (needs the dup-cluster backfill)
+RAG_DUP_CLUSTERS=false
+# Result diversity: off | collapse | mmr
+RAG_RESULT_DIVERSITY=off
+# Store normalized identifiers per passage (needs the identifier backfill)
+RAG_IDENTIFIER_INDEX=false
+# Limit retrieval to passages carrying a named identifier (needs RAG_IDENTIFIER_INDEX=true)
+RAG_IDENTIFIER_FILTER=false
 # Emergency override for pool/cap/topk (operator only)
 RAG_RETRIEVAL_PARAMS_OVERRIDE=
 # Tenant for embedded chat: s:default | o:<uuid> | u:<uuid> (empty means s:default in single-tenant, fails closed in multi-tenant)
