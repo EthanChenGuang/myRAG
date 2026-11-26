@@ -345,6 +345,8 @@ export type {
 } from './ingest/scopes/admin';
 export { activeUploadVocabulary, uploadScopesEnabled, validateUploadScopes, warnUploadScopesIgnored } from './ingest/scopes/upload';
 export type { UploadScopeFailure, UploadVocabularyEntry, ValidateUploadScopesResult } from './ingest/scopes/upload';
+export { attributesFormField, uploadAttributesRefusal, validateUploadAttributes } from './ingest/attributes/apply';
+export type { UploadAttributesRefusal, ValidateUploadAttributesResult } from './ingest/attributes/apply';
 export {
   confirmSupersession,
   dismissSupersession,

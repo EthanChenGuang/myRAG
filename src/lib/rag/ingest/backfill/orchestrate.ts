@@ -660,6 +660,7 @@ export async function runBackfill(request: BackfillRequest, deps: OrchestrateDep
 
   // D-33 step 1: inventory and dedupe; the opened streams are kept by source key for the enqueue.
   const openers = new Map<string, SourceItem['open']>();
+  const attributesByKey = new Map<string, NonNullable<SourceItem['attributes']>>();
   let rejected = 0;
   const sourceDeps: BackfillSourceDeps = {
     ...(deps.sourceDeps ?? (row.sourceKind === 'bucket' ? defaultSourceDeps() : {})),
@@ -679,11 +680,15 @@ export async function runBackfill(request: BackfillRequest, deps: OrchestrateDep
   async function* remembered(): AsyncGenerator<SourceItem> {
     for await (const item of listed) {
       openers.set(item.sourceKey, item.open.bind(item));
+      if (item.attributes !== undefined) attributesByKey.set(item.sourceKey, item.attributes);
       yield item;
     }
   }
   const inv = await inventory(batch, remembered(), { rpc, signal });
-  const entries: RunEntry[] = inv.entries.map((entry) => ({ ...entry, open: openers.get(entry.sourceKey) as SourceItem['open'] }));
+  const entries: RunEntry[] = inv.entries.map((entry) => {
+    const attributes = attributesByKey.get(entry.sourceKey);
+    return { ...entry, ...(attributes !== undefined ? { attributes } : {}), open: openers.get(entry.sourceKey) as SourceItem['open'] };
+  });
   io.out(
     `[Backfill] inventory: ${inv.totals.total} files, ${inv.totals.uniqueNew} new, ${inv.totals.inInventoryDuplicates} duplicates inside the source, ${inv.totals.existingDuplicates} already in the knowledge base, ${inv.totals.unreadable} unreadable${rejected > 0 ? `, ${rejected} refused` : ''}`,
   );

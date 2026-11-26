@@ -52,6 +52,7 @@ export function queuedInputRecordOf(input: IngestInput, ctx: StageContext): Queu
     kind: input.text !== undefined ? 'text' : 'file',
     ...(input.docType ? { docType: input.docType } : {}),
     ...(input.scopes && input.scopes.length > 0 ? { scopes: [...input.scopes] } : {}),
+    ...(input.attributes !== undefined ? { attributes: input.attributes } : {}),
     ...(input.replacesDocumentId ? { replacesDocumentId: input.replacesDocumentId } : {}),
     ...(input.options !== undefined ? { options: input.options } : {}),
     ...(input.typeChange !== undefined ? { typeChange: input.typeChange } : {}),
