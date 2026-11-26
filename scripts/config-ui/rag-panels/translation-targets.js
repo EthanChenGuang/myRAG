@@ -10,13 +10,14 @@ const TRANSLATION_TARGETS_LABELS = {
     'panel.description':
       'Stores a translation of each chunk for search only, so a question in another language can find it. Answers and citations always use the original text. Follows the workspace chosen under Document Processing.',
     'panel.workspaceDefault': 'Default workspace',
-    'targets.enable': "Translate this workspace's documents",
+    'targets.enable': 'Translate this workspace’s documents',
     'targets.legend': 'Translate into',
     'targets.needEnable': 'Turn on translation for this workspace to choose languages.',
     'targets.needOne': 'Choose at least one language to translate into.',
     'targets.unchanged': 'No changes to save.',
     'targets.deploymentOff':
-      "Document translation is off for this deployment, so targets can't be changed here. Turn on Document translation under Settings below and save all changes; targets can be chosen once the app runs with it on.",
+      'Document translation is off for this deployment, so targets can’t be changed here. Turn on Document translation under Settings below and save all changes; targets can be chosen once the app runs with it on.',
+    'targets.deploymentOffShort': 'Document translation is off for this deployment; turn it on under Settings below.',
     'targets.dataFlow': 'Chunk text is sent to the translation model set under Settings.',
     'targets.loading': 'Loading translation targets…',
     'targets.unavailable': 'Translation targets are unavailable right now. Select Reload panel in a moment.',
@@ -67,6 +68,7 @@ const TRANSLATION_TARGETS_LABELS = {
     'targets.needOne': '请至少选择一种目标语言。',
     'targets.unchanged': '没有需要保存的更改。',
     'targets.deploymentOff': '此部署的文档翻译已关闭，因此这里无法更改目标语言。请在下方“设置”中开启文档翻译并保存所有更改；应用以开启状态运行后即可选择目标语言。',
+    'targets.deploymentOffShort': '此部署的文档翻译已关闭；请在下方“设置”中开启。',
     'targets.dataFlow': '切块文本会发送给“设置”中指定的翻译模型。',
     'targets.loading': '正在加载翻译目标语言…',
     'targets.unavailable': '暂时无法获取翻译目标语言。请稍后选择“重新加载面板”。',
@@ -110,7 +112,7 @@ const TRANSLATION_TARGETS_LABELS = {
   it: {
     'panel.title': 'Lingue di traduzione',
     'panel.description':
-      "Salva una traduzione di ogni chunk solo per la ricerca, così una domanda in un'altra lingua può trovarlo. Risposte e citazioni usano sempre il testo originale. Segue lo spazio di lavoro scelto in Document Processing.",
+      'Salva una traduzione di ogni chunk solo per la ricerca, così una domanda in un’altra lingua può trovarlo. Risposte e citazioni usano sempre il testo originale. Segue lo spazio di lavoro scelto in Document Processing.',
     'panel.workspaceDefault': 'Spazio di lavoro predefinito',
     'targets.enable': 'Traduci i documenti di questo spazio di lavoro',
     'targets.legend': 'Traduci in',
@@ -118,7 +120,8 @@ const TRANSLATION_TARGETS_LABELS = {
     'targets.needOne': 'Scegli almeno una lingua di destinazione.',
     'targets.unchanged': 'Nessuna modifica da salvare.',
     'targets.deploymentOff':
-      "La traduzione dei documenti è disattivata per questa installazione, quindi qui le lingue non si possono cambiare. Attiva Traduzione dei documenti in Impostazioni qui sotto e salva tutte le modifiche; potrai scegliere le lingue quando l'app sarà in esecuzione con la traduzione attiva.",
+      'La traduzione dei documenti è disattivata per questa installazione, quindi qui le lingue non si possono cambiare. Attiva Traduzione dei documenti in Impostazioni qui sotto e salva tutte le modifiche; potrai scegliere le lingue quando l’app sarà in esecuzione con la traduzione attiva.',
+    'targets.deploymentOffShort': 'La traduzione dei documenti è disattivata per questa installazione; attivala in Impostazioni qui sotto.',
     'targets.dataFlow': 'Il testo dei chunk viene inviato al modello di traduzione indicato in Impostazioni.',
     'targets.loading': 'Caricamento delle lingue di traduzione…',
     'targets.unavailable': 'Le lingue di traduzione non sono disponibili. Seleziona Ricarica pannello tra poco.',
@@ -134,7 +137,7 @@ const TRANSLATION_TARGETS_LABELS = {
     'action.saveTargets': 'Salva le lingue di traduzione',
     'action.saving': 'Salvataggio delle lingue…',
     'error.targetNotSupported': 'Non salvato. {language} non è tra le lingue supportate.',
-    'targets.monolingual': "Questa installazione supporta una sola lingua, quindi non c'è nulla in cui tradurre.",
+    'targets.monolingual': 'Questa installazione supporta una sola lingua, quindi non c’è nulla in cui tradurre.',
     'targets.stale': 'Il profilo di embedding è cambiato, quindi le traduzioni salvate non vengono usate nella ricerca. Esegui {command} per riutilizzarle.',
     'coverage.staleBadge': 'Non usate nella ricerca',
     'coverage.gaps': 'Alcuni chunk non sono stati tradotti perché un nome, un numero o un codice non sarebbe rimasto identico. Vengono comunque trovati nella lingua originale.',
@@ -519,7 +522,7 @@ class TranslationTargetsPanel {
     const enable = this.el('input', {
       className: 'checkbox checkbox-sm',
       id: 'rag-translation-targets-enabled',
-      attrs: { type: 'checkbox', 'data-translation-targets-enabled': '' },
+      attrs: { type: 'checkbox', name: 'rag-translation-targets-enabled', autocomplete: 'off', 'data-translation-targets-enabled': '' },
     });
     enable.checked = this.draft.enabled;
     enable.addEventListener('change', () => {
@@ -527,7 +530,7 @@ class TranslationTargetsPanel {
       this.clearFieldError();
       this.update();
     });
-    const enableRow = this.el('label', { className: 'label cursor-pointer justify-start gap-3 w-fit', attrs: { for: 'rag-translation-targets-enabled' } }, [
+    const enableRow = this.el('label', { className: 'label cursor-pointer justify-start gap-3 w-fit min-h-11 md:min-h-8', attrs: { for: 'rag-translation-targets-enabled' } }, [
       enable,
       this.el('span', { className: 'label-text', text: this.t('targets.enable') }),
     ]);
@@ -540,7 +543,7 @@ class TranslationTargetsPanel {
       const box = this.el('input', {
         className: 'checkbox checkbox-sm',
         id,
-        attrs: { type: 'checkbox', value: language.code, 'data-translation-targets-target': language.code },
+        attrs: { type: 'checkbox', name: 'rag-translation-targets-target', value: language.code, autocomplete: 'off', 'data-translation-targets-target': language.code },
       });
       box.checked = this.draft.targets.has(language.code);
       box.addEventListener('change', () => {
@@ -550,7 +553,7 @@ class TranslationTargetsPanel {
         this.update();
       });
       boxes.push(box);
-      return this.el('label', { className: 'label cursor-pointer justify-start gap-2 min-h-8 py-1', attrs: { for: id } }, [
+      return this.el('label', { className: 'label cursor-pointer justify-start gap-2 min-h-11 md:min-h-8 py-1', attrs: { for: id } }, [
         box,
         this.el('span', { className: 'label-text', text: language.name, attrs: { lang: language.code } }),
         ' ',
@@ -558,7 +561,7 @@ class TranslationTargetsPanel {
       ]);
     });
     const needEnable = this.el('p', { className: 'text-sm text-base-content/70 mt-1', id: needEnableId, text: this.t('targets.needEnable') });
-    const error = this.el('p', { className: 'text-sm text-error mt-1', id: errorId, attrs: { role: 'alert' } });
+    const error = this.el('p', { className: 'text-sm text-error mt-1', id: errorId });
     const fieldset = this.el('fieldset', { className: 'min-w-0', attrs: { 'aria-describedby': needEnableId + ' ' + errorId } }, [
       this.el('legend', { className: 'text-sm font-semibold mb-1', text: this.t('targets.legend') }),
       this.el('div', { className: 'flex flex-wrap gap-x-6 gap-y-1' }, options),
@@ -573,7 +576,7 @@ class TranslationTargetsPanel {
 
     const reasonId = 'rag-translation-targets-save-reason';
     const save = this.el('button', {
-      className: 'btn btn-primary btn-sm',
+      className: 'btn btn-primary md:btn-sm',
       text: this.t('action.saveTargets'),
       attrs: { type: 'button', 'aria-describedby': reasonId },
     });
@@ -595,7 +598,7 @@ class TranslationTargetsPanel {
 
   saveBlockedReason() {
     if (!this.view) return null;
-    if (!this.view.deploymentOn) return this.t('targets.deploymentOff');
+    if (!this.view.deploymentOn) return this.t('targets.deploymentOffShort');
     if (!this.changed()) return this.t('targets.unchanged');
     if (this.draft.enabled && this.draft.targets.size === 0) return this.t('targets.needOne');
     return null;
@@ -614,6 +617,11 @@ class TranslationTargetsPanel {
     const reason = this.saveBlockedReason();
     c.save.disabled = Boolean(reason);
     c.reason.textContent = reason || '';
+  }
+
+  focusFirstTarget() {
+    const box = this.controls && this.controls.boxes.find((b) => !b.disabled);
+    if (box && typeof box.focus === 'function') box.focus();
   }
 
   clearFieldError() {
@@ -663,6 +671,7 @@ class TranslationTargetsPanel {
       if (mapped.kind === 'invalid' && mapped.field === 'targets') this.fieldError = message;
     }
     this.update();
+    if (this.fieldError) this.focusFirstTarget();
     this.announce(message, true);
   }
 
@@ -677,7 +686,7 @@ class TranslationTargetsPanel {
       return;
     }
     const ui = this.ui();
-    const th = (text) => this.el('th', { className: 'font-semibold', text, attrs: { scope: 'col' } });
+    const th = (text) => this.el('th', { className: 'font-semibold whitespace-normal align-bottom', text, attrs: { scope: 'col' } });
     const rows = view.coverage.map((row) =>
       this.el('tr', {}, [
         this.el('td', {}, [
@@ -687,13 +696,13 @@ class TranslationTargetsPanel {
           ]),
         ]),
         this.el('td', {
-          className: 'tabular-nums whitespace-nowrap',
+          className: 'tabular-nums',
           text: this.t('coverage.value', { done: ui.ragUiFormatNumber(row.done, this.locale), total: ui.ragUiFormatNumber(row.total, this.locale) }),
         }),
         this.el('td', { className: 'tabular-nums' }, [row.gaps === null ? this.missing('gaps.none') : ui.ragUiFormatNumber(row.gaps, this.locale)]),
       ]),
     );
-    const table = this.el('table', { className: 'table table-sm' }, [
+    const table = this.el('table', { className: 'table table-sm w-auto max-w-full' }, [
       this.el('thead', {}, [this.el('tr', {}, [th(this.t('col.language')), th(this.t('col.translated')), th(this.t('col.gaps'))])]),
       this.el('tbody', {}, rows),
     ]);
@@ -752,7 +761,7 @@ class TranslationTargetsPanel {
     const clipboard = typeof navigator !== 'undefined' && navigator ? navigator.clipboard : null;
     if (!clipboard || typeof clipboard.writeText !== 'function') return null;
     const button = this.el('button', {
-      className: 'btn btn-ghost btn-sm',
+      className: 'btn btn-ghost md:btn-sm',
       text: this.t('action.copy'),
       attrs: { type: 'button', 'aria-label': this.t('action.copyAria', { name: this.t(nameKey) }) },
     });
