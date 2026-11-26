@@ -191,7 +191,7 @@ describe('hybrid_search_chunks without the flag equals the Phase 4 function', ()
     }
 
     const sig =
-      'text, text, vector, text[], integer, integer, date, date, text[], uuid[], text[], text[], text, integer, text[], text, numeric, numeric, text, jsonb, boolean, text[], boolean, date';
+      'text, text, vector, text[], integer, integer, date, date, text[], uuid[], text[], text[], text, integer, text[], text, numeric, numeric, text, jsonb, boolean, text[], boolean, date, jsonb, text[]';
     await db.exec(`DROP FUNCTION public.hybrid_search_chunks(${sig})`);
     await db.exec(fs.readFileSync(path.join(REPO_ROOT, 'supabase/migrations/0407_hybrid_search_chunks.sql'), 'utf8'));
     try {
@@ -200,8 +200,9 @@ describe('hybrid_search_chunks without the flag equals the Phase 4 function', ()
       }
     } finally {
       await db.exec(fs.readFileSync(path.join(REPO_ROOT, 'supabase/migrations/0802_hybrid_search_scopes_dates_und.sql'), 'utf8'));
+      await db.exec(fs.readFileSync(path.join(REPO_ROOT, 'supabase/migrations/0856_hybrid_search_42.sql'), 'utf8'));
     }
     const count = await db.query<{ n: number }>("SELECT count(*)::int AS n FROM pg_proc WHERE proname = 'hybrid_search_chunks'");
-    assert.equal(count.rows[0]?.n, 1, 're-applying 0802 on top of 0407 leaves one function');
+    assert.equal(count.rows[0]?.n, 1, 're-applying 0802 and 0856 on top of 0407 leaves one function');
   });
 });
