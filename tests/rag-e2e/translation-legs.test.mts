@@ -40,6 +40,7 @@ describe('translation legs through the v2 pipeline, two tenants (XLG-04, D-30)',
   let blocksModule: typeof import('@/lib/rag/generation/citations/blocks');
   let recordModule: typeof import('@/lib/rag/generation/citations/record');
   let floorModule: typeof import('@/lib/rag/refusal/floor');
+  let languageSettings: typeof import('@/lib/rag/lang/settings');
   const saved: Record<string, string | undefined> = {};
 
   async function seedItalian(userId: string, tenantKey: string, doc: { docId: string; chunkId: string }) {
@@ -90,6 +91,7 @@ describe('translation legs through the v2 pipeline, two tenants (XLG-04, D-30)',
     blocksModule = await import('@/lib/rag/generation/citations/blocks');
     recordModule = await import('@/lib/rag/generation/citations/record');
     floorModule = await import('@/lib/rag/refusal/floor');
+    languageSettings = await import('@/lib/rag/lang/settings');
     // The fixture embedder scores across languages near zero; a fixture floor keeps the eval profile's floor out of the way (eval only).
     floorModule.setEvalScoreCalibration({ context_threshold: 0.01, context_image_threshold: 0.01 });
     configModule.resetRagConfigForTests();
@@ -127,6 +129,7 @@ describe('translation legs through the v2 pipeline, two tenants (XLG-04, D-30)',
       process.env[name] = value;
     }
     configModule.resetRagConfigForTests();
+    languageSettings.resetLanguageSettingsForTests();
     try {
       const scope = await scopeOf(userId);
       const start = edge.calls.length;
@@ -146,8 +149,36 @@ describe('translation legs through the v2 pipeline, two tenants (XLG-04, D-30)',
         else process.env[name] = value;
       }
       configModule.resetRagConfigForTests();
+      languageSettings.resetLanguageSettingsForTests();
     }
   };
+
+  const writeTranslation = () =>
+    fixture.db.query('SELECT rag_write_chunk_translations($1, $2::jsonb)', [
+      TENANT_A,
+      JSON.stringify([
+        {
+          chunk_id: DOC_A.chunkId,
+          language: 'en',
+          content: TRANSLATED_EN,
+          lexical_text: TRANSLATED_EN.toLowerCase(),
+          source_content_hash: 'fixture-source-hash',
+          model: 'fixture-translator',
+          profile_id: LEGACY,
+          embedding: embedText(TRANSLATED_EN),
+          embedding_model: 'text-embedding-3-small',
+        },
+      ]),
+    ]);
+  const translationRpcs = (calls: string[]) =>
+    calls.filter((path) => path.endsWith('/rpc/hybrid_search_translations') || path.endsWith('/rpc/rag_translation_query_state'));
+  const searchStage = (result: RetrievalResult) => result.stages.find((entry) => entry.name === 'search');
+  const view = (result: RetrievalResult) => ({
+    status: result.status,
+    candidates: result.candidates.map((entry) => [entry.chunk_id, entry.similarity, entry.legs]),
+    hash: result.retrievalConfigHash,
+    search: { status: searchStage(result)?.status, detail: searchStage(result)?.detail, counts: searchStage(result)?.counts },
+  });
 
   const translationCalls = (calls: string[]) => calls.filter((path) => path.endsWith('/rpc/hybrid_search_translations'));
 
@@ -177,4 +208,58 @@ describe('translation legs through the v2 pipeline, two tenants (XLG-04, D-30)',
     assert.ok(!result.candidates.some((entry) => entry.chunk_id === DOC_A.chunkId));
     assert.ok(!result.candidates.some((entry) => Object.keys(entry.legs ?? {}).some((leg) => leg.includes('_tr:'))));
   });
+
+  test('with RAG_DOC_TRANSLATION off no translation RPC is made; a tenant without translations keeps the switch-off result and hash', async () => {
+    const offA = await retrieve(TWO_TENANT_IDS.userA, { RAG_DOC_TRANSLATION: 'off' }, 'eval');
+    assert.deepEqual(translationRpcs(offA.calls), []);
+    assert.ok(!offA.result.candidates.some((entry) => Object.keys(entry.legs ?? {}).some((leg) => leg.includes('_tr:'))));
+    const onA = await retrieve(TWO_TENANT_IDS.userA, {}, 'eval');
+    assert.notEqual(onA.result.retrievalConfigHash, offA.result.retrievalConfigHash, 'a request that ran the legs hashes the switch');
+
+    const offB = await retrieve(TWO_TENANT_IDS.userB, { RAG_DOC_TRANSLATION: 'off' });
+    const onB = await retrieve(TWO_TENANT_IDS.userB);
+    assert.deepEqual(view(onB.result), view(offB.result));
+    assert.deepEqual(
+      onB.calls.filter((path) => !path.endsWith('/rpc/rag_translation_query_state')),
+      offB.calls,
+      'the only extra request is the one state lookup',
+    );
+  });
+
+  test('monolingual mode, the voice profile and the legacy pipeline make no translation RPC', async () => {
+    for (const run of [
+      await retrieve(TWO_TENANT_IDS.userA, { RAG_SUPPORTED_LANGUAGES: 'en', RAG_PRIMARY_LANGUAGE: 'en' }, 'eval'),
+      await retrieve(TWO_TENANT_IDS.userA, {}, 'voice'),
+      await retrieve(TWO_TENANT_IDS.userA, { RAG_PIPELINE: 'legacy' }, 'chat'),
+    ]) {
+      assert.deepEqual(translationRpcs(run.calls), []);
+    }
+  });
+
+  test('a tenant whose setting is disabled gets no translation search', async () => {
+    await fixture.db.query('UPDATE rag_translation_settings SET enabled = false WHERE tenant_key = $1', [TENANT_A]);
+    try {
+      const { result, calls } = await retrieve(TWO_TENANT_IDS.userA, {}, 'eval');
+      assert.equal(translationCalls(calls).length, 0);
+      assert.equal(searchStage(result)?.detail, undefined);
+    } finally {
+      await fixture.db.query('UPDATE rag_translation_settings SET enabled = true WHERE tenant_key = $1', [TENANT_A]);
+    }
+  });
+
+  test('after a profile flip (no vector under the active profile) the legs are skipped as translation_stale until re-embedded', async () => {
+    await fixture.db.query('DELETE FROM chunk_translation_embeddings WHERE tenant_key = $1', [TENANT_A]);
+    try {
+      const { result, calls } = await retrieve(TWO_TENANT_IDS.userA, {}, 'eval');
+      assert.equal(translationCalls(calls).length, 0);
+      assert.equal(searchStage(result)?.status, 'ok');
+      assert.equal(searchStage(result)?.detail, 'translation_stale');
+      assert.notEqual(result.status, 'error');
+    } finally {
+      await writeTranslation();
+    }
+    const { calls } = await retrieve(TWO_TENANT_IDS.userA, {}, 'eval');
+    assert.equal(translationCalls(calls).length, 1, 're-embedded translations are searched again');
+  });
 });
+
