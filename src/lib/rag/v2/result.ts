@@ -27,6 +27,7 @@ import {
   type TerminologyHashStage,
 } from './config-hash';
 import { terminologyParams } from '../terminology/expand';
+import { recordMiss } from '../terminology/miss-log';
 import { effectiveRetrievalParams } from './retrieval-params';
 import { effectiveTuningParams, tuningHashComponent } from './tuning-params';
 import type { TranslationHashField } from './translation-legs';
@@ -294,8 +295,9 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
     ...(ctx.cacheTicket && profile !== 'voice' ? { cacheTicket: ctx.cacheTicket } : {}),
   };
 
+  let result: RetrievalResult;
   if (profile === 'voice') {
-    return {
+    result = {
       ...base,
       candidates: outputCandidates,
       voice: voice ?? { results: [], source_images: [] },
@@ -303,26 +305,42 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
       refusal,
       queryLanguage,
     };
+  } else if (!assembly) {
+    result = { ...base, candidates: outputCandidates, retrievalConfigHash, refusal, queryLanguage };
+  } else {
+    result = {
+      ...base,
+      candidates: outputCandidates,
+      context: assembly.context,
+      usedDocuments: assembly.usedDocuments,
+      sourceImages: assembly.sourceImages,
+      links: assembly.links,
+      relevantChunks: assembly.relevantChunks,
+      kept: assembly.kept,
+      queryTerms: assembly.queryTerms,
+      refusalCandidate: assembly.refusalCandidate,
+      blocks: assembly.blocks,
+      retrievalConfigHash,
+      refusal,
+      queryLanguage,
+    };
   }
 
-  if (!assembly) {
-    return { ...base, candidates: outputCandidates, retrievalConfigHash, refusal, queryLanguage };
-  }
-
-  return {
-    ...base,
-    candidates: outputCandidates,
-    context: assembly.context,
-    usedDocuments: assembly.usedDocuments,
-    sourceImages: assembly.sourceImages,
-    links: assembly.links,
-    relevantChunks: assembly.relevantChunks,
-    kept: assembly.kept,
-    queryTerms: assembly.queryTerms,
-    refusalCandidate: assembly.refusalCandidate,
-    blocks: assembly.blocks,
-    retrievalConfigHash,
-    refusal,
+  // D-25: fire-and-forget; the response never waits on the miss log.
+  void recordMiss({
+    enabled: config.v2.terminologyMining,
+    profile,
+    scope: input.scope,
+    query: input.query,
     queryLanguage,
-  };
+    status,
+    reason,
+    refusal,
+    candidates: outputCandidates,
+    scoredCandidates: refusal?.decision === 'refuse' ? (preRefusalCandidates ?? candidates) : outputCandidates,
+    ...(ctx.terminology ? { terminology: ctx.terminology } : {}),
+    retrievalConfigHash,
+  });
+
+  return result;
 }
