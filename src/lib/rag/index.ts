@@ -375,6 +375,21 @@ export { escapeToolOutput, scanToolOutput, wrapToolResultsForPrompt } from './se
 export { FingerprintImpactError, computeFingerprintCoverage, computeFingerprintImpact, isSettingName } from './ingest/fingerprint/impact';
 export type { FingerprintCoverage, PendingRebuild, RebuildStart } from './ingest/fingerprint/impact';
 export {
+  RebuildInputError,
+  RebuildNotFound,
+  RebuildRefused,
+  RebuildUnavailable,
+  activateRebuild,
+  getRebuildRun,
+  listRebuildRuns,
+  recordRebuildEvidence,
+  rollbackRebuild,
+  startRebuild,
+} from './ingest/rebuild/run';
+export type { RebuildActivation, RebuildRunRow, RebuildRunState, StartRebuildResult } from './ingest/rebuild/run';
+export { MECHANISM_COMMANDS } from './ingest/fingerprint/impact';
+export { REBUILDABLE_MECHANISMS, isRebuildableMechanism } from './ingest/rebuild/plan';
+export {
   effectiveLogMode,
   readTenantFeedbackSettings,
   setTenantFeedbackSettings,

@@ -237,13 +237,13 @@ export const MECHANISM_COMMANDS: Readonly<Record<RebuildMechanism, string>> = Ob
 export const BACKFILL_COMMAND = 'npm run rag:fingerprint -- backfill';
 
 /**
- * How each rebuild starts (UI-SPEC finding 5, D-11): rechunk and recaption build a chunking profile through the existing build route; reparse
- * needs the queue (RAG_INGEST_ASYNC=on); re-embed, relex, retranslate and the security rescan are commands.
+ * How each rebuild starts (UI-SPEC finding 5, D-11): rechunk builds a chunking profile through the rebuild route; reparse needs the queue
+ * (RAG_INGEST_ASYNC=on); re-embed, relex, recaption (the plan 03.2-33 recaption job, which calls the vision model per picture), retranslate
+ * and the security rescan are commands.
  */
 export function startOf(mechanism: RebuildMechanism, ingestAsync: boolean): RebuildStart {
   switch (mechanism) {
     case 'rechunk':
-    case 'recaption':
       return 'ui';
     case 'reparse':
       return ingestAsync ? 'ui' : 'needs_async';
@@ -266,13 +266,18 @@ export interface FingerprintCoverage {
   total_current: number;
 }
 
+/** The saved values the coverage compares against: the variables the fingerprint records and the primary language. */
+export function coverageProposal(saved: Record<string, string>): Record<string, string> {
+  return pick(saved, [...FINGERPRINT_VARIABLES, LANGUAGE_COMPANION]);
+}
+
 /** GET /api/rag/admin/ingest-fingerprint: documents left on previous settings per mechanism, under the saved values. */
 export function coverageFromGroups(
   groups: readonly FingerprintGroup[],
   saved: Record<string, string>,
   ingestAsync: boolean,
 ): FingerprintCoverage {
-  const counts = countImpact(groups, pick(saved, [...FINGERPRINT_VARIABLES, LANGUAGE_COMPANION]));
+  const counts = countImpact(groups, coverageProposal(saved));
   const pending = REBUILD_MECHANISMS.map((mechanism): PendingRebuild => {
     const byDocType = Object.fromEntries(DOC_TYPES.map((docType) => [docType, counts.affected.get(mechanism)?.get(docType) ?? 0])) as Record<
       ImpactDocType,
