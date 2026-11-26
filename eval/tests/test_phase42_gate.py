@@ -176,7 +176,13 @@ def test_run_configs_load_through_the_typescript_run_config_loader(tmp_path):
     loaded = [json.loads(line) for line in result.stdout.splitlines() if line.startswith("{")]
     assert [entry["name"] for entry in loaded] == sorted(FEATURE_RUNS)
     for entry in loaded:
-        assert entry["overrides"] is None
+        if entry["name"] == "v2-diversity-mmr":
+            # Plan 04.2-29: rag_eval.sweep diversity --write-run-config stores the eval-only lambda here and nothing else.
+            overrides = entry["overrides"]
+            assert overrides is not None and overrides["diversity"]["mmr_lambda"] in (0.5, 0.6, 0.7, 0.8, 0.9)
+            assert all(value is None for key, value in overrides.items() if key != "diversity"), overrides
+        else:
+            assert entry["overrides"] is None
         for key, value in FEATURE_RUNS[entry["name"]].items():
             assert entry["env"][key] == value
 
