@@ -35,6 +35,7 @@ import {
   type AnswerGroundedness,
   type CitationSession,
   type ClaudeTurnFacts,
+  type RetrievalCacheContext,
   type RetrievalFilterInput,
   type RetrievalOptions,
   type RetrievalResult,
@@ -53,7 +54,6 @@ import {
   type EvalConversationTurn,
 } from '@/lib/rag-eval/answer';
 import type { CitationRecord } from '@/lib/rag-eval/contracts.generated';
-import type { RetrievalCacheContext } from '@/lib/rag/types';
 
 export const runtime = 'nodejs';
 

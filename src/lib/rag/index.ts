@@ -88,6 +88,7 @@ export type {
   LogOutcome,
   LogOutcomeValue,
   Profile,
+  RetrievalCacheContext,
   RetrievalOptions,
   RetrievalResult,
   RetrievalStatus,
