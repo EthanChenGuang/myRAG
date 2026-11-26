@@ -7,7 +7,7 @@ import { detectorsConfigVersion, loadInjectionDetectorConfig, type Detector, typ
 import { injectionRulesVersion, scanText } from './injection-rules';
 import { lakeraAllowed } from './lakera';
 import type { PromptGuardItem, PromptGuardOutcome } from './prompt-guard-client';
-import { buildSecurityEvent, type SecurityEvent } from './security-events';
+import { buildSecurityEvent, recordSecurityEvents, type SecurityEvent } from './security-events';
 import { createVerdictCache, verdictCacheKey, type VerdictCache } from './verdict-cache';
 import type { InjectionItemRecord, InjectionSummary, Profile, ReferencedSection, ReferencedState } from '../types';
 
@@ -341,6 +341,19 @@ export function injectionSecurityEvents(
       }),
     );
   }
+  return events;
+}
+
+/**
+ * Builds the request's retrieval_injection events and records them in one call after the response (D-43); eval runs record
+ * nothing, so a fixture run never counts towards an uploader alert or hold. Returns the events for the log line.
+ */
+export function recordInjectionEvents(
+  summary: InjectionSummary,
+  context: { tenantKey: string; traceId: string | null; uploaders?: ReadonlyMap<string, string | null>; profile: Profile },
+): SecurityEvent[] {
+  const events = injectionSecurityEvents(summary, context);
+  if (events.length > 0 && context.profile !== 'eval') recordSecurityEvents({ tenantKey: context.tenantKey, events, traceId: context.traceId });
   return events;
 }
 

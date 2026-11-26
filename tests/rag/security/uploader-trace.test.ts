@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runRetrieval } from '@/lib/rag';
 import { readSecurityConfig } from '@/lib/rag/security/config';
+import { recordInjectionEvents } from '@/lib/rag/security/injection-check';
 import { recordSecurityEvents } from '@/lib/rag/security/security-events';
 import { mintScope } from '@/lib/rag/tenant/scope';
 import type { RetrievalResult } from '@/lib/rag/types';
@@ -352,5 +353,33 @@ describe('the overview documents read (D-44)', () => {
     vi.stubEnv('RAG_SECURITY_EVENTS', 'true');
     await fetchOverviewDocuments(chunks, { admin: on.admin, signal: new AbortController().signal });
     expect(on.selects).toEqual([`${BASE_SELECT}, user_id`]);
+  });
+});
+
+describe('recordInjectionEvents', () => {
+  const summary = {
+    mode: 'drop' as const,
+    checkedCount: 1,
+    flaggedChunkIds: [CHUNK_BAD],
+    flaggedReferenceIds: [],
+    droppedChunkIds: [CHUNK_BAD],
+    droppedReferenceIds: [],
+    downweightedChunkIds: [],
+    ruleIds: ['inj-en-08'],
+    detectorsUnavailable: [],
+    flagged: true,
+    items: [{ kind: 'chunk' as const, chunkIds: [CHUNK_BAD], documentId: DOC_C, flagged: true, detectors: ['rules'], ruleIds: ['inj-en-08'] }],
+  };
+
+  beforeEach(() => vi.mocked(recordSecurityEvents).mockClear());
+
+  it('records for a request profile and never for an eval run', () => {
+    const uploaders = new Map([[DOC_C, USER_C]]);
+    const chatEvents = recordInjectionEvents(summary, { tenantKey: 's:default', traceId: null, uploaders, profile: 'chat' });
+    expect(chatEvents.map((entry) => entry.uploader_id)).toEqual([USER_C]);
+    expect(vi.mocked(recordSecurityEvents)).toHaveBeenCalledTimes(1);
+    const evalEvents = recordInjectionEvents(summary, { tenantKey: 's:default', traceId: null, uploaders, profile: 'eval' });
+    expect(evalEvents).toHaveLength(1);
+    expect(vi.mocked(recordSecurityEvents)).toHaveBeenCalledTimes(1);
   });
 });

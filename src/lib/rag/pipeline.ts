@@ -56,6 +56,7 @@ import {
   injectionVersions,
   releasedRulesFromRows,
   logInjectionSummary,
+  recordInjectionEvents,
   securityEventsOn,
   uploadersFromRows,
   runInjectionCheck,
@@ -69,7 +70,7 @@ import {
   type ItemCandidate,
   type ReleasedRules,
 } from './security/injection-check';
-import { recordSecurityEvents, securitySpanAttributes } from './security/security-events';
+import { securitySpanAttributes } from './security/security-events';
 import { exactIdStage, mergeExactCandidates } from './retrieval/exact-id';
 import { hybridRerank } from './rerank/local-hybrid';
 import { assertTenantScope, scopeKey, type TenantScope } from './tenant/scope';
@@ -383,10 +384,8 @@ export async function runInjectionStage<C extends ItemCandidate>(input: Injectio
   const applied: InjectionApplied<C> | null = checked.skipped ? held : checked.value;
   const stalled = checked.skipped && applied !== null;
   if (applied && securityContext) {
-    const events = injectionSecurityEvents(applied.summary, securityContext);
+    const events = recordInjectionEvents(applied.summary, { ...securityContext, profile: input.profile });
     logInjectionSummary(applied.summary, applied.counts, { traceId: input.collector.traceId, stalled, security: { tenant: securityContext.tenantKey, events } });
-    // Eval runs record nothing, so a fixture run never counts towards an uploader alert or hold.
-    if (events.length > 0 && input.profile !== 'eval') recordSecurityEvents({ tenantKey: securityContext.tenantKey, events, traceId: input.collector.traceId });
   } else if (applied) logInjectionSummary(applied.summary, applied.counts, { traceId: input.collector.traceId, stalled });
   return { applied, stalled };
 }
