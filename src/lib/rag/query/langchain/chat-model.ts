@@ -11,7 +11,9 @@ import {
 } from '@/lib/rag-eval/contracts.generated';
 import condensedQueryJson from '../../../../../rag-sidecar/schemas/CondensedQuery.schema.json';
 import hypotheticalDocumentJson from '../../../../../rag-sidecar/schemas/HypotheticalDocument.schema.json';
+import queryTranslationJson from '../../../../../rag-sidecar/schemas/QueryTranslation.schema.json';
 import queryVariantsJson from '../../../../../rag-sidecar/schemas/QueryVariants.schema.json';
+import subQuestionsJson from '../../../../../rag-sidecar/schemas/SubQuestions.schema.json';
 import { LangChainAdapterError, raceAbort, type LangChainTransform } from './errors';
 
 export const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
@@ -71,6 +73,28 @@ type ContractOutput<N extends StructuredContractName> = (typeof STRUCTURED_CONTR
 /** Every LangChain invoke gets the request signal and no callbacks. */
 export function invokeConfig(signal: AbortSignal): { signal: AbortSignal; callbacks: [] } {
   return { signal, callbacks: [] };
+}
+
+/** Generated JSON Schemas for the calls whose output the shared finisher validates (decompose, translate). */
+export const RAW_STRUCTURED_SCHEMAS = Object.freeze({
+  SubQuestions: subQuestionsJson as Record<string, unknown>,
+  QueryTranslation: queryTranslationJson as Record<string, unknown>,
+});
+
+/**
+ * One structured call whose raw output is returned unvalidated: the caller hands it to the shared finisher, which owns
+ * the schema check (method jsonSchema, so response_format; request signal and no callbacks).
+ */
+export async function structuredRaw(
+  chatModel: BaseChatModel,
+  json: Record<string, unknown>,
+  name: string,
+  messages: BaseMessageLike[],
+  signal: AbortSignal,
+  transform: LangChainTransform,
+): Promise<unknown> {
+  const runnable = chatModel.withStructuredOutput(json, { method: 'jsonSchema', name });
+  return raceAbort(() => runnable.invoke(messages, invokeConfig(signal)), signal, transform);
 }
 
 /**

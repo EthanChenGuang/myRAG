@@ -12,12 +12,16 @@ import multiQueryPrompt from '../prompts/langchain.multi-query.v1.json';
 import type {
   CondenseInput,
   CondenseResult,
+  DecomposeResult,
   ExpandResult,
   HydeResult,
   QueryTransformer,
   QueryTransformFinishers,
+  TransformDecomposeInput,
   TransformExpandInput,
   TransformHydeInput,
+  TransformTranslateInput,
+  TranslateResult,
 } from '../transformer';
 import { CaptureRetriever } from './capture';
 import { invokeConfig, structured, type ChatModelFactory } from './chat-model';
@@ -34,9 +38,6 @@ const HYDE_ID = 'langchain.hyde';
 export interface LangChainTransformerDeps {
   /** The shared post-check step (transformer.ts QUERY_TRANSFORM_FINISHERS), so results have exactly the native shapes. */
   finish: QueryTransformFinishers;
-  /** Served natively until plan 06-37 adds the LangChain decompose and translate. */
-  decompose: QueryTransformer['decompose'];
-  translate: QueryTransformer['translate'];
 }
 
 export interface CreateLangChainTransformerOptions {
@@ -140,12 +141,20 @@ export function createLangChainTransformer(options: CreateLangChainTransformerOp
     return finish.hyde(input, passage);
   }
 
+  async function decompose(_input: TransformDecomposeInput): Promise<DecomposeResult> {
+    return { variants: [], notCompound: false, skipped: [] };
+  }
+
+  async function translate(_input: TransformTranslateInput): Promise<TranslateResult> {
+    return { variants: [], skipped: [] };
+  }
+
   return Object.freeze({
     framework: 'langchain' as const,
     condense,
     expand,
     hyde,
-    decompose: options.deps.decompose,
-    translate: options.deps.translate,
+    decompose,
+    translate,
   });
 }
