@@ -74,7 +74,14 @@ function sortedDeep(value: unknown): unknown {
 
 /** A trace without its timings and the switch values it records: what a run returns for the item. */
 const normalized = (trace: Trace): string => {
-  const { stage_latency_ms: _latency, config_hash: _configHash, effective_config: _effectiveConfig, ...rest } = trace;
+  const {
+    stage_latency_ms: _latency,
+    ttft_ms: _ttft,
+    pre_generation_ms: _preGeneration,
+    config_hash: _configHash,
+    effective_config: _effectiveConfig,
+    ...rest
+  } = trace;
   return JSON.stringify(sortedDeep(rest));
 };
 
