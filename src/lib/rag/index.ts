@@ -26,6 +26,26 @@ export { isTenantScope, scopeKey } from './tenant/scope';
 export { evalScope } from './tenant/eval';
 export type { EvalScopeInput, EvalScopeOutcome } from './tenant/eval';
 export type { TenantScope } from './tenant/scope';
+export { getTerminologyLexicon, TerminologyUnavailableError } from './terminology/lexicon';
+export type { TerminologyLexicon, TerminologyLexiconOptions } from './terminology/lexicon';
+export {
+  createEntry as createTerminologyEntry,
+  deleteEntry as deleteTerminologyEntry,
+  getVersions as getTerminologyVersions,
+  listAudit as listTerminologyAudit,
+  listEntries as listTerminologyEntries,
+  setSuppression as setTerminologySuppression,
+  terminologyEnabledLanguages,
+  updateEntry as updateTerminologyEntry,
+} from './terminology/admin';
+export type {
+  TerminologyAdminEntry,
+  TerminologyAdminFailed,
+  TerminologyAdminFailure,
+  TerminologyAuditItem,
+  TerminologyEntryInput,
+  TerminologyLayerVersion,
+} from './terminology/admin';
 export { RetrievalBackendError } from './backend/supabase-rpc';
 export { getRetrievalBackend, resetRetrievalBackendForTests, setRetrievalBackendForTests } from './backend/registry';
 export { createPgvectorBackend } from './backend/pgvector';
