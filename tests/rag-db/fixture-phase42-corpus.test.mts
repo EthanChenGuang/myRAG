@@ -15,10 +15,10 @@ const MODES: DeploymentMode[] = ['single-tenant', 'multi-tenant'];
 
 // The committed prechunked corpus before plan 04.2-28 (eval/baselines/fixture-baseline.json). Plan 04.2-37 adds the Phase 4.2 fixture
 // files and re-records this hash and the two dump digests below together with the baselines.
-const COMMITTED_CORPUS_SHA256 = '2d1e198f73a6aba71d94eac166fc21f92853113267cfe00be6659e6c6010ca04';
+const COMMITTED_CORPUS_SHA256 = '4d9bd0210cebe95433e3065f19414c92f328f1c9f4530cf437647438b230309b';
 const COMMITTED_DUMP_SHA256: Record<DeploymentMode, string> = {
-  'single-tenant': 'efad865001851f52f3a9a98a6e0104b146b082f70e9091f9421816f55d4e102d',
-  'multi-tenant': 'b88227f69fe7479418dcd84230d7023f51e7d9de76c3be4cf7557120336d03f2',
+  'single-tenant': '6b56af41c33f75d1f3c2485cbd5b4475a0b57be80614a9421aefbe2b52c94a19',
+  'multi-tenant': '43fa4b39ab025122f0d5ae772c315bf4b1077aaa0dadce453a6e07e927bf3e4c',
 };
 const DUMP_DOCUMENT_COLUMNS =
   'id, filename, content, metadata, status, is_current, version, lineage_id, source, source_key, tenant_key, superseded_by, doc_type, user_id, created_at';
