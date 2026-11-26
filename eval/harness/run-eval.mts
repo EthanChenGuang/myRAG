@@ -115,6 +115,10 @@ export interface RunEvalOptions {
    * the nightly's Prompt Guard sidecar endpoint. Never recorded in the manifest.
    */
   appEnv?: Record<string, string>;
+  /** D-37: run the golden cache pairs (anchor stored, candidate checked) and write cache-pairs.json instead of item traces. */
+  cachePairs?: boolean;
+  /** With cachePairs and baseUrl: the live run seeds and probes a live cache (plan 06-46); refused without it. */
+  allowLiveCache?: boolean;
 }
 
 export interface RunEvalResult {
@@ -127,6 +131,8 @@ export interface RunEvalResult {
   edgeErrors: number;
   runPath: string;
   manifest: RunManifest;
+  /** Set by a cache-pairs run. */
+  cachePairsPath?: string;
 }
 
 /** An item filter names a document id that ingest mode did not write from any corpus file: the run stops instead of dropping it. */
