@@ -7,6 +7,7 @@ const CHECKBOXES = [
   'RAG_LEXICAL_DICTIONARY',
   'RAG_LEXICAL_STEM_IT',
   'RAG_VERSION_SCOPE',
+  'RAG_EMBED_VERSION_SCOPE',
   'RAG_TABLE_LOOKUP',
   'RAG_DUP_CLUSTERS',
   'RAG_IDENTIFIER_INDEX',
@@ -17,6 +18,7 @@ const D04_ORDER = [
   'RAG_LEXICAL_DICTIONARY',
   'RAG_LEXICAL_STEM_IT',
   'RAG_VERSION_SCOPE',
+  'RAG_EMBED_VERSION_SCOPE',
   'RAG_TABLE_LOOKUP',
   'RAG_DUP_CLUSTERS',
   'RAG_RESULT_DIVERSITY',
@@ -96,7 +98,21 @@ describe('Phase 4.2 retrieval tuning switches in the Config UI (plan 04.2-02, UI
     expect(options.filter((m) => m[2]).map((m) => m[1])).toEqual(['off']);
   });
 
-  it('the eight controls sit in the box in the D-04 order, in five groups', () => {
+  it('the embed version-scope switch directly follows RAG_VERSION_SCOPE in the Versions group (D-58)', () => {
+    const content = box();
+    const scope = content.indexOf('id="RAG_VERSION_SCOPE"');
+    const embed = content.indexOf('id="RAG_EMBED_VERSION_SCOPE"');
+    expect(scope).toBeGreaterThan(-1);
+    expect(embed).toBeGreaterThan(scope);
+    const between = content.slice(scope + 'id="RAG_VERSION_SCOPE"'.length, embed);
+    expect(between).not.toMatch(/<(input|select)\b/);
+    expect(between).not.toMatch(/border-t border-base-300 pt-4/);
+    const help = new RegExp(`<p\\b[^>]*\\bid="${helpId('RAG_EMBED_VERSION_SCOPE')}"[^>]*>([^<]*)</p>`).exec(content)?.[1] ?? '';
+    expect(help).toContain('Works only while the version scope filter is on');
+    expect(content).not.toContain('id="rag-embed-version-scope-stored"');
+  });
+
+  it('the nine controls sit in the box in the D-04 order, in five groups', () => {
     const content = box();
     const positions = D04_ORDER.map((id) => content.indexOf(`id="${id}"`));
     for (const [i, id] of D04_ORDER.entries()) expect(positions[i], id).toBeGreaterThan(-1);
