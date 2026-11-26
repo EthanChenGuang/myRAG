@@ -68,12 +68,30 @@ jobs:
           --golden eval/fixtures/golden.jsonl
           --manifest eval/out/nightly/run.json
           --out eval/out/nightly
+      - name: Fixture golden-set stale scan
+        if: env.HAS_JUDGE_KEYS == 'true'
+        run: |
+          uv run --directory eval python -m rag_eval.golden_set stale-scan --golden eval/fixtures/golden.jsonl --manifest eval/fixtures/golden.manifest.json
+          uv run --directory eval python -m rag_eval.golden_set stale-scan --golden eval/fixtures/golden.jsonl --golden eval/fixtures/ingest/golden-ingest.jsonl --manifest eval/fixtures/ingest/golden-ingest.manifest.json
+      - name: Absolute gate on the nightly report, report-only until the owner ratifies the floors (O-2)
+        if: env.HAS_JUDGE_KEYS == 'true'
+        run: >-
+          uv run --directory eval python -m rag_eval.absolute_gate check
+          --report eval/out/nightly/report.json
+          --gates eval/config/quality-gates.json
+          --tier nightly
+          --judge-report eval/out/nightly/judge.json
+          --calibration eval/config/judge-calibration.json
+          --mode report
+          --out eval/out/nightly
       - name: Upload nightly output
         if: always() && env.HAS_JUDGE_KEYS == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: eval-nightly
-          path: eval/out/nightly
+          path: |
+            eval/out/nightly
+            eval/out/nightly/absolute.json
           if-no-files-found: warn
   injection-sec:
     if: github.event.schedule != '23 4 * * 1'

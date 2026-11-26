@@ -1,0 +1,6 @@
+{
+  "env": {
+    "RAG_PRE_CONTEXT": "You are a helpful assistant with access to a knowledge base.",
+    "RAG_POST_CONTEXT": "Answer concisely and cite the documents."
+  }
+}
