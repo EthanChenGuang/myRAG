@@ -25,6 +25,7 @@ export const JOB_SETTINGS_PHASE32_DEFAULTS = {
   approval: null,
   hold_publish: false,
   ocr_primary_language: null,
+  target_language: null,
 } as const;
 
 export function omitDefaultFields<T extends Record<string, unknown>>(value: T, defaults: Readonly<Record<string, unknown>>): T {

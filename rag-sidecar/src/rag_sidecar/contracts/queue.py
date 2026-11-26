@@ -94,6 +94,8 @@ class JobSettingsSnapshot(_Contract):
     hold_publish: bool = False
     # D-17: the primary of the configured languages ocr_languages was built from; None when the profile's list applies.
     ocr_primary_language: Language | None = None
+    # D-29: the language a job of kind translate produces; None (and left out of the wire) for every other kind.
+    target_language: Language | None = None
 
     @model_validator(mode="after")
     def _tiers_are_ordered(self) -> JobSettingsSnapshot:
@@ -291,7 +293,35 @@ class AdvanceResponse(_Contract):
     reason: str | None = None
 
 
-REQUEST_BODY_MODELS = (DetectVlmRequest, ParseExternalRequest, AdvanceRequest)
+TranslateOutcome = Literal["done", "continue", "retry"]
+
+
+class TranslateCallbackRequest(_Contract):
+    """The worker's call for a job of kind translate (D-29): the app reads the tenant, document and language from the job row."""
+
+    worker_id: WorkerId
+    deadline_ms: int = Field(ge=1, le=40_000)
+
+
+class TranslateCallbackResponse(_Contract):
+    """done: the ledger row is terminal (status); continue: the time budget ran out with chunks remaining, call again; retry: fail the job retryably."""
+
+    worker_id: WorkerId
+    outcome: TranslateOutcome
+    status: JobStatus | None = None
+    remaining: int | None = Field(default=None, ge=0)
+    reason: str | None = Field(default=None, max_length=64)
+
+    @model_validator(mode="after")
+    def _outcome_fields(self) -> TranslateCallbackResponse:
+        if self.outcome == "done" and self.status is None:
+            raise ValueError("done requires status")
+        if self.outcome == "retry" and self.reason is None:
+            raise ValueError("retry requires reason")
+        return self
+
+
+REQUEST_BODY_MODELS = (DetectVlmRequest, ParseExternalRequest, AdvanceRequest, TranslateCallbackRequest)
 
 
 def request_bodies_must_not_carry_tenant() -> None:
