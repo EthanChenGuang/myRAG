@@ -52,6 +52,7 @@ async function run(ctx: StageContext): Promise<StageOutcome> {
     documentLanguage = detectLanguage(ctx.work.parseText ?? ctx.work.chunks.map((draft) => draft.content).join('\n'));
     if (documentLanguage !== null) await ctx.writer.setFields(document.id, { language: documentLanguage });
   }
+  ctx.work.documentLanguage = documentLanguage;
 
   const rowSerialization = ctx.config.tableRowSerialization === true;
   const primary = rowSerialization ? getLanguageSettings().primary : null;

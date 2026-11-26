@@ -4962,6 +4962,10 @@
     },
     "LanguagePack": {
       "code": "zh",
+      "effective_date_end_patterns": [
+        "有效期\\s*(?:至|到)\\s*(?:19|20)\\d{2}\\s*年\\s*\\d{1,2}\\s*月\\s*\\d{1,2}\\s*日",
+        "(?<!截)至\\s*(?:19|20)\\d{2}\\s*年\\s*\\d{1,2}\\s*月\\s*\\d{1,2}\\s*日\\s*(?:止|为止|失效|废止)"
+      ],
       "effective_date_patterns": [
         "自\\s*(?:19|20)\\d{2}\\s*年\\s*\\d{1,2}\\s*月\\s*\\d{1,2}\\s*日\\s*起\\s*(?:施行|生效|实施|执行)"
       ],
@@ -5050,6 +5054,10 @@
       "packs": [
         {
           "code": "zh",
+          "effective_date_end_patterns": [
+            "有效期\\s*(?:至|到)\\s*(?:19|20)\\d{2}\\s*年\\s*\\d{1,2}\\s*月\\s*\\d{1,2}\\s*日",
+            "(?<!截)至\\s*(?:19|20)\\d{2}\\s*年\\s*\\d{1,2}\\s*月\\s*\\d{1,2}\\s*日\\s*(?:止|为止|失效|废止)"
+          ],
           "effective_date_patterns": [
             "自\\s*(?:19|20)\\d{2}\\s*年\\s*\\d{1,2}\\s*月\\s*\\d{1,2}\\s*日\\s*起\\s*(?:施行|生效|实施|执行)"
           ],
@@ -5136,6 +5144,10 @@
         },
         {
           "code": "en",
+          "effective_date_end_patterns": [
+            "\\b(?:valid|effective|in\\s+(?:force|effect))\\s+(?:until|through)\\b",
+            "\\bexpires\\s+on\\b"
+          ],
           "effective_date_patterns": [
             "\\beffective\\s+(?:from|as\\s+of|on)\\b",
             "\\bin\\s+(?:force|effect)\\s+(?:from|as\\s+of)\\b"
@@ -5297,6 +5309,10 @@
         },
         {
           "code": "it",
+          "effective_date_end_patterns": [
+            "\\b(?:valid[oa]|in\\s+vigore|efficace)\\s+fino\\s+al\\b",
+            "\\bscade\\s+il\\b"
+          ],
           "effective_date_patterns": [
             "\\bin\\s+vigore\\s+dal\\b",
             "\\ba\\s+decorrere\\s+dal\\b",

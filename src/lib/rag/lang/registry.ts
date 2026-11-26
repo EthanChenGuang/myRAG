@@ -32,7 +32,11 @@ function fail(message: string): never {
 }
 
 function checkPatterns(pack: LanguagePack): void {
-  const lists = { effective_date_patterns: pack.effective_date_patterns, version_markers: pack.version_markers };
+  const lists = {
+    effective_date_patterns: pack.effective_date_patterns,
+    effective_date_end_patterns: pack.effective_date_end_patterns,
+    version_markers: pack.version_markers,
+  };
   for (const [field, patterns] of Object.entries(lists)) {
     patterns.forEach((pattern, index) => {
       try {
