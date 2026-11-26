@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -60,8 +61,17 @@ PHASE6_TAGS = frozenset(
 )
 
 
+# Plan 04.1.1-10 appended the colloquial and no_answer term items, too.
+TERM_ITEM_ID = re.compile(r"^[a-z]+-(colloquial|no_answer)-term-\d{3}$")
+
+
 def _added_after_snapshot(item: GoldenItem) -> bool:
-    return item.category == "small_talk" or item.category in CACHE_PAIR_CATEGORIES or bool(PHASE6_TAGS & set(item.tags))
+    return (
+        item.category == "small_talk"
+        or item.category in CACHE_PAIR_CATEGORIES
+        or bool(PHASE6_TAGS & set(item.tags))
+        or bool(TERM_ITEM_ID.match(item.id))
+    )
 
 
 def fixture_shapes() -> dict[str, tuple[list[ItemResult], frozenset[str]]]:
