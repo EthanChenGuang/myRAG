@@ -3,7 +3,8 @@ import type { PGlite } from '@electric-sql/pglite';
 /**
  * A small Supabase-js shaped client over PGlite for route tests that need real RLS. Each query runs in its own transaction as the
  * given role, with request.jwt.claim.sub set to the user, so the policies and SECURITY DEFINER helpers decide as on Supabase.
- * Supported: select (plain column list), eq, in, contains, lt, or (the mined_at/id keyset grammar), order, limit, maybeSingle.
+ * Supported: select (plain column list), update (with select for RETURNING), eq, in, contains, lt, or (the mined_at/id keyset grammar),
+ * order, limit, maybeSingle; auth.admin.getUserById reads auth.users as service_role.
  * Every query is appended to `calls` as `<label>:<table>`.
  */
 
@@ -68,6 +69,7 @@ class Query implements PromiseLike<{ data: unknown; error: unknown }> {
   private readonly orders: string[] = [];
   private limitCount: number | null = null;
   private single = false;
+  private updateValues: Row | null = null;
 
   constructor(
     private readonly db: PGlite,
@@ -80,6 +82,11 @@ class Query implements PromiseLike<{ data: unknown; error: unknown }> {
       .split(',')
       .map((column) => ident(column.trim()))
       .join(', ');
+    return this;
+  }
+
+  update(values: Row): this {
+    this.updateValues = values;
     return this;
   }
 
@@ -140,12 +147,33 @@ class Query implements PromiseLike<{ data: unknown; error: unknown }> {
 
   private async run(): Promise<{ data: unknown; error: unknown }> {
     this.options.calls.push(`${this.options.label}:${this.table}`);
-    const sql =
+    const sql = this.updateValues ? this.updateSql(this.updateValues) : this.selectSql();
+    return this.execute(sql);
+  }
+
+  private updateSql(values: Row): string {
+    const sets = Object.entries(values).map(([column, value]) => {
+      this.params.push(value !== null && typeof value === 'object' && !Array.isArray(value) ? JSON.stringify(value) : value);
+      return `${ident(column)} = $${this.params.length}`;
+    });
+    return (
+      `WITH t AS (UPDATE public.${ident(this.table)} SET ${sets.join(', ')}` +
+      (this.where.length > 0 ? ` WHERE ${this.where.join(' AND ')}` : '') +
+      ` RETURNING ${this.columns}) SELECT to_jsonb(t) AS row FROM t`
+    );
+  }
+
+  private selectSql(): string {
+    return (
       `SELECT to_jsonb(t) AS row FROM (SELECT ${this.columns} FROM public.${ident(this.table)}` +
       (this.where.length > 0 ? ` WHERE ${this.where.join(' AND ')}` : '') +
       (this.orders.length > 0 ? ` ORDER BY ${this.orders.join(', ')}` : '') +
       (this.limitCount !== null ? ` LIMIT ${Math.trunc(this.limitCount)}` : '') +
-      ') t';
+      ') t'
+    );
+  }
+
+  private async execute(sql: string): Promise<{ data: unknown; error: unknown }> {
     try {
       const rows = await this.db.transaction(async (tx) => {
         await tx.query("SELECT set_config('request.jwt.claim.sub', $1, true)", [this.options.userId ?? '']);
@@ -169,6 +197,14 @@ export function pgliteClient(db: PGlite, options: PgliteClientOptions) {
     from: (table: string) => new Query(db, table, options),
     auth: {
       getUser: async () => ({ data: { user: options.userId ? { id: options.userId } : null }, error: null }),
+      admin: {
+        getUserById: async (id: string) => {
+          if (options.role !== 'service_role') return { data: { user: null }, error: { message: 'not allowed' } };
+          const found = await db.query<{ id: string }>('SELECT id::text AS id FROM auth.users WHERE id::text = $1', [id]);
+          const user = found.rows[0] ? { id: found.rows[0].id } : null;
+          return { data: { user }, error: user ? null : { message: 'User not found' } };
+        },
+      },
     },
   };
 }
