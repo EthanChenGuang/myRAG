@@ -26,6 +26,9 @@ const state = {
   admins: [] as string[],
   readOnly: false,
   settingsFail: false,
+  dupClusters: 'false' as 'true' | 'false',
+  rpcFails: false,
+  rpcCalls: [] as Array<{ fn: string; args: Row }>,
 };
 
 // The columns the Phase 3 migrations add: lineage_id defaults to the row id, tenant_key is generated from the owner columns.
@@ -49,6 +52,14 @@ function matches(row: Row, filters: Array<[string, string, unknown]>): boolean {
 
 function dataAdmin() {
   return {
+    rpc(fn: string, args: Row) {
+      state.rpcCalls.push({ fn, args });
+      const response = state.rpcFails
+        ? { data: null, error: { code: '42501', message: 'permission denied' } }
+        : { data: [{ recomputed: 1, dissolved: 0 }], error: null };
+      const request = { abortSignal: () => request, then: (resolve: (value: unknown) => unknown) => Promise.resolve(response).then(resolve) };
+      return request;
+    },
     from(table: string) {
       const rows: Row[] =
         table === 'documents'
@@ -155,7 +166,7 @@ async function loadRoute() {
   vi.doMock('@/lib/auth/organization-handler', () => ({ verifyUserOrganizationAccess: async () => ({ hasAccess: false }) }));
   vi.doMock('@/lib/supabase', () => ({ getSupabaseAdmin: () => dataAdmin(), supabaseAdmin: dataAdmin() }));
   const { setRagDepsForTests } = await import('@/lib/rag/deps');
-  setRagDepsForTests({ adminClient: () => membershipAdmin() as never });
+  setRagDepsForTests({ adminClient: () => membershipAdmin() as never, ragEnv: () => ({ RAG_DUP_CLUSTERS: state.dupClusters }) });
   return import('@/app/api/documents/[id]/route');
 }
 
@@ -197,6 +208,9 @@ describe('documents/[id] route', () => {
     state.admins = [];
     state.readOnly = false;
     state.settingsFail = false;
+    state.dupClusters = 'false';
+    state.rpcFails = false;
+    state.rpcCalls = [];
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -292,6 +306,44 @@ describe('documents/[id] route', () => {
     expect(ids(state.chunks)).not.toContain('chunk-a');
     expect(ids(state.documents)).toEqual([DOC_B_PERSONAL, DOC_ORG_X, DOC_ORG_Y]);
     expect(ids(state.chunks)).toEqual(['chunk-b', 'chunk-x', 'chunk-y']);
+  });
+
+  it('switch off: a delete makes no duplicate cluster call', async () => {
+    state.session = { id: USER_A };
+    const { DELETE } = await loadRoute();
+    const response = await DELETE(...call('DELETE', DOC_A_PERSONAL));
+    expect(response.status).toBe(200);
+    expect(state.rpcCalls).toEqual([]);
+  });
+
+  it('RAG_DUP_CLUSTERS=true: a delete recomputes the dirty clusters of the caller tenant only', async () => {
+    state.session = { id: USER_A };
+    state.dupClusters = 'true';
+    const { DELETE } = await loadRoute();
+    const response = await DELETE(...call('DELETE', DOC_A_PERSONAL));
+    expect(response.status).toBe(200);
+    expect(state.rpcCalls).toEqual([{ fn: 'rag_dup_clusters_recompute', args: { p_tenant_key: `u:${USER_A}`, p_cluster_ids: null } }]);
+  });
+
+  it('a failing cluster recompute never fails the delete', async () => {
+    state.session = { id: USER_A };
+    state.dupClusters = 'true';
+    state.rpcFails = true;
+    const { DELETE } = await loadRoute();
+    const response = await DELETE(...call('DELETE', DOC_A_PERSONAL));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ success: true });
+    expect(ids(state.documents)).not.toContain(DOC_A_PERSONAL);
+    expect(state.rpcCalls.map((entry) => entry.fn)).toEqual(['rag_dup_clusters_recompute']);
+  });
+
+  it('a refused delete makes no duplicate cluster call', async () => {
+    state.session = { id: USER_A };
+    state.dupClusters = 'true';
+    const { DELETE } = await loadRoute();
+    const response = await DELETE(...call('DELETE', DOC_B_PERSONAL));
+    expect(response.status).toBe(404);
+    expect(state.rpcCalls).toEqual([]);
   });
 
   it('lets the owner PATCH the external url and keeps existing metadata', async () => {

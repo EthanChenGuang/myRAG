@@ -1,4 +1,5 @@
 import { redisvlInvalidationTarget } from '../../cache/emit';
+import { clusterPublishedDocument, dupClustersEnabled } from '../../dedupe/cluster';
 import { scheduleAfterResponse } from '../../trace/schedule';
 import { scopeKey } from '../../tenant/scope';
 import { buildIngestFingerprint, collectFingerprintParts } from '../fingerprint';
@@ -47,6 +48,20 @@ async function writeFingerprint(ctx: StageContext, documentId: string): Promise<
   await ctx.writer.setFields(documentId, { ingest_fingerprint: buildIngestFingerprint(parts), metadata: { ingest_fingerprint_parts: parts } });
 }
 
+/**
+ * D-19: duplicate clustering is a non-fatal sub-step of publish, not a stage. It runs only for a version that became current; a failure
+ * is logged with the error name and repaired by `npm run rag:dup-clusters`.
+ */
+async function clusterAfterPublish(ctx: StageContext, documentId: string): Promise<void> {
+  try {
+    if (!(await dupClustersEnabled())) return;
+    await clusterPublishedDocument(ctx.input.scope, documentId, { signal: ctx.input.signal });
+  } catch (error) {
+    if (ctx.input.signal.aborted) throw error;
+    console.warn('[Ingest] Duplicate clustering failed; the document is published', { error: error instanceof Error ? error.name : 'unknown' });
+  }
+}
+
 async function run(ctx: StageContext): Promise<StageOutcome> {
   const document = requireDocument(ctx, 'publish');
   await writeFingerprint(ctx, document.id);
@@ -74,6 +89,7 @@ async function run(ctx: StageContext): Promise<StageOutcome> {
       // D-12: the batch's hold keeps the version out of retrieval until activation; for the ledger the job's work is done.
       return result(ctx, 'ready', published.documentId, published.version, 'publish_held');
     case 'published': {
+      await clusterAfterPublish(ctx, published.documentId);
       const tenantKey = ctx.identity?.tenantKey ?? scopeKey(ctx.input.scope).toLowerCase();
       // Never awaited: post-publish work must not delay or fail the ingest result (D-29, D-41).
       void afterPublish({ documentId: published.documentId, tenantKey });
