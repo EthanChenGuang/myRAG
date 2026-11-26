@@ -420,3 +420,209 @@ describe('section-rules route', () => {
     });
   });
 });
+
+describe('boilerplate-rules route', () => {
+  it.each([
+    ['unset', { RAG_PAGE_BOILERPLATE: undefined }],
+    ['off', { RAG_PAGE_BOILERPLATE: 'off' }],
+    ['on under the legacy pipeline', { RAG_INGEST_PIPELINE: 'legacy' }],
+  ])('answers 404 with no session lookup and no rpc while the switch is %s', async (_label, patch) => {
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === undefined) delete state.env[key];
+      else state.env[key] = value;
+    }
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    const answers = [
+      await loaded.boilerplateRules.GET(req('/api/rag/admin/boilerplate-rules')),
+      await loaded.boilerplateRules.POST(req('/api/rag/admin/boilerplate-rules', { method: 'POST', body: { rule: LINE_RULE } })),
+      await loaded.boilerplateRules.PUT(req('/api/rag/admin/boilerplate-rules', { method: 'PUT', body: { id: RULE_ID, rule: LINE_RULE } })),
+      await loaded.boilerplateRules.DELETE(req(`/api/rag/admin/boilerplate-rules?id=${RULE_ID}`, { method: 'DELETE' })),
+    ];
+    for (const answer of answers) {
+      expect(answer.status).toBe(404);
+      expect(answer.headers.get('cache-control')).toBe('no-store');
+    }
+    expect(state.sessionLookups).toBe(0);
+    expect(state.rpcCalls).toEqual([]);
+  });
+
+  it('lists, creates, replaces and deletes rules of the workspace', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    const listed = await loaded.boilerplateRules.GET(req('/api/rag/admin/boilerplate-rules'));
+    expect(listed.status).toBe(200);
+    expect(await listed.json()).toEqual({ success: true, items: [RULE_JSON] });
+    const created = await loaded.boilerplateRules.POST(req('/api/rag/admin/boilerplate-rules', { method: 'POST', body: { rule: LINE_RULE } }));
+    expect(created.status).toBe(201);
+    expect(await created.json()).toEqual({ success: true, item: RULE_JSON });
+    state.outcomes.rag_boilerplate_rule_upsert = { data: [{ ...RULE_ROW, version: 2 }], error: null };
+    const replaced = await loaded.boilerplateRules.PUT(req('/api/rag/admin/boilerplate-rules', { method: 'PUT', body: { id: RULE_ID, rule: LINE_RULE } }));
+    expect(replaced.status).toBe(200);
+    expect((await replaced.json()).item.version).toBe(2);
+    const removed = await loaded.boilerplateRules.DELETE(req(`/api/rag/admin/boilerplate-rules?id=${RULE_ID}`, { method: 'DELETE' }));
+    expect(await removed.json()).toEqual({ success: true, id: RULE_ID });
+    expect(ruleCalls().every((call) => call.args.p_tenant_key === 's:default' && call.args.p_actor === ADMIN_ID)).toBe(true);
+  });
+
+  it('refuses a refused line pattern with path rule.pattern and a fragment or line rule of the wrong shape', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    const refused = await loaded.boilerplateRules.POST(
+      req('/api/rag/admin/boilerplate-rules', { method: 'POST', body: { rule: { ...LINE_RULE, pattern: `(${MARKER}` } } }),
+    );
+    expect(refused.status).toBe(400);
+    const text = await refused.text();
+    const body = JSON.parse(text);
+    expect(body.error).toBe('invalid_tenant_pattern');
+    expect(body.details.length).toBeGreaterThan(0);
+    for (const detail of body.details) expect(detail.path).toBe('rule.pattern');
+    expect(text).not.toContain(MARKER);
+    expect(logged.join('\n')).not.toContain(MARKER);
+
+    const fragmentWithPattern = await loaded.boilerplateRules.POST(
+      req('/api/rag/admin/boilerplate-rules', {
+        method: 'POST',
+        body: { rule: { name: 'rule-b', kind: 'fragment', pattern: '^-+$', max_length: 40, min_page_share: 0.5 } },
+      }),
+    );
+    expect(fragmentWithPattern.status).toBe(400);
+    expect((await fragmentWithPattern.json()).error).toBe('Invalid request data');
+    const lineWithout = await loaded.boilerplateRules.POST(req('/api/rag/admin/boilerplate-rules', { method: 'POST', body: { rule: { name: 'rule-c', kind: 'line' } } }));
+    expect(lineWithout.status).toBe(400);
+    expect((await lineWithout.json()).error).toBe('Invalid request data');
+    expect(ruleCalls().filter((call) => call.fn.endsWith('_upsert'))).toEqual([]);
+  });
+});
+
+describe('attribute-schema route', () => {
+  it.each([
+    ['unset', { RAG_DOC_ATTRIBUTES: undefined }],
+    ['false', { RAG_DOC_ATTRIBUTES: 'false' }],
+    ['true under the legacy pipeline', { RAG_INGEST_PIPELINE: 'legacy' }],
+  ])('answers 404 with no session lookup and no rpc while the switch is %s', async (_label, patch) => {
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === undefined) delete state.env[key];
+      else state.env[key] = value;
+    }
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    const answers = [
+      await loaded.attributeSchema.GET(req('/api/rag/admin/attribute-schema')),
+      await loaded.attributeSchema.PUT(req('/api/rag/admin/attribute-schema', { method: 'PUT', body: { definition: { key: 'alpha_code', type: 'code' } } })),
+      await loaded.attributeSchema.DELETE(req('/api/rag/admin/attribute-schema?key=alpha_code', { method: 'DELETE' })),
+    ];
+    for (const answer of answers) {
+      expect(answer.status).toBe(404);
+      expect(answer.headers.get('cache-control')).toBe('no-store');
+    }
+    expect(state.sessionLookups).toBe(0);
+    expect(state.rpcCalls).toEqual([]);
+  });
+
+  it('gates each route by its own switch', async () => {
+    state.env.RAG_SECTION_RULES = 'off';
+    state.env.RAG_PAGE_BOILERPLATE = 'off';
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    expect((await loaded.sectionRules.GET(req('/api/rag/admin/section-rules'))).status).toBe(404);
+    expect((await loaded.boilerplateRules.GET(req('/api/rag/admin/boilerplate-rules'))).status).toBe(404);
+    expect((await loaded.attributeSchema.GET(req('/api/rag/admin/attribute-schema'))).status).toBe(200);
+  });
+
+  it('lists, upserts and deletes definitions of the workspace', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    const listed = await loaded.attributeSchema.GET(req('/api/rag/admin/attribute-schema'));
+    expect(listed.status).toBe(200);
+    expect(await listed.json()).toEqual({ success: true, items: [DEF_JSON] });
+    const upserted = await loaded.attributeSchema.PUT(
+      req('/api/rag/admin/attribute-schema', { method: 'PUT', body: { definition: { key: 'alpha_code', type: 'code', filterable: true, in_identifier_index: true } } }),
+    );
+    expect(upserted.status).toBe(200);
+    expect(await upserted.json()).toEqual({ success: true, item: DEF_JSON });
+    const removed = await loaded.attributeSchema.DELETE(req('/api/rag/admin/attribute-schema?key=alpha_code', { method: 'DELETE' }));
+    expect(removed.status).toBe(200);
+    expect(await removed.json()).toEqual({ success: true, key: 'alpha_code' });
+    expect(ruleCalls().map((call) => [call.fn, call.args.p_tenant_key, call.args.p_actor])).toEqual([
+      ['rag_attribute_definitions_list', 's:default', ADMIN_ID],
+      ['rag_attribute_definition_upsert', 's:default', ADMIN_ID],
+      ['rag_attribute_definition_delete', 's:default', ADMIN_ID],
+    ]);
+  });
+
+  it('refuses the identifier index on a text key, a bad key and a tenant field before any rpc', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    const textIndex = await loaded.attributeSchema.PUT(
+      req('/api/rag/admin/attribute-schema', { method: 'PUT', body: { definition: { key: 'alpha_text', type: 'text', in_identifier_index: true } } }),
+    );
+    expect(textIndex.status).toBe(400);
+    expect((await textIndex.json()).error).toBe('Invalid request data');
+    const tenant = await loaded.attributeSchema.PUT(
+      req('/api/rag/admin/attribute-schema', { method: 'PUT', body: { definition: { key: 'alpha_code', type: 'code' }, tenant_key: 's:default' } }),
+    );
+    expect(tenant.status).toBe(400);
+    const badKey = await loaded.attributeSchema.DELETE(req('/api/rag/admin/attribute-schema?key=Bad-Key', { method: 'DELETE' }));
+    expect(badKey.status).toBe(400);
+    expect((await badKey.json()).details.map((d: { path: string }) => d.path)).toContain('key');
+    expect(ruleCalls()).toEqual([]);
+  });
+
+  it.each([
+    ['a type change', 'rag_attribute_definition_upsert', { code: '22023', message: 'invalid_attribute_type' }, 400, 'invalid_attribute_type'],
+    ['the 31st key', 'rag_attribute_definition_upsert', { code: '54000', message: 'limit_reached' }, 409, 'limit_reached'],
+    ['turning in_header off for a template key', 'rag_attribute_definition_upsert', { code: '2BP01', message: 'unknown_placeholder' }, 409, 'unknown_placeholder'],
+    ['deleting a template key', 'rag_attribute_definition_delete', { code: '2BP01', message: 'unknown_placeholder' }, 409, 'unknown_placeholder'],
+    ['an unknown key', 'rag_attribute_definition_delete', { code: 'P0002', message: 'not_found' }, 404, 'not_found'],
+  ])('maps %s to its fixed answer', async (_label, fn, error, status, word) => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    state.outcomes[fn] = { data: null, error };
+    const answer = fn.endsWith('_delete')
+      ? await loaded.attributeSchema.DELETE(req('/api/rag/admin/attribute-schema?key=alpha_code', { method: 'DELETE' }))
+      : await loaded.attributeSchema.PUT(req('/api/rag/admin/attribute-schema', { method: 'PUT', body: { definition: { key: 'alpha_code', type: 'text' } } }));
+    expect(answer.status).toBe(status);
+    expect(answer.headers.get('cache-control')).toBe('no-store');
+    expect((await answer.json()).error).toBe(word);
+  });
+});
+
+describe('two organizations (multi-tenant)', () => {
+  beforeEach(() => {
+    state.mode = 'multi-tenant';
+    state.tables.organization_members = [
+      { organization_id: ORG_O, user_id: ORG_ADMIN_ID, role: 'admin' },
+      { organization_id: ORG_P, user_id: MEMBER_ID, role: 'admin' },
+    ];
+  });
+
+  it("never lets O's admin read or change P's rules or definitions; every rpc carries the admitted key", async () => {
+    const loaded = await load();
+    state.session = { id: ORG_ADMIN_ID };
+    const foreign = [
+      await loaded.boilerplateRules.GET(req(`/api/rag/admin/boilerplate-rules?organizationId=${ORG_P}`)),
+      await loaded.boilerplateRules.DELETE(req(`/api/rag/admin/boilerplate-rules?id=${RULE_ID}&organizationId=${ORG_P}`, { method: 'DELETE' })),
+      await loaded.attributeSchema.GET(req(`/api/rag/admin/attribute-schema?organizationId=${ORG_P}`)),
+      await loaded.attributeSchema.PUT(
+        req(`/api/rag/admin/attribute-schema?organizationId=${ORG_P}`, { method: 'PUT', body: { definition: { key: 'alpha_code', type: 'code' } } }),
+      ),
+      await loaded.sectionRules.DELETE(req(`/api/rag/admin/section-rules?id=${SET_ID}&organizationId=${ORG_P}`, { method: 'DELETE' })),
+    ];
+    for (const answer of foreign) {
+      expect(answer.status).toBe(403);
+      expect(answer.headers.get('cache-control')).toBe('no-store');
+    }
+    expect(ruleCalls()).toEqual([]);
+
+    await loaded.boilerplateRules.GET(req(`/api/rag/admin/boilerplate-rules?organizationId=${ORG_O}`));
+    await loaded.attributeSchema.DELETE(req(`/api/rag/admin/attribute-schema?key=alpha_code&organizationId=${ORG_O}`, { method: 'DELETE' }));
+    state.session = { id: MEMBER_ID };
+    await loaded.attributeSchema.GET(req(`/api/rag/admin/attribute-schema?organizationId=${ORG_P}`));
+    expect(ruleCalls().map((call) => [call.args.p_tenant_key, call.args.p_actor])).toEqual([
+      [`o:${ORG_O}`, ORG_ADMIN_ID],
+      [`o:${ORG_O}`, ORG_ADMIN_ID],
+      [`o:${ORG_P}`, MEMBER_ID],
+    ]);
+  });
+});
