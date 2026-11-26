@@ -3,6 +3,7 @@ name: nightly
 on:
   schedule:
     - cron: '0 3 * * *'
+    - cron: '23 4 * * 1'
   workflow_dispatch:
 
 permissions:
@@ -19,6 +20,7 @@ env:
 
 jobs:
   judge:
+    if: github.event.schedule != '23 4 * * 1'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     env:
@@ -74,6 +76,7 @@ jobs:
           path: eval/out/nightly
           if-no-files-found: warn
   injection-sec:
+    if: github.event.schedule != '23 4 * * 1'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
@@ -124,6 +127,7 @@ jobs:
           path: eval/out/nightly-sec
           if-no-files-found: warn
   online-judge:
+    if: github.event.schedule != '23 4 * * 1'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -153,6 +157,7 @@ jobs:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: uv run --directory eval python -m rag_eval.online_judge
   real-docling:
+    if: github.event.schedule != '23 4 * * 1'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -216,3 +221,44 @@ jobs:
           name: real-docling-report
           path: ${{ runner.temp }}/real-docling-report.json
           if-no-files-found: warn
+  weekly-report:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '23 4 * * 1'
+    runs-on: ${{ vars.PRIVATE_EVAL_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    steps:
+      - name: Detect private eval data on this runner
+        run: |
+          if [ -d eval/golden/private ] && [ -n "$(ls -A eval/golden/private)" ]; then
+            echo "HAS_PRIVATE_EVAL=true" >> "$GITHUB_ENV"
+          else
+            echo "HAS_PRIVATE_EVAL=false" >> "$GITHUB_ENV"
+            echo "::notice::no private eval data on this runner, skipping weekly report"
+          fi
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        if: env.HAS_PRIVATE_EVAL == 'true'
+        with:
+          clean: false
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5.4.2
+        if: env.HAS_PRIVATE_EVAL == 'true'
+        with:
+          version: '0.11.32'
+          python-version: '3.12'
+          enable-cache: true
+          cache-dependency-glob: '**/uv.lock'
+      - name: Sync eval project
+        if: env.HAS_PRIVATE_EVAL == 'true'
+        run: uv sync --directory eval --locked --all-extras
+      - name: Failure report (new failures since last week)
+        if: env.HAS_PRIVATE_EVAL == 'true'
+        run: uv run --directory eval python -m rag_eval.failure_report --since "$(date -u -d '7 days ago' +%Y-%m-%d)"
+      - name: Weekly report (stats, trend and the failure report above)
+        if: env.HAS_PRIVATE_EVAL == 'true'
+        env:
+          RAG_ADMIN_BEARER: ${{ secrets.RAG_ADMIN_BEARER }}
+          RAG_WEEKLY_BASE_URL: ${{ vars.RAG_WEEKLY_BASE_URL }}
+        run: |
+          latest="$(find eval/golden/private/reports -maxdepth 1 -name 'failure-report-*.json' 2>/dev/null | sort | tail -n 1)"
+          args=()
+          if [ -n "$latest" ]; then args+=(--failure-report "$latest"); fi
+          if [ -n "$RAG_WEEKLY_BASE_URL" ]; then args+=(--base-url "$RAG_WEEKLY_BASE_URL"); fi
+          uv run --directory eval python -m rag_eval.weekly_report --since "$(date -u -d '7 days ago' +%Y-%m-%d)" "${args[@]}"

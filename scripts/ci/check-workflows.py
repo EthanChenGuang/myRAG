@@ -31,6 +31,10 @@ SKIP_NOTICE = "::notice::judge key not configured, skipping"
 ONLINE_SKIP_NOTICE = "::notice::langfuse keys not configured, skipping online judge"
 DOCLING_SKIP_NOTICE = "::notice::docling extra not installable, skipping"
 SEC_SKIP_NOTICE = "::notice::generator key not configured, skipping injection runs"
+WEEKLY_JOB = "weekly-report"
+WEEKLY_CRON = "23 4 * * 1"
+PRIVATE_FLAG = "HAS_PRIVATE_EVAL"
+WEEKLY_SKIP_NOTICE = "::notice::no private eval data on this runner, skipping weekly report"
 SEC_SMOKE_STEP = "npm run test-rag -- --run-config eval/config/runs/sec-recommended.json --out eval/out/smoke-sec"
 SEC_NIGHTLY_STEP = "run-nightly.mts --sec-matrix --generator live"
 LAKERA_SECRET = "LAKERA_GUARD_API_KEY"
@@ -502,7 +506,52 @@ def check_real_docling(data: dict, errors: list[str]) -> None:
 
 
 def check_weekly_report(data: dict, errors: list[str]) -> None:
-    pass
+    """D-25, T-0511-74/75: the weekly report runs only where private eval data exists, never uploads it, never inlines a secret."""
+    name = "nightly: weekly-report"
+    crons = [str(entry.get("cron", "")) for entry in (triggers(data).get("schedule") or []) if isinstance(entry, dict)]
+    job = (data.get("jobs") or {}).get(WEEKLY_JOB)
+    if job is None:
+        errors.append(f"nightly: job '{WEEKLY_JOB}' missing")
+        return
+    condition = str(job.get("if", ""))
+    if (
+        WEEKLY_CRON not in crons
+        or f"github.event.schedule == '{WEEKLY_CRON}'" not in condition
+        or "github.event_name == 'workflow_dispatch'" not in condition
+    ):
+        errors.append(f"{name} must run only on the weekly schedule '{WEEKLY_CRON}' (listed under schedule) or workflow_dispatch")
+    steps = all_steps(job)
+    first = steps[0] if steps else {}
+    first_run = str(first.get("run", ""))
+    if (
+        "if" in first
+        or "eval/golden/private" not in first_run
+        or f"{PRIVATE_FLAG}=true" not in first_run
+        or "$GITHUB_ENV" not in first_run
+        or WEEKLY_SKIP_NOTICE not in first_run
+    ):
+        errors.append(
+            f"{name}: the first step must run unconditionally, set {PRIVATE_FLAG} in $GITHUB_ENV from the presence of "
+            f"eval/golden/private and print '{WEEKLY_SKIP_NOTICE}' when it is absent"
+        )
+    for step in steps[1:]:
+        if f"env.{PRIVATE_FLAG} == 'true'" not in str(step.get("if", "")):
+            errors.append(f"{name}: step '{step.get('name', step.get('uses', '?'))}' must be conditioned on env.{PRIVATE_FLAG} == 'true'")
+    body = step_text(job)
+    for needle in ("rag_eval.failure_report", "rag_eval.weekly_report", "uv sync --directory eval --locked --all-extras"):
+        if needle not in body:
+            errors.append(f"{name} is missing '{needle}'")
+    for step in steps:
+        uses = str(step.get("uses", ""))
+        if uses.startswith("actions/upload-artifact@"):
+            errors.append(f"{name} must not upload an artifact (private reports stay on the runner)")
+        if uses.startswith("actions/checkout@") and (step.get("with") or {}).get("clean") is not False:
+            errors.append(f"{name}: checkout must set clean: false so the gitignored private data stays on the runner")
+        run = str(step.get("run", ""))
+        if "secrets." in run:
+            errors.append(f"{name}: secrets must be passed through step env, not interpolated into run")
+        if re.search(r"\becho\b.*\b(KEY|TOKEN|BEARER)\b", run):
+            errors.append(f"{name}: a step appears to echo a credential")
 
 
 def check_nightly(errors: list[str]) -> None:
@@ -526,6 +575,7 @@ def check_nightly(errors: list[str]) -> None:
     check_online_judge(data, errors)
     check_real_docling(data, errors)
     check_injection_sec(data, errors)
+    check_weekly_report(data, errors)
     job = (data.get("jobs") or {}).get("judge")
     if job is None:
         errors.append("nightly: job 'judge' missing")
