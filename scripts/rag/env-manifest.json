@@ -1107,6 +1107,56 @@
       "name": "VOYAGE_BASE_URL",
       "status": "managed",
       "knownGaps": []
+    },
+    {
+      "name": "RAG_RETRIEVAL_BACKEND",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_RETRIEVAL_BACKEND_VOICE",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_VECTOR_SYNC_SECRET",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_VECTOR_SYNC_MAX_LAG_SECONDS",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "WEAVIATE_URL",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "WEAVIATE_API_KEY",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "WEAVIATE_READ_API_KEY",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "QDRANT_URL",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "QDRANT_API_KEY",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "QDRANT_READ_API_KEY",
+      "status": "managed",
+      "knownGaps": []
     }
   ]
 }

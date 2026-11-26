@@ -239,7 +239,7 @@ app.post('/api/config', (req, res) => {
       return res.status(400).json({ success: false, error: 'hidden_text_needs_sidecar' });
     }
 
-    for (const name of ['RAG_EVAL_SECRET', 'RAG_SIDECAR_SECRET', 'RAG_VOICE_TOKEN_SECRET', 'VOYAGE_API_KEY', 'DEEPINFRA_API_KEY', 'COHERE_API_KEY', 'LAKERA_GUARD_API_KEY', 'RAG_EMBED_FEEDBACK_SECRET']) {
+    for (const name of ['RAG_EVAL_SECRET', 'RAG_SIDECAR_SECRET', 'RAG_VOICE_TOKEN_SECRET', 'VOYAGE_API_KEY', 'DEEPINFRA_API_KEY', 'COHERE_API_KEY', 'LAKERA_GUARD_API_KEY', 'RAG_EMBED_FEEDBACK_SECRET', 'RAG_VECTOR_SYNC_SECRET']) {
       const value = fullValues[name];
       if (typeof value === 'string' && value.length > 0 && value.length < 32) {
         console.warn(`[Config] ${name} is ${value.length} characters; at least 32 are required or the endpoint answers 503`);
@@ -598,6 +598,18 @@ ${fullValues.RAG_EMBED_TENANT !== undefined ? `RAG_EMBED_TENANT=${fullValues.RAG
 ${fullValues.RAG_VOICE_TOKEN_SECRET !== undefined ? `RAG_VOICE_TOKEN_SECRET=${fullValues.RAG_VOICE_TOKEN_SECRET}` : 'RAG_VOICE_TOKEN_SECRET='}
 ${fullValues.RAG_VOICE_TOKEN_TTL_SECONDS !== undefined ? `RAG_VOICE_TOKEN_TTL_SECONDS=${fullValues.RAG_VOICE_TOKEN_TTL_SECONDS}` : 'RAG_VOICE_TOKEN_TTL_SECONDS=3600'}
 ${fullValues.VOICE_MAX_ACTIVE_ROOMS !== undefined ? `VOICE_MAX_ACTIVE_ROOMS=${fullValues.VOICE_MAX_ACTIVE_ROOMS}` : 'VOICE_MAX_ACTIVE_ROOMS=4'}
+
+# Vector backends (Phase 7)
+${fullValues.RAG_RETRIEVAL_BACKEND !== undefined ? `RAG_RETRIEVAL_BACKEND=${fullValues.RAG_RETRIEVAL_BACKEND}` : 'RAG_RETRIEVAL_BACKEND=pgvector'}
+${fullValues.RAG_RETRIEVAL_BACKEND_VOICE !== undefined ? `RAG_RETRIEVAL_BACKEND_VOICE=${fullValues.RAG_RETRIEVAL_BACKEND_VOICE}` : 'RAG_RETRIEVAL_BACKEND_VOICE=pgvector'}
+${fullValues.RAG_VECTOR_SYNC_SECRET !== undefined ? `RAG_VECTOR_SYNC_SECRET=${fullValues.RAG_VECTOR_SYNC_SECRET}` : 'RAG_VECTOR_SYNC_SECRET='}
+${fullValues.RAG_VECTOR_SYNC_MAX_LAG_SECONDS !== undefined ? `RAG_VECTOR_SYNC_MAX_LAG_SECONDS=${fullValues.RAG_VECTOR_SYNC_MAX_LAG_SECONDS}` : 'RAG_VECTOR_SYNC_MAX_LAG_SECONDS=300'}
+${fullValues.WEAVIATE_URL !== undefined ? `WEAVIATE_URL=${fullValues.WEAVIATE_URL}` : 'WEAVIATE_URL='}
+${fullValues.WEAVIATE_API_KEY !== undefined ? `WEAVIATE_API_KEY=${fullValues.WEAVIATE_API_KEY}` : 'WEAVIATE_API_KEY='}
+${fullValues.WEAVIATE_READ_API_KEY !== undefined ? `WEAVIATE_READ_API_KEY=${fullValues.WEAVIATE_READ_API_KEY}` : 'WEAVIATE_READ_API_KEY='}
+${fullValues.QDRANT_URL !== undefined ? `QDRANT_URL=${fullValues.QDRANT_URL}` : 'QDRANT_URL='}
+${fullValues.QDRANT_API_KEY !== undefined ? `QDRANT_API_KEY=${fullValues.QDRANT_API_KEY}` : 'QDRANT_API_KEY='}
+${fullValues.QDRANT_READ_API_KEY !== undefined ? `QDRANT_READ_API_KEY=${fullValues.QDRANT_READ_API_KEY}` : 'QDRANT_READ_API_KEY='}
 
 # Langfuse tracing
 ${fullValues.LANGFUSE_ENABLED !== undefined ? `LANGFUSE_ENABLED=${fullValues.LANGFUSE_ENABLED}` : 'LANGFUSE_ENABLED=false'}
@@ -1493,6 +1505,17 @@ RAG_EMBED_TENANT=${getEnvValue('RAG_EMBED_TENANT') || ''}
 RAG_VOICE_TOKEN_SECRET=${getEnvValue('RAG_VOICE_TOKEN_SECRET') || ''}
 RAG_VOICE_TOKEN_TTL_SECONDS=${getEnvValue('RAG_VOICE_TOKEN_TTL_SECONDS') || '3600'}
 VOICE_MAX_ACTIVE_ROOMS=${getEnvValue('VOICE_MAX_ACTIVE_ROOMS') || '4'}
+# Vector backends (Phase 7)
+RAG_RETRIEVAL_BACKEND=${getEnvValue('RAG_RETRIEVAL_BACKEND') || 'pgvector'}
+RAG_RETRIEVAL_BACKEND_VOICE=${getEnvValue('RAG_RETRIEVAL_BACKEND_VOICE') || 'pgvector'}
+RAG_VECTOR_SYNC_SECRET=${getEnvValue('RAG_VECTOR_SYNC_SECRET') || ''}
+RAG_VECTOR_SYNC_MAX_LAG_SECONDS=${getEnvValue('RAG_VECTOR_SYNC_MAX_LAG_SECONDS') || '300'}
+WEAVIATE_URL=${getEnvValue('WEAVIATE_URL') || ''}
+WEAVIATE_API_KEY=${getEnvValue('WEAVIATE_API_KEY') || ''}
+WEAVIATE_READ_API_KEY=${getEnvValue('WEAVIATE_READ_API_KEY') || ''}
+QDRANT_URL=${getEnvValue('QDRANT_URL') || ''}
+QDRANT_API_KEY=${getEnvValue('QDRANT_API_KEY') || ''}
+QDRANT_READ_API_KEY=${getEnvValue('QDRANT_READ_API_KEY') || ''}
 # Langfuse tracing
 LANGFUSE_ENABLED=${getEnvValue('LANGFUSE_ENABLED') || 'false'}
 LANGFUSE_PUBLIC_KEY=${getEnvValue('LANGFUSE_PUBLIC_KEY') || ''}
@@ -1950,6 +1973,17 @@ RAG_EMBED_TENANT=${getEnvValue('RAG_EMBED_TENANT') || ''}
 RAG_VOICE_TOKEN_SECRET=${getEnvValue('RAG_VOICE_TOKEN_SECRET') || ''}
 RAG_VOICE_TOKEN_TTL_SECONDS=${getEnvValue('RAG_VOICE_TOKEN_TTL_SECONDS') || '3600'}
 VOICE_MAX_ACTIVE_ROOMS=${getEnvValue('VOICE_MAX_ACTIVE_ROOMS') || '4'}
+# Vector backends (Phase 7)
+RAG_RETRIEVAL_BACKEND=${getEnvValue('RAG_RETRIEVAL_BACKEND') || 'pgvector'}
+RAG_RETRIEVAL_BACKEND_VOICE=${getEnvValue('RAG_RETRIEVAL_BACKEND_VOICE') || 'pgvector'}
+RAG_VECTOR_SYNC_SECRET=${getEnvValue('RAG_VECTOR_SYNC_SECRET') || ''}
+RAG_VECTOR_SYNC_MAX_LAG_SECONDS=${getEnvValue('RAG_VECTOR_SYNC_MAX_LAG_SECONDS') || '300'}
+WEAVIATE_URL=${getEnvValue('WEAVIATE_URL') || ''}
+WEAVIATE_API_KEY=${getEnvValue('WEAVIATE_API_KEY') || ''}
+WEAVIATE_READ_API_KEY=${getEnvValue('WEAVIATE_READ_API_KEY') || ''}
+QDRANT_URL=${getEnvValue('QDRANT_URL') || ''}
+QDRANT_API_KEY=${getEnvValue('QDRANT_API_KEY') || ''}
+QDRANT_READ_API_KEY=${getEnvValue('QDRANT_READ_API_KEY') || ''}
 # Langfuse tracing
 LANGFUSE_ENABLED=${getEnvValue('LANGFUSE_ENABLED') || 'false'}
 LANGFUSE_PUBLIC_KEY=${getEnvValue('LANGFUSE_PUBLIC_KEY') || ''}

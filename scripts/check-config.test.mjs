@@ -867,3 +867,128 @@ test('the embed feedback secret is masked by the config server and warned on whe
   assert.ok(list, 'short-secret warning list exists');
   assert.match(list[1], /'RAG_EMBED_FEEDBACK_SECRET'/);
 });
+
+const VECTOR_BACKEND_DEFAULTS = {
+  RAG_RETRIEVAL_BACKEND: 'pgvector',
+  RAG_RETRIEVAL_BACKEND_VOICE: 'pgvector',
+  RAG_VECTOR_SYNC_SECRET: '',
+  RAG_VECTOR_SYNC_MAX_LAG_SECONDS: '300',
+  WEAVIATE_URL: '',
+  WEAVIATE_API_KEY: '',
+  WEAVIATE_READ_API_KEY: '',
+  QDRANT_URL: '',
+  QDRANT_API_KEY: '',
+  QDRANT_READ_API_KEY: '',
+};
+const VECTOR_BACKEND_NAMES = Object.keys(VECTOR_BACKEND_DEFAULTS);
+const VECTOR_BACKEND_SECRETS = ['RAG_VECTOR_SYNC_SECRET', 'WEAVIATE_API_KEY', 'WEAVIATE_READ_API_KEY', 'QDRANT_API_KEY', 'QDRANT_READ_API_KEY'];
+
+test('reports exactly the location that lacks a managed RAG_RETRIEVAL_BACKEND in a fixture tree', () => {
+  const files = Object.fromEntries(TRACKED.map((f) => [f, 'RAG_RETRIEVAL_BACKEND=pgvector\n']));
+  files['scripts/config-ui/index.html'] = '<input id="OTHER_SETTING">\n';
+  const root = syntheticTree({
+    files,
+    manifest: { schemaVersion: 1, vars: [{ name: 'RAG_RETRIEVAL_BACKEND', status: 'managed', knownGaps: [] }] },
+  });
+  try {
+    const { code, out } = run(root);
+    assert.equal(code, 1, out);
+    assert.match(out, /RAG_RETRIEVAL_BACKEND \[config-ui\] missing from this location/);
+    for (const location of ['config-server', 'env-ts', 'init-env']) {
+      assert.doesNotMatch(out, new RegExp(`RAG_RETRIEVAL_BACKEND \\[${location}\\]`));
+    }
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('fails when src reads a QDRANT or WEAVIATE variable that is not in the manifest', () => {
+  for (const name of ['QDRANT_COLLECTION_PREFIX', 'WEAVIATE_GRPC_URL']) {
+    const root = copyRealTree();
+    try {
+      write(root, 'src/lib/probe.ts', `export const probe = process.env.${name};\n`);
+      const { code, out } = run(root);
+      assert.equal(code, 1, out);
+      assert.match(out, new RegExp(`${name} \\[manifest\\] used in src/ or a tracked file but not in the manifest`));
+    } finally {
+      cleanup(root);
+    }
+  }
+});
+
+test('the manifest lists the ten vector-backend names as managed (D-24)', () => {
+  const manifest = JSON.parse(fs.readFileSync(path.join(REPO, MANIFEST), 'utf8'));
+  const byName = new Map(manifest.vars.map((entry) => [entry.name, entry]));
+  for (const name of VECTOR_BACKEND_NAMES) {
+    assert.equal(byName.get(name)?.status, 'managed', name);
+    assert.deepEqual(byName.get(name)?.knownGaps, [], name);
+  }
+});
+
+test('fails when any vector-backend name is removed from any single location', () => {
+  for (const name of VECTOR_BACKEND_NAMES) {
+    for (const [relative, location] of [
+      ['scripts/init-env.js', 'init-env'],
+      ['src/lib/env.ts', 'env-ts'],
+      ['scripts/config-server.js', 'config-server'],
+      ['scripts/config-ui/index.html', 'config-ui'],
+    ]) {
+      const root = copyRealTree();
+      try {
+        removeName(root, relative, name);
+        const { code, out } = run(root);
+        assert.equal(code, 1, `${name} removed from ${location}: ${out}`);
+        assert.match(out, new RegExp(`${name} \\[${location}\\] missing from this location`));
+      } finally {
+        cleanup(root);
+      }
+    }
+  }
+});
+
+test('the vector-backend defaults match D-24 in init-env, env.ts and all three config-server templates, with empty secrets', () => {
+  const init = fs.readFileSync(path.join(REPO, 'scripts/init-env.js'), 'utf8');
+  const envTs = fs.readFileSync(path.join(REPO, 'src/lib/env.ts'), 'utf8');
+  const server = fs.readFileSync(path.join(REPO, 'scripts/config-server.js'), 'utf8');
+  for (const [name, value] of Object.entries(VECTOR_BACKEND_DEFAULTS)) {
+    assert.match(init, new RegExp(`^${name}=${value}$`, 'm'), `init-env ${name}`);
+    assert.ok(envTs.includes(`${name}: process.env.${name} || '${value}',`), `env.ts ${name}`);
+    assert.deepEqual(templatesMissing(server, name), [], `config-server ${name}`);
+    for (const [label, block] of templateBlocks(server)) {
+      const quoted = `'${name}=${value}'`;
+      const fallback = `getEnvValue('${name}') || '${value}'`;
+      assert.ok(block.includes(quoted) || block.includes(fallback), `${label} template default for ${name}`);
+    }
+  }
+  for (const name of VECTOR_BACKEND_SECRETS) {
+    assert.doesNotMatch(init, new RegExp(`^${name}=.+$`, 'm'), `init-env ${name} must be empty`);
+  }
+});
+
+test('the vector-backend secrets are masked by the config server and the sync secret is warned on when short', async () => {
+  const { createRequire } = await import('node:module');
+  const require = createRequire(import.meta.url);
+  const security = require('./config-server-security.js');
+  for (const name of VECTOR_BACKEND_SECRETS) {
+    assert.equal(security.isSecretConfigEntry(name, 'placeholder-value'), true, name);
+  }
+  for (const name of ['RAG_RETRIEVAL_BACKEND', 'RAG_RETRIEVAL_BACKEND_VOICE', 'RAG_VECTOR_SYNC_MAX_LAG_SECONDS']) {
+    assert.equal(security.isSecretConfigEntry(name, 'pgvector'), false, name);
+  }
+  const server = fs.readFileSync(path.join(REPO, 'scripts/config-server.js'), 'utf8');
+  const list = server.match(/for \(const name of \[([^\]]*'RAG_EVAL_SECRET'[^\]]*)\]\)/);
+  assert.ok(list, 'short-secret warning list exists');
+  assert.match(list[1], /'RAG_VECTOR_SYNC_SECRET'/);
+});
+
+test('the config UI offers pgvector, weaviate and qdrant for both backend selects and hides the keys', () => {
+  const html = fs.readFileSync(path.join(REPO, 'scripts/config-ui/index.html'), 'utf8');
+  for (const name of ['RAG_RETRIEVAL_BACKEND', 'RAG_RETRIEVAL_BACKEND_VOICE']) {
+    const select = html.match(new RegExp(`<select id="${name}"[\\s\\S]*?</select>`));
+    assert.ok(select, `${name} select`);
+    for (const option of ['pgvector', 'weaviate', 'qdrant']) assert.match(select[0], new RegExp(`value="${option}"`), `${name} ${option}`);
+  }
+  for (const name of VECTOR_BACKEND_SECRETS) {
+    assert.match(html, new RegExp(`<input type="password" id="${name}"`), `${name} is a password input`);
+  }
+});
