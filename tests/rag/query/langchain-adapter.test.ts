@@ -317,3 +317,62 @@ describe('shapes on the fixture inputs', () => {
     }
   });
 });
+
+describe('hyde', () => {
+  const PASSAGE_EN = 'Module QX-210 is configured in three steps described in its setup guide.';
+
+  test('hyde returns a dense-only hyde variant from the websearch template with the shared suffix', async () => {
+    const { transformer, fake } = langchain([{ transform: 'hyde', query: EXPAND_QUERY, output: { passage: PASSAGE_EN } }]);
+    const result = await transformer.hyde({ query: EXPAND_QUERY, language: 'en', protectedTokens: ['QX-210'], signal: signal() });
+    expect(result).toEqual({
+      variant: { text: PASSAGE_EN, language: 'en', kind: 'hyde', legs: 'dense', protectedOk: true },
+      truncated: false,
+      skipped: [],
+    });
+    expect(fake.structuredRequests.map((r) => [r.name, r.method])).toEqual([['HypotheticalDocument', 'jsonSchema']]);
+    const prompt = fake.calls[0].prompt;
+    expect(prompt.startsWith(`Please write a passage to answer the question\nQuestion: ${EXPAND_QUERY}\nPassage:`)).toBe(true);
+    expect(prompt.endsWith(suffixFor('en', 1, ['QX-210']))).toBe(true);
+    expect(fake.calls[0].config).toMatchObject({ signal: true, callbacks: 0 });
+  });
+
+  test('a failure or an invalid object is a skip with reason error; an abort propagates', async () => {
+    for (const fail of ['error', 'invalid'] as const) {
+      const { transformer } = langchain([{ transform: 'hyde', query: EXPAND_QUERY, fail }]);
+      expect(await transformer.hyde({ query: EXPAND_QUERY, language: 'en', protectedTokens: [], signal: signal() })).toEqual({
+        variant: null,
+        truncated: false,
+        skipped: [{ transform: 'hyde', reason: 'error' }],
+      });
+    }
+    const slow = langchain([{ transform: 'hyde', query: EXPAND_QUERY, delay_ms: 5000, output: { passage: PASSAGE_EN } }]);
+    const controller = new AbortController();
+    const pending = slow.transformer.hyde({ query: EXPAND_QUERY, language: 'en', protectedTokens: [], signal: controller.signal });
+    setTimeout(() => controller.abort(), 20);
+    await expect(pending).rejects.toMatchObject({ kind: 'aborted', transform: 'hyde' });
+  });
+
+  test('hyde: every scripted query gives the native result and a HypotheticalDocument-valid passage', async () => {
+    const entries = committedTable().entries.filter((e) => e.transform === 'hyde' && !e.fail);
+    expect(entries.length).toBeGreaterThan(0);
+    const fake = createFakeQueryLlm({ table: committedTable() as unknown as FakeQueryLlmTable });
+    const { transformer } = langchain(committedTable());
+    for (const entry of entries) {
+      const language = (/[一-鿿]/u.test(entry.query) ? 'zh' : entry.item_id?.startsWith('it-') ? 'it' : 'en') as Lang;
+      const base = { query: entry.query, language, protectedTokens: [], signal: signal() };
+      const lc = await transformer.hyde(base);
+      const native = await nativeHyde({ ...base, deps: { queryLlm: () => fake } });
+      expect(lc).toEqual(native);
+      expect(lc.variant).not.toBeNull();
+      expect(HypotheticalDocumentSchema.safeParse({ passage: lc.variant!.text }).success).toBe(true);
+    }
+  });
+
+  test('the adapter never imports HydeRetriever or a VectorStore class', () => {
+    const dir = join(process.cwd(), 'src/lib/rag/query/langchain');
+    for (const file of ['index.ts', 'chat-model.ts', 'capture.ts', 'errors.ts', 'fake.ts']) {
+      const source = readFileSync(join(dir, file), 'utf8');
+      expect(source).not.toMatch(/HydeRetriever|VectorStore|retrievers\/hyde|vectorstores/u);
+    }
+  });
+});
