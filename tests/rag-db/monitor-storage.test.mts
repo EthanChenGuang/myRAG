@@ -296,8 +296,34 @@ for (const mode of MODES) {
         );
       }
       await rejectsWith('23514', () =>
-        upsertAlert(db, alertPayload(keys.own, `free-text-${crypto.randomUUID()}`, '2026-11-01', { suggestion: 'Please look at the query about leave.' })),
+        upsertAlert(db, alertPayload(keys.own, `free-text-${crypto.randomUUID()}`, '2026-11-01', { suggestion: 'Please look at the neutral sample question.' })),
       );
+      for (const field of ['band', 'breakdown', 'companions', 'delivered']) {
+        await rejectsWith('23514', () =>
+          upsertAlert(db, alertPayload(keys.own, `free-text-${crypto.randomUUID()}`, '2026-11-01', { [field]: { note: 'a sentence with spaces' } })),
+        );
+        await rejectsWith('23514', () =>
+          upsertAlert(db, alertPayload(keys.own, `free-text-${crypto.randomUUID()}`, '2026-11-01', { [field]: { 'a key with spaces': 1 } })),
+        );
+      }
+      await rejectsWith('23514', () =>
+        upsertAlert(
+          db,
+          alertPayload(keys.own, `free-text-${crypto.randomUUID()}`, '2026-11-01', {
+            config_changes: [{ record_id: crypto.randomUUID(), changed_keys: ['RAG_PIPELINE'], source: 'the operator typed this' }],
+          }),
+        ),
+      );
+      const coded = await upsertAlert(
+        db,
+        alertPayload(keys.own, `coded-${crypto.randomUUID()}`, '2026-11-01', {
+          config_changes: [
+            { record_id: crypto.randomUUID(), at: '2026-11-01T08:00:00.000Z', source: 'config_ui', changed_keys: ['RAG_PIPELINE'], before_hash: 'a'.repeat(64), after_hash: 'b'.repeat(64) },
+          ],
+          delivered: { webhook: { status: 'sent', at: '2026-11-01T08:00:00Z', attempts: 1 } },
+        }),
+      );
+      assert.ok(coded);
     });
 
     test('a new dedup_key inserts an open alert and returns its id', async () => {
