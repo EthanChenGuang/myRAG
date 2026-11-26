@@ -93,3 +93,9 @@ def test_several_kept_chunks_matching_one_span_earn_one_credit():
     hits = gold_unit_first_hits(trace, item)
     assert hits == [1]
     assert ndcg_at_context_k(hits, len(trace.kept)) == pytest.approx(1.0)
+
+
+def test_one_chunk_matching_two_units_is_one_relevant_position_and_never_above_one():
+    assert ndcg_at_context_k([1, 1], 1) == 1.0
+    assert ndcg_at_context_k([1, 1], 2) == pytest.approx(1 / (1 + 1 / math.log2(3)))
+    assert ndcg_at_context_k([2, 2, 2], 5) <= 1.0

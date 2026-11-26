@@ -197,3 +197,82 @@ def test_markdown_shows_rerank_against_the_committed_chat_budget(tmp_path: Path)
     }
     assert rows["rerank"] == ["200.0", "700.0", "4", "-", "600.0", "over"]
     assert rows["search"][-1] == "within"
+
+
+# --- Phase 4.2 plan 12: TTFT by cache state and pre-generation (D-25, D-27) ---
+
+
+def _budgets_with_ttft() -> LatencyBudgets:
+    data = _budgets().model_dump(mode="json")
+    data["ttft"] = {
+        "chat": {
+            "hit": {"p50_ms": 300, "p95_ms": 600},
+            "miss": {"p50_ms": 1500, "p95_ms": 3000},
+            "bypass": {"p50_ms": 1500, "p95_ms": 3000},
+        }
+    }
+    data["pre_generation"] = {"chat": {"p95_ms": 1200}}
+    return LatencyBudgets.model_validate(data)
+
+
+def _timed(index: int, cache: str | None, ttft: float | None, pre: float | None) -> RagTrace:
+    update: dict[str, object] = {}
+    if cache is not None:
+        update["cache"] = cache
+    if ttft is not None:
+        update["ttft_ms"] = ttft
+    if pre is not None:
+        update["pre_generation_ms"] = pre
+    return _trace(f"item-{index}", [("doc.en.md", QUOTE)]).model_copy(update=update)
+
+
+def _timed_report(traces: list[RagTrace]):
+    golden = [_item(trace.item_id, "en", answerable=True) for trace in traces]
+    return build_report(_manifest(), score_items(traces, golden), golden, traces)
+
+
+def test_ttft_groups_by_cache_state_with_nearest_rank():
+    traces = [
+        _timed(0, "hit", 100, 50),
+        _timed(1, "hit", 300, 60),
+        _timed(2, "miss", 2000, 900),
+        _timed(3, "miss", 1000, 800),
+        _timed(4, "miss", 4000, 700),
+    ]
+    report = _timed_report(traces)
+    assert report.ttft is not None
+    assert (report.ttft["hit"].p50_ms, report.ttft["hit"].p95_ms, report.ttft["hit"].n) == (100, 300, 2)
+    assert (report.ttft["miss"].p50_ms, report.ttft["miss"].p95_ms, report.ttft["miss"].n) == (2000, 4000, 3)
+    assert "bypass" not in report.ttft
+    assert report.pre_generation is not None
+    assert (report.pre_generation["chat"].p50_ms, report.pre_generation["chat"].p95_ms) == (700, 900)
+    assert report.pre_generation["chat"].n == 5
+
+
+def test_ttft_rows_render_hit_miss_bypass_and_pre_generation_against_budgets(tmp_path: Path):
+    report = _timed_report([_timed(0, "hit", 100, 50), _timed(1, "miss", 3500, 1300)])
+    _, md_path = write_report(report, tmp_path, _budgets_with_ttft())
+    md = md_path.read_text(encoding="utf-8")
+    assert "## Time to first token (report-only)" in md
+    block = md.split("## Time to first token (report-only)", 1)[1].split("\n## ", 1)[0]
+    assert "| hit | 100.0 | 100.0 | 1 | 300.0 | 600.0 | within |" in block
+    assert "| miss | 3500.0 | 3500.0 | 1 | 1500.0 | 3000.0 | over |" in block
+    assert "| bypass | - | - | 0 | 1500.0 | 3000.0 | - |" in block
+    assert "| pre-generation | 50.0 | 1300.0 | 2 | - | 1200.0 | over |" in block
+
+
+def test_ttft_rows_without_ttft_budgets_show_dashes(tmp_path: Path):
+    report = _timed_report([_timed(0, "bypass", 800, 400)])
+    _, md_path = write_report(report, tmp_path, _budgets())
+    md = md_path.read_text(encoding="utf-8")
+    assert "## Time to first token (report-only)" in md
+    block = md.split("## Time to first token (report-only)", 1)[1]
+    assert "| bypass | 800.0 | 800.0 | 1 | - | - | - |" in block
+    assert "| pre-generation | 400.0 | 400.0 | 1 | - | - | - |" in block
+
+
+def test_run_without_timing_data_has_no_ttft_block(tmp_path: Path):
+    report = _timed_report([_timed(0, None, None, None)])
+    assert report.ttft is None and report.pre_generation is None
+    _, md_path = write_report(report, tmp_path, _budgets_with_ttft())
+    assert "Time to first token" not in md_path.read_text(encoding="utf-8")
