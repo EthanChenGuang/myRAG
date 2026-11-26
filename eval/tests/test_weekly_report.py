@@ -2,12 +2,11 @@ import json
 import re
 
 import httpx
+from _private_runs import MARKERS, item, six_layer_run, trace, write_run
 from rag_sidecar.contracts.feedback_loop import WeeklyReport
 
 from rag_eval import weekly_report
 from rag_eval.weekly_report import EXIT_PRIVATE, SKIP_NOTICE, main
-
-from _private_runs import MARKERS, item, six_layer_run, trace, write_run
 
 SINCE = "2026-11-01"
 TENANT_HASH = "0123456789abcdef"
