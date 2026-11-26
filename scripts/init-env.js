@@ -587,6 +587,8 @@ RAG_FT_SLOT_B_BASE_URL=
 RAG_FT_SLOT_B_MODEL=
 RAG_FT_SLOT_B_QUERY_PROMPT=
 RAG_FT_SLOT_B_DOCUMENT_PROMPT=
+# Host for the OpenAI embedding model: openai | openrouter (openrouter sends embedding requests to OpenRouter with OPENROUTER_API_KEY, same model and vectors; the OpenAI Batch API is then unavailable and backfills embed in sync)
+RAG_OPENAI_EMBEDDINGS_VIA=openai
 
 # -----------------------------
 # INGESTION (Phase 3.1 queue)

@@ -118,7 +118,10 @@ describe('term:0 reach into the rerank input (D-34, TERM-06)', () => {
     const cap = capBounds().min;
     const off = await search({ pool: SNAPSHOT_POOL, cap, terminology: null });
     expect(off.params.rerank_input_cap).toBe(cap);
-    expect(JSON.stringify(off.output)).toMatchSnapshot();
+    // 04.2-15 added versionScope to the stage output after the snapshot was taken; pin it, keep the snapshot byte-exact for the rest.
+    const { versionScope, ...beforeReservation } = off.output;
+    expect(versionScope).toBe('current');
+    expect(JSON.stringify(beforeReservation)).toMatchSnapshot();
     expect(off.output.dedupeCounts).not.toHaveProperty('term_reserved');
     const empty = await search({ pool: SNAPSHOT_POOL, cap, terminology: { tokens: [], expansionWeight: terminologyParams().expansion_weight } });
     expect(JSON.stringify(empty.output)).toBe(JSON.stringify(off.output));

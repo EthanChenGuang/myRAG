@@ -83,6 +83,17 @@ test('retrieval-rpc: unrelated rpc names are not flagged under src', () => {
   assert.deepEqual(rulesFor({ 'src/lib/a.ts': "await db.rpc('increment_counter', {});\n" }), []);
 });
 
+test('finetune-export-rpc: rag_finetune_export_vectors is callable only under src/lib/rag', () => {
+  const code = "const r = await db.rpc('rag_finetune_export_vectors', { p_tenant_key: 's:default' });\n";
+  const multi = 'const r = await db.rpc(\n  `rag_finetune_export_vectors`,\n  args,\n);\n';
+  assert.deepEqual(rulesFor({ 'src/app/x/route.ts': code, 'scripts/x.mjs': multi }).sort(), [
+    'scripts/x.mjs:finetune-export-rpc',
+    'src/app/x/route.ts:finetune-export-rpc',
+  ]);
+  assert.deepEqual(rulesFor({ 'src/lib/rag/finetune/export-vectors.ts': code }), []);
+  assert.deepEqual(rulesFor({ 'src/lib/a.ts': "await db.rpc('rag_finetune_list_consent', {});\n" }), []);
+});
+
 test('retired-module: alias and relative imports fail', () => {
   const files = {
     'src/app/a.ts': "import { x } from '@/lib/enhanced-rag-retrieval';\n",

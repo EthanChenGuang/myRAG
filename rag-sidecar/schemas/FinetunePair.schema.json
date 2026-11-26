@@ -1,0 +1,125 @@
+{
+  "$defs": {
+    "FinetuneNegative": {
+      "additionalProperties": false,
+      "properties": {
+        "chunk_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+          "title": "Chunk Id",
+          "type": "string"
+        },
+        "negative_source": {
+          "enum": [
+            "expert",
+            "mined"
+          ],
+          "title": "Negative Source",
+          "type": "string"
+        },
+        "text": {
+          "minLength": 1,
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "chunk_id",
+        "text",
+        "negative_source"
+      ],
+      "title": "FinetuneNegative",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "anchor": {
+      "maxLength": 2000,
+      "minLength": 1,
+      "title": "Anchor",
+      "type": "string"
+    },
+    "language": {
+      "enum": [
+        "zh",
+        "en",
+        "it"
+      ],
+      "title": "Language",
+      "type": "string"
+    },
+    "negatives": {
+      "items": {
+        "$ref": "#/$defs/FinetuneNegative"
+      },
+      "maxItems": 32,
+      "title": "Negatives",
+      "type": "array"
+    },
+    "pair_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "title": "Pair Id",
+      "type": "string"
+    },
+    "positive": {
+      "minLength": 1,
+      "title": "Positive",
+      "type": "string"
+    },
+    "positive_chunk_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "title": "Positive Chunk Id",
+      "type": "string"
+    },
+    "positive_language": {
+      "enum": [
+        "zh",
+        "en",
+        "it"
+      ],
+      "title": "Positive Language",
+      "type": "string"
+    },
+    "source": {
+      "enum": [
+        "synthetic",
+        "mined"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "split": {
+      "enum": [
+        "train",
+        "dev",
+        "test"
+      ],
+      "title": "Split",
+      "type": "string"
+    },
+    "tenant_key": {
+      "pattern": "^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
+      "title": "Tenant Key",
+      "type": "string"
+    },
+    "weight": {
+      "minimum": 1,
+      "title": "Weight",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "pair_id",
+    "tenant_key",
+    "language",
+    "positive_language",
+    "anchor",
+    "positive_chunk_id",
+    "positive",
+    "source",
+    "split",
+    "weight"
+  ],
+  "title": "FinetunePair",
+  "type": "object"
+}

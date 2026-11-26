@@ -542,7 +542,7 @@ describe('write stage on the two-tenant fixture: RAG_TABLE_LOOKUP (D-15, D-45, T
   describe('backfill command rag:table-rows (D-15, T-04.2-120)', () => {
     const ROW_COLUMNS = 'document_id, tenant_key, chunking_profile_id, table_key, row_index, header, cells, chunk_ids, version, is_current, status';
     const tenantRows = (key: string) => rows(`SELECT ${ROW_COLUMNS} FROM rag_table_rows WHERE tenant_key = $1 ORDER BY document_id, chunking_profile_id, table_key, row_index`, [key]);
-    const knownUsers = new Set([TWO_TENANT_IDS.userA, TWO_TENANT_IDS.userB]);
+    const knownUsers = new Set<string>([TWO_TENANT_IDS.userA, TWO_TENANT_IDS.userB]);
     const fakeAuthAdmin = () => ({
       auth: {
         admin: {

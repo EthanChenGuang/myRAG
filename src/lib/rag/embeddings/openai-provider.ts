@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { env } from '@/lib/env';
 import { EmbeddingProfileMismatch } from './mrl';
+import { normalizeOpenAiEmbeddingModel, openAiEmbeddingsClientOptions, openAiEmbeddingsVia } from './openai-client';
 import type { EmbedOptions, EmbedOutput, EmbeddingProvider } from './types';
 import { OPENAI_NATIVE_DIMS, toProviderError } from './types';
 
@@ -29,12 +30,14 @@ export function createOpenAiProvider(options: OpenAiProviderOptions = {}): Embed
   let lazy: OpenAiEmbeddingsClient | null = null;
   const getClient = (): OpenAiEmbeddingsClient => {
     if (options.client) return options.client();
-    if (!lazy) lazy = new OpenAI({ apiKey: env.OPENAI_API_KEY }) as unknown as OpenAiEmbeddingsClient;
+    if (!lazy) lazy = new OpenAI(openAiEmbeddingsClientOptions()) as unknown as OpenAiEmbeddingsClient;
     return lazy;
   };
 
   async function embed(texts: string[], opts: EmbedOptions): Promise<EmbedOutput> {
     if (opts.dims !== OPENAI_NATIVE_DIMS) throw new EmbeddingProfileMismatch('dims', opts.dims, OPENAI_NATIVE_DIMS);
+    // A missing OpenRouter key is a configuration error; surface it before toProviderError hides the message.
+    if (!options.client && !lazy && openAiEmbeddingsVia() === 'openrouter') openAiEmbeddingsClientOptions();
     const model = configuredModel();
     const vectors: number[][] = [];
     let responseModel = model;
@@ -55,7 +58,7 @@ export function createOpenAiProvider(options: OpenAiProviderOptions = {}): Embed
         }
         vectors.push(item.embedding);
       }
-      if (response.model) responseModel = response.model;
+      if (response.model) responseModel = openAiEmbeddingsVia() === 'openrouter' ? normalizeOpenAiEmbeddingModel(response.model) : response.model;
       tokens += response.usage?.total_tokens || 0;
     }
     return { vectors, model: responseModel, host: HOST, usage: { tokens } };

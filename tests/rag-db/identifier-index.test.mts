@@ -338,7 +338,7 @@ describe('write stage on the two-tenant fixture: RAG_IDENTIFIER_INDEX (D-28, T-0
 
   describe('backfill command rag:identifiers (D-28, T-04.2-120)', () => {
     const KEY_B = `u:${TWO_TENANT_IDS.userB}`;
-    const knownUsers = new Set([TWO_TENANT_IDS.userA, TWO_TENANT_IDS.userB]);
+    const knownUsers = new Set<string>([TWO_TENANT_IDS.userA, TWO_TENANT_IDS.userB]);
     const fakeAuthAdmin = () => ({
       auth: {
         admin: {
