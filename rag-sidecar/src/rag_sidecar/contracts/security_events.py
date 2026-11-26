@@ -39,7 +39,7 @@ class SecurityEvent(_Contract):
     action: SecurityAction
     detector: DetectorName
     rule_ids: list[Annotated[str, Field(min_length=1, max_length=64)]] = Field(default_factory=list)
-    document_id: str = Field(min_length=1)
+    document_id: str | None = Field(default=None, min_length=1)
     chunk_id: str | None = None
     uploader_id: UUID | None = None
     trace_id: str | None = None
@@ -116,7 +116,7 @@ class SecurityEventView(_Contract):
     action: SecurityAction
     detector: DetectorName
     rule_ids: list[str] = Field(default_factory=list)
-    document_id: str = Field(min_length=1)
+    document_id: str | None = Field(default=None, min_length=1)
     file_name: str | None = None
     uploader_id: UUID | None = None
     uploader_name: str | None = None
