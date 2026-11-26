@@ -43,6 +43,22 @@ const RPC_ARGUMENTS: Record<string, { vector: string; allowed: string[] }> = {
   },
 };
 
+// Phase 7 vector sync and re-validation RPCs (0703-0705): served by the generic path, with exactly these argument names.
+const VECTOR_SYNC_RPC_ARGUMENTS: Record<string, readonly string[]> = {
+  rag_vector_sync_claim: ['p_limit', 'p_lease_seconds'],
+  rag_vector_sync_complete: ['p_ids'],
+  rag_vector_sync_fail: ['p_id', 'p_error'],
+  rag_vector_sync_checkpoint: ['p_id', 'p_cursor'],
+  rag_vector_sync_expand: ['p_id', 'p_limit'],
+  rag_vector_sync_requeue_dead: ['p_target'],
+  rag_vector_sync_set_target: ['p_target', 'p_enabled', 'p_actor'],
+  rag_validate_chunks: ['p_tenant_key', 'p_ids', 'p_profile_id'],
+  rag_vector_sync_document_rows: ['p_tenant_key', 'p_document_id', 'p_profile_id', 'p_after', 'p_limit'],
+  rag_vector_sync_chunk_row: ['p_tenant_key', 'p_chunk_id', 'p_profile_id'],
+  rag_vector_sync_profiles: [],
+  rag_backend_readiness: ['p_target', 'p_profile_id', 'p_tenant_key'],
+};
+
 const GENERIC_RPC_NAME = /^(?:rag_[a-z0-9_]+|match_chunks_by_profile|hybrid_search_chunks)$/;
 const FIXTURE_SERVICE_ROLE_KEY = 'fixture-service-role-key-placeholder';
 const VECTOR_ARGUMENT_TYPES = new Set(['vector', 'halfvec']);
@@ -566,7 +582,8 @@ function createHandlers(
     const signature = await signatureOf(fn);
     if (!signature) throw new Rejection(404, `unsupported rpc function: ${fn}`);
     const names = Object.keys(body);
-    const unknown = names.filter((name) => !signature.args.has(name));
+    const registered = VECTOR_SYNC_RPC_ARGUMENTS[fn];
+    const unknown = names.filter((name) => !signature.args.has(name) || (registered !== undefined && !registered.includes(name)));
     if (unknown.length > 0) throw new Rejection(400, `unsupported rpc argument(s) for ${fn}: ${unknown.join(', ')}`);
     const values = names.map((name) => bindArgument(name, signature.args.get(name) as string, body[name]));
     calls.push({ method: 'POST', path: `/rest/v1/rpc/${fn}` });
