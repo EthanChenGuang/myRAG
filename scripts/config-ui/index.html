@@ -76,6 +76,7 @@
     <script src="rag-panels/ingest-impact.js"></script>
     <script src="rag-panels/upload-approvals.js"></script>
     <script src="rag-panels/scope-tags.js"></script>
+    <script src="rag-panels/versions-dates.js"></script>
     <script src="rag-panels/doc-types.js"></script>
     <script src="rag-panels/quarantine.js"></script>
     <script src="rag-panels/embedding-profiles.js"></script>
@@ -9763,6 +9764,19 @@
                                         </div>
                                     </section>
                                     <!-- rag-scope-tags:end -->
+
+                                    <!-- rag-versions-dates:start -->
+                                    <section id="rag-administration-versions" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-versions-dates-title">
+                                        <div class="card-body">
+                                            <h3 id="rag-versions-dates-title" class="text-lg font-semibold mb-2 text-balance rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" tabindex="-1" data-versions-dates-title>Versions and dates</h3>
+                                            <p class="text-sm text-base-content/70 max-w-prose" data-versions-dates-description>Decide when an older document stops being used, and from when a document applies. Nothing is replaced and no date hides a document without your decision. Follows the workspace chosen under Document Processing.</p>
+                                            <p class="text-xs text-base-content/70 mt-1 mb-4 break-words" data-versions-dates-workspace></p>
+                                            <div data-versions-dates-alert class="flex flex-col gap-2 mb-4 empty:mb-0"></div>
+                                            <div data-versions-dates-content></div>
+                                            <div data-versions-dates-status class="text-sm mt-4" role="status" aria-live="polite" tabindex="-1"></div>
+                                        </div>
+                                    </section>
+                                    <!-- rag-versions-dates:end -->
 
                                     <section id="rag-administration-profiles" class="card bg-base-200 shadow-md">
                                         <div class="card-body">
