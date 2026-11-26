@@ -236,3 +236,28 @@ export async function readDocumentAttributes(
     rows: result.rows.map((row) => ({ documentId: String(row.document_id), attributes: (row.attributes ?? null) as IngestAttributeValues | null })),
   };
 }
+
+export interface UploadAttributesRefusal {
+  status: 400 | 503;
+  body: Record<string, unknown>;
+}
+
+/** The wire answer of a refused check: 400 attributes_not_enabled, 400 invalid_attributes with one detail per error, 503 unavailable. */
+export function uploadAttributesRefusal(result: Exclude<ValidateUploadAttributesResult, { ok: true }>): UploadAttributesRefusal {
+  if (result.reason === 'unavailable') return { status: 503, body: { error: 'attributes_unavailable' } };
+  if (result.reason === 'attributes_not_enabled') return { status: 400, body: { success: false, error: 'attributes_not_enabled' } };
+  return {
+    status: 400,
+    body: {
+      success: false,
+      error: 'invalid_attributes',
+      details: result.errors.map((error) => ({ path: error.key === '' ? 'attributes' : `attributes.${error.key}`, message: error.code })),
+    },
+  };
+}
+
+/** The form field as the check takes it: absent is null, a string as sent, anything else (a file part) a malformed value. */
+export function attributesFormField(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  return typeof value === 'string' ? value : '';
+}

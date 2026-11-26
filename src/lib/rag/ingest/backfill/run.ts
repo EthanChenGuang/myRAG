@@ -15,9 +15,13 @@ import { buildJobSettings } from '../routing/settings-snapshot';
 import { effectiveTierBounds } from '../routing/tier-bounds';
 import type { BackfillBatchRef, InventoryEntry } from './inventory';
 import type { SourceItem } from './sources';
+import { stageAttributeRows, type AttributeRowInput } from '../attributes/apply';
+import { loadAttributeSchema, type LoadAttributeSchemaResult } from '../attributes/schema';
+import { validateAttributes } from '../attributes/validate';
+import type { IngestAttributeValues } from '../types';
 
 /** Every backfill job is an operator import of the tenant's own files; the ledger and the document rows record it as such. */
-const BACKFILL_SOURCE = 'config_upload';
+export const BACKFILL_SOURCE = 'config_upload';
 const ENQUEUE_CHUNK = 500;
 const LIST_PAGE = 1_000;
 const TERMINAL = new Set(['ready', 'failed', 'quarantined', 'needs_review', 'skipped_duplicate']);
@@ -26,7 +30,7 @@ const SETTLED = new Set(['ready', 'quarantined', 'needs_review', 'skipped_duplic
 const DEFAULT_MONITOR_INTERVAL_MS = 5_000;
 
 /** An inventory entry the run can read: its file is opened again to stage it at enqueue. */
-export type RunEntry = InventoryEntry & Pick<SourceItem, 'open'>;
+export type RunEntry = InventoryEntry & Pick<SourceItem, 'open' | 'attributes'>;
 
 export interface RunDeps {
   rpc?: RpcClient;
@@ -239,12 +243,33 @@ export async function enqueueRun(batch: BackfillBatchRef, entries: readonly RunE
     console.warn('[Backfill] entry refused at enqueue', { reason });
   };
   const jobs: Record<string, unknown>[] = [];
+  // D-23: a manifest row's values are checked against the batch tenant's schema (read once, fresh) and staged under the backfill source and
+  // the entry's source key before its job is enqueued; the worker's begin applies them. A dry run neither checks nor stages.
+  const staged: AttributeRowInput[] = [];
+  const stagedJobs = new Set<Record<string, unknown>>();
+  let schema: LoadAttributeSchemaResult | null = null;
+  const checkAttributes = async (raw: unknown): Promise<{ ok: true; values: IngestAttributeValues } | { ok: false; reason: string }> => {
+    if (!ingestConfig.docAttributes) return { ok: false, reason: 'attributes_not_enabled' };
+    schema ??= await loadAttributeSchema(batch.scope, { signal, fresh: true });
+    if (!schema.ok) return { ok: false, reason: 'attributes_unavailable' };
+    const checked = validateAttributes(schema.definitions, raw);
+    return checked.ok ? { ok: true, values: checked.values } : { ok: false, reason: 'attributes_invalid' };
+  };
   let existing = 0;
   for (const entry of entries) {
     signal.throwIfAborted();
     if (existingKeys.has(entry.sourceKey)) {
       existing += 1;
       continue;
+    }
+    let values: IngestAttributeValues | undefined;
+    if (kind === 'ingest' && entry.attributes !== undefined) {
+      const checked = await checkAttributes(entry.attributes);
+      if (!checked.ok) {
+        refuse(checked.reason);
+        continue;
+      }
+      values = checked.values;
     }
     const key = stagedOriginalKey(row.tenantKey, batch.id, entry);
     if (!(await store.exists(key, { signal }))) {
@@ -264,7 +289,7 @@ export async function enqueueRun(batch: BackfillBatchRef, entries: readonly RunE
       { ...(entry.docType ? { picked: entry.docType } : {}), source: BACKFILL_SOURCE, filename: entry.filename, mimeType: entry.mimeType },
       { db: deps.db, config: ingestConfig, signal },
     );
-    jobs.push({
+    const job = {
       kind,
       source: BACKFILL_SOURCE,
       source_key: entry.sourceKey,
@@ -273,7 +298,24 @@ export async function enqueueRun(batch: BackfillBatchRef, entries: readonly RunE
       mime_type: entry.mimeType,
       original_ref: { bucket: ORIGINALS_BUCKET, path: key },
       settings: await settingsFor(resolved.docType),
-    });
+    };
+    jobs.push(job);
+    if (values !== undefined) {
+      staged.push({ source: BACKFILL_SOURCE, sourceKey: entry.sourceKey, attributes: values });
+      stagedJobs.add(job);
+    }
+  }
+
+  if (staged.length > 0) {
+    const result = await stageAttributeRows(rpc, row.tenantKey, staged, signal);
+    if (!result.ok) {
+      // Never enqueued without their values: every entry that carries values is refused when they cannot be staged.
+      const reason = result.reason === 'unavailable' ? 'attributes_unavailable' : 'attributes_invalid';
+      for (let i = 0; i < staged.length; i += 1) refuse(reason);
+      for (let i = jobs.length - 1; i >= 0; i -= 1) if (stagedJobs.has(jobs[i] as Record<string, unknown>)) jobs.splice(i, 1);
+    } else {
+      console.log('[Backfill] attributes staged', { staged: result.staged, unchanged: result.unchanged });
+    }
   }
 
   let enqueued = 0;
