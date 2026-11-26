@@ -111,6 +111,9 @@ export interface WrapDoc {
   type?: string;
   kind?: 'links' | 'image' | 'reference';
   flagged?: boolean;
+  /** RAG_VERSION_LABELS (D-50): the block's version label and effective date. */
+  version?: string;
+  effective?: string;
 }
 
 export interface WrapOptions {
@@ -135,6 +138,8 @@ function renderDoc(doc: WrapDoc): string {
     ['section', doc.section],
     ['type', doc.type],
     ['kind', doc.kind],
+    ['version', doc.version],
+    ['effective', doc.effective],
     ['flagged', doc.flagged ? 'true' : undefined],
   ];
   const rendered = attrs
@@ -184,6 +189,8 @@ export function docsFromBlocks(blocks: readonly ContextBlock[], opts: DocsFromBl
     if (block.documentName) doc.source = block.documentName;
     if (block.sectionPath?.length) doc.section = block.sectionPath.join(' / ');
     if (kind) doc.kind = kind;
+    if (block.versionLabel !== undefined) doc.version = block.versionLabel;
+    if (block.effectiveFrom !== undefined) doc.effective = block.effectiveFrom;
     if (opts.flaggedChunkIds && block.chunkIds.some((chunkId) => opts.flaggedChunkIds!.has(chunkId))) doc.flagged = true;
     docs.push(doc);
   });

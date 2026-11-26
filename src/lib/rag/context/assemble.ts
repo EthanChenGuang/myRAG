@@ -4,6 +4,7 @@ import { neutralizeSentinel } from '../generation/sentinel';
 import { renderReferencedSection } from '../refs/resolve';
 import type { InjectionMarks } from '../security/injection-check';
 import { legacyKeepReason, legacyQueryTerms } from './relevance';
+import { effectiveDateOf, versionHeaderSuffix, versionLabelLanguage, versionLabelOf } from './version-labels';
 import { docsFromBlocks, wrapDocuments, type WrapDoc } from './wrap';
 import type {
   CitationLabel,
@@ -36,6 +37,11 @@ export interface AssemblyDocumentRow {
   version?: number | null;
   /** Selected only while RAG_SECURITY_EVENTS is on (fetchAssemblyRows). */
   user_id?: string | null;
+  /** Selected only while RAG_VERSION_LABELS is on (fetchAssemblyRows, D-49). */
+  doc_type?: string | null;
+  doc_date?: string | null;
+  effective_from?: string | null;
+  version_label?: string | null;
 }
 
 export interface AssembleInput<C extends AssemblyCandidate = AssemblyCandidate> {
@@ -230,6 +236,43 @@ export function blockTitle(block: Pick<ContextBlock, 'documentName' | 'page' | '
   return `${block.documentName}${page}${section}`;
 }
 
+interface VersionView {
+  /** documentVersion from the row, null without one. */
+  documentVersion: number | null;
+  fields: Pick<ContextBlock, 'versionLabel' | 'effectiveFrom'>;
+  /** Appended to the block title and the legacy document line; empty without a version or date. */
+  suffix: string;
+}
+
+/**
+ * D-48 to D-50: null with RAG_VERSION_LABELS off, so no row is read for labels and every title stays as it was. On, each
+ * document row gives its version label, effective date and title suffix in the label language resolved from the question.
+ */
+function versionViews(input: AssembleInput): ((documentId: string) => VersionView | null) | null {
+  if (!readAnswerConfig().versionLabels) return null;
+  const language = versionLabelLanguage(input.queryText);
+  const cache = new Map<string, VersionView | null>();
+  return (documentId) => {
+    if (cache.has(documentId)) return cache.get(documentId)!;
+    const row = input.documents.get(documentId);
+    let view: VersionView | null = null;
+    if (row) {
+      const versionLabel = versionLabelOf(row, language);
+      const effectiveFrom = effectiveDateOf(row);
+      view = {
+        documentVersion: typeof row.version === 'number' ? row.version : null,
+        fields: {
+          ...(versionLabel !== null ? { versionLabel } : {}),
+          ...(effectiveFrom !== null ? { effectiveFrom } : {}),
+        },
+        suffix: versionHeaderSuffix(row, language),
+      };
+    }
+    cache.set(documentId, view);
+    return view;
+  };
+}
+
 /** Applies the labeler to non-image blocks in order, continuing the ordinal count. */
 class BlockLabeller {
   readonly blocks: ContextBlock[] = [];
@@ -244,8 +287,8 @@ class BlockLabeller {
   readonly headers = new Map<number, string>();
 
   /** Records the block; returns its label when a labeler is set and the block is not an image. */
-  add(draft: DraftBlock): CitationLabel | null {
-    const unlabelled = { ...draft, title: this.neutralize(blockTitle(draft)) };
+  add(draft: DraftBlock, titleSuffix = ''): CitationLabel | null {
+    const unlabelled = { ...draft, title: this.neutralize(`${blockTitle(draft)}${titleSuffix}`) };
     if (!this.labeler || draft.isImage) {
       this.blocks.push({ ...unlabelled, alias: null });
       return null;
@@ -291,6 +334,7 @@ export function buildContext<C extends AssemblyCandidate>(
   }
 
   const sentinel = sentinelNeutralizer();
+  const versionOf = versionViews(input);
   const labeller = new BlockLabeller(input.citationLabeler, sentinel.quiet);
   const marks = input.injectionMarks ?? null;
   const entries: WrapEntry[] = [];
@@ -306,17 +350,22 @@ export function buildContext<C extends AssemblyCandidate>(
         return renderReferencedSection(section);
       }
       entries.push({ block: labeller.blocks.length, reference: true, flagged: marks?.sectionIndexes.has(sectionIndex) ?? false });
-      const label = labeller.add({
-        documentId: section.documentId,
-        documentName: section.documentName,
-        documentVersion: null,
-        chunkIds: [...section.chunkIds],
-        page: null,
-        sectionPath: null,
-        text: section.text,
-        isImage: false,
-        ...uploaderOf(input.documents.get(section.documentId)),
-      });
+      const version = versionOf?.(section.documentId) ?? null;
+      const label = labeller.add(
+        {
+          documentId: section.documentId,
+          documentName: section.documentName,
+          documentVersion: version?.documentVersion ?? null,
+          chunkIds: [...section.chunkIds],
+          page: null,
+          sectionPath: null,
+          text: section.text,
+          isImage: false,
+          ...uploaderOf(input.documents.get(section.documentId)),
+          ...version?.fields,
+        },
+        version?.suffix,
+      );
       return label ? renderReferencedSection({ ...section, text: label.text }, label.header) : renderReferencedSection(section);
     });
     if (input.citationLabeler) context = rendered.join('');
@@ -333,7 +382,7 @@ export function buildContext<C extends AssemblyCandidate>(
     // Sections group by file name; a version-labelled document groups by its id, so two versions of one file stay apart.
     const sectionNames = new Map<string, string>();
     const sectionKey = (documentId: string, docName: string): string => {
-      if (!input.versionLabels?.has(documentId)) return docName;
+      if (!input.versionLabels?.has(documentId) && !versionOf) return docName;
       const key = `${docName}\u0000${documentId}`;
       sectionNames.set(key, docName);
       return key;
@@ -418,7 +467,8 @@ export function buildContext<C extends AssemblyCandidate>(
         return b.similarity - a.similarity;
       });
 
-      contextParts.push(`\n--- Document: ${docName} (${chunks.length} relevant chunks) ---`);
+      const sectionVersion = versionOf?.(chunks[0]!.documentId) ?? null;
+      contextParts.push(`\n--- Document: ${docName}${sectionVersion?.suffix ?? ''} (${chunks.length} relevant chunks) ---`);
 
       const pieces = chunks.map((c) => {
         const contentMatch = c.content.match(/^Document: [^.]+\.[^.]+\. Chunk \d+ of (\d+)\. Content: (.*)$/s);
@@ -449,6 +499,7 @@ export function buildContext<C extends AssemblyCandidate>(
         }
         const group = pieces.slice(start, end);
         const documentVersion = input.documents.get(first.chunk.documentId)?.version;
+        const version = versionOf?.(first.chunk.documentId) ?? null;
         const draft: DraftBlock = {
           documentId: first.chunk.documentId,
           documentName: docName,
@@ -459,13 +510,14 @@ export function buildContext<C extends AssemblyCandidate>(
           text: group.map((piece) => piece.body).join('\n\n'),
           isImage: first.isImage,
           ...uploaderOf(input.documents.get(first.chunk.documentId)),
+          ...version?.fields,
         };
         entries.push({
           block: labeller.blocks.length,
           reference: false,
           flagged: marks !== null && draft.chunkIds.some((chunkId) => marks.chunkIds.has(chunkId)),
         });
-        const label = labeller.add(draft);
+        const label = labeller.add(draft, version?.suffix);
         if (versionLine !== undefined && !draft.isImage) {
           // The line is written before the entry (and is the wrapped doc's header), never into the block text that citations quote.
           labeller.headers.set(labeller.blocks.length - 1, label ? `${versionLine}\n${label.header}` : versionLine);

@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   buildContext,
   attachTableRow,
@@ -11,7 +12,8 @@ import {
 import { selectWithinBudget, type BudgetOptions, type RenderEstimate } from '../../context/budget';
 import { compressChunks, type CompressibleChunk } from '../../context/compress';
 import { edgeOrder } from '../../context/edge-order';
-import type { AssemblyRows } from '../../context/fetch-rows';
+import { fetchVersionColumns, type AssemblyRows } from '../../context/fetch-rows';
+import { readAnswerConfig } from '../../generation/answer-config';
 import { mergeAdjacent, type AdjacentChunk } from '../../context/merge-adjacent';
 import { getRagDeps } from '../../deps';
 import { countTokens } from '../../ingest/text/tokens';
@@ -306,6 +308,17 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
     });
   }
   const rows = assemblyRowsFromHits(topHits);
+  // D-49: the hits carry no version label or dates; one batched read adds them, only while RAG_VERSION_LABELS is on.
+  if (readAnswerConfig().versionLabels && input.scope && rows.documents.size > 0) {
+    const admin = getRagDeps().adminClient() as SupabaseClient | null;
+    if (admin) {
+      const columns = await fetchVersionColumns(admin, [...rows.documents.keys()], { tenantKey: scopeKey(input.scope), signal });
+      for (const [documentId, values] of columns) {
+        const row = rows.documents.get(documentId);
+        if (row) rows.documents.set(documentId, { ...row, ...values });
+      }
+    }
+  }
   const hitById = new Map(topHits.map((row) => [row.hit.chunkId, row.hit]));
   const rankById = new Map(candidates.map((candidate, index) => [candidate.chunk_id, index + 1]));
   const keptBy: KeptBy = rerank?.ran ? 'rerank' : 'fused';

@@ -142,6 +142,10 @@ export interface ContextBlock {
   alias: string | null;
   /** The document's documents.user_id; present only while RAG_SECURITY_EVENTS is on (D-44), null for a document without owner. */
   uploaderId?: string | null;
+  /** RAG_VERSION_LABELS (D-50): documents.version_label, else the integer version in the label language; absent without either. */
+  versionLabel?: string;
+  /** RAG_VERSION_LABELS (D-50): ISO YYYY-MM-DD from effective_from, else the document date; absent without either. */
+  effectiveFrom?: string;
 }
 
 export interface CitationLabel {
