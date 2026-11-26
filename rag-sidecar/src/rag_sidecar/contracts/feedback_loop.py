@@ -473,6 +473,8 @@ class TenantLoopStats(_Contract):
     items_skipped: Count = 0
     items_exported: Count = 0
     triage: TriageCounts
+    # 04.2-20 (D-22): mean of the logged top-k redundancy over the tenant's rows that carry one.
+    topk_redundancy_mean: Rate | None = None
 
 
 class FeedbackLoopStats(_Contract):

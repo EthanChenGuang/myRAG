@@ -4434,6 +4434,7 @@
           "source_open_rate": 0.3,
           "tenant_hash": "0101010101010101",
           "thumbs_down_rate": 0.25,
+          "topk_redundancy_mean": null,
           "triage": {
             "dictionary": 0,
             "golden": 1,
@@ -7708,6 +7709,7 @@
             "source_open_rate": 0.3,
             "tenant_hash": "0101010101010101",
             "thumbs_down_rate": 0.25,
+            "topk_redundancy_mean": null,
             "triage": {
               "dictionary": 0,
               "golden": 1,
