@@ -98,7 +98,7 @@ function hasExplicitAttributes(explicit: Record<string, readonly string[]> | und
 
 function attributeCounts(value: AttributeStageOutcome): Record<string, number> {
   if (value.kind === 'rejected') {
-    return { explicit_keys: 0, matched_keys: 0, alias_matches: 0, ambiguous: 0, hard_ids: 0, soft_ids: 0, too_broad: 0, lexicon_truncated: 0, explicit_rejected: 1 };
+    return { explicit_keys: 0, matched_keys: 0, alias_matches: 0, ambiguous: 0, explicit_ids: 0, hard_ids: 0, soft_ids: 0, too_broad: 0, lexicon_truncated: 0, explicit_rejected: 1 };
   }
   const { resolution } = value;
   return {
@@ -106,6 +106,7 @@ function attributeCounts(value: AttributeStageOutcome): Record<string, number> {
     matched_keys: resolution.counts.matchedKeys,
     alias_matches: resolution.counts.aliasMatches,
     ambiguous: resolution.counts.ambiguous,
+    explicit_ids: value.explicitIds?.length ?? 0,
     hard_ids: resolution.hardIds?.length ?? 0,
     soft_ids: value.softIds.length,
     too_broad: resolution.tooBroad ? 1 : 0,

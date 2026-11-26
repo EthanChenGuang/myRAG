@@ -209,6 +209,7 @@ describe('attribute_resolve stage (03.3-19, D-29, D-30)', () => {
       matched_keys: 0,
       alias_matches: 0,
       ambiguous: 0,
+      explicit_ids: 0,
       hard_ids: 0,
       soft_ids: 0,
       too_broad: 0,
