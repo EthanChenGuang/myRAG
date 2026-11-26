@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "description": "Phase 3.2 D-07 / Phase 3.2.1: the languages each embedding catalog model declares, the one source of these declarations. src/lib/rag/embeddings/catalog.ts reads it at module load (every catalog model needs an entry, and every entry a catalog model); scripts/init-env.js and scripts/config-server.js read it through scripts/rag/language-settings-context.js. Codes are language-pack codes of config/rag/language-packs.json. default_profile is the profile checked when the active profile cannot be read (no database).",
+  "default_profile": {
+    "id": "openai-3-small-1536",
+    "provider": "openai",
+    "model": "text-embedding-3-small"
+  },
+  "models": [
+    { "provider": "openai", "model": "text-embedding-3-small", "supported_languages": ["zh", "en", "it"] },
+    { "provider": "voyage", "model": "voyage-4-large", "supported_languages": ["zh", "en", "it"] },
+    { "provider": "voyage", "model": "voyage-law-2", "supported_languages": ["en", "zh"] },
+    { "provider": "voyage", "model": "voyage-finance-2", "supported_languages": ["en"] },
+    { "provider": "qwen3", "model": "Qwen/Qwen3-Embedding-8B", "supported_languages": ["zh", "en", "it"] },
+    { "provider": "bge-m3", "model": "BAAI/bge-m3", "supported_languages": ["zh", "en", "it"] }
+  ]
+}

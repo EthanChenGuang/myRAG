@@ -1,5 +1,13 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { EMBEDDING_MODEL_CATALOG, catalogEntry, defaultModelFor } from '@/lib/rag/embeddings/catalog';
+import {
+  EMBEDDING_MODEL_CATALOG,
+  catalogEntry,
+  defaultEmbeddingProfileDeclaration,
+  defaultModelFor,
+  embeddingProfileDeclaration,
+} from '@/lib/rag/embeddings/catalog';
 import type { EmbeddingModelEntry } from '@/lib/rag/embeddings/catalog';
 import { canonicalModelId } from '@/lib/rag/embeddings/types';
 
@@ -9,6 +17,7 @@ const EXPECTED_MODELS = [
   'voyage:voyage-law-2',
   'voyage:voyage-finance-2',
   'qwen3:Qwen/Qwen3-Embedding-8B',
+  'bge-m3:BAAI/bge-m3',
 ];
 
 function entry(provider: string, model: string): EmbeddingModelEntry {
@@ -18,7 +27,7 @@ function entry(provider: string, model: string): EmbeddingModelEntry {
 }
 
 describe('embedding model catalog (EMB-06, D-01)', () => {
-  it('lists exactly the five models of this phase and is frozen', () => {
+  it('lists exactly the five Phase 3.1.1 models plus BGE-M3 (Phase 3.2.1) and is frozen', () => {
     expect(EMBEDDING_MODEL_CATALOG.map((item) => `${item.provider}:${item.model}`).sort()).toEqual([...EXPECTED_MODELS].sort());
     expect(Object.isFrozen(EMBEDDING_MODEL_CATALOG)).toBe(true);
     for (const item of EMBEDDING_MODEL_CATALOG) expect(Object.isFrozen(item)).toBe(true);
@@ -86,7 +95,7 @@ describe('embedding model catalog (EMB-06, D-01)', () => {
       expect(item.supportedLanguages.length).toBeGreaterThan(0);
       for (const code of item.supportedLanguages) expect(code).toMatch(/^[a-z]{2,3}$/);
     }
-    expect([...entry('voyage', 'voyage-law-2').supportedLanguages]).toEqual(['en', 'zh', 'de']);
+    expect([...entry('voyage', 'voyage-law-2').supportedLanguages]).toEqual(['en', 'zh']);
     expect([...entry('voyage', 'voyage-finance-2').supportedLanguages]).toEqual(['en']);
     for (const [provider, model] of [
       ['openai', 'text-embedding-3-small'],
@@ -125,6 +134,62 @@ describe('embedding model catalog (EMB-06, D-01)', () => {
 
   it('records the date the vendor facts were read', () => {
     for (const item of EMBEDDING_MODEL_CATALOG) expect(item.readOn).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+});
+
+const ROOT = path.resolve(__dirname, '..', '..', '..');
+const DECLARATIONS = JSON.parse(fs.readFileSync(path.join(ROOT, 'config', 'rag', 'embedding-model-languages.json'), 'utf8')) as {
+  schema_version: number;
+  default_profile: { id: string; provider: string; model: string };
+  models: { provider: string; model: string; supported_languages: string[] }[];
+};
+const REGISTRY_CODES = (
+  JSON.parse(fs.readFileSync(path.join(ROOT, 'config', 'rag', 'language-packs.json'), 'utf8')) as { packs: { code: string }[] }
+).packs.map((pack) => pack.code);
+
+describe('language declarations of the catalog models (Phase 3.2 D-07, Phase 3.2.1)', () => {
+  it('come from config/rag/embedding-model-languages.json, one entry per catalog model and no other', () => {
+    expect(DECLARATIONS.schema_version).toBe(1);
+    const fileModels = DECLARATIONS.models.map((model) => `${model.provider}:${model.model}`);
+    expect(new Set(fileModels).size).toBe(fileModels.length);
+    expect([...fileModels].sort()).toEqual(EMBEDDING_MODEL_CATALOG.map((item) => `${item.provider}:${item.model}`).sort());
+    for (const declared of DECLARATIONS.models) {
+      expect([...entry(declared.provider, declared.model).supportedLanguages]).toEqual(declared.supported_languages);
+    }
+  });
+
+  it('declare a non-empty set of language-pack codes on every model', () => {
+    for (const item of EMBEDDING_MODEL_CATALOG) {
+      expect(item.supportedLanguages.length, `${item.provider}:${item.model}`).toBeGreaterThan(0);
+      for (const code of item.supportedLanguages) expect(REGISTRY_CODES, `${item.provider}:${item.model}`).toContain(code);
+    }
+  });
+
+  it('declare the three shipped languages on every model an unscoped profile can use', () => {
+    for (const [provider, model] of [
+      ['openai', 'text-embedding-3-small'],
+      ['voyage', 'voyage-4-large'],
+      ['qwen3', 'Qwen/Qwen3-Embedding-8B'],
+      ['bge-m3', 'BAAI/bge-m3'],
+    ]) {
+      expect([...entry(provider, model).supportedLanguages].sort()).toEqual(['en', 'it', 'zh']);
+    }
+  });
+
+  it('name a catalog model for the default profile, the legacy profile', () => {
+    expect(DECLARATIONS.default_profile).toEqual({ id: 'openai-3-small-1536', provider: 'openai', model: 'text-embedding-3-small' });
+    expect(defaultEmbeddingProfileDeclaration()).toEqual({ id: 'openai-3-small-1536', supportedLanguages: ['zh', 'en', 'it'] });
+  });
+
+  it('give a profile the declaration of its model, and none for a model outside the catalog', () => {
+    expect(embeddingProfileDeclaration({ id: 'voyage-finance-2-1024', provider: 'voyage', model: 'mongodb/voyage-finance-2' })).toEqual({
+      id: 'voyage-finance-2-1024',
+      supportedLanguages: ['en'],
+    });
+    expect(embeddingProfileDeclaration({ id: 'other-1024', provider: 'voyage', model: 'voyage-9' })).toEqual({
+      id: 'other-1024',
+      supportedLanguages: [],
+    });
   });
 });
 

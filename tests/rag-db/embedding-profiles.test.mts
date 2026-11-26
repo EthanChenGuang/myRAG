@@ -1,5 +1,6 @@
 import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { PGlite } from '@electric-sql/pglite';
@@ -15,6 +16,9 @@ const HALFVEC_PROFILES = ['voyage-4-large-2048', 'voyage-4-large-1024', 'qwen3-8
 const SERVICE_TABLES = ['embedding_profiles', 'chunk_embeddings', 'embedding_backfill_runs', 'embedding_backfill_gaps'];
 /** Scoped domain candidates seeded by 0440 (Phase 3.1.1); they never take part in the Phase 3 global registry behaviour. */
 const SCOPED_PROFILES = ['voyage-4-large-1024-domain', 'voyage-finance-2-1024', 'voyage-law-2-1024'];
+/** Unscoped open-source fallback seeded by 0811 (Phase 3.2.1, EMB-11, D-25). */
+const BGE_M3 = 'bge-m3-1024';
+const MIGRATION_0811 = path.join(REPO_ROOT, 'supabase/migrations/0811_bge_m3_profile.sql');
 
 function halfvecLiteral(dims: number, value = 0.1): string {
   return `[${Array.from({ length: dims }, () => value).join(',')}]`;
@@ -109,7 +113,7 @@ for (const mode of MODES) {
         query_instruction: string | null;
       }>('SELECT id, provider, model, dims, storage, status, score_calibration, query_instruction FROM embedding_profiles ORDER BY id');
       const byId = new Map(result.rows.map((row) => [row.id, row]));
-      assert.deepEqual([...byId.keys()].sort(), [LEGACY, ...HALFVEC_PROFILES, ...SCOPED_PROFILES].sort());
+      assert.deepEqual([...byId.keys()].sort(), [LEGACY, ...HALFVEC_PROFILES, ...SCOPED_PROFILES, BGE_M3].sort());
 
       const legacy = byId.get(LEGACY);
       assert.equal(legacy?.provider, 'openai');
@@ -317,7 +321,7 @@ for (const mode of MODES) {
 
       await db.query("UPDATE embedding_profiles SET eval_evidence = '{\"gate_passed\": true}'::jsonb WHERE id = 'voyage-4-large-1024'");
       const list = await db.query<Record<string, unknown>>('SELECT * FROM rag_list_embedding_profiles()');
-      assert.equal(list.rows.length, 5 + SCOPED_PROFILES.length);
+      assert.equal(list.rows.length, 5 + SCOPED_PROFILES.length + 1);
       assert.ok(!('eval_evidence' in (list.rows[0] ?? {})), 'the list must not return evidence bodies');
       const withEvidence = list.rows.filter((row) => row.has_evidence === true).map((row) => row.id);
       assert.deepEqual(withEvidence, ['voyage-4-large-1024']);
@@ -354,6 +358,160 @@ for (const mode of MODES) {
            AND p.proname IN ('rag_list_embedding_profiles', 'rag_set_embedding_profile_status') AND NOT has_function_privilege('service_role', p.oid, 'EXECUTE')`,
       );
       assert.deepEqual(service.rows, []);
+    });
+  });
+}
+
+async function hnswIndexFor(db: PGlite, table: string, profileId: string): Promise<string | undefined> {
+  const result = await db.query<{ indexdef: string }>(
+    "SELECT indexdef FROM pg_indexes WHERE schemaname = 'public' AND tablename = $1 AND indexdef LIKE '%USING hnsw%'",
+    [table],
+  );
+  return result.rows.find((row) => row.indexdef.includes(`'${profileId}'`))?.indexdef;
+}
+
+for (const mode of MODES) {
+  describe(`0811 BGE-M3 profile (${mode})`, () => {
+    let fixture: FixtureDatabase;
+
+    before(async () => {
+      fixture = await createFixtureDatabase({ deploymentMode: mode, corpusDir: REAL_CORPUS, supabaseGrants: true });
+    });
+
+    after(async () => {
+      await fixture.db.close();
+    });
+
+    test('seeds bge-m3-1024 available, unscoped, halfvec 1024, with no query instruction and no evidence', async () => {
+      const { db } = fixture;
+      const result = await db.query<Record<string, unknown>>(
+        `SELECT provider, model, dims, storage, status, doc_types, query_instruction, score_calibration, eval_evidence,
+                activated_at, activated_by, previous_active_id
+           FROM public.embedding_profiles WHERE id = $1`,
+        [BGE_M3],
+      );
+      assert.deepEqual(result.rows, [
+        {
+          provider: 'bge-m3',
+          model: 'BAAI/bge-m3',
+          dims: 1024,
+          storage: 'halfvec',
+          status: 'available',
+          doc_types: null,
+          query_instruction: null,
+          score_calibration: {},
+          eval_evidence: null,
+          activated_at: null,
+          activated_by: null,
+          previous_active_id: null,
+        },
+      ]);
+    });
+
+    test('activates nothing: the legacy profile stays the one active profile', async () => {
+      const { db } = fixture;
+      const active = await db.query<{ id: string }>("SELECT id FROM public.embedding_profiles WHERE status = 'active'");
+      assert.deepEqual(active.rows, [{ id: LEGACY }]);
+    });
+
+    test('has a partial HNSW index over halfvec(1024) with m 64 and ef_construction 200 on both vector tables', async () => {
+      const { db } = fixture;
+      for (const table of ['chunk_embeddings', 'chunk_translation_embeddings']) {
+        const indexdef = await hnswIndexFor(db, table, BGE_M3);
+        assert.ok(indexdef, `no HNSW index for ${BGE_M3} on ${table}`);
+        assert.match(indexdef, /halfvec\(1024\)/);
+        assert.match(indexdef, /halfvec_cosine_ops/);
+        assert.match(indexdef, /m='?64'?/);
+        assert.match(indexdef, /ef_construction='?200'?/);
+        assert.match(indexdef, /WHERE \(+profile_id = 'bge-m3-1024'::text\)+/);
+      }
+    });
+
+    test('the unchanged activation gate refuses it without completeness, then without evidence', async () => {
+      const { db } = fixture;
+      const attempt = async (): Promise<string> => {
+        await db.exec('SAVEPOINT bge_activate');
+        try {
+          await db.query('SELECT * FROM rag_activate_embedding_profile($1, $2)', [BGE_M3, 'operator-test']);
+          await db.exec('RELEASE SAVEPOINT bge_activate');
+          return 'accepted';
+        } catch (error) {
+          await db.exec('ROLLBACK TO SAVEPOINT bge_activate');
+          return error instanceof Error ? error.message : String(error);
+        }
+      };
+      await db.exec('BEGIN');
+      try {
+        assert.match(await attempt(), /activation_refused: incomplete/);
+        await db.query(
+          `INSERT INTO chunk_embeddings (chunk_id, profile_id, tenant_key, embedding, embedding_model, dims)
+           SELECT c.id, $1, c.tenant_key, array_fill(0.1::float4, ARRAY[1024])::halfvec, 'BAAI/bge-m3', 1024
+           FROM document_chunks c WHERE c.is_current AND c.status = 'ready'`,
+          [BGE_M3],
+        );
+        assert.match(await attempt(), /activation_refused: eval_missing/);
+        const status = await db.query<{ id: string; status: string }>(
+          "SELECT id, status FROM public.embedding_profiles WHERE id = $1 OR status = 'active' ORDER BY id",
+          [BGE_M3],
+        );
+        assert.deepEqual(status.rows, [
+          { id: BGE_M3, status: 'available' },
+          { id: LEGACY, status: 'active' },
+        ]);
+      } finally {
+        await db.exec('ROLLBACK');
+      }
+    });
+
+    test('stores 1024-dimension vectors, refuses another length, and holds rows from two embedding hosts', async () => {
+      const { db } = fixture;
+      const documentId = idFor(811, 1);
+      const chunks = [idFor(811, 2), idFor(811, 3), idFor(811, 4)];
+      await insertDocumentWithChunk(db, mode, fixture.fixtureUserId, documentId, chunks[0]);
+      for (const [offset, chunkId] of chunks.slice(1).entries()) {
+        await db.query('INSERT INTO document_chunks (id, document_id, content, chunk_index, metadata) VALUES ($1, $2, $3, $4, $5::jsonb)', [
+          chunkId,
+          documentId,
+          `further profile storage chunk ${offset}`,
+          offset + 1,
+          '{}',
+        ]);
+      }
+      for (const [index, host] of ['deepinfra', 'sidecar'].entries()) {
+        await db.query(
+          `INSERT INTO chunk_embeddings (chunk_id, profile_id, tenant_key, embedding, embedding_model, dims, embedding_host)
+           SELECT c.id, $2, c.tenant_key, $3::halfvec, 'BAAI/bge-m3', 1024, $4 FROM document_chunks c WHERE c.id = $1`,
+          [chunks[index], BGE_M3, halfvecLiteral(1024), host],
+        );
+      }
+      const stored = await db.query<{ hosts: string[] }>(
+        'SELECT array_agg(DISTINCT embedding_host ORDER BY embedding_host) AS hosts FROM chunk_embeddings WHERE profile_id = $1',
+        [BGE_M3],
+      );
+      assert.deepEqual(stored.rows[0]?.hosts, ['deepinfra', 'sidecar']);
+      const wrong = await tryQuery(
+        db,
+        `INSERT INTO chunk_embeddings (chunk_id, profile_id, tenant_key, embedding, embedding_model, dims)
+         SELECT c.id, $2, c.tenant_key, $3::halfvec, 'BAAI/bge-m3', 768 FROM document_chunks c WHERE c.id = $1`,
+        [chunks[2], BGE_M3, halfvecLiteral(768)],
+      );
+      assert.match(wrong ?? 'accepted', /expected 1024 dimensions/);
+    });
+
+    test('applying 0811 a second time changes nothing', async () => {
+      const { db } = fixture;
+      const snapshot = async () => ({
+        profiles: (await db.query('SELECT * FROM public.embedding_profiles ORDER BY id')).rows,
+        indexes: (
+          await db.query(
+            "SELECT tablename, indexname, indexdef FROM pg_indexes WHERE schemaname = 'public' AND indexdef LIKE '%bge-m3-1024%' ORDER BY indexname",
+          )
+        ).rows,
+      });
+      const before = await snapshot();
+      await db.exec(fs.readFileSync(MIGRATION_0811, 'utf8'));
+      assert.deepEqual(await snapshot(), before);
+      assert.equal(before.indexes.length, 2);
     });
   });
 }

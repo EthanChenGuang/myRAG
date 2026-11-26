@@ -849,5 +849,147 @@
         }
       }
     }
+  ],
+  "activeProfileDescription": "Phase 3.2.1 (03.2.1-01): adapter-level cases. activeProfile is the profile the registry pointer names; its declaration comes from the catalog (config/rag/embedding-model-languages.json), never from the case. database unreachable means the active profile cannot be read: the app checks the default profile and reports verifiedAgainstActiveProfile false. The script entry points never read the pointer, so they see activeProfile as the default profile when the database is reachable and report false.",
+  "activeProfileCases": [
+    {
+      "name": "active_profile_model_lacks_language",
+      "supported": "zh,en",
+      "primary": "en",
+      "activeProfile": {
+        "id": "voyage-finance-2-1024",
+        "provider": "voyage",
+        "model": "voyage-finance-2"
+      },
+      "database": "reachable",
+      "expect": {
+        "ok": false,
+        "errors": [
+          {
+            "code": "embedding_profile_unsupported",
+            "language": "zh",
+            "id": "voyage-finance-2-1024"
+          }
+        ],
+        "warnings": [],
+        "verifiedAgainstActiveProfile": true,
+        "normalized": null
+      }
+    },
+    {
+      "name": "active_profile_model_lacks_two_languages",
+      "supported": "zh,en,it",
+      "primary": "en",
+      "activeProfile": {
+        "id": "voyage-law-2-1024",
+        "provider": "voyage",
+        "model": "voyage-law-2"
+      },
+      "database": "reachable",
+      "expect": {
+        "ok": false,
+        "errors": [
+          {
+            "code": "embedding_profile_unsupported",
+            "language": "it",
+            "id": "voyage-law-2-1024"
+          }
+        ],
+        "warnings": [
+          {
+            "code": "groundedness_not_checked",
+            "language": "it"
+          }
+        ],
+        "verifiedAgainstActiveProfile": true,
+        "normalized": null
+      }
+    },
+    {
+      "name": "active_profile_declares_all",
+      "supported": "zh,en,it",
+      "primary": "en",
+      "activeProfile": {
+        "id": "bge-m3-1024",
+        "provider": "bge-m3",
+        "model": "BAAI/bge-m3"
+      },
+      "database": "reachable",
+      "expect": {
+        "ok": true,
+        "errors": [],
+        "warnings": [
+          {
+            "code": "groundedness_not_checked",
+            "language": "it"
+          }
+        ],
+        "verifiedAgainstActiveProfile": true,
+        "normalized": {
+          "languages": [
+            "zh",
+            "en",
+            "it"
+          ],
+          "primary": "en",
+          "supported": "zh,en,it"
+        }
+      }
+    },
+    {
+      "name": "active_profile_model_outside_catalog_declares_nothing",
+      "supported": "en",
+      "primary": "en",
+      "activeProfile": {
+        "id": "unlisted-1024",
+        "provider": "voyage",
+        "model": "voyage-unlisted"
+      },
+      "database": "reachable",
+      "expect": {
+        "ok": false,
+        "errors": [
+          {
+            "code": "embedding_profile_unsupported",
+            "language": "en",
+            "id": "unlisted-1024"
+          }
+        ],
+        "warnings": [],
+        "verifiedAgainstActiveProfile": true,
+        "normalized": null
+      }
+    },
+    {
+      "name": "database_unreachable_checks_default_profile",
+      "supported": "zh,en,it",
+      "primary": "en",
+      "activeProfile": {
+        "id": "voyage-finance-2-1024",
+        "provider": "voyage",
+        "model": "voyage-finance-2"
+      },
+      "database": "unreachable",
+      "expect": {
+        "ok": true,
+        "errors": [],
+        "warnings": [
+          {
+            "code": "groundedness_not_checked",
+            "language": "it"
+          }
+        ],
+        "verifiedAgainstActiveProfile": false,
+        "normalized": {
+          "languages": [
+            "zh",
+            "en",
+            "it"
+          ],
+          "primary": "en",
+          "supported": "zh,en,it"
+        }
+      }
+    }
   ]
 }
