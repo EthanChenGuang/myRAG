@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { getLanguageRegistry, resetLanguageRegistryForTests, setLanguageRegistryForTests, TEXT_KEYS } from '@/lib/rag/lang/registry';
 import { LanguagePackSchema } from '@/lib/rag-eval/contracts.generated';
 import { resetLanguageSettingsForTests } from '@/lib/rag/lang/settings';
+import { FIXED_TEXTS } from '@/lib/rag/lang/texts.generated';
 import { fixedText, MissingTextParameterError, registryPackVersion, type TextKey } from '@/lib/rag/lang/texts';
 
 const ROOT = path.resolve(__dirname, '..', '..', '..');
@@ -117,5 +118,30 @@ describe('fixedText (D-08)', () => {
     const source = fs.readFileSync(path.join(ROOT, 'src', 'lib', 'rag', 'lang', 'texts.ts'), 'utf8');
     expect(source).not.toMatch(/process\.env/);
     expect(source).toMatch(/getLanguagePack/);
+  });
+});
+
+describe('FIXED_TEXTS client subset (D-12)', () => {
+  it('holds the notices and labels of every shipped language and no instructions', () => {
+    expect(Object.keys(FIXED_TEXTS)).toEqual(['zh', 'en', 'it']);
+    for (const entry of Object.values(FIXED_TEXTS)) {
+      expect(Object.keys(entry).sort()).toEqual(['labels', 'notices']);
+      expect(entry).not.toHaveProperty('instructions');
+    }
+    const source = fs.readFileSync(path.join(ROOT, 'src', 'lib', 'rag', 'lang', 'texts.generated.ts'), 'utf8');
+    expect(source).not.toMatch(/instructions|webSearch|calculate tool/);
+  });
+
+  it('every value equals fixedText for the same key and language', () => {
+    const keys = TEXT_KEYS.filter((key) => !key.startsWith('instructions.'));
+    expect(keys).toHaveLength(26);
+    for (const [code, entry] of Object.entries(FIXED_TEXTS)) {
+      for (const key of keys) {
+        const [group, name] = key.split('.') as ['notices' | 'labels', string];
+        expect(entry[group][name], `${code} ${key}`).toBe(shippedText(code, key));
+      }
+    }
+    expect(FIXED_TEXTS.zh.notices.link_removed).toBe(fixedText('notices.link_removed', 'zh'));
+    expect(FIXED_TEXTS.it.labels.badge_verified).toBe(fixedText('labels.badge_verified', 'it'));
   });
 });
