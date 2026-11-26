@@ -118,7 +118,7 @@ export { validateChunkingProfile } from './chunking/validate';
 export type { ChunkingFinding, ChunkingValidationContext, ChunkingValidationResult } from './chunking/validate';
 export { getChunkingSweepReport, getChunkingDecisions, ChunkingReportInvalid } from './chunking/report';
 export type { ChunkingReportCode } from './chunking/report';
-export { refusalCalibrationStatus, currentRefusalCalibrationStatus } from './refusal/status';
+export { refusalCalibrationStatus, currentRefusalCalibrationStatus, currentRefusalCalibrationInputs } from './refusal/status';
 export type { RefusalCalibrationStatus } from './refusal/status';
 export { judgeCalibrationStatus, currentJudgeCalibrationStatus } from './judge/calibration-status';
 export type { JudgeCalibrationStatus, JudgeCalibrationWarning, JudgeCalibrationCellView } from './judge/calibration-status';
@@ -126,6 +126,8 @@ export { exportCalibrationCases } from './judge/calibration-export';
 export type { CalibrationCase, CalibrationExport, CalibrationExportResult } from './judge/calibration-export';
 export { AnswerCheckRequestSchema, readAnswerCheck, saveAnswerCheck } from './judge/answer-check';
 export type { AnswerCheck, AnswerCheckFailure, AnswerCheckResult, AnswerCheckVerdicts } from './judge/answer-check';
+export { pendingCells, proposedPendingCells, PENDING_KEY_CATEGORIES, PENDING_KEYS } from './refusal/pending';
+export type { CellPending, PendingAlert, PendingChangeRecord, PendingCells } from './refusal/pending';
 export type {
   Candidate,
   HistoryTurn,

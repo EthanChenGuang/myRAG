@@ -5,7 +5,8 @@ import { getRagDeps } from '../deps';
 import { describeReranker } from '../rerank/select';
 import { RERANK_TEXT_VERSION, type RerankScoreSemantics } from '../rerank/types';
 import type { CellMode, QueryLanguage } from './gate';
-import { parseThresholds } from './thresholds';
+import type { CellPending, PendingCells } from './pending';
+import { parseThresholds, runningEmbeddingModel } from './thresholds';
 
 type ThresholdCellEntry = NonNullable<RefusalThresholds['cells']>[number];
 type SplitMetrics = ThresholdCellEntry['dev'];
@@ -42,6 +43,11 @@ export interface RefusalCellStatus {
   threshold: number | null;
   /** Calibrated with another tokenizer or rerank text version than the running code: the gate does not use it. */
   stale: boolean;
+  /**
+   * D-18 / D-24: derived mark, present (null or a mark) only when the caller passed the pending input. Separate from the stored status
+   * and from stale; never written into refusal-thresholds.json.
+   */
+  pending?: CellPending | null;
   tokenizer_version: number;
   rerank_text_version: number;
   recorded_at: string;
@@ -60,6 +66,8 @@ export type RefusalStatusWarning =
   | { code: 'refusal_on_without_calibrated_cell'; languages: QueryLanguage[]; missing: MissingRefusalCell[]; message: string }
   | { code: 'fixture_cells_only'; message: string }
   | { code: 'stale_cells'; keys: string[]; message: string }
+  | { code: 'uncalibrated_after_change'; keys: string[]; changed_keys: string[]; message: string }
+  | { code: 'possibly_stale_scores'; keys: string[]; alert_id: string; message: string }
   | { code: 'relative_reranker'; provider: RerankerKind; message: string }
   | { code: 'thresholds_invalid'; message: string };
 
@@ -119,7 +127,11 @@ function usable(cell: RefusalCellStatus): boolean {
  * its false-refusal point estimate and the 95% upper bound next to it (F-19); nothing here states a rate at or under the target, and no
  * cell can be changed through it (thresholds change only through the calibration tool and a pull request).
  */
-export function refusalCalibrationStatus(thresholds: RefusalThresholds | null, config: RagConfig): RefusalCalibrationStatus {
+export function refusalCalibrationStatus(
+  thresholds: RefusalThresholds | null,
+  config: RagConfig,
+  pending?: PendingCells,
+): RefusalCalibrationStatus {
   const provider = describeReranker(config, 'chat', '').id;
   const semantics = SCORE_SEMANTICS[provider];
   const tiers = {} as RefusalCalibrationStatus['reranker']['tiers'];
@@ -132,7 +144,10 @@ export function refusalCalibrationStatus(thresholds: RefusalThresholds | null, c
   }
 
   const lexicalVersion = effectiveLexicalVersion(config);
-  const cells = (thresholds?.cells ?? []).map((cell) => cellStatus(cell, lexicalVersion));
+  const cells = (thresholds?.cells ?? []).map((cell) => {
+    const entry = cellStatus(cell, lexicalVersion);
+    return pending ? { ...entry, pending: pending.get(cell.key) ?? null } : entry;
+  });
   const warnings: RefusalStatusWarning[] = [];
 
   if (thresholds === null) {
@@ -180,6 +195,29 @@ export function refusalCalibrationStatus(thresholds: RefusalThresholds | null, c
     });
   }
 
+  if (pending) {
+    const changed = cells.filter((entry) => entry.pending && entry.pending.reason !== 'score_shift');
+    if (changed.length > 0) {
+      const changedKeys = [...new Set(changed.flatMap((entry) => entry.pending?.changed_keys ?? []))].sort();
+      warnings.push({
+        code: 'uncalibrated_after_change',
+        keys: changed.map((entry) => entry.key),
+        changed_keys: changedKeys,
+        message: 'A reranker, embedding-model or tokenizer change made these cells stop applying; run rag_eval.calibrate refusal to record matching live cells.',
+      });
+    }
+    const shifted = cells.filter((entry) => entry.pending?.reason === 'score_shift');
+    if (shifted.length > 0) {
+      const latest = [...shifted].sort((a, b) => ((a.pending?.since ?? '') < (b.pending?.since ?? '') ? 1 : -1))[0]!;
+      warnings.push({
+        code: 'possibly_stale_scores',
+        keys: shifted.map((entry) => entry.key),
+        alert_id: latest.pending?.alert_id ?? '',
+        message: 'The top-score distribution shifted for these languages; the thresholds still apply but may be stale.',
+      });
+    }
+  }
+
   if (semantics === 'relative') {
     warnings.push({
       code: 'relative_reranker',
@@ -203,4 +241,9 @@ export function refusalCalibrationStatus(thresholds: RefusalThresholds | null, c
 /** The status of the committed thresholds file (read by static import) under the running config. */
 export function currentRefusalCalibrationStatus(): RefusalCalibrationStatus {
   return refusalCalibrationStatus(parseThresholds(rawThresholds), loadRagConfig(getRagDeps().ragEnv()));
+}
+
+/** The committed thresholds and the running config the status is computed from, for callers that add the pending input. */
+export function currentRefusalCalibrationInputs(): { thresholds: RefusalThresholds | null; config: RagConfig; embeddingModel: string } {
+  return { thresholds: parseThresholds(rawThresholds), config: loadRagConfig(getRagDeps().ragEnv()), embeddingModel: runningEmbeddingModel() };
 }
