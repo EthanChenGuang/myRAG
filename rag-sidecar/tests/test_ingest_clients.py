@@ -451,3 +451,44 @@ def test_fake_app_records_calls_and_pending():
         assert len(app.calls) == 1
 
     asyncio.run(run())
+
+def _slice_ms(ts_path: str, name: str) -> int:
+    source = (Path(__file__).resolve().parents[2] / ts_path).read_text(encoding="utf-8")
+    marker = f"export const {name} = "
+    start = source.index(marker) + len(marker)
+    return int(source[start : source.index(";", start)].replace("_", ""))
+
+
+def test_slice_callbacks_wait_longer_than_the_app_slice_and_below_the_route_limit():
+    """The advance and parse-external routes run a 40 s slice and then finish the step in flight; a read timeout equal to the slice
+    aborted the request while the app was still answering (and the app then marked the version failed)."""
+    from rag_sidecar.ingest import app_client
+    from rag_sidecar.ingest.process_job import ADVANCE_DEADLINE_MS
+
+    reads: dict[str, float] = {}
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        reads[request.url.path.rsplit("/", 1)[-1]] = request.extensions["timeout"]["read"]
+        if request.url.path.endswith("/advance"):
+            return httpx.Response(200, json={"worker_id": "worker-1", "stage": "chunk", "done": True, "wait_ms": 0})
+        return httpx.Response(200, json={"status": "pending", "retry_after_ms": 1000})
+
+    async def run() -> None:
+        http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler), base_url=_APP_URL)
+        app = AppClient(app_base_url=_APP_URL, secret=SecretStr("x" * 32), client=http_client, rate_per_second=100)
+        await app.advance(_JOB_ID, AdvanceRequest(worker_id="worker-1", attempt_no=1, phase="begin", deadline_ms=ADVANCE_DEADLINE_MS))
+        try:
+            await app.parse_external(_JOB_ID, ParseExternalRequest(worker_id="worker-1", attempt_no=1, mode="chain"))
+        except Exception:  # noqa: BLE001 - only the timeout the request was sent with matters here
+            pass
+        await app.aclose()
+
+    asyncio.run(run())
+    advance_slice_s = _slice_ms("src/lib/rag/ingest/callbacks/advance.ts", "ADVANCE_SLICE_MS") / 1000
+    parse_slice_s = _slice_ms("src/lib/rag/ingest/callbacks/parse-external.ts", "PARSE_SLICE_MS") / 1000
+    route_limit_s = 60
+    assert set(reads) == {"advance", "parse-external"}
+    assert advance_slice_s + 10 <= reads["advance"] < route_limit_s
+    assert ADVANCE_DEADLINE_MS / 1000 + 10 <= reads["advance"]
+    assert parse_slice_s + 10 <= reads["parse-external"] < route_limit_s
+    assert reads["advance"] == app_client._SLICE_READ_TIMEOUT

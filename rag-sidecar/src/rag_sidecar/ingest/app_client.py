@@ -30,6 +30,10 @@ _MAX_CALLBACK_RETRIES = 3
 # A translate slice starts chunks for half its deadline and then finishes the one in flight (one model call, at most 30 s): below the
 # route's 60 s limit, above the default read timeout.
 _TRANSLATE_READ_TIMEOUT = 55.0
+# The advance and parse-external routes run a slice of up to 40 s (ADVANCE_SLICE_MS, PARSE_SLICE_MS) and then finish the step in flight
+# (an embed batch and its chunk write can take tens of seconds): wait longer than the slice, below the routes' 60 s limit. A read timeout
+# equal to the slice aborted the request while the app was still answering, and the app then marked the version failed.
+_SLICE_READ_TIMEOUT = 55.0
 
 
 class AppAuthError(Exception):
@@ -160,6 +164,7 @@ class AppClient:
         response = await self._call_with_retries(
             f"/api/internal/rag/ingest/jobs/{job_id}/parse-external",
             body,
+            read_timeout=_SLICE_READ_TIMEOUT,
         )
         if response.status_code >= 400 and response.status_code != 401:
             if response.status_code < 500:
@@ -174,6 +179,7 @@ class AppClient:
         response = await self._call_with_retries(
             f"/api/internal/rag/ingest/jobs/{job_id}/advance",
             body,
+            read_timeout=_SLICE_READ_TIMEOUT,
         )
         if response.status_code == 401:
             raise AppAuthError("callback unauthorized")
