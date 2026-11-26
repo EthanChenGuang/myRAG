@@ -634,9 +634,9 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     ...(runConfig?.generatorModel !== undefined ? { generatorModel: runConfig.generatorModel } : {}),
     citationsSwitch: runConfig?.env.RAG_CITATIONS === 'true',
   });
+  const citations = resolved.citations;
   if (citations) requestOptions.citations = true;
   if (groundedness) requestOptions.groundedness = true;
-  const citations = resolved.citations;
   if (runConfig?.generatorModel !== undefined && !requestOptions.generator_model) requestOptions.generator_model = runConfig.generatorModel;
   // Phase 5.3 D-13: --answers answers every item with the fake generator in instruction-sensitive mode.
   const answers = options.answers === true;
