@@ -59,6 +59,8 @@ export interface SearchStagesInput {
   translations?: TranslationLegsPlan;
   /** D-16: the terminology stage's expansion; non-empty tokens add one lexical-only term:0 list. */
   terminology?: { tokens: readonly string[]; expansionWeight: number } | null;
+  /** D-18: factor on the dense leg weight for a variant of kind terminology; absent reads TerminologyParams.dense_weight. */
+  terminologyDenseWeight?: number;
 }
 
 /** D-16: the expansion list id; no dense/lexical prefix, so nothing that inspects list ids by prefix counts it as a leg. */

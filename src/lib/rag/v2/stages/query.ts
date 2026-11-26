@@ -51,6 +51,10 @@ export interface TerminologyOutcome {
   /** D-16: factor on the lexical leg weight in force for the term:0 list. */
   expansionWeight: number;
   capped: boolean;
+  /** D-31: whether the term:0 list is searched; false when it has no tokens or the protected variants fill max_searches. */
+  termSearch: boolean;
+  /** D-18: factor on the dense leg weight in force for the terminology variant's dense list. */
+  denseWeight: number;
 }
 
 function terminologyDetail(value: TerminologyOutcome): string {
@@ -94,6 +98,8 @@ export async function runTerminologyStage(args: {
         expansionTokens: expansion.tokens,
         expansionWeight: params.expansion_weight,
         capped: expansion.capped,
+        termSearch: expansion.tokens.length > 0,
+        denseWeight: params.dense_weight,
       };
     },
     args.collector,
