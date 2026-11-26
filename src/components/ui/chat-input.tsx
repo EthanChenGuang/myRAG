@@ -4596,6 +4596,7 @@ export const ChatInput = forwardRef<ChatInputHandle, ChatInputProps>(function Ch
 
           <form
             ref={formRef}
+            data-chat-input-form=""
             onSubmit={handleFormSubmit}
             onClick={handleFormClick}
             className={cn(

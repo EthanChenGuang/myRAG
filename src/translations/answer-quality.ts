@@ -18,6 +18,7 @@ export interface AnswerQualityStrings {
   feedbackCancel: string;
   feedbackSaved: string;
   feedbackFailed: string;
+  relatedHeading: string;
 }
 
 const STRINGS: Record<string, AnswerQualityStrings> = {
@@ -44,6 +45,7 @@ const STRINGS: Record<string, AnswerQualityStrings> = {
     feedbackCancel: 'Cancel',
     feedbackSaved: 'Thanks for your feedback.',
     feedbackFailed: 'Feedback could not be saved. Try again.',
+    relatedHeading: 'Related',
   },
   zh: {
     citationsHeading: '本回答引用的内容',
@@ -68,6 +70,7 @@ const STRINGS: Record<string, AnswerQualityStrings> = {
     feedbackCancel: '取消',
     feedbackSaved: '感谢你的反馈。',
     feedbackFailed: '反馈未能保存，请重试。',
+    relatedHeading: '相关问题',
   },
   it: {
     citationsHeading: 'Citato in questa risposta',
@@ -92,6 +95,7 @@ const STRINGS: Record<string, AnswerQualityStrings> = {
     feedbackCancel: 'Annulla',
     feedbackSaved: 'Grazie per il feedback.',
     feedbackFailed: 'Non è stato possibile salvare il feedback. Riprova.',
+    relatedHeading: 'Domande correlate',
   },
 };
 
