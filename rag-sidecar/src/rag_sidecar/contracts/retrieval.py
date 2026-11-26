@@ -364,6 +364,9 @@ class RefusalCell(_Contract):
     holdout_evaluations: int = Field(ge=0)
     dev: RefusalMetricBlock
     holdout: RefusalMetricBlock
+    embedding_model: str | None = Field(
+        default=None, min_length=1, exclude_if=_omit_none, json_schema_extra=omit_none_schema
+    )
 
     @model_validator(mode="after")
     def _calibrated_needs_threshold(self) -> "RefusalCell":

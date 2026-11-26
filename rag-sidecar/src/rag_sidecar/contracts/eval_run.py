@@ -359,3 +359,4 @@ class RunManifest(_Contract):
     item_count: int = Field(ge=0)
     edge_errors: int = Field(ge=0)
     run_config: RunConfigRecord | None = None
+    rag_mode: Literal["strict", "balanced", "flexible"] = "strict"

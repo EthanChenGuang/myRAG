@@ -299,6 +299,9 @@
         "correct_refusal_rate": {
           "$ref": "#/$defs/MetricValue"
         },
+        "false_answer_rate": {
+          "$ref": "#/$defs/MetricValue"
+        },
         "false_refusal_rate": {
           "$ref": "#/$defs/MetricValue"
         },
@@ -412,7 +415,9 @@
           "claude_draft",
           "ragas_generated",
           "human",
-          "production"
+          "production",
+          "historical",
+          "paraphrased"
         ]
       },
       "title": "Provenance Counts",

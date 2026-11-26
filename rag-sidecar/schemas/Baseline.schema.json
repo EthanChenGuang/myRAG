@@ -1512,6 +1512,16 @@
     "golden_filter": {
       "$ref": "#/$defs/GoldenFilter"
     },
+    "golden_manifest_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Golden Manifest Sha256",
+      "type": "string"
+    },
+    "golden_set_version": {
+      "minimum": 1,
+      "title": "Golden Set Version",
+      "type": "integer"
+    },
     "golden_sha256": {
       "title": "Golden Sha256",
       "type": "string"

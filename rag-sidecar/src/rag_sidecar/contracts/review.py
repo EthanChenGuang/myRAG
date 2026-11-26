@@ -18,6 +18,8 @@ ReviewReason = Literal[
     "zero_results",
     "low_score",
     "no_source_opened",
+    "representative",
+    "re_review",
 ]
 
 

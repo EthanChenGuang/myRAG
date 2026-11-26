@@ -31,6 +31,7 @@ Category = Literal[
     "table_split",
     "duplicate_flood",
     "identifier_near_miss",
+    "implicit_condition",
 ]
 INJECTION_CATEGORIES = frozenset({"injection", "injection_evasive"})
 CACHE_PAIR_CATEGORIES = frozenset({"cache_paraphrase", "cache_near_miss"})
@@ -38,7 +39,9 @@ UNANSWERABLE_CATEGORIES = frozenset({"no_answer", "small_talk"})
 ITEM_ID_PATTERN = r"^[a-z0-9][a-z0-9._-]{2,63}$"
 UUID_PATTERN = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
 ReviewStatus = Literal["draft", "approved", "rejected"]
-Provenance = Literal["synthetic_fixture", "claude_draft", "ragas_generated", "human", "production"]
+Provenance = Literal[
+    "synthetic_fixture", "claude_draft", "ragas_generated", "human", "production", "historical", "paraphrased"
+]
 Split = Literal["dev", "test"]
 NativeReviewOrigin = Literal["native", "machine_translated", "llm_drafted"]
 NativeReviewStatus = Literal["pending", "approved"]

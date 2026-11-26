@@ -54,7 +54,9 @@
           "refused_high_score",
           "zero_results",
           "low_score",
-          "no_source_opened"
+          "no_source_opened",
+          "representative",
+          "re_review"
         ],
         "type": "string"
       },

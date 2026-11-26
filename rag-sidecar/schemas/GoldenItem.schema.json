@@ -466,7 +466,8 @@
         "small_talk",
         "table_split",
         "duplicate_flood",
-        "identifier_near_miss"
+        "identifier_near_miss",
+        "implicit_condition"
       ],
       "title": "Category",
       "type": "string"
@@ -561,7 +562,9 @@
         "claude_draft",
         "ragas_generated",
         "human",
-        "production"
+        "production",
+        "historical",
+        "paraphrased"
       ],
       "title": "Provenance",
       "type": "string"

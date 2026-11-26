@@ -328,7 +328,8 @@
             "small_talk",
             "table_split",
             "duplicate_flood",
-            "identifier_near_miss"
+            "identifier_near_miss",
+            "implicit_condition"
           ],
           "title": "Category",
           "type": "string"
@@ -434,7 +435,9 @@
             "claude_draft",
             "ragas_generated",
             "human",
-            "production"
+            "production",
+            "historical",
+            "paraphrased"
           ],
           "title": "Provenance",
           "type": "string"
@@ -1665,6 +1668,9 @@
         "correct_refusal_rate": {
           "$ref": "#/$defs/MetricValue"
         },
+        "false_answer_rate": {
+          "$ref": "#/$defs/MetricValue"
+        },
         "false_refusal_rate": {
           "$ref": "#/$defs/MetricValue"
         },
@@ -2496,6 +2502,16 @@
     "golden_filter": {
       "$ref": "#/$defs/GoldenFilter"
     },
+    "golden_manifest_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Golden Manifest Sha256",
+      "type": "string"
+    },
+    "golden_set_version": {
+      "minimum": 1,
+      "title": "Golden Set Version",
+      "type": "integer"
+    },
     "golden_sha256": {
       "title": "Golden Sha256",
       "type": "string"
@@ -2634,6 +2650,16 @@
       ],
       "default": null
     },
+    "rag_mode": {
+      "default": "strict",
+      "enum": [
+        "strict",
+        "balanced",
+        "flexible"
+      ],
+      "title": "Rag Mode",
+      "type": "string"
+    },
     "raw_invalid_markers": {
       "anyOf": [
         {
@@ -2685,6 +2711,19 @@
         }
       ],
       "default": null
+    },
+    "stale_count": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Stale Count",
+      "type": "integer"
+    },
+    "stale_share": {
+      "default": 0.0,
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Stale Share",
+      "type": "number"
     },
     "table_split": {
       "$ref": "#/$defs/TableSplitReport"

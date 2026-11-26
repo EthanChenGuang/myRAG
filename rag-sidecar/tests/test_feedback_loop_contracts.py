@@ -498,7 +498,7 @@ def test_gate_population_config():
 
 def test_gate_population_provenances_are_named_once():
     allowed = set(get_args(get_args(GatePopulationConfig.model_fields["provenances"].annotation)[0]))
-    assert allowed == {"production", "human"}
+    assert allowed == {"production", "human", "historical"}
 
 
 def test_ship_check_result():

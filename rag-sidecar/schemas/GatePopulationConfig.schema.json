@@ -21,7 +21,8 @@
       "items": {
         "enum": [
           "production",
-          "human"
+          "human",
+          "historical"
         ],
         "type": "string"
       },
