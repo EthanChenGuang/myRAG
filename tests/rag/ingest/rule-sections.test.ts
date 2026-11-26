@@ -1,7 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import type { ChunkerConfig } from '@/lib/rag/ingest/chunkers';
 import type { MarkdownChunkOptions } from '@/lib/rag/ingest/chunkers/markdown-sections';
+import { chunkParentChild, type ParentChildProfile } from '@/lib/rag/ingest/chunkers/parent-child';
 import { carryTableHeaders } from '@/lib/rag/ingest/chunkers/markdown-tables';
 import {
   chunkRuleSections,
@@ -337,5 +339,51 @@ describe('rule_sections: purity', () => {
     expect(source).not.toMatch(/RegExp\(/);
     expect(source).not.toMatch(/from '@\/lib\/rag\/(patterns|identifiers)/);
     expect(source).not.toMatch(/console\./);
+  });
+});
+
+describe('rule_sections under parent-child', () => {
+  const chunker: ChunkerConfig = {
+    kind: 'rule_sections',
+    max_tokens: 512,
+    overlap_tokens: 0,
+    min_chunk_tokens: 0,
+    repeat_table_header: true,
+    section_rules: rules(VARIANT_HITS),
+  };
+  const body = (tag: string): string =>
+    Array.from({ length: 30 }, (_, index) => `Sentence ${index} of ${tag} zorvik plent masu tarel vesti pram olu.`).join(' ');
+  const markdown = doc('# Part North', '1 Alpha', body('north alpha'), '2 Beta', body('north beta'), '# Part South', '1 Alpha', body('south alpha'), '2 Beta', 'Quorel south.');
+
+  it('structure mode takes one parent per rule section and every child keeps its parent path, variant label first', () => {
+    const profile: ParentChildProfile = { childTokens: 64, parentMode: 'structure', parentTokens: 1024 };
+    const result = chunkParentChild(markdown, profile, chunker);
+    expect(result.parents.map((parent) => parent.section_path)).toEqual([
+      ['Part North', 'Part', 'Alpha'],
+      ['Part North', 'Part', 'Beta'],
+      ['Part South', 'Part', 'Alpha'],
+      ['Part South', 'Part', 'Beta'],
+    ]);
+    expect(result.children.length).toBeGreaterThan(result.parents.length);
+    for (const child of result.children) {
+      const parent = result.parents[child.parent_index ?? -1];
+      expect(child.section_path).toEqual(parent?.section_path);
+      expect(embeddingTokens(child)).toBeLessThanOrEqual(profile.childTokens);
+    }
+    for (const child of result.children.filter((entry) => entry.content.includes('south'))) expect(child.section_path[0]).toBe('Part South');
+  });
+
+  it('none mode cuts children by rule sections too, and fixed mode never calls the registry', () => {
+    const none = chunkParentChild(markdown, { childTokens: 64, parentMode: 'none', parentTokens: null }, chunker);
+    expect(none.parents).toEqual([]);
+    expect([...new Set(none.children.map((child) => child.section_path.join('/')))]).toEqual([
+      'Part North/Part/Alpha',
+      'Part North/Part/Beta',
+      'Part South/Part/Alpha',
+      'Part South/Part/Beta',
+    ]);
+    const fixed = chunkParentChild(markdown, { childTokens: 64, parentMode: 'fixed', parentTokens: 512 }, chunker);
+    const sections: ChunkerConfig = { ...chunker, kind: 'markdown_sections', section_rules: undefined };
+    expect(fixed).toEqual(chunkParentChild(markdown, { childTokens: 64, parentMode: 'fixed', parentTokens: 512 }, sections));
   });
 });
