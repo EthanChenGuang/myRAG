@@ -1820,6 +1820,34 @@ def render_switch_markdown(c: SwitchComparison) -> str:
     return "\n".join(lines) + "\n"
 
 
+@dataclass(frozen=True)
+class CachePairsOutput:
+    pairs: Any
+    traces: list[RagTrace]
+    run_config_hash: str
+
+
+class NearMissZeroSpec(_Model):
+    kind: Literal["near_miss_zero"]
+    calibration: str = ""
+
+
+def equal_runs_check(output: RunOutput, reference_output: RunOutput, *, reference: str) -> CheckResult:
+    return CheckResult(name="equal_runs", passed=False)
+
+
+def slice_hold_check(output: RunOutput, reference_output: RunOutput, noise: NoiseConfig, *, slices: list[str], reference: str) -> CheckResult:
+    return CheckResult(name="slice_hold", passed=False)
+
+
+def cache_latency_check(output: CachePairsOutput, *, max_ratio: float) -> CheckResult:
+    return CheckResult(name="cache_latency", passed=False)
+
+
+def near_miss_zero_check(output: CachePairsOutput, spec: NearMissZeroSpec) -> CheckResult:
+    return CheckResult(name="near_miss_zero", passed=True)
+
+
 def _write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(path.name + ".tmp")

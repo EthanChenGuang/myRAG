@@ -1070,3 +1070,272 @@ def test_report_only_runs_never_fail_the_comparison(tmp_path: Path):
     commands, _ = _env_commands()
     result = run_switch_comparison(spec, tmp_path / "out", runner=_switch_runner(_spec51_outputs(spec, flag=worse), {}), commands=commands)
     assert result.passed is True
+
+
+# ---------- Phase 6 (D-42): equal_runs, slice_hold, cache_latency, near_miss_zero
+from rag_sidecar.contracts.cache import CachePairResult, CachePairsRun, SemanticCacheCalibration  # noqa: E402
+
+from rag_eval.phase_compare import (  # noqa: E402
+    CachePairsOutput,
+    NearMissZeroSpec,
+    cache_latency_check,
+    equal_runs_check,
+    near_miss_zero_check,
+    slice_hold_check,
+)
+
+SPEC6 = REPO_ROOT / "eval" / "config" / "phase6-comparison.json"
+HOLD_SLICES = ["category:compound", "category:cross_lingual"]
+
+
+def test_equal_runs_passes_on_identical_item_outputs():
+    result = equal_runs_check(_output(), _output(), reference="query-layer-off")
+    assert result.passed is True, result.detail
+    assert result.name == "equal_runs:query-layer-off"
+
+
+def test_equal_runs_fails_naming_the_first_differing_item():
+    result = equal_runs_check(_output(rank2=("zh-general-001", "en-table-001")), _output(), reference="v2-all-off")
+    assert result.passed is False
+    assert "en-table-001" in result.detail[0] and "zh-general-001" not in result.detail[0]
+    assert result.measures["items_differing"] == 2
+
+
+def test_equal_runs_fails_on_a_refusal_change_and_on_other_data():
+    refused = equal_runs_check(_output(refused=("en-no_answer-001", "zh-no_answer-001")), _output(), reference="ref")
+    assert refused.passed is False and "zh-no_answer-001" in refused.detail[0]
+    base = _output()
+    other = RunOutput(report=base.report.model_copy(update={"golden_sha256": "other"}), traces=base.traces, golden=base.golden)
+    assert equal_runs_check(other, base, reference="ref").passed is False
+
+
+def test_equal_runs_fails_when_the_item_sets_differ():
+    base = _output()
+    fewer = RunOutput(report=base.report.model_copy(update={"items": base.report.items[1:]}), traces=base.traces[1:], golden=base.golden)
+    result = equal_runs_check(fewer, base, reference="ref")
+    assert result.passed is False and any("en-general-001" in line for line in result.detail)
+
+
+def test_slice_hold_passes_at_or_above_the_reference():
+    reference = _output(misses=("en-clause-001",))
+    assert slice_hold_check(_output(), reference, NOISE, slices=HOLD_SLICES, reference="query-layer-off").passed is True
+    same = slice_hold_check(reference, reference, NOISE, slices=HOLD_SLICES, reference="query-layer-off")
+    assert same.passed is True and same.name == "slice_hold:query-layer-off"
+
+
+def test_slice_hold_fails_on_a_named_slice_drop_beyond_the_band():
+    result = slice_hold_check(_output(misses=("it-xl-001",)), _output(), NOISE, slices=HOLD_SLICES, reference="ref")
+    assert result.passed is False
+    assert any(line.startswith("category:cross_lingual:") for line in result.detail)
+
+
+def test_slice_hold_fails_on_any_other_slice_drop_or_refusal_rise():
+    other = slice_hold_check(_output(misses=("en-table-001",)), _output(), NOISE, slices=HOLD_SLICES, reference="ref")
+    assert other.passed is False and any(line.startswith("category:table:") for line in other.detail)
+    refusal = slice_hold_check(_output(refused=("en-no_answer-001", "en-general-001")), _output(), NOISE, slices=HOLD_SLICES, reference="ref")
+    assert refusal.passed is False and any("false_refusal_rate" in line for line in refusal.detail)
+
+
+def test_slice_hold_fails_on_a_named_slice_missing_from_either_run():
+    result = slice_hold_check(_output(), _output(), NOISE, slices=["category:multi_turn"], reference="ref")
+    assert result.passed is False and "category:multi_turn" in result.detail[0]
+
+
+def _cache_trace(item_id: str, kind: str, total_ms: float):
+    trace = _trace(item_id, [("doc.en.md", "text")])
+    counts = {"hit": {"hit": 1, "distance": 0.01}, "miss": {"hit": 0}, "bypass": {"bypass_protected_tokens": 1}}[kind]
+    return trace.model_copy(
+        update={
+            "stage_status": {"semantic_cache": "ok"},
+            "stage_counts": {"semantic_cache": counts},
+            "stage_latency_ms": {"embed": total_ms, "generation": 500.0},
+        }
+    )
+
+
+def _pair(pair_id: str, category: str, outcome: str, distance: float | None = None, split: str = "dev") -> CachePairResult:
+    return CachePairResult(
+        pair_id=pair_id,
+        anchor_id="anchor",
+        category=category,
+        split=split,
+        language="en",
+        outcome=outcome,
+        hit=outcome == "hit",
+        distance=distance,
+        bypass_reason="protected_tokens" if outcome == "bypass" else None,
+        anchor_outcome="miss",
+    )
+
+
+def _pairs_output(hit_ms: float = 5.0, miss_ms: float = 40.0, near_distance: float | None = None, profile: str = "fixture-ngram") -> CachePairsOutput:
+    traces = [_cache_trace(f"a-{i}", "miss", miss_ms) for i in range(4)]
+    traces += [_cache_trace(f"h-{i}", "hit", hit_ms) for i in range(3)]
+    traces += [_cache_trace("b-0", "bypass", 1.0)]
+    pairs = [
+        _pair("p-1", "cache_paraphrase", "hit", 0.03),
+        _pair("p-2", "cache_paraphrase", "hit", 0.12),
+        _pair("n-1", "cache_near_miss", "hit" if near_distance is not None else "miss", near_distance),
+        _pair("n-2", "cache_near_miss", "bypass", split="test"),
+    ]
+    run = CachePairsRun(source="fixture", embedding_profile_id=profile, probe_max_distance=0.2, pairs=pairs)
+    return CachePairsOutput(pairs=run, traces=traces, run_config_hash="hash")
+
+
+def test_cache_latency_passes_when_hit_p95_is_at_most_half_of_miss_p95():
+    result = cache_latency_check(_pairs_output(hit_ms=20.0, miss_ms=40.0), max_ratio=0.5)
+    assert result.passed is True, result.detail
+    assert result.measures["hit_p95_ms"] == 20.0 and result.measures["miss_p95_ms"] == 40.0
+
+
+def test_cache_latency_fails_when_hits_are_not_fast_enough_or_unmeasured():
+    assert cache_latency_check(_pairs_output(hit_ms=21.0, miss_ms=40.0), max_ratio=0.5).passed is False
+    output = _pairs_output()
+    no_hits = CachePairsOutput(pairs=output.pairs, traces=[t for t in output.traces if not t.item_id.startswith("h-")], run_config_hash="hash")
+    result = cache_latency_check(no_hits, max_ratio=0.5)
+    assert result.passed is False and result.detail
+
+
+def _calibration(tmp_path: Path, max_distance: float = 0.05, source: str = "default") -> Path:
+    path = tmp_path / "semantic-cache.json"
+    config = SemanticCacheCalibration.model_validate(
+        {"profiles": [{"embedding_profile_id": "fixture-ngram", "max_distance": max_distance, "source": source}]}
+    )
+    path.write_text(config.model_dump_json(), encoding="utf-8")
+    return path
+
+
+def test_near_miss_zero_passes_when_no_near_miss_hits_at_the_effective_distance(tmp_path: Path):
+    spec = NearMissZeroSpec(kind="near_miss_zero", calibration=str(_calibration(tmp_path)))
+    assert near_miss_zero_check(_pairs_output(), spec).passed is True
+    beyond = near_miss_zero_check(_pairs_output(near_distance=0.09), spec)
+    assert beyond.passed is True and beyond.measures["max_distance"] == 0.05
+
+
+def test_near_miss_zero_fails_on_any_wrong_hit(tmp_path: Path):
+    spec = NearMissZeroSpec(kind="near_miss_zero", calibration=str(_calibration(tmp_path)))
+    result = near_miss_zero_check(_pairs_output(near_distance=0.04), spec)
+    assert result.passed is False and "n-1" in result.detail[0]
+    calibrated = NearMissZeroSpec(kind="near_miss_zero", calibration=str(_calibration(tmp_path, 0.1, "calibrated")))
+    assert near_miss_zero_check(_pairs_output(near_distance=0.09), calibrated).passed is False
+
+
+def test_near_miss_zero_never_passes_without_near_miss_pairs(tmp_path: Path):
+    spec = NearMissZeroSpec(kind="near_miss_zero", calibration=str(_calibration(tmp_path)))
+    output = _pairs_output()
+    paraphrases = output.pairs.model_copy(update={"pairs": [p for p in output.pairs.pairs if p.category == "cache_paraphrase"]})
+    result = near_miss_zero_check(CachePairsOutput(pairs=paraphrases, traces=output.traces, run_config_hash="hash"), spec)
+    assert result.passed is False
+
+
+def _spec6_world(tmp_path: Path) -> SwitchComparisonSpec:
+    baseline = _baseline(_output())
+    for name in ("prechunked", "ingest"):
+        (tmp_path / f"{name}.json").write_text(baseline.model_dump_json(), encoding="utf-8")
+    raw = json.loads(SPEC6.read_text(encoding="utf-8"))
+    raw["baselines"] = {"prechunked": str(tmp_path / "prechunked.json"), "ingest": str(tmp_path / "ingest.json")}
+    calibration = _calibration(tmp_path)
+    for run in raw["runs"]:
+        for check in run["checks"]:
+            if isinstance(check, dict) and check["kind"] == "near_miss_zero":
+                check["calibration"] = str(calibration)
+    return SwitchComparisonSpec.model_validate(raw)
+
+
+def _pairs_runner(output: CachePairsOutput, seen: dict):
+    def runner(request):
+        seen[request.name] = request
+        return output
+
+    return runner
+
+
+def test_committed_phase6_spec_names_every_d42_run():
+    spec = SwitchComparisonSpec.model_validate_json(SPEC6.read_text(encoding="utf-8"))
+    runs = {run.name: run for run in spec.runs}
+    legacy = [run for run in spec.runs if run.name.startswith("legacy-")]
+    assert {run.fixture_mode for run in legacy} == {"prechunked", "ingest"}
+    for run in legacy:
+        assert run.env.get("RAG_QUERY_LAYER") == "false" and {"gate", "paired_all_zero"} <= set(run.checks)
+    kinds = {name: {getattr(c, "kind", c): c for c in run.checks} for name, run in runs.items()}
+    assert kinds["query-layer-off"]["equal_runs"].reference == "v2-all-off"
+    hold = kinds["query-layer-llamaindex"]["slice_hold"]
+    assert hold.reference == "query-layer-off"
+    assert set(hold.slices) == {"category:multi_turn", "category:compound", "category:cross_lingual"}
+    assert kinds["query-layer-llamaindex-cache-off"]["equal_runs"].reference == "query-layer-llamaindex"
+    pair_runs = [run for run in spec.runs if run.cache_pairs]
+    assert len(pair_runs) == 1 and {"cache_latency", "near_miss_zero"} <= set(kinds[pair_runs[0].name])
+    assert kinds[pair_runs[0].name]["cache_latency"].max_ratio == 0.5
+
+
+def test_phase6_spec_rejects_bad_references_and_misplaced_checks():
+    raw = json.loads(SPEC6.read_text(encoding="utf-8"))
+
+    def find(r, name):
+        return next(run for run in r["runs"] if run["name"] == name)
+
+    for mutate in (
+        lambda r: find(r, "query-layer-off")["checks"].__setitem__(0, {"kind": "equal_runs", "reference": "nope"}),
+        lambda r: find(r, "query-layer-off")["checks"].__setitem__(0, {"kind": "equal_runs", "reference": "query-layer-llamaindex"}),
+        lambda r: find(r, "query-layer-off")["checks"].__setitem__(0, {"kind": "equal_runs", "reference": "legacy-ingest"}),
+        lambda r: find(r, "query-layer-off")["checks"].append({"kind": "cache_latency"}),
+        lambda r: next(run for run in r["runs"] if run.get("cache_pairs"))["checks"].append("gate"),
+        lambda r: find(r, "query-layer-llamaindex")["checks"].__setitem__(0, {"kind": "slice_hold", "reference": "query-layer-off", "slices": ["bogus"]}),
+    ):
+        broken = json.loads(json.dumps(raw))
+        mutate(broken)
+        with pytest.raises(ValueError):
+            SwitchComparisonSpec.model_validate(broken)
+
+
+def test_run_switch_comparison_phase6_passes_and_records_cache_measures(tmp_path: Path):
+    spec = _spec6_world(tmp_path)
+    seen: dict = {}
+    commands, calls = _env_commands()
+    outputs = {run.name: _output() for run in spec.runs if not run.cache_pairs}
+    out = tmp_path / "phase-06"
+    result = run_switch_comparison(
+        spec, out, runner=_switch_runner(outputs, seen), commands=commands, pairs_runner=_pairs_runner(_pairs_output(), seen)
+    )
+    assert result.passed is True, result.model_dump_json(indent=2)
+    pair_run = next(run for run in spec.runs if run.cache_pairs)
+    assert "--cache-pairs" in seen[pair_run.name].harness_flags
+    stored = SwitchComparison.model_validate_json((out / "comparison.json").read_text(encoding="utf-8"))
+    by_name = {run.name: run for run in stored.runs}
+    assert by_name[pair_run.name].overall is None and by_name[pair_run.name].cache_pairs.pairs == 4
+    latency = next(c for c in by_name[pair_run.name].checks if c.name == "cache_latency")
+    assert latency.measures["hit_p95_ms"] == 5.0
+    md = (out / "comparison.md").read_text(encoding="utf-8")
+    assert "noise band" in md.lower() and f"### {pair_run.name}" in md and "lexical fixture embedder" in md
+
+
+@pytest.mark.parametrize("breaker", ["layer_off_moved", "slice_dropped", "cache_off_moved", "slow_hits", "near_miss_hit", "legacy_moved"])
+def test_run_switch_comparison_phase6_fails_on_each_d42_check(tmp_path: Path, breaker: str):
+    spec = _spec6_world(tmp_path)
+    outputs = {run.name: _output() for run in spec.runs if not run.cache_pairs}
+    pairs = _pairs_output()
+    if breaker == "layer_off_moved":
+        outputs["query-layer-off"] = _output(rank2=("en-general-001",))
+    elif breaker == "slice_dropped":
+        outputs["query-layer-llamaindex"] = _output(misses=("en-clause-001",))
+        outputs["query-layer-llamaindex-cache-off"] = outputs["query-layer-llamaindex"]
+        outputs["query-layer-llamaindex-cache-on"] = outputs["query-layer-llamaindex"]
+    elif breaker == "cache_off_moved":
+        outputs["query-layer-llamaindex-cache-off"] = _output(rank2=("en-general-001",))
+    elif breaker == "slow_hits":
+        pairs = _pairs_output(hit_ms=30.0)
+    elif breaker == "near_miss_hit":
+        pairs = _pairs_output(near_distance=0.01)
+    else:
+        outputs["legacy-ingest"] = _output(rank2=("en-general-001",))
+    commands, _ = _env_commands()
+    result = run_switch_comparison(
+        spec, tmp_path / "out", runner=_switch_runner(outputs, {}), commands=commands, pairs_runner=_pairs_runner(pairs, {})
+    )
+    assert result.passed is False
+
+
+def test_phase4_and_phase5_specs_still_validate_after_the_phase6_checks():
+    ComparisonSpec.model_validate_json(SPEC.read_text(encoding="utf-8"))
+    for path in (SPEC5, SPEC51):
+        SwitchComparisonSpec.model_validate_json(path.read_text(encoding="utf-8"))
