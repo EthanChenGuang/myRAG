@@ -220,3 +220,19 @@ describe('answerDisplayText', () => {
     expect(out).not.toContain('Remove');
   });
 });
+
+describe('records from the server builder', () => {
+  test('marks land at the sentence ends the server recorded', async () => {
+    const { buildSentenceRecords } = await import('@/lib/rag/generation/sentences-record');
+    const text = 'The first value is seven [S1]. The second value is nine.\n\n- A listed value is three.\n';
+    const records = buildSentenceRecords({ text, part: 0, language: 'en', aliases: new Set(['S1']) });
+    const verified = await verifySentenceRecords([text], records);
+    expect(verified).toHaveLength(records.length);
+    const out = insertSentenceMarks(text, verified, uncited(verified));
+    const rendered = renderCitationMarkers(out, { citations: [{ n: 1, alias: 'S1' }], phase: 'final' });
+    expect(rendered).toContain('seven[1](#cite-S1).');
+    expect(rendered).toMatch(/is nine\.⁠\[\]\(#mark-uncited-0-\d+\)/);
+    expect(rendered).toMatch(/is three\.⁠\[\]\(#mark-uncited-0-\d+\)\n$/);
+    expect(rendered.match(/#mark-/g)).toHaveLength(2);
+  });
+});
