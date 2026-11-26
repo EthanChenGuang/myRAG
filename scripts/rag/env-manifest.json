@@ -860,6 +860,21 @@
       "ragAffecting": true
     },
     {
+      "name": "RAG_LEXICAL_SCORING",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_LEXICAL_BM25_K1",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
+      "name": "RAG_LEXICAL_BM25_B",
+      "status": "managed",
+      "knownGaps": []
+    },
+    {
       "name": "RAG_MAX_OUTPUT_TOKENS",
       "status": "managed",
       "knownGaps": [],

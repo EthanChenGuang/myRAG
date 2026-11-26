@@ -22,6 +22,7 @@ import type { SecurityConfig } from '../security/config';
 import {
   attributeFilterHashBlock,
   computeRetrievalConfigHash,
+  lexicalScoringHashBlock,
   securityHashComponent,
   terminologyHashBlock,
   type AttributeFilterHashStage,
@@ -154,6 +155,7 @@ export async function requestRetrievalConfigHash(ctx: RequestConfigHashInput): P
     ...(ctx.effectiveOn ? { effectiveOn: ctx.effectiveOn } : {}),
     ...(terminology ? { terminology } : {}),
     ...(attributeFilter ? { attributeFilter } : {}),
+    lexicalScoring: lexicalScoringHashBlock(config),
   });
 }
 
