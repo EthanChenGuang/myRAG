@@ -149,6 +149,23 @@ function expectedCounts(cell: SeedCell): Record<CountColumn, number> {
   };
 }
 
+function rowCounts(rows: SeededRow[]): Record<CountColumn, number> {
+  const kind = (...kinds: SeededRow['kind'][]) => rows.filter((r) => kinds.includes(r.kind)).length;
+  return {
+    retrievals: rows.length,
+    refused: kind('refused', 'below_threshold'),
+    kb_unavailable: kind('kb_unavailable'),
+    degraded: kind('degraded'),
+    error: kind('error', 'kb_unavailable'),
+    zero_result: kind('zero_result'),
+    below_threshold: kind('below_threshold'),
+    helpful: rows.filter((r) => r.vote === 1).length,
+    not_helpful: rows.filter((r) => r.vote === -1).length,
+    judged: rows.filter((r) => r.judged).length,
+    groundedness_flagged: rows.filter((r) => r.groundednessFlagged).length,
+  };
+}
+
 function nextDay(day: string): string {
   return new Date(Date.parse(`${day}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
 }
@@ -187,22 +204,37 @@ for (const mode of MODES) {
       const written = await aggregate(db);
       const stored = await cells(db);
 
-      assert.equal(written, spec.length);
-      assert.equal(stored.size, spec.length);
+      assert.equal(written, stored.size);
       for (const [index, cell] of spec.entries()) {
-        const key = cellKey({ tenant_key: cell.tenantKey, language: cell.language ?? 'und', rag_mode: cell.ragMode ?? 'unknown', channel: cell.channel, doc_type: cell.docType ?? 'general' });
-        const row = stored.get(key);
-        assert.ok(row, `missing cell ${key}`);
-        assert.equal(row.day, DAY);
-        const got = Object.fromEntries(COUNT_COLUMNS.map((column) => [column, row[column]]));
-        assert.deepEqual(got, expectedCounts(cell), `counts of cell ${index}`);
-        const hist = expectedHistograms(seeded.rows.filter((r) => r.cellIndex === index));
-        assert.deepEqual(row.top_score_hist, hist.top, `top-score histogram of cell ${index}`);
-        assert.deepEqual(row.latency_hist, hist.latency, `latency histogram of cell ${index}`);
-        const judged = cell.counts?.judged ?? 0;
-        assert.equal(Number(row.judge_score_sums.faithfulness), judged * 0.75);
-        assert.equal(Number(row.judge_score_sums.answer_relevance), judged * 0.5);
+        const base = { tenant_key: cell.tenantKey, language: cell.language ?? 'und', rag_mode: cell.ragMode ?? 'unknown', channel: cell.channel };
+        const cellRows = seeded.rows.filter((r) => r.cellIndex === index);
+        const withDoc = cellRows.filter((r) => r.documentId !== null);
+        const withoutDoc = cellRows.filter((r) => r.documentId === null);
+        const parts = [
+          { key: cellKey({ ...base, doc_type: cell.docType ?? 'general' }), rows: withDoc },
+          { key: cellKey({ ...base, doc_type: 'unknown' }), rows: withoutDoc },
+        ];
+        const total = Object.fromEntries(COUNT_COLUMNS.map((column) => [column, 0])) as Record<CountColumn, number>;
+        for (const part of parts) {
+          const row = stored.get(part.key);
+          assert.ok(row, `missing cell ${part.key}`);
+          assert.equal(row.day, DAY);
+          assert.deepEqual(
+            Object.fromEntries(COUNT_COLUMNS.map((column) => [column, row[column]])),
+            rowCounts(part.rows),
+            `counts of ${part.key}`,
+          );
+          const hist = expectedHistograms(part.rows);
+          assert.deepEqual(row.top_score_hist, hist.top, `top-score histogram of ${part.key}`);
+          assert.deepEqual(row.latency_hist, hist.latency, `latency histogram of ${part.key}`);
+          const judged = part.rows.filter((r) => r.judged).length;
+          assert.equal(Number(row.judge_score_sums.faithfulness), judged * 0.75);
+          assert.equal(Number(row.judge_score_sums.answer_relevance), judged * 0.5);
+          for (const column of COUNT_COLUMNS) total[column] += row[column];
+        }
+        assert.deepEqual(total, expectedCounts(cell), `seeded counts of cell ${index}`);
       }
+      assert.equal(stored.size, spec.length * 2);
 
       for (const tenantKey of keys) {
         const tenantRows = seeded.rows.filter((r) => r.tenantKey === tenantKey).length;
@@ -219,9 +251,9 @@ for (const mode of MODES) {
     test('re-running a day leaves the same cells and counts; a later vote is picked up by the next run', async () => {
       const spec = weekCells(keys);
       const seeded = await seedRetrievalLog(db, { seed: `rerun-${mode}`, cells: spec });
-      assert.equal(await aggregate(db), spec.length);
+      assert.equal(await aggregate(db), spec.length * 2);
       const first = await cells(db);
-      assert.equal(await aggregate(db), spec.length);
+      assert.equal(await aggregate(db), spec.length * 2);
       const second = await cells(db);
       assert.equal(second.size, first.size);
       for (const [key, row] of first) {
@@ -231,11 +263,11 @@ for (const mode of MODES) {
         assert.deepEqual(again.latency_hist, row.latency_hist);
       }
 
-      const unvoted = seeded.rows.find((r) => r.vote === null && r.cellIndex === 0) as SeededRow;
+      const unvoted = seeded.rows.find((r) => r.vote === null && r.cellIndex === 0 && r.documentId !== null) as SeededRow;
       await db.query("UPDATE public.rag_retrieval_log SET feedback_vote = -1, feedback_kind = 'answer' WHERE trace_id = $1", [unvoted.traceId]);
       const cell = spec[0] as SeedCell;
       const key = cellKey({ tenant_key: cell.tenantKey, language: cell.language as string, rag_mode: 'strict', channel: cell.channel, doc_type: cell.docType as string });
-      assert.equal(await aggregate(db), spec.length);
+      assert.equal(await aggregate(db), spec.length * 2);
       const third = await cells(db);
       assert.equal((third.get(key) as CellRow).not_helpful, (first.get(key) as CellRow).not_helpful + 1);
       for (const [other, row] of third) {
