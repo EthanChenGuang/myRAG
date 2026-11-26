@@ -18,12 +18,14 @@ from rag_eval.golden_io import load_golden
 from rag_eval.paths import REPO_ROOT
 
 CORPUS = REPO_ROOT / "eval" / "fixtures" / "corpus"
-# Plan 04.2-37 documents; the stub answers every batch with the same items, so the batch-count tests keep to the older corpus.
+# Plan 04.2-37 documents, and the plan 05.3-15 documents that joined on train 31; the stub answers every batch with the
+# same items, so the batch-count tests keep to the older corpus.
 PHASE42_STEMS = ("dup-passage", "dup-solo", "versioned-note", "grid-reference", "coded-list", "morphology-note")
+PHASE53_STEMS = ("access-rules", "instrument-catalog")
 
 
 def _pre_phase42_documents():
-    return [doc for doc in DirectoryWorkspaceSource(CORPUS).documents() if not doc.filename.startswith(PHASE42_STEMS)]
+    return [doc for doc in DirectoryWorkspaceSource(CORPUS).documents() if not doc.filename.startswith(PHASE42_STEMS + PHASE53_STEMS)]
 GOOD_QUOTE = "The annual plans refund window is 45 days from the purchase date"
 CATEGORIES = ("multi_turn", "compound", "exact_term", "table", "scanned", "no_answer", "general")
 

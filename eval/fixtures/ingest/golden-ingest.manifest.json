@@ -1795,8 +1795,8 @@
       "last_reviewed_at": "2026-11-26"
     },
     {
-      "id": "it-no-answer-017",
-      "item_sha256": "b4d4fbc5d7381ca77783656b11893cf329f0823b814eff7e2c3ab2c457f2365d",
+      "id": "it-no-answer-018",
+      "item_sha256": "c77ed96a27c810d5048129ee330fd02afa62a4287acde0fcd2f3a99ae4c9a55c",
       "status": "active",
       "stale_reason": null,
       "stale_since": null,
@@ -3723,7 +3723,7 @@
         "it-no-answer-014",
         "it-no-answer-015",
         "it-no-answer-016",
-        "it-no-answer-017",
+        "it-no-answer-018",
         "zh-implicit-condition-001",
         "zh-implicit-condition-002",
         "zh-implicit-condition-003",
@@ -3738,5 +3738,5 @@
       "stale": []
     }
   ],
-  "manifest_sha256": "75a5d1f0cd7e831c1f99a96d09fab41c5e1e097de3480139950c18dced76d5d6"
+  "manifest_sha256": "7065ec0ea808425a78bc3769df8efb34b34db9efcf8e90182523745fcc299235"
 }

@@ -48,7 +48,7 @@ ABSENT_FACT_TERMS = {
     "en-no-answer-014": ("temperature",),
     "en-no-answer-015": ("price", "euro"),
     "en-no-answer-016": ("cable", "metre"),
-    "it-no-answer-017": ("autonomia", "durata"),
+    "it-no-answer-018": ("autonomia", "durata"),
     "it-no-answer-014": ("grammi", "pesa"),
     "it-no-answer-015": ("temperatura",),
     "it-no-answer-016": ("prezzo", "euro"),
