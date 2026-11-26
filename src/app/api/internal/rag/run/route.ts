@@ -450,7 +450,8 @@ export async function POST(req: NextRequest) {
       query,
       profile: 'eval',
       options: {
-        maxResults: options?.max_results ?? parseInt(env.RAG_FINAL_RESULT_COUNT || '25'),
+        // Unset: each pipeline applies RAG_FINAL_RESULT_COUNT itself (legacy) or keeps its own final top-k (v2).
+        ...(options?.max_results != null ? { maxResults: options.max_results } : {}),
         isGPTModel,
         ragMode,
         webSearchEnabled: false,

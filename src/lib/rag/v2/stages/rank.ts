@@ -376,11 +376,22 @@ async function runRerankStage(ctx: RankStagesInput): Promise<RerankStageResult> 
   };
 }
 
+/** The CI degrade negative control: eval only, the same position legacy drops it (final order, before the refusal). */
+function evalDegrade(ctx: RankStagesInput): boolean {
+  return ctx.profile === 'eval' && ctx.input.options?.degrade === 'drop_top_candidate';
+}
+
+function dropTopCandidate(result: RerankStageResult): RerankStageResult {
+  return { ...result, hits: result.hits.slice(1), gate: { ...result.gate, reranked: result.gate.reranked.slice(1) } };
+}
+
 export async function runRankStages(ctx: RankStagesInput): Promise<RankStagesOutput> {
   const { config, profile, signal, collector, stageOverrides } = ctx;
   const spec = (name: StageName, onFail: StageSpec['onFail']) => stageSpec(config, profile, name, onFail, stageOverrides);
 
-  const reranked = await runRerankStage(ctx);
+  const degrade = evalDegrade(ctx);
+  const rerankStage = await runRerankStage(ctx);
+  const reranked = degrade ? dropTopCandidate(rerankStage) : rerankStage;
   const rankedHits = reranked.hits;
   const preRefusalHits = rankedHits;
   const variants = ctx.variants ?? [];
@@ -417,10 +428,13 @@ export async function runRankStages(ctx: RankStagesInput): Promise<RankStagesOut
       },
       detail: ({ record, gate, poolSize }) => {
         const base = record.basis !== 'none' ? record.basis : record.reason;
-        if (record === gate || config.v2.refusalFloor === 'similarity') return base;
-        return poolSize === undefined
-          ? `${base} floor=${config.v2.refusalFloor}`
-          : `${base} floor=${config.v2.refusalFloor} pool=${poolSize}`;
+        const described =
+          record === gate || config.v2.refusalFloor === 'similarity'
+            ? base
+            : poolSize === undefined
+              ? `${base} floor=${config.v2.refusalFloor}`
+              : `${base} floor=${config.v2.refusalFloor} pool=${poolSize}`;
+        return degrade ? `${described} degrade=drop_top_candidate` : described;
       },
     },
   );

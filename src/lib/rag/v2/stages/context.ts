@@ -17,7 +17,8 @@ import type { RpcClient } from '../../backend/supabase-rpc';
 import { expandParents, selectWithParents, type ParentBudgetCandidate, type ParentSelection } from '../../parents/expand';
 import type { RerankSpan } from '../../rerank/types';
 import type { FusedHit } from '../../fusion/rrf';
-import type { RagConfig, StageName } from '../../config';
+import { resolveFinalResultCount, type RagConfig, type StageName } from '../../config';
+import { env } from '@/lib/env';
 import { documentNamesFromRows, downweightOrder, injectionDropped, runInjectionStage, runStage, stageSpec, type StageSpec } from '../../pipeline';
 import type { SecurityConfig } from '../../security/config';
 import { injectionItems, releasedRulesFromRows, type InjectionMarks } from '../../security/injection-check';
@@ -162,13 +163,28 @@ interface CompressStageValue {
   savedTokens: number;
 }
 
+/**
+ * Eval only, and only when the request names a result count (the CI max-results negative control): the cap legacy
+ * applies to its final results, here applied to the final top-k. Null leaves the v2 output untouched.
+ */
+export function evalResultCap(profile: Profile, input: RunRetrievalInput): number | null {
+  if (profile !== 'eval' || input.options?.maxResults === undefined) return null;
+  return resolveFinalResultCount(input.options.maxResults, env.RAG_FINAL_RESULT_COUNT);
+}
+
+export function evalFinalTopK(profile: Profile, input: RunRetrievalInput, finalTopK: number): number {
+  const cap = evalResultCap(profile, input);
+  return cap === null ? finalTopK : Math.min(finalTopK, cap);
+}
+
 export async function runContextStages(ctx: ContextStagesInput): Promise<ContextStagesOutput> {
   const { input, config, profile, params, fusedHits, signal, collector, stageOverrides, rerank } = ctx;
   let referenced = ctx.referenced;
   const security = ctx.security ?? getRagDeps().securityConfig();
   const spec = (name: StageName, onFail: StageSpec['onFail']) => stageSpec(config, profile, name, onFail, stageOverrides);
   const settings = v2ProfileSettings(profile, config);
-  const topHits = fusedHits.slice(0, params.final_top_k);
+  const resultCap = evalResultCap(profile, input);
+  const topHits = fusedHits.slice(0, evalFinalTopK(profile, input, params.final_top_k));
   let candidates = topHits.map((row) => fusedToCandidate(row, rerank?.scoreByChunk?.get(row.hit.chunkId)));
   const rows = assemblyRowsFromHits(topHits);
   const hitById = new Map(topHits.map((row) => [row.hit.chunkId, row.hit]));
@@ -387,6 +403,7 @@ export async function runContextStages(ctx: ContextStagesInput): Promise<Context
         budget_tokens: value.budgetTokens,
         used_tokens: value.usedTokens,
         groups: value.groups,
+        ...(resultCap !== null ? { max_results: resultCap } : {}),
       }),
     },
   );
