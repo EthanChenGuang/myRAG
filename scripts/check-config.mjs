@@ -13,6 +13,8 @@ export const TRACKED = {
 export const TRACKED_LOCATIONS = Object.keys(TRACKED);
 const MANIFEST_PATH = 'scripts/rag/env-manifest.json';
 const ENV_LOCAL = '.env.local';
+export const RAG_AFFECTING_PATH = 'src/lib/rag/config-gate/rag-affecting.generated.json';
+const WRITE_RAG_AFFECTING = 'node scripts/check-config.mjs --write-rag-affecting';
 const NAME_PATTERN = '(?:NEXT_PUBLIC_)?RAG_[A-Z0-9_]+|LLAMACLOUD_[A-Z0-9_]+|LANGFUSE_[A-Z0-9_]+|VOYAGE_[A-Z0-9_]+|DEEPINFRA_[A-Z0-9_]+|COHERE_[A-Z0-9_]+|ANTHROPIC_[A-Z0-9_]+|WEAVIATE_[A-Z0-9_]+|QDRANT_[A-Z0-9_]+|OPENAI_EMBEDDING_MODEL';
 const SRC_EXTENSIONS = new Set(['.ts', '.tsx', '.js', '.mjs']);
 
@@ -100,6 +102,9 @@ export function checkConfig(root) {
     }
     seen.add(name);
     manifestNames.add(name);
+    if ('ragAffecting' in entry ? typeof entry.ragAffecting !== 'boolean' : /^(?:NEXT_PUBLIC_)?RAG_/.test(name)) {
+      violations.push({ name, location: 'manifest', message: 'ragAffecting must be stated as true or false (D-11)' });
+    }
     const status = entry.status;
     const gaps = Array.isArray(entry.knownGaps) ? entry.knownGaps : [];
     if (status !== 'managed' && status !== 'legacy') {
@@ -146,6 +151,7 @@ export function checkConfig(root) {
   }
 
   violations.push(...checkModelMappings(root, texts));
+  if (manifest) violations.push(...checkRagAffectingFile(root, manifest));
 
   const effectiveEnv = loadEffectiveEnv(root);
   const ingestion = checkIngestionSwitches(effectiveEnv);
@@ -153,6 +159,36 @@ export function checkConfig(root) {
 
   violations.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : a.location < b.location ? -1 : a.location > b.location ? 1 : 0));
   return { violations, warnings: ingestion.warnings, varCount: vars.length };
+}
+
+/** D-11: the sorted union of the manifest entries marked ragAffecting and ragAffectingExtra. */
+export function ragAffectingNames(manifest) {
+  const vars = Array.isArray(manifest?.vars) ? manifest.vars : [];
+  const extra = Array.isArray(manifest?.ragAffectingExtra) ? manifest.ragAffectingExtra : [];
+  const names = vars.filter((entry) => entry && entry.ragAffecting === true && typeof entry.name === 'string').map((entry) => entry.name);
+  for (const name of extra) if (typeof name === 'string' && name) names.push(name);
+  return [...new Set(names)].sort();
+}
+
+export function renderRagAffecting(manifest) {
+  return `${JSON.stringify({ names: ragAffectingNames(manifest) }, null, 2)}\n`;
+}
+
+function checkRagAffectingFile(root, manifest) {
+  const file = path.join(root, RAG_AFFECTING_PATH);
+  const expected = renderRagAffecting(manifest);
+  const actual = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : null;
+  if (actual === expected) return [];
+  const state = actual === null ? 'is missing' : 'is out of date with the manifest';
+  return [{ name: '-', location: 'manifest', message: `${RAG_AFFECTING_PATH} ${state}; run \`${WRITE_RAG_AFFECTING}\`` }];
+}
+
+function writeRagAffectingFile(root) {
+  const manifest = JSON.parse(fs.readFileSync(path.join(root, MANIFEST_PATH), 'utf8'));
+  const file = path.join(root, RAG_AFFECTING_PATH);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, renderRagAffecting(manifest));
+  return ragAffectingNames(manifest).length;
 }
 
 const ANTHROPIC_ID_PATTERN = /^claude-[a-z0-9-]+$/;
@@ -386,15 +422,20 @@ export function checkIngestionSwitches(env) {
 }
 
 function parseArgs(argv) {
-  const args = { root: DEFAULT_ROOT };
+  const args = { root: DEFAULT_ROOT, writeRagAffecting: false };
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === '--root') args.root = path.resolve(argv[++i] ?? '');
+    else if (argv[i] === '--write-rag-affecting') args.writeRagAffecting = true;
   }
   return args;
 }
 
 function main() {
-  const { root } = parseArgs(process.argv.slice(2));
+  const { root, writeRagAffecting } = parseArgs(process.argv.slice(2));
+  if (writeRagAffecting) {
+    const count = writeRagAffectingFile(root);
+    console.log(`[check-config] wrote ${RAG_AFFECTING_PATH} (${count} name(s))`);
+  }
   const { violations, varCount, warnings } = checkConfig(root);
   for (const w of warnings) console.warn(`${w.name} [${w.location}] ${w.message}`);
   if (violations.length === 0) {
