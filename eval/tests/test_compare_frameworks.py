@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 import pytest
-from rag_sidecar.contracts.eval_run import RagTrace
+from rag_sidecar.contracts.eval_run import RagTrace, TraceCandidate
 from rag_sidecar.contracts.report import EvalReport, ItemResult
 from rag_sidecar.contracts.samples import build_samples
 
@@ -168,8 +168,8 @@ def test_tie_order_differences_are_counted_apart_from_rank_differences():
     tied_swapped = [candidate(1, "c-2", 0.03), candidate(2, "c-1", 0.03), candidate(3, "c-3", 0.01)]
     distinct = [candidate(1, "c-1", 0.03), candidate(2, "c-2", 0.02)]
     distinct_swapped = [candidate(1, "c-2", 0.03), candidate(2, "c-1", 0.02)]
-    boundary = [candidate(1, "c-1", 0.03), candidate(2, "c-2", 0.01)]
-    boundary_other = [candidate(1, "c-1", 0.03), candidate(2, "c-9", 0.01)]
+    boundary = [candidate(1, "c-1", 0.03), candidate(2, "c-2", 0.01), candidate(3, "c-3", 0.01)]
+    boundary_other = [candidate(1, "c-1", 0.03), candidate(2, "c-9", 0.01), candidate(3, "c-2", 0.01)]
     pairs = [(tied, tied_swapped), (distinct, distinct_swapped), (boundary, boundary_other), (distinct, distinct), (tied, tied)]
     reference = [trace(entry.item_id, "llamaindex", candidates=a) for entry, (a, _) in zip(ITEMS, pairs)]
     other = [trace(entry.item_id, "langchain", candidates=b) for entry, (_, b) in zip(ITEMS, pairs)]
@@ -179,6 +179,12 @@ def test_tie_order_differences_are_counted_apart_from_rank_differences():
     assert report.fused_order.rank == 1
     assert report.fused_order.tie_only_items == ["en-general-001", "zh-general-001"]
     assert report.fused_order.rank_items == ["it-general-001"]
+    lone = [candidate(1, "c-1", 0.03), candidate(2, "c-2", 0.01)]
+    lone_other = [candidate(1, "c-1", 0.03), candidate(2, "c-9", 0.01)]
+    assert frameworks.fused_order_kind([TraceCandidate.model_validate(row) for row in lone], [TraceCandidate.model_validate(row) for row in lone_other]) == "rank"
+    unscored = [candidate(1, "c-2", None), candidate(2, "c-1", None)]
+    scored = [TraceCandidate.model_validate(row) for row in [candidate(1, "c-1", None), candidate(2, "c-2", None)]]
+    assert frameworks.fused_order_kind(scored, [TraceCandidate.model_validate(row) for row in unscored]) == "rank"
 
 
 def test_framework_fallback_and_unpaired_items_are_problems():
