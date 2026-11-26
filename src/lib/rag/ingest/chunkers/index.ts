@@ -8,6 +8,7 @@ import { chunkInvoice } from './invoice';
 import { chunkLegalClauses } from './legal-clauses';
 import { chunkMarkdownSections } from './markdown-sections';
 import { carryTableHeaders, markCarriedChunks } from './markdown-tables';
+import { chunkRuleSections } from './rule-sections';
 import { chunkTableAware } from './table-aware';
 
 export type ChunkerConfig = ProcessingProfile['chunker'];
@@ -54,6 +55,7 @@ export const CHUNKERS: Partial<Record<ChunkerKind, Chunker>> = {
       clause_patterns: config.clause_patterns ?? [],
       lead_in_phrases: config.lead_in_phrases ?? [],
     }),
+  rule_sections: (markdown, config, sentences) => chunkRuleSections(markdown, { ...budget(config, sentences), rules: config.section_rules }),
 };
 
 /** Kinds whose chunks may come from Docling's HybridChunker instead of the Markdown chunkers. */
