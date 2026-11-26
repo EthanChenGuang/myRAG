@@ -242,6 +242,7 @@ export function createPgliteAdmin(db: PGlite, options: PgliteAdminOptions = {}) 
         },
         abortSignal: () => builder,
         maybeSingle: () => run(true),
+        single: () => run(true),
         then: (onFulfilled: (value: Result) => unknown, onRejected?: (reason: unknown) => unknown) =>
           run(false).then(onFulfilled, onRejected),
       };
