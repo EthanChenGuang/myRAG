@@ -20,7 +20,7 @@ import { evalFinalTopK, evalResultCap, runContextStages } from './stages/context
 import { runQueryStages } from './stages/query';
 import { runRankStages } from './stages/rank';
 import { embedForRetrieval, embedVariantTexts, runSearchStages, type QueryLexicalOptions, type SearchIdentifiers } from './stages/search';
-import { resolveLexicalOptions } from '../lexical/resolve-options';
+import { lexicalOptionsOn, resolveLexicalOptions } from '../lexical/resolve-options';
 import {
   bindingHashFields,
   planBindingLegs,
@@ -118,7 +118,7 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
 
   // LANG-07 (D-08, D-09): the tenant's query-side lexical options, resolved once per request from the verified scope only while a
   // switch is on; the search stage and both config hashes (result and semantic-cache key) read the same resolution.
-  const lexicalSwitchOn = config.v2.lexicalDictionary || config.v2.lexicalStemIt || config.v2.identifierIndex;
+  const lexicalSwitchOn = lexicalOptionsOn(config);
   let lexicalPending: Promise<QueryLexicalOptions> | null = null;
   const resolveQueryLexical = (): Promise<QueryLexicalOptions> =>
     (lexicalPending ??= resolveLexicalOptions(scope, config, { language: detectQueryLanguage(input.query), signal }).then(
