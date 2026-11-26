@@ -249,3 +249,282 @@ describe('validateUploadAttributes', () => {
     expect(lines.join('\n')).not.toContain(MARKER);
   });
 });
+
+// ---------------------------------------------------------------------------------------------------------------------------------------
+// Upload routes (D-22, D-23): the attributes form field of /api/process-document and /api/upload.
+// ---------------------------------------------------------------------------------------------------------------------------------------
+
+const USER_A = '00000000-0000-4000-8000-0000000011a1';
+const ORG_O = '00000000-0000-4000-8000-0000000011c1';
+const ORG_P = '00000000-0000-4000-8000-0000000011c2';
+const BODY = 'First neutral placeholder paragraph.\n\nSecond neutral placeholder paragraph.';
+const ROUTE_DEFINITIONS: Record<string, Row[]> = {
+  's:default': [
+    { key: 'alpha_code', type: 'code', filterable: false, in_header: false, in_identifier_index: false, soft: false },
+    { key: 'beta_list', type: 'text_list', filterable: false, in_header: false, in_identifier_index: false, soft: false },
+  ],
+  [`o:${ORG_O}`]: [{ key: 'alpha_code', type: 'code', filterable: false, in_header: false, in_identifier_index: false, soft: false }],
+  [`o:${ORG_P}`]: [{ key: 'gamma_text', type: 'text', filterable: false, in_header: false, in_identifier_index: false, soft: false }],
+};
+
+const routeState = {
+  mode: 'single-tenant' as 'single-tenant' | 'multi-tenant',
+  members: [] as Array<{ organization_id: string; user_id: string }>,
+  schemaFails: false,
+  rpcCalls: [] as Call[],
+  storageUploads: 0,
+};
+
+const ingestSpy = vi.hoisted(() => vi.fn<(input: IngestInput) => Promise<unknown>>());
+const submitSpy = vi.hoisted(() => vi.fn<(input: IngestInput) => Promise<unknown>>());
+
+function routeDb(): RpcClient {
+  return {
+    rpc(fn, args) {
+      const a = (args ?? {}) as Row;
+      routeState.rpcCalls.push({ fn, args: a });
+      const response =
+        fn === 'rag_attribute_definitions_for'
+          ? routeState.schemaFails
+            ? { data: null, error: { code: 'XX000', message: `connection reset ${MARKER}` } }
+            : { data: ROUTE_DEFINITIONS[String(a.p_tenant_key)] ?? [], error: null }
+          : { data: [], error: null };
+      const request = { abortSignal: () => request, then: (ok: (v: unknown) => unknown, bad?: (r: unknown) => unknown) => Promise.resolve(response).then(ok, bad) };
+      return request as never;
+    },
+  };
+}
+
+function routeAdmin() {
+  return {
+    from(table: string) {
+      const filters: Record<string, string> = {};
+      const builder = {
+        eq: (column: string, value: string) => {
+          filters[column] = value;
+          return builder;
+        },
+        order: () => builder,
+        limit: () => builder,
+        abortSignal: () => builder,
+        select: () => builder,
+        insert: () => builder,
+        maybeSingle: () => {
+          if (table === 'organization_members') {
+            const row = routeState.members.find((m) => m.organization_id === filters.organization_id && m.user_id === filters.user_id);
+            return Promise.resolve({ data: row ? { organization_id: row.organization_id } : null, error: null });
+          }
+          return Promise.resolve({ data: table === 'admin_settings' ? { read_only_doc_dashboard: false } : null, error: null });
+        },
+        single: () => Promise.resolve({ data: { id: 'doc' }, error: null }),
+        then: (ok: (value: unknown) => unknown, bad?: (reason: unknown) => unknown) => Promise.resolve({ data: null, error: null }).then(ok, bad),
+      };
+      return builder;
+    },
+    storage: {
+      from: () => ({
+        upload: async () => {
+          routeState.storageUploads += 1;
+          return { data: {}, error: null };
+        },
+        getPublicUrl: () => ({ data: { publicUrl: 'http://127.0.0.1/placeholder' } }),
+      }),
+    },
+  };
+}
+
+async function loadRoute(route: 'process-document' | 'upload', env: { pipeline: string; attributes: string; async?: boolean }) {
+  vi.resetModules();
+  vi.stubEnv('SUPABASE_SERVICE_ROLE_KEY', 'test-service-role-key-placeholder');
+  vi.stubEnv('LLAMA_CLOUD_API_KEY', 'test-llama-key-placeholder');
+  vi.stubEnv('RAG_INGEST_PIPELINE', env.pipeline);
+  vi.stubEnv('RAG_DOC_ATTRIBUTES', env.attributes);
+  vi.stubEnv('RAG_SCOPE_TAGS', 'false');
+  vi.stubEnv('RAG_INGEST_ASYNC', env.async ? 'on' : 'off');
+  vi.stubEnv('RAG_SUPERSESSION_DETECT', 'off');
+  vi.stubEnv('RAG_SIDECAR_URL', 'http://127.0.0.1:9199');
+  vi.stubEnv('RAG_SIDECAR_SECRET', 'wake-sidecar-secret-placeholder-00');
+  vi.doMock('next/server', async (importOriginal) => ({ ...(await importOriginal<typeof import('next/server')>()), after: (task: () => unknown) => void task() }));
+  vi.doMock('@/lib/rag/ingest/wake', () => ({ scheduleIngestWake: () => undefined }));
+  vi.doMock('@/lib/deployment-mode', () => ({
+    getDeploymentMode: () => routeState.mode,
+    isMultiTenant: () => routeState.mode === 'multi-tenant',
+    isSingleTenant: () => routeState.mode === 'single-tenant',
+  }));
+  vi.doMock('@/lib/supabase/server', () => ({ createClient: async () => ({ auth: { getUser: async () => ({ data: { user: { id: USER_A } }, error: null }) } }) }));
+  vi.doMock('@/lib/supabase', () => ({ supabaseAdmin: routeAdmin(), getSupabaseAdmin: () => routeAdmin(), getSupabase: () => ({}) }));
+  vi.doMock('@/lib/auth/organization-handler', () => ({
+    verifyUserOrganizationAccess: async (userId: string, organizationId: string) => ({
+      hasAccess: routeState.members.some((member) => member.user_id === userId && member.organization_id === organizationId),
+    }),
+  }));
+  vi.doMock('@supabase/supabase-js', () => ({ createClient: () => routeAdmin() }));
+  vi.doMock('node-fetch', () => ({
+    default: async (url: string) => {
+      const json = (body: unknown) => ({ ok: true, status: 200, statusText: 'OK', json: async () => body, text: async () => '' });
+      if (url.endsWith('/parsing/upload')) return json({ id: 'job-1', status: 'PENDING' });
+      if (url.endsWith('/result/markdown')) return json({ markdown: 'Neutral placeholder body.', metadata: { total_pages: 1 }, chunks: ['Neutral placeholder body.'] });
+      return json({ status: 'SUCCESS' });
+    },
+  }));
+  vi.doMock('@/lib/document-processor', () => ({ processImageDocument: async () => 'legacy-doc' }));
+  vi.doMock('@/lib/rag', async (importOriginal) => {
+    const original = await importOriginal<typeof import('@/lib/rag')>();
+    return {
+      ...original,
+      embedText: async () => [0.1, 0.2],
+      ingest: (input: IngestInput) => ingestSpy(input),
+      submitIngest: (input: IngestInput) => submitSpy(input),
+    };
+  });
+  const { setRagDepsForTests } = await import('@/lib/rag/deps');
+  setRagDepsForTests({ adminClient: () => routeAdmin() as never });
+  const { setIngestDepsForTests } = await import('@/lib/rag/ingest/deps');
+  setIngestDepsForTests({ db: () => routeDb() });
+  const module = route === 'upload' ? await import('@/app/api/upload/route') : await import('@/app/api/process-document/route');
+  return module.POST as unknown as (req: Request) => Promise<Response>;
+}
+
+function documentForm(attributes: string | null, fields: Record<string, string> = {}): Request {
+  const form = new FormData();
+  form.append('file', new File([BODY], 'notes.txt', { type: 'text/plain' }));
+  form.append('isTemporary', fields.isTemporary ?? 'false');
+  for (const [key, value] of Object.entries(fields)) if (key !== 'isTemporary') form.append(key, value);
+  if (attributes !== null) form.append('attributes', attributes);
+  return new Request('http://localhost/api/process-document', { method: 'POST', body: form });
+}
+
+function imageForm(attributes: string | null, files = 1): Request {
+  const form = new FormData();
+  for (let i = 0; i < files; i += 1) {
+    form.append('files', new File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 1, 2, 3, i])], `figure-${i}.png`, { type: 'image/png' }));
+  }
+  form.append('process_rag', 'true');
+  if (attributes !== null) form.append('attributes', attributes);
+  return new Request('http://localhost/api/upload', { method: 'POST', body: form });
+}
+
+const routeInputs = (): IngestInput[] => [...ingestSpy.mock.calls, ...submitSpy.mock.calls].map((call) => call[0] as IngestInput);
+const schemaReads = () => routeState.rpcCalls.filter((call) => call.fn === 'rag_attribute_definitions_for');
+
+describe('upload routes: the attributes field', () => {
+  beforeEach(() => {
+    routeState.mode = 'single-tenant';
+    routeState.members = [];
+    routeState.schemaFails = false;
+    routeState.rpcCalls = [];
+    routeState.storageUploads = 0;
+    ingestSpy.mockReset();
+    ingestSpy.mockResolvedValue({ status: 'ready', documentId: DOCUMENT, version: 1, parserUsed: 'text', chunkCount: 2, warnings: [] });
+    submitSpy.mockReset();
+    submitSpy.mockResolvedValue({ jobId: '00000000-0000-4000-8000-0000000011f1', documentId: DOCUMENT, status: 'queued' });
+  });
+
+  afterEach(() => {
+    for (const id of ['next/server', '@/lib/rag/ingest/wake', '@/lib/deployment-mode', '@/lib/supabase/server', '@/lib/supabase', '@/lib/auth/organization-handler', '@supabase/supabase-js', 'node-fetch', '@/lib/document-processor', '@/lib/rag']) {
+      vi.doUnmock(id);
+    }
+  });
+
+  it.each([false, true])('process-document (queued=%s): valid values travel canonical in the ingest input', async (asyncOn) => {
+    const POST = await loadRoute('process-document', { pipeline: 'unified', attributes: 'true', async: asyncOn });
+    const response = await POST(documentForm(JSON.stringify({ beta_list: [' x'], alpha_code: 'C-1 ' })));
+    expect([200, 202]).toContain(response.status);
+    expect(routeInputs()).toHaveLength(1);
+    expect(routeInputs()[0]?.attributes).toEqual({ alpha_code: 'C-1', beta_list: ['x'] });
+    expect(schemaReads().map((call) => call.args)).toEqual([{ p_tenant_key: 's:default' }]);
+  });
+
+  it('without the field the request behaves as today: no attributes key and no schema read', async () => {
+    const POST = await loadRoute('process-document', { pipeline: 'unified', attributes: 'true' });
+    expect((await POST(documentForm(null))).status).toBe(200);
+    expect(routeInputs()[0]).not.toHaveProperty('attributes');
+    expect(schemaReads()).toEqual([]);
+  });
+
+  it('invalid values answer 400 invalid_attributes with one detail per error; malformed JSON gives path attributes', async () => {
+    const POST = await loadRoute('process-document', { pipeline: 'unified', attributes: 'true' });
+    const response = await POST(documentForm(JSON.stringify({ delta_text: MARKER, alpha_code: ['x'] })));
+    expect(response.status).toBe(400);
+    const body = await response.json();
+    expect(body).toEqual({
+      success: false,
+      error: 'invalid_attributes',
+      details: [
+        { path: 'attributes.delta_text', message: 'unknown_attribute' },
+        { path: 'attributes.alpha_code', message: 'invalid_attribute_type' },
+      ],
+    });
+    expect(JSON.stringify(body)).not.toContain(MARKER);
+    const malformed = await POST(documentForm('{not json'));
+    expect(await malformed.json()).toEqual({ success: false, error: 'invalid_attributes', details: [{ path: 'attributes', message: 'invalid_attribute_type' }] });
+    expect(routeInputs()).toEqual([]);
+    expect(lines.join('\n')).not.toContain(MARKER);
+  });
+
+  it('an unreadable schema answers 503 attributes_unavailable without the database message', async () => {
+    routeState.schemaFails = true;
+    const POST = await loadRoute('process-document', { pipeline: 'unified', attributes: 'true' });
+    const response = await POST(documentForm('{"alpha_code":"x"}'));
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: 'attributes_unavailable' });
+    expect(routeInputs()).toEqual([]);
+    expect(lines.join('\n')).not.toContain(MARKER);
+  });
+
+  it.each([
+    ['the switch off', { pipeline: 'unified', attributes: 'false' }, {}],
+    ['the legacy pipeline', { pipeline: 'legacy', attributes: 'true' }, {}],
+    ['a temporary upload', { pipeline: 'unified', attributes: 'true' }, { isTemporary: 'true' }],
+  ])('process-document with %s: 400 attributes_not_enabled and nothing is ingested', async (_label, env, fields) => {
+    const POST = await loadRoute('process-document', env);
+    const response = await POST(documentForm('{}', fields));
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ success: false, error: 'attributes_not_enabled' });
+    expect(routeInputs()).toEqual([]);
+    expect(schemaReads()).toEqual([]);
+  });
+
+  it("multi-tenant: a member of O is checked against O's schema and never P's", async () => {
+    routeState.mode = 'multi-tenant';
+    routeState.members = [{ organization_id: ORG_O, user_id: USER_A }];
+    const POST = await loadRoute('process-document', { pipeline: 'unified', attributes: 'true' });
+    const refused = await POST(documentForm('{"gamma_text":"x"}', { organization_id: ORG_O }));
+    expect(refused.status).toBe(400);
+    expect((await refused.json()).details).toEqual([{ path: 'attributes.gamma_text', message: 'unknown_attribute' }]);
+    const accepted = await POST(documentForm('{"alpha_code":"O-1"}', { organization_id: ORG_O }));
+    expect(accepted.status).toBe(200);
+    expect(routeInputs().at(-1)?.attributes).toEqual({ alpha_code: 'O-1' });
+    expect(new Set(schemaReads().map((call) => call.args.p_tenant_key))).toEqual(new Set([`o:${ORG_O}`]));
+  });
+
+  it('image upload: valid values go on every file; invalid values or the switch off answer 400 before any file is stored', async () => {
+    let POST = await loadRoute('upload', { pipeline: 'unified', attributes: 'true' });
+    const response = await POST(imageForm('{"alpha_code":"I-1"}', 2));
+    expect([200, 202]).toContain(response.status);
+    await vi.waitFor(() => expect(routeInputs().length).toBe(2));
+    expect(routeInputs().map((input) => input.attributes)).toEqual([{ alpha_code: 'I-1' }, { alpha_code: 'I-1' }]);
+    const uploads = routeState.storageUploads;
+    const invalid = await POST(imageForm('{"delta_text":"x"}'));
+    expect(invalid.status).toBe(400);
+    expect((await invalid.json()).error).toBe('invalid_attributes');
+    expect(routeState.storageUploads).toBe(uploads);
+    POST = await loadRoute('upload', { pipeline: 'unified', attributes: 'false' });
+    const off = await POST(imageForm('{}'));
+    expect(off.status).toBe(400);
+    expect(await off.json()).toEqual({ success: false, error: 'attributes_not_enabled' });
+    POST = await loadRoute('upload', { pipeline: 'legacy', attributes: 'true' });
+    const legacy = await POST(imageForm('{}'));
+    expect(legacy.status).toBe(400);
+    expect(await legacy.json()).toEqual({ success: false, error: 'attributes_not_enabled' });
+    expect(routeState.storageUploads).toBe(uploads);
+  });
+
+  it('image upload without the field: the ingest input has no attributes key and no schema is read', async () => {
+    const POST = await loadRoute('upload', { pipeline: 'unified', attributes: 'true' });
+    expect((await POST(imageForm(null))).status).toBe(200);
+    await vi.waitFor(() => expect(routeInputs().length).toBe(1));
+    expect(routeInputs()[0]).not.toHaveProperty('attributes');
+    expect(schemaReads()).toEqual([]);
+  });
+});
