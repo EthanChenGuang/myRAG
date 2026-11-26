@@ -19,7 +19,20 @@ export type ParsedEmbeddingArgs =
   | { ok: true; command: 'activate-binding'; bindingId: string }
   | { ok: true; command: 'rollback-binding'; docType: string; tenantKey: string | null }
   | { ok: true; command: 'deactivate-binding'; docType: string; tenantKey: string | null }
+  | { ok: true; command: 'ft-consent-grant'; tenantKey: string; evidenceRef: string; scope: FinetuneConsentScope }
+  | { ok: true; command: 'ft-consent-revoke'; tenantKey: string; pruneRoot: string | null }
+  | { ok: true; command: 'ft-consent-list' }
+  | { ok: true; command: 'ft-models-register'; cardPath: string }
+  | { ok: true; command: 'ft-models-list' }
+  | { ok: true; command: 'ft-models-retire'; versionId: string }
+  | { ok: true; command: 'ft-bind'; slot: FinetuneSlotId; versionId: string }
+  | { ok: true; command: 'ft-clear'; slot: FinetuneSlotId; batch: number }
+  | { ok: true; command: 'ft-release-rollback' }
+  | { ok: true; command: 'ft-check'; slot: FinetuneSlotId }
   | { ok: false; error: string };
+
+export type FinetuneConsentScope = 'private' | 'deployment';
+export type FinetuneSlotId = 'ft-a-1024' | 'ft-b-1024';
 
 export interface CliIo {
   out: (line: string) => void;
@@ -31,6 +44,9 @@ const SETTABLE: readonly string[] = ['available', 'backfilling', 'retired'];
 const DOC_TYPES: readonly string[] = BindingActivationEvidenceSchema.shape.doc_type.options;
 const BINDING_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const TENANT_KEY = /^(s:default|[uo]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/;
+const VERSION_ID = /^ft-[a-z0-9][a-z0-9.-]{2,58}$/;
+const FT_SLOTS: readonly string[] = ['ft-a-1024', 'ft-b-1024'];
+const FT_CLEAR_DEFAULT_BATCH = 1000;
 
 export const USAGE = [
   'usage: npm run rag:embedding -- status',
@@ -45,6 +61,16 @@ export const USAGE = [
   '       npm run rag:embedding -- activate-binding <bindingId>',
   '       npm run rag:embedding -- rollback-binding <docType> [--tenant <key>]',
   '       npm run rag:embedding -- deactivate-binding <docType> [--tenant <key>]',
+  '       npm run rag:embedding -- ft-consent grant <tenantKey> --ref <evidenceRef> [--scope private|deployment]',
+  '       npm run rag:embedding -- ft-consent revoke <tenantKey> [--prune-root <bundles dir>]',
+  '       npm run rag:embedding -- ft-consent list',
+  '       npm run rag:embedding -- ft-models register <card.json>',
+  '       npm run rag:embedding -- ft-models list',
+  '       npm run rag:embedding -- ft-models retire <versionId>',
+  '       npm run rag:embedding -- ft-bind ft-a-1024|ft-b-1024 <versionId>',
+  '       npm run rag:embedding -- ft-clear ft-a-1024|ft-b-1024 [--batch <1..10000>]',
+  '       npm run rag:embedding -- ft-release-rollback --ack drop-rollback',
+  '       npm run rag:embedding -- ft-check ft-a-1024|ft-b-1024',
 ].join('\n');
 
 type DocTypeAndTenant = { ok: true; docType: string; tenantKey: string | null } | { ok: false; error: string };
@@ -59,6 +85,61 @@ function parseDocTypeAndTenant(command: string, args: string[]): DocTypeAndTenan
   if (!TENANT_KEY.test(options[1] as string)) return { ok: false, error: '--tenant needs a tenant key (s:default, u:<uuid> or o:<uuid>)' };
   return { ok: true, docType, tenantKey: options[1] as string };
 }
+
+/** `--flag value` pairs only; each flag at most once and only from `allowed`. */
+function parseFlags(command: string, args: string[], allowed: readonly string[]): { ok: true; values: Map<string, string> } | { ok: false; error: string } {
+  const values = new Map<string, string>();
+  for (let index = 0; index < args.length; index += 2) {
+    const flag = args[index] as string;
+    const value = args[index + 1];
+    if (!allowed.includes(flag)) return { ok: false, error: `${command} does not take ${flag}` };
+    if (values.has(flag)) return { ok: false, error: `${command} takes ${flag} once` };
+    if (value === undefined || value === '' || value.startsWith('--')) return { ok: false, error: `${flag} needs a value` };
+    values.set(flag, value);
+  }
+  return { ok: true, values };
+}
+
+function parseFinetuneConsent(rest: string[]): ParsedEmbeddingArgs {
+  const [action, tenantKey, ...options] = rest;
+  if (action === 'list') return rest.length === 1 ? { ok: true, command: 'ft-consent-list' } : { ok: false, error: 'ft-consent list takes no arguments' };
+  if (action !== 'grant' && action !== 'revoke') return { ok: false, error: 'ft-consent needs grant, revoke or list' };
+  if (tenantKey === undefined || !TENANT_KEY.test(tenantKey)) return { ok: false, error: `ft-consent ${action} needs a tenant key (s:default, u:<uuid> or o:<uuid>)` };
+  if (action === 'revoke') {
+    const flags = parseFlags('ft-consent revoke', options, ['--prune-root']);
+    if (!flags.ok) return flags;
+    return { ok: true, command: 'ft-consent-revoke', tenantKey, pruneRoot: flags.values.get('--prune-root') ?? null };
+  }
+  const flags = parseFlags('ft-consent grant', options, ['--ref', '--scope']);
+  if (!flags.ok) return flags;
+  const evidenceRef = flags.values.get('--ref');
+  if (!evidenceRef) return { ok: false, error: 'ft-consent grant needs --ref <evidenceRef> (a ticket or signed-agreement reference)' };
+  const scope = flags.values.get('--scope') ?? 'private';
+  if (scope !== 'private' && scope !== 'deployment') return { ok: false, error: '--scope needs private or deployment (revoke sets none)' };
+  return { ok: true, command: 'ft-consent-grant', tenantKey, evidenceRef, scope };
+}
+
+function parseFinetuneModels(rest: string[]): ParsedEmbeddingArgs {
+  const [action, argument] = rest;
+  if (action === 'list') return rest.length === 1 ? { ok: true, command: 'ft-models-list' } : { ok: false, error: 'ft-models list takes no arguments' };
+  if (action === 'register') {
+    if (rest.length !== 2 || !argument || argument.startsWith('--')) return { ok: false, error: 'ft-models register needs one <card.json>' };
+    return { ok: true, command: 'ft-models-register', cardPath: argument };
+  }
+  if (action === 'retire') {
+    if (rest.length !== 2 || argument === undefined || !VERSION_ID.test(argument)) return { ok: false, error: 'ft-models retire needs one model version id (ft-...)' };
+    return { ok: true, command: 'ft-models-retire', versionId: argument };
+  }
+  return { ok: false, error: 'ft-models needs register, list or retire' };
+}
+
+export type FinetuneParsedArgs = Extract<ParsedEmbeddingArgs, { ok: true; command: `ft-${string}` }>;
+
+export function isFinetuneCommand(parsed: ParsedEmbeddingArgs): parsed is FinetuneParsedArgs {
+  return parsed.ok && parsed.command.startsWith('ft-');
+}
+
+const slotArgument = (value: string | undefined): FinetuneSlotId | null => (value !== undefined && FT_SLOTS.includes(value) ? (value as FinetuneSlotId) : null);
 
 /** `set-status` never takes `active`: only the gate in `activate` moves the pointer. */
 export function parseEmbeddingArgs(argv: string[]): ParsedEmbeddingArgs {
@@ -129,6 +210,37 @@ export function parseEmbeddingArgs(argv: string[]): ParsedEmbeddingArgs {
       if (!scope.ok) return scope;
       return { ok: true, command, docType: scope.docType, tenantKey: scope.tenantKey };
     }
+    case 'ft-consent':
+      return parseFinetuneConsent(rest);
+    case 'ft-models':
+      return parseFinetuneModels(rest);
+    case 'ft-bind': {
+      const slot = slotArgument(rest[0]);
+      const versionId = rest[1];
+      if (slot === null) return { ok: false, error: 'ft-bind needs a slot: ft-a-1024 or ft-b-1024' };
+      if (rest.length !== 2 || versionId === undefined || !VERSION_ID.test(versionId)) return { ok: false, error: 'ft-bind needs <slot> <versionId>' };
+      return { ok: true, command: 'ft-bind', slot, versionId };
+    }
+    case 'ft-clear': {
+      const slot = slotArgument(rest[0]);
+      if (slot === null) return { ok: false, error: 'ft-clear needs a slot: ft-a-1024 or ft-b-1024' };
+      const flags = parseFlags('ft-clear', rest.slice(1), ['--batch']);
+      if (!flags.ok) return flags;
+      const raw = flags.values.get('--batch');
+      const batch = raw === undefined ? FT_CLEAR_DEFAULT_BATCH : /^[1-9][0-9]*$/.test(raw) ? Number(raw) : Number.NaN;
+      if (!Number.isInteger(batch) || batch < 1 || batch > 10000) return { ok: false, error: '--batch needs a whole number from 1 to 10000' };
+      return { ok: true, command: 'ft-clear', slot, batch };
+    }
+    case 'ft-release-rollback':
+      if (rest.length !== 2 || rest[0] !== '--ack' || rest[1] !== 'drop-rollback') {
+        return { ok: false, error: 'ft-release-rollback needs --ack drop-rollback (the active profile loses its rollback target)' };
+      }
+      return { ok: true, command: 'ft-release-rollback' };
+    case 'ft-check': {
+      const slot = slotArgument(rest[0]);
+      if (rest.length !== 1 || slot === null) return { ok: false, error: 'ft-check needs one slot: ft-a-1024 or ft-b-1024' };
+      return { ok: true, command: 'ft-check', slot };
+    }
     default:
       return { ok: false, error: command === undefined ? 'a command is required' : `unknown command: ${command}` };
   }
@@ -169,6 +281,10 @@ export async function main(argv: string[] = process.argv.slice(2), io: CliIo = c
   if (!parsed.ok) {
     io.err(`[Embedding] ${parsed.error}`);
     io.err(USAGE);
+    return 2;
+  }
+  if (isFinetuneCommand(parsed)) {
+    io.err('[Embedding] the ft-* commands are not available in this build');
     return 2;
   }
   const ops = await import('./profile-ops');
