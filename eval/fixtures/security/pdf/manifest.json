@@ -3,84 +3,100 @@
     "clean-crop-marks.pdf": {
       "expected": "clean",
       "hidden_text": null,
+      "link_targets": [],
       "reason": null,
       "sha256": "b691f5f15b8c03aa1248d49455bc17f8a5a699003cbd67c6755a4b0011992adb"
     },
     "clean-dark-header.pdf": {
       "expected": "clean",
       "hidden_text": null,
+      "link_targets": [],
       "reason": null,
       "sha256": "a16b96ee62dcb6d538ceb956431648d5aa10cd86f845b2e9fff629c3fdb36d3b"
     },
     "clean-footnotes.pdf": {
       "expected": "clean",
       "hidden_text": null,
+      "link_targets": [],
       "reason": null,
       "sha256": "d9e35fd909fa81e21a472026ee47f2b397637cc73703c1ec74b1512a978eea9a"
     },
     "clean-ocr-layer.pdf": {
       "expected": "clean",
       "hidden_text": null,
+      "link_targets": [],
       "reason": null,
       "sha256": "b2c1f8d4d422d10a7ed0fd60fd446e4ade408c3ec6353056b5e01dc496e565b5"
     },
     "clean-plain.pdf": {
       "expected": "clean",
       "hidden_text": null,
+      "link_targets": [],
       "reason": null,
       "sha256": "d4e6ae68a190c398267a335adc453f92c588b6089092810af4abf6f963a3fe58"
     },
     "clean-scan.pdf": {
       "expected": "clean",
       "hidden_text": null,
+      "link_targets": [],
       "reason": null,
       "sha256": "9359fe7a4f652b6efcb422211bf19af24c07bec24c1a2e983191cb93eb4719bf"
     },
     "covered-text.pdf": {
       "expected": "hidden_found",
       "hidden_text": "Questa frase viene coperta da un rettangolo bianco.",
+      "link_targets": [],
       "reason": "covered_by_object",
       "sha256": "20e481595481b23a665b040a0b42ce6d64b86b260ca317282c4ca090f6937f70"
     },
     "form-white-text.pdf": {
       "expected": "hidden_found",
       "hidden_text": "This white sentence sits inside a form object.",
+      "link_targets": [],
       "reason": "color_near_background",
       "sha256": "10c25d200441170ac620e306f5955a6830c73a022662cd5fe8ef1d7057339d6a"
     },
     "invisible-render.pdf": {
       "expected": "hidden_found",
       "hidden_text": "This sentence uses the invisible text render mode.",
+      "link_targets": [],
       "reason": "invisible_render_mode",
       "sha256": "bf434de2cb46e46824965d893feb452f5c4d09134cbd1d1981c0909d2ecd1af1"
     },
     "link-annotation.pdf": {
       "expected": "clean",
       "hidden_text": null,
+      "link_targets": [
+        "https://example.org/reference/overview"
+      ],
       "reason": null,
       "sha256": "c93e2a49d12be9fe88e29db6e8053fb41b49699567ed9e973a107bd511819f6d"
     },
     "off-page.pdf": {
       "expected": "hidden_found",
       "hidden_text": "Questa frase si trova fuori dal bordo della pagina.",
+      "link_targets": [],
       "reason": "outside_page",
       "sha256": "b0cdbc6eb6a49187439b3238bb3a4da94bf00ad8a75aa3a58d1ea1ae1da8a61e"
     },
     "tiny-font.pdf": {
       "expected": "hidden_found",
       "hidden_text": "这一句用极小的字号写成读者看不见。",
+      "link_targets": [],
       "reason": "font_too_small",
       "sha256": "5a8c09f4d3db84039d39a14ca38b25b5cdc889b3d3ad6f5ffd0e430c7af0501a"
     },
     "white-on-white.pdf": {
       "expected": "hidden_found",
       "hidden_text": "This sentence is written in white on a white page.",
+      "link_targets": [],
       "reason": "color_near_background",
       "sha256": "cd4f8e6aa48c834acf9407d77c6451f33b5786f3ea509f70e16423b84e63736a"
     },
     "zero-pages.pdf": {
       "expected": "clean",
       "hidden_text": null,
+      "link_targets": [],
       "reason": null,
       "sha256": "94ceb7b3b306c11bad59cf8faaacddf79b5d1e3bb49f884ef7cd81b468b46359"
     }
