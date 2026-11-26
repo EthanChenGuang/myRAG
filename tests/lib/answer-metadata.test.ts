@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { extractStreamAnswerMetadata, mergeAnswerRecord } from '@/lib/chat/answer-metadata';
+import { extractStreamAnswerMetadata, mergeAnswerRecord, noticesOf, pickAnswerMetadata } from '@/lib/chat/answer-metadata';
 import { useAnswerRecordsStore } from '@/lib/stores/answer-records-store';
 import { AnswerRecordSchema, type AnswerRecord } from '@/lib/rag-eval/contracts.generated';
 import type { ExtendedMessage } from '@/types/chat';
@@ -117,5 +117,99 @@ describe('useAnswerRecordsStore', () => {
     const before = useAnswerRecordsStore.getState().records;
     useAnswerRecordsStore.getState().upsert(record({ updatedAt: '2026-11-25T10:00:00.000Z' }));
     expect(useAnswerRecordsStore.getState().records).toBe(before);
+  });
+});
+
+const SENTENCE = {
+  index: 0,
+  part: 0,
+  start: 0,
+  end: 20,
+  kind: 'sentence',
+  cited: true,
+  factual: true,
+  support: 'not_checked',
+  reason: null,
+  scorer: null,
+  text_hash: 'c'.repeat(64),
+};
+const NOTICE = { kind: 'partial_answer', language: 'en', text: 'Only part of the question is covered.' };
+
+describe('Phase 5.2 finish metadata (D-11, D-23)', () => {
+  it('extracts sentences, notices, answerLanguage, truncated and refusalOrigin from the finish part', () => {
+    const start = extractStreamAnswerMetadata({ ragTraceId: TRACE, answerId: ANSWER_ID });
+    const finish = extractStreamAnswerMetadata(
+      { sentences: [SENTENCE, { index: 'x' }], notices: [NOTICE, { kind: 'Bad Kind' }], answerLanguage: 'it', truncated: true, refusal: true, refusalOrigin: 'model_relevance' },
+      start,
+    );
+    expect(finish).toEqual({
+      ragTraceId: TRACE,
+      answerId: ANSWER_ID,
+      refusal: true,
+      sentences: [SENTENCE],
+      notices: [NOTICE],
+      answerLanguage: 'it',
+      truncated: true,
+      refusalOrigin: 'model_relevance',
+    });
+  });
+
+  it('drops malformed values field by field', () => {
+    expect(extractStreamAnswerMetadata({ answerLanguage: '', truncated: 'yes', refusalOrigin: 'Not Valid', sentences: 'x', notices: {} })).toEqual({});
+  });
+
+  it('picks the fields, plus checks and textsSource, for persistence', () => {
+    const checks = AnswerRecordSchema.shape.checks.unwrap().parse({ truncated: true, text_language: 'en' });
+    expect(
+      pickAnswerMetadata({ answerId: ANSWER_ID, sentences: [SENTENCE], notices: [NOTICE], answerLanguage: 'it', truncated: false, refusalOrigin: 'model_relevance', checks, textsSource: 'registry' }),
+    ).toEqual({ answerId: ANSWER_ID, sentences: [SENTENCE], notices: [NOTICE], answerLanguage: 'it', truncated: false, refusalOrigin: 'model_relevance', checks, textsSource: 'registry' });
+    expect(pickAnswerMetadata({ checks: { truncated: 'no' }, textsSource: 'other' })).toEqual({});
+  });
+});
+
+describe('mergeAnswerRecord with checks (D-23)', () => {
+  it('adds checks, textsSource and answerLanguage from a Phase 5.2 record without dropping metadata fields', () => {
+    const rec = record({ checks: { sentences: [{ ...SENTENCE, support: 'supported' }], truncated: false }, textsSource: 'registry', answerLanguage: 'it' });
+    const messages = [assistant('a-1', { answerId: ANSWER_ID, sentences: [SENTENCE], notices: [NOTICE], truncated: false })];
+    const merged = mergeAnswerRecord(messages, rec);
+    expect(merged[0].metadata).toEqual({
+      answerId: ANSWER_ID,
+      sentences: [SENTENCE],
+      notices: [NOTICE],
+      truncated: false,
+      groundedness: rec.groundedness,
+      feedback: rec.feedback,
+      checks: rec.checks,
+      textsSource: 'registry',
+      answerLanguage: 'it',
+    });
+    expect(mergeAnswerRecord(merged, rec)).toBe(merged);
+  });
+
+  it('leaves the language and checks alone for a record without checks (every switch off)', () => {
+    const rec = record({ answerLanguage: 'en' });
+    const merged = mergeAnswerRecord([assistant('a-1', { answerId: ANSWER_ID })], rec);
+    expect(merged[0].metadata).toEqual({ answerId: ANSWER_ID, groundedness: rec.groundedness, feedback: rec.feedback });
+  });
+});
+
+describe('noticesOf (UI-SPEC finding 2)', () => {
+  it('returns the notices of any assistant message, citation-aware or not', () => {
+    expect(noticesOf({ notices: [NOTICE] })).toEqual([NOTICE]);
+    expect(noticesOf({ answerId: ANSWER_ID, citations: [CITATION], notices: [NOTICE] })).toEqual([NOTICE]);
+  });
+
+  it('removes exact duplicates, keeps unknown kinds and drops malformed entries', () => {
+    const other = { kind: 'some_future_kind', language: 'en', text: 'A later notice.' };
+    expect(noticesOf({ notices: [NOTICE, { ...NOTICE }, other, { ...NOTICE, language: 'it' }, { kind: 'x' }, 'text'] })).toEqual([
+      NOTICE,
+      other,
+      { ...NOTICE, language: 'it' },
+    ]);
+  });
+
+  it('is empty for metadata without notices', () => {
+    expect(noticesOf(undefined)).toEqual([]);
+    expect(noticesOf({ notices: 'x' })).toEqual([]);
   });
 });
