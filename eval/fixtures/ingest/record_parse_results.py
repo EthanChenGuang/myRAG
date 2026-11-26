@@ -241,7 +241,7 @@ def _record_entries(
     """Records each spec into files and returns its manifest entries, in spec order.
 
     With header_repeat_variant, each spec also gets the ParseResult of the RAG_TABLE_HEADER_REPEAT=always request
-    (<id>.header-repeat.parse.json), which the fake sidecar answers when a request repeats and carries headers."""
+    (<id>.parse-header-repeat.json), which the fake sidecar answers when a request repeats and carries headers."""
     entries: list[dict[str, Any]] = []
     for index, spec in enumerate(fixture_specs, start=1):
         pdf_path = pdf_dir / f"{spec.id}.pdf"
@@ -255,7 +255,7 @@ def _record_entries(
         recorded["parse_result"] = parse_path
         if header_repeat_variant:
             repeated, _ = record_fixture(spec, binary_hash=first_hash + index, header_repeat=True)
-            repeat_path = f"recorded/{spec.id}.header-repeat.parse.json"
+            repeat_path = f"recorded/{spec.id}.parse-header-repeat.json"
             files[repeat_path] = _dump(repeated.model_dump(mode="json"))
             recorded["parse_result_header_repeat"] = repeat_path
         for name, data in artifacts.items():

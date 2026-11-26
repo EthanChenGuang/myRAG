@@ -657,7 +657,7 @@
         },
         "docling": "recorded/long-table-zh.docling.json",
         "parse_result": "recorded/long-table-zh.parse.json",
-        "parse_result_header_repeat": "recorded/long-table-zh.header-repeat.parse.json"
+        "parse_result_header_repeat": "recorded/long-table-zh.parse-header-repeat.json"
       },
       "size_bytes": 26706,
       "text": {
@@ -728,7 +728,7 @@
         },
         "docling": "recorded/long-table-en.docling.json",
         "parse_result": "recorded/long-table-en.parse.json",
-        "parse_result_header_repeat": "recorded/long-table-en.header-repeat.parse.json"
+        "parse_result_header_repeat": "recorded/long-table-en.parse-header-repeat.json"
       },
       "size_bytes": 19524,
       "text": {
@@ -799,7 +799,7 @@
         },
         "docling": "recorded/long-table-it.docling.json",
         "parse_result": "recorded/long-table-it.parse.json",
-        "parse_result_header_repeat": "recorded/long-table-it.header-repeat.parse.json"
+        "parse_result_header_repeat": "recorded/long-table-it.parse-header-repeat.json"
       },
       "size_bytes": 20017,
       "text": {
@@ -876,7 +876,7 @@
         },
         "docling": "recorded/long-table-zh-continued.docling.json",
         "parse_result": "recorded/long-table-zh-continued.parse.json",
-        "parse_result_header_repeat": "recorded/long-table-zh-continued.header-repeat.parse.json"
+        "parse_result_header_repeat": "recorded/long-table-zh-continued.parse-header-repeat.json"
       },
       "size_bytes": 26996,
       "text": {
@@ -953,7 +953,7 @@
         },
         "docling": "recorded/long-table-en-continued.docling.json",
         "parse_result": "recorded/long-table-en-continued.parse.json",
-        "parse_result_header_repeat": "recorded/long-table-en-continued.header-repeat.parse.json"
+        "parse_result_header_repeat": "recorded/long-table-en-continued.parse-header-repeat.json"
       },
       "size_bytes": 19574,
       "text": {
@@ -1030,7 +1030,7 @@
         },
         "docling": "recorded/long-table-it-continued.docling.json",
         "parse_result": "recorded/long-table-it-continued.parse.json",
-        "parse_result_header_repeat": "recorded/long-table-it-continued.header-repeat.parse.json"
+        "parse_result_header_repeat": "recorded/long-table-it-continued.parse-header-repeat.json"
       },
       "size_bytes": 20067,
       "text": {
