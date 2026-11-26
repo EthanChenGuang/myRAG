@@ -225,3 +225,16 @@ export function blockSplitterForIngest(mode: 'off' | 'on' | undefined): BlockSpl
   if (mode !== 'on') return legacyBlockSplitter;
   return languageAwareBlockSplitter(getLanguageSettings());
 }
+
+/** Phase 5.2 D-18: one unit of an answer; offsets are UTF-16 code units into the answer text as persisted, markers included. */
+export interface AnswerSentenceUnit {
+  index: number;
+  start: number;
+  end: number;
+  text: string;
+  kind: 'sentence' | 'list_item' | 'table' | 'heading' | 'code';
+}
+
+export function splitAnswerSentences(_text: string, _language: string): AnswerSentenceUnit[] {
+  return [];
+}
