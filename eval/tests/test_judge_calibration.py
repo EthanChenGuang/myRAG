@@ -432,10 +432,11 @@ def test_run_with_a_same_family_generator_is_refused(tmp_path: Path, _keys, caps
     assert "family" in capsys.readouterr().err
 
 
-def test_tenant_source_waits_for_plan_20(tmp_path: Path, _keys, capsys):
-    code = main(["run", "--tenant", "s:default", "--base-url", "http://127.0.0.1:1", "--generator-model", GENERATOR])
+def test_tenant_source_excludes_seed_only(tmp_path: Path, _keys, capsys):
+    argv = ["run", "--seed-only", "--tenant", "s:default", "--base-url", "http://127.0.0.1:1"]
+    code = main([*argv, "--generator-model", GENERATOR])
     assert code == 2
-    assert "needs plan 05.3-20" in capsys.readouterr().err
+    assert "exclude each other" in capsys.readouterr().err
 
 
 def test_seed_only_requires_a_seed_file(tmp_path: Path, _keys, capsys):

@@ -291,9 +291,8 @@ def test_connection_error_names_the_type_only(tmp_path, private, monkeypatch, _k
 def test_pull_error_message_never_contains_the_token(monkeypatch):
     error = httpx.ConnectError(f"Bearer {TOKEN}")
     _install(monkeypatch, FakeApp(error=error))
-    with pytest.raises(Exception) as caught:
-        getattr(calibration_module, "pull_review_queue_cases")(BASE_URL, TENANT, TOKEN)
-    assert type(caught.value).__name__ == "ReviewQueueSourceError"
+    with pytest.raises(calibration_module.ReviewQueueSourceError) as caught:
+        calibration_module.pull_review_queue_cases(BASE_URL, TENANT, TOKEN)
     assert TOKEN not in str(caught.value)
     assert "ConnectError" in str(caught.value)
 
@@ -328,9 +327,8 @@ def test_pull_returns_seed_shaped_cases(monkeypatch):
 
 def test_body_without_a_cases_list_is_a_source_error(monkeypatch):
     _install(monkeypatch, FakeApp(body={"success": True}))
-    with pytest.raises(Exception) as caught:
-        getattr(calibration_module, "pull_review_queue_cases")(BASE_URL, TENANT, TOKEN)
-    assert type(caught.value).__name__ == "ReviewQueueSourceError"
+    with pytest.raises(calibration_module.ReviewQueueSourceError) as caught:
+        calibration_module.pull_review_queue_cases(BASE_URL, TENANT, TOKEN)
 
 
 def test_out_outside_the_private_directory_is_refused(tmp_path, private, monkeypatch, _keys, capsys):

@@ -16,9 +16,9 @@ import os
 import sys
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 
 from pydantic import ValidationError
 from rag_sidecar.contracts.judge import JudgeConfig
@@ -34,6 +34,7 @@ from rag_sidecar.contracts.retrieval import ConfigProvenance
 
 import rag_eval.judge  # noqa: F401  (applies the telemetry opt-out before the judge libraries load)
 from rag_eval.config_files import finalize_config, write_config_atomically
+from rag_eval.draft import writer
 from rag_eval.judge.config import (
     DEFAULT_CONFIG_PATH,
     JudgeCase,
@@ -42,7 +43,14 @@ from rag_eval.judge.config import (
     assert_judge_family_differs,
     load_judge_config,
 )
-from rag_eval.judge.run import EXIT_FAMILY, EXIT_INPUT, EXIT_KEY, EXIT_OK, EXIT_PROVIDER, MISSING_KEY_NOTICE
+from rag_eval.judge.run import (
+    EXIT_FAMILY,
+    EXIT_INPUT,
+    EXIT_KEY,
+    EXIT_OK,
+    EXIT_PROVIDER,
+    MISSING_KEY_NOTICE,
+)
 from rag_eval.judge.telemetry import check_no_results_upload
 from rag_eval.paths import REPO_ROOT, resolve_cli_path
 from rag_eval.stats import accuracy, bootstrap_interval, cohen_kappa, recall_precision
@@ -53,7 +61,13 @@ DEFAULT_GATES_PATH = REPO_ROOT / "eval" / "config" / "quality-gates.json"
 DEFAULT_OUT = REPO_ROOT / "eval" / "out" / "judge-calibration"
 REPORT_NAME = "judge-calibration.md"
 CELLS_NAME = "judge-calibration-cells.json"
-TENANT_NOTICE = "the review-queue calibration source needs plan 05.3-20"
+PRIVATE_SUBDIR = "judge-calibration"
+EXPORT_ROUTE = "/api/rag/admin/judge-calibration/export"
+TOKEN_ENV = "RAG_ADMIN_BEARER"
+QUEUE_SKIP = "skipping the review-queue judge calibration"
+QUEUE_REVIEWER = "review_queue"
+QUEUE_ID_PREFIX = "rq-"
+PARTIAL_ANSWER_METRIC = "partial_answer"
 
 ROLE_LIBRARIES: dict[str, tuple[str, ...]] = {"nightly": ("deepeval", "ragas"), "online": ("deepeval",)}
 ROLES: tuple[JudgeRole, ...] = ("nightly", "online")
@@ -151,7 +165,7 @@ def judge_fingerprint(
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _round(value: float | None) -> float | None:
@@ -313,7 +327,7 @@ def calibrate_with_details(
     cases: Sequence[JudgeSeedCase],
     judge_factory: JudgeFactory,
     gates: QualityGates,
-    source: JudgeLabelSource,
+    source: JudgeLabelSource | Mapping[str, JudgeLabelSource],
     *,
     judges: Mapping[str, JudgeConfig],
     fingerprints: Mapping[str, str] | None = None,
@@ -350,7 +364,7 @@ def calibrate_with_details(
                         cases=by_language[language],
                         scores=scores,
                         gates=gates,
-                        source=source,
+                        source=source if isinstance(source, str) else source[language],
                         recorded_at=stamp,
                     )
                     if detail is not None:
@@ -362,7 +376,7 @@ def calibrate(
     cases: Sequence[JudgeSeedCase],
     judge_factory: JudgeFactory,
     gates: QualityGates,
-    source: JudgeLabelSource,
+    source: JudgeLabelSource | Mapping[str, JudgeLabelSource],
     *,
     judges: Mapping[str, JudgeConfig],
     fingerprints: Mapping[str, str] | None = None,
@@ -376,10 +390,10 @@ def calibrate(
 
 def _recorded_on(value: str) -> date | None:
     try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        parsed = datetime.fromisoformat(value)
     except ValueError:
         return None
-    return parsed.astimezone(timezone.utc).date() if parsed.tzinfo else parsed.date()
+    return parsed.astimezone(UTC).date() if parsed.tzinfo else parsed.date()
 
 
 def effective_status(
@@ -432,6 +446,123 @@ def load_seed(path: Path) -> list[JudgeSeedCase]:
     return cases
 
 
+class ReviewQueueSourceError(Exception):
+    """The export could not be read; the message names the status or exception type only, never the token or text."""
+
+    def __init__(self, message: str, *, status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
+
+
+@dataclass(frozen=True)
+class ReviewQueuePull:
+    cases: list[JudgeSeedCase]
+    dropped: int
+
+
+def _http_client():
+    import httpx
+
+    return httpx.Client(timeout=30.0)
+
+
+def _queue_case(raw: object) -> JudgeSeedCase | None:
+    """One exported case as a confirmed calibration case: the latest expert label is the human verdict."""
+    if not isinstance(raw, dict):
+        return None
+    labels = raw.get("labels")
+    contexts = raw.get("contexts")
+    item_id = raw.get("item_id")
+    if not isinstance(labels, list) or not labels or not isinstance(contexts, list) or not isinstance(item_id, str):
+        return None
+    dated = [label for label in labels if isinstance(label, dict)]
+    if len(dated) != len(labels):
+        return None
+    latest = max(dated, key=lambda label: str(label.get("labelled_at") or ""))
+    texts = [context.get("text") if isinstance(context, dict) else None for context in contexts]
+    try:
+        return JudgeSeedCase.model_validate(
+            {
+                "id": QUEUE_ID_PREFIX + item_id.lower(),
+                "language": raw.get("language"),
+                "question": raw.get("question"),
+                "contexts": texts,
+                "answer": raw.get("answer"),
+                "expected": {"faithfulness": latest.get("supported"), "answer_relevance": latest.get("relevant")},
+                "unsupported_content": latest.get("unsupported_content"),
+                "review_status": "approved",
+                "reviewed_by": QUEUE_REVIEWER,
+            }
+        )
+    except ValidationError:
+        return None
+
+
+def pull_review_queue_cases(base_url: str, tenant_key: str, token: str) -> ReviewQueuePull:
+    """Expert-labelled cases of one tenant from the app's judge-calibration/export route (D-31); text stays in memory."""
+    url = base_url.rstrip("/") + EXPORT_ROUTE
+    try:
+        with _http_client() as client:
+            response = client.get(url, params={"tenant": tenant_key}, headers={"Authorization": f"Bearer {token}"})
+    except Exception as exc:  # noqa: BLE001  (any transport failure is a skip; only the type name is kept)
+        raise ReviewQueueSourceError(f"judge-calibration export request failed: {type(exc).__name__}") from None
+    if response.status_code != 200:
+        raise ReviewQueueSourceError(
+            f"judge-calibration export answered HTTP {response.status_code}", status=response.status_code
+        )
+    try:
+        payload = response.json()
+    except ValueError:
+        raise ReviewQueueSourceError("judge-calibration export answered a body that is not JSON") from None
+    raw_cases = payload.get("cases") if isinstance(payload, dict) else None
+    if not isinstance(raw_cases, list):
+        raise ReviewQueueSourceError("judge-calibration export answered without a cases list")
+    cases: list[JudgeSeedCase] = []
+    seen: set[str] = set()
+    dropped = 0
+    for raw in raw_cases:
+        case = _queue_case(raw)
+        if case is None or case.id in seen:
+            dropped += 1
+            continue
+        seen.add(case.id)
+        cases.append(case)
+    return ReviewQueuePull(cases=cases, dropped=dropped)
+
+
+def _confirmed_seed(cases: Sequence[JudgeSeedCase]) -> list[JudgeSeedCase]:
+    approved = {case.id for case in cases if case.review_status == "approved" and case.variant == "base"}
+    return [
+        case
+        for case in cases
+        if case.review_status == "approved" and (case.variant == "base" or case.base_id in approved)
+    ]
+
+
+def combine_sources(
+    queue: Sequence[JudgeSeedCase], seed: Sequence[JudgeSeedCase], gates: QualityGates
+) -> tuple[list[JudgeSeedCase], dict[str, JudgeLabelSource]]:
+    """Queue cases per language; confirmed seed cases fill a language that has fewer than the review-queue minimum."""
+    minimum = gates.judge.min_labels_per_language
+    confirmed = _confirmed_seed(seed)
+    languages = sorted({case.language for case in queue} | {case.language for case in confirmed})
+    combined: list[JudgeSeedCase] = []
+    sources: dict[str, JudgeLabelSource] = {}
+    for language in languages:
+        own = [case for case in queue if case.language == language]
+        fill = [case for case in confirmed if case.language == language]
+        if len(own) >= minimum or not fill:
+            sources[language] = "review_queue"
+            combined.extend(own)
+        elif not own:
+            sources[language] = "seed"
+            combined.extend(fill)
+        else:
+            sources[language] = "mixed"
+            combined.extend(own + fill)
+    return combined, sources
+
+
 def _fmt(value: float | None, digits: int = 3) -> str:
     return "n/a" if value is None else f"{value:.{digits}f}"
 
@@ -461,12 +592,12 @@ def render_markdown(
         lines.append(f"| {role} | `{fingerprints[role]}` | {note} |")
     lines += [
         "",
-        "Kappa uses base cases only (variants count once); the interval is a seeded 95% bootstrap. "
+        ("Kappa uses base cases only (variants count once); the interval is a seeded 95% bootstrap. "
         "A cell gates only with enough confirmed labels, kappa and accuracy at their floors and bias and probe "
-        "deltas within tolerance.",
+        "deltas within tolerance."),
         "",
-        "| Role | Language | Metric | Status | Reasons | Kappa | 95% interval | Accuracy | n | Positive share | "
-        "Unsupported recall | Unsupported precision | Length bias | Expanded | Assertive | Source |",
+        ("| Role | Language | Metric | Status | Reasons | Kappa | 95% interval | Accuracy | n | Positive share | "
+        "Unsupported recall | Unsupported precision | Length bias | Expanded | Assertive | Source |"),
         "|" + " --- |" * 16,
     ]
     for detail in details:
@@ -529,17 +660,54 @@ def _read_calibration(path: Path) -> JudgeCalibration | None:
     return JudgeCalibration.model_validate_json(path.read_text(encoding="utf-8"))
 
 
+def _private_out(args: argparse.Namespace) -> Path:
+    """The tenant path writes only under eval/golden/private/ (D-31)."""
+    out_dir = resolve_cli_path(args.out) if args.out is not None else writer.PRIVATE_DIR / PRIVATE_SUBDIR
+    for name in (REPORT_NAME, CELLS_NAME):
+        writer.assert_private_path(out_dir / name)
+    return out_dir
+
+
+def _pull_queue(args: argparse.Namespace) -> ReviewQueuePull | int:
+    token = os.environ.get(TOKEN_ENV) or None
+    if token is None:
+        print(f"::notice::{TOKEN_ENV} is not set, {QUEUE_SKIP}")
+        return EXIT_OK
+    try:
+        pulled = pull_review_queue_cases(args.base_url, args.tenant, token)
+    except ReviewQueueSourceError as exc:
+        if exc.status == 400:
+            return _fail(str(exc), EXIT_INPUT)
+        print(f"::notice::{exc}, {QUEUE_SKIP}")
+        return EXIT_OK
+    print(f"pulled {len(pulled.cases)} review-queue case(s)")
+    if pulled.dropped:
+        print(f"dropped {pulled.dropped} export case(s) that failed validation")
+    return pulled
+
+
 def _run(args: argparse.Namespace, judge_factory: JudgeFactory | None) -> int:
     try:
         check_no_results_upload()
     except RuntimeError as exc:
         return _fail(str(exc), EXIT_INPUT)
-    if args.tenant or args.base_url:
-        return _fail(TENANT_NOTICE, EXIT_INPUT)
+    tenant_path = bool(args.tenant or args.base_url)
+    if tenant_path:
+        if not (args.tenant and args.base_url):
+            return _fail("--tenant and --base-url go together", EXIT_INPUT)
+        if args.seed_only:
+            return _fail("--seed-only and --tenant exclude each other", EXIT_INPUT)
+        try:
+            out_dir = _private_out(args)
+        except writer.PrivatePathError as exc:
+            return _fail(str(exc), EXIT_INPUT)
+    else:
+        out_dir = resolve_cli_path(args.out if args.out is not None else DEFAULT_OUT)
     try:
         config = load_judge_config(resolve_cli_path(args.config))
         gates = QualityGates.model_validate_json(resolve_cli_path(args.gates).read_text(encoding="utf-8"))
-        cases = load_seed(resolve_cli_path(args.seed))
+        seed_path = resolve_cli_path(args.seed)
+        seed = load_seed(seed_path) if not tenant_path or seed_path.is_file() else []
         calibration_path = resolve_cli_path(args.calibration)
         existing = _read_calibration(calibration_path) if args.write else None
     except (OSError, ValidationError, ValueError) as exc:
@@ -560,6 +728,18 @@ def _run(args: argparse.Namespace, judge_factory: JudgeFactory | None) -> int:
                 return EXIT_KEY
         assert openrouter_key is not None and openai_key is not None
         factory = _live_factory(openrouter_key, openai_key)
+    sources: JudgeLabelSource | dict[str, JudgeLabelSource] = "seed"
+    cases = seed
+    if tenant_path:
+        pulled = _pull_queue(args)
+        if isinstance(pulled, int):
+            return pulled
+        cases, sources = combine_sources(pulled.cases, seed, gates)
+        if not cases:
+            print(f"::notice::no labelled cases to calibrate, {QUEUE_SKIP}")
+            return EXIT_OK
+    if PARTIAL_ANSWER_METRIC not in METRIC_FORMS:
+        print(f"::notice::the {PARTIAL_ANSWER_METRIC} judge metric is not defined on this branch; it is not calibrated")
     fingerprints: dict[str, str] = {}
     rubric_missing: dict[str, list[str]] = {}
     for role, role_config in judges.items():
@@ -568,7 +748,7 @@ def _run(args: argparse.Namespace, judge_factory: JudgeFactory | None) -> int:
         fingerprints[role] = judge_fingerprint(role, role_config, rubrics=rubrics)
         rubric_missing[role] = sorted(key for key, text in rubrics.items() if text is None)
     try:
-        details = calibrate_with_details(cases, factory, gates, "seed", judges=judges, fingerprints=fingerprints)
+        details = calibrate_with_details(cases, factory, gates, sources, judges=judges, fingerprints=fingerprints)
     except JudgeFatalError as exc:
         return _fail(str(exc), EXIT_PROVIDER)
     except JudgeFamilyError as exc:
@@ -577,7 +757,6 @@ def _run(args: argparse.Namespace, judge_factory: JudgeFactory | None) -> int:
         return _fail(str(exc), EXIT_INPUT)
     for detail in details:
         print(summary_line(detail))
-    out_dir = resolve_cli_path(args.out)
     _write_text(out_dir / REPORT_NAME, render_markdown(details, fingerprints, rubric_missing))
     cells_payload = {
         "cells": [detail.cell.model_dump(mode="json") for detail in details],
@@ -598,14 +777,16 @@ def _parser() -> argparse.ArgumentParser:
     run = sub.add_parser("run", help="score a labelled sample with each judge role and report agreement per cell")
     run.add_argument("--seed-only", action="store_true", help="use the seed set only (minimum 50 labels per language)")
     run.add_argument("--seed", type=Path, default=DEFAULT_SEED_PATH)
-    run.add_argument("--tenant", help="review-queue source (plan 05.3-20)")
-    run.add_argument("--base-url", help="app base URL for the review-queue export (plan 05.3-20)")
+    run.add_argument("--tenant", help="tenant key whose expert-labelled review-queue cases are pulled (D-31)")
+    run.add_argument("--base-url", help="app base URL for the judge-calibration export (admin Bearer in RAG_ADMIN_BEARER)")
     run.add_argument("--generator-model", required=True, help="generator model id; the judge family must differ")
     run.add_argument("--config", type=Path, default=DEFAULT_CONFIG_PATH)
     run.add_argument("--gates", type=Path, default=DEFAULT_GATES_PATH)
     run.add_argument("--calibration", type=Path, default=DEFAULT_CALIBRATION_PATH)
     run.add_argument("--write", action="store_true", help="merge the cells into the calibration file")
-    run.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    run.add_argument(
+        "--out", type=Path, default=None, help="report directory; with --tenant it must be inside eval/golden/private/"
+    )
     return parser
 
 
