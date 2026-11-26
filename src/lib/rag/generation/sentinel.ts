@@ -1,3 +1,5 @@
+import type { StreamTextTransform, TextStreamPart, ToolSet } from 'ai';
+
 /**
  * The no-answer sentinel (D-16, D-93). The model writes this token when the context does not answer the
  * question; the server then drops the model text and writes the registry refusal itself.
@@ -196,14 +198,61 @@ export function neutralizeSentinel(text: string): { text: string; count: number 
   return { text: parts.join(NEUTRALIZED_SENTINEL), count: parts.length - 1 };
 }
 
-import type { StreamTextTransform, ToolSet } from 'ai';
-
 export interface SentinelTransformOptions {
+  /** The registry refusal chosen by the caller (`notices.no_information` or `notices.no_information_web`). */
   refusalText: string;
   onRefusal?: (info: { refusalOrigin: 'model_relevance' }) => void;
+  /** Called with the number of later tokens stripped by one delta. */
   onStripped?: (count: number) => void;
 }
 
-export function sentinelTransform(_options: SentinelTransformOptions): StreamTextTransform<ToolSet> {
-  return () => new TransformStream();
+type Part = TextStreamPart<ToolSet>;
+
+/**
+ * Stream adapter for `experimental_transform` (D-16, D-93). Only text-delta text is held; start-step,
+ * finish-step, tool parts and finish are forwarded at once (RESEARCH Pitfall 1).
+ */
+export function sentinelTransform(options: SentinelTransformOptions): StreamTextTransform<ToolSet> {
+  return () => {
+    const core = createSentinelCore(options.refusalText, {
+      onRefusal: () => options.onRefusal?.({ refusalOrigin: 'model_relevance' }),
+      onStripped: options.onStripped,
+    });
+    const emit = (controller: TransformStreamDefaultController<Part>, id: string, text: string) => {
+      if (text) controller.enqueue({ type: 'text-delta', id, text });
+    };
+    const endOpenBlocks = (controller: TransformStreamDefaultController<Part>) => {
+      for (const id of core.openBlockIds()) emit(controller, id, core.endBlock(id));
+    };
+    return new TransformStream<Part, Part>({
+      transform(part, controller) {
+        switch (part.type) {
+          case 'start-step':
+            core.startStep();
+            break;
+          case 'text-start':
+            core.startBlock(part.id);
+            break;
+          case 'text-delta': {
+            const text = core.push(part.id, part.text);
+            if (text) controller.enqueue({ ...part, text });
+            return;
+          }
+          case 'text-end':
+            emit(controller, part.id, core.endBlock(part.id));
+            break;
+          case 'finish-step':
+          case 'finish':
+            endOpenBlocks(controller);
+            break;
+          default:
+            break;
+        }
+        controller.enqueue(part);
+      },
+      flush(controller) {
+        endOpenBlocks(controller);
+      },
+    });
+  };
 }
