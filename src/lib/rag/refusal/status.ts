@@ -1,5 +1,6 @@
 import rawThresholds from '../../../../eval/config/refusal-thresholds.json';
-import { RefusalThresholdsSchema, type RefusalThresholds } from '@/lib/rag-eval/contracts.generated';
+import type { RefusalThresholds } from '@/lib/rag-eval/contracts.generated';
+import { parseRefusalThresholds } from './thresholds';
 import { loadRagConfig, type RagConfig, type RerankerKind, type RerankTier } from '../config';
 import { getRagDeps } from '../deps';
 import { LEXICAL_VERSION } from '../lexical/chunk-text';
@@ -198,6 +199,6 @@ export function refusalCalibrationStatus(thresholds: RefusalThresholds | null, c
 
 /** The status of the committed thresholds file (read by static import) under the running config. */
 export function currentRefusalCalibrationStatus(): RefusalCalibrationStatus {
-  const parsed = RefusalThresholdsSchema.safeParse(rawThresholds);
+  const parsed = parseRefusalThresholds(rawThresholds);
   return refusalCalibrationStatus(parsed.success ? parsed.data : null, loadRagConfig(getRagDeps().ragEnv()));
 }

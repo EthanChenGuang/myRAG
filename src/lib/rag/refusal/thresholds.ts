@@ -31,8 +31,17 @@ function cellsFromFile(parsed: RefusalThresholds): ThresholdCells {
   return cells;
 }
 
-export function loadThresholdsFromData(data: unknown): { cells: ThresholdCells; configHash: string | null } {
+/** Zod carries no model validators: schema_version is 2 exactly when a cell carries a mode, as in the Pydantic contract. */
+export function parseRefusalThresholds(data: unknown): { success: true; data: RefusalThresholds } | { success: false } {
   const parsed = RefusalThresholdsSchema.safeParse(data);
+  if (!parsed.success) return { success: false };
+  const hasMode = (parsed.data.cells ?? []).some((cell) => cell.mode != null);
+  if (hasMode !== (parsed.data.schema_version === 2)) return { success: false };
+  return { success: true, data: parsed.data };
+}
+
+export function loadThresholdsFromData(data: unknown): { cells: ThresholdCells; configHash: string | null } {
+  const parsed = parseRefusalThresholds(data);
   if (!parsed.success) {
     problem('refusal-thresholds-invalid', 'Invalid refusal-thresholds.json, refusal thresholds disabled', {});
     return { cells: new Map(), configHash: null };
