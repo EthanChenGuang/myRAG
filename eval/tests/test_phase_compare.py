@@ -13,37 +13,37 @@ from test_report_runner import QUOTE, _manifest, _trace
 
 from rag_eval.calibrate.refusal import CalibrationResult, CrossComparison
 from rag_eval.gate import evaluate_gate
-from rag_eval.metrics import score_items
 from rag_eval.golden_io import write_golden
+from rag_eval.metrics import score_items
 from rag_eval.phase_compare import (
     ComparisonSpec,
+    LatencyBudgetSpec,
+    PhaseComparison,
+    RunOutput,
     RunRequest,
     SwitchComparison,
     SwitchComparisonSpec,
-    LatencyBudgetSpec,
     absolute_zero_check,
-    latency_budget_check,
     category_noise_check,
     citation_validity_check,
-    gate_check,
-    no_slice_drop_check,
-    paired_all_zero_check,
-    retrieval_unchanged_check,
-    run_switch_comparison,
-    default_runner,
-    PhaseComparison,
-    RunOutput,
-    compression_rule,
     command_result,
+    compression_rule,
+    default_runner,
+    gate_check,
+    iterative_scan_rule,
+    latency_budget_check,
     legacy_parity_rule,
     local_bm25_refusal_rule,
     main,
+    no_slice_drop_check,
+    paired_all_zero_check,
     parent_child_rule,
     recommended_rule,
     resolve_chunking_profile,
+    retrieval_unchanged_check,
     run_phase_comparison,
+    run_switch_comparison,
     translation_rule,
-    iterative_scan_rule,
     xlg03_verdict,
 )
 from rag_eval.profile_compare import baseline_from_report
