@@ -368,12 +368,13 @@ from pathlib import Path
 
 from rag_sidecar.contracts.report import EvalReport, ItemResult
 
-from rag_eval.metrics import aggregate
+from rag_eval.metrics import POPULATION_EXCLUSIONS, aggregate
 
 source, out = Path(sys.argv[1]), Path(sys.argv[2])
 for name, rows in json.loads(source.read_text(encoding="utf-8")).items():
     items = [ItemResult.model_validate(row) for row in rows]
     aggregated = aggregate(items, gate_split="dev")
+    aggregated.pop(POPULATION_EXCLUSIONS)
     report = EvalReport.model_validate(
         {
             "run_id": f"finetune-lifecycle-{name}",
