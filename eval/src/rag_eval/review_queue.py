@@ -31,7 +31,6 @@ from rag_eval.matching import normalize_text
 from rag_eval.near_dup import matches as near_duplicate_matches
 from rag_eval.paths import resolve_cli_path
 from rag_eval.split import (
-    NEAR_DUPLICATE_TAG,
     assign_split,
     freeze_splits,
     load_manifest,
@@ -579,7 +578,7 @@ def _candidate(line: _GoldenExportLine, accepted: list[GoldenItem]) -> tuple[Gol
     if confirmed is not None:
         if confirmed not in {item.id for item in accepted}:
             return None, f"review item {ref}: confirm_near_duplicate_of names {confirmed}, which is not in the domain set"
-        tags.append(f"{NEAR_DUPLICATE_TAG}{confirmed}")
+        tags.append(f"near_duplicate_confirmed:{confirmed}")
     if found and confirmed not in {item_id for item_id, _ in found}:
         names = ", ".join(item_id for item_id, _ in found)
         return None, f"review item {ref}: near-duplicate of {names}; set confirm_near_duplicate_of to promote it"

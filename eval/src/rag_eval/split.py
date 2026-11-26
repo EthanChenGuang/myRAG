@@ -5,15 +5,10 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
-from rag_sidecar.contracts.golden import (
-    DOCGROUP_SPLIT_RULE,
-    ITEM_SPLIT_RULE,
-    GoldenItem,
-    GoldenSplitManifest,
-    GoldSpan,
-)
+from rag_sidecar.contracts.golden import GoldenItem, GoldenSplitManifest, GoldSpan
 
-SPLIT_RULE = ITEM_SPLIT_RULE
+SPLIT_RULE = "sha256-first8hex-mod100-lt70-dev"
+DOCGROUP_SPLIT_RULE = "docgroup-sha256-first8hex-mod100-lt70-dev"
 NEAR_DUPLICATE_TAG = "near_duplicate_confirmed:"
 
 
