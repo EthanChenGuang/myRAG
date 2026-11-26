@@ -34,6 +34,8 @@ export interface AssemblyDocumentRow {
   content?: string | null;
   metadata?: Record<string, any> | null;
   version?: number | null;
+  /** Selected only while RAG_SECURITY_EVENTS is on (fetchAssemblyRows). */
+  user_id?: string | null;
 }
 
 export interface AssembleInput<C extends AssemblyCandidate = AssemblyCandidate> {
@@ -195,6 +197,12 @@ export function filterCandidates<C extends AssemblyCandidate>(input: AssembleInp
 
 type DraftBlock = Omit<ContextBlock, 'alias' | 'title'>;
 
+/** The uploader field of a block, only when its document row carries user_id, so all-off blocks stay deep-equal. */
+function uploaderOf(row: AssemblyDocumentRow | undefined): Pick<ContextBlock, 'uploaderId'> {
+  if (!row || !Object.prototype.hasOwnProperty.call(row, 'user_id')) return {};
+  return { uploaderId: typeof row.user_id === 'string' ? row.user_id : null };
+}
+
 function chunkMetadataOf(chunk: AssemblyCandidate, rows: Map<string, Record<string, any> | null>): Record<string, any> | undefined {
   let metadata = chunk.metadata ?? undefined;
   if (!metadata || !metadata.image_url) {
@@ -307,6 +315,7 @@ export function buildContext<C extends AssemblyCandidate>(
         sectionPath: null,
         text: section.text,
         isImage: false,
+        ...uploaderOf(input.documents.get(section.documentId)),
       });
       return label ? renderReferencedSection({ ...section, text: label.text }, label.header) : renderReferencedSection(section);
     });
@@ -449,6 +458,7 @@ export function buildContext<C extends AssemblyCandidate>(
           sectionPath: sectionPathOf(first.chunk.metadata),
           text: group.map((piece) => piece.body).join('\n\n'),
           isImage: first.isImage,
+          ...uploaderOf(input.documents.get(first.chunk.documentId)),
         };
         entries.push({
           block: labeller.blocks.length,

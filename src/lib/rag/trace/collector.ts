@@ -35,6 +35,8 @@ export interface StageEntry {
   /** Detector versions such as rules@<12 hex>. */
   versions?: string[];
   detail?: string;
+  /** Scalar span metadata, ids and counts only. */
+  attributes?: Record<string, string | number | boolean>;
 }
 
 export interface ReviewContent {
@@ -124,6 +126,7 @@ export function createTraceCollector(options: TraceCollectorOptions): TraceColle
       if (entry.detail !== undefined) record.detail = entry.detail;
       if (entry.counts !== undefined) record.counts = entry.counts;
       if (entry.versions !== undefined) record.versions = entry.versions;
+      if (entry.attributes !== undefined) record.attributes = entry.attributes;
       records.push(record);
       return record;
     },
