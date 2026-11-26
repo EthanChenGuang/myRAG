@@ -89,11 +89,12 @@ export function composedPartIds(input: AnswerRulesInput): readonly AnswerRuleId[
 
 /**
  * Phase 5.2 D-04: the one place that builds the instructions this phase and Phase 5.2.1 add. Appends the parts after
- * the prompt, each headed by its ASCII rule id line; returns the prompt itself when no part applies.
+ * the prompt, each headed by its ASCII rule id line; returns the prompt itself when no part applies. `log: false` skips
+ * the `[Answer Rules]` line when a turn composes a second prompt (the Claude Citations system text).
  */
-export function composeAnswerRules(input: AnswerRulesInput): string {
+export function composeAnswerRules(input: AnswerRulesInput, options: { log?: boolean } = {}): string {
   const parts = plan(input);
   if (parts.length === 0) return input.prompt;
-  console.log('[Answer Rules]', { parts: parts.map((part) => part.id), mode: input.mode, channel: input.channel });
+  if (options.log !== false) console.log('[Answer Rules]', { parts: parts.map((part) => part.id), mode: input.mode, channel: input.channel });
   return [input.prompt, ...parts.map((part) => `[rule:${part.id}]\n${part.text()}`)].join('\n\n');
 }

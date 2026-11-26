@@ -1,4 +1,5 @@
 import type { AnswerConfig } from './answer-config';
+import { composeAnswerRules } from './answer-rules';
 import { previousTurnLanguage, resolveAnswerLanguage, type AnswerLanguageSource, type TurnMessage } from '../lang/answer-language';
 import { getLanguageSettings, languageVariablesUnset } from '../lang/settings';
 
@@ -15,6 +16,16 @@ export interface AnswerTurn {
   readonly textsSource: TextsSource;
   readonly channel: AnswerChannel;
   readonly ragMode: string;
+  /** D-32; false until plan 05.2-10 sets it from the output-cap rules. */
+  readonly capApplies: boolean;
+  /** D-04: appends the answer-rule block to the final system prompt; returns the prompt itself when no part applies. */
+  composeSystemPrompt(prompt: string, options: ComposeSystemPromptOptions): string;
+}
+
+export interface ComposeSystemPromptOptions {
+  mode: string;
+  webSearchOffered: boolean;
+  contextTagging: boolean;
 }
 
 export interface AnswerTurnInput {
@@ -48,6 +59,8 @@ export function createAnswerTurn(input: AnswerTurnInput): AnswerTurn {
       answerLanguageSource = resolved.source;
     }
   }
+  const capApplies = false;
+  let logged = false;
   return Object.freeze({
     config: input.config,
     answerLanguage,
@@ -55,5 +68,24 @@ export function createAnswerTurn(input: AnswerTurnInput): AnswerTurn {
     textsSource: input.config.registryTexts && answerLanguage !== null ? 'registry' : 'legacy',
     channel: input.channel,
     ragMode: input.ragMode,
+    capApplies,
+    composeSystemPrompt(prompt: string, options: ComposeSystemPromptOptions): string {
+      const composed = composeAnswerRules(
+        {
+          prompt,
+          mode: options.mode,
+          language: answerLanguage,
+          config: input.config,
+          channel: input.channel,
+          webSearchOffered: options.webSearchOffered,
+          capApplies,
+          calcOffered: false,
+          contextTagging: options.contextTagging,
+        },
+        { log: !logged },
+      );
+      if (composed !== prompt) logged = true;
+      return composed;
+    },
   });
 }
