@@ -8,6 +8,7 @@ import { fixedText } from '../../src/lib/rag/lang/texts.ts';
 import { stripCitationMarkers } from '../../src/lib/citations/marker-grammar.ts';
 import {
   DEFAULT_FAKE_CITATION_SEED,
+  FAKE_CITATION_GENERATOR_MODEL,
   contextBlocks,
   fakeCitationAnswer,
   firstSentence,
@@ -44,6 +45,11 @@ export const FAKE_ANSWER_MODEL_IDS = [
 ] as const;
 
 export type FakeAnswerModelId = (typeof FAKE_ANSWER_MODEL_IDS)[number];
+
+/** True for every model id the fake factory serves: the Phase 5.2 fakes and the fake citation generator. */
+export function isFakeGeneratorModel(modelId: string): boolean {
+  return modelId === FAKE_CITATION_GENERATOR_MODEL || (FAKE_ANSWER_MODEL_IDS as readonly string[]).includes(modelId);
+}
 
 type RuleCategory = 'partial_answer' | 'stale_version' | 'off_topic_context';
 

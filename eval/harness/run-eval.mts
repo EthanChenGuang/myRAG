@@ -17,7 +17,8 @@ import { closeTableSplitTenants, isTableSplitItem, TABLE_SPLIT_USER_ID, withTabl
 import { createFixtureDatabase, FIXTURE_USER_ID, seedFixtureFeatures, seedTerminology, type DeploymentMode, type FixtureMode, type TerminologySeedRow } from './pglite-supabase.mts';
 import { fixtureProcessEnv, startFakeEdge, type FakeEdge } from './fake-edge.mts';
 import { applyFixtureProcessEnv } from './process-env.mts';
-import { FAKE_CITATION_GENERATOR_MODEL, installFakeCitationGenerator } from './fake-citation-generator.mts';
+import { FAKE_CITATION_GENERATOR_MODEL, type FakeLanguageModelFactory } from './fake-citation-generator.mts';
+import { installFakeAnswerModels, isFakeGeneratorModel } from './fake-answer-models.mts';
 import { startFakeGroundedness, type FakeGroundedness } from './fake-groundedness.mts';
 import { CHUNKING_PROFILES_NEED_INGEST, RunConfigError, type RunConfig } from './run-config.mts';
 import { CACHE_PAIRS_APP_ENV, CACHE_PAIRS_FILE, cachePairOptions, cachePairSpecs, cachePairsRun, runCachePairs } from './cache-pairs.mts';
@@ -52,6 +53,51 @@ export interface EvalRequestOptions {
 export type EvalGenerator = 'stub' | 'live' | 'fake';
 
 export const STUB_GENERATOR_MODEL = 'stub/extractive-v1';
+
+export interface AnswerGeneratorInput {
+  generator?: EvalGenerator;
+  citations?: boolean;
+  groundedness?: boolean;
+  includeAnswer?: boolean;
+  baseUrl?: string;
+  /** The run config's generator_model. */
+  generatorModel?: string;
+  /** The run config sets RAG_CITATIONS=true. */
+  citationsSwitch?: boolean;
+}
+
+/**
+ * Which generator answers the run. Citations and groundedness need an answer: a fixture run answers with the fake generator
+ * unless a live one is asked for. A run config that names a fake generator model (D-54) answers every item with it.
+ */
+export function resolveAnswerGenerator(input: AnswerGeneratorInput): {
+  generator: EvalGenerator | undefined;
+  includeAnswer: boolean;
+  citations: boolean;
+} {
+  const configFake = input.generatorModel !== undefined && isFakeGeneratorModel(input.generatorModel);
+  if (configFake && input.baseUrl) {
+    throw new RunConfigError('[Eval Harness] a run-config fake generator_model answers in-process only; omit --base-url');
+  }
+  if (configFake && input.generator === 'live') {
+    throw new RunConfigError('[Eval Harness] a run-config fake generator_model cannot be used with the live generator');
+  }
+  const citations = input.citations === true || input.citationsSwitch === true;
+  const answerFeatures = citations || input.groundedness === true;
+  const includeAnswer = input.includeAnswer === true || answerFeatures || configFake;
+  let generator = input.generator;
+  if (configFake && (generator === undefined || generator === 'stub')) generator = 'fake';
+  if (answerFeatures) {
+    if (input.baseUrl) generator ??= 'live';
+    else if (generator === undefined || generator === 'stub') generator = 'fake';
+  }
+  return { generator, includeAnswer, citations };
+}
+
+/** The one fake factory: the Phase 5.2 fakes by model id, every other id the fake citation generator (D-24, D-54). */
+export function evalFakeLanguageModelFactory(items: readonly GoldenItem[]): FakeLanguageModelFactory {
+  return installFakeAnswerModels({ items });
+}
 export const LIVE_KEY_MISSING_NOTICE = '[RAG Eval] OPENROUTER_API_KEY not set; live generation skipped';
 
 export class LiveGenerationKeyMissingError extends Error {
@@ -559,18 +605,19 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     throw new Error('[Eval Harness] a --cache-pairs run against --base-url seeds and probes a live cache; pass --allow-live-cache (plan 06-46)');
   }
   const requestOptions: EvalRequestOptions = { ...(options.requestOptions ?? {}) };
-  const citations = options.citations === true;
   const groundedness = options.groundedness === true;
-  const answerFeatures = citations || groundedness;
+  const { generator, includeAnswer, citations } = resolveAnswerGenerator({
+    ...(options.generator !== undefined ? { generator: options.generator } : {}),
+    citations: options.citations === true,
+    groundedness,
+    includeAnswer: options.includeAnswer === true,
+    ...(baseUrl ? { baseUrl } : {}),
+    ...(runConfig?.generatorModel !== undefined ? { generatorModel: runConfig.generatorModel } : {}),
+    citationsSwitch: runConfig?.env.RAG_CITATIONS === 'true',
+  });
   if (citations) requestOptions.citations = true;
   if (groundedness) requestOptions.groundedness = true;
-  // Citations and groundedness need an answer: a fixture run answers with the fake citation generator unless a live one is asked for.
-  const includeAnswer = options.includeAnswer === true || answerFeatures;
-  let generator = options.generator;
-  if (answerFeatures) {
-    if (baseUrl) generator ??= 'live';
-    else if (generator === undefined || generator === 'stub') generator = 'fake';
-  }
+  if (runConfig?.generatorModel !== undefined && !requestOptions.generator_model) requestOptions.generator_model = runConfig.generatorModel;
   if (runConfig) {
     if (baseUrl && Object.keys(runConfig.env).length > 0) {
       throw new RunConfigError('[Eval Harness] a run-config env overlay applies to in-process runs only; omit --base-url or drop its env');
@@ -697,7 +744,7 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
         if (generator === 'stub') {
           answerModule.setEvalLanguageModelFactory(() => createStubLanguageModel());
         } else if (generator === 'fake') {
-          answerModule.setEvalLanguageModelFactory(installFakeCitationGenerator());
+          answerModule.setEvalLanguageModelFactory(evalFakeLanguageModelFactory(items));
         } else {
           const provider = createOpenRouter({ apiKey: liveApiKey, baseURL: 'https://openrouter.ai/api/v1' });
           answerModule.setEvalLanguageModelFactory((modelId) => provider(modelId) as unknown as LanguageModel);
@@ -924,10 +971,3 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
   };
 }
 
-export function resolveAnswerGenerator(_input: Record<string, unknown>): { generator: EvalGenerator | undefined; includeAnswer: boolean; citations: boolean } {
-  return { generator: undefined, includeAnswer: false, citations: false };
-}
-
-export function evalFakeLanguageModelFactory(_items: readonly GoldenItem[]) {
-  return installFakeCitationGenerator();
-}

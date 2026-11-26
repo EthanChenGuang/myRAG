@@ -22,6 +22,8 @@ export interface RunConfig {
   overrides: RetrievalOverrides | null;
   /** Candidate chunking profiles the ingest-mode builder seeds as building before the first document (D-21); absent when the key is. */
   chunkingProfiles?: ChunkingProfile[];
+  /** Phase 5.2 D-54: the generator model the run answers with (a fake id selects the fake generator); absent when the key is. */
+  generatorModel?: string;
 }
 
 /** The Phase 5.1 SEC switches (D-14) and the values each accepts; keys, acks, regions and endpoints are never among them. */
@@ -90,6 +92,11 @@ const PHASE52_SWITCH_VALUES: Readonly<Record<string, readonly string[] | null>> 
 };
 const MAX_OUTPUT_TOKENS_RE = /^(off|auto|[1-9]\d*)$/;
 
+/** The Phase 5 switch a Phase 5.2 run config sets: RAG_CITATIONS=true asks the eval run for citations (D-54). */
+const PHASE5_SWITCH_VALUES: Readonly<Record<string, readonly string[]>> = {
+  RAG_CITATIONS: BOOLEAN_VALUES,
+};
+
 /**
  * Vendor settings a run config may set, each only to one of the listed values (Phase 4.1 D-22): a key is empty, the proxy
  * placeholder or the token `fixture` (keep the fake edge's placeholder key); a base URL is empty or the vendor's own host.
@@ -138,12 +145,15 @@ export const RUN_CONFIG_ENV_ALLOWLIST: readonly string[] = [
   ...Object.keys(PHASE6_SWITCH_VALUES),
   ...Object.keys(PHASE33_SWITCH_VALUES),
   ...Object.keys(PHASE52_SWITCH_VALUES),
+  ...Object.keys(PHASE5_SWITCH_VALUES),
 ];
 
 export const RUN_CONFIG_REJECT_MESSAGE =
   '[Eval Harness] run-config may only set RAG_PIPELINE, Phase 4 RAG_* switches, the Phase 5.1 SEC switches and the Phase 6 query-layer and semantic-cache switches';
 
-const TOP_LEVEL_KEYS = new Set(['name', 'env', 'overrides', 'chunking_profiles']);
+const TOP_LEVEL_KEYS = new Set(['name', 'env', 'overrides', 'chunking_profiles', 'generator_model']);
+/** The trace contract's generator_model pattern. */
+const GENERATOR_MODEL_RE = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/;
 const NAME_RE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 const PIPELINE_VALUES = new Set(['legacy', 'v2']);
 const DOC_TYPES = new Set<string>(ChunkingProfileSchema.shape.doc_type.options);
@@ -163,7 +173,7 @@ export function parseRunConfig(raw: unknown, source: string): RunConfig {
     throw new RunConfigError(`[Eval Harness] run-config ${source} has unknown field(s): ${unknownKeys.join(', ')}`);
   }
 
-  const { name, env: rawEnv = {}, overrides: rawOverrides = null, chunking_profiles: rawProfiles } = raw;
+  const { name, env: rawEnv = {}, overrides: rawOverrides = null, chunking_profiles: rawProfiles, generator_model: rawGeneratorModel } = raw;
   if (typeof name !== 'string' || !NAME_RE.test(name)) {
     throw new RunConfigError(`[Eval Harness] run-config ${source} needs a name of lowercase letters, digits, dot, dash or underscore`);
   }
@@ -188,7 +198,13 @@ export function parseRunConfig(raw: unknown, source: string): RunConfig {
   if (env.RAG_PIPELINE !== undefined && !PIPELINE_VALUES.has(env.RAG_PIPELINE)) {
     throw new RunConfigError(`[Eval Harness] run-config ${source} RAG_PIPELINE must be legacy or v2`);
   }
-  for (const [name, allowed] of Object.entries({ ...SEC_SWITCH_VALUES, ...PHASE6_SWITCH_VALUES, ...PHASE33_SWITCH_VALUES, ...PHASE52_SWITCH_VALUES })) {
+  for (const [name, allowed] of Object.entries({
+    ...SEC_SWITCH_VALUES,
+    ...PHASE6_SWITCH_VALUES,
+    ...PHASE33_SWITCH_VALUES,
+    ...PHASE52_SWITCH_VALUES,
+    ...PHASE5_SWITCH_VALUES,
+  })) {
     if (!allowed) continue;
     // A malformed SEC, Phase 6, Phase 3.3 or Phase 5.2 value would silently fall back to off in the app; the run config fails instead (the value is never echoed).
     if (env[name] !== undefined && !allowed.includes(env[name])) {
@@ -214,7 +230,17 @@ export function parseRunConfig(raw: unknown, source: string): RunConfig {
   if (chunkingProfiles && env.RAG_PIPELINE !== 'v2') throw new RunConfigError(CHUNKING_PROFILES_NEED_V2);
   checkChunkingOverride(overrides, chunkingProfiles);
 
-  return { name, env, overrides, ...(chunkingProfiles ? { chunkingProfiles } : {}) };
+  if (rawGeneratorModel !== undefined && (typeof rawGeneratorModel !== 'string' || !GENERATOR_MODEL_RE.test(rawGeneratorModel))) {
+    throw new RunConfigError(`[Eval Harness] run-config ${source} generator_model must be a model id`);
+  }
+
+  return {
+    name,
+    env,
+    overrides,
+    ...(chunkingProfiles ? { chunkingProfiles } : {}),
+    ...(rawGeneratorModel !== undefined ? { generatorModel: rawGeneratorModel } : {}),
+  };
 }
 
 /**
