@@ -22,6 +22,7 @@ import { terminologyMatcherFor } from '../../terminology/load';
 import { normalizeLexical } from '../../lexical/tokenize';
 import { getV2StartupVerdict } from '../startup';
 import type { TraceCollector as Collector } from '../../trace/collector';
+import type { TerminologyHashStage } from '../config-hash';
 
 export interface QueryStagesInput {
   input: RunRetrievalInput;
@@ -33,6 +34,8 @@ export interface QueryStagesInput {
   stageOverrides?: StageOverrides;
   /** Lent to the query layer's semantic_cache stage. */
   cache?: SemanticCacheSeam;
+  /** D-21: told how the terminology stage ended, before semantic_cache builds its key. */
+  onTerminology?: (stage: TerminologyHashStage) => void;
 }
 
 export interface QueryStagesOutput {
@@ -177,7 +180,10 @@ export async function runQueryStages(ctx: QueryStagesInput): Promise<QueryStages
   const terminologyStage = async (standalone: string): Promise<void> => {
     terminologyRan = true;
     terminologyStandalone = standalone;
-    terminology = await runTerminologyStage({ standalone, scope, spec: spec('terminology', 'skip'), signal, collector });
+    const termSpec = spec('terminology', 'skip');
+    const outcome = await runTerminologyStage({ standalone, scope, spec: termSpec, signal, collector });
+    terminology = outcome;
+    ctx.onTerminology?.(termSpec.enabled ? { enabled: true, version: outcome?.version ?? null } : { enabled: false });
   };
 
   let queryLayer: QueryLayerOutcome | undefined;

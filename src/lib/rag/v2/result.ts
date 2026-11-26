@@ -1,5 +1,5 @@
 import { getRetrievalBackend } from '../backend/registry';
-import { CORE_STAGES, QUERY_LAYER_STAGES, effectiveLexicalVersion, type RagConfig } from '../config';
+import { CORE_STAGES, QUERY_LAYER_STAGES, effectiveLexicalVersion, terminologyDenseFor, type RagConfig } from '../config';
 import { getActiveChunkingProfiles } from '../chunking/active';
 import { LEGACY_PROFILE } from '../embeddings/active-profile';
 import type { QueryEmbedding } from '../embeddings/query-embedding';
@@ -19,7 +19,14 @@ import type { TemporalQueryContext } from '../query/temporal-query-detector';
 import { isMultiTenant } from '@/lib/deployment-mode';
 import { getRagDeps } from '../deps';
 import type { SecurityConfig } from '../security/config';
-import { computeRetrievalConfigHash, securityHashComponent, type RetrievalConfigHashQueryLayer } from './config-hash';
+import {
+  computeRetrievalConfigHash,
+  securityHashComponent,
+  terminologyHashBlock,
+  type RetrievalConfigHashQueryLayer,
+  type TerminologyHashStage,
+} from './config-hash';
+import { terminologyParams } from '../terminology/expand';
 import { effectiveRetrievalParams } from './retrieval-params';
 import { effectiveTuningParams, tuningHashComponent } from './tuning-params';
 import type { TranslationHashField } from './translation-legs';
@@ -60,6 +67,8 @@ export interface BuildV2ResultInput {
   queryLayerHash?: RetrievalConfigHashQueryLayer;
   /** The semantic_cache stage's store ticket (D-32). */
   cacheTicket?: CacheTicket;
+  /** D-21: how the terminology stage ended; absent reads as disabled. */
+  terminology?: TerminologyHashStage;
 }
 
 export interface RequestConfigHashInput {
@@ -74,6 +83,8 @@ export interface RequestConfigHashInput {
   translationHash?: TranslationHashField;
   queryLayerHash?: RetrievalConfigHashQueryLayer;
   effectiveOn?: string;
+  /** D-21: how the terminology stage ended; absent reads as disabled, so the hash is the pre-terminology value. */
+  terminology?: TerminologyHashStage;
 }
 
 /** The request's retrieval-config hash; the result and the semantic-cache key both use it, so they never disagree. */
@@ -81,6 +92,7 @@ export async function requestRetrievalConfigHash(ctx: RequestConfigHashInput): P
   const { input, config, profile, queryLanguage, security } = ctx;
   const { configHash: thresholdsConfigHash } = loadThresholds();
   const chunking = await getActiveChunkingProfiles();
+  const terminology = terminologyHashBlock(ctx.terminology ?? { enabled: false }, terminologyParams(), terminologyDenseFor(config, profile));
   return computeRetrievalConfigHash({
     backendId: getRetrievalBackend().id,
     embeddingProfileId: ctx.embeddingProfileId,
@@ -111,6 +123,7 @@ export async function requestRetrievalConfigHash(ctx: RequestConfigHashInput): P
     ...(ctx.translationHash ?? {}),
     ...(ctx.queryLayerHash ? { queryLayer: ctx.queryLayerHash } : {}),
     ...(ctx.effectiveOn ? { effectiveOn: ctx.effectiveOn } : {}),
+    ...(terminology ? { terminology } : {}),
   });
 }
 
@@ -271,6 +284,7 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
     ...(ctx.translationHash ? { translationHash: ctx.translationHash } : {}),
     ...(ctx.queryLayerHash ? { queryLayerHash: ctx.queryLayerHash } : {}),
     ...(ctx.effectiveOn ? { effectiveOn: ctx.effectiveOn } : {}),
+    ...(ctx.terminology ? { terminology: ctx.terminology } : {}),
   });
 
   const base = {
