@@ -49,6 +49,7 @@ LABEL_KEYS = (
 INSTRUCTION_KEYS = (
     "citation",
     "citation_per_sentence",
+    "grounding_per_sentence",
     "attached_documents",
     "relevance",
     "relevance_web",
