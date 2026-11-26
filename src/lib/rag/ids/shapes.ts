@@ -13,7 +13,8 @@ export interface IdentifierSplit {
 /**
  * Cuts text into identifier and non-identifier pieces in order. Callers normalise (NFKC) first.
  */
-export function splitAtIdentifiers(text: string): IdentifierSplit[] {
+export function splitAtIdentifiers(text: string, extraPatterns?: readonly RegExp[]): IdentifierSplit[] {
+  void extraPatterns;
   const out: IdentifierSplit[] = [];
   let last = 0;
   for (const match of text.matchAll(IDENTIFIER_PATTERN)) {
@@ -26,8 +27,8 @@ export function splitAtIdentifiers(text: string): IdentifierSplit[] {
   return out;
 }
 
-export function extractIdentifiers(text: string): string[] {
-  return splitAtIdentifiers(text)
+export function extractIdentifiers(text: string, extraPatterns?: readonly RegExp[]): string[] {
+  return splitAtIdentifiers(text, extraPatterns)
     .filter((piece) => piece.identifier)
     .map((piece) => piece.text);
 }
