@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { maskPII } from '@/lib/rag/trace/mask';
-import { fingerprintMaskedQuery } from '@/lib/rag/feedback-loop/retrieval-log';
+import { queryFingerprint } from '@/lib/rag/feedback-loop/query-codes';
 
 /**
  * Golden-set evidence for real sets (Phase 5.3 D-48 to D-50). A gold span names a document and quotes it; the check resolves the name
@@ -244,7 +244,7 @@ export async function enqueueReReview(
   for (const question of input.questions) {
     const masked = maskPII(question).slice(0, MAX_MASKED_QUERY);
     if (masked.trim().length === 0) continue;
-    const fingerprint = fingerprintMaskedQuery(masked);
+    const fingerprint = queryFingerprint(masked);
     if (seen.has(fingerprint)) continue;
     seen.add(fingerprint);
     rows.push({ query_masked: masked, query_fingerprint: fingerprint, mining_window: window });
