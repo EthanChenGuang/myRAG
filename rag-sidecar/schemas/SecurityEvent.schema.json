@@ -1,0 +1,125 @@
+{
+  "additionalProperties": false,
+  "description": "D-43: one row of `rag_security_events`. Ids and rule ids only; there is no text field.",
+  "properties": {
+    "action": {
+      "enum": [
+        "detected",
+        "quarantined",
+        "dropped",
+        "downweighted",
+        "removed",
+        "blocked",
+        "warned"
+      ],
+      "title": "Action",
+      "type": "string"
+    },
+    "chunk_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Chunk Id"
+    },
+    "created_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Created At"
+    },
+    "detector": {
+      "pattern": "^[a-z][a-z0-9_]{0,63}$",
+      "title": "Detector",
+      "type": "string"
+    },
+    "document_id": {
+      "minLength": 1,
+      "title": "Document Id",
+      "type": "string"
+    },
+    "id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Id"
+    },
+    "rule_ids": {
+      "items": {
+        "maxLength": 64,
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Rule Ids",
+      "type": "array"
+    },
+    "source": {
+      "enum": [
+        "ingest_injection",
+        "retrieval_injection",
+        "output_guard",
+        "hidden_text",
+        "untrusted_link"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "tenant_key": {
+      "minLength": 1,
+      "title": "Tenant Key",
+      "type": "string"
+    },
+    "trace_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Trace Id"
+    },
+    "uploader_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Uploader Id"
+    }
+  },
+  "required": [
+    "tenant_key",
+    "source",
+    "action",
+    "detector",
+    "document_id"
+  ],
+  "title": "SecurityEvent",
+  "type": "object"
+}

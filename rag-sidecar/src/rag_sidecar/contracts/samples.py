@@ -258,6 +258,31 @@ from rag_sidecar.contracts.routing import (
 from rag_sidecar.contracts.embed import EmbedRequest, EmbedResponse
 from rag_sidecar.contracts.retrieval import RetrievalLegWeights
 from rag_sidecar.contracts.vector_sync import ReconcileReport, VectorSyncSliceReport
+from rag_sidecar.contracts.golden_lifecycle import GoldenSetManifest, manifest_hash
+from rag_sidecar.contracts.monitor import (
+    LATENCY_BINS,
+    TOP_SCORE_BINS,
+    DriftReport,
+    MonitorAlert,
+    MonitorDailyCell,
+    default_monitor_alerts,
+)
+from rag_sidecar.contracts.judge_calibration import JudgeCalibration, JudgeCalibrationCell, JudgeSeedCase
+from rag_sidecar.contracts.release_gate import ReleaseGatePart, ReleaseGateResult, default_release_gate
+from rag_sidecar.contracts.config_change import (
+    ConfigChangeRecord,
+    ConfigGateCheck,
+    ConfigGateLayer,
+    ConfigGateNotEvaluated,
+    WeeklyGatesSection,
+)
+from rag_sidecar.contracts.quality_gates import (
+    AbsoluteGateResult,
+    CompositionLanguageResult,
+    CompositionResult,
+    GateCheckRow,
+    default_quality_gates,
+)
 from rag_sidecar.contracts.terminology import (
     TerminologyCandidate,
     TerminologyEntry,
@@ -2274,6 +2299,401 @@ def _term_issue() -> TerminologyValidationIssue:
     )
 
 
+def _composition_result() -> CompositionResult:
+    return CompositionResult(
+        languages=[
+            CompositionLanguageResult(
+                language="en",
+                items=40,
+                no_answer=8,
+                share=0.2,
+                min=0.15,
+                target=0.2,
+                result="passed",
+                kinds={"no_answer": 8},
+            ),
+            CompositionLanguageResult(
+                language="it", items=12, no_answer=2, share=None, min=0.15, target=0.2, result="insufficient_n"
+            ),
+        ],
+        missing_required_kinds=[],
+    )
+
+
+def _absolute_gate_result() -> AbsoluteGateResult:
+    return AbsoluteGateResult(
+        passed=True,
+        mode="enforce",
+        rag_mode="strict",
+        checks=[
+            GateCheckRow(
+                check="false_answer_rate",
+                slice="overall",
+                measured=0.0,
+                numerator=0,
+                denominator=20,
+                limit=0.05,
+                limit_kind="max",
+                result="passed",
+            ),
+            GateCheckRow(
+                check="false_answer_rate",
+                slice="language:it",
+                measured=0.0,
+                numerator=0,
+                denominator=4,
+                limit=0.05,
+                limit_kind="max",
+                result="insufficient_n",
+                reason="below_min_n",
+            ),
+            GateCheckRow(
+                check="faithfulness_floor",
+                slice="overall",
+                limit=0.85,
+                limit_kind="min",
+                result="skipped",
+                reason="no_judge_report",
+            ),
+            GateCheckRow(
+                check="false_answer_rate",
+                slice="overall",
+                limit=None,
+                limit_kind="max",
+                measured=0.0,
+                numerator=0,
+                denominator=20,
+                result="report_only",
+                reason="null_ceiling",
+            ),
+        ],
+        composition=_composition_result(),
+        stale_count=0,
+        stale_share=0.0,
+        stale_result="passed",
+        failed=[],
+        exit_code=0,
+    )
+
+
+def _golden_set_manifest() -> GoldenSetManifest:
+    data: dict[str, Any] = {
+        "schema_version": 1,
+        "set_id": "fixture",
+        "version": 2,
+        "items": [
+            {"id": "en-general-001", "item_sha256": "a" * 64, "status": "active", "last_reviewed_at": "2026-01-01"},
+            {
+                "id": "en-general-002",
+                "item_sha256": "b" * 64,
+                "status": "stale",
+                "stale_reason": "source_document_changed",
+                "stale_since": "2026-02-01",
+            },
+            {"id": "en-general-003", "item_sha256": "c" * 64, "status": "retired", "retire_reason": "duplicate_item"},
+        ],
+        "changelog": [
+            {"version": 1, "date": "2026-01-01", "added": ["en-general-001", "en-general-002", "en-general-003"]},
+            {"version": 2, "date": "2026-02-01", "stale": ["en-general-002"], "retired": ["en-general-003"]},
+        ],
+    }
+    data["manifest_sha256"] = manifest_hash(data)
+    return GoldenSetManifest.model_validate(data)
+
+
+_P53_SHA = "a" * 64
+_P53_SHA_B = "b" * 64
+_P53_FP = "f" * 64
+_P53_GIT_SHA = "0123456789abcdef0123456789abcdef01234567"
+
+
+def _monitor_daily_cell() -> MonitorDailyCell:
+    bins = [0] * TOP_SCORE_BINS
+    bins[15] = 30
+    bins[17] = 20
+    latency = [0] * LATENCY_BINS
+    latency[6] = 40
+    latency[8] = 10
+    return MonitorDailyCell(
+        tenant_key="s:default",
+        day="2026-01-05",
+        language="en",
+        rag_mode="strict",
+        channel="chat",
+        doc_type="general",
+        retrievals=50,
+        refused=19,
+        kb_unavailable=0,
+        degraded=0,
+        error=0,
+        zero_result=0,
+        below_threshold=0,
+        helpful=2,
+        not_helpful=1,
+        judged=4,
+        judge_score_sums={"faithfulness": 3.4},
+        groundedness_flagged=0,
+        top_score_hist={"similarity": {"bins": bins, "underflow": 0, "overflow": 0}},
+        latency_hist={"bins": latency},
+    )
+
+
+def _monitor_alert() -> MonitorAlert:
+    return MonitorAlert(
+        id="00000000-0000-4000-8000-000000000501",
+        tenant_key="s:default",
+        rule="refusal_rate",
+        kind="rate",
+        language="en",
+        day="2026-01-05",
+        window_days=1,
+        severity="alert",
+        status="open",
+        observed={"count": 19, "n": 50, "value": 0.38},
+        baseline={"count": 24, "n": 200, "value": 0.12},
+        band={
+            "ratio": 2.0,
+            "min_abs_delta": 0.05,
+            "min_z": 3.0,
+            "measured_ratio": 3.17,
+            "measured_delta": 0.26,
+            "measured_z": 4.36,
+        },
+        breakdown={
+            "by_mode": {"strict": {"count": 19, "n": 50, "value": 0.38}},
+            "by_channel": {"chat": {"count": 19, "n": 50, "value": 0.38}},
+            "by_doc_type": {"general": {"count": 19, "n": 50, "value": 0.38}},
+        },
+        companions=[{"rule": "not_helpful_rate", "value": 0.02, "baseline": 0.02, "n": 50}],
+        sample_trace_ids=["trace-0001", "trace-0002"],
+        cluster_ids=["c-01"],
+        config_changes=[
+            {
+                "record_id": "00000000-0000-4000-8000-000000000601",
+                "at": "2026-01-04T10:00:00Z",
+                "source": "config_ui",
+                "changed_keys": ["RAG_RERANKER"],
+                "before_hash": _P53_SHA,
+                "after_hash": _P53_SHA_B,
+            },
+            {"at": "2026-01-04", "source": "retrieval_log", "after_hash": "0123abcd", "unrecorded": True},
+        ],
+        suggestion=None,
+        delivered={"webhook": {"state": "delivered", "attempts": 1, "last_attempt_at": "2026-01-05T06:00:00Z"}},
+        dedup_key="s:default|en|refusal_rate",
+        created_at="2026-01-05T06:00:00Z",
+        updated_at="2026-01-05T06:00:00Z",
+    )
+
+
+def _drift_report() -> DriftReport:
+    return DriftReport(
+        week="2026-W02",
+        tenant_hash="0123abcd",
+        divergence=0.12,
+        state="warn",
+        null_p95=0.067,
+        limits={"warn": 0.10, "alert": 0.20, "gap": 0.15},
+        trend=[{"week": "2026-W01", "divergence": 0.05, "state": "ok"}],
+        clusters=[
+            {"id": "c-01", "production_share": 0.2, "test_share": 0.05, "test_items": 3, "state": "under"},
+            {"id": "novel", "production_share": 0.02, "test_share": 0.0, "test_items": 0, "state": "ok"},
+        ],
+        scores={"unweighted": 0.8, "weighted": 0.76, "uncovered_share": 0.02},
+        gaps=[{"slice": "language:en", "offline": 0.86, "online": 0.8, "online_n": 60, "gap": 0.06, "result": "passed"}],
+        rates=[{"slice": "language:en", "metric": "refusal_rate", "online": 0.12, "online_n": 300, "offline": 0.2}],
+    )
+
+
+def _judge_calibration_cell() -> JudgeCalibrationCell:
+    return JudgeCalibrationCell(
+        key=f"{_P53_FP}|nightly|en|ragas.faithfulness",
+        fingerprint=_P53_FP,
+        role="nightly",
+        language="en",
+        library="ragas",
+        metric="faithfulness",
+        status="report_only",
+        reasons=["labels_not_confirmed"],
+        kappa=0.74,
+        accuracy=0.88,
+        n=50,
+        source="seed",
+        unsupported_recall=0.9,
+        unsupported_precision=0.85,
+        length_bias_delta=0.02,
+        expanded_delta=0.01,
+        assertive_delta=-0.03,
+        labels_human_confirmed=False,
+        recorded_at="2026-01-05T06:00:00Z",
+    )
+
+
+def _judge_seed_case() -> JudgeSeedCase:
+    return JudgeSeedCase(
+        id="en-seed-001-long",
+        language="en",
+        question="Which colour is the sample box?",
+        contexts=["The sample box is blue."],
+        answer="The sample box described in the context is blue.",
+        expected={"faithfulness": True, "answer_relevance": True},
+        unsupported_content=False,
+        variant="long",
+        base_id="en-seed-001",
+        pair_id="p-001",
+        review_status="approved",
+        reviewed_by="reviewer-01",
+    )
+
+
+def _release_gate_result() -> ReleaseGateResult:
+    return ReleaseGateResult(
+        sha=_P53_GIT_SHA,
+        result="skipped",
+        skip_reason="judge_keys_missing",
+        parts=[
+            ReleaseGatePart(part="nightly_absolute", result="passed"),
+            ReleaseGatePart(part="judge_floors", result="skipped", reason="judge_keys_missing"),
+            ReleaseGatePart(part="ship_check", result="not_applicable", reason="population_legacy"),
+            ReleaseGatePart(part="pr_smoke", result="passed"),
+        ],
+        gate_file_hashes={"quality_gates": _P53_SHA, "release_gate": _P53_SHA, "noise": _P53_SHA},
+        changed_gate_files=[],
+        source="ci",
+        actor="github-actions[bot]",
+        report_hashes={"nightly": _P53_SHA_B},
+        created_at="2026-01-05T06:00:00Z",
+    )
+
+
+def _config_gate_layer() -> ConfigGateLayer:
+    return ConfigGateLayer(
+        layer="deterministic",
+        set_hash=_P53_SHA_B,
+        result="fail",
+        checks=[
+            GateCheckRow(
+                check="false_answer_rate",
+                slice="language:en",
+                measured=0.15,
+                numerator=3,
+                denominator=20,
+                limit=0.05,
+                limit_kind="max",
+                result="failed",
+            )
+        ],
+    )
+
+
+def _config_gate_check() -> ConfigGateCheck:
+    return ConfigGateCheck(
+        check_id="chk-00000001",
+        status="done",
+        started_at="2026-01-05T06:00:00Z",
+        finished_at="2026-01-05T06:04:00Z",
+        mode="enforce",
+        cached=False,
+        rag_settings_hash=_P53_SHA,
+        changed_keys=["RAG_SYSTEM_PROMPT"],
+        result="fail",
+        layers=[
+            _config_gate_layer(),
+            ConfigGateLayer(layer="live", result="skipped", reason="live_layer_off"),
+            ConfigGateLayer(layer="real_set", result="skipped", reason="no_real_set"),
+        ],
+        not_evaluated_on_real_set=["RAG_SYSTEM_PROMPT"],
+        not_evaluated=[ConfigGateNotEvaluated(key="RAG_CONTEXT_COMPRESSION", reason="no_layer_exercised")],
+        uncalibrated_cells=["cohere|rerank-model-a|en|same"],
+        saved_as="not_saved",
+    )
+
+
+def _config_change_record() -> ConfigChangeRecord:
+    return ConfigChangeRecord(
+        id="00000000-0000-4000-8000-000000000701",
+        created_at="2026-01-05T06:05:00Z",
+        actor="local-config-ui",
+        source="config_ui",
+        changed_keys=["RAG_SYSTEM_PROMPT"],
+        before_hash=_P53_SHA,
+        after_hash=_P53_SHA_B,
+        retrieval_config_hash=None,
+        gate_result="fail",
+        gate_summary={
+            "checks": 12,
+            "failed": 1,
+            "skipped": 2,
+            "offenders": ["false_answer_rate"],
+            "layers": {"deterministic": "fail", "live": "skipped", "real_set": "skipped"},
+        },
+        override_reason="Owner accepted the change for a scheduled review",
+        uncalibrated_cells=[],
+    )
+
+
+def _weekly_gates_section() -> WeeklyGatesSection:
+    return WeeklyGatesSection(
+        overrides=[
+            {
+                "date": "2026-01-05",
+                "actor": "local-config-ui",
+                "changed_keys": ["RAG_SYSTEM_PROMPT"],
+                "before_hash": _P53_SHA,
+                "after_hash": _P53_SHA_B,
+                "gate_result": "fail",
+                "override_reason": "Owner accepted the change for a scheduled review",
+            }
+        ],
+        change_counts=[{"source": "config_ui", "gate_result": "pass", "count": 3}],
+        release_overrides=[
+            {
+                "date": "2026-01-05",
+                "sha": _P53_GIT_SHA,
+                "github_actor": "repo-admin",
+                "override_reason": "Emergency fix for a broken build",
+            }
+        ],
+        open_alerts={"refusal_rate": 1},
+        judge_cells={"gating": 0, "report_only": 6, "uncalibrated": 0},
+        drift=[{"tenant_hash": "0123abcd", "week": "2026-W02", "divergence": 0.12, "state": "warn"}],
+        skipped_runs={"no_real_set": 1},
+        overdue_re_reviews=0,
+    )
+
+
+def _phase53_models() -> dict[str, Any]:
+    monitor = default_monitor_alerts()
+    return {
+        "QualityGates": default_quality_gates(),
+        "AbsoluteGateResult": _absolute_gate_result(),
+        "CompositionResult": _composition_result(),
+        "GoldenSetManifest": _golden_set_manifest(),
+        "MonitorRule": monitor.rules[0],
+        "MonitorDriftBands": monitor.drift,
+        "MonitorSamplingConfig": monitor.sampling,
+        "MonitorAlertsConfig": monitor,
+        "MonitorDailyCell": _monitor_daily_cell(),
+        "MonitorAlert": _monitor_alert(),
+        "DriftReport": _drift_report(),
+        "JudgeCalibration": JudgeCalibration(
+            cells=[_judge_calibration_cell()],
+            running_fingerprints={"nightly": _P53_FP},
+            provenance={"source": "calibration"},
+        ),
+        "JudgeCalibrationCell": _judge_calibration_cell(),
+        "JudgeSeedCase": _judge_seed_case(),
+        "ReleaseGateConfig": default_release_gate(),
+        "ReleaseGatePart": ReleaseGatePart(part="ship_check", result="not_applicable", reason="population_legacy"),
+        "ReleaseGateResult": _release_gate_result(),
+        "ConfigGateLayer": _config_gate_layer(),
+        "ConfigGateNotEvaluated": ConfigGateNotEvaluated(key="RAG_CONTEXT_COMPRESSION", reason="no_layer_exercised"),
+        "ConfigGateCheck": _config_gate_check(),
+        "ConfigChangeRecord": _config_change_record(),
+        "WeeklyGatesSection": _weekly_gates_section(),
+    }
+
+
 def _terminology_models() -> dict[str, Any]:
     seen = datetime(2026, 1, 1, tzinfo=timezone.utc)
     return {
@@ -3036,8 +3456,243 @@ def _finetune_models() -> dict[str, Any]:
     }
 
 
+def _phase52_models() -> dict[str, Any]:
+    from rag_sidecar.contracts.answer_checks import (  # noqa: PLC0415
+        AnswerChecks,
+        AnswerNotice,
+        AnswerSentence,
+        BlockedRange,
+        ClaimsSummary,
+        OutputGuardSummary,
+        VersionConflict,
+    )
+    from rag_sidecar.contracts.claims import (  # noqa: PLC0415
+        ClaimCheckRequest,
+        ClaimCheckResult,
+        ClaimInput,
+        ClaimJudgement,
+        ClaimJudgementItem,
+        ClaimPremise,
+        ClaimVerdict,
+        GroundednessJudgeThresholdCell,
+        GroundednessJudgeThresholds,
+    )
+    from rag_sidecar.contracts.output_guard import (  # noqa: PLC0415
+        CredentialRule,
+        ObfuscationPattern,
+        OutputCapCell,
+        OutputCaps,
+        OutputGuardRules,
+    )
+    from rag_sidecar.contracts.security_events import (  # noqa: PLC0415
+        LinkPreviewStatus,
+        SecurityAlert,
+        SecurityAlertView,
+        SecurityEvent,
+        SecurityEventView,
+        SecurityUploaderView,
+        UploaderHold,
+    )
+
+    part_hash = hashlib.sha256("First sentence. Second sentence.".encode("utf-8")).hexdigest()
+    sentence = AnswerSentence(
+        index=0, part=0, start=0, end=15, kind="sentence", text_hash=part_hash, factual=True, cited=True,
+        support="supported", scorer="hhem_2_1_open",
+    )
+    guard = OutputGuardSummary(
+        mode="enforce",
+        rules_version="1",
+        links_checked=2,
+        links_removed=1,
+        credential_blocked=1,
+        rule_ids=["rule-1"],
+        event_ids=["00000000-0000-4000-8000-0000000000e1"],
+        source_chunk_ids=["chunk-001"],
+        blocked_ranges=[BlockedRange(part=0, start=16, end=32, text_hash=part_hash)],
+    )
+    conflict = VersionConflict(
+        document_ids=["doc-0001", "doc-0002"], latest_document_id="doc-0002", group_rule="supersession_link"
+    )
+    claims = ClaimsSummary(total=2, unsupported=0, not_checked=1, reasons={"too_many": 1}, scorer="hhem_2_1_open")
+    uploader = "00000000-0000-4000-8000-0000000000c1"
+    admin = "00000000-0000-4000-8000-0000000000c2"
+    return {
+        "AnswerSentence": sentence,
+        "AnswerNotice": AnswerNotice(kind="uncited", text="This sentence has no source.", language="en"),
+        "ClaimsSummary": claims,
+        "OutputGuardSummary": guard,
+        "VersionConflict": conflict,
+        "AnswerChecks": AnswerChecks(
+            sentences=[
+                sentence,
+                AnswerSentence(
+                    index=1, part=0, start=16, end=32, kind="sentence", text_hash=part_hash, factual=True,
+                    cited=False, reason="too_many",
+                ),
+            ],
+            output_guard=guard,
+            version_conflict=conflict,
+            claims=claims,
+            truncated=False,
+            finish_reason="stop",
+            text_language="en",
+        ),
+        "ClaimCheckRequest": ClaimCheckRequest(
+            request_id="req-0001",
+            language="en",
+            premises=[ClaimPremise(ref="S1", text="A neutral premise sentence.")],
+            claims=[ClaimInput(index=0, hypothesis="A neutral claim sentence.", premise_refs=["S1"])],
+            allow_vectara=False,
+        ),
+        "ClaimCheckResult": ClaimCheckResult(
+            claims=[
+                ClaimVerdict(index=0, status="scored", scorer="hhem_2_1_open", score=0.81),
+                ClaimVerdict(index=1, status="not_checked", scorer="none", reason="too_many"),
+            ],
+            latency_ms=420,
+        ),
+        "ClaimJudgement": ClaimJudgement(
+            judgements=[
+                ClaimJudgementItem(index=0, verdict="supported", evidence_ref="S1"),
+                ClaimJudgementItem(index=1, verdict="not_enough_info"),
+            ]
+        ),
+        "GroundednessJudgeThresholds": GroundednessJudgeThresholds(
+            cells=[
+                GroundednessJudgeThresholdCell(
+                    judge_model="judge/model-j",
+                    judge_version="judge-v1",
+                    language="it",
+                    max_unsupported_share=0.2,
+                    recall=0.8,
+                    precision=0.9,
+                    source="fixture",
+                    run_ids=["run-0001"],
+                    config_hash="c" * 64,
+                )
+            ]
+        ),
+        "OutputCaps": OutputCaps(
+            cells=[OutputCapCell(mode="strict", source="default"), OutputCapCell(mode="balanced", source="default")]
+        ),
+        "OutputGuardRules": OutputGuardRules(
+            version="1",
+            credential_rules=[
+                CredentialRule(id="rule-1", language="en", request_terms=["send me"], secret_terms=["password"])
+            ],
+            obfuscation_patterns=[ObfuscationPattern(id="rule-2", pattern=r"h\s*t\s*t\s*p")],
+            opaque_schemes=["data", "javascript"],
+        ),
+        "SecurityEvent": SecurityEvent(
+            tenant_key="s:default",
+            source="output_guard",
+            action="removed",
+            detector="output_guard",
+            rule_ids=["rule-1"],
+            document_id="doc-0001",
+            chunk_id="chunk-001",
+            uploader_id=uploader,
+            trace_id="0123456789abcdef0123456789abcdef",
+        ),
+        "SecurityAlert": SecurityAlert(
+            id="00000000-0000-4000-8000-0000000000f1",
+            tenant_key="s:default",
+            uploader_id=uploader,
+            event_count=6,
+            window_start="2026-01-01T00:00:00Z",
+            window_end="2026-01-02T00:00:00Z",
+            status="open",
+        ),
+        "UploaderHold": UploaderHold(
+            tenant_key="s:default",
+            user_id=uploader,
+            created_by=admin,
+            reason="Repeated flagged uploads.",
+            created_at="2026-01-02T00:00:00Z",
+        ),
+        "SecurityEventView": SecurityEventView(
+            id="00000000-0000-4000-8000-0000000000e1",
+            created_at="2026-01-01T00:00:05Z",
+            tenant_key="s:default",
+            workspace_name="Workspace A",
+            source="output_guard",
+            action="removed",
+            detector="output_guard",
+            rule_ids=["rule-1"],
+            document_id="doc-0001",
+            file_name="document-a.pdf",
+            uploader_id=uploader,
+            uploader_name="Uploader A",
+        ),
+        "SecurityAlertView": SecurityAlertView(
+            id="00000000-0000-4000-8000-0000000000f1",
+            tenant_key="s:default",
+            workspace_name="Workspace A",
+            uploader_id=uploader,
+            uploader_name="Uploader A",
+            event_count=6,
+            window_hours=24,
+            threshold=5,
+            opened_at="2026-01-02T00:00:00Z",
+            status="open",
+        ),
+        "SecurityUploaderView": SecurityUploaderView(
+            user_id=uploader,
+            display_name="Uploader A",
+            tenant_key="s:default",
+            workspace_name="Workspace A",
+            event_count=6,
+            last_event_at="2026-01-01T23:00:00Z",
+        ),
+        "LinkPreviewStatus": LinkPreviewStatus(
+            state="mismatch", preview_hosts=["host.example", "other.example"], hosts_not_allowlisted=["other.example"]
+        ),
+    }
+
+
+def _phase52_variants() -> dict[str, Any]:
+    from rag_sidecar.contracts.answer_checks import AnswerChecks  # noqa: PLC0415
+
+    checks = _phase52_models()["AnswerChecks"]
+    return {
+        "AnswerRecord:with_checks": {
+            "model": "AnswerRecord",
+            "value": _answer_record()
+            .model_copy(update={"checks": checks, "textsSource": "registry"})
+            .model_dump(mode="json"),
+        },
+        "AnswerChecks:empty": {"model": "AnswerChecks", "value": AnswerChecks().model_dump(mode="json")},
+        "CitationRecord:version_label": {
+            "model": "CitationRecord",
+            "value": _citation_record()
+            .model_copy(update={"versionLabel": "v2", "effectiveFrom": date(2025, 3, 1)})
+            .model_dump(mode="json"),
+        },
+        "OutputCaps:sweep": {
+            "model": "OutputCaps",
+            "value": {
+                "schema_version": 1,
+                "cells": [
+                    {"mode": "strict", "limit": 600, "source": "sweep", "run_ids": ["run-0001"], "config_hash": "h-1"},
+                    {"mode": "balanced", "limit": None, "source": "default"},
+                ],
+            },
+        },
+        "LinkPreviewStatus:unknown": {"model": "LinkPreviewStatus", "value": {"state": "unknown"}},
+    }
+
+
 def build_samples() -> dict[str, dict[str, Any]]:
-    models = {**_models(), **_feedback_loop_models(), **_phase42_models(), **_terminology_models(), **_phase33_models(), **_finetune_models()}
+    models = {
+        **_models(),
+        **_feedback_loop_models(),
+        **_phase42_models(),
+        **_terminology_models(),
+        **_phase33_models(),
+        **_finetune_models(),
+        **_phase52_models(),
+        **_phase53_models(),
+    }
     samples = {name: model.model_dump(mode="json") for name, model in models.items()}
     variants: dict[str, dict[str, Any]] = {
         "AnswerRecord:pending_unlinked": {
@@ -3167,4 +3822,5 @@ def build_samples() -> dict[str, dict[str, Any]]:
     variants.update(_phase32_query_contract_variants())
     variants.update(_phase42_variants())
     variants.update(_phase33_variants())
+    variants.update(_phase52_variants())
     return {"samples": samples, "variants": variants}

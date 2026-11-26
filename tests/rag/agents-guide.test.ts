@@ -159,3 +159,59 @@ describe('AGENTS.md reflects Phase 3.2 language support and ingestion hardening'
     for (const command of ['rag:fingerprint', 'rag:rebuild', 'rag:translate', 'rag:reembed -- --recaption']) expect(section16).toContain(command);
   });
 });
+
+describe('AGENTS.md reflects the Phase 5.1.1 feedback loop', () => {
+  const section6 = AGENTS.slice(AGENTS.indexOf('## 6. RAG & Data Pipeline'), AGENTS.indexOf('## 7. AI Model Management'));
+  const start = section6.indexOf('### Feedback loop (Phase 5.1.1)');
+  const subsection = start === -1 ? '' : section6.slice(start, section6.indexOf('\n### ', start + 1) === -1 ? undefined : section6.indexOf('\n### ', start + 1));
+
+  test('section 6 has the Feedback loop subsection', () => {
+    expect(start).toBeGreaterThan(-1);
+  });
+
+  test.each([
+    '`RAG_RETRIEVAL_LOG=off`',
+    '`RAG_RETRIEVAL_LOG_RETENTION_DAYS=30`',
+    '`RAG_REFUSAL_FEEDBACK=false`',
+    '`RAG_EMBED_FEEDBACK=false`',
+    '`RAG_EMBED_FEEDBACK_SECRET=`',
+    '`RAG_SOURCE_OPEN_SIGNAL=false`',
+    '`RAG_DOMAIN_EXPERT_REVIEW=false`',
+    'no answer, chunk or document text',
+    'The language columns hold codes only',
+    'only in `masked_query` mode',
+    'opt out',
+    'cascade',
+    'Nobody is implicitly an expert in multi-tenant mode',
+    'npm run rag:feedback-loop -- mine',
+    'npm run rag:feedback-loop -- purge',
+    'python -m rag_eval.review_queue promote-db',
+    'python -m rag_eval.feedback_exports',
+    'python -m rag_eval.failure_report',
+    'python -m rag_eval.weekly_report',
+    'python -m rag_eval.ship_check',
+    'eval/config/gate-population.json',
+    'requires a passing ship check',
+    '`TrainingPair`',
+    '`held_out` pairs never train',
+    'confirmed hard negatives are the ones an expert rejected',
+    'eval/config/phase5.1.1-comparison.json',
+  ])('the subsection mentions %s', (fragment) => {
+    expect(subsection).toContain(fragment);
+  });
+
+  test('every switch default in the subsection defaults line matches src/lib/env.ts', () => {
+    const envSource = fs.readFileSync(path.resolve(__dirname, '../../src/lib/env.ts'), 'utf8');
+    const defaults = subsection.split('\n').find((line) => line.startsWith('- Every Phase 5.1.1 switch')) ?? '';
+    const stated = [...defaults.matchAll(/`(RAG_[A-Z0-9_]+)=([^`]*)`/g)].filter(([, name]) => envSource.includes(`${name}: process.env.${name} ||`));
+    expect(new Set(stated.map(([, name]) => name)).size).toBe(7);
+    for (const [, name, value] of stated) {
+      const match = envSource.match(new RegExp(`${name}: process\\.env\\.${name} \\|\\| '([^']*)'`));
+      expect(`${name}=${match?.[1]}`).toBe(`${name}=${value}`);
+    }
+  });
+
+  test('the fold sentence names Phase 5.1.1', () => {
+    expect(AGENTS).toContain('Phase 5.1.1 (0531–0537)');
+  });
+});

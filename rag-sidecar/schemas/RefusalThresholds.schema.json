@@ -32,6 +32,11 @@
         "dev": {
           "$ref": "#/$defs/RefusalMetricBlock"
         },
+        "embedding_model": {
+          "minLength": 1,
+          "title": "Embedding Model",
+          "type": "string"
+        },
         "holdout": {
           "$ref": "#/$defs/RefusalMetricBlock"
         },

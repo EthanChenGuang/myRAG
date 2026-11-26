@@ -8,7 +8,14 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
-from rag_sidecar.groundedness.scorer import LOCAL_SCORER, ScorerBusy, ScorerUnavailable
+from rag_sidecar.groundedness.scorer import (
+    LOCAL_SCORER,
+    ResultCallback,
+    ScorePair,
+    ScorerBusy,
+    ScorerUnavailable,
+    usable_score,
+)
 from rag_sidecar.settings import SidecarSettings
 
 logger = logging.getLogger("rag_sidecar.groundedness.local_hhem")
@@ -16,6 +23,7 @@ logger = logging.getLogger("rag_sidecar.groundedness.local_hhem")
 HHEM_MODEL_ID = "vectara/hallucination_evaluation_model"
 _CACHE_DIR_NAME = "models--vectara--hallucination_evaluation_model"
 _LOAD_LOCK = threading.Lock()
+MICRO_BATCH_SIZE = 8
 
 Loader = Callable[..., Any]
 
@@ -111,6 +119,16 @@ class LocalHhemScorer:
             raise ScorerUnavailable("invalid_score")
         return score
 
+    def _infer_batch(self, batch: list[tuple[str, str]]) -> list[float | None]:
+        model = self._ensure_model()
+        try:
+            output = model.predict(batch)
+            raw = [output[i] for i in range(len(batch))]
+        except Exception:
+            logger.warning("[Groundedness] local HHEM batch inference failed", extra={"pairs": len(batch)})
+            return [None] * len(batch)
+        return [usable_score(value) for value in raw]
+
     def _gate(self) -> asyncio.Semaphore:
         loop = asyncio.get_running_loop()
         if self._semaphore is None or self._semaphore_loop is not loop:
@@ -134,3 +152,27 @@ class LocalHhemScorer:
             raise
         future.add_done_callback(lambda _done: gate.release())
         return await asyncio.shield(future)
+
+    async def score_many(
+        self, pairs: Sequence[ScorePair], *, on_result: ResultCallback | None = None
+    ) -> list[float | None]:
+        if self._load_failed:
+            raise ScorerUnavailable("model_load_failed")
+        gate = self._gate()
+        loop = asyncio.get_running_loop()
+        results: list[float | None] = []
+        for start in range(0, len(pairs), MICRO_BATCH_SIZE):
+            batch = [("\n\n".join(premises), hypothesis) for premises, hypothesis in pairs[start : start + MICRO_BATCH_SIZE]]
+            await gate.acquire()
+            try:
+                future = loop.run_in_executor(None, self._infer_batch, batch)
+            except BaseException:
+                gate.release()
+                raise
+            future.add_done_callback(lambda _done: gate.release())
+            scores = await asyncio.shield(future)
+            for offset, value in enumerate(scores):
+                results.append(value)
+                if on_result is not None:
+                    on_result(start + offset, value)
+        return results

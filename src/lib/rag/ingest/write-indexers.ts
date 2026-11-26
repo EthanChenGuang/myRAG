@@ -1,4 +1,5 @@
 import { extractChunkIdentifiers, unionIdentifiers, type ChunkIdentifiers } from '../identifiers/extract';
+import { loadAttributeIdentifiers, mergeAttributeIdentifiers, type AttributeIdentifierEntry } from './attributes/identifier-feed';
 import { loadTenantIdentifierPatterns, type TenantIdentifierPatterns } from '../identifiers/patterns';
 import { parseTableRows, type TableTruncation } from '../tables/parse';
 import type { TenantScope } from '../tenant/scope';
@@ -24,12 +25,14 @@ export interface IndexDocumentInput {
   signal: AbortSignal;
   /** Test seam; defaults to loadTenantIdentifierPatterns. */
   loadPatterns?: (scope: TenantScope, options: { signal: AbortSignal }) => Promise<TenantIdentifierPatterns>;
+  /** Test seam; defaults to loadAttributeIdentifiers (TPL-04): the flagged attribute entries, null while the feed does not apply. */
+  loadAttributeIdentifiers?: (scope: TenantScope, documentId: string, options: { signal: AbortSignal }) => Promise<AttributeIdentifierEntry[] | null>;
 }
 
 export interface IndexDocumentReport {
   chunksRead: number;
   tables: { profiles: number; rowsWritten: number; rowsDeleted: number; truncated: TableTruncation } | null;
-  identifiers: { chunksIndexed: number; chunksWritten: number; documentIdentifiers: number; documentChanged: boolean; truncated: number; tenantPatterns: number } | null;
+  identifiers: { chunksIndexed: number; chunksWritten: number; documentIdentifiers: number; documentChanged: boolean; truncated: number; tenantPatterns: number; attributeEntries?: number } | null;
   warnings: IndexWarningCode[];
 }
 
@@ -93,6 +96,7 @@ async function indexIdentifiers(
   input: IndexDocumentInput,
   chunks: readonly IndexChunkRow[],
   patterns: TenantIdentifierPatterns,
+  attributeEntries: readonly AttributeIdentifierEntry[] | null,
 ): Promise<NonNullable<IndexDocumentReport['identifiers']>> {
   const write = input.writer.writeChunkIdentifiers;
   if (!write) throw new IndexerUnavailable();
@@ -105,12 +109,10 @@ async function indexIdentifiers(
         a.chunkIndex - b.chunkIndex ||
         a.id.localeCompare(b.id),
     );
-  const results: ChunkIdentifiers[] = [];
-  const rows = ordered.map((chunk) => {
-    const found = extractChunkIdentifiers(chunk.content, patterns.expressions);
-    results.push(found);
-    return { chunkId: chunk.id, raw: found.raw, norm: found.norm };
-  });
+  const extracted: ChunkIdentifiers[] = ordered.map((chunk) => extractChunkIdentifiers(chunk.content, patterns.expressions));
+  // TPL-04 (D-25): identifiers from flagged attributes join every chunk's own before the write, so the SQL union carries them too.
+  const results = attributeEntries === null ? extracted : mergeAttributeIdentifiers(extracted, attributeEntries);
+  const rows = ordered.map((chunk, position) => ({ chunkId: chunk.id, raw: results[position]!.raw, norm: results[position]!.norm }));
   let chunksWritten = 0;
   let documentChanged = false;
   for (let start = 0; start < rows.length; start += INDEX_PAGE_SIZE) {
@@ -127,6 +129,7 @@ async function indexIdentifiers(
     documentChanged,
     truncated: results.reduce((sum, result) => sum + result.truncated, 0) + union.truncated,
     tenantPatterns: patterns.expressions.length,
+    ...(attributeEntries === null ? {} : { attributeEntries: attributeEntries.length }),
   };
 }
 
@@ -172,7 +175,8 @@ export async function indexDocumentForLookup(input: IndexDocumentInput): Promise
       const load = input.loadPatterns ?? loadTenantIdentifierPatterns;
       const patterns = await load(input.scope, { signal: input.signal });
       if (patterns.loadFailed) report.warnings.push('identifier_patterns_unavailable');
-      report.identifiers = await indexIdentifiers(input, chunks, patterns);
+      const attributeEntries = await (input.loadAttributeIdentifiers ?? loadAttributeIdentifiers)(input.scope, input.documentId, { signal: input.signal });
+      report.identifiers = await indexIdentifiers(input, chunks, patterns, attributeEntries);
     } catch (error) {
       if (input.signal.aborted) throw error;
       warn('index_identifiers_failed', input.documentId, error);

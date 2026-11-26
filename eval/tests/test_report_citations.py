@@ -224,11 +224,11 @@ def test_committed_budgets_have_report_only_groundedness_entries_and_unchanged_c
 
 
 _CONTEXT_ITEM_FIELDS = ("context_k", "ndcg_at_context_k", "group_count", "topk_redundancy", "intent_coverage")
-_CONTEXT_SLICE_FIELDS = ("ndcg_at_context_k", "k_zero", "topk_redundancy", "intent_coverage")
+_CONTEXT_SLICE_FIELDS = ("ndcg_at_context_k", "k_zero", "topk_redundancy", "intent_coverage", "false_answer_rate")
 
 
 def _without_context_metrics(report: EvalReport) -> EvalReport:
-    """The report without the report-only 04.2-12 fields, which are additive and absent from earlier reports."""
+    """The report without the 04.2-12 fields and the 05.3-05 false_answer_rate, which are additive and absent from earlier reports."""
     data = report.model_dump(mode="python")
     for item in data["items"]:
         for field in _CONTEXT_ITEM_FIELDS:
@@ -269,7 +269,7 @@ def test_report_without_citation_data_is_byte_identical_to_before(tmp_path: Path
     )
     json_path, md_path = write_report(report, tmp_path / "full", _budgets())
     assert hashlib.sha256(json_path.read_bytes()).hexdigest() == (
-        "072432d5d59da889b6a0853ba866e2a004ddded56302c36d98a08a0a429f4ef1"
+        "6051c3dcfe48f306e94a23e8d2e0f5dce07279dfc8ca16c2bbe46bbf7386d8d3"
     )
     assert hashlib.sha256(md_path.read_bytes()).hexdigest() == (
         "2962dc9f9de4a47c1ea7d44bd55b685da6796ca69a8fcef7747f1db46f9ec7aa"

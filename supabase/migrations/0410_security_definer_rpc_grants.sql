@@ -812,6 +812,55 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_finetune_export_vectors(text, text, text, uuid, integer) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_finetune_export_vectors(text, text, text, uuid, integer) TO service_role;
   END IF;
+  -- Phase 5.2, migrations 0940 to 0943: document version label, security events, alerts and uploader holds (SECURITY INVOKER, service_role only).
+  IF to_regprocedure('public.rag_set_document_version_label(text, uuid, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_set_document_version_label(text, uuid, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_set_document_version_label(text, uuid, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_record_security_events(text, jsonb, integer, integer, boolean)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_record_security_events(text, jsonb, integer, integer, boolean) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_record_security_events(text, jsonb, integer, integer, boolean) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_hold_uploader(text, uuid, uuid, text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_hold_uploader(text, uuid, uuid, text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_hold_uploader(text, uuid, uuid, text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_release_uploader_hold(text, uuid, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_release_uploader_hold(text, uuid, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_release_uploader_hold(text, uuid, uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_acknowledge_security_alert(text, uuid, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_acknowledge_security_alert(text, uuid, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_acknowledge_security_alert(text, uuid, uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_uploader_hold_active(text, uuid)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_uploader_hold_active(text, uuid) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_uploader_hold_active(text, uuid) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_active_uploader_holds(text, uuid[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_active_uploader_holds(text, uuid[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_active_uploader_holds(text, uuid[]) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_list_security_events(text[], text, uuid, timestamptz, integer, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_list_security_events(text[], text, uuid, timestamptz, integer, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_list_security_events(text[], text, uuid, timestamptz, integer, integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_list_security_alerts(text[])') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_list_security_alerts(text[]) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_list_security_alerts(text[]) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_list_security_uploaders(text[], integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_list_security_uploaders(text[], integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_list_security_uploaders(text[], integer) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_finetune_bind_scoped_slot(text, text, text[], text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_bind_scoped_slot(text, text, text[], text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_bind_scoped_slot(text, text, text[], text) TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_finetune_scope_slot(text, text[], text)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_scope_slot(text, text[], text) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_scope_slot(text, text[], text) TO service_role;
+  END IF;
 END
 $service_role_only$;
 

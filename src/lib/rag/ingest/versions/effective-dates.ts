@@ -49,6 +49,8 @@ export interface EffectiveDatesItem {
   origin: EffectiveDatesOrigin | null;
   confidence: number | null;
   proposal: StoredEffectiveDateProposal | null;
+  /** documents.version_label (0941, D-49), null when unset. */
+  versionLabel: string | null;
 }
 
 export interface EffectiveDatesScopeInput {
@@ -60,7 +62,15 @@ export interface EffectiveDatesScopeInput {
 }
 
 export type ApplyEffectiveDatesResult =
-  | { ok: true; documentId: string; effectiveFrom: string | null; effectiveTo: string | null; origin: EffectiveDatesOrigin }
+  | {
+      ok: true;
+      documentId: string;
+      effectiveFrom: string | null;
+      effectiveTo: string | null;
+      origin: EffectiveDatesOrigin;
+      /** The stored label when the call named one (null: cleared); undefined when the label was left unchanged. */
+      versionLabel?: string | null;
+    }
   | EffectiveDatesError;
 
 export type ListEffectiveDateProposalsResult =
@@ -75,6 +85,9 @@ export type RecordExtractedEffectiveDatesResult =
 
 export const AUTO_APPLY_MIN_CONFIDENCE = 0.8;
 export const MAX_QUERY_LENGTH = 200;
+/** documents.version_label limit (0941): at most 40 characters after trimming, no control characters. */
+export const MAX_VERSION_LABEL_LENGTH = 40;
+const CONTROL = /\p{Cc}/u;
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
 const MAX_EVIDENCE_LENGTH = 2000;
@@ -228,6 +241,61 @@ function proposalOf(value: unknown): StoredEffectiveDateProposal | null {
   };
 }
 
+/** The trimmed label, null for an empty one (clears it), or false when it breaks the 0941 rule. */
+export function normalizeVersionLabel(value: string | null): string | null | false {
+  if (value === null) return null;
+  const trimmed = value.trim();
+  if (trimmed === '') return null;
+  return trimmed.length <= MAX_VERSION_LABEL_LENGTH && !CONTROL.test(trimmed) ? trimmed : false;
+}
+
+/**
+ * version_label of the given documents, read on the admin client by id and only within one tenant (D-49): an id of another tenant is
+ * simply absent. Fails as a whole, so a list never shows an unread label as empty.
+ */
+export async function versionLabelsOf(
+  documentIds: ReadonlyArray<string | null>,
+  tenantKey: string,
+  signal: AbortSignal,
+): Promise<{ ok: true; labels: Map<string, string | null> } | EffectiveDatesError> {
+  const ids = [...new Set(documentIds.filter((id): id is string => typeof id === 'string' && UUID.test(id)).map((id) => id.toLowerCase()))];
+  const labels = new Map<string, string | null>();
+  if (ids.length === 0) return { ok: true, labels };
+  if (!TENANT_KEY.test(tenantKey)) return { ok: false, reason: 'invalid_argument' };
+  const client = lookupClient();
+  if (!client) return { ok: false, reason: 'unavailable' };
+  try {
+    signal.throwIfAborted();
+    const { data, error } = await client.from('documents').select('id, version_label').in('id', ids).eq('tenant_key', tenantKey).abortSignal(signal);
+    if (error || !Array.isArray(data)) return { ok: false, reason: 'unavailable' };
+    for (const row of data as Row[]) {
+      if (typeof row.id === 'string') labels.set(row.id.toLowerCase(), typeof row.version_label === 'string' ? row.version_label : null);
+    }
+    return { ok: true, labels };
+  } catch {
+    return { ok: false, reason: 'unavailable' };
+  }
+}
+
+async function setVersionLabel(documentId: string, tenantKey: string, label: string | null, signal: AbortSignal): Promise<{ ok: true } | EffectiveDatesError> {
+  const db: RpcClient | null = getIngestDeps().db();
+  if (!db) return { ok: false, reason: 'unavailable' };
+  try {
+    signal.throwIfAborted();
+    const response = await db
+      .rpc('rag_set_document_version_label', { p_tenant_key: tenantKey, p_document_id: documentId, p_label: label })
+      .abortSignal(signal);
+    if (response.error) {
+      console.error('[RAG Admin] version label call failed', { documentId, code: response.error.code ?? null });
+      return { ok: false, reason: 'unavailable' };
+    }
+    return response.data === true ? { ok: true } : { ok: false, reason: 'not_found' };
+  } catch (error) {
+    console.error('[RAG Admin] version label call failed', { documentId, error: error instanceof Error ? error.name : 'unknown' });
+    return { ok: false, reason: 'unavailable' };
+  }
+}
+
 function itemOf(row: Row): EffectiveDatesItem | null {
   const documentId = text(row, 'document_id');
   if (documentId === null) return null;
@@ -243,6 +311,7 @@ function itemOf(row: Row): EffectiveDatesItem | null {
     origin: originOf(row.effective_dates_origin),
     confidence: numberOf(row.effective_dates_confidence),
     proposal: proposalOf(row.proposal),
+    versionLabel: null,
   };
 }
 
@@ -252,14 +321,17 @@ function clamp(value: number | undefined, fallback: number, min: number, max: nu
 
 /**
  * An admin sets, changes or clears a document's window (PUT, and applying a proposal is the same call). Origin admin; the stored proposal
- * is removed; chunks and the cache follow in the same transaction.
+ * is removed; chunks and the cache follow in the same transaction. A versionLabel (D-49) is saved after the dates through
+ * rag_set_document_version_label for the same tenant: an empty or null label clears it, an undefined one leaves it unchanged.
  */
 export async function applyEffectiveDates(
-  input: EffectiveDatesScopeInput & { documentId: string; from: string | null; to: string | null },
+  input: EffectiveDatesScopeInput & { documentId: string; from: string | null; to: string | null; versionLabel?: string | null },
 ): Promise<ApplyEffectiveDatesResult> {
   if (!validScope(input) || !UUID.test(input.documentId)) return { ok: false, reason: 'invalid_argument' };
   if ((input.from !== null && !isIsoDate(input.from)) || (input.to !== null && !isIsoDate(input.to))) return { ok: false, reason: 'invalid_argument' };
   if (!isValidWindow(input.from, input.to)) return { ok: false, reason: 'invalid_window' };
+  const label = input.versionLabel === undefined ? undefined : normalizeVersionLabel(input.versionLabel);
+  if (label === false) return { ok: false, reason: 'invalid_argument' };
   const documentId = input.documentId.toLowerCase();
   const inWorkspace = await documentInWorkspace(documentId, input.tenantKey, input.signal);
   if (!inWorkspace.ok) return inWorkspace;
@@ -281,7 +353,12 @@ export async function applyEffectiveDates(
   const id = row ? text(row, 'document_id') : null;
   if (!row || id === null || text(row, 'outcome') !== 'set') return { ok: false, reason: 'unavailable' };
   console.log('[RAG Admin] effective dates set', { documentId: id, chunks: numberOf(row.chunks_updated) ?? 0 });
-  return { ok: true, documentId: id, effectiveFrom: dateOf(row.effective_from), effectiveTo: dateOf(row.effective_to), origin: 'admin' };
+  const saved = { ok: true as const, documentId: id, effectiveFrom: dateOf(row.effective_from), effectiveTo: dateOf(row.effective_to), origin: 'admin' as const };
+  if (label === undefined) return saved;
+  const labelled = await setVersionLabel(documentId, input.tenantKey, label, input.signal);
+  if (!labelled.ok) return labelled;
+  console.log('[RAG Admin] version label set', { documentId: id, cleared: label === null });
+  return { ...saved, versionLabel: label };
 }
 
 /** Drops a stored proposal and keeps the current dates. */
@@ -337,6 +414,13 @@ export async function listEffectiveDateProposals(
     if (item === null) return { ok: false, reason: 'unavailable' };
     items.push(item);
   }
+  const labels = await versionLabelsOf(
+    items.map((item) => item.documentId),
+    input.tenantKey,
+    input.signal,
+  );
+  if (!labels.ok) return labels;
+  for (const item of items) item.versionLabel = labels.labels.get(item.documentId.toLowerCase()) ?? null;
   return { ok: true, items, total, limit, offset, query };
 }
 

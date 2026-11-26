@@ -94,12 +94,18 @@ def test_cli_passes_remaining_arguments_and_returns_the_exit_code(tmp_path, monk
     assert probe.SEEN == [["--x", "1"]]
 
 
-def test_cli_module_entry_point_train_not_available_in_this_build():
-    result = subprocess.run(
-        [sys.executable, "-m", "rag_eval.finetune", "train"], capture_output=True, text=True, check=False, cwd=REPO_ROOT / "eval"
-    )
-    assert result.returncode == 2
-    assert "not available in this build" in result.stderr
+def test_cli_every_dispatched_command_is_built():
+    import importlib
+
+    for command, target in cli.COMMANDS.items():
+        module_name, _, function_name = target.partition(":")
+        assert callable(getattr(importlib.import_module(module_name), function_name, None)), command
+
+
+def test_cli_command_whose_module_is_missing_is_not_available(monkeypatch, capsys):
+    monkeypatch.setitem(cli.COMMANDS, "later", "rag_eval.finetune.not_built_yet:main")
+    assert cli.main(["later"]) == 2
+    assert "not available in this build" in capsys.readouterr().err
 
 
 def test_cli_module_entry_point_unknown_command():

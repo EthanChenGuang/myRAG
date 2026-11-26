@@ -485,7 +485,8 @@
         "table_split",
         "duplicate_flood",
         "identifier_near_miss",
-        "templated_collection"
+        "templated_collection",
+        "implicit_condition"
       ],
       "title": "Category",
       "type": "string"
@@ -580,7 +581,9 @@
         "claude_draft",
         "ragas_generated",
         "human",
-        "production"
+        "production",
+        "historical",
+        "paraphrased"
       ],
       "title": "Provenance",
       "type": "string"

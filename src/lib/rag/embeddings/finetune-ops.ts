@@ -8,7 +8,7 @@ import { callGate, callGateRows, type ProfileRefusal } from './profile-ops';
 export type FinetuneSlotId = 'ft-a-1024' | 'ft-b-1024';
 export type FinetuneRefusal = ProfileRefusal;
 
-const REFUSAL = /^((?:consent|register|status|bind|clear|release|slot)_refused|tenant_key_invalid)(?:: ([a-z_]+))?/;
+const REFUSAL = /^((?:consent|register|status|bind|clear|release|slot|scope|binding|reembed)_refused|tenant_key_invalid)(?:: ([a-z_]+))?/;
 const PROBE_COUNT = 3;
 const PROBE_DIMS = 1024;
 const UNIT_TOLERANCE = 1e-3;
@@ -50,12 +50,21 @@ export interface TaintedSlot {
 }
 
 export type GrantResult = { ok: true; tenantKey: string; scope: string; taintedVersions: string[] } | FinetuneRefusal;
+/** A binding of a tainted version's slot that was active or backfilling before the revoke and is available after it (D-29, D-33). */
+export interface DeactivatedBinding {
+  id: string;
+  docType: string;
+  tenantKey: string | null;
+  profileId: string;
+  status: string;
+}
+
 export type RevokeResult =
-  | { ok: true; tenantKey: string; taintedVersions: string[]; slots: TaintedSlot[]; artifactUris: string[] }
+  | { ok: true; tenantKey: string; taintedVersions: string[]; slots: TaintedSlot[]; artifactUris: string[]; deactivatedBindings: DeactivatedBinding[] }
   | FinetuneRefusal;
 export type RegisterResult = { ok: true; versionId: string; status: string } | FinetuneRefusal;
 export type RetireResult = { ok: true; versionId: string; status: string } | FinetuneRefusal;
-export type BindResult = { ok: true; slot: FinetuneSlotId; version: ModelVersionRow } | FinetuneRefusal;
+export type BindResult = { ok: true; slot: FinetuneSlotId; version: ModelVersionRow; docTypes: string[] | null } | FinetuneRefusal;
 export type ClearResult = { ok: true; slot: FinetuneSlotId; deleted: number; batches: number } | FinetuneRefusal;
 export type ReleaseResult = { ok: true; activeProfile: string; droppedPrevious: string | null } | FinetuneRefusal;
 
@@ -130,9 +139,18 @@ export async function grantConsent(tenantKey: string, scope: 'private' | 'deploy
  * slot evidence; this then reports where those versions are bound so the operator can roll back and clear.
  */
 export async function revokeConsent(tenantKey: string, actor: string): Promise<RevokeResult> {
+  // The binding listing only reports; a failure to read it never holds back the revocation (SQL deactivates the bindings either way).
+  const { listBindings } = await import('./binding-ops');
+  const servingBefore = (await listBindings().catch(() => [])).filter(
+    (binding) => binding.profileId.startsWith('ft-') && (binding.status === 'active' || binding.status === 'backfilling'),
+  );
   const outcome = await setConsent(tenantKey, 'none', null, actor);
   if ('refusal' in outcome) return outcome.refusal;
   await refreshAfterOperation();
+  const after = new Map((await listBindings().catch(() => [])).map((binding) => [binding.id, binding.status]));
+  const deactivatedBindings: DeactivatedBinding[] = servingBefore
+    .filter((binding) => after.get(binding.id) === 'available')
+    .map((binding) => ({ id: binding.id, docType: binding.docType, tenantKey: binding.tenantKey, profileId: binding.profileId, status: binding.status }));
   const versions = (await listModels()).filter((version) => version.status === 'tainted' && version.tenantKeys.includes(tenantKey));
   const profiles = await listEmbeddingProfiles();
   const active = profiles.find((profile) => profile.status === 'active');
@@ -146,7 +164,7 @@ export async function revokeConsent(tenantKey: string, actor: string): Promise<R
     }));
   const tainted = [...new Set([...outcome.taintedVersions, ...versions.map((version) => version.id)])].sort();
   const artifactUris = versions.map((version) => version.artifactUri).filter((uri): uri is string => uri !== null);
-  return { ok: true, tenantKey, taintedVersions: tainted, slots, artifactUris };
+  return { ok: true, tenantKey, taintedVersions: tainted, slots, artifactUris, deactivatedBindings };
 }
 
 function invalid(code: string, message: string): never {
@@ -216,23 +234,33 @@ export async function retireModel(versionId: string, actor: string): Promise<Ret
 }
 
 /**
- * Binds a registered version to an unscoped slot. A tenant-scope version is refused here before any bind RPC: it is bound only with
- * its doc types through the scoped bind (06.1-20). The SQL refusal is the real guard (D-35).
+ * Binds a registered version to a slot. Without doc types the slot stays unscoped (global EMB-05 path); with doc types the version is bound
+ * and the slot scoped in one SQL call (rag_finetune_bind_scoped_slot), after which it serves only through 3.1.1 bindings (D-33). A
+ * tenant-scope version without doc types is refused here before any bind RPC; the SQL refusal is the real guard (D-35).
  */
-export async function bindSlot(slot: FinetuneSlotId, versionId: string, actor: string): Promise<BindResult> {
+export async function bindSlot(slot: FinetuneSlotId, versionId: string, actor: string, docTypes: string[] | null = null): Promise<BindResult> {
   const version = (await listModels()).find((entry) => entry.id === versionId);
-  if (version?.scope === 'tenant') {
+  if (version?.scope === 'tenant' && (docTypes === null || docTypes.length === 0)) {
     return {
       ok: false,
       reason: 'bind_refused: tenant_scope_requires_scoping',
-      detail: `bind_refused: tenant_scope_requires_scoping (${versionId} is a tenant-scope version: it needs --doc-types, the scoped bind of 06.1-20)`,
+      detail: `bind_refused: tenant_scope_requires_scoping (${versionId} is a tenant-scope version: bind it with --doc-types <docType,...|all>)`,
     };
   }
-  const outcome = await callGate('rag_finetune_bind_slot', { p_slot: slot, p_version: versionId, p_actor: actor }, REFUSAL);
+  const outcome = docTypes
+    ? await callGate('rag_finetune_bind_scoped_slot', { p_slot: slot, p_version: versionId, p_doc_types: docTypes, p_actor: actor }, REFUSAL)
+    : await callGate('rag_finetune_bind_slot', { p_slot: slot, p_version: versionId, p_actor: actor }, REFUSAL);
   if ('refusal' in outcome) return outcome.refusal;
   if (!version) malformed();
   await refreshAfterOperation();
-  return { ok: true, slot, version: { ...version, status: 'bound', boundSlot: slot, queryPrompt: str(outcome.row, 'query_instruction') ?? version.queryPrompt } };
+  const scoped = docTypes ? strings(outcome.row.doc_types) : null;
+  if (docTypes && (!scoped || scoped.length === 0)) malformed();
+  return {
+    ok: true,
+    slot,
+    docTypes: scoped,
+    version: { ...version, status: 'bound', boundSlot: slot, queryPrompt: str(outcome.row, 'query_instruction') ?? version.queryPrompt },
+  };
 }
 
 /** Deletes a free slot's vectors batch by batch until it is empty and unbound; a refusal stops the loop. */
@@ -275,22 +303,41 @@ export function slotLetter(slot: FinetuneSlotId): 'A' | 'B' {
   return slot === 'ft-a-1024' ? 'A' : 'B';
 }
 
+/** The scope of a scoped bind: its doc types and, for a tenant-scope version, the one tenant its bindings may name. */
+export interface BindScope {
+  docTypes: string[];
+  tenantKey: string | null;
+}
+
 /**
  * What the operator sets and runs after a bind. Prompts are written as dotenv double-quoted values. No key is printed. A scoped slot
- * (06.1-20) is filled by the tenant-filtered binding backfill of 3.1.1 instead of the global re-embed.
+ * (06.1-20) is served through 3.1.1 bindings: the guidance names the binding commands and the tenant-filtered binding backfill, never the
+ * global re-embed or `activate`.
  */
-export function bindGuidance(slot: FinetuneSlotId, version: Pick<ModelVersionRow, 'id' | 'queryPrompt' | 'documentPrompt'>, scopedTenantKey?: string): string[] {
+export function bindGuidance(slot: FinetuneSlotId, version: Pick<ModelVersionRow, 'id' | 'queryPrompt' | 'documentPrompt'>, scope?: BindScope): string[] {
   const letter = slotLetter(slot);
-  const backfill = scopedTenantKey
-    ? `npm run rag:reembed -- --profile ${slot} --tenant ${scopedTenantKey} (the 3.1.1 tenant-filtered binding backfill)`
-    : `npm run rag:reembed -- --profile ${slot}`;
-  return [
+  const lines = [
     `set in .env.local for slot ${slot} (RAG_FT_SLOT_${letter}_BASE_URL and RAG_FT_EMBED_API_KEY stay as configured):`,
     `  RAG_FT_SLOT_${letter}_MODEL=${version.id}`,
     `  RAG_FT_SLOT_${letter}_QUERY_PROMPT=${JSON.stringify(version.queryPrompt)}`,
     `  RAG_FT_SLOT_${letter}_DOCUMENT_PROMPT=${JSON.stringify(version.documentPrompt)}`,
-    `then: npm run rag:embedding -- ft-check ${slot} must pass before ${backfill}`,
   ];
+  if (!scope) {
+    lines.push(`then: npm run rag:embedding -- ft-check ${slot} must pass before npm run rag:reembed -- --profile ${slot}`);
+    return lines;
+  }
+  const tenant = scope.tenantKey ?? '<tenantKey>';
+  const docType = scope.docTypes[0] ?? '<docType>';
+  lines.push(
+    `then: npm run rag:embedding -- ft-check ${slot} must pass before any binding backfill`,
+    `the slot serves only through 3.1.1 bindings, per doc type (${scope.docTypes.join(', ')}) and tenant${scope.tenantKey ? ` (${scope.tenantKey} only)` : ''}:`,
+    `  npm run rag:embedding -- bind ${docType} ${slot} --tenant ${tenant}`,
+    `  npm run rag:embedding -- bind-status <bindingId> backfilling`,
+    `  npm run rag:reembed -- --profile ${slot} --tenant ${tenant} (the 3.1.1 tenant-filtered binding backfill)`,
+    `  npm run rag:embedding -- record-binding-evidence <comparison.json> --binding <bindingId>`,
+    `  npm run rag:embedding -- activate-binding <bindingId>`,
+  );
+  return lines;
 }
 
 /** The retention command for a revoked tenant (D-31); `root` adds --root. */

@@ -1,0 +1,57 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "gap_alert": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Gap Alert",
+      "type": "number"
+    },
+    "jsd_alert": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Jsd Alert",
+      "type": "number"
+    },
+    "jsd_warn": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Jsd Warn",
+      "type": "number"
+    },
+    "min_test_items": {
+      "minimum": 1,
+      "title": "Min Test Items",
+      "type": "integer"
+    },
+    "null_percentile": {
+      "exclusiveMaximum": 1,
+      "exclusiveMinimum": 0,
+      "title": "Null Percentile",
+      "type": "number"
+    },
+    "under_covered_min_share": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Under Covered Min Share",
+      "type": "number"
+    },
+    "under_covered_ratio": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Under Covered Ratio",
+      "type": "number"
+    }
+  },
+  "required": [
+    "jsd_warn",
+    "jsd_alert",
+    "under_covered_min_share",
+    "under_covered_ratio",
+    "gap_alert",
+    "min_test_items",
+    "null_percentile"
+  ],
+  "title": "MonitorDriftBands",
+  "type": "object"
+}

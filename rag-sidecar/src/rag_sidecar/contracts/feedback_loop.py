@@ -10,6 +10,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from rag_sidecar.contracts.cache import TENANT_KEY_PATTERN
+from rag_sidecar.contracts.config_change import WeeklyGatesSection
 from rag_sidecar.contracts.golden import (
     ITEM_ID_PATTERN,
     UNANSWERABLE_CATEGORIES,
@@ -73,7 +74,7 @@ DictionaryRelation = Literal["synonym", "abbreviation", "translation", "misspell
 TrainingSplit = Literal["train", "held_out"]
 FailureLayer = Literal["retrieval", "rerank_or_assembly", "refusal", "generation", "groundedness", "injection"]
 GatePopulation = Literal["all", "production", "real"]
-RealProvenance = Literal["production", "human"]
+RealProvenance = Literal["production", "human", "historical"]
 
 MAX_LOG_CANDIDATES = 50
 MAX_QUERY_CHARS = 2000
@@ -543,6 +544,9 @@ class WeeklyReport(_Contract):
     stats_skipped_reason: ReasonCode | None = None
     trend: list[EvalTrendPoint] = Field(default_factory=list)
     failures: FailureReport | None = None
+    gates: WeeklyGatesSection | None = Field(
+        default=None, exclude_if=lambda value: value is None, json_schema_extra=omit_none_schema
+    )
 
     @model_validator(mode="after")
     def _stats_or_reason(self) -> "WeeklyReport":

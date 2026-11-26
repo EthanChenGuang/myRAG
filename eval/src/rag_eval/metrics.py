@@ -25,6 +25,7 @@ from rag_eval.config_files import load_gate_population
 from rag_eval.matching import chunk_matches_span, normalize_text
 from rag_eval.identifiers import is_near_miss, normalize_identifier
 from rag_eval.ndcg import gold_unit_first_hits, ndcg_at_context_k
+from rag_eval.refusal_text import is_refusal_answer
 from rag_eval.native_review import MIN_GATED_ITEMS, counts_in_gated_slices, report_only_reason
 from rag_eval.table_answer import score_table_answer
 
@@ -195,7 +196,7 @@ def score_items(
                 split=item.split,
                 provenance=item.provenance,
                 answerable=item.answerable,
-                refused=trace.refused,
+                refused=trace.refused or is_refusal_answer(trace.answer, item.language),
                 span_count=len(units),
                 spans_hit_at_5=sum(1 for r in ranks if r <= 5),
                 spans_hit_at_10=sum(1 for r in ranks if r <= 10),
@@ -242,6 +243,7 @@ def _slice(results: list[ItemResult]) -> SliceMetrics:
         recall_at_10=recall(10),
         mrr=_mean([1 / r.first_hit_rank if r.first_hit_rank else 0.0 for r in answerable]),
         correct_refusal_rate=_mean([1.0 if r.refused else 0.0 for r in unanswerable]),
+        false_answer_rate=_mean([0.0 if r.refused else 1.0 for r in unanswerable]),
         false_refusal_rate=_mean([1.0 if r.refused else 0.0 for r in answerable]),
         false_refusal_upper_95=upper_bound(sum(1 for r in answerable if r.refused), len(answerable)),
         ndcg_at_context_k=_optional_mean([r.ndcg_at_context_k for r in answerable]),
@@ -402,7 +404,11 @@ def report_gate_items(
 
     A real report without an explicit config reads the committed gate-population.json.
     """
-    gated = [item for item in items if item.split == gate_split and counts_in_gated_slices(item)]
+    gated = [
+        item
+        for item in items
+        if item.split == gate_split and counts_in_gated_slices(item) and item.provenance not in COVERAGE_ONLY_PROVENANCES
+    ]
     if gate_population == "production":
         return [item for item in gated if item.provenance == "production"]
     if gate_population == "real":
@@ -413,17 +419,51 @@ def report_gate_items(
     return gated
 
 
+COVERAGE_ONLY_PROVENANCES = frozenset({"paraphrased"})
+ACTIVE_STATUS = "active"
+STALE_STATUS = "stale"
+POPULATION_EXCLUSIONS = "population_exclusions"
+
+
+def population_exclusions(
+    gated: list[ItemResult], statuses: Mapping[str, str] | None = None
+) -> tuple[list[ItemResult], dict[str, object]]:
+    """D-49, D-53: active, non-paraphrased items of the gated split, and the counts of what was left out.
+
+    An item absent from statuses is active; stale_share is stale over active plus stale."""
+    active: list[ItemResult] = []
+    stale = retired = coverage_only = 0
+    for result in gated:
+        status = statuses.get(result.item_id, ACTIVE_STATUS) if statuses is not None else ACTIVE_STATUS
+        if status != ACTIVE_STATUS:
+            if status == STALE_STATUS:
+                stale += 1
+            else:
+                retired += 1
+            continue
+        if result.provenance in COVERAGE_ONLY_PROVENANCES:
+            coverage_only += 1
+            continue
+        active.append(result)
+    lifecycle_active = len(active) + coverage_only
+    share = stale / (lifecycle_active + stale) if lifecycle_active + stale else 0.0
+    return active, {"coverage_only": coverage_only, "stale_count": stale, "retired_count": retired, "stale_share": share}
+
+
 def aggregate(
     results: list[ItemResult],
     k_values: tuple[int, ...] = (5, 10),
     gate_split: str = "dev",
     approved_ids: frozenset[str] | None = None,
     population: GatePopulationConfig | None = None,
+    statuses: Mapping[str, str] | None = None,
 ) -> dict[str, object]:
     if tuple(k_values) != (5, 10):
         raise ValueError(f"unsupported k_values {tuple(k_values)!r}: the report contract carries recall@5 and recall@10")
-    gated = [r for r in results if r.split == gate_split]
-    counting = [r for r in gated if counts_in_gated_slices(r)]
+    split_items = [r for r in results if r.split == gate_split]
+    eligible, exclusions = population_exclusions(split_items, statuses)
+    gated = [r for r in split_items if statuses is None or statuses.get(r.item_id, ACTIVE_STATUS) == ACTIVE_STATUS]
+    counting = [r for r in eligible if counts_in_gated_slices(r)]
     members, label = select_gate_population(counting, approved_ids, population)
     return {
         "overall": _slice(members),
@@ -441,6 +481,7 @@ def aggregate(
         "by_provenance": _group(gated, lambda r: r.provenance),
         "by_provenance_category": _group(gated, lambda r: f"{r.provenance}/{r.category}"),
         "gate_population": label,
+        POPULATION_EXCLUSIONS: exclusions,
     }
 
 

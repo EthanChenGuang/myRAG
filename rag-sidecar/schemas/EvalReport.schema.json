@@ -333,7 +333,8 @@
             "table_split",
             "duplicate_flood",
             "identifier_near_miss",
-            "templated_collection"
+            "templated_collection",
+            "implicit_condition"
           ],
           "title": "Category",
           "type": "string"
@@ -443,7 +444,9 @@
             "claude_draft",
             "ragas_generated",
             "human",
-            "production"
+            "production",
+            "historical",
+            "paraphrased"
           ],
           "title": "Provenance",
           "type": "string"
@@ -1710,6 +1713,9 @@
         "correct_refusal_rate": {
           "$ref": "#/$defs/MetricValue"
         },
+        "false_answer_rate": {
+          "$ref": "#/$defs/MetricValue"
+        },
         "false_refusal_rate": {
           "$ref": "#/$defs/MetricValue"
         },
@@ -2553,6 +2559,16 @@
     "golden_filter": {
       "$ref": "#/$defs/GoldenFilter"
     },
+    "golden_manifest_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Golden Manifest Sha256",
+      "type": "string"
+    },
+    "golden_set_version": {
+      "minimum": 1,
+      "title": "Golden Set Version",
+      "type": "integer"
+    },
     "golden_sha256": {
       "title": "Golden Sha256",
       "type": "string"
@@ -2568,6 +2584,7 @@
         "enum": [
           "hhem_2_3_vectara",
           "hhem_2_1_open",
+          "llm_judge",
           "none"
         ]
       },
@@ -2691,6 +2708,15 @@
       ],
       "default": null
     },
+    "rag_mode": {
+      "enum": [
+        "strict",
+        "balanced",
+        "flexible"
+      ],
+      "title": "Rag Mode",
+      "type": "string"
+    },
     "raw_invalid_markers": {
       "anyOf": [
         {
@@ -2742,6 +2768,17 @@
         }
       ],
       "default": null
+    },
+    "stale_count": {
+      "minimum": 0,
+      "title": "Stale Count",
+      "type": "integer"
+    },
+    "stale_share": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Stale Share",
+      "type": "number"
     },
     "table_split": {
       "$ref": "#/$defs/TableSplitReport"
