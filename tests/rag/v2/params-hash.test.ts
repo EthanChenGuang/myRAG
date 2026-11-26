@@ -10,6 +10,11 @@ import { effectiveRetrievalParams } from '@/lib/rag/v2/retrieval-params';
 import { v2ProfileSettings } from '@/lib/rag/v2/profiles';
 import { computeRetrievalConfigHash, securityHashComponent, type RetrievalConfigHashInput } from '@/lib/rag/v2/config-hash';
 import { readSecurityConfig } from '@/lib/rag/security/config';
+import { requestRetrievalConfigHash } from '@/lib/rag/v2/result';
+import { effectiveTuningParams, tuningHashComponent } from '@/lib/rag/v2/tuning-params';
+import { resetRetrievalBackendForTests, setRetrievalBackendForTests } from '@/lib/rag/backend/registry';
+import type { RetrievalBackend } from '@/lib/rag/backend/types';
+import type { RunRetrievalInput } from '@/lib/rag/types';
 import { describeReranker } from '@/lib/rag/rerank/select';
 import {
   getActiveChunkingProfiles,
@@ -19,6 +24,9 @@ import {
 } from '@/lib/rag/chunking/active';
 
 const COMMITTED = RetrievalParamsSchema.parse(rawCommitted);
+
+/** requestRetrievalConfigHash(requestInput()) on the code before 04.2-06 (base ci/merge-train-24). */
+const PINNED_REQUEST_OFF_HASH = '1bbdc29901e372073c7a9d899a9a9fce1198b05c42d234f3958de0dd1fdc5273';
 
 function baseConfig(overrides: Record<string, string> = {}): RagConfig {
   return loadRagConfig({
@@ -464,5 +472,130 @@ describe('computeRetrievalConfigHash binding legs (03.1.1-09)', () => {
     const domain = computeRetrievalConfigHash({ ...baseHashInput(), embeddingBindings: { contract_legal: 'voyage-4-large-1024-domain' } });
     const control = computeRetrievalConfigHash({ ...baseHashInput(), domainControlLeg: 'contract_legal' });
     expect(new Set([base, law, domain, control]).size).toBe(4);
+  });
+});
+
+describe('requestRetrievalConfigHash with every Phase 4.2 switch off (04.2-06, D-34)', () => {
+  beforeEach(() => {
+    resetRagConfigForTests();
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    setRetrievalBackendForTests({ id: 'pgvector' } as unknown as RetrievalBackend);
+    setActiveChunkingProfilesForTests({ general: 'legacy' });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    resetRetrievalBackendForTests();
+    resetActiveChunkingProfilesForTests();
+    resetRagConfigForTests();
+  });
+
+  function requestInput(env: Record<string, string> = {}) {
+    return {
+      input: { scope: null, query: 'q', profile: 'chat', signal: new AbortController().signal } as RunRetrievalInput,
+      config: baseConfig({ RAG_LEXICAL_SEARCH: 'true', ...env }),
+      profile: 'chat' as const,
+      embeddingProfileId: 'openai-3-small-1536',
+      queryLanguage: 'en',
+      security: readSecurityConfig({}),
+    };
+  }
+
+  it('equals the hash pinned before the plan', async () => {
+    expect(await requestRetrievalConfigHash(requestInput())).toBe(PINNED_REQUEST_OFF_HASH);
+  });
+
+  it('explicit off values for every new switch keep the pinned hash', async () => {
+    const off = requestInput({
+      RAG_LEXICAL_DICTIONARY: 'false',
+      RAG_LEXICAL_STEM_IT: 'false',
+      RAG_VERSION_SCOPE: 'false',
+      RAG_TABLE_LOOKUP: 'false',
+      RAG_DUP_CLUSTERS: 'false',
+      RAG_RESULT_DIVERSITY: 'off',
+      RAG_IDENTIFIER_INDEX: 'false',
+      RAG_IDENTIFIER_FILTER: 'false',
+    });
+    expect(await requestRetrievalConfigHash(off)).toBe(PINNED_REQUEST_OFF_HASH);
+  });
+
+  it('invalid combinations that resolve to off keep the pinned hash', async () => {
+    const filterOnly = requestInput({ RAG_IDENTIFIER_FILTER: 'true' });
+    const scopeWithoutLexical = { ...requestInput(), config: baseConfig({ RAG_LEXICAL_SEARCH: 'false', RAG_VERSION_SCOPE: 'true' }) };
+    const lexicalOff = { ...requestInput(), config: baseConfig({ RAG_LEXICAL_SEARCH: 'false' }) };
+    expect(await requestRetrievalConfigHash(filterOnly)).toBe(PINNED_REQUEST_OFF_HASH);
+    expect(await requestRetrievalConfigHash(scopeWithoutLexical)).toBe(await requestRetrievalConfigHash(lexicalOff));
+  });
+
+  it('each on-switch gives its own hash', async () => {
+    const envs: Record<string, string>[] = [
+      { RAG_LEXICAL_DICTIONARY: 'true' },
+      { RAG_LEXICAL_STEM_IT: 'true' },
+      { RAG_LEXICAL_DICTIONARY: 'true', RAG_LEXICAL_STEM_IT: 'true' },
+      { RAG_VERSION_SCOPE: 'true' },
+      { RAG_TABLE_LOOKUP: 'true' },
+      { RAG_DUP_CLUSTERS: 'true' },
+      { RAG_DUP_CLUSTERS: 'true', RAG_RESULT_DIVERSITY: 'collapse' },
+      { RAG_DUP_CLUSTERS: 'true', RAG_RESULT_DIVERSITY: 'mmr' },
+      { RAG_IDENTIFIER_INDEX: 'true' },
+      { RAG_IDENTIFIER_INDEX: 'true', RAG_IDENTIFIER_FILTER: 'true' },
+    ];
+    const hashes = [PINNED_REQUEST_OFF_HASH];
+    for (const env of envs) hashes.push(await requestRetrievalConfigHash(requestInput(env)));
+    expect(new Set(hashes).size).toBe(envs.length + 1);
+  });
+});
+
+describe('computeRetrievalConfigHash tuning block (04.2-06, D-34, D-42)', () => {
+  beforeEach(() => {
+    resetRagConfigForTests();
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    resetRagConfigForTests();
+  });
+
+  function tuningFor(env: Record<string, string>, overrides?: Parameters<typeof effectiveTuningParams>[2]) {
+    const config = baseConfig({ RAG_LEXICAL_SEARCH: 'true', ...env });
+    return tuningHashComponent(config, effectiveTuningParams('eval', config, overrides));
+  }
+
+  it('is null with every switch off and with the lexical switches alone', () => {
+    expect(tuningFor({})).toBeNull();
+    expect(tuningFor({ RAG_LEXICAL_DICTIONARY: 'true', RAG_LEXICAL_STEM_IT: 'true' })).toBeNull();
+    expect(tuningFor({ RAG_IDENTIFIER_FILTER: 'true' })).toBeNull();
+  });
+
+  it('a null or empty tuning input leaves the pinned hash unchanged', () => {
+    expect(computeRetrievalConfigHash({ ...literalHashInput(), tuning: null })).toBe(PINNED_DEFAULT_HASH);
+    expect(computeRetrievalConfigHash({ ...literalHashInput(), tuning: {} })).toBe(PINNED_DEFAULT_HASH);
+  });
+
+  it('holds only the entries of the switches that are on, with their effective parameters', () => {
+    expect(tuningFor({ RAG_TABLE_LOOKUP: 'true' })).toEqual({ table_lookup: { min_cells: 2, limit: 10, weight: 1 } });
+    expect(tuningFor({ RAG_DUP_CLUSTERS: 'true', RAG_RESULT_DIVERSITY: 'collapse' })).toEqual({
+      dup_clusters: true,
+      diversity: { mode: 'collapse' },
+    });
+    expect(tuningFor({ RAG_RESULT_DIVERSITY: 'mmr' })).toEqual({ diversity: { mode: 'mmr', mmr_lambda: 0.7, mmr_window_factor: 3 } });
+    expect(tuningFor({ RAG_VERSION_SCOPE: 'true' })).toEqual({ version_scope: true });
+    expect(tuningFor({ RAG_IDENTIFIER_INDEX: 'true' })).toEqual({ identifier_index: true });
+    expect(tuningFor({ RAG_IDENTIFIER_INDEX: 'true', RAG_IDENTIFIER_FILTER: 'true' })).toEqual({ identifier_index: true, identifier_filter: true });
+  });
+
+  it('min_cells moves the hash only while the table lookup is on', () => {
+    const hash = (env: Record<string, string>, minCells: number) =>
+      computeRetrievalConfigHash({ ...literalHashInput(), tuning: tuningFor(env, { table_lookup: { min_cells: minCells } }) });
+    expect(hash({ RAG_TABLE_LOOKUP: 'true' }, 2)).not.toBe(hash({ RAG_TABLE_LOOKUP: 'true' }, 3));
+    expect(hash({}, 2)).toBe(hash({}, 3));
+    expect(hash({}, 3)).toBe(PINNED_DEFAULT_HASH);
+  });
+
+  it('two mmr lambdas give two hashes', () => {
+    const hash = (lambda: number) =>
+      computeRetrievalConfigHash({ ...literalHashInput(), tuning: tuningFor({ RAG_RESULT_DIVERSITY: 'mmr' }, { diversity: { mmr_lambda: lambda } }) });
+    expect(hash(0.5)).not.toBe(hash(0.7));
   });
 });
