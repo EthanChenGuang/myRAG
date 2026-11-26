@@ -25,14 +25,16 @@ interface ExportRow {
   dims: number;
 }
 
+/** Runs one statement and returns 'accepted' or the error message; outside a transaction a failed statement rolls itself back. */
 async function outcome(db: PGlite, sql: string, params: unknown[] = []): Promise<string> {
-  await db.exec('SAVEPOINT attempt');
+  const nested = db.isInTransaction();
+  if (nested) await db.exec('SAVEPOINT attempt');
   try {
     await db.query(sql, params);
-    await db.exec('RELEASE SAVEPOINT attempt');
+    if (nested) await db.exec('RELEASE SAVEPOINT attempt');
     return 'accepted';
   } catch (error) {
-    await db.exec('ROLLBACK TO SAVEPOINT attempt');
+    if (nested) await db.exec('ROLLBACK TO SAVEPOINT attempt');
     return error instanceof Error ? error.message : String(error);
   }
 }

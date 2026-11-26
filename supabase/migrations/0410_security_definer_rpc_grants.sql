@@ -804,6 +804,10 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_finetune_version_taint_guard() FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_finetune_version_taint_guard() TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_finetune_export_vectors(text, text, text, uuid, integer)') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_finetune_export_vectors(text, text, text, uuid, integer) FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_finetune_export_vectors(text, text, text, uuid, integer) TO service_role;
+  END IF;
 END
 $service_role_only$;
 
