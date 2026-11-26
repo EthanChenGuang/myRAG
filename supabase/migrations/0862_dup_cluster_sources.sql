@@ -42,7 +42,30 @@ BEGIN
     RAISE EXCEPTION 'rag_dup_cluster_sources: at most 50 cluster ids' USING ERRCODE = '22023';
   END IF;
 
-  RETURN;
+  RETURN QUERY
+  SELECT r.cluster_id, r.document_id, r.filename, r.chunk_id
+  FROM (
+    SELECT m.cluster_id, m.document_id, m.filename, m.chunk_id,
+           pg_catalog.row_number() OVER (PARTITION BY m.cluster_id ORDER BY m.filename, m.document_id) AS n
+    FROM (
+      SELECT DISTINCT ON (c.dup_cluster_id, c.document_id)
+             c.dup_cluster_id AS cluster_id, c.document_id, d.filename, c.id AS chunk_id
+      FROM public.document_chunks c
+      JOIN public.rag_dup_clusters k ON k.id = c.dup_cluster_id AND k.tenant_key = p_tenant_key
+      JOIN public.documents d ON d.id = c.document_id AND d.tenant_key = p_tenant_key
+      WHERE c.tenant_key = p_tenant_key
+        AND c.dup_cluster_id = ANY (p_cluster_ids)
+        AND c.is_current
+        AND c.status IN ('ready', 'variant')
+        AND NOT c.provisional
+        AND d.is_current
+        AND d.status = 'ready'
+        AND NOT d.provisional
+      ORDER BY c.dup_cluster_id, c.document_id, c.chunk_index, c.id
+    ) m
+  ) r
+  WHERE r.n <= p_limit
+  ORDER BY r.cluster_id, r.n;
 END
 $fn$;
 

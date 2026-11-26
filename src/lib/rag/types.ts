@@ -72,6 +72,8 @@ export interface UsedDocument {
   isCurrent?: boolean;
   effectiveFrom?: string | null;
   effectiveTo?: string | null;
+  /** D-21: other documents holding the same passage as a kept chunk of this document; set only when there are any. */
+  alsoIn?: AlsoIn[];
 }
 
 export interface SourceImage {
