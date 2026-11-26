@@ -792,6 +792,146 @@ describe('stored header in embedding text and lexical_text (two tenants, plan 03
     assert.ok(embedded.length > 0 && embedded.every((text) => text.includes(MARK_A) !== text.includes(MARK_B)), 'each embedded text holds exactly one tenant header');
   });
 
+  /** Takes B's chunks out of step (its document stamp moves on) for the body of a test; A stays in step. */
+  async function withBOutOfStep(run: () => Promise<void>): Promise<void> {
+    const stamp = await docStamp(docs.b);
+    await q('UPDATE documents SET attribute_header_stamp = $2 WHERE id = $1', [docs.b, 't9.aaaaaaaaaaaa']);
+    try {
+      await run();
+    } finally {
+      await q('UPDATE documents SET attribute_header_stamp = $2 WHERE id = $1', [docs.b, stamp]);
+    }
+  }
+
+  const plainLexical = async (documentId: string, chunk: Row): Promise<string> => {
+    const { chunkLexicalText } = await import('@/lib/rag/lexical/chunk-text');
+    const meta = (await q('SELECT section_path, chunk_kind, d.filename FROM document_chunks c JOIN documents d ON d.id = c.document_id WHERE c.id = $1', [chunk.id]))[0] as Row;
+    return chunkLexicalText({
+      sectionPath: (meta.section_path as string[]) ?? [],
+      content: String(chunk.content),
+      chunkKind: String(meta.chunk_kind),
+      metadata: chunk.metadata as Record<string, unknown>,
+      documentFilename: String(meta.filename),
+    });
+  };
+
+  test('relex: a chunk in step gets back exactly the lexical_text ingestion wrote; a chunk not in step gets today\'s text', async () => {
+    const relex = await import('@/lib/rag/ingest/relex/run');
+    const ingestedA = await legacyChunks(docs.a);
+    const ingestedB = await legacyChunks(docs.b);
+    await withBOutOfStep(async () => {
+      await q("UPDATE document_chunks SET lexical_version = 0, lexical_text = 'stale' WHERE document_id = ANY($1::uuid[]) AND chunking_profile_id = 'legacy'", [[docs.a, docs.b]]);
+      edge.calls.length = 0;
+      await relex.runRelex({ db: ingestDb() });
+      assert.ok(headerCalls().length >= 2, 'a read per tenant of the batch');
+      const rebuiltA = await legacyChunks(docs.a);
+      assert.deepEqual(rebuiltA.map((chunk) => chunk.lexical_text), ingestedA.map((chunk) => chunk.lexical_text), 'byte-equal to ingestion');
+      const rebuiltB = await legacyChunks(docs.b);
+      for (const chunk of rebuiltB) {
+        assert.equal(chunk.lexical_text, await plainLexical(docs.b, chunk));
+        assert.ok(!String(chunk.lexical_text).includes(MARK_B) && !String(chunk.lexical_text).includes(MARK_A));
+        assert.equal(chunk.stamp, ingestedB[0]?.stamp, 'relex drops no stamp');
+      }
+    });
+    const relexAgain = await import('@/lib/rag/ingest/relex/run');
+    await q("UPDATE document_chunks SET lexical_version = 0 WHERE document_id = $1 AND chunking_profile_id = 'legacy'", [docs.b]);
+    await relexAgain.runRelex({ db: ingestDb() });
+    assert.deepEqual((await legacyChunks(docs.b)).map((chunk) => chunk.lexical_text), ingestedB.map((chunk) => chunk.lexical_text), 'back in step: header again');
+  });
+
+  test('relex, switch off: no header read', async () => {
+    const relex = await import('@/lib/rag/ingest/relex/run');
+    useEnv(OFF_ENV);
+    const before = await legacyChunks(docs.a);
+    await q("UPDATE document_chunks SET lexical_version = 0 WHERE document_id = $1 AND chunking_profile_id = 'legacy'", [docs.a]);
+    edge.calls.length = 0;
+    await relex.runRelex({ db: ingestDb() });
+    assert.equal(headerCalls().length, 0);
+    for (const chunk of await legacyChunks(docs.a)) assert.equal(chunk.lexical_text, await plainLexical(docs.a, chunk));
+    useEnv(HEADER_ENV);
+    await q("UPDATE document_chunks SET lexical_version = 0 WHERE document_id = $1 AND chunking_profile_id = 'legacy'", [docs.a]);
+    await relex.runRelex({ db: ingestDb() });
+    assert.deepEqual((await legacyChunks(docs.a)).map((chunk) => chunk.lexical_text), before.map((chunk) => chunk.lexical_text));
+  });
+
+  test('re-embed: a chunk in step is embedded with the text ingestion embedded; a chunk not in step with today\'s text', async () => {
+    const reembed = await import('@/lib/rag/ingest/reembed/run');
+    const registry = await import('@/lib/rag/embeddings/registry');
+    const { buildEmbeddingText } = await import('@/lib/rag/ingest/text/embedding-text');
+    const VOYAGE = 'voyage-4-large-2048';
+    const model = String((await q('SELECT model FROM embedding_profiles WHERE id = $1', [VOYAGE]))[0]?.model);
+    const seen: string[] = [];
+    registry.setEmbeddingProvidersForTests({
+      voyage: {
+        id: 'voyage',
+        model,
+        maxInputTokens: 8000,
+        supportedDims: [1024, 2048],
+        normalize: true,
+        async embedDocuments(texts, opts) {
+          seen.push(...texts);
+          return { vectors: texts.map((_, index) => Array.from({ length: opts.dims }, (_, dim) => (dim === index % opts.dims ? 1 : 0))), model, host: 'fake-host', usage: { tokens: texts.length } };
+        },
+        async embedQuery(_text, opts) {
+          return { vectors: [Array.from({ length: opts.dims }, () => 0)], model, host: 'fake-host', usage: { tokens: 1 } };
+        },
+      },
+    } as never);
+    try {
+      useEnv({ ...HEADER_ENV, RAG_EMBEDDING_PROFILES: 'on' });
+      await withBOutOfStep(async () => {
+        await q("DELETE FROM chunk_embeddings WHERE profile_id = $1", [VOYAGE]);
+        await q('DELETE FROM embedding_backfill_gaps');
+        await q('DELETE FROM embedding_backfill_runs');
+        const report = await reembed.runReembed({ db: ingestDb(), profileId: VOYAGE, tenantKey: keyA(), batchSize: 8 });
+        assert.equal(report.status, 'completed');
+        const reportB = await reembed.runReembed({ db: ingestDb(), profileId: VOYAGE, tenantKey: keyB(), batchSize: 8 });
+        assert.equal(reportB.status, 'completed');
+      });
+      const chunksA = await legacyChunks(docs.a);
+      const sectionOf = async (id: unknown) => ((await q('SELECT section_path FROM document_chunks WHERE id = $1', [id]))[0]?.section_path as string[]) ?? [];
+      for (const chunk of chunksA) {
+        const expected = buildEmbeddingText({ section_path: await sectionOf(chunk.id), content: String(chunk.content), attribute_header: `${MARK_A} K-1` });
+        assert.ok(seen.includes(expected), 'A chunk embedded with its header');
+      }
+      for (const chunk of await legacyChunks(docs.b)) {
+        const expected = buildEmbeddingText({ section_path: await sectionOf(chunk.id), content: String(chunk.content) });
+        assert.ok(seen.includes(expected), 'B chunk (not in step) embedded with today\'s text');
+      }
+      assert.ok(seen.every((text) => !text.includes(MARK_B)), 'no B header: B is out of step');
+    } finally {
+      registry.resetEmbeddingProvidersForTests();
+      await q("DELETE FROM chunk_embeddings WHERE profile_id = 'voyage-4-large-2048'");
+      await q('DELETE FROM embedding_backfill_gaps');
+      await q('DELETE FROM embedding_backfill_runs');
+    }
+  });
+
+  test('translation producer: the translation lexical_text carries the header of a chunk in step; translated content and its embedding input do not', async () => {
+    const translator = await import('@/lib/rag/ingest/translate/translator');
+    const produce = await import('@/lib/rag/ingest/translate/produce');
+    const settings = await import('@/lib/rag/lang/settings');
+    const { chunkLexicalText } = await import('@/lib/rag/lexical/chunk-text');
+    settings.resetLanguageSettingsForTests();
+    await q('INSERT INTO admin_users (id) VALUES ($1) ON CONFLICT DO NOTHING', [ids.userA]);
+    await q('SELECT rag_translation_settings_set($1, $2, $3::text[], true)', [ids.userA, keyA(), ['it']]);
+    translator.setChunkTranslationModelForTests({ model: 'fixture-translator', translate: async (request) => ({ content: `[${request.targetLanguage}] ${request.text}` }) });
+    try {
+      useEnv({ ...HEADER_ENV, RAG_DOC_TRANSLATION: 'on' });
+      const result = await produce.translateDocumentChunks(docs.a, keyA());
+      assert.equal(result.ok, true, JSON.stringify(result));
+      const translations = await q('SELECT chunk_id, content, lexical_text FROM chunk_translations WHERE document_id = $1', [docs.a]);
+      assert.ok(translations.length > 0);
+      for (const row of translations) {
+        assert.ok(!String(row.content).includes(MARK_A));
+        assert.equal(row.lexical_text, chunkLexicalText({ sectionPath: [], content: String(row.content), chunkKind: 'text', attributeHeader: `${MARK_A} K-1` }));
+      }
+      assert.ok(embedded.length > 0 && embedded.every((text) => !text.includes(MARK_A)), 'the translated content alone is embedded');
+    } finally {
+      translator.resetChunkTranslationModelForTests();
+    }
+  });
+
   test('switch off: re-chunk makes no header read and writes texts and stamps equal to today', async () => {
     useEnv(OFF_ENV);
     await resetProfile();

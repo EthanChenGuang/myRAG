@@ -372,7 +372,7 @@ function deferredText(row: JobRow): string {
 }
 
 /** The chunks of the batch's deferred jobs that still lack a vector of the profile, in groups, keyset by chunk id so each is read once per pass. */
-async function* deferredGroups(rpc: RpcClient, batchId: string, profileId: string, signal: AbortSignal): AsyncGenerator<DeferredChunk[]> {
+export async function* deferredGroups(rpc: RpcClient, batchId: string, profileId: string, signal: AbortSignal): AsyncGenerator<DeferredChunk[]> {
   let after: string | null = null;
   let group: DeferredChunk[] = [];
   for (;;) {

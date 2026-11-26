@@ -633,3 +633,170 @@ describe('inline ingest stages with the stored header (enrich, runEmbed, runDefe
     expect(run.embedded.every((text) => text.includes(STORED_HEADER))).toBe(true);
   });
 });
+
+// --- Plan 03.3-17 Task 3: sites that rewrite the text of stored chunks follow the in-step rule ------------------------------------------------
+
+const CHUNK_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1';
+const CHUNK_A_OLD = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2';
+const CHUNK_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb1';
+const MARK_A = 'hdra-x1';
+const MARK_B = 'hdrb-x2';
+
+/** The chunk-mode read: a header only for the chunks that are in step with their document, and only for the tenant named in the call. */
+function chunkHeaderAnswer(args: Row): RpcResponse {
+  const ids = (args.p_chunk_ids as string[] | undefined) ?? [];
+  const inStep: Record<string, { tenant: string; header: string }> = {
+    [CHUNK_A]: { tenant: TENANT_A, header: `${MARK_A} K-1` },
+    [CHUNK_B]: { tenant: TENANT_B, header: `${MARK_B} K-2` },
+  };
+  return ok(
+    ids.flatMap((id) => {
+      const entry = inStep[id];
+      return entry && entry.tenant === args.p_tenant_key ? [{ document_id: DOC_1, chunk_id: id, header: entry.header, stamp: 't1.0123456789ab' }] : [];
+    }),
+  );
+}
+
+describe('embeddingTextOf with the in-step header', () => {
+  it('without the third argument the text equals today; with a string it replaces the profile header', async () => {
+    const { embeddingTextOf } = await import('@/lib/rag/ingest/reembed/run');
+    const chunk = {
+      id: CHUNK_A,
+      documentId: DOC_1,
+      tenantKey: TENANT_A,
+      content: 'Neutral body sentence one.',
+      sectionPath: ['Part 1'],
+      chunkKind: 'text',
+      docType: 'invoice_receipt',
+      templateRow: INVOICE_ROW,
+      hasGap: false,
+    };
+    const today = embeddingTextOf(chunk, new Set());
+    expect(today).toContain('Invoice N-7');
+    expect(embeddingTextOf(chunk, new Set(), undefined)).toBe(today);
+    expect(embeddingTextOf(chunk, new Set(), null)).toBe(today);
+    expect(embeddingTextOf(chunk, new Set(), `${MARK_A} K-1`)).toBe(buildEmbeddingText({ section_path: ['Part 1'], content: chunk.content, attribute_header: `${MARK_A} K-1` }));
+  });
+});
+
+describe('deferred backfill embeddings with the in-step header', () => {
+  const deferredRows = [
+    { id: CHUNK_A, document_id: DOC_1, tenant_key: TENANT_A, embedding_text_version: 1, content: 'Neutral body one.', section_path: ['P'], chunk_kind: 'text', doc_type: 'general', template_row: {} },
+    { id: CHUNK_A_OLD, document_id: DOC_1, tenant_key: TENANT_A, embedding_text_version: 1, content: 'Neutral body two.', section_path: ['P'], chunk_kind: 'text', doc_type: 'general', template_row: {} },
+    { id: CHUNK_B, document_id: DOC_2, tenant_key: TENANT_B, embedding_text_version: 1, content: 'Neutral body three.', section_path: ['P'], chunk_kind: 'text', doc_type: 'general', template_row: {} },
+  ];
+
+  async function groups(env: Record<string, string>): Promise<{ texts: Map<string, string>; db: ReturnType<typeof fakeDb> }> {
+    const { deferredGroups } = await import('@/lib/rag/ingest/backfill/orchestrate');
+    let served = false;
+    const db = fakeDb({
+      rag_deferred_embed_chunks: () => {
+        const page = served ? [] : deferredRows;
+        served = true;
+        return ok(page);
+      },
+      rag_attribute_headers: chunkHeaderAnswer,
+    });
+    setIngestDepsForTests({ db: () => db, ingestEnv: () => env });
+    const texts = new Map<string, string>();
+    for await (const group of deferredGroups(db, 'batch-1', 'openai-3-small-1536', signal)) for (const chunk of group) texts.set(chunk.chunkId, chunk.text);
+    return { texts, db };
+  }
+
+  it('switch on: one read per tenant of the page; a chunk in step gets its own header, the others today', async () => {
+    const { texts, db } = await groups(HEADER_ENV);
+    const reads = db.calls.filter((call) => call.fn === 'rag_attribute_headers');
+    expect(reads.map((call) => call.args.p_tenant_key).sort()).toEqual([TENANT_A, TENANT_B].sort());
+    expect(texts.get(CHUNK_A)).toBe(buildEmbeddingText({ section_path: ['P'], content: 'Neutral body one.', attribute_header: `${MARK_A} K-1` }));
+    expect(texts.get(CHUNK_A_OLD)).toBe(buildEmbeddingText({ section_path: ['P'], content: 'Neutral body two.' }));
+    expect(texts.get(CHUNK_B)).toContain(MARK_B);
+    expect(texts.get(CHUNK_B)).not.toContain(MARK_A);
+  });
+
+  it('switch off: no read and the texts of today', async () => {
+    const { texts, db } = await groups(OFF_ENV);
+    expect(db.calls.filter((call) => call.fn === 'rag_attribute_headers')).toHaveLength(0);
+    for (const row of deferredRows) expect(texts.get(row.id)).toBe(buildEmbeddingText({ section_path: ['P'], content: row.content }));
+  });
+});
+
+describe('recaption with the in-step header', () => {
+  const saved = { supported: process.env.RAG_SUPPORTED_LANGUAGES, primary: process.env.RAG_PRIMARY_LANGUAGE };
+
+  beforeEach(async () => {
+    process.env.RAG_SUPPORTED_LANGUAGES = 'en,it';
+    process.env.RAG_PRIMARY_LANGUAGE = 'en';
+    (await import('@/lib/rag/lang/settings')).resetLanguageSettingsForTests();
+  });
+
+  afterEach(async () => {
+    for (const [key, value] of [['RAG_SUPPORTED_LANGUAGES', saved.supported], ['RAG_PRIMARY_LANGUAGE', saved.primary]] as const) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    (await import('@/lib/rag/lang/settings')).resetLanguageSettingsForTests();
+  });
+
+  const candidate = (id: string, tenant: string) => ({
+    id,
+    document_id: DOC_1,
+    tenant_key: tenant,
+    content: 'A blue square beside two white dots on a card.',
+    language: 'en',
+    document_language: 'it',
+    picture_document: false,
+    image_url: `https://project.example.test/storage/v1/object/public/chat-images/rag/${id}.png`,
+    image_type: 'image/png',
+    section_path: ['Pics'],
+    doc_type: 'general',
+    template_row: {},
+    profiles: [{ id: 'openai-3-small-1536', provider: 'openai', model: 'text-embedding-3-small', dims: 4 }],
+  });
+
+  async function run(env: Record<string, string>) {
+    const { runRecaption, dryRunRecaption } = await import('@/lib/rag/ingest/reembed/recaption');
+    let pages = 0;
+    const db = fakeDb({
+      rag_recaption_start_run: () => ok([{ run_id: 'run-1', tenant_key: null, cursor_chunk_id: null, status: 'running' }]),
+      rag_recaption_candidates: () => ok(pages++ % 2 === 0 ? [candidate(CHUNK_A, TENANT_A), candidate(CHUNK_A_OLD, TENANT_A), candidate(CHUNK_B, TENANT_B)] : []),
+      rag_attribute_headers: chunkHeaderAnswer,
+    });
+    setIngestDepsForTests({ db: () => db, ingestEnv: () => ({ ...env, RAG_CAPTION_LANGUAGE: 'document' }) });
+    const embedded = new Map<string, string>();
+    let current = '';
+    const report = await runRecaption({
+      db,
+      signal,
+      deps: {
+        fetchImage: async (url) => ((current = url), { bytes: new Uint8Array([1]), mimeType: 'image/png' }),
+        caption: async () => 'Un quadrato blu accanto a due punti bianchi.',
+        embed: async (_profile, texts) => (embedded.set(current, texts[0] ?? ''), texts.map(() => [1, 0, 0, 0])),
+      },
+    });
+    await dryRunRecaption({ db, signal });
+    return { report, db, embedded, writes: db.calls.filter((call) => call.fn === 'rag_recaption_write_chunk') };
+  }
+
+  it('switch on: a chunk in step gets its own header in the embedded text and in its rewritten lexical text; the others today', async () => {
+    const { report, db, embedded, writes } = await run(HEADER_ENV);
+    expect(report.recaptioned).toBe(3);
+    const urlOf = (id: string) => candidate(id, TENANT_A).image_url;
+    expect(embedded.get(urlOf(CHUNK_A))).toContain(`${MARK_A} K-1`);
+    expect(embedded.get(urlOf(CHUNK_A_OLD))).not.toContain(MARK_A);
+    expect(embedded.get(urlOf(CHUNK_B))).toContain(MARK_B);
+    expect(embedded.get(urlOf(CHUNK_B))).not.toContain(MARK_A);
+    const lexicalOf = (id: string) => String(writes.find((call) => call.args.p_chunk_id === id)?.args.p_lexical_text);
+    expect(lexicalOf(CHUNK_A)).toContain(lexicalTokens(MARK_A)[0]);
+    expect(lexicalOf(CHUNK_A_OLD)).not.toContain(lexicalTokens(MARK_A)[0]);
+    for (const call of writes) expect(String(call.args.p_content)).not.toContain('hdr');
+    const reads = db.calls.filter((call) => call.fn === 'rag_attribute_headers');
+    expect(reads.length).toBe(4);
+    expect(new Set(reads.map((call) => call.args.p_tenant_key))).toEqual(new Set([TENANT_A, TENANT_B]));
+  });
+
+  it('switch off: no header read', async () => {
+    const { db, embedded } = await run(OFF_ENV);
+    expect(db.calls.filter((call) => call.fn === 'rag_attribute_headers')).toHaveLength(0);
+    for (const text of embedded.values()) expect(text).not.toContain('hdr');
+  });
+});
