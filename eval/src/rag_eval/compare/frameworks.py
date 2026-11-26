@@ -21,7 +21,14 @@ from rag_sidecar.contracts.baseline import PairedStat
 from rag_sidecar.contracts.eval_run import RagTrace, TraceCandidate
 from rag_sidecar.contracts.report import EvalReport, ItemResult
 
-from rag_eval.paired import METRICS, RESAMPLES, SEED, _slice_members, _stat, item_metrics
+from rag_eval.paired import (
+    METRICS,
+    RESAMPLES,
+    SEED,
+    _slice_members,
+    _stat,
+    item_metrics,
+)
 from rag_eval.paths import REPO_ROOT, resolve_cli_path
 from rag_eval.traces import load_traces
 
@@ -396,9 +403,11 @@ def render_markdown(report: FrameworkComparison) -> str:
     lines += [f"> {note}" for note in report.notes]
     lines += [
         "",
-        f"Paired difference: {report.difference}, on {report.items} items. Each cell is the mean difference with its 95% "
-        f"bootstrap interval (seed {report.seed}, {report.resamples} resamples), the paired item count n and the count of "
-        "items whose value differs (nz).",
+        (
+            f"Paired difference: {report.difference}, on {report.items} items. Each cell is the mean difference with its 95% "
+            f"bootstrap interval (seed {report.seed}, {report.resamples} resamples), the paired item count n and the count "
+            "of items whose value differs (nz)."
+        ),
         "",
         f"All paired differences zero: {'yes' if report.all_zero else 'no'}.",
         "",
@@ -424,8 +433,10 @@ def render_markdown(report: FrameworkComparison) -> str:
     lines += [
         "## Fused candidate order",
         "",
-        f"Compared {order.compared} items: {order.identical} identical, {order.tie_only} differ only by tie order, "
-        f"{order.rank} differ by rank.",
+        (
+            f"Compared {order.compared} items: {order.identical} identical, {order.tie_only} differ only by tie order, "
+            f"{order.rank} differ by rank."
+        ),
         "",
     ]
     if order.tie_only_items:
