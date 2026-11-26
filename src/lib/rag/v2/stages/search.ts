@@ -1,7 +1,7 @@
 import type { RpcClient } from '../../backend/supabase-rpc';
-import { getRetrievalBackend } from '../../backend/registry';
-import type { BackendLegs, RankedHit, RetrievalFilterInput, RetrievalFilters } from '../../backend/types';
-import type { AssemblyDocumentRow } from '../../context/assemble';
+import { backendForRequest, getRetrievalBackend } from '../../backend/registry';
+import type { BackendLegs, RankedHit, RetrievalFilters, VersionScope } from '../../backend/types';
+import type { AssemblyDocumentRow, TableRowAttachment } from '../../context/assemble';
 import { fetchAssemblyRows } from '../../context/fetch-rows';
 import type { RagConfig, StageName } from '../../config';
 import { getRagDeps, type RagDeps } from '../../deps';
@@ -16,12 +16,16 @@ import {
   type QueryEmbedding,
 } from '../../embeddings/query-embedding';
 import { requireValue, runStage, StageError, stageSpec, type StageSpec } from '../../pipeline';
-import { exactIdStage, type ExactIdRow } from '../../retrieval/exact-id';
+import { exactIdStage } from '../../retrieval/exact-id';
+import { tableLookupStage, type TableLookupRow } from '../../retrieval/table-lookup';
 import type { TenantScope } from '../../tenant/scope';
 import type { TraceCollector } from '../../trace/collector';
 import type { Profile, QueryVariant, RunRetrievalInput, StageOverrides } from '../../types';
 import { getV2StartupVerdict } from '../startup';
-import { evalChunkingOverride } from '../overrides';
+import { terminologyParams } from '../../terminology/expand';
+import { reserveTerminologyHits } from '../../terminology/reserve';
+import { evalChunkingOverride, evalTuningOverrides } from '../overrides';
+import { effectiveTuningParams } from '../tuning-params';
 import { createRetrievalPort, listsFromLegs, variantSearchRequest, type RetrievalPortHandle } from '../port';
 import { bindingFailureDetail, hasBindingWork, runBindingLegs, type BindingEmbed, type BindingLegsOutput, type BindingLegsPlan } from './binding-legs';
 import {
@@ -34,6 +38,7 @@ import {
 } from '../translation-legs';
 import type { RetrievalParams } from '@/lib/rag-eval/contracts.generated';
 import type { SearchDelegate } from '../../query/port-types';
+import { effectiveVersionScope } from '../../query/filters';
 
 export interface SearchStagesInput {
   input: RunRetrievalInput;
@@ -57,7 +62,14 @@ export interface SearchStagesInput {
   searchDelegate?: SearchDelegate;
   /** Planned translation legs (XLG-04, D-30); absent or empty runs none. */
   translations?: TranslationLegsPlan;
+  /** D-16: the terminology stage's expansion; non-empty tokens add one lexical-only term:0 list. */
+  terminology?: { tokens: readonly string[]; expansionWeight: number; reserveSlots?: number } | null;
+  /** D-18: factor on the dense leg weight for a variant of kind terminology; absent reads TerminologyParams.dense_weight. */
+  terminologyDenseWeight?: number;
 }
+
+/** D-16: the expansion list id; no dense/lexical prefix, so nothing that inspects list ids by prefix counts it as a leg. */
+export const TERMINOLOGY_LIST_ID = 'term:0';
 
 function evalEmbeddingProfileId(input: RunRetrievalInput): string | undefined {
   return input.profile === 'eval' ? input.options?.embeddingProfile : undefined;
@@ -116,11 +128,28 @@ const BINDING_STAGE_MARGIN_MS = 10;
 export interface SearchStagesOutput {
   fusedHits: FusedHit[];
   dedupeCounts: DedupeCounts;
+  /** D-12: the version scope this request read; the context stage and later legs read this one value. */
+  versionScope: VersionScope;
+  /** D-17: the matched table row per chunk of the table:0 list; absent when the list is empty. */
+  tableRows?: ReadonlyMap<string, TableRowAttachment>;
 }
 
+/** D-12, D-40: fixed trace codes of the search stage detail. */
+export const VERSIONS_IGNORED = 'versions_ignored';
+export const SUPERSEDED_DENSE_UNAVAILABLE = 'superseded_dense_unavailable';
+export const BACKEND_FIELD_UNSUPPORTED = 'backend_field_unsupported';
+/** D-45: the table_lookup stage detail when a narrowing filter makes it stand down. */
+export const TABLE_LOOKUP_NARROWED = 'narrowing_filters';
+export const TABLE_LIST_ID = 'table:0';
+
 function buildFilters(input: RunRetrievalInput): RetrievalFilters {
-  const extra: RetrievalFilterInput = input.retrievalFilters ?? {};
+  const { versionScope: _versionScope, ...extra } = input.retrievalFilters ?? {};
   return { currentOnly: true, ...extra };
+}
+
+function joinDetail(parts: readonly (string | undefined)[]): string | undefined {
+  const present = parts.filter((part): part is string => part !== undefined && part.length > 0);
+  return present.length > 0 ? present.join(';') : undefined;
 }
 
 function nonEmpty(values: readonly unknown[] | undefined): boolean {
@@ -159,8 +188,16 @@ function legHitsByChunkId(legsByVariant: BackendLegs[]): Map<string, RankedHit> 
   return map;
 }
 
-function hitFromExactRow(
-  row: ExactIdRow,
+/** The fields a lookup leg's row shares with a search hit: exact-id and table rows alike. */
+interface LookupRow {
+  chunk_id: string;
+  document_id: string;
+  content: string;
+  metadata: Record<string, unknown> | null;
+}
+
+function hitFromLookupRow(
+  row: LookupRow,
   rank: number,
   doc: AssemblyDocumentRow | undefined,
   chunkMeta: Record<string, unknown> | null | undefined,
@@ -189,15 +226,16 @@ function hitFromExactRow(
   };
 }
 
-async function exactIdRankedList(
-  rows: ExactIdRow[],
+async function lookupRankedList(
+  id: string,
+  weight: number,
+  rows: LookupRow[],
   legsByVariant: BackendLegs[],
-  params: RetrievalParams,
   signal: AbortSignal,
 ): Promise<RankedList | null> {
   if (rows.length === 0) return null;
   const known = legHitsByChunkId(legsByVariant);
-  const missing: ExactIdRow[] = [];
+  const missing: LookupRow[] = [];
   const hits: RankedHit[] = [];
   for (let index = 0; index < rows.length; index++) {
     const row = rows[index]!;
@@ -208,7 +246,7 @@ async function exactIdRankedList(
       continue;
     }
     missing.push(row);
-    hits.push(hitFromExactRow(row, rank, undefined, row.metadata));
+    hits.push(hitFromLookupRow(row, rank, undefined, row.metadata));
   }
   if (missing.length > 0) {
     const adminClient = getRagDeps().adminClient();
@@ -228,11 +266,22 @@ async function exactIdRankedList(
       if (known.has(row.chunk_id)) continue;
       const hitIndex = hits.findIndex((entry) => entry.chunkId === row.chunk_id);
       if (hitIndex < 0) continue;
-      hits[hitIndex] = hitFromExactRow(row, index + 1, assembly.documents.get(row.document_id), assembly.chunkMetadata.get(row.chunk_id));
+      hits[hitIndex] = hitFromLookupRow(row, index + 1, assembly.documents.get(row.document_id), assembly.chunkMetadata.get(row.chunk_id));
     }
   }
-  const weight = params.leg_weights?.exact_id ?? 1;
-  return { id: 'exact_id', weight, hits };
+  return { id, weight, hits };
+}
+
+/** One hit per matched row, its first qualifying chunk; a chunk two rows share is listed once, with the better row. */
+function tableListRows(rows: TableLookupRow[]): { rows: TableLookupRow[]; attachments: Map<string, TableRowAttachment> } {
+  const attachments = new Map<string, TableRowAttachment>();
+  const kept: TableLookupRow[] = [];
+  for (const row of rows) {
+    if (attachments.has(row.chunk_id)) continue;
+    attachments.set(row.chunk_id, { header: row.header, cells: row.cells });
+    kept.push(row);
+  }
+  return { rows: kept, attachments };
 }
 
 /** D-06: the standalone variant is the condensed one when present, else the original; never hyde, expanded or translated. */
@@ -296,12 +345,26 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
   const spec = (name: StageName, onFail: StageSpec['onFail']) => stageSpec(config, profile, name, onFail, stageOverrides);
   const pool = params.candidate_pool_size;
   const filters = ctx.filters ?? buildFilters(input);
-  const backend = getRetrievalBackend();
+  // D-58: the embed channel (set server-side by the embed route) also needs config.v2.embedVersionScope; the rule lives in effectiveVersionScope.
+  const versions = effectiveVersionScope(config, profile, input.retrievalFilters?.versionScope, input.channel);
+  const historyScope = versions.scope === 'current' ? undefined : versions.scope;
+  const route = historyScope ? backendForRequest({ versionScope: historyScope }) : { backend: getRetrievalBackend() };
+  const backend = route.backend;
+  const versionScopeArg = historyScope ? { versionScope: historyScope } : {};
+  const versionCodes = [
+    versions.ignored ? VERSIONS_IGNORED : undefined,
+    historyScope ? SUPERSEDED_DENSE_UNAVAILABLE : undefined,
+    route.reason === 'backend_field_unsupported' ? BACKEND_FIELD_UNSUPPORTED : undefined,
+  ];
+  const versionDegraded = route.reason === 'backend_field_unsupported';
   const lexicalEnabled = config.v2.lexicalSearch;
   const verdict = getV2StartupVerdict();
   const icuSkipLexical = lexicalEnabled && !verdict.icuAvailable;
   const chunkingOverride = evalChunkingOverride(profile, stageOverrides?.retrievalOverrides);
   const bindings = ctx.bindings && hasBindingWork(ctx.bindings.plan) ? ctx.bindings : null;
+  // D-18, D-34: the terminology variant's dense list weighs dense_weight × the dense leg weight in force, read at run time.
+  const terminologyDenseWeight = ctx.terminologyDenseWeight ?? terminologyParams().dense_weight;
+  const denseFactor = (index: number): number => (variants[index]?.kind === 'terminology' ? terminologyDenseWeight : 1);
   const searchSpec = spec('search', 'throw');
   const bindingTimeoutMs = Math.max(
     1,
@@ -344,9 +407,33 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
         })
       : Promise.resolve(null);
 
+  // D-16: one lexical-only call (no vector, dense limit 0) under the same scope, filters and chunking override as the other legs.
+  const termTokens = ctx.terminology && lexicalEnabled && verdict.icuAvailable ? [...ctx.terminology.tokens] : [];
+  const runTermLeg = (stageSignal: AbortSignal): Promise<RankedHit[] | null> =>
+    termTokens.length > 0
+      ? backend
+          .search({
+            scope,
+            embeddingProfileId: embedding.profile?.id ?? LEGACY_PROFILE.id,
+            denseVector: null,
+            lexicalTokens: termTokens,
+            lexicalLanguages: null,
+            filters,
+            denseLimit: 0,
+            lexicalLimit: pool,
+            signal: stageSignal,
+            ...(chunkingOverride ? { chunkingProfileOverride: chunkingOverride } : {}),
+            ...versionScopeArg,
+          })
+          .then((legs) => legs.lexical)
+      : Promise.resolve(null);
+
   const runDelegatedSearch = async (stageSignal: AbortSignal, delegate: SearchDelegate) => {
     const domainPending = runDomainLegs(stageSignal);
     const translationPending = runTranslations(stageSignal);
+    const termPending = runTermLeg(stageSignal);
+    // Awaited below; a delegate failure first must not leave the term call's rejection unhandled.
+    termPending.catch(() => undefined);
     const handle = createRetrievalPort({
       scope,
       backend,
@@ -358,6 +445,8 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       embed: async () => variants.map((_variant, index) => ctx.variantEmbeddings?.[index] ?? embedding),
       lexicalEnabled: lexicalEnabled && verdict.icuAvailable,
       ...(chunkingOverride ? { chunkingProfileOverride: chunkingOverride } : {}),
+      ...versionScopeArg,
+      terminologyDenseWeight,
     });
     let order: unknown;
     try {
@@ -376,12 +465,14 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     const legsByVariant = handle.collectedLegs();
     const domain = await domainPending;
     const translation = await translationPending;
+    const term = await termPending;
     return {
       legsByVariant,
       denseTotal: legsByVariant.reduce((total, legs) => total + legs.dense.length, 0),
       lexicalTotal: legsByVariant.reduce((total, legs) => total + legs.lexical.length, 0),
       domain,
       translation,
+      term,
       delegated: { handle, order: order as string[] } as DelegatedFusion | null,
     };
   };
@@ -392,8 +483,9 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     let lexicalTotal = 0;
     const domainPending = runDomainLegs(stageSignal);
     const translationPending = runTranslations(stageSignal);
-    const legsByVariant = await Promise.all(
-      variants.map(async (variant, index) => {
+    const [term, ...legsByVariant] = await Promise.all([
+      runTermLeg(stageSignal),
+      ...variants.map(async (variant, index) => {
         const legs = await backend.search(
           variantSearchRequest({
             scope,
@@ -404,45 +496,48 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
             lexicalEnabled: lexicalEnabled && verdict.icuAvailable,
             signal: stageSignal,
             chunkingProfileOverride: chunkingOverride,
+            ...versionScopeArg,
           }),
         );
         denseTotal += legs.dense.length;
         lexicalTotal += legs.lexical.length;
         return legs;
       }),
-    );
+    ]) as [RankedHit[] | null, ...BackendLegs[]];
     const domain = await domainPending;
     const translation = await translationPending;
-    return { legsByVariant, denseTotal, lexicalTotal, domain, translation, delegated: null as DelegatedFusion | null };
+    return { legsByVariant, denseTotal, lexicalTotal, domain, translation, term, delegated: null as DelegatedFusion | null };
   };
 
   type SearchResult = Awaited<ReturnType<typeof runBackendSearch>>;
 
   const searchCounts = (value: {
+    legsByVariant: BackendLegs[];
     denseTotal: number;
     lexicalTotal: number;
     domain: BindingLegsOutput | null;
     translation: TranslationLegsOutput | null;
+    term: RankedHit[] | null;
   }) => ({
     dense: value.denseTotal,
     lexical: value.lexicalTotal,
     ...(value.domain ? value.domain.counts : {}),
     ...(value.translation ? value.translation.counts : {}),
+    ...(value.term ? { term: value.term.length } : {}),
+    ...(historyScope ? { superseded: supersededCount(value) } : {}),
   });
 
   const extraFailed = (value: SearchResult): boolean =>
     (value.domain !== null && value.domain.failures.length > 0) || (value.translation !== null && value.translation.failures.length > 0);
-  const extraDetail = (value: SearchResult): string | undefined => {
-    const parts = [value.domain ? bindingFailureDetail(value.domain.failures) : undefined, translationDetail(value.translation)].filter(
-      (part): part is string => part !== undefined,
-    );
-    return parts.length > 0 ? parts.join(';') : undefined;
-  };
+  const extraDetail = (value: SearchResult): string | undefined =>
+    joinDetail([value.domain ? bindingFailureDetail(value.domain.failures) : undefined, translationDetail(value.translation)]);
+  const hasVersionCodes = versionCodes.some((code) => code !== undefined);
 
   let searchValue: Awaited<ReturnType<typeof runBackendSearch>>['legsByVariant'];
   let domainLists: RankedList[] = [];
   let translationOutput: TranslationLegsOutput | null = null;
   let delegated: DelegatedFusion | null = null;
+  let termHits: RankedHit[] | null = null;
   if (icuSkipLexical) {
     const startedAt = collector.now();
     let searched: SearchResult;
@@ -464,13 +559,13 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     domainLists = searched.domain?.lists ?? [];
     translationOutput = searched.translation;
     delegated = searched.delegated;
-    const translationNote = translationDetail(searched.translation);
+    termHits = searched.term;
     collector.record({
       name: 'search',
       status: 'degraded',
       startedAt,
       endedAt: collector.now(),
-      detail: translationNote ? `lexical_icu_unavailable;${translationNote}` : 'lexical_icu_unavailable',
+      detail: joinDetail(['lexical_icu_unavailable', translationDetail(searched.translation), ...versionCodes])!,
       counts: searchCounts(searched),
       candidatesOut: searched.denseTotal + searched.lexicalTotal,
     });
@@ -485,11 +580,12 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
           candidatesOut: (value) => value.denseTotal + value.lexicalTotal,
           counts: searchCounts,
           ...(ctx.searchDelegate ? { failureDetail: delegateFailureDetail } : {}),
-          ...(bindings || translations
+          ...(bindings || translations || hasVersionCodes
             ? {
                 // D-19, D-30: a dropped binding or translation leg degrades the stage; the original legs and the answer continue.
-                status: (value) => (extraFailed(value) ? 'degraded' : 'ok'),
-                detail: extraDetail,
+                // D-12: a backend that cannot serve the version scope is replaced by pgvector and degrades the stage too.
+                status: (value) => (extraFailed(value) || versionDegraded ? 'degraded' : 'ok'),
+                detail: (value) => joinDetail([extraDetail(value), ...versionCodes]),
               }
             : {}),
         },
@@ -500,6 +596,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     domainLists = searched.domain?.lists ?? [];
     translationOutput = searched.translation;
     delegated = searched.delegated;
+    termHits = searched.term;
   }
   // Mapped to source chunks before fusion; a chunk the original legs also found keeps the original hit (D-30).
   const translationLists =
@@ -513,7 +610,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       hasNarrowingFilters(filters) ? { ...exactSpec, enabled: false } : exactSpec,
       signal,
       (stageSignal) =>
-        exactIdStage(input.query, scope, { client: requireAdminSearchClient(getRagDeps()), signal: stageSignal, limit: pool }),
+        exactIdStage(input.query, scope, { client: requireAdminSearchClient(getRagDeps()), signal: stageSignal, limit: pool, ...versionScopeArg }),
       collector,
       {
         candidatesIn: searchValue.reduce((total, legs) => total + legs.dense.length + legs.lexical.length, 0),
@@ -522,21 +619,59 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       },
     );
     if (!exact.skipped && exact.value.rows.length > 0) {
-      exactList = await exactIdRankedList(exact.value.rows, searchValue, params, signal);
+      exactList = await lookupRankedList('exact_id', params.leg_weights?.exact_id ?? 1, exact.value.rows, searchValue, signal);
     }
   }
+
+  // D-16, D-45: the structured table leg, one deterministic list of matched rows' chunks. It takes no filter arguments either, so a
+  // narrowing filter makes it stand down; the version scope is passed through.
+  let tableList: RankedList | null = null;
+  let tableRows: Map<string, TableRowAttachment> | undefined;
+  if (config.v2.tableLookup) {
+    const tableSpec = spec('table_lookup', 'skip');
+    const candidatesIn = searchValue.reduce((total, legs) => total + legs.dense.length + legs.lexical.length, 0);
+    if (tableSpec.enabled && hasNarrowingFilters(filters)) {
+      const at = collector.now();
+      collector.record({ name: 'table_lookup', status: 'disabled', reason: 'disabled', startedAt: at, endedAt: at, candidatesIn, detail: TABLE_LOOKUP_NARROWED });
+    } else {
+      const tuning = effectiveTuningParams(profile, config, evalTuningOverrides(profile, input.stageOverrides?.retrievalOverrides)).tableLookup;
+      const table = await runStage(
+        tableSpec,
+        signal,
+        (stageSignal) =>
+          tableLookupStage(input.query, scope, tuning, { client: requireAdminSearchClient(getRagDeps()), signal: stageSignal, ...versionScopeArg }),
+        collector,
+        {
+          candidatesIn,
+          candidatesOut: (value) => value.rows.length,
+          detail: (value) => `tokens=${value.tokenCount} rows=${value.rows.length}`,
+        },
+      );
+      if (!table.skipped && table.value.rows.length > 0) {
+        const listed = tableListRows(table.value.rows);
+        tableList = await lookupRankedList(TABLE_LIST_ID, tuning.weight, listed.rows, searchValue, signal);
+        if (tableList) tableRows = listed.attachments;
+      }
+    }
+  }
+
+  // D-16: weight = expansion_weight × the lexical leg weight in force, so the list stays a fraction of the lexical leg.
+  const termList: RankedList | null =
+    termHits && termHits.length > 0 && ctx.terminology
+      ? { id: TERMINOLOGY_LIST_ID, weight: ctx.terminology.expansionWeight * (params.leg_weights?.lexical ?? 1), hits: termHits }
+      : null;
 
   const fused = requireValue(
     await runStage(
       spec('fuse', 'throw'),
       signal,
       () => {
-        const extraLists = [...(exactList ? [exactList] : []), ...domainLists, ...translationLists];
+        const extraLists = [...(exactList ? [exactList] : []), ...(tableList ? [tableList] : []), ...domainLists, ...translationLists, ...(termList ? [termList] : [])];
         let fusedHits: FusedHit[];
         if (delegated) {
           fusedHits = delegatedFusion(delegated, extraLists, params.rrf_k);
         } else {
-          const lists = searchValue.flatMap((legs, index) => listsFromLegs(index, legs.dense, legs.lexical, params));
+          const lists = searchValue.flatMap((legs, index) => listsFromLegs(index, legs.dense, legs.lexical, params, denseFactor(index)));
           lists.push(...extraLists);
           fusedHits = rrf(lists, params.rrf_k);
         }
@@ -549,10 +684,19 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     'fuse',
   );
 
+  // D-34: bounded rerank-input places for term:0-only hits; absent reserveSlots reads TerminologyParams.reserve_slots.
+  const reserve = (result: DedupeResult): DedupeResult =>
+    termList && ctx.terminology
+      ? reserveTerminologyHits(result, fused, termList.hits, {
+          reserveSlots: ctx.terminology.reserveSlots ?? terminologyParams().reserve_slots,
+          byParent: config.v2.parentChild,
+        })
+      : result;
+
   const deduped = await runStage(
     spec('dedupe', 'skip'),
     signal,
-    () => dedupeAndCap(fused, { byParent: config.v2.parentChild, cap: params.rerank_input_cap }),
+    () => reserve(dedupeAndCap(fused, { byParent: config.v2.parentChild, cap: params.rerank_input_cap })),
     collector,
     {
       candidatesIn: fused.length,
@@ -561,9 +705,16 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     },
   );
 
-  const capped = deduped.skipped ? sliceCap(fused, params.rerank_input_cap) : deduped.value;
+  const capped = deduped.skipped ? reserve(sliceCap(fused, params.rerank_input_cap)) : deduped.value;
 
-  return { fusedHits: capped.hits, dedupeCounts: capped.counts };
+  return { fusedHits: capped.hits, dedupeCounts: capped.counts, versionScope: versions.scope, ...(tableRows ? { tableRows } : {}) };
+}
+
+function supersededCount(value: { legsByVariant: BackendLegs[]; term: RankedHit[] | null }): number {
+  const ids = new Set<string>();
+  for (const legs of value.legsByVariant) for (const hit of [...legs.dense, ...legs.lexical]) if (hit.isCurrent === false) ids.add(hit.chunkId);
+  for (const hit of value.term ?? []) if (hit.isCurrent === false) ids.add(hit.chunkId);
+  return ids.size;
 }
 
 async function runAgainstSignal<T>(parent: AbortSignal, fn: (signal: AbortSignal) => Promise<T>): Promise<T> {

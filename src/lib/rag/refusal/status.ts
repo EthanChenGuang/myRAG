@@ -1,12 +1,11 @@
 import rawThresholds from '../../../../eval/config/refusal-thresholds.json';
 import type { RefusalThresholds } from '@/lib/rag-eval/contracts.generated';
-import { parseRefusalThresholds } from './thresholds';
-import { loadRagConfig, type RagConfig, type RerankerKind, type RerankTier } from '../config';
+import { effectiveLexicalVersion, loadRagConfig, type RagConfig, type RerankerKind, type RerankTier } from '../config';
 import { getRagDeps } from '../deps';
-import { LEXICAL_VERSION } from '../lexical/chunk-text';
 import { describeReranker } from '../rerank/select';
 import { RERANK_TEXT_VERSION, type RerankScoreSemantics } from '../rerank/types';
-import type { QueryLanguage } from './gate';
+import type { CellMode, QueryLanguage } from './gate';
+import { parseThresholds } from './thresholds';
 
 type ThresholdCellEntry = NonNullable<RefusalThresholds['cells']>[number];
 type SplitMetrics = ThresholdCellEntry['dev'];
@@ -32,6 +31,8 @@ export interface RefusalSplitStatus {
 
 export interface RefusalCellStatus {
   key: string;
+  /** D-24: present only on a per-mode cell. */
+  mode?: CellMode;
   provider: string;
   model: string;
   query_language: QueryLanguage;
@@ -87,9 +88,10 @@ function split(metrics: SplitMetrics): RefusalSplitStatus {
   };
 }
 
-function cellStatus(cell: ThresholdCellEntry): RefusalCellStatus {
+function cellStatus(cell: ThresholdCellEntry, lexicalVersion: number): RefusalCellStatus {
   return {
     key: cell.key,
+    ...(cell.mode ? { mode: cell.mode } : {}),
     provider: cell.provider,
     model: cell.model,
     query_language: cell.query_language,
@@ -97,7 +99,7 @@ function cellStatus(cell: ThresholdCellEntry): RefusalCellStatus {
     status: cell.status,
     source: cell.source,
     threshold: cell.threshold ?? null,
-    stale: cell.tokenizer_version !== LEXICAL_VERSION || cell.rerank_text_version !== RERANK_TEXT_VERSION,
+    stale: cell.tokenizer_version !== lexicalVersion || cell.rerank_text_version !== RERANK_TEXT_VERSION,
     tokenizer_version: cell.tokenizer_version,
     rerank_text_version: cell.rerank_text_version,
     recorded_at: cell.recorded_at,
@@ -129,7 +131,8 @@ export function refusalCalibrationStatus(thresholds: RefusalThresholds | null, c
     tiers[tier] = { tier: tier === 'voice' ? config.v2.rerankTier.voice : config.v2.rerankTier.chat, models };
   }
 
-  const cells = (thresholds?.cells ?? []).map(cellStatus);
+  const lexicalVersion = effectiveLexicalVersion(config);
+  const cells = (thresholds?.cells ?? []).map((cell) => cellStatus(cell, lexicalVersion));
   const warnings: RefusalStatusWarning[] = [];
 
   if (thresholds === null) {
@@ -189,7 +192,7 @@ export function refusalCalibrationStatus(thresholds: RefusalThresholds | null, c
     pipeline: config.pipeline,
     refusal_threshold: config.v2.refusalThreshold,
     reranker: { provider, score_semantics: semantics, tiers },
-    versions: { tokenizer: LEXICAL_VERSION, rerank_text: RERANK_TEXT_VERSION },
+    versions: { tokenizer: lexicalVersion, rerank_text: RERANK_TEXT_VERSION },
     config_hash: thresholds?.config_hash ?? null,
     labels: { false_refusal_point_estimate: 'point estimate', false_refusal_upper_bound_95: '95% upper bound' },
     cells,
@@ -199,6 +202,5 @@ export function refusalCalibrationStatus(thresholds: RefusalThresholds | null, c
 
 /** The status of the committed thresholds file (read by static import) under the running config. */
 export function currentRefusalCalibrationStatus(): RefusalCalibrationStatus {
-  const parsed = parseRefusalThresholds(rawThresholds);
-  return refusalCalibrationStatus(parsed.success ? parsed.data : null, loadRagConfig(getRagDeps().ragEnv()));
+  return refusalCalibrationStatus(parseThresholds(rawThresholds), loadRagConfig(getRagDeps().ragEnv()));
 }

@@ -166,7 +166,7 @@ describe('Phase 3.2 migration block files', () => {
       const last = blockIndexes[blockIndexes.length - 1] as number;
       assert.equal(last - first + 1, BLOCK_NAMES.length, `${mode}: no other file sorts inside the block`);
       assert.deepEqual(files.slice(0, first).filter((file) => numberOf(file) >= 800), [], `${mode}: every earlier file is numbered below 0800`);
-      assert.deepEqual(files.slice(last + 1).filter((file) => !isLaterPhase32(file)), [], `${mode}: only Phase 3.2 files (0811-0899) follow`);
+      assert.deepEqual(files.slice(last + 1).filter((file) => numberOf(file) < 900 && !isLaterPhase32(file)), [], `${mode}: below 0900 only Phase 3.2 files (0811-0899) follow`);
     }
   });
 
@@ -224,9 +224,10 @@ for (const mode of MODES) {
       }
     });
 
-    test('re-running 0316, 0425, 0426 and 0602 then the 08xx files restores every Phase 3.2 function with one overload', async () => {
+    test('re-running 0314, 0316, 0425, 0426 and 0602 then the 08xx files restores every Phase 3.2 function with one overload', async () => {
       const files = migrationFiles(mode);
-      const older = files.filter((file) => ['0316', '0425', '0426', '0602'].includes(stemOf(file).slice(0, 4)) && file.endsWith('.sql'));
+      // 0314 runs first since 0856 changed the rag_exact_id_documents signature that the 0425 precheck names (0856 header).
+      const older = files.filter((file) => ['0314', '0316', '0425', '0426', '0602'].includes(stemOf(file).slice(0, 4)) && file.endsWith('.sql'));
       assert.equal(older.filter((file) => stemOf(file).startsWith('0425_')).length, 2, '0425 runs with its mode file');
       assert.equal(older.filter((file) => stemOf(file).startsWith('0316_')).length, 2, '0316 runs with its mode file');
       const phase32 = files.filter((file) => numberOf(file) >= 801);

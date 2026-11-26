@@ -17,6 +17,8 @@ PR = ROOT / ".github" / "workflows" / "pr-smoke.yml"
 NIGHTLY = ROOT / ".github" / "workflows" / "nightly.yml"
 RAY_OPTIONAL = ROOT / ".github" / "workflows" / "ray-optional.yml"
 DOCKERFILE = ROOT / "rag-sidecar" / "Dockerfile"
+SIDECAR_CONFIG_DIR = ROOT / "rag-sidecar" / "config" / "rag"
+SIDECAR_TEST_EXTRAS = ("chunking", "preflight", "hidden-text")
 
 TESTS_DIR = ROOT / "tests"
 TSX_GLOB = "tests/*.test.mts"
@@ -279,20 +281,7 @@ def check_pr(errors: list[str]) -> None:
             for step in all_steps(voice)
         ):
             errors.append("pr-smoke: job voice-agent must run npm test in the voice-agent working directory")
-    py_job = jobs.get("python")
-    if py_job is not None:
-        body = step_text(py_job)
-        for needle in (
-            "uv sync --directory rag-sidecar --locked --extra chunking",
-            "uv sync --directory rag-sidecar --locked --extra preflight",
-            "uv run --directory rag-sidecar --extra chunking pytest -q",
-        ):
-            if needle not in body:
-                errors.append(f"pr-smoke: job python is missing '{needle}'")
-        if "--extra docling" in body:
-            errors.append("pr-smoke: job python must not install the heavy docling extra")
-        if "--extra ray" in body:
-            errors.append("pr-smoke: job python must not install the ray extra")
+    check_python_job(jobs.get("python"), errors)
     sp = jobs.get("schema-parity")
     if sp is not None:
         body = step_text(sp)
@@ -303,21 +292,59 @@ def check_pr(errors: list[str]) -> None:
         if job is not None and "npm ci" not in step_text(job):
             errors.append(f"pr-smoke: job {jname} must install with npm ci")
     check_next_build(jobs.get("next-build"), errors)
-    docker = jobs.get("docker-build")
-    if docker is not None:
-        body = step_text(docker)
-        for needle in (
-            "docker build -t rag-sidecar:ci rag-sidecar",
-            "/app/config/rag/",
-            "load_routing_config()",
-            "load_processing_profiles()",
-            "/health",
-            "/ready",
-            "/v1/info",
-            "RAG_SIDECAR_SECRET",
-        ):
-            if needle not in body:
-                errors.append(f"pr-smoke: job docker-build is missing '{needle}'")
+    check_docker_build(jobs.get("docker-build"), errors)
+
+
+def check_python_job(job: dict | None, errors: list[str]) -> None:
+    """
+    The sidecar tests need the chunking, preflight and hidden-text extras at once. Each `uv sync` and `uv run --extra` installs exactly
+    the extras it names and removes the rest, so one sync and the pytest run must both name all three.
+    """
+    if job is None:
+        return
+    body = step_text(job)
+    syncs = [line for line in body.splitlines() if "uv sync --directory rag-sidecar" in line]
+    runs = [line for line in body.splitlines() if "uv run --directory rag-sidecar" in line and "pytest" in line]
+    for kind, lines in (("sync", syncs), ("pytest run", runs)):
+        if not lines:
+            errors.append(f"pr-smoke: job python has no rag-sidecar {kind}")
+            continue
+        for line in lines:
+            if "--locked" not in line:
+                errors.append(f"pr-smoke: job python rag-sidecar {kind} must use --locked: {line.strip()}")
+            missing = [extra for extra in SIDECAR_TEST_EXTRAS if f"--extra {extra}" not in line]
+            if missing:
+                errors.append(f"pr-smoke: job python rag-sidecar {kind} must name every test extra (missing {', '.join(missing)}): {line.strip()}")
+    if "--extra docling" in body:
+        errors.append("pr-smoke: job python must not install the heavy docling extra")
+    if "--extra ray" in body:
+        errors.append("pr-smoke: job python must not install the ray extra")
+
+
+def check_docker_build(job: dict | None, errors: list[str]) -> None:
+    """The sidecar image must ship every config copy under rag-sidecar/config/rag/, byte-equal to config/rag/."""
+    if job is None:
+        return
+    body = step_text(job)
+    for needle in (
+        "docker build -t rag-sidecar:ci rag-sidecar",
+        "/app/config/rag/",
+        "load_routing_config()",
+        "load_processing_profiles()",
+        "/health",
+        "/ready",
+        "/v1/info",
+        "RAG_SIDECAR_SECRET",
+    ):
+        if needle not in body:
+            errors.append(f"pr-smoke: job docker-build is missing '{needle}'")
+    for name in sidecar_config_copies():
+        if name not in body:
+            errors.append(f"pr-smoke: job docker-build does not compare the image copy of config/rag/{name}")
+
+
+def sidecar_config_copies() -> list[str]:
+    return sorted(p.name for p in SIDECAR_CONFIG_DIR.glob("*.json"))
 
 
 def check_shards(jname: str, job: dict, flag: str, errors: list[str]) -> None:

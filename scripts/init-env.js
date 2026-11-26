@@ -385,6 +385,8 @@ RAG_LEXICAL_DICTIONARY=false
 RAG_LEXICAL_STEM_IT=false
 # Requests may ask for earlier document versions (needs RAG_LEXICAL_SEARCH=true)
 RAG_VERSION_SCOPE=false
+# Embedded chat may request earlier versions only while this and RAG_VERSION_SCOPE are on
+RAG_EMBED_VERSION_SCOPE=false
 # Structured table row lookup (needs the table-rows backfill)
 RAG_TABLE_LOOKUP=false
 # Group near-duplicate passages across documents (needs the dup-cluster backfill)
@@ -571,6 +573,22 @@ RAG_DOMAIN_EMBEDDING_TIMEOUT_MS=800
 RAG_QWEN_EMBED_FALLBACK=openrouter
 # Primary host for the Qwen embedding provider: deepinfra | openrouter (openrouter needs only OPENROUTER_API_KEY; the fallback then goes to DeepInfra when a key is set)
 RAG_QWEN_EMBED_PRIMARY=deepinfra
+# Fine-tuned embedding slots: off | on (any other value is off). Bind, consent and activation are CLI-only (npm run rag:embedding)
+RAG_FINETUNE=off
+# Shared key for the fine-tuned slot endpoints (may stay empty on a private network)
+RAG_FT_EMBED_API_KEY=
+# Slot A: OpenAI-compatible base URL (POST {base}/embeddings), model version id, query and document prompts
+RAG_FT_SLOT_A_BASE_URL=
+RAG_FT_SLOT_A_MODEL=
+RAG_FT_SLOT_A_QUERY_PROMPT=
+RAG_FT_SLOT_A_DOCUMENT_PROMPT=
+# Slot B: same settings as slot A
+RAG_FT_SLOT_B_BASE_URL=
+RAG_FT_SLOT_B_MODEL=
+RAG_FT_SLOT_B_QUERY_PROMPT=
+RAG_FT_SLOT_B_DOCUMENT_PROMPT=
+# Host for the OpenAI embedding model: openai | openrouter (openrouter sends embedding requests to OpenRouter with OPENROUTER_API_KEY, same model and vectors; the OpenAI Batch API is then unavailable and backfills embed in sync)
+RAG_OPENAI_EMBEDDINGS_VIA=openai
 
 # -----------------------------
 # INGESTION (Phase 3.1 queue)
@@ -616,7 +634,7 @@ RAG_PRIMARY_LANGUAGE=
 # Language-aware chunking, sentence splitting and OCR: off | on
 RAG_LANGUAGE_AWARE_INGEST=off
 # Repeat table headers in split table chunks: profile | always
-RAG_TABLE_HEADER_REPEAT=profile
+RAG_TABLE_HEADER_REPEAT=always
 # Add "column = value" lines per table row to the search text: true | false
 RAG_TABLE_ROW_SERIALIZATION=false
 # Image caption language: en | document
@@ -645,6 +663,19 @@ RAG_SUPERSESSION_DETECT=off
 RAG_EFFECTIVE_DATES=false
 # Read effective dates with a model when rules find none: true | false
 RAG_EFFECTIVE_DATE_LLM_EXTRACT=false
+# Templated collections (Phase 3.3)
+# Split documents at the headings of the workspace's section rule set (needs the unified ingest pipeline): off | on
+RAG_SECTION_RULES=off
+# Remove repeated page lines before chunking (needs the unified ingest pipeline): off | detect | rules | both
+RAG_PAGE_BOILERPLATE=off
+# Store schema-checked attributes with documents and chunks (needs the unified ingest pipeline): true | false
+RAG_DOC_ATTRIBUTES=false
+# Add the rendered attribute header line to embedding and keyword text (needs RAG_DOC_ATTRIBUTES=true): true | false
+RAG_ATTRIBUTE_HEADER=false
+# Limit or rank retrieval by matched attributes (needs RAG_DOC_ATTRIBUTES=true and RAG_PIPELINE=v2): off | hard | soft
+RAG_ATTRIBUTE_FILTER=off
+# Numbers with unit symbols match as single lexical tokens (needs relex): true | false
+RAG_LEXICAL_QUANTITY=false
 
 # Voyage embeddings
 VOYAGE_API_KEY=

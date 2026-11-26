@@ -237,3 +237,29 @@ describe('storeBypassReason', () => {
     expect(storeBypassReason(storeFacts(SAFE.en, { profile: 'eval' }))).toBe('profile');
   });
 });
+
+describe('version scope (D-14, D-47)', () => {
+  const q = SAFE.en;
+
+  it.each([['all' as const], [{ from: '2026-01-01' }], [{ to: '2026-06-30' }], [{ from: '2026-01-01', to: '2026-06-30' }]])(
+    'bypasses check and store for versionScope %j',
+    (versionScope) => {
+      expect(checkBypassReason(facts(q, { versionScope }))).toBe('version_scope');
+      expect(storeBypassReason(storeFacts(q, { versionScope }))).toBe('version_scope');
+    },
+  );
+
+  it('keeps today\'s result for versionScope current or absent', () => {
+    expect(checkBypassReason(facts(q, { versionScope: 'current' }))).toBeNull();
+    expect(storeBypassReason(storeFacts(q, { versionScope: 'current' }))).toBeNull();
+    expect(checkBypassReason(facts(q))).toBeNull();
+    expect(checkBypassReason(facts(q, { versionScope: 'current', webSearch: true }))).toBe('tools');
+  });
+
+  it('still answers invalid_facts for malformed facts', () => {
+    const broken = { ...facts(q, { versionScope: 'all' }), gate: null } as unknown as TurnFacts;
+    expect(checkBypassReason({ ...broken, profile: 'chat', ragMode: 'strict' })).not.toBeNull();
+    const malformed = { profile: 'chat', ragMode: 'strict' } as unknown as TurnFacts;
+    expect(checkBypassReason(malformed)).toBe('invalid_facts');
+  });
+});

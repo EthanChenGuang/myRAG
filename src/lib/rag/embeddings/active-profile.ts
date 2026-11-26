@@ -278,6 +278,9 @@ const KEY_BY_PROVIDER: Record<string, () => unknown> = {
   openai: () => env.OPENAI_API_KEY,
   voyage: () => env.VOYAGE_API_KEY,
   qwen3: () => env.DEEPINFRA_API_KEY,
+  // The slot key may be empty on a private network, so the endpoint stands in for it (06.1 D-02).
+  ft_slot_a: () => env.RAG_FT_SLOT_A_BASE_URL,
+  ft_slot_b: () => env.RAG_FT_SLOT_B_BASE_URL,
 };
 
 /** Presence only: the value is never read into a log line. */

@@ -18,13 +18,25 @@ const h = await vi.hoisted(async () => {
   };
 });
 
+// The embed route builds its response from toUIMessageStream, as toUIMessageStreamResponse does; this marks the model's answer
+function modelStream() {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue({ type: 'text-start', id: 'model' });
+      controller.enqueue({ type: 'text-delta', id: 'model', delta: 'model stream' });
+      controller.enqueue({ type: 'text-end', id: 'model' });
+      controller.close();
+    },
+  });
+}
+
 vi.mock('ai', async (importOriginal) => ({
   ...(await importOriginal<typeof import('ai')>()),
   streamText: async (params: Record<string, unknown>) => {
     const result = await h.capture.streamText(params);
     const embed = params.maxOutputTokens === 2000 && params.tools === undefined;
     if (embed) (params.onFinish as ((event: { text: string }) => void) | undefined)?.({ text: h.embedAnswer.text });
-    return embed ? { ...result, toUIMessageStreamResponse: () => new Response('model stream') } : result;
+    return embed ? { ...result, toUIMessageStream: () => modelStream() } : result;
   },
 }));
 vi.mock('@/lib/document-processor', () => ({ getQueryEmbedding: vi.fn(async () => []) }));
@@ -240,7 +252,7 @@ describe('embed route semantic cache (CACHE-01, D-32, A-3)', () => {
 
   it('check-only by default: an embed miss schedules no store', async () => {
     const routes = await loadRoutes(CACHE_ON);
-    expect(await (await askEmbed(routes)).text()).toBe('model stream');
+    expect(await (await askEmbed(routes)).text()).toContain('"delta":"model stream"');
     await settle();
     expect(memory.checks).toHaveLength(1);
     expect(memory.stores).toEqual([]);
@@ -270,7 +282,7 @@ describe('embed route semantic cache (CACHE-01, D-32, A-3)', () => {
 
     h.capture.reset();
     const embedBody = await (await askEmbed(routes)).text();
-    expect(embedBody).toBe('model stream');
+    expect(embedBody).toContain('"delta":"model stream"');
     expect(h.capture.streamText).toHaveBeenCalledTimes(1);
     await stored(2);
     expect(memory.stores[1].q.entryProfile).toBe('embed');
@@ -295,7 +307,7 @@ describe('embed route semantic cache (CACHE-01, D-32, A-3)', () => {
     h.scope.current = TENANT_B;
     h.capture.reset();
     const body = await (await askEmbed(routes)).text();
-    expect(body).toBe('model stream');
+    expect(body).toContain('"delta":"model stream"');
     expect(h.capture.streamText).toHaveBeenCalledTimes(1);
     expect(scopeKey(memory.checks[memory.checks.length - 1].scope as unknown as ScopeDesc)).toBe(scopeKey(TENANT_B));
     await stored(2);
@@ -309,7 +321,7 @@ describe('embed route semantic cache (CACHE-01, D-32, A-3)', () => {
 
   it('cache off: no cacheContext, no check, the model stream as today', async () => {
     const routes = await loadRoutes({ ...CACHE_ON, RAG_SEMANTIC_CACHE: 'off' });
-    expect(await (await askEmbed(routes)).text()).toBe('model stream');
+    expect(await (await askEmbed(routes)).text()).toContain('"delta":"model stream"');
     expect((h.runRetrieval.mock.calls[0][0] as RunRetrievalInput).cacheContext).toBeUndefined();
     expect(memory.checks).toEqual([]);
   });

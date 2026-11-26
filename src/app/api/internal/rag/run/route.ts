@@ -13,14 +13,17 @@ import {
   countTokens,
   createCitationSession,
   createTraceCollector,
+  awaitPreGenerationDelay,
+  traceCacheState,
+  type TraceCollector,
   detectLanguage,
   evalScope,
   cacheSourcesFromResult,
   finishTrace,
   groundednessEligibility,
+  currentLexicalVersion,
   hashSystemPromptTemplate,
   isCacheHitResult,
-  LEXICAL_VERSION,
   OPTIONAL_STAGES,
   parseRetrievalFilters,
   resolveScopesFilter,
@@ -32,6 +35,7 @@ import {
   scopeKey,
   scoreAnswerGroundedness,
   storeCacheAnswerNow,
+  topkRedundancy,
   type AnswerGroundedness,
   type CitationSession,
   type ClaudeTurnFacts,
@@ -75,6 +79,7 @@ function toRetrievalOverrides(input: RetrievalOverridesInput | undefined): Retri
   if (input.chunking_profile_by_doc_type && Object.keys(input.chunking_profile_by_doc_type).length > 0) {
     out.chunkingProfileByDocType = { ...input.chunking_profile_by_doc_type };
   }
+  if (input.table_lookup != null) out.tableLookup = { ...input.table_lookup };
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
@@ -95,6 +100,7 @@ function toFilterBody(input: NonNullable<RetrievalFiltersInput>): Record<string,
   }
   if (input.scopes != null) body.scopes = input.scopes;
   if (input.include_untagged === true) body.includeUntagged = true;
+  if (input.versions != null) body.versions = input.versions;
   return body;
 }
 
@@ -216,7 +222,7 @@ function v2TraceFields(result: RetrievalResult) {
     retrieval_config_hash: result.retrievalConfigHash ?? null,
     context_tokens: countTokens(result.context),
     query_language: result.queryLanguage ?? null,
-    retrieval_versions: { lexical: LEXICAL_VERSION, rerank_text: RERANK_TEXT_VERSION },
+    retrieval_versions: { lexical: currentLexicalVersion(), rerank_text: RERANK_TEXT_VERSION },
     refusal: record
       ? {
           decision: record.decision,
@@ -227,6 +233,17 @@ function v2TraceFields(result: RetrievalResult) {
           cell_key: record.cellKey,
         }
       : null,
+  };
+}
+
+/** D-25 on the eval trace: present only when an answer was generated. */
+function timingTraceFields(collector: TraceCollector) {
+  const timing = collector.timing();
+  if (!timing) return {};
+  return {
+    ...(timing.ttft_ms !== undefined ? { ttft_ms: timing.ttft_ms } : {}),
+    ...(timing.pre_generation_ms !== undefined ? { pre_generation_ms: timing.pre_generation_ms } : {}),
+    cache: timing.cache,
   };
 }
 
@@ -391,7 +408,7 @@ function cacheOverrideOn(options: RagRunRequest['options']): boolean {
 }
 
 /** The trace's cache outcome, from the semantic_cache stage record; absent when the stage did not run. */
-function traceCacheState(result: RetrievalResult): TraceCacheState | undefined {
+function evalTraceCacheState(result: RetrievalResult): TraceCacheState | undefined {
   if (isCacheHitResult(result)) return 'hit';
   const record = result.stages.find((stage) => stage.name === 'semantic_cache');
   if (!record) return undefined;
@@ -401,6 +418,7 @@ function traceCacheState(result: RetrievalResult): TraceCacheState | undefined {
 }
 
 export async function POST(req: NextRequest) {
+  const requestReceivedAt = Date.now();
   const access = checkEvalAccess(req.headers, {
     nodeEnv: process.env.NODE_ENV,
     endpointEnabled: env.RAG_EVAL_ENDPOINT_ENABLED,
@@ -511,6 +529,7 @@ export async function POST(req: NextRequest) {
       ...(cacheContext ? { cacheContext } : {}),
     });
 
+    collector.setCacheState(traceCacheState(result));
     try {
       if (result.status === 'error') {
         console.error('[RAG Eval] retrieval failed:', { reason: result.reason });
@@ -533,6 +552,10 @@ export async function POST(req: NextRequest) {
       if (cacheHit) {
         if (includeAnswer) answer = cacheHit.answer.answer_text;
       } else if (generatorModel !== null && !refused) {
+        // D-25: only a turn that generates records timing, so a retrieval-only run traces as before
+        collector.markRequestStart(requestReceivedAt);
+        await awaitPreGenerationDelay();
+        collector.markGenerationStart();
         const generationStart = collector.now();
         citationSession?.attach(result);
         const answerLanguage = answerLanguageOptions(result);
@@ -563,6 +586,8 @@ export async function POST(req: NextRequest) {
           console.error('[RAG Eval] generation failed:', detail);
           return NextResponse.json({ error: `generation failed: ${detail}` }, { status: 500 });
         }
+        // The eval answer is generated whole, so its first text is the full answer
+        if (answer !== null && answer.length > 0) collector.markFirstTextDelta();
         collector.record({ name: 'generation', status: 'ok', startedAt: generationStart, endedAt: collector.now() });
       }
       const citationFields = citationTraceFields(citationSession);
@@ -614,7 +639,7 @@ export async function POST(req: NextRequest) {
           console.log('[RAG Eval] semantic cache store:', { outcome: stored });
         }
       }
-      const cacheState = cacheOverride ? traceCacheState(result) : undefined;
+      const cacheState = cacheOverride ? evalTraceCacheState(result) : undefined;
 
       const retrievalStrategy = result.stages.find((stage) => stage.name === 'search')?.detail ?? 'unknown';
       const queryContext = result.queryContext;
@@ -623,6 +648,7 @@ export async function POST(req: NextRequest) {
       const injection = injectionTraceOf(result, documentNames);
       const effectiveConfig = buildEffectiveConfig({ security: injectionTraceVersions() });
       effectiveConfig.generator_model = generatorModel;
+      const redundancy = topkRedundancy(result.kept);
       const trace = {
         schema_version: 1 as const,
         item_id: itemId ?? null,
@@ -652,7 +678,11 @@ export async function POST(req: NextRequest) {
           ...(chunk.legs !== undefined ? { legs: chunk.legs } : {}),
           ...(chunk.language !== undefined ? { language: chunk.language } : {}),
         })),
-        kept: result.kept,
+        kept: result.kept.map(({ dupClusterId, alsoIn: _alsoIn, ...chunk }) => ({
+          ...chunk,
+          ...(dupClusterId ? { dup_cluster_id: dupClusterId } : {}),
+        })),
+        ...(redundancy !== null ? { topk_redundancy: redundancy } : {}),
         used_documents: result.usedDocuments.map((doc) => ({
           document_id: doc.id,
           name: doc.name,
@@ -672,6 +702,7 @@ export async function POST(req: NextRequest) {
           ? { citation_strategy: citationFields.citation_strategy, invalid_citations: citationFields.invalid_citations }
           : {}),
         ...(groundedness ? { groundedness } : {}),
+        ...(answer !== null ? timingTraceFields(collector) : {}),
         stage_latency_ms: collector.toStageLatency(),
         stage_status: collector.toStageStatus(),
         effective_config: effectiveConfig,

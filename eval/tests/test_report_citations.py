@@ -223,6 +223,25 @@ def test_committed_budgets_have_report_only_groundedness_entries_and_unchanged_c
     assert "groundedness" not in chat.stages
 
 
+_CONTEXT_ITEM_FIELDS = ("context_k", "ndcg_at_context_k", "group_count", "topk_redundancy", "intent_coverage")
+_CONTEXT_SLICE_FIELDS = ("ndcg_at_context_k", "k_zero", "topk_redundancy", "intent_coverage")
+
+
+def _without_context_metrics(report: EvalReport) -> EvalReport:
+    """The report without the report-only 04.2-12 fields, which are additive and absent from earlier reports."""
+    data = report.model_dump(mode="python")
+    for item in data["items"]:
+        for field in _CONTEXT_ITEM_FIELDS:
+            item[field] = None
+    for key, value in data.items():
+        blocks = [value] if key == "overall" else value.values() if key.startswith("by_") and isinstance(value, dict) else []
+        for block in blocks:
+            if isinstance(block, dict) and "recall_at_5" in block:
+                for field in _CONTEXT_SLICE_FIELDS:
+                    block[field] = None
+    return EvalReport.model_validate(data)
+
+
 def test_report_without_citation_data_is_byte_identical_to_before(tmp_path: Path):
     golden, traces = _four_items()
     traces = [_with_latency(t, embed=10.0 + i, search=100.0, generation=900.0 + i) for i, t in enumerate(traces)]
@@ -230,7 +249,9 @@ def test_report_without_citation_data_is_byte_identical_to_before(tmp_path: Path
     assert report.by_strategy == {} and report.citation_coverage is None and report.groundedness_labels == {}
     # Without the 03.2-31 native review backlog the bytes are the pre-Phase-5 report.
     json_path, md_path = write_report(
-        report.model_copy(update={"native_review_backlog": None}), tmp_path / "no-backlog", _budgets()
+        _without_context_metrics(report).model_copy(update={"native_review_backlog": None}),
+        tmp_path / "no-backlog",
+        _budgets(),
     )
     # 06-34: layer-off reports carry the empty query_layer and semantic_cache sections; without them the JSON bytes
     # are the earlier report's.
@@ -248,10 +269,10 @@ def test_report_without_citation_data_is_byte_identical_to_before(tmp_path: Path
     )
     json_path, md_path = write_report(report, tmp_path / "full", _budgets())
     assert hashlib.sha256(json_path.read_bytes()).hexdigest() == (
-        "609a73906a1a40ba980893fea16755169d243dc903f8361e4a418fc96f6a9400"
+        "072432d5d59da889b6a0853ba866e2a004ddded56302c36d98a08a0a429f4ef1"
     )
     assert hashlib.sha256(md_path.read_bytes()).hexdigest() == (
-        "e1ed2773449ac301bbcc237d843c2c1b5c3593f39a2f9a92524562ab5309068e"
+        "2962dc9f9de4a47c1ea7d44bd55b685da6796ca69a8fcef7747f1db46f9ec7aa"
     )
 
 

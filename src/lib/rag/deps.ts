@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { env } from '@/lib/env';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { loadRagConfig, pipelineSourceOf, type RagEnvInput } from './config';
+import { effectiveLexicalVersion, loadRagConfig, pipelineSourceOf, type RagEnvInput } from './config';
 import type { RawPipelineEnv } from './lang/resolve';
 import { getLanguageSettings } from './lang/settings';
 import type { EmbeddingProfile } from './embeddings/active-profile';
@@ -101,12 +101,19 @@ function readRagEnvInput(): RagEnvInput {
     RAG_LEXICAL_TRANSLATION: process.env.RAG_LEXICAL_TRANSLATION ?? env.RAG_LEXICAL_TRANSLATION,
     RAG_LEXICAL_DICTIONARY: process.env.RAG_LEXICAL_DICTIONARY ?? env.RAG_LEXICAL_DICTIONARY,
     RAG_LEXICAL_STEM_IT: process.env.RAG_LEXICAL_STEM_IT ?? env.RAG_LEXICAL_STEM_IT,
+    RAG_TERMINOLOGY: process.env.RAG_TERMINOLOGY,
+    RAG_TERMINOLOGY_DENSE: process.env.RAG_TERMINOLOGY_DENSE,
+    RAG_TERMINOLOGY_MINING: process.env.RAG_TERMINOLOGY_MINING,
     RAG_VERSION_SCOPE: process.env.RAG_VERSION_SCOPE ?? env.RAG_VERSION_SCOPE,
+    RAG_EMBED_VERSION_SCOPE: process.env.RAG_EMBED_VERSION_SCOPE ?? env.RAG_EMBED_VERSION_SCOPE,
     RAG_TABLE_LOOKUP: process.env.RAG_TABLE_LOOKUP ?? env.RAG_TABLE_LOOKUP,
     RAG_DUP_CLUSTERS: process.env.RAG_DUP_CLUSTERS ?? env.RAG_DUP_CLUSTERS,
     RAG_RESULT_DIVERSITY: process.env.RAG_RESULT_DIVERSITY ?? env.RAG_RESULT_DIVERSITY,
     RAG_IDENTIFIER_INDEX: process.env.RAG_IDENTIFIER_INDEX ?? env.RAG_IDENTIFIER_INDEX,
     RAG_IDENTIFIER_FILTER: process.env.RAG_IDENTIFIER_FILTER ?? env.RAG_IDENTIFIER_FILTER,
+    RAG_ATTRIBUTE_FILTER: process.env.RAG_ATTRIBUTE_FILTER ?? env.RAG_ATTRIBUTE_FILTER,
+    RAG_LEXICAL_QUANTITY: process.env.RAG_LEXICAL_QUANTITY ?? env.RAG_LEXICAL_QUANTITY,
+    RAG_DOC_ATTRIBUTES: process.env.RAG_DOC_ATTRIBUTES ?? env.RAG_DOC_ATTRIBUTES,
     RAG_RETRIEVAL_PARAMS_OVERRIDE: process.env.RAG_RETRIEVAL_PARAMS_OVERRIDE ?? env.RAG_RETRIEVAL_PARAMS_OVERRIDE,
     VOYAGE_API_KEY: process.env.VOYAGE_API_KEY ?? env.VOYAGE_API_KEY,
     VOYAGE_BASE_URL: process.env.VOYAGE_BASE_URL ?? env.VOYAGE_BASE_URL,
@@ -203,4 +210,8 @@ export function setRagDepsForTests(partial: Partial<RagDeps>): void {
 export function resetRagDepsForTests(): void {
   overrides = {};
   defaultQueryLlm = null;
+}
+/** D-42: the effective lexical version of the configuration this process loads, the value the search stage uses. */
+export function currentLexicalVersion(): number {
+  return effectiveLexicalVersion(loadRagConfig(getRagDeps().ragEnv()));
 }

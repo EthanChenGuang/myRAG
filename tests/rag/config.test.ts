@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi, type MockInstance } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
 import {
   CORE_STAGES,
   OPTIONAL_STAGES,
@@ -26,9 +28,10 @@ afterEach(() => {
 });
 
 const PHASE42_STAGES = ['table_lookup', 'diversify', 'identifier_resolve', 'identifier_guard'];
+const PHASE33_STAGES = ['attribute_resolve'];
 
 function phase4Disabled(config: { disabledStages: ReadonlySet<string> }): string[] {
-  const skip = new Set<string>([...QUERY_LAYER_STAGES, ...PHASE42_STAGES]);
+  const skip = new Set<string>([...QUERY_LAYER_STAGES, ...PHASE42_STAGES, ...PHASE33_STAGES]);
   return [...config.disabledStages].filter((name) => !skip.has(name)).sort();
 }
 
@@ -36,12 +39,15 @@ const PHASE42_V2_FIELDS = [
   'lexicalDictionary',
   'lexicalStemIt',
   'versionScope',
+  'embedVersionScope',
   'tableLookup',
   'dupClusters',
   'resultDiversity',
   'identifierIndex',
   'identifierFilter',
   'lexicalVersion',
+  'attributeFilter',
+  'lexicalQuantity',
 ];
 
 function withoutPhase42(v2: object): Record<string, unknown> {
@@ -83,6 +89,7 @@ const CHAT_DEFAULTS = {
   diversify: 1000,
   identifier_resolve: 1000,
   identifier_guard: 1000,
+  attribute_resolve: 1000,
 };
 
 describe('stage tables', () => {
@@ -116,6 +123,7 @@ describe('stage tables', () => {
       'identifier_resolve',
       'identifier_guard',
       'terminology',
+      'attribute_resolve',
     ]);
   });
 
@@ -137,6 +145,8 @@ describe('stage tables', () => {
     expect(PROFILE_STAGE_DEFAULTS.voice).toMatchObject({ table_lookup: 500, identifier_resolve: 500, diversify: 300, identifier_guard: 300 });
     expect(PROFILE_STAGE_DEFAULTS.eval).toMatchObject({ table_lookup: 1000, identifier_resolve: 1000, diversify: 1000, identifier_guard: 1000 });
     expect(PROFILE_STAGE_DEFAULTS.eval.terminology).toBe(1000);
+    expect(PROFILE_STAGE_DEFAULTS.voice.attribute_resolve).toBe(500);
+    expect(PROFILE_STAGE_DEFAULTS.eval.attribute_resolve).toBe(1000);
   });
 });
 
@@ -358,7 +368,7 @@ describe('Phase 3.2 typed switches (D-47)', () => {
       supersessionDetect: config.supersessionDetect,
       effectiveDateLlmExtract: config.effectiveDateLlmExtract,
     }).toEqual({
-      tableHeaderRepeat: 'profile',
+      tableHeaderRepeat: 'always',
       tableRowSerialization: false,
       captionLanguage: 'en',
       docTranslation: 'off',
@@ -373,6 +383,16 @@ describe('Phase 3.2 typed switches (D-47)', () => {
       effectiveDateLlmExtract: false,
     });
     expect(config.warnings).toEqual([]);
+  });
+
+  // The default of RAG_TABLE_HEADER_REPEAT is the outcome recorded in eval/decisions/03.2-table-header-default.json (D-19).
+  test('RAG_TABLE_HEADER_REPEAT defaults to always and profile restores the processing profile flag', () => {
+    const decision = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'eval/decisions/03.2-table-header-default.json'), 'utf8')) as { decision: string };
+    expect(loadIngestConfig({}).tableHeaderRepeat).toBe(decision.decision);
+    expect(decision.decision).toBe('always');
+    const explicit = loadIngestConfig({ RAG_TABLE_HEADER_REPEAT: 'profile' });
+    expect(explicit.tableHeaderRepeat).toBe('profile');
+    expect(explicit.warnings).toEqual([]);
   });
 
   test('ingestion-side fields accept every D-47 value', () => {
@@ -413,7 +433,7 @@ describe('Phase 3.2 typed switches (D-47)', () => {
   });
 
   test.each([
-    ['RAG_TABLE_HEADER_REPEAT', 'tableHeaderRepeat', 'sometimes', 'profile'],
+    ['RAG_TABLE_HEADER_REPEAT', 'tableHeaderRepeat', 'sometimes', 'always'],
     ['RAG_TABLE_ROW_SERIALIZATION', 'tableRowSerialization', 'yes', false],
     ['RAG_TABLE_ROW_SERIALIZATION', 'tableRowSerialization', '1', false],
     ['RAG_CAPTION_LANGUAGE', 'captionLanguage', 'fr', 'en'],
@@ -425,6 +445,10 @@ describe('Phase 3.2 typed switches (D-47)', () => {
     ['RAG_SCOPE_TAG_SUGGEST', 'scopeTagSuggest', 'on', false],
     ['RAG_SUPERSESSION_DETECT', 'supersessionDetect', 'true', 'off'],
     ['RAG_EFFECTIVE_DATE_LLM_EXTRACT', 'effectiveDateLlmExtract', 'on', false],
+    ['RAG_SECTION_RULES', 'sectionRules', 'true', 'off'],
+    ['RAG_PAGE_BOILERPLATE', 'pageBoilerplate', 'all', 'off'],
+    ['RAG_DOC_ATTRIBUTES', 'docAttributes', 'on', false],
+    ['RAG_ATTRIBUTE_HEADER', 'attributeHeader', 'yes', false],
   ] as const)('ingest %s=%s falls back to the default with one [Ingest Config] warning', (name, field, raw, fallback) => {
     const config = loadIngestConfig({ [name]: raw });
     expect((config as unknown as Record<string, unknown>)[field]).toBe(fallback);
@@ -462,6 +486,7 @@ describe('Phase 3.2 typed switches (D-47)', () => {
     ['RAG_SCOPE_TAGS', 'scopeTags', 'on', false],
     ['RAG_DOC_TRANSLATION', 'docTranslation', 'enabled', 'off'],
     ['RAG_BGE_M3_SERVING', 'bgeM3Serving', 'local', 'hosted'],
+    ['RAG_DOC_ATTRIBUTES', 'docAttributes', 'on', false],
   ] as const)('rag %s=%s falls back to the default with one [RAG Config] warning', (name, field, raw, fallback) => {
     const config = loadRagConfig({ [name]: raw });
     expect((config as unknown as Record<string, unknown>)[field]).toBe(fallback);
@@ -1104,5 +1129,244 @@ describe('terminology switches (D-15, D-18, D-19)', () => {
     expect(loadRagConfig(base).v2.terminologyDense).toBe(false);
     expect(loadRagConfig({ ...base, RAG_TERMINOLOGY_MINING: 'true' }).v2.terminologyMining).toBe(true);
     expect(loadRagConfig(base).v2.terminologyMining).toBe(false);
+  });
+});
+
+describe('RAG_EMBED_VERSION_SCOPE (D-58, D-40)', () => {
+  const FULL = { RAG_EMBED_VERSION_SCOPE: 'true', RAG_VERSION_SCOPE: 'true', RAG_LEXICAL_SEARCH: 'true' };
+
+  function embedWarnings(): string[] {
+    return configWarnings().filter((line) => line.includes('RAG_EMBED_VERSION_SCOPE'));
+  }
+
+  test('unset: the embed switch is false and no warning is logged', () => {
+    expect(loadRagConfig({}).v2.embedVersionScope).toBe(false);
+    expect(loadRagConfig({ RAG_PIPELINE: 'v2' }).v2.embedVersionScope).toBe(false);
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test('unset: every other v2 field equals the configuration without the variable', () => {
+    const { embedVersionScope: _a, ...withEmbedUnset } = loadRagConfig({ RAG_VERSION_SCOPE: 'true', RAG_LEXICAL_SEARCH: 'true' }).v2;
+    resetRagConfigForTests();
+    const { embedVersionScope: _b, ...withEmbedFalse } = loadRagConfig({
+      RAG_VERSION_SCOPE: 'true',
+      RAG_LEXICAL_SEARCH: 'true',
+      RAG_EMBED_VERSION_SCOPE: 'false',
+    }).v2;
+    expect(withEmbedFalse).toEqual(withEmbedUnset);
+    expect(withEmbedUnset.versionScope).toBe(true);
+  });
+
+  test('true together with the effective version scope: true, no warning', () => {
+    expect(loadRagConfig(FULL).v2.embedVersionScope).toBe(true);
+    expect(loadRagConfig({ ...FULL, RAG_EMBED_VERSION_SCOPE: 'TRUE' }).v2.embedVersionScope).toBe(true);
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test('true while RAG_VERSION_SCOPE is off: one warning naming both variables, false', () => {
+    for (const versionScope of [undefined, 'false']) {
+      const env: Record<string, string> = { RAG_EMBED_VERSION_SCOPE: 'true', RAG_LEXICAL_SEARCH: 'true' };
+      if (versionScope) env.RAG_VERSION_SCOPE = versionScope;
+      expect(loadRagConfig(env).v2.embedVersionScope).toBe(false);
+    }
+    const warnings = embedWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('[RAG Config]');
+    expect(warnings[0]).toContain('RAG_VERSION_SCOPE');
+  });
+
+  test('true while the version scope is invalid because lexical search is off: one embed warning, false', () => {
+    const config = loadRagConfig({ RAG_EMBED_VERSION_SCOPE: 'true', RAG_VERSION_SCOPE: 'true' });
+    expect(config.v2.versionScope).toBe(false);
+    expect(config.v2.embedVersionScope).toBe(false);
+    loadRagConfig({ RAG_EMBED_VERSION_SCOPE: 'true', RAG_VERSION_SCOPE: 'true', RAG_LEXICAL_SEARCH: 'false' });
+    const warnings = embedWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('RAG_VERSION_SCOPE');
+  });
+
+  test('false never warns, whatever the version scope', () => {
+    expect(loadRagConfig({ ...FULL, RAG_EMBED_VERSION_SCOPE: 'false' }).v2.embedVersionScope).toBe(false);
+    expect(loadRagConfig({ RAG_EMBED_VERSION_SCOPE: 'false' }).v2.embedVersionScope).toBe(false);
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test('any other value warns once and is false', () => {
+    for (let i = 0; i < 3; i += 1) {
+      expect(loadRagConfig({ ...FULL, RAG_EMBED_VERSION_SCOPE: 'on' }).v2.embedVersionScope).toBe(false);
+    }
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('[RAG Config]');
+  });
+
+  test('the variable is part of the memo key', () => {
+    const base = loadRagConfig({ RAG_VERSION_SCOPE: 'true', RAG_LEXICAL_SEARCH: 'true' });
+    expect(loadRagConfig(FULL)).not.toBe(base);
+    expect(loadRagConfig({})).not.toBe(loadRagConfig({ RAG_EMBED_VERSION_SCOPE: 'true' }));
+  });
+});
+
+describe('Phase 3.3 switches (D-03, D-29, D-33)', () => {
+  const UNIFIED = { RAG_INGEST_PIPELINE: 'unified' };
+
+  function ragV2(extra: Record<string, string>) {
+    return loadRagConfig({ RAG_PIPELINE: 'v2', ...extra });
+  }
+
+  test('unset: everything off, nothing logged, no new field changes an existing one', () => {
+    const rag = loadRagConfig({});
+    expect(rag.v2.attributeFilter).toBe('off');
+    expect(rag.v2.lexicalQuantity).toBe(false);
+    expect(rag.docAttributes).toBe(false);
+    expect(rag.v2.lexicalVersion).toBe(2);
+    expect(rag.disabledStages.has('attribute_resolve')).toBe(true);
+    const ingest = loadIngestConfig({});
+    expect({
+      sectionRules: ingest.sectionRules,
+      pageBoilerplate: ingest.pageBoilerplate,
+      docAttributes: ingest.docAttributes,
+      attributeHeader: ingest.attributeHeader,
+    }).toEqual({ sectionRules: 'off', pageBoilerplate: 'off', docAttributes: false, attributeHeader: false });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  test('explicit off values equal the unset configuration for every existing field', () => {
+    const offEnv = {
+      RAG_SECTION_RULES: 'off',
+      RAG_PAGE_BOILERPLATE: 'off',
+      RAG_DOC_ATTRIBUTES: 'false',
+      RAG_ATTRIBUTE_HEADER: 'false',
+      RAG_ATTRIBUTE_FILTER: 'off',
+      RAG_LEXICAL_QUANTITY: 'false',
+    };
+    const { warnings: _a, ...ingestUnset } = loadIngestConfig({});
+    const { warnings: _b, ...ingestOff } = loadIngestConfig(offEnv);
+    expect(ingestOff).toEqual(ingestUnset);
+    const ragUnset = loadRagConfig({});
+    const ragOff = loadRagConfig(offEnv);
+    expect({ ...ragOff, disabledStages: [...ragOff.disabledStages].sort() }).toEqual({ ...ragUnset, disabledStages: [...ragUnset.disabledStages].sort() });
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  test('accepted values with every need met are kept and log nothing', () => {
+    for (const mode of ['off', 'detect', 'rules', 'both'] as const) {
+      expect(loadIngestConfig({ ...UNIFIED, RAG_PAGE_BOILERPLATE: mode }).pageBoilerplate).toBe(mode);
+    }
+    const ingest = loadIngestConfig({ ...UNIFIED, RAG_SECTION_RULES: 'on', RAG_DOC_ATTRIBUTES: 'true', RAG_ATTRIBUTE_HEADER: 'true' });
+    expect(ingest).toMatchObject({ sectionRules: 'on', docAttributes: true, attributeHeader: true });
+    for (const mode of ['hard', 'soft'] as const) {
+      const rag = ragV2({ RAG_DOC_ATTRIBUTES: 'true', RAG_ATTRIBUTE_FILTER: mode });
+      expect(rag.v2.attributeFilter).toBe(mode);
+      expect(rag.docAttributes).toBe(true);
+      expect(rag.disabledStages.has('attribute_resolve')).toBe(false);
+    }
+    expect(loadRagConfig({ RAG_LEXICAL_QUANTITY: 'true' }).v2.lexicalQuantity).toBe(true);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['RAG_ATTRIBUTE_FILTER', 'maybe'],
+    ['RAG_LEXICAL_QUANTITY', 'on'],
+  ] as const)('rag %s=%s falls back to off with one [RAG Config] warning', (name, raw) => {
+    const config = ragV2({ RAG_DOC_ATTRIBUTES: 'true', [name]: raw });
+    loadRagConfig({ RAG_PIPELINE: 'v2', RAG_DOC_ATTRIBUTES: 'true', [name]: raw });
+    expect(config.v2.attributeFilter).toBe('off');
+    expect(config.v2.lexicalQuantity).toBe(false);
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain(name);
+  });
+
+  test('the filter without document attributes warns once naming both variables and is off', () => {
+    const config = ragV2({ RAG_ATTRIBUTE_FILTER: 'hard' });
+    loadRagConfig({ RAG_PIPELINE: 'v2', RAG_ATTRIBUTE_FILTER: 'hard' });
+    expect(config.v2.attributeFilter).toBe('off');
+    expect(config.disabledStages.has('attribute_resolve')).toBe(true);
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('RAG_ATTRIBUTE_FILTER');
+    expect(warnings[0]).toContain('RAG_DOC_ATTRIBUTES');
+  });
+
+  test.each([
+    ['set to legacy', { RAG_PIPELINE: 'legacy' }],
+    ['defaulted', {}],
+  ] as const)('the filter while the pipeline is %s warns once and is off', (_label, pipelineEnv) => {
+    const config = loadRagConfig({ ...pipelineEnv, RAG_DOC_ATTRIBUTES: 'true', RAG_ATTRIBUTE_FILTER: 'soft' });
+    expect(config.pipeline).toBe('legacy');
+    expect(config.v2.attributeFilter).toBe('off');
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('RAG_PIPELINE');
+  });
+
+  test('both filter needs unmet give two warnings, one per need', () => {
+    const config = loadRagConfig({ RAG_ATTRIBUTE_FILTER: 'hard' });
+    expect(config.v2.attributeFilter).toBe('off');
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(2);
+    expect(warnings.some((line) => line.includes('RAG_DOC_ATTRIBUTES'))).toBe(true);
+    expect(warnings.some((line) => line.includes('RAG_PIPELINE'))).toBe(true);
+  });
+
+  test.each([
+    ['RAG_SECTION_RULES', 'on', 'sectionRules', 'off'],
+    ['RAG_PAGE_BOILERPLATE', 'both', 'pageBoilerplate', 'off'],
+    ['RAG_DOC_ATTRIBUTES', 'true', 'docAttributes', false],
+  ] as const)('ingest %s=%s without the unified pipeline warns once under [RAG Config] and is off', (name, raw, field, effective) => {
+    const config = loadIngestConfig({ [name]: raw });
+    loadIngestConfig({ [name]: raw, RAG_INGEST_PIPELINE: 'legacy' });
+    expect((config as unknown as Record<string, unknown>)[field]).toBe(effective);
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain(name);
+    expect(warnings[0]).toContain('RAG_INGEST_PIPELINE');
+    expect(ingestConfigWarnings()).toEqual([]);
+  });
+
+  test('the header without effective attributes warns exactly once and is off', () => {
+    const config = loadIngestConfig({ ...UNIFIED, RAG_ATTRIBUTE_HEADER: 'true' });
+    expect(config.attributeHeader).toBe(false);
+    expect(configWarnings()).toHaveLength(1);
+    expect(configWarnings()[0]).toContain('RAG_DOC_ATTRIBUTES');
+  });
+
+  test('the header with attributes requested on a legacy pipeline: one warning per unmet need, both off', () => {
+    const config = loadIngestConfig({ RAG_DOC_ATTRIBUTES: 'true', RAG_ATTRIBUTE_HEADER: 'true' });
+    expect(config).toMatchObject({ docAttributes: false, attributeHeader: false });
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(2);
+    expect(warnings.filter((line) => line.includes('RAG_ATTRIBUTE_HEADER'))).toHaveLength(1);
+  });
+
+  test('a second load logs nothing more; changing any one variable returns a different object', () => {
+    const env = { RAG_ATTRIBUTE_FILTER: 'hard' };
+    loadRagConfig(env);
+    const count = warn.mock.calls.length;
+    loadRagConfig(env);
+    expect(warn.mock.calls.length).toBe(count);
+
+    const rag = loadRagConfig({});
+    for (const [name, value] of [['RAG_ATTRIBUTE_FILTER', 'soft'], ['RAG_LEXICAL_QUANTITY', 'true'], ['RAG_DOC_ATTRIBUTES', 'true']]) {
+      expect(loadRagConfig({ [name]: value }), name).not.toBe(rag);
+    }
+    const ingest = loadIngestConfig({});
+    for (const [name, value] of [['RAG_SECTION_RULES', 'on'], ['RAG_PAGE_BOILERPLATE', 'detect'], ['RAG_DOC_ATTRIBUTES', 'true'], ['RAG_ATTRIBUTE_HEADER', 'true']]) {
+      expect(loadIngestConfig({ [name]: value }), name).not.toBe(ingest);
+    }
+  });
+
+  test('attribute_resolve is accepted by RAG_DISABLED_STAGES and RAG_STAGE_TIMEOUTS', () => {
+    const config = ragV2({
+      RAG_DOC_ATTRIBUTES: 'true',
+      RAG_ATTRIBUTE_FILTER: 'hard',
+      RAG_DISABLED_STAGES: 'attribute_resolve',
+      RAG_STAGE_TIMEOUTS: 'chat.attribute_resolve=250',
+    });
+    expect(config.v2.attributeFilter).toBe('hard');
+    expect(config.disabledStages.has('attribute_resolve')).toBe(true);
+    expect(config.timeouts.chat.attribute_resolve).toBe(250);
+    expect(configWarnings()).toEqual([]);
   });
 });

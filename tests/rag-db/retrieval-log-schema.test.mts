@@ -64,6 +64,7 @@ const ALL_COLUMNS = [
   'feedback_reasons',
   'feedback_at',
   'source_opened_count',
+  'topk_redundancy',
   'created_at',
 ].sort();
 
@@ -211,6 +212,8 @@ for (const mode of MODES) {
       await rejectsWith(() => insertLog(db, { feedback_kind: 'thumbs' }), '23514');
       await rejectsWith(() => insertLog(db, { candidate_count: -1 }), '23514');
       await rejectsWith(() => insertLog(db, { source_opened_count: -1 }), '23514');
+      await rejectsWith(() => insertLog(db, { topk_redundancy: 1.5 }), '23514');
+      await rejectsWith(() => insertLog(db, { topk_redundancy: -0.1 }), '23514');
       await rejectsWith(() => insertLog(db, { candidates: '{}' }), '23514');
       await rejectsWith(() => insertLog(db, { candidates: JSON.stringify(Array.from({ length: 51 }, (_, rank) => ({ rank }))) }), '23514');
       await rejectsWith(() => insertLog(db, { query_fingerprint: 'not-a-hash' }), '23514');

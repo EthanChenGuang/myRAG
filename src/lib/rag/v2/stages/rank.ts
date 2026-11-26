@@ -5,7 +5,6 @@ import { getRagDeps } from '../../deps';
 import { LEGACY_PROFILE } from '../../embeddings/active-profile';
 import type { QueryEmbedding } from '../../embeddings/query-embedding';
 import type { FusedHit } from '../../fusion/rrf';
-import { LEXICAL_VERSION } from '../../lexical/chunk-text';
 import { runStage, StageError, stageSpec, type StageSpec } from '../../pipeline';
 import type { DedupeCounts } from '../../fusion/dedupe';
 import { decideRefusal, type GateCandidate, type GateInput, type QueryLanguage } from '../../refusal/gate';
@@ -29,7 +28,10 @@ import type { TraceCollector } from '../../trace/collector';
 import type { Profile, QueryVariant, ReferencedState, RunRetrievalInput, StageOverrides } from '../../types';
 import type { QueryPlan } from '@/lib/rag-eval/contracts.generated';
 import { v2ProfileSettings } from '../profiles';
-import { reserveSubQuestionCoverage } from '../subq-coverage';
+import { reserveSubQuestionCoverage, subQuestionsOf } from '../subq-coverage';
+import { diversify, type AlsoIn, type DiversifyCounts } from '../diversify';
+import { effectiveRetrievalParams } from '../retrieval-params';
+import { effectiveTuningParams } from '../tuning-params';
 import type { ContextRerankInput } from './context';
 
 export interface RankStagesInput {
@@ -51,6 +53,10 @@ export interface RankStagesInput {
   queryPlan?: QueryPlan | null;
   /** D-07: sub-question coverage over the final top-k (retrieval-params `sub_question_coverage`). */
   coverage?: { enabled: boolean; topK: number };
+  /** D-21: the final top-k the diversify window is sized from; defaults to the effective retrieval parameters. */
+  finalTopK?: number;
+  /** D-49: selects a per-profile tuning entry. */
+  embeddingProfileId?: string;
 }
 
 export interface RankRerankOutput extends ContextRerankInput {
@@ -70,6 +76,8 @@ export interface RankStagesOutput {
   /** Candidates before refusal, in rerank order when the rerank stage ran. */
   preRefusalHits: FusedHit[];
   rerank: RankRerankOutput;
+  /** D-21: the dropped duplicates of each kept chunk; present only when the diversify stage ran. */
+  alsoIn?: Map<string, AlsoIn[]>;
 }
 
 interface RerankGateState {
@@ -180,7 +188,8 @@ function applyRefusal(
     reranked: rerankGate.reranked,
     queryLanguage,
     cells,
-    versions: { lexical: LEXICAL_VERSION, rerankText: RERANK_TEXT_VERSION },
+    versions: { lexical: config.v2.lexicalVersion, rerankText: RERANK_TEXT_VERSION },
+    ragMode: ctx.input.options?.ragMode,
   });
   if (gate.decision !== 'not_applied') return { record: gate, gate };
 
@@ -401,16 +410,25 @@ export async function runRankStages(ctx: RankStagesInput): Promise<RankStagesOut
     (ctx.queryPlan?.sub_questions?.length ?? 0) > 0 &&
     variants.some((variant) => variant.subQuestionIndex !== undefined);
 
-  const decide = () => {
-    const refusal = applyRefusal(ctx, rankedHits, reranked.gate);
-    if (refusal.record.decision === 'refuse') return { ...refusal, survivors: [] as FusedHit[], reserved: 0 };
-    if (!coverageActive || !ctx.coverage) return { ...refusal, survivors: rankedHits, reserved: 0 };
+  // D-48, D-38 h: rerank, refusal, diversify, reservation. With diversify disabled the reservation stays in the refusal stage.
+  const diversifySpec = spec('diversify', 'skip');
+  const diversityOn = diversifySpec.enabled && config.v2.resultDiversity !== 'off';
+
+  const reserve = (hits: FusedHit[]) => {
+    if (!coverageActive || !ctx.coverage) return { survivors: hits, reserved: 0 };
     const topK = Math.max(0, ctx.coverage.topK);
-    const covered = reserveSubQuestionCoverage(rankedHits.slice(0, topK), rankedHits.slice(topK), variants, {
+    const covered = reserveSubQuestionCoverage(hits.slice(0, topK), hits.slice(topK), variants, {
       enabled: ctx.coverage.enabled,
       max: 4,
     });
-    return { ...refusal, survivors: [...covered.topK, ...covered.pool], reserved: covered.reserved };
+    return { survivors: [...covered.topK, ...covered.pool], reserved: covered.reserved };
+  };
+
+  const decide = () => {
+    const refusal = applyRefusal(ctx, rankedHits, reranked.gate);
+    if (refusal.record.decision === 'refuse') return { ...refusal, survivors: [] as FusedHit[], reserved: 0 };
+    if (diversityOn) return { ...refusal, survivors: rankedHits, reserved: 0 };
+    return { ...refusal, ...reserve(rankedHits) };
   };
 
   const refused = await runStage(
@@ -421,7 +439,7 @@ export async function runRankStages(ctx: RankStagesInput): Promise<RankStagesOut
     {
       candidatesIn: rankedHits.length,
       counts: ({ record, reserved }): Record<string, number> => {
-        const extra: Record<string, number> = coverageActive ? { subq_reserved: reserved } : {};
+        const extra: Record<string, number> = coverageActive && !diversityOn ? { subq_reserved: reserved } : {};
         if (record.decision === 'refuse') return { refused: 1, ...extra };
         if (record.decision === 'answer') return { answered: 1, ...extra };
         return { not_applied: 1, ...extra };
@@ -439,6 +457,45 @@ export async function runRankStages(ctx: RankStagesInput): Promise<RankStagesOut
     },
   );
 
-  const { record: decision, gate, survivors } = refused.skipped ? decide() : refused.value;
-  return { decision, gate, survivors, preRefusalHits, rerank: reranked.output };
+  const { record: decision, gate, survivors: decided } = refused.skipped ? decide() : refused.value;
+  const output: RankStagesOutput = { decision, gate, survivors: decided, preRefusalHits, rerank: reranked.output };
+
+  if (!diversityOn) {
+    await runStage(diversifySpec, signal, async () => null, collector, { candidatesIn: decided.length });
+    return output;
+  }
+
+  const mode = config.v2.resultDiversity;
+  const tuning = effectiveTuningParams(profile, config, undefined, ctx.embeddingProfileId ? { embeddingProfileId: ctx.embeddingProfileId } : undefined);
+  const finalTopK = ctx.finalTopK ?? effectiveRetrievalParams(profile, config, null).final_top_k;
+  const subQuestionOf = coverageActive ? (row: FusedHit) => [...subQuestionsOf(row, variants)] : undefined;
+  const diversified = await runStage(
+    diversifySpec,
+    signal,
+    async (): Promise<{ hits: FusedHit[]; alsoIn: Map<string, AlsoIn[]>; counts: DiversifyCounts; reserved: number }> => {
+      const result = diversify(decided, {
+        mode,
+        lambda: tuning.diversity.mmr_lambda,
+        windowFactor: tuning.diversity.mmr_window_factor,
+        finalTopK,
+        ...(reranked.output.ran ? { relevanceByChunk: reranked.output.scoreByChunk } : {}),
+        ...(subQuestionOf ? { subQuestionOf } : {}),
+      });
+      const covered = reserve(result.hits);
+      return { hits: covered.survivors, alsoIn: result.alsoIn, counts: result.counts, reserved: covered.reserved };
+    },
+    collector,
+    {
+      candidatesIn: decided.length,
+      candidatesOut: (value) => value.hits.length,
+      counts: (value): Record<string, number> => ({
+        ...value.counts,
+        ...(coverageActive ? { subq_reserved: value.reserved } : {}),
+      }),
+      detail: () => `mode=${mode}`,
+    },
+  );
+
+  if (diversified.skipped) return { ...output, survivors: reserve(decided).survivors };
+  return { ...output, survivors: diversified.value.hits, alsoIn: diversified.value.alsoIn };
 }

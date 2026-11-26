@@ -126,7 +126,7 @@ export async function POST(req: NextRequest) {
         }
 
         if (!voice || voice.results.length === 0) {
-            return NextResponse.json({ results: [] }, { headers });
+            return NextResponse.json({ results: [], traceId: result.traceId }, { headers });
         }
 
         if (logged && result.logOutcome) result.logOutcome.value = 'answered';
@@ -134,6 +134,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({
             results: voice.results,
             source_images: voice.source_images,
+            traceId: result.traceId,
             debug_info: process.env.NODE_ENV === 'development' ? {
                 cleanQuery: keywords.cleanQuery,
                 keywords: keywords.keywords,

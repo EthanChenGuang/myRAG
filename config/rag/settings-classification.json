@@ -22,6 +22,15 @@
       "side": "query"
     },
     {
+      "name": "RAG_ATTRIBUTE_FILTER",
+      "side": "query"
+    },
+    {
+      "name": "RAG_ATTRIBUTE_HEADER",
+      "side": "ingestion",
+      "mechanism": "rechunk"
+    },
+    {
       "name": "RAG_BEHAVIOR_MODE",
       "side": "query"
     },
@@ -76,6 +85,10 @@
     },
     {
       "name": "RAG_DOCUMENT_COMPLETENESS_THRESHOLD",
+      "side": "query"
+    },
+    {
+      "name": "RAG_DOC_ATTRIBUTES",
       "side": "query"
     },
     {
@@ -145,6 +158,10 @@
       "side": "query"
     },
     {
+      "name": "RAG_EMBED_VERSION_SCOPE",
+      "side": "query"
+    },
+    {
       "name": "RAG_ENABLE_ADJACENT_CHUNKS",
       "side": "query"
     },
@@ -203,6 +220,55 @@
     {
       "name": "RAG_FINANCIAL_CONFIDENCE_MIN",
       "side": "query"
+    },
+    {
+      "name": "RAG_FINETUNE",
+      "side": "both",
+      "mechanism": "reembed"
+    },
+    {
+      "name": "RAG_FT_EMBED_API_KEY",
+      "side": "query"
+    },
+    {
+      "name": "RAG_FT_SLOT_A_BASE_URL",
+      "side": "both",
+      "mechanism": "reembed"
+    },
+    {
+      "name": "RAG_FT_SLOT_A_DOCUMENT_PROMPT",
+      "side": "both",
+      "mechanism": "reembed"
+    },
+    {
+      "name": "RAG_FT_SLOT_A_MODEL",
+      "side": "both",
+      "mechanism": "reembed"
+    },
+    {
+      "name": "RAG_FT_SLOT_A_QUERY_PROMPT",
+      "side": "both",
+      "mechanism": "reembed"
+    },
+    {
+      "name": "RAG_FT_SLOT_B_BASE_URL",
+      "side": "both",
+      "mechanism": "reembed"
+    },
+    {
+      "name": "RAG_FT_SLOT_B_DOCUMENT_PROMPT",
+      "side": "both",
+      "mechanism": "reembed"
+    },
+    {
+      "name": "RAG_FT_SLOT_B_MODEL",
+      "side": "both",
+      "mechanism": "reembed"
+    },
+    {
+      "name": "RAG_FT_SLOT_B_QUERY_PROMPT",
+      "side": "both",
+      "mechanism": "reembed"
     },
     {
       "name": "RAG_GROUNDEDNESS",
@@ -317,6 +383,11 @@
       "mechanism": "relex"
     },
     {
+      "name": "RAG_LEXICAL_QUANTITY",
+      "side": "both",
+      "mechanism": "relex"
+    },
+    {
       "name": "RAG_LEXICAL_SEARCH",
       "side": "query"
     },
@@ -362,9 +433,18 @@
       "side": "query"
     },
     {
+      "name": "RAG_OPENAI_EMBEDDINGS_VIA",
+      "side": "query"
+    },
+    {
       "name": "RAG_OUTPUT_LINK_ALLOWLIST",
       "side": "both",
       "mechanism": "rescan"
+    },
+    {
+      "name": "RAG_PAGE_BOILERPLATE",
+      "side": "ingestion",
+      "mechanism": "rechunk"
     },
     {
       "name": "RAG_PARENT_CHILD",
@@ -567,6 +647,11 @@
     {
       "name": "RAG_SCOPE_TAG_SUGGEST",
       "side": "query"
+    },
+    {
+      "name": "RAG_SECTION_RULES",
+      "side": "ingestion",
+      "mechanism": "rechunk"
     },
     {
       "name": "RAG_SEMANTIC_CACHE",

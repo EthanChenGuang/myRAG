@@ -1,0 +1,62 @@
+{
+  "$defs": {
+    "AttributeDefinition": {
+      "additionalProperties": false,
+      "properties": {
+        "filterable": {
+          "default": false,
+          "title": "Filterable",
+          "type": "boolean"
+        },
+        "in_header": {
+          "default": false,
+          "title": "In Header",
+          "type": "boolean"
+        },
+        "in_identifier_index": {
+          "default": false,
+          "title": "In Identifier Index",
+          "type": "boolean"
+        },
+        "key": {
+          "pattern": "^[a-z][a-z0-9_]{0,39}$",
+          "title": "Key",
+          "type": "string"
+        },
+        "soft": {
+          "default": false,
+          "title": "Soft",
+          "type": "boolean"
+        },
+        "type": {
+          "enum": [
+            "text",
+            "text_list",
+            "code"
+          ],
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "type"
+      ],
+      "title": "AttributeDefinition",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "definitions": {
+      "items": {
+        "$ref": "#/$defs/AttributeDefinition"
+      },
+      "maxItems": 30,
+      "title": "Definitions",
+      "type": "array"
+    }
+  },
+  "title": "AttributeSchema",
+  "type": "object"
+}

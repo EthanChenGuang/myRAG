@@ -5,7 +5,7 @@ import { CitationRecordSchema, type CitationRecord } from '@/lib/rag-eval/contra
 import { formatURLsForContext, type ExtractedURL } from '@/lib/url-extractor';
 import { buildClaudeContextReplacement, docsFromBlocks } from '../../context/wrap';
 import { readSecurityConfig } from '../../security/config';
-import type { CitationLabeler, ContextBlock } from '../../types';
+import type { CitationLabeler, ContextBlock, UsedDocument } from '../../types';
 import type { GenerationConfig } from '../config';
 import { createEnhancedRAGPrompt } from '../prompt';
 import { createMarkerParser, type MarkerParser } from './marker-parser';
@@ -70,7 +70,7 @@ export interface CitationSession {
   /** Why the direct Claude call was given up for chunk-alias; null when it was not. */
   readonly fallbackReason: FallbackReason | null;
   /** Binds the final context blocks that were sent to the model; null when no context was sent. */
-  attach(result: { blocks?: ContextBlock[]; links?: ExtractedURL[] } | null): void;
+  attach(result: { blocks?: ContextBlock[]; links?: ExtractedURL[]; usedDocuments?: readonly UsedDocument[] } | null): void;
   /** On a Claude turn the OpenRouter prompt is the fallback prompt, so it carries the alias instruction too. */
   decorateSystemPrompt(prompt: string): string;
   /** D-09: {{context}} becomes the attached-documents sentence, the image captions and the links section; with RAG_CONTEXT_TAGGING the notice, reminder and a documents element wrap them (5.1 D-05). */
@@ -175,7 +175,7 @@ export function createCitationSession(input: CitationSessionInput): CitationSess
     attach(result) {
       if (!labeler) return;
       try {
-        const map = buildAliasMap(result?.blocks);
+        const map = buildAliasMap(result?.blocks, result?.usedDocuments);
         strategy = selectCitationStrategy({
           modelId: input.modelId,
           turn: {

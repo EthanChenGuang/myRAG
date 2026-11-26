@@ -31,6 +31,7 @@ Category = Literal[
     "table_split",
     "duplicate_flood",
     "identifier_near_miss",
+    "templated_collection",
 ]
 INJECTION_CATEGORIES = frozenset({"injection", "injection_evasive"})
 CACHE_PAIR_CATEGORIES = frozenset({"cache_paraphrase", "cache_near_miss"})

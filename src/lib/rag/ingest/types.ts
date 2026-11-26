@@ -2,6 +2,7 @@ import type { DocTypeDetection, HiddenTextReport, ParseResult, UploadApproval } 
 import type { TenantScope } from '../tenant/scope';
 import type { TraceCollector } from '../trace/collector';
 import type { IngestConfig } from './config';
+import type { IngestLexical } from './lexical-options';
 import type { IngestDeps } from './deps';
 import type { DocType, ProcessingProfile } from './profiles/load';
 import type { StateStore } from './state-store';
@@ -77,6 +78,11 @@ interface IngestInputBase {
    */
   scopes?: string[];
   /**
+   * Attribute values for the document (D-23), already checked by the caller against the tenant's attribute schema. They never enter logs,
+   * traces, stage details or the job settings snapshot; only counts and code words may. Absent: no attribute is written.
+   */
+  attributes?: IngestAttributeValues;
+  /**
    * The document this upload replaces ("Replaces…", D-41), already checked by validateUploadReplaces in the route: a current document of
    * the same tenant outside the upload's lineage. Recorded on the version at publish; after publish it is raised as a supersession
    * candidate (confirmed at once for an admin of the tenant). Absent, or with RAG_SUPERSESSION_DETECT=off: nothing is recorded.
@@ -147,10 +153,29 @@ export interface IngestState {
   parserVersion?: string;
   /** The hidden-text check of this version (D-33, D-34), kept so a retried scan reuses the report and removes each span once. */
   hiddenText?: HiddenTextState;
+  /** The resolved chunk-preparation rule data (D-09), snapshotted on first use so a resumed run re-chunks from it. Plain JSON only. */
+  chunkPrep?: ChunkPrepSnapshot;
   /** Single-tenant runs only: the server-set uploader, so that uploader can resume the version without being an administrator. */
   uploaderId?: string;
   /** An embed stage that yielded between batches: where a resumed run continues, valid only for the same targets and chunk total. */
   embedProgress?: EmbedProgress;
+  /** D-51: the Phase 3.2 span facts (codes, counts and one hash, never text); absent while every switch that produces one is off. */
+  traceFacts?: IngestTraceFacts;
+}
+
+/**
+ * D-51: what the trace shows of the Phase 3.2 stages. enrich sets the language shares and the und count, scan_injection the outcome and
+ * count of each check, publish the fingerprint hash and the approval state. Kept in the state so a queued job's trace reads them too.
+ */
+export interface IngestTraceFacts {
+  /** Registry code to its token share of the document's detected chunks, rounded to 2 decimals. */
+  language_shares?: Record<string, number>;
+  und_count?: number;
+  /** `<outcome>:<count>` per check, or `off`. */
+  scan?: { injection: string; hidden_text: string; links: string };
+  ingest_fingerprint?: string;
+  /** `required`: approval applies but a scan quarantined the version, so it is not held for review. */
+  approval_state?: 'not_required' | 'pending_review' | 'required';
 }
 
 export interface EmbedProgress {
@@ -159,6 +184,43 @@ export interface EmbedProgress {
   total: number;
   targets: string[];
   gaps: Array<{ profileId: string; chunkIndex: number }>;
+}
+
+/** Attribute key to one text value or a list of text values. */
+export type IngestAttributeValues = Record<string, string | string[]>;
+
+export interface ChunkPrepBoilerplateSnapshot {
+  mode: 'detect' | 'rules' | 'both';
+  cleanerVersion: number;
+  rulesVersion: number;
+  ruleIds: Array<{ id: string; version: number }>;
+  removedLineKeys: string[];
+}
+
+export interface ChunkPrepHeadingHit {
+  name: string;
+  level: number;
+  restart: boolean;
+}
+
+export interface ChunkPrepSectionRulesSnapshot {
+  ruleSetId: string;
+  ruleSetVersion: number;
+  /** Table-of-contents handling: a run of at least minRunLines heading lines with no body line between them is skipped. */
+  toc: { skip: boolean; minRunLines: number };
+  /** Keyed by the trimmed line text. */
+  headingHits: Record<string, ChunkPrepHeadingHit>;
+  satisfied: boolean;
+}
+
+export interface ChunkPrepSnapshot {
+  fingerprint: string;
+  boilerplate?: ChunkPrepBoilerplateSnapshot;
+  sectionRules?: ChunkPrepSectionRulesSnapshot;
+  /** Code names only. */
+  warnings: string[];
+  /** The size cap dropped part of the snapshot. */
+  truncated: boolean;
 }
 
 export interface HiddenTextState {
@@ -265,6 +327,8 @@ export interface IngestWork {
   documentLanguage?: string | null;
   /** RAG_CAPTION_LANGUAGE=document: the caption target language, resolved once per run (null: no target, English prompt). */
   captionTarget?: { language: string | null };
+  /** The document's lexical options and version, resolved once by enrich (plan 04.2-19); absent on a run resumed after enrich. */
+  lexical?: IngestLexical;
 }
 
 export interface StageContext {

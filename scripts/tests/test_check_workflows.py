@@ -580,3 +580,64 @@ class WeeklyReportJobTest(unittest.TestCase):
         data = weekly_fixture()
         del self.steps(data)[1]["with"]
         self.assertTrue(any("clean: false" in e for e in self.errors_for(data)))
+
+
+class SidecarPythonJobTest(unittest.TestCase):
+    """The sidecar tests need chunking, preflight and hidden-text together; a sync or run that names fewer removes the others."""
+
+    def job(self) -> dict:
+        return check_workflows.load(check_workflows.PR)[0]["jobs"]["python"]
+
+    def errors_for(self, job: dict | None) -> list[str]:
+        errors: list[str] = []
+        check_workflows.check_python_job(job, errors)
+        return errors
+
+    def with_runs(self, *runs: str) -> dict:
+        return {"steps": [{"run": run} for run in runs]}
+
+    def test_repository_job_syncs_and_runs_every_test_extra(self):
+        self.assertEqual(self.errors_for(self.job()), [])
+
+    def test_a_later_sync_with_fewer_extras_is_reported(self):
+        job = self.with_runs(
+            "uv sync --directory rag-sidecar --locked --extra chunking --extra preflight --extra hidden-text",
+            "uv sync --directory rag-sidecar --locked --extra preflight --extra hidden-text",
+            "uv run --directory rag-sidecar --locked --extra chunking --extra preflight --extra hidden-text pytest -q",
+        )
+        self.assertTrue(any("sync must name every test extra (missing chunking)" in e for e in self.errors_for(job)))
+
+    def test_a_pytest_run_with_one_extra_is_reported(self):
+        job = self.with_runs(
+            "uv sync --directory rag-sidecar --locked --extra chunking --extra preflight --extra hidden-text",
+            "uv run --directory rag-sidecar --extra chunking pytest -q",
+        )
+        errors = self.errors_for(job)
+        self.assertTrue(any("pytest run must name every test extra (missing preflight, hidden-text)" in e for e in errors))
+        self.assertTrue(any("pytest run must use --locked" in e for e in errors))
+
+    def test_the_docling_extra_is_reported(self):
+        job = self.job()
+        job["steps"].append({"run": "uv sync --directory rag-sidecar --locked --extra docling"})
+        self.assertTrue(any("heavy docling extra" in e for e in self.errors_for(job)))
+
+
+class DockerConfigCopiesTest(unittest.TestCase):
+    def job(self) -> dict:
+        return check_workflows.load(check_workflows.PR)[0]["jobs"]["docker-build"]
+
+    def errors_for(self, job: dict) -> list[str]:
+        errors: list[str] = []
+        check_workflows.check_docker_build(job, errors)
+        return errors
+
+    def test_repository_job_compares_every_sidecar_config_copy(self):
+        self.assertIn("language-packs.json", check_workflows.sidecar_config_copies())
+        self.assertEqual(self.errors_for(self.job()), [])
+
+    def test_a_copy_left_out_of_the_comparison_is_reported(self):
+        job = self.job()
+        for step in job["steps"]:
+            if "run" in step:
+                step["run"] = str(step["run"]).replace(" hidden-text-rules.json", "")
+        self.assertTrue(any("config/rag/hidden-text-rules.json" in e for e in self.errors_for(job)))

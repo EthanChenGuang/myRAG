@@ -21,6 +21,9 @@ import {
   errorStatusOf,
   firstTokenGate,
   createTraceCollector,
+  awaitPreGenerationDelay,
+  traceCacheState,
+  withFirstTextDelta,
   detectLanguage,
   finishTrace,
   isSmallTalkResult,
@@ -31,6 +34,7 @@ import {
   noKnowledgeBaseResponseLanguage,
   mintAnswerId,
   cacheSourcesFromResult,
+  sourceDocumentFields,
   hashSystemPromptTemplate,
   isCacheHitResult,
   isSemanticCacheActive,
@@ -1222,6 +1226,7 @@ function cleanMalformedDocumentCalls(text: string): string {
 }
 
 export async function POST(req: Request) {
+  const requestReceivedAt = Date.now();
   console.log('API ROUTE: Starting POST request handler');
 
   let ragTrace: { collector: TraceCollector; result: RetrievalResult } | null = null;
@@ -1239,6 +1244,18 @@ export async function POST(req: Request) {
     } else {
       finishTrace(pending.collector, pending.result);
     }
+  };
+  // D-25: timing lives on the collector of the turn that ran retrieval; a turn without one records nothing
+  let timingCollector: TraceCollector | null = null;
+  const startRequestTiming = (collector: TraceCollector, result: RetrievalResult) => {
+    timingCollector = collector;
+    collector.markRequestStart(requestReceivedAt);
+    collector.setCacheState(traceCacheState(result));
+  };
+  const markGenerationStart = () => timingCollector?.markGenerationStart();
+  const timeFirstText = <T extends { type: string }>(stream: globalThis.ReadableStream<T>): globalThis.ReadableStream<T> => {
+    const collector = timingCollector;
+    return collector ? withFirstTextDelta(stream, () => collector.markFirstTextDelta()) : stream;
   };
   // D-07, D-03a: the holder is read after the response, so set it before finishRagTrace runs for that path
   const setRagLogOutcome = (value: LogOutcomeValue | null, answerLanguage?: string | null) => {
@@ -2215,6 +2232,7 @@ Context:
           ...(cacheContext ? { cacheContext } : {}),
         });
         ragTrace = { collector, result };
+        startRequestTiming(collector, result);
         if (ragLogContext) ragLogQuery = queryText;
         collector.setReviewContent({ query: queryText });
         retrievalResult = result;
@@ -2245,6 +2263,7 @@ Context:
           ...(cacheContext ? { cacheContext } : {}),
         });
         ragTrace = { collector, result };
+        startRequestTiming(collector, result);
         retrievalResult = result;
 
         console.log('[Document Search] Overview retrieval finished:', {
@@ -2423,7 +2442,7 @@ Context:
           });
         },
       });
-      return createUIMessageStreamResponse({ stream });
+      return createUIMessageStreamResponse({ stream: timeFirstText(stream) });
     }
 
     // A-8/A-14: one per-turn YOLO decision after retrieval; flagged content kept in the context (flag or downweight) suspends it
@@ -2464,7 +2483,7 @@ Context:
           }
         });
 
-        return createUIMessageStreamResponse({ stream });
+        return createUIMessageStreamResponse({ stream: timeFirstText(stream) });
       }
 
       if (ragTrace) {
@@ -2517,7 +2536,7 @@ Context:
         }
       });
 
-      return createUIMessageStreamResponse({ stream });
+      return createUIMessageStreamResponse({ stream: timeFirstText(stream) });
     }
 
     citationSession.attach(retrievalFailed || effectiveDisableRAG || smallTalkTurn ? null : retrievalResult);
@@ -4000,7 +4019,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                   provider: 'Document Database',
                   title: doc.name || doc.filename || 'Document Source',
                   image_url: doc.image_url,
-                  url: doc.external_url || DOCUMENT_URL_MAP[doc.name || doc.filename] || undefined
+                  url: doc.external_url || DOCUMENT_URL_MAP[doc.name || doc.filename] || undefined,
+                  ...sourceDocumentFields(doc)
                 })),
                 // [FIX] Add images directly to the tool result
                 images: sourceImages
@@ -4020,7 +4040,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                 similarity: doc.similarity,
                 uploadedAt: doc.created_at,
                 explicitly_referenced: doc.explicitly_referenced || false,
-                image_url: doc.image_url
+                image_url: doc.image_url,
+                ...sourceDocumentFields(doc)
               }))
             });
 
@@ -4199,6 +4220,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       let claudeError: unknown = null;
       const claudeAbort = new AbortController();
       let claudeStream: ReturnType<typeof citationSession.startClaude> | null = null;
+      await awaitPreGenerationDelay();
+      markGenerationStart();
       if (citationSession.strategy === 'claude-citations' && claudeSystemText !== null) {
         try {
           const history = modelMessages.filter((message) => message.role !== 'system');
@@ -4319,7 +4342,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                 created_at: doc.created_at,
                 similarity: doc.similarity,
                 image_url: doc.image_url,
-                url: doc.external_url || DOCUMENT_URL_MAP[doc.name || doc.filename] || undefined
+                url: doc.external_url || DOCUMENT_URL_MAP[doc.name || doc.filename] || undefined,
+                ...sourceDocumentFields(doc)
               }))
             });
           }
@@ -4508,7 +4532,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       });
 
       // Return the stream response
-      return createUIMessageStreamResponse({ stream });
+      return createUIMessageStreamResponse({ stream: timeFirstText(stream) });
     } catch (streamError) {
       finishRagTrace();
       console.error('API ROUTE: Error in streamText:', streamError);

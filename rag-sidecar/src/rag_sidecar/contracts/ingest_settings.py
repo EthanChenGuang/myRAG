@@ -6,8 +6,9 @@ from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
 
-from .ingest import DocType
+from .ingest import DocType, RuleRowId
 from .languages import Language
+from .omit import omit_none_schema
 
 Side = Literal["ingestion", "query", "both"]
 RebuildMechanism = Literal["reparse", "rechunk", "relex", "reembed", "recaption", "retranslate", "rescan"]
@@ -109,6 +110,43 @@ class FingerprintSwitches(_Contract):
     caption_language: Literal["en", "document"]
 
 
+def _omit_unset(value: object) -> bool:
+    return value is None
+
+
+class ChunkPrepBoilerplatePart(_Contract):
+    """Cleaning state of a document prepared while `RAG_PAGE_BOILERPLATE` is on (Phase 3.3 D-13)."""
+
+    mode: Literal["detect", "rules", "both"]
+    cleaner_version: Version
+    rules_version: Version
+    rule_fingerprint: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class ChunkPrepSectionRulesPart(_Contract):
+    """Rule set a document was cut by while `RAG_SECTION_RULES` is on (Phase 3.3 D-17)."""
+
+    rule_set_id: RuleRowId
+    version: Version
+
+
+class ChunkPrepPart(_Contract):
+    """Optional fingerprint part of the shared chunk preparation; present only when a writer sets it (D-13, F-22)."""
+
+    boilerplate: ChunkPrepBoilerplatePart | None = Field(
+        default=None, exclude_if=_omit_unset, json_schema_extra=omit_none_schema
+    )
+    section_rules: ChunkPrepSectionRulesPart | None = Field(
+        default=None, exclude_if=_omit_unset, json_schema_extra=omit_none_schema
+    )
+
+    @model_validator(mode="after")
+    def _names_a_sub_part(self) -> ChunkPrepPart:
+        if self.boilerplate is None and self.section_rules is None:
+            raise ValueError("chunk_prep needs boilerplate or section_rules")
+        return self
+
+
 class IngestFingerprintParts(_Contract):
     """Parts hashed into `documents.ingest_fingerprint` (D-10); strings and integers only, so canonical JSON is stable."""
 
@@ -126,6 +164,7 @@ class IngestFingerprintParts(_Contract):
     switches: FingerprintSwitches
     # Parts never stored for documents published before this phase; the backfill records that it assumed defaults.
     assumed_defaults: list[FingerprintPartName] = Field(default_factory=list)
+    chunk_prep: ChunkPrepPart | None = Field(default=None, exclude_if=_omit_unset, json_schema_extra=omit_none_schema)
 
     @field_validator("ocr_engine_codes", "assumed_defaults")
     @classmethod

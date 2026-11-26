@@ -1,5 +1,6 @@
 import { z } from 'zod/v3';
-import type { RetrievalFilterInput, RetrievalFilters } from '@/lib/rag/backend/types';
+import type { RetrievalFilterInput, RetrievalFilters, VersionScope } from '@/lib/rag/backend/types';
+import type { Profile, RunRetrievalInput } from '@/lib/rag/types';
 import { RetrievalFiltersSchema } from '@/lib/rag-eval/contracts.generated';
 import { getLanguageRegistry } from '@/lib/rag/lang/registry';
 
@@ -55,6 +56,15 @@ const retrievalFilterBodySchema = z
       .strict()
       .optional(),
     includeUntagged: z.boolean().optional(),
+    versions: z
+      .union([
+        z.enum(['current', 'all']),
+        z
+          .object({ from: z.string().date().optional(), to: z.string().date().optional() })
+          .strict()
+          .refine((range) => range.from !== undefined || range.to !== undefined, { message: 'versions needs from or to' }),
+      ])
+      .optional(),
   })
   .strict();
 
@@ -104,6 +114,7 @@ function bodyToContract(body: BodyShape): Record<string, unknown> {
   if (body.documentIds) out.document_ids = body.documentIds;
   if (body.docTypes) out.doc_types = body.docTypes;
   if (body.languages) out.languages = body.languages;
+  if (body.versions !== undefined) out.versions = body.versions;
   if (body.invoice) {
     out.invoice = {
       supplier: body.invoice.supplier,
@@ -131,6 +142,13 @@ function contractToFilterInput(contract: ContractFilters): RetrievalFilterInput 
       amountMax: Number(contract.invoice.amount_max),
       currency: contract.invoice.currency,
     };
+  }
+  if (contract.versions !== undefined && contract.versions !== 'current') {
+    const versions = contract.versions;
+    out.versionScope =
+      versions === 'all'
+        ? 'all'
+        : { ...(versions.from !== undefined ? { from: versions.from } : {}), ...(versions.to !== undefined ? { to: versions.to } : {}) };
   }
   if (contract.scopes) {
     const tags = scopeTags(contract.scopes);
@@ -161,7 +179,8 @@ function hasFilterFields(filters: RetrievalFilterInput): boolean {
     filters.docTypes !== undefined ||
     filters.languages !== undefined ||
     filters.invoice !== undefined ||
-    filters.scopes !== undefined
+    filters.scopes !== undefined ||
+    filters.versionScope !== undefined
   );
 }
 
@@ -203,6 +222,11 @@ export function parseRetrievalFilters(
         details: [issue('invoice', 'invoice.amountMin must be less than or equal to amountMax')],
       };
     }
+  }
+
+  const versions = parsed.data.versions;
+  if (typeof versions === 'object' && versions.from !== undefined && versions.to !== undefined && versions.from > versions.to) {
+    return { ok: false, details: [issue('versions', 'versions.from must be on or before versions.to')] };
   }
 
   const contractPayload = bodyToContract(parsed.data);
@@ -266,4 +290,25 @@ export function buildRetrievalFilters(input: {
 export function effectiveOnFor(config: { effectiveDates: boolean }, nowMs: number): string | undefined {
   if (!config.effectiveDates) return undefined;
   return new Date(nowMs).toISOString().slice(0, 10);
+}
+
+/**
+ * D-12, D-40, D-58: the version scope a request actually reads. The request's ask counts only while RAG_VERSION_SCOPE is
+ * effective (which already needs the lexical leg); voice always reads current versions, and embed also needs
+ * RAG_EMBED_VERSION_SCOPE. `ignored` marks a non-current ask that was not honoured (trace code versions_ignored).
+ */
+export function effectiveVersionScope(
+  config: { v2: { versionScope: boolean; embedVersionScope: boolean } },
+  profile: Profile,
+  requested: VersionScope | undefined,
+  channel?: RunRetrievalInput['channel'],
+): { scope: VersionScope; ignored: boolean } {
+  if (requested === undefined || requested === 'current') return { scope: 'current', ignored: false };
+  const embed = profile === 'embed' || channel === 'embed';
+  const allowed = config.v2.versionScope && profile !== 'voice' && (!embed || config.v2.embedVersionScope);
+  return allowed ? { scope: requested, ignored: false } : { scope: 'current', ignored: true };
+}
+
+export function isCurrentVersionScope(scope: VersionScope | undefined): boolean {
+  return scope === undefined || scope === 'current';
 }
