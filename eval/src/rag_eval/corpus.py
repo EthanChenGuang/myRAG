@@ -43,6 +43,9 @@ class CorpusDocument:
     content: str
     chunks: list[CorpusChunk]
     doc_type: str | None = None
+    fixture_dup_template: str | None = None
+    lineage: str | None = None
+    version: int | None = None
 
 
 def _js_trim(text: str) -> str:
@@ -133,6 +136,10 @@ def load_corpus(corpus_dir: Path) -> list[CorpusDocument]:
             )
         )
     return documents
+
+
+def corpus_sha256(corpus_dir: Path) -> str:
+    return ""
 
 
 def _dump(corpus_dir: Path) -> str:
