@@ -343,7 +343,12 @@ describe('terminology mining 0473 (multi-tenant)', () => {
       const row = await candidateRow(db, TENANT_A, 'termbeta');
       assert.equal(row?.decided_by, ADMIN_A);
       const audit = await auditOf(db, TENANT_A);
-      assert.deepEqual(audit.map((r) => [r.action, r.entry_id]), [['candidate_dismiss', null], ['candidate_accept', shared.rows[0]!.entry_id]]);
+      // created_at ties inside one transaction and id is a random uuid, so compare without order.
+      const byAction = (a: [string, string | null], b: [string, string | null]) => a[0].localeCompare(b[0]);
+      assert.deepEqual(
+        audit.map((r): [string, string | null] => [r.action, r.entry_id]).sort(byAction),
+        ([['candidate_accept', shared.rows[0]!.entry_id], ['candidate_dismiss', null]] as [string, string | null][]).sort(byAction),
+      );
     });
   });
 
