@@ -64,6 +64,9 @@ PRIVATE_FLAG = "HAS_PRIVATE_EVAL"
 WEEKLY_SKIP_NOTICE = "::notice::no private eval data on this runner, skipping weekly report"
 SEC_SMOKE_STEP = "npm run test-rag -- --run-config eval/config/runs/sec-recommended.json --out eval/out/smoke-sec"
 SEC_NIGHTLY_STEP = "run-nightly.mts --sec-matrix --generator live"
+FRAMEWORKS_STEP = "uv run --directory eval python -m rag_eval.compare frameworks --fixtures"
+CACHE_PAIRS_STEP = "npm run test-rag -- --run-config eval/config/runs/query-layer-llamaindex.json --cache-pairs"
+CACHE_CHECK_STEP = "python -m rag_eval.calibrate cache --check"
 LAKERA_SECRET = "LAKERA_GUARD_API_KEY"
 DOCLING_READY = "steps.docling.outputs.ready == 'true'"
 RAY_SYNC = "uv sync --directory rag-sidecar --locked --extra ray --extra chunking --extra preflight"
@@ -410,6 +413,51 @@ def check_eval_smoke(job: dict | None, errors: list[str]) -> None:
             errors.append("pr-smoke: the injection gate step must run after the all-off smoke step, which stays as it is")
     if not any("eval/out/smoke-sec" in str((step.get("with") or {}).get("path", "")) for step in uploads):
         errors.append("pr-smoke: job eval-smoke must upload eval/out/smoke-sec")
+    check_query_layer_gates(steps, runs, errors)
+
+
+def check_query_layer_gates(steps: list[dict], runs: list[str], errors: list[str]) -> None:
+    """D-40, D-42 e, T-06-92: the fixture framework comparison and the cache near-miss gate run on every PR and fail it."""
+    installs = [i for i, run in enumerate(runs) if "npm ci" in run or "uv sync --directory eval" in run]
+    last_install = max(installs) if installs else None
+
+    def soft(index: int) -> bool:
+        return "|| true" in runs[index] or bool(steps[index].get("continue-on-error"))
+
+    def after_installs(index: int, what: str) -> None:
+        if last_install is None or index < last_install:
+            errors.append(f"pr-smoke: the {what} step must run after npm ci and uv sync")
+
+    frameworks = next((i for i, run in enumerate(runs) if "rag_eval.compare frameworks" in run), None)
+    if frameworks is None:
+        errors.append(f"pr-smoke: job eval-smoke must run '{FRAMEWORKS_STEP}'")
+    else:
+        if FRAMEWORKS_STEP not in runs[frameworks]:
+            errors.append(f"pr-smoke: the framework comparison step must run '{FRAMEWORKS_STEP}'")
+        if soft(frameworks):
+            errors.append("pr-smoke: the framework comparison step must fail the job")
+        after_installs(frameworks, "framework comparison")
+
+    check = next((i for i, run in enumerate(runs) if CACHE_CHECK_STEP in run), None)
+    if check is None:
+        errors.append(f"pr-smoke: job eval-smoke must run '{CACHE_CHECK_STEP}' on a fresh pair run")
+        return
+    if soft(check):
+        errors.append("pr-smoke: the cache near-miss gate step must fail the job")
+    after_installs(check, "cache near-miss gate")
+    lines = runs[check].splitlines()
+    check_line = next(n for n, line in enumerate(lines) if CACHE_CHECK_STEP in line)
+    pair_line = next((n for n, line in enumerate(lines) if "--cache-pairs" in line), None)
+    if pair_line is None:
+        errors.append(f"pr-smoke: the cache near-miss gate step must run '{CACHE_PAIRS_STEP}' (--cache-pairs) before the check")
+        return
+    if pair_line > check_line:
+        errors.append(f"pr-smoke: '{CACHE_CHECK_STEP}' must check a fresh pair run, so the --cache-pairs run comes first")
+    if CACHE_PAIRS_STEP not in lines[pair_line]:
+        errors.append(f"pr-smoke: the cache pair run must be '{CACHE_PAIRS_STEP}'")
+    out = re.search(r"--out\s+(\S+)", lines[pair_line])
+    if out is None or f"--pairs {out.group(1)}/cache-pairs.json" not in lines[check_line]:
+        errors.append("pr-smoke: the cache check must read the cache-pairs.json of the fresh pair run in the same step")
 
 
 def check_online_judge(data: dict, errors: list[str]) -> None:

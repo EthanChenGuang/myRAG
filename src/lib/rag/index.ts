@@ -88,6 +88,7 @@ export type {
   LogOutcome,
   LogOutcomeValue,
   Profile,
+  RetrievalCacheContext,
   RetrievalOptions,
   RetrievalResult,
   RetrievalStatus,
@@ -468,7 +469,7 @@ export {
 export type { ExportKind, GoldenExportLine, MarkExportedRequest, MarkItem, MarkResult } from './feedback-loop/exports';
 export type { ReviewSearchHit, ReviewSearchRequest, ReviewSearchResult } from './feedback-loop/review-search';
 export { hashSystemPromptTemplate } from './cache/keys';
-export { cacheSourcesFromResult, scheduleCacheStore } from './cache/store-after';
+export { cacheSourcesFromResult, scheduleCacheStore, storeCacheAnswerNow, type CacheStoreOutcome } from './cache/store-after';
 export type { CacheStoreFacts, CacheStoreSource, ScheduleCacheStoreInput } from './cache/store-after';
 export { cacheHitMetadata, streamCachedAnswer } from './cache/hit-stream';
 export { clearTenantSemanticCache, SEMANTIC_CACHE_ADMIN_TIMEOUT_MS } from './cache/admin';

@@ -172,6 +172,8 @@ from rag_sidecar.contracts.cache import (
     CachedSourceVersion,
     CacheInvalidateRequest,
     CacheInvalidateResponse,
+    CachePairResult,
+    CachePairsRun,
     CacheSplitMetrics,
     CacheStoreRequest,
     SemanticCacheCalibration,
@@ -1442,6 +1444,24 @@ def _cache_contract_samples() -> dict[str, Any]:
         "CacheInvalidateRequest": CacheInvalidateRequest(tenant_key="s:default", document_ids=[_CACHE_DOCUMENT_ID]),
         "CacheInvalidateResponse": CacheInvalidateResponse(deleted=3),
         "SemanticCacheCalibration": _semantic_cache_calibration(),
+        "CachePairsRun": CachePairsRun(
+            source="fixture",
+            embedding_profile_id="fixture-ngram",
+            probe_max_distance=0.2,
+            pairs=[
+                CachePairResult(
+                    pair_id="en-cache-paraphrase-001",
+                    anchor_id="en-general-001",
+                    category="cache_paraphrase",
+                    split="dev",
+                    language="en",
+                    outcome="hit",
+                    hit=True,
+                    distance=0.03,
+                    anchor_outcome="miss",
+                )
+            ],
+        ),
     }
 
 

@@ -15,8 +15,11 @@ import {
   createTraceCollector,
   detectLanguage,
   evalScope,
+  cacheSourcesFromResult,
   finishTrace,
   groundednessEligibility,
+  hashSystemPromptTemplate,
+  isCacheHitResult,
   LEXICAL_VERSION,
   OPTIONAL_STAGES,
   parseRetrievalFilters,
@@ -28,9 +31,11 @@ import {
   runRetrieval,
   scopeKey,
   scoreAnswerGroundedness,
+  storeCacheAnswerNow,
   type AnswerGroundedness,
   type CitationSession,
   type ClaudeTurnFacts,
+  type RetrievalCacheContext,
   type RetrievalFilterInput,
   type RetrievalOptions,
   type RetrievalResult,
@@ -378,6 +383,23 @@ async function generateClaudeAnswer(input: {
   return null;
 }
 
+type TraceCacheState = NonNullable<RagTrace['cache']>;
+
+/** D-38: the eval request asked for the semantic cache (the environment still has to select a backend). */
+function cacheOverrideOn(options: RagRunRequest['options']): boolean {
+  return options?.semantic_cache !== undefined && options.semantic_cache !== null && options.semantic_cache !== 'off';
+}
+
+/** The trace's cache outcome, from the semantic_cache stage record; absent when the stage did not run. */
+function traceCacheState(result: RetrievalResult): TraceCacheState | undefined {
+  if (isCacheHitResult(result)) return 'hit';
+  const record = result.stages.find((stage) => stage.name === 'semantic_cache');
+  if (!record) return undefined;
+  if (Object.keys(record.counts ?? {}).some((key) => key.startsWith('bypass_'))) return 'bypass';
+  if (record.status === 'disabled') return undefined;
+  return 'miss';
+}
+
 export async function POST(req: NextRequest) {
   const access = checkEvalAccess(req.headers, {
     nodeEnv: process.env.NODE_ENV,
@@ -393,6 +415,10 @@ export async function POST(req: NextRequest) {
     return parsed.response;
   }
   const { query, conversation, options, rag_mode: ragMode, item_id: itemId, include_answer: includeAnswer } = parsed.data;
+  // Plan-check B2: a caller-supplied answer is never accepted on a production server, before any retrieval, check or store.
+  if (options?.cache_seed_answer != null && process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'cache_seed_answer_not_allowed' }, { status: 403 });
+  }
 
   const deploymentMode = env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE;
   const organizationId = deploymentMode === 'multi-tenant' ? (options?.organization_id ?? null) : null;
@@ -449,6 +475,18 @@ export async function POST(req: NextRequest) {
           })
         : null;
 
+    // D-37/D-38: the key parts of an eval lookup; the pipeline derives the eval entry profile, so no entry reaches chat or embed.
+    const cacheOverride = cacheOverrideOn(options);
+    const cacheContext: RetrievalCacheContext | undefined = cacheOverride
+      ? {
+          generatorModel: generatorModel ?? resolveGeneratorModel(options?.generator_model),
+          systemPromptHash: hashSystemPromptTemplate(`${resolveEvalPromptTemplate()}\u0000citations:${citationSession?.strategy ?? 'none'}`),
+          webSearch: false,
+          mcpTools: false,
+          chatId: null,
+        }
+      : undefined;
+
     const result = await runRetrieval({
       scope,
       query,
@@ -470,6 +508,7 @@ export async function POST(req: NextRequest) {
       ...(citationSession?.labeler ? { citationLabeler: citationSession.labeler } : {}),
       ...(history.length > 0 ? { history } : {}),
       ...(classification ? { classification } : {}),
+      ...(cacheContext ? { cacheContext } : {}),
     });
 
     try {
@@ -489,8 +528,11 @@ export async function POST(req: NextRequest) {
       for (const chunk of result.kept) documentNames.set(chunk.document_id, chunk.document_name);
 
       let answer: string | null = null;
-      const refused = result.refusalCandidate || result.refusal?.decision === 'refuse';
-      if (generatorModel !== null && !refused) {
+      const cacheHit = isCacheHitResult(result) ? result.cacheHit : undefined;
+      const refused = cacheHit ? cacheHit.answer.is_refusal : result.refusalCandidate || result.refusal?.decision === 'refuse';
+      if (cacheHit) {
+        if (includeAnswer) answer = cacheHit.answer.answer_text;
+      } else if (generatorModel !== null && !refused) {
         const generationStart = collector.now();
         citationSession?.attach(result);
         const answerLanguage = answerLanguageOptions(result);
@@ -557,6 +599,23 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      if (cacheOverride && !cacheHit && result.cacheTicket && !refused) {
+        const answerText = answer ?? options?.cache_seed_answer ?? null;
+        if (answerText !== null) {
+          const stored = await storeCacheAnswerNow({
+            scope,
+            ticket: result.cacheTicket,
+            traceId: collector.traceId,
+            facts: { chatId: null, sourceImages: result.sourceImages.length > 0, retrievalStatus: result.status, answerText, isRefusal: false },
+            citations: citationFields?.citations ?? NO_CITATIONS,
+            sources: cacheSourcesFromResult(result),
+            groundedness: groundedness ? Promise.resolve(groundedness) : null,
+          });
+          console.log('[RAG Eval] semantic cache store:', { outcome: stored });
+        }
+      }
+      const cacheState = cacheOverride ? traceCacheState(result) : undefined;
+
       const retrievalStrategy = result.stages.find((stage) => stage.name === 'search')?.detail ?? 'unknown';
       const queryContext = result.queryContext;
       const stageCounts = stageCountsOf(result.stages);
@@ -606,6 +665,7 @@ export async function POST(req: NextRequest) {
         ...(v2Result ? v2TraceFields(result) : {}),
         ...(Object.keys(stageCounts).length > 0 ? { stage_counts: stageCounts } : {}),
         ...(injection ? { injection } : {}),
+        ...(cacheState ? { cache: cacheState } : {}),
         answer,
         citations: citationFields?.citations ?? NO_CITATIONS,
         ...(citationFields

@@ -7,7 +7,7 @@ import type { AnswerGroundedness } from '../generation/groundedness';
 import type { TenantScope } from '../tenant/scope';
 import { scheduleAfterResponse } from '../trace/schedule';
 import type { RetrievalResult, RetrievalStatus } from '../types';
-import { storeBypassReason, type StoreTurnFacts } from './bypass';
+import { storeBypassReason, type BypassReason, type StoreTurnFacts } from './bypass';
 import { hashedTenantKey } from './index';
 import { resolveCachedSources, type ResolvedSource } from './sources';
 import type { CacheTicket, SemanticCache } from './types';
@@ -159,10 +159,19 @@ function reasonOf(error: unknown): string {
   return 'unknown';
 }
 
-async function runStore(scope: TenantScope, ticket: CacheTicket, cache: SemanticCache, input: ScheduleCacheStoreInput, deps: CacheStoreDeps): Promise<void> {
+/** What one store attempt did: stored, a bypass reason, or why it never reached the backend. */
+export type CacheStoreOutcome = 'stored' | BypassReason | 'groundedness_unsettled' | 'no_ticket' | 'no_backend' | 'not_eval' | 'failed';
+
+async function runStore(
+  scope: TenantScope,
+  ticket: CacheTicket,
+  cache: SemanticCache,
+  input: ScheduleCacheStoreInput,
+  deps: CacheStoreDeps,
+): Promise<CacheStoreOutcome> {
   const config = deps.readConfig();
   const groundedness = await settledGroundedness(input, config.groundedness, deps.now);
-  if (!groundedness) return;
+  if (!groundedness) return 'groundedness_unsettled';
 
   const facts: StoreTurnFacts = {
     ...ticket.turn,
@@ -174,7 +183,8 @@ async function runStore(scope: TenantScope, ticket: CacheTicket, cache: Semantic
     embedStore: config.embedStore,
     answerText: input.facts.answerText,
   };
-  if (storeBypassReason(facts) !== null) return;
+  const bypass = storeBypassReason(facts);
+  if (bypass !== null) return bypass;
 
   const { sources, versions } = input.facts.isRefusal ? { sources: [], versions: new Map<string, number>() } : await currentSources(scope, input, deps);
   const citations = input.facts.isRefusal
@@ -204,6 +214,7 @@ async function runStore(scope: TenantScope, ticket: CacheTicket, cache: Semantic
     },
     parsed.data,
   );
+  return 'stored';
 }
 
 /**
@@ -226,5 +237,24 @@ export function scheduleCacheStore(input: ScheduleCacheStoreInput, overrides: Pa
     });
   } catch {
     // scheduling never affects the response
+  }
+}
+
+/**
+ * D-37/D-38: the eval route's synchronous store. The same rules as scheduleCacheStore, awaited before the response, for eval
+ * tickets only (the eval entry profile the pipeline derived from the request profile, never from caller data). Never throws.
+ */
+export async function storeCacheAnswerNow(input: ScheduleCacheStoreInput, overrides: Partial<CacheStoreDeps> = {}): Promise<CacheStoreOutcome> {
+  const { scope, ticket } = input;
+  if (!scope || !ticket) return 'no_ticket';
+  if (ticket.key.entryProfile !== 'eval' || ticket.turn.profile !== 'eval') return 'not_eval';
+  try {
+    const deps: CacheStoreDeps = { ...defaultDeps, ...overrides };
+    const cache = deps.cache();
+    if (!cache) return 'no_backend';
+    return await runStore(scope, ticket, cache, input, deps);
+  } catch (error) {
+    logFailure(scope, reasonOf(error));
+    return 'failed';
   }
 }

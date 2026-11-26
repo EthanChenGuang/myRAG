@@ -37,6 +37,7 @@ import type { QueryEmbedding } from '../embeddings/query-embedding';
 import { env } from '@/lib/env';
 import { checkBypassReason, type CacheRetrievalOptions, type TurnFacts } from '../cache/bypass';
 import { resolveHitSources } from '../cache/sources';
+import { effectiveCacheThreshold } from '../cache/threshold';
 import type { CacheHit, CacheKeyParts, CacheTicket, EntryProfile } from '../cache/types';
 import { resolveFinalResultCount } from '../config';
 import type { RpcClient } from '../backend/supabase-rpc';
@@ -292,6 +293,11 @@ interface CacheStageResult {
 
 type CacheLookup = { kind: 'hit'; hit: CacheHit } | { kind: 'miss' } | { kind: 'unresolved' };
 
+/** D-37/D-42 e: hit (1 or 0) and, on a hit, its cosine distance; the eval report and the cache-pair run read them. */
+function lookupCounts(lookup: CacheLookup): Record<string, number> {
+  return lookup.kind === 'hit' ? { hit: 1, distance: lookup.hit.distance } : { hit: 0 };
+}
+
 function lookupDetail(lookup: CacheLookup): string {
   if (lookup.kind === 'hit') return `hit distance=${lookup.hit.distance.toFixed(4)}`;
   return lookup.kind === 'unresolved' ? 'miss citations_unresolved' : 'miss';
@@ -306,9 +312,17 @@ function lookupDetail(lookup: CacheLookup): string {
 async function runSemanticCacheStage(args: CacheStageInput): Promise<CacheStageResult> {
   const { ctx, gate, spec } = args;
   const { input, profile, signal, collector } = ctx;
-  const record = (status: 'disabled' | 'skipped', detail: string, reason?: 'disabled' | 'failed' | 'timeout') => {
+  const record = (status: 'disabled' | 'skipped', detail: string, reason?: 'disabled' | 'failed' | 'timeout', counts?: Record<string, number>) => {
     const at = collector.now();
-    collector.record({ name: 'semantic_cache', status, reason: reason ?? (status === 'disabled' ? 'disabled' : 'failed'), startedAt: at, endedAt: at, detail });
+    collector.record({
+      name: 'semantic_cache',
+      status,
+      reason: reason ?? (status === 'disabled' ? 'disabled' : 'failed'),
+      startedAt: at,
+      endedAt: at,
+      detail,
+      ...(counts ? { counts } : {}),
+    });
   };
 
   const evalOverride = profile === 'eval' && evalCacheOverride(args.layerOverrides);
@@ -335,7 +349,8 @@ async function runSemanticCacheStage(args: CacheStageInput): Promise<CacheStageR
   };
   const bypass = checkBypassReason(facts);
   if (bypass !== null) {
-    record('disabled', `bypass=${bypass}`);
+    // D-42 e: the eval report reads bypass_<reason> from the stage counts.
+    record('disabled', `bypass=${bypass}`, undefined, { [`bypass_${bypass}`]: 1 });
     return {};
   }
 
@@ -380,13 +395,21 @@ async function runSemanticCacheStage(args: CacheStageInput): Promise<CacheStageR
     spec,
     signal,
     async (stageSignal) => {
-      const hit = await cache.check({ ...key, scope, standalone: args.standalone, vector: embedding.vector, embeddingProfileId, signal: stageSignal });
+      const hit = await cache.check({
+        ...key,
+        scope,
+        standalone: args.standalone,
+        vector: embedding.vector,
+        embeddingProfileId,
+        maxDistance: effectiveCacheThreshold(embeddingProfileId, ctx.config.semanticCache),
+        signal: stageSignal,
+      });
       if (!hit) return { kind: 'miss' };
       const client = getRagDeps().adminClient() as unknown as RpcClient | null;
       return resolveHitSources(scope, hit, { client, signal: stageSignal });
     },
     collector,
-    { detail: lookupDetail },
+    { detail: lookupDetail, counts: lookupCounts },
   );
   if (!looked.skipped && looked.value.kind === 'hit') return { hit: looked.value.hit, ticket, precomputed };
   return { ticket, precomputed };

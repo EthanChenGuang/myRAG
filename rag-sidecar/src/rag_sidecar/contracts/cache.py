@@ -3,6 +3,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from rag_sidecar.contracts.answers import AnswerGroundedness, CitationRecord
+from rag_sidecar.contracts.golden import Split
 from rag_sidecar.contracts.groundedness import ThresholdSource
 from rag_sidecar.contracts.query import Lang
 
@@ -148,4 +149,56 @@ class SemanticCacheCalibration(_Contract):
         ids = [profile.embedding_profile_id for profile in self.profiles]
         if len(ids) != len(set(ids)):
             raise ValueError("duplicate embedding profile in the cache calibration")
+        return self
+
+
+CachePairCategory = Literal["cache_paraphrase", "cache_near_miss"]
+CachePairOutcome = Literal["hit", "miss", "bypass", "failure"]
+CachePairsSource = Literal["fixture", "live"]
+CacheBypassReason = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")]
+GoldenItemId = Annotated[str, Field(min_length=1, max_length=200)]
+
+
+class CachePairResult(_Contract):
+    """One golden cache pair (D-37): the anchor is stored, then the candidate is checked against it alone."""
+
+    pair_id: GoldenItemId
+    anchor_id: GoldenItemId
+    category: CachePairCategory
+    split: Split
+    language: Lang
+    outcome: CachePairOutcome
+    hit: bool
+    distance: CacheDistance | None = None
+    bypass_reason: CacheBypassReason | None = None
+    anchor_outcome: CachePairOutcome | None = None
+
+    @model_validator(mode="after")
+    def _consistent(self) -> "CachePairResult":
+        if self.hit != (self.outcome == "hit"):
+            raise ValueError("hit is true exactly for outcome hit")
+        if self.hit and self.distance is None:
+            raise ValueError("a hit carries its distance")
+        if (self.outcome == "bypass") != (self.bypass_reason is not None):
+            raise ValueError("bypass_reason is set exactly for outcome bypass")
+        return self
+
+
+class CachePairsRun(_Contract):
+    """cache-pairs.json: every pair checked at probe_max_distance; a pair with no hit at the probe is farther than it."""
+
+    schema_version: Literal[1] = 1
+    source: CachePairsSource
+    embedding_profile_id: EmbeddingProfileId | None = None
+    probe_max_distance: CacheDistance
+    pairs: list[CachePairResult] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _unique_pairs(self) -> "CachePairsRun":
+        ids = [pair.pair_id for pair in self.pairs]
+        if len(ids) != len(set(ids)):
+            raise ValueError("duplicate pair id in the cache-pair run")
+        for pair in self.pairs:
+            if pair.distance is not None and pair.distance > self.probe_max_distance:
+                raise ValueError("a pair distance above the probe distance")
         return self
