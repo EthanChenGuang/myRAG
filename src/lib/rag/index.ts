@@ -659,3 +659,5 @@ export {
 export type { AddPilotUserResult, PilotUserEntry, PilotUserPage, PilotSamplingParams } from './monitor/pilot-users';
 export { allocateStrata, drawWeeklySample, loadSampleConfig, missingSamplePrerequisites, planWeeklySample, sampleStatus, sampleTenants, sampleWindow } from './monitor/sample';
 export type { DrawWeeklySampleResult, SamplePrerequisite, SampleStatus, WeeklySampleConfig } from './monitor/sample';
+export { IMPORT_LIMITS, importQuestions, parseQuestionFile, prepareQuestions, QuestionsImportError } from './monitor/questions-import';
+export type { ImportCounts, PreparedQuestions, QuestionFileFormat } from './monitor/questions-import';
