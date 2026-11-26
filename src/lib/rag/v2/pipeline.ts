@@ -334,6 +334,8 @@ export async function runV2Pipeline(input: RunRetrievalInput, collector: TraceCo
         stageOverrides: input.stageOverrides,
         rerank: rank.rerank,
         security,
+        versionScope: search.versionScope,
+        queryLanguage: query.queryLanguage,
       });
       assembly = context.assembly;
       candidates = context.candidates;

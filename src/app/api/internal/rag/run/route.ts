@@ -93,6 +93,7 @@ function toFilterBody(input: NonNullable<RetrievalFiltersInput>): Record<string,
   }
   if (input.scopes != null) body.scopes = input.scopes;
   if (input.include_untagged === true) body.includeUntagged = true;
+  if (input.versions != null) body.versions = input.versions;
   return body;
 }
 

@@ -233,6 +233,24 @@ describe('eval route v2 overrides, filters and trace fields', () => {
     });
   });
 
+  it('maps options.retrieval_filters.versions to retrievalFilters.versionScope (D-12)', async () => {
+    const route = await loadRoute();
+    const response = await route.POST(evalRequest({ retrieval_filters: { versions: { from: '2026-01-01', to: '2026-06-30' } } }));
+
+    expect(response.status).toBe(200);
+    expect(h.runSpy.mock.calls[0][0].retrievalFilters).toEqual({ versionScope: { from: '2026-01-01', to: '2026-06-30' } });
+  });
+
+  it('rejects an inverted version range with 400 on the versions path before retrieval', async () => {
+    const route = await loadRoute();
+    const response = await route.POST(evalRequest({ retrieval_filters: { versions: { from: '2026-06-30', to: '2026-01-01' } } }));
+
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { details: Array<{ path: string }> };
+    expect(body.details[0].path).toBe('versions');
+    expect(h.runSpy).not.toHaveBeenCalled();
+  });
+
   it('rejects an empty filter list with 400 before retrieval', async () => {
     const route = await loadRoute();
     const response = await route.POST(evalRequest({ retrieval_filters: { doc_types: [] } }));

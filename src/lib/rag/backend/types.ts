@@ -26,10 +26,11 @@ export interface RetrievalFilters {
   effectiveOn?: string;
 }
 
-export type RetrievalFilterInput = Omit<RetrievalFilters, 'currentOnly' | 'effectiveOn'>;
-
 /** D-12: which document versions a request reads. 'current' (the default) is today's behaviour; a range takes ISO dates. */
 export type VersionScope = 'current' | 'all' | { from?: string; to?: string };
+
+/** versionScope is the request's ask; it never reaches RetrievalFilters, and the search stage applies it only when the switch allows (D-12). */
+export type RetrievalFilterInput = Omit<RetrievalFilters, 'currentOnly' | 'effectiveOn'> & { versionScope?: Exclude<VersionScope, 'current'> };
 
 /** Request fields a backend honours beyond the base contract; a backend that does not declare one is never handed it (backendForRequest). */
 export interface BackendCapabilities {

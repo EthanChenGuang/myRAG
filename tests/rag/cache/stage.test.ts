@@ -4,7 +4,7 @@ import type { CachedAnswer } from '@/lib/rag-eval/contracts.generated';
 import { runRetrieval } from '@/lib/rag';
 import { resetRetrievalBackendForTests, setRetrievalBackendForTests } from '@/lib/rag/backend/registry';
 import type { RpcClient } from '@/lib/rag/backend/supabase-rpc';
-import type { BackendLegs, RetrievalBackend } from '@/lib/rag/backend/types';
+import type { BackendLegs, RetrievalBackend, RetrievalFilterInput } from '@/lib/rag/backend/types';
 import { computeCacheKeyHash } from '@/lib/rag/cache/keys';
 import type { CacheHit, CacheQuery, SemanticCache } from '@/lib/rag/cache/types';
 import { resetActiveChunkingProfilesForTests } from '@/lib/rag/chunking/active';
@@ -103,6 +103,7 @@ interface LayerRun {
   stageOverrides?: StageOverrides;
   context?: RetrievalCacheContext | null;
   env?: Record<string, string>;
+  retrievalFilters?: RetrievalFilterInput;
 }
 
 /** Runs the query layer alone with a hand-built cache seam (the pipeline supplies the real one). */
@@ -129,6 +130,7 @@ async function runLayer(cache: SemanticCache | null, run: LayerRun = {}, admin?:
       options: { ragMode: run.ragMode ?? 'strict', webSearchEnabled: false, ...run.options },
       ...(run.documentRefs ? { documentRefs: run.documentRefs } : {}),
       ...(run.stageOverrides ? { stageOverrides: run.stageOverrides } : {}),
+      ...(run.retrievalFilters ? { retrievalFilters: run.retrievalFilters } : {}),
       ...(context ? { cacheContext: context } : {}),
     },
     config: loadRagConfig(env(run.env)),
@@ -267,6 +269,22 @@ describe('semantic_cache stage in the query layer (D-05, D-32, D-33, D-36)', () 
       expect(run.out.cacheTicket).toBeUndefined();
     }
     expect(memory.checks).toEqual([]);
+  });
+
+  it('an effective version scope other than current bypasses with version_scope; an ignored one checks normally (D-14)', async () => {
+    const memory = memoryCache();
+    const on = { RAG_LEXICAL_SEARCH: 'true', RAG_VERSION_SCOPE: 'true' };
+    const history = await runLayer(memory.cache, { env: on, retrievalFilters: { versionScope: 'all' } });
+    const range = await runLayer(memory.cache, { env: on, retrievalFilters: { versionScope: { from: '2026-01-01' } } });
+    for (const run of [history, range]) {
+      expect(run.record).toMatchObject({ status: 'disabled', detail: 'bypass=version_scope' });
+      expect(run.out.cacheTicket).toBeUndefined();
+    }
+    expect(memory.checks).toEqual([]);
+
+    const ignored = await runLayer(memory.cache, { retrievalFilters: { versionScope: 'all' } });
+    expect(ignored.record).toMatchObject({ status: 'ok', detail: 'miss' });
+    expect(ignored.out.cacheTicket?.turn.versionScope).toBeUndefined();
   });
 
   it('non-default retrieval options bypass with retrieval_options; the configured count checks normally', async () => {

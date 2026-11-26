@@ -1,4 +1,4 @@
-import type { BackendLegs, BackendSearchRequest, RankedHit, RetrievalBackend, RetrievalFilters } from '../backend/types';
+import type { BackendLegs, BackendSearchRequest, RankedHit, RetrievalBackend, RetrievalFilters, VersionScope } from '../backend/types';
 import { LEGACY_PROFILE } from '../embeddings/active-profile';
 import type { QueryEmbedding } from '../embeddings/query-embedding';
 import { rrf, type FusedHit, type RankedList } from '../fusion/rrf';
@@ -21,6 +21,8 @@ export interface RetrievalPortContext {
   /** Lexical search on and available; a dense-only variant sends no lexical tokens either way. */
   lexicalEnabled: boolean;
   chunkingProfileOverride?: Record<string, string>;
+  /** D-12: the effective non-current version scope; absent reads current versions. */
+  versionScope?: Exclude<VersionScope, 'current'>;
 }
 
 /** Server-side view of a port: the search stage reads the collected legs; the framework only ever sees `port`. */
@@ -46,6 +48,8 @@ export function variantSearchRequest(args: {
   lexicalEnabled: boolean;
   signal: AbortSignal;
   chunkingProfileOverride?: Record<string, string> | null;
+  /** D-12: set only for a non-current effective scope, so a default request sends today's request object. */
+  versionScope?: VersionScope;
 }): BackendSearchRequest {
   const { variant, embedding } = args;
   // P-6: a dense-only variant (HyDE) sends no lexical tokens, so it contributes no lexical list.
@@ -61,6 +65,7 @@ export function variantSearchRequest(args: {
     lexicalLimit: args.pool,
     signal: args.signal,
     ...(args.chunkingProfileOverride ? { chunkingProfileOverride: args.chunkingProfileOverride } : {}),
+    ...(args.versionScope !== undefined && args.versionScope !== 'current' ? { versionScope: args.versionScope } : {}),
   };
 }
 
@@ -127,6 +132,7 @@ export function createRetrievalPort(ctx: RetrievalPortContext): RetrievalPortHan
           lexicalEnabled,
           signal,
           chunkingProfileOverride: ctx.chunkingProfileOverride ?? null,
+          ...(ctx.versionScope !== undefined ? { versionScope: ctx.versionScope } : {}),
         }),
       );
       collected.set(index, legs);

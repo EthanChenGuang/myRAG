@@ -1,6 +1,6 @@
 import type { RpcClient } from '../../backend/supabase-rpc';
-import { getRetrievalBackend } from '../../backend/registry';
-import type { BackendLegs, RankedHit, RetrievalFilterInput, RetrievalFilters } from '../../backend/types';
+import { backendForRequest, getRetrievalBackend } from '../../backend/registry';
+import type { BackendLegs, RankedHit, RetrievalFilters, VersionScope } from '../../backend/types';
 import type { AssemblyDocumentRow } from '../../context/assemble';
 import { fetchAssemblyRows } from '../../context/fetch-rows';
 import type { RagConfig, StageName } from '../../config';
@@ -34,6 +34,7 @@ import {
 } from '../translation-legs';
 import type { RetrievalParams } from '@/lib/rag-eval/contracts.generated';
 import type { SearchDelegate } from '../../query/port-types';
+import { effectiveVersionScope } from '../../query/filters';
 
 export interface SearchStagesInput {
   input: RunRetrievalInput;
@@ -121,11 +122,23 @@ const BINDING_STAGE_MARGIN_MS = 10;
 export interface SearchStagesOutput {
   fusedHits: FusedHit[];
   dedupeCounts: DedupeCounts;
+  /** D-12: the version scope this request read; the context stage and later legs read this one value. */
+  versionScope: VersionScope;
 }
 
+/** D-12, D-40: fixed trace codes of the search stage detail. */
+export const VERSIONS_IGNORED = 'versions_ignored';
+export const SUPERSEDED_DENSE_UNAVAILABLE = 'superseded_dense_unavailable';
+export const BACKEND_FIELD_UNSUPPORTED = 'backend_field_unsupported';
+
 function buildFilters(input: RunRetrievalInput): RetrievalFilters {
-  const extra: RetrievalFilterInput = input.retrievalFilters ?? {};
+  const { versionScope: _versionScope, ...extra } = input.retrievalFilters ?? {};
   return { currentOnly: true, ...extra };
+}
+
+function joinDetail(parts: readonly (string | undefined)[]): string | undefined {
+  const present = parts.filter((part): part is string => part !== undefined && part.length > 0);
+  return present.length > 0 ? present.join(';') : undefined;
 }
 
 function nonEmpty(values: readonly unknown[] | undefined): boolean {
@@ -301,7 +314,17 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
   const spec = (name: StageName, onFail: StageSpec['onFail']) => stageSpec(config, profile, name, onFail, stageOverrides);
   const pool = params.candidate_pool_size;
   const filters = ctx.filters ?? buildFilters(input);
-  const backend = getRetrievalBackend();
+  const versions = effectiveVersionScope(config, profile, input.retrievalFilters?.versionScope);
+  const historyScope = versions.scope === 'current' ? undefined : versions.scope;
+  const route = historyScope ? backendForRequest({ versionScope: historyScope }) : { backend: getRetrievalBackend() };
+  const backend = route.backend;
+  const versionScopeArg = historyScope ? { versionScope: historyScope } : {};
+  const versionCodes = [
+    versions.ignored ? VERSIONS_IGNORED : undefined,
+    historyScope ? SUPERSEDED_DENSE_UNAVAILABLE : undefined,
+    route.reason === 'backend_field_unsupported' ? BACKEND_FIELD_UNSUPPORTED : undefined,
+  ];
+  const versionDegraded = route.reason === 'backend_field_unsupported';
   const lexicalEnabled = config.v2.lexicalSearch;
   const verdict = getV2StartupVerdict();
   const icuSkipLexical = lexicalEnabled && !verdict.icuAvailable;
@@ -365,6 +388,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
             lexicalLimit: pool,
             signal: stageSignal,
             ...(chunkingOverride ? { chunkingProfileOverride: chunkingOverride } : {}),
+            ...versionScopeArg,
           })
           .then((legs) => legs.lexical)
       : Promise.resolve(null);
@@ -386,6 +410,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       embed: async () => variants.map((_variant, index) => ctx.variantEmbeddings?.[index] ?? embedding),
       lexicalEnabled: lexicalEnabled && verdict.icuAvailable,
       ...(chunkingOverride ? { chunkingProfileOverride: chunkingOverride } : {}),
+      ...versionScopeArg,
     });
     let order: unknown;
     try {
@@ -430,6 +455,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
             lexicalEnabled: lexicalEnabled && verdict.icuAvailable,
             signal: stageSignal,
             chunkingProfileOverride: chunkingOverride,
+            ...versionScopeArg,
           }),
         );
         denseTotal += legs.dense.length;
@@ -445,6 +471,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
   type SearchResult = Awaited<ReturnType<typeof runBackendSearch>>;
 
   const searchCounts = (value: {
+    legsByVariant: BackendLegs[];
     denseTotal: number;
     lexicalTotal: number;
     domain: BindingLegsOutput | null;
@@ -456,16 +483,14 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     ...(value.domain ? value.domain.counts : {}),
     ...(value.translation ? value.translation.counts : {}),
     ...(value.term ? { term: value.term.length } : {}),
+    ...(historyScope ? { superseded: supersededCount(value) } : {}),
   });
 
   const extraFailed = (value: SearchResult): boolean =>
     (value.domain !== null && value.domain.failures.length > 0) || (value.translation !== null && value.translation.failures.length > 0);
-  const extraDetail = (value: SearchResult): string | undefined => {
-    const parts = [value.domain ? bindingFailureDetail(value.domain.failures) : undefined, translationDetail(value.translation)].filter(
-      (part): part is string => part !== undefined,
-    );
-    return parts.length > 0 ? parts.join(';') : undefined;
-  };
+  const extraDetail = (value: SearchResult): string | undefined =>
+    joinDetail([value.domain ? bindingFailureDetail(value.domain.failures) : undefined, translationDetail(value.translation)]);
+  const hasVersionCodes = versionCodes.some((code) => code !== undefined);
 
   let searchValue: Awaited<ReturnType<typeof runBackendSearch>>['legsByVariant'];
   let domainLists: RankedList[] = [];
@@ -494,13 +519,12 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
     translationOutput = searched.translation;
     delegated = searched.delegated;
     termHits = searched.term;
-    const translationNote = translationDetail(searched.translation);
     collector.record({
       name: 'search',
       status: 'degraded',
       startedAt,
       endedAt: collector.now(),
-      detail: translationNote ? `lexical_icu_unavailable;${translationNote}` : 'lexical_icu_unavailable',
+      detail: joinDetail(['lexical_icu_unavailable', translationDetail(searched.translation), ...versionCodes])!,
       counts: searchCounts(searched),
       candidatesOut: searched.denseTotal + searched.lexicalTotal,
     });
@@ -515,11 +539,12 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
           candidatesOut: (value) => value.denseTotal + value.lexicalTotal,
           counts: searchCounts,
           ...(ctx.searchDelegate ? { failureDetail: delegateFailureDetail } : {}),
-          ...(bindings || translations
+          ...(bindings || translations || hasVersionCodes
             ? {
                 // D-19, D-30: a dropped binding or translation leg degrades the stage; the original legs and the answer continue.
-                status: (value) => (extraFailed(value) ? 'degraded' : 'ok'),
-                detail: extraDetail,
+                // D-12: a backend that cannot serve the version scope is replaced by pgvector and degrades the stage too.
+                status: (value) => (extraFailed(value) || versionDegraded ? 'degraded' : 'ok'),
+                detail: (value) => joinDetail([extraDetail(value), ...versionCodes]),
               }
             : {}),
         },
@@ -544,7 +569,7 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
       hasNarrowingFilters(filters) ? { ...exactSpec, enabled: false } : exactSpec,
       signal,
       (stageSignal) =>
-        exactIdStage(input.query, scope, { client: requireAdminSearchClient(getRagDeps()), signal: stageSignal, limit: pool }),
+        exactIdStage(input.query, scope, { client: requireAdminSearchClient(getRagDeps()), signal: stageSignal, limit: pool, ...versionScopeArg }),
       collector,
       {
         candidatesIn: searchValue.reduce((total, legs) => total + legs.dense.length + legs.lexical.length, 0),
@@ -599,7 +624,14 @@ export async function runSearchStages(ctx: SearchStagesInput): Promise<SearchSta
 
   const capped = deduped.skipped ? sliceCap(fused, params.rerank_input_cap) : deduped.value;
 
-  return { fusedHits: capped.hits, dedupeCounts: capped.counts };
+  return { fusedHits: capped.hits, dedupeCounts: capped.counts, versionScope: versions.scope };
+}
+
+function supersededCount(value: { legsByVariant: BackendLegs[]; term: RankedHit[] | null }): number {
+  const ids = new Set<string>();
+  for (const legs of value.legsByVariant) for (const hit of [...legs.dense, ...legs.lexical]) if (hit.isCurrent === false) ids.add(hit.chunkId);
+  for (const hit of value.term ?? []) if (hit.isCurrent === false) ids.add(hit.chunkId);
+  return ids.size;
 }
 
 async function runAgainstSignal<T>(parent: AbortSignal, fn: (signal: AbortSignal) => Promise<T>): Promise<T> {
