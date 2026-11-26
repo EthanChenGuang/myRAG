@@ -459,6 +459,77 @@ def _floor_tier(name: str) -> Tier:
     return "nightly" if name.startswith("nightly") else "smoke"
 
 
+def _pairs(entries: list[str] | None, flag: str, names: set[str], cast) -> dict[str, object]:
+    values: dict[str, object] = {}
+    for entry in entries or []:
+        name, sep, raw = entry.partition("=")
+        if not sep or not name or not raw:
+            raise ValueError(f"{flag} expects <name>=<value>, got {entry!r}")
+        if name not in names:
+            raise ValueError(f"{flag} names tier {name!r}, which has no --tier")
+        try:
+            values[name] = cast(raw)
+        except ValueError as exc:
+            raise ValueError(f"{flag} {name}: {exc}") from exc
+    return values
+
+
+def _overall(result: AbsoluteGateResult, check: str) -> float | None:
+    return next((row.measured for row in result.checks if row.check == check and row.slice == "overall"), None)
+
+
+def _composition_result(result: AbsoluteGateResult) -> str:
+    if any(code in (NO_ANSWER_SHARE_BELOW_MIN, REQUIRED_KIND_MISSING) for code in result.failed):
+        return "failed"
+    return next((row.result for row in result.checks if row.check == "no_answer_share"), "skipped")
+
+
+def _tier_entry(name: str, raw_path: str, report: EvalReport, gates: QualityGates, stage: str) -> dict[str, object]:
+    enforced = evaluate(report, gates, tier=_floor_tier(name))
+    return {
+        "name": name,
+        "stage": stage,
+        "report": raw_path,
+        "out": str(Path(raw_path).parent),
+        "floor_tier": _floor_tier(name),
+        "rag_mode": report.rag_mode,
+        "exit_code": exit_code_for(enforced),
+        "passed": enforced.passed,
+        "failed": list(enforced.failed),
+        "false_answer_rate": _overall(enforced, "false_answer_rate"),
+        "false_refusal_rate": _overall(enforced, "false_refusal_rate"),
+        "composition_result": _composition_result(enforced),
+        "stale_result": enforced.stale_result,
+        "checks": [row.model_dump(mode="json") for row in enforced.checks],
+        "composition": enforced.composition.model_dump(mode="json"),
+    }
+
+
+def render_measurement_markdown(record: Mapping[str, object]) -> str:
+    lines = [
+        "# Absolute gate measurement",
+        "",
+        "Would-be exit code: the absolute gate in enforce mode (0 pass, 11 ceiling or floor, 12 composition or stale share).",
+        "Gate exit: the exit code of the gate run itself (noise band; absolute gate in report mode). The wall time of each run is in seconds.",
+        "",
+        "| Tier | Stage | Out | False-answer rate | False-refusal rate | Composition | Would-be exit code | Gate exit | Wall time (s) |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    for entry in record.get("tiers", []):  # type: ignore[union-attr]
+        wall = entry.get("wall_time_s")
+        gate_exit = entry.get("gate_exit")
+        lines.append(
+            f"| {entry['name']} | {entry['stage']} | {entry['out']} | {_fmt(entry.get('false_answer_rate'))} | "
+            f"{_fmt(entry.get('false_refusal_rate'))} | {entry.get('composition_result')} | {entry['exit_code']} | "
+            f"{'-' if gate_exit is None else gate_exit} | {'-' if wall is None else f'{wall:.1f}'} |"
+        )
+    lines += ["", "## Failed checks per tier", ""]
+    for entry in record.get("tiers", []):  # type: ignore[union-attr]
+        failed = ", ".join(entry.get("failed") or []) or "none"
+        lines.append(f"- {entry['name']} ({entry['stage']}): {failed}")
+    return "\n".join(lines) + "\n"
+
+
 def _measure(args: argparse.Namespace) -> int:
     try:
         gates = QualityGates.model_validate_json(_read(resolve_cli_path(args.gates)))
@@ -472,25 +543,31 @@ def _measure(args: argparse.Namespace) -> int:
                 raise ValueError(f"--tier {name} given twice")
             tiers[name] = EvalReport.model_validate_json(_read(resolve_cli_path(Path(raw_path))))
             paths[name] = raw_path
+        wall = _pairs(args.wall_time, "--wall-time", set(tiers), float)
+        gate_exit = _pairs(args.gate_exit, "--gate-exit", set(tiers), int)
+        out = resolve_cli_path(args.out)
+        previous: list[dict[str, object]] = []
+        if out.exists():
+            existing = json.loads(_read(out))
+            if not isinstance(existing, dict) or not isinstance(existing.get("tiers"), list):
+                raise ValueError(f"{out}: expected a measurement record with a tiers list")
+            previous = existing["tiers"]
     except (OSError, ValidationError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_MISMATCH
-    record: dict[str, object] = {"stage": args.stage, "tiers": {}}
+    entries = [
+        entry for entry in previous if not (entry.get("name") in tiers and entry.get("stage") == args.stage)
+    ]
     for name in sorted(tiers):
-        enforced = evaluate(tiers[name], gates, tier=_floor_tier(name))
-        record["tiers"][name] = {  # type: ignore[index]
-            "report": paths[name],
-            "stage": args.stage,
-            "floor_tier": _floor_tier(name),
-            "would_exit": exit_code_for(enforced),
-            "passed": enforced.passed,
-            "failed": list(enforced.failed),
-            "checks": [row.model_dump(mode="json") for row in enforced.checks],
-            "composition": enforced.composition.model_dump(mode="json"),
-            "stale_result": enforced.stale_result,
-        }
-    out = resolve_cli_path(args.out)
+        entry = _tier_entry(name, paths[name], tiers[name], gates, args.stage)
+        entry["wall_time_s"] = wall.get(name)
+        entry["gate_exit"] = gate_exit.get(name)
+        entries.append(entry)
+    entries.sort(key=lambda entry: (str(entry.get("name")), str(entry.get("stage"))))
+    record: dict[str, object] = {"schema_version": 1, "gates_config_hash": gates.config_hash, "tiers": entries}
     _write_text(out, json.dumps(record, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
+    if args.markdown:
+        _write_text(resolve_cli_path(args.markdown), render_measurement_markdown(record))
     print(f"absolute gate measure: {len(tiers)} tier(s) recorded ({args.stage})")
     return EXIT_PASS
 
@@ -511,7 +588,10 @@ def _parser() -> argparse.ArgumentParser:
     measure.add_argument("--stage", required=True, choices=["before", "after"])
     measure.add_argument("--tier", required=True, action="append", metavar="NAME=REPORT")
     measure.add_argument("--gates", required=True, type=Path)
-    measure.add_argument("--out", required=True, type=Path)
+    measure.add_argument("--out", required=True, type=Path, help="measurement JSON; entries of other stages or tiers are kept")
+    measure.add_argument("--wall-time", action="append", metavar="NAME=SECONDS", help="wall time of a tier's run")
+    measure.add_argument("--gate-exit", action="append", metavar="NAME=CODE", help="exit code of a tier's gate run")
+    measure.add_argument("--markdown", type=Path, help="also write the Markdown twin of the whole record")
     return parser
 
 
