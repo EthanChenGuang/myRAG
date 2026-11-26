@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { RetrievalParams, TerminologyParams } from '@/lib/rag-eval/contracts.generated';
-import type { IterativeScanMode, RerankerKind, RerankTier } from '../config';
+import type { IterativeScanMode, RagConfig, RerankerKind, RerankTier } from '../config';
 import type { InjectionCheckMode, SecurityConfig, ToolResultGuardMode } from '../security/config';
 import { detectorsConfigVersion } from '../security/detectors';
 import { injectionRulesVersion } from '../security/injection-rules';
@@ -134,6 +134,21 @@ export interface RetrievalConfigHashInput {
   tuning?: RetrievalConfigHashTuning | null;
   /** D-21: present only while the terminology stage is enabled for the request (terminologyHashBlock). */
   terminology?: RetrievalConfigHashTerminology | null;
+  /** D-08: present only while BM25 is the effective lexical scoring (lexicalScoringHashBlock). */
+  lexicalScoring?: RetrievalConfigHashLexicalScoring | null;
+}
+
+export interface RetrievalConfigHashLexicalScoring {
+  mode: 'bm25';
+  k1: number;
+  b: number;
+}
+
+/** D-08: null while the effective mode is ts_rank_cd, whatever k1 and b say, so the off-hash keeps its value. */
+export function lexicalScoringHashBlock(config: Pick<RagConfig, 'v2'>): RetrievalConfigHashLexicalScoring | null {
+  const scoring = config.v2.lexicalScoring;
+  if (scoring.mode !== 'bm25') return null;
+  return { mode: 'bm25', k1: scoring.k1, b: scoring.b };
 }
 
 function sortKeys(value: unknown): unknown {
@@ -200,6 +215,7 @@ function buildPayload(input: RetrievalConfigHashInput): Record<string, unknown> 
     ...(input.docTranslation ? { doc_translation: input.docTranslation } : {}),
     ...(input.tuning && Object.keys(input.tuning).length > 0 ? { tuning: input.tuning } : {}),
     ...(input.terminology ? { terminology: input.terminology } : {}),
+    ...(input.lexicalScoring ? { lexical_scoring: input.lexicalScoring } : {}),
   };
 }
 

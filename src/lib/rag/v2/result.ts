@@ -21,6 +21,7 @@ import { getRagDeps } from '../deps';
 import type { SecurityConfig } from '../security/config';
 import {
   computeRetrievalConfigHash,
+  lexicalScoringHashBlock,
   securityHashComponent,
   terminologyHashBlock,
   type RetrievalConfigHashQueryLayer,
@@ -142,6 +143,7 @@ export async function requestRetrievalConfigHash(ctx: RequestConfigHashInput): P
     ...(ctx.queryLayerHash ? { queryLayer: ctx.queryLayerHash } : {}),
     ...(ctx.effectiveOn ? { effectiveOn: ctx.effectiveOn } : {}),
     ...(terminology ? { terminology } : {}),
+    lexicalScoring: lexicalScoringHashBlock(config),
   });
 }
 
