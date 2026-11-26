@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import type { LanguageModelV3, LanguageModelV3CallOptions, LanguageModelV3StreamPart } from '@ai-sdk/provider';
-import { GoldenItemSchema, type GoldenItem } from '../../src/lib/rag-eval/contracts.generated';
+import { ClaimCheckResultSchema, GoldenItemSchema, type GoldenItem } from '../../src/lib/rag-eval/contracts.generated';
 import { NO_ANSWER_SENTINEL } from '../../src/lib/rag/generation/sentinel';
 import { fixedText } from '../../src/lib/rag/lang/texts';
 import {
@@ -9,6 +9,9 @@ import {
   installFakeAnswerModels,
 } from '../../eval/harness/fake-answer-models.mts';
 import { FAKE_CITATION_GENERATOR_MODEL, fakeCitationAnswer } from '../../eval/harness/fake-citation-generator.mts';
+import { startFakeClaimsSidecar } from '../../eval/harness/fake-claims.mts';
+import { parseRunConfig, RunConfigError } from '../../eval/harness/run-config.mts';
+import { evalFakeLanguageModelFactory, resolveAnswerGenerator } from '../../eval/harness/run-eval.mts';
 
 const base = { review_status: 'approved', provenance: 'synthetic_fixture', split: 'dev', conversation: [] } as const;
 
@@ -338,5 +341,99 @@ describe('fake judge', () => {
     const payload = JSON.stringify({ premises, claims });
     const { text } = await generate('fake/judge-v1', 'Judge each sentence.', payload);
     expect(JSON.parse(text)).toEqual(fakeJudgeClaims({ premises, claims }));
+  });
+});
+
+describe('fake claims sidecar', () => {
+  const request = {
+    request_id: 'req-1',
+    language: 'en',
+    allow_vectara: false,
+    premises: [
+      { ref: 'S1', text: 'The Q-7 gadget weighs 3 kilograms.' },
+      { ref: 'S2', text: 'The R-1 lamp uses 5 watts.' },
+    ],
+    claims: [
+      { index: 0, hypothesis: 'The Q-7 gadget weighs 3 kilograms.', premise_refs: ['S1'] },
+      { index: 1, hypothesis: 'The lamp is blue.', premise_refs: ['S2'] },
+    ],
+  };
+
+  async function post(url: string, body: unknown, secret?: string) {
+    const res = await fetch(`${url}/v1/groundedness/claims`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', ...(secret === undefined ? {} : { 'x-sidecar-secret': secret }) },
+      body: typeof body === 'string' ? body : JSON.stringify(body),
+    });
+    return { status: res.status, body: await res.json() };
+  }
+
+  test('rejects a missing or wrong secret with 401 and an invalid body with 422', async () => {
+    const fake = await startFakeClaimsSidecar({ secret: 'fixture-secret-0123456789' });
+    try {
+      expect((await post(fake.url, request)).status).toBe(401);
+      expect((await post(fake.url, request, 'wrong-secret')).status).toBe(401);
+      expect((await post(fake.url, '{not json', fake.secret)).status).toBe(422);
+      expect((await post(fake.url, { ...request, claims: [] }, fake.secret)).status).toBe(422);
+      const unknownRef = { ...request, claims: [{ index: 0, hypothesis: 'x y', premise_refs: ['S9'] }] };
+      expect((await post(fake.url, unknownRef, fake.secret)).status).toBe(422);
+      expect(fake.requests).toHaveLength(0);
+    } finally {
+      await fake.close();
+    }
+  });
+
+  test('returns one deterministic verdict per claim and records the request', async () => {
+    const fake = await startFakeClaimsSidecar();
+    try {
+      const first = await post(fake.url, request, fake.secret);
+      const second = await post(fake.url, request, fake.secret);
+      expect(first.status).toBe(200);
+      expect(ClaimCheckResultSchema.parse(first.body).claims.map((claim) => claim.index)).toEqual([0, 1]);
+      expect(first.body.claims[0]).toMatchObject({ status: 'scored', scorer: 'hhem_2_1_open', score: 1 });
+      expect(first.body.claims[1].score).toBeLessThan(1);
+      expect(second.body).toEqual(first.body);
+      expect(fake.requests).toHaveLength(2);
+      const italian = await post(fake.url, { ...request, language: 'it' }, fake.secret);
+      expect(italian.body.claims.every((claim: { status: string; reason: string }) => claim.status === 'not_checked' && claim.reason === 'unsupported_language')).toBe(true);
+    } finally {
+      await fake.close();
+    }
+  });
+});
+
+describe('harness dispatch', () => {
+  test('a run config with top-level generator_model loads; an unknown top-level key is still rejected', () => {
+    const config = parseRunConfig({ name: 'with-model', env: {}, overrides: null, generator_model: RULE_FOLLOWING }, 'inline');
+    expect(config.generatorModel).toBe(RULE_FOLLOWING);
+    expect(parseRunConfig({ name: 'without-model', env: {} }, 'inline').generatorModel).toBeUndefined();
+    expect(() => parseRunConfig({ name: 'bad-model', generator_model: '' }, 'inline')).toThrow(RunConfigError);
+    expect(() => parseRunConfig({ name: 'bad-model', generator_model: 'has spaces' }, 'inline')).toThrow(RunConfigError);
+    expect(() => parseRunConfig({ name: 'unknown', generator: RULE_FOLLOWING }, 'inline')).toThrow(RunConfigError);
+  });
+
+  test('a run config may set the Phase 5 citations switch', () => {
+    expect(parseRunConfig({ name: 'cited', env: { RAG_CITATIONS: 'true' } }, 'inline').env.RAG_CITATIONS).toBe('true');
+    expect(() => parseRunConfig({ name: 'cited', env: { RAG_CITATIONS: 'yes' } }, 'inline')).toThrow(RunConfigError);
+  });
+
+  test('a fake generator_model selects the fake generator and an answer; the citations switch asks for citations', () => {
+    expect(resolveAnswerGenerator({ generatorModel: RULE_FOLLOWING })).toMatchObject({ generator: 'fake', includeAnswer: true, citations: false });
+    expect(resolveAnswerGenerator({ generatorModel: RULE_FOLLOWING, citationsSwitch: true })).toMatchObject({ citations: true });
+    expect(resolveAnswerGenerator({})).toMatchObject({ generator: undefined, includeAnswer: false, citations: false });
+    expect(resolveAnswerGenerator({ citations: true })).toMatchObject({ generator: 'fake', includeAnswer: true });
+    expect(() => resolveAnswerGenerator({ generatorModel: RULE_FOLLOWING, baseUrl: 'https://app.invalid' })).toThrow(RunConfigError);
+    expect(() => resolveAnswerGenerator({ generatorModel: RULE_FOLLOWING, generator: 'live' })).toThrow(RunConfigError);
+  });
+
+  test('the installed factory serves the new fakes and still selects the fake citation generator by its id', async () => {
+    const installed = evalFakeLanguageModelFactory(ITEMS);
+    const sys = system(CONTEXT_PARTIAL, ['partial_answer']);
+    const rule = (installed(RULE_FOLLOWING) as unknown as LanguageModelV3).doGenerate(callOptions(sys, partialItem.question));
+    expect((await rule).content[0]).toMatchObject({ text: expect.stringContaining(NOT_COVERED) });
+    const fake = installed(FAKE_CITATION_GENERATOR_MODEL) as unknown as LanguageModelV3;
+    expect(fake.modelId).toBe(FAKE_CITATION_GENERATOR_MODEL);
+    const answer = await fake.doGenerate(callOptions(sys, partialItem.question));
+    expect(answer.content[0]).toMatchObject({ text: fakeCitationAnswer({ system: sys, question: partialItem.question }) });
   });
 });

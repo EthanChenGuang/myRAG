@@ -923,3 +923,11 @@ export async function runEval(options: RunEvalOptions): Promise<RunEvalResult> {
     ...(cachePairsPath ? { cachePairsPath } : {}),
   };
 }
+
+export function resolveAnswerGenerator(_input: Record<string, unknown>): { generator: EvalGenerator | undefined; includeAnswer: boolean; citations: boolean } {
+  return { generator: undefined, includeAnswer: false, citations: false };
+}
+
+export function evalFakeLanguageModelFactory(_items: readonly GoldenItem[]) {
+  return installFakeCitationGenerator();
+}
