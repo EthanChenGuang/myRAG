@@ -117,13 +117,35 @@ describe('tracer retrieval through runEval', () => {
 });
 
 describe('run-smoke absolute-gate flags', () => {
-  test('--gates-mode without --gates is refused with exit 2 naming the flag', () => {
-    const result = spawnSync(process.execPath, ['--import', 'tsx', 'eval/harness/run-smoke.mts', '--gates-mode', 'report', '--out', makeOutDir()], {
+  // D-06 (05.3-16): a gated run always carries the absolute gates of eval/config/quality-gates.json; only --no-gate leaves them out.
+  function gated(extra: string[]): { status: number | null; stderr: string; gate: { absolute?: { mode?: string; gates_config?: string } | null } | null } {
+    const out = makeOutDir();
+    const result = spawnSync(process.execPath, ['--import', 'tsx', 'eval/harness/run-smoke.mts', '--golden', GOLDEN_PATH, '--no-answers', '--out', out, ...extra], {
       cwd: REPO_ROOT,
       encoding: 'utf8',
     });
-    expect(result.status).toBe(2);
-    expect(result.stderr).toContain('--gates-mode needs --gates');
+    const gatePath = path.join(out, 'gate.json');
+    const gate = fs.existsSync(gatePath) ? (JSON.parse(fs.readFileSync(gatePath, 'utf8')) as { absolute?: { mode?: string } | null }) : null;
+    return { status: result.status, stderr: result.stderr, gate };
+  }
+
+  test('a gated run without --gates evaluates the absolute gates in enforce mode', () => {
+    const run = gated([]);
+    expect(run.gate, run.stderr.slice(-2000)).not.toBeNull();
+    expect(run.gate?.absolute).toBeTruthy();
+    expect(run.gate?.absolute?.mode).toBe('enforce');
+  });
+
+  test('--gates-mode report without --gates runs the default absolute gates in report mode', () => {
+    const run = gated(['--gates-mode', 'report']);
+    expect(run.gate, run.stderr.slice(-2000)).not.toBeNull();
+    expect(run.gate?.absolute?.mode).toBe('report');
+  });
+
+  test('--no-gate runs neither gate', () => {
+    const run = gated(['--no-gate']);
+    expect(run.status, run.stderr.slice(-2000)).toBe(0);
+    expect(run.gate).toBeNull();
   });
 
   test('--gates-mode accepts only enforce or report', () => {
