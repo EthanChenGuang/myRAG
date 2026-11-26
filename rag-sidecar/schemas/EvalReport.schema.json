@@ -2651,7 +2651,6 @@
       "default": null
     },
     "rag_mode": {
-      "default": "strict",
       "enum": [
         "strict",
         "balanced",
@@ -2713,13 +2712,11 @@
       "default": null
     },
     "stale_count": {
-      "default": 0,
       "minimum": 0,
       "title": "Stale Count",
       "type": "integer"
     },
     "stale_share": {
-      "default": 0.0,
       "maximum": 1,
       "minimum": 0,
       "title": "Stale Share",

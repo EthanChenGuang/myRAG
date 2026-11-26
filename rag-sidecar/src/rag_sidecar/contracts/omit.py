@@ -19,6 +19,12 @@ def omit_none_schema(schema: dict[str, Any]) -> None:
         schema.update(values[0])
 
 
+def omit_default_schema(schema: dict[str, Any]) -> None:
+    """A key left out of the serialised object while it holds its default: optional, no default in the schema."""
+
+    schema.pop("default", None)
+
+
 class OmitNoneModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 

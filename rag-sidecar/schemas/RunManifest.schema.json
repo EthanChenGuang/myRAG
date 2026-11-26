@@ -1587,7 +1587,6 @@
       "type": "integer"
     },
     "rag_mode": {
-      "default": "strict",
       "enum": [
         "strict",
         "balanced",

@@ -241,7 +241,7 @@ def test_real_report_names_the_population_counts_and_report_only_provenances(tmp
     assert "3 approved item(s)" in note
     assert "en 1, it 1, zh 1" in note
     assert "provenances production, human" in note
-    assert "synthetic_fixture, claude_draft and ragas_generated items are report-only" in note
+    assert "synthetic_fixture, claude_draft, ragas_generated, historical and paraphrased items are report-only" in note
     assert any(LOADED_SHA in note and "mode real" in note for note in report.notes)
 
 
