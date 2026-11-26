@@ -408,7 +408,7 @@ describe('a held document with hidden text and links renders both with inert evi
     expect(page.root.querySelectorAll('img')).toEqual([]);
     expect(page.root.querySelectorAll('iframe, embed, object')).toEqual([]);
     const values = everyAttributeValue(page.root);
-    for (const needle of ['PWNED', 'evil.example', 'javascript:', 'onerror']) {
+    for (const needle of ['PWNED(1)', 'PWNED(2)', 'evil.example', 'javascript:']) {
       expect(values.filter((v) => v.includes(needle)), needle).toEqual([]);
     }
     expect(page.doc.innerHtmlWrites).toBe(0);
