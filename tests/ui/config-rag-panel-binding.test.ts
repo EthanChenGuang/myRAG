@@ -9,6 +9,7 @@ const require = createRequire(import.meta.url);
 const panelDir = path.resolve(import.meta.dirname, '../../scripts/config-ui/rag-panels');
 
 const PANELS = [
+  { file: 'languages.js', rootId: 'rag-administration-languages', instance: 'languagesPanel', deps: ['rag-ui.js'] },
   { file: 'ingestion.js', rootId: 'rag-administration-ingestion', instance: 'ingestionPanel' },
   { file: 'doc-types.js', rootId: 'rag-administration-doc-types', instance: 'docTypesPanel' },
   { file: 'embedding-profiles.js', rootId: 'rag-administration-profiles', instance: 'embeddingProfilesPanel' },
@@ -28,7 +29,7 @@ function addLink(doc: FakeDocument, label: string): FakeElement {
 }
 
 /** Runs a panel script the way index.html does: in <head>, before the menu links exist. */
-function loadInHead(file: string, rootId: string) {
+function loadInHead(file: string, rootId: string, deps: readonly string[] = []) {
   const doc = new FakeDocument();
   const root = doc.createElement('section');
   root.id = rootId;
@@ -46,15 +47,19 @@ function loadInHead(file: string, rootId: string) {
   };
   context.window = context;
   vm.createContext(context);
-  const code = fs.readFileSync(path.join(panelDir, file), 'utf8');
-  new vm.Script(code, { filename: file }).runInContext(context);
+  for (const name of [...deps, file]) {
+    const code = fs.readFileSync(path.join(panelDir, name), 'utf8');
+    new vm.Script(code, { filename: name }).runInContext(context);
+  }
   return { doc, root, context };
 }
 
-describe.each(PANELS)('$file starts from every RAG administration link', ({ file, rootId, instance }) => {
+describe.each(PANELS)('$file starts from every RAG administration link', (panel) => {
+  const { file, rootId, instance } = panel;
+  const deps: readonly string[] = 'deps' in panel ? panel.deps : [];
   it('binds at DOMContentLoaded, so the desktop and the mobile drawer link both start the panel', () => {
     for (const which of ['desktop', 'mobile'] as const) {
-      const { doc, root, context } = loadInHead(file, rootId);
+      const { doc, root, context } = loadInHead(file, rootId, deps);
       const desktop = addLink(doc, 'desktop');
       const mobile = addLink(doc, 'mobile');
       doc.body.appendChild(root);
@@ -66,7 +71,7 @@ describe.each(PANELS)('$file starts from every RAG administration link', ({ file
   });
 
   it('binds each link once even if DOMContentLoaded handlers run again', () => {
-    const { doc, root } = loadInHead(file, rootId);
+    const { doc, root } = loadInHead(file, rootId, deps);
     const desktop = addLink(doc, 'desktop');
     addLink(doc, 'mobile');
     doc.body.appendChild(root);
