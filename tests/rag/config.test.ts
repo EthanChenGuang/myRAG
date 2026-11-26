@@ -35,6 +35,7 @@ const PHASE42_V2_FIELDS = [
   'lexicalDictionary',
   'lexicalStemIt',
   'versionScope',
+  'embedVersionScope',
   'tableLookup',
   'dupClusters',
   'resultDiversity',
@@ -1041,5 +1042,80 @@ describe('terminology switches (D-15, D-18, D-19)', () => {
     expect(loadRagConfig(base).v2.terminologyDense).toBe(false);
     expect(loadRagConfig({ ...base, RAG_TERMINOLOGY_MINING: 'true' }).v2.terminologyMining).toBe(true);
     expect(loadRagConfig(base).v2.terminologyMining).toBe(false);
+  });
+});
+
+describe('RAG_EMBED_VERSION_SCOPE (D-58, D-40)', () => {
+  const FULL = { RAG_EMBED_VERSION_SCOPE: 'true', RAG_VERSION_SCOPE: 'true', RAG_LEXICAL_SEARCH: 'true' };
+
+  function embedWarnings(): string[] {
+    return configWarnings().filter((line) => line.includes('RAG_EMBED_VERSION_SCOPE'));
+  }
+
+  test('unset: the embed switch is false and no warning is logged', () => {
+    expect(loadRagConfig({}).v2.embedVersionScope).toBe(false);
+    expect(loadRagConfig({ RAG_PIPELINE: 'v2' }).v2.embedVersionScope).toBe(false);
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test('unset: every other v2 field equals the configuration without the variable', () => {
+    const { embedVersionScope: _a, ...withEmbedUnset } = loadRagConfig({ RAG_VERSION_SCOPE: 'true', RAG_LEXICAL_SEARCH: 'true' }).v2;
+    resetRagConfigForTests();
+    const { embedVersionScope: _b, ...withEmbedFalse } = loadRagConfig({
+      RAG_VERSION_SCOPE: 'true',
+      RAG_LEXICAL_SEARCH: 'true',
+      RAG_EMBED_VERSION_SCOPE: 'false',
+    }).v2;
+    expect(withEmbedFalse).toEqual(withEmbedUnset);
+    expect(withEmbedUnset.versionScope).toBe(true);
+  });
+
+  test('true together with the effective version scope: true, no warning', () => {
+    expect(loadRagConfig(FULL).v2.embedVersionScope).toBe(true);
+    expect(loadRagConfig({ ...FULL, RAG_EMBED_VERSION_SCOPE: 'TRUE' }).v2.embedVersionScope).toBe(true);
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test('true while RAG_VERSION_SCOPE is off: one warning naming both variables, false', () => {
+    for (const versionScope of [undefined, 'false']) {
+      const env: Record<string, string> = { RAG_EMBED_VERSION_SCOPE: 'true', RAG_LEXICAL_SEARCH: 'true' };
+      if (versionScope) env.RAG_VERSION_SCOPE = versionScope;
+      expect(loadRagConfig(env).v2.embedVersionScope).toBe(false);
+    }
+    const warnings = embedWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('[RAG Config]');
+    expect(warnings[0]).toContain('RAG_VERSION_SCOPE');
+  });
+
+  test('true while the version scope is invalid because lexical search is off: one embed warning, false', () => {
+    const config = loadRagConfig({ RAG_EMBED_VERSION_SCOPE: 'true', RAG_VERSION_SCOPE: 'true' });
+    expect(config.v2.versionScope).toBe(false);
+    expect(config.v2.embedVersionScope).toBe(false);
+    loadRagConfig({ RAG_EMBED_VERSION_SCOPE: 'true', RAG_VERSION_SCOPE: 'true', RAG_LEXICAL_SEARCH: 'false' });
+    const warnings = embedWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('RAG_VERSION_SCOPE');
+  });
+
+  test('false never warns, whatever the version scope', () => {
+    expect(loadRagConfig({ ...FULL, RAG_EMBED_VERSION_SCOPE: 'false' }).v2.embedVersionScope).toBe(false);
+    expect(loadRagConfig({ RAG_EMBED_VERSION_SCOPE: 'false' }).v2.embedVersionScope).toBe(false);
+    expect(configWarnings()).toEqual([]);
+  });
+
+  test('any other value warns once and is false', () => {
+    for (let i = 0; i < 3; i += 1) {
+      expect(loadRagConfig({ ...FULL, RAG_EMBED_VERSION_SCOPE: 'on' }).v2.embedVersionScope).toBe(false);
+    }
+    const warnings = configWarnings();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('[RAG Config]');
+  });
+
+  test('the variable is part of the memo key', () => {
+    const base = loadRagConfig({ RAG_VERSION_SCOPE: 'true', RAG_LEXICAL_SEARCH: 'true' });
+    expect(loadRagConfig(FULL)).not.toBe(base);
+    expect(loadRagConfig({})).not.toBe(loadRagConfig({ RAG_EMBED_VERSION_SCOPE: 'true' }));
   });
 });

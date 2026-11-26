@@ -1070,3 +1070,194 @@ def test_report_only_runs_never_fail_the_comparison(tmp_path: Path):
     commands, _ = _env_commands()
     result = run_switch_comparison(spec, tmp_path / "out", runner=_switch_runner(_spec51_outputs(spec, flag=worse), {}), commands=commands)
     assert result.passed is True
+
+
+# ---------- schema 3: Phase 3.2 per-switch arms (plan 03.2-66, D-46)
+
+PHASE32_SPEC = REPO_ROOT / "eval" / "config" / "phase32-comparison.json"
+PHASE32_ARMS = ("language_aware_ingest", "table_header_repeat", "table_row_serialization", "caption_language", "doc_translation")
+
+
+def _arm_item(item_id: str, language: str, category: str = "general", *, hit: bool = True, evidence: str | None = None, **extra) -> dict:
+    item = {
+        "item_id": item_id,
+        "language": language,
+        "category": category,
+        "split": "test",
+        "provenance": "synthetic_fixture",
+        "answerable": True,
+        "refused": False,
+        "span_count": 1,
+        "spans_hit_at_5": 1 if hit else 0,
+        "spans_hit_at_10": 1 if hit else 0,
+        "first_hit_rank": 1 if hit else None,
+    }
+    if evidence is not None:
+        item["evidence_language"] = evidence
+    item.update(extra)
+    return item
+
+
+def _arm_items(**misses: bool) -> list[dict]:
+    """Twelve neutral items over three languages, the table slices, an image item and a cross-lingual pair; `misses` turns hits off."""
+    items = []
+    for language in ("en", "zh", "it"):
+        items += [
+            _arm_item(f"{language}-general-001", language),
+            _arm_item(f"{language}-general-002", language),
+            _arm_item(f"{language}-table-001", language, "table"),
+            _arm_item(f"{language}-table-split-001", language, "table_split"),
+        ]
+    items += [_arm_item("ingest-image-caption-en", "en", "general"), _arm_item("xl-en-it-01", "en", "cross_lingual", evidence="it")]
+    for item in items:
+        if misses.get(item["item_id"].replace("-", "_")):
+            item.update(spans_hit_at_5=0, spans_hit_at_10=0, first_hit_rank=None)
+    return items
+
+
+def _arm_report(path: Path, items: list[dict], embedder: str | None = "fixture-hash-ngram") -> str:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"embedder_id": embedder, "items": items}), encoding="utf-8")
+    return str(path)
+
+
+def _arm_world(tmp_path: Path, runs: dict[str, tuple[list[dict], list[dict]]], embedder: str | None = "fixture-hash-ngram") -> tuple[Path, Path]:
+    manifest = {
+        name: {"off": _arm_report(tmp_path / name / "off.json", off, embedder), "on": _arm_report(tmp_path / name / "on.json", on, embedder)}
+        for name, (off, on) in runs.items()
+    }
+    runs_path = tmp_path / "runs.json"
+    runs_path.write_text(json.dumps(manifest), encoding="utf-8")
+    return PHASE32_SPEC, runs_path
+
+
+def _run_arms(tmp_path: Path, runs: dict[str, tuple[list[dict], list[dict]]], embedder: str | None = "fixture-hash-ngram") -> tuple[int, dict, str]:
+    spec, runs_path = _arm_world(tmp_path, runs, embedder)
+    out = tmp_path / "out"
+    code = main(["--spec", str(spec), "--runs", str(runs_path), "--out", str(out)])
+    payload = json.loads((out / "comparison.json").read_text(encoding="utf-8")) if (out / "comparison.json").exists() else {}
+    markdown = (out / "comparison.md").read_text(encoding="utf-8") if (out / "comparison.md").exists() else ""
+    return code, payload, markdown
+
+
+def _all_arms(**overrides: tuple[list[dict], list[dict]]) -> dict[str, tuple[list[dict], list[dict]]]:
+    runs = {name: (_arm_items(), _arm_items()) for name in PHASE32_ARMS}
+    runs.update(overrides)
+    return runs
+
+
+def _arm(payload: dict, name: str) -> dict:
+    return next(arm for arm in payload["arms"] if arm["name"] == name)
+
+
+def test_phase32_spec_names_one_arm_per_switch_with_the_slices_it_is_judged_on():
+    spec = json.loads(PHASE32_SPEC.read_text(encoding="utf-8"))
+    assert spec["schema_version"] == 3
+    arms = {arm["name"]: arm for arm in spec["arms"]}
+    assert tuple(arms) == PHASE32_ARMS
+    assert arms["language_aware_ingest"]["switch"] == "RAG_LANGUAGE_AWARE_INGEST"
+    assert arms["language_aware_ingest"]["judged"] == ["language:"]
+    for name, switch in (("table_header_repeat", "RAG_TABLE_HEADER_REPEAT"), ("table_row_serialization", "RAG_TABLE_ROW_SERIALIZATION")):
+        assert arms[name]["switch"] == switch
+        assert arms[name]["judged"] == ["category:table", "category:table_split"]
+    assert arms["caption_language"]["switch"] == "RAG_CAPTION_LANGUAGE"
+    assert arms["caption_language"]["judged"] == ["image:"]
+    assert "image" in spec["item_groups"]
+    assert arms["doc_translation"]["switch"] == "RAG_DOC_TRANSLATION"
+    assert arms["doc_translation"]["judged"] == ["category:cross_lingual", "pair:"]
+    assert spec["live_checks"] == "03.2-53"
+
+
+def test_phase32_spec_has_no_bge_m3_arm():
+    spec = json.loads(PHASE32_SPEC.read_text(encoding="utf-8"))
+    for arm in spec["arms"]:
+        assert "bge" not in arm["name"].lower()
+        assert arm["switch"] != "RAG_BGE_M3_SERVING"
+        assert "RAG_EMBEDDING_PROFILES" not in json.dumps(arm)
+
+
+def test_each_arm_reports_off_on_and_the_paired_difference_on_its_judged_slices(tmp_path: Path):
+    worse = _arm_items(zh_general_001=True, zh_general_002=True)
+    code, payload, markdown = _run_arms(tmp_path, _all_arms(language_aware_ingest=(worse, _arm_items())))
+    arm = _arm(payload, "language_aware_ingest")
+    rows = {(row["slice"], row["metric"]): row for row in arm["rows"]}
+    assert {row["slice"] for row in arm["rows"]} == {"language:en", "language:zh", "language:it"}
+    zh = rows[("language:zh", "recall_at_10")]
+    assert zh["off"] == 0.5 and zh["on"] == 1.0
+    assert zh["paired"]["mean_d"] == 0.5
+    assert zh["beyond_band"] is True and zh["direction"] == "up"
+    en = rows[("language:en", "recall_at_10")]
+    assert en["paired"]["mean_d"] == 0 and en["beyond_band"] is False
+    assert arm["status"] == "passed" and arm["failures"] == []
+    assert code == 0
+    assert "### language_aware_ingest" in markdown and "| language:zh | recall_at_10 |" in markdown
+
+
+def test_table_arms_are_judged_on_table_and_table_split_and_caption_on_image_items(tmp_path: Path):
+    _, payload, _ = _run_arms(tmp_path, _all_arms())
+    for name in ("table_header_repeat", "table_row_serialization"):
+        assert {row["slice"] for row in _arm(payload, name)["rows"]} == {"category:table", "category:table_split"}
+    assert {row["slice"] for row in _arm(payload, "caption_language")["rows"]} == {"image:en"}
+    assert {row["slice"] for row in _arm(payload, "doc_translation")["rows"]} == {"category:cross_lingual", "pair:en->it"}
+
+
+def test_an_arm_whose_on_run_drops_a_gated_slice_fails_and_names_the_slice(tmp_path: Path):
+    dropped = _arm_items(it_general_001=True, it_general_002=True, it_table_001=True)
+    code, payload, markdown = _run_arms(tmp_path, _all_arms(table_row_serialization=(_arm_items(), dropped)))
+    arm = _arm(payload, "table_row_serialization")
+    assert arm["status"] == "failed"
+    assert any(failure.startswith("language:it:recall_at_10 dropped by") for failure in arm["failures"])
+    assert any(failure.startswith("overall:") for failure in arm["failures"])
+    assert not any(failure.startswith("category:table:") for failure in arm["failures"]), "category:table is not a gated slice"
+    assert payload["passed"] is False
+    assert code == 10
+    assert "language:it:recall_at_10 dropped by" in markdown
+
+
+def test_a_drop_within_the_band_or_on_a_report_only_item_does_not_fail(tmp_path: Path):
+    off = _arm_items() + [_arm_item(f"en-bulk-{index:03d}", "en") for index in range(60)]
+    on = _arm_items() + [_arm_item(f"en-bulk-{index:03d}", "en", hit=index != 0) for index in range(60)]
+    pending = [_arm_item("it-drafted-001", "it", "table_split", report_only_reason="native_review_pending")]
+    pending_miss = [_arm_item("it-drafted-001", "it", "table_split", hit=False, report_only_reason="native_review_pending")]
+    _, payload, _ = _run_arms(tmp_path, _all_arms(table_header_repeat=(off + pending, on + pending_miss)))
+    arm = _arm(payload, "table_header_repeat")
+    assert arm["status"] == "passed", arm["failures"]
+    split = next(row for row in arm["rows"] if row["slice"] == "category:table_split" and row["metric"] == "recall_at_10")
+    assert split["n"] == 4 and split["paired"]["mean_d"] == -0.25
+
+
+def test_fixture_runs_are_wiring_proof_and_carry_no_recommendation(tmp_path: Path):
+    _, payload, markdown = _run_arms(tmp_path, _all_arms())
+    assert payload["wiring_proof"] is True
+    assert "wiring proof" in payload["label"]
+    assert all(arm["recommendation"] is None for arm in payload["arms"])
+    assert "wiring proof" in markdown.lower()
+    assert "Recommendation:" not in markdown
+    assert "03.2-53" in markdown
+
+
+def test_live_runs_carry_a_recommendation(tmp_path: Path):
+    _, payload, markdown = _run_arms(tmp_path, _all_arms(), embedder="openai-3-small-1536")
+    assert payload["wiring_proof"] is False and payload["label"] is None
+    assert all(arm["recommendation"] for arm in payload["arms"])
+    assert "Recommendation:" in markdown
+
+
+def test_an_optional_arm_without_runs_is_not_run_and_a_required_one_fails(tmp_path: Path):
+    runs = _all_arms()
+    optional = [arm["name"] for arm in json.loads(PHASE32_SPEC.read_text(encoding="utf-8"))["arms"] if arm.get("optional")]
+    assert optional == ["doc_translation"]
+    del runs["doc_translation"]
+    code, payload, markdown = _run_arms(tmp_path, runs)
+    assert _arm(payload, "doc_translation")["status"] == "not_run"
+    assert "This optional arm was not run." in markdown
+    assert code == 0 and payload["passed"] is True
+    del runs["caption_language"]
+    code, payload, markdown = _run_arms(tmp_path / "required", runs)
+    assert _arm(payload, "caption_language")["status"] == "failed"
+    assert "This required arm did not run, so it fails the comparison." in markdown
+    assert code == 10
+
+
+def test_a_schema3_spec_needs_the_runs_manifest(tmp_path: Path):
+    assert main(["--spec", str(PHASE32_SPEC), "--out", str(tmp_path / "out")]) == 2

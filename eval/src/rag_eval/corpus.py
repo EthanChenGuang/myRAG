@@ -1,4 +1,5 @@
 import argparse
+import hashlib
 import json
 import re
 import sys
@@ -43,6 +44,9 @@ class CorpusDocument:
     content: str
     chunks: list[CorpusChunk]
     doc_type: str | None = None
+    fixture_dup_template: str | None = None
+    lineage: str | None = None
+    version: int | None = None
 
 
 def _js_trim(text: str) -> str:
@@ -79,8 +83,110 @@ def _parse_meta(line: str, relpath: str) -> dict:
     raise ValueError(f"[Fixture Corpus] invalid fixture-meta JSON in {relpath}")
 
 
-def load_corpus(corpus_dir: Path) -> list[CorpusDocument]:
-    corpus_dir = Path(corpus_dir)
+_GENERATE_KEYS = frozenset({"count", "name", "substitutions", "template_id"})
+GENERATE_MAX_COUNT = 100
+
+
+def _is_integer(value: object) -> bool:
+    # JSON numbers: JavaScript cannot tell 30 from 30.0, so an integral float counts as an integer in both loaders.
+    if isinstance(value, bool):
+        return False
+    return isinstance(value, int) or (isinstance(value, float) and value.is_integer())
+
+
+def _parse_generate(raw: object, meta: dict, relpath: str) -> dict:
+    error = ValueError(f"[Fixture Corpus] invalid generate block in {relpath}")
+    if not isinstance(raw, dict) or set(raw) != _GENERATE_KEYS:
+        raise error
+    count, name, substitutions, template_id = raw["count"], raw["name"], raw["substitutions"], raw["template_id"]
+    if not _is_integer(count) or not 1 <= count <= GENERATE_MAX_COUNT:
+        raise error
+    if not isinstance(name, str) or "{n}" not in name or "/" in name or "\\" in name:
+        raise error
+    if not isinstance(template_id, str) or not template_id:
+        raise error
+    if not isinstance(substitutions, list):
+        raise error
+    for pair in substitutions:
+        if not (isinstance(pair, list) and len(pair) == 2 and all(isinstance(part, str) for part in pair) and pair[0]):
+            raise error
+    if "filename" in meta or "lineage" in meta or "version" in meta:
+        raise error
+    return {"count": int(count), "name": name, "substitutions": substitutions, "template_id": template_id}
+
+
+def _parse_lineage(meta: dict, relpath: str) -> tuple[str | None, int | None]:
+    if "lineage" not in meta and "version" not in meta:
+        return None, None
+    lineage, version = meta.get("lineage"), meta.get("version")
+    if not isinstance(lineage, str) or not lineage or not _is_integer(version) or version < 1:
+        raise ValueError(f"[Fixture Corpus] invalid lineage in {relpath}")
+    return lineage, int(version)
+
+
+def _build_document(
+    relpath: str,
+    filename: str,
+    lines: list[str],
+    meta: dict,
+    fixture_dup_template: str | None = None,
+    lineage: str | None = None,
+    version: int | None = None,
+) -> CorpusDocument:
+    language = relpath.split("/", 1)[0]
+    parts: list[str] = []
+    current: list[str] = []
+    for line in lines:
+        if line == CHUNK_MARKER:
+            parts.append("\n".join(current))
+            current = []
+        else:
+            current.append(line)
+    parts.append("\n".join(current))
+    texts = [trimmed for trimmed in (_js_trim(part) for part in parts) if trimmed]
+    return CorpusDocument(
+        relpath=relpath,
+        language=language,
+        filename=filename,
+        image_url=meta["image_url"] if isinstance(meta.get("image_url"), str) else None,
+        created_at=meta["created_at"] if isinstance(meta.get("created_at"), str) else DEFAULT_CREATED_AT,
+        content="\n\n".join(texts),
+        chunks=[
+            CorpusChunk(
+                index=index,
+                section=_first_heading(text),
+                text=text,
+                stored=f"Document: {filename}. Chunk {index + 1} of {len(texts)}. Content: {text}",
+            )
+            for index, text in enumerate(texts)
+        ],
+        doc_type=_resolve_doc_type(meta, relpath),
+        fixture_dup_template=fixture_dup_template,
+        lineage=lineage,
+        version=version,
+    )
+
+
+def _expand_template(relpath: str, lines: list[str], meta: dict, generate: dict) -> list[CorpusDocument]:
+    """D-20/D-50: one committed template becomes `count` documents; copy i applies substitution i mod len and ends with its own chunk."""
+    language = relpath.split("/", 1)[0]
+    count, substitutions, template_id = generate["count"], generate["substitutions"], generate["template_id"]
+    width = max(2, len(str(count)))
+    body = "\n".join(lines)
+    copies: list[CorpusDocument] = []
+    for i in range(count):
+        number = str(i + 1).zfill(width)
+        text = body
+        if substitutions:
+            source, target = substitutions[i % len(substitutions)]
+            text = text.replace(source, target)
+        filename = generate["name"].replace("{n}", number)
+        copy_lines = [*text.split("\n"), CHUNK_MARKER, f"{template_id}-{number}"]
+        copies.append(_build_document(f"{language}/{filename}", filename, copy_lines, meta, fixture_dup_template=template_id))
+    return copies
+
+
+def _corpus_relpaths(corpus_dir: Path) -> list[str]:
     relpaths: list[str] = []
     for language in CORPUS_LANGUAGES:
         lang_dir = corpus_dir / language
@@ -90,54 +196,54 @@ def load_corpus(corpus_dir: Path) -> list[CorpusDocument]:
             if entry.name.endswith(".md") and entry.is_file():
                 relpaths.append(f"{language}/{entry.name}")
     relpaths.sort()
+    return relpaths
 
+
+def load_corpus(corpus_dir: Path) -> list[CorpusDocument]:
+    corpus_dir = Path(corpus_dir)
     documents: list[CorpusDocument] = []
-    for relpath in relpaths:
+    for relpath in _corpus_relpaths(corpus_dir):
         raw = (corpus_dir / relpath).read_bytes().decode("utf-8", errors="replace")
         lines = raw.replace("\r\n", "\n").split("\n")
         meta: dict = {}
         if _META_RE.match(_js_trim(lines[0])):
             meta = _parse_meta(lines.pop(0), relpath)
-        language = relpath.split("/", 1)[0]
+        if "generate" in meta:
+            documents.extend(_expand_template(relpath, lines, meta, _parse_generate(meta["generate"], meta, relpath)))
+            continue
+        lineage, version = _parse_lineage(meta, relpath)
         filename = meta["filename"] if isinstance(meta.get("filename"), str) else relpath.rsplit("/", 1)[-1]
+        documents.append(_build_document(relpath, filename, lines, meta, lineage=lineage, version=version))
 
-        parts: list[str] = []
-        current: list[str] = []
-        for line in lines:
-            if line == CHUNK_MARKER:
-                parts.append("\n".join(current))
-                current = []
-            else:
-                current.append(line)
-        parts.append("\n".join(current))
-        texts = [trimmed for trimmed in (_js_trim(part) for part in parts) if trimmed]
-
-        documents.append(
-            CorpusDocument(
-                relpath=relpath,
-                language=language,
-                filename=filename,
-                image_url=meta["image_url"] if isinstance(meta.get("image_url"), str) else None,
-                created_at=meta["created_at"] if isinstance(meta.get("created_at"), str) else DEFAULT_CREATED_AT,
-                content="\n\n".join(texts),
-                chunks=[
-                    CorpusChunk(
-                        index=index,
-                        section=_first_heading(text),
-                        text=text,
-                        stored=f"Document: {filename}. Chunk {index + 1} of {len(texts)}. Content: {text}",
-                    )
-                    for index, text in enumerate(texts)
-                ],
-                doc_type=_resolve_doc_type(meta, relpath),
-            )
-        )
+    seen: set[str] = set()
+    versions: set[tuple[str, int]] = set()
+    for doc in documents:
+        if doc.relpath in seen:
+            raise ValueError(f"[Fixture Corpus] duplicate corpus document {doc.relpath}")
+        seen.add(doc.relpath)
+        if doc.lineage is not None and doc.version is not None:
+            if (doc.lineage, doc.version) in versions:
+                raise ValueError(f"[Fixture Corpus] duplicate lineage version {doc.lineage} {doc.version}")
+            versions.add((doc.lineage, doc.version))
+    documents.sort(key=lambda doc: doc.relpath)
     return documents
 
 
+def corpus_sha256(corpus_dir: Path) -> str:
+    """The TypeScript loader's corpusSha256: committed file bytes only, so generated documents add nothing (D-50)."""
+    corpus_dir = Path(corpus_dir)
+    digest = hashlib.sha256()
+    for relpath in _corpus_relpaths(corpus_dir):
+        digest.update(relpath.encode("utf-8"))
+        digest.update(b"\x00")
+        digest.update((corpus_dir / relpath).read_bytes())
+    return digest.hexdigest()
+
+
 def _dump(corpus_dir: Path) -> str:
-    payload = [
-        {
+    payload = []
+    for doc in load_corpus(corpus_dir):
+        entry: dict = {
             "relpath": doc.relpath,
             "filename": doc.filename,
             "language": doc.language,
@@ -146,8 +252,12 @@ def _dump(corpus_dir: Path) -> str:
                 {"index": c.index, "section": c.section, "text": c.text, "stored": c.stored} for c in doc.chunks
             ],
         }
-        for doc in load_corpus(corpus_dir)
-    ]
+        if doc.fixture_dup_template is not None:
+            entry["fixture_dup_template"] = doc.fixture_dup_template
+        if doc.lineage is not None:
+            entry["lineage"] = doc.lineage
+            entry["version"] = doc.version
+        payload.append(entry)
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
@@ -156,8 +266,13 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     dump = sub.add_parser("dump", help="print the parsed fixture corpus as JSON")
     dump.add_argument("corpus_dir")
+    sha = sub.add_parser("sha256", help="print the corpus hash the TypeScript loader computes")
+    sha.add_argument("corpus_dir")
     args = parser.parse_args(argv)
     sys.stdout.reconfigure(encoding="utf-8")
+    if args.command == "sha256":
+        print(corpus_sha256(resolve_cli_path(args.corpus_dir)))
+        return 0
     print(_dump(resolve_cli_path(args.corpus_dir)))
     return 0
 

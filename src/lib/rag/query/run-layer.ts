@@ -70,6 +70,8 @@ export interface QueryLayerInput {
   scope?: TenantScope;
   /** Absent: the semantic_cache stage stands down. */
   cache?: SemanticCacheSeam;
+  /** D-15 (Phase 4.1.1): run after the parallel group has joined and before semantic_cache, on the standalone query. */
+  afterTransforms?: (standalone: string) => Promise<void>;
 }
 
 const NO_LAYER_OUTCOME: Readonly<QueryLayerOutcome> = Object.freeze({
@@ -621,6 +623,8 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
     hyde: hypothetical?.variant ? { text: hypothetical.variant.text, protectedOk: hypothetical.variant.protectedOk } : null,
     subQuestions: subQuestions?.variants.map((variant) => variant.text) ?? [],
   });
+
+  if (ctx.afterTransforms) await ctx.afterTransforms(standalone);
 
   const cached = await runSemanticCacheStage({
     ctx,

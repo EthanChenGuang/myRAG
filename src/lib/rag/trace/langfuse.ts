@@ -6,6 +6,7 @@ import { BasicTracerProvider } from '@opentelemetry/sdk-trace-base';
 import { isLangfuseUsable, type LangfuseConfig } from './config';
 import { maskPII } from './mask';
 import type { StageRecord } from '../types';
+import type { TraceTiming } from './collector';
 
 const DEFAULT_FLUSH_TIMEOUT_MS = 4000;
 const EXPORT_REQUEST_TIMEOUT_SECONDS = 3;
@@ -30,6 +31,8 @@ export interface CollectedTrace {
   endedAt: number;
   stages: TraceStage[];
   review?: { query?: string; answer?: string; context?: string; model?: string };
+  /** D-25: numbers and one fixed word, read from the collector when the export is built. */
+  timing?: TraceTiming;
   content?: { query?: string; chunks?: Array<{ document_name: string; content: string; similarity: number; rank: number }> };
 }
 
@@ -125,6 +128,7 @@ export async function exportTrace(trace: CollectedTrace, options: ExportTraceOpt
 
   const content = trace.content;
   const review = trace.review;
+  const timing = trace.timing;
   const rootAttributes = {
     metadata: {
       tenantKey: trace.tenantKey,
@@ -133,6 +137,9 @@ export async function exportTrace(trace: CollectedTrace, options: ExportTraceOpt
       reason: trace.reason,
       ...(review?.context !== undefined ? { context: maskPII(review.context).slice(0, MAX_REVIEW_CONTEXT_CHARS) } : {}),
       ...(review?.model !== undefined ? { model: review.model } : {}),
+      ...(timing?.ttft_ms !== undefined ? { ttft_ms: timing.ttft_ms } : {}),
+      ...(timing?.pre_generation_ms !== undefined ? { pre_generation_ms: timing.pre_generation_ms } : {}),
+      ...(timing !== undefined ? { cache: timing.cache } : {}),
     },
     ...(review?.query !== undefined ? { input: maskPII(review.query) } : {}),
     ...(review?.answer !== undefined ? { output: maskPII(review.answer) } : {}),

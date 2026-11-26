@@ -155,4 +155,63 @@ describe('verifyV2Startup', () => {
     expect(chunkingCoverage).not.toHaveBeenCalled();
     expect(verdict.chunkingCoverage).toEqual({ state: 'coverage_unchecked', missing: {} });
   });
+
+  describe('invalid Phase 4.2 switch combinations (04.2-06, D-04, D-40)', () => {
+    function comboWarnings(name: string): string[] {
+      return (console.warn as unknown as ReturnType<typeof vi.fn>).mock.calls
+        .map((call: unknown[]) => call.map((part) => (typeof part === 'string' ? part : JSON.stringify(part))).join(' '))
+        .filter((line: string) => line.startsWith('[RAG Config] invalid switch combination') && line.includes(name));
+    }
+
+    const run = (env: Record<string, string>) => verifyV2Startup({ ...DEFAULT_DEPS, ragEnv: () => ({ ...DEFAULT_DEPS.ragEnv(), ...env }) });
+
+    it('RAG_VERSION_SCOPE without RAG_LEXICAL_SEARCH records version_scope_needs_lexical and warns once', async () => {
+      const verdict = await run({ RAG_VERSION_SCOPE: 'true', RAG_LEXICAL_SEARCH: 'false' });
+      expect(verdict.reasons).toEqual(['version_scope_needs_lexical']);
+      expect(comboWarnings('RAG_VERSION_SCOPE')).toHaveLength(1);
+      await run({ RAG_VERSION_SCOPE: 'true', RAG_LEXICAL_SEARCH: 'false' });
+      expect(comboWarnings('RAG_VERSION_SCOPE')).toHaveLength(1);
+    });
+
+    it('RAG_IDENTIFIER_FILTER without RAG_IDENTIFIER_INDEX records identifier_filter_needs_index and warns once', async () => {
+      const verdict = await run({ RAG_IDENTIFIER_FILTER: 'true' });
+      expect(verdict.reasons).toEqual(['identifier_filter_needs_index']);
+      expect(comboWarnings('RAG_IDENTIFIER_FILTER')).toHaveLength(1);
+      const line = comboWarnings('RAG_IDENTIFIER_FILTER')[0];
+      expect(line).toContain('RAG_IDENTIFIER_INDEX');
+    });
+
+    it('both invalid combinations record both reasons, one warning each', async () => {
+      const verdict = await run({ RAG_VERSION_SCOPE: 'TRUE ', RAG_LEXICAL_SEARCH: 'false', RAG_IDENTIFIER_FILTER: 'true', RAG_IDENTIFIER_INDEX: 'false' });
+      expect([...verdict.reasons].sort()).toEqual(['identifier_filter_needs_index', 'version_scope_needs_lexical']);
+      expect(comboWarnings('RAG_VERSION_SCOPE')).toHaveLength(1);
+      expect(comboWarnings('RAG_IDENTIFIER_FILTER')).toHaveLength(1);
+    });
+
+    it.each([
+      ['all off', {}],
+      ['version scope with lexical search', { RAG_VERSION_SCOPE: 'true', RAG_LEXICAL_SEARCH: 'true' }],
+      ['identifier filter with the index', { RAG_IDENTIFIER_FILTER: 'true', RAG_IDENTIFIER_INDEX: 'true' }],
+      ['index alone', { RAG_IDENTIFIER_INDEX: 'true' }],
+    ])('a valid combination (%s) adds no reason and no warning', async (_label, env) => {
+      const verdict = await run(env as Record<string, string>);
+      expect(verdict.reasons).toEqual([]);
+      expect(verdict.status).toBe('ok');
+      expect(comboWarnings('RAG_')).toEqual([]);
+    });
+
+    it('resetV2StartupForTests clears the once-state', async () => {
+      await run({ RAG_IDENTIFIER_FILTER: 'true' });
+      resetV2StartupForTests();
+      resetRagConfigForTests();
+      await run({ RAG_IDENTIFIER_FILTER: 'true' });
+      expect(comboWarnings('RAG_IDENTIFIER_FILTER')).toHaveLength(2);
+    });
+
+    it('legacy records no combination reason', async () => {
+      const verdict = await verifyV2Startup({ ...DEFAULT_DEPS, ragEnv: () => ({ RAG_PIPELINE: 'legacy', RAG_IDENTIFIER_FILTER: 'true' }) });
+      expect(verdict.reasons).toEqual([]);
+      expect(comboWarnings('RAG_')).toEqual([]);
+    });
+  });
 });
