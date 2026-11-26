@@ -427,3 +427,91 @@ describe('rag-panels/upload-approvals.js renders server data as text (XSS)', () 
     doc.body.querySelectorAll('dialog').find((d) => d.open)!.close('keep');
   });
 });
+
+describe('rag-panels/scope-tags.js renders server data as text (XSS)', () => {
+  it('tag labels, other names, values, file names, sources and queue labels create no element and no inline handler', async () => {
+    const doc = new FakeDocument();
+    const section = host(doc, 'rag-administration-scopes', 'section');
+    for (const attr of ['data-scope-tags-title', 'data-scope-tags-description', 'data-scope-tags-workspace', 'data-scope-tags-alert', 'data-scope-tags-content', 'data-scope-tags-status']) {
+      const el = doc.createElement('div');
+      el.setAttribute(attr, '');
+      section.appendChild(el);
+    }
+    const selector = host(doc, 'workspace-selector', 'select');
+    const option = doc.createElement('option');
+    option.setAttribute('value', 'org-1');
+    option.textContent = XSS_PAYLOAD;
+    selector.appendChild(option);
+    selector.value = 'org-1';
+    const vocab = {
+      success: true,
+      items: [
+        { id: 'e1', dimension: 'region', value: 'region-a', label: XSS_PAYLOAD, aliases: [JS_BREAKOUT, XSS_PAYLOAD], active: true },
+        { id: JS_BREAKOUT, dimension: 'department', value: 'dept-a', label: JS_BREAKOUT, aliases: [], active: false },
+      ],
+    };
+    const docs = {
+      success: true,
+      total: 1,
+      suggested_total: 1,
+      items: [
+        {
+          id: 'd1',
+          file_name: XSS_PAYLOAD,
+          doc_type: JS_BREAKOUT,
+          tags: ['region:region-a', 'region:unknown-value'],
+          suggestions: [{ dimension: 'department', value: 'dept-a', source: XSS_PAYLOAD }],
+          uploaded_at: JS_BREAKOUT,
+        },
+      ],
+    };
+    const context: Record<string, unknown> = {
+      document: doc,
+      console: { log() {}, error() {}, warn() {}, info() {}, debug() {} },
+      navigator: { language: 'en-US' },
+      location: { origin: 'http://config.local' },
+      setTimeout,
+      clearTimeout,
+      AbortController,
+      URLSearchParams,
+      Intl,
+      ragFetch: async (apiPath: string, init: { method?: string } = {}) => {
+        if (init.method === 'PATCH' || init.method === 'POST' || init.method === 'PUT') return { ok: false, status: 409, body: { success: false, error: XSS_PAYLOAD } };
+        if (apiPath.startsWith('/api/rag/admin/scope-vocabulary')) return { ok: true, status: 200, body: vocab };
+        return { ok: true, status: 200, body: docs };
+      },
+    };
+    context.window = context;
+    vm.createContext(context);
+    for (const file of ['rag-panels/rag-ui.js', 'rag-panels/scope-tags.js']) {
+      new vm.Script(fs.readFileSync(path.join(configUiDir, file), 'utf8'), { filename: file }).runInContext(context);
+    }
+    const flushAll = async () => {
+      for (let i = 0; i < 25; i += 1) await new Promise((resolve) => setImmediate(resolve));
+    };
+    await (context.initScopeTagsPanel as () => Promise<void>)();
+    await flushAll();
+    doc.getElementById('rag-scope-tags-tab-documents')!.click();
+    doc.body.querySelectorAll('button').find((b) => b.textContent === 'Edit tags')!.click();
+    doc.body.querySelectorAll('button').find((b) => b.textContent === 'Save tags')!.click();
+    await flushAll();
+    doc.body.querySelectorAll('button').find((b) => b.textContent === 'Retire tag')!.click();
+    await flushAll();
+    const queue = doc.createElement('div');
+    const extras = doc.createElement('div');
+    extras.setAttribute('data-queue-extras', '1');
+    queue.appendChild(extras);
+    doc.body.appendChild(queue);
+    (context.scopeTagsMountQueueControls as (...args: unknown[]) => void)(
+      queue,
+      [{ id: 1, name: XSS_PAYLOAD, replaces: { id: 'b0000000-0000-4000-8000-000000000001', name: JS_BREAKOUT } }],
+      { tags: { enabled: true, vocabulary: [{ dimension: 'region', value: 'region-a', label: JS_BREAKOUT }] }, replaces: { enabled: true } },
+      { organizationId: 'org-1' },
+    );
+    expectSafe(doc);
+    expect(doc.innerHtmlWrites).toBe(0);
+    expect(doc.body.textContent).toContain(XSS_PAYLOAD);
+    expect(doc.body.textContent).toContain(JS_BREAKOUT);
+    doc.body.querySelectorAll('dialog').find((d) => d.open)!.close('keep');
+  });
+});

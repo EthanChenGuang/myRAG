@@ -14351,11 +14351,15 @@
                 const defaults = await window.fetchUploadPickerDefault(orgId);
                 if (defaults.error) {
                     this.uploadPicker.enabled = false;
+                    this.uploadPicker.tags = null;
+                    this.uploadPicker.replaces = null;
                     this.uploadPicker.loaded = true;
                     return;
                 }
                 this.uploadPicker.enabled = Boolean(defaults.enabled);
                 this.uploadPicker.defaultType = defaults.docType || 'auto';
+                this.uploadPicker.tags = defaults.tags || null;
+                this.uploadPicker.replaces = defaults.replaces || null;
                 this.uploadPicker.loaded = true;
                 for (const item of this.queue) {
                     if (!item.docType) item.docType = this.uploadPicker.defaultType;
@@ -14616,6 +14620,9 @@
                     if (this.workspaces.isMultiTenant && this.workspaces.currentSelection) {
                         formData.append('organization_id', this.workspaces.currentSelection);
                     }
+                    if (typeof window.scopeTagsAppendUploadFields === 'function') {
+                        window.scopeTagsAppendUploadFields(formData, fileItem, this.uploadPicker);
+                    }
 
                     const response = await fetch('/api/process-document', {
                         method: 'POST',
@@ -14699,6 +14706,13 @@
                         }
                     } else {
                         let errorMessage = await this.readResponseError(response);
+                        const queueControlError = typeof window.scopeTagsUploadErrorText === 'function'
+                            ? window.scopeTagsUploadErrorText(errorMessage, this.monitorUiLocale())
+                            : null;
+                        if (queueControlError) {
+                            if (errorMessage === 'unknown_scope_value') this.refreshUploadPickerDefaults();
+                            errorMessage = queueControlError;
+                        }
 
                         if (response.status === 401 && this.workspaces.isMultiTenant) {
                             const appUrl = window.getConfiguredMyRAGAppUrl ? window.getConfiguredMyRAGAppUrl() : window.location.origin;
@@ -14803,6 +14817,11 @@
                             if (item) item.docType = event.target.value;
                         });
                     });
+                    if (typeof window.scopeTagsMountQueueControls === 'function') {
+                        window.scopeTagsMountQueueControls(queueItems, this.queue, this.uploadPicker, {
+                            organizationId: this.workspaces.isMultiTenant ? this.workspaces.currentSelection : null,
+                        });
+                    }
                 }
             }
 
@@ -14831,6 +14850,11 @@
                             `<option value="${this.escapeHtml(opt.value)}" ${opt.selected ? 'selected' : ''}>${this.escapeHtml(opt.label)}</option>`).join('')}
                        </select>`
                     : '';
+                const picker = this.uploadPicker || {};
+                const extrasWanted = Boolean((picker.tags && picker.tags.enabled === true) || (picker.replaces && picker.replaces.enabled === true));
+                const queueExtras = extrasWanted
+                    ? `<div data-queue-extras="${this.escapeHtml(String(item.id))}" class="flex flex-wrap items-center gap-2 mt-2"></div>`
+                    : '';
 
                 return `
                     <div class="bg-base-100 p-4 rounded-lg">
@@ -14840,7 +14864,7 @@
                                 <div>
                                     <div class="font-medium">${safeName}</div>
                                     <div class="text-sm text-base-content/60">${safeSize}</div>
-                                    ${docTypeSelect}
+                                    ${docTypeSelect}${queueExtras}
                                 </div>
                             </div>
                             <div class="text-right">

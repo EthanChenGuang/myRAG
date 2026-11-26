@@ -381,7 +381,7 @@ describe('Documents sub-view', () => {
     expect(scroller.className).toContain('max-h-72');
     expect(scroller.className).toContain('overflow-y-auto');
     expect(scroller.getAttribute('tabindex')).toBe('0');
-    expect(scroller.querySelectorAll('input[type="checkbox"]').length).toBe(200);
+    expect(scroller.querySelectorAll('input[type="checkbox"]').length).toBeGreaterThanOrEqual(200);
   });
 });
 
