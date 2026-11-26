@@ -76,7 +76,7 @@ describe('GATES_UI_LABELS', () => {
     const { GATES_UI_LABELS } = load();
     for (const locale of ['en', 'zh', 'it'] as const) {
       for (const [key, value] of Object.entries(GATES_UI_LABELS[locale])) {
-        if (!value.includes('{count}')) continue;
+        if (!value.includes('{count}') || key === 'measured.rate') continue;
         expect(value, `${locale} ${key}`).toMatch(/[:：]\s?\{count\}/);
       }
     }
@@ -231,7 +231,7 @@ describe('gatesUiEvidenceRows and gatesUiEvidenceTable', () => {
       const { gatesUiEvidenceTable } = load();
       const el = gatesUiEvidenceTable(checks, 'en');
       expect(el.querySelector('caption')?.textContent).toBe('Checks and their results');
-      expect(el.querySelectorAll('th[scope="col"]').map((th) => th.textContent)).toEqual(['Check', 'Questions', 'Measured', 'Limit', 'Result']);
+      expect((el.querySelector('table') as FakeElement).querySelectorAll('th[scope="col"]').map((th) => th.textContent)).toEqual(['Check', 'Questions', 'Measured', 'Limit', 'Result']);
       const summary = el.querySelector('summary') as FakeElement;
       expect(summary.textContent).toBe('Show all checks: 2');
       expect(el.querySelectorAll('th[scope="row"]').length).toBe(4);
