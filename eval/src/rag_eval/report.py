@@ -837,7 +837,8 @@ def _ttft_section(report: EvalReport, budgets: LatencyBudgets | None) -> list[st
 
 IDENTIFIER_CATEGORY = "identifier_near_miss"
 IDENTIFIER_NOTE = (
-    "Report-only (D-32): identifier precision is the share of identifier_near_miss items whose context is about the "
+    "Report-only (D-32): identifier precision is the share of identifier items (identifier_near_miss, and no_answer "
+    "items tagged asked_identifier) whose context is about the "
     "asked identifier only (answerable: no near-miss chunk, a kept chunk and every cited chunk carry the asked "
     "identifier; no-answer: refused with no near-miss chunk); near-miss leakage is the share of items with a kept "
     "chunk that carries a near-miss of the asked identifier and not the asked one. Traces without identifiers_norm "
@@ -846,7 +847,11 @@ IDENTIFIER_NOTE = (
 
 
 def _identifier_section(report: EvalReport) -> list[str]:
-    items = [item for item in report.items if item.category == IDENTIFIER_CATEGORY]
+    items = [
+        item
+        for item in report.items
+        if item.category == IDENTIFIER_CATEGORY or item.identifier_precise is not None or item.near_miss_leak is not None
+    ]
     if not items:
         return []
     lines = [

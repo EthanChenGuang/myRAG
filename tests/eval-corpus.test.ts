@@ -42,6 +42,8 @@ interface DumpDocument {
   language: string;
   doc_type: string;
   chunks: DumpChunk[];
+  fixture_dup_template?: string;
+  lineage?: string;
   version?: number;
   version_label?: string;
   effective_from?: string;
@@ -79,14 +81,17 @@ describe('fixture corpus loaders', () => {
     expect(dump.status, dump.stderr).toBe(0);
     const python = JSON.parse(dump.stdout) as DumpDocument[];
 
-    expect(loaded.documents).toHaveLength(34);
+    // 34 documents plus the 109 Phase 4.2 documents of plan 04.2-37 (90 of them generated from three templates).
+    expect(loaded.documents).toHaveLength(34 + 109);
     const fromTs = loaded.documents.map((doc) => ({
       relpath: doc.relpath,
       filename: doc.filename,
       language: doc.language,
       doc_type: doc.docType,
       chunks: doc.chunks.map((chunk) => ({ index: chunk.index, section: chunk.section, text: chunk.text, stored: chunk.stored })),
-      ...(doc.version !== undefined ? { version: doc.version } : {}),
+      ...(doc.fixtureDupTemplate !== undefined ? { fixture_dup_template: doc.fixtureDupTemplate } : {}),
+      ...(doc.lineage !== undefined ? { lineage: doc.lineage.id, version: doc.lineage.version } : {}),
+      ...(doc.lineage === undefined && doc.version !== undefined ? { version: doc.version } : {}),
       ...(doc.versionLabel !== undefined ? { version_label: doc.versionLabel } : {}),
       ...(doc.effectiveFrom !== undefined ? { effective_from: doc.effectiveFrom } : {}),
     }));

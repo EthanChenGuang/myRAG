@@ -49,7 +49,7 @@
     },
     "identifier": {
       "decision": "D-32",
-      "description": "identifier_near_miss: identifier precision 1.0 and near-miss leakage 0.0 measured on every item of the slice; the descriptive slice and every other slice within the noise band against the Phase 4.1 default run",
+      "description": "identifier_near_miss plus the no_answer items tagged asked_identifier (asked identifier absent): identifier precision 1.0 and near-miss leakage 0.0 measured on every one of those items; the descriptive slice and every other slice within the noise band against the Phase 4.1 default run",
       "run": "v2-identifier-on",
       "reference": "v2-default",
       "slice": "category:identifier_near_miss",

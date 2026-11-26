@@ -617,28 +617,33 @@ def test_table_split_is_gated_and_the_re_recorded_ingest_baseline_leaves_every_o
     )
     assert len(current.runs) >= 3
     assert {run.run_id for run in current.runs}.isdisjoint({run.run_id for run in previous.runs}), "not re-recorded"
-    assert current.corpus_sha256 == previous.corpus_sha256
     assert previous.items is not None and current.items is not None
     # Plan 06-39 later added the cache pair golden items: they bring their own category slices and move only
     # the overall and language slices, so those are compared only while the golden set is the one 03.2-32 recorded.
     cache_categories = {"cache_paraphrase", "cache_near_miss"}
-    golden_categories = {
-        item.id: item.category
-        for item in (
-            GoldenItem.model_validate_json(line)
-            for line in (root / "fixtures" / "golden.jsonl").read_text(encoding="utf-8").splitlines()
-            if line.strip()
-        )
-    }
+    # Plan 04.2-37 added the Phase 4.2 documents and items (tag phase42): the corpus hash moves, and so do the slices of the
+    # categories those items join; every old item is still compared below.
+    golden_items = [
+        GoldenItem.model_validate_json(line)
+        for line in (root / "fixtures" / "golden.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    golden_categories = {item.id: item.category for item in golden_items}
+    phase42 = {item.id for item in golden_items if "phase42" in item.tags}
     added = set(current.items) - set(previous.items)
     golden_grew = current.golden_sha256 != previous.golden_sha256
     if golden_grew:
-        assert added and {golden_categories.get(item_id) for item_id in added} <= cache_categories
+        assert added and {golden_categories.get(item_id) for item_id in added - phase42} <= cache_categories
     else:
         assert not added
+    if added & phase42:
+        assert current.corpus_sha256 != previous.corpus_sha256
+    else:
+        assert current.corpus_sha256 == previous.corpus_sha256
     moved = {"overall"} | {name for name in previous.slices if name.startswith("language:")}
     # Plan 03.2-67 flipped the default of RAG_TABLE_HEADER_REPEAT to always: only table_split items moved, so the slices that hold
     # them and those items are compared by test_the_03_2_67_baseline_moves_only_table_split_items_and_none_drops.
+    moved |= {f"category:{golden_categories[item_id]}" for item_id in added & phase42}
     header_moved = moved | {"category:table_split"}
     table_split_ids = {item_id for item_id in previous.items if item_id.startswith("ingest-table-split-")}
     for name, stats in previous.slices.items():
@@ -891,6 +896,36 @@ def test_no_answer_identifier_item_is_precise_only_when_refused_without_leak():
     assert answered.identifier_precise is False
     (leaked,) = score_items([_identifier_trace(item.id, [["qx4471"]], refused=True)], [item])
     assert (leaked.identifier_precise, leaked.near_miss_leak) == (False, True)
+
+
+def _absent_identifier_item(item_id: str, tags: list[str]) -> GoldenItem:
+    """A valid no_answer item whose asked identifier does not exist (D-32, plan 04.2-37): the category rule stays as it is."""
+    return GoldenItem.model_validate(
+        {
+            **_item(item_id, [(ID_DOC, "the asked record")]).model_dump(mode="json"),
+            "category": "no_answer",
+            "answerable": False,
+            "expected_answer": None,
+            "gold_evidence": [],
+            "tags": tags,
+        }
+    )
+
+
+def test_tagged_no_answer_item_is_scored_as_a_no_answer_identifier_item():
+    item = _absent_identifier_item("en-na-001", ["asked_identifier:QX-4479"])
+    (refused,) = score_items([_identifier_trace(item.id, [], refused=True)], [item])
+    assert (refused.identifier_precise, refused.near_miss_leak) == (True, False)
+    (answered,) = score_items([_identifier_trace(item.id, [["lm9902"]])], [item])
+    assert (answered.identifier_precise, answered.near_miss_leak) == (False, False)
+    (leaked,) = score_items([_identifier_trace(item.id, [["qx4471"]], refused=True)], [item])
+    assert (leaked.identifier_precise, leaked.near_miss_leak) == (False, True)
+
+
+def test_no_answer_item_without_the_asked_tag_gets_no_identifier_values():
+    item = _absent_identifier_item("en-na-002", ["identifier_absent"])
+    (result,) = score_items([_identifier_trace(item.id, [["qx4471"]], refused=True)], [item])
+    assert (result.identifier_precise, result.near_miss_leak) == (None, None)
 
 
 def test_identifier_item_without_the_asked_tag_is_a_scoring_error():

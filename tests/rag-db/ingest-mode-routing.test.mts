@@ -309,14 +309,26 @@ describe('the re-recorded ingest baseline (T-03.1-104)', () => {
       .map((line) => JSON.parse(line) as { id: string })
       .filter((item) => /^[a-z]+-(colloquial|no_answer)-term-\d{3}$/.test(item.id))
       .map((item) => item.id);
+    // Plan 04.2-37 added the Phase 4.2 items (tag phase42) to golden.jsonl.
+    const phase42Ids = fs
+      .readFileSync(path.join(ROOT, 'eval/fixtures/golden.jsonl'), 'utf8')
+      .split('\n')
+      .filter((line) => line.trim() !== '')
+      .map((line) => JSON.parse(line) as { id: string; tags?: string[] })
+      .filter((item) => (item.tags ?? []).includes('phase42'))
+      .map((item) => item.id);
     const added = Object.keys(current.items).filter((id) => !(id in previous.items)).sort();
     assert.ok(parseIds.length >= 30);
+    assert.equal(phase42Ids.length, 36);
     assert.equal(phase6Ids.length, 38);
     assert.equal(cachePairIds.length, 27);
     assert.equal(injectionIds.length, 18);
     assert.equal(tableSplitIds.length, 15);
     assert.equal(termIds.length, 18);
-    assert.deepEqual(added, [...parseIds, ...injectionIds, ...tableSplitIds, ...phase6Ids, ...cachePairIds, ...termIds].sort());
+    assert.deepEqual(
+      added,
+      [...parseIds, ...injectionIds, ...tableSplitIds, ...phase6Ids, ...cachePairIds, ...termIds, ...phase42Ids].sort(),
+    );
     assert.notEqual(current.corpus_sha256, previous.corpus_sha256, 'the parse fixtures are part of the ingest corpus hash');
   });
 });
