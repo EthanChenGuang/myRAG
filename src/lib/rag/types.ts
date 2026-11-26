@@ -271,6 +271,8 @@ export interface RunRetrievalInput {
   logContext?: LogContext;
   /** Chat and embed only; without it the semantic_cache stage stands down. */
   cacheContext?: RetrievalCacheContext;
+  /** D-58: set server-side by the embed route only, never from a request body; a version scope then also needs RAG_EMBED_VERSION_SCOPE. */
+  channel?: 'embed';
 }
 
 export type LogOutcomeValue = 'answered' | 'refused_no_context' | 'kb_unavailable' | 'degraded_answer' | 'unknown';
