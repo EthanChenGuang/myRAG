@@ -441,3 +441,70 @@ Applied to `<live-project-ref>` from `origin/main` 0ded1157 (train 18, PR #93). 
 - 0804 calls `rag_publish_document_version`; re-running 0803 restores the 0803 publish body, so re-run 0806 and then 0804 after it.
 - Re-running 0803 also restores the 0803 `rag_upload_approval_keys` body (deployment admins only); re-run 0814 after it.
 - All four files carry their own REVOKE/GRANT; re-run 0410 after any future migration that adds a definer function it lists.
+
+## 0805, 0807, 0808, 0815, 0816 and 0410 r8 (applied after train 19, 2026-11-26)
+
+Applied to `<live-project-ref>` from `origin/main` 78ca69f8 (train 19, PR #97). None of the five files has a `.single-tenant`/`.multi-tenant` variant on `origin/main`. As before, only the top-level `BEGIN;` and `COMMIT;` and the leading header comment block were left out; every statement and every comment inside a function body is the exact file text.
+
+### Run history
+- The five feature files were applied in an earlier run that a container restart interrupted before 0410 r8 and before this log entry. `list_migrations` shows them as `train19_0805_scope_tags`, `train19_0807_effective_dates`, `train19_0808_fingerprint_impact`, `train19_0815_relex_table_candidates` and `train19_0816_translation_settings_org_admins` (2026-11-26 00:05–00:06 UTC). They were not re-applied; the catalog checks below confirm each one's objects.
+- 0410 r8 was applied in the resumed run. No statement failed, no call timed out and nothing was retried.
+
+### Steps
+| # | Migration name | Result |
+|---|---|---|
+| 1 | train19_0805_scope_tags | ok (interrupted run; verified) |
+| 2 | train19_0807_effective_dates | ok (interrupted run; verified) |
+| 3 | train19_0808_fingerprint_impact | ok (interrupted run; verified) |
+| 4 | train19_0815_relex_table_candidates | ok (interrupted run; verified) |
+| 5 | train19_0816_translation_settings_org_admins | ok (interrupted run; verified) |
+| 6 | 0410_security_definer_rpc_grants_r8 | ok |
+
+### Verification
+- **Body md5 matches the repo (22/22)**, one overload each, `search_path=""`, EXECUTE for service_role only (anon, authenticated and PUBLIC refused):
+  - 0805 SECURITY DEFINER:
+    - rag_scope_names_taken 4b511ae03108882f556dc312493ca61e
+    - rag_scope_admin c5e1ab71872a353449b784177f040cae
+    - rag_scope_vocabulary_list 0f8ac437f074ce7206c4bdb030dc544a
+    - rag_scope_vocabulary_for 5558db1464009ea400f0fe6e15e817c9
+    - rag_scope_vocabulary_create d29fac171735e97da4ab0348a13a4770
+    - rag_scope_vocabulary_update 7ad77bcfceb57a629fa68b92990a4be4
+    - rag_set_document_scopes 01b11f57dcf80795b931e9f598f94e40
+    - rag_list_documents_with_scopes b240b78a6f0511d321244070a1b5197f
+    - rag_purge_hook_scope_tags 9ec13d90342a6f90bee355c588555385
+  - 0805 SECURITY INVOKER:
+    - rag_scope_slug 244acfb2e5baa06b731fbc25e9122542
+    - rag_scope_name_key eae4b598eb61105bf95d77f03181208f
+    - rag_scope_clean_aliases 0d4038b3fee35c2f09ee6dc5338fb7a7
+    - rag_scope_lock_dimension 3a37e290336d717aadbb36e2a844d781
+  - 0807:
+    - rag_set_document_effective_dates 6efc459c2ca1d293c84ba3837f382590 (SECURITY DEFINER)
+    - rag_dismiss_effective_date_proposal 6fe93e72aa59241310850697a82be3d0 (SECURITY DEFINER)
+    - rag_propose_document_effective_dates 431cfed37be85243c3d204d6317a11c0 (SECURITY INVOKER)
+    - rag_list_effective_date_proposals 616fab7882aaf102b4661f3d860f14fe (SECURITY INVOKER)
+  - 0808 (all SECURITY INVOKER):
+    - rag_fingerprint_groups 94b6ac0d6f4c2b9850e0909e67dd0a3d
+    - rag_fingerprint_backfill_page c6fb1da21d8f371da89c0bf23e3ef43e
+    - rag_fingerprint_backfill_write 45e26d597136b6a6f6076b4079106799
+  - 0815: `rag_relex_table_candidates` b8b71c8474ddd64197b66e1198eb1f5f, SECURITY INVOKER.
+  - 0816: `rag_translation_settings_set` d792922b08c06b4dd2dacfe4a796c188 (replaces the 0810 body, same signature), SECURITY INVOKER.
+- **Audit check:** `rag_admin_audit_action_check` now also allows `set_effective_dates` and `dismiss_effective_dates` (rebuilt by 0807, keeping every earlier action).
+- **New table** `rag_scope_vocabulary` (0805): RLS on, 0 rows, no policies, five CHECK constraints; service_role has SELECT only, no anon or authenticated grant, as the file grants.
+- **Purge hooks:** `rag_purge_hook_supersession`, `rag_purge_hook_chunk_translations`, `rag_purge_hook_recaption` and the new `rag_purge_hook_scope_tags`: one overload each, service_role only.
+- **0410 r8 grants:** the repo file changed since r7 (0ded1157) by +44 lines only: guarded REVOKE/GRANT for the two 0807 definers and the nine 0805 definers (section 1, service_role only). Every one of the 166 section 1 signatures exists and is service_role only; the 13 section 2 signatures present have exactly the roles the file grants (`kb_writes_locked()` does not exist on this multi-tenant project, so its guarded block was a no-op). The guarded `DROP` of the stale 4-argument `rag_fail_ingestion_job` was a no-op (one overload remains). No `rag_*` or `hybrid_search*` function is executable by anon; authenticated can execute only `rag_ingest_realtime_topic_allowed` and `rag_is_domain_expert`, by design.
+- **Whole database:**
+  - Public functions: 404 → 425 (+13 from 0805, +4 from 0807, +3 from 0808, +1 from 0815; 0816 replaced one body). 0410 r8 changed no count.
+  - Public tables with RLS off: 0.
+  - Only one SECURITY DEFINER function lacks `search_path=""`: `rls_auto_enable()`, Supabase's own, as before.
+- **Security advisors:**
+  - No ERROR.
+  - WARN unchanged: function_search_path_mutable 4, extension_in_public 2 (`vector`, `pg_trgm`), GraphQL 0026 24, GraphQL 0027 26, anon definers 5, authenticated definers 14, leaked password protection.
+  - INFO rls_enabled_no_policy 33 → 34 for the new server-only `rag_scope_vocabulary`.
+- **Data intact:** documents 1, document_chunks 15, chunk_embeddings 0 and ingestion_jobs 0, the same as after train 18. All document and chunk statuses are `ready`.
+
+### Re-run and ordering notes
+- 0805 needs the 0801 `scopes` columns and GIN index and the 0814 `rag_upload_approval_keys`; 0807 needs the 0801 effective-date columns, `rag_upload_approval_keys` (0814), `rag_assert_tenant_key` and `rag_cache_invalidate` (0603).
+- 0807 rebuilds `rag_admin_audit_action_check` from the live constraint; any later migration that rebuilds that check must keep `set_effective_dates` and `dismiss_effective_dates`.
+- Re-running 0810 puts back the old `rag_translation_settings_set` body (deployment admins only); re-run 0816 after it.
+- Re-running 0803 restores the 0803 `rag_upload_approval_keys` body; re-run 0814 after it, since 0805 and 0807 depend on its organization-admin rule.
+- All five files carry their own REVOKE/GRANT; re-run 0410 after any future migration that adds a definer function it lists.
