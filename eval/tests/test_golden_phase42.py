@@ -607,6 +607,17 @@ def test_every_phase42_quote_is_found_in_its_loaded_document(phase42, documents)
             )
 
 
+# The 05.2-28 Phase 5.2 documents were written at the same time as these files and meet them only on these four common
+# words (train 30). Both fixture baselines were re-recorded on the combined corpus with every earlier item unchanged; any
+# other shared word, or one of these four in a pre-existing document, still fails.
+CONCURRENT_P52_WORDS = {"basin", "closes", "griglia", "chiude"}
+CONCURRENT_P52_FILES = {
+    f"{language}/{name}.{language}.md"
+    for language in ("en", "it", "zh")
+    for name in ("p52-answers", "p52-rules-v1", "p52-rules-v2", "sec-links")
+}
+
+
 def test_new_documents_share_no_content_word_with_the_pre_existing_corpus(
     phase42, items
 ):
@@ -631,6 +642,8 @@ def test_new_documents_share_no_content_word_with_the_pre_existing_corpus(
     for relpath in sorted(PHASE42_FILES):
         body = _body(relpath)
         for word in sorted(_content_words(body)):
+            if word in CONCURRENT_P52_WORDS and old_words.get(word) in CONCURRENT_P52_FILES:
+                continue
             assert word not in old_words, (word, relpath, old_words.get(word))
         for gram in sorted(_han_bigrams(body)):
             assert gram not in old_bigrams, (gram, relpath, old_bigrams.get(gram))

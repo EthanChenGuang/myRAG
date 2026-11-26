@@ -998,6 +998,16 @@ def test_the_03_2_67_baseline_moves_only_table_split_items_and_none_drops():
 # The prechunked corpus hash before plan 04.1.1-10 added the three synthetic-terms files.
 PRE_TERMS_CORPUS_SHA256 = "2d1e198f73a6aba71d94eac166fc21f92853113267cfe00be6659e6c6010ca04"
 TERM_CORPUS_FILES = {"en/synthetic-terms.en.md", "it/synthetic-terms.it.md", "zh/synthetic-terms.zh.md"}
+PHASE42_CORPUS_FILES_04_2_37 = {
+    f"{language}/{name}.{language}.md"
+    for language in ("en", "it", "zh")
+    for name in ("coded-list-a", "coded-list-b", "dup-passage.template", "dup-solo", "grid-reference", "versioned-note.v1", "versioned-note.v2")
+} | {"it/morphology-note.it.md"}
+P52_CORPUS_FILES_05_2_28 = {
+    f"{language}/{name}.{language}.md"
+    for language in ("en", "it", "zh")
+    for name in ("p52-answers", "p52-rules-v1", "p52-rules-v2", "sec-links")
+}
 
 
 def test_the_04_1_1_10_baseline_adds_only_term_items_and_moves_no_old_item(tmp_path):
@@ -1024,6 +1034,13 @@ def test_the_04_1_1_10_baseline_adds_only_term_items_and_moves_no_old_item(tmp_p
     shutil.copytree(corpus, without_terms)
     for relpath in TERM_CORPUS_FILES:
         (without_terms / relpath).unlink()
+    # The merge with plan 04.2-37 re-recorded this baseline with the Phase 4.2 files too; without both sets the corpus
+    # is the one both plans started from.
+    for relpath in PHASE42_CORPUS_FILES_04_2_37:
+        (without_terms / relpath).unlink()
+    # Train 30 re-recorded it again with the 05.2-28 Phase 5.2 documents, which add no golden item.
+    for relpath in P52_CORPUS_FILES_05_2_28:
+        (without_terms / relpath).unlink()
     assert corpus_sha256(without_terms) == PRE_TERMS_CORPUS_SHA256
     assert current.corpus_sha256 != previous.corpus_sha256 and current.golden_sha256 != previous.golden_sha256
 
@@ -1037,13 +1054,20 @@ def test_the_04_1_1_10_baseline_adds_only_term_items_and_moves_no_old_item(tmp_p
             if line.strip()
         )
     }
+    phase42 = {item_id for item_id, item in golden.items() if "phase42" in item.tags}
     added = set(current.items) - set(previous.items)
-    assert added and all("-term-" in item_id for item_id in added), sorted(added)
+    term_added = added - phase42
+    assert phase42 <= added
+    assert term_added and all("-term-" in item_id for item_id in term_added), sorted(term_added)
+    assert {golden[item_id].category for item_id in term_added} == {"colloquial", "no_answer"}
     added_categories = {golden[item_id].category for item_id in added}
-    assert added_categories == {"colloquial", "no_answer"}
     moved = {"overall"} | {name for name in previous.slices if name.startswith("language:")}
     moved |= {f"category:{category}" for category in added_categories}
-    assert set(current.slices) == set(previous.slices)
+    # The Phase 6 gate fix scores the small_talk items marked conversational outside the refusal rates, so their category slice
+    # moves too; their item records are compared above.
+    moved |= {f"category:{item.category}" for item in golden.values() if item.expected_behavior == "conversational"}
+    assert set(previous.slices) <= set(current.slices)
+    assert set(current.slices) - set(previous.slices) <= {f"category:{category}" for category in added_categories}
     for name, stats in previous.slices.items():
         if name in moved:
             continue

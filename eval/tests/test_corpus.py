@@ -247,7 +247,8 @@ def test_lineage_and_version_are_read_and_validated(tmp_path: Path):
 
 @pytest.mark.parametrize(
     "meta",
-    [{"lineage": "L"}, {"version": 1}, {"lineage": "", "version": 1}, {"lineage": "L", "version": 0}, {"lineage": "L", "version": 1.5}],
+    # A lone {"version": 1} is a valid document version since plan 05.2-28 (D-52).
+    [{"lineage": "L"}, {"lineage": "", "version": 1}, {"lineage": "L", "version": 0}, {"lineage": "L", "version": 1.5}],
 )
 def test_malformed_lineage_names_the_file(tmp_path: Path, meta):
     _write(tmp_path, "en/bad.en.md", f"<!-- fixture-meta {json.dumps(meta)} -->\n## A\n")
