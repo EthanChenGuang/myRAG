@@ -128,17 +128,17 @@
   "absolute": {
     "ingest": {
       "overall": {
-        "recall_at_10_min": 0.6854794520547945,
+        "recall_at_10_min": 0.6908433734939758,
         "derivation": {
           "rule": "ingest_baseline_overall_recall_at_10_mean_minus_band",
           "baseline_path": "eval/baselines/fixture-ingest-baseline.json",
-          "baseline_sha256": "b8d2064ef98d2846451f97ce98e947d0f5170e38c37d1bddfaca04d22d6580fa",
-          "baseline_mean": 0.7054794520547946,
+          "baseline_sha256": "f47901a17f7996d148e5ebd3df8b5966bfb758f1bb519f70968bc3118362bd8f",
+          "baseline_mean": 0.7108433734939759,
           "baseline_spread": 0.0,
           "noise_k": 3.0,
           "noise_floor": 0.02,
           "band": 0.02,
-          "noise_sha256": "959adc75a6d7f06ad6319d5bc179daa692cf067b6a1bc731af1224d3f2d42333"
+          "noise_sha256": "1b17319b44015551251c8bfc8bd5b2cc067ee02846c74f3e729f050206980426"
         }
       }
     }
