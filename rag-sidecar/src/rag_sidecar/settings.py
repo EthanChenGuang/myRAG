@@ -188,4 +188,6 @@ def load_settings() -> SidecarSettings:
     values["prompt_guard_enabled"] = (os.environ.get(PROMPT_GUARD_ENABLED_ENV_VAR) or "").strip().lower() == "true"
     model_dir = (os.environ.get(PROMPT_GUARD_MODEL_DIR_ENV_VAR) or "").strip()
     values["prompt_guard_model_dir"] = model_dir or None
+    redis_url = (os.environ.get(REDIS_URL_ENV_VAR) or "").strip()
+    values["redis_url"] = SecretStr(redis_url) if redis_url else None
     return SidecarSettings(**values)
