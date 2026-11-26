@@ -1767,10 +1767,9 @@ class ReviewLabellingPanel {
       const at = template.indexOf('{time}');
       const time = this.el('time', { className: 'tabular-nums', text: reviewLabellingFormatDateTime(check.labelledAt, this.locale), attrs: { datetime: check.labelledAt } });
       actions.appendChild(
-        this.el('span', { className: 'text-xs text-base-content/70', attrs: { 'data-review-check-saved-at': true } }, at < 0 ? [template, ' ', time] : [template.slice(0, at), time, template.slice(at + 6)]),
+        this.el('span', { className: 'min-w-0 break-words text-xs text-base-content/70', attrs: { 'data-review-check-saved-at': true } }, at < 0 ? [template, ' ', time] : [template.slice(0, at), time, template.slice(at + 6)]),
       );
     }
-    if (check.state === 'loading') actions.appendChild(this.el('span', { className: 'text-xs text-base-content/70' }, [reviewLabellingSpinner(doc, this.t('item.loading'))]));
     nodes.push(actions);
     const message = check.message;
     const text = message ? (message.text !== undefined ? message.text : this.t(message.key)) : '';
@@ -1781,6 +1780,8 @@ class ReviewLabellingPanel {
       ]),
     );
     host.replaceChildren(...nodes);
+    if (check.state === 'loading') host.setAttribute('aria-busy', 'true');
+    else host.removeAttribute('aria-busy');
     if (focusSelector) {
       const target = host.querySelector(focusSelector);
       if (target) target.focus();
