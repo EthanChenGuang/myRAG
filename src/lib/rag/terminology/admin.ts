@@ -17,6 +17,7 @@ export type TerminologyAdminFailure =
   | 'workspace_layer_unavailable'
   | 'limit'
   | 'invalid'
+  | 'not_pending'
   | 'unavailable';
 
 export interface TerminologyAdminFailed {
@@ -144,6 +145,7 @@ const SQL_REASONS = new Map<string, TerminologyAdminFailure>([
   ['workspace_layer_unavailable', 'workspace_layer_unavailable'],
   ['limit', 'limit'],
   ['invalid_entry', 'invalid'],
+  ['not_pending', 'not_pending'],
 ]);
 
 export const UNAVAILABLE: TerminologyAdminFailed = { ok: false, reason: 'unavailable' };

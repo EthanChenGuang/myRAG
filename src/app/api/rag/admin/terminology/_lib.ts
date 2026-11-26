@@ -107,6 +107,23 @@ export const AuditQuerySchema = z
   .object({ layer: LayerSchema.default('shared'), organization_id: OrganizationId, limit: QueryInt(100).nullish(), offset: QueryInt(1_000_000).nullish() })
   .strict();
 
+/** D-26: the candidate review list; the tenant is the admin's resolved workspace, never a parameter. */
+export const CandidateListQuerySchema = z
+  .object({ organization_id: OrganizationId, limit: QueryInt(100).nullish(), offset: QueryInt(1_000_000).nullish() })
+  .strict();
+/** D-26: dismiss, or accept with the id of an entry created through the normal create route; no actor or tenant key in the body. */
+export const CandidateDecisionBodySchema = z
+  .object({ action: z.enum(['dismiss', 'accept']), entry_id: z.string().uuid().optional() })
+  .strict()
+  .superRefine((body, ctx) => {
+    if (body.action === 'accept' && body.entry_id === undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['entry_id'], message: 'entry_id is required to accept' });
+    }
+    if (body.action === 'dismiss' && body.entry_id !== undefined) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['entry_id'], message: 'entry_id is not allowed to dismiss' });
+    }
+  });
+
 /** The search params as an object; a repeated parameter is a 400 like any malformed value. */
 export function queryOf(request: Request): Record<string, string | string[]> {
   const query: Record<string, string | string[]> = {};
@@ -182,6 +199,8 @@ export function failure(result: TerminologyAdminFailed): NextResponse {
       return fail(413, 'limit');
     case 'invalid':
       return fail(422, 'Validation failed', { issues: result.issues ?? [] });
+    case 'not_pending':
+      return fail(409, 'not_pending');
     default:
       return fail(503, 'Terminology is unavailable');
   }

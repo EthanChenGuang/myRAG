@@ -50,6 +50,8 @@ export { previewTerminology } from './terminology/preview';
 export type { TerminologyPreviewInput, TerminologyPreviewResult } from './terminology/preview';
 export { TERMINOLOGY_CSV_COLUMNS, parseTerminologyCsv, serializeTerminologyCsv } from './terminology/csv';
 export type { TerminologyCsvError, TerminologyCsvParseResult, TerminologyCsvRow } from './terminology/csv';
+export { decideTerminologyCandidate, listTerminologyCandidates } from './terminology/candidates';
+export type { DecideTerminologyCandidateResult, ListTerminologyCandidatesResult, TerminologyCandidate } from './terminology/candidates';
 export type {
   TerminologyAdminEntry,
   TerminologyAdminFailed,
