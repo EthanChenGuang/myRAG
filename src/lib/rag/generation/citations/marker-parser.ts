@@ -9,6 +9,8 @@ export interface MarkerParseResult {
   valid: string[];
   invalidCitations: number;
   invalidAliases: string[];
+  /** D-33: markers cut in half when a text part or the stream ended; never guessed. Absent when none was cut. */
+  truncatedMarkers?: number;
 }
 
 export interface MarkerParser {
@@ -30,6 +32,7 @@ export function createMarkerParser(options: { aliases: ReadonlySet<string> }): M
   const invalidAliases: string[] = [];
   const seenInvalid = new Set<string>();
   let invalidCitations = 0;
+  let truncatedMarkers = 0;
   let result: MarkerParseResult | null = null;
 
   const record = (alias: string) => {
@@ -67,12 +70,15 @@ export function createMarkerParser(options: { aliases: ReadonlySet<string> }): M
       else tails.delete(textId);
     },
     end(textId) {
-      tails.delete(textId);
+      if (result) return;
+      if (tails.delete(textId)) truncatedMarkers++;
     },
     finish() {
       if (!result) {
+        truncatedMarkers += tails.size;
         tails.clear();
         result = { valid: [...valid], invalidCitations, invalidAliases: [...invalidAliases] };
+        if (truncatedMarkers > 0) result.truncatedMarkers = truncatedMarkers;
       }
       return { ...result, valid: [...result.valid], invalidAliases: [...result.invalidAliases] };
     },

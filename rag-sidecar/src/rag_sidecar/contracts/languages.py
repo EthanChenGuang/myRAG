@@ -137,6 +137,7 @@ class InstructionTexts(_TextGroup):
 
     citation: str | None = _text()
     citation_per_sentence: str | None = _text()
+    grounding_per_sentence: str | None = _text()
     attached_documents: str | None = _text()
     relevance: str | None = _text()
     relevance_web: str | None = _text()
