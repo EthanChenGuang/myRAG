@@ -1339,3 +1339,27 @@ def test_phase4_and_phase5_specs_still_validate_after_the_phase6_checks():
     ComparisonSpec.model_validate_json(SPEC.read_text(encoding="utf-8"))
     for path in (SPEC5, SPEC51):
         SwitchComparisonSpec.model_validate_json(path.read_text(encoding="utf-8"))
+
+
+def test_phase6_verdicts_summarise_each_d42_letter(tmp_path: Path):
+    spec = _spec6_world(tmp_path)
+    assert [verdict.label for verdict in spec.verdicts] == ["a", "b", "c", "d", "e"]
+    outputs = {run.name: _output() for run in spec.runs if not run.cache_pairs}
+    commands, _ = _env_commands()
+    out = tmp_path / "ok"
+    result = run_switch_comparison(spec, out, runner=_switch_runner(outputs, {}), commands=commands, pairs_runner=_pairs_runner(_pairs_output(), {}))
+    assert [v.passed for v in result.verdicts] == [True] * 5
+    assert "| (e) " in (out / "comparison.md").read_text(encoding="utf-8")
+    failed = run_switch_comparison(
+        spec, tmp_path / "bad", runner=_switch_runner(outputs, {}), commands=commands, pairs_runner=_pairs_runner(_pairs_output(hit_ms=30.0), {})
+    )
+    assert {v.label: v.passed for v in failed.verdicts} == {"a": True, "b": True, "c": True, "d": True, "e": False}
+
+
+def test_verdicts_must_name_a_check_of_a_named_run():
+    raw = json.loads(SPEC6.read_text(encoding="utf-8"))
+    for bad in ("nope/gate", "query-layer-off/gate", "query-layer-off"):
+        broken = json.loads(json.dumps(raw))
+        broken["verdicts"][0]["checks"].append(bad)
+        with pytest.raises(ValueError):
+            SwitchComparisonSpec.model_validate(broken)

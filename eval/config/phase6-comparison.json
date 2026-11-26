@@ -11,27 +11,44 @@
       "name": "legacy-prechunked",
       "fixture_mode": "prechunked",
       "base": "eval/config/runs/legacy.json",
-      "env": { "RAG_QUERY_LAYER": "false" },
-      "checks": ["gate", "paired_all_zero"]
+      "env": {
+        "RAG_QUERY_LAYER": "false"
+      },
+      "checks": [
+        "gate",
+        "paired_all_zero"
+      ]
     },
     {
       "name": "legacy-ingest",
       "fixture_mode": "ingest",
       "base": "eval/config/runs/legacy.json",
-      "env": { "RAG_QUERY_LAYER": "false" },
-      "checks": ["gate", "paired_all_zero"]
+      "env": {
+        "RAG_QUERY_LAYER": "false"
+      },
+      "checks": [
+        "gate",
+        "paired_all_zero"
+      ]
     },
     {
       "name": "v2-all-off",
       "fixture_mode": "prechunked",
       "base": "eval/config/runs/v2-all-off.json",
-      "checks": ["report_only"]
+      "checks": [
+        "report_only"
+      ]
     },
     {
       "name": "query-layer-off",
       "fixture_mode": "prechunked",
       "base": "eval/config/runs/query-layer-off.json",
-      "checks": [{ "kind": "equal_runs", "reference": "v2-all-off" }]
+      "checks": [
+        {
+          "kind": "equal_runs",
+          "reference": "v2-all-off"
+        }
+      ]
     },
     {
       "name": "query-layer-llamaindex",
@@ -41,7 +58,11 @@
         {
           "kind": "slice_hold",
           "reference": "query-layer-off",
-          "slices": ["category:multi_turn", "category:compound", "category:cross_lingual"]
+          "slices": [
+            "category:multi_turn",
+            "category:compound",
+            "category:cross_lingual"
+          ]
         },
         "framework_parity",
         "transform_delays",
@@ -53,15 +74,29 @@
       "name": "query-layer-llamaindex-cache-off",
       "fixture_mode": "prechunked",
       "base": "eval/config/runs/query-layer-llamaindex.json",
-      "env": { "RAG_SEMANTIC_CACHE": "off" },
-      "checks": [{ "kind": "equal_runs", "reference": "query-layer-llamaindex" }]
+      "env": {
+        "RAG_SEMANTIC_CACHE": "off"
+      },
+      "checks": [
+        {
+          "kind": "equal_runs",
+          "reference": "query-layer-llamaindex"
+        }
+      ]
     },
     {
       "name": "query-layer-llamaindex-cache-on",
       "fixture_mode": "prechunked",
       "base": "eval/config/runs/query-layer-llamaindex.json",
-      "env": { "RAG_SEMANTIC_CACHE": "pgvector" },
-      "checks": [{ "kind": "equal_runs", "reference": "query-layer-llamaindex" }]
+      "env": {
+        "RAG_SEMANTIC_CACHE": "pgvector"
+      },
+      "checks": [
+        {
+          "kind": "equal_runs",
+          "reference": "query-layer-llamaindex"
+        }
+      ]
     },
     {
       "name": "cache-pairs",
@@ -69,17 +104,38 @@
       "base": "eval/config/runs/query-layer-llamaindex.json",
       "cache_pairs": true,
       "checks": [
-        { "kind": "cache_latency", "max_ratio": 0.5 },
-        { "kind": "near_miss_zero" },
+        {
+          "kind": "cache_latency",
+          "max_ratio": 0.5
+        },
+        {
+          "kind": "near_miss_zero"
+        },
         "cache_canary",
         "two_tenant_matrix"
       ]
     }
   ],
   "commands": {
-    "framework_parity": ["npx", "vitest", "run", "tests/rag/query/framework-parity.test.ts"],
-    "transform_delays": ["npx", "vitest", "run", "tests/rag/query/delays.test.ts"],
-    "voice_budget": ["npx", "vitest", "run", "tests/rag/query/voice-budget.test.ts", "tests/rag/v2/voice-budget.test.ts"],
+    "framework_parity": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/rag/query/framework-parity.test.ts"
+    ],
+    "transform_delays": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/rag/query/delays.test.ts"
+    ],
+    "voice_budget": [
+      "npx",
+      "vitest",
+      "run",
+      "tests/rag/query/voice-budget.test.ts",
+      "tests/rag/v2/voice-budget.test.ts"
+    ],
     "framework_report": [
       "uv",
       "run",
@@ -96,13 +152,73 @@
       "--out",
       "eval/out/phase-06-frameworks"
     ],
-    "cache_canary": ["node", "--import", "tsx", "--test", "tests/rag-db/semantic-cache-canary.test.mts"],
-    "two_tenant_matrix": ["node", "--import", "tsx", "--test", "tests/rag-db/v2-two-tenant-matrix.test.mts"]
+    "cache_canary": [
+      "node",
+      "--import",
+      "tsx",
+      "--test",
+      "tests/rag-db/semantic-cache-canary.test.mts"
+    ],
+    "two_tenant_matrix": [
+      "node",
+      "--import",
+      "tsx",
+      "--test",
+      "tests/rag-db/v2-two-tenant-matrix.test.mts"
+    ]
   },
   "fixture_note": "Fixture corpus only. Fixture gains reflect the lexical fixture embedder (hashed n-grams, research P-13) and the scripted fake query LLM (D-39); cache distances are on the fixture-ngram profile, whose committed calibration is source default at 0.05. Live numbers are plan 06-46.",
   "notes": [
     "Phase 6 (D-42): (a) with RAG_QUERY_LAYER=false both legacy smoke tiers have every paired difference zero against the Phase 4 baselines, and query-layer-off equals v2-all-off item by item; (b) the default framework (LlamaIndex) with the layer on holds multi_turn, compound and cross_lingual against query-layer-off, with no overall, language or category slice beyond the noise band on Recall@5, Recall@10, MRR or the refusal rates; (c) framework_parity and the paired framework report (rag_eval.compare frameworks --fixtures); (d) transform_delays and voice_budget; (e) the cache-pair run's hit p95 is at most half its miss p95, no near-miss pair hits at the effective distance, the cache-off and cache-on item runs equal the layer-on run item by item, and the two-tenant canary suite with its cache cases passes.",
     "The item runs send no semantic_cache override, so the eval route checks no cache in them (06-41); the cache is measured on the golden cache pairs (--cache-pairs), probed at 0.2 and judged at the effective distance.",
     "The shipped defaults stay off: RAG_QUERY_LAYER=false and RAG_SEMANTIC_CACHE=off in src/lib/env.ts until the Phase 7 regression decides them."
+  ],
+  "verdicts": [
+    {
+      "label": "a",
+      "title": "Layer off: legacy paired differences zero, query-layer-off equals v2-all-off",
+      "checks": [
+        "legacy-prechunked/gate",
+        "legacy-prechunked/paired_all_zero",
+        "legacy-ingest/gate",
+        "legacy-ingest/paired_all_zero",
+        "query-layer-off/equal_runs:v2-all-off"
+      ]
+    },
+    {
+      "label": "b",
+      "title": "Layer on (LlamaIndex): multi_turn, compound, cross_lingual hold; no slice beyond the noise band",
+      "checks": [
+        "query-layer-llamaindex/slice_hold:query-layer-off"
+      ]
+    },
+    {
+      "label": "c",
+      "title": "Framework parity suite and the paired framework report",
+      "checks": [
+        "query-layer-llamaindex/framework_parity",
+        "query-layer-llamaindex/framework_report"
+      ]
+    },
+    {
+      "label": "d",
+      "title": "Transform injected-delay and failure tests, voice budget",
+      "checks": [
+        "query-layer-llamaindex/transform_delays",
+        "query-layer-llamaindex/voice_budget"
+      ]
+    },
+    {
+      "label": "e",
+      "title": "Cache: hit p95 at most half of miss p95, near-miss wrong hits 0, cache off and on equal the layer-on run, canary suite",
+      "checks": [
+        "cache-pairs/cache_latency",
+        "cache-pairs/near_miss_zero",
+        "query-layer-llamaindex-cache-off/equal_runs:query-layer-llamaindex",
+        "query-layer-llamaindex-cache-on/equal_runs:query-layer-llamaindex",
+        "cache-pairs/cache_canary",
+        "cache-pairs/two_tenant_matrix"
+      ]
+    }
   ]
 }

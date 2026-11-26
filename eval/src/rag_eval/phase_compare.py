@@ -1542,6 +1542,14 @@ class SwitchRun(_Model):
         return self
 
 
+class VerdictSpec(_Model):
+    """One row of the verdict table: passes when every named `run/check` passed."""
+
+    label: str = Field(pattern=r"^[a-z0-9]{1,8}$")
+    title: str = Field(min_length=1, max_length=200)
+    checks: list[str] = Field(min_length=1)
+
+
 class SwitchComparisonSpec(_Model):
     schema_version: Literal[2]
     phase: str = Field(pattern=r"^\d{2}(\.\d+)*$")
@@ -1551,6 +1559,7 @@ class SwitchComparisonSpec(_Model):
     commands: dict[str, list[str]] = Field(default_factory=dict)
     fixture_note: str | None = None
     notes: list[str] = Field(default_factory=list)
+    verdicts: list[VerdictSpec] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _references(self) -> SwitchComparisonSpec:
@@ -1579,6 +1588,15 @@ class SwitchComparisonSpec(_Model):
                     if reference.cache_pairs or reference.fixture_mode != run.fixture_mode:
                         raise ValueError(f"run {run.name}: {check.name} must name an item run of fixture mode {run.fixture_mode}")
             earlier[run.name] = run
+        labels = [verdict.label for verdict in self.verdicts]
+        if len(set(labels)) != len(labels):
+            raise ValueError("verdict labels must be unique")
+        checks_by_run = {run.name: {check_name(check) for check in run.checks} for run in self.runs}
+        for verdict in self.verdicts:
+            for ref in verdict.checks:
+                run_name, _, check = ref.partition("/")
+                if not check or check not in checks_by_run.get(run_name, set()):
+                    raise ValueError(f"verdict {verdict.label}: {ref!r} is not a run/check of this spec")
         return self
 
 
@@ -1612,6 +1630,14 @@ class SwitchRunResult(_Model):
     checks: list[CheckResult]
 
 
+class VerdictResult(_Model):
+    label: str
+    title: str
+    passed: bool
+    checks: list[str]
+    failed: list[str]
+
+
 class SwitchComparison(_Model):
     schema_version: Literal[2] = 2
     phase: str
@@ -1620,6 +1646,7 @@ class SwitchComparison(_Model):
     noise_k: float
     runs: list[SwitchRunResult]
     notes: list[str]
+    verdicts: list[VerdictResult] = Field(default_factory=list)
 
 
 def _paired_cells(gate: GateResult, metrics: tuple[str, ...] | None = None) -> list[str]:
@@ -2098,15 +2125,29 @@ def run_switch_comparison(
                 checks=checks,
             )
         )
+    outcomes = {f"{result.name}/{check.name}": check.passed for result in results for check in result.checks}
+    verdicts = [
+        VerdictResult(
+            label=verdict.label,
+            title=verdict.title,
+            passed=all(outcomes.get(ref, False) for ref in verdict.checks),
+            checks=list(verdict.checks),
+            failed=[ref for ref in verdict.checks if not outcomes.get(ref, False)],
+        )
+        for verdict in spec.verdicts
+    ]
     comparison = SwitchComparison(
         phase=spec.phase,
-        passed=bool(results) and all(result.passed for result in results),
+        passed=bool(results) and all(result.passed for result in results) and all(v.passed for v in verdicts),
         noise_floor=noise.floor,
         noise_k=noise.k,
         runs=results,
         notes=[spec.fixture_note or SWITCH_FIXTURE_NOTE, SWITCH_DEFAULTS_NOTE, *spec.notes],
+        verdicts=verdicts,
     )
     payload = comparison.model_dump(mode="json")
+    if not payload["verdicts"]:
+        payload.pop("verdicts")
     for run_payload in payload["runs"]:
         for optional in ("run_config_env", "injection", "overall", "cache_pairs"):
             if run_payload.get(optional) is None:
@@ -2164,6 +2205,16 @@ def _measure_lines(r: SwitchRunResult) -> list[str]:
     return lines
 
 
+def _verdict_lines(verdicts: list[VerdictResult]) -> list[str]:
+    if not verdicts:
+        return []
+    lines = ["## Verdicts", "", "| Check | Verdict | Evidence |", "|---|---|---|"]
+    for v in verdicts:
+        evidence = ", ".join(f"{ref} (FAIL)" if ref in v.failed else ref for ref in v.checks)
+        lines.append(f"| ({v.label}) {v.title} | {_verdict(v.passed)} | {evidence} |")
+    return [*lines, ""]
+
+
 def render_switch_markdown(c: SwitchComparison) -> str:
     lines = [
         f"# Phase {c.phase} comparison",
@@ -2179,6 +2230,7 @@ def render_switch_markdown(c: SwitchComparison) -> str:
         "",
         *[f"- {note}" for note in c.notes],
         "",
+        *_verdict_lines(c.verdicts),
         "## Runs",
     ]
     for r in c.runs:
