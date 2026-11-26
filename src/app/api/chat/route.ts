@@ -2599,10 +2599,21 @@ Context:
       console.log('[RAG SYSTEM] Creating enhanced prompt with context length:', context.length);
       console.log('[RAG SYSTEM] Using RAG mode:', ragMode);
       const answerLanguage = answerLanguageOptions(retrievalResult);
-      systemPrompt = citationSession.decorateSystemPrompt(createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode, answerLanguage));
+      // Phase 5.2 D-04, D-07: the answer-rule block goes after the citation instruction; it is the prompt itself with every switch off
+      const answerRuleOptions = {
+        mode: ragMode,
+        webSearchOffered: SUPPORTS_TOOLS && webSearchEnabled && Boolean(env.EXA_API_KEY),
+      };
+      systemPrompt = answerTurn.composeSystemPrompt(
+        citationSession.decorateSystemPrompt(createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode, answerLanguage)),
+        answerRuleOptions,
+      );
       if (citationSession.strategy === 'claude-citations') {
         claudeSystemText = [
-          appendAnswerLanguage(citationSession.claudeSystemPrompt(ragSystemPrompt), answerLanguage),
+          answerTurn.composeSystemPrompt(
+            appendAnswerLanguage(citationSession.claudeSystemPrompt(ragSystemPrompt), answerLanguage),
+            answerRuleOptions,
+          ),
           String(formattingSystemMessage.content),
           String(ctaSystemMessage.content),
         ].join('\n\n');
