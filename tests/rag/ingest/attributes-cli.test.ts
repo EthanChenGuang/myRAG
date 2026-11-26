@@ -97,7 +97,7 @@ async function run(argv: string[], options: RunOptions = {}) {
               return request as never;
             }
           }
-          return db.rpc(fn, args);
+          return db.rpc(fn, args ?? {});
         },
       };
   fakes.installIngestDeps({ db: failingDb as typeof db, env: options.env ?? ON });
@@ -157,7 +157,8 @@ describe('parseAttributesArgs', () => {
 describe('switch, tenant and database refusals', () => {
   it('with RAG_DOC_ATTRIBUTES effectively off: exit 64, one fixed line, no tenant check, no RPC', async () => {
     const target = await file('a.jsonl', [row(1)]);
-    for (const env of [{}, { RAG_DOC_ATTRIBUTES: 'true' }, { RAG_INGEST_PIPELINE: 'legacy', RAG_DOC_ATTRIBUTES: 'true' }]) {
+    const envs: Array<Record<string, string>> = [{}, { RAG_DOC_ATTRIBUTES: 'true' }, { RAG_INGEST_PIPELINE: 'legacy', RAG_DOC_ATTRIBUTES: 'true' }];
+    for (const env of envs) {
       const result = await run(['--tenant', TENANT, '--import', target, '--apply'], { env });
       expect(result.code).toBe(64);
       expect(result.calls).toEqual([]);
