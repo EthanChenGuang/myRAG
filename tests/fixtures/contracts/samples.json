@@ -16536,6 +16536,622 @@
         "strategy": "chunk-alias"
       }
     },
+    "EvalReport:answer_rules": {
+      "model": "EvalReport",
+      "value": {
+        "answer_rules": {
+          "adjacent_repurpose_rate": {
+            "by_category": {
+              "partial_answer": {
+                "n": 4,
+                "value": 0.0
+              }
+            },
+            "by_language": {
+              "en": {
+                "n": 4,
+                "value": 0.0
+              }
+            },
+            "overall": {
+              "n": 4,
+              "value": 0.0
+            }
+          },
+          "covered_part_answered": {
+            "by_category": {
+              "partial_answer": {
+                "n": 4,
+                "value": 0.0
+              }
+            },
+            "by_language": {
+              "en": {
+                "n": 4,
+                "value": 0.0
+              }
+            },
+            "overall": {
+              "n": 4,
+              "value": 0.0
+            }
+          },
+          "current_value_rate": {
+            "by_category": {
+              "partial_answer": {
+                "n": 4,
+                "value": 0.0
+              }
+            },
+            "by_language": {
+              "en": {
+                "n": 4,
+                "value": 0.0
+              }
+            },
+            "overall": {
+              "n": 4,
+              "value": 0.0
+            }
+          },
+          "mixed_versions_rate": {
+            "by_category": {
+              "partial_answer": {
+                "n": 4,
+                "value": 0.0
+              }
+            },
+            "by_language": {
+              "en": {
+                "n": 4,
+                "value": 0.0
+              }
+            },
+            "overall": {
+              "n": 4,
+              "value": 0.0
+            }
+          },
+          "truncation_rate": {
+            "by_category": {
+              "partial_answer": {
+                "n": 4,
+                "value": 0.0
+              }
+            },
+            "by_language": {
+              "en": {
+                "n": 4,
+                "value": 0.0
+              }
+            },
+            "overall": {
+              "n": 4,
+              "value": 0.0
+            }
+          },
+          "uncited_sentence_rate": {
+            "by_category": {
+              "partial_answer": {
+                "n": 4,
+                "value": 0.0
+              }
+            },
+            "by_language": {
+              "en": {
+                "n": 4,
+                "value": 0.0
+              }
+            },
+            "overall": {
+              "n": 4,
+              "value": 0.0
+            }
+          },
+          "unsupported_addition_rate": {
+            "by_category": {
+              "partial_answer": {
+                "n": 4,
+                "value": 0.0
+              }
+            },
+            "by_language": {
+              "en": {
+                "n": 4,
+                "value": 0.0
+              }
+            },
+            "overall": {
+              "n": 4,
+              "value": 0.0
+            }
+          }
+        },
+        "by_category": {
+          "general": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          }
+        },
+        "by_doc_type": {
+          "general": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          }
+        },
+        "by_language": {
+          "en": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          }
+        },
+        "by_language_category": {
+          "en:general": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          }
+        },
+        "by_language_pair": {
+          "en->zh": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          }
+        },
+        "by_provenance": {
+          "synthetic_fixture": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          }
+        },
+        "by_provenance_category": {
+          "synthetic_fixture/general": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          }
+        },
+        "by_question_kind": {
+          "fact_lookup": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          }
+        },
+        "by_split": {
+          "dev": {
+            "correct_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_rate": {
+              "n": 10,
+              "value": 0.5
+            },
+            "false_refusal_upper_95": 0.25,
+            "mrr": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_10": {
+              "n": 10,
+              "value": 0.5
+            },
+            "recall_at_5": {
+              "n": 10,
+              "value": 0.5
+            }
+          }
+        },
+        "by_strategy": {
+          "chunk-alias": {
+            "citation_coverage": null,
+            "cited_gold_hit": null,
+            "faithfulness": null,
+            "generation_latency": null,
+            "invalid_citation_rate": null,
+            "items": 4,
+            "raw_invalid_markers": null,
+            "uncited_sentence_rate": {
+              "n": 4,
+              "value": 0.0
+            }
+          }
+        },
+        "citation_coverage": {
+          "n": 4,
+          "value": 0.75
+        },
+        "cited_gold_hit": {
+          "n": 4,
+          "value": 0.5
+        },
+        "corpus_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "deployment_mode": "single-tenant",
+        "embedder_id": "fixture-embedder",
+        "embedder_source_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "embedder_version": 1,
+        "gate_population": "all",
+        "golden_filter": {
+          "gate_split": "dev",
+          "review_statuses": [
+            "approved"
+          ]
+        },
+        "golden_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "groundedness_labels": {
+          "hhem_2_1_open": {
+            "en": {
+              "not_checked": 0,
+              "possibly_unreliable": 1,
+              "verified": 2
+            }
+          },
+          "none": {
+            "it": {
+              "not_checked": 1,
+              "possibly_unreliable": 0,
+              "verified": 0
+            }
+          }
+        },
+        "groundedness_latency": {
+          "hhem_2_1_open": {
+            "n": 3,
+            "p50_ms": 900.0,
+            "p95_ms": 1800.0
+          }
+        },
+        "injection": null,
+        "invalid_citation_rate": {
+          "n": 3,
+          "value": 0.0
+        },
+        "items": [
+          {
+            "answerable": true,
+            "category": "general",
+            "doc_type": "general",
+            "evidence_language": null,
+            "first_hit_rank": 1,
+            "item_id": "en-general-001",
+            "language": "en",
+            "lexical_hit_at_10": true,
+            "provenance": "synthetic_fixture",
+            "question_kind": "fact_lookup",
+            "refused": false,
+            "rerank_status": "ok",
+            "span_count": 1,
+            "spans_hit_at_10": 1,
+            "spans_hit_at_5": 1,
+            "split": "dev"
+          }
+        ],
+        "k_values": [
+          5,
+          10
+        ],
+        "latency": {
+          "embed": {
+            "n": 12,
+            "p50_ms": 4.0,
+            "p95_ms": 6.0
+          },
+          "retrieval_total": {
+            "n": 12,
+            "p50_ms": 12.0,
+            "p95_ms": 20.0
+          }
+        },
+        "lexical_leg_hit_rate_at_10": {
+          "n": 4,
+          "value": 0.75
+        },
+        "notes": [
+          "synthetic sample"
+        ],
+        "overall": {
+          "correct_refusal_rate": {
+            "n": 10,
+            "value": 0.5
+          },
+          "false_refusal_rate": {
+            "n": 10,
+            "value": 0.5
+          },
+          "false_refusal_upper_95": 0.25,
+          "mrr": {
+            "n": 10,
+            "value": 0.5
+          },
+          "recall_at_10": {
+            "n": 10,
+            "value": 0.5
+          },
+          "recall_at_5": {
+            "n": 10,
+            "value": 0.5
+          }
+        },
+        "query_layer": {
+          "budget_profile": "chat",
+          "gate_rules": {
+            "R1_PRONOUN": 3,
+            "R9_KEYWORDS": 1
+          },
+          "items": 4,
+          "items_with_plan": 4,
+          "llm_transform_share": {
+            "n": 4,
+            "value": 0.5
+          },
+          "protected_token_losses": 1,
+          "query_budget": {
+            "p50_ms": 600.0,
+            "p95_ms": 1200.0
+          },
+          "query_latency": {
+            "latency": {
+              "n": 4,
+              "p50_ms": 300.0,
+              "p95_ms": 900.0
+            },
+            "status": "within"
+          },
+          "query_latency_by_category": {
+            "multi_turn": {
+              "latency": {
+                "n": 2,
+                "p50_ms": 700.0,
+                "p95_ms": 1300.0
+              },
+              "status": "over"
+            }
+          },
+          "query_latency_by_language": {
+            "en": {
+              "latency": {
+                "n": 4,
+                "p50_ms": 300.0,
+                "p95_ms": 900.0
+              },
+              "status": "within"
+            }
+          },
+          "transforms": {
+            "condense": {
+              "disabled": 0,
+              "run": 3,
+              "skip_reasons": {},
+              "skipped": 0
+            },
+            "expand": {
+              "disabled": 0,
+              "run": 0,
+              "skip_reasons": {
+                "timeout": 1
+              },
+              "skipped": 1
+            },
+            "hyde": {
+              "disabled": 4,
+              "run": 0,
+              "skip_reasons": {},
+              "skipped": 0
+            }
+          }
+        },
+        "raw_invalid_markers": 1,
+        "request_options": {
+          "cache_seed_answer": null,
+          "citations": false,
+          "degrade": null,
+          "disabled_stages": null,
+          "domain_control_leg": null,
+          "embedding_bindings": null,
+          "embedding_profile": null,
+          "generator_model": null,
+          "groundedness": false,
+          "max_results": 10,
+          "organization_id": null,
+          "query_framework": null,
+          "query_layer": null,
+          "query_params": null,
+          "query_transforms": null,
+          "retrieval_filters": null,
+          "retrieval_overrides": null,
+          "semantic_cache": null,
+          "stage_timeouts_ms": null,
+          "user_id": null
+        },
+        "rerank_skipped_rate": {
+          "n": 4,
+          "value": 0.25
+        },
+        "run_config_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "run_id": "run-001",
+        "schema_version": 1,
+        "semantic_cache": {
+          "bypasses": {
+            "protected_tokens": 2
+          },
+          "checks": 4,
+          "failures": 1,
+          "hit_latency": {
+            "n": 1,
+            "p50_ms": 20.0,
+            "p95_ms": 20.0
+          },
+          "hit_rate": {
+            "n": 4,
+            "value": 0.25
+          },
+          "hits": 1,
+          "miss_latency": {
+            "n": 3,
+            "p50_ms": 400.0,
+            "p95_ms": 800.0
+          },
+          "misses": 3,
+          "near_miss_checks": 2,
+          "near_miss_wrong_hit_rate": {
+            "n": 2,
+            "value": 0.0
+          },
+          "near_miss_wrong_hits": 0
+        },
+        "tier": "smoke"
+      }
+    },
     "EvalReport:injection": {
       "model": "EvalReport",
       "value": {
@@ -18333,6 +18949,127 @@
         "tags": []
       }
     },
+    "GoldenItem:off_topic_context": {
+      "model": "GoldenItem",
+      "value": {
+        "answerable": false,
+        "attack": null,
+        "category": "off_topic_context",
+        "conversation": [],
+        "evidence_language": null,
+        "expected_answer": null,
+        "gold_evidence": [],
+        "id": "en-off-topic-context-001",
+        "language": "en",
+        "off_topic": {
+          "adjacent_quotes": [
+            {
+              "document": "document-c.md",
+              "quote": "Item C takes 9 units.",
+              "section": "Section 1"
+            }
+          ],
+          "score_band": "above_threshold"
+        },
+        "pair_of": null,
+        "provenance": "synthetic_fixture",
+        "question": "How many units does item D take?",
+        "retrieval_filters": null,
+        "review_status": "approved",
+        "split": "dev",
+        "tags": []
+      }
+    },
+    "GoldenItem:partial_answer": {
+      "model": "GoldenItem",
+      "value": {
+        "answerable": true,
+        "attack": null,
+        "category": "partial_answer",
+        "conversation": [],
+        "evidence_language": null,
+        "expected_answer": "Item A takes 4 units; the documents do not cover item B.",
+        "gold_evidence": [
+          {
+            "document": "document-a.md",
+            "quote": "Item A takes 4 units.",
+            "section": "Section 1"
+          }
+        ],
+        "id": "en-partial-answer-001",
+        "language": "en",
+        "pair_of": null,
+        "partial": {
+          "covered": [
+            {
+              "document": "document-a.md",
+              "quote": "Item A takes 4 units.",
+              "section": "Section 1"
+            }
+          ],
+          "forbidden_claims": [
+            "item b takes \\d+ units"
+          ],
+          "uncovered_aspects": [
+            "how many units item B takes"
+          ]
+        },
+        "provenance": "synthetic_fixture",
+        "question": "How many units do item A and item B take?",
+        "retrieval_filters": null,
+        "review_status": "approved",
+        "split": "dev",
+        "tags": []
+      }
+    },
+    "GoldenItem:stale_version": {
+      "model": "GoldenItem",
+      "value": {
+        "answerable": true,
+        "attack": null,
+        "category": "stale_version",
+        "conversation": [],
+        "evidence_language": null,
+        "expected_answer": "Rule B allows 7 units (v2).",
+        "gold_evidence": [
+          {
+            "document": "document-b-v2.md",
+            "quote": "Rule B allows 7 units.",
+            "section": "Section 1"
+          }
+        ],
+        "id": "en-stale-version-001",
+        "language": "en",
+        "pair_of": null,
+        "provenance": "synthetic_fixture",
+        "question": "How many units does rule B allow?",
+        "retrieval_filters": null,
+        "review_status": "approved",
+        "split": "dev",
+        "tags": [],
+        "versions": {
+          "current": {
+            "span": {
+              "document": "document-b-v2.md",
+              "quote": "Rule B allows 7 units.",
+              "section": "Section 1"
+            },
+            "value": "7 units",
+            "version_label": "v2"
+          },
+          "historical": false,
+          "stale": {
+            "span": {
+              "document": "document-b-v1.md",
+              "quote": "Rule B allows 5 units.",
+              "section": "Section 1"
+            },
+            "value": "5 units",
+            "version_label": "v1"
+          }
+        }
+      }
+    },
     "GoldenItem:table_split": {
       "model": "GoldenItem",
       "value": {
@@ -19067,6 +19804,67 @@
             "ab",
             "cd"
           ]
+        },
+        "schema_version": 1
+      }
+    },
+    "LatencyBudgets:answer_checks": {
+      "model": "LatencyBudgets",
+      "value": {
+        "answer_checks": {
+          "claim_check": {
+            "p50_ms": 2000.0,
+            "p95_ms": 6000.0
+          },
+          "groundedness_judge": {
+            "p50_ms": 5000.0,
+            "p95_ms": 10000.0
+          },
+          "output_guard": {
+            "p50_ms": 1.0,
+            "p95_ms": 2.0
+          },
+          "report_only": true
+        },
+        "groundedness": {
+          "hhem_2_1_open": {
+            "p50_ms": 2500.0,
+            "p95_ms": 5000.0
+          },
+          "hhem_2_3_vectara": {
+            "p50_ms": 4000.0,
+            "p95_ms": 8000.0
+          },
+          "report_only": true
+        },
+        "profiles": {
+          "chat": {
+            "groups": {
+              "query": {
+                "p50_ms": 600.0,
+                "p95_ms": 1200.0
+              }
+            },
+            "stages": {
+              "assemble": 100.0,
+              "condense": 600.0,
+              "embed": 200.0,
+              "search": 400.0
+            },
+            "total_p50_ms": 1000.0,
+            "total_p95_ms": 2000.0
+          },
+          "voice": {
+            "groups": {
+              "query": {
+                "p50_ms": null,
+                "p95_ms": 300.0
+              }
+            },
+            "stages": {},
+            "total_p50_ms": 400.0,
+            "total_p95_ms": 800.0
+          }
         },
         "schema_version": 1
       }
@@ -20032,6 +20830,196 @@
           }
         ],
         "version_scope": "current"
+      }
+    },
+    "RagTrace:phase52_answer_fields": {
+      "model": "RagTrace",
+      "value": {
+        "answer": "Item A takes 4 units. [S1]",
+        "answer_language": "en",
+        "answer_rules_parts": [
+          "relevance",
+          "partial_answer"
+        ],
+        "candidates": [
+          {
+            "chunk_id": "chunk-001",
+            "content": "Employees receive twenty days of leave per year.",
+            "document_id": "doc-001",
+            "document_name": "handbook.md",
+            "final_score": 0.85,
+            "fused_score": null,
+            "has_image": false,
+            "language": null,
+            "legs": {},
+            "match_reason": "vector",
+            "rank": 1,
+            "rerank_score": null,
+            "similarity": 0.82
+          },
+          {
+            "chunk_id": "chunk-002",
+            "content": "Office hours are nine to five.",
+            "document_id": "doc-002",
+            "document_name": null,
+            "final_score": null,
+            "fused_score": null,
+            "has_image": false,
+            "language": null,
+            "legs": {},
+            "match_reason": null,
+            "rank": 2,
+            "rerank_score": null,
+            "similarity": 0.41
+          }
+        ],
+        "citation_strategy": "chunk-alias",
+        "citations": [
+          {
+            "alias": "S1",
+            "chunkIds": [
+              "chunk-001"
+            ],
+            "documentId": "doc-001",
+            "documentName": "handbook.md",
+            "documentVersion": null,
+            "n": 1,
+            "page": null,
+            "quote": "Employees receive twenty days of leave per year.",
+            "quoteHash": "8ce0aa222a8339916769a9552a8ffcc2834d2f6aa1101ab636571873bf2c7bb2",
+            "sectionPath": null,
+            "strategy": "chunk-alias"
+          }
+        ],
+        "config_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "context": "Employees receive twenty days of leave per year.",
+        "context_tokens": null,
+        "effective_config": {
+          "deployment_mode": "single-tenant",
+          "embedding_model": "text-embedding-3-small",
+          "endpoint_version": "1",
+          "generator_model": null,
+          "rag_env": {
+            "RAG_BEHAVIOR_MODE": "strict"
+          },
+          "rag_prompt_sha256": {
+            "RAG_SYSTEM_PROMPT": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "security": null
+        },
+        "finish_reason": "stop",
+        "groundedness": null,
+        "injection": null,
+        "invalid_citations": 0,
+        "item_id": "en-general-001",
+        "kept": [
+          {
+            "chunk_id": "chunk-001",
+            "content": "Employees receive twenty days of leave per year.",
+            "document_id": "doc-001",
+            "document_name": "handbook.md",
+            "kept_by": "similarity",
+            "rank": 1,
+            "similarity": 0.82
+          }
+        ],
+        "mixed_versions": false,
+        "notices": [
+          {
+            "kind": "judge_not_configured",
+            "language": "en",
+            "text": "Notice A."
+          }
+        ],
+        "output_guard": {
+          "blocked_ranges": [],
+          "credential_blocked": 0,
+          "credential_warned": 0,
+          "event_ids": [],
+          "links_checked": 1,
+          "links_removed": 0,
+          "mode": "flag",
+          "rule_ids": [],
+          "rules_version": "1",
+          "source_chunk_ids": []
+        },
+        "query": "How many leave days do employees get?",
+        "query_context": {
+          "is_financial_query": false,
+          "is_temporal_query": false,
+          "required_precision": "medium",
+          "search_strategy": "semantic_only",
+          "suggested_threshold": 0.3
+        },
+        "query_language": null,
+        "query_plan": null,
+        "query_transforms": [
+          {
+            "kind": "rewrite",
+            "reason": null,
+            "status": null,
+            "text": "leave days per year",
+            "transform": null
+          }
+        ],
+        "refusal": null,
+        "refusal_origin": "model_relevance",
+        "refusal_reason": null,
+        "refused": false,
+        "residual_output_findings": {
+          "credential_matches": 0,
+          "links": 0,
+          "rule_ids": []
+        },
+        "retrieval_config_hash": null,
+        "retrieval_strategy": "standard",
+        "retrieval_versions": null,
+        "schema_version": 1,
+        "sentences": [
+          {
+            "cited": true,
+            "end": 26,
+            "factual": true,
+            "index": 0,
+            "kind": "sentence",
+            "part": 0,
+            "reason": "judge_not_configured",
+            "scorer": null,
+            "start": 0,
+            "support": "not_checked",
+            "text_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          }
+        ],
+        "stage_counts": {},
+        "stage_latency_ms": {
+          "analyze": 1.5,
+          "embed": 4.0,
+          "generation": 0.0,
+          "search": 7.0
+        },
+        "stage_status": {
+          "analyze": "ok",
+          "embed": "ok",
+          "generation": "ok",
+          "search": "ok"
+        },
+        "used_documents": [
+          {
+            "document_id": "doc-001",
+            "image_url": "https://example.invalid/image.png",
+            "name": "handbook.md",
+            "similarity": 0.82
+          }
+        ],
+        "version_conflict": {
+          "document_ids": [
+            "doc-001",
+            "doc-002"
+          ],
+          "group_rule": "title_match",
+          "latest_document_id": "doc-002",
+          "mixed_versions": false
+        }
       }
     },
     "RagTrace:query_plan": {
