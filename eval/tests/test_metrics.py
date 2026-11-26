@@ -883,6 +883,36 @@ def test_no_answer_identifier_item_is_precise_only_when_refused_without_leak():
     assert (leaked.identifier_precise, leaked.near_miss_leak) == (False, True)
 
 
+def _absent_identifier_item(item_id: str, tags: list[str]) -> GoldenItem:
+    """A valid no_answer item whose asked identifier does not exist (D-32, plan 04.2-37): the category rule stays as it is."""
+    return GoldenItem.model_validate(
+        {
+            **_item(item_id, [(ID_DOC, "the asked record")]).model_dump(mode="json"),
+            "category": "no_answer",
+            "answerable": False,
+            "expected_answer": None,
+            "gold_evidence": [],
+            "tags": tags,
+        }
+    )
+
+
+def test_tagged_no_answer_item_is_scored_as_a_no_answer_identifier_item():
+    item = _absent_identifier_item("en-na-001", ["asked_identifier:QX-4479"])
+    (refused,) = score_items([_identifier_trace(item.id, [], refused=True)], [item])
+    assert (refused.identifier_precise, refused.near_miss_leak) == (True, False)
+    (answered,) = score_items([_identifier_trace(item.id, [["lm9902"]])], [item])
+    assert (answered.identifier_precise, answered.near_miss_leak) == (False, False)
+    (leaked,) = score_items([_identifier_trace(item.id, [["qx4471"]], refused=True)], [item])
+    assert (leaked.identifier_precise, leaked.near_miss_leak) == (False, True)
+
+
+def test_no_answer_item_without_the_asked_tag_gets_no_identifier_values():
+    item = _absent_identifier_item("en-na-002", ["identifier_absent"])
+    (result,) = score_items([_identifier_trace(item.id, [["qx4471"]], refused=True)], [item])
+    assert (result.identifier_precise, result.near_miss_leak) == (None, None)
+
+
 def test_identifier_item_without_the_asked_tag_is_a_scoring_error():
     item = _identifier_item("en-id-009", None)
     with pytest.raises(ValueError, match="en-id-009"):

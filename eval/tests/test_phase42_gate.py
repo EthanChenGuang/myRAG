@@ -2,6 +2,7 @@ import json
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -403,6 +404,22 @@ def test_identifier_gate_fails_when_precision_is_not_measured_on_every_item():
     result = identifier_gate(gate, _identifier_outputs(on=_output(kept={"en-ident-001": unmeasured}, identifier=_ident())), NOISE)
     assert result.passed is False
     assert "category:identifier_near_miss identifier_precision not measured" in result.offenders
+
+
+def test_identifier_gate_measures_tagged_no_answer_items_too(monkeypatch):
+    absent = _g("en-no_answer-002", "en", answerable=False, tags=["asked_identifier:AB-14"])
+    monkeypatch.setattr(sys.modules[__name__], "GOLDEN", [*GOLDEN, absent])
+    gate = _spec().gates.identifier
+    refused = ("en-no_answer-001", "en-no_answer-002")
+    ok = identifier_gate(gate, _identifier_outputs(on=_output(identifier=_ident(), refused=refused), reference=_output(refused=refused)), NOISE)
+    assert ok.passed is True, ok.offenders
+    assert (ok.numbers["items"], ok.numbers["identifier_precision_n"], ok.numbers["near_miss_leakage_n"]) == (2, 2, 2)
+    leaking = {"en-no_answer-002": [_chunk("en-no_answer-002", 1, "doc.en.md", "x", identifiers_norm=[NEAR])]}
+    on = _output(kept=leaking, identifier=_ident(), refused=("en-no_answer-001",))
+    result = identifier_gate(gate, _identifier_outputs(on=on, reference=_output(refused=refused)), NOISE)
+    assert result.passed is False
+    assert "category:identifier_near_miss near_miss_leakage 0.5000 > 0.0000" in result.offenders
+    assert "category:identifier_near_miss identifier_precision 0.5000 < 1.0000" in result.offenders
 
 
 def test_identifier_gate_fails_when_the_descriptive_slice_drops():
