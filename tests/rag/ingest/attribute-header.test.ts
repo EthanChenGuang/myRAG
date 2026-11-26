@@ -552,7 +552,7 @@ async function runStages(options: {
       filename: 'file.md',
       fileSha256: 'a'.repeat(64),
       docType,
-      docTypeOrigin: 'explicit',
+      docTypeOrigin: 'picked',
       profile: getProcessingProfile(docType),
       bytes: null,
     },
