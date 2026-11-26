@@ -248,6 +248,38 @@ for (const mode of MODES) {
   });
 }
 
+interface SharedEdge {
+  fixture: import('../../eval/harness/two-tenant.mts').TwoTenantDatabase;
+  edge: import('../../eval/harness/fake-edge.mts').FakeEdge;
+}
+let shared: Promise<SharedEdge> | null = null;
+
+/**
+ * One two-tenant database and fake edge for every CLI block, closed when the file ends: the admin client is a process singleton bound
+ * to the first edge URL.
+ */
+function acquireEdge(): Promise<SharedEdge> {
+  shared ??= (async () => {
+    const twoTenant = await import('../../eval/harness/two-tenant.mts');
+    const fakeEdge = await import('../../eval/harness/fake-edge.mts');
+    const fixture = await twoTenant.createTwoTenantDatabase();
+    const edge = await fakeEdge.startFakeEdge({ db: fixture.db });
+    Object.assign(process.env, fakeEdge.fixtureProcessEnv(edge.url));
+    process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = 'multi-tenant';
+    process.env.MYRAG_DEPLOYMENT_MODE = 'multi-tenant';
+    return { fixture, edge };
+  })();
+  return shared;
+}
+
+after(async () => {
+  if (!shared) return;
+  const { edge, fixture } = await shared;
+  shared = null;
+  await edge.close();
+  await fixture.db.close();
+});
+
 describe('npm run rag:finetune over the fake edge (two tenants)', () => {
   const FT_ENV = { RAG_FINETUNE: 'on' };
   let fixture: import('../../eval/harness/two-tenant.mts').TwoTenantDatabase;
@@ -263,15 +295,10 @@ describe('npm run rag:finetune over the fake edge (two tenants)', () => {
 
   before(async () => {
     const twoTenant = await import('../../eval/harness/two-tenant.mts');
-    const fakeEdge = await import('../../eval/harness/fake-edge.mts');
     ids = twoTenant.TWO_TENANT_IDS;
     tenantA = `u:${ids.userA}`;
     tenantB = `u:${ids.userB}`;
-    fixture = await twoTenant.createTwoTenantDatabase();
-    edge = await fakeEdge.startFakeEdge({ db: fixture.db });
-    Object.assign(process.env, fakeEdge.fixtureProcessEnv(edge.url));
-    process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = 'multi-tenant';
-    process.env.MYRAG_DEPLOYMENT_MODE = 'multi-tenant';
+    ({ fixture, edge } = await acquireEdge());
     cli = await import('@/lib/rag/finetune/cli');
     bundleIo = await import('@/lib/rag/finetune/bundle-io');
     ingestDeps = await import('@/lib/rag/ingest/deps');
@@ -282,8 +309,6 @@ describe('npm run rag:finetune over the fake edge (two tenants)', () => {
     ingestDeps?.resetIngestDepsForTests();
     activeProfile?.resetActiveProfileForTests();
     for (const dir of bundles) fs.rmSync(dir, { recursive: true, force: true });
-    await edge?.close();
-    await fixture?.db.close();
   });
 
   function makeBundle(tenantKeys: string[], purpose: 'private' | 'deployment'): string {
@@ -380,14 +405,9 @@ describe('npm run rag:finetune -- embed-queries over the fake edge', () => {
 
   before(async () => {
     const twoTenant = await import('../../eval/harness/two-tenant.mts');
-    const fakeEdge = await import('../../eval/harness/fake-edge.mts');
     tenantA = `u:${twoTenant.TWO_TENANT_IDS.userA}`;
     tenantB = `u:${twoTenant.TWO_TENANT_IDS.userB}`;
-    fixture = await twoTenant.createTwoTenantDatabase();
-    edge = await fakeEdge.startFakeEdge({ db: fixture.db });
-    Object.assign(process.env, fakeEdge.fixtureProcessEnv(edge.url));
-    process.env.NEXT_PUBLIC_MYRAG_DEPLOYMENT_MODE = 'multi-tenant';
-    process.env.MYRAG_DEPLOYMENT_MODE = 'multi-tenant';
+    ({ fixture, edge } = await acquireEdge());
     cli = await import('@/lib/rag/finetune/cli');
     bundleIo = await import('@/lib/rag/finetune/bundle-io');
     ingestDeps = await import('@/lib/rag/ingest/deps');
@@ -425,8 +445,6 @@ describe('npm run rag:finetune -- embed-queries over the fake edge', () => {
     ingestDeps?.resetIngestDepsForTests();
     activeProfile?.resetActiveProfileForTests();
     for (const dir of bundles) fs.rmSync(dir, { recursive: true, force: true });
-    await edge?.close();
-    await fixture?.db.close();
   });
 
   function pairRow(id: string, split: 'train' | 'dev' | 'test', source: 'synthetic' | 'mined' = 'synthetic', tenant = tenantA): string {

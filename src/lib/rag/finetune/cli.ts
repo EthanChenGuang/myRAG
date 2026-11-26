@@ -128,7 +128,7 @@ export async function main(
       return 1;
     }
     if (error instanceof ProfileUnavailableError) {
-      io.err(`${TAG} refused: profile registry unavailable (${error.reason})`);
+      io.err(`${TAG} refused: profile registry unavailable (${error.reason}${error.code ? `, ${error.code}` : ''})`);
       return 1;
     }
     throw error;
