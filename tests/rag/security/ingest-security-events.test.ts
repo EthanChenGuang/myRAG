@@ -51,7 +51,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function setup(env: Record<string, string>, text: string, uploaderId: string | undefined = UPLOADER) {
+function setup(env: Record<string, string>, text: string, uploaderId: string | null = UPLOADER) {
   const { db, calls } = fakeIngestDb();
   installIngestDeps({ db, env });
   const deps = getIngestDeps();
@@ -65,7 +65,7 @@ function setup(env: Record<string, string>, text: string, uploaderId: string | u
       filename: 'notes.md',
       mimeType: 'text/markdown',
       signal,
-      ...(uploaderId !== undefined ? { uploaderId } : {}),
+      ...(uploaderId !== null ? { uploaderId } : {}),
     },
     deps,
     writer: createIngestWriter({ db, scope, signal }),
@@ -155,7 +155,7 @@ describe('ingestion security events with RAG_SECURITY_EVENTS on', () => {
     await scanInjectionStage.run(clean.ctx);
     expect(recorded()).toHaveLength(0);
     uninstallIngestDeps();
-    const anonymous = setup({ RAG_INJECTION_SCAN: 'quarantine' }, RULE_HIT, undefined);
+    const anonymous = setup({ RAG_INJECTION_SCAN: 'quarantine' }, RULE_HIT, null);
     await scanInjectionStage.run(anonymous.ctx);
     expect(recorded()[0]?.events[0]).toMatchObject({ uploader_id: null });
   });

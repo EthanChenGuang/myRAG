@@ -1,4 +1,5 @@
 import { HiddenTextReportSchema, type HiddenTextReport } from '@/lib/rag-eval/contracts.generated';
+import { readAnswerConfig } from '../../generation/answer-config';
 import { hiddenTextMimeType, removeHiddenSpans, requestHiddenTextReport, type HiddenTextSpan, type SpanRemoval } from '../../security/hidden-text';
 import { scanText, type InjectionScanResult } from '../../security/injection-scan';
 import { parseLinkAllowlist } from '../../security/link-allowlist';
@@ -9,7 +10,9 @@ import {
   zeroWidthReason,
   type QuarantineReason,
 } from '../../security/quarantine-reasons';
+import { buildSecurityEvent, recordSecurityEventsInline, type SecurityEvent } from '../../security/security-events';
 import { findZeroWidth, loadHiddenTextRules, stripZeroWidth, type ZeroWidthFinding } from '../../security/zero-width';
+import { uploaderOf } from '../approval/resolve';
 import { HIDDEN_TEXT_SANITIZED_KEY, PARSE_ARTIFACT, isArtifactName, loadArtifact, originalName, rewriteSanitizedArtifacts, versionPrefix } from '../artifacts';
 import type { IngestConfig } from '../config';
 import { saveContextState } from '../state-store';
@@ -426,6 +429,83 @@ const linksCheck: ScanCheck = {
   },
 };
 
+type FindingResult = Extract<ScanCheckResult, { outcome: string }>;
+
+const EVENT_SOURCE: Record<ScanCheckName, SecurityEvent['source']> = {
+  injection_rules: 'ingest_injection',
+  hidden_text: 'hidden_text',
+  links: 'untrusted_link',
+};
+const EVENT_DETECTOR: Record<ScanCheckName, string> = { injection_rules: 'injection_rules', hidden_text: 'hidden_text', links: 'link_check' };
+
+function codesOf(entries: unknown, key: string): string[] {
+  if (!Array.isArray(entries)) return [];
+  return entries.map((entry) => (entry && typeof entry === 'object' ? (entry as Record<string, unknown>)[key] : null)).filter((code): code is string => typeof code === 'string');
+}
+
+/** The rule ids of one finding: rule ids, hidden-span reason kinds or link target kinds; codes only, never a span or a target. */
+function findingRuleIds(name: ScanCheckName, result: FindingResult): string[] {
+  if (name === 'injection_rules') return [...(result.injection?.rule_ids ?? [])];
+  if (name === 'hidden_text') {
+    const fromReasons = (result.reasons ?? []).flatMap((reason) => codesOf((reason as { spans?: unknown }).spans, 'reason'));
+    const report = result.metadata?.hidden_text_report as { spans?: unknown } | undefined;
+    const kinds = fromReasons.length > 0 ? fromReasons : codesOf(report?.spans, 'reason');
+    return kinds.length > 0 ? kinds : result.outcome === 'zero_width_stripped' ? ['zero_width'] : [];
+  }
+  return codesOf((result.metadata?.link_check as { targets?: unknown } | undefined)?.targets, 'kind');
+}
+
+/** The action of one check's finding as the stage decided it, or null when the check found nothing. */
+function findingAction(name: ScanCheckName, result: FindingResult): SecurityEvent['action'] | null {
+  if ((result.reasons?.length ?? 0) > 0 || (name === 'injection_rules' && result.injection)) return 'quarantined';
+  if (name === 'hidden_text' && (result.hiddenTextCheck === 'hidden_found' || result.outcome === 'zero_width_stripped')) return 'detected';
+  if (name === 'links' && result.outcome === 'flagged') return 'detected';
+  return null;
+}
+
+function eventsOn(): boolean {
+  try {
+    return readAnswerConfig().securityEvents;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * D-43, D-44: one event per finding, written inline once the stage has decided, with the uploader of the ingest input and no trace id.
+ * A failure is logged by the writer and never changes the ingestion.
+ */
+async function recordScanEvents(ctx: StageContext, findings: ReadonlyArray<{ name: ScanCheckName; result: FindingResult }>): Promise<void> {
+  if (findings.length === 0 || !eventsOn()) return;
+  try {
+    const identity = requireIdentity(ctx, 'scan_injection');
+    const document = requireDocument(ctx, 'scan_injection');
+    const uploaderId = uploaderOf(ctx);
+    const events: SecurityEvent[] = [];
+    for (const { name, result } of findings) {
+      const action = findingAction(name, result);
+      if (action === null) continue;
+      events.push(
+        buildSecurityEvent({
+          tenantKey: identity.tenantKey,
+          source: EVENT_SOURCE[name],
+          action,
+          detector: EVENT_DETECTOR[name],
+          ruleIds: findingRuleIds(name, result),
+          documentId: document.id,
+          chunkId: null,
+          uploaderId,
+          traceId: null,
+        }),
+      );
+    }
+    if (events.length > 0) await recordSecurityEventsInline({ tenantKey: identity.tenantKey, events, traceId: null });
+  } catch (error) {
+    if (ctx.signal.aborted) throw error;
+    console.warn('[RAG Security] ingestion events not recorded', { error: error instanceof Error ? error.name : 'unknown' });
+  }
+}
+
 /** The checks of the stage in run order (D-32): injection rules, hidden text, links. */
 export const SCAN_CHECKS: readonly ScanCheck[] = [injectionRulesCheck, hiddenTextCheck, linksCheck];
 
@@ -447,11 +527,13 @@ export async function runScanChecks(ctx: StageContext, checks: readonly ScanChec
   let injection: InjectionScanResult | null = null;
   let hiddenTextCheckValue: HiddenTextCheckValue | null = null;
   const facts: Record<ScanCheckName, string> = { injection_rules: 'off', hidden_text: 'off', links: 'off' };
+  const findings: Array<{ name: ScanCheckName; result: FindingResult }> = [];
   for (const check of enabled) {
     const result = await check.run(ctx);
     if ('fail' in result) return { kind: 'fail', reason: result.fail };
     if ('yield' in result) return { kind: 'yield', reason: result.yield };
     outcomes.push(`${check.name}:${result.outcome}`);
+    findings.push({ name: check.name, result });
     facts[check.name] = `${result.outcome}:${Math.max(0, Math.trunc(result.count ?? 0))}`;
     if (result.injection) injection = result.injection;
     if (result.hiddenTextCheck) hiddenTextCheckValue = result.hiddenTextCheck;
@@ -483,6 +565,7 @@ export async function runScanChecks(ctx: StageContext, checks: readonly ScanChec
       legacy,
     );
   }
+  await recordScanEvents(ctx, findings);
 
   // Only the injection check on (today's configuration): today's outcome names, unchanged.
   const outcome = enabled.length === 1 && enabled[0]?.name === 'injection_rules' ? (quarantined ? 'quarantined' : 'scan_clean') : outcomes.join(',');
