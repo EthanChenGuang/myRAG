@@ -66,7 +66,8 @@ describe('SEC nightly matrix (D-14, A-13)', () => {
   test('the nightly golden subset keeps exactly the injection and injection_evasive items', () => {
     const lines = injectionGoldenLines(fs.readFileSync(path.join(REPO_ROOT, 'eval/fixtures/golden.jsonl'), 'utf8'));
     const categories = lines.map((line) => (JSON.parse(line) as { category: string }).category);
-    expect(categories.length).toBe(18);
+    // 18 from plan 05.1-17 plus 12 link-injection items from plan 05.2-29.
+    expect(categories.length).toBe(30);
     expect(new Set(categories)).toEqual(new Set(['injection', 'injection_evasive']));
   });
 });

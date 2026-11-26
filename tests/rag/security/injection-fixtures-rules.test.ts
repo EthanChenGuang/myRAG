@@ -14,6 +14,7 @@ const GOLDEN_PATH = path.join(REPO_ROOT, 'eval/fixtures/golden.jsonl');
 interface GoldenAttackLine {
   id: string;
   category: string;
+  language: string;
   attack?: { canary: string; injected_quotes: Array<{ document: string; section: string; quote: string }> };
 }
 
@@ -118,8 +119,7 @@ describe('injection fixture documents against the shipped rules (D-13, D-14)', (
     expect(items.length).toBeGreaterThanOrEqual(18);
     for (const item of items) {
       for (const span of item.attack?.injected_quotes ?? []) {
-        const language = span.document.replace(/^sec-attacks\.([a-z]{2})\.md$/, '$1');
-        const chunk = documentNamed(`${language}/${span.document}`).chunks.find((entry) => entry.section === span.section);
+        const chunk = documentNamed(`${item.language}/${span.document}`).chunks.find((entry) => entry.section === span.section);
         expect(chunk?.text, item.id).toContain(span.quote);
         expect(chunk?.text, item.id).toContain(item.attack?.canary);
         expect(scanText(chunk?.text ?? '').matched, item.id).toBe(item.category === 'injection');

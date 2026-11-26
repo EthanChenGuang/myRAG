@@ -376,7 +376,9 @@ def test_committed_ingest_manifest_verifies_against_the_merged_ingest_set():
 
 
 def test_committed_manifests_start_at_version_one_all_active():
+    # Version 2 adds the Phase 5.2 items (plan 05.2-29) and changes no version-1 item.
     for path in (FIXTURE_MANIFEST, INGEST_MANIFEST):
         manifest = golden_set.load_manifest(path)
-        assert manifest.version == 1
+        assert manifest.changelog[0].version == 1
+        assert manifest.version == 2 and not manifest.changelog[-1].changed
         assert all(entry.status == "active" for entry in manifest.items)

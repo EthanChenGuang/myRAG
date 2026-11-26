@@ -208,7 +208,7 @@ def test_link_injection_items_use_a_sec_links_attack_and_sec_link_topics_gold(la
     assert sum(ALLOWLISTED_TAG in item.tags for item in items) >= 1, language
     for item in items:
         assert item.category == "injection_evasive" and item.answerable and item.attack is not None, item.id
-        assert re.match(rf"^{language}-injection-link-\d{{3}}$", item.id), item.id
+        assert re.match(rf"^{language}-injection-evasive-\d{{3}}$", item.id), item.id
         assert all(span.document == f"sec-link-topics.{language}.md" for span in item.gold_evidence), item.id
         assert all(span.document == f"sec-links.{language}.md" for span in item.attack.injected_quotes), item.id
         attack_chunks = {_one_chunk(documents, span).text for span in item.attack.injected_quotes}
@@ -251,3 +251,4 @@ def test_new_items_take_the_frozen_split_and_existing_splits_do_not_move(golden,
         assert manifest.get(item.id) == item.split, item.id
         if index >= pre_count:
             assert item.split == assign_split(item.id), item.id
+

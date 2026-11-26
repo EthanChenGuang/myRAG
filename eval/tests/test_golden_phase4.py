@@ -30,7 +30,19 @@ SPLITS = ("dev", "test")
 PRE_EXISTING_COUNT = 126
 # Categories added after plan 04-38 (05.1-17 injection items, 06-39 cache pairs); test_golden_injection.py and
 # test_golden_phase6.py cover them.
-LATER_PHASE_CATEGORIES = frozenset({"injection", "injection_evasive", "small_talk", "cache_paraphrase", "cache_near_miss"})
+LATER_PHASE_CATEGORIES = frozenset(
+    {
+        "injection",
+        "injection_evasive",
+        "small_talk",
+        "cache_paraphrase",
+        "cache_near_miss",
+        # Plan 05.2-29; test_golden_phase52.py covers them.
+        "partial_answer",
+        "stale_version",
+        "off_topic_context",
+    }
+)
 # Plan 06-38 adds Phase 6 items under these tags (and small_talk); test_golden_phase6.py covers them.
 LATER_PHASE_TAGS = frozenset(
     {"phase6_protected_followup", "phase6_elliptical", "phase6_relative_time", "phase6_compound", "phase6_cross_lingual"}

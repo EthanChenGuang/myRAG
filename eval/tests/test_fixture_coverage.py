@@ -34,6 +34,9 @@ CACHE_PAIRS_PER_LANGUAGE_06_39 = 9
 COLLOQUIAL_TERM_PER_LANGUAGE_04_1_1_10 = 5
 NO_ANSWER_TERM_PER_LANGUAGE_04_1_1_10 = 1
 TERM_ITEMS_PER_LANGUAGE_04_1_1_10 = COLLOQUIAL_TERM_PER_LANGUAGE_04_1_1_10 + NO_ANSWER_TERM_PER_LANGUAGE_04_1_1_10
+# Plan 05.2-29: four partial_answer, stale_version and off_topic_context items and four link-injection
+# injection_evasive items per language; test_golden_phase52.py checks them.
+PHASE52_PER_LANGUAGE_05_2_29 = 16
 TERM_ITEM_ID = re.compile(r"^[a-z]+-(colloquial|no_answer)-term-\d{3}$")
 PHASE6_RELATIVE_TIME_TAG = "phase6_relative_time"
 PER_LANGUAGE_CATEGORY = {
@@ -52,6 +55,9 @@ PER_LANGUAGE_CATEGORY = {
     "small_talk": 2,
     "cache_paraphrase": 4,
     "cache_near_miss": 5,
+    "partial_answer": 4,
+    "stale_version": 4,
+    "off_topic_context": 4,
 }
 PER_LANGUAGE_CATEGORY_OVERRIDES = {("en", "cross_lingual"): 13, ("it", "cross_lingual"): 13}
 # Tightest selective_filter in this corpus pins a single document (4–6 chunk rows of 71).
@@ -89,6 +95,7 @@ def test_single_language_items_forty_per_language(items):
         + PHASE6_PER_LANGUAGE_06_38
         + CACHE_PAIRS_PER_LANGUAGE_06_39
         + TERM_ITEMS_PER_LANGUAGE_04_1_1_10
+        + PHASE52_PER_LANGUAGE_05_2_29
     )
     assert len(single) == 102 + NO_ANSWER_ADDED_BY_PLAN_04_38 + per_language * len(LANGUAGES)
     expected = 40 + per_language
@@ -102,6 +109,7 @@ def test_twenty_six_cross_lingual_items_at_least_four_per_pair(items):
         + PHASE6_PER_LANGUAGE_06_38
         + CACHE_PAIRS_PER_LANGUAGE_06_39
         + TERM_ITEMS_PER_LANGUAGE_04_1_1_10
+        + PHASE52_PER_LANGUAGE_05_2_29
     )
     assert len(items) == 102 + NO_ANSWER_ADDED_BY_PLAN_04_38 + per_language * len(LANGUAGES) + len(cross)
     assert len(cross) == PER_PAIR_MINIMUM * len(PAIRS) + CROSS_LINGUAL_ADDED_BY_PLAN_04_38 + CROSS_LINGUAL_ADDED_BY_PLAN_06_38
