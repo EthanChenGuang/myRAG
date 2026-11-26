@@ -43,6 +43,14 @@
       "side": "query"
     },
     {
+      "name": "RAG_CITATION_PER_SENTENCE",
+      "side": "query"
+    },
+    {
+      "name": "RAG_CLAIM_CHECK",
+      "side": "query"
+    },
+    {
       "name": "RAG_CLAUDE_CITATIONS",
       "side": "query"
     },
@@ -56,6 +64,10 @@
     },
     {
       "name": "RAG_CONTEXT_EDGE_ORDER",
+      "side": "query"
+    },
+    {
+      "name": "RAG_CONTEXT_RELEVANCE_RULE",
       "side": "query"
     },
     {
@@ -262,6 +274,14 @@
       "side": "query"
     },
     {
+      "name": "RAG_GROUNDEDNESS_JUDGE_MODEL",
+      "side": "query"
+    },
+    {
+      "name": "RAG_GROUNDEDNESS_LLM_JUDGE",
+      "side": "query"
+    },
+    {
       "name": "RAG_GROUNDEDNESS_MAX_PREMISE_TOKENS",
       "side": "query"
     },
@@ -395,6 +415,10 @@
       "side": "query"
     },
     {
+      "name": "RAG_MAX_OUTPUT_TOKENS",
+      "side": "query"
+    },
+    {
       "name": "RAG_MAX_RETRIEVAL_PASSES",
       "side": "query"
     },
@@ -416,6 +440,10 @@
     },
     {
       "name": "RAG_OPENAI_EMBEDDINGS_VIA",
+      "side": "query"
+    },
+    {
+      "name": "RAG_OUTPUT_GUARD",
       "side": "query"
     },
     {
@@ -474,6 +502,10 @@
       "name": "RAG_PARSE_VLM_MODEL",
       "side": "ingestion",
       "mechanism": "reparse"
+    },
+    {
+      "name": "RAG_PARTIAL_ANSWER_RULE",
+      "side": "query"
     },
     {
       "name": "RAG_PDF_IMAGE_CHUNKS",
@@ -570,6 +602,10 @@
       "side": "query"
     },
     {
+      "name": "RAG_REGISTRY_TEXTS",
+      "side": "query"
+    },
+    {
       "name": "RAG_RERANKER",
       "side": "query"
     },
@@ -623,6 +659,10 @@
     },
     {
       "name": "RAG_SCOPE_TAG_SUGGEST",
+      "side": "query"
+    },
+    {
+      "name": "RAG_SECURITY_EVENTS",
       "side": "query"
     },
     {
@@ -726,6 +766,18 @@
       "side": "query"
     },
     {
+      "name": "RAG_UPLOADER_ALERT_THRESHOLD",
+      "side": "query"
+    },
+    {
+      "name": "RAG_UPLOADER_ALERT_WINDOW_HOURS",
+      "side": "query"
+    },
+    {
+      "name": "RAG_UPLOADER_HOLD",
+      "side": "query"
+    },
+    {
       "name": "RAG_UPLOAD_APPROVAL",
       "side": "query"
     },
@@ -735,6 +787,10 @@
     },
     {
       "name": "RAG_VECTOR_SYNC_SECRET",
+      "side": "query"
+    },
+    {
+      "name": "RAG_VERSION_LABELS",
       "side": "query"
     },
     {
