@@ -1,4 +1,5 @@
 import { splitAtIdentifiers } from '../ids/shapes';
+import type { LexicalOptions } from './options';
 import rules from './rules.json';
 
 export const LEXICAL_VERSION = 2;
@@ -146,17 +147,17 @@ function tokenizeNormalized(text: string): string[] {
 }
 
 /** Shared tokenizer for index-side lexical_text (order and duplicates kept by lexicalText). */
-export function lexicalTokens(text: string): string[] {
+export function lexicalTokens(text: string, _options?: LexicalOptions): string[] {
   if (text === '') return [];
   return tokenizeNormalized(normalize(text));
 }
 
-export function lexicalText(prefix: string[], content: string): string {
+export function lexicalText(prefix: string[], content: string, _options?: LexicalOptions): string {
   const tokens = [...prefix.flatMap((part) => lexicalTokens(part)), ...lexicalTokens(content)];
   return tokens.join(' ');
 }
 
-export function queryLexicalTokens(text: string): string[] {
+export function queryLexicalTokens(text: string, _options?: LexicalOptions): string[] {
   if (text === '') return [];
   const seen = new Set<string>();
   const out: string[] = [];
@@ -170,7 +171,7 @@ export function queryLexicalTokens(text: string): string[] {
 }
 
 /** Whole and joined lexical forms for an identifier string (exact-id lookup). */
-export function identifierLexicalLookupForms(raw: string): string[] {
+export function identifierLexicalLookupForms(raw: string, _options?: LexicalOptions): string[] {
   const normalized = normalize(raw);
   const joined = joinedForm(normalized);
   const fromQuery = new Set(queryLexicalTokens(raw));
@@ -182,4 +183,14 @@ export function identifierLexicalLookupForms(raw: string): string[] {
   if (!out.includes(normalized)) out.push(normalized);
   if (joined !== normalized && !out.includes(joined)) out.push(joined);
   return out;
+}
+
+export const MAX_ADDITIVE_QUERY_TOKENS = 0;
+
+export function lexicalRegistryRules(): { stopwords: Set<string>; hanStopwords: Set<string>; elisionPrefixes: string[]; elisionSuffixes: string[]; foldAccents: boolean } {
+  return { stopwords: new Set(), hanStopwords: new Set(), elisionPrefixes: [], elisionSuffixes: [], foldAccents: false };
+}
+
+export function lexicalStemmerAvailable(_language: string | null | undefined): boolean {
+  return false;
 }
