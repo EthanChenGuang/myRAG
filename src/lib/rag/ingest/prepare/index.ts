@@ -9,9 +9,10 @@ import {
 import { DOCLING_ARTIFACT, PAGE_TEXTS_ARTIFACT, loadArtifact, type ArtifactContext } from '../artifacts';
 import { FENCE, HEADING } from '../chunkers/markdown-sections';
 import type { ChunkerConfig } from '../chunkers';
-import type { PageBoilerplateMode } from '../config';
-import type { TenantRules } from '../rules/load';
-import type { ChunkPrepSnapshot } from '../types';
+import type { ResolvedSectionRules, SectionHeadingHit } from '../chunkers/rule-sections';
+import type { PageBoilerplateMode, SectionRulesMode } from '../config';
+import type { LoadedSectionRuleSet, TenantRules } from '../rules/load';
+import type { ChunkPrepSectionRulesSnapshot, ChunkPrepSnapshot } from '../types';
 import type { IngestWriter } from '../writer';
 import {
   CLEANER_VERSION,
@@ -24,6 +25,18 @@ import {
 } from './boilerplate';
 import { boilerplateConfig } from './boilerplate-config';
 import { readPageLines, type PageLines } from './page-lines';
+import {
+  checkSectionRules,
+  headingCandidates,
+  headingPatterns,
+  HEADING_PATTERN_ID_PREFIX,
+  hitsOverCap,
+  resolveSectionHits,
+  resolvedSectionRules,
+  sectionCounts,
+  type HeadingInput,
+  type SectionRuleCounts,
+} from './section-hits';
 
 /**
  * The one preparation step between parse and chunk (TPL-02, D-06 to D-11, D-14, D-15). The chunk stage and the re-chunk command call it
@@ -36,6 +49,7 @@ import { readPageLines, type PageLines } from './page-lines';
 export const TENANT_RULES_UNAVAILABLE = 'tenant_rules_unavailable';
 export const BOILERPLATE_SNAPSHOT_TOO_LARGE = 'boilerplate_snapshot_too_large';
 export const PREPARE_FAILED = 'prepare_failed';
+export const SECTION_RULES_SNAPSHOT_TOO_LARGE = 'section_rules_snapshot_too_large';
 
 export const REVIEW_CODES = ['section_rules_not_satisfied', 'boilerplate_above_threshold', 'tenant_pattern_timeout'] as const;
 export type ReviewCode = (typeof REVIEW_CODES)[number];
@@ -58,8 +72,11 @@ export interface PrepareChunkInputArgs {
   parseChunks: readonly ParseChunk[] | null;
   pageLines: PageLines | null;
   baseChunker: ChunkerConfig;
-  mode: BoilerplateMode;
-  /** The tenant's rules for the document's binding; not needed with a snapshot or in mode detect. */
+  /** The effective cleaning mode; off removes no line (section rules may still run). */
+  mode: PageBoilerplateMode;
+  /** The effective RAG_SECTION_RULES value; absent means off. */
+  sectionRules?: SectionRulesMode;
+  /** The tenant's rules for the document's binding; not needed with a snapshot, or in mode detect or off while section rules are off. */
   rules?: TenantRules | null;
   snapshot?: ChunkPrepSnapshot | null;
   deadlineMs?: number;
@@ -74,6 +91,16 @@ export interface PrepareChunkInputResult {
   review: ReviewCode[];
   warnings: string[];
   snapshot: ChunkPrepSnapshot;
+  /** What is stored under metadata.section_rules; null when no rule set applied. */
+  sectionRules: SectionRulesReport | null;
+}
+
+/** metadata.section_rules: ids, the verdict and integer counts only. */
+export interface SectionRulesReport {
+  rule_set_id: string;
+  version: number;
+  satisfied: boolean;
+  counts: SectionRuleCounts;
 }
 
 const isReviewCode = (code: string): code is ReviewCode => (REVIEW_CODES as readonly string[]).includes(code);
@@ -99,9 +126,25 @@ function fragmentRules(rules: TenantRules | null | undefined): BoilerplateFragme
   return out;
 }
 
-/** True when preparing this document starts a worker call: no snapshot, a mode with rules, and at least one tenant line rule. */
-export function needsPatternCall(mode: PageBoilerplateMode, rules: TenantRules | null | undefined, snapshot?: ChunkPrepSnapshot | null): boolean {
-  if (snapshot || mode === 'off' || mode === 'detect') return false;
+/** The rule set whose heading patterns apply: loaded, bound to the document and with at least one heading. */
+function boundRuleSet(rules: TenantRules | null | undefined): LoadedSectionRuleSet | null {
+  if (!rules || rules.loadFailed || !rules.ruleSet || rules.ruleSet.headings.length === 0) return null;
+  return rules.ruleSet;
+}
+
+/**
+ * True when preparing this document starts a worker call: no snapshot, and at least one tenant line rule in a mode with rules or, with
+ * section rules on, a bound rule set.
+ */
+export function needsPatternCall(
+  mode: PageBoilerplateMode,
+  rules: TenantRules | null | undefined,
+  snapshot?: ChunkPrepSnapshot | null,
+  sectionRules: SectionRulesMode = 'off',
+): boolean {
+  if (snapshot) return false;
+  if (sectionRules === 'on' && boundRuleSet(rules)) return true;
+  if (mode === 'off' || mode === 'detect') return false;
   return lineRules(rules).length > 0;
 }
 
@@ -159,10 +202,10 @@ function overCap(entries: readonly string[]): boolean {
 const EMPTY_REMOVAL: BoilerplateRemoval = { keys: [], lineDigests: [] };
 
 /** The removal applied to every text field of the parser's chunks; emptied headings and chunks with no text left are dropped. */
-function mapChunks(chunks: readonly ParseChunk[] | null, removal: BoilerplateRemoval): ParseChunk[] | null {
+function mapChunks(chunks: readonly ParseChunk[] | null, removal: BoilerplateRemoval, protectedLines: readonly string[] = []): ParseChunk[] | null {
   if (chunks === null) return null;
   if (removal.keys.length === 0 && removal.lineDigests.length === 0) return chunks as ParseChunk[];
-  const map = removalTextMap(removal);
+  const map = removalTextMap(removal, protectedLines);
   const out: ParseChunk[] = [];
   for (const chunk of chunks) {
     const text = map(chunk.text);
@@ -183,25 +226,73 @@ function boilerplateRuleIds(rules: TenantRules | null | undefined): Array<{ id: 
   return rules.ruleIds.filter((entry) => entry.kind === 'boilerplate_rule').map((entry) => ({ id: entry.id, version: entry.version }));
 }
 
+function resolvedOf(section: ChunkPrepSectionRulesSnapshot): ResolvedSectionRules {
+  return {
+    rule_set_id: section.ruleSetId,
+    version: section.ruleSetVersion,
+    skip_toc: section.toc.skip,
+    toc_min_run: section.toc.minRunLines,
+    hits: section.headingHits,
+  };
+}
+
+/** The chunker a section-rules snapshot selects: the rule-driven one when the rule set was satisfied, else the profile's own object. */
+function chunkerOf(base: ChunkerConfig, section: ChunkPrepSectionRulesSnapshot | undefined): ChunkerConfig {
+  return section?.satisfied ? { ...base, kind: 'rule_sections', section_rules: resolvedOf(section) } : base;
+}
+
+function sectionReportOf(markdown: string, section: ChunkPrepSectionRulesSnapshot): SectionRulesReport {
+  return { rule_set_id: section.ruleSetId, version: section.ruleSetVersion, satisfied: section.satisfied, counts: sectionCounts(markdown, resolvedOf(section)) };
+}
+
 function replay(args: PrepareChunkInputArgs, snapshot: ChunkPrepSnapshot): PrepareChunkInputResult {
+  const section = snapshot.sectionRules;
+  const protectedLines = section ? Object.keys(section.headingHits) : [];
   const removal = snapshot.boilerplate && !snapshot.truncated ? untagRemoval(snapshot.boilerplate.removedLineKeys) : EMPTY_REMOVAL;
-  const replayed = replayRemoval(args.markdown, removal);
+  const replayed = replayRemoval(args.markdown, removal, protectedLines);
   const review = new Set<ReviewCode>(snapshot.warnings.filter(isReviewCode));
   if (replayed.aboveReviewShare) review.add('boilerplate_above_threshold');
+  // A rule set that could not be judged (worker timeout or failure) is not reported as unsatisfied, on the first run or on replay.
+  if (section && !section.satisfied && !snapshot.warnings.includes('tenant_pattern_timeout') && !snapshot.warnings.includes(TENANT_RULES_UNAVAILABLE)) {
+    review.add('section_rules_not_satisfied');
+  }
   return {
     markdown: replayed.markdown,
-    parseChunks: mapChunks(args.parseChunks, removal),
-    chunker: args.baseChunker,
+    parseChunks: mapChunks(args.parseChunks, removal, protectedLines),
+    chunker: chunkerOf(args.baseChunker, section),
     report: replayed.report,
     review: REVIEW_CODES.filter((code) => review.has(code)),
     warnings: snapshot.warnings.filter((code) => !isReviewCode(code)),
     snapshot,
+    sectionRules: section ? sectionReportOf(replayed.markdown, section) : null,
   };
 }
 
+/** The worker request lines: the boilerplate candidates first (unchanged from cleaning alone), then heading-only texts, one entry per text. */
+function requestLines(markdown: string, withLines: boolean, ruleSet: LoadedSectionRuleSet | null): { lines: string[]; lineInputs: number; headings: HeadingInput[] } {
+  const lines = withLines ? candidateLines(markdown) : [];
+  const lineInputs = lines.length;
+  const headings: HeadingInput[] = [];
+  if (ruleSet) {
+    const indexOf = new Map<string, number>();
+    lines.forEach((line, index) => indexOf.set(line, index));
+    for (const candidate of headingCandidates(markdown)) {
+      let input = indexOf.get(candidate.text);
+      if (input === undefined) {
+        if (lines.length >= MAX_CANDIDATE_LINES) continue;
+        input = lines.push(candidate.text) - 1;
+        indexOf.set(candidate.text, input);
+      }
+      headings.push({ input, key: candidate.key });
+    }
+  }
+  return { lines, lineInputs, headings };
+}
+
 /**
- * Cleans one parsed document before chunking. Deterministic for the same inputs; writes no stored object. With `snapshot` set the earlier
- * removal is replayed instead and `rules` is ignored.
+ * Prepares one parsed document before chunking: page boilerplate cleaning (mode not off) and section rules (sectionRules on with a bound
+ * rule set). Deterministic for the same inputs; writes no stored object. One worker call serves both pattern kinds. Lines that are
+ * headings of the bound rule set are never removed. With `snapshot` set the earlier result is replayed instead and `rules` is ignored.
  */
 export async function prepareChunkInput(args: PrepareChunkInputArgs): Promise<PrepareChunkInputResult> {
   if (args.snapshot) return replay(args, args.snapshot);
@@ -209,75 +300,124 @@ export async function prepareChunkInput(args: PrepareChunkInputArgs): Promise<Pr
   const { mode } = args;
   const warnings: string[] = [];
   const review = new Set<ReviewCode>();
-  const usesRules = mode !== 'detect';
+  const cleaning = mode !== 'off';
+  const usesRules = cleaning && mode !== 'detect';
+  const ruleSet = args.sectionRules === 'on' ? boundRuleSet(args.rules) : null;
   const rules = usesRules ? (args.rules ?? null) : null;
-  if (usesRules && rules?.loadFailed) warnings.push(TENANT_RULES_UNAVAILABLE);
+  if ((usesRules || args.sectionRules === 'on') && args.rules?.loadFailed) warnings.push(TENANT_RULES_UNAVAILABLE);
 
   let lineHits: string[] = [];
-  const patterns = usesRules ? lineRules(rules) : [];
+  let hits: Record<string, SectionHeadingHit> = {};
+  let judged = ruleSet !== null;
+  const linePatterns = usesRules ? lineRules(rules) : [];
+  const patterns = [...(ruleSet ? headingPatterns(ruleSet) : []), ...linePatterns];
   if (patterns.length > 0) {
-    const lines = candidateLines(args.markdown);
+    const { lines, lineInputs, headings } = requestLines(args.markdown, linePatterns.length > 0, ruleSet);
     if (lines.length > 0) {
       const verdict = await matchTenantLinePatterns(
         { patterns, lines },
         { deadlineMs: args.deadlineMs ?? TENANT_LINE_DEFAULT_DEADLINE_MS, signal: args.signal },
       );
-      if (verdict.kind === 'ok') lineHits = [...new Set(verdict.hits.map((hit) => lines[hit.inputIndex]).filter((line): line is string => line !== undefined))];
-      else if (verdict.kind === 'timeout') review.add('tenant_pattern_timeout');
-      else if (!warnings.includes(TENANT_RULES_UNAVAILABLE)) warnings.push(TENANT_RULES_UNAVAILABLE);
+      if (verdict.kind === 'ok') {
+        const ruled = verdict.hits.filter((hit) => hit.inputIndex < lineInputs && !hit.patternId.startsWith(HEADING_PATTERN_ID_PREFIX));
+        lineHits = [...new Set(ruled.map((hit) => lines[hit.inputIndex]).filter((line): line is string => line !== undefined))];
+        if (ruleSet) hits = resolveSectionHits({ candidates: headings, ruleSet, verdict });
+      } else {
+        judged = false;
+        if (verdict.kind === 'timeout') review.add('tenant_pattern_timeout');
+        else if (!warnings.includes(TENANT_RULES_UNAVAILABLE)) warnings.push(TENANT_RULES_UNAVAILABLE);
+      }
     }
   }
-
-  const cleaned = cleanBoilerplate({
-    markdown: args.markdown,
-    pageLines: args.pageLines,
-    mode,
-    lineHits,
-    fragmentRules: usesRules ? fragmentRules(rules) : [],
-    protectedLines: [],
-  });
-  for (const code of cleaned.warnings) if (!warnings.includes(code)) warnings.push(code);
-
-  let removal = cleaned.removal;
-  let markdown = cleaned.markdown;
-  let report = cleaned.report;
-  let aboveReviewShare = cleaned.aboveReviewShare;
-  let tagged = tagRemoval(removal);
-  let truncated = false;
-  if (overCap(tagged)) {
-    truncated = true;
-    removal = EMPTY_REMOVAL;
-    tagged = [];
-    const unchanged = replayRemoval(args.markdown, EMPTY_REMOVAL);
-    markdown = args.markdown;
-    report = unchanged.report;
-    aboveReviewShare = false;
-    warnings.push(BOILERPLATE_SNAPSHOT_TOO_LARGE);
+  if (ruleSet && hitsOverCap(hits)) {
+    hits = {};
+    warnings.push(SECTION_RULES_SNAPSHOT_TOO_LARGE);
   }
-  if (aboveReviewShare) review.add('boilerplate_above_threshold');
+  const protectedLines = Object.keys(hits);
+
+  let removal = EMPTY_REMOVAL;
+  let markdown = args.markdown;
+  let report: BoilerplateReport;
+  let tagged: string[] = [];
+  let truncated = false;
+  if (cleaning) {
+    const cleaned = cleanBoilerplate({
+      markdown: args.markdown,
+      pageLines: args.pageLines,
+      mode,
+      lineHits,
+      fragmentRules: usesRules ? fragmentRules(rules) : [],
+      protectedLines,
+    });
+    for (const code of cleaned.warnings) if (!warnings.includes(code)) warnings.push(code);
+    removal = cleaned.removal;
+    markdown = cleaned.markdown;
+    report = cleaned.report;
+    let aboveReviewShare = cleaned.aboveReviewShare;
+    tagged = tagRemoval(removal);
+    if (overCap(tagged)) {
+      truncated = true;
+      removal = EMPTY_REMOVAL;
+      tagged = [];
+      const unchanged = replayRemoval(args.markdown, EMPTY_REMOVAL);
+      markdown = args.markdown;
+      report = unchanged.report;
+      aboveReviewShare = false;
+      warnings.push(BOILERPLATE_SNAPSHOT_TOO_LARGE);
+    }
+    if (aboveReviewShare) review.add('boilerplate_above_threshold');
+  } else {
+    report = replayRemoval(args.markdown, EMPTY_REMOVAL).report;
+  }
+
+  let chunker = args.baseChunker;
+  let sectionSnapshot: ChunkPrepSectionRulesSnapshot | undefined;
+  let sectionReport: SectionRulesReport | null = null;
+  if (ruleSet) {
+    const resolved = resolvedSectionRules(ruleSet, hits);
+    const check = checkSectionRules(markdown, resolved, ruleSet);
+    const satisfied = judged && check.satisfied;
+    if (judged && !satisfied) review.add('section_rules_not_satisfied');
+    sectionSnapshot = {
+      ruleSetId: ruleSet.id,
+      ruleSetVersion: ruleSet.version,
+      toc: { skip: ruleSet.skipToc, minRunLines: ruleSet.tocMinRun },
+      headingHits: hits,
+      satisfied,
+    };
+    chunker = chunkerOf(args.baseChunker, sectionSnapshot);
+    sectionReport = { rule_set_id: ruleSet.id, version: ruleSet.version, satisfied, counts: check.counts };
+  }
 
   const reviewCodes = REVIEW_CODES.filter((code) => review.has(code));
+  const consulted = usesRules ? rules : ruleSet ? (args.rules ?? null) : null;
   const snapshot: ChunkPrepSnapshot = {
-    fingerprint: rules && !rules.loadFailed ? rules.fingerprint : NO_RULES_FINGERPRINT,
-    boilerplate: {
-      mode,
-      cleanerVersion: CLEANER_VERSION,
-      rulesVersion: boilerplateConfig().rules_version,
-      ruleIds: boilerplateRuleIds(rules),
-      removedLineKeys: tagged,
-    },
+    fingerprint: consulted && !consulted.loadFailed ? consulted.fingerprint : NO_RULES_FINGERPRINT,
+    ...(cleaning
+      ? {
+          boilerplate: {
+            mode,
+            cleanerVersion: CLEANER_VERSION,
+            rulesVersion: boilerplateConfig().rules_version,
+            ruleIds: boilerplateRuleIds(rules),
+            removedLineKeys: tagged,
+          },
+        }
+      : {}),
+    ...(sectionSnapshot ? { sectionRules: sectionSnapshot } : {}),
     // Review codes that the replay cannot recompute (a worker timeout) are kept with the warning codes.
     warnings: [...warnings, ...reviewCodes.filter((code) => code === 'tenant_pattern_timeout')],
     truncated,
   };
   return {
     markdown,
-    parseChunks: mapChunks(args.parseChunks, removal),
-    chunker: args.baseChunker,
+    parseChunks: mapChunks(args.parseChunks, removal, protectedLines),
+    chunker,
     report,
     review: reviewCodes,
     warnings,
     snapshot,
+    sectionRules: sectionReport,
   };
 }
 
@@ -324,15 +464,18 @@ export interface PrepareOutcomeTarget {
 }
 
 /**
- * Stores the report under metadata.boilerplate and flags each review code through rag_flag_document_review with the run's tenant key.
+ * Stores the report under metadata.boilerplate and the section-rules verdict under metadata.section_rules, and flags each review code through rag_flag_document_review with the run's tenant key.
  * A flagged document is still published.
  */
 export async function applyPrepareOutcome(
   target: PrepareOutcomeTarget,
-  outcome: { report: BoilerplateReport | null; review: readonly ReviewCode[] },
+  outcome: { report: BoilerplateReport | null; review: readonly ReviewCode[]; sectionRules?: SectionRulesReport | null },
   options: { signal?: AbortSignal } = {},
 ): Promise<void> {
-  if (outcome.report) await target.writer.setFields(target.documentId, { metadata: { boilerplate: outcome.report } });
+  const metadata: Record<string, unknown> = {};
+  if (outcome.report) metadata.boilerplate = outcome.report;
+  if (outcome.sectionRules) metadata.section_rules = outcome.sectionRules;
+  if (Object.keys(metadata).length > 0) await target.writer.setFields(target.documentId, { metadata });
   if (outcome.review.length === 0) return;
   if (!target.db) throw new Error('[Ingest] review flag: database unavailable');
   for (const reason of outcome.review) {

@@ -11,7 +11,7 @@ import { currentIngestConfig } from '../current-config';
 import { getIngestDeps } from '../deps';
 import { resolveEmbeddingTargets, type EmbeddingTarget } from '../embedding-targets';
 import { ObjectStoreError } from '../object-store';
-import { PREPARE_FAILED, applyPrepareOutcome, loadPageLines, needsPageLines, prepareChunkInput, type ReviewCode } from '../prepare';
+import { PREPARE_FAILED, applyPrepareOutcome, loadPageLines, needsPageLines, prepareChunkInput, type ReviewCode, type SectionRulesReport } from '../prepare';
 import { buildProfileChunks, writeProfileChunks, type BuiltProfileChunks, type ChunkingProfileRow } from '../profile-chunks';
 import { getProcessingProfile, profileFor, type DocType, type ProcessingProfile } from '../profiles/load';
 import { loadTenantRules } from '../rules/load';
@@ -324,10 +324,11 @@ async function listGaps(db: RpcClient, signal: AbortSignal, runId: string): Prom
   }));
 }
 
-/** What the preparation step left for the real run to store after its profile write (D-10). */
+/** What the preparation step left for the real run to store after its profile write (D-10, D-17). */
 interface PrepOutcome {
-  report: BoilerplateReport;
+  report: BoilerplateReport | null;
   review: ReviewCode[];
+  sectionRules: SectionRulesReport | null;
 }
 
 type Prepared =
@@ -338,8 +339,9 @@ type Prepared =
 type ScopeOf = (tenantKey: string) => Promise<TenantScope | null>;
 
 /**
- * Page boilerplate cleaning from the stored parse output with the tenant's current rules (D-06, D-07): the same preparation the chunk stage
- * runs, without a snapshot, so a rule added since ingestion takes effect without a parser call. Null markdown: the scope was refused.
+ * Chunk preparation from the stored parse output with the tenant's current rules (D-06, D-07, D-21): the same preparation the chunk stage
+ * runs, without a snapshot, so a cleaning rule or a section rule set changed since ingestion takes effect without a parser call. Returns
+ * the cleaned Markdown and the effective chunker (the rule-driven one, or the profile's own).
  */
 async function prepareMarkdown(
   doc: RechunkDocument,
@@ -347,13 +349,18 @@ async function prepareMarkdown(
   chunker: ProcessingProfile['chunker'],
   scopeOf: ScopeOf,
   signal: AbortSignal,
-): Promise<{ kind: 'ok'; markdown: string; prep: PrepOutcome | null; warnings: string[] } | { kind: 'gap'; detail: string }> {
-  const mode = currentIngestConfig().pageBoilerplate;
-  if (mode === 'off' || chunker.kind === 'image_caption') return { kind: 'ok', markdown, prep: null, warnings: [] };
+): Promise<
+  | { kind: 'ok'; markdown: string; chunker: ProcessingProfile['chunker']; prep: PrepOutcome | null; warnings: string[] }
+  | { kind: 'gap'; detail: string }
+> {
+  const { pageBoilerplate: mode, sectionRules } = currentIngestConfig();
+  if ((mode === 'off' && sectionRules === 'off') || chunker.kind === 'image_caption') return { kind: 'ok', markdown, chunker, prep: null, warnings: [] };
   const scope = await scopeOf(doc.tenantKey);
   if (!scope) return { kind: 'gap', detail: 'tenant_scope_refused' };
   try {
-    const rules = mode === 'detect' ? null : await loadTenantRules(scope, { docType: doc.docType, source: doc.source }, { signal });
+    const rules = mode === 'rules' || mode === 'both' || sectionRules === 'on'
+      ? await loadTenantRules(scope, { docType: doc.docType, source: doc.source }, { signal })
+      : null;
     const context: ArtifactContext = {
       identity: { tenantKey: doc.tenantKey },
       document: { lineageId: doc.lineageId as string, version: doc.version },
@@ -367,11 +374,18 @@ async function prepareMarkdown(
       pageLines,
       baseChunker: chunker,
       mode,
+      sectionRules,
       rules,
       deadlineMs: TENANT_LINE_DEFAULT_DEADLINE_MS,
       signal,
     });
-    return { kind: 'ok', markdown: prepared.markdown, prep: { report: prepared.report, review: prepared.review }, warnings: prepared.warnings };
+    return {
+      kind: 'ok',
+      markdown: prepared.markdown,
+      chunker: prepared.chunker,
+      prep: { report: mode === 'off' ? null : prepared.report, review: prepared.review, sectionRules: prepared.sectionRules },
+      warnings: prepared.warnings,
+    };
   } catch (error) {
     if (signal.aborted) throw error;
     return { kind: 'gap', detail: PREPARE_FAILED };
@@ -426,7 +440,7 @@ async function prepare(doc: RechunkDocument, profile: ChunkingProfileRow, signal
   try {
     const templateHeader = templateHeaderFor(processing.embedding_text_template, doc.templateRow);
     built = buildProfileChunks(
-      { filename: doc.filename, chunker: processing.chunker, templateHeader, languageAwareIngest: currentIngestConfig().languageAwareIngest, tableHeaderRepeat: currentIngestConfig().tableHeaderRepeat },
+      { filename: doc.filename, chunker: cleaned.chunker, templateHeader, languageAwareIngest: currentIngestConfig().languageAwareIngest, tableHeaderRepeat: currentIngestConfig().tableHeaderRepeat },
       cleaned.markdown,
       profile,
     );

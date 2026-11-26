@@ -25,6 +25,8 @@ import {
   type PrepareChunkInputArgs,
 } from '@/lib/rag/ingest/prepare';
 import { readPageLines } from '@/lib/rag/ingest/prepare/page-lines';
+import { SECTION_HITS_CAP } from '@/lib/rag/ingest/prepare/section-hits';
+import { ProcessingProfileSetSchema } from '@/lib/rag-eval/contracts.generated';
 import { getProcessingProfile } from '@/lib/rag/ingest/profiles/load';
 import type { TenantRules } from '@/lib/rag/ingest/rules/load';
 import { matchTenantLinePatterns } from '@/lib/rag/patterns/tenant-line-pattern';
@@ -403,5 +405,288 @@ describe('chunk stage wiring (D-06 to D-10)', () => {
 
   test('callerDocumentMetadata drops the pipeline-owned keys and keeps an unrelated one', () => {
     expect(callerDocumentMetadata({ documentMetadata: { boilerplate: 'x', review_reasons: 'y', section_rules: 'z', note: 'kept' } })).toEqual({ note: 'kept' });
+  });
+});
+
+describe('section rules in prepareChunkInput (plan 03.3-12; D-11, D-13, D-17, D-20)', () => {
+  const RULE_SET_ID = '66666666-6666-4666-8666-666666666666';
+  const NAME_MARKER = 'Zqheading';
+  const chunkerSchema = ProcessingProfileSetSchema.shape.profiles.element.shape.chunker;
+
+  function sectionRules(headings: Array<{ pattern: string; name: string; required?: boolean }>, partial: Partial<TenantRules> = {}): TenantRules {
+    return rules({
+      ruleSet: {
+        id: RULE_SET_ID,
+        version: 4,
+        docType: 'general',
+        source: null,
+        headings: headings.map((heading) => ({ pattern: heading.pattern, flags: 'u', name: heading.name, level: 1, required: heading.required ?? true, restart: false })),
+        requireIncreasingNumbers: false,
+        skipToc: true,
+        tocMinRun: 3,
+      },
+      ruleIds: [{ kind: 'rule_set', id: RULE_SET_ID, version: 4 }],
+      fingerprint: 'd'.repeat(64),
+      ...partial,
+    });
+  }
+
+  const bound = sectionRules([{ pattern: '^Bulletin', name: NAME_MARKER }]);
+  const withLineRule = sectionRules([{ pattern: '^Bulletin', name: NAME_MARKER }], { boilerplateRules: lineRule.boilerplateRules, ruleIds: [{ kind: 'rule_set', id: RULE_SET_ID, version: 4 }, ...lineRule.ruleIds] });
+  const unsatisfiable = sectionRules([{ pattern: '^Bulletin', name: NAME_MARKER }, { pattern: '^Absent heading', name: 'Absent' }]);
+
+  test('one worker call carries the heading patterns first, then the line patterns', async () => {
+    await prepareChunkInput(args({ mode: 'both', rules: withLineRule, sectionRules: 'on' }));
+    expect(matchSpy).toHaveBeenCalledTimes(1);
+    const request = matchSpy.mock.calls[0]![0];
+    expect(request.patterns.map((entry) => [entry.id, entry.kind])).toEqual([
+      ['h:0', 'heading'],
+      [LINE_RULE_ID, 'boilerplate_line'],
+    ]);
+    expect(new Set(request.lines).size).toBe(request.lines.length);
+    expect(request.lines).toContain(HEADER);
+  });
+
+  test('a satisfied document: hit lines are protected from cleaning and the rule-driven chunker is returned', async () => {
+    const result = await prepareChunkInput(args({ mode: 'detect', rules: bound, sectionRules: 'on' }));
+    expect(result.markdown.split(HEADER).length - 1).toBe(4);
+    expect(result.markdown).not.toMatch(/Page \d of 4/);
+    expect(result.chunker).not.toBe(baseChunker);
+    expect(result.chunker).toEqual({
+      ...baseChunker,
+      kind: 'rule_sections',
+      section_rules: { rule_set_id: RULE_SET_ID, version: 4, skip_toc: true, toc_min_run: 3, hits: { [HEADER]: { name: NAME_MARKER, level: 1, restart: false } } },
+    });
+    expect(chunkerSchema.safeParse(result.chunker).success).toBe(true);
+    expect(result.review).toEqual([]);
+    expect(result.sectionRules).toEqual({ rule_set_id: RULE_SET_ID, version: 4, satisfied: true, counts: { headings: 4, variants: 0, skipped: 0 } });
+    expect(result.snapshot.sectionRules).toEqual({
+      ruleSetId: RULE_SET_ID,
+      ruleSetVersion: 4,
+      toc: { skip: true, minRunLines: 3 },
+      headingHits: { [HEADER]: { name: NAME_MARKER, level: 1, restart: false } },
+      satisfied: true,
+    });
+    const off = await prepareChunkInput(args({ mode: 'detect', rules: bound }));
+    expect(off.markdown).not.toContain(HEADER);
+  });
+
+  test('a document that does not satisfy its rule set keeps the profile chunker object and is flagged', async () => {
+    const result = await prepareChunkInput(args({ mode: 'both', rules: unsatisfiable, sectionRules: 'on' }));
+    expect(result.chunker).toBe(baseChunker);
+    expect(result.review).toEqual(['section_rules_not_satisfied']);
+    expect(result.markdown).toContain(HEADER);
+    expect(result.snapshot.sectionRules?.satisfied).toBe(false);
+    expect(result.sectionRules).toMatchObject({ satisfied: false });
+  });
+
+  test('cleaning off: no line is removed, the same string comes back, hits and selection run alone, no boilerplate part', async () => {
+    const doc = documentOf(4, [MARKER]);
+    const result = await prepareChunkInput(args({ mode: 'off', markdown: doc.markdown, rules: withLineRule, sectionRules: 'on' }));
+    expect(result.markdown).toBe(doc.markdown);
+    expect(matchSpy.mock.calls[0]![0].patterns.map((entry) => entry.kind)).toEqual(['heading']);
+    expect(result.chunker.kind).toBe('rule_sections');
+    expect(result.snapshot.boilerplate).toBeUndefined();
+    expect(result.snapshot.sectionRules?.satisfied).toBe(true);
+  });
+
+  test('no bound rule set, or section rules off: no heading pattern is sent and the profile chunker object is returned', async () => {
+    await prepareChunkInput(args({ mode: 'both', rules: rules(), sectionRules: 'on' }));
+    expect(matchSpy).not.toHaveBeenCalled();
+    const unbound = await prepareChunkInput(args({ mode: 'off', rules: rules(), sectionRules: 'on' }));
+    expect(matchSpy).not.toHaveBeenCalled();
+    expect(unbound.chunker).toBe(baseChunker);
+    expect(unbound.review).toEqual([]);
+    expect(unbound.snapshot.sectionRules).toBeUndefined();
+
+    const reference = await prepareChunkInput(args({ mode: 'both', rules: lineRule }));
+    matchSpy.mockClear();
+    const ruleSetIgnored = await prepareChunkInput(args({ mode: 'both', rules: { ...withLineRule, fingerprint: lineRule.fingerprint } }));
+    expect(matchSpy.mock.calls[0]![0].patterns.map((entry) => entry.kind)).toEqual(['boilerplate_line']);
+    expect(ruleSetIgnored.chunker).toBe(baseChunker);
+    expect(ruleSetIgnored.markdown).toBe(reference.markdown);
+    expect(ruleSetIgnored.review).toEqual(reference.review);
+    expect(ruleSetIgnored.report).toEqual(reference.report);
+    expect(ruleSetIgnored.snapshot.sectionRules).toBeUndefined();
+    expect(ruleSetIgnored.sectionRules).toBeNull();
+    expect(reference.sectionRules).toBeNull();
+  });
+
+  test('a worker timeout: tenant_pattern_timeout, the profile chunker object, no hit used', async () => {
+    matchSpy.mockResolvedValueOnce({ kind: 'timeout' });
+    const result = await prepareChunkInput(args({ mode: 'detect', rules: bound, sectionRules: 'on' }));
+    expect(result.review).toEqual(['tenant_pattern_timeout']);
+    expect(result.chunker).toBe(baseChunker);
+    expect(result.markdown).not.toContain(HEADER);
+  });
+
+  test('a hit map over the contract caps: the profile chunker object, a warning and section_rules_not_satisfied', async () => {
+    const lines = Array.from({ length: SECTION_HITS_CAP.maxEntries + 1 }, (_, index) => `Entry ${index.toString(36)} text`);
+    const markdown = lines.join('\n\nBody.\n\n');
+    const result = await prepareChunkInput(args({ mode: 'off', markdown, pageLines: null, rules: sectionRules([{ pattern: '^Entry', name: 'Entry' }]), sectionRules: 'on' }));
+    expect(result.chunker).toBe(baseChunker);
+    expect(result.warnings).toContain('section_rules_snapshot_too_large');
+    expect(result.review).toEqual(['section_rules_not_satisfied']);
+    expect(result.snapshot.sectionRules?.headingHits).toEqual({});
+  });
+
+  test('a snapshot replays chunker, Markdown and review codes without rules or a worker call, whatever rule set is passed now', async () => {
+    const first = await prepareChunkInput(args({ mode: 'both', rules: withLineRule, sectionRules: 'on' }));
+    matchSpy.mockClear();
+    for (const now of [rules(), unsatisfiable, null]) {
+      const again = await prepareChunkInput(args({ mode: 'both', rules: now, sectionRules: 'on', snapshot: first.snapshot }));
+      expect(matchSpy).not.toHaveBeenCalled();
+      expect(again.chunker).toEqual(first.chunker);
+      expect(again.markdown).toBe(first.markdown);
+      expect(again.review).toEqual(first.review);
+      expect(again.sectionRules).toEqual(first.sectionRules);
+    }
+    const failed = await prepareChunkInput(args({ mode: 'both', rules: unsatisfiable, sectionRules: 'on' }));
+    const replayedFailure = await prepareChunkInput(args({ mode: 'both', rules: bound, sectionRules: 'on', snapshot: failed.snapshot }));
+    expect(replayedFailure.chunker).toBe(baseChunker);
+    expect(replayedFailure.review).toEqual(['section_rules_not_satisfied']);
+
+    matchSpy.mockResolvedValueOnce({ kind: 'timeout' });
+    const timedOut = await prepareChunkInput(args({ mode: 'detect', rules: bound, sectionRules: 'on' }));
+    const replayedTimeout = await prepareChunkInput(args({ mode: 'detect', rules: null, sectionRules: 'on', snapshot: timedOut.snapshot }));
+    expect(replayedTimeout.review).toEqual(['tenant_pattern_timeout']);
+    expect(replayedTimeout.chunker).toBe(baseChunker);
+  });
+
+  test('no log line, warning or review code holds a heading name, a pattern or a line', async () => {
+    const results = [
+      await prepareChunkInput(args({ mode: 'both', rules: withLineRule, sectionRules: 'on' })),
+      await prepareChunkInput(args({ mode: 'both', rules: unsatisfiable, sectionRules: 'on' })),
+    ];
+    matchSpy.mockResolvedValueOnce({ kind: 'error', error: 'worker_failed' });
+    results.push(await prepareChunkInput(args({ mode: 'both', rules: bound, sectionRules: 'on' })));
+    for (const line of logged) {
+      for (const secret of [NAME_MARKER, '^Bulletin', HEADER, MARKER]) expect(line).not.toContain(secret);
+    }
+    for (const result of results) {
+      for (const code of [...result.warnings, ...result.review, ...result.snapshot.warnings]) expect(code).toMatch(/^[a-z_]+$/);
+    }
+  });
+});
+
+describe('chunk stage with section rules (plan 03.3-12)', () => {
+  const prepareSpy = vi.mocked(prepareChunkInput);
+  const loaderSpy = vi.mocked(loadTenantRules);
+  const RULE_SET_ID = '77777777-7777-4777-8777-777777777777';
+
+  const ruleSetRules = (headings: Array<{ pattern: string; name: string }>): TenantRules =>
+    rules({
+      ruleSet: {
+        id: RULE_SET_ID,
+        version: 2,
+        docType: 'general',
+        source: null,
+        headings: headings.map((heading) => ({ ...heading, flags: 'u', level: 1, required: true, restart: false })),
+        requireIncreasingNumbers: false,
+        skipToc: true,
+        tocMinRun: 3,
+      },
+      ruleIds: [{ kind: 'rule_set', id: RULE_SET_ID, version: 2 }],
+    });
+
+  function stageContext(env: Record<string, string>, overrides: { deadline?: number; picture?: boolean } = {}) {
+    const setFields = vi.fn(async () => undefined);
+    const rpcCalls: Array<[string, Record<string, unknown>]> = [];
+    const db = {
+      rpc: (name: string, params: Record<string, unknown>) => {
+        rpcCalls.push([name, params]);
+        const response = Promise.resolve({ data: [], error: null });
+        return Object.assign(response, { abortSignal: () => response });
+      },
+    };
+    const profile = getProcessingProfile('general');
+    const identity = {
+      tenantKey: 's:default',
+      filename: 'doc.md',
+      fileSha256: 'x',
+      docType: 'general',
+      docTypeOrigin: 'picked',
+      profile: overrides.picture ? { ...profile, chunker: { ...profile.chunker, kind: 'image_caption' } } : profile,
+      bytes: null,
+    };
+    const ctx = {
+      input: { scope: mintScope('single', null, null), source: 'config_upload' },
+      deps: { db: () => db, now: () => 0 },
+      writer: { setFields },
+      config: loadIngestConfig({ RAG_INGEST_PIPELINE: 'unified', ...env }),
+      signal: new AbortController().signal,
+      deadline: overrides.deadline ?? 50_000,
+      identity,
+      document: { id: 'doc-1', version: 1, lineageId: '33333333-3333-4333-8333-333333333333', resumed: false },
+      warnings: [] as string[],
+      state: emptyIngestState(),
+      work: { parseText: documentOf(4).markdown, parserVersion: null, chunks: [], chunksWritten: 0 },
+    } as unknown as StageContext;
+    return { ctx, identity, setFields, rpcCalls };
+  }
+
+  beforeEach(() => {
+    prepareSpy.mockClear();
+    loaderSpy.mockClear();
+    setObjectStoreForTests(createFakeObjectStore());
+  });
+
+  test('switch on, cleaning off: the rule set is loaded for the binding, the run identity carries the effective chunker, the chunks follow the rule sections', async () => {
+    loaderSpy.mockResolvedValueOnce(ruleSetRules([{ pattern: '^Bulletin', name: 'Unit' }]));
+    const { ctx, identity, setFields } = stageContext({ RAG_SECTION_RULES: 'on' });
+    const before = ctx.work.parseText;
+    expect(await chunkStage.run(ctx)).toEqual({ kind: 'next' });
+    expect(loaderSpy).toHaveBeenCalledTimes(1);
+    expect(loaderSpy.mock.calls[0]![1]).toEqual({ docType: 'general', source: 'config_upload' });
+    expect(ctx.work.parseText).toBe(before);
+    expect(ctx.identity).not.toBe(identity);
+    expect(ctx.identity!.profile.chunker.kind).toBe('rule_sections');
+    expect(identity.profile.chunker.kind).toBe(getProcessingProfile('general').chunker.kind);
+    expect(ctx.identity!.profile.id).toBe(identity.profile.id);
+    expect(ctx.work.chunks.every((chunk) => chunk.section_path[0] === 'Unit' && chunk.page_start === null)).toBe(true);
+    expect(setFields).toHaveBeenCalledWith('doc-1', { metadata: { section_rules: { rule_set_id: RULE_SET_ID, version: 2, satisfied: true, counts: { headings: 4, variants: 0, skipped: 0 } } } });
+    expect(ctx.state.chunkPrep?.sectionRules?.ruleSetId).toBe(RULE_SET_ID);
+    expect(ctx.state.chunkPrep?.boilerplate).toBeUndefined();
+  });
+
+  test('a document that does not satisfy its rule set: profile chunker on the identity, flagged with the run tenant key', async () => {
+    loaderSpy.mockResolvedValueOnce(ruleSetRules([{ pattern: '^Absent heading', name: 'Absent' }]));
+    const { ctx, identity, rpcCalls } = stageContext({ RAG_SECTION_RULES: 'on', RAG_PAGE_BOILERPLATE: 'detect' });
+    expect(await chunkStage.run(ctx)).toEqual({ kind: 'next' });
+    expect(ctx.identity).toBe(identity);
+    expect(rpcCalls).toContainEqual(['rag_flag_document_review', { p_document_id: 'doc-1', p_tenant_key: 's:default', p_reason: 'section_rules_not_satisfied' }]);
+  });
+
+  test('no bound rule set: the identity is unchanged and no section_rules metadata is written', async () => {
+    loaderSpy.mockResolvedValueOnce(rules());
+    const { ctx, identity, setFields } = stageContext({ RAG_SECTION_RULES: 'on' });
+    await chunkStage.run(ctx);
+    expect(ctx.identity).toBe(identity);
+    for (const call of setFields.mock.calls as unknown as Array<[string, { metadata: Record<string, unknown> }]>) {
+      expect('section_rules' in call[1].metadata).toBe(false);
+    }
+  });
+
+  test('a picture keeps its caption-only chunker: no preparation and no rule load with cleaning off', async () => {
+    const { ctx, identity } = stageContext({ RAG_SECTION_RULES: 'on' }, { picture: true });
+    await chunkStage.run(ctx);
+    expect(prepareSpy).not.toHaveBeenCalled();
+    expect(loaderSpy).not.toHaveBeenCalled();
+    expect(ctx.identity).toBe(identity);
+  });
+
+  test('a heading pattern call with too little time left yields', async () => {
+    loaderSpy.mockResolvedValueOnce(ruleSetRules([{ pattern: '^Bulletin', name: 'Unit' }]));
+    const { ctx } = stageContext({ RAG_SECTION_RULES: 'on' }, { deadline: 4_000 });
+    expect(await chunkStage.run(ctx)).toEqual({ kind: 'yield', reason: 'deadline' });
+    expect(prepareSpy).not.toHaveBeenCalled();
+  });
+
+  test('switch off: no rule load and no preparation', async () => {
+    const { ctx, identity } = stageContext({});
+    await chunkStage.run(ctx);
+    expect(loaderSpy).not.toHaveBeenCalled();
+    expect(prepareSpy).not.toHaveBeenCalled();
+    expect(ctx.identity).toBe(identity);
   });
 });
