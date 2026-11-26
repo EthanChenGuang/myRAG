@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from rag_sidecar.contracts.answers import CitationStrategy
 from rag_sidecar.contracts.eval_run import GoldenFilter, RagRunOptions
-from rag_sidecar.contracts.golden import Category, Language, Provenance, Split
+from rag_sidecar.contracts.golden import Category, ExpectedBehavior, Language, Provenance, Split
 from rag_sidecar.contracts.groundedness import GroundednessScorer
 from rag_sidecar.contracts.latency import CacheState, GroupBudget, Profile, StageLatency
 from rag_sidecar.contracts.omit import omit_none_schema
@@ -51,6 +51,7 @@ class SliceMetrics(_Contract):
     variant_accuracy: MetricValue | None = _optional_metric()
     quantity_match_rate: MetricValue | None = _optional_metric()
     attribute_filter_fallback_rate: MetricValue | None = _optional_metric()
+    conversational_rate: MetricValue | None = _optional_metric()
 
 
 class ItemResult(_Contract):
@@ -91,6 +92,10 @@ class ItemResult(_Contract):
     attribute_filter_fallback: bool | None = Field(
         default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema
     )
+    expected_behavior: ExpectedBehavior | None = Field(
+        default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema
+    )
+    conversational_ok: bool | None = Field(default=None, exclude_if=_omit_none, json_schema_extra=omit_none_schema)
 
 
 class NativeReviewBacklogEntry(_Contract):

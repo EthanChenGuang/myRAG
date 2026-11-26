@@ -36,6 +36,9 @@ Category = Literal[
 INJECTION_CATEGORIES = frozenset({"injection", "injection_evasive"})
 CACHE_PAIR_CATEGORIES = frozenset({"cache_paraphrase", "cache_near_miss"})
 UNANSWERABLE_CATEGORIES = frozenset({"no_answer", "small_talk"})
+# A no-retrieval turn (D-10): scored on whether it skipped the knowledge base, never as a refusal.
+ExpectedBehavior = Literal["conversational"]
+CONVERSATIONAL: ExpectedBehavior = "conversational"
 ITEM_ID_PATTERN = r"^[a-z0-9][a-z0-9._-]{2,63}$"
 UUID_PATTERN = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
 ReviewStatus = Literal["draft", "approved", "rejected"]
@@ -134,6 +137,11 @@ class GoldenItem(_Contract):
     tags: list[str] = Field(default_factory=list)
     attack: AttackSpec | None = None
     pair_of: str | None = Field(default=None, pattern=ITEM_ID_PATTERN)
+    expected_behavior: ExpectedBehavior | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        json_schema_extra=omit_none_schema,
+    )
     table_answer: TableAnswer | None = Field(
         default=None,
         exclude_if=lambda value: value is None,
@@ -192,6 +200,8 @@ class GoldenItem(_Contract):
                 raise ValueError("cross_lingual evidence_language must differ from the question language")
         elif self.evidence_language is not None and self.evidence_language != self.language:
             raise ValueError("evidence_language must equal the question language outside cross_lingual items")
+        if self.expected_behavior == CONVERSATIONAL and self.category != "small_talk":
+            raise ValueError("expected_behavior conversational is only for small_talk items")
         if (self.category == "table_split") != (self.table_answer is not None):
             raise ValueError("table_answer is required exactly for table_split items")
         self._check_pair()

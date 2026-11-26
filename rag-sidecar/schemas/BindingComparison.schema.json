@@ -302,6 +302,9 @@
         "boilerplate_token_share": {
           "$ref": "#/$defs/MetricValue"
         },
+        "conversational_rate": {
+          "$ref": "#/$defs/MetricValue"
+        },
         "correct_refusal_rate": {
           "$ref": "#/$defs/MetricValue"
         },
