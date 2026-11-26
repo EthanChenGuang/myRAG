@@ -13,6 +13,7 @@ from rag_sidecar.contracts.report import (
     MetricValue,
     QuestionKind,
     SliceMetrics,
+    TableSplitReport,
 )
 
 from rag_eval.bounds import upper_bound
@@ -504,3 +505,13 @@ def injection_metrics(
         "false_positive_rate": false_positive_rate,
         "rules_false_positive_count": rules_count,
     }
+
+
+def table_split_report(
+    traces: list[RagTrace],
+    golden: list[GoldenItem],
+    *,
+    gate_split: str = "dev",
+    rank_field: Literal["kept", "candidates"] = "kept",
+) -> TableSplitReport | None:
+    return None

@@ -213,6 +213,9 @@ from rag_sidecar.contracts.report import (
     MetricValue,
     NativeReviewBacklogEntry,
     SliceMetrics,
+    TableSplitItemRow,
+    TableSplitReport,
+    TableSplitSlice,
 )
 from rag_sidecar.contracts.retrieval import (
     ChunkingDecision,
@@ -396,6 +399,9 @@ __all__ = [
     "InjectionReport",
     "ItemResult",
     "NativeReviewBacklogEntry",
+    "TableSplitItemRow",
+    "TableSplitReport",
+    "TableSplitSlice",
     "MetricValue",
     "SliceMetrics",
     "DraftedItemBatch",
