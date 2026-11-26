@@ -526,12 +526,15 @@ describe('the security fixture corpus is an absolute gate on the inline and the 
       assert.equal((emailRow.metadata as Row).quarantine, undefined);
     });
 
-    test('the CLI refuses bad arguments, and start --mechanism rescan still points to the rescan command', async () => {
+    test('the CLI refuses bad arguments, and start --mechanism rescan stays refused: the rescan is its own command', async () => {
       withChecks('quarantine', 'quarantine');
       for (const argv of [['rescan'], ['rescan', '--check', 'images'], ['rescan', '--check', 'links', '--tenant', 'not-a-tenant'], ['rescan', '--check', 'links', '--dry-run', '--dry-run']]) {
         const run = io();
         assert.equal(await m.cli.main(argv, run.io), 2, argv.join(' '));
       }
+      const refused = io();
+      assert.equal(await m.cli.main(['start', '--mechanism', 'rescan'], refused.io), 2);
+      assert.match(refused.err.join('\n'), /invalid_mechanism/);
       assert.deepEqual(m.cli.parseRebuildArgs(['rescan', '--check', 'links', '--tenant', 's:default', '--dry-run']), {
         ok: true,
         command: 'rescan',
