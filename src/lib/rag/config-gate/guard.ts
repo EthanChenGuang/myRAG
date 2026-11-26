@@ -17,7 +17,9 @@ export type AppGuardRoute = 'config' | 'rag-prompt' | 'models';
 export interface GuardAppEnvWriteInput {
   updates: Record<string, string>;
   ragGate: unknown;
-  actorUserId: string;
+  /** The admin's user id; without it the id is read from the request's admin session when a record is written. */
+  actorUserId?: string;
+  request?: Request;
   route: AppGuardRoute;
   /** Repository root holding eval/out/config-gate/; defaults to process.cwd(). */
   root?: string;
@@ -52,6 +54,14 @@ function processMode(): ConfigGateMode {
 function effectiveMode(fromProcess: ConfigGateMode, fileValues: Record<string, string>): ConfigGateMode {
   const fromFile = monitorSettings({ RAG_CONFIG_GATE: fileValues.RAG_CONFIG_GATE }).configGate;
   return MODE_RANK[fromFile] > MODE_RANK[fromProcess] ? fromFile : fromProcess;
+}
+
+async function resolveActor(input: GuardAppEnvWriteInput): Promise<string | null> {
+  if (input.actorUserId) return input.actorUserId;
+  if (!input.request) return null;
+  const { checkAdmin } = await import('@/lib/admin-route-auth');
+  const admin = await checkAdmin(input.request);
+  return admin.ok ? admin.userId : null;
 }
 
 function writesCleanly(updates: Record<string, string>): boolean {
@@ -118,9 +128,16 @@ export async function guardAppEnvWrite(input: GuardAppEnvWriteInput): Promise<Gu
     // A write the env writer would refuse anyway leaves no record; the route answers it through its own error path.
     if (!writesCleanly(input.updates)) return { ok: true, ragGate: null };
 
+    const actor = await resolveActor(input).catch(() => null);
+    if (!actor) {
+      console.error('[Config Gate] admin id unavailable for the change record', { route: input.route });
+      if (decision.overrideReason !== null) return refuse(503, { error: 'rag_gate_record_failed' });
+      return mode === 'enforce' ? required() : { ok: true, ragGate: null };
+    }
+
     const check: ConfigGateCheck | null = decision.checkId ? matched : null;
     const row = buildChangeRecord({
-      actor: input.actorUserId,
+      actor,
       source: 'config_ui',
       gateResult: decision.gateResult,
       before,

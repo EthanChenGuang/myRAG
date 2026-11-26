@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { env } from '@/lib/env';
 import { requireAdminOrDeny } from '@/lib/admin-route-auth';
 import { EnvWriteError, readEnvFile, stringifyJsonForEnv, writeEnvUpdates } from '@/lib/env-file';
+import { guardAppEnvWrite } from '@/lib/rag/config-gate/guard';
 
 export interface ModelWithReasoning {
   id: string;
@@ -25,14 +26,18 @@ export interface ModelConfig {
   groqModels: Array<ModelWithReasoning>;
 }
 
-async function saveModelConfig(provider: string, openaiModels: any[], openrouterModels: any[], groqModels: any[]): Promise<void> {
+function modelConfigUpdates(provider: string, openaiModels: any[], openrouterModels: any[], groqModels: any[]): Record<string, string> {
+  return {
+    NEXT_PUBLIC_AI_PROVIDER: provider,
+    NEXT_PUBLIC_OPENAI_MODELS: stringifyJsonForEnv(openaiModels),
+    NEXT_PUBLIC_OPENROUTER_MODELS: stringifyJsonForEnv(openrouterModels),
+    NEXT_PUBLIC_GROQ_MODELS: stringifyJsonForEnv(groqModels),
+  };
+}
+
+async function saveModelConfig(updates: Record<string, string>): Promise<void> {
   try {
-    writeEnvUpdates({
-      NEXT_PUBLIC_AI_PROVIDER: provider,
-      NEXT_PUBLIC_OPENAI_MODELS: stringifyJsonForEnv(openaiModels),
-      NEXT_PUBLIC_OPENROUTER_MODELS: stringifyJsonForEnv(openrouterModels),
-      NEXT_PUBLIC_GROQ_MODELS: stringifyJsonForEnv(groqModels),
-    });
+    writeEnvUpdates(updates);
   } catch (error) {
     if (error instanceof EnvWriteError && error.reason !== 'io') throw error;
     console.error('[Config Models] failed to save model configuration');
@@ -121,6 +126,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { provider, openaiModels, openrouterModels, groqModels } = body as ModelConfig;
+    const ragGate: unknown = (body as { ragGate?: unknown } | null)?.ragGate;
 
     // Validate provider
     if (!provider || !['openai', 'openrouter', 'groq'].includes(provider)) {
@@ -162,8 +168,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const updates = modelConfigUpdates(provider, openaiModels, openrouterModels, groqModels);
+    const gate = await guardAppEnvWrite({ updates, ragGate, request, route: 'models' });
+    if (!gate.ok) return gate.response;
+
     // Save the configuration to .env.local
-    await saveModelConfig(provider, openaiModels, openrouterModels, groqModels);
+    await saveModelConfig(updates);
 
     return NextResponse.json({
       success: true,
@@ -173,7 +183,8 @@ export async function POST(request: NextRequest) {
         openaiModels,
         openrouterModels,
         groqModels
-      }
+      },
+      ...(gate.ragGate ? { ragGate: gate.ragGate } : {})
     });
   } catch (error) {
     console.error('Error updating model config:', error);

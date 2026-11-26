@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { adminDenied, checkAdmin, requireAdminOrDeny } from '@/lib/admin-route-auth';
+import { requireAdminOrDeny } from '@/lib/admin-route-auth';
 import { EnvWriteError, invalidEnvValueReason, readEnvFile, writeEnvUpdates } from '@/lib/env-file';
 import { guardAppEnvWrite } from '@/lib/rag/config-gate/guard';
 
@@ -130,8 +130,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const admin = await checkAdmin(request);
-  if (!admin.ok) return adminDenied(admin.status);
+  const denied = await requireAdminOrDeny(request);
+  if (denied) return denied;
 
   try {
     const body = await request.json();
@@ -174,7 +174,7 @@ export async function POST(request: NextRequest) {
     // Assemble prompt for response (not saved to env file)
     const assembledPrompt = assemblePrompt(preContext, postContext || '');
 
-    const gate = await guardAppEnvWrite({ updates, ragGate, actorUserId: admin.userId, route: 'rag-prompt' });
+    const gate = await guardAppEnvWrite({ updates, ragGate, request, route: 'rag-prompt' });
     if (!gate.ok) return gate.response;
 
     writeEnvUpdates(updates);

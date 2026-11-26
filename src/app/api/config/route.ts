@@ -8,6 +8,7 @@ import {
   isWritableEnvName,
 } from '@/lib/config-env-allowlist';
 import { EnvWriteError, invalidEnvValueReason, parseEnvContent, stringifyJsonForEnv, writeEnvUpdates } from '@/lib/env-file';
+import { guardAppEnvWrite } from '@/lib/rag/config-gate/guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -101,10 +102,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ success: true, message: 'No valid updates provided' });
   }
 
+  const updatesToWrite = Object.fromEntries(entries);
+  const gate = await guardAppEnvWrite({
+    updates: updatesToWrite,
+    ragGate: (body as { ragGate?: unknown }).ragGate,
+    request,
+    route: 'config',
+  });
+  if (!gate.ok) return gate.response;
+
   try {
-    writeEnvUpdates(Object.fromEntries(entries));
+    writeEnvUpdates(updatesToWrite);
     console.log('[Config API] configuration updated', { names: entries.map(([name]) => name) });
-    return NextResponse.json({ success: true, message: 'Configuration saved' });
+    return NextResponse.json({ success: true, message: 'Configuration saved', ...(gate.ragGate ? { ragGate: gate.ragGate } : {}) });
   } catch (error) {
     if (error instanceof EnvWriteError && error.reason !== 'io') {
       return NextResponse.json(
