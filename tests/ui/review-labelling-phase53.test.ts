@@ -286,3 +286,133 @@ describe('review-labelling.js Phase 5.3: label tables', () => {
     }
   });
 });
+
+const FIELDS = ['supported', 'relevant', 'unsupported_content'] as const;
+
+function radio(panel: ReturnType<typeof loadPanel>, field: string, value: boolean): FakeElement {
+  return q(panel.section, `input[data-review-check-field="${field}"][value="${value}"]`);
+}
+
+function pick(el: FakeElement): void {
+  el.checked = true;
+  el.dispatch('change');
+}
+
+function checkPosts(panel: ReturnType<typeof loadPanel>) {
+  return panel.calls.filter((c) => c.url.endsWith('/answer-check') && c.method === 'POST');
+}
+
+describe('review-labelling.js Phase 5.3: answer check (D-31, UI-SPEC 6.11)', () => {
+  it('sits directly under the masked answer: heading, help line, three fieldsets of two radios, none selected', async () => {
+    const panel = loadPanel();
+    await open(panel);
+    expect(panel.calls.some((c) => c.url === `/api/rag/review/items/${ITEM_A}/answer-check` && c.method === 'GET')).toBe(true);
+    const answer = q(panel.section, '[data-review-answer]');
+    const host = q(panel.section, '[data-review-check]');
+    const siblings = answer.parentNode!.childNodes;
+    expect(siblings.indexOf(host)).toBe(siblings.indexOf(answer) + 1);
+    expect(q(host, 'h4').textContent).toBe('Answer check');
+    expect(host.textContent).toContain('Your three answers are compared with the model judges');
+    const fieldsets = host.querySelectorAll('fieldset');
+    expect(fieldsets).toHaveLength(3);
+    expect(fieldsets.map((f) => q(f, 'legend').textContent)).toEqual([
+      'Is the answer backed by the documents shown?',
+      'Does the answer address the question?',
+      'Does it contain any statement the documents do not back, even a minor one?',
+    ]);
+    for (const fieldset of fieldsets) {
+      const radios = fieldset.querySelectorAll('input[type="radio"]');
+      expect(radios).toHaveLength(2);
+      for (const r of radios) expect(r.checked).toBe(false);
+    }
+    expect(host.textContent).toContain('Choose Supported when the main statements are backed.');
+    const save = q(host, '[data-review-save-check]');
+    expect(save.textContent).toBe('Save answer check');
+    expect(save.disabled).toBe(false);
+  });
+
+  it('with a group unanswered shows check.incomplete, focuses the first radio of that group and sends nothing', async () => {
+    const panel = loadPanel();
+    await open(panel);
+    pick(radio(panel, 'supported', true));
+    pick(radio(panel, 'unsupported_content', false));
+    q(panel.section, '[data-review-save-check]').click();
+    await flush();
+    const status = q(panel.section, '[data-review-check-status]');
+    expect(status.getAttribute('role')).toBe('status');
+    expect(status.textContent).toBe(EN.incomplete);
+    expect(panel.doc.activeElement).toBe(q(panel.section, 'fieldset[data-review-check-group="relevant"] input[type="radio"]'));
+    expect(checkPosts(panel)).toEqual([]);
+  });
+
+  it('posts exactly the three verdicts and shows check.saved with the saved time', async () => {
+    const panel = loadPanel();
+    await open(panel);
+    pick(radio(panel, 'supported', true));
+    pick(radio(panel, 'relevant', false));
+    pick(radio(panel, 'unsupported_content', true));
+    q(panel.section, '[data-review-save-check]').click();
+    await flush();
+    expect(checkPosts(panel).map((c) => c.body)).toEqual([{ supported: true, relevant: false, unsupported_content: true }]);
+    const status = q(panel.section, '[data-review-check-status]');
+    expect(status.textContent).toContain(EN.saved);
+    expect(q(panel.section, '[data-review-check] time').getAttribute('datetime')).toBe('2026-11-25T14:02:00Z');
+    expect(q(panel.section, '[data-review-check]').textContent).toContain('Last saved');
+    expect(panel.calls.some((c) => c.url.endsWith('/label'))).toBe(false);
+  });
+
+  it('shows a saved check selected when the item is opened again, without any judge score', async () => {
+    const panel = loadPanel({
+      route: (call) =>
+        call.url.endsWith('/answer-check') && call.method === 'GET'
+          ? { status: 200, body: { supported: false, relevant: true, unsupported_content: false, labelled_at: '2026-11-24T09:00:00Z', judge_score: 0.987654 } }
+          : undefined,
+    });
+    await open(panel);
+    expect(radio(panel, 'supported', false).checked).toBe(true);
+    expect(radio(panel, 'supported', true).checked).toBe(false);
+    expect(radio(panel, 'relevant', true).checked).toBe(true);
+    expect(radio(panel, 'unsupported_content', false).checked).toBe(true);
+    const host = q(panel.section, '[data-review-check]');
+    expect(q(host, 'time').getAttribute('datetime')).toBe('2026-11-24T09:00:00Z');
+    expect(host.textContent).not.toMatch(/0[.,]98|score|judge_score/i);
+    pick(radio(panel, 'supported', true));
+    q(panel.section, '[data-review-save-check]').click();
+    await flush();
+    const [post] = checkPosts(panel);
+    expect(Object.keys(post!.body as Json).sort()).toEqual([...FIELDS].sort());
+  });
+
+  it('maps 403 to check.notAllowed, 404 to check.gone with a list reload, and 409 to the already-exported message', async () => {
+    for (const [statusCode, text] of [
+      [403, EN.notAllowed],
+      [404, EN.gone],
+      [409, EN.exported],
+    ] as const) {
+      const panel = loadPanel({
+        route: (call) => (call.url.endsWith('/answer-check') && call.method === 'POST' ? { status: statusCode, body: { error: 'x' } } : undefined),
+      });
+      await open(panel);
+      for (const field of FIELDS) pick(radio(panel, field, true));
+      const listCalls = panel.calls.filter((c) => c.url.startsWith('/api/rag/review/items?')).length;
+      q(panel.section, '[data-review-save-check]').click();
+      await flush();
+      expect(panel.section.textContent + panel.status.textContent, String(statusCode)).toContain(text);
+      if (statusCode === 404) {
+        expect(panel.calls.filter((c) => c.url.startsWith('/api/rag/review/items?')).length).toBe(listCalls + 1);
+        expect(panel.section.querySelector('tr[data-review-row]')).not.toBeNull();
+      }
+    }
+  });
+
+  it('localizes the answer check for zh and it', async () => {
+    const zh = loadPanel({ locale: 'zh-CN' });
+    await open(zh);
+    expect(q(zh.section, '[data-review-check] h4').textContent).toBe('回答检查');
+    expect(q(zh.section, '[data-review-save-check]').textContent).toBe('保存回答检查');
+    const itPanel = loadPanel({ locale: 'it-IT' });
+    await open(itPanel);
+    expect(q(itPanel.section, '[data-review-check] h4').textContent).toBe('Verifica della risposta');
+    expect(q(itPanel.section, '[data-review-save-check]').textContent).toBe('Salva verifica della risposta');
+  });
+});
