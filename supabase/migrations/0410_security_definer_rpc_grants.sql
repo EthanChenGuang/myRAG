@@ -336,6 +336,14 @@ BEGIN
     REVOKE ALL ON FUNCTION public.rag_get_parse_tier_overrides() FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_get_parse_tier_overrides() TO service_role;
   END IF;
+  IF to_regprocedure('public.rag_golden_evidence_on_documents_delete()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_golden_evidence_on_documents_delete() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_golden_evidence_on_documents_delete() TO service_role;
+  END IF;
+  IF to_regprocedure('public.rag_golden_evidence_on_documents_update()') IS NOT NULL THEN
+    REVOKE ALL ON FUNCTION public.rag_golden_evidence_on_documents_update() FROM PUBLIC, anon, authenticated;
+    GRANT EXECUTE ON FUNCTION public.rag_golden_evidence_on_documents_update() TO service_role;
+  END IF;
   IF to_regprocedure('public.rag_heartbeat_ingestion_job(uuid, text)') IS NOT NULL THEN
     REVOKE ALL ON FUNCTION public.rag_heartbeat_ingestion_job(uuid, text) FROM PUBLIC, anon, authenticated;
     GRANT EXECUTE ON FUNCTION public.rag_heartbeat_ingestion_job(uuid, text) TO service_role;
