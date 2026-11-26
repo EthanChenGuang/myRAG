@@ -26,6 +26,7 @@ VECTARA_BASE_URL_ENV_VAR = "VECTARA_BASE_URL"
 HHEM_MODEL_REVISION_ENV_VAR = "HHEM_MODEL_REVISION"
 PROMPT_GUARD_ENABLED_ENV_VAR = "PROMPT_GUARD_ENABLED"
 PROMPT_GUARD_MODEL_DIR_ENV_VAR = "PROMPT_GUARD_MODEL_DIR"
+REDIS_URL_ENV_VAR = "REDIS_URL"
 DEFAULT_VECTARA_BASE_URL = "https://api.vectara.io"
 DEFAULT_HHEM_MODEL_REVISION = "de9a5e6ba9ba49531a022dba17e35ffeb2a6fad8"
 
@@ -65,6 +66,7 @@ class SidecarSettings(BaseModel):
     hhem_model_revision: str = DEFAULT_HHEM_MODEL_REVISION
     prompt_guard_enabled: bool = False
     prompt_guard_model_dir: str | None = None
+    redis_url: SecretStr | None = None
 
     def model_post_init(self, __context: object) -> None:
         if not self.version:
