@@ -71,6 +71,7 @@
     <script src="document-processing/status-monitor.js"></script>
     <script src="document-processing/process-documents.js"></script>
     <script src="rag-panels/rag-fetch.js"></script>
+    <script src="rag-panels/gates-ui.js"></script>
     <script src="rag-panels/rag-ui.js"></script>
     <script src="rag-panels/languages.js"></script>
     <script src="rag-panels/ingest-impact.js"></script>
@@ -2050,6 +2051,7 @@
 
                 <!-- Main Content -->
                 <div class="p-6">
+                    <div id="rag-attention-banner"></div>
                     <div id="rag-language-banner"></div>
 
                     <!-- Features Tab -->
@@ -11278,6 +11280,7 @@
                     // Expose config globally for other components (like workspace selector)
                     window.currentConfig = this.config;
                     console.log('Config loaded:', this.config);
+                    if (typeof window.gatesUiMountBanner === 'function') window.gatesUiMountBanner(this.savedConfig);
                 } catch (error) {
                     console.error('Failed to load config:', error);
                 }
@@ -11627,6 +11630,7 @@
 
                     this.hasChanges = false;
                     this.savedConfig = { ...this.config };
+                    if (typeof window.gatesUiMountBanner === 'function') window.gatesUiMountBanner(this.savedConfig);
 
                     // Update indicators to show success
                     if (desktopIndicator) {

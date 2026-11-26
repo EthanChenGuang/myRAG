@@ -780,16 +780,138 @@ async function gatesUiFetch(apiPath, init, deps) {
   }
 }
 
-function gatesUiBannerPlan() {
-  return { alerts: null, uncal: null };
+// ---------------------------------------------------------------------------------------------------------------------------------------
+// Page attention banner (UI-SPEC 6.6): at most two rows, requested only when the loaded configuration asks for them, never polls.
+
+const GATES_UI_BANNER_ALERTS_API = '/api/rag/admin/monitor/alerts?status=open&limit=1';
+const GATES_UI_BANNER_REFUSAL_API = '/api/rag/admin/refusal-calibration';
+const GATES_UI_BANNER_STATE = { config: null, deps: null, seq: 0 };
+
+/** Which rows the loaded (saved) configuration asks for; an unsaved select value is never read. */
+function gatesUiBannerPlan(config) {
+  const c = config && typeof config === 'object' ? config : {};
+  const monitor = String(c.RAG_MONITOR === undefined || c.RAG_MONITOR === null ? 'false' : c.RAG_MONITOR).trim().toLowerCase() === 'true';
+  const gate = String(c.RAG_CONFIG_GATE === undefined || c.RAG_CONFIG_GATE === null || c.RAG_CONFIG_GATE === '' ? 'off' : c.RAG_CONFIG_GATE).trim().toLowerCase();
+  return { alerts: monitor, uncal: monitor || gate !== 'off' };
 }
 
-async function gatesUiMountBanner() {
-  return null;
+/** Pure: the open-alert count and whether an open alert of severity alert was returned; null when the request failed. */
+function gatesUiBannerAlertCount(result) {
+  if (!result || !result.ok || !result.body || typeof result.body !== 'object') return null;
+  const counts = result.body.counts;
+  const open = counts && gatesUiFinite(counts.open) && counts.open >= 0 ? Math.floor(counts.open) : null;
+  if (open === null) return null;
+  const alerts = Array.isArray(result.body.alerts) ? result.body.alerts : [];
+  const severe = alerts.some((a) => a && a.status === 'open' && a.severity === 'alert');
+  return { count: open, severe };
 }
 
-async function gatesUiRefreshBanner() {
-  return null;
+/** Pure: refusal cells marked pending after a setting change (a score shift still applies, so it does not count). */
+function gatesUiBannerPendingCount(result) {
+  if (!result || !result.ok || !result.body || typeof result.body !== 'object' || !Array.isArray(result.body.cells)) return null;
+  return result.body.cells.filter((cell) => cell && cell.pending && typeof cell.pending === 'object' && cell.pending.reason !== 'score_shift').length;
+}
+
+/** Pure: the banner view, or null when no row has a count above 0. */
+function gatesUiBannerView(alerts, pending) {
+  const rows = [];
+  if (alerts && alerts.count > 0) rows.push({ kind: 'alerts', count: alerts.count });
+  if (gatesUiFinite(pending) && pending > 0) rows.push({ kind: 'uncal', count: pending });
+  if (rows.length === 0) return null;
+  return { tone: alerts && alerts.count > 0 && alerts.severe ? 'error' : 'warning', rows };
+}
+
+/** Review alerts: activates RAG administration, selects the Alerts sub-tab when the Monitoring panel exists, scrolls, focuses its heading. */
+function gatesUiOpenMonitorAlerts() {
+  const link = document.querySelector('.menu-item[data-tab="rag-administration"]') || document.querySelector('[data-tab="rag-administration"]');
+  if (link) link.click();
+  const section = document.getElementById('rag-administration-monitor');
+  if (!section) return;
+  const tab = section.querySelector('[data-monitor-tab="alerts"]');
+  if (tab && tab.getAttribute('aria-selected') !== 'true') tab.click();
+  const reduce = typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (typeof section.scrollIntoView === 'function') section.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+  const heading = section.querySelector('h3');
+  if (heading && typeof heading.focus === 'function') heading.focus({ preventScroll: true });
+}
+
+function gatesUiOpenRefusal() {
+  if (typeof window !== 'undefined' && typeof window.openRefusalCalibrationPanel === 'function') window.openRefusalCalibrationPanel();
+}
+
+function gatesUiBannerEl(view, locale, deps) {
+  const d = deps || {};
+  const list = gatesUiEl('ul', { className: 'grid gap-2 w-full' });
+  for (const row of view.rows) {
+    const alertsRow = row.kind === 'alerts';
+    const button = gatesUiEl('button', {
+      className: 'btn btn-sm shrink-0 w-full sm:w-auto',
+      text: gatesUiLabel(alertsRow ? 'banner.alertsAction' : 'banner.uncalAction', locale),
+      attrs: { type: 'button' },
+      on: { click: () => (alertsRow ? (d.openAlerts || gatesUiOpenMonitorAlerts)() : (d.openRefusal || gatesUiOpenRefusal)()) },
+    });
+    list.appendChild(
+      gatesUiEl('li', { className: 'flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 min-w-0' }, [
+        gatesUiEl('span', {
+          className: 'text-sm tabular-nums break-words min-w-0',
+          text: gatesUiLabel(alertsRow ? 'banner.alerts' : 'banner.uncal', locale, { count: gatesUiNumber(row.count, locale) }),
+        }),
+        button,
+      ]),
+    );
+  }
+  return gatesUiEl('div', { className: 'alert alert-' + view.tone + ' items-start text-left mb-6', attrs: { lang: locale } }, [
+    gatesUiIcon('bi-exclamation-triangle', 'mt-0.5'),
+    gatesUiEl('div', { className: 'flex flex-col gap-2 min-w-0 w-full' }, [gatesUiEl('h2', { className: 'text-base font-semibold', text: gatesUiLabel('banner.title', locale) }), list]),
+  ]);
+}
+
+/**
+ * Mounts or refreshes #rag-attention-banner from the loaded configuration. deps: { fetcher, locale, openAlerts, openRefusal }. A failed
+ * request leaves its row out and shows nothing; with neither switch on no request is made. Resolves to the view or null.
+ */
+async function gatesUiMountBanner(config, deps) {
+  GATES_UI_BANNER_STATE.config = config && typeof config === 'object' ? config : {};
+  if (deps) GATES_UI_BANNER_STATE.deps = deps;
+  const d = GATES_UI_BANNER_STATE.deps || {};
+  const seq = (GATES_UI_BANNER_STATE.seq += 1);
+  const host = typeof document !== 'undefined' ? document.getElementById('rag-attention-banner') : null;
+  const plan = gatesUiBannerPlan(GATES_UI_BANNER_STATE.config);
+  if (!plan.alerts && !plan.uncal) {
+    if (host) host.replaceChildren();
+    return null;
+  }
+  const locale = gatesUiLocale(d.locale);
+  const fetchDeps = { fetcher: d.fetcher };
+  const [alertsResult, refusalResult] = await Promise.all([
+    plan.alerts ? gatesUiFetch(GATES_UI_BANNER_ALERTS_API, { method: 'GET' }, fetchDeps) : Promise.resolve(null),
+    plan.uncal ? gatesUiFetch(GATES_UI_BANNER_REFUSAL_API, { method: 'GET' }, fetchDeps) : Promise.resolve(null),
+  ]);
+  if (seq !== GATES_UI_BANNER_STATE.seq) return null;
+  const view = gatesUiBannerView(gatesUiBannerAlertCount(alertsResult), gatesUiBannerPendingCount(refusalResult));
+  if (host) {
+    if (view) host.replaceChildren(gatesUiBannerEl(view, locale, d));
+    else host.replaceChildren();
+  }
+  return view;
+}
+
+/** Refreshes the banner with the last loaded configuration (after an action or a tab activation); nothing polls. */
+function gatesUiRefreshBanner() {
+  let config = GATES_UI_BANNER_STATE.config;
+  if (typeof window !== 'undefined' && window.configManager && window.configManager.savedConfig) config = window.configManager.savedConfig;
+  if (!config) return Promise.resolve(null);
+  return gatesUiMountBanner(config);
+}
+
+function gatesUiBindBannerRefresh() {
+  document.querySelectorAll('[data-tab="rag-administration"]').forEach((link) => {
+    if (link.getAttribute('data-gates-banner-bound')) return;
+    link.setAttribute('data-gates-banner-bound', '1');
+    link.addEventListener('click', () => {
+      gatesUiRefreshBanner();
+    });
+  });
 }
 
 if (typeof window !== 'undefined') {
@@ -805,6 +927,12 @@ if (typeof window !== 'undefined') {
   window.gatesUiConfirm = gatesUiConfirm;
   window.gatesUiMapError = gatesUiMapError;
   window.gatesUiFetch = gatesUiFetch;
+  window.gatesUiMountBanner = gatesUiMountBanner;
+  window.gatesUiRefreshBanner = gatesUiRefreshBanner;
+  if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+    gatesUiBindBannerRefresh();
+    document.addEventListener('DOMContentLoaded', () => gatesUiBindBannerRefresh());
+  }
 }
 
 if (typeof module !== 'undefined' && module.exports) {
@@ -847,6 +975,9 @@ if (typeof module !== 'undefined' && module.exports) {
     gatesUiMapError,
     gatesUiFetch,
     gatesUiBannerPlan,
+    gatesUiBannerAlertCount,
+    gatesUiBannerPendingCount,
+    gatesUiBannerView,
     gatesUiMountBanner,
     gatesUiRefreshBanner,
   };
