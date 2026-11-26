@@ -54,7 +54,12 @@ describe('ingest fixture mode: the corpus goes through the real ingest()', () =>
 
   /** The corpus documents ingest() writes; the sec-attacks documents are written pre-chunked (D-13). */
   const ingestedDocuments = () => corpus.documents.filter((doc) => !isPrechunkedOnlyDocument(doc.relpath));
-  const corpusFilenames = () => ingestedDocuments().map((doc) => doc.filename);
+  const corpusFilenames = () => [...new Set(ingestedDocuments().map((doc) => doc.filename))];
+  /** Plan 04.2-37: the versions of a lineage share one filename; ingest publishes the later version over the earlier one. */
+  const versionOf = (doc: { lineage?: { version: number } }) => doc.lineage?.version ?? 1;
+  const latestVersion = (filename: unknown) =>
+    Math.max(...ingestedDocuments().filter((doc) => doc.filename === filename).map((doc) => versionOf(doc)));
+  const sourceOf = (row: Row) => corpus.documents.find((doc) => doc.filename === row.filename && versionOf(doc) === row.version);
 
   test('every corpus document is a ready, current config_upload document of the fixture tenant', async () => {
     const { rows } = await fixture.db.query<Row>(
@@ -63,20 +68,23 @@ describe('ingest fixture mode: the corpus goes through the real ingest()', () =>
     );
     assert.deepEqual(
       rows.map((row) => row.filename),
-      corpusFilenames().sort(),
+      ingestedDocuments()
+        .map((doc) => doc.filename)
+        .sort(),
     );
     for (const row of rows) {
       assert.equal(row.status, 'ready', `${String(row.filename)} status`);
-      assert.equal(row.is_current, true, `${String(row.filename)} is_current`);
+      assert.equal(row.is_current, row.version === latestVersion(row.filename), `${String(row.filename)} v${String(row.version)} is_current`);
       assert.equal(row.source, 'config_upload', `${String(row.filename)} source`);
       assert.equal(row.tenant_key, 's:default', `${String(row.filename)} tenant_key`);
-      assert.equal(row.version, 1, `${String(row.filename)} version`);
+      assert.ok(sourceOf(row), `${String(row.filename)} v${String(row.version)} is a corpus document version`);
     }
   });
 
   test('the chunks are written by the unified writer: plain content, hashes, parser and a vector', async () => {
     const { rows } = await fixture.db.query<Row>(
-      `SELECT c.content, c.content_hash, c.parser_used, c.status, c.is_current, (c.embedding IS NOT NULL) AS has_vector
+      `SELECT c.content, c.content_hash, c.parser_used, c.status, c.is_current, (c.embedding IS NOT NULL) AS has_vector,
+              d.is_current AS document_current
        FROM document_chunks c JOIN documents d ON d.id = c.document_id
        WHERE d.filename = ANY($1::text[])`,
       [corpusFilenames()],
@@ -88,8 +96,9 @@ describe('ingest fixture mode: the corpus goes through the real ingest()', () =>
       assert.ok(row.content_hash, 'every chunk has a content hash');
       assert.equal(row.parser_used, 'text');
       assert.equal(row.status, 'ready');
-      assert.equal(row.is_current, true);
-      assert.equal(row.has_vector, true);
+      // A superseded version keeps its chunks, not current and without a vector (D-40).
+      assert.equal(row.is_current, row.document_current);
+      assert.equal(row.has_vector, row.document_current);
     }
   });
 
@@ -109,7 +118,7 @@ describe('ingest fixture mode: the corpus goes through the real ingest()', () =>
       }
     }
     const documents = await fixture.db.query<Row>(
-      'SELECT filename, content, metadata::text AS metadata, content_hash FROM documents WHERE filename = ANY($1::text[])',
+      'SELECT filename, version, content, metadata::text AS metadata, content_hash FROM documents WHERE filename = ANY($1::text[])',
       [corpusFilenames()],
     );
     assert.equal(documents.rows.length, ingestedDocuments().length, 'every corpus document is there to inspect');
@@ -117,11 +126,14 @@ describe('ingest fixture mode: the corpus goes through the real ingest()', () =>
     for (const row of documents.rows) {
       assert.ok(!String(row.content ?? '').includes(MARKER), `${String(row.filename)} content holds a marker`);
       assert.ok(!String(row.metadata ?? '').includes(META), `${String(row.filename)} metadata holds fixture-meta`);
-      const source = corpus.documents.find((doc) => doc.filename === row.filename);
+      const source = sourceOf(row);
       assert.ok(source, `${String(row.filename)} is a corpus document`);
       assert.equal(row.content_hash, contentHash(source.content), `${String(row.filename)} was hashed over the stripped text`);
     }
-    const stripped = corpus.documents.filter((doc) => fs.readFileSync(path.join(CORPUS_DIR, doc.relpath), 'utf8').includes(META));
+    // Generated template copies (04.2-28) have no file of their own.
+    const stripped = corpus.documents.filter(
+      (doc) => fs.existsSync(path.join(CORPUS_DIR, doc.relpath)) && fs.readFileSync(path.join(CORPUS_DIR, doc.relpath), 'utf8').includes(META),
+    );
     assert.ok(stripped.length >= 1, 'the corpus has a document with a fixture-meta line, so the check above is not vacuous');
   });
 
@@ -182,10 +194,10 @@ describe('ingest fixture mode: the corpus goes through the real ingest()', () =>
   });
 
   test('documents.content holds the parsed text of every document, the text the chunker consumed', async () => {
-    const { rows } = await fixture.db.query<Row>('SELECT filename, content FROM documents WHERE filename = ANY($1::text[])', [corpusFilenames()]);
+    const { rows } = await fixture.db.query<Row>('SELECT filename, version, content FROM documents WHERE filename = ANY($1::text[])', [corpusFilenames()]);
     assert.equal(rows.length, ingestedDocuments().length, 'every corpus document is there to inspect');
     for (const row of rows) {
-      const source = corpus.documents.find((doc) => doc.filename === row.filename);
+      const source = sourceOf(row);
       assert.ok(source, `${String(row.filename)} is a corpus document`);
       assert.equal(row.content, source.content, `${String(row.filename)} content`);
     }

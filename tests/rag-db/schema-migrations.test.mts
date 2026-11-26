@@ -173,8 +173,9 @@ for (const mode of MODES) {
                AND source = 'config_upload' AND processing_state = '{}'::jsonb) AS defaults
            FROM documents ORDER BY id`,
         );
+        // Plan 04.2-37: lineage versions are seeded with their own version and the earlier one superseded (D-40), not the defaults.
         const expected = loadCorpus(REAL_CORPUS)
-          .documents.map((doc) => [doc.id, doc.docType, true])
+          .documents.map((doc) => [doc.id, doc.docType, doc.lineage === undefined])
           .sort((a, b) => String(a[0]).localeCompare(String(b[0])));
         assert.ok(expected.length > 0);
         assert.deepEqual(
