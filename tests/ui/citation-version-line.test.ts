@@ -22,7 +22,7 @@ describe('CitationSourceEntry version line (UI-SPEC 6.7)', () => {
     const [html] = entries(meta([citation(1, 'doc-a', { versionLabel: 'Versione 3', effectiveFrom: '2026-01-01' })], { answerLanguage: 'it' }));
     expect(html).toContain('data-citation-version');
     expect(html).toContain('<span>Versione 3</span>');
-    expect(html).toContain('In vigore dal <time dateTime="2026-01-01">2026-01-01</time>');
+    expect(html).toContain('In vigore dal <time dateTime="2026-01-01" class="tabular-nums">2026-01-01</time>');
     expect(html).toContain('lang="it"');
     expect(html!.indexOf('</h4>')).toBeLessThan(html!.indexOf('data-citation-version'));
     expect(html!.indexOf('data-citation-version')).toBeLessThan(html!.indexOf('p. 2'));
@@ -33,7 +33,7 @@ describe('CitationSourceEntry version line (UI-SPEC 6.7)', () => {
     expect(labelOnly).toContain('<span>B-2</span>');
     expect(labelOnly).not.toContain('<time');
     const [dateOnly] = entries(meta([citation(1, 'doc-a', { effectiveFrom: '2026-02-03' })]));
-    expect(dateOnly).toContain('<time dateTime="2026-02-03">2026-02-03</time>');
+    expect(dateOnly).toContain('<time dateTime="2026-02-03" class="tabular-nums">2026-02-03</time>');
     expect(dateOnly).not.toContain('Version 3');
     const [neither] = entries(meta([citation(1, 'doc-a')]));
     expect(neither).not.toContain('data-citation-version');

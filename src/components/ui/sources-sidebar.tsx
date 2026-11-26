@@ -82,7 +82,7 @@ function CitationVersionLine({ citation, uiLanguage }: { citation: SourceCitatio
       {date && (
         <span>
           {beforeDate}
-          <time dateTime={date}>{date}</time>
+          <time dateTime={date} className="tabular-nums">{date}</time>
           {afterDate}
         </span>
       )}
