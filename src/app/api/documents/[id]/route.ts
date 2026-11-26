@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { removeDocumentObjects, repairOwnerMembership, resolveTenantScope, scopeKey, type DocumentObjectRow, type RagAdminDb } from '@/lib/rag';
+import { recomputeDirtyDupClusters, removeDocumentObjects, repairOwnerMembership, resolveTenantScope, scopeKey, type DocumentObjectRow, type RagAdminDb, type TenantScope } from '@/lib/rag';
 import { checkSingleTenantKbWrite } from '@/lib/kb-write-access';
 
 export const runtime = 'nodejs';
@@ -23,6 +23,7 @@ interface Authorized {
   admin: ReturnType<typeof getSupabaseAdmin>;
   predicate: Predicate;
   tenantKey: string;
+  scope: TenantScope;
 }
 
 type AuthResult = { ok: true; value: Authorized } | { ok: false; response: Response };
@@ -97,7 +98,7 @@ async function authorize(
   } else if (scope.kind === 'personal' && scope.userId) {
     predicate = { kind: 'personal', userId: scope.userId };
   }
-  return { ok: true, value: { admin, predicate, tenantKey: scopeKey(scope) } };
+  return { ok: true, value: { admin, predicate, tenantKey: scopeKey(scope), scope } };
 }
 
 export async function DELETE(
@@ -110,7 +111,7 @@ export async function DELETE(
 
     const auth = await authorize(request, new URL(request.url).searchParams.get('organizationId'), true);
     if (!auth.ok) return auth.response;
-    const { admin, predicate, tenantKey } = auth.value;
+    const { admin, predicate, tenantKey, scope } = auth.value;
 
     // The row must be in the caller's tenant; another tenant's id reads exactly like an unknown id.
     const { data: owned, error: lookupError } = await applyPredicate(
@@ -150,6 +151,9 @@ export async function DELETE(
       console.error('[Documents] Document delete failed', { code: documentError.code });
       return fail(500, 'Failed to delete document');
     }
+
+    // D-20: the chunk delete marked the lineage's duplicate clusters dirty; switch-gated and never fails the delete.
+    await recomputeDirtyDupClusters(scope, { signal: request.signal });
 
     // Best effort and after the rows: the originals and parse files of every version leave the private bucket, and a storage failure
     // is reported in the answer without undoing the delete.
