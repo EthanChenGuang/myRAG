@@ -1,5 +1,6 @@
 import { TerminologyParamsSchema, type TerminologyMatch, type TerminologyParams } from '@/lib/rag-eval/contracts.generated';
-import { normalizeLexical, queryLexicalTokens } from '../lexical/tokenize';
+import { splitAtIdentifiers } from '../ids/shapes';
+import { identifierLexicalLookupForms, normalizeLexical, queryLexicalTokens } from '../lexical/tokenize';
 import type { RawTermMatch } from './matcher';
 
 let defaults: TerminologyParams | null = null;
@@ -22,6 +23,13 @@ function termsFor(match: RawTermMatch): string[] {
   if (entry.mode === 'one_way') return [entry.canonical];
   const members = [entry.canonical, ...entry.variants];
   return members.filter((member) => normalizeLexical(member).trim() !== match.surface);
+}
+
+/** D-12: an identifier entry expands to identifier forms (whole and joined) when the term is one identifier. */
+function termTokens(match: RawTermMatch, term: string): string[] {
+  if (match.entry.kind !== 'identifier') return queryLexicalTokens(term);
+  const pieces = splitAtIdentifiers(normalizeLexical(term).trim());
+  return pieces.length === 1 && pieces[0]!.identifier ? identifierLexicalLookupForms(term) : queryLexicalTokens(term);
 }
 
 function toContractMatch(match: RawTermMatch): TerminologyMatch {
@@ -50,7 +58,7 @@ export function expandMatches(query: string, raw: readonly RawTermMatch[], param
     const terms = termsFor(match);
     if (terms.length > params.max_terms_per_match) capped = true;
     for (const term of terms.slice(0, params.max_terms_per_match)) {
-      for (const token of queryLexicalTokens(term)) {
+      for (const token of termTokens(match, term)) {
         if (seen.has(token)) continue;
         if (tokens.length >= params.max_expansion_tokens) {
           capped = true;

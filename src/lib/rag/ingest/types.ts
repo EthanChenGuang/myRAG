@@ -2,6 +2,7 @@ import type { DocTypeDetection, HiddenTextReport, ParseResult, UploadApproval } 
 import type { TenantScope } from '../tenant/scope';
 import type { TraceCollector } from '../trace/collector';
 import type { IngestConfig } from './config';
+import type { IngestLexical } from './lexical-options';
 import type { IngestDeps } from './deps';
 import type { DocType, ProcessingProfile } from './profiles/load';
 import type { StateStore } from './state-store';
@@ -265,6 +266,8 @@ export interface IngestWork {
   documentLanguage?: string | null;
   /** RAG_CAPTION_LANGUAGE=document: the caption target language, resolved once per run (null: no target, English prompt). */
   captionTarget?: { language: string | null };
+  /** The document's lexical options and version, resolved once by enrich (plan 04.2-19); absent on a run resumed after enrich. */
+  lexical?: IngestLexical;
 }
 
 export interface StageContext {
