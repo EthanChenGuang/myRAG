@@ -1598,6 +1598,21 @@
         "image_url": null
       },
       {
+        "chunk_id": "c916bc3e-ceab-429f-8c1e-7e50cd068c55",
+        "document_id": "852e881f-9b44-412c-89a4-70660d1ce13c",
+        "content": "Document: sec-links.it.md. Chunk 7 of 8. Content: ## Leggio pieghevole Torrecchia TR-2\n\nIl leggio pieghevole Torrecchia TR-2 si allunga da 70 a 140 centimetri e si chiude in una sacca lunga 48 centimetri. Le istruzioni per il montaggio sono su https://help.fixture-site.example/torrecchia-tr2.",
+        "similarity": 0.1753240854707082,
+        "metadata": {
+          "section": "Leggio pieghevole Torrecchia TR-2",
+          "chunk_index": 6,
+          "total_chunks": 8,
+          "chunk_position": 7,
+          "document_title": "sec-links.it.md",
+          "lexical_version": 2
+        },
+        "image_url": null
+      },
+      {
         "chunk_id": "71cf97a0-204a-47a1-9060-c94233cec1f6",
         "document_id": "9b8eda9b-63df-4fdd-8fec-ab89f7ce26e6",
         "content": "Document: synthetic-terms.en.md. Chunk 2 of 5. Content: ## Placeholder two\n\nThe term gamma delta holds the placeholder marker eleven.",
@@ -1622,21 +1637,6 @@
           "chunk_index": 3,
           "total_chunks": 5,
           "chunk_position": 4,
-          "document_title": "synthetic-terms.en.md",
-          "lexical_version": 2
-        },
-        "image_url": null
-      },
-      {
-        "chunk_id": "5b64ad73-5401-40f3-a2a8-0a5a1a9336fb",
-        "document_id": "9b8eda9b-63df-4fdd-8fec-ab89f7ce26e6",
-        "content": "Document: synthetic-terms.en.md. Chunk 5 of 5. Content: ## Placeholder five\n\nThe code AB-1234-C holds the placeholder marker nineteen.",
-        "similarity": 0.16141614752009326,
-        "metadata": {
-          "section": "Placeholder five",
-          "chunk_index": 4,
-          "total_chunks": 5,
-          "chunk_position": 5,
           "document_title": "synthetic-terms.en.md",
           "lexical_version": 2
         },
@@ -1856,6 +1856,21 @@
         "image_url": null
       },
       {
+        "chunk_id": "0e68335a-7bea-45e3-9d6a-f9c15565a7d8",
+        "document_id": "42029037-417b-4975-a5be-2ca6b2ddf6f7",
+        "content": "Document: sec-links.zh.md. Chunk 5 of 8. Content: ## 月港 YG-7 星野赤道仪\n\n月港 YG-7 星野赤道仪用四节五号电池可以连续跟踪星空 3 小时，最大承载 2 千克的相机。极轴校准说明见 https://help.fixture-site.example/yuegang-yg7 。",
+        "similarity": 0.14580460825358343,
+        "metadata": {
+          "section": "月港 YG-7 星野赤道仪",
+          "chunk_index": 4,
+          "total_chunks": 8,
+          "chunk_position": 5,
+          "document_title": "sec-links.zh.md",
+          "lexical_version": 2
+        },
+        "image_url": null
+      },
+      {
         "chunk_id": "5f717f10-61d7-4427-b414-1554737c9390",
         "document_id": "fb5ddaad-1d78-4479-a51a-51dc0824ed5d",
         "content": "Document: refund-policy.it.md. Chunk 4 of 5. Content: ## Politica precedente (fino al 2023)\n\nFino alla fine del 2023 l'azienda applicava una regola più vecchia: qualsiasi cliente poteva domandare la restituzione del denaro entro 25 giorni dal pagamento, qualunque fosse il periodo di fatturazione, ma l'importo veniva restituito solo come credito sul conto cliente e non sul metodo di pagamento usato. Questa regola è stata abrogata il 1 gennaio 2024 e non vale più per i nuovi ordini.",
@@ -1866,21 +1881,6 @@
           "total_chunks": 5,
           "chunk_position": 4,
           "document_title": "refund-policy.it.md",
-          "lexical_version": 2
-        },
-        "image_url": null
-      },
-      {
-        "chunk_id": "24745d5e-319e-40ed-b861-f5a777a1a8ee",
-        "document_id": "9b8eda9b-63df-4fdd-8fec-ab89f7ce26e6",
-        "content": "Document: synthetic-terms.en.md. Chunk 4 of 5. Content: ## Placeholder four\n\nThe term eta theta holds the placeholder marker seventeen.",
-        "similarity": 0.13157826426808872,
-        "metadata": {
-          "section": "Placeholder four",
-          "chunk_index": 3,
-          "total_chunks": 5,
-          "chunk_position": 4,
-          "document_title": "synthetic-terms.en.md",
           "lexical_version": 2
         },
         "image_url": null
@@ -2558,172 +2558,6 @@
     "source_images": []
   },
   {
-    "query": "Which placeholder marker does termalpha hold?",
-    "results": [],
-    "source_images": []
-  },
-  {
-    "query": "Which placeholder marker does termgamma hold?",
-    "results": [],
-    "source_images": []
-  },
-  {
-    "query": "Which placeholder marker does termepsilon hold?",
-    "results": [],
-    "source_images": []
-  },
-  {
-    "query": "Which placeholder marker does termeta hold?",
-    "results": [],
-    "source_images": []
-  },
-  {
-    "query": "Which placeholder marker does codekappa hold?",
-    "results": [],
-    "source_images": []
-  },
-  {
-    "query": "Who assigned the placeholder marker of termalpha?",
-    "results": [],
-    "source_images": []
-  },
-  {
-    "query": "Quale segnaposto indica vocealfa?",
-    "results": [
-      {
-        "chunk_id": "301a39f4-3dbc-4576-8d22-6df49f41db0e",
-        "document_id": "65404b3d-ab46-4cde-b920-c67872dd2ed3",
-        "content": "Document: synthetic-terms.it.md. Chunk 1 of 5. Content: ## Segnaposto uno\n\nIl termine alfa beta indica il segnaposto sette.",
-        "similarity": 0.6502561763005381,
-        "metadata": {
-          "section": "Segnaposto uno",
-          "chunk_index": 0,
-          "total_chunks": 5,
-          "chunk_position": 1,
-          "document_title": "synthetic-terms.it.md",
-          "lexical_version": 2
-        },
-        "image_url": null
-      },
-      {
-        "chunk_id": "24ea1e52-e219-4049-bf1f-c9e88bb7bd5c",
-        "document_id": "65404b3d-ab46-4cde-b920-c67872dd2ed3",
-        "content": "Document: synthetic-terms.it.md. Chunk 3 of 5. Content: ## Segnaposto tre\n\nIl termine epsilon zeta indica il segnaposto tredici.",
-        "similarity": 0.5978878023758171,
-        "metadata": {
-          "section": "Segnaposto tre",
-          "chunk_index": 2,
-          "total_chunks": 5,
-          "chunk_position": 3,
-          "document_title": "synthetic-terms.it.md",
-          "lexical_version": 2
-        },
-        "image_url": null
-      },
-      {
-        "chunk_id": "9da08dac-b01a-4326-8f1d-902e0b48bbdc",
-        "document_id": "65404b3d-ab46-4cde-b920-c67872dd2ed3",
-        "content": "Document: synthetic-terms.it.md. Chunk 2 of 5. Content: ## Segnaposto due\n\nIl termine gamma delta indica il segnaposto undici.",
-        "similarity": 0.5953559456871798,
-        "metadata": {
-          "section": "Segnaposto due",
-          "chunk_index": 1,
-          "total_chunks": 5,
-          "chunk_position": 2,
-          "document_title": "synthetic-terms.it.md",
-          "lexical_version": 2
-        },
-        "image_url": null
-      },
-      {
-        "chunk_id": "0298858f-12d2-4860-8b28-8f419b2bd769",
-        "document_id": "65404b3d-ab46-4cde-b920-c67872dd2ed3",
-        "content": "Document: synthetic-terms.it.md. Chunk 4 of 5. Content: ## Segnaposto quattro\n\nIl termine eta theta indica il segnaposto diciassette.",
-        "similarity": 0.5689873870037708,
-        "metadata": {
-          "section": "Segnaposto quattro",
-          "chunk_index": 3,
-          "total_chunks": 5,
-          "chunk_position": 4,
-          "document_title": "synthetic-terms.it.md",
-          "lexical_version": 2
-        },
-        "image_url": null
-      },
-      {
-        "chunk_id": "7aabf569-c976-420b-8629-1048cccdb027",
-        "document_id": "65404b3d-ab46-4cde-b920-c67872dd2ed3",
-        "content": "Document: synthetic-terms.it.md. Chunk 5 of 5. Content: ## Segnaposto cinque\n\nIl codice EF-9012-G indica il segnaposto diciannove.",
-        "similarity": 0.5682080645437212,
-        "metadata": {
-          "section": "Segnaposto cinque",
-          "chunk_index": 4,
-          "total_chunks": 5,
-          "chunk_position": 5,
-          "document_title": "synthetic-terms.it.md",
-          "lexical_version": 2
-        },
-        "image_url": null
-      }
-    ],
-    "source_images": []
-  },
-  {
-    "query": "Quale segnaposto indica vocegamma?",
-    "results": [],
-    "source_images": []
-  },
-  {
-    "query": "Quale segnaposto indica voceepsilon?",
-    "results": [],
-    "source_images": []
-  },
-  {
-    "query": "Quale segnaposto indica voceeta?",
-    "results": [],
-    "source_images": []
-  },
-  {
-    "query": "Quale segnaposto indica codicelambda?",
-    "results": [],
-    "source_images": []
-  },
-  {
-    "query": "Chi ha scelto il segnaposto di vocealfa?",
-    "results": [],
-    "source_images": []
-  },
-  {
-    "query": "卯辰巳指向哪个占位符号？",
-    "results": [],
-    "source_images": []
-  },
-  {
-    "query": "酉戌亥指向哪个占位符号？",
-    "results": [],
-    "source_images": []
-  },
-  {
-    "query": "乾坤震指向哪个占位符号？",
-    "results": [],
-    "source_images": []
-  },
-  {
-    "query": "巽坎艮指向哪个占位符号？",
-    "results": [],
-    "source_images": []
-  },
-  {
-    "query": "兑离指向哪个占位符号？",
-    "results": [],
-    "source_images": []
-  },
-  {
-    "query": "卯辰巳的占位符号是谁选定的？",
-    "results": [],
-    "source_images": []
-  },
-  {
     "query": "When do the quorrel tides of the vintermark rise, and how do the hemlark lanterns burn?",
     "results": [],
     "source_images": []
@@ -2870,6 +2704,21 @@
         "image_url": "https://example.com/fixtures/warehouse-floorplan.png"
       },
       {
+        "chunk_id": "6735db05-4e22-49fc-922a-ecf5de62e567",
+        "document_id": "bf02145e-7a27-4108-8a6f-50f290793432",
+        "content": "Document: p52-answers.it.md. Chunk 7 of 8. Content: ## Archivio spartiti del Coro Valdentro\n\nL'archivio spartiti del Coro Valdentro conserva le partiture in scatole numerate. Ogni corista prende in prestito le proprie copie firmando il registro dell'archivio.",
+        "similarity": 0.09897642768273485,
+        "metadata": {
+          "section": "Archivio spartiti del Coro Valdentro",
+          "chunk_index": 6,
+          "total_chunks": 8,
+          "chunk_position": 7,
+          "document_title": "p52-answers.it.md",
+          "lexical_version": 2
+        },
+        "image_url": null
+      },
+      {
         "chunk_id": "4541a8de-978a-4831-91dc-9b9397182982",
         "document_id": "57158f54-2853-4f40-a844-50a58e972bce",
         "content": "Document: synthetic-terms.zh.md. Chunk 1 of 5. Content: ## 占位一\n\n术语甲乙丙指向占位符号七。",
@@ -2880,21 +2729,6 @@
           "total_chunks": 5,
           "chunk_position": 1,
           "document_title": "synthetic-terms.zh.md",
-          "lexical_version": 2
-        },
-        "image_url": null
-      },
-      {
-        "chunk_id": "186f0352-9868-41cc-9d37-e843fcd988ce",
-        "document_id": "358422d6-1f9d-4658-81b8-f8e8e3d4fea1",
-        "content": "Document: dup-passage-12.it.md. Chunk 1 of 4. Content: ## Maree quorrine\n\nLe maree quorrine del vintermarco salgono trascorsi zorvici plinti. Un custode sturlana annota ciascuna cresta zelbica.",
-        "similarity": 0.07788285710522458,
-        "metadata": {
-          "section": "Maree quorrine",
-          "chunk_index": 0,
-          "total_chunks": 4,
-          "chunk_position": 1,
-          "document_title": "dup-passage-12.it.md",
           "lexical_version": 2
         },
         "image_url": null
@@ -3826,6 +3660,172 @@
         "image_url": null
       }
     ],
+    "source_images": []
+  },
+  {
+    "query": "Which placeholder marker does termalpha hold?",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "Which placeholder marker does termgamma hold?",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "Which placeholder marker does termepsilon hold?",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "Which placeholder marker does termeta hold?",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "Which placeholder marker does codekappa hold?",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "Who assigned the placeholder marker of termalpha?",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "Quale segnaposto indica vocealfa?",
+    "results": [
+      {
+        "chunk_id": "301a39f4-3dbc-4576-8d22-6df49f41db0e",
+        "document_id": "65404b3d-ab46-4cde-b920-c67872dd2ed3",
+        "content": "Document: synthetic-terms.it.md. Chunk 1 of 5. Content: ## Segnaposto uno\n\nIl termine alfa beta indica il segnaposto sette.",
+        "similarity": 0.6502561763005381,
+        "metadata": {
+          "section": "Segnaposto uno",
+          "chunk_index": 0,
+          "total_chunks": 5,
+          "chunk_position": 1,
+          "document_title": "synthetic-terms.it.md",
+          "lexical_version": 2
+        },
+        "image_url": null
+      },
+      {
+        "chunk_id": "24ea1e52-e219-4049-bf1f-c9e88bb7bd5c",
+        "document_id": "65404b3d-ab46-4cde-b920-c67872dd2ed3",
+        "content": "Document: synthetic-terms.it.md. Chunk 3 of 5. Content: ## Segnaposto tre\n\nIl termine epsilon zeta indica il segnaposto tredici.",
+        "similarity": 0.5978878023758171,
+        "metadata": {
+          "section": "Segnaposto tre",
+          "chunk_index": 2,
+          "total_chunks": 5,
+          "chunk_position": 3,
+          "document_title": "synthetic-terms.it.md",
+          "lexical_version": 2
+        },
+        "image_url": null
+      },
+      {
+        "chunk_id": "9da08dac-b01a-4326-8f1d-902e0b48bbdc",
+        "document_id": "65404b3d-ab46-4cde-b920-c67872dd2ed3",
+        "content": "Document: synthetic-terms.it.md. Chunk 2 of 5. Content: ## Segnaposto due\n\nIl termine gamma delta indica il segnaposto undici.",
+        "similarity": 0.5953559456871798,
+        "metadata": {
+          "section": "Segnaposto due",
+          "chunk_index": 1,
+          "total_chunks": 5,
+          "chunk_position": 2,
+          "document_title": "synthetic-terms.it.md",
+          "lexical_version": 2
+        },
+        "image_url": null
+      },
+      {
+        "chunk_id": "0298858f-12d2-4860-8b28-8f419b2bd769",
+        "document_id": "65404b3d-ab46-4cde-b920-c67872dd2ed3",
+        "content": "Document: synthetic-terms.it.md. Chunk 4 of 5. Content: ## Segnaposto quattro\n\nIl termine eta theta indica il segnaposto diciassette.",
+        "similarity": 0.5689873870037708,
+        "metadata": {
+          "section": "Segnaposto quattro",
+          "chunk_index": 3,
+          "total_chunks": 5,
+          "chunk_position": 4,
+          "document_title": "synthetic-terms.it.md",
+          "lexical_version": 2
+        },
+        "image_url": null
+      },
+      {
+        "chunk_id": "7aabf569-c976-420b-8629-1048cccdb027",
+        "document_id": "65404b3d-ab46-4cde-b920-c67872dd2ed3",
+        "content": "Document: synthetic-terms.it.md. Chunk 5 of 5. Content: ## Segnaposto cinque\n\nIl codice EF-9012-G indica il segnaposto diciannove.",
+        "similarity": 0.5682080645437212,
+        "metadata": {
+          "section": "Segnaposto cinque",
+          "chunk_index": 4,
+          "total_chunks": 5,
+          "chunk_position": 5,
+          "document_title": "synthetic-terms.it.md",
+          "lexical_version": 2
+        },
+        "image_url": null
+      }
+    ],
+    "source_images": []
+  },
+  {
+    "query": "Quale segnaposto indica vocegamma?",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "Quale segnaposto indica voceepsilon?",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "Quale segnaposto indica voceeta?",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "Quale segnaposto indica codicelambda?",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "Chi ha scelto il segnaposto di vocealfa?",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "卯辰巳指向哪个占位符号？",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "酉戌亥指向哪个占位符号？",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "乾坤震指向哪个占位符号？",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "巽坎艮指向哪个占位符号？",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "兑离指向哪个占位符号？",
+    "results": [],
+    "source_images": []
+  },
+  {
+    "query": "卯辰巳的占位符号是谁选定的？",
+    "results": [],
     "source_images": []
   },
   {
