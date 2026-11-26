@@ -306,7 +306,7 @@ describe('answer checks on the record (D-23, D-89)', () => {
       expect(h.inserts).toHaveLength(1);
       expect('checks' in h.inserts[0]).toBe(false);
       expect(h.inserts[0].textsSource).toBe('registry');
-      const lines = warnings.mock.calls.filter((call) => String(call[0]).startsWith('[Answer Record]'));
+      const lines = warnings.mock.calls.filter((call: unknown[]) => String(call[0]).startsWith('[Answer Record]'));
       expect(lines).toHaveLength(1);
       expect(lines[0][1]).toMatchObject({ issues: 1 });
       expect(JSON.stringify(lines)).not.toContain(ANSWER_TEXT);
