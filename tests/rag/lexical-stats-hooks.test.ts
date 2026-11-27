@@ -63,7 +63,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const lexicalLines = () => warn.mock.calls.map((args) => args.map(String).join(' ')).filter((line) => line.includes('[Lexical Stats]'));
+const lexicalLines = () => warn.mock.calls.map((args: unknown[]) => args.map(String).join(' ')).filter((line: string) => line.includes('[Lexical Stats]'));
 
 describe('afterLexicalWrite', () => {
   it('waits at most five seconds by default', () => {
