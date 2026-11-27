@@ -558,3 +558,4 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
 - 13:58Z 04.3-42 DONE (52efd478) archived -> train 38. 04.3-43 launched session_01X342smu4Ho5Dm7LP3gAUmi (base exec/04.3-42).
 - Owner desk: WhatsApp live checks 05.2-15 / 06.2-33 BLOCKED (no Baileys service configured); owner asked set-up-now vs defer.
 - 13:59Z Owner DEFERRED WhatsApp live checks 05.2-15/06.2-33 until WhatsApp is provisioned. Owner desk now on Config UI walkthroughs 04.1.1-13, 04.2-23, 04.2-26.
+- 14:00Z PR #133 (fix ai-to-rag title via OpenRouter + /api/audio 503 voice_unavailable) 26/26 green, MERGED -> main be569250. No SQL. Not deployed yet (prod = 274d0456); ask user (bundle with train 37 or deploy alone). Fix session archived. Train-37 builder told to merge main.
