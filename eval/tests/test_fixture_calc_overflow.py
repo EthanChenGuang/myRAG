@@ -197,7 +197,7 @@ def test_overflow_items_per_language_with_long_histories(language, overflow_item
 def test_long_histories_alone_exceed_the_small_window(overflow_items, encoder):
     for item in (item for item in overflow_items if item.overflow.kind == "long_history"):
         tokens = sum(len(encoder.encode(turn.content)) for turn in item.conversation)
-        assert tokens > SMALL_WINDOW_TOKENS // 2, (item.id, tokens)
+        assert tokens > SMALL_WINDOW_TOKENS, (item.id, tokens)
 
 
 def test_every_new_span_quote_matches_exactly_one_chunk_of_its_section(calc_items, overflow_items, documents):

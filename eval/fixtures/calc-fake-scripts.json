@@ -1,0 +1,1777 @@
+{
+  "schema_version": 1,
+  "description": "Per paraphrase group of the multi_step_calc fixture items: the correct CalcRequest the calculation fakes send, the value it computes, the total a rule-skipping fake states and the operand value a missing-operand fake cites. Chunk operands name the block alias B1; the fake maps it to the context block that holds the quoted rule (D-78).",
+  "groups": [
+    {
+      "paraphrase_group": "en-calc-cap",
+      "language": "en",
+      "rule_shape": "cap",
+      "items": [
+        "en-multi-step-calc-001",
+        "en-multi-step-calc-002",
+        "en-multi-step-calc-003"
+      ],
+      "questions": [
+        "Under Talvoran tally rule A, three lots of 25, 52 and 61 pell are recorded. How many pell count in total?",
+        "Lots of 25 pell, 52 pell and 61 pell go on one Talvoran tally under rule A. What total in pell is counted?",
+        "What counted total does Talvoran tally rule A give for three lots recorded at 25, 52 and 61 pell?"
+      ],
+      "blocks": {
+        "B1": {
+          "document": "calc-rules.en.md",
+          "quote": "each lot counts for at most 40 pell",
+          "section": "Talvoran tally rule A: cap on each lot"
+        }
+      },
+      "request": {
+        "operands": [
+          {
+            "name": "lots",
+            "source": {
+              "kind": "question"
+            },
+            "values": [
+              "25",
+              "52",
+              "61"
+            ],
+            "unit": "pell"
+          },
+          {
+            "name": "cap",
+            "value": "40",
+            "source": {
+              "kind": "chunk",
+              "alias": "B1"
+            },
+            "unit": "pell"
+          }
+        ],
+        "steps": [
+          {
+            "id": "capped",
+            "op": "cap_each",
+            "args": [
+              "lots",
+              "cap"
+            ],
+            "label": "each lot capped"
+          },
+          {
+            "id": "total",
+            "op": "sum",
+            "args": [
+              "capped"
+            ],
+            "label": "counted total"
+          }
+        ],
+        "result": "total"
+      },
+      "expected_value": "105",
+      "unit": "pell",
+      "skip_rule": {
+        "stated_value": "40",
+        "how": "the cap of 40 pell applied to the sum of the lots instead of to each lot"
+      },
+      "missing_operand": {
+        "operand": "cap",
+        "cited_value": "45"
+      }
+    },
+    {
+      "paraphrase_group": "en-calc-threshold",
+      "language": "en",
+      "rule_shape": "threshold",
+      "items": [
+        "en-multi-step-calc-004",
+        "en-multi-step-calc-005",
+        "en-multi-step-calc-006"
+      ],
+      "questions": [
+        "Under Talvoran tally rule B, three rounds of 150, 95 and 210 pell are recorded. How many pell are counted?",
+        "Rounds of 150 pell, 95 pell and 210 pell are tallied with Talvoran tally rule B. What is the counted total in pell?",
+        "Applying Talvoran tally rule B to rounds recorded at 150, 95 and 210 pell, what total is counted?"
+      ],
+      "blocks": {
+        "B1": {
+          "document": "calc-rules.en.md",
+          "quote": "only the part of a round above 120 pell is counted",
+          "section": "Talvoran tally rule B: threshold for each round"
+        }
+      },
+      "request": {
+        "operands": [
+          {
+            "name": "round_1",
+            "source": {
+              "kind": "question"
+            },
+            "value": "150",
+            "unit": "pell"
+          },
+          {
+            "name": "round_2",
+            "source": {
+              "kind": "question"
+            },
+            "value": "95",
+            "unit": "pell"
+          },
+          {
+            "name": "round_3",
+            "source": {
+              "kind": "question"
+            },
+            "value": "210",
+            "unit": "pell"
+          },
+          {
+            "name": "threshold",
+            "value": "120",
+            "source": {
+              "kind": "chunk",
+              "alias": "B1"
+            },
+            "unit": "pell"
+          }
+        ],
+        "steps": [
+          {
+            "id": "floor_1",
+            "op": "max",
+            "args": [
+              "round_1",
+              "threshold"
+            ]
+          },
+          {
+            "id": "part_1",
+            "op": "subtract",
+            "args": [
+              "floor_1",
+              "threshold"
+            ],
+            "label": "round 1 counted part"
+          },
+          {
+            "id": "floor_2",
+            "op": "max",
+            "args": [
+              "round_2",
+              "threshold"
+            ]
+          },
+          {
+            "id": "part_2",
+            "op": "subtract",
+            "args": [
+              "floor_2",
+              "threshold"
+            ],
+            "label": "round 2 counted part"
+          },
+          {
+            "id": "floor_3",
+            "op": "max",
+            "args": [
+              "round_3",
+              "threshold"
+            ]
+          },
+          {
+            "id": "part_3",
+            "op": "subtract",
+            "args": [
+              "floor_3",
+              "threshold"
+            ],
+            "label": "round 3 counted part"
+          },
+          {
+            "id": "total",
+            "op": "add",
+            "args": [
+              "part_1",
+              "part_2",
+              "part_3"
+            ],
+            "label": "counted total"
+          }
+        ],
+        "result": "total"
+      },
+      "expected_value": "120",
+      "unit": "pell",
+      "skip_rule": {
+        "stated_value": "335",
+        "how": "the threshold of 120 pell subtracted once from the sum of the rounds"
+      },
+      "missing_operand": {
+        "operand": "threshold",
+        "cited_value": "125"
+      }
+    },
+    {
+      "paraphrase_group": "en-calc-percentage",
+      "language": "en",
+      "rule_shape": "percentage",
+      "items": [
+        "en-multi-step-calc-007",
+        "en-multi-step-calc-008",
+        "en-multi-step-calc-009"
+      ],
+      "questions": [
+        "Under Talvoran tally rule C, one tally holds two batches of 260 and 140 pell. What is the counted size in pell?",
+        "Two batches, 260 pell and 140 pell, make up one Talvoran tally under rule C. How many pell is the counted size?",
+        "What counted size does Talvoran tally rule C give for a tally with batches of 260 and 140 pell?"
+      ],
+      "blocks": {
+        "B1": {
+          "document": "calc-rules.en.md",
+          "quote": "the sum gains an added share of 15% of itself",
+          "section": "Talvoran tally rule C: added share"
+        }
+      },
+      "request": {
+        "operands": [
+          {
+            "name": "batch_1",
+            "source": {
+              "kind": "question"
+            },
+            "value": "260",
+            "unit": "pell"
+          },
+          {
+            "name": "batch_2",
+            "source": {
+              "kind": "question"
+            },
+            "value": "140",
+            "unit": "pell"
+          },
+          {
+            "name": "share",
+            "value": "15",
+            "source": {
+              "kind": "chunk",
+              "alias": "B1"
+            },
+            "unit": "%"
+          }
+        ],
+        "steps": [
+          {
+            "id": "base",
+            "op": "add",
+            "args": [
+              "batch_1",
+              "batch_2"
+            ],
+            "label": "sum of the batches"
+          },
+          {
+            "id": "added",
+            "op": "percentage",
+            "args": [
+              "base",
+              "share"
+            ],
+            "label": "added share"
+          },
+          {
+            "id": "total",
+            "op": "add",
+            "args": [
+              "base",
+              "added"
+            ],
+            "label": "counted size"
+          }
+        ],
+        "result": "total"
+      },
+      "expected_value": "460",
+      "unit": "pell",
+      "skip_rule": {
+        "stated_value": "400",
+        "how": "the sum of the batches without the added share"
+      },
+      "missing_operand": {
+        "operand": "share",
+        "cited_value": "18"
+      }
+    },
+    {
+      "paraphrase_group": "en-calc-tiered",
+      "language": "en",
+      "rule_shape": "tiered",
+      "items": [
+        "en-multi-step-calc-010",
+        "en-multi-step-calc-011",
+        "en-multi-step-calc-012"
+      ],
+      "questions": [
+        "Under Talvoran tally rule D, one interval runs 80 steps and another runs 30 steps. How many pell are charged in total?",
+        "Two intervals of 80 steps and 30 steps are charged with Talvoran tally rule D. What is the total charge in pell?",
+        "What total charge in pell does Talvoran tally rule D give for intervals of 80 and 30 steps?"
+      ],
+      "blocks": {
+        "B1": {
+          "document": "calc-rules.en.md",
+          "quote": "each interval is charged 2 pell per step for its first 50 steps and 3 pell per step for every step beyond 50",
+          "section": "Talvoran tally rule D: tiered rate per interval"
+        }
+      },
+      "request": {
+        "operands": [
+          {
+            "name": "interval_1",
+            "source": {
+              "kind": "question"
+            },
+            "value": "80",
+            "unit": "steps"
+          },
+          {
+            "name": "interval_2",
+            "source": {
+              "kind": "question"
+            },
+            "value": "30",
+            "unit": "steps"
+          },
+          {
+            "name": "limit",
+            "value": "50",
+            "source": {
+              "kind": "chunk",
+              "alias": "B1"
+            },
+            "unit": "steps"
+          },
+          {
+            "name": "rate_low",
+            "value": "2",
+            "source": {
+              "kind": "chunk",
+              "alias": "B1"
+            },
+            "unit_from": "steps",
+            "unit_to": "pell"
+          },
+          {
+            "name": "rate_high",
+            "value": "3",
+            "source": {
+              "kind": "chunk",
+              "alias": "B1"
+            },
+            "unit_from": "steps",
+            "unit_to": "pell"
+          }
+        ],
+        "steps": [
+          {
+            "id": "low_steps_1",
+            "op": "min",
+            "args": [
+              "interval_1",
+              "limit"
+            ]
+          },
+          {
+            "id": "top_1",
+            "op": "max",
+            "args": [
+              "interval_1",
+              "limit"
+            ]
+          },
+          {
+            "id": "high_steps_1",
+            "op": "subtract",
+            "args": [
+              "top_1",
+              "limit"
+            ]
+          },
+          {
+            "id": "low_charge_1",
+            "op": "multiply",
+            "args": [
+              "low_steps_1",
+              "rate_low"
+            ]
+          },
+          {
+            "id": "high_charge_1",
+            "op": "multiply",
+            "args": [
+              "high_steps_1",
+              "rate_high"
+            ]
+          },
+          {
+            "id": "low_steps_2",
+            "op": "min",
+            "args": [
+              "interval_2",
+              "limit"
+            ]
+          },
+          {
+            "id": "top_2",
+            "op": "max",
+            "args": [
+              "interval_2",
+              "limit"
+            ]
+          },
+          {
+            "id": "high_steps_2",
+            "op": "subtract",
+            "args": [
+              "top_2",
+              "limit"
+            ]
+          },
+          {
+            "id": "low_charge_2",
+            "op": "multiply",
+            "args": [
+              "low_steps_2",
+              "rate_low"
+            ]
+          },
+          {
+            "id": "high_charge_2",
+            "op": "multiply",
+            "args": [
+              "high_steps_2",
+              "rate_high"
+            ]
+          },
+          {
+            "id": "total",
+            "op": "add",
+            "args": [
+              "low_charge_1",
+              "high_charge_1",
+              "low_charge_2",
+              "high_charge_2"
+            ],
+            "label": "total charge"
+          }
+        ],
+        "result": "total"
+      },
+      "expected_value": "250",
+      "unit": "pell",
+      "skip_rule": {
+        "stated_value": "280",
+        "how": "the two rate tiers applied to the 110 steps of both intervals together instead of to each interval"
+      },
+      "missing_operand": {
+        "operand": "rate_high",
+        "cited_value": "7"
+      }
+    },
+    {
+      "paraphrase_group": "en-calc-date",
+      "language": "en",
+      "rule_shape": "date",
+      "items": [
+        "en-multi-step-calc-013",
+        "en-multi-step-calc-014",
+        "en-multi-step-calc-015"
+      ],
+      "questions": [
+        "Under Talvoran tally rule E, one interval opens on 2026-03-10 and closes on 2026-04-02, and another opens on 2026-05-28 and closes on 2026-06-03. How many pell do they add?",
+        "Two intervals, from 2026-03-10 to 2026-04-02 and from 2026-05-28 to 2026-06-03, are counted with Talvoran tally rule E. What total in pell do they add?",
+        "What do intervals running from 2026-03-10 to 2026-04-02 and from 2026-05-28 to 2026-06-03 add in pell under Talvoran tally rule E?"
+      ],
+      "blocks": {
+        "B1": {
+          "document": "calc-rules.en.md",
+          "quote": "both the opening day and the closing day count. Each counted day adds 4 pell",
+          "section": "Talvoran tally rule E: length of an interval"
+        }
+      },
+      "request": {
+        "operands": [
+          {
+            "name": "open_1",
+            "source": {
+              "kind": "question"
+            },
+            "value": "2026-03-10"
+          },
+          {
+            "name": "close_1",
+            "source": {
+              "kind": "question"
+            },
+            "value": "2026-04-02"
+          },
+          {
+            "name": "open_2",
+            "source": {
+              "kind": "question"
+            },
+            "value": "2026-05-28"
+          },
+          {
+            "name": "close_2",
+            "source": {
+              "kind": "question"
+            },
+            "value": "2026-06-03"
+          },
+          {
+            "name": "rate_day",
+            "value": "4",
+            "source": {
+              "kind": "chunk",
+              "alias": "B1"
+            },
+            "unit_from": "days",
+            "unit_to": "pell"
+          }
+        ],
+        "steps": [
+          {
+            "id": "days_1",
+            "op": "date_diff",
+            "args": [
+              "open_1",
+              "close_1"
+            ],
+            "date_unit": "days",
+            "inclusive": true
+          },
+          {
+            "id": "days_2",
+            "op": "date_diff",
+            "args": [
+              "open_2",
+              "close_2"
+            ],
+            "date_unit": "days",
+            "inclusive": true
+          },
+          {
+            "id": "all_days",
+            "op": "add",
+            "args": [
+              "days_1",
+              "days_2"
+            ]
+          },
+          {
+            "id": "total",
+            "op": "multiply",
+            "args": [
+              "all_days",
+              "rate_day"
+            ],
+            "label": "counted total"
+          }
+        ],
+        "result": "total"
+      },
+      "expected_value": "124",
+      "unit": "pell",
+      "skip_rule": {
+        "stated_value": "116",
+        "how": "the days counted without the opening day (29 days)"
+      },
+      "missing_operand": {
+        "operand": "rate_day",
+        "cited_value": "9"
+      }
+    },
+    {
+      "paraphrase_group": "zh-calc-cap",
+      "language": "zh",
+      "rule_shape": "cap",
+      "items": [
+        "zh-multi-step-calc-001",
+        "zh-multi-step-calc-002",
+        "zh-multi-step-calc-003"
+      ],
+      "questions": [
+        "按照璆岫计分规则甲，登记了 45、72 和 88 璆分三批。一共计入多少璆分？",
+        "三批分别为 45 璆分、72 璆分和 88 璆分，按璆岫计分规则甲计分，总共计入多少璆分？",
+        "璆岫计分规则甲下，登记为 45、72、88 璆分的三批合计计入多少？"
+      ],
+      "blocks": {
+        "B1": {
+          "document": "calc-rules.zh.md",
+          "quote": "每一批最多计 60 璆分",
+          "section": "璆岫计分规则甲：每批上限"
+        }
+      },
+      "request": {
+        "operands": [
+          {
+            "name": "lots",
+            "source": {
+              "kind": "question"
+            },
+            "values": [
+              "45",
+              "72",
+              "88"
+            ],
+            "unit": "璆分"
+          },
+          {
+            "name": "cap",
+            "value": "60",
+            "source": {
+              "kind": "chunk",
+              "alias": "B1"
+            },
+            "unit": "璆分"
+          }
+        ],
+        "steps": [
+          {
+            "id": "capped",
+            "op": "cap_each",
+            "args": [
+              "lots",
+              "cap"
+            ],
+            "label": "each lot capped"
+          },
+          {
+            "id": "total",
+            "op": "sum",
+            "args": [
+              "capped"
+            ],
+            "label": "counted total"
+          }
+        ],
+        "result": "total"
+      },
+      "expected_value": "165",
+      "unit": "璆分",
+      "skip_rule": {
+        "stated_value": "60",
+        "how": "把 60 璆分的上限用在三批之和上，而不是每一批"
+      },
+      "missing_operand": {
+        "operand": "cap",
+        "cited_value": "65"
+      }
+    },
+    {
+      "paraphrase_group": "zh-calc-threshold",
+      "language": "zh",
+      "rule_shape": "threshold",
+      "items": [
+        "zh-multi-step-calc-004",
+        "zh-multi-step-calc-005",
+        "zh-multi-step-calc-006"
+      ],
+      "questions": [
+        "按照璆岫计分规则乙，登记了 260、180 和 315 璆分三轮。一共计入多少璆分？",
+        "三轮分别为 260 璆分、180 璆分和 315 璆分，按璆岫计分规则乙计分，总共计入多少璆分？",
+        "璆岫计分规则乙下，登记为 260、180、315 璆分的三轮合计计入多少？"
+      ],
+      "blocks": {
+        "B1": {
+          "document": "calc-rules.zh.md",
+          "quote": "每一轮只计入超过 200 璆分的部分",
+          "section": "璆岫计分规则乙：每轮门槛"
+        }
+      },
+      "request": {
+        "operands": [
+          {
+            "name": "round_1",
+            "source": {
+              "kind": "question"
+            },
+            "value": "260",
+            "unit": "璆分"
+          },
+          {
+            "name": "round_2",
+            "source": {
+              "kind": "question"
+            },
+            "value": "180",
+            "unit": "璆分"
+          },
+          {
+            "name": "round_3",
+            "source": {
+              "kind": "question"
+            },
+            "value": "315",
+            "unit": "璆分"
+          },
+          {
+            "name": "threshold",
+            "value": "200",
+            "source": {
+              "kind": "chunk",
+              "alias": "B1"
+            },
+            "unit": "璆分"
+          }
+        ],
+        "steps": [
+          {
+            "id": "floor_1",
+            "op": "max",
+            "args": [
+              "round_1",
+              "threshold"
+            ]
+          },
+          {
+            "id": "part_1",
+            "op": "subtract",
+            "args": [
+              "floor_1",
+              "threshold"
+            ],
+            "label": "round 1 counted part"
+          },
+          {
+            "id": "floor_2",
+            "op": "max",
+            "args": [
+              "round_2",
+              "threshold"
+            ]
+          },
+          {
+            "id": "part_2",
+            "op": "subtract",
+            "args": [
+              "floor_2",
+              "threshold"
+            ],
+            "label": "round 2 counted part"
+          },
+          {
+            "id": "floor_3",
+            "op": "max",
+            "args": [
+              "round_3",
+              "threshold"
+            ]
+          },
+          {
+            "id": "part_3",
+            "op": "subtract",
+            "args": [
+              "floor_3",
+              "threshold"
+            ],
+            "label": "round 3 counted part"
+          },
+          {
+            "id": "total",
+            "op": "add",
+            "args": [
+              "part_1",
+              "part_2",
+              "part_3"
+            ],
+            "label": "counted total"
+          }
+        ],
+        "result": "total"
+      },
+      "expected_value": "175",
+      "unit": "璆分",
+      "skip_rule": {
+        "stated_value": "555",
+        "how": "只从三轮之和中减去一次 200 璆分的门槛"
+      },
+      "missing_operand": {
+        "operand": "threshold",
+        "cited_value": "220"
+      }
+    },
+    {
+      "paraphrase_group": "zh-calc-percentage",
+      "language": "zh",
+      "rule_shape": "percentage",
+      "items": [
+        "zh-multi-step-calc-007",
+        "zh-multi-step-calc-008",
+        "zh-multi-step-calc-009"
+      ],
+      "questions": [
+        "按照璆岫计分规则丙，一张计分单上有 350 和 150 璆分两份。计入的数值是多少璆分？",
+        "一张计分单上的两份分别为 350 璆分和 150 璆分，按璆岫计分规则丙计算，计入多少璆分？",
+        "璆岫计分规则丙下，含有 350、150 璆分两份的计分单计入多少？"
+      ],
+      "blocks": {
+        "B1": {
+          "document": "calc-rules.zh.md",
+          "quote": "再在总和之上附加总和本身 8% 的份额",
+          "section": "璆岫计分规则丙：附加份额"
+        }
+      },
+      "request": {
+        "operands": [
+          {
+            "name": "batch_1",
+            "source": {
+              "kind": "question"
+            },
+            "value": "350",
+            "unit": "璆分"
+          },
+          {
+            "name": "batch_2",
+            "source": {
+              "kind": "question"
+            },
+            "value": "150",
+            "unit": "璆分"
+          },
+          {
+            "name": "share",
+            "value": "8",
+            "source": {
+              "kind": "chunk",
+              "alias": "B1"
+            },
+            "unit": "%"
+          }
+        ],
+        "steps": [
+          {
+            "id": "base",
+            "op": "add",
+            "args": [
+              "batch_1",
+              "batch_2"
+            ],
+            "label": "sum of the batches"
+          },
+          {
+            "id": "added",
+            "op": "percentage",
+            "args": [
+              "base",
+              "share"
+            ],
+            "label": "added share"
+          },
+          {
+            "id": "total",
+            "op": "add",
+            "args": [
+              "base",
+              "added"
+            ],
+            "label": "counted size"
+          }
+        ],
+        "result": "total"
+      },
+      "expected_value": "540",
+      "unit": "璆分",
+      "skip_rule": {
+        "stated_value": "500",
+        "how": "只取两份之和，没有加上附加份额"
+      },
+      "missing_operand": {
+        "operand": "share",
+        "cited_value": "9"
+      }
+    },
+    {
+      "paraphrase_group": "zh-calc-tiered",
+      "language": "zh",
+      "rule_shape": "tiered",
+      "items": [
+        "zh-multi-step-calc-010",
+        "zh-multi-step-calc-011",
+        "zh-multi-step-calc-012"
+      ],
+      "questions": [
+        "按照璆岫计分规则丁，一个区间走了 45 步，另一个走了 20 步。一共计多少璆分？",
+        "两个区间分别为 45 步和 20 步，按璆岫计分规则丁计分，总共计多少璆分？",
+        "璆岫计分规则丁下，45 步和 20 步的两个区间合计计多少璆分？"
+      ],
+      "blocks": {
+        "B1": {
+          "document": "calc-rules.zh.md",
+          "quote": "每个区间的前 30 步每步计 4 璆分，超过 30 步的部分每步计 6 璆分",
+          "section": "璆岫计分规则丁：区间分档费率"
+        }
+      },
+      "request": {
+        "operands": [
+          {
+            "name": "interval_1",
+            "source": {
+              "kind": "question"
+            },
+            "value": "45",
+            "unit": "步"
+          },
+          {
+            "name": "interval_2",
+            "source": {
+              "kind": "question"
+            },
+            "value": "20",
+            "unit": "步"
+          },
+          {
+            "name": "limit",
+            "value": "30",
+            "source": {
+              "kind": "chunk",
+              "alias": "B1"
+            },
+            "unit": "步"
+          },
+          {
+            "name": "rate_low",
+            "value": "4",
+            "source": {
+              "kind": "chunk",
+              "alias": "B1"
+            },
+            "unit_from": "步",
+            "unit_to": "璆分"
+          },
+          {
+            "name": "rate_high",
+            "value": "6",
+            "source": {
+              "kind": "chunk",
+              "alias": "B1"
+            },
+            "unit_from": "步",
+            "unit_to": "璆分"
+          }
+        ],
+        "steps": [
+          {
+            "id": "low_steps_1",
+            "op": "min",
+            "args": [
+              "interval_1",
+              "limit"
+            ]
+          },
+          {
+            "id": "top_1",
+            "op": "max",
+            "args": [
+              "interval_1",
+              "limit"
+            ]
+          },
+          {
+            "id": "high_steps_1",
+            "op": "subtract",
+            "args": [
+              "top_1",
+              "limit"
+            ]
+          },
+          {
+            "id": "low_charge_1",
+            "op": "multiply",
+            "args": [
+              "low_steps_1",
+              "rate_low"
+            ]
+          },
+          {
+            "id": "high_charge_1",
+            "op": "multiply",
+            "args": [
+              "high_steps_1",
+              "rate_high"
+            ]
+          },
+          {
+            "id": "low_steps_2",
+            "op": "min",
+            "args": [
+              "interval_2",
+              "limit"
+            ]
+          },
+          {
+            "id": "top_2",
+            "op": "max",
+            "args": [
+              "interval_2",
+              "limit"
+            ]
+          },
+          {
+            "id": "high_steps_2",
+            "op": "subtract",
+            "args": [
+              "top_2",
+              "limit"
+            ]
+          },
+          {
+            "id": "low_charge_2",
+            "op": "multiply",
+            "args": [
+              "low_steps_2",
+              "rate_low"
+            ]
+          },
+          {
+            "id": "high_charge_2",
+            "op": "multiply",
+            "args": [
+              "high_steps_2",
+              "rate_high"
+            ]
+          },
+          {
+            "id": "total",
+            "op": "add",
+            "args": [
+              "low_charge_1",
+              "high_charge_1",
+              "low_charge_2",
+              "high_charge_2"
+            ],
+            "label": "total charge"
+          }
+        ],
+        "result": "total"
+      },
+      "expected_value": "290",
+      "unit": "璆分",
+      "skip_rule": {
+        "stated_value": "330",
+        "how": "把两档费率用在两个区间合计的 65 步上，而不是每个区间"
+      },
+      "missing_operand": {
+        "operand": "rate_high",
+        "cited_value": "7"
+      }
+    },
+    {
+      "paraphrase_group": "zh-calc-date",
+      "language": "zh",
+      "rule_shape": "date",
+      "items": [
+        "zh-multi-step-calc-013",
+        "zh-multi-step-calc-014",
+        "zh-multi-step-calc-015"
+      ],
+      "questions": [
+        "按照璆岫计分规则戊，一个区间 2026-07-01 开启、2026-07-15 关闭，另一个 2026-08-30 开启、2026-09-02 关闭。一共加多少璆分？",
+        "两个区间分别从 2026-07-01 到 2026-07-15、从 2026-08-30 到 2026-09-02，按璆岫计分规则戊计算，总共加多少璆分？",
+        "璆岫计分规则戊下，2026-07-01 至 2026-07-15 和 2026-08-30 至 2026-09-02 两个区间合计加多少璆分？"
+      ],
+      "blocks": {
+        "B1": {
+          "document": "calc-rules.zh.md",
+          "quote": "开启当天和关闭当天都计入。每计入一天加 5 璆分",
+          "section": "璆岫计分规则戊：区间时长"
+        }
+      },
+      "request": {
+        "operands": [
+          {
+            "name": "open_1",
+            "source": {
+              "kind": "question"
+            },
+            "value": "2026-07-01"
+          },
+          {
+            "name": "close_1",
+            "source": {
+              "kind": "question"
+            },
+            "value": "2026-07-15"
+          },
+          {
+            "name": "open_2",
+            "source": {
+              "kind": "question"
+            },
+            "value": "2026-08-30"
+          },
+          {
+            "name": "close_2",
+            "source": {
+              "kind": "question"
+            },
+            "value": "2026-09-02"
+          },
+          {
+            "name": "rate_day",
+            "value": "5",
+            "source": {
+              "kind": "chunk",
+              "alias": "B1"
+            },
+            "unit_from": "天",
+            "unit_to": "璆分"
+          }
+        ],
+        "steps": [
+          {
+            "id": "days_1",
+            "op": "date_diff",
+            "args": [
+              "open_1",
+              "close_1"
+            ],
+            "date_unit": "days",
+            "inclusive": true
+          },
+          {
+            "id": "days_2",
+            "op": "date_diff",
+            "args": [
+              "open_2",
+              "close_2"
+            ],
+            "date_unit": "days",
+            "inclusive": true
+          },
+          {
+            "id": "all_days",
+            "op": "add",
+            "args": [
+              "days_1",
+              "days_2"
+            ]
+          },
+          {
+            "id": "total",
+            "op": "multiply",
+            "args": [
+              "all_days",
+              "rate_day"
+            ],
+            "label": "counted total"
+          }
+        ],
+        "result": "total"
+      },
+      "expected_value": "95",
+      "unit": "璆分",
+      "skip_rule": {
+        "stated_value": "85",
+        "how": "计天数时不算开启当天（共 17 天）"
+      },
+      "missing_operand": {
+        "operand": "rate_day",
+        "cited_value": "6"
+      }
+    },
+    {
+      "paraphrase_group": "it-calc-cap",
+      "language": "it",
+      "rule_shape": "cap",
+      "items": [
+        "it-multi-step-calc-001",
+        "it-multi-step-calc-002",
+        "it-multi-step-calc-003"
+      ],
+      "questions": [
+        "Con la regola A del registro Merovesca si annotano quattro lotti da 18, 47, 39 e 22 dalt. Quanti dalt si contano in tutto?",
+        "Quattro lotti, da 18 dalt, 47 dalt, 39 dalt e 22 dalt, vanno nel registro Merovesca secondo la regola A. Qual è il totale contato in dalt?",
+        "Che totale dà la regola A del registro Merovesca per lotti annotati a 18, 47, 39 e 22 dalt?"
+      ],
+      "blocks": {
+        "B1": {
+          "document": "calc-rules.it.md",
+          "quote": "ogni lotto vale al massimo 35 dalt",
+          "section": "Registro Merovesca, regola A: limite per lotto"
+        }
+      },
+      "request": {
+        "operands": [
+          {
+            "name": "lots",
+            "source": {
+              "kind": "question"
+            },
+            "values": [
+              "18",
+              "47",
+              "39",
+              "22"
+            ],
+            "unit": "dalt"
+          },
+          {
+            "name": "cap",
+            "value": "35",
+            "source": {
+              "kind": "chunk",
+              "alias": "B1"
+            },
+            "unit": "dalt"
+          }
+        ],
+        "steps": [
+          {
+            "id": "capped",
+            "op": "cap_each",
+            "args": [
+              "lots",
+              "cap"
+            ],
+            "label": "each lot capped"
+          },
+          {
+            "id": "total",
+            "op": "sum",
+            "args": [
+              "capped"
+            ],
+            "label": "counted total"
+          }
+        ],
+        "result": "total"
+      },
+      "expected_value": "110",
+      "unit": "dalt",
+      "skip_rule": {
+        "stated_value": "35",
+        "how": "il limite di 35 dalt applicato alla somma dei lotti invece che a ciascun lotto"
+      },
+      "missing_operand": {
+        "operand": "cap",
+        "cited_value": "38"
+      }
+    },
+    {
+      "paraphrase_group": "it-calc-threshold",
+      "language": "it",
+      "rule_shape": "threshold",
+      "items": [
+        "it-multi-step-calc-004",
+        "it-multi-step-calc-005",
+        "it-multi-step-calc-006"
+      ],
+      "questions": [
+        "Con la regola B del registro Merovesca si annotano tre turni da 130, 64 e 95 dalt. Quanti dalt si contano?",
+        "Tre turni, da 130 dalt, 64 dalt e 95 dalt, si contano secondo la regola B del registro Merovesca. Qual è il totale in dalt?",
+        "Applicando la regola B del registro Merovesca a turni da 130, 64 e 95 dalt, quale totale si conta?"
+      ],
+      "blocks": {
+        "B1": {
+          "document": "calc-rules.it.md",
+          "quote": "di ogni turno si conta soltanto la parte che supera gli 80 dalt",
+          "section": "Registro Merovesca, regola B: soglia per turno"
+        }
+      },
+      "request": {
+        "operands": [
+          {
+            "name": "round_1",
+            "source": {
+              "kind": "question"
+            },
+            "value": "130",
+            "unit": "dalt"
+          },
+          {
+            "name": "round_2",
+            "source": {
+              "kind": "question"
+            },
+            "value": "64",
+            "unit": "dalt"
+          },
+          {
+            "name": "round_3",
+            "source": {
+              "kind": "question"
+            },
+            "value": "95",
+            "unit": "dalt"
+          },
+          {
+            "name": "threshold",
+            "value": "80",
+            "source": {
+              "kind": "chunk",
+              "alias": "B1"
+            },
+            "unit": "dalt"
+          }
+        ],
+        "steps": [
+          {
+            "id": "floor_1",
+            "op": "max",
+            "args": [
+              "round_1",
+              "threshold"
+            ]
+          },
+          {
+            "id": "part_1",
+            "op": "subtract",
+            "args": [
+              "floor_1",
+              "threshold"
+            ],
+            "label": "round 1 counted part"
+          },
+          {
+            "id": "floor_2",
+            "op": "max",
+            "args": [
+              "round_2",
+              "threshold"
+            ]
+          },
+          {
+            "id": "part_2",
+            "op": "subtract",
+            "args": [
+              "floor_2",
+              "threshold"
+            ],
+            "label": "round 2 counted part"
+          },
+          {
+            "id": "floor_3",
+            "op": "max",
+            "args": [
+              "round_3",
+              "threshold"
+            ]
+          },
+          {
+            "id": "part_3",
+            "op": "subtract",
+            "args": [
+              "floor_3",
+              "threshold"
+            ],
+            "label": "round 3 counted part"
+          },
+          {
+            "id": "total",
+            "op": "add",
+            "args": [
+              "part_1",
+              "part_2",
+              "part_3"
+            ],
+            "label": "counted total"
+          }
+        ],
+        "result": "total"
+      },
+      "expected_value": "65",
+      "unit": "dalt",
+      "skip_rule": {
+        "stated_value": "209",
+        "how": "la soglia di 80 dalt sottratta una sola volta dalla somma dei turni"
+      },
+      "missing_operand": {
+        "operand": "threshold",
+        "cited_value": "85"
+      }
+    },
+    {
+      "paraphrase_group": "it-calc-percentage",
+      "language": "it",
+      "rule_shape": "percentage",
+      "items": [
+        "it-multi-step-calc-007",
+        "it-multi-step-calc-008",
+        "it-multi-step-calc-009"
+      ],
+      "questions": [
+        "Con la regola C del registro Merovesca un registro contiene due partite da 240 e 160 dalt. Qual è il valore contato in dalt?",
+        "Due partite, da 240 dalt e da 160 dalt, formano un registro Merovesca secondo la regola C. Quanti dalt vale il valore contato?",
+        "Che valore contato dà la regola C del registro Merovesca per partite da 240 e 160 dalt?"
+      ],
+      "blocks": {
+        "B1": {
+          "document": "calc-rules.it.md",
+          "quote": "alla somma si aggiunge una quota pari al 12,5% della somma stessa",
+          "section": "Registro Merovesca, regola C: quota aggiunta"
+        }
+      },
+      "request": {
+        "operands": [
+          {
+            "name": "batch_1",
+            "source": {
+              "kind": "question"
+            },
+            "value": "240",
+            "unit": "dalt"
+          },
+          {
+            "name": "batch_2",
+            "source": {
+              "kind": "question"
+            },
+            "value": "160",
+            "unit": "dalt"
+          },
+          {
+            "name": "share",
+            "value": "12.5",
+            "source": {
+              "kind": "chunk",
+              "alias": "B1"
+            },
+            "unit": "%"
+          }
+        ],
+        "steps": [
+          {
+            "id": "base",
+            "op": "add",
+            "args": [
+              "batch_1",
+              "batch_2"
+            ],
+            "label": "sum of the batches"
+          },
+          {
+            "id": "added",
+            "op": "percentage",
+            "args": [
+              "base",
+              "share"
+            ],
+            "label": "added share"
+          },
+          {
+            "id": "total",
+            "op": "add",
+            "args": [
+              "base",
+              "added"
+            ],
+            "label": "counted size"
+          }
+        ],
+        "result": "total"
+      },
+      "expected_value": "450",
+      "unit": "dalt",
+      "skip_rule": {
+        "stated_value": "400",
+        "how": "la somma delle partite senza la quota aggiunta"
+      },
+      "missing_operand": {
+        "operand": "share",
+        "cited_value": "14"
+      }
+    },
+    {
+      "paraphrase_group": "it-calc-tiered",
+      "language": "it",
+      "rule_shape": "tiered",
+      "items": [
+        "it-multi-step-calc-010",
+        "it-multi-step-calc-011",
+        "it-multi-step-calc-012"
+      ],
+      "questions": [
+        "Con la regola D del registro Merovesca un intervallo dura 70 passi e un altro 25 passi. Quanti dalt costano in tutto?",
+        "Due intervalli da 70 passi e da 25 passi si pagano secondo la regola D del registro Merovesca. Qual è il costo totale in dalt?",
+        "Quale costo totale in dalt dà la regola D del registro Merovesca per intervalli da 70 e 25 passi?"
+      ],
+      "blocks": {
+        "B1": {
+          "document": "calc-rules.it.md",
+          "quote": "ogni intervallo costa 3 dalt per passo per i primi 40 passi e 5 dalt per passo per ogni passo oltre i primi 40",
+          "section": "Registro Merovesca, regola D: tariffa a scaglioni per intervallo"
+        }
+      },
+      "request": {
+        "operands": [
+          {
+            "name": "interval_1",
+            "source": {
+              "kind": "question"
+            },
+            "value": "70",
+            "unit": "passi"
+          },
+          {
+            "name": "interval_2",
+            "source": {
+              "kind": "question"
+            },
+            "value": "25",
+            "unit": "passi"
+          },
+          {
+            "name": "limit",
+            "value": "40",
+            "source": {
+              "kind": "chunk",
+              "alias": "B1"
+            },
+            "unit": "passi"
+          },
+          {
+            "name": "rate_low",
+            "value": "3",
+            "source": {
+              "kind": "chunk",
+              "alias": "B1"
+            },
+            "unit_from": "passi",
+            "unit_to": "dalt"
+          },
+          {
+            "name": "rate_high",
+            "value": "5",
+            "source": {
+              "kind": "chunk",
+              "alias": "B1"
+            },
+            "unit_from": "passi",
+            "unit_to": "dalt"
+          }
+        ],
+        "steps": [
+          {
+            "id": "low_steps_1",
+            "op": "min",
+            "args": [
+              "interval_1",
+              "limit"
+            ]
+          },
+          {
+            "id": "top_1",
+            "op": "max",
+            "args": [
+              "interval_1",
+              "limit"
+            ]
+          },
+          {
+            "id": "high_steps_1",
+            "op": "subtract",
+            "args": [
+              "top_1",
+              "limit"
+            ]
+          },
+          {
+            "id": "low_charge_1",
+            "op": "multiply",
+            "args": [
+              "low_steps_1",
+              "rate_low"
+            ]
+          },
+          {
+            "id": "high_charge_1",
+            "op": "multiply",
+            "args": [
+              "high_steps_1",
+              "rate_high"
+            ]
+          },
+          {
+            "id": "low_steps_2",
+            "op": "min",
+            "args": [
+              "interval_2",
+              "limit"
+            ]
+          },
+          {
+            "id": "top_2",
+            "op": "max",
+            "args": [
+              "interval_2",
+              "limit"
+            ]
+          },
+          {
+            "id": "high_steps_2",
+            "op": "subtract",
+            "args": [
+              "top_2",
+              "limit"
+            ]
+          },
+          {
+            "id": "low_charge_2",
+            "op": "multiply",
+            "args": [
+              "low_steps_2",
+              "rate_low"
+            ]
+          },
+          {
+            "id": "high_charge_2",
+            "op": "multiply",
+            "args": [
+              "high_steps_2",
+              "rate_high"
+            ]
+          },
+          {
+            "id": "total",
+            "op": "add",
+            "args": [
+              "low_charge_1",
+              "high_charge_1",
+              "low_charge_2",
+              "high_charge_2"
+            ],
+            "label": "total charge"
+          }
+        ],
+        "result": "total"
+      },
+      "expected_value": "345",
+      "unit": "dalt",
+      "skip_rule": {
+        "stated_value": "395",
+        "how": "i due scaglioni applicati ai 95 passi dei due intervalli insieme invece che a ciascun intervallo"
+      },
+      "missing_operand": {
+        "operand": "rate_high",
+        "cited_value": "8"
+      }
+    },
+    {
+      "paraphrase_group": "it-calc-date",
+      "language": "it",
+      "rule_shape": "date",
+      "items": [
+        "it-multi-step-calc-013",
+        "it-multi-step-calc-014",
+        "it-multi-step-calc-015"
+      ],
+      "questions": [
+        "Con la regola E del registro Merovesca un intervallo si apre il 2026-01-26 e si chiude il 2026-02-09, un altro si apre il 2026-02-27 e si chiude il 2026-03-02. Quanti dalt aggiungono?",
+        "Due intervalli, dal 2026-01-26 al 2026-02-09 e dal 2026-02-27 al 2026-03-02, si contano secondo la regola E del registro Merovesca. Quanti dalt aggiungono in tutto?",
+        "Quanti dalt aggiungono, secondo la regola E del registro Merovesca, gli intervalli dal 2026-01-26 al 2026-02-09 e dal 2026-02-27 al 2026-03-02?"
+      ],
+      "blocks": {
+        "B1": {
+          "document": "calc-rules.it.md",
+          "quote": "contano sia il giorno di apertura sia il giorno di chiusura. Ogni giorno contato aggiunge 6 dalt",
+          "section": "Registro Merovesca, regola E: durata di un intervallo"
+        }
+      },
+      "request": {
+        "operands": [
+          {
+            "name": "open_1",
+            "source": {
+              "kind": "question"
+            },
+            "value": "2026-01-26"
+          },
+          {
+            "name": "close_1",
+            "source": {
+              "kind": "question"
+            },
+            "value": "2026-02-09"
+          },
+          {
+            "name": "open_2",
+            "source": {
+              "kind": "question"
+            },
+            "value": "2026-02-27"
+          },
+          {
+            "name": "close_2",
+            "source": {
+              "kind": "question"
+            },
+            "value": "2026-03-02"
+          },
+          {
+            "name": "rate_day",
+            "value": "6",
+            "source": {
+              "kind": "chunk",
+              "alias": "B1"
+            },
+            "unit_from": "giorni",
+            "unit_to": "dalt"
+          }
+        ],
+        "steps": [
+          {
+            "id": "days_1",
+            "op": "date_diff",
+            "args": [
+              "open_1",
+              "close_1"
+            ],
+            "date_unit": "days",
+            "inclusive": true
+          },
+          {
+            "id": "days_2",
+            "op": "date_diff",
+            "args": [
+              "open_2",
+              "close_2"
+            ],
+            "date_unit": "days",
+            "inclusive": true
+          },
+          {
+            "id": "all_days",
+            "op": "add",
+            "args": [
+              "days_1",
+              "days_2"
+            ]
+          },
+          {
+            "id": "total",
+            "op": "multiply",
+            "args": [
+              "all_days",
+              "rate_day"
+            ],
+            "label": "counted total"
+          }
+        ],
+        "result": "total"
+      },
+      "expected_value": "114",
+      "unit": "dalt",
+      "skip_rule": {
+        "stated_value": "102",
+        "how": "i giorni contati senza il giorno di apertura (17 giorni)"
+      },
+      "missing_operand": {
+        "operand": "rate_day",
+        "cited_value": "7"
+      }
+    }
+  ]
+}
