@@ -24,7 +24,7 @@ from rag_sidecar.contracts.baseline import NoiseConfig
 
 from rag_eval.harness_runner import HarnessError
 from rag_eval.paired import item_metrics
-from rag_eval.paths import repo_relative
+from rag_eval.paths import repo_relative, resolve_cli_path
 from rag_eval.phase42_gate import drop_offenders
 from rag_eval.phase44_gate import OFF_ENV
 from rag_eval.phase_compare import (
@@ -244,7 +244,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--mode", choices=MODES, action="append", help="fixture mode(s); default both")
     parser.add_argument("--reuse", action="store_true", help="reuse finished harness runs under <out>/harness")
     args = parser.parse_args(argv)
-    out = Path(args.out)
+    out = resolve_cli_path(args.out)
     try:
         result = run_diagnostic(out, modes=tuple(args.mode or MODES), reuse=args.reuse)
     except (ComparisonError, HarnessError) as exc:
