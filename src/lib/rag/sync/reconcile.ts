@@ -9,6 +9,7 @@ import {
 } from '@/lib/rag-eval/contracts.generated';
 import { readSyncProfiles, type SyncProfile } from './claim';
 import { logVectorSync, type VectorSyncLogSink } from './log';
+import { PURGE_DELETE_CHUNK, readPurgedDocuments, reopenPurge } from './purge';
 import type { StoreScanPoint, VectorStore } from './stores/types';
 import { traceVectorSync, type VectorSyncTraceOptions } from './trace';
 
@@ -16,6 +17,9 @@ export const RECONCILE_BUCKETS = 64;
 export const RECONCILE_PRUNE_DAYS = 7;
 export const RECONCILE_DEFAULT_BUDGET_MS = 45_000;
 export const RECONCILE_PAGE = 500;
+/** Purged document ids per rag_vector_sync_purged_documents page (its maximum). */
+export const RECONCILE_PURGE_PAGE = 1000;
+export const PURGED_POINTS_PRESENT = 'purged_points_present';
 const ZERO = BigInt(0);
 const ERROR_CODE_RE = /^[a-z0-9_.:-]{1,200}$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -54,6 +58,8 @@ export interface ReconcileSliceOptions {
   rpc: RpcClient;
   budgetMs?: number;
   pageSize?: number;
+  /** Purged document ids per page of the must-be-absent check (1..1000). */
+  purgePageSize?: number;
   now?: () => number;
   sink?: VectorSyncLogSink;
   /** Langfuse options for the per-slice trace; false turns it off. Default: the environment's Langfuse config. */
@@ -85,6 +91,21 @@ interface SupabaseRow {
   content_hash: string | null;
   lexical_version: number | null;
 }
+
+/** The outcome of one (target, tenant) must-be-absent check; `incomplete` ran out of budget and resumes on the next slice. */
+type PurgeCheck =
+  | { state: 'clean' }
+  | { state: 'incomplete' }
+  | { state: 'present' }
+  | { state: 'failed'; code: string };
+
+interface StateOverride {
+  state: 'stale';
+  code: string;
+}
+
+/** Where an unfinished must-be-absent check resumes, per store and tenant; in process, like the drain's ensured collections. */
+const purgeCursors = new WeakMap<VectorStore, Map<string, string>>();
 
 class ReconcileError extends Error {
   readonly code: string;
@@ -211,7 +232,7 @@ async function setState(
  * mismatched buckets are listed id by id. Missing and stale ids re-sync their documents, extra ids get a `chunk` row the drain
  * deletes, a tenant with points and no servable rows gets a `tenant` row. State is ready only when every bucket matches.
  */
-async function reconcileOne(rpc: RpcClient, candidate: Candidate, pageSize: number): Promise<ReconcileReport> {
+async function reconcileOne(rpc: RpcClient, candidate: Candidate, pageSize: number, override: StateOverride | null = null): Promise<ReconcileReport> {
   const { store, profile, tenantKey } = candidate;
   const target = store.target;
   const profileId = profile.profile_id;
@@ -289,10 +310,10 @@ async function reconcileOne(rpc: RpcClient, candidate: Candidate, pageSize: numb
       target,
       profileId,
       tenantKey,
-      state: mismatched.length === 0 ? 'ready' : 'stale',
+      state: override ? override.state : mismatched.length === 0 ? 'ready' : 'stale',
       supabaseCount,
       backendCount,
-      error: null,
+      error: override ? override.code : null,
     });
     return ReconcileReportSchema.parse({
       target,
@@ -330,6 +351,83 @@ async function reconcileOne(rpc: RpcClient, candidate: Candidate, pageSize: numb
   }
 }
 
+function failedReport(target: string, profileId: string, tenantKey: string): ReconcileReport {
+  return ReconcileReportSchema.parse({
+    target,
+    profile_id: profileId,
+    tenant_key: tenantKey,
+    supabase_count: 0,
+    backend_count: 0,
+    mismatched_buckets: 0,
+    missing: 0,
+    extra: 0,
+    stale: 0,
+    repairs_enqueued: 0,
+    state: 'failed',
+  });
+}
+
+/**
+ * RET-05 delta, D-05, D-11: the purged documents of one tenant must have no point in any `myrag_chunks_` collection of the store,
+ * synced or not. Pages rag_vector_sync_purged_documents and counts per purge in chunks of 100 ids; every purge with a point left is
+ * re-opened through the outbox (reconcile never deletes). Resumes where an earlier slice ran out of budget.
+ */
+async function checkPurged(
+  rpc: RpcClient,
+  store: VectorStore,
+  tenantKey: string,
+  pageSize: number,
+  spent: () => boolean,
+): Promise<PurgeCheck> {
+  let cursors = purgeCursors.get(store);
+  if (!cursors) {
+    cursors = new Map();
+    purgeCursors.set(store, cursors);
+  }
+  try {
+    let after = cursors.get(tenantKey) ?? null;
+    let collections: string[] | null = null;
+    const found = new Set<string>();
+    for (;;) {
+      const page = await readPurgedDocuments(rpc, { target: store.target, tenantKey, after, limit: pageSize });
+      if (page.length > 0) {
+        collections ??= [...new Set(await store.listCollections())].sort();
+        const byPurge = new Map<string, string[]>();
+        for (const doc of page) {
+          const ids = byPurge.get(doc.purgeId) ?? [];
+          ids.push(doc.documentId);
+          byPurge.set(doc.purgeId, ids);
+        }
+        for (const [purgeId, ids] of [...byPurge.entries()].sort(([a], [b]) => (a < b ? -1 : 1))) {
+          if (found.has(purgeId)) continue;
+          search: for (const collection of collections) {
+            for (let i = 0; i < ids.length; i += PURGE_DELETE_CHUNK) {
+              if ((await store.countDocumentPoints(collection, tenantKey, ids.slice(i, i + PURGE_DELETE_CHUNK))) > 0) {
+                found.add(purgeId);
+                break search;
+              }
+            }
+          }
+        }
+      }
+      if (page.length < pageSize) {
+        cursors.delete(tenantKey);
+        break;
+      }
+      after = page[page.length - 1].documentId;
+      if (spent()) {
+        cursors.set(tenantKey, after);
+        break;
+      }
+    }
+    for (const purgeId of [...found].sort()) await reopenPurge(rpc, purgeId, store.target);
+    if (found.size > 0) return { state: 'present' };
+    return cursors.has(tenantKey) ? { state: 'incomplete' } : { state: 'clean' };
+  } catch (error) {
+    return { state: 'failed', code: codeOf(error) };
+  }
+}
+
 function byLeastRecent(a: Candidate, b: Candidate): number {
   if (a.last !== b.last) {
     if (a.last === null) return -1;
@@ -350,6 +448,7 @@ export async function reconcileSlice(options: ReconcileSliceOptions): Promise<Re
   const now = options.now ?? Date.now;
   const budgetMs = options.budgetMs ?? RECONCILE_DEFAULT_BUDGET_MS;
   const pageSize = options.pageSize ?? RECONCILE_PAGE;
+  const purgePageSize = Math.min(Math.max(1, Math.floor(options.purgePageSize ?? RECONCILE_PURGE_PAGE)), RECONCILE_PURGE_PAGE);
   const started = now();
   const spent = (): boolean => now() - started >= budgetMs;
 
@@ -377,12 +476,49 @@ export async function reconcileSlice(options: ReconcileSliceOptions): Promise<Re
 
   const reports: ReconcileReport[] = [];
   let morePending = false;
+  const checks = new Map<string, PurgeCheck>();
+
+  /** The first visit of a (target, tenant) runs the must-be-absent check; points found make every synced profile stale at once. */
+  async function purgeCheckFor(candidate: Candidate): Promise<PurgeCheck> {
+    const key = `${candidate.store.target}|${candidate.tenantKey}`;
+    const known = checks.get(key);
+    if (known) return known;
+    const check = await checkPurged(rpc, candidate.store, candidate.tenantKey, purgePageSize, spent);
+    checks.set(key, check);
+    if (check.state === 'incomplete') morePending = true;
+    if (check.state === 'present' || check.state === 'failed') {
+      for (const profile of profiles) {
+        try {
+          await setState(rpc, {
+            target: candidate.store.target,
+            profileId: profile.profile_id,
+            tenantKey: candidate.tenantKey,
+            state: check.state === 'present' ? 'stale' : 'failed',
+            supabaseCount: null,
+            backendCount: null,
+            error: check.state === 'present' ? PURGED_POINTS_PRESENT : check.code,
+          });
+        } catch {
+          // The candidate's own compare below writes its state again; a profile not visited keeps its previous state.
+        }
+      }
+    }
+    return check;
+  }
+
   for (let i = 0; i < candidates.length; i += 1) {
     if (spent()) {
       morePending = true;
       break;
     }
-    reports.push(await reconcileOne(rpc, candidates[i], pageSize));
+    const candidate = candidates[i];
+    const check = await purgeCheckFor(candidate);
+    if (check.state === 'failed') {
+      reports.push(failedReport(candidate.store.target, candidate.profile.profile_id, candidate.tenantKey));
+      continue;
+    }
+    const override: StateOverride | null = check.state === 'present' ? { state: 'stale', code: PURGED_POINTS_PRESENT } : null;
+    reports.push(await reconcileOne(rpc, candidate, pageSize, override));
   }
 
   const slice = VectorSyncSliceReportSchema.parse({

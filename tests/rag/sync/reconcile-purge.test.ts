@@ -107,7 +107,7 @@ describe('reconcile keeps purged documents absent (RET-05 delta)', () => {
     const staleWrites = rpc.calls.filter(
       (c) => c.fn === 'rag_set_backend_index_state' && c.args.p_tenant_key === TENANT_A && c.args.p_state === 'stale',
     );
-    expect(staleWrites.map((c) => c.args.p_profile_id).sort()).toEqual(['p1', 'p2']);
+    expect([...new Set(staleWrites.map((c) => c.args.p_profile_id))].sort()).toEqual(['p1', 'p2']);
     for (const c of staleWrites) expect(c.args.p_error).toBe('purged_points_present');
     expect(reports.filter((r) => r.tenant_key === TENANT_A).every((r) => r.state === 'stale')).toBe(true);
     expect(reports.filter((r) => r.tenant_key === TENANT_B).every((r) => r.state === 'ready')).toBe(true);
