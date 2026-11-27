@@ -502,6 +502,9 @@ def weekly_fixture() -> dict:
                     {"uses": "actions/checkout@" + "a" * 40, "if": gate, "with": {"clean": False}},
                     {"name": "Sync eval project", "if": gate, "run": "uv sync --directory eval --locked --all-extras"},
                     {"name": "Failure report", "if": gate, "run": "uv run --directory eval python -m rag_eval.failure_report --since x"},
+                    {"name": "Drift", "if": gate, "run": "uv run --directory eval python -m rag_eval.drift --tenant t --set s"},
+                    {"name": "Stale scan", "if": gate, "run": "uv run --directory eval python -m rag_eval.golden_set stale-scan --golden g"},
+                    {"name": "Re-review", "if": gate, "run": "uv run --directory eval python -m rag_eval.golden_set re-review --golden g"},
                     {
                         "name": "Weekly report",
                         "if": gate,
@@ -580,6 +583,372 @@ class WeeklyReportJobTest(unittest.TestCase):
         data = weekly_fixture()
         del self.steps(data)[1]["with"]
         self.assertTrue(any("clean: false" in e for e in self.errors_for(data)))
+
+
+    def test_the_weekly_lifecycle_steps_must_run(self):
+        for needle in ("rag_eval.drift", "golden_set stale-scan", "golden_set re-review"):
+            data = weekly_fixture()
+            data["jobs"]["weekly-report"]["steps"] = [s for s in self.steps(data) if needle not in str(s.get("run", ""))]
+            self.assertTrue(any(needle in e for e in self.errors_for(data)), needle)
+
+    def test_the_lifecycle_steps_run_before_the_weekly_report(self):
+        data = weekly_fixture()
+        steps = self.steps(data)
+        steps.append(steps.pop(4))
+        self.assertTrue(any("before the weekly report" in e for e in self.errors_for(data)))
+
+
+TENANT_GATE = "env.HAS_PRIVATE_EVAL == 'true'"
+
+
+def tenant_nightly_fixture() -> dict:
+    return {
+        "on": {"schedule": [{"cron": "0 3 * * *"}, {"cron": WEEKLY_CRON}], "workflow_dispatch": None},
+        "jobs": {
+            "tenant-nightly": {
+                "if": f"github.event.schedule != '{WEEKLY_CRON}'",
+                "runs-on": "ubuntu-latest",
+                "env": {"HAS_ADMIN_BEARER": "${{ secrets.RAG_ADMIN_BEARER != '' }}"},
+                "steps": [
+                    {
+                        "name": "Detect private eval data and the admin token",
+                        "run": (
+                            'if [ "$HAS_ADMIN_BEARER" = "true" ] && [ -d eval/golden/private ] && [ -n "$(ls -A eval/golden/private)" ]; then\n'
+                            '  echo "HAS_PRIVATE_EVAL=true" >> "$GITHUB_ENV"\n'
+                            "else\n"
+                            '  echo "HAS_PRIVATE_EVAL=false" >> "$GITHUB_ENV"\n'
+                            f'  echo "{check_workflows.TENANT_NIGHTLY_SKIP_NOTICE}"\n'
+                            "fi\n"
+                        ),
+                    },
+                    {"uses": "actions/checkout@" + "a" * 40, "if": TENANT_GATE, "with": {"clean": False}},
+                    {"name": "Sync eval project", "if": TENANT_GATE, "run": "uv sync --directory eval --locked --all-extras"},
+                    {
+                        "name": "Drain",
+                        "if": TENANT_GATE,
+                        "env": {"RAG_ADMIN_BEARER": "${{ secrets.RAG_ADMIN_BEARER }}", "RAG_APP_URL": "${{ secrets.RAG_APP_URL }}"},
+                        "run": 'uv run --directory eval python -m rag_eval.tenant_nightly --drain --base-url "$RAG_APP_URL"',
+                    },
+                ],
+            }
+        },
+    }
+
+
+class TenantNightlyJobTest(unittest.TestCase):
+    def errors_for(self, data: dict) -> list[str]:
+        errors: list[str] = []
+        check_workflows.check_tenant_nightly(data, errors)
+        return errors
+
+    def steps(self, data: dict) -> list[dict]:
+        return data["jobs"]["tenant-nightly"]["steps"]
+
+    def test_the_fixture_is_valid(self):
+        self.assertEqual(self.errors_for(tenant_nightly_fixture()), [])
+
+    def test_repository_nightly_has_a_valid_tenant_nightly_job(self):
+        self.assertEqual(self.errors_for(check_workflows.load(check_workflows.NIGHTLY)[0]), [])
+
+    def test_missing_job_is_reported(self):
+        data = tenant_nightly_fixture()
+        del data["jobs"]["tenant-nightly"]
+        self.assertTrue(any("'tenant-nightly' missing" in e for e in self.errors_for(data)))
+
+    def test_an_ungated_step_is_reported(self):
+        data = tenant_nightly_fixture()
+        del self.steps(data)[3]["if"]
+        self.assertTrue(any("HAS_PRIVATE_EVAL == 'true'" in e for e in self.errors_for(data)))
+
+    def test_a_missing_skip_notice_is_reported(self):
+        data = tenant_nightly_fixture()
+        self.steps(data)[0]["run"] = self.steps(data)[0]["run"].replace("::notice::", "")
+        self.assertTrue(any("first step" in e for e in self.errors_for(data)))
+
+    def test_the_guard_must_require_the_admin_bearer(self):
+        data = tenant_nightly_fixture()
+        data["jobs"]["tenant-nightly"]["env"] = {}
+        self.assertTrue(any("secrets.RAG_ADMIN_BEARER" in e for e in self.errors_for(data)))
+        data = tenant_nightly_fixture()
+        self.steps(data)[0]["run"] = self.steps(data)[0]["run"].replace('[ "$HAS_ADMIN_BEARER" = "true" ] && ', "")
+        self.assertTrue(any("HAS_ADMIN_BEARER" in e for e in self.errors_for(data)))
+
+    def test_a_secret_interpolated_in_a_run_script_is_reported(self):
+        data = tenant_nightly_fixture()
+        self.steps(data)[3]["run"] += ' --token "${{ secrets.RAG_ADMIN_BEARER }}"'
+        self.assertTrue(any("not interpolated into run" in e for e in self.errors_for(data)))
+
+    def test_an_upload_artifact_step_is_reported(self):
+        data = tenant_nightly_fixture()
+        self.steps(data).append({"uses": "actions/upload-artifact@" + "b" * 40, "if": TENANT_GATE, "with": {"path": "eval/golden/private"}})
+        self.assertTrue(any("upload" in e for e in self.errors_for(data)))
+
+    def test_the_drain_must_run(self):
+        data = tenant_nightly_fixture()
+        self.steps(data)[3]["run"] = "uv run --directory eval python -m rag_eval.tenant_nightly"
+        self.assertTrue(any("--drain" in e for e in self.errors_for(data)))
+
+    def test_the_bearer_reaches_the_drain_through_step_env(self):
+        data = tenant_nightly_fixture()
+        del self.steps(data)[3]["env"]
+        self.assertTrue(any("step env" in e for e in self.errors_for(data)))
+
+    def test_the_job_does_not_run_on_the_weekly_schedule(self):
+        data = tenant_nightly_fixture()
+        del data["jobs"]["tenant-nightly"]["if"]
+        self.assertTrue(any("daily schedule" in e for e in self.errors_for(data)))
+
+
+MONITOR_GATE = "env.HAS_MONITOR_SECRETS == 'true'"
+
+
+def monitor_fixture() -> dict:
+    return {
+        "on": {"schedule": [{"cron": "0 3 * * *"}, {"cron": WEEKLY_CRON}], "workflow_dispatch": None},
+        "jobs": {
+            "monitor": {
+                "if": f"github.event.schedule != '{WEEKLY_CRON}'",
+                "runs-on": "ubuntu-latest",
+                "env": {
+                    "HAS_MONITOR_SECRETS": "${{ secrets.NEXT_PUBLIC_SUPABASE_URL != '' && secrets.SUPABASE_SERVICE_ROLE_KEY != '' }}"
+                },
+                "steps": [
+                    {
+                        "name": "Skip notice",
+                        "if": "env.HAS_MONITOR_SECRETS != 'true'",
+                        "run": f'echo "{check_workflows.MONITOR_SKIP_NOTICE}"',
+                    },
+                    {"uses": "actions/checkout@" + "a" * 40, "if": MONITOR_GATE},
+                    {"name": "Install Node dependencies", "if": MONITOR_GATE, "run": "npm ci --ignore-scripts"},
+                    {
+                        "name": "Daily monitor",
+                        "if": MONITOR_GATE,
+                        "env": {
+                            "NEXT_PUBLIC_SUPABASE_URL": "${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}",
+                            "SUPABASE_SERVICE_ROLE_KEY": "${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}",
+                        },
+                        "run": "npm run rag:monitor",
+                    },
+                ],
+            }
+        },
+    }
+
+
+class MonitorJobTest(unittest.TestCase):
+    def errors_for(self, data: dict) -> list[str]:
+        errors: list[str] = []
+        check_workflows.check_monitor_job(data, errors)
+        return errors
+
+    def steps(self, data: dict) -> list[dict]:
+        return data["jobs"]["monitor"]["steps"]
+
+    def test_the_fixture_is_valid(self):
+        self.assertEqual(self.errors_for(monitor_fixture()), [])
+
+    def test_repository_nightly_has_a_valid_monitor_job(self):
+        self.assertEqual(self.errors_for(check_workflows.load(check_workflows.NIGHTLY)[0]), [])
+
+    def test_missing_job_is_reported(self):
+        data = monitor_fixture()
+        del data["jobs"]["monitor"]
+        self.assertTrue(any("'monitor' missing" in e for e in self.errors_for(data)))
+
+    def test_an_ungated_step_is_reported(self):
+        data = monitor_fixture()
+        del self.steps(data)[3]["if"]
+        self.assertTrue(any("HAS_MONITOR_SECRETS == 'true'" in e for e in self.errors_for(data)))
+
+    def test_a_missing_skip_notice_is_reported(self):
+        data = monitor_fixture()
+        del self.steps(data)[0]
+        self.assertTrue(any("skip-notice" in e for e in self.errors_for(data)))
+
+    def test_the_guard_needs_both_supabase_secrets(self):
+        for secret in ("NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"):
+            data = monitor_fixture()
+            job = data["jobs"]["monitor"]
+            job["env"]["HAS_MONITOR_SECRETS"] = job["env"]["HAS_MONITOR_SECRETS"].replace(f"secrets.{secret} != ''", "true")
+            self.assertTrue(any(f"secrets.{secret}" in e for e in self.errors_for(data)), secret)
+
+    def test_a_secret_interpolated_in_a_run_script_is_reported(self):
+        data = monitor_fixture()
+        self.steps(data)[3]["run"] = 'SUPABASE_SERVICE_ROLE_KEY="${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}" npm run rag:monitor'
+        self.assertTrue(any("not interpolated into run" in e for e in self.errors_for(data)))
+
+    def test_the_secrets_reach_the_monitor_through_step_env(self):
+        data = monitor_fixture()
+        del self.steps(data)[3]["env"]["SUPABASE_SERVICE_ROLE_KEY"]
+        self.assertTrue(any("SUPABASE_SERVICE_ROLE_KEY through step env" in e for e in self.errors_for(data)))
+
+    def test_the_monitor_must_run(self):
+        data = monitor_fixture()
+        self.steps(data)[3]["run"] = "npm run lint"
+        self.assertTrue(any("rag:monitor" in e for e in self.errors_for(data)))
+
+    def test_an_upload_artifact_step_is_reported(self):
+        data = monitor_fixture()
+        self.steps(data).append({"uses": "actions/upload-artifact@" + "b" * 40, "if": MONITOR_GATE, "with": {"path": "out"}})
+        self.assertTrue(any("upload" in e for e in self.errors_for(data)))
+
+
+class NightlyTriggersTest(unittest.TestCase):
+    def test_a_push_trigger_on_nightly_is_reported(self):
+        data = check_workflows.load(check_workflows.NIGHTLY)[0]
+        data = dict(data)
+        data["on"] = {**check_workflows.triggers(data), "push": {"branches": ["main"]}}
+        errors: list[str] = []
+        check_workflows.check_nightly_triggers(data, errors)
+        self.assertTrue(any("'push' must not be used" in e for e in errors))
+
+    def test_the_repository_nightly_triggers_are_valid(self):
+        errors: list[str] = []
+        check_workflows.check_nightly_triggers(check_workflows.load(check_workflows.NIGHTLY)[0], errors)
+        self.assertEqual(errors, [])
+
+
+class OnlineJudgeMirrorTest(unittest.TestCase):
+    def runner(self, data: dict) -> dict:
+        return next(s for s in data["jobs"]["online-judge"]["steps"] if "rag_eval.online_judge" in str(s.get("run", "")))
+
+    def errors_for(self, data: dict) -> list[str]:
+        errors: list[str] = []
+        check_workflows.check_online_judge(data, errors)
+        return errors
+
+    def test_the_repository_online_judge_passes_the_mirror_inputs(self):
+        self.assertEqual(self.errors_for(check_workflows.load(check_workflows.NIGHTLY)[0]), [])
+
+    def test_the_mirror_inputs_must_reach_the_step_env(self):
+        for name in ("RAG_APP_URL", "RAG_ADMIN_BEARER"):
+            data = check_workflows.load(check_workflows.NIGHTLY)[0]
+            self.runner(data).get("env", {}).pop(name, None)
+            self.assertTrue(any(name in e for e in self.errors_for(data)), name)
+
+    def test_the_base_url_flag_must_be_passed(self):
+        data = check_workflows.load(check_workflows.NIGHTLY)[0]
+        self.runner(data)["run"] = "uv run --directory eval python -m rag_eval.online_judge"
+        self.assertTrue(any("--base-url" in e for e in self.errors_for(data)))
+
+
+JUDGE_GATE = "env.HAS_JUDGE_KEYS == 'true'"
+
+
+def judge_calibration_fixture() -> dict:
+    return {
+        "on": {"schedule": [{"cron": "41 5 1 * *"}], "workflow_dispatch": None},
+        "permissions": {"contents": "read"},
+        "env": dict(check_workflows.TELEMETRY),
+        "jobs": {
+            "calibrate": {
+                "runs-on": "ubuntu-latest",
+                "env": {
+                    "HAS_JUDGE_KEYS": (
+                        "${{ secrets.OPENROUTER_API_KEY != '' && secrets.OPENAI_API_KEY != '' && vars.RAG_JUDGE_GENERATOR_MODEL != '' }}"
+                    )
+                },
+                "steps": [
+                    {"name": "Skip notice", "if": "env.HAS_JUDGE_KEYS != 'true'", "run": f'echo "{check_workflows.JUDGE_CALIBRATION_SKIP_NOTICE}"'},
+                    {"uses": "actions/checkout@" + "a" * 40, "if": JUDGE_GATE},
+                    {"name": "Sync eval project", "if": JUDGE_GATE, "run": "uv sync --directory eval --locked --all-extras"},
+                    {
+                        "name": "Seed calibration",
+                        "if": JUDGE_GATE,
+                        "env": {"OPENROUTER_API_KEY": "${{ secrets.OPENROUTER_API_KEY }}", "OPENAI_API_KEY": "${{ secrets.OPENAI_API_KEY }}"},
+                        "run": (
+                            'uv run --directory eval python -m rag_eval.judge_calibration run --seed-only --generator-model "$M" '
+                            "--write --out eval/out/judge-calibration"
+                        ),
+                    },
+                    {
+                        "uses": "actions/upload-artifact@" + "b" * 40,
+                        "if": f"always() && {JUDGE_GATE}",
+                        "with": {"name": "judge-calibration", "path": "eval/config/judge-calibration.json\neval/out/judge-calibration\n"},
+                    },
+                ],
+            }
+        },
+    }
+
+
+class JudgeCalibrationWorkflowTest(unittest.TestCase):
+    def errors_for(self, data: dict) -> list[str]:
+        errors: list[str] = []
+        check_workflows.check_judge_calibration(data, errors)
+        return errors
+
+    def steps(self, data: dict) -> list[dict]:
+        return data["jobs"]["calibrate"]["steps"]
+
+    def test_the_fixture_is_valid(self):
+        self.assertEqual(self.errors_for(judge_calibration_fixture()), [])
+
+    def test_the_repository_workflow_exists_and_is_valid(self):
+        self.assertTrue(check_workflows.JUDGE_CALIBRATION_WORKFLOW.exists())
+        self.assertEqual(self.errors_for(check_workflows.load(check_workflows.JUDGE_CALIBRATION_WORKFLOW)[0]), [])
+
+    def test_a_missing_schedule_is_reported(self):
+        data = judge_calibration_fixture()
+        del data["on"]["schedule"]
+        self.assertTrue(any("schedule" in e for e in self.errors_for(data)))
+
+    def test_a_missing_dispatch_is_reported(self):
+        data = judge_calibration_fixture()
+        del data["on"]["workflow_dispatch"]
+        self.assertTrue(any("workflow_dispatch" in e for e in self.errors_for(data)))
+
+    def test_write_permissions_are_reported(self):
+        for scope in ("contents", "pull-requests"):
+            data = judge_calibration_fixture()
+            data["permissions"] = {"contents": "read", scope: "write"}
+            self.assertTrue(any("write" in e for e in self.errors_for(data)), scope)
+            data = judge_calibration_fixture()
+            data["jobs"]["calibrate"]["permissions"] = {scope: "write"}
+            self.assertTrue(any("write" in e for e in self.errors_for(data)), scope)
+
+    def test_an_ungated_step_is_reported(self):
+        data = judge_calibration_fixture()
+        del self.steps(data)[3]["if"]
+        self.assertTrue(any("HAS_JUDGE_KEYS == 'true'" in e for e in self.errors_for(data)))
+
+    def test_a_missing_skip_notice_is_reported(self):
+        data = judge_calibration_fixture()
+        del self.steps(data)[0]
+        self.assertTrue(any("skip-notice" in e for e in self.errors_for(data)))
+
+    def test_the_guard_needs_the_judge_keys(self):
+        for secret in ("OPENROUTER_API_KEY", "OPENAI_API_KEY"):
+            data = judge_calibration_fixture()
+            job = data["jobs"]["calibrate"]
+            job["env"]["HAS_JUDGE_KEYS"] = job["env"]["HAS_JUDGE_KEYS"].replace(f"secrets.{secret} != ''", "true")
+            self.assertTrue(any(f"secrets.{secret}" in e for e in self.errors_for(data)), secret)
+
+    def test_a_secret_interpolated_in_a_run_script_is_reported(self):
+        data = judge_calibration_fixture()
+        self.steps(data)[3]["run"] += ' --key "${{ secrets.OPENAI_API_KEY }}"'
+        self.assertTrue(any("not interpolated into run" in e for e in self.errors_for(data)))
+
+    def test_the_seed_calibration_must_run(self):
+        data = judge_calibration_fixture()
+        self.steps(data)[3]["run"] = "uv run --directory eval python -m rag_eval.judge_calibration run --generator-model x"
+        self.assertTrue(any("--seed-only" in e for e in self.errors_for(data)))
+
+    def test_the_result_must_be_uploaded(self):
+        data = judge_calibration_fixture()
+        del self.steps(data)[4]
+        self.assertTrue(any("artifact" in e for e in self.errors_for(data)))
+
+    def test_private_files_must_not_be_uploaded(self):
+        data = judge_calibration_fixture()
+        self.steps(data)[4]["with"]["path"] += "eval/golden/private/judge-calibration\n"
+        self.assertTrue(any("eval/golden/private" in e for e in self.errors_for(data)))
+
+    def test_pushing_or_opening_a_pull_request_is_reported(self):
+        for command in ("git push origin HEAD", "gh pr create --fill"):
+            data = judge_calibration_fixture()
+            self.steps(data)[3]["run"] += f" && {command}"
+            self.assertTrue(any("pull request" in e for e in self.errors_for(data)), command)
 
 
 class SidecarPythonJobTest(unittest.TestCase):

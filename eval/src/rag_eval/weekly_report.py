@@ -6,7 +6,9 @@ Combines three sections and writes weekly-report-<stamp>.json (WeeklyReport) and
 - the trend of the last 8 private eval runs per domain set (runs with report.json), oldest first, each with its gate
   population, config hash and golden manifest hash; a run whose population or manifest hash differs from the previous run of
   its domain set is marked "not comparable";
-- the failure report since --since (rag_eval.failure_report; written too, so next week lists only new failures).
+- the failure report since --since (rag_eval.failure_report; written too, so next week lists only new failures);
+- the gates section (rag_eval.gates_report, Phase 5.3 D-17): overrides, change counts, release overrides, open alerts, judge
+  cells, drift, skipped runs and overdue re-reviews; a source it cannot read is listed as not read.
 Counts, ids, hashes and codes only, never question, answer or chunk text. No private runs: a skip notice and exit 0.
 """
 
@@ -27,6 +29,7 @@ from rag_sidecar.contracts.feedback_loop import (
 from rag_sidecar.contracts.report import EvalReport
 
 from rag_eval import failure_report as failures
+from rag_eval import gates_report
 from rag_eval.draft.writer import PrivatePathError, assert_private_path
 from rag_eval.failure_report import (
     PrivateRun,
@@ -220,7 +223,7 @@ def _trend_lines(report: WeeklyReport) -> list[str]:
     return lines
 
 
-def render_weekly_markdown(report: WeeklyReport) -> str:
+def render_weekly_markdown(report: WeeklyReport, gates: gates_report.GatesCollection | None = None) -> str:
     lines = [
         "# Weekly feedback-loop report",
         "",
@@ -233,6 +236,8 @@ def render_weekly_markdown(report: WeeklyReport) -> str:
         lines.extend(["## Failure report", "", "No failure report.", ""])
     else:
         lines.append(failures.render_failure_markdown(report.failures, heading="##"))
+    if gates is not None or report.gates is not None:
+        lines.append(gates_report.render_gates_markdown(gates if gates is not None else report.gates, heading="##"))
     return "\n".join(lines).rstrip("\n") + "\n"
 
 
@@ -253,6 +258,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--runs-dir", type=Path, default=None, help="default: eval/golden/private/runs")
     parser.add_argument("--out-dir", type=Path, default=None, help="default: eval/golden/private/reports")
     parser.add_argument("--failure-report", type=Path, default=None, help="embed this FailureReport instead of generating one")
+    parser.add_argument("--github-repository", default=None, help="owner/name whose rag-release-gate override statuses on main are read")
+    parser.add_argument("--github-token-env", default=gates_report.DEFAULT_GITHUB_TOKEN_ENV)
     args = parser.parse_args(argv)
 
     try:
@@ -276,7 +283,20 @@ def main(argv: list[str] | None = None) -> int:
             failure = _load_failure_report(resolve_cli_path(args.failure_report))
         else:
             failure = failures.generate(since, runs_dir, out_dir, now=now)
-        stats, reason = fetch_stats(args.base_url, os.environ.get(args.token_env) or None, since, until)
+        token = os.environ.get(args.token_env) or None
+        stats, reason = fetch_stats(args.base_url, token, since, until)
+        github, github_reason = gates_report.github_source(args.github_repository, args.github_token_env)
+        gates = gates_report.collect_gates_section(
+            since,
+            args.base_url,
+            token,
+            github,
+            gates_report.default_set_dirs(),
+            client_factory=_http_client,
+            today=now.date(),
+            reports_dir=out_dir,
+            github_skip_reason=github_reason or "no_token",
+        )
         report = WeeklyReport(
             generated_at=iso_now(now),
             since=iso_now(since),
@@ -285,10 +305,11 @@ def main(argv: list[str] | None = None) -> int:
             stats_skipped_reason=reason,
             trend=trend,
             failures=failure,
+            gates=gates.section,
         )
         stamp = file_stamp(now)
         write_text(out_dir / f"{REPORT_PREFIX}{stamp}.json", report.model_dump_json(indent=2) + "\n")
-        write_text(out_dir / f"{REPORT_PREFIX}{stamp}.md", render_weekly_markdown(report))
+        write_text(out_dir / f"{REPORT_PREFIX}{stamp}.md", render_weekly_markdown(report, gates))
     except PrivatePathError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_PRIVATE
@@ -297,7 +318,7 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_INPUT
     print(
         f"[Weekly Report] trend_points={len(report.trend)} stats={'included' if stats else reason} "
-        f"new_failures={len(failure.entries) if failure else 0}"
+        f"new_failures={len(failure.entries) if failure else 0} gates_not_read={','.join(gates.not_read) or 'none'}"
     )
     return EXIT_OK
 
