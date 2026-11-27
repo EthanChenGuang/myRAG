@@ -9,9 +9,9 @@ const require = createRequire(import.meta.url);
 const repoRoot = path.resolve(import.meta.dirname, '../..');
 const configUiDir = path.join(repoRoot, 'scripts/config-ui');
 const indexHtml = fs.readFileSync(path.join(configUiDir, 'index.html'), 'utf8');
-
-
-
+const managerSource = fs.readFileSync(path.join(configUiDir, 'document-processing/document-manager.js'), 'utf8');
+const connectorsSource = fs.readFileSync(path.join(configUiDir, 'connectors-config.js'), 'utf8');
+const panelSource = fs.readFileSync(path.join(configUiDir, 'rag-panels/access-groups.js'), 'utf8');
 
 type Json = Record<string, unknown>;
 interface Reply {
@@ -21,9 +21,9 @@ interface Reply {
 
 const G_A = '11111111-1111-4111-8111-111111111111';
 const G_B = '22222222-2222-4222-8222-222222222222';
-
-
-
+const D_1 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1';
+const D_2 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2';
+const D_3 = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3';
 
 function groupsBody(extra: Json = {}): Json {
   return {
@@ -324,3 +324,177 @@ describe('AccessGroupsQueueControls in the queue host (UI-SPEC 6.7)', () => {
   });
 });
 
+function tablePage(reply: (apiPath: string) => Reply, locale?: string) {
+  const page = loadPage({ reply, locale });
+  const container = page.doc.createElement('div');
+  container.id = 'documents-table-container';
+  page.doc.body.appendChild(container);
+  const body = page.doc.createElement('tbody');
+  container.appendChild(body);
+  for (const [id, name] of [[D_1, 'document-a.pdf'], [D_2, XSS_PAYLOAD], [D_3, 'document-c.pdf']] as const) {
+    const row = page.doc.createElement('tr');
+    row.innerHTML = '<td><div class="font-medium">x</div></td><td>date</td>';
+    row.children[0]!.children[0]!.textContent = name;
+    row.setAttribute('data-access-groups-doc', id);
+    body.appendChild(row);
+  }
+  return { ...page, container, body };
+}
+
+function audienceReply(enabled = true) {
+  return (p: string): Reply => {
+    if (p.startsWith('/api/rag/access-groups/documents?ids=')) {
+      return {
+        status: 200,
+        body: {
+          success: true,
+          personal: false,
+          audiences: [
+            { documentId: D_1, kind: 'groups', groups: [{ id: G_A, name: 'group-a' }] },
+            { documentId: D_2, kind: 'uploader_only', groups: [], fallbackReason: 'group_deleted' },
+            { documentId: D_3, kind: 'everyone', groups: [] },
+          ],
+        },
+      };
+    }
+    return { status: 200, body: groupsBody({ enabled }) };
+  };
+}
+
+describe('stored-documents badge (UI-SPEC 6.8)', () => {
+  const apply = (page: Page, body: FakeElement, org: string | null = null) => {
+    expect(typeof page.context.AccessGroupsDocumentBadges).toBe('object');
+    return (page.context.AccessGroupsDocumentBadges as { apply: (b: FakeElement, o: string | null) => Promise<void> }).apply(body, org);
+  };
+
+  it('Restricted for groups, the warning badge for the fallback, nothing for Everyone, and docs.manageHint under the table', async () => {
+    const page = tablePage(audienceReply());
+    await apply(page, page.body, 'org-1');
+    const [r1, r2, r3] = page.body.children;
+    const b1 = r1!.querySelector('[data-access-groups-table-badge]')!;
+    expect(b1.textContent).toBe('Restricted');
+    expect(b1.querySelector('i')!.className).toContain('bi-lock');
+    expect(b1.getAttribute('title')).toBe('Only some members can see this document.');
+    const b2 = r2!.querySelector('[data-access-groups-table-badge]')!;
+    expect(b2.textContent).toBe('Uploader and admins only');
+    expect(b2.className).toContain('badge-warning');
+    expect(b2.querySelector('i')!.className).toContain('bi-shield-exclamation');
+    expect(r3!.querySelector('[data-access-groups-table-badge]')).toBeNull();
+    expect(page.container.querySelector('[data-access-groups-manage-hint]')!.textContent).toBe(
+      'To change who can see a document, open RAG administration, Access groups, Documents.',
+    );
+    expect(page.calls).toContain(`/api/rag/access-groups/documents?ids=${D_1},${D_2},${D_3}&organizationId=org-1`);
+    expect(r1!.textContent).not.toContain('group-a');
+  });
+
+  it('re-applying replaces, never duplicates; the switch off or a failed request leaves the table as today', async () => {
+    const page = tablePage(audienceReply());
+    await apply(page, page.body);
+    await apply(page, page.body);
+    expect(page.body.querySelectorAll('[data-access-groups-table-badge]')).toHaveLength(2);
+    expect(page.container.querySelectorAll('[data-access-groups-manage-hint]')).toHaveLength(1);
+
+    const off = tablePage(audienceReply(false));
+    await apply(off, off.body);
+    expect(off.body.querySelectorAll('[data-access-groups-table-badge]')).toHaveLength(0);
+    expect(off.container.querySelector('[data-access-groups-manage-hint]')).toBeNull();
+    expect(off.calls.some((c) => c.includes('/documents?ids='))).toBe(false);
+
+    const failed = tablePage((p) => (p.includes('/documents') ? { status: 500, body: { error: 'x' } } : { status: 200, body: groupsBody() }));
+    await apply(failed, failed.body);
+    expect(failed.body.querySelectorAll('[data-access-groups-table-badge]')).toHaveLength(0);
+  });
+
+  it('the it badge wraps inside the name cell, and file names stay text', async () => {
+    const page = tablePage(audienceReply(), 'it-IT');
+    await apply(page, page.body);
+    const b2 = page.body.children[1]!.querySelector('[data-access-groups-table-badge]')!;
+    expect(b2.textContent).toBe('Solo chi ha caricato e amministratori');
+    expect(b2.className).toContain('whitespace-normal');
+    expect(b2.className).toContain('max-w-full');
+    expect(injectedElements(page.body)).toHaveLength(0);
+  });
+
+  it('the table marks rows by id with setAttribute and calls the badge after the rows are set', () => {
+    expect(managerSource).toContain("row.setAttribute('data-access-groups-doc', String(doc.id));");
+    const render = managerSource.slice(managerSource.indexOf('renderDocuments() {'), managerSource.indexOf('createDocumentRow(doc) {'));
+    expect(render.indexOf('AccessGroupsDocumentBadges.apply')).toBeGreaterThan(render.indexOf('this.elements.tableBody.appendChild(row)'));
+  });
+});
+
+describe('Connectors card notice (UI-SPEC 6.8, D-20, D-22)', () => {
+  type Card = { host: FakeElement; connectionId: string };
+  const apply = (page: Page, cards: Card[]) => {
+    expect(typeof page.context.AccessGroupsConnectorNotices).toBe('object');
+    return (page.context.AccessGroupsConnectorNotices as { apply: (c: Card[], o: string | null) => Promise<void> }).apply(cards, null);
+  };
+
+  function cardsPage(enabled: boolean, counts: Array<{ connectionId: string; documents: number }>) {
+    const page = loadPage({
+      reply: (p) => (p.startsWith('/api/rag/access-groups/connector-map/fail-closed') ? { status: 200, body: { success: true, connections: counts } } : { status: 200, body: groupsBody({ enabled }) }),
+    });
+    const cards = ['conn-a', 'conn-b'].map((connectionId) => {
+      const host = page.doc.createElement('div');
+      host.setAttribute('data-connector-extras', '');
+      page.doc.body.appendChild(host);
+      return { host, connectionId };
+    });
+    return { page, cards };
+  }
+
+  it('shows connector.failClosed with the count and Open connector mapping only on the card with fallen-back documents', async () => {
+    const { page, cards } = cardsPage(true, [{ connectionId: 'conn-a', documents: 1200 }]);
+    await apply(page, cards);
+    const notice = cards[0]!.host.querySelector('[data-access-groups-connector-notice]')!;
+    expect(notice.getAttribute('data-access-groups-connector-notice')).toBe('connector.failClosed');
+    expect(notice.className).toContain('alert-warning');
+    expect(notice.querySelector('i')!.className).toContain('bi-shield-exclamation');
+    expect(notice.querySelector('p')!.textContent).toBe(
+      'Documents visible to their uploader and admins only: 1,200. Their sharing at the source is not mapped to an access group.',
+    );
+    expect(notice.querySelector('button')!.textContent).toBe('Open connector mapping');
+    expect(cards[1]!.host.children).toHaveLength(0);
+  });
+
+  it('uses connector.failClosedOff with the switch off, and shows nothing without counts', async () => {
+    const off = cardsPage(false, [{ connectionId: 'conn-b', documents: 3 }]);
+    await apply(off.page, off.cards);
+    expect(off.cards[1]!.host.querySelector('[data-access-groups-connector-notice]')!.getAttribute('data-access-groups-connector-notice')).toBe('connector.failClosedOff');
+    const none = cardsPage(true, [{ connectionId: 'conn-a', documents: 0 }]);
+    await apply(none.page, none.cards);
+    expect(none.cards.every((c) => c.host.children.length === 0)).toBe(true);
+  });
+
+  it('Open connector mapping activates RAG administration through its menu link and scrolls with reduced motion honoured', async () => {
+    const { page, cards } = cardsPage(true, [{ connectionId: 'conn-a', documents: 2 }]);
+    const link = page.doc.createElement('a');
+    link.setAttribute('data-tab', 'rag-administration');
+    let clicked = 0;
+    link.addEventListener('click', () => {
+      clicked += 1;
+    });
+    page.doc.body.appendChild(link);
+    const section = page.doc.createElement('section');
+    section.id = 'rag-administration-access';
+    const scrolled: Json[] = [];
+    (section as unknown as { scrollIntoView: (o: Json) => void }).scrollIntoView = (o: Json) => scrolled.push(o);
+    page.doc.body.appendChild(section);
+    page.context.matchMedia = () => ({ matches: true });
+    page.context.initAccessGroupsPanel = () => null;
+    await apply(page, cards);
+    cards[0]!.host.querySelector('button')!.click();
+    await flush();
+    expect(clicked).toBe(1);
+    expect(scrolled).toEqual([{ behavior: 'auto', block: 'start' }]);
+  });
+
+  it('markup in counts answers and connection ids creates no element; the card hook is static markup', async () => {
+    const { page, cards } = cardsPage(true, [{ connectionId: XSS_PAYLOAD, documents: 1 }]);
+    cards[0]!.connectionId = XSS_PAYLOAD;
+    await apply(page, cards);
+    expect(injectedElements(page.doc)).toHaveLength(0);
+    expect(connectorsSource).toContain("${isConnected ? '<div data-connector-extras></div>' : ''}");
+    const notices = panelSource.slice(panelSource.indexOf('async function accessGroupsApplyConnectorNotices'), panelSource.indexOf('const AccessGroupsDocumentBadges'));
+    expect(notices).not.toMatch(/innerHTML|insertAdjacentHTML|`/);
+  });
+});
