@@ -131,7 +131,7 @@ const MONITOR_LABELS = {
     "alert.meta.window": "Window: {days} days ending {day}",
     "measure.rate": "Measured: {rate} ({count} of {total}). Usual: {baseRate} ({baseCount} of {baseTotal}, the 30 days before).",
     "measure.distribution": "Shift (PSI): {value}. Limits: warning {warn}, alert {alert}.",
-    "measure.latency": "p95: {value} ms. Usual: {base} ms. Budget: {budget} ms.",
+    "measure.latency": "p95: {value} ms. Usual: {base} ms. Budget: {budget} ms.",
     "measure.score": "Mean score: {value} (n = {n}). Usual: {base}.",
     "measure.drift": "Difference from real questions: {value}. Topic groups: {ids}.",
     "measure.generic": "Measured: {value}. Usual: {base}.",
@@ -214,10 +214,10 @@ const MONITOR_LABELS = {
     "count.item": "{label}: {value}",
     "status.acknowledged.plain": "Acknowledged",
     "status.resolved.plain": "Resolved",
-    "measure.latency.noBudget": "p95: {value} ms. Usual: {base} ms.",
+    "measure.latency.noBudget": "p95: {value} ms. Usual: {base} ms.",
     "measure.generic.value": "Measured: {value}.",
     "measure.crossed.separator": "; ",
-    "value.ms": "{value} ms",
+    "value.ms": "{value} ms",
     "alerts.listLabel": "Monitoring alerts",
     "settings.webhook.removeHint": "Removing takes effect at once; it does not wait for Save All Changes.",
   },
@@ -278,7 +278,7 @@ const MONITOR_LABELS = {
     "alert.meta.window": "窗口：截至 {day} 的 {days} 天",
     "measure.rate": "实测：{rate}（{total} 个中的 {count} 个）。通常：{baseRate}（此前 30 天，{baseTotal} 个中的 {baseCount} 个）。",
     "measure.distribution": "偏移（PSI）：{value}。限值：提醒 {warn}，告警 {alert}。",
-    "measure.latency": "p95：{value} 毫秒。通常：{base} 毫秒。预算：{budget} 毫秒。",
+    "measure.latency": "p95：{value} 毫秒。通常：{base} 毫秒。预算：{budget} 毫秒。",
     "measure.score": "平均分：{value}（n = {n}）。通常：{base}。",
     "measure.drift": "与真实问题的差异：{value}。主题分组：{ids}。",
     "measure.generic": "实测：{value}。通常：{base}。",
@@ -361,10 +361,10 @@ const MONITOR_LABELS = {
     "count.item": "{label}：{value}",
     "status.acknowledged.plain": "已确认",
     "status.resolved.plain": "已解决",
-    "measure.latency.noBudget": "p95：{value} 毫秒。通常：{base} 毫秒。",
+    "measure.latency.noBudget": "p95：{value} 毫秒。通常：{base} 毫秒。",
     "measure.generic.value": "实测：{value}。",
     "measure.crossed.separator": "；",
-    "value.ms": "{value} 毫秒",
+    "value.ms": "{value} 毫秒",
     "alerts.listLabel": "监控告警",
     "settings.webhook.removeHint": "移除会立即生效，无需点击“Save All Changes”。",
   },
@@ -425,7 +425,7 @@ const MONITOR_LABELS = {
     "alert.meta.window": "Finestra: {days} giorni fino al {day}",
     "measure.rate": "Misurato: {rate} ({count} su {total}). Abituale: {baseRate} ({baseCount} su {baseTotal}, nei 30 giorni precedenti).",
     "measure.distribution": "Spostamento (PSI): {value}. Limiti: attenzione {warn}, allarme {alert}.",
-    "measure.latency": "p95: {value} ms. Abituale: {base} ms. Budget: {budget} ms.",
+    "measure.latency": "p95: {value} ms. Abituale: {base} ms. Budget: {budget} ms.",
     "measure.score": "Punteggio medio: {value} (n = {n}). Abituale: {base}.",
     "measure.drift": "Differenza dalle domande reali: {value}. Gruppi di argomenti: {ids}.",
     "measure.generic": "Misurato: {value}. Abituale: {base}.",
@@ -508,10 +508,10 @@ const MONITOR_LABELS = {
     "count.item": "{label}: {value}",
     "status.acknowledged.plain": "Preso in carico",
     "status.resolved.plain": "Risolto",
-    "measure.latency.noBudget": "p95: {value} ms. Abituale: {base} ms.",
+    "measure.latency.noBudget": "p95: {value} ms. Abituale: {base} ms.",
     "measure.generic.value": "Misurato: {value}.",
     "measure.crossed.separator": "; ",
-    "value.ms": "{value} ms",
+    "value.ms": "{value} ms",
     "alerts.listLabel": "Avvisi di monitoraggio",
     "settings.webhook.removeHint": "La rimozione ha effetto subito, senza attendere Save All Changes.",
   },
@@ -703,7 +703,7 @@ function monitorCrossed(alert, locale) {
   }
   if (parts.length === 0) return null;
   const lead = monitorLabel('measure.crossed', locale);
-  const text = lead + ' ' + parts.join(monitorLabel('measure.crossed.separator', locale));
+  const text = lead + (lead.endsWith('：') ? '' : ' ') + parts.join(monitorLabel('measure.crossed.separator', locale));
   return { key: 'measure.crossed', segments: [{ text }], text };
 }
 
@@ -968,6 +968,7 @@ class MonitorPanel {
       selected: this.current,
       onSelect: (id) => {
         this.current = id;
+        this.setStatus('');
         this.refresh();
       },
     });
@@ -1047,7 +1048,7 @@ class MonitorPanel {
     const legendId = 'rag-monitor-filter-legend';
     this.filterInputs = MONITOR_FILTERS.map((value) => {
       const input = this.el('input', {
-        className: 'join-item btn btn-sm',
+        className: 'btn btn-sm',
         attrs: { type: 'radio', name: 'rag-monitor-status-filter', value, 'aria-label': this.t('filter.' + value) },
         on: {
           change: () => {
@@ -1060,7 +1061,7 @@ class MonitorPanel {
       input.checked = value === this.filter;
       return input;
     });
-    this.filterFieldset = this.el('fieldset', { className: 'join flex-wrap', attrs: { 'aria-labelledby': legendId } }, [
+    this.filterFieldset = this.el('fieldset', { className: 'flex flex-wrap gap-2', attrs: { 'aria-labelledby': legendId } }, [
       this.el('legend', { className: 'sr-only', text: this.t('filter.legend'), attrs: { id: legendId } }),
       ...this.filterInputs,
     ]);
@@ -1520,7 +1521,7 @@ class MonitorPanel {
     else {
       const list = this.el(
         'ul',
-        { className: 'max-h-40 overflow-y-auto flex flex-col gap-1 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2', attrs: { tabindex: '0', 'aria-label': v.traces.title } },
+        { className: 'max-h-40 overflow-y-auto overscroll-contain flex flex-col gap-1 rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2', attrs: { tabindex: '0', 'aria-label': v.traces.title } },
         v.traces.ids.map((id) => this.el('li', { className: 'min-w-0' }, [this.mono(id, 'code')])),
       );
       const children = [list];
@@ -1591,7 +1592,7 @@ class MonitorPanel {
       if (reveal) reveal.setAttribute('aria-label', MONITOR_GATES.gatesUiLabel('settings.secret.reveal', this.locale));
     }
     const url = document.getElementById('RAG_MONITOR_WEBHOOK_URL');
-    this.webhookState = this.el('div', { className: 'flex flex-wrap items-center gap-2 mb-2', attrs: { 'data-monitor-webhook-state': '' } });
+    this.webhookState = this.el('div', { className: 'flex flex-wrap items-center justify-start gap-2 mb-2', attrs: { 'data-monitor-webhook-state': '' } });
     if (url && url.parentNode) url.parentNode.insertBefore(this.webhookState, url);
     else view.appendChild(this.webhookState);
     for (const id of ['RAG_MONITOR', 'RAG_RETRIEVAL_LOG', 'RAG_MONITOR_WEBHOOK_URL']) {

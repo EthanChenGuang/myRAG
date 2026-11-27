@@ -188,7 +188,7 @@ describe('monitorAlertView', () => {
       alert({ rule: 'latency_p95', kind: 'latency', observed: { n: 300, value: 4200, count: null }, baseline: { n: 9000, value: 2100, count: null }, band: { ratio: 1.5, budget: 4000, measured_ratio: 2, measured_value: 4200 } }),
       'en',
     );
-    expect(lat.measurement.text).toBe('p95: 4,200 ms. Usual: 2,100 ms. Budget: 4,000 ms.');
+    expect(lat.measurement.text).toBe('p95: 4,200\u00a0ms. Usual: 2,100\u00a0ms. Budget: 4,000\u00a0ms.');
     expect(lat.crossed?.text).toBe('Crossed: 2.0 times the usual value (limit 1.5)');
     const judge = monitorAlertView(
       alert({ rule: 'online_judge_mean', kind: 'judge_mean', observed: { n: 50, value: 0.61, count: null }, baseline: { n: 900, value: 0.8, count: null }, band: { drop: 0.1, measured_delta: -0.19, measured_value: 0.61 } }),
@@ -235,7 +235,7 @@ describe('monitorEvidenceView', () => {
     const v = monitorEvidenceView(alert(), 'en');
     expect(v.companions).toEqual([
       { measure: 'Not-helpful votes', code: false, measured: '5.0%', usual: '5.0%' },
-      { measure: 'Latency (p95)', code: false, measured: '2,400 ms', usual: '2,300 ms' },
+      { measure: 'Latency (p95)', code: false, measured: '2,400\u00a0ms', usual: '2,300\u00a0ms' },
     ]);
   });
 
@@ -591,5 +591,12 @@ describe('MonitorPanel: evidence DOM', () => {
       expect(injectedElements(doc)).toHaveLength(0);
       expect(text(section)).toContain(XSS);
     });
+  });
+});
+
+describe('monitorAlertView in zh', () => {
+  it('writes the crossed conditions without a space after the full-width colon', () => {
+    const { monitorAlertView } = load();
+    expect(monitorAlertView(alert(), 'zh').crossed?.text.startsWith('超出：为通常值的 3.2 倍')).toBe(true);
   });
 });
