@@ -16,14 +16,17 @@ export type ParsedBackfillArgs =
       dryRun: boolean;
       resumeBatchId: string | null;
       runner: RunnerName;
+      /** --access-groups: group keys of the tenant (D-16); null: no flag, each document's label is left untouched (everyone for a new one). */
+      accessGroups: string[] | null;
     }
   | { ok: false; error: string };
 
 export const USAGE = [
-  'usage: npm run rag:backfill -- --tenant <key> --source <folder|bucket|manifest>:<ref> [--root <dir>] [--budget <USD>] [--concurrency <n>] [--dry-run] [--runner worker|ray]',
+  'usage: npm run rag:backfill -- --tenant <key> --source <folder|bucket|manifest>:<ref> [--root <dir>] [--budget <USD>] [--concurrency <n>] [--access-groups <group keys>] [--dry-run] [--runner worker|ray]',
   '       npm run rag:backfill -- --tenant <key> --resume <batch_id> [--source <kind>:<ref>] [--root <dir>] [--runner worker|ray]',
+  '  --access-groups <key,key> makes every document of the batch visible to those access groups only (default: everyone).',
   '  The sample dry run always runs first. Without --budget, or with --dry-run, the command stops after the report (exit 2).',
-  '  Exit codes: 0 done, 1 failed, 2 report only, 3 the projection does not fit the budget, 64 usage.',
+  '  Exit codes: 0 done, 1 failed, 2 report only (or an unknown access group), 3 the projection does not fit the budget, 64 usage.',
 ].join('\n');
 
 export const DEFAULT_CONCURRENCY = 1;
@@ -31,7 +34,9 @@ const MAX_CONCURRENCY = 64;
 const MAX_BUDGET_USD = 1_000_000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SOURCE_KINDS: readonly SourceKind[] = ['folder', 'bucket', 'manifest'];
-const WITH_VALUE = new Set(['--tenant', '--source', '--root', '--budget', '--concurrency', '--resume', '--runner']);
+const WITH_VALUE = new Set(['--tenant', '--source', '--root', '--budget', '--concurrency', '--resume', '--runner', '--access-groups']);
+const MAX_ACCESS_GROUPS = 50;
+const GROUP_KEY = /^[a-z0-9][a-z0-9-]{0,62}$/;
 
 /**
  * `--tenant <key>` (required) with `--source <kind>:<ref>` for a new batch or `--resume <batch_id>`; `--budget`, `--concurrency` and
@@ -88,8 +93,19 @@ export function parseBackfillArgs(argv: string[]): ParsedBackfillArgs {
   const runner = values.get('--runner') ?? 'worker';
   if (runner !== 'worker' && runner !== 'ray') return { ok: false, error: '--runner needs worker or ray' };
 
+  let accessGroups: string[] | null = null;
+  const rawGroups = values.get('--access-groups');
+  if (rawGroups !== undefined) {
+    const keys = [...new Set(rawGroups.split(',').map((key) => key.trim().toLowerCase()).filter((key) => key !== ''))];
+    if (keys.length === 0 || keys.length > MAX_ACCESS_GROUPS) return { ok: false, error: `--access-groups needs 1 to ${MAX_ACCESS_GROUPS} group keys, separated by commas` };
+    const bad = keys.find((key) => !GROUP_KEY.test(key) || key === 'all');
+    if (bad !== undefined) return { ok: false, error: `--access-groups: not a group key: ${bad}` };
+    accessGroups = keys.sort();
+  }
+
   const resumeBatchId = values.get('--resume') ?? null;
   if (resumeBatchId !== null) {
+    if (accessGroups !== null) return { ok: false, error: '--resume continues the batch with the access groups it was started with' };
     if (!UUID.test(resumeBatchId)) return { ok: false, error: '--resume needs a batch id (a UUID)' };
     if (rawBudget !== undefined || rawConcurrency !== undefined) {
       return { ok: false, error: '--resume continues the batch with the budget and concurrency it was created with' };
@@ -99,7 +115,7 @@ export function parseBackfillArgs(argv: string[]): ParsedBackfillArgs {
     return { ok: false, error: '--source is required for a new batch' };
   }
 
-  return { ok: true, tenantKey, source, root, budgetUsd, concurrency, dryRun, resumeBatchId: resumeBatchId?.toLowerCase() ?? null, runner };
+  return { ok: true, tenantKey, source, root, budgetUsd, concurrency, dryRun, resumeBatchId: resumeBatchId?.toLowerCase() ?? null, runner, accessGroups };
 }
 
 const consoleIo: RunnerIo = { out: (line) => console.log(line), err: (line) => console.error(line) };
@@ -108,6 +124,31 @@ const consoleIo: RunnerIo = { out: (line) => console.log(line), err: (line) => c
 export type BackfillCliOverrides = Partial<Omit<OrchestrateDeps, 'signal' | 'io'>> & {
   resolveScope?: (tenantKey: string) => Promise<import('@/lib/rag/tenant/backfill-scope').BackfillScopeResult>;
 };
+
+/**
+ * --access-groups: the g:<id> keys of the named groups of the batch tenant. An unknown or unreadable key ends the command with exit 2 and a
+ * message naming the key, before any batch is created.
+ */
+async function resolveAccessGroups(
+  scope: import('@/lib/rag/tenant/scope').TenantScope,
+  groupKeys: readonly string[],
+  rpc: OrchestrateDeps['rpc'],
+  io: RunnerIo,
+  signal: AbortSignal,
+): Promise<string[] | null> {
+  const { accessKeysForGroupKeys } = await import('@/lib/rag/access/upload');
+  const { getIngestDeps } = await import('../deps');
+  try {
+    const result = await accessKeysForGroupKeys(scope, groupKeys, { db: () => rpc ?? getIngestDeps().db(), signal });
+    if (result.ok) return result.keys;
+    io.err(`[Backfill] --access-groups: ${result.reason === 'unknown_group' ? 'no access group of this tenant has the key' : 'not a group key'}: ${result.key}`);
+    return null;
+  } catch (error) {
+    if (signal.aborted) throw error;
+    io.err('[Backfill] --access-groups: the access groups could not be read');
+    return null;
+  }
+}
 
 /**
  * The CLI body: 0 done, 1 failed, 2 stopped after the report, 3 the projection does not fit the budget, 64 usage (unknown flags, a
@@ -143,6 +184,12 @@ export async function main(
 
   const deps: Partial<Omit<OrchestrateDeps, 'signal' | 'io'>> = { ...overrides };
   delete (deps as BackfillCliOverrides).resolveScope;
+  let accessKeys: string[] | undefined;
+  if (parsed.accessGroups !== null) {
+    const keys = await resolveAccessGroups(scope.scope, parsed.accessGroups, overrides.rpc, io, signal);
+    if (keys === null) return 2;
+    accessKeys = keys;
+  }
   try {
     const outcome = await orchestrate.runBackfill(
       {
@@ -154,6 +201,7 @@ export async function main(
         dryRun: parsed.dryRun,
         resumeBatchId: parsed.resumeBatchId,
         runner: parsed.runner,
+        ...(accessKeys ? { accessKeys } : {}),
       },
       { ...deps, signal, io },
     );

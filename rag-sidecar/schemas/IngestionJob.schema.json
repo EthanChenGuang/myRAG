@@ -38,6 +38,24 @@
       "additionalProperties": false,
       "description": "Settings frozen on a ledger job at enqueue.\n\nThe Phase 3.2 fields default to today's behaviour and are written only when they differ from it. The model\nkeeps extra=\"forbid\", so an older sidecar rejects a snapshot carrying them: deploy the sidecar first.",
       "properties": {
+        "access_keys": {
+          "anyOf": [
+            {
+              "items": {
+                "pattern": "^(all|[gu]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$",
+                "type": "string"
+              },
+              "maxItems": 50,
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Access Keys"
+        },
         "approval": {
           "anyOf": [
             {
