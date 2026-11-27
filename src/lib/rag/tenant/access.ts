@@ -49,26 +49,6 @@ export function scopeAccessFilter(scope: TenantScope): ScopeAccessFilter {
   return { mode: 'keys', keys: access.keys, setHash: access.setHash };
 }
 
-/** Two filters describe the same access: same mode and, for keys, the same key set and set hash. */
-export function sameAccessFilter(a: ScopeAccessFilter, b: ScopeAccessFilter): boolean {
-  if (a.mode !== b.mode) return false;
-  if (a.mode === 'keys' && b.mode === 'keys') {
-    if (a.setHash !== b.setHash) return false;
-    const left = [...new Set(a.keys)].sort();
-    const right = [...new Set(b.keys)].sort();
-    return left.length === right.length && left.every((key, index) => key === right[index]);
-  }
-  return true;
-}
-
-/** The only place a filter becomes SQL arguments: off sends nothing, so the request body is today's. */
-export function accessRpcArgs(filter: ScopeAccessFilter): { p_access_keys?: string[]; p_access_all?: boolean } {
-  if (filter.mode === 'off') return {};
-  if (filter.mode === 'admin_all') return { p_access_keys: ['all'], p_access_all: true };
-  if (filter.keys.length === 0) throw new Error('[RAG Access] keys filter without keys');
-  return { p_access_keys: [...filter.keys], p_access_all: false };
-}
-
 /** D-06, D-07: who is asking, always established by the server (session, signed token, embed configuration, eval admission). */
 export type AccessIdentity =
   | { kind: 'user'; userId: string }

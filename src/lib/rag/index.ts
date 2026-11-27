@@ -342,7 +342,6 @@ export { resolveAnswerLanguage, previousTurnLanguage, type AnswerLanguageSource 
 // Phase 5.2.1 D-76, D-87: the voice calculation route and the voice-rag calculation offer and prompt budget.
 export { evaluateCalc } from './calc/evaluate';
 export { runCalcChecks } from './calc/check-step';
-export { shouldOfferCalcTool } from './calc/signal';
 export {
   loadVoiceCalcSources,
   voiceCalcSources,
