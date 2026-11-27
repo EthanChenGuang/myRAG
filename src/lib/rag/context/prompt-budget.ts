@@ -49,6 +49,11 @@ export interface PromptBudgetInput {
   answerLanguage?: string;
   /** Adds the configured MCP schema reserve to the tools part. */
   mcpToolReserve?: boolean;
+  /**
+   * D-87: token counts a caller holds instead of text (voice: the system reserve and the agent-reported history). They are
+   * added to their part as given, never multiplied by the family factor, and reserved history is never trimmed.
+   */
+  reservedTokens?: { system?: number; history?: number };
   overflowMode?: OverflowMode;
   config?: PromptBudgetConfig;
   calibration?: TokenizerCalibration;
@@ -74,6 +79,7 @@ interface PlanState {
   count: (text: string) => number;
   fixed: Record<Exclude<PartName, 'documents'>, Counted>;
   turns: readonly CountedTurn[];
+  reservedHistory: number;
   droppedTurns: number;
   note: (Counted & { text: string }) | null;
   noteKept: boolean;
@@ -146,7 +152,7 @@ function historyCounted(state: PlanState): Counted {
   const kept = state.turns.slice(state.droppedTurns);
   const note = state.note && state.noteKept && state.droppedTurns > 0 ? state.note : null;
   return {
-    tokens: sum(kept.map((t) => t.tokens)) + (note?.tokens ?? 0),
+    tokens: state.reservedHistory + sum(kept.map((t) => t.tokens)) + (note?.tokens ?? 0),
     raw: sum(kept.map((t) => t.raw)) + (note?.raw ?? 0),
   };
 }
@@ -186,8 +192,10 @@ export function planPromptBudget(input: PromptBudgetInput): PromptBudgetPlan {
   };
   const { window, source: windowSource } = windowFor(input.window, config);
   const toolsCounted = counted(serialized(input.parts.tools));
+  const reserved = (value: number | undefined) => (typeof value === 'number' && value > 0 ? Math.ceil(value) : 0);
+  const systemCounted = counted(input.parts.system);
   const fixed = {
-    system: counted(input.parts.system),
+    system: { raw: systemCounted.raw, tokens: systemCounted.tokens + reserved(input.reservedTokens?.system) },
     rules: counted(input.parts.rules),
     tools: { raw: toolsCounted.raw, tokens: toolsCounted.tokens + (input.mcpToolReserve ? config.mcp_tool_reserve : 0) },
     question: counted(input.parts.question),
@@ -208,6 +216,7 @@ export function planPromptBudget(input: PromptBudgetInput): PromptBudgetPlan {
       const c = sum(messages.map((m) => count(messageText(m))));
       return { messages, raw: c, tokens: Math.ceil(c * factor) };
     }),
+    reservedHistory: reserved(input.reservedTokens?.history),
     droppedTurns: 0,
     note: noteText ? { text: noteText, ...counted(noteText) } : null,
     noteKept: true,

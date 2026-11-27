@@ -113,6 +113,28 @@ describe('planPromptBudget', () => {
     expect(plan.keptHistory.some((m) => m.role === 'tool')).toBe(false);
   });
 
+  it('D-87: reserved system and history tokens count as fixed parts, are never trimmed and the question still decides exceeded', () => {
+    const voice = (window: number) =>
+      planPromptBudget(
+        input({
+          window,
+          parts: { system: '', rules: '', tools: '', question: chars(500, 'q') },
+          history: [],
+          answerReserve: 600,
+          documentTarget: 2000,
+          reservedTokens: { system: 1200, history: 1000 },
+        }),
+      );
+    const plan = voice(5000);
+    expect(plan.status).toBe('ok');
+    expect(plan.documentBudget).toBe(5000 - 1200 - 1000 - 500 - 600 - (Math.ceil(0.05 * 5000) + 256));
+    expect(plan.trace.parts).toMatchObject({ system: 1200, history: 1000, question: 500, reserve: 600 });
+    expect(plan.trace.dropped_history_turns).toBe(0);
+    expect(PromptBudgetTraceSchema.safeParse(plan.trace).success).toBe(true);
+    expect(voice(100000).documentBudget).toBe(2000);
+    expect(voice(2500).status).toBe('exceeded');
+  });
+
   it('uses the default window with the unknown flag when the window is not known', () => {
     const plan = planPromptBudget(input({ window: null }));
     expect(plan.trace.window).toBe(16384);

@@ -8,8 +8,11 @@ import {
     createTraceCollector,
     deriveVoiceKeywords,
     finishTrace,
+    fixedText,
     labelledUntaggedVoiceContext,
     labelTaggedVoiceContext,
+    planPromptBudget,
+    promptBudgetConfig,
     readAnswerConfig,
     readFeedbackLoopConfig,
     readSecurityConfig,
@@ -43,7 +46,17 @@ const bodySchema = z.object({
     query: z.string().min(1).max(4000),
     matchCount: z.number().int().min(1).max(20).optional(),
     history: z.array(historyTurnSchema).max(MAX_HISTORY_TURNS).optional(),
+    // Phase 5.2.1 D-87: the agent's model window and its own (already trimmed) history size; read only with RAG_PROMPT_BUDGET.
+    modelContextLength: z.number().int().min(1024).max(10_000_000).optional(),
+    historyTokens: z.number().int().min(0).max(10_000_000).optional(),
 });
+
+const BODY_FIELD_ERRORS: Record<string, string> = {
+    matchCount: 'Invalid matchCount',
+    history: 'Invalid history',
+    modelContextLength: 'Invalid modelContextLength',
+    historyTokens: 'Invalid historyTokens',
+};
 
 /** The session binding of a history turn: the first 22 characters of base64url SHA-256 over the raw scope token. */
 function historyBinding(rawToken: string): string {
@@ -89,6 +102,49 @@ function voiceCalcOffer(
     return { offered: true, check: config.calcCheck, sources: voiceCalcSources(results), tool_schema: CALC_REQUEST_JSON_SCHEMA };
 }
 
+interface VoiceBudget {
+    status: 'ok' | 'exceeded';
+    documentBudget: number;
+    counts: Record<string, number>;
+}
+
+/**
+ * Phase 5.2.1 D-87: the voice document budget. With the agent's window the planner sizes it from the window minus the voice
+ * system reserve, the agent-reported history, the question, the voice answer reserve and the margin, capped at the voice
+ * budget; without a window it is the fixed voice budget from config/rag/prompt-budget.json.
+ */
+function voiceBudget(query: string, modelContextLength: number | undefined, historyTokens: number | undefined): VoiceBudget {
+    const config = promptBudgetConfig();
+    if (modelContextLength === undefined) {
+        return { status: 'ok', documentBudget: config.voice_document_budget, counts: { documents: config.voice_document_budget, fixed: 1 } };
+    }
+    const plan = planPromptBudget({
+        window: modelContextLength,
+        family: null,
+        parts: { system: '', rules: '', tools: '', question: query },
+        history: [],
+        reservedTokens: { system: config.voice_system_reserve, history: historyTokens ?? 0 },
+        answerReserve: config.voice_answer_reserve,
+        documentTarget: config.voice_document_budget,
+        config,
+    });
+    const { parts } = plan.trace;
+    return {
+        status: plan.status,
+        documentBudget: plan.documentBudget,
+        counts: {
+            window: plan.trace.window,
+            documents: plan.documentBudget,
+            system: parts.system,
+            history: parts.history,
+            question: parts.question,
+            reserve: parts.reserve,
+            near_limit: plan.trace.near_limit ? 1 : 0,
+            fixed: 0,
+        },
+    };
+}
+
 function fellBack(result: RetrievalResult): boolean {
     return result.stages.some((stage) => stage.name === 'pipeline_fallback');
 }
@@ -123,7 +179,7 @@ export async function POST(req: NextRequest) {
         const parsed = bodySchema.safeParse(rawBody);
         if (!parsed.success) {
             const field = parsed.error.issues[0]?.path[0];
-            const error = field === 'matchCount' ? 'Invalid matchCount' : field === 'history' ? 'Invalid history' : 'Missing or invalid query';
+            const error = (typeof field === 'string' ? BODY_FIELD_ERRORS[field] : undefined) ?? 'Missing or invalid query';
             return NextResponse.json({ error }, { status: 400 });
         }
         const { query, matchCount = 5 } = parsed.data;
@@ -149,12 +205,29 @@ export async function POST(req: NextRequest) {
             trace.record({ name: 'voice_history', status: 'ok', startedAt: at, endedAt: at, counts: { history_kept: history.length, history_dropped: dropped } });
         }
 
+        const answerConfig = readAnswerConfig();
+        let answerTurn: ReturnType<typeof voiceAnswerTurn> | undefined;
+        const turnOf = () => (answerTurn ??= voiceAnswerTurn(answerConfig, query, history));
+
+        let budget: VoiceBudget | undefined;
+        if (answerConfig.promptBudget) {
+            budget = voiceBudget(query, parsed.data.modelContextLength, parsed.data.historyTokens);
+            if (budget.status === 'exceeded') {
+                console.warn('[Internal RAG] Voice prompt budget exceeded', { window: budget.counts.window });
+                return NextResponse.json(
+                    { error: 'prompt_budget_exceeded', message: fixedText('notices.prompt_too_long', turnOf().answerLanguage ?? '') },
+                    { status: 413 },
+                );
+            }
+            trace ??= createTraceCollector({ profile: 'voice', tenantKey: scopeKey(scope.scope) });
+        }
+
         const classification = env.RAG_QUERY_LAYER === 'true' ? classifyQuery(query) : undefined;
         const result = await runRetrieval({
             scope: scope.scope,
             query,
             profile: 'voice',
-            options: { maxResults: matchCount },
+            options: { maxResults: matchCount, ...(budget ? { documentTokenBudget: budget.documentBudget } : {}) },
             signal: req.signal,
             ...(logged
                 ? { logContext: { channel: 'voice', userId: scope.scope.userId, organizationId: scope.scope.organizationId } as const }
@@ -163,6 +236,11 @@ export async function POST(req: NextRequest) {
             ...(classification ? { classification } : {}),
             ...(trace ? { trace } : {}),
         });
+        if (trace && budget) {
+            const at = trace.now();
+            const counts = { ...budget.counts, dropped_documents: result.packing?.droppedDocuments ?? 0 };
+            trace.record({ name: 'prompt_budget', status: 'ok', startedAt: at, endedAt: at, counts });
+        }
         if (trace) finishTrace(trace, result, { query });
         const headers: Record<string, string> = voiceServerCondenses() && !fellBack(result) ? { [SERVER_REWRITE_HEADER]: '1' } : {};
 
@@ -181,8 +259,7 @@ export async function POST(req: NextRequest) {
         const keywords = deriveVoiceKeywords(query);
         const contextTagging = readSecurityConfig().contextTagging;
         const taggedContext = contextTagging && typeof voice.context === 'string' && voice.context.trim() !== '' ? voice.context : null;
-        const answerConfig = readAnswerConfig();
-        const turn = voiceAnswerTurn(answerConfig, query, history);
+        const turn = turnOf();
         const calc = voiceCalcOffer(answerConfig, query, voice.results, turn.answerLanguage);
         // The block follows the Phase 5.1 reminder; with tagging off it follows the agent's own context format. '' changes nothing.
         // With the calculation offered each block carries its alias label, the same aliases the agent gives its results (D-76).
