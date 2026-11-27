@@ -883,3 +883,10 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
 - 23:38Z OWNER chose (b) for 4.2 W-1 (no post-hoc metric change; re-register, then re-run) -> quick-42-w1-reregister. The pre-registration commit is pushed before the re-run commit.
 - 23:39Z Train 38 builder pushed 859c2a95: corpus re-pins, the 0930 re-apply rule in tests, a version-scope question fix, and timeouts (vitest hook 180/test 120, eval-corpus 240 s, ts-db 25->40 min). PR #135 CI is re-running. fix/ci-timeouts was told to stay compatible and focus on rebalancing the shards.
 - 23:42Z OpenRouter key saved (openrouter.ai, myRAG env); route A added to the 06.2-42 route-B session. PR #135 ts-checks red: the check-workflows cap on ts-db (25) vs the new 40. The train-38 builder was told to raise the lint cap with a reason and update its test.
+- 23:46Z VERIFY 5.2: PASS_WITH_GAPS (verify/05.2 9d95a09f0); security SECURED, 6 items pending live.
+  - Gap 1 (it->es refusal) is covered by quick-it-refusal-locale in train 40.
+  - B1, B2, 6, 5 and 2 (LIVE.md checklist) -> quick-52-fixes.
+  - Gap 7 -> verify/05.2-audits.
+  - Live items 05.2-39/40 belong to the owner.
+  - Archived.
+- PHASE VERIFICATION ROUND: all 13 requested phases now have reports (3.1.1, 3.2.1, 3.2 pending final, 3.3 pending, 4.1, 4.1.1, 4.2, 4.3, 4.4, 5.1.1, 5.2, 5.3, 6.2).
