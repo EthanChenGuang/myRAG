@@ -72,6 +72,7 @@ import { SourceImagesGrid } from './source-images-grid'
 import type { SourceImageData } from '@/types/chat'
 import { CitationChip } from './citation-chip'
 import { citationSourcesFor } from '@/components/providers/sources-provider'
+import { withdrawnCitationNumbers } from '@/lib/citations/display'
 import { citeAliasFromHref, isCitationAware, renderCitationMarkers, type CitationMarkerTarget, type CitationRenderPhase } from '@/lib/chat/citation-markers'
 import { pickAnswerMetadata } from '@/lib/chat/answer-metadata'
 import { useAnswerRecordsStore } from '@/lib/stores/answer-records-store'
@@ -2756,6 +2757,7 @@ ChatMessage = function ({
   );
   const answerId = answerMetadata?.answerId;
   const answerDocuments = useAnswerRecordsStore((s) => (answerId ? s.records[answerId]?.documents : undefined));
+  const withdrawnCitationKey = answerMetadata ? withdrawnCitationNumbers(answerMetadata.citations ?? [], answerDocuments ?? {}).join(',') : '';
   const citationMessageId = answerMetadata ? message.id : undefined;
   const isGhostChat = useGhostModeStore((s) => s.isGhostMode);
   const metadataRecord = messageMetadata && typeof messageMetadata === 'object' ? (messageMetadata as Record<string, unknown>) : undefined;
@@ -4054,7 +4056,7 @@ ChatMessage = function ({
         const n = citationNumbers.get(citeAlias);
         return n === undefined
           ? <span>{children}</span>
-          : <CitationChip n={n} messageId={citationMessageId} buildSources={buildCitationSources} />;
+          : <CitationChip n={n} messageId={citationMessageId} buildSources={buildCitationSources} withdrawn={withdrawnCitationKey.split(',').includes(String(n))} />;
       }
       return (
         <a
@@ -4162,7 +4164,7 @@ ChatMessage = function ({
         </div>
       );
     }
-  }), [isCodeCopied, markerCitations, citationNumbers, citationMessageId, buildCitationSources]);
+  }), [isCodeCopied, markerCitations, citationNumbers, citationMessageId, buildCitationSources, withdrawnCitationKey]);
 
   // Set up layout stabilization on initial render
   useEffect(() => {

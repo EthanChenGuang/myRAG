@@ -14,16 +14,18 @@ export interface CitationChipProps {
   n: number;
   messageId: string;
   buildSources: () => Source[];
+  withdrawn?: boolean;
   className?: string;
 }
 
 /** A superscript citation number; clicking it opens the sources panel at that citation's snapshot entry. */
-export function CitationChip({ n, messageId, buildSources, className }: CitationChipProps) {
+export function CitationChip({ n, messageId, buildSources, withdrawn = false, className }: CitationChipProps) {
   const { language } = useLanguage();
   const { setSources, trackedSetIsSourcesOpen } = useSources();
   const currentChatId = useChatStore((s) => s.currentChatId);
   const { focusCitation } = useCitationFocusStore(useShallow((s) => ({ focusCitation: s.focusCitation })));
-  const label = answerQualityStrings(language).chipAriaLabel(n);
+  const strings = answerQualityStrings(language);
+  const label = withdrawn ? strings.chipWithdrawnAriaLabel(n) : strings.chipAriaLabel(n);
 
   const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
@@ -49,7 +51,9 @@ export function CitationChip({ n, messageId, buildSources, className }: Citation
         className={cn(
           'relative inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[0.65rem] font-semibold tabular-nums',
           'after:absolute after:-inset-2',
-          'bg-[#FF6417]/15 text-[#C24A0C] hover:bg-[#FF6417]/25 dark:bg-[#FF8A4D]/20 dark:text-[#FFB48A] dark:hover:bg-[#FF8A4D]/35',
+          withdrawn
+            ? 'bg-gray-500/15 text-gray-700 hover:bg-gray-500/25 dark:bg-white/10 dark:text-gray-300 dark:hover:bg-white/20'
+            : 'bg-[#FF6417]/15 text-[#C24A0C] hover:bg-[#FF6417]/25 dark:bg-[#FF8A4D]/20 dark:text-[#FFB48A] dark:hover:bg-[#FF8A4D]/35',
           'transition-colors duration-150 motion-reduce:transition-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FF6417]/60',
           'touch-manipulation',
           className,
