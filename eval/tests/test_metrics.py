@@ -1164,11 +1164,7 @@ def test_the_train_31_baselines_add_only_phase53_items_and_move_only_refusal_rat
 
     root = Path(__file__).resolve().parents[1]
     previous = Baseline.model_validate_json((root / "baselines" / "history" / f"{name}.pre-05.3-15.json").read_text(encoding="utf-8"))
-    # The train-31/32 record, kept in history when plan 05.2-29 added its golden items on top of train 32;
-    # eval/tests/test_golden_phase52.py compares it with the committed baselines.
-    current = Baseline.model_validate_json(
-        (root / "baselines" / "history" / f"{name}.pre-05.2-29.json").read_text(encoding="utf-8")
-    )
+    current = Baseline.model_validate_json((root / "baselines" / f"{name}.json").read_text(encoding="utf-8"))
     assert len(current.runs) >= 3
     assert previous.items is not None and current.items is not None
     golden = {
