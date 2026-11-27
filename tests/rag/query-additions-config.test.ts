@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test, vi, type MockInstance } from 'vitest';
+import { afterEach, beforeEach, describe, expect, expectTypeOf, test, vi, type MockInstance } from 'vitest';
 import {
   DEFAULT_ROUTING_FAST_MODEL,
   DEFAULT_ROUTING_QUALITY_MODEL,
@@ -9,6 +9,9 @@ import {
   scopeGateEnabledFor,
   type RagEnvInput,
 } from '@/lib/rag/config';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { LatencyBudgetsSchema } from '@/lib/rag-eval/contracts.generated';
 import { parseRunConfig, RUN_CONFIG_ENV_ALLOWLIST, RunConfigError } from '../../eval/harness/run-config.mts';
 
 let warn: MockInstance<(...args: unknown[]) => void>;
@@ -179,5 +182,73 @@ describe('eval run-config allowlist (D-10, D-16)', () => {
     expect(() => parseRunConfig({ name: 'bad-route', env: { RAG_MODEL_ROUTING: 'always' } }, 'test')).toThrow(RunConfigError);
     expect(() => parseRunConfig({ name: 'unknown', env: { RAG_SCOPE_GATE_THRESHOLD: '0.5' } }, 'test')).toThrow(RunConfigError);
     expect(RUN_CONFIG_ENV_ALLOWLIST).not.toContain('RAG_SCOPE_GATE_THRESHOLD');
+  });
+});
+
+describe('Phase 6.2 type extensions (P-32)', () => {
+  test('existing objects stay valid and the new optional fields carry the generated types', () => {
+    type RunInput = import('@/lib/rag/types').RunRetrievalInput;
+    type Variant = import('@/lib/rag/types').QueryVariant;
+    type Block = import('@/lib/rag/types').ContextBlock;
+    type Result = import('@/lib/rag/types').RetrievalResult;
+    expectTypeOf<RunInput['uiLanguage']>().toEqualTypeOf<string | undefined>();
+    expectTypeOf<RunInput['previousStandaloneQuery']>().toEqualTypeOf<string | null | undefined>();
+    expectTypeOf<RunInput['previousTurnLanguage']>().toEqualTypeOf<string | null | undefined>();
+    expectTypeOf<Variant['filters']>().toEqualTypeOf<import('@/lib/rag/backend/types').RetrievalFilters | undefined>();
+    expectTypeOf<Variant['filterApplied']>().toEqualTypeOf<boolean | undefined>();
+    expectTypeOf<Block['subQuestionIndexes']>().toEqualTypeOf<number[] | undefined>();
+    expectTypeOf<Result['scopeGate']>().toEqualTypeOf<import('@/lib/rag-eval/contracts.generated').ScopeGateResult | undefined>();
+    expectTypeOf<Result['searchesCounted']>().toEqualTypeOf<number | undefined>();
+    expectTypeOf<Result['speculative']>().toEqualTypeOf<import('@/lib/rag/types').SpeculativeTrace | undefined>();
+    expectTypeOf<'out_of_scope'>().toExtend<import('@/lib/rag/types').RetrievalSkipReason>();
+    expectTypeOf<'small_talk'>().toExtend<import('@/lib/rag/types').RetrievalSkipReason>();
+    expectTypeOf<Result['skipReason']>().toEqualTypeOf<import('@/lib/rag/types').RetrievalSkipReason | undefined>();
+
+    const variant: Variant = {
+      text: 'synthetic follow-up',
+      language: null,
+      kind: 'history_fallback',
+      filters: { currentOnly: true, docTypes: ['general'] },
+      filterApplied: true,
+    };
+    const phase6: Result = {
+      status: 'empty',
+      reason: 'no_candidates',
+      candidates: [],
+      context: '',
+      usedDocuments: [],
+      sourceImages: [],
+      links: [],
+      relevantChunks: [],
+      kept: [],
+      queryTerms: [],
+      refusalCandidate: false,
+      stages: [],
+      traceId: 'trace-synthetic',
+      queryContext: null,
+    };
+    expect(variant.kind).toBe('history_fallback');
+    expect(phase6.scopeGate).toBeUndefined();
+  });
+});
+
+describe('committed params and budgets (D-17, D-20, D-29)', () => {
+  test('query-params.json holds the four Phase 6.2 keys at the QueryParams defaults', () => {
+    const params = JSON.parse(readFileSync(join(process.cwd(), 'eval/config/query-params.json'), 'utf8'));
+    expect(params).toMatchObject({
+      language_confidence_threshold: 0.6,
+      routing_fast_max_context_tokens: 2000,
+      subq_filter_vocab_cap: 20,
+      langid_timeout_ms: 30,
+    });
+  });
+
+  test('latency-budgets.json carries a report-only scope_gate budget for chat and embed and none for voice', () => {
+    const budgets = LatencyBudgetsSchema.parse(JSON.parse(readFileSync(join(process.cwd(), 'eval/config/latency-budgets.json'), 'utf8')));
+    for (const profile of ['chat', 'embed'] as const) {
+      expect(budgets.profiles[profile]?.stages.scope_gate).toBe(5);
+      expect(budgets.profiles[profile]?.groups.scope_gate).toEqual({ p50_ms: 2, p95_ms: 5 });
+    }
+    expect(budgets.profiles.voice?.stages).not.toHaveProperty('scope_gate');
   });
 });
