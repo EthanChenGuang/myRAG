@@ -393,3 +393,42 @@ describe('secret hints and the masked-save rule (07-20, D-14)', () => {
     expect(reply.body).not.toContain('placeholder-');
   });
 });
+
+describe('GET /api/rag-pipeline/manifest (07-20, D-14)', () => {
+  interface ManifestEntry {
+    name: string;
+    group: string;
+    type: string;
+    label: string;
+    default: string;
+    value?: string | null;
+    secret?: { state: string; last4?: string };
+    help?: string;
+  }
+
+  it('returns every managed entry with metadata, saved values and secret hints only', async () => {
+    fs.appendFileSync(path.join(root, '.env.local'), 'VOYAGE_API_KEY=Qx7vLm9TpR2sWn4Kd8Hjzq9w\nRAG_PIPELINE=v2\n');
+    const reply = await call('GET', '/api/rag-pipeline/manifest');
+    expect(reply.status).toBe(200);
+    const data = JSON.parse(reply.body) as { success: boolean; entries: ManifestEntry[]; envModifiedAt: string };
+    const manifest = JSON.parse(fs.readFileSync('scripts/rag/env-manifest.json', 'utf8')) as { vars: Array<{ name: string; status: string }> };
+    const managed = manifest.vars.filter((v) => v.status === 'managed').map((v) => v.name);
+    expect(data.entries.map((e) => e.name)).toEqual(managed);
+    const byName = new Map(data.entries.map((e) => [e.name, e]));
+    expect(byName.get('RAG_PIPELINE')!.value).toBe('v2');
+    expect(byName.get('RAG_PIPELINE')!.group).toBe('retrieval');
+    expect(byName.get('VOYAGE_API_KEY')!.secret).toEqual({ state: 'set', last4: 'zq9w' });
+    expect(byName.get('VOYAGE_API_KEY')!.value).toBeUndefined();
+    expect(byName.get('COHERE_API_KEY')!.secret).toEqual({ state: 'unset' });
+    expect(byName.get('LAKERA_GUARD_API_KEY')!.type).toBe('secret');
+    expect(byName.get('RAG_INJECTION_LAKERA')!.help).toContain('Sends chunk text to Lakera, a third party');
+    expect(Number.isNaN(Date.parse(data.envModifiedAt))).toBe(false);
+    for (const leaked of ['Qx7vLm9TpR2sWn4Kd8Hj', 'placeholder-openai', 'placeholder-service-role', 'placeholder-pw']) {
+      expect(reply.body).not.toContain(leaked);
+    }
+  });
+
+  it('needs a loopback Host like every config route', async () => {
+    expect((await call('GET', '/api/rag-pipeline/manifest', { host: 'evil.example.test' })).status).toBe(403);
+  });
+});
