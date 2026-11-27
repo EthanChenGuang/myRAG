@@ -255,6 +255,14 @@ function buildFilters(input: RunRetrievalInput): RetrievalFilters {
   return { currentOnly: true, ...extra };
 }
 
+export const LEXICAL_SCORING_BM25 = 'lexical_scoring_bm25';
+export const LEXICAL_STATS_UNAVAILABLE = 'lexical_stats_unavailable';
+export const LEXICAL_BM25_FAILED = 'lexical_bm25_failed';
+
+export function lexicalScoringArg(_config: RagConfig): Record<string, never> {
+  return {};
+}
+
 function joinDetail(parts: readonly (string | undefined)[]): string | undefined {
   const present = parts.filter((part): part is string => part !== undefined && part.length > 0);
   return present.length > 0 ? present.join(';') : undefined;
