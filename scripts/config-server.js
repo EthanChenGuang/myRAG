@@ -5,6 +5,7 @@ const dotenv = require('dotenv');
 const { exec, spawn } = require('child_process');
 const multer = require('multer');
 const security = require('./config-server-security');
+const ragGate = require('./config-server-rag-gate');
 const app = express();
 const PORT = 3333;
 // Loopback only. CONFIG_UI_HOST can override it, but any other value exposes an unauthenticated .env editor to the network.
@@ -1281,6 +1282,36 @@ app.all(/^\/api\/scrapers\//, async (req, res) => {
     res.status(500).json({ error: 'Failed to proxy scraper API request: ' + error.message });
   }
 });
+
+// Phase 5.3 D-13, D-14: the pre-save setting check (POST /api/config/rag-gate/check, GET .../latest, GET .../:id).
+// A posted config goes through the same filtering as POST /api/config before it is compared and hashed.
+function prepareRagGateConfig(raw) {
+  const values = filterValidEnvVars(raw);
+  for (const [name, value] of Object.entries(values)) {
+    if (security.isSecretConfigEntry(name, '') && (value === '' || value === null || value === undefined)) delete values[name];
+  }
+  for (const [name, value] of Object.entries(values)) {
+    if (value === null || value === undefined) {
+      delete values[name];
+      continue;
+    }
+    const text = typeof value === 'object' ? (Array.isArray(value) ? value.join(',') : JSON.stringify(value)) : String(value);
+    const safe = security.toEnvLineValue(text);
+    if (safe === null) return null;
+    values[name] = safe;
+  }
+  return values;
+}
+
+ragGate.registerRagGateRoutes(
+  app,
+  ragGate.createRagGateRunner({
+    repoRoot: REPO_ROOT,
+    spawn,
+    prepareConfig: prepareRagGateConfig,
+    appBaseUrl: () => getMainAppBaseUrl(),
+  }),
+);
 
 // API endpoint to create a new .env.local with template
 app.post('/api/config/create', (req, res) => {

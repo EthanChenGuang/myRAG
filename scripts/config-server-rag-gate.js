@@ -660,7 +660,95 @@ function createRagGateRunner(options) {
   };
 }
 
-function registerRagGateRoutes() {}
+const CHECK_FIELDS = [
+  'check_id',
+  'status',
+  'stage',
+  'started_at',
+  'finished_at',
+  'mode',
+  'cached',
+  'changed_keys',
+  'result',
+  'error_reason',
+  'layers',
+  'rag_settings_hash',
+  'not_evaluated_on_real_set',
+  'not_evaluated',
+  'uncalibrated_cells',
+  'saved_as',
+];
+const BODY_KINDS = { config: 'config', prompt: 'prompt', models: 'models' };
+
+/** The check object of UI-SPEC 8.1 only: names, hashes and verdicts. */
+function publicCheck(check, { withSavedAs = false } = {}) {
+  const out = {};
+  for (const field of CHECK_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(check, field)) out[field] = check[field];
+  }
+  if (withSavedAs && out.saved_as === undefined) out.saved_as = null;
+  return out;
+}
+
+function validBody(body) {
+  if (!isPlainObject(body) || typeof body.kind !== 'string' || !Object.prototype.hasOwnProperty.call(BODY_KINDS, body.kind)) return false;
+  const payloadKey = BODY_KINDS[body.kind];
+  const allowed = new Set(['kind', 'force', payloadKey]);
+  if (Object.keys(body).some((key) => !allowed.has(key))) return false;
+  if (body.force !== undefined && typeof body.force !== 'boolean') return false;
+  const payload = body[payloadKey];
+  if (!isPlainObject(payload)) return false;
+  if (body.kind === 'prompt') {
+    if (typeof payload.preContext !== 'string') return false;
+    if (payload.postContext !== undefined && payload.postContext !== null && typeof payload.postContext !== 'string') return false;
+  }
+  if (body.kind === 'models') {
+    if (typeof payload.provider !== 'string') return false;
+    for (const key of ['openaiModels', 'openrouterModels', 'groqModels']) {
+      if (payload[key] !== undefined && !Array.isArray(payload[key])) return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * D-14: POST /api/config/rag-gate/check, GET /api/config/rag-gate/check/latest and GET /api/config/rag-gate/check/:id.
+ * Mounted after securityMiddleware and express.json(), so the loopback and x-config-ui rules apply. JSON answers only.
+ */
+function registerRagGateRoutes(app, runner) {
+  app.post('/api/config/rag-gate/check', async (req, res) => {
+    if (!validBody(req.body)) return res.status(400).json({ error: 'invalid_body' });
+    try {
+      const answer = await runner.start(req.body);
+      const body = answer.body && answer.body.check_id && answer.body.status ? publicCheck(answer.body) : answer.body;
+      return res.status(answer.status).json(body);
+    } catch {
+      console.error('[Config Gate] check could not be started');
+      return res.status(500).json({ error: 'rag_gate_failed' });
+    }
+  });
+
+  app.get('/api/config/rag-gate/check/latest', (req, res) => {
+    try {
+      const check = runner.latest();
+      if (!check) return res.status(404).json({ error: 'not_found' });
+      return res.json(publicCheck(check, { withSavedAs: true }));
+    } catch {
+      return res.status(500).json({ error: 'rag_gate_failed' });
+    }
+  });
+
+  app.get('/api/config/rag-gate/check/:id', (req, res) => {
+    try {
+      const id = req.params.id;
+      const check = typeof id === 'string' && UUID_RE.test(id) ? runner.get(id) : null;
+      if (!check) return res.status(404).json({ error: 'not_found' });
+      return res.json(publicCheck(check));
+    } catch {
+      return res.status(500).json({ error: 'rag_gate_failed' });
+    }
+  });
+}
 
 module.exports = {
   CHECK_TIMEOUT_MS,
