@@ -1,10 +1,11 @@
 import type { StreamTextTransform, ToolSet } from 'ai';
+import type { AnswerNotice } from '@/lib/rag-eval/contracts.generated';
 import { z } from 'zod/v3';
 import type { AnswerConfig } from './answer-config';
 import { buildAnswerChecksInput, type AnswerChecksInput } from './answer-checks';
 import { createAnswerCollector, type AnswerCollector } from './answer-collector';
 import { composeAnswerRules, composedPartIds, type AnswerRuleId } from './answer-rules';
-import { buildAnswerTransforms, guardSlot } from './answer-transforms';
+import { buildAnswerTransforms, guardSlot, type CalcCheckSlotInput } from './answer-transforms';
 import type { CalcBlockOptions } from './calc-block';
 import { emitNotice } from './notices';
 import { decideOutputCap as decideCap, effectiveMaxOutputTokens, type OutputCapDecision } from './output-cap';
@@ -118,6 +119,11 @@ export interface AnswerTransformOptions {
   guard?: OutputGuardTurnSources;
   /** Phase 5.2.1 D-72: the calculation-block transform options; absent adds no slot. */
   calcBlock?: CalcBlockOptions | null;
+  /**
+   * Phase 5.2.1 D-73: the calculation check at the final finish-step; its notices go to this turn's collector in the answer
+   * language. Absent, or a turn without a collector or an answer language, adds no slot.
+   */
+  calcCheck?: Omit<CalcCheckSlotInput, 'addNotice' | 'answerLanguage'> | null;
 }
 
 const BodyChannelSchema = z.enum(['web', 'whatsapp']);
@@ -269,7 +275,18 @@ export function createAnswerTurn(input: AnswerTurnInput): AnswerTurn {
               onStripped: (count) => active.countStripped(count),
             })
           : null;
-      chain = buildAnswerTransforms({ citationTransforms, sentinel, ...calcBlock, guard: guard.transform(), noticeCollector: active.transforms() });
+      const calcCheck =
+        options.calcCheck && answerLanguage !== null
+          ? { calcCheck: { ...options.calcCheck, answerLanguage, addNotice: (notice: AnswerNotice) => active.addNotice(notice) } }
+          : {};
+      chain = buildAnswerTransforms({
+        citationTransforms,
+        sentinel,
+        ...calcBlock,
+        guard: guard.transform(),
+        ...calcCheck,
+        noticeCollector: active.transforms(),
+      });
       return chain;
     },
     finishMetadata() {

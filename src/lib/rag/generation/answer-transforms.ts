@@ -1,15 +1,15 @@
-import type { StreamTextTransform, ToolSet } from 'ai';
+import type { StreamTextTransform, TextStreamPart, ToolSet } from 'ai';
 import type { AnswerNotice } from '@/lib/rag-eval/contracts.generated';
 import { createNoticeState } from './answer-collector';
 import type { AnswerChannel } from './answer-turn';
 import { emitNotice } from './notices';
 import { applySentinelToText } from './sentinel';
 import type { AnswerConfig } from './answer-config';
-import { calcBlockTransform, extractCalcBlocks, type CalcBlockExtraction, type CalcBlockOptions } from './calc-block';
+import { calcBlockTransform, extractCalcBlocks, type CalcBlockExtraction, type CalcBlockOptions, type CalcBlockTransform } from './calc-block';
 import { guardWholeText, type OutputGuardLinkSummary, type OutputGuardPolicy } from '../security/output-guard';
 import { outputGuardTransform, type OutputGuardTransformOptions } from '../security/output-guard-stream';
 import type { CalcCheck } from '@/lib/rag-eval/contracts.generated';
-import type { CalcBlock, CalcReviewReason } from '../calc/check-step';
+import { runCalcChecks, type CalcBlock, type CalcReviewReason } from '../calc/check-step';
 import type { CalcTraceHolder } from '../calc/trace-holder';
 
 type Transform = StreamTextTransform<ToolSet>;
@@ -72,10 +72,92 @@ export interface CalcCheckSlotInput {
 export function buildAnswerTransforms(parts: AnswerTransformParts): Transform[] {
   const rest: Transform[] = [];
   const calcBlock = parts.calcBlock && typeof parts.calcBlock === 'object' ? calcBlockTransform(parts.calcBlock) : parts.calcBlock;
-  for (const slot of [parts.sentinel, calcBlock, parts.guard]) if (slot) rest.push(slot);
+  const blockRawText = calcBlock && typeof (calcBlock as Partial<CalcBlockTransform>).rawText === 'function' ? (calcBlock as CalcBlockTransform).rawText : undefined;
+  const calcCheck = parts.calcCheck ? calcCheckTransform({ ...parts.calcCheck, rawText: parts.calcCheck.rawText ?? blockRawText }) : null;
+  for (const slot of [parts.sentinel, calcBlock, parts.guard, calcCheck]) if (slot) rest.push(slot);
   if (parts.noticeCollector) rest.push(...parts.noticeCollector);
   if (rest.length === 0) return parts.citationTransforms as Transform[];
   return [...parts.citationTransforms, ...rest];
+}
+
+type Part = TextStreamPart<ToolSet>;
+
+function checkErrorRun(input: CalcCheckSlotInput, startedAt: number): { run: CalcCheckRun; notices: AnswerNotice[] } {
+  const check: CalcCheck = { status: 'not_verified', stated: null, recomputed: null, unit: null, trace_hash: null, origin: null, reason: 'check_error', stated_span: null };
+  let notices: AnswerNotice[] = [];
+  try {
+    notices = [emitNotice('calc_not_verified', { language: input.answerLanguage })];
+  } catch {
+    notices = [];
+  }
+  return { run: { checks: [check], primary: check, reviewReasons: ['calc_unverified'], durationMs: Math.max(0, Date.now() - startedAt) }, notices };
+}
+
+/**
+ * D-73, D-75: runs the calculation check once, at the first finish-step whose reason is not tool-calls (or at finish when no such
+ * step came), before forwarding it, so the notice stage after this slot renders the notices in the same response. A tool-calls
+ * finish-step anchors the tool traces of that step at the current text offset. Nothing is held: every part is forwarded at once
+ * and the text is never rewritten. A failure is not_verified with check_error and never breaks the stream (T-05.2.1-41).
+ */
+export function calcCheckTransform(input: CalcCheckSlotInput): Transform {
+  return () => {
+    let seen = '';
+    let done = false;
+    const rawText = () => (input.rawText ? input.rawText() : seen);
+    const check = () => {
+      if (done) return;
+      done = true;
+      const startedAt = Date.now();
+      let outcome: { run: CalcCheckRun; notices: AnswerNotice[] };
+      try {
+        const result = runCalcChecks({
+          traces: input.holder.traces(),
+          invalid: input.holder.invalid(),
+          offered: input.offered,
+          rawText: rawText(),
+          blocks: input.blocks,
+          question: input.question,
+          answerLanguage: input.answerLanguage,
+        });
+        outcome = {
+          run: { checks: result.checks, primary: result.primary, reviewReasons: result.reviewReasons, durationMs: Math.max(0, Date.now() - startedAt) },
+          notices: result.notices,
+        };
+      } catch {
+        outcome = checkErrorRun(input, startedAt);
+      }
+      for (const notice of outcome.notices) {
+        try {
+          input.addNotice(notice);
+        } catch {
+          // a notice that cannot be added never fails the stream
+        }
+      }
+      try {
+        input.sink.record(outcome.run);
+      } catch {
+        // the sink is the route's; it never fails the stream
+      }
+    };
+    return new TransformStream<Part, Part>({
+      transform(part, controller) {
+        if (part.type === 'text-delta' && !input.rawText) seen += part.text;
+        if (part.type === 'finish-step') {
+          if (part.finishReason === 'tool-calls') {
+            try {
+              input.holder.markToolCall(rawText().length);
+            } catch {
+              // anchoring is best effort; the check falls back to the end of the text
+            }
+          } else {
+            check();
+          }
+        }
+        if (part.type === 'finish') check();
+        controller.enqueue(part);
+      },
+    });
+  };
 }
 
 /** D-36: the guard slot; null with RAG_OUTPUT_GUARD off, so the chain is exactly the one without the guard. */
