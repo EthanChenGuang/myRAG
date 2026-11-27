@@ -8,6 +8,7 @@ import {
   createEmptyFixtureDatabase,
   prechunkedWriter,
   relexFixtureChunks,
+  seedTerminology,
   type DeploymentMode,
   type EmptyFixtureDatabase,
   type FixtureDatabase,
@@ -17,6 +18,7 @@ import { RunConfigError } from './run-config.mts';
 import { isTableSplitItem, loadTableSplitTenants, tableSplitCorpusParts, type TableSplitTenant } from './table-split.mts';
 import { isTemplatedItem, loadTemplatedFixtures, type TemplatedFixture } from './templated-fixtures.mts';
 import { phase33ProcessEnv, phase33SeedParts, seedTemplatedTenant } from './templated-seed.mts';
+import { isQ62Item, loadQ62IngestTenant, q62CorpusParts, type Q62Tenant } from './q62-fixtures.mts';
 import type { ChunkingProfile } from '../../src/lib/rag-eval/contracts.generated.ts';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { IngestInput } from '@/lib/rag/ingest/types';
@@ -141,14 +143,18 @@ export function ingestModeGoldenPaths(): string[] {
 }
 
 /**
- * How ingest mode routes golden items by category: table_split items run against their isolated tenants (table-split.mts) after
- * every other item, so the other items run exactly as they did before the table documents existed (research Pitfall 10).
+ * How golden items are routed by category: table_split items run against their isolated tenants (table-split.mts) and q62 items
+ * (scoped_compound, glossary, version_compare, or tagged off_domain) against the isolated q62 tenant (q62-fixtures.mts), both after
+ * every other item, so the other items run exactly as they did before those documents existed (research Pitfall 10, 6.2 P-25).
  */
-export function partitionIngestModeItems<T extends { category: string }>(items: T[]): { main: T[]; tableSplit: T[]; templated: T[] } {
+export function partitionIngestModeItems<T extends { category: string; tags?: readonly string[] | null }>(
+  items: T[],
+): { main: T[]; tableSplit: T[]; templated: T[]; q62: T[] } {
   return {
-    main: items.filter((item) => !isTableSplitItem(item)),
+    main: items.filter((item) => !isTableSplitItem(item) && !isQ62Item(item)),
     tableSplit: items.filter((item) => isTableSplitItem(item)),
     templated: items.filter((item) => isTemplatedItem(item)),
+    q62: items.filter((item) => !isTableSplitItem(item) && isQ62Item(item)),
   };
 }
 
@@ -186,6 +192,7 @@ function ingestCorpusSha256(
   ingestEnv?: Record<string, string>,
   templated: TemplatedFixture[] = [],
   seedParts: readonly string[] = [],
+  q62 = false,
 ): string {
   const hash = crypto.createHash('sha256').update('fixture-mode:ingest').update(Buffer.from([0])).update(corpusSha256);
   for (const fixture of parseFixtures) hash.update(Buffer.from([0])).update(`parse:${fixture.filename}:${fixture.sha256}`);
@@ -195,6 +202,7 @@ function ingestCorpusSha256(
   for (const fixture of templated) hash.update(Buffer.from([0])).update(`templated:${fixture.file_name}:${fixture.file_sha256}`);
   for (const name of Object.keys(ingestEnv ?? {}).sort()) hash.update(Buffer.from([0])).update(`ingest_env:${name}=${ingestEnv?.[name]}`);
   for (const part of seedParts) hash.update(Buffer.from([0])).update(part);
+  if (q62) for (const part of q62CorpusParts()) hash.update(Buffer.from([0])).update(part);
   return hash.digest('hex');
 }
 
@@ -431,11 +439,23 @@ export async function buildIngestFixtureDatabase(options: {
   templated?: boolean;
   /** With templated: only these templated fixture ids (a restricted build for tests). */
   templatedFixtureIds?: string[];
+  /** After the fixture tenant is filled, load the Phase 6.2 documents into the isolated q62 tenant (q62-fixtures.mts); inline only. */
+  q62?: boolean;
 }): Promise<
-  FixtureDatabase & { buildState: IngestFixtureBuildState; routingSummary?: IngestRoutingSummary; tableSplitTenants?: TableSplitTenant[] }
+  FixtureDatabase & {
+    buildState: IngestFixtureBuildState;
+    routingSummary?: IngestRoutingSummary;
+    tableSplitTenants?: TableSplitTenant[];
+    q62Tenant?: Q62Tenant;
+  }
 > {
   const { deploymentMode, routing } = options;
   const tableSplit = options.tableSplit === true;
+  const q62 = options.q62 === true;
+  if (q62 && routing) throw new Error('[Ingest Mode] the q62 tenant is loaded by inline ingest(); drop its items under --routing');
+  if (q62 && (options.continueFrom || options.onAfterCorpusSlice || options.splitAtCorpusIndex !== undefined)) {
+    throw new Error('[Ingest Mode] the q62 tenant is loaded only by a build in one pass');
+  }
   if (tableSplit && routing) throw new Error('[Ingest Mode] the table_split tenants are loaded by inline ingest(); drop them under --routing');
   if (tableSplit && (options.continueFrom || options.onAfterCorpusSlice || options.splitAtCorpusIndex !== undefined)) {
     throw new Error('[Ingest Mode] the table_split tenants are loaded only by a build in one pass');
@@ -488,6 +508,7 @@ export async function buildIngestFixtureDatabase(options: {
     options.ingestEnv,
     templatedFixtures,
     seedParts,
+    q62,
   );
   const parseById = new Map(allParseFixtures.map((fixture) => [fixture.id, fixture]));
 
@@ -510,6 +531,7 @@ export async function buildIngestFixtureDatabase(options: {
   let llamaAttempts = 0;
   let routingSummary: IngestRoutingSummary | undefined;
   let tableSplitTenants: TableSplitTenant[] | undefined;
+  let q62Tenant: Q62Tenant | undefined;
   const harnessEnv: Record<string, string> = {
     RAG_INGEST_PIPELINE: 'unified',
     RAG_PARSER: 'llamaparse',
@@ -719,6 +741,21 @@ export async function buildIngestFixtureDatabase(options: {
       if (fakes.llamaParseAttempts() !== llamaAttempts) throw new Error('[Ingest Mode] the table_split tenants reached LlamaParse');
     }
 
+    if (q62) {
+      q62Tenant = await loadQ62IngestTenant({
+        edge,
+        homeDb: empty.db,
+        deploymentMode,
+        createDatabase: createIngestDatabase,
+        ingest,
+        buildSourceKey,
+        mintScope,
+        scopeKey,
+        seedTerminology,
+      });
+      if (fakes.llamaParseAttempts() !== llamaAttempts) throw new Error('[Ingest Mode] the q62 tenant reached LlamaParse');
+    }
+
     if (edge.errors.length > 0) {
       const sample = edge.errors
         .slice(0, 3)
@@ -728,6 +765,7 @@ export async function buildIngestFixtureDatabase(options: {
     }
   } catch (error) {
     for (const tenant of tableSplitTenants ?? []) await tenant.db.close().catch(() => undefined);
+    await q62Tenant?.db.close().catch(() => undefined);
     await runCleanups(cleanups);
     await uninstall?.().catch(() => undefined);
     uninstall = undefined;
@@ -753,6 +791,7 @@ export async function buildIngestFixtureDatabase(options: {
     buildState,
     ...(routingSummary ? { routingSummary } : {}),
     ...(tableSplitTenants ? { tableSplitTenants } : {}),
+    ...(q62Tenant ? { q62Tenant } : {}),
   };
 }
 
