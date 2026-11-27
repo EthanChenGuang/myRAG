@@ -587,3 +587,6 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - quick-review-access-sets (security gap) session_01X342sj2koRHNmrF8zZkQJp, base ci/merge-train-37.
   - 04.3-51 session_01X342shUrdxSnQeqwdLP6Sp. Base exec/04.3-14; it merges 04.3-23 itself (index.ts) and, if needed, train-37.
   Running now (9 + builder): 03.3-25, 04.3-48, 04.3-51, 05.2.1-17, 06.2-14, 06.2-15, 06.2-16, quick-review-access-sets, train-38.
+- 15:11Z 06.2-16 DONE (0be703a0) and archived -> goes into train 38 (send it to the train-38 builder).
+  FOLLOW-UP to queue after train 38: src/lib/rag/deps.ts ragEnv() does not pass RAG_DECOMPOSED_ANSWER, RAG_TRANSLATION_GLOSSARY, RAG_LANGID_SIDECAR, RAG_SPECULATIVE_RETRIEVAL, RAG_QUERY_HISTORY_FALLBACK or RAG_SCOPE_GATE, so none of these switches can be turned on from the app environment. Wire them in once their plans have landed.
+  Also pre-existing: config-hash-query "lists every prompt file" (shared.subq-filters.v1.json has no prompt-version registry entry, from 06.2-11).
