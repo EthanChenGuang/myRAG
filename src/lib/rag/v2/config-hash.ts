@@ -186,6 +186,8 @@ export interface RetrievalConfigHashQueryLayer {
   /** Prompt file id to version. */
   prompts: Record<string, number>;
   transforms: Record<string, boolean>;
+  /** 06.2 G5: present only while a query-addition switch differs from its default (queryAdditionsHashBlock). */
+  additions?: Record<string, boolean>;
 }
 
 /** D-34: only the entries of the Phase 4.2 switches that are on; absent while every switch is off. */
