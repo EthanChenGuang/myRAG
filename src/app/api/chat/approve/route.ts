@@ -12,7 +12,7 @@ import {
   readImageContext,
 } from '@/lib/mcp/caller-scope';
 import { getSupabaseAdmin } from '@/lib/supabase';
-import { escapeTags, isAdminUser, readSecurityConfig, scanToolOutput, TOOL_RESULT_NOTICE, wrapToolResultsForPrompt, type RagAdminDb } from '@/lib/rag';
+import { escapeTags, guardSummaryText, isAdminUser, readSecurityConfig, scanToolOutput, TOOL_RESULT_NOTICE, wrapToolResultsForPrompt, type RagAdminDb } from '@/lib/rag';
 import { isUrlMcpCompatible } from '@/lib/mcp/url-validator';
 
 function describeConnections(client: unknown): { server: string; connected: boolean }[] {
@@ -2512,7 +2512,8 @@ export async function POST(req: NextRequest) {
                 } else {
                   // Use GPT-5 Nano to intelligently summarize the email content
                   console.log('🔍 [SUMMARY] Calling GPT-5 Nano for email summarization');
-                  const summarizedContent = await summarizeEmailsWithGPT(emails, params.instructions || params.query || 'Find my recent emails', toolName);
+                  const summaryQuery = params.instructions || params.query || 'Find my recent emails';
+                  const summarizedContent = guardSummaryText({ text: await summarizeEmailsWithGPT(emails, summaryQuery, toolName), userMessage: summaryQuery, channel: 'approve' });
                   
                   return {
                     content: [makeText(summarizedContent)],

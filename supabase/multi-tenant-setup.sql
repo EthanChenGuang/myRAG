@@ -19569,3 +19569,653 @@ GRANT EXECUTE ON FUNCTION public.rag_mine_failed_queries_report(timestamptz, tim
 NOTIFY pgrst, 'reload schema';
 
 COMMIT;
+
+------------------------------------------
+-- Phase 6: Query layer language shares, undated filter and semantic cache (migrations 0601-0603, plan 06-45, after 0537 in migration order)
+------------------------------------------
+
+-- >>> supabase/migrations/0601_tenant_language_shares.sql
+-- 0601: rag_tenant_language_shares — knowledge-base language shares per tenant for query translation (Phase 6, D-23, XLG-01).
+-- Counts the tenant's current, ready documents with a known language. The tenant comes only from p_tenant_key, checked first by
+-- rag_assert_tenant_key (Phase 4 D-04). SECURITY INVOKER with an empty search_path; service_role only. Idempotent.
+
+BEGIN;
+
+CREATE OR REPLACE FUNCTION public.rag_tenant_language_shares(p_tenant_key text)
+RETURNS TABLE (
+  language text,
+  share double precision,
+  docs bigint
+)
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+
+  RETURN QUERY
+  SELECT g.language,
+         g.docs::double precision / pg_catalog.sum(g.docs) OVER ()::double precision AS share,
+         g.docs
+  FROM (
+    SELECT d.language AS language, pg_catalog.count(*) AS docs
+    FROM public.documents d
+    WHERE d.tenant_key = p_tenant_key
+      AND d.is_current
+      AND d.status = 'ready'
+      AND d.language IS NOT NULL
+    GROUP BY d.language
+  ) g
+  ORDER BY g.docs DESC, g.language;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.rag_tenant_language_shares(text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_tenant_language_shares(text) TO service_role;
+
+NOTIFY pgrst, 'reload schema';
+
+COMMIT;
+
+-- >>> supabase/migrations/0602_hybrid_include_undated.sql
+-- 0602: hybrid_search_chunks gains p_include_undated (D-11, A-6). With true and a date range set, chunks whose doc_date is NULL pass
+-- the date predicate on both legs; false, NULL or omitted keeps the 0407 predicate text exactly. Tenant, current, status and every other
+-- filter are unchanged; the body is the 0413 one, so legacy image and invoice_header rows stay searchable under an active profile.
+-- The 0407 signature is dropped first so exactly one function exists and PostgREST rpc() is never ambiguous (P-8);
+-- a new overload would otherwise get PUBLIC execute. search_path is '' with schema-qualified names and operators.
+-- Idempotent: safe to run more than once.
+
+BEGIN;
+
+DROP FUNCTION IF EXISTS public.hybrid_search_chunks(
+  text, text, public.vector, text[], integer, integer, date, date, text[], uuid[], text[], text[], text, integer,
+  text[], text, numeric, numeric, text, jsonb
+);
+
+CREATE OR REPLACE FUNCTION public.hybrid_search_chunks(
+  p_tenant_key text,
+  p_profile_id text,
+  p_query_embedding public.vector,
+  p_lexical_tokens text[],
+  p_dense_limit integer,
+  p_lexical_limit integer,
+  p_date_from date DEFAULT NULL,
+  p_date_to date DEFAULT NULL,
+  p_sources text[] DEFAULT NULL,
+  p_document_ids uuid[] DEFAULT NULL,
+  p_doc_types text[] DEFAULT NULL,
+  p_languages text[] DEFAULT NULL,
+  p_iterative_scan text DEFAULT 'off',
+  p_exact_scan_cutoff integer DEFAULT 0,
+  p_lexical_languages text[] DEFAULT NULL,
+  p_supplier text DEFAULT NULL,
+  p_amount_min numeric DEFAULT NULL,
+  p_amount_max numeric DEFAULT NULL,
+  p_currency text DEFAULT NULL,
+  p_chunking_override jsonb DEFAULT NULL,
+  p_include_undated boolean DEFAULT false
+)
+RETURNS TABLE (
+  leg text,
+  rank integer,
+  chunk_id uuid,
+  document_id uuid,
+  content text,
+  metadata jsonb,
+  chunk_index integer,
+  similarity double precision,
+  lexical_score real,
+  doc_type text,
+  language text,
+  parent_id uuid,
+  section_path text[],
+  chunk_kind text,
+  document_filename text,
+  document_created_at timestamptz,
+  document_metadata jsonb,
+  document_content_preview text,
+  dense_mode text
+)
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_dims integer;
+  v_storage text;
+  v_tsq tsquery;
+  v_n integer;
+  v_mode text := 'ann';
+  v_filter text;
+  v_date_filter text;
+  v_from text;
+  v_vec text;
+  v_sel text;
+  v_pgvector text;
+  v_key text;
+  v_val text;
+  v_doc_types text[] := ARRAY[
+    'financial_report', 'contract_legal', 'invoice_receipt',
+    'product_technical', 'scanned_image', 'general'
+  ];
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+
+  IF p_dense_limit NOT BETWEEN 0 AND 200 OR p_lexical_limit NOT BETWEEN 0 AND 200 OR p_exact_scan_cutoff NOT BETWEEN 0 AND 100000 THEN
+    RAISE EXCEPTION 'hybrid_search_chunks: limit out of range' USING ERRCODE = '22023';
+  END IF;
+  IF p_iterative_scan NOT IN ('off', 'relaxed_order', 'strict_order') THEN
+    RAISE EXCEPTION 'hybrid_search_chunks: invalid iterative scan mode' USING ERRCODE = '22023';
+  END IF;
+
+  IF p_chunking_override IS NOT NULL AND jsonb_typeof(p_chunking_override) <> 'object' THEN
+    RAISE EXCEPTION 'hybrid_search_chunks: invalid chunking override' USING ERRCODE = '22023';
+  END IF;
+  IF p_chunking_override IS NOT NULL THEN
+    FOR v_key, v_val IN SELECT key, value FROM jsonb_each_text(p_chunking_override) LOOP
+      IF NOT EXISTS (SELECT 1 FROM public.chunking_profiles cp WHERE cp.doc_type = v_key AND cp.id = v_val) THEN
+        RAISE EXCEPTION 'hybrid_search_chunks: unknown chunking profile in override' USING ERRCODE = '22023';
+      END IF;
+    END LOOP;
+  END IF;
+
+  SELECT e.dims, e.storage INTO v_dims, v_storage FROM public.embedding_profiles e WHERE e.id = p_profile_id;
+  IF v_dims IS NULL OR v_storage NOT IN ('legacy_column', 'halfvec') THEN
+    RAISE EXCEPTION 'embedding_profile_mismatch: unknown profile' USING ERRCODE = '22023';
+  END IF;
+  IF p_dense_limit > 0 AND (p_query_embedding IS NULL OR public.vector_dims(p_query_embedding) <> v_dims) THEN
+    RAISE EXCEPTION 'embedding_profile_mismatch: dims' USING ERRCODE = '22000';
+  END IF;
+
+  CREATE TEMP TABLE pg_temp._hybrid_eff_profile (doc_type text PRIMARY KEY, profile_id text) ON COMMIT DROP;
+  INSERT INTO pg_temp._hybrid_eff_profile (doc_type, profile_id)
+  SELECT dt.doc_type,
+         COALESCE(
+           NULLIF(trim(both FROM p_chunking_override ->> dt.doc_type), ''),
+           (SELECT cp.id FROM public.chunking_profiles cp WHERE cp.doc_type = dt.doc_type AND cp.status = 'active' ORDER BY cp.id LIMIT 1),
+           'legacy'
+         )
+  FROM unnest(v_doc_types) AS dt(doc_type);
+
+  IF COALESCE(p_include_undated, false) THEN
+    v_date_filter :=
+      ' AND ($3::date IS NULL OR c.doc_date >= $3 OR c.doc_date IS NULL)'
+      || ' AND ($4::date IS NULL OR c.doc_date <= $4 OR c.doc_date IS NULL)';
+  ELSE
+    v_date_filter :=
+      ' AND ($3::date IS NULL OR c.doc_date >= $3)'
+      || ' AND ($4::date IS NULL OR c.doc_date <= $4)';
+  END IF;
+
+  v_filter :=
+    ' c.tenant_key = $2 AND c.is_current AND c.status IN (''ready'', ''variant'')'
+    || ' AND EXISTS (SELECT 1 FROM pg_temp._hybrid_eff_profile ep WHERE ep.doc_type = c.doc_type AND ('
+    || '   c.chunking_profile_id = ep.profile_id'
+    || '   OR (ep.profile_id <> ''legacy'' AND c.chunking_profile_id = ''legacy'' AND c.chunk_kind IN (''image'', ''invoice_header''))'
+    || '   OR (ep.profile_id <> ''legacy'' AND c.chunking_profile_id = ''legacy'''
+    || '       AND NOT EXISTS (SELECT 1 FROM public.document_chunks c2 WHERE c2.document_id = c.document_id'
+    || '         AND c2.tenant_key = $2 AND c2.is_current AND c2.chunking_profile_id = ep.profile_id))'
+    || ' ))'
+    || v_date_filter
+    || ' AND ($5::text[] IS NULL OR (cardinality($5) > 0 AND c.source = ANY($5)))'
+    || ' AND ($6::uuid[] IS NULL OR c.document_id = ANY($6))'
+    || ' AND ($7::text[] IS NULL OR c.doc_type = ANY($7))'
+    || ' AND ($8::text[] IS NULL OR c.language = ANY($8))'
+    || ' AND ($9::text IS NULL OR strpos(lower(d.supplier_name), lower($9)) > 0 OR d.supplier_tax_id = $9)'
+    || ' AND ($10::numeric IS NULL OR d.gross_total >= $10)'
+    || ' AND ($11::numeric IS NULL OR d.gross_total <= $11)'
+    || ' AND ($12::text IS NULL OR d.currency = $12) ';
+
+  v_sel :=
+    ' c.id, c.document_id, c.content, c.metadata, c.chunk_index, %s, %s, c.doc_type, c.language,'
+    || ' c.parent_id, c.section_path, c.chunk_kind,'
+    || ' d.filename, d.created_at, d.metadata, left(d.content, 200), %L::text ';
+
+  IF p_dense_limit > 0 THEN
+    IF v_storage = 'legacy_column' THEN
+      v_from := ' public.document_chunks c JOIN public.documents d ON d.id = c.document_id ';
+      v_vec := format('c.embedding OPERATOR(public.<=>) $1::public.vector(%s)', v_dims);
+      v_filter := v_filter || ' AND c.embedding IS NOT NULL ';
+    ELSE
+      v_from := format(
+        ' public.chunk_embeddings e JOIN public.document_chunks c ON c.id = e.chunk_id AND e.profile_id = %L'
+        || ' JOIN public.documents d ON d.id = c.document_id ',
+        p_profile_id
+      );
+      v_vec := format('(e.embedding::public.halfvec(%1$s)) OPERATOR(public.<=>) $1::public.halfvec(%1$s)', v_dims);
+    END IF;
+
+    IF p_exact_scan_cutoff > 0 THEN
+      EXECUTE 'SELECT count(*)::int FROM (SELECT 1 FROM ' || v_from || ' WHERE ' || v_filter || ' LIMIT $13) s'
+        INTO v_n
+        USING p_query_embedding, p_tenant_key, p_date_from, p_date_to, p_sources, p_document_ids, p_doc_types, p_languages,
+          p_supplier, p_amount_min, p_amount_max, p_currency, p_exact_scan_cutoff + 1;
+      IF v_n <= p_exact_scan_cutoff THEN v_mode := 'exact'; END IF;
+    END IF;
+
+    IF v_mode = 'ann' THEN
+      PERFORM set_config('hnsw.ef_search', least(greatest(p_dense_limit * 2, 100), 1000)::text, true);
+      IF p_iterative_scan <> 'off' THEN
+        SELECT extversion INTO v_pgvector FROM pg_catalog.pg_extension WHERE extname = 'vector';
+        IF v_pgvector IS NULL OR (string_to_array(v_pgvector, '.'))[1:2]::int[] < ARRAY[0, 8] THEN
+          RAISE EXCEPTION 'iterative_scan_unsupported' USING ERRCODE = '22023';
+        END IF;
+        PERFORM set_config('hnsw.iterative_scan', p_iterative_scan, true);
+      END IF;
+    END IF;
+
+    RETURN QUERY EXECUTE
+      'WITH hits AS MATERIALIZED (SELECT c.id AS hid, ' || v_vec || ' AS dist FROM ' || v_from || ' WHERE ' || v_filter
+      || CASE WHEN v_mode = 'exact' THEN ') ' ELSE ' ORDER BY ' || v_vec || ' LIMIT $13) ' END
+      || ', top AS (SELECT hid, dist, (row_number() OVER (ORDER BY dist + 0, hid))::integer AS rnk FROM hits ORDER BY dist + 0, hid LIMIT $13) '
+      || 'SELECT ''dense''::text, t.rnk, ' || format(v_sel, '(1 - t.dist)::double precision', 'NULL::real', v_mode)
+      || ' FROM top t JOIN public.document_chunks c ON c.id = t.hid JOIN public.documents d ON d.id = c.document_id ORDER BY t.rnk'
+      USING p_query_embedding, p_tenant_key, p_date_from, p_date_to, p_sources, p_document_ids, p_doc_types, p_languages,
+        p_supplier, p_amount_min, p_amount_max, p_currency, p_dense_limit;
+  END IF;
+
+  v_tsq := public.rag_lexical_tsquery(p_lexical_tokens);
+  IF p_lexical_limit > 0 AND v_tsq IS NOT NULL THEN
+  v_filter := replace(v_filter, ' AND c.embedding IS NOT NULL ', '');
+    RETURN QUERY EXECUTE
+      'WITH hits AS MATERIALIZED (SELECT c.id AS hid, ts_rank_cd(c.lexical_tsv, $1, 1) AS score'
+      || ' FROM public.document_chunks c JOIN public.documents d ON d.id = c.document_id WHERE ' || v_filter
+      || ' AND ($14::text[] IS NULL OR (cardinality($14) > 0 AND c.language = ANY($14)))'
+      || ' AND c.lexical_tsv @@ $1 ORDER BY score DESC, c.id LIMIT $13) '
+      || 'SELECT ''lexical''::text, (row_number() OVER (ORDER BY t.score DESC, t.hid))::integer, '
+      || format(
+        v_sel,
+        CASE WHEN v_storage = 'legacy_column' AND p_query_embedding IS NOT NULL
+          THEN format('(1 - (c.embedding OPERATOR(public.<=>) $15::public.vector(%s)))::double precision', v_dims)
+          ELSE 'NULL::double precision' END,
+        't.score::real',
+        'n/a'
+      )
+      || ' FROM hits t JOIN public.document_chunks c ON c.id = t.hid JOIN public.documents d ON d.id = c.document_id ORDER BY t.score DESC, t.hid'
+      USING v_tsq, p_tenant_key, p_date_from, p_date_to, p_sources, p_document_ids, p_doc_types, p_languages,
+        p_supplier, p_amount_min, p_amount_max, p_currency, p_lexical_limit, p_lexical_languages, p_query_embedding;
+  END IF;
+END
+$fn$;
+
+REVOKE ALL ON FUNCTION public.hybrid_search_chunks(
+  text, text, public.vector, text[], integer, integer, date, date, text[], uuid[], text[], text[], text, integer,
+  text[], text, numeric, numeric, text, jsonb, boolean
+) FROM PUBLIC, anon, authenticated;
+
+GRANT EXECUTE ON FUNCTION public.hybrid_search_chunks(
+  text, text, public.vector, text[], integer, integer, date, date, text[], uuid[], text[], text[], text, integer,
+  text[], text, numeric, numeric, text, jsonb, boolean
+) TO service_role;
+
+NOTIFY pgrst, 'reload schema';
+
+COMMIT;
+
+-- >>> supabase/migrations/0603_semantic_cache.sql
+-- 0603: pgvector semantic answer cache (Phase 6, CACHE-01, D-34, A-6).
+-- rag_semantic_cache holds one cached answer per row, keyed by tenant_key, key_hash (64 lower-case hex over answer language, RAG mode,
+-- generator model, retrieval-config hash and query framework) and embedding_profile_id. The embedding column is an untyped halfvec, so
+-- profiles of different dimensions share the table; every lookup filters by tenant, key, profile and expiry in a materialized CTE before any
+-- distance is computed (research P-5). RLS is on with no policies; only service_role reaches the table, through the functions below.
+-- Every function takes the tenant only from p_tenant_key, checked first by rag_assert_tenant_key (Phase 4 D-04), is SECURITY INVOKER with an
+-- empty search_path and is service_role only. Idempotent.
+
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS public.rag_semantic_cache (
+  id uuid PRIMARY KEY DEFAULT pg_catalog.gen_random_uuid(),
+  tenant_key text NOT NULL,
+  key_hash text NOT NULL,
+  embedding_profile_id text NOT NULL,
+  embedding public.halfvec NOT NULL,
+  query_text_masked text NOT NULL,
+  answer jsonb NOT NULL,
+  source_versions jsonb NOT NULL DEFAULT '[]'::jsonb,
+  is_refusal boolean NOT NULL DEFAULT false,
+  created_at timestamptz NOT NULL DEFAULT pg_catalog.now(),
+  expires_at timestamptz NOT NULL,
+  CONSTRAINT rag_semantic_cache_source_versions_array CHECK (pg_catalog.jsonb_typeof(source_versions) = 'array')
+);
+
+CREATE INDEX IF NOT EXISTS rag_semantic_cache_lookup_idx
+  ON public.rag_semantic_cache (tenant_key, key_hash, embedding_profile_id, expires_at);
+
+ALTER TABLE public.rag_semantic_cache ENABLE ROW LEVEL SECURITY;
+
+REVOKE ALL ON TABLE public.rag_semantic_cache FROM PUBLIC, anon, authenticated;
+GRANT SELECT, INSERT, DELETE ON TABLE public.rag_semantic_cache TO service_role;
+
+-- True when every {document_id, version} in p_source_versions is the current, ready version of a document of the tenant (vacuously true
+-- for an empty list). Used by rag_cache_check on every hit, by rag_cache_store, and by the app to re-validate a RedisVL hit (D-35).
+CREATE OR REPLACE FUNCTION public.rag_cache_sources_current(p_tenant_key text, p_source_versions jsonb)
+RETURNS boolean
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  IF p_source_versions IS NULL OR pg_catalog.jsonb_typeof(p_source_versions) <> 'array' THEN
+    RAISE EXCEPTION 'source_versions must be a json array' USING ERRCODE = '22023';
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM pg_catalog.jsonb_array_elements(p_source_versions) AS e(v)
+    WHERE pg_catalog.jsonb_typeof(e.v) <> 'object'
+       OR pg_catalog.jsonb_typeof(e.v -> 'document_id') IS DISTINCT FROM 'string'
+       OR (e.v ->> 'document_id') !~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+       OR pg_catalog.jsonb_typeof(e.v -> 'version') IS DISTINCT FROM 'number'
+  ) THEN
+    RAISE EXCEPTION 'each source must be {document_id, version}' USING ERRCODE = '22023';
+  END IF;
+
+  RETURN NOT EXISTS (
+    SELECT 1 FROM pg_catalog.jsonb_to_recordset(p_source_versions) AS s(document_id uuid, version integer)
+    WHERE NOT EXISTS (
+      SELECT 1 FROM public.documents d
+      WHERE d.id = s.document_id
+        AND d.tenant_key = p_tenant_key
+        AND d.version = s.version
+        AND d.is_current
+        AND d.status = 'ready'
+    )
+  );
+END
+$fn$;
+
+-- Nearest entry for (tenant, key, profile) among unexpired rows. Returns exactly one row: the nearest distance is reported even on a miss
+-- (NULL when no candidate exists); answer, entry_id and is_refusal are set only on a hit (distance <= p_max_distance). A hit whose sources are
+-- no longer current and ready is a miss, and that row is deleted.
+CREATE OR REPLACE FUNCTION public.rag_cache_check(
+  p_tenant_key text,
+  p_key_hash text,
+  p_profile text,
+  p_embedding public.halfvec,
+  p_max_distance double precision
+)
+RETURNS TABLE (hit boolean, entry_id uuid, distance double precision, answer jsonb, is_refusal boolean)
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_id uuid;
+  v_distance double precision;
+  v_answer jsonb;
+  v_is_refusal boolean;
+  v_sources jsonb;
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  IF p_key_hash IS NULL OR p_key_hash !~ '^[0-9a-f]{64}$' THEN
+    RAISE EXCEPTION 'malformed cache key hash' USING ERRCODE = '22023';
+  END IF;
+  IF p_profile IS NULL OR pg_catalog.btrim(p_profile) = '' OR pg_catalog.length(p_profile) > 200 THEN
+    RAISE EXCEPTION 'malformed embedding profile id' USING ERRCODE = '22023';
+  END IF;
+  IF p_embedding IS NULL THEN
+    RAISE EXCEPTION 'embedding is required' USING ERRCODE = '22023';
+  END IF;
+  IF p_max_distance IS NULL OR p_max_distance < 0 OR p_max_distance > 2 OR p_max_distance <> p_max_distance THEN
+    RAISE EXCEPTION 'max distance must be within 0..2' USING ERRCODE = '22023';
+  END IF;
+
+  WITH candidates AS MATERIALIZED (
+    SELECT c.id, c.embedding, c.answer, c.is_refusal, c.source_versions
+    FROM public.rag_semantic_cache c
+    WHERE c.tenant_key = p_tenant_key
+      AND c.key_hash = p_key_hash
+      AND c.embedding_profile_id = p_profile
+      AND c.expires_at > pg_catalog.now()
+      AND public.vector_dims(c.embedding) = public.vector_dims(p_embedding)
+  )
+  SELECT k.id, (k.embedding OPERATOR(public.<=>) p_embedding)::double precision, k.answer, k.is_refusal, k.source_versions
+  INTO v_id, v_distance, v_answer, v_is_refusal, v_sources
+  FROM candidates k
+  ORDER BY 2, k.id
+  LIMIT 1;
+
+  IF v_id IS NULL THEN
+    RETURN QUERY SELECT false, NULL::uuid, NULL::double precision, NULL::jsonb, NULL::boolean;
+    RETURN;
+  END IF;
+  IF v_distance > p_max_distance THEN
+    RETURN QUERY SELECT false, NULL::uuid, v_distance, NULL::jsonb, NULL::boolean;
+    RETURN;
+  END IF;
+
+  IF NOT public.rag_cache_sources_current(p_tenant_key, v_sources) THEN
+    DELETE FROM public.rag_semantic_cache c WHERE c.id = v_id AND c.tenant_key = p_tenant_key;
+    RETURN QUERY SELECT false, NULL::uuid, v_distance, NULL::jsonb, NULL::boolean;
+    RETURN;
+  END IF;
+
+  RETURN QUERY SELECT true, v_id, v_distance, v_answer, v_is_refusal;
+END
+$fn$;
+
+-- Stores one entry and returns its id. The TTL must be 1..86400 s; every source must be a current, ready document version of the tenant.
+-- Each call also deletes at most 100 expired rows of the same tenant.
+CREATE OR REPLACE FUNCTION public.rag_cache_store(
+  p_tenant_key text,
+  p_key_hash text,
+  p_profile text,
+  p_embedding public.halfvec,
+  p_query_text_masked text,
+  p_answer jsonb,
+  p_source_versions jsonb,
+  p_is_refusal boolean,
+  p_ttl_seconds integer
+)
+RETURNS uuid
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_sources jsonb;
+  v_id uuid;
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+  IF p_key_hash IS NULL OR p_key_hash !~ '^[0-9a-f]{64}$' THEN
+    RAISE EXCEPTION 'malformed cache key hash' USING ERRCODE = '22023';
+  END IF;
+  IF p_profile IS NULL OR pg_catalog.btrim(p_profile) = '' OR pg_catalog.length(p_profile) > 200 THEN
+    RAISE EXCEPTION 'malformed embedding profile id' USING ERRCODE = '22023';
+  END IF;
+  IF p_embedding IS NULL THEN
+    RAISE EXCEPTION 'embedding is required' USING ERRCODE = '22023';
+  END IF;
+  IF p_query_text_masked IS NULL THEN
+    RAISE EXCEPTION 'masked query text is required' USING ERRCODE = '22023';
+  END IF;
+  IF p_answer IS NULL OR pg_catalog.jsonb_typeof(p_answer) <> 'object' THEN
+    RAISE EXCEPTION 'answer must be a json object' USING ERRCODE = '22023';
+  END IF;
+  IF p_is_refusal IS NULL THEN
+    RAISE EXCEPTION 'is_refusal is required' USING ERRCODE = '22023';
+  END IF;
+  IF p_ttl_seconds IS NULL OR p_ttl_seconds < 1 OR p_ttl_seconds > 86400 THEN
+    RAISE EXCEPTION 'ttl must be within 1..86400 seconds' USING ERRCODE = '22023';
+  END IF;
+  IF NOT public.rag_cache_sources_current(p_tenant_key, p_source_versions) THEN
+    RAISE EXCEPTION 'cache_sources_not_current' USING DETAIL = 'every source must be a current, ready document of the tenant';
+  END IF;
+
+  SELECT coalesce(
+           pg_catalog.jsonb_agg(pg_catalog.jsonb_build_object('document_id', s.document_id, 'version', s.version) ORDER BY s.document_id, s.version),
+           '[]'::jsonb)
+  INTO v_sources
+  FROM (SELECT DISTINCT r.document_id, r.version
+        FROM pg_catalog.jsonb_to_recordset(p_source_versions) AS r(document_id uuid, version integer)) s;
+
+  DELETE FROM public.rag_semantic_cache c
+  WHERE c.id IN (
+    SELECT x.id FROM public.rag_semantic_cache x
+    WHERE x.tenant_key = p_tenant_key AND x.expires_at <= pg_catalog.now()
+    LIMIT 100
+  );
+
+  INSERT INTO public.rag_semantic_cache (
+    tenant_key, key_hash, embedding_profile_id, embedding, query_text_masked, answer, source_versions, is_refusal, created_at, expires_at
+  )
+  VALUES (
+    p_tenant_key, p_key_hash, p_profile, p_embedding, p_query_text_masked, p_answer, v_sources, p_is_refusal, pg_catalog.now(),
+    pg_catalog.now() + pg_catalog.make_interval(secs => p_ttl_seconds)
+  )
+  RETURNING id INTO v_id;
+
+  RETURN v_id;
+END
+$fn$;
+
+-- Deletes the tenant's entries and returns how many: all of them when p_document_ids is NULL, otherwise only entries whose source_versions
+-- reference one of the ids.
+CREATE OR REPLACE FUNCTION public.rag_cache_invalidate(p_tenant_key text, p_document_ids uuid[] DEFAULT NULL)
+RETURNS integer
+LANGUAGE plpgsql
+VOLATILE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+DECLARE
+  v_deleted integer;
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+
+  IF p_document_ids IS NULL THEN
+    DELETE FROM public.rag_semantic_cache c WHERE c.tenant_key = p_tenant_key;
+  ELSE
+    DELETE FROM public.rag_semantic_cache c
+    WHERE c.tenant_key = p_tenant_key
+      AND EXISTS (
+        SELECT 1 FROM pg_catalog.jsonb_array_elements(c.source_versions) AS e(v)
+        WHERE (e.v ->> 'document_id') IN (SELECT u.id::text FROM pg_catalog.unnest(p_document_ids) AS u(id))
+      );
+  END IF;
+  GET DIAGNOSTICS v_deleted = ROW_COUNT;
+  RETURN v_deleted;
+END
+$fn$;
+
+-- The current name and version of the tenant's current, ready documents among p_document_ids, so a cache hit can write its answer record
+-- with citations re-resolved against the current sources (plan-check W6).
+CREATE OR REPLACE FUNCTION public.rag_cache_resolve_sources(p_tenant_key text, p_document_ids uuid[])
+RETURNS TABLE (document_id uuid, name text, version integer)
+LANGUAGE plpgsql
+STABLE
+SECURITY INVOKER
+SET search_path = ''
+AS $fn$
+BEGIN
+  PERFORM public.rag_assert_tenant_key(p_tenant_key);
+
+  RETURN QUERY
+  SELECT d.id, d.filename, d.version
+  FROM public.documents d
+  WHERE d.tenant_key = p_tenant_key
+    AND d.id = ANY (coalesce(p_document_ids, '{}'::uuid[]))
+    AND d.is_current
+    AND d.status = 'ready'
+  ORDER BY d.id;
+END
+$fn$;
+
+-- Same-transaction invalidation (D-34, A-6): three single-event statement triggers on documents delete every cache row of each tenant whose
+-- documents were inserted, deleted, or updated in is_current, status, version or tenant_key. Processing-progress updates leave the cache
+-- alone. This covers rag_publish_document_version, soft deletes, legacy routes, connector syncs and cascades in one place. The functions
+-- are SECURITY DEFINER so invalidation works for any writer, including an authenticated owner who has no access to the cache table; they
+-- only delete cache rows for tenant keys taken from the transition tables.
+CREATE OR REPLACE FUNCTION public.rag_semantic_cache_on_documents_insert()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+BEGIN
+  DELETE FROM public.rag_semantic_cache c
+  WHERE c.tenant_key IN (SELECT DISTINCT n.tenant_key FROM new_rows n WHERE n.tenant_key IS NOT NULL);
+  RETURN NULL;
+END
+$fn$;
+
+CREATE OR REPLACE FUNCTION public.rag_semantic_cache_on_documents_update()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+BEGIN
+  DELETE FROM public.rag_semantic_cache c
+  WHERE c.tenant_key IN (
+    SELECT t.tenant_key
+    FROM old_rows o
+    JOIN new_rows n ON n.id = o.id
+    CROSS JOIN LATERAL (VALUES (o.tenant_key), (n.tenant_key)) AS t(tenant_key)
+    WHERE t.tenant_key IS NOT NULL
+      AND (o.is_current IS DISTINCT FROM n.is_current
+        OR o.status IS DISTINCT FROM n.status
+        OR o.version IS DISTINCT FROM n.version
+        OR o.tenant_key IS DISTINCT FROM n.tenant_key)
+  );
+  RETURN NULL;
+END
+$fn$;
+
+CREATE OR REPLACE FUNCTION public.rag_semantic_cache_on_documents_delete()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $fn$
+BEGIN
+  DELETE FROM public.rag_semantic_cache c
+  WHERE c.tenant_key IN (SELECT DISTINCT o.tenant_key FROM old_rows o WHERE o.tenant_key IS NOT NULL);
+  RETURN NULL;
+END
+$fn$;
+
+DROP TRIGGER IF EXISTS rag_semantic_cache_documents_insert ON public.documents;
+CREATE TRIGGER rag_semantic_cache_documents_insert
+  AFTER INSERT ON public.documents
+  REFERENCING NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.rag_semantic_cache_on_documents_insert();
+
+DROP TRIGGER IF EXISTS rag_semantic_cache_documents_update ON public.documents;
+CREATE TRIGGER rag_semantic_cache_documents_update
+  AFTER UPDATE ON public.documents
+  REFERENCING OLD TABLE AS old_rows NEW TABLE AS new_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.rag_semantic_cache_on_documents_update();
+
+DROP TRIGGER IF EXISTS rag_semantic_cache_documents_delete ON public.documents;
+CREATE TRIGGER rag_semantic_cache_documents_delete
+  AFTER DELETE ON public.documents
+  REFERENCING OLD TABLE AS old_rows
+  FOR EACH STATEMENT EXECUTE FUNCTION public.rag_semantic_cache_on_documents_delete();
+
+REVOKE ALL ON FUNCTION public.rag_semantic_cache_on_documents_insert() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_semantic_cache_on_documents_update() FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_semantic_cache_on_documents_delete() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_semantic_cache_on_documents_insert() TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_semantic_cache_on_documents_update() TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_semantic_cache_on_documents_delete() TO service_role;
+
+REVOKE ALL ON FUNCTION public.rag_cache_sources_current(text, jsonb) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_cache_check(text, text, text, public.halfvec, double precision) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_cache_store(text, text, text, public.halfvec, text, jsonb, jsonb, boolean, integer) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_cache_invalidate(text, uuid[]) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.rag_cache_resolve_sources(text, uuid[]) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.rag_cache_sources_current(text, jsonb) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_cache_check(text, text, text, public.halfvec, double precision) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_cache_store(text, text, text, public.halfvec, text, jsonb, jsonb, boolean, integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_cache_invalidate(text, uuid[]) TO service_role;
+GRANT EXECUTE ON FUNCTION public.rag_cache_resolve_sources(text, uuid[]) TO service_role;
+
+NOTIFY pgrst, 'reload schema';
+
+COMMIT;

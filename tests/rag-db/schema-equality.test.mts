@@ -28,15 +28,17 @@ const FOLDED_SETUP: Record<DeploymentMode, string> = {
 /**
  * Migrations whose final shape is folded into both setup files: Phase 3 (0301-0320, plans 03-47 and later), Phase 3.1 (0351-0359, and the queue
  * hardening and chunk writer fix 0420-0424 after Phase 4, plan 03.1-52), Phase 4 (0401-0413, plan 04-42) and the empty search_path rewrite 0425
- * after 0424 (plan 04-47), Phase 3.1.1 (0440-0442, plan 03.1.1-14), Phase 5 (0501-0502, plan 05-25) and Phase 5.1.1 (0531-0537, plan
- * 05.1.1-22). 0426, 0427, Phase 4.1.1, Phase 6 (plan 06-45) and the 07xx and 08xx blocks are not folded yet, so a fresh install from a setup file is completed by those migrations alone.
+ * after 0424 (plan 04-47), Phase 3.1.1 (0440-0442, plan 03.1.1-14), Phase 5 (0501-0502, plan 05-25), Phase 5.1.1 (0531-0537, plan
+ * 05.1.1-22) and Phase 6 (0601-0603, plan 06-45). 0426, 0427, Phase 4.1.1, Phase 6.1 (0651-0654) and the 07xx and later blocks are not folded
+ * yet, so a fresh install from a setup file is completed by those migrations alone.
  */
-const FOLDED_MIGRATION = /^supabase\/migrations\/(030[1-9]|031\d|0320|035[1-9]|040[1-9]|041[0-3]|042[0-5]|044[0-2]|050[12]|053[1-7])_[a-z0-9_]+(\.(single|multi)-tenant)?\.sql$/;
+const FOLDED_MIGRATION = /^supabase\/migrations\/(030[1-9]|031\d|0320|035[1-9]|040[1-9]|041[0-3]|042[0-5]|044[0-2]|050[12]|053[1-7]|060[1-3])_[a-z0-9_]+(\.(single|multi)-tenant)?\.sql$/;
 const PHASE4_MIGRATION = /^supabase\/migrations\/04(0[1-9]|1\d)_/;
 const PHASE31_MIGRATION = /^supabase\/migrations\/(035[1-9]|042[0-4])_/;
 const PHASE5_MIGRATION = /^supabase\/migrations\/050\d_/;
 const PHASE311_MIGRATION = /^supabase\/migrations\/044\d_/;
 const PHASE511_MIGRATION = /^supabase\/migrations\/053\d_/;
+const PHASE6_MIGRATION = /^supabase\/migrations\/060\d_/;
 const unfoldedMigrationFiles = (mode: DeploymentMode): string[] => migrationFiles(mode).filter((file) => !FOLDED_MIGRATION.test(file));
 
 /** Every function the Phase 4 migrations create; each one is service-role only (RET-04, D-04). */
@@ -323,6 +325,16 @@ describe('folded migration set', () => {
       ]);
       assert.deepEqual(phase511.filter((file) => !FOLDED_MIGRATION.test(file)), []);
     });
+
+    test(`every Phase 6 migration of ${mode} is folded into the setup file`, () => {
+      const phase6 = migrationFiles(mode).filter((file) => PHASE6_MIGRATION.test(file));
+      assert.deepEqual(phase6, [
+        'supabase/migrations/0601_tenant_language_shares.sql',
+        'supabase/migrations/0602_hybrid_include_undated.sql',
+        'supabase/migrations/0603_semantic_cache.sql',
+      ]);
+      assert.deepEqual(phase6.filter((file) => !FOLDED_MIGRATION.test(file)), []);
+    });
   }
 });
 
@@ -513,6 +525,66 @@ async function assertFeedbackLoopSecured(db: PGlite, mode: DeploymentMode): Prom
   assert.deepEqual(expert.rows[0], { anon: false, authenticated: true, service: true }, 'rag_is_domain_expert is the RLS helper for authenticated');
 }
 
+/** Every function 0601-0603 create; each one is service-role only (D-23, D-34). */
+const PHASE6_FUNCTIONS = [
+  'rag_tenant_language_shares',
+  'hybrid_search_chunks',
+  'rag_cache_sources_current',
+  'rag_cache_check',
+  'rag_cache_store',
+  'rag_cache_invalidate',
+  'rag_cache_resolve_sources',
+  'rag_semantic_cache_on_documents_insert',
+  'rag_semantic_cache_on_documents_update',
+  'rag_semantic_cache_on_documents_delete',
+] as const;
+
+/** The Phase 6 schema as a fresh install gets it: one hybrid_search_chunks overload (the 0602 one with p_include_undated), every Phase 6
+ * function service_role only, and the semantic cache table with RLS, no client privilege and its three documents triggers. */
+async function assertPhase6Secured(db: PGlite): Promise<void> {
+  const overloads = await db.query<{ args: string }>(
+    `SELECT pg_get_function_identity_arguments(p.oid) AS args FROM pg_proc p
+     WHERE p.pronamespace = 'public'::regnamespace AND p.proname = 'hybrid_search_chunks'`,
+  );
+  assert.equal(overloads.rows.length, 1, 'exactly one hybrid_search_chunks overload');
+  assert.match(String(overloads.rows[0]?.args), /p_include_undated boolean$/, 'the folded hybrid_search_chunks is the 0602 one');
+  const result = await db.query<{ proname: string; signature: string; anon: boolean; authenticated: boolean; service_role: boolean }>(
+    `SELECT p.proname, p.oid::regprocedure::text AS signature,
+            has_function_privilege('anon', p.oid, 'EXECUTE') AS anon,
+            has_function_privilege('authenticated', p.oid, 'EXECUTE') AS authenticated,
+            has_function_privilege('service_role', p.oid, 'EXECUTE') AS service_role
+     FROM pg_proc p WHERE p.pronamespace = 'public'::regnamespace AND p.proname = ANY($1::text[])`,
+    [[...PHASE6_FUNCTIONS]],
+  );
+  const present = new Set(result.rows.map((row) => row.proname));
+  assert.deepEqual(PHASE6_FUNCTIONS.filter((name) => !present.has(name)), [], 'every Phase 6 function is defined by the setup file');
+  assert.deepEqual(
+    result.rows.filter((row) => row.anon || row.authenticated || !row.service_role).map((row) => row.signature),
+    [],
+    'every Phase 6 function is service_role only',
+  );
+  const table = await db.query<{ rls: boolean; policies: number }>(
+    `SELECT c.relrowsecurity AS rls, (SELECT count(*)::int FROM pg_policies WHERE schemaname = 'public' AND tablename = c.relname) AS policies
+     FROM pg_class c WHERE c.oid = to_regclass('public.rag_semantic_cache')`,
+  );
+  assert.deepEqual(table.rows, [{ rls: true, policies: 0 }], 'rag_semantic_cache has RLS on and no policy');
+  for (const role of ['anon', 'authenticated']) {
+    const granted = await db.query<{ n: number }>(
+      `SELECT count(*)::int AS n FROM unnest(ARRAY['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'TRUNCATE', 'REFERENCES', 'TRIGGER']) AS p(privilege)
+       WHERE has_table_privilege($1, 'public.rag_semantic_cache', p.privilege)`,
+      [role],
+    );
+    assert.equal(granted.rows[0]?.n, 0, `${role} has no privilege on rag_semantic_cache`);
+  }
+  const triggers = await db.query<{ name: string }>(
+    `SELECT tgname AS name FROM pg_trigger WHERE tgrelid = 'public.documents'::regclass AND tgname LIKE 'rag_semantic_cache_documents_%' ORDER BY 1`,
+  );
+  assert.deepEqual(
+    triggers.rows.map((row) => row.name),
+    ['rag_semantic_cache_documents_delete', 'rag_semantic_cache_documents_insert', 'rag_semantic_cache_documents_update'],
+  );
+}
+
 for (const mode of MODES) {
   describe(`${mode} setup`, () => {
     test(`${mode} setup applies cleanly on fresh PGlite`, async () => {
@@ -524,6 +596,7 @@ for (const mode of MODES) {
         await assertAnswerRecordsSecured(fixture.db, mode);
         await assertDomainBindingsSecured(fixture.db);
         await assertFeedbackLoopSecured(fixture.db, mode);
+        await assertPhase6Secured(fixture.db);
         const tables = await fixture.db.query<{ name: string }>(
           `SELECT c.relname AS name FROM pg_class c WHERE c.relnamespace = 'public'::regnamespace AND c.relkind = 'r'
              AND c.relname IN ('document_parents', 'chunking_profiles', 'chunking_build_runs', 'chunking_build_gaps') ORDER BY 1`,
@@ -590,8 +663,8 @@ const PHASE_31_SECTIONS = [
 ] as const;
 const PHASE_4_HEADER = `${BAR}\n-- Phase 4: Hybrid retrieval`;
 // The empty search_path rewrite (0425, plan 04-47) runs after 0424, so its section follows the 0420-0424 section; the Phase 3.1.1 section
-// (0440-0442, plan 03.1.1-14) replaces 0425 guard and re-embed bodies, so it follows 0425; the Phase 5 section (0501-0502, plan 05-25) follows, and the Phase 5.1.1 section (0531-0537, plan
-// 05.1.1-22) closes the file.
+// (0440-0442, plan 03.1.1-14) replaces 0425 guard and re-embed bodies, so it follows 0425; the Phase 5 section (0501-0502, plan 05-25) follows, then
+// the Phase 5.1.1 section (0531-0537, plan 05.1.1-22), and the Phase 6 section (0601-0603, plan 06-45) closes the file.
 const SEARCH_PATH_SECTION = {
   header: `${BAR}\n-- Phase 4 gap closure: empty search_path for SECURITY DEFINER, trigger and post-Phase-3 functions (migration 0425, plan 04-47, after 0424)\n${BAR}`,
   files: /^supabase\/migrations\/0425_/,
@@ -607,6 +680,10 @@ const PHASE_5_SECTION = {
 const PHASE_511_SECTION = {
   header: `${BAR}\n-- Phase 5.1.1: Feedback loop (migrations 0531-0537, plan 05.1.1-22, after 0502 in migration order)\n${BAR}`,
   files: /^supabase\/migrations\/053[1-7]_/,
+} as const;
+const PHASE_6_SECTION = {
+  header: `${BAR}\n-- Phase 6: Query layer language shares, undated filter and semantic cache (migrations 0601-0603, plan 06-45, after 0537 in migration order)\n${BAR}`,
+  files: /^supabase\/migrations\/060[1-3]_/,
 } as const;
 const OTHER_MODE: Record<DeploymentMode, DeploymentMode> = { 'single-tenant': 'multi-tenant', 'multi-tenant': 'single-tenant' };
 
@@ -695,9 +772,9 @@ for (const mode of MODES) {
       assert.ok(text.includes(`${early}\n${PHASE_4_HEADER}`), 'the 0351-0359 section sits right before the Phase 4 section');
       assert.ok(
         text.endsWith(
-          `${late}\n${foldedSection(mode, SEARCH_PATH_SECTION)}\n${foldedSection(mode, PHASE_311_SECTION)}\n${foldedSection(mode, PHASE_5_SECTION)}\n${foldedSection(mode, PHASE_511_SECTION)}`,
+          `${late}\n${foldedSection(mode, SEARCH_PATH_SECTION)}\n${foldedSection(mode, PHASE_311_SECTION)}\n${foldedSection(mode, PHASE_5_SECTION)}\n${foldedSection(mode, PHASE_511_SECTION)}\n${foldedSection(mode, PHASE_6_SECTION)}`,
         ),
-        'after Phase 4 come the 0420-0424, 0425, 0440-0442 and Phase 5 sections, then the Phase 5.1.1 section, which closes the file',
+        'after Phase 4 come the 0420-0424, 0425, 0440-0442, Phase 5 and Phase 5.1.1 sections, then the Phase 6 section, which closes the file',
       );
       assert.ok(text.indexOf(late) > text.indexOf(PHASE_4_HEADER));
     });

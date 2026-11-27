@@ -273,6 +273,7 @@ for (const mode of MODES) {
         'breakdown',
         'companions',
         'sample_trace_ids',
+        'cluster_ids',
         'config_changes',
         'suggestion',
         'delivered',
@@ -451,6 +452,28 @@ for (const mode of MODES) {
         alertPayload(keys.own, `language_drop:${crypto.randomUUID()}`, '2026-11-05', { rule: 'language_drop', kind: 'language_drop', language: 'all' }),
       );
       assert.ok(reserved);
+    });
+
+    test('0978: the cluster ids an alert names are stored on insert and replaced on update; text is rejected', async () => {
+      const dedup = `test_set_not_representative:${crypto.randomUUID()}`;
+      const drift = { rule: 'test_set_not_representative', kind: 'drift', language: 'all' };
+      const id = await upsertAlert(db, alertPayload(keys.own, dedup, '2026-11-08', { ...drift, cluster_ids: ['c-07', 'novel'] }));
+      assert.ok(id);
+      const read = async () =>
+        (await db.query<{ cluster_ids: string[] }>('SELECT cluster_ids FROM public.rag_monitor_alerts WHERE id = $1', [id])).rows[0]?.cluster_ids;
+      assert.deepEqual(await read(), ['c-07', 'novel']);
+      assert.equal(await upsertAlert(db, alertPayload(keys.own, dedup, '2026-11-15', { ...drift, cluster_ids: ['c-03'] })), id);
+      assert.deepEqual(await read(), ['c-03']);
+      const plain = await upsertAlert(db, alertPayload(keys.own, `r:${crypto.randomUUID()}`, '2026-11-05'));
+      assert.deepEqual(
+        (await db.query<{ cluster_ids: string[] }>('SELECT cluster_ids FROM public.rag_monitor_alerts WHERE id = $1', [plain])).rows[0]?.cluster_ids,
+        [],
+      );
+      await rejectsWith('23514', () => upsertAlert(db, alertPayload(keys.own, `r:${crypto.randomUUID()}`, '2026-11-05', { cluster_ids: ['a sentence with spaces'] })));
+      await rejectsWith('23514', () =>
+        upsertAlert(db, alertPayload(keys.own, `r:${crypto.randomUUID()}`, '2026-11-05', { cluster_ids: Array.from({ length: 65 }, (_, i) => `c-${i}`) })),
+      );
+      await rejectsWith('22023', () => upsertAlert(db, alertPayload(keys.own, `r:${crypto.randomUUID()}`, '2026-11-05', { cluster_ids: 'c-07' })));
     });
 
     test('a tenant key of the other deployment mode raises 22023 in the upsert', async () => {

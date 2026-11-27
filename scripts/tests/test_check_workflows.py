@@ -641,3 +641,124 @@ class DockerConfigCopiesTest(unittest.TestCase):
             if "run" in step:
                 step["run"] = str(step["run"]).replace(" hidden-text-rules.json", "")
         self.assertTrue(any("config/rag/hidden-text-rules.json" in e for e in self.errors_for(job)))
+
+
+class AbsoluteGatesTest(unittest.TestCase):
+    """D-06, O-1, O-2 (05.3-16): every CI tier carries the absolute gates; report mode only where the measurement says so."""
+
+    def workflows(self) -> tuple[dict, dict]:
+        return check_workflows.load(check_workflows.PR)[0], check_workflows.load(check_workflows.NIGHTLY)[0]
+
+    def errors_for(self, pr: dict, nightly: dict, measurement: Path | None = None) -> list[str]:
+        errors: list[str] = []
+        if measurement is None:
+            check_workflows.check_absolute_gates(pr, nightly, errors)
+        else:
+            check_workflows.check_absolute_gates(pr, nightly, errors, measurement_path=measurement)
+        return errors
+
+    def step(self, pr: dict, job: str, needle: str) -> dict:
+        return next(step for step in pr["jobs"][job]["steps"] if needle in str(step.get("run", "")))
+
+    def test_repository_workflows_carry_the_absolute_gates(self):
+        self.assertEqual(self.errors_for(*self.workflows()), [])
+
+    def test_report_only_tiers_come_from_the_measurement_record(self):
+        tiers = check_workflows.report_only_outs(check_workflows.MEASUREMENT)
+        self.assertIn("eval/out/smoke", tiers)
+        self.assertNotIn("eval/out/smoke-ingest", tiers)
+
+    def test_an_ungated_smoke_step_is_reported(self):
+        pr, nightly = self.workflows()
+        self.step(pr, "eval-smoke", "--fixture-mode ingest --out eval/out/smoke-ingest")["run"] += " --no-gate"
+        self.assertTrue(any("--no-gate" in e for e in self.errors_for(pr, nightly)))
+
+    def test_report_mode_on_an_enforced_tier_is_reported(self):
+        pr, nightly = self.workflows()
+        self.step(pr, "eval-smoke", "--fixture-mode ingest --out eval/out/smoke-ingest")["run"] += " --gates-mode report"
+        errors = self.errors_for(pr, nightly)
+        self.assertTrue(any("eval/out/smoke-ingest" in e and "report" in e for e in errors), errors)
+
+    def test_report_mode_on_the_prompt_control_is_reported(self):
+        pr, nightly = self.workflows()
+        step = self.step(pr, "gate-negative-control", "no-refusal-directive.overlay.json")
+        step["run"] = step["run"].replace("--out eval/out/negative-prompt", "--out eval/out/negative-prompt --gates-mode report")
+        self.assertTrue(any("eval/out/negative-prompt" in e for e in self.errors_for(pr, nightly)))
+
+    def test_another_gates_file_is_reported(self):
+        pr, nightly = self.workflows()
+        self.step(pr, "eval-smoke", "npm run test-rag -- --out eval/out/smoke")["run"] += " --gates eval/out/lax-gates.json"
+        self.assertTrue(any("quality-gates.json" in e for e in self.errors_for(pr, nightly)))
+
+    def test_a_missing_prompt_control_is_reported(self):
+        pr, nightly = self.workflows()
+        job = pr["jobs"]["gate-negative-control"]
+        job["steps"] = [step for step in job["steps"] if "no-refusal-directive.overlay.json" not in str(step.get("run", ""))]
+        self.assertTrue(any("-eq 11" in e for e in self.errors_for(pr, nightly)))
+
+    def test_a_prompt_control_without_exit_11_is_reported(self):
+        pr, nightly = self.workflows()
+        step = self.step(pr, "gate-negative-control", "no-refusal-directive.overlay.json")
+        step["run"] = step["run"].replace('-eq 11', '-eq 10')
+        self.assertTrue(any("-eq 11" in e for e in self.errors_for(pr, nightly)))
+
+    def test_a_prompt_control_without_the_false_answer_check_is_reported(self):
+        pr, nightly = self.workflows()
+        step = self.step(pr, "gate-negative-control", "no-refusal-directive.overlay.json")
+        step["run"] = "\n".join(line for line in step["run"].splitlines() if "false_answer_rate" not in line)
+        self.assertTrue(any("false_answer_rate" in e for e in self.errors_for(pr, nightly)))
+
+    def test_the_two_regression_controls_stay_required(self):
+        pr, nightly = self.workflows()
+        step = self.step(pr, "gate-negative-control", "--max-results 1")
+        step["run"] = step["run"].replace('test "$code" -eq 10', 'test "$code" -ne 0')
+        self.assertTrue(any("-eq 10" in e for e in self.errors_for(pr, nightly)))
+
+    def test_a_python_job_without_the_manifest_verify_is_reported(self):
+        for manifest in ("eval/fixtures/golden.manifest.json", "eval/fixtures/ingest/golden-ingest.manifest.json"):
+            pr, nightly = self.workflows()
+            job = pr["jobs"]["python"]
+            for step in job["steps"]:
+                if "golden_set verify" in str(step.get("run", "")):
+                    step["run"] = "\n".join(line for line in step["run"].splitlines() if manifest not in line)
+            self.assertTrue(any(manifest in e for e in self.errors_for(pr, nightly)), manifest)
+
+    def test_a_judge_job_without_the_absolute_gate_is_reported(self):
+        pr, nightly = self.workflows()
+        job = nightly["jobs"]["judge"]
+        job["steps"] = [step for step in job["steps"] if "rag_eval.absolute_gate" not in str(step.get("run", ""))]
+        self.assertTrue(any("absolute_gate" in e for e in self.errors_for(pr, nightly)))
+
+    def test_an_absolute_gate_step_without_the_keys_condition_is_reported(self):
+        pr, nightly = self.workflows()
+        step = self.step(nightly, "judge", "rag_eval.absolute_gate")
+        step.pop("if", None)
+        self.assertTrue(any("HAS_JUDGE_KEYS" in e for e in self.errors_for(pr, nightly)))
+
+    def test_an_enforced_nightly_absolute_gate_is_reported(self):
+        pr, nightly = self.workflows()
+        step = self.step(nightly, "judge", "rag_eval.absolute_gate")
+        step["run"] = step["run"].replace("--mode report", "--mode enforce")
+        self.assertTrue(any("--mode report" in e for e in self.errors_for(pr, nightly)))
+
+    def test_a_judge_job_without_the_stale_scan_is_reported(self):
+        pr, nightly = self.workflows()
+        job = nightly["jobs"]["judge"]
+        job["steps"] = [step for step in job["steps"] if "stale-scan" not in str(step.get("run", ""))]
+        self.assertTrue(any("stale-scan" in e for e in self.errors_for(pr, nightly)))
+
+    def test_the_nightly_absolute_result_must_be_uploaded(self):
+        pr, nightly = self.workflows()
+        for step in nightly["jobs"]["judge"]["steps"]:
+            if str(step.get("uses", "")).startswith("actions/upload-artifact@"):
+                step["with"]["path"] = "eval/out/nightly/judge.json"
+        self.assertTrue(any("absolute.json" in e for e in self.errors_for(pr, nightly)))
+
+    def test_a_missing_or_unreadable_measurement_is_an_error(self):
+        pr, nightly = self.workflows()
+        with tempfile.TemporaryDirectory() as tmp:
+            missing = Path(tmp) / "absent.json"
+            self.assertTrue(any("absolute-gate-measurement" in e or "absent.json" in e for e in self.errors_for(pr, nightly, missing)))
+            broken = Path(tmp) / "broken.json"
+            broken.write_text("{not json", encoding="utf-8")
+            self.assertTrue(any("broken.json" in e for e in self.errors_for(pr, nightly, broken)))

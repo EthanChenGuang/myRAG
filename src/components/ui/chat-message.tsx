@@ -73,7 +73,16 @@ import type { SourceImageData } from '@/types/chat'
 import { CitationChip } from './citation-chip'
 import { citationSourcesFor } from '@/components/providers/sources-provider'
 import { citeAliasFromHref, isCitationAware, renderCitationMarkers, type CitationMarkerTarget, type CitationRenderPhase } from '@/lib/chat/citation-markers'
-import { pickAnswerMetadata } from '@/lib/chat/answer-metadata'
+import { noticesOf, pickAnswerMetadata } from '@/lib/chat/answer-metadata'
+import { useShallow } from 'zustand/react/shallow'
+import { clientText, clientTextLanguage } from '@/lib/chat/answer-texts'
+import { answerDisplayText, blockedReplacements } from '@/lib/chat/answer-display-text'
+import { MARK_HREF_PREFIX, markFromHref, markHref, placedSentenceMarks, insertSentenceMarks, sentenceMarkKinds, verifySentenceRecords, verifySentenceRecordsSync, type SentenceOffsets } from '@/lib/chat/sentence-marks'
+import { SentenceMark } from './sentence-mark'
+import { AnswerMarkLegend } from './answer-mark-legend'
+import { AnswerNotices } from './answer-notices'
+import { PART_LABEL_ICONS } from './part-label-icon'
+import { partLabelOf, soleText } from '@/lib/chat/part-labels'
 import { useAnswerRecordsStore } from '@/lib/stores/answer-records-store'
 import { GroundednessBadge } from './groundedness-badge'
 import { AnswerFeedback } from './answer-feedback'
@@ -81,6 +90,7 @@ import { RefusalFeedback } from './refusal-feedback'
 import { pickRefusalMetadata, type RefusalFeedbackValue } from '@/lib/chat/answer-metadata'
 import { registerMessageTrace, setSourcesMessage, shouldShowRefusalControl } from '@/lib/chat/refusal-feedback-client'
 import { useGhostModeStore } from '@/lib/ghost-mode-store'
+import { useChatStore } from '@/lib/chat-store'
 import { imageLinkHref, isAllowedImageUrl } from '@/lib/safe-image-hosts'
 import { separateFollowupLines, splitFollowups } from '@/lib/chat/followups'
 import { answerQualityStrings } from '@/translations/answer-quality'
@@ -199,6 +209,12 @@ interface ToolCall {
 }
 
 // Function to highlight document mentions in text
+/** True when message metadata carries a non-empty notices array (UI-SPEC 6.4, independent of citation awareness). */
+function metadataHasNotices(metadata: unknown): boolean {
+  const notices = metadata && typeof metadata === 'object' ? (metadata as { notices?: unknown }).notices : undefined;
+  return Array.isArray(notices) && notices.length > 0;
+}
+
 // Function to check if text contains our special approval format
 function isApprovalRequiredFormat(text: string): boolean {
   if (!text || typeof text !== 'string') return false;
@@ -2735,6 +2751,8 @@ ChatMessage = function ({
     () => new Map((markerCitations ?? []).map(({ alias, n }) => [alias, n] as const)),
     [markerCitations]
   );
+  const noticesKey = isAI && metadataHasNotices(messageMetadata) ? JSON.stringify((messageMetadata as { notices: unknown }).notices) : '';
+  const answerNotices = useMemo(() => (noticesKey ? noticesOf({ notices: JSON.parse(noticesKey) }) : []), [noticesKey]);
   const answerId = answerMetadata?.answerId;
   const answerDocuments = useAnswerRecordsStore((s) => (answerId ? s.records[answerId]?.documents : undefined));
   const citationMessageId = answerMetadata ? message.id : undefined;
@@ -3634,12 +3652,8 @@ ChatMessage = function ({
   // Update the handleCopy function to show a confirmation
   const handleCopy = async () => {
     // Use processed parts instead of raw message content to get properly extracted RAG text
-    const textParts = processMessageContent.renderableParts
-      .map((part, index) => (index === followupSplit.partIndex && part.type === 'text' ? { ...part, text: followupSplit.body } : part))
-      .filter((part): part is { type: 'text'; text: string } => part.type === 'text');
-
     // Concatenate text from all text parts (includes RAG content extracted before approval marker)
-    let textToCopy = textParts.map(part => part.text).join('\n\n');
+    let textToCopy = copyTextParts().join('\n\n');
 
     // Always clean the text to remove JSON artifacts before copying
     textToCopy = cleanToolCallMetadata(textToCopy);
@@ -3762,7 +3776,7 @@ ChatMessage = function ({
       }
 
       // Clean the text before sending to text-to-speech
-      const cleanedText = prepareTextForTTS(cleanToolCallMetadata(messageContent.text));
+      const cleanedText = prepareTextForTTS(cleanToolCallMetadata(speechSourceText()));
 
       // Get voice provider - prioritize environment variable
       const voiceProvider = env.NEXT_PUBLIC_VOICE_PROVIDER || useUserSettingsStore.getState().voiceProvider || 'openai';
@@ -3779,7 +3793,7 @@ ChatMessage = function ({
 
   const handleDownloadAudio = () => {
     // Clean the text before checking the audio cache
-    const cleanedText = prepareTextForTTS(cleanToolCallMetadata(messageContent.text));
+    const cleanedText = prepareTextForTTS(cleanToolCallMetadata(speechSourceText()));
     const audioBlob = getCachedAudioBlob(cleanedText);
     if (!audioBlob) return;
 
@@ -4016,10 +4030,28 @@ ChatMessage = function ({
     li: ({ children }) => (
       <li className="ml-2 text-gray-700 dark:text-gray-300">{children}</li>
     ),
+    strong: ({ children }) => {
+      const label = partLabelOf(soleText(children));
+      if (!label) return <strong>{children}</strong>;
+      const Icon = PART_LABEL_ICONS[label.key];
+      return (
+        <strong>
+          <span
+            data-part-label={label.key}
+            lang={(language ?? '').split('-')[0]!.toLowerCase() === label.language ? undefined : label.language}
+            className="inline-flex items-center gap-1"
+          >
+            <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+            {children}
+          </span>
+        </strong>
+      );
+    },
     p: ({ children }) => (
       <p className="break-words text-gray-700 dark:text-gray-300 mb-4 last:mb-0">{children}</p>
     ),
     a: ({ href, children }) => {
+      if (markerCitations && typeof href === 'string' && href.startsWith(MARK_HREF_PREFIX)) return null;
       const citeAlias = markerCitations ? citeAliasFromHref(href) : null;
       if (citeAlias && citationMessageId) {
         const n = citationNumbers.get(citeAlias);
@@ -4133,7 +4165,7 @@ ChatMessage = function ({
         </div>
       );
     }
-  }), [isCodeCopied, markerCitations, citationNumbers, citationMessageId, buildCitationSources]);
+  }), [isCodeCopied, markerCitations, citationNumbers, citationMessageId, buildCitationSources, language]);
 
   // Set up layout stabilization on initial render
   useEffect(() => {
@@ -4290,6 +4322,141 @@ ChatMessage = function ({
     }
     return none;
   }, [isAI, isThinking, isStreaming, isStreamingMessage, isLastMessage, followupsDisabled, processMessageContent.renderableParts]);
+
+  // Phase 5.2 sentence marks, legend and display text (UI-SPEC 6.2, 6.3, 6.5); nothing changes unless offsets verify.
+  const markRecordView = useAnswerRecordsStore(
+    useShallow((s) => {
+      const record = answerId && Object.prototype.hasOwnProperty.call(s.records, answerId) ? s.records[answerId] : undefined;
+      return {
+        hasRecord: record !== undefined,
+        mode: record?.ragMode ?? null,
+        checks: record?.checks ?? undefined,
+        language: record?.answerLanguage ?? null,
+      };
+    }),
+  );
+  const currentChatId = useChatStore((s) => s.currentChatId);
+  const markFinished = isAI && !isThinking && !isStreaming && !isStreamingMessage;
+  const [markLive, setMarkLive] = useState(false);
+  if (isAI && !markFinished && !markLive) setMarkLive(true);
+  const markChecks = markRecordView.checks ?? answerMetadata?.checks;
+  const markTexts = useMemo(() => {
+    const texts: string[] = [];
+    const byRender: number[] = [];
+    for (const part of processMessageContent.renderableParts) {
+      const text = part.type === 'text' ? (part as { text?: unknown }).text : undefined;
+      if (typeof text === 'string') {
+        byRender.push(texts.length);
+        texts.push(text);
+      } else {
+        byRender.push(-1);
+      }
+    }
+    return { texts, byRender };
+  }, [processMessageContent.renderableParts]);
+  const markSentences = answerMetadata?.sentences ?? [];
+  const markChecked = markChecks?.sentences ?? [];
+  const markBlocked = markChecks?.output_guard?.blocked_ranges ?? [];
+  const markOffsets: SentenceOffsets[] = markFinished && answerMetadata ? [...markSentences, ...markChecked, ...markBlocked] : [];
+  const markOffsetsKey = markOffsets.length > 0 ? JSON.stringify(markOffsets) : '';
+  const markHashesReady = markOffsets.length > 0 && verifySentenceRecordsSync(markTexts.texts, markOffsets) !== undefined;
+  const [, setMarkHashTick] = useState(0);
+  useEffect(() => {
+    if (!markOffsetsKey || markHashesReady) return;
+    let active = true;
+    verifySentenceRecords(markTexts.texts, JSON.parse(markOffsetsKey) as SentenceOffsets[]).then(
+      () => { if (active) setMarkHashTick((n) => n + 1); },
+      () => {},
+    );
+    return () => { active = false; };
+  }, [markOffsetsKey, markHashesReady, markTexts]);
+
+  const markModeShown = !markRecordView.hasRecord || markRecordView.mode === 'strict' || markRecordView.mode === 'balanced';
+  const markGhost = isGhostChat || Boolean(currentChatId?.startsWith('ghost-'));
+  const marksAllowed = markHashesReady && Array.isArray(answerMetadata?.sentences) && markModeShown && !markGhost && metadataRecord?.refusal !== true;
+  const markLanguage = answerMetadata?.answerLanguage ?? markRecordView.language ?? language ?? 'en';
+  const markTextLanguage = clientTextLanguage(markLanguage);
+  const uncitedText = clientText('notices.uncited', markLanguage);
+  const notConfirmedText = clientText('notices.not_confirmed', markLanguage);
+  const verifiedSentences = marksAllowed ? verifySentenceRecordsSync(markTexts.texts, markSentences) ?? [] : [];
+  const verifiedChecked = marksAllowed ? verifySentenceRecordsSync(markTexts.texts, markChecked) ?? [] : [];
+  const markKinds = sentenceMarkKinds(verifiedSentences, verifiedChecked);
+  const blockedByPart = markHashesReady ? blockedReplacements(markTexts.texts, markBlocked, markLanguage) : markTexts.texts.map(() => []);
+  const displayParts = markHashesReady ? answerDisplayText(markTexts.texts, markBlocked, markLanguage) : markTexts.texts;
+  const displayChanged = displayParts.some((text, i) => text !== markTexts.texts[i]);
+
+  const markedTextByRender = new Map<number, string>();
+  const shownMarks: string[] = [];
+  const markCounts = { uncited: 0, unsupported: 0 };
+  markTexts.byRender.forEach((textIndex, renderIndex) => {
+    if (textIndex < 0) return;
+    const raw = markTexts.texts[textIndex]!;
+    const seen = new Set<string>();
+    const records = [...verifiedSentences, ...verifiedChecked].flatMap((record) => {
+      const key = `${record.part}:${record.index}`;
+      if (record.part !== textIndex || seen.has(key) || record.start >= raw.length) return [];
+      seen.add(key);
+      return [{ ...record, end: Math.min(record.end, raw.length) }];
+    });
+    const replacements = (blockedByPart[textIndex] ?? []).filter((r) => r.end <= raw.length);
+    if (records.length === 0 && replacements.length === 0) return;
+    const placed = placedSentenceMarks(raw, records, markKinds, replacements);
+    let text = insertSentenceMarks(raw, records, markKinds, replacements);
+    if (renderIndex === followupSplit.partIndex) {
+      const split = splitFollowups(text);
+      const display = splitFollowups(displayParts[textIndex]!);
+      if (split.followups.length === followupSplit.followups.length) text = split.body;
+      else if (display.followups.length === followupSplit.followups.length) text = display.body;
+      else text = followupSplit.body;
+    }
+    markedTextByRender.set(renderIndex, text);
+    for (const mark of placed) {
+      if (!text.includes(`(${markHref(mark.kind, mark.part, mark.index)})`)) continue;
+      shownMarks.push(mark.id);
+      markCounts[mark.kind] += 1;
+    }
+  });
+  const markShownKey = shownMarks.join(',');
+  const markedMarkdownComponents = useMemo<Partial<Components>>(() => {
+    if (!markShownKey) return markdownComponents;
+    const shown = new Set(markShownKey.split(','));
+    const baseAnchor = markdownComponents.a as ((_props: Record<string, unknown>) => React.ReactNode) | undefined;
+    return {
+      ...markdownComponents,
+      a: (props) => {
+        const mark = markFromHref(props.href, shown);
+        if (mark) {
+          return (
+            <SentenceMark
+              kind={mark.kind}
+              index={mark.index}
+              text={mark.kind === 'uncited' ? uncitedText : notConfirmedText}
+              lang={markTextLanguage}
+              uiLanguage={language}
+            />
+          );
+        }
+        return baseAnchor ? baseAnchor(props as Record<string, unknown>) : null;
+      },
+    };
+  }, [markdownComponents, markShownKey, uncitedText, notConfirmedText, markTextLanguage, language]);
+
+  /** The text parts copy uses: the display text (blocked ranges replaced), the related-question tail split off. */
+  const copyTextParts = (): string[] =>
+    processMessageContent.renderableParts.flatMap((part, index) => {
+      if (part.type !== 'text') return [];
+      const textIndex = markTexts.byRender[index] ?? -1;
+      const changed = textIndex >= 0 && displayParts[textIndex] !== markTexts.texts[textIndex];
+      const shown = changed ? displayParts[textIndex]! : (part as { text: string }).text;
+      if (index !== followupSplit.partIndex) return [shown];
+      if (changed) {
+        const split = splitFollowups(shown);
+        return [split.followups.length === followupSplit.followups.length ? split.body : followupSplit.body];
+      }
+      return [followupSplit.body];
+    });
+  /** The text read aloud: today's text, or the display text when a verified blocked range replaced a sentence. */
+  const speechSourceText = (): string => (displayChanged ? displayParts.join('\n\n') : messageContent.text);
 
   // Add these handlers for the McpToolBox
   const { toast } = useToast();
@@ -4538,10 +4705,12 @@ ChatMessage = function ({
                         return (
                           <TextPartRenderer
                             key={`text-part-${index}`}
-                            part={(index === followupSplit.partIndex ? { ...part, text: followupSplit.body } : part) as ContentPart & { type: 'text' }}
+                            part={(markedTextByRender.has(index)
+                              ? { ...part, text: markedTextByRender.get(index)! }
+                              : index === followupSplit.partIndex ? { ...part, text: followupSplit.body } : part) as ContentPart & { type: 'text' }}
                             index={index}
                             inlineSourcesEnabled={env.NEXT_PUBLIC_SHOW_SOURCES_ENABLED === 'true'}
-                            markdownComponents={markdownComponents}
+                            markdownComponents={markedMarkdownComponents}
                             textSize={textSize}
                             fontFamily={fontFamily}
                             isAI={isAI}
@@ -4812,6 +4981,16 @@ ChatMessage = function ({
                       }
                     })}
                     {/* End parts mapping */}
+                    {marksAllowed && (
+                      <AnswerMarkLegend
+                        counts={markCounts}
+                        texts={{ uncited: uncitedText, unsupported: notConfirmedText }}
+                        language={markTextLanguage}
+                        uiLanguage={language}
+                        live={markLive}
+                      />
+                    )}
+                    {answerNotices.length > 0 && <AnswerNotices notices={answerNotices} />}
                     {followupSplit.followups.length > 0 && (
                       <RelatedQuestions
                         questions={followupSplit.followups}
@@ -5053,7 +5232,7 @@ ChatMessage = function ({
                         })() as React.ReactNode}
 
                         {/* Audio download options */}
-                        {isAudioCached(prepareTextForTTS(cleanToolCallMetadata(messageContent.text))) && !audioState.isPlaying && !audioState.isLoading && (
+                        {isAudioCached(prepareTextForTTS(cleanToolCallMetadata(speechSourceText()))) && !audioState.isPlaying && !audioState.isLoading && (
                           <div className="relative" style={{ position: 'relative' }}>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>

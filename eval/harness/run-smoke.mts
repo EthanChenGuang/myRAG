@@ -22,6 +22,7 @@ const DEFAULT_GOLDEN_MANIFESTS: Record<FixtureMode, string> = {
   ingest: 'eval/fixtures/ingest/golden-ingest.manifest.json',
 };
 const NOISE_PATH = path.join(REPO_ROOT, 'eval/config/noise.json');
+const DEFAULT_GATES_PATH = 'eval/config/quality-gates.json';
 const SEC_LOG_SWITCHES = ['RAG_CONTEXT_TAGGING', 'RAG_INJECTION_CHECK', 'RAG_INJECTION_PROMPT_GUARD', 'RAG_INJECTION_LAKERA', 'RAG_TOOL_RESULT_GUARD'] as const;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -70,17 +71,15 @@ async function main(): Promise<number> {
     strict: true,
   });
 
-  // D-06, O-1: --gates adds the absolute gate to the noise-band gate; --gates-mode report prints it without changing the exit code.
-  const gatesFile = values.gates?.trim();
-  if (gatesFile !== undefined && gatesFile === '') {
+  // D-06, O-1: a gated run always adds the absolute gates (default eval/config/quality-gates.json, --gates names another file) to the
+  // noise-band gate; only --no-gate leaves them out. --gates-mode report prints them without changing the exit code.
+  const gatesFlag = values.gates?.trim();
+  if (gatesFlag !== undefined && gatesFlag === '') {
     console.error('[Eval Harness] --gates must not be empty');
     return 2;
   }
+  const gatesFile = gatesFlag !== undefined ? path.resolve(gatesFlag) : path.join(REPO_ROOT, DEFAULT_GATES_PATH);
   const gatesMode = values['gates-mode'];
-  if (gatesMode !== undefined && gatesFile === undefined) {
-    console.error('[Eval Harness] --gates-mode needs --gates');
-    return 2;
-  }
   if (gatesMode !== undefined && gatesMode !== 'enforce' && gatesMode !== 'report') {
     console.error('[Eval Harness] --gates-mode must be enforce or report');
     return 2;
@@ -309,7 +308,8 @@ async function main(): Promise<number> {
     '--out',
     outDir,
     ...(goldenManifest !== undefined ? ['--manifest', goldenManifest] : []),
-    ...(gatesFile !== undefined ? ['--gates', path.resolve(gatesFile)] : []),
+    '--gates',
+    gatesFile,
     ...(gatesMode !== undefined ? ['--gates-mode', gatesMode] : []),
   ]);
   console.log(`[Eval Harness] gate: ${path.join(outDir, 'gate.md')}`);

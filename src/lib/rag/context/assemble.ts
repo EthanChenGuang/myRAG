@@ -1,4 +1,5 @@
-import { formatURLsForContext, type ExtractedURL } from '@/lib/url-extractor';
+import type { ExtractedURL } from '@/lib/url-extractor';
+import { formatGuardedLinks } from '../security/link-section';
 import { readAnswerConfig } from '../generation/answer-config';
 import { neutralizeSentinel } from '../generation/sentinel';
 import { renderReferencedSection } from '../refs/resolve';
@@ -533,7 +534,7 @@ export function buildContext<C extends AssemblyCandidate>(
     if (collectedURLs.length > 0) {
       const uniqueURLs = Array.from(new Map(collectedURLs.map((url) => [url.url, url])).values());
       links = uniqueURLs;
-      const urlSection = formatURLsForContext(uniqueURLs);
+      const urlSection = formatGuardedLinks(uniqueURLs);
       if (urlSection) {
         contextParts.push(urlSection);
         linksSection = urlSection;

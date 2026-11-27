@@ -1,3 +1,4 @@
+import json
 import re
 from pathlib import Path
 
@@ -52,29 +53,19 @@ def load_judge_config(path: Path | None = None) -> JudgeConfig:
     return JudgeConfig.model_validate_json(target.read_text(encoding="utf-8"))
 
 
-_PROVIDER_FAMILIES = {
-    "anthropic": "anthropic",
-    "openai": "openai",
-    "google": "google",
-    "meta-llama": "meta-llama",
-    "mistralai": "mistralai",
-    "qwen": "qwen",
-    "deepseek": "deepseek",
-    "x-ai": "x-ai",
-    "cohere": "cohere",
-}
-_ROUTER_PREFIXES = {"openrouter"}
-_NAME_FAMILIES = (
-    (re.compile(r"claude"), "anthropic"),
-    (re.compile(r"^(gpt-|gpt\d|chatgpt|o\d(\b|-|$)|davinci)"), "openai"),
-    (re.compile(r"^(gemini|gemma)"), "google"),
-    (re.compile(r"^(llama|meta-llama)"), "meta-llama"),
-    (re.compile(r"^(mistral|mixtral|codestral|ministral|pixtral|magistral|devstral)"), "mistralai"),
-    (re.compile(r"^(qwen|qwq)"), "qwen"),
-    (re.compile(r"^deepseek"), "deepseek"),
-    (re.compile(r"^grok"), "x-ai"),
-    (re.compile(r"^(command|c4ai)"), "cohere"),
-)
+FAMILIES_PATH = REPO_ROOT / "config" / "rag" / "model-families.json"
+
+
+def _load_families(path: Path) -> tuple[dict[str, str], set[str], tuple[tuple[re.Pattern[str], str], ...]]:
+    """D-25: one family table for the app (src/lib/rag/generation/judge.ts) and the eval."""
+    data = json.loads(path.read_text(encoding="utf-8"))
+    providers = dict(data["provider_families"])
+    routers = set(data["router_prefixes"])
+    patterns = tuple((re.compile(entry["pattern"]), entry["family"]) for entry in data["name_patterns"])
+    return providers, routers, patterns
+
+
+_PROVIDER_FAMILIES, _ROUTER_PREFIXES, _NAME_FAMILIES = _load_families(FAMILIES_PATH)
 
 
 def generator_family(model_id: str) -> str:
