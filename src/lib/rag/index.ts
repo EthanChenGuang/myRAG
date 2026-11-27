@@ -26,7 +26,23 @@ export { isTenantScope, scopeKey } from './tenant/scope';
 export { evalScope } from './tenant/eval';
 export type { EvalScopeInput, EvalScopeOutcome } from './tenant/eval';
 export type { TenantScope } from './tenant/scope';
+export {
+  ACCESS_ADMIN_HASH,
+  accessScopeTiming,
+  accessTableFilter,
+  bodyNamesAccessGroups,
+  resolveAccessScope,
+  uploadAccessKeys,
+} from './tenant/access';
 export { scopeAccessFilter } from './tenant/access';
+export type {
+  AccessIdentity,
+  AccessScopeRefusalReason,
+  ResolveAccessScopeInput,
+  ResolveAccessScopeResult,
+  UploadAccessChoice,
+  UploadAccessResult,
+} from './tenant/access';
 export type { ScopeAccessFilter } from './tenant/access';
 export { getTerminologyLexicon, TerminologyUnavailableError } from './terminology/lexicon';
 export type { TerminologyLexicon, TerminologyLexiconOptions } from './terminology/lexicon';
