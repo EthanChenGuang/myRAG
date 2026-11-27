@@ -527,6 +527,8 @@ export async function createFixtureDatabase(options: {
   tableSplitDocType?: string;
   /** Ingest mode only: ingestion switches layered over the build's fixed ingest env. */
   ingestEnv?: Record<string, string>;
+  /** Ingest mode only: also ingest the templated collection into the fixture tenant (plan 03.3-20). */
+  templated?: boolean;
   /** D-27: dictionary rows written after the corpus load, in either fixture mode. */
   terminologySeed?: readonly TerminologySeedRow[];
 }): Promise<FixtureDatabase> {
@@ -553,6 +555,7 @@ export async function createFixtureDatabase(options: {
       ...(options.tableSplit ? { tableSplit: true } : {}),
       ...(options.tableSplit && options.tableSplitDocType ? { tableSplitDocType: options.tableSplitDocType } : {}),
       ...(options.ingestEnv ? { ingestEnv: options.ingestEnv } : {}),
+      ...(options.templated ? { templated: true } : {}),
     });
     if (options.terminologySeed?.length) {
       try {
@@ -565,6 +568,7 @@ export async function createFixtureDatabase(options: {
     return built;
   }
   if (options.tableSplit) throw new Error('[Fixture DB] the table_split tenants need the ingest fixture mode');
+  if (options.templated) throw new Error('[Fixture DB] the templated collection needs the ingest fixture mode');
   if (options.chunkingProfiles?.length) throw new Error('[Fixture DB] chunking profiles are seeded only in the ingest fixture mode');
   if (options.ingestRouting) throw new Error('[Fixture DB] routing and forced tiers need the ingest fixture mode');
 

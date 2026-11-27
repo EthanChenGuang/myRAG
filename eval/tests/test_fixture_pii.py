@@ -37,7 +37,8 @@ def email_violations(text: str) -> list[str]:
 
 INGEST_FIXTURES = FIXTURES / "ingest"
 PARSE_FIXTURES = FIXTURES / "parse"
-INGEST_FILE_COUNT = 54
+# 54 before plan 03.3-20, which added 39 recorded parse results, 39 Docling JSON files and the five templated rule data files.
+INGEST_FILE_COUNT = 54 + 2 * 39 + 5
 
 
 def _ingest_files():
@@ -48,6 +49,7 @@ def _ingest_files():
         *sorted((INGEST_FIXTURES / "text").glob("*.md")),
         INGEST_FIXTURES / "manifest.json",
         *sorted((INGEST_FIXTURES / "recorded").glob("*.json")),
+        *sorted((INGEST_FIXTURES / "templated").glob("*.json")),
     ]
 
 

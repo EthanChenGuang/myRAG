@@ -9,8 +9,8 @@ import type { FixtureDatabase } from '../../eval/harness/pglite-supabase.mts';
 const ROOT = process.cwd();
 const CORPUS_DIR = path.join(ROOT, 'eval/fixtures/corpus');
 const HARNESS = path.join(ROOT, 'eval/harness/templated-fixtures.mts');
-/** The ingest-mode corpus hash before plan 03.3-20 (committed fixture-ingest-baseline.json at its Task 1). */
-const PLAIN_CORPUS_SHA256 = 'f70716e198dd625ce408aa1d26a042567e33398b8d37df50f3245352932ae08c';
+/** The ingest-mode build hash (corpusSha256) of this small plain build on the base commit of plan 03.3-20, measured there. */
+const PLAIN_CORPUS_SHA256 = '28d34c3215950aa8b0a0397827b2a91b7001df488e524c33ca94bd4163423351';
 const RESTRICTED = ['tpl-family-zh-01', 'tpl-family-en-01', 'tpl-family-it-01', 'tpl-variants-zh', 'tpl-variants-en', 'tpl-variants-it'];
 /** A small build: one corpus document, no typed or parse fixture document (the corpus hash still covers the whole corpus). */
 const SMALL = { corpusDir: CORPUS_DIR, corpusRange: { start: 0, end: 1 }, typedFixtureIds: [], parseFixtureIds: [] } as const;

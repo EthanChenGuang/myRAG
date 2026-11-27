@@ -98,6 +98,7 @@ def test_existing_ingest_golden_items_are_unchanged():
             row
             for row in rows
             if not {"clause", "parse_fixtures"} & set(row.get("tags", [])) and row["category"] not in (TABLE_SPLIT, TEMPLATED)
+            and not row["id"].startswith(TEMPLATED_ID_PREFIX)
         ),
         key=lambda row: row["id"],
     )
@@ -108,6 +109,8 @@ def test_existing_ingest_golden_items_are_unchanged():
 
 TABLE_SPLIT = "table_split"
 TEMPLATED = "templated_collection"
+# 03.3-20: the templated_collection items and the five no-answer items in the templated vocabulary that keep the gate composition.
+TEMPLATED_ID_PREFIX = "ingest-tpl-"
 
 
 # Parse fixtures (03.1-47, D-40/D-41): at least three approved items per class link to the fixture document by name.
@@ -206,7 +209,7 @@ def test_new_items_take_their_split_from_the_rule_and_the_manifest_keeps_the_old
     parse_ids = {item.id for item in items if PARSE_TAG in item.tags}
     assert parse_ids, "no parse fixture items"
     table_ids = {item.id for item in items if item.category == TABLE_SPLIT}
-    templated_ids = {item.id for item in items if item.category == TEMPLATED}
+    templated_ids = {item.id for item in items if item.category == TEMPLATED or item.id.startswith(TEMPLATED_ID_PREFIX)}
     assert templated_ids, "no templated_collection items"
     for item in items:
         if item.id in parse_ids | table_ids | templated_ids:

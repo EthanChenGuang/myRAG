@@ -103,6 +103,21 @@ export function loadTemplatedFixtures(root = process.cwd()): TemplatedFixtureSet
   return { fixtures, data };
 }
 
+/** A golden item of the templated collection: it runs only where the collection is loaded (inline ingest mode). */
+export function isTemplatedItem(item: { category: string }): boolean {
+  return item.category === TEMPLATED_CATEGORY;
+}
+
+/** The golden file without templated items, for runs that do not load the collection; the file itself when it holds none. */
+export function dropTemplatedItems(goldenPath: string, outPath: string): string {
+  const lines = fs.readFileSync(goldenPath, 'utf8').split('\n').filter((line) => line.trim() !== '');
+  const kept = lines.filter((line) => !isTemplatedItem(JSON.parse(line) as { category: string }));
+  if (kept.length === lines.length) return goldenPath;
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
+  fs.writeFileSync(outPath, `${kept.join('\n')}\n`);
+  return outPath;
+}
+
 function sortKeys(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortKeys);
   if (value && typeof value === 'object') {
