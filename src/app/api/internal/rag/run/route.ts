@@ -724,9 +724,11 @@ export async function POST(req: NextRequest) {
           ...(chunk.legs !== undefined ? { legs: chunk.legs } : {}),
           ...(chunk.language !== undefined ? { language: chunk.language } : {}),
         })),
-        kept: result.kept.map(({ dupClusterId, alsoIn: _alsoIn, ...chunk }, index) => ({
+        kept: result.kept.map(({ dupClusterId, alsoIn: _alsoIn, isCurrent, documentVersion, ...chunk }, index) => ({
           ...chunk,
           ...(dupClusterId ? { dup_cluster_id: dupClusterId } : {}),
+          ...(isCurrent !== undefined ? { is_current: isCurrent } : {}),
+          ...(documentVersion !== undefined ? { document_version: documentVersion } : {}),
           ...(keptIdentifiers ? { identifiers_norm: keptIdentifiers[index] ?? [] } : {}),
         })),
         ...(redundancy !== null ? { topk_redundancy: redundancy } : {}),

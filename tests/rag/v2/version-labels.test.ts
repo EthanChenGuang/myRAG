@@ -249,6 +249,24 @@ describe('version labels in the v2 context (D-13)', () => {
     for (const doc of out.assembly?.usedDocuments ?? []) expect('version' in doc).toBe(false);
   });
 
+  it('scope all: kept chunks carry isCurrent and documentVersion, also when the version lookup fails', async () => {
+    for (const fail of [false, true]) {
+      const { out } = await runContext({ versionScope: 'all', fail });
+      const byChunk = new Map((out.assembly?.kept ?? []).map((chunk) => [chunk.chunk_id, chunk]));
+      expect(byChunk.get('old-1')).toMatchObject({ isCurrent: false, documentVersion: 1 });
+      expect(byChunk.get('new-1')).toMatchObject({ isCurrent: true, documentVersion: 2 });
+    }
+  });
+
+  it('scope current: kept chunks carry no version fields', async () => {
+    for (const run of [await runContext(), await runContext({ versionScope: 'current' })]) {
+      for (const chunk of run.out.assembly?.kept ?? []) {
+        expect('isCurrent' in chunk).toBe(false);
+        expect('documentVersion' in chunk).toBe(false);
+      }
+    }
+  });
+
   it('v2 blocks carry documentVersion from the hit', async () => {
     const { out } = await runContext();
     const versions = new Map((out.assembly?.blocks ?? []).map((block) => [block.documentId, block.documentVersion]));

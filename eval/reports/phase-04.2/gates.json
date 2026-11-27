@@ -106,17 +106,10 @@
       "name": "versions",
       "numbers": {
         "items": 3,
-        "superseded_kept": 0
+        "superseded_kept": 3
       },
-      "offenders": [
-        "en-general-007: an evidence group has no kept chunk",
-        "en-general-007: 0 superseded chunk(s) kept, fewer than 1",
-        "zh-general-008: an evidence group has no kept chunk",
-        "zh-general-008: 0 superseded chunk(s) kept, fewer than 1",
-        "it-general-007: an evidence group has no kept chunk",
-        "it-general-007: 0 superseded chunk(s) kept, fewer than 1"
-      ],
-      "passed": false,
+      "offenders": [],
+      "passed": true,
       "runs": [
         "v2-version-scope-on",
         "v2-default"
@@ -743,7 +736,7 @@
         },
         "intent_coverage": {
           "n": 9,
-          "value": 0.6666666666666666
+          "value": 1.0
         },
         "k_zero": {
           "n": 173,
@@ -755,7 +748,7 @@
         },
         "ndcg_at_context_k": {
           "n": 173,
-          "value": 0.617300125639792
+          "value": 0.6240085558230499
         },
         "near_miss_leakage": {
           "n": 1,
@@ -763,11 +756,11 @@
         },
         "recall_at_10": {
           "n": 173,
-          "value": 0.6791907514450867
+          "value": 0.6878612716763006
         },
         "recall_at_5": {
           "n": 173,
-          "value": 0.6676300578034682
+          "value": 0.6763005780346821
         },
         "topk_redundancy": {
           "n": 149,
