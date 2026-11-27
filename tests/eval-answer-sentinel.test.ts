@@ -1,8 +1,15 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, test } from 'vitest';
-import { buildEvalSystemPrompt, EVAL_DEFAULT_SYSTEM_PROMPT } from '@/lib/rag-eval/answer';
-import { createEnhancedRAGPrompt, readSecurityConfig } from '@/lib/rag';
+import { MockLanguageModelV3 } from 'ai/test';
+import type { LanguageModelV3CallOptions, LanguageModelV3Content } from '@ai-sdk/provider';
+import {
+  buildEvalSystemPrompt,
+  EVAL_DEFAULT_SYSTEM_PROMPT,
+  generateEvalAnswerDetailed,
+  setEvalLanguageModelFactory,
+} from '@/lib/rag-eval/answer';
+import { buildCalculateTool, createCalcTraceHolder, createEnhancedRAGPrompt, readSecurityConfig } from '@/lib/rag';
 import { REFERENCE_NOTICE, wrapDocuments } from '@/lib/rag/context/wrap';
 import { SystemPromptManager } from '@/lib/system-prompt-manager';
 
@@ -149,5 +156,107 @@ describe('eval answer prompt assembly stays tied to the chat route', () => {
         expect(source).not.toContain('contextTagging');
       }
     });
+  });
+});
+
+describe('Phase 5.2.1 calculation tool loop on the eval answer path (D-65, RESEARCH Pattern F, A12)', () => {
+  const REQUEST = {
+    operands: [
+      { name: 'a', value: '2', unit: 'pell', source: { kind: 'question' } },
+      { name: 'b', value: '3', unit: 'pell', source: { kind: 'question' } },
+    ],
+    steps: [{ id: 'total', op: 'add', args: ['a', 'b'], label: 'total' }],
+    result: 'total',
+  };
+
+  interface Call {
+    tools: string[];
+    toolChoice: unknown;
+    hasToolResult: boolean;
+  }
+
+  function scriptedModel(steps: Array<{ text?: string; toolCall?: boolean }>, calls: Call[]) {
+    return new MockLanguageModelV3({
+      doGenerate: async (options: LanguageModelV3CallOptions) => {
+        const index = calls.length;
+        calls.push({
+          tools: (options.tools ?? []).map((tool) => tool.name),
+          toolChoice: options.toolChoice,
+          hasToolResult: options.prompt.some((message) => message.role === 'tool'),
+        });
+        const step = steps[Math.min(index, steps.length - 1)];
+        const content: LanguageModelV3Content[] = [];
+        if (step.text) content.push({ type: 'text', text: step.text });
+        if (step.toolCall) content.push({ type: 'tool-call', toolCallId: `call-${index}`, toolName: 'calculate', input: JSON.stringify(REQUEST) });
+        return {
+          content,
+          finishReason: { unified: step.toolCall ? ('tool-calls' as const) : ('stop' as const), raw: step.toolCall ? 'tool-calls' : 'stop' },
+          usage: {
+            inputTokens: { total: 10, noCache: 10, cacheRead: 0, cacheWrite: 0 },
+            outputTokens: { total: 3, text: 3, reasoning: 0 },
+          },
+          warnings: [],
+        };
+      },
+    });
+  }
+
+  afterEach(() => setEvalLanguageModelFactory(null));
+
+  const base = { query: 'What is 2 pell plus 3 pell?', context: '', ragMode: 'balanced' as const, generatorModel: 'test/eval-model' };
+
+  test('without the calculation input the call offers no tools and makes one step', async () => {
+    const calls: Call[] = [];
+    setEvalLanguageModelFactory(() => scriptedModel([{ text: 'Five pell.' }], calls));
+    const result = await generateEvalAnswerDetailed(base);
+    expect(result.text).toBe('Five pell.');
+    expect(calls).toHaveLength(1);
+    expect(calls[0].tools).toEqual([]);
+    expect(calls[0].toolChoice).toBeUndefined();
+    expect(result.toolStepEnds).toEqual([]);
+    expect(result.usage).toEqual({ input_tokens: 10, output_tokens: 3 });
+  });
+
+  test('in tool mode the calculate tool is offered, the holder records the trace and the tool step end anchors it', async () => {
+    const calls: Call[] = [];
+    setEvalLanguageModelFactory(() => scriptedModel([{ text: 'Adding. ', toolCall: true }, { text: 'The total is 5 pell.' }], calls));
+    const holder = createCalcTraceHolder();
+    const tool = buildCalculateTool({ aliases: new Set<string>(), holder });
+    const result = await generateEvalAnswerDetailed({ ...base, calc: { mode: 'tool', tool, holder } });
+    expect(calls).toHaveLength(2);
+    expect(calls[0].tools).toEqual(['calculate']);
+    expect(calls[1].hasToolResult).toBe(true);
+    expect(result.text).toBe('Adding. The total is 5 pell.');
+    expect(result.stepTexts).toEqual(['Adding. ', 'The total is 5 pell.']);
+    expect(result.toolStepEnds).toEqual(['Adding. '.length]);
+    const traces = holder.traces();
+    expect(traces).toHaveLength(1);
+    expect(traces[0]).toMatchObject({ origin: 'tool', anchor_offset: 'Adding. '.length, result: { status: 'ok', value: '5' } });
+    expect(result.usage).toEqual({ input_tokens: 20, output_tokens: 6 });
+  });
+
+  test('the tool loop stops after three steps', async () => {
+    const calls: Call[] = [];
+    setEvalLanguageModelFactory(() => scriptedModel([{ toolCall: true }], calls));
+    const holder = createCalcTraceHolder();
+    const tool = buildCalculateTool({ aliases: new Set<string>(), holder });
+    await generateEvalAnswerDetailed({ ...base, calc: { mode: 'tool', tool, holder } });
+    expect(calls).toHaveLength(3);
+    expect(holder.traces()).toHaveLength(3);
+  });
+
+  test('trailing_block mode offers no tools (the block is extracted from the whole text afterwards)', async () => {
+    const calls: Call[] = [];
+    setEvalLanguageModelFactory(() => scriptedModel([{ text: 'The total is 5 pell.' }], calls));
+    const result = await generateEvalAnswerDetailed({ ...base, calc: { mode: 'trailing_block', holder: createCalcTraceHolder() } });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].tools).toEqual([]);
+    expect(result.text).toBe('The total is 5 pell.');
+  });
+
+  test('the eval loop allows three steps and the chat route offers the same tool builder', () => {
+    expect(compact(answerSource)).toContain(compact('stopWhen: stepCountIs(EVAL_CALC_MAX_STEPS)'));
+    expect(answerSource).toContain('const EVAL_CALC_MAX_STEPS = 3;');
+    expect(compact(chatRoute)).toContain(compact('buildCalculateTool({ aliases: calcOffer.aliases, holder: calcHolder })'));
   });
 });
