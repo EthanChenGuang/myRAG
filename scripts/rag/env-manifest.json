@@ -408,6 +408,12 @@
       "ragAffecting": true
     },
     {
+      "name": "RAG_DOC_ACCESS_GROUPS",
+      "status": "managed",
+      "knownGaps": [],
+      "ragAffecting": true
+    },
+    {
       "name": "RAG_DOC_TRANSLATION",
       "status": "managed",
       "knownGaps": [],

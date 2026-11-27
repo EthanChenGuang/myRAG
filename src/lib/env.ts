@@ -190,6 +190,7 @@ class EnvironmentConfig {
       RAG_CONTEXT_TOKEN_BUDGET: process.env.RAG_CONTEXT_TOKEN_BUDGET || '6000',
       RAG_PARENT_CHILD: process.env.RAG_PARENT_CHILD || 'false',
       RAG_HNSW_ITERATIVE_SCAN: process.env.RAG_HNSW_ITERATIVE_SCAN || 'off',
+      RAG_DOC_ACCESS_GROUPS: process.env.RAG_DOC_ACCESS_GROUPS || 'off',
       RAG_EXACT_SCAN_CUTOFF: process.env.RAG_EXACT_SCAN_CUTOFF || '0',
       RAG_LEXICAL_TRANSLATION: process.env.RAG_LEXICAL_TRANSLATION || 'false',
       RAG_LEXICAL_DICTIONARY: process.env.RAG_LEXICAL_DICTIONARY || 'false',

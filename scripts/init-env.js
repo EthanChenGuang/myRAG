@@ -380,6 +380,7 @@ RAG_CONTEXT_TOKEN_BUDGET=6000
 # Parent chunks and pgvector scan
 RAG_PARENT_CHILD=false
 RAG_HNSW_ITERATIVE_SCAN=off
+RAG_DOC_ACCESS_GROUPS=off
 RAG_EXACT_SCAN_CUTOFF=0
 # Query translation before lexical tokenization
 RAG_LEXICAL_TRANSLATION=false
