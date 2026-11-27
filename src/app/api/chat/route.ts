@@ -1,6 +1,7 @@
 import { streamText, tool, type ToolSet, convertToModelMessages, createUIMessageStream, createUIMessageStreamResponse, UIMessage, stepCountIs } from 'ai';
 import { buildCtaInstruction } from '@/lib/chat/cta-instruction';
 import { buildFormattingInstruction, resolveAnswerStyle } from '@/lib/chat/answer-style';
+import { appendHistoryNotEvidence, historyNotEvidenceEnabled } from '@/lib/chat/history-not-evidence';
 import { z } from 'zod/v3';
 // Use the dedicated OpenRouter provider
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
@@ -2631,15 +2632,22 @@ Context:
         mode: ragMode,
         webSearchOffered: SUPPORTS_TOOLS && webSearchEnabled && Boolean(env.EXA_API_KEY),
       };
-      systemPrompt = answerTurn.composeSystemPrompt(
-        citationSession.decorateSystemPrompt(createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode, answerLanguage)),
-        answerRuleOptions,
+      const historyNotEvidence = ragMode !== 'bypass' && historyNotEvidenceEnabled(env.RAG_HISTORY_NOT_EVIDENCE);
+      systemPrompt = appendHistoryNotEvidence(
+        answerTurn.composeSystemPrompt(
+          citationSession.decorateSystemPrompt(createEnhancedRAGPrompt(ragSystemPrompt, context, ragMode, answerLanguage)),
+          answerRuleOptions,
+        ),
+        historyNotEvidence,
       );
       if (citationSession.strategy === 'claude-citations') {
         claudeSystemText = [
-          answerTurn.composeSystemPrompt(
-            appendAnswerLanguage(citationSession.claudeSystemPrompt(ragSystemPrompt), answerLanguage),
-            answerRuleOptions,
+          appendHistoryNotEvidence(
+            answerTurn.composeSystemPrompt(
+              appendAnswerLanguage(citationSession.claudeSystemPrompt(ragSystemPrompt), answerLanguage),
+              answerRuleOptions,
+            ),
+            historyNotEvidence,
           ),
           String(formattingSystemMessage.content),
           String(ctaSystemMessage.content),
