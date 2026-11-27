@@ -45,6 +45,7 @@ const FILTERED_COMMON = [
   'rag_cache_check',
   'rag_attribute_filter_values',
   'rag_attribute_documents',
+  'rag_tenant_doc_types',
 ];
 
 const FILTERED: Record<DeploymentMode, string[]> = {
@@ -207,7 +208,6 @@ const EXEMPT: ReadonlyArray<{ reason: string; functions: readonly string[] }> = 
     reason: 'Statistics: counts, shares or coverage per tenant, language or profile; no row content and no document id.',
     functions: [
       'get_index_statistics',
-      'rag_tenant_doc_types',
       'rag_language_document_counts',
       'rag_tenant_language_shares',
       'rag_translation_query_state',

@@ -12,7 +12,12 @@ import { FIXTURE_USER_ID, createEmptyFixtureDatabase, type DeploymentMode } from
  */
 const ANON_KEY = 'fixture-anon-key-placeholder';
 const SERVICE_KEY = 'fixture-service-role-key-placeholder';
-const FN = 'public.rag_tenant_doc_types(text)';
+const FN = 'public.rag_tenant_doc_types(text, text[], boolean)';
+const OLD_FN = 'public.rag_tenant_doc_types(text)';
+const ACCESS_SQL = 'SELECT doc_type, docs FROM public.rag_tenant_doc_types(p_tenant_key => $1, p_access_keys => $2::text[], p_access_all => $3)';
+const GROUP_KEY = 'g:00000000-0000-4000-8000-000000986001';
+const OUTSIDER_KEYS = ['all', 'u:00000000-0000-4000-8000-000000986002'];
+const MEMBER_KEYS = ['all', 'u:00000000-0000-4000-8000-000000986003', GROUP_KEY];
 
 const USER_A = '00000000-0000-4000-8000-0000000062a1';
 const USER_B = '00000000-0000-4000-8000-0000000062b1';
@@ -22,6 +27,7 @@ type Role = 'anon' | 'authenticated' | 'service_role';
 
 interface DocSpec {
   docType: string;
+  accessGroups?: string[];
   status?: string;
   isCurrent?: boolean;
   userId?: string;
@@ -57,6 +63,24 @@ async function insertDocs(db: PGlite, mode: DeploymentMode, specs: DocSpec[]): P
         [id, `doc-${id}.md`, `legacy:${id}`, spec.status ?? 'ready', spec.isCurrent ?? true, spec.docType],
       );
     }
+    if (spec.accessGroups) await db.query('UPDATE documents SET access_groups = $2::text[] WHERE id = $1', [id, spec.accessGroups]);
+  }
+}
+
+async function accessDocTypes(db: PGlite, tenantKey: string, keys: string[] | null, all = false): Promise<Record<string, number>> {
+  const result = await asRole(db, 'service_role', () => db.query<{ doc_type: string; docs: string | number }>(ACCESS_SQL, [tenantKey, keys, all]));
+  return Object.fromEntries(result.rows.map((row) => [row.doc_type, Number(row.docs)]));
+}
+
+async function failure(db: PGlite, run: () => Promise<unknown>): Promise<{ message: string; code: string } | null> {
+  await db.exec('SAVEPOINT doc_types_case');
+  try {
+    await run();
+    return null;
+  } catch (error) {
+    return { message: (error as Error).message, code: codeOf(error) };
+  } finally {
+    await db.exec('ROLLBACK TO SAVEPOINT doc_types_case');
   }
 }
 
@@ -229,3 +253,80 @@ describe('rag_tenant_doc_types two-tenant isolation', () => {
     assert.deepEqual(await docTypes(db, `u:${crypto.randomUUID()}`), {});
   });
 });
+
+/**
+ * Quick task doc-types-access (migration 0986): rag_tenant_doc_types takes the access filter of the other retrieval RPCs, so a caller
+ * outside a document's access groups never sees that document's doc type in the sub-question filter vocabulary. Without keys the answer
+ * is the one 0981 gave.
+ */
+for (const mode of ['multi-tenant', 'single-tenant'] as DeploymentMode[]) {
+  const tenant = mode === 'multi-tenant' ? `u:${FIXTURE_USER_ID}` : 's:default';
+
+  describe(`rag_tenant_doc_types access filter (${mode})`, () => {
+    let db: PGlite;
+
+    before(async () => {
+      ({ db } = await createEmptyFixtureDatabase({ deploymentMode: mode }));
+      await insertDocs(db, mode, [
+        { docType: 'general' },
+        { docType: 'general', accessGroups: [GROUP_KEY] },
+        { docType: 'contract_legal', accessGroups: [GROUP_KEY] },
+        { docType: 'contract_legal', accessGroups: [GROUP_KEY], isCurrent: false },
+      ]);
+    });
+
+    after(async () => {
+      await db?.close();
+    });
+
+    test('exactly one overload, with the access parameters; the 0981 signature is gone', async () => {
+      const old = await db.query<{ oid: string | null }>('SELECT to_regprocedure($1) AS oid', [OLD_FN]);
+      assert.equal(old.rows[0]?.oid, null);
+      const overloads = await db.query<{ n: number }>(
+        `SELECT count(*)::int AS n FROM pg_proc WHERE pronamespace = 'public'::regnamespace AND proname = 'rag_tenant_doc_types'`,
+      );
+      assert.equal(overloads.rows[0]?.n, 1);
+      const result = await db.query<{ provolatile: string }>(`SELECT provolatile FROM pg_proc WHERE oid = '${FN}'::regprocedure`);
+      assert.equal(result.rows[0]?.provolatile, 's');
+    });
+
+    test('no keys (access off): the 0981 answer, restricted documents included', async () => {
+      assert.deepEqual(await docTypes(db, tenant), { general: 2, contract_legal: 1 });
+      assert.deepEqual(await accessDocTypes(db, tenant, null), { general: 2, contract_legal: 1 });
+    });
+
+    test('outsider keys: a doc type carried only by restricted documents is not listed, and counts leave them out', async () => {
+      assert.deepEqual(await accessDocTypes(db, tenant, OUTSIDER_KEYS), { general: 1 });
+    });
+
+    test('member keys and admin_all: the restricted doc type is listed', async () => {
+      assert.deepEqual(await accessDocTypes(db, tenant, MEMBER_KEYS), { general: 2, contract_legal: 1 });
+      assert.deepEqual(await accessDocTypes(db, tenant, ['all'], true), { general: 2, contract_legal: 1 });
+    });
+
+    test('guard: no keys while enforcement is on raises access_scope_required; empty or NULL-holding keys raise access_keys_empty', async () => {
+      await db.exec('BEGIN');
+      try {
+        await db.query('UPDATE public.rag_access_group_settings SET enforced = true');
+        const failed = await failure(db, () => docTypes(db, tenant));
+        assert.deepEqual(failed, { message: 'access_scope_required', code: '42501' });
+        assert.deepEqual(await accessDocTypes(db, tenant, OUTSIDER_KEYS), { general: 1 });
+      } finally {
+        await db.exec('ROLLBACK');
+      }
+      for (const keys of [[], ['all', null]] as unknown as string[][]) {
+        await db.exec('BEGIN');
+        try {
+          assert.deepEqual(await failure(db, () => accessDocTypes(db, tenant, keys)), { message: 'access_keys_empty', code: '22023' });
+        } finally {
+          await db.exec('ROLLBACK');
+        }
+      }
+    });
+
+    test('the tenant check still runs first: a wrong-mode key raises 22023 with any keys', async () => {
+      const wrong = mode === 'multi-tenant' ? 's:default' : `u:${FIXTURE_USER_ID}`;
+      await assert.rejects(() => accessDocTypes(db, wrong, MEMBER_KEYS), (error: unknown) => codeOf(error) === '22023');
+    });
+  });
+}

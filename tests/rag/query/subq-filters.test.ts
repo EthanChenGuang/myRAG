@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import type { RetrievalFilterInput } from '@/lib/rag/backend/types';
 import { narrowFilters, parseProposedFilter, type NarrowVocabulary, type SubQuestionFilter } from '@/lib/rag/query/subq-filters';
 import { loadTenantDocTypes, resetTenantVocabularyCacheForTests } from '@/lib/rag/query/tenant-vocabulary';
-import { mintScope } from '@/lib/rag/tenant/scope';
+import { mintAccessScope } from '@/lib/rag/tenant/access-brand';
+import { mintScope, withAccess } from '@/lib/rag/tenant/scope';
 
 /** Neutral synthetic vocabulary: dimension and value slugs carry no domain meaning. */
 const VOCAB_A: NarrowVocabulary = {
@@ -273,5 +274,74 @@ describe('loadTenantDocTypes', () => {
     const { client } = fakeClient({ 's:default': [{ doc_type: 'general', docs: 1 }] });
     expect(await loadTenantDocTypes(tenant, { deps: { adminClient: () => client as never, now: () => 0 } })).toEqual(['general']);
     warn.mockRestore();
+  });
+});
+
+describe('loadTenantDocTypes access filter (quick task doc-types-access, migration 0986)', () => {
+  const ORG = '00000000-0000-4000-8000-000000986aa1';
+  const GROUP = 'g:00000000-0000-4000-8000-000000986aa2';
+  const BASE = mintScope('org', null, ORG);
+  const OUTSIDER = withAccess(BASE, mintAccessScope('keys', ['all', 'u:00000000-0000-4000-8000-000000986aa3']));
+  const MEMBER = withAccess(BASE, mintAccessScope('keys', ['all', GROUP]));
+  const ADMIN = withAccess(BASE, mintAccessScope('admin_all', []));
+
+  function accessClient() {
+    const calls: Array<Record<string, unknown>> = [];
+    const client = {
+      rpc(_name: string, args: Record<string, unknown>) {
+        calls.push(args);
+        const member = Array.isArray(args.p_access_keys) && (args.p_access_keys.includes(GROUP) || args.p_access_all === true);
+        const response = { data: member ? [{ doc_type: 'general' }, { doc_type: 'contract_legal' }] : [{ doc_type: 'general' }], error: null };
+        return Object.assign(Promise.resolve(response), { abortSignal: () => Promise.resolve(response) });
+      },
+    };
+    return { client, calls };
+  }
+
+  it('sends the scope access filter the way accessRpcArgs builds it; an unattached scope (access off) sends only the tenant key', async () => {
+    resetTenantVocabularyCacheForTests();
+    const { client, calls } = accessClient();
+    const deps = { adminClient: () => client as never, now: () => 1_000 };
+    await loadTenantDocTypes(BASE, { deps });
+    await loadTenantDocTypes(OUTSIDER, { deps });
+    await loadTenantDocTypes(MEMBER, { deps });
+    await loadTenantDocTypes(ADMIN, { deps });
+    expect(calls).toEqual([
+      { p_tenant_key: `o:${ORG}` },
+      { p_tenant_key: `o:${ORG}`, p_access_keys: ['all', 'u:00000000-0000-4000-8000-000000986aa3'], p_access_all: false },
+      { p_tenant_key: `o:${ORG}`, p_access_keys: [GROUP, 'all'].sort(), p_access_all: false },
+      { p_tenant_key: `o:${ORG}`, p_access_keys: ['all'], p_access_all: true },
+    ]);
+  });
+
+  it('caches per tenant and access set: a member entry never serves the outsider, and the same set reuses its entry', async () => {
+    resetTenantVocabularyCacheForTests();
+    const { client, calls } = accessClient();
+    const deps = { adminClient: () => client as never, now: () => 2_000 };
+    expect(await loadTenantDocTypes(MEMBER, { deps })).toEqual(['general', 'contract_legal']);
+    expect(await loadTenantDocTypes(OUTSIDER, { deps })).toEqual(['general']);
+    expect(await loadTenantDocTypes(MEMBER, { deps })).toEqual(['general', 'contract_legal']);
+    expect(await loadTenantDocTypes(OUTSIDER, { deps })).toEqual(['general']);
+    expect(calls).toHaveLength(2);
+  });
+
+  it('options.access overrides the scope filter', async () => {
+    resetTenantVocabularyCacheForTests();
+    const { client, calls } = accessClient();
+    const deps = { adminClient: () => client as never, now: () => 3_000 };
+    await loadTenantDocTypes(BASE, { deps, access: { mode: 'keys', keys: ['all', GROUP], setHash: 'c'.repeat(64) } });
+    expect(calls[0]?.p_access_keys).toEqual(['all', GROUP]);
+  });
+
+  it('resetTenantVocabularyCacheForTests(tenantKey) drops every access variant of that tenant', async () => {
+    resetTenantVocabularyCacheForTests();
+    const { client, calls } = accessClient();
+    const deps = { adminClient: () => client as never, now: () => 4_000 };
+    await loadTenantDocTypes(MEMBER, { deps });
+    await loadTenantDocTypes(OUTSIDER, { deps });
+    resetTenantVocabularyCacheForTests(`o:${ORG}`);
+    await loadTenantDocTypes(MEMBER, { deps });
+    await loadTenantDocTypes(OUTSIDER, { deps });
+    expect(calls).toHaveLength(4);
   });
 });
