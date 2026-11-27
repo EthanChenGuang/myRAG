@@ -795,7 +795,7 @@ class MonitorJobTest(unittest.TestCase):
 
 class NightlyTriggersTest(unittest.TestCase):
     def test_a_push_trigger_on_nightly_is_reported(self):
-        data, text = check_workflows.load(check_workflows.NIGHTLY)
+        data = check_workflows.load(check_workflows.NIGHTLY)[0]
         data = dict(data)
         data["on"] = {**check_workflows.triggers(data), "push": {"branches": ["main"]}}
         errors: list[str] = []

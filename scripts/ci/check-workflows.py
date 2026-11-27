@@ -71,6 +71,7 @@ WEEKLY_SKIP_NOTICE = "::notice::no private eval data on this runner, skipping we
 TENANT_NIGHTLY_JOB = "tenant-nightly"
 TENANT_NIGHTLY_SKIP_NOTICE = "::notice::no private eval data or admin token on this runner, skipping tenant nightly"
 MONITOR_JOB = "monitor"
+WEEKLY_LIFECYCLE = ("rag_eval.drift", "rag_eval.golden_set stale-scan", "rag_eval.golden_set re-review")
 MONITOR_SKIP_NOTICE = "::notice::supabase service-role secrets not configured, skipping monitor"
 SEC_SMOKE_STEP = "npm run test-rag -- --run-config eval/config/runs/sec-recommended.json --out eval/out/smoke-sec"
 SEC_NIGHTLY_STEP = "run-nightly.mts --sec-matrix --generator live"
@@ -576,6 +577,11 @@ def check_online_judge(data: dict, errors: list[str]) -> None:
             errors.append(f"nightly: online-judge step must receive {secret} through step env")
     if "LANGFUSE_BASE_URL" not in runner_env:
         errors.append("nightly: online-judge step must receive LANGFUSE_BASE_URL through step env")
+    for name in ("RAG_APP_URL", "RAG_ADMIN_BEARER"):
+        if name not in runner_env:
+            errors.append(f"nightly: online-judge step must receive {name} through step env for the score mirror (D-23)")
+    if runner is not None and '--base-url "$RAG_APP_URL"' not in str(runner.get("run", "")):
+        errors.append('nightly: online-judge must pass --base-url "$RAG_APP_URL" for the score mirror (D-23)')
     for step in steps:
         run = str(step.get("run", ""))
         if "secrets." in run:
@@ -704,9 +710,14 @@ def check_weekly_report(data: dict, errors: list[str]) -> None:
         if f"env.{PRIVATE_FLAG} == 'true'" not in str(step.get("if", "")):
             errors.append(f"{name}: step '{step.get('name', step.get('uses', '?'))}' must be conditioned on env.{PRIVATE_FLAG} == 'true'")
     body = step_text(job)
-    for needle in ("rag_eval.failure_report", "rag_eval.weekly_report", "uv sync --directory eval --locked --all-extras"):
+    for needle in ("rag_eval.failure_report", "rag_eval.weekly_report", "uv sync --directory eval --locked --all-extras", *WEEKLY_LIFECYCLE):
         if needle not in body:
             errors.append(f"{name} is missing '{needle}'")
+    report_index = _step_index(steps, "rag_eval.weekly_report")
+    for needle in WEEKLY_LIFECYCLE:
+        index = _step_index(steps, needle)
+        if index is not None and report_index is not None and index > report_index:
+            errors.append(f"{name}: the '{needle}' step must run before the weekly report")
     for step in steps:
         uses = str(step.get("uses", ""))
         if uses.startswith("actions/upload-artifact@"):
@@ -720,21 +731,102 @@ def check_weekly_report(data: dict, errors: list[str]) -> None:
             errors.append(f"{name}: a step appears to echo a credential")
 
 
+def _check_no_leaks(name: str, steps: list[dict], errors: list[str], *, private: bool) -> None:
+    for step in steps:
+        uses = str(step.get("uses", ""))
+        if private and uses.startswith("actions/upload-artifact@"):
+            errors.append(f"{name} must not upload an artifact (private data and reports stay on the runner)")
+        if private and uses.startswith("actions/checkout@") and (step.get("with") or {}).get("clean") is not False:
+            errors.append(f"{name}: checkout must set clean: false so the gitignored private data stays on the runner")
+        run = str(step.get("run", ""))
+        if "secrets." in run:
+            errors.append(f"{name}: secrets must be passed through step env, not interpolated into run")
+        if re.search(r"\becho\b.*\b(KEY|TOKEN|BEARER)\b", run):
+            errors.append(f"{name}: a step appears to echo a credential")
+
+
+def _daily_only(job: dict) -> bool:
+    return f"github.event.schedule != '{WEEKLY_CRON}'" in str(job.get("if", ""))
+
+
 def check_tenant_nightly(data: dict, errors: list[str]) -> None:
-    pass
+    """D-19, research X-3: drain tenant nightly requests only where private data and the admin token exist."""
+    name = f"nightly: {TENANT_NIGHTLY_JOB}"
+    job = (data.get("jobs") or {}).get(TENANT_NIGHTLY_JOB)
+    if job is None:
+        errors.append(f"nightly: job '{TENANT_NIGHTLY_JOB}' missing")
+        return
+    if not _daily_only(job):
+        errors.append(f"{name} must run on the daily schedule (if: github.event.schedule != '{WEEKLY_CRON}')")
+    flag_expr = str((job.get("env") or {}).get("HAS_ADMIN_BEARER", ""))
+    if "secrets.RAG_ADMIN_BEARER != ''" not in flag_expr:
+        errors.append(f"{name}: job env HAS_ADMIN_BEARER must require secrets.RAG_ADMIN_BEARER")
+    steps = all_steps(job)
+    first = steps[0] if steps else {}
+    first_run = str(first.get("run", ""))
+    if (
+        "if" in first
+        or "eval/golden/private" not in first_run
+        or f"{PRIVATE_FLAG}=true" not in first_run
+        or "$GITHUB_ENV" not in first_run
+        or TENANT_NIGHTLY_SKIP_NOTICE not in first_run
+    ):
+        errors.append(
+            f"{name}: the first step must run unconditionally, set {PRIVATE_FLAG} in $GITHUB_ENV from eval/golden/private "
+            f"and print '{TENANT_NIGHTLY_SKIP_NOTICE}' otherwise"
+        )
+    if '"$HAS_ADMIN_BEARER" = "true"' not in first_run:
+        errors.append(f"{name}: the first step must set {PRIVATE_FLAG} only when HAS_ADMIN_BEARER is true")
+    for step in steps[1:]:
+        if f"env.{PRIVATE_FLAG} == 'true'" not in str(step.get("if", "")):
+            errors.append(f"{name}: step '{step.get('name', step.get('uses', '?'))}' must be conditioned on env.{PRIVATE_FLAG} == 'true'")
+    drain = next((s for s in steps if "rag_eval.tenant_nightly" in str(s.get("run", ""))), None)
+    if drain is None or "--drain" not in str(drain.get("run", "")) or "--base-url" not in str(drain.get("run", "")):
+        errors.append(f"{name} must run 'python -m rag_eval.tenant_nightly --drain --base-url'")
+    elif "RAG_ADMIN_BEARER" not in (drain.get("env") or {}):
+        errors.append(f"{name}: the drain must receive RAG_ADMIN_BEARER through step env")
+    _check_no_leaks(name, steps, errors, private=True)
 
 
 def check_monitor_job(data: dict, errors: list[str]) -> None:
-    pass
+    """O-2, D-20: the daily rule evaluation runs only with the Supabase URL and service-role key as repository secrets."""
+    name = f"nightly: {MONITOR_JOB}"
+    flag = "HAS_MONITOR_SECRETS"
+    job = (data.get("jobs") or {}).get(MONITOR_JOB)
+    if job is None:
+        errors.append(f"nightly: job '{MONITOR_JOB}' missing")
+        return
+    if not _daily_only(job):
+        errors.append(f"{name} must run on the daily schedule (if: github.event.schedule != '{WEEKLY_CRON}')")
+    flag_expr = str((job.get("env") or {}).get(flag, ""))
+    for secret in ("NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"):
+        if f"secrets.{secret} != ''" not in flag_expr:
+            errors.append(f"{name}: job env {flag} must require secrets.{secret}")
+    steps = all_steps(job)
+    ungated = [s for s in steps if f"{flag} == 'true'" not in str(s.get("if", ""))]
+    if (
+        len(ungated) != 1
+        or MONITOR_SKIP_NOTICE not in str(ungated[0].get("run", ""))
+        or f"{flag} != 'true'" not in str(ungated[0].get("if", ""))
+    ):
+        errors.append(f"{name}: only the skip-notice step may run without the {flag} == 'true' condition")
+    runner = next((s for s in steps if "npm run rag:monitor" in str(s.get("run", ""))), None)
+    if runner is None:
+        errors.append(f"{name} must run 'npm run rag:monitor'")
+    else:
+        runner_env = runner.get("env") or {}
+        for secret in ("NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"):
+            if secret not in runner_env:
+                errors.append(f"{name}: the monitor step must receive {secret} through step env")
+    if "npm ci --ignore-scripts" not in step_text(job):
+        errors.append(f"{name} must install with npm ci --ignore-scripts")
+    for step in steps:
+        if str(step.get("uses", "")).startswith("actions/upload-artifact@"):
+            errors.append(f"{name} must not upload an artifact")
+    _check_no_leaks(name, steps, errors, private=False)
 
 
 def check_nightly_triggers(data: dict, errors: list[str]) -> None:
-    pass
-
-
-def check_nightly(errors: list[str]) -> None:
-    data, text = load(NIGHTLY)
-    check_common("nightly", data, text, errors)
     trig = triggers(data)
     for t in ("schedule", "workflow_dispatch"):
         if t not in trig:
@@ -742,6 +834,12 @@ def check_nightly(errors: list[str]) -> None:
     for forbidden in ("pull_request", "push"):
         if forbidden in trig:
             errors.append(f"nightly: trigger '{forbidden}' must not be used (secrets must never reach fork code)")
+
+
+def check_nightly(errors: list[str]) -> None:
+    data, text = load(NIGHTLY)
+    check_common("nightly", data, text, errors)
+    check_nightly_triggers(data, errors)
     env = data.get("env") or {}
     for key, value in TELEMETRY.items():
         if str(env.get(key)) != value:
@@ -754,6 +852,8 @@ def check_nightly(errors: list[str]) -> None:
     check_real_docling(data, errors)
     check_injection_sec(data, errors)
     check_weekly_report(data, errors)
+    check_tenant_nightly(data, errors)
+    check_monitor_job(data, errors)
     job = (data.get("jobs") or {}).get("judge")
     if job is None:
         errors.append("nightly: job 'judge' missing")
