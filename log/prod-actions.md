@@ -15,3 +15,8 @@
   rag_access_enforced (by design). Exactly one rag_cache_check overload. All 9 triggers are enabled; 3 rag_access_groups_restrict policies
   are RESTRICTIVE; 8 checks validated; 5 GIN indexes; RLS on for all 11 tables checked; rag_access_group_settings.enforced=false;
   rag_access_groups_drift() = 0 for all 4 stores.
+
+## 2026-11-27 ~13:55 UTC: WhatsApp live check 05.2-15 blocked
+- Owner has never connected WhatsApp. Vercel prod env (names only, not decrypted) has no WHATSAPP_*, FLYIO_* or KOYEB_* variables: no Baileys service is configured.
+- To run the check: deploy baileys-whatsapp/ (Fly.io), set WHATSAPP_PROVIDER, FLYIO_BAILEYS_URL, WHATSAPP_WEBHOOK_URL on Vercel (owner enters FLYIO_API_KEY and WHATSAPP_WEBHOOK_SECRET), redeploy, scan the QR from the app's WhatsApp connect button with a spare number, test from another phone.
+- Asked the owner: set up now (A) or defer (B). Waiting.
