@@ -146,6 +146,7 @@ describe('eval route entry_profile voice (Phase 6.2 D-16, P-26)', () => {
     expect(input.profile).toBe('voice');
     expect(input.scope).toMatchObject({ kind: 'single', userId: null });
     expect(input.options).toMatchObject({ maxResults: 4 });
+    expect(input.evalEntry).toBe(true);
     const trace = await response.json();
     expect(trace.kept.map((chunk: { chunk_id: string }) => chunk.chunk_id)).toEqual(['chunk-b', 'chunk-a']);
     expect(trace.kept.map((chunk: { rank: number }) => chunk.rank)).toEqual([1, 2]);
@@ -205,6 +206,7 @@ describe('eval route entry_profile voice (Phase 6.2 D-16, P-26)', () => {
       const response = await POST(evalRequest(options));
       expect(response.status).toBe(200);
       expect(h.runSpy.mock.calls[0]![0].profile).toBe('eval');
+      expect(h.runSpy.mock.calls[0]![0].evalEntry).toBeUndefined();
     }
   });
 
