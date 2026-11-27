@@ -173,8 +173,11 @@ const admin = {
   },
 };
 
+const ragOverrides: Record<string, unknown> = {};
+
 async function load<T>(path: string): Promise<T> {
   vi.resetModules();
+  vi.doMock('@/lib/rag', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/rag')>()), ...ragOverrides }));
   vi.doMock('@/lib/deployment-mode', () => ({
     getDeploymentMode: () => state.mode,
     isMultiTenant: () => state.mode === 'multi-tenant',
@@ -260,6 +263,7 @@ beforeEach(() => {
 });
 
 afterEach(async () => {
+  for (const key of Object.keys(ragOverrides)) delete ragOverrides[key];
   const { resetRagDepsForTests } = await import('@/lib/rag/deps');
   resetRagDepsForTests();
   vi.restoreAllMocks();
@@ -357,5 +361,134 @@ describe('DELETE and PATCH /api/documents/[id] (D-15)', () => {
     state.admins = [];
     expect(await byId('PATCH', DOC_RESTRICTED)).toEqual({ status: 200, body: { success: true } });
     expect(state.rpcCalls).toEqual([]);
+  });
+});
+
+type GetRoute = { GET: (request: NextRequest, ctx?: { params: Promise<{ id: string }> }) => Promise<Response> };
+
+async function images(): Promise<{ status: number; body: Row }> {
+  const route = await load<GetRoute>('@/app/api/images/route');
+  const response = await route.GET(new NextRequest('http://localhost/api/images'));
+  return { status: response.status, body: (await response.json()) as Row };
+}
+
+async function deleteImage(id: string): Promise<{ status: number; body: Row }> {
+  const route = await load<{ DELETE: (request: NextRequest) => Promise<Response> }>('@/app/api/images/route');
+  const response = await route.DELETE(new NextRequest(`http://localhost/api/images?id=${id}`, { method: 'DELETE' }));
+  return { status: response.status, body: (await response.json()) as Row };
+}
+
+async function scraperStatus(): Promise<{ status: number; body: Row }> {
+  const route = await load<GetRoute>('@/app/api/scrapers/status/route');
+  const response = await route.GET(new NextRequest(`http://localhost/api/scrapers/status?url=${encodeURIComponent(SCRAPE_URL)}`));
+  return { status: response.status, body: (await response.json()) as Row };
+}
+
+async function ingestStatus(id: string): Promise<{ status: number; body: Row }> {
+  const route = await load<GetRoute>('@/app/api/rag/ingest/[id]/route');
+  const response = await route.GET(new NextRequest(`http://localhost/api/rag/ingest/${id}`), { params: Promise.resolve({ id }) });
+  return { status: response.status, body: (await response.json()) as Row };
+}
+
+async function jobStatus(id: string): Promise<{ status: number; body: Row }> {
+  const route = await load<GetRoute>('@/app/api/rag/ingest/jobs/[id]/route');
+  const response = await route.GET(new NextRequest(`http://localhost/api/rag/ingest/jobs/${id}`), { params: Promise.resolve({ id }) });
+  return { status: response.status, body: (await response.json()) as Row };
+}
+
+const JOB_OPEN = '00000000-0000-4000-8000-0000000000b1';
+const JOB_RESTRICTED = '00000000-0000-4000-8000-0000000000b2';
+const JOB_MISSING = '00000000-0000-4000-8000-0000000000bf';
+
+function installIngestFakes(): void {
+  const known = new Set([DOC_OPEN, DOC_RESTRICTED]);
+  ragOverrides.getIngestStatusReport = async (_scope: unknown, documentId: string) =>
+    known.has(documentId)
+      ? { view: { status: 'ready', version: 1, processingStatus: null, lastCompleted: null, parserUsed: null, docType: null }, warnings: [] }
+      : null;
+  const jobs: Record<string, string> = { [JOB_OPEN]: DOC_OPEN, [JOB_RESTRICTED]: DOC_RESTRICTED };
+  ragOverrides.getJobForScope = async (_scope: unknown, jobId: string) =>
+    jobs[jobId]
+      ? { id: jobId, document_id: jobs[jobId], status: 'succeeded', stage: 'publish', provisional_published_at: null, updated_at: '2026-01-01T00:00:00Z' }
+      : null;
+}
+
+describe('images, scraper status and ingest status routes (D-15)', () => {
+  it('images: an outsider gets only the open image; a member gets both; switch off lists both', async () => {
+    const ids = (body: Row) => (body.images as Row[]).map((image) => image.id);
+    expect(ids((await images()).body)).toEqual([IMAGE_OPEN]);
+    state.session = MEMBER_A;
+    expect(new Set(ids((await images()).body))).toEqual(new Set([IMAGE_OPEN, IMAGE_RESTRICTED]));
+    state.session = OUTSIDER;
+    state.access = 'off';
+    expect(new Set(ids((await images()).body))).toEqual(new Set([IMAGE_OPEN, IMAGE_RESTRICTED]));
+  });
+
+  it('images: deleting a hidden image answers like an unknown id and deletes nothing', async () => {
+    state.session = ADMIN;
+    state.admins = [];
+    const unknown = await deleteImage(DOC_MISSING);
+    expect(unknown.status).toBe(404);
+    expect(await deleteImage(IMAGE_RESTRICTED)).toEqual(unknown);
+    expect(state.tables.documents.some((doc) => doc.id === IMAGE_RESTRICTED)).toBe(true);
+  });
+
+  it('scraper status: a hidden scraped page reads as not scraped; a member and the switch off see it', async () => {
+    state.tables.documents.push({
+      id: '00000000-0000-4000-8000-00000000d021',
+      filename: 'page-a',
+      created_at: '2026-01-05T00:00:00Z',
+      metadata: { title: 'Page A' },
+      source_provider: 'firecrawl',
+      source_file_id: SCRAPE_URL,
+      access_groups: [`g:${GROUP_A}`],
+    });
+    expect((await scraperStatus()).body.scraped).toBe(false);
+    state.session = MEMBER_A;
+    expect((await scraperStatus()).body.scraped).toBe(true);
+    state.session = OUTSIDER;
+    state.access = 'off';
+    expect((await scraperStatus()).body.scraped).toBe(true);
+  });
+
+  it('ingest status: a hidden document answers like an unknown id unless the caller uploaded it or is an access admin', async () => {
+    installIngestFakes();
+    const unknown = await ingestStatus(DOC_MISSING);
+    expect(unknown.status).toBe(404);
+    expect(await ingestStatus(DOC_RESTRICTED)).toEqual(unknown);
+    expect((await ingestStatus(DOC_OPEN)).status).toBe(200);
+
+    const restricted = state.tables.documents.find((doc) => doc.id === DOC_RESTRICTED)!;
+    restricted.processing_state = { uploaderId: OUTSIDER };
+    expect((await ingestStatus(DOC_RESTRICTED)).status).toBe(200);
+    delete restricted.processing_state;
+
+    state.session = ADMIN;
+    expect((await ingestStatus(DOC_RESTRICTED)).status).toBe(200);
+    state.session = OUTSIDER;
+    state.access = 'off';
+    expect((await ingestStatus(DOC_RESTRICTED)).status).toBe(200);
+  });
+
+  it('job status: a job of a hidden document answers like an unknown job', async () => {
+    installIngestFakes();
+    const unknown = await jobStatus(JOB_MISSING);
+    expect(unknown.status).toBe(404);
+    expect(await jobStatus(JOB_RESTRICTED)).toEqual(unknown);
+    expect((await jobStatus(JOB_OPEN)).status).toBe(200);
+    state.session = MEMBER_A;
+    expect((await jobStatus(JOB_RESTRICTED)).status).toBe(200);
+    state.session = OUTSIDER;
+    state.access = 'off';
+    expect((await jobStatus(JOB_RESTRICTED)).status).toBe(200);
+  });
+
+  it('fails closed when the access lookup fails', async () => {
+    installIngestFakes();
+    state.failRpc = 'rag_resolve_access_scope';
+    expect((await images()).status).toBe(503);
+    expect((await scraperStatus()).status).toBe(503);
+    expect((await ingestStatus(DOC_OPEN)).status).toBe(503);
+    expect((await jobStatus(JOB_OPEN)).status).toBe(503);
   });
 });
