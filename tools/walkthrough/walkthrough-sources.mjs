@@ -43,8 +43,11 @@ if (mode === 'setup') {
   if (!fs.existsSync(BACKUP)) fs.copyFileSync(ENV_FILE, BACKUP);
   let lines = fs.readFileSync(ENV_FILE, 'utf8').split(/\r?\n/);
   const current = readEnv(ENV_FILE);
-  const extra = !current.OPENROUTER_API_KEY && current.OPENAI_API_KEY ? { NEXT_PUBLIC_AI_PROVIDER: 'openai' } : {};
-  if (extra.NEXT_PUBLIC_AI_PROVIDER) console.log('No OpenRouter key found: chat will use OpenAI (gpt-4o-mini) for this walkthrough.');
+  const extra = current.OPENROUTER_API_KEY
+    ? { NEXT_PUBLIC_AI_PROVIDER: 'openrouter', RAG_OPENAI_EMBEDDINGS_VIA: 'openrouter' }
+    : current.OPENAI_API_KEY ? { NEXT_PUBLIC_AI_PROVIDER: 'openai' } : {};
+  if (extra.RAG_OPENAI_EMBEDDINGS_VIA) console.log('OpenRouter key found: chat and embeddings go through OpenRouter for this walkthrough.');
+  else if (extra.NEXT_PUBLIC_AI_PROVIDER) console.log('No OpenRouter key found: chat and embeddings use OpenAI (gpt-4o-mini) for this walkthrough.');
   for (const [key, value] of Object.entries({ ...SWITCHES, ...extra })) {
     const i = lines.findIndex((l) => new RegExp(`^\\s*${key}\\s*=`).test(l));
     if (i >= 0) lines[i] = `${key}=${value}`;
