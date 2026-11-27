@@ -9,7 +9,8 @@ import type { CacheKeyParts, CacheQuery, SemanticCache } from '@/lib/rag/cache/t
 import { resetActiveChunkingProfilesForTests } from '@/lib/rag/chunking/active';
 import { resetRagConfigForTests } from '@/lib/rag/config';
 import type { AttributeResolution } from '@/lib/rag/retrieval/attributes';
-import { scopeKey } from '@/lib/rag/tenant/scope';
+import { mintAccessScope } from '@/lib/rag/tenant/access-brand';
+import { scopeKey, withAccess } from '@/lib/rag/tenant/scope';
 import { createTraceCollector } from '@/lib/rag/trace/collector';
 import type { RetrievalCacheContext, RetrievalResult, RunRetrievalInput } from '@/lib/rag/types';
 import { resetV2StartupForTests, verifyV2Startup } from '@/lib/rag/v2/startup';
@@ -23,11 +24,12 @@ const QUERY = `Which part of the record concerns ${PLANTED_VALUE}?`;
 
 type ResolverMode = 'nothing' | 'hard' | 'soft_only' | 'ambiguous' | 'too_broad' | 'explicit' | 'explicit_too_broad' | 'unknown' | 'fail' | 'hang';
 
-const resolverState: { mode: ResolverMode; queries: string[]; digest: string; calls: number } = {
+const resolverState: { mode: ResolverMode; queries: string[]; digest: string; calls: number; accesses: unknown[] } = {
   mode: 'nothing',
   queries: [],
   digest: 'a'.repeat(64),
   calls: 0,
+  accesses: [],
 };
 
 function resolution(over: Partial<AttributeResolution>): AttributeResolution {
@@ -50,8 +52,9 @@ vi.mock('@/lib/rag/retrieval/attributes', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/lib/rag/retrieval/attributes')>();
   return {
     ...original,
-    resolveAttributeFilter: async (_scope: unknown, query: string, _explicit: unknown, options: { signal?: AbortSignal }) => {
+    resolveAttributeFilter: async (_scope: unknown, query: string, _explicit: unknown, options: { signal?: AbortSignal; access?: unknown }) => {
       resolverState.calls += 1;
+      resolverState.accesses.push(options.access);
       resolverState.queries.push(query);
       const digest = resolverState.digest;
       switch (resolverState.mode) {
@@ -113,6 +116,7 @@ interface RunOptions {
   cache?: SemanticCache;
   profile?: RunRetrievalInput['profile'];
   stageOverrides?: RunRetrievalInput['stageOverrides'];
+  scope?: RunRetrievalInput['scope'];
 }
 
 async function run(options: RunOptions = {}) {
@@ -149,9 +153,10 @@ async function run(options: RunOptions = {}) {
   setRetrievalBackendForTests(backend);
   await verifyV2Startup();
   const profile = options.profile ?? 'chat';
-  const collector = createTraceCollector({ profile, tenantKey: scopeKey(SCOPE_SINGLE) });
+  const scope = options.scope ?? SCOPE_SINGLE;
+  const collector = createTraceCollector({ profile, tenantKey: scopeKey(scope) });
   const result: RetrievalResult = await runRetrieval({
-    scope: SCOPE_SINGLE,
+    scope,
     query: QUERY,
     profile,
     options: { ragMode: 'strict', webSearchEnabled: false, maxResults: 25 },
@@ -176,6 +181,7 @@ describe('attribute_resolve stage (03.3-19, D-29, D-30)', () => {
     resolverState.queries = [];
     resolverState.digest = 'a'.repeat(64);
     resolverState.calls = 0;
+    resolverState.accesses = [];
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     vi.spyOn(console, 'log').mockImplementation(() => undefined);
@@ -358,5 +364,14 @@ describe('attribute_resolve stage (03.3-19, D-29, D-30)', () => {
     expect(computeCacheKeyHash({ ...base, retrievalConfigHash: first.checks[0]!.retrievalConfigHash })).not.toBe(
       computeCacheKeyHash({ ...base, retrievalConfigHash: second.checks[0]!.retrievalConfigHash }),
     );
+  });
+  it('passes the request access filter to the resolver (quick task attribute-access)', async () => {
+    resolverState.mode = 'nothing';
+    await run();
+    expect(resolverState.accesses).toEqual([{ mode: 'off' }]);
+    resolverState.accesses = [];
+    const access = mintAccessScope('keys', ['all', 'g:00000000-0000-4000-8000-000000181001']);
+    await run({ scope: withAccess(SCOPE_SINGLE, access) });
+    expect(resolverState.accesses).toEqual([{ mode: 'keys', keys: access.keys, setHash: access.setHash }]);
   });
 });

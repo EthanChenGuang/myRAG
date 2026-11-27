@@ -148,6 +148,8 @@ function intersectIds(a: readonly string[] | null, b: readonly string[] | null):
 export async function runAttributeResolveStage(args: {
   standalone: string;
   scope: TenantScope;
+  /** The request's access filter; absent reads scopeAccessFilter(scope). */
+  access?: ScopeAccessFilter;
   explicit: Record<string, readonly string[]> | undefined;
   mode: 'hard' | 'soft';
   spec: StageSpec;
@@ -161,7 +163,10 @@ export async function runAttributeResolveStage(args: {
     async (stageSignal): Promise<AttributeStageOutcome> => {
       let resolution: AttributeResolution;
       try {
-        resolution = await resolveAttributeFilter(args.scope, args.standalone, explicitPresent ? args.explicit : null, { signal: stageSignal });
+        resolution = await resolveAttributeFilter(args.scope, args.standalone, explicitPresent ? args.explicit : null, {
+          signal: stageSignal,
+          access: args.access ?? scopeAccessFilter(args.scope),
+        });
       } catch (error) {
         if (error instanceof AttributeFilterError) return { kind: 'rejected' };
         if (stageSignal.aborted) throw error;
@@ -333,6 +338,7 @@ export async function runQueryStages(ctx: QueryStagesInput): Promise<QueryStages
     attributeOutcome = await runAttributeResolveStage({
       standalone,
       scope,
+      access: ctx.access ?? scopeAccessFilter(scope),
       explicit: input.retrievalFilters?.attributes,
       mode: attributeMode,
       spec: attrSpec,

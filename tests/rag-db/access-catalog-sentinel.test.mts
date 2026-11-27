@@ -43,6 +43,8 @@ const FILTERED_COMMON = [
   'rag_identifier_candidates',
   'rag_dup_cluster_sources',
   'rag_cache_check',
+  'rag_attribute_filter_values',
+  'rag_attribute_documents',
 ];
 
 const FILTERED: Record<DeploymentMode, string[]> = {
@@ -62,12 +64,11 @@ const GUARDED: Record<DeploymentMode, string[]> = {
 };
 
 /**
- * Query-time legs that are on trunk but cannot be filtered by the 0920 block, because their file runs after it: the 1008 attribute resolver
- * (its value lexicon and document ids would let an outsider tell whether a restricted document carries a value). Until a later file gives
- * each the access parameters, rag_access_readiness() must name it, so the switch cannot turn on; once it has them it must pass the FILTERED
- * checks. Move a name to FILTERED when its fix lands.
+ * Query-time legs that are on trunk but cannot be filtered by the 0920 block, because their file runs after it. Until a later file gives
+ * each the access parameters, rag_access_readiness() must name it, so the switch cannot turn on; once it has them, move it to FILTERED.
+ * The 1008 attribute resolver moved to FILTERED with migration 1010.
  */
-const PENDING = ['rag_attribute_filter_values', 'rag_attribute_documents'];
+const PENDING: string[] = [];
 
 const EXEMPT: ReadonlyArray<{ reason: string; functions: readonly string[] }> = [
   {
