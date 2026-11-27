@@ -162,6 +162,8 @@ export interface SyncStats {
   failed: number;
   skipped: number;
   deleted: number;
+  /** Documents this sync left with the fallback audience (owner and admins) because their source sharing was unmappable or unreadable. */
+  failClosed: number;
 }
 
 /**
