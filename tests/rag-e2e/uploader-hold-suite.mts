@@ -150,7 +150,7 @@ export function runUploaderHoldSuite(mode: ModeSetup): void {
 
     const upload = async (userId: string | null, token: string) => {
       const entry = note(token);
-      return ingestModule.ingest({
+      const result = await ingestModule.ingest({
         scope: await scopeOf(userId ?? mode.admin),
         source: 'config_upload',
         sourceKey: `root/${entry.filename}`,
@@ -160,6 +160,9 @@ export function runUploaderHoldSuite(mode: ModeSetup): void {
         ...(userId !== null ? { uploaderId: userId } : {}),
         signal: new AbortController().signal,
       });
+      const { documentId } = result;
+      assert.ok(documentId, `the upload of ${token} names its document`);
+      return { ...result, documentId };
     };
 
     const documentOf = async (id: string) =>

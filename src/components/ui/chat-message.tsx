@@ -92,7 +92,7 @@ import { registerMessageTrace, setSourcesMessage, shouldShowRefusalControl } fro
 import { useGhostModeStore } from '@/lib/ghost-mode-store'
 import { useChatStore } from '@/lib/chat-store'
 import { imageLinkHref, isAllowedImageUrl } from '@/lib/safe-image-hosts'
-import { splitFollowups } from '@/lib/chat/followups'
+import { separateFollowupLines, splitFollowups } from '@/lib/chat/followups'
 import { answerQualityStrings } from '@/translations/answer-quality'
 import { RelatedQuestions } from './related-questions'
 import { ThinkingIndicator } from './thinking-indicator'
@@ -213,31 +213,6 @@ interface ToolCall {
 function metadataHasNotices(metadata: unknown): boolean {
   const notices = metadata && typeof metadata === 'object' ? (metadata as { notices?: unknown }).notices : undefined;
   return Array.isArray(notices) && notices.length > 0;
-}
-
-function escapeHtml(text: string): string {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-}
-
-/** The paragraph's raw-HTML path: the text is escaped first, so only the mention spans are markup. */
-function highlightDocumentMentions(raw: string) {
-  if (!raw) return '';
-  const text = escapeHtml(raw);
-
-  // Regex to match /mentions, potentially with backslashes
-  const mentionRegex = /\/\\?([^\\]+?)\\?(?=\s|$|\.|\,|\;|\:|\!|\?)/g;
-
-  // Replace mentions with styled spans, removing any backslashes
-  const formattedText = text.replace(mentionRegex, (match, docName) => {
-    // Clean the document name by removing any backslashes
-    const cleanedDocName = docName.replace(/\\/g, '');
-
-    return `<span class="inline-flex items-center leading-none">
-      <span class="text-[#FF6417] dark:text-[#FF8A4D] font-medium align-baseline leading-none">${cleanedDocName}</span>
-    </span>`;
-  });
-
-  return formattedText;
 }
 
 // Function to check if text contains our special approval format
@@ -2725,7 +2700,7 @@ const TextPartRenderer = React.memo(({
         "mt-2"
       )}
     >
-      {typeof displayText === 'string' ? displayText : String(displayText)}
+      {separateFollowupLines(typeof displayText === 'string' ? displayText : String(displayText))}
     </Markdown>
   );
 });
@@ -4072,19 +4047,9 @@ ChatMessage = function ({
         </strong>
       );
     },
-    p: ({ children }) => {
-      // If children contains a string that might have @mentions
-      if (typeof children === 'string') {
-        const formattedText = highlightDocumentMentions(children);
-        return <p
-          className="break-words text-gray-700 dark:text-gray-300 mb-4 last:mb-0"
-          dangerouslySetInnerHTML={{ __html: formattedText }}
-        />;
-      }
-
-      // Otherwise use normal paragraph rendering
-      return <p className="break-words text-gray-700 dark:text-gray-300 mb-4 last:mb-0">{children}</p>;
-    },
+    p: ({ children }) => (
+      <p className="break-words text-gray-700 dark:text-gray-300 mb-4 last:mb-0">{children}</p>
+    ),
     a: ({ href, children }) => {
       if (markerCitations && typeof href === 'string' && href.startsWith(MARK_HREF_PREFIX)) return null;
       const citeAlias = markerCitations ? citeAliasFromHref(href) : null;
@@ -5380,17 +5345,7 @@ ChatMessage = function ({
                         ? message.content.find(part => part.type === 'text')?.text || ''
                         : messageContent.text || '';
 
-                      return textContent && textContent.includes('@') ? (
-                        <div
-                          className={cn(
-                            "react-markdown prose dark:prose-invert max-w-none",
-                            textSizeClasses[textSize].base,
-                            fontClasses[fontFamily] || '',
-                            "prose-p:my-0 leading-normal"
-                          )}
-                          dangerouslySetInnerHTML={{ __html: highlightDocumentMentions(textContent) }}
-                        />
-                      ) : (
+                      return (
                         <div className={cn(
                           "break-words text-gray-700 dark:text-gray-300",
                           textSizeClasses[textSize].base,

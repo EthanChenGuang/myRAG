@@ -81,23 +81,31 @@ describe('ChatMessage part labels', async () => {
     expect(html).not.toContain('data-part-label');
   });
 
-  test('the label paragraph does not go through the raw-HTML paragraph path', () => {
+  test('the label paragraph does not go through a raw-HTML paragraph path', () => {
     const source = readFileSync('src/components/ui/chat-message.tsx', 'utf8');
-    const p = source.slice(source.indexOf('    p: ({ children }) => {'), source.indexOf('    a: ({ href, children }) => {'));
+    const start = source.indexOf('    p: ({ children }) =>');
+    const end = source.indexOf('    a: ({ href, children }) => {');
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const p = source.slice(start, end);
     expect(p).not.toContain('data-part-label');
+    expect(p).not.toContain('dangerouslySetInnerHTML');
     expect(source).toMatch(/strong: \(\{ children \}\) =>/);
   });
 
-  test('HTML entities in a plain paragraph render as text, never as elements (pre-existing raw-HTML path)', () => {
+  test('HTML entities in a plain paragraph render as text, never as elements', () => {
     const html = render('Hello &lt;img src=x onerror=alert(1)&gt; and &lt;a href="javascript:alert(1)"&gt;x&lt;/a&gt; there');
     expect(html).not.toMatch(/<img[^>]*onerror/);
     expect(html).not.toMatch(/<a\b[^>]*javascript/);
     expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
   });
 
-  test('a /mention keeps its highlight and its name is escaped', () => {
+  // PR #121 (fix(chat): render slashes in answers verbatim) removed the /mention highlight: the slash and the
+  // name stay plain text, and the name is still escaped.
+  test('a /mention renders verbatim and its name is escaped', () => {
     const html = render('See /report&lt;b&gt; here');
     expect(html).not.toContain('<b>');
-    expect(html).toContain('text-[#FF6417]');
+    expect(html).toContain('/report');
+    expect(html).not.toContain('text-[#FF6417]');
   });
 });

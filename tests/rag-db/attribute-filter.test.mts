@@ -444,7 +444,7 @@ for (const mode of ['multi-tenant', 'single-tenant'] as const) {
 
     if (mode === 'multi-tenant') {
       test("tenant B naming tenant A's value resolves nothing and sees no chunk of tenant A", () => {
-        const crossed = part('crossTenant') as PipelineSummary & { aChunks: string[] };
+        const crossed = part('crossTenant') as unknown as PipelineSummary & { aChunks: string[] };
         assert.equal((crossed.attribute as Record<string, unknown>).matched_attributes, 0);
         assert.deepEqual(crossed.aChunks, [], `foreign chunk ids: ${crossed.aChunks.join(',')}`);
       });
