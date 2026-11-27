@@ -403,7 +403,7 @@ jobs:
         shell: bash
         run: |
           set +e
-          npm run test-rag -- --env-overlay eval/fixtures/controls/no-refusal-directive.overlay.json --out eval/out/negative-prompt
+          npm run test-rag -- --env-overlay eval/fixtures/controls/no-refusal-directive.overlay.json --out eval/out/negative-prompt --gates-mode enforce
           code=$?
           set -e
           echo "prompt control exit code: $code"

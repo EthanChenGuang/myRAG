@@ -1200,6 +1200,12 @@ class AbsoluteGatesTest(unittest.TestCase):
         step["run"] = step["run"].replace("--out eval/out/negative-prompt", "--out eval/out/negative-prompt --gates-mode report")
         self.assertTrue(any("eval/out/negative-prompt" in e for e in self.errors_for(pr, nightly)))
 
+    def test_a_prompt_control_without_explicit_enforce_is_reported(self):
+        pr, nightly = self.workflows()
+        step = self.step(pr, "gate-negative-control", "no-refusal-directive.overlay.json")
+        step["run"] = step["run"].replace(" --gates-mode enforce", "")
+        self.assertTrue(any("--gates-mode enforce" in e for e in self.errors_for(pr, nightly)))
+
     def test_another_gates_file_is_reported(self):
         pr, nightly = self.workflows()
         self.step(pr, "eval-smoke", "npm run test-rag -- --out eval/out/smoke")["run"] += " --gates eval/out/lax-gates.json"

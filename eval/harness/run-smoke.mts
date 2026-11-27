@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import { ingestModeGoldenPaths, mergeGoldenFiles, parseIngestRoutingFlags } from './ingest-mode.mts';
 import { dropTableSplitItems } from './table-split.mts';
+import { MEASUREMENT_PATH, resolveGatesMode } from './gate-mode.mts';
 import { runEval, type EvalRequestOptions } from './run-eval.mts';
 import { CHUNKING_PROFILES_NEED_INGEST, loadRunConfig, RunConfigError } from './run-config.mts';
 import { loadEnvOverlay, OverlayError, writeOverlayReport, type EnvOverlay } from './env-overlay.mts';
@@ -326,6 +327,17 @@ async function main(): Promise<number> {
 
   if (!gate) return 0;
 
+  const gatesResolution = resolveGatesMode(gatesMode, {
+    fixtureMode,
+    live: Boolean(baseUrl),
+    customInputs: gatesFlag !== undefined || values.golden !== undefined,
+  });
+  if (gatesResolution.source === 'measured_tier') {
+    console.log(
+      `[Eval Harness] absolute gate mode ${gatesResolution.mode}: the mode ${path.relative(REPO_ROOT, MEASUREMENT_PATH)} records for tier ${gatesResolution.tier} (pr-smoke runs it so); --gates-mode enforce|report overrides`,
+    );
+  }
+
   const gateCode = runPython('rag_eval.gate', [
     '--report',
     path.join(outDir, 'report.json'),
@@ -338,7 +350,7 @@ async function main(): Promise<number> {
     ...(goldenManifest !== undefined ? ['--manifest', goldenManifest] : []),
     '--gates',
     gatesFile,
-    ...(gatesMode !== undefined ? ['--gates-mode', gatesMode] : []),
+    ...(gatesResolution.mode !== undefined ? ['--gates-mode', gatesResolution.mode] : []),
   ]);
   console.log(`[Eval Harness] gate: ${path.join(outDir, 'gate.md')}`);
   return gateCode;
