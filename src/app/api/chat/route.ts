@@ -113,7 +113,7 @@ interface StepToolCall {
 }
 
 // Tool results that are evidence the answer may rely on; anything else (MCP) skips groundedness
-const ANSWER_EVIDENCE_TOOLS = new Set(['webSearch', 'useDocument']);
+const ANSWER_EVIDENCE_TOOLS = new Set(['webSearch', 'useDocument', CALCULATE_TOOL_NAME]);
 
 // Phase 5.2.1 D-65: RAG_CALC_TOOL, read from the one answer-config reader once plan 05.2.1-02 adds the field; false before
 function calcToolSwitchOn(config: object): boolean {
@@ -3680,7 +3680,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           console.warn('[RAG Security] Tool result flagged; passed on escaped', { tool: toolName, ruleIds, traceId: collector?.traceId ?? null });
         };
         for (const toolName of Object.keys(allTools)) {
-          if (toolName === 'useDocument') continue;
+          if (toolName === 'useDocument' || isServerCalculateTool(allTools[toolName])) continue;
           allTools[toolName] = withToolResultGuard(allTools[toolName], toolName, toolResultGuard, recordToolResultFlag);
         }
       }
@@ -3872,7 +3872,10 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
       // Special handling for Claude Sonnet 4
       const isClaudeSonnet4 = modelBlocksTools(safeModelId);
 
-      const resultToolsReachModel = SUPPORTS_TOOLS && !isClaudeSonnet4 && Object.keys(allTools).some((toolName) => toolName !== 'useDocument');
+      const resultToolsReachModel =
+        SUPPORTS_TOOLS &&
+        !isClaudeSonnet4 &&
+        Object.keys(allTools).some((toolName) => toolName !== 'useDocument' && !isServerCalculateTool(allTools[toolName]));
       if (toolResultGuard !== 'off' && resultToolsReachModel) {
         const contextIndex = messagesForModel.findIndex((message) => message.id === systemContextMessage.id);
         if (contextIndex >= 0) {
@@ -4028,12 +4031,20 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
         return citationTransforms.length > 0 ? { experimental_transform: citationTransforms } : {};
       };
 
+      // D-65, Pitfall C1: tools that run on the server without approval; calculate only as our own tool object
+      const isServerExecutedTool = (toolName: string | undefined): boolean =>
+        toolName === 'webSearch' ||
+        toolName === 'query_documents' ||
+        (toolName === CALCULATE_TOOL_NAME && isServerCalculateTool(allTools[toolName]));
+      const isAnswerEvidenceTool = (toolName: string): boolean =>
+        toolName === CALCULATE_TOOL_NAME ? isServerExecutedTool(toolName) : ANSWER_EVIDENCE_TOOLS.has(toolName);
+
       const startOpenRouterStream = () => streamText({
         ...streamParams,
         ...citationTransformParams(),
         onStepFinish: async (params: { text?: string; toolCalls?: StepToolCall[]; toolResults?: StepToolResult[] }) => {
           let { text, toolCalls = [] as StepToolCall[], toolResults = [] as StepToolResult[] } = params;
-          if (Array.isArray(toolResults) && toolResults.some((item) => typeof item?.toolName === 'string' && !ANSWER_EVIDENCE_TOOLS.has(item.toolName))) {
+          if (Array.isArray(toolResults) && toolResults.some((item) => typeof item?.toolName === 'string' && !isAnswerEvidenceTool(item.toolName))) {
             answerToolOutputUsed = true;
           }
 
@@ -4235,7 +4246,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             console.log('API ROUTE: Clearing auto-generated results to force explicit approval');
             toolResults.forEach(result => {
               // Clear all tool results except document sources and safe tools which don't need approval
-              if (result && result.toolName !== 'query_documents' && result.toolName !== 'webSearch') {
+              if (result && !isServerExecutedTool(result.toolName)) {
                 console.log(`API ROUTE: Clearing result for ${result.toolName} to force explicit approval`);
                 // Set result to null to prevent auto-execution
                 result.output = null;
@@ -4251,7 +4262,7 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
             // Check if we already have a result for this tool call
             // This happens for tools that execute immediately (like webSearch or query_documents)
             const existingResult = toolResults.find(r => r.toolCallId === call.toolCallId);
-            const isAllowedTool = call.toolName === 'webSearch' || call.toolName === 'query_documents';
+            const isAllowedTool = isServerExecutedTool(call.toolName);
             const hasResultPayload = existingResult?.output !== undefined;
 
             // If we have a result AND it's an allowed tool, we treat it as already approved/executed
