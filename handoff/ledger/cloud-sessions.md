@@ -627,3 +627,4 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   Waiting for train 38: 04.3-52, 05.2.1-20, 06.2-22, 06.2-24, 06.2-25, 06.2-36.
   Train 38 is at d49d1b6a (subq-filters switch-gated hash fix).
 - 20:29Z User consented: deploying main 00afa6d9 (train 37) -> dpl_6PB9HxaqvBHDWeX1Qc9RxoPJsymW.
+- 20:36Z PROD DEPLOY READY: main 00afa6d9 (train 37) -> dpl_6PB9HxaqvBHDWeX1Qc9RxoPJsymW, aliased to myrag.laoxiang.app. Prod DB and app are now through train 37.
