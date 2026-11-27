@@ -193,7 +193,8 @@ describe('RefusalCalibrationPanel with the derived marks', () => {
   it('shows Not calibrated, Stale and the pending badge together, each on its own line, with the hint line', async () => {
     const r = await rendered(status([cell({ status: 'uncalibrated', threshold: null, stale: true, pending: { reason: 'tokenizer', since: '2026-11-20', changed_keys: ['RAG_EXAMPLE_SETTING'] } })]));
     try {
-      const row = r.root.querySelector('tbody tr') as FakeElement;
+      const table = r.root.querySelector('[role="region"]') as FakeElement;
+      const row = table.querySelector('tbody tr') as FakeElement;
       const badges = row.querySelector('[data-refusal-badges]') as FakeElement;
       expect(badges.className).toContain('flex-col');
       const words = badges.querySelectorAll('.badge').map((b) => text(b));
