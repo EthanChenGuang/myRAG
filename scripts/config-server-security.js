@@ -4,7 +4,8 @@ const CSRF_HEADER = 'x-config-ui';
 
 const SECRET_NAME =
   /(KEY|SECRET|TOKEN|PASSWORD|PASSWD|PRIVATE|SERVICE_ROLE|DATABASE_URL|WEBHOOK|DSN|CREDENTIAL|COOKIE|SALT|CERT|CONNECTION_STRING|JWT|SIGNING)/i;
-const BENIGN_NAME = /(_TOKENS$|TOKEN_TTL|TOKEN_LIMIT|KEY_TERMS)/;
+// Nango integration ids name a provider configuration in the Nango dashboard; they are not credentials.
+const BENIGN_NAME = /(_TOKENS$|TOKEN_TTL|TOKEN_LIMIT|KEY_TERMS|^NANGO_[A-Z0-9]+_INTEGRATION_KEY$)/;
 const SECRET_VALUE_NAMES = new Set(['MCP_CUSTOM_SERVERS', 'REDIS_URL']);
 const SECRET_VALUE_PATTERN = /^MCP_[A-Z0-9_]*_ENDPOINT$/;
 const URL_WITH_CREDENTIALS = /:\/\/[^/\s:@]+:[^/\s@]*@/;

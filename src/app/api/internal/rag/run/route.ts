@@ -605,6 +605,7 @@ export async function POST(req: NextRequest) {
         refusal_reason: refusalReasonOf(result, refused),
         ...(v2Result ? v2TraceFields(result) : {}),
         ...(Object.keys(stageCounts).length > 0 ? { stage_counts: stageCounts } : {}),
+        ...(result.sourceRecheck ? { stale_index_drop: result.sourceRecheck.dropped } : {}),
         ...(injection ? { injection } : {}),
         answer,
         citations: citationFields?.citations ?? NO_CITATIONS,
