@@ -142,7 +142,11 @@ def _stages() -> dict[str, list[str]]:
     return stages
 
 
-@pytest.mark.parametrize("stage", ["docling", "runtime"])
+def test_the_dockerfile_has_the_expected_stages():
+    assert {"docling", "hhem", "runtime"} <= set(_stages())
+
+
+@pytest.mark.parametrize("stage", sorted(_stages()))
 def test_every_image_stage_copies_the_config_next_to_src(stage):
     lines = _stages()[stage]
     assert "WORKDIR /app" in lines
