@@ -66,6 +66,8 @@ import {
   runCalcChecks,
   shouldOfferCalcTool,
   turnCanUseTools,
+  observeCalc,
+  type CalcObserved,
 } from '@/lib/rag';
 import { RagRunRequestSchema, RagTraceSchema, type RagRunRequest, type RagTrace } from '@/lib/rag-eval/contracts.generated';
 import { checkEvalAccess } from '@/lib/rag-eval/auth';
@@ -78,8 +80,6 @@ import {
   retrievalBackendTrace,
   evalTraceLanguages,
 } from '@/lib/rag-eval/trace';
-import { observeCalc, type CalcObserved } from '@/lib/rag-eval/calc-observed';
-import { getLanguageSettings, languageVariablesUnset } from '@/lib/rag/lang/settings';
 import {
   evalGroundednessRequest,
   evalModelToolCapability,
@@ -450,16 +450,6 @@ type EvalCalcOffer = { mode: 'tool' | 'trailing_block'; aliases: ReadonlySet<str
 /** Phase 5.2.1 D-65: RAG_CALC_TOOL through the one answer-config reader. */
 function calcToolSwitchOn(config: object): boolean {
   return (config as { readonly calcTool?: unknown }).calcTool === true;
-}
-
-/** The number format of an observation when no answer language is known: the primary language, else English (the registry fallback). */
-function observationFallbackLanguage(): string {
-  if (languageVariablesUnset()) return 'en';
-  try {
-    return getLanguageSettings().primary ?? 'en';
-  } catch {
-    return 'en';
-  }
 }
 
 function calcCheckSwitchOn(config: object): boolean {
@@ -896,7 +886,7 @@ export async function POST(req: NextRequest) {
             rawText: answerChain?.calcBlock?.rawText ?? modelText,
             traces: calcHolder.traces(),
             aliases: calcOffer?.aliases ?? citationSession?.aliases() ?? new Set<string>(),
-            language: answerTurn?.answerLanguage ?? detectLanguage(modelText) ?? detectLanguage(query) ?? observationFallbackLanguage(),
+            language: answerTurn?.answerLanguage ?? detectLanguage(modelText) ?? detectLanguage(query) ?? null,
           });
         }
         // The eval answer is generated whole, so its first text is the full answer

@@ -2,10 +2,15 @@ import { generateText, stepCountIs, type LanguageModel, type Tool } from 'ai';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider';
 import { env } from '@/lib/env';
 import { SystemPromptManager } from '@/lib/system-prompt-manager';
-import { createEnhancedRAGPrompt, effectiveMaxOutputTokens, type AnswerLanguageOptions, type OutputCapDecision } from '@/lib/rag';
+import {
+  CALCULATE_TOOL_NAME,
+  createEnhancedRAGPrompt,
+  effectiveMaxOutputTokens,
+  type AnswerLanguageOptions,
+  type CalcTraceHolder,
+  type OutputCapDecision,
+} from '@/lib/rag';
 import type { GroundednessRequest, GroundednessResult } from '@/lib/rag-eval/contracts.generated';
-import { CALCULATE_TOOL_NAME } from '@/lib/rag/generation/calc-tool';
-import type { CalcTraceHolder } from '@/lib/rag/calc/trace-holder';
 
 export const EVAL_DEFAULT_SYSTEM_PROMPT = `You are a helpful AI assistant with access to a knowledge base. When answering questions:
 

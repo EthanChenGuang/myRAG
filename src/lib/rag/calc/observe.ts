@@ -1,7 +1,8 @@
 import type { CalcResult, CalcTrace, RagTrace } from '@/lib/rag-eval/contracts.generated';
-import { locateStatedNumber, stepsListed } from '@/lib/rag/calc/check';
-import { evaluateCalc } from '@/lib/rag/calc/evaluate';
-import { display, equals, parseDecimal, rational, type Rational } from '@/lib/rag/calc/rational';
+import { getLanguageSettings, languageVariablesUnset } from '../lang/settings';
+import { locateStatedNumber, stepsListed } from './check';
+import { evaluateCalc } from './evaluate';
+import { display, equals, parseDecimal, rational, type Rational } from './rational';
 
 export type CalcObserved = NonNullable<RagTrace['calc_observed']>;
 
@@ -45,6 +46,16 @@ function resultOf(trace: CalcTrace, offered: ReadonlySet<string>): CalcResult {
   return evaluateCalc(trace.request, { aliases });
 }
 
+/** The number format of an observation when no answer language is known: the primary language, else English (the registry fallback). */
+function fallbackLanguage(): string {
+  if (languageVariablesUnset()) return 'en';
+  try {
+    return getLanguageSettings().primary ?? 'en';
+  } catch {
+    return 'en';
+  }
+}
+
 /**
  * D-77: what the answer showed of a calculation, recorded on every generated eval answer whether the check is on or off. The
  * stated number follows the check's D-95 rule for the last calculation of the answer (operand and intermediate values are
@@ -55,6 +66,7 @@ export function observeCalc(input: {
   traces: readonly CalcTrace[];
   /** The context-block aliases of the turn. */
   aliases: ReadonlySet<string>;
+  /** The answer language; null uses the primary language, else English. */
   language: string | null;
 }): CalcObserved {
   const { rawText, traces } = input;
@@ -65,8 +77,7 @@ export function observeCalc(input: {
     tool_used: traces.some((trace) => trace.origin === 'tool'),
     origin: primary?.origin ?? null,
   };
-  if (!input.language) return observed;
-  const language = input.language;
+  const language = input.language ?? fallbackLanguage();
   try {
     if (!primary) {
       const stated = locateStatedNumber(rawText, { aliases: input.aliases, excluded: [], anchor: rawText.length, language });
