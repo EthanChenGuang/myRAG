@@ -48,7 +48,7 @@ class FakeTokenizer:
 
 
 class FakeModel:
-    """Hidden state: the first token's vector is derived from the whole row, later tokens are noise the pooling must ignore."""
+    """Hidden state: the first token's vector derives from the whole row; later tokens are noise pooling must ignore."""
 
     def __init__(self, delay_s: float = 0.0) -> None:
         self.delay_s = delay_s
@@ -196,7 +196,14 @@ def test_route_answers_503_model_unavailable_without_a_model():
 
 @pytest.mark.parametrize(
     "body",
-    [{}, {"inputs": []}, {"inputs": [""]}, {"inputs": ["x"], "model": "other/model"}, {"inputs": ["x"] * 33}, {"inputs": ["x"], "extra": 1}],
+    [
+        {},
+        {"inputs": []},
+        {"inputs": [""]},
+        {"inputs": ["x"], "model": "other/model"},
+        {"inputs": ["x"] * 33},
+        {"inputs": ["x"], "extra": 1},
+    ],
 )
 def test_route_validates_the_embed_request(body):
     response = _client(_embedder()).post(ROUTE, json=body, headers=HEADER)

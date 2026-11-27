@@ -25,6 +25,8 @@ from rag_sidecar.contracts import (
     SidecarInfo,
     SidecarReady,
 )
+from rag_sidecar.embed.bge_m3 import Embedder, resolve_embedder
+from rag_sidecar.embed.router import build_embed_router
 from rag_sidecar.extract.invoice import extract_invoice
 from rag_sidecar.groundedness.claims import build_claims_router
 from rag_sidecar.groundedness.router import build_groundedness_router
@@ -92,7 +94,7 @@ def create_app(
     scorers: Mapping[str, Scorer] | None = None,
     injection_scorer: InjectionScorer | None = None,
     cache_service: CacheService | None = None,
-    embedder: object | None = None,
+    embedder: Embedder | None = None,
 ) -> FastAPI:
     resolved = settings if settings is not None else load_settings()
     active_converter = converter if converter is not None else default_converter()
@@ -103,6 +105,7 @@ def create_app(
     active_injection_scorer = (
         injection_scorer if injection_scorer is not None else resolve_scorer(resolved, prompt_guard_config)
     )
+    active_embedder = embedder if embedder is not None else resolve_embedder(resolved)
 
     ingest_worker: IngestWorker | None = None
     ingest_pool: PriorityPool | None = None
@@ -357,6 +360,7 @@ def create_app(
     v1.include_router(build_claims_router(resolved, active_scorers))
     v1.include_router(build_injection_router(active_injection_scorer, prompt_guard_config))
     v1.include_router(build_hidden_text_router(resolved))
+    v1.include_router(build_embed_router(active_embedder))
     v1.include_router(build_cache_router(resolved, cache_service))
     app.include_router(v1)
     return app
