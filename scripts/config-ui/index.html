@@ -90,6 +90,7 @@
     <script src="rag-panels/refusal-calibration.js"></script>
     <script src="rag-panels/injection-defense.js"></script>
     <script src="rag-panels/answer-rules.js"></script>
+    <script src="rag-panels/security-events.js"></script>
     <script src="rag-panels/review-labelling.js"></script>
     <script src="rag-panels/review-admin.js"></script>
     <script src="rag-panels/query-layer.js"></script>
@@ -2055,6 +2056,7 @@
                 <div class="p-6">
                     <div id="rag-attention-banner"></div>
                     <div id="rag-language-banner"></div>
+                    <div id="rag-security-alert-banner"></div>
 
                     <!-- Features Tab -->
                     <div class="tab-content" id="features">
@@ -7888,6 +7890,7 @@
                                         <div id="injection-defense-summary" class="rounded-box bg-base-100 p-4 mt-4" aria-live="polite">
                                             <p class="text-sm text-base-content/70">Loading detector configuration…</p>
                                         </div>
+                                        <div id="injection-defense-events-pointer" class="mt-2 min-w-0"></div>
                                     </div>
                                 </div>
 
@@ -10430,6 +10433,18 @@
                                         </div>
                                     </section>
                                     <!-- rag-upload-approvals:end -->
+
+                                    <!-- rag-security-events:start -->
+                                    <section id="rag-administration-security-events" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-security-events-title">
+                                        <div class="card-body">
+                                            <h3 id="rag-security-events-title" class="text-lg font-semibold mb-2 text-balance rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2" tabindex="-1" data-security-events-title>Security events</h3>
+                                            <p class="text-sm text-base-content/70 max-w-prose mb-4" data-security-events-description>What the upload checks, the retrieval check and the answer guard detected, and whose uploads were involved. Ids and counts only.</p>
+                                            <div data-security-events-alert class="flex flex-col gap-2 mb-4 empty:mb-0"></div>
+                                            <div data-security-events-content class="min-w-0"></div>
+                                            <div data-security-events-status class="text-sm mt-4" role="status" aria-live="polite" tabindex="-1"></div>
+                                        </div>
+                                    </section>
+                                    <!-- rag-security-events:end -->
 
                                     <!-- rag-scope-tags:start -->
                                     <section id="rag-administration-scopes" class="card bg-base-200 shadow-md min-w-0 scroll-mt-4" aria-labelledby="rag-scope-tags-title">

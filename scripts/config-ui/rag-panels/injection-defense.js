@@ -8,6 +8,32 @@ const PROMPT_GUARD_LANGUAGE_NOTE =
   'Prompt Guard: en and it only; on CPU it runs inline only in eval runs and fills a warm cache for chat';
 const INJECTION_RULE_LANGUAGE_ORDER = ['zh', 'en', 'it', 'any'];
 
+/** UI-SPEC 05.2 6.14, 12.5: the pointer from this card to RAG administration, Security events. */
+const INJECTION_DEFENSE_LABELS = {
+  en: {
+    'pointer.events': 'Detections are listed with their uploaders in RAG administration, Security events.',
+    'pointer.action': 'Open security events',
+  },
+  zh: {
+    'pointer.events': '检测结果及其上传者列在“RAG 管理”的“安全事件”中。',
+    'pointer.action': '打开安全事件',
+  },
+  it: {
+    'pointer.events': 'I rilevamenti sono elencati con i relativi autori in Amministrazione RAG, Eventi di sicurezza.',
+    'pointer.action': 'Apri eventi di sicurezza',
+  },
+};
+
+function injectionDefenseLocale(language) {
+  const lang = typeof language === 'string' ? language.slice(0, 2).toLowerCase() : '';
+  return lang === 'zh' || lang === 'it' ? lang : 'en';
+}
+
+function injectionDefenseLabel(key, locale) {
+  const table = INJECTION_DEFENSE_LABELS[locale] || INJECTION_DEFENSE_LABELS.en;
+  return table[key] || INJECTION_DEFENSE_LABELS.en[key];
+}
+
 function isStringList(value) {
   return Array.isArray(value) && value.every((item) => typeof item === 'string');
 }
@@ -105,10 +131,37 @@ async function loadInjectionDefenseSummary(container, options = {}) {
   }
 }
 
+/**
+ * The pointer line under the detector summary, only when the Security events panel is on the page. Its button opens that
+ * panel's Events view through openSecurityEvents (security-events.js).
+ */
+function renderInjectionDefensePointer(host, doc = globalThis.document, locale = 'en') {
+  if (!host) return null;
+  if (!doc.getElementById('rag-administration-security-events')) {
+    host.replaceChildren();
+    return null;
+  }
+  const line = injectionDefenseElement(doc, 'p', 'text-sm text-base-content/70 min-w-0 break-words');
+  line.setAttribute('lang', locale);
+  line.appendChild(doc.createTextNode(injectionDefenseLabel('pointer.events', locale) + ' '));
+  const open = injectionDefenseElement(doc, 'button', 'btn btn-link btn-sm px-0 h-auto min-h-0 align-baseline', injectionDefenseLabel('pointer.action', locale));
+  open.setAttribute('type', 'button');
+  open.setAttribute('data-injection-open-events', '');
+  open.addEventListener('click', () => {
+    const view = typeof window !== 'undefined' ? window : globalThis;
+    if (typeof view.openSecurityEvents === 'function') void view.openSecurityEvents({ tab: 'events' });
+  });
+  line.appendChild(open);
+  host.replaceChildren(line);
+  return line;
+}
+
 function initInjectionDefensePanel() {
   const container = document.getElementById('injection-defense-summary');
   if (!container) return;
   void loadInjectionDefenseSummary(container);
+  const locale = injectionDefenseLocale(typeof navigator !== 'undefined' && navigator ? navigator.language : undefined);
+  renderInjectionDefensePointer(document.getElementById('injection-defense-events-pointer'), document, locale);
 }
 
 if (typeof window !== 'undefined') {
@@ -119,7 +172,9 @@ if (typeof window !== 'undefined') {
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     INJECTION_DEFENSE_ENDPOINT,
+    INJECTION_DEFENSE_LABELS,
     PROMPT_GUARD_LANGUAGE_NOTE,
+    renderInjectionDefensePointer,
     injectionDefenseRows,
     renderInjectionDefenseSummary,
     loadInjectionDefenseSummary,
