@@ -5,6 +5,8 @@ const softDeleteLineage = vi.hoisted(() =>
   vi.fn(async () => ({ ok: true as const, outcome: 'deleted' as const, lineageId: 'line-a', jobId: null })),
 );
 
+const recomputeDirtyDupClusters = vi.hoisted(() => vi.fn(async (_scope: unknown) => ({ ok: true as const, skipped: false as const })));
+
 vi.mock('@/lib/rag/ingest/soft-delete', () => ({ softDeleteLineage }));
 
 const OWNER_A = TWO_TENANT_IDS.userA;
@@ -141,6 +143,7 @@ async function loadSyncManager(memory: ReturnType<typeof createMemoryDb>) {
     currentIngestConfig: () => ({ pipeline: state.pipeline }),
     scopeKey: scopeModule.scopeKey,
     softDeleteLineage,
+    recomputeDirtyDupClusters,
     removeDocumentObjects: async () => ({ removed: 0, failed: 0 }),
     queueConfigFromProcessEnv: () => ({ ingestAsync: state.ingestAsync }),
   }));
@@ -151,6 +154,7 @@ async function loadSyncManager(memory: ReturnType<typeof createMemoryDb>) {
 describe('deleteOrphanedDocuments soft delete under the queue (D-27)', () => {
   beforeEach(() => {
     softDeleteLineage.mockClear();
+    recomputeDirtyDupClusters.mockClear();
     remote.drive = { [CONNECTION]: { [FOLDER]: [] } };
     state.pipeline = 'unified';
     state.ingestAsync = false;
@@ -231,6 +235,23 @@ describe('deleteOrphanedDocuments soft delete under the queue (D-27)', () => {
     expect(memory.ops.some((entry) => entry.table === 'documents' && entry.op === 'delete')).toBe(true);
   });
 
+  it('with unified and async off, the hard delete recomputes the owner tenant duplicate clusters after the rows are gone (DATA-21)', async () => {
+    const memory = orphanSeed();
+    let documentsAtRecompute: string[] | null = null;
+    recomputeDirtyDupClusters.mockImplementationOnce(async () => {
+      documentsAtRecompute = memory.documentIds();
+      return { ok: true, skipped: false };
+    });
+    const { syncDocumentsForConnection } = await loadSyncManager(memory);
+
+    await syncDocumentsForConnection(CONNECTION, 'google-drive');
+
+    expect(recomputeDirtyDupClusters).toHaveBeenCalledTimes(1);
+    const [scope] = recomputeDirtyDupClusters.mock.calls[0] as unknown as [Record<string, unknown>];
+    expect(scope).toMatchObject({ kind: 'personal', userId: OWNER_A });
+    expect(documentsAtRecompute).toEqual(['doc-b']);
+  });
+
   it('with the legacy pipeline, orphans use the hard delete path', async () => {
     state.pipeline = 'legacy';
     const memory = createMemoryDb({
@@ -246,6 +267,7 @@ describe('deleteOrphanedDocuments soft delete under the queue (D-27)', () => {
 
     expect(stats.deleted).toBe(1);
     expect(softDeleteLineage).not.toHaveBeenCalled();
+    expect(recomputeDirtyDupClusters).not.toHaveBeenCalled();
     expect(memory.documentIds()).toEqual([]);
   });
 });
