@@ -957,8 +957,19 @@ function accessGroupsDriftView(body) {
  * D-07, UI-SPEC 6.6: the Embedded chat group field. value is the field's text; switchValue the select's; embedGroup the
  * status answer's check of the key the running app uses. Returns { finding, warn }.
  */
-function accessGroupsEmbedCheck(_value, _switchValue, _embedGroup) {
-  return { finding: null, warn: false };
+function accessGroupsEmbedCheck(value, switchValue, embedGroup) {
+  const key = accessGroupsText(value).trim();
+  const result = { finding: null, warn: false };
+  if (!key) return result;
+  result.warn = accessGroupsSwitchValue(switchValue) !== 'on';
+  if (ACCESS_GROUPS_RESERVED_KEYS.has(key)) result.finding = { key: 'form.reservedKey', tone: 'error' };
+  else if (!ACCESS_GROUPS_KEY_RE.test(key)) result.finding = { key: 'form.badKey', tone: 'error' };
+  else if (embedGroup && embedGroup.key === key) {
+    if (!embedGroup.valid) result.finding = { key: 'form.badKey', tone: 'error' };
+    else if (embedGroup.exists) result.finding = { key: 'RAG_EMBED_ACCESS_GROUP.found', tone: 'success', group: embedGroup.name || key };
+    else result.finding = { key: 'RAG_EMBED_ACCESS_GROUP.notFound', tone: 'warning' };
+  }
+  return result;
 }
 
 /**
@@ -966,7 +977,23 @@ function accessGroupsEmbedCheck(_value, _switchValue, _embedGroup) {
  * ctx.unavailable: the view's unavailable sentence. 403 is split by body.error (Forbidden is the workspace sentence).
  */
 function mapAccessGroupsError(result, locale, ctx) {
-  return accessGroupsUiLib().ragUiMapError(result, locale, { unavailable: (ctx || {}).unavailable });
+  const ui = accessGroupsUiLib();
+  const opts = ctx || {};
+  const body = result && result.body && typeof result.body === 'object' ? result.body : {};
+  const err = typeof body.error === 'string' ? body.error : '';
+  if (!result || result.thrown) {
+    if (opts.write) return { key: 'error.outcomeUnknown', kind: 'outcomeUnknown', message: accessGroupsLabel('error.outcomeUnknown', locale), reload: true };
+    return { key: 'error.network', kind: 'network', message: ui.ragUiSharedLabel('error.network', locale) };
+  }
+  const status = result.status;
+  if (status === 400 && (err === 'invalid_key' || err === 'reserved_key')) {
+    const key = err === 'invalid_key' ? 'form.badKey' : 'form.reservedKey';
+    return { key, kind: 'field', field: 'key', message: accessGroupsLabel(key, locale) };
+  }
+  if (status === 404 || (status === 409 && opts.write)) {
+    return { key: 'error.changed', kind: 'changed', message: accessGroupsLabel('error.changed', locale), reload: true };
+  }
+  return ui.ragUiMapError(result, locale, { unavailable: opts.unavailable });
 }
 
 class AccessGroupsPanel {
@@ -1290,7 +1317,7 @@ class AccessGroupsPanel {
       this.el('div', { className: 'flex flex-wrap items-center gap-2 min-w-0' }, [this.badge(shown.state), this.stateSentence(shown)]),
       this.valuesList(shown),
       shown.state === 'blocked' ? this.reasonsList(shown) : null,
-      this.statusFailure && !this.statusLoaded ? null : this.actionButtons(shown),
+      this.actionButtons(shown),
     ]);
     if (this.statusFailure && this.statusLoaded) body.classList.add('opacity-60');
     nodes.push(body);
@@ -1335,7 +1362,18 @@ class AccessGroupsPanel {
 
   renderAlerts() {
     const host = this.root.querySelector('[data-access-groups-alert]');
-    if (host) host.replaceChildren();
+    if (!host) return;
+    const ui = accessGroupsUiLib();
+    const view = this.view();
+    const open = () => {
+      const button = this.el('button', { className: 'btn btn-sm h-auto min-h-8 py-1 whitespace-normal', text: this.t('action.openEnforcement'), attrs: { type: 'button' } });
+      button.addEventListener('click', () => this.selectEnforcement());
+      return button;
+    };
+    const nodes = [];
+    if (view.state === 'blocked') nodes.push(ui.ragUiAlert(this.doc, { tone: 'error', icon: 'x-octagon', body: [this.t('alert.blocked')], actions: [open()] }));
+    else if (this.statusLoaded && view.running === 'off') nodes.push(ui.ragUiAlert(this.doc, { tone: 'info', icon: 'info-circle', body: [this.t('alert.off')], actions: [open()] }));
+    host.replaceChildren(...nodes);
   }
 
   async loadStatus(source) {
@@ -1383,7 +1421,39 @@ class AccessGroupsPanel {
     return false;
   }
 
-  async runSync() {}
+  async runSync() {
+    const ui = accessGroupsUiLib();
+    const button = this.hosts.state ? this.hosts.state.querySelector('[data-access-groups-sync]') : null;
+    const restore = button ? ui.ragUiButtonBusy(this.doc, button, this.t('sync.running'), this.actionRow) : null;
+    let result;
+    try {
+      result = await ui.ragUiRagRequest(ACCESS_GROUPS_PATH + '/status/sync', { method: 'POST' });
+    } finally {
+      if (restore) restore();
+    }
+    if (result && result.ok && result.body && typeof result.body === 'object' && result.body.status && typeof result.body.status === 'object') {
+      this.applyStatusResult(result, true);
+      const view = this.view();
+      if (view.reasons.some((r) => ACCESS_GROUPS_FLAG_REASONS.has(r)) || view.state === 'unsynced') {
+        this.showSyncFailed();
+        return;
+      }
+      this.announce(this.t('sync.done', { database: this.databaseWord(view.database) }));
+      return;
+    }
+    const mapped = mapAccessGroupsError(result, this.locale, { write: true, unavailable: this.t('enforce.unavailable') });
+    if (mapped.kind === 'signIn' || mapped.kind === 'workspace') {
+      this.applyStatusResult(result, true);
+      return;
+    }
+    if (mapped.kind === 'outcomeUnknown' || mapped.kind === 'changed') {
+      this.announce(mapped.message, true);
+      await this.loadStatus('refresh');
+      this.announce(mapped.message, true);
+      return;
+    }
+    this.showSyncFailed();
+  }
 
   showSyncFailed() {
     const ui = accessGroupsUiLib();
@@ -1393,7 +1463,37 @@ class AccessGroupsPanel {
     }
   }
 
-  async runDrift() {}
+  async runDrift() {
+    if (this.driftRunning) return;
+    const ui = accessGroupsUiLib();
+    const host = this.hosts.drift;
+    this.driftRunning = true;
+    const restore = ui.ragUiButtonBusy(this.doc, this.driftButton, this.t('drift.running'));
+    if (host) {
+      if (this.drift) ui.ragUiListBusy(host, true);
+      else host.replaceChildren(ui.ragUiSpinner(this.doc, this.t('drift.running')));
+    }
+    let result;
+    try {
+      result = await ui.ragUiRagRequest(ACCESS_GROUPS_PATH + '/drift', { method: 'POST' });
+    } finally {
+      this.driftRunning = false;
+      restore();
+      if (host) ui.ragUiListBusy(host, false);
+    }
+    if (result && result.ok && result.body && typeof result.body === 'object') {
+      this.drift = accessGroupsDriftView(result.body);
+      this.driftFailure = null;
+      this.renderDrift();
+      const text = this.drift.total > 0 ? this.t('drift.found', { count: ui.ragUiFormatNumber(this.drift.total, this.locale) }) : this.driftNoneText();
+      this.announce(text);
+      return;
+    }
+    const mapped = mapAccessGroupsError(result, this.locale, { unavailable: this.t('drift.unavailable') });
+    this.driftFailure = mapped.kind === 'signIn' ? mapped : { ...mapped, message: this.t('drift.unavailable') };
+    this.renderDrift();
+    this.announce(this.driftFailure.message, true);
+  }
 
   driftNoneText() {
     return this.t('drift.none', { time: this.drift && this.drift.checkedAt ? this.formatTime(this.drift.checkedAt) : '' });
