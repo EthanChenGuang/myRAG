@@ -25,7 +25,10 @@ import {
   type HydeResult,
   type QueryFrameworkRuntime,
   type QueryTransformer,
+  reportedQueryLanguage,
 } from './transformer';
+import { resolveQueryLanguage, type QueryLanguageDetection } from '../lang/resolve-query-language';
+import { getLanguageSettings, languageVariablesUnset } from '../lang/settings';
 import type { SearchDelegate } from './port-types';
 import { queryLayerTranslator, type QueryLayerTranslateContext } from './translate';
 import type { TranslatedQuery } from './variants';
@@ -455,6 +458,42 @@ async function runSemanticCacheStage(args: CacheStageInput): Promise<CacheStageR
   return { ticket, precomputed };
 }
 
+type PlanLanguageDetection = Omit<QueryLanguageDetection, 'language'> & { language: Lang };
+
+interface RequestLanguage {
+  detection: PlanLanguageDetection;
+  enabled: readonly Lang[];
+}
+
+/**
+ * D-17, P-21: the query language resolved before the gate, only under the effective layer and only with the languages
+ * configured; null keeps the gate's own detector, exactly as before.
+ */
+async function resolveRequestLanguage(ctx: QueryLayerInput, params: ReturnType<typeof effectiveQueryParams>): Promise<RequestLanguage | null> {
+  if (languageVariablesUnset()) return null;
+  const settings = getLanguageSettings();
+  if (!settings.configured || !settings.primary || settings.languages.length === 0) return null;
+  const enabled = settings.languages.filter(isPlanLanguage);
+  if (enabled.length === 0) return null;
+  const { input, profile, signal } = ctx;
+  const detection = await resolveQueryLanguage({
+    text: input.query,
+    enabled,
+    primary: settings.primary,
+    previousTurnLanguage: input.previousTurnLanguage ?? null,
+    uiLanguage: input.uiLanguage ?? null,
+    profile,
+    params,
+    signal,
+  });
+  if (!isPlanLanguage(detection.language)) return null;
+  return { detection: { ...detection, language: detection.language }, enabled };
+}
+
+function detectionContract(detection: PlanLanguageDetection): NonNullable<QueryPlan['language_detection']> {
+  return { language: detection.language, confidence: detection.confidence, source: detection.source };
+}
+
 let frameworkLoadFailureLogged = false;
 
 /**
@@ -521,6 +560,10 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
     kbShares = ctx.scope ? await getKbLanguageShares(ctx.scope, { signal: transformSignal(signal, null, translateSpec.timeoutMs) }) : null;
   }
 
+  const resolved = await resolveRequestLanguage(ctx, params);
+  const enabledLanguages = resolved?.enabled ?? [];
+  let detection: PlanLanguageDetection | null = resolved?.detection ?? null;
+
   const gated = await runStage(
     spec('query_gate', 'skip'),
     signal,
@@ -529,6 +572,7 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
         hasHistory: history.length > 0,
         now: new Date(deps.now()),
         ...(kbShares ? { kbShares } : {}),
+        ...(detection ? { language: detection.language } : {}),
       }),
     collector,
     { rules: (value) => [...value.reasons], detail: gateDetail },
@@ -551,7 +595,10 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
   };
 
   if (route.skipRetrieval) {
-    const plan = buildQueryPlan({ original: input.query, gate, framework: transformer.framework, skipped });
+    const plan: QueryPlan = {
+      ...buildQueryPlan({ original: input.query, gate, framework: transformer.framework, skipped }),
+      ...(detection ? { language_detection: detectionContract(detection) } : {}),
+    };
     return { plan, variants: planToVariants(plan), dateRange: null, handledTranslate, shortCircuit: { kind: 'small_talk' } };
   }
   if (handledTranslate && !translateForProfile) skip('translate', 'disabled_for_profile');
@@ -567,6 +614,7 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
 
   let condensed: string | null = null;
   let condenseOk = false;
+  let condenseLanguage: string | null = null;
   if (routed.has('condense')) {
     const outcome = await runTransform<CondenseResult>(
       {
@@ -585,6 +633,7 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
         console.warn('[Query Layer] condense output discarded', { reason: outcome.value.skip.reason });
       } else {
         condenseOk = true;
+        condenseLanguage = outcome.value.reportedLanguage ?? null;
         if (!outcome.value.passThrough) condensed = outcome.value.standalone;
       }
     } else if (outcome.reason !== 'disabled') {
@@ -622,8 +671,12 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
   const completenessOn = config.queryAdditions.effective.completeness;
 
   const translateSkips: TranslateSkip[] = [];
+  // D-17: a language condense reported overrides the detection for the translation source and targets; the gate stays.
+  const condenseReported = reportedQueryLanguage([condenseLanguage], enabledLanguages);
+  const translateSource: Lang = condenseReported ?? gate.lang;
+  let translateReported: Lang | null = null;
   const runTranslate = handledTranslate && routed.has('translate');
-  const translateTargets: Lang[] = runTranslate ? translationTargets(gate.lang, kbShares) : [];
+  const translateTargets: Lang[] = runTranslate ? translationTargets(translateSource, kbShares) : [];
 
   const tasks: [
     Promise<TransformOutcome<NormalizedDates>> | null,
@@ -685,13 +738,16 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
           (stageSignal) => {
             const translateCtx: QueryLayerTranslateContext = {
               signal: stageSignal,
-              sourceLanguage: gate.lang,
+              sourceLanguage: translateSource,
               targets: translateTargets,
               protectedTokens: gate.protectedTokens,
               maxItems: params.max_translations,
               limits,
               transformer,
               onSkip: (entry) => translateSkips.push(entry),
+              onSourceLanguage: (language) => {
+                translateReported ??= language;
+              },
             };
             return queryLayerTranslator.translate(standalone, translateCtx);
           },
@@ -733,7 +789,12 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
     ? translation.value.flatMap((item) => (isPlanLanguage(item.language) ? [{ text: item.text, language: item.language }] : []))
     : [];
 
-  const plan = buildQueryPlan({
+  // D-17: the LLM-reported language (condense first, then translate) sets the answer-language input only.
+  const answerLanguage = condenseReported ?? (translation?.ran ? reportedQueryLanguage([translateReported], enabledLanguages) : null);
+  if (detection && answerLanguage && answerLanguage !== detection.language) {
+    detection = { language: answerLanguage, confidence: 1, source: 'llm' };
+  }
+  const built = buildQueryPlan({
     original: input.query,
     gate,
     framework: transformer.framework,
@@ -746,6 +807,11 @@ export async function runQueryLayer(ctx: QueryLayerInput): Promise<QueryLayerOut
     subQuestions: subQuestions?.variants.map((variant) => variant.text) ?? [],
     ...(subQuestions?.completeness ? { completeness: subQuestions.completeness } : {}),
   });
+  const plan: QueryPlan = {
+    ...built,
+    ...(detection ? { language_detection: detectionContract(detection) } : {}),
+    ...(answerLanguage && answerLanguage !== built.language ? { language: answerLanguage } : {}),
+  };
 
   if (ctx.afterTransforms) await ctx.afterTransforms(standalone);
 

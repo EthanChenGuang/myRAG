@@ -39,6 +39,8 @@ export interface GateContext {
   now: Date;
   /** Knowledge-base language shares (D-23); when given, R8 uses the 20% rule instead of kbLang. */
   kbShares?: Partial<Record<Lang, number>>;
+  /** Phase 6.2 D-17: the query language resolved before the gate; when present it replaces the gate's own detector. */
+  language?: Lang;
 }
 
 export type RelativeTimeMatch = { term: string; unit: string; offset: number | null; n?: number };
@@ -300,7 +302,7 @@ function translateNeeded(lang: Lang, ctx: GateContext): boolean {
  * rule, returns all that fired and the transforms they map to. No LLM call, no I/O.
  */
 export function needsRewrite(q: string, ctx: GateContext): GateResult {
-  const lang = detectGateLanguage(q);
+  const lang = ctx.language ?? detectGateLanguage(q);
   const normalized = normalizeText(q);
 
   if (isSmallTalk(normalized)) {

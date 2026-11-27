@@ -66,8 +66,12 @@ describe('resolveQueryLanguage (D-17)', () => {
     expect(await resolve('如何 配置 sample gateway', { previousTurnLanguage: 'zh' })).toMatchObject({ language: 'zh', source: 'previous_turn' });
   });
 
+  it('code tokens carry no script evidence: a Han question around one identifier stays Han-dominant', async () => {
+    expect(await resolve('那个 ERR_TIMEOUT 怎么修？')).toMatchObject({ language: 'zh', source: 'detector' });
+  });
+
   it('code-dominated text is low confidence', async () => {
-    const detection = await resolve('the config.yaml has sample_module.timeout and retry_limit=3 set', { uiLanguage: 'it' });
+    const detection = await resolve('the config.yaml sample_module.timeout retry_limit=3 max_items=10 and', { uiLanguage: 'it' });
     expect(detection).toMatchObject({ language: 'it', source: 'ui_language' });
   });
 
@@ -187,7 +191,8 @@ describe('runQueryLayer language resolution (D-17)', () => {
     expect(out.plan?.gate.lang).toBe('en');
     expect(out.plan?.language).toBe('it');
     expect(out.plan?.language_detection?.source).toBe('llm');
-    expect(requests.filter((request) => request.transform === 'translate').map((request) => request.target)).toEqual(['zh']);
+    // XLG-01 from the reported language: its 40% share needs no translation, while the detected language would get two.
+    expect(requests.filter((request) => request.transform === 'translate')).toEqual([]);
   });
 
   it('a null or non-enabled reported language changes nothing', async () => {
@@ -197,7 +202,7 @@ describe('runQueryLayer language resolution (D-17)', () => {
     const { requests } = install([{ transform: 'condense', query, output: { standalone, unchanged: false, language: null } }]);
     const out = await runLayer(query, { history: HISTORY });
     expect(out.plan?.language).toBe('en');
-    expect(out.plan?.language_detection?.source).toBe('detector');
+    expect(out.plan?.language_detection).toMatchObject({ language: 'en', source: 'primary' });
     expect(requests.filter((request) => request.transform === 'translate').map((request) => request.target)).toEqual(['zh', 'it']);
   });
 

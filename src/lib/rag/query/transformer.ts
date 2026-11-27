@@ -26,6 +26,18 @@ export type { ExpandResult } from './llamaindex/expand';
 export type { HydeResult } from './llamaindex/hyde';
 export type { NativeTranslateResult as TranslateResult, TranslateCallOutcome, TranslateRequest, TranslateSkipReason } from './llamaindex/translate';
 
+/**
+ * D-17: the language an LLM transform that ran anyway reported (condense, then translate), when it names an enabled language;
+ * null otherwise. It overrides the detection for the answer-language instruction and translation targets only; no extra call.
+ */
+export function reportedQueryLanguage<L extends string>(reports: ReadonlyArray<string | null | undefined>, enabled: readonly L[]): L | null {
+  for (const report of reports) {
+    const match = enabled.find((language) => language === report);
+    if (match) return match;
+  }
+  return null;
+}
+
 /** The shared transform inputs; the implementation supplies its own client (D-02). */
 export type TransformExpandInput = Omit<ExpandInput, 'deps'>;
 export type TransformHydeInput = Omit<HydeInput, 'deps'>;

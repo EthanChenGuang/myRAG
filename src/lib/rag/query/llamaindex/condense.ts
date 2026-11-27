@@ -25,6 +25,8 @@ export interface CondenseResult {
   passThrough: boolean;
   /** Set when the rewrite was discarded (the original is used); never carries query text. */
   skip: PostCheckSkip | null;
+  /** D-17: the language the model reported for the standalone query; absent when it reported none. */
+  reportedLanguage?: NonNullable<CondensedQuery['language']>;
 }
 
 /** QRY-01: the LlamaIndex condense-question method, native, with the shared suffix and the D-15 post-checks. */
@@ -44,5 +46,10 @@ export async function llamaindexCondense(input: CondenseInput): Promise<Condense
 export function finishCondense(input: Pick<CondenseInput, 'query' | 'protectedTokens' | 'limits'>, output: CondensedQuery): CondenseResult {
   const text = output.unchanged ? input.query : output.standalone;
   const checked = checkCondensed({ text, input: input.query, protectedTokens: input.protectedTokens }, input.limits ?? DEFAULT_POST_CHECK_LIMITS);
-  return { standalone: checked.text, passThrough: checked.passThrough, skip: checked.skip };
+  return {
+    standalone: checked.text,
+    passThrough: checked.passThrough,
+    skip: checked.skip,
+    ...(output.language ? { reportedLanguage: output.language } : {}),
+  };
 }
