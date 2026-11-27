@@ -11,6 +11,8 @@ export interface SourceCitation {
   page: number | null;
   sectionPath: string[] | null;
   unavailable: boolean;
+  withdrawn?: boolean;
+  withdrawnAt?: string | null;
   messageId?: string;
 }
 
@@ -32,6 +34,7 @@ export interface Source {
   explicitly_referenced?: boolean;
   citation?: SourceCitation;
   cited?: boolean;
+  withdrawn?: boolean;
 }
 
 export type AnswerDocumentStatus = Readonly<Record<string, 'current' | 'unavailable' | 'withdrawn'>>;
@@ -65,6 +68,8 @@ export function citationSourcesFor(
         page: entry.page,
         sectionPath: entry.sectionPath,
         unavailable,
+        withdrawn: entry.withdrawn,
+        withdrawnAt: entry.withdrawnAt,
         ...(messageId ? { messageId } : {}),
       },
     };
@@ -72,14 +77,24 @@ export function citationSourcesFor(
     return source;
   });
   const citedIds = new Set(sorted.map((citation) => citation.documentId));
+  const withdrawnIds = new Set([
+    ...sorted.filter((_, index) => entries[index].withdrawn).map((citation) => citation.documentId),
+    ...Object.keys(documents ?? {}).filter((id) => documents?.[id] === 'withdrawn'),
+  ]);
   const kept = existing
     .filter((source) => !source.citation)
-    .map((source) =>
-      source.type === 'document' && source.documentId && citedIds.has(source.documentId) && !source.cited
-        ? { ...source, cited: true }
-        : source,
-    );
+    .map((source) => {
+      if (source.type !== 'document' || !source.documentId) return source;
+      if (withdrawnIds.has(source.documentId)) return withdrawnDocumentSource(source, citedIds.has(source.documentId));
+      return citedIds.has(source.documentId) && !source.cited ? { ...source, cited: true } : source;
+    });
   return [...citationEntries, ...kept];
+}
+
+/** A document entry of a withdrawn document keeps its name and pills, never its text or link (UI-SPEC 6.9). */
+function withdrawnDocumentSource(source: Source, cited: boolean): Source {
+  const { snippet: _snippet, content: _content, url: _url, ...rest } = source;
+  return { ...rest, ...(cited || source.cited ? { cited: true } : {}), withdrawn: true };
 }
 
 interface SourcesContextType {

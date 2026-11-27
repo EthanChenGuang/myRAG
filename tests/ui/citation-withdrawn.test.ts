@@ -1,6 +1,6 @@
 import { createElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { afterEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, describe, expect, onTestFinished, test, vi } from 'vitest';
 
 const sourcesState = vi.hoisted(() => ({ sources: [] as unknown[], open: false }));
 
@@ -87,7 +87,7 @@ function expectNoStaleText(html: string) {
 }
 
 afterEach(() => {
-  useAnswerRecordsStore.setState({ records: {} });
+  vi.restoreAllMocks();
   sourcesState.sources = [];
   sourcesState.open = false;
 });
@@ -221,8 +221,11 @@ function chatMessage(metadata: Record<string, unknown>) {
 
 describe('ChatMessage and shared chats', () => {
   test('the availability map in the answer-records store turns the chip neutral', () => {
-    useAnswerRecordsStore.setState({
-      records: { [ANSWER_ID]: { answerId: ANSWER_ID, documents: { 'doc-1': 'withdrawn', 'doc-2': 'current' } } as never },
+    // Server rendering reads the store's initial state, so the record is placed there for this test.
+    const initial = useAnswerRecordsStore.getInitialState().records;
+    initial[ANSWER_ID] = { answerId: ANSWER_ID, documents: { 'doc-1': 'withdrawn', 'doc-2': 'current' } } as never;
+    onTestFinished(() => {
+      delete initial[ANSWER_ID];
     });
     const html = renderToStaticMarkup(
       chatMessage({ answerId: ANSWER_ID, citationStrategy: 'chunk-alias', citations: [citation(1, 'doc-1'), citation(2, 'doc-2')] }),

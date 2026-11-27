@@ -4,6 +4,10 @@ export interface AnswerQualityStrings {
   citedLabel: string;
   documentUpdatedOrRemoved: string;
   chipAriaLabel: (n: number) => string;
+  sourceWithdrawn: string;
+  sourceWithdrawnDetail: string;
+  sourceWithdrawnOn: (date: string) => string;
+  chipWithdrawnAriaLabel: (n: number) => string;
   pageLabel: (page: number) => string;
   badgeLabels: Record<'verified' | 'possibly_unreliable' | 'not_checked', string>;
   badgeTooltips: Record<'verified' | 'possibly_unreliable' | 'not_checked', string>;
@@ -33,6 +37,10 @@ const STRINGS: Record<string, AnswerQualityStrings> = {
     citedLabel: 'Cited',
     documentUpdatedOrRemoved: 'This document has since been updated or removed. The quote above is the text the answer used.',
     chipAriaLabel: (n) => `Show source ${n}`,
+    sourceWithdrawn: 'Source withdrawn',
+    sourceWithdrawnDetail: 'This source was withdrawn after the answer was written. Its text is no longer available.',
+    sourceWithdrawnOn: (date) => `Withdrawn on ${date}.`,
+    chipWithdrawnAriaLabel: (n) => `Show source ${n} (withdrawn)`,
     pageLabel: (page) => `p. ${page}`,
     badgeLabels: { verified: 'Verified', possibly_unreliable: 'Possibly Unreliable', not_checked: 'Not Checked' },
     badgeTooltips: {
@@ -64,6 +72,10 @@ const STRINGS: Record<string, AnswerQualityStrings> = {
     citedLabel: '已引用',
     documentUpdatedOrRemoved: '该文档此后已被更新或删除。上方引文是回答当时使用的内容。',
     chipAriaLabel: (n) => `查看来源 ${n}`,
+    sourceWithdrawn: '来源已撤回',
+    sourceWithdrawnDetail: '该来源在回答生成后已被撤回，其内容不再提供。',
+    sourceWithdrawnOn: (date) => `撤回于 ${date}。`,
+    chipWithdrawnAriaLabel: (n) => `查看来源 ${n}（已撤回）`,
     pageLabel: (page) => `第 ${page} 页`,
     badgeLabels: { verified: '已核验', possibly_unreliable: '可能不可靠', not_checked: '未核验' },
     badgeTooltips: {
@@ -95,6 +107,10 @@ const STRINGS: Record<string, AnswerQualityStrings> = {
     citedLabel: 'Citato',
     documentUpdatedOrRemoved: 'Questo documento è stato aggiornato o rimosso. La citazione qui sopra è il testo usato dalla risposta.',
     chipAriaLabel: (n) => `Mostra la fonte ${n}`,
+    sourceWithdrawn: 'Fonte ritirata',
+    sourceWithdrawnDetail: 'Questa fonte è stata ritirata dopo la stesura della risposta. Il testo non è più disponibile.',
+    sourceWithdrawnOn: (date) => `Ritirata il ${date}.`,
+    chipWithdrawnAriaLabel: (n) => `Mostra la fonte ${n} (ritirata)`,
     pageLabel: (page) => `p. ${page}`,
     badgeLabels: { verified: 'Verificata', possibly_unreliable: 'Forse inaffidabile', not_checked: 'Non verificata' },
     badgeTooltips: {
