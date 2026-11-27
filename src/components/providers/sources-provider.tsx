@@ -23,7 +23,6 @@ export interface SourceCitation extends SourceProvenance {
   messageId?: string;
   /** Phase 5.2 (D-50): present only while the version labels produced them. */
   versionLabel?: string;
-  effectiveFrom?: string;
   documentVersion?: number;
   /** The older document of the answer's version conflict (checks.version_conflict). */
   olderVersion?: true;

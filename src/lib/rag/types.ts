@@ -100,6 +100,9 @@ export interface KeptChunk {
   dupClusterId?: string;
   /** D-21: other documents of the cluster that the diversify stage dropped, in rank order. */
   alsoIn?: AlsoIn[];
+  /** D-13, D-40: set only when the effective version scope is not current; false for a superseded version. */
+  isCurrent?: boolean;
+  documentVersion?: number;
 }
 
 /** Another document of a kept chunk's duplicate cluster (D-21): the first dropped chunk of that document. */

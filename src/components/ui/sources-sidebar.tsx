@@ -211,14 +211,14 @@ function aroundDate(template: string): [string, string] {
 }
 
 /** GEN-14 (UI-SPEC 6.7): version, effective date and older-version parts; null when the citation carries none. */
-function CitationVersionLine({ citation, uiLanguage }: { citation: SourceCitation; uiLanguage: string }) {
+function CitationVersionLine({ citation, uiLanguage, hideDate = false }: { citation: SourceCitation; uiLanguage: string; hideDate?: boolean }) {
   const language = clientTextLanguage(citation.answerLanguage ?? uiLanguage);
   const version =
     citation.versionLabel ??
     (citation.olderVersion && typeof citation.documentVersion === 'number'
       ? clientText('labels.version', language).replace('{version}', String(citation.documentVersion))
       : null);
-  const date = citation.effectiveFrom ?? null;
+  const date = hideDate ? null : (citation.effectiveFrom ?? null);
   const older = citation.olderVersion ? clientText('labels.older_version', language) : '';
   if (!version && !date && !older) return null;
   const [beforeDate, afterDate] = date ? aroundDate(clientText('labels.effective_from', language)) : ['', ''];
@@ -281,7 +281,7 @@ export function CitationSourceEntry({ source, language, focused = false, listHas
         </span>
         <div className="min-w-0 flex-1">
           <h4 className="break-words text-sm font-medium text-gray-900 dark:text-gray-100">{source.title}</h4>
-          <CitationVersionLine citation={citation} uiLanguage={language} />
+          <CitationVersionLine citation={citation} uiLanguage={language} hideDate={versionView !== null} />
           {location.length > 0 && (
             <p className="mt-1 break-words text-xs text-gray-500 dark:text-gray-400">{location.join(' · ')}</p>
           )}
