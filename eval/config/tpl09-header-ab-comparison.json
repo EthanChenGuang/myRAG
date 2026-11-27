@@ -1,0 +1,42 @@
+{
+  "schema_version": 2,
+  "phase": "03.3",
+  "noise": "eval/config/noise.json",
+  "baselines": {
+    "prechunked": "eval/baselines/fixture-baseline.json",
+    "ingest": "eval/baselines/fixture-ingest-baseline.json"
+  },
+  "notes": [
+    "Plan 03.3-26, TPL-09 must-check (handoffs/03.3-25-requirement-TPL-09.md, D-26): tpl-recommended with RAG_ATTRIBUTE_HEADER on and off, fixture ingest mode. Both runs are report_only here; python -m rag_eval.header_ab_check --population fixture compares them. This is the fixture rehearsal of the tool only: the decision rests on the live real-item runs of 03.3-26-CHECKPOINT.md."
+  ],
+  "runs": [
+    {
+      "name": "tpl-recommended-ingest",
+      "fixture_mode": "ingest",
+      "base": "eval/config/runs/tpl-recommended.json",
+      "switches": {
+        "RAG_CITATIONS": "true"
+      },
+      "harness_flags": [
+        "--citations"
+      ],
+      "checks": [
+        "report_only"
+      ]
+    },
+    {
+      "name": "tpl-recommended-no-header-ingest",
+      "fixture_mode": "ingest",
+      "base": "eval/config/runs/tpl-recommended-no-header.json",
+      "switches": {
+        "RAG_CITATIONS": "true"
+      },
+      "harness_flags": [
+        "--citations"
+      ],
+      "checks": [
+        "report_only"
+      ]
+    }
+  ]
+}
