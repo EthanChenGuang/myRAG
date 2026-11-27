@@ -84,3 +84,27 @@ export async function buildVectorSyncStores(
   }
   return stores;
 }
+
+export interface VectorSyncTargetFlag {
+  target: VectorSyncTarget;
+  enabled: boolean;
+}
+
+export async function listVectorSyncTargets(_rpc: RpcClient): Promise<VectorSyncTargetFlag[]> {
+  return [];
+}
+
+export interface SetVectorSyncTargetResult {
+  target: VectorSyncTarget;
+  enabled: boolean;
+  tenantsEnqueued: number;
+}
+
+export async function setVectorSyncTarget(
+  _rpc: RpcClient,
+  target: VectorSyncTarget,
+  enabled: boolean,
+  _actor: string,
+): Promise<SetVectorSyncTargetResult> {
+  return { target, enabled, tenantsEnqueued: 0 };
+}
