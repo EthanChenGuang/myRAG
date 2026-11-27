@@ -219,3 +219,28 @@ describe('retrieval config hash backend inputs (D-24)', () => {
 
 /** computeRetrievalConfigHash(base) at the commit before this plan (pinned so the default hash can never drift). */
 const PGVECTOR_DEFAULT_HASH = 'cd5802e67caf9dba719d8f8ef510b12369a1c158275090a4794aca06cd743d11';
+
+describe('defaulted v2 run (buffered collector)', () => {
+  it('keeps the search span backend attributes when the buffered attempt is committed', async () => {
+    const { runRetrieval } = await import('@/lib/rag');
+    const { setDefaultPipelineForTests } = await import('@/lib/rag/config');
+    const { resetActiveChunkingProfilesForTests } = await import('@/lib/rag/chunking/active');
+    const { adminWithRpc, fakeAssemblyAdmin, fakeRpcClient, rows } = await import('../helpers/pipeline-fakes');
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    setDefaultPipelineForTests('v2');
+    try {
+      resetActiveChunkingProfilesForTests();
+      const rpc = fakeRpcClient({ rows: rows(3) });
+      installDeps({
+        embedder: fakeEmbedder().embedder,
+        adminClient: adminWithRpc(rpc.client, fakeAssemblyAdmin()),
+        ragEnv: () => ({ RAG_PIPELINE: undefined, RAG_LEXICAL_SEARCH: 'false', RAG_RERANKER: 'none' }),
+      });
+      const result = await runRetrieval({ scope, query: QUERY, profile: 'chat', signal: new AbortController().signal });
+      const record = result.stages.find((stage) => stage.name === 'search');
+      expect(record?.attributes).toEqual({ backend: 'pgvector', tenant_validation_dropped: 0 });
+    } finally {
+      setDefaultPipelineForTests(null);
+    }
+  });
+});
