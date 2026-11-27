@@ -9,6 +9,10 @@ from rag_eval.paths import REPO_ROOT
 
 DEFAULT_CONFIG_PATH = REPO_ROOT / "eval" / "config" / "judge.json"
 
+# Reasoning judges (gpt-5-mini) spend output tokens on reasoning before the structured answer;
+# Ragas's 1024-token default cut most Faithfulness outputs off (IncompleteOutputException).
+JUDGE_MAX_OUTPUT_TOKENS = 16384
+
 
 class JudgeFamilyError(ValueError):
     pass
