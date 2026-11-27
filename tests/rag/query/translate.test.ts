@@ -15,13 +15,13 @@ const SLOW = 'Which synthetic queue drains first?';
 const table: FakeQueryLlmTable = {
   version: 1,
   entries: [
-    { transform: 'translate', query: PLAIN, output: { target_language: 'zh', text: PLAIN_ZH } },
-    { transform: 'translate', query: PLAIN, output: { target_language: 'it', text: PLAIN_IT } },
-    { transform: 'translate', query: CODED, output: { target_language: 'zh', text: '示例服务如何处理超时错误？' } },
-    { transform: 'translate', query: CODED, output: { target_language: 'it', text: 'Come gestisce ERR_TIMEOUT il servizio di esempio?' } },
-    { transform: 'translate', query: WRONG, target_language: 'zh', output: { target_language: 'it', text: 'Quale campo sintetico contiene il valore?' } },
-    { transform: 'translate', query: SLOW, target_language: 'zh', delay_ms: 5000, output: { target_language: 'zh', text: '哪个合成队列先清空？' } },
-    { transform: 'translate', query: SLOW, target_language: 'it', delay_ms: 5000, output: { target_language: 'it', text: 'Quale coda sintetica si svuota per prima?' } },
+    { transform: 'translate', query: PLAIN, output: { target_language: 'zh', text: PLAIN_ZH, source_language: null } },
+    { transform: 'translate', query: PLAIN, output: { target_language: 'it', text: PLAIN_IT, source_language: null } },
+    { transform: 'translate', query: CODED, output: { target_language: 'zh', text: '示例服务如何处理超时错误？', source_language: null } },
+    { transform: 'translate', query: CODED, output: { target_language: 'it', text: 'Come gestisce ERR_TIMEOUT il servizio di esempio?', source_language: null } },
+    { transform: 'translate', query: WRONG, target_language: 'zh', output: { target_language: 'it', text: 'Quale campo sintetico contiene il valore?', source_language: null } },
+    { transform: 'translate', query: SLOW, target_language: 'zh', delay_ms: 5000, output: { target_language: 'zh', text: '哪个合成队列先清空？', source_language: null } },
+    { transform: 'translate', query: SLOW, target_language: 'it', delay_ms: 5000, output: { target_language: 'it', text: 'Quale coda sintetica si svuota per prima?', source_language: null } },
   ],
 };
 
@@ -167,7 +167,7 @@ describe('nativeTranslate', () => {
     const llm: QueryLlm = {
       model: 'failing',
       async generate<T>(request: QueryLlmRequest<T>) {
-        if (request.targetLanguage === 'zh') return { target_language: 'zh', text: '  ' } as T;
+        if (request.targetLanguage === 'zh') return { target_language: 'zh', text: '  ', source_language: null } as T;
         throw new QueryLlmError('unavailable', 'translate');
       },
     };

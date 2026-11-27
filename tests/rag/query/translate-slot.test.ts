@@ -88,7 +88,7 @@ async function run(query: string, scope: TenantScope, options: { env?: Record<st
 const translateEntry = (query: string, text: string, target: 'zh' | 'en' | 'it'): FakeQueryLlmEntry => ({
   transform: 'translate',
   query,
-  output: { text, target_language: target },
+  output: { text, target_language: target, source_language: null },
 });
 
 describe('the query layer serves the D-22 translate slot', () => {

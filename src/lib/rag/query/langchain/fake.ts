@@ -121,7 +121,7 @@ function entryTarget(entry: FakeLangChainEntry): string | undefined {
 function defaultOutput(transform: LangChainTransform, query: string, target?: string): unknown {
   switch (transform) {
     case 'condense':
-      return { standalone: query, unchanged: true };
+      return { standalone: query, unchanged: true, language: null };
     case 'expand':
       return { queries: [] };
     case 'decompose':
@@ -129,7 +129,7 @@ function defaultOutput(transform: LangChainTransform, query: string, target?: st
     case 'hyde':
       return { passage: query };
     case 'translate':
-      return { target_language: target ?? 'en', text: '' };
+      return { target_language: target ?? 'en', text: '', source_language: null };
   }
 }
 

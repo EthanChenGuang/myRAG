@@ -488,7 +488,7 @@ describe('voice-rag under the v2 query layer', () => {
       async generate<T>(req: QueryLlmRequest<T>): Promise<T> {
         llmCalls.push({ transform: req.transform, prompt: `${req.system}\n${req.prompt}` });
         if (req.transform !== 'condense') throw new Error('unexpected transform');
-        return req.schema.parse({ standalone: req.input, unchanged: true });
+        return req.schema.parse({ standalone: req.input, unchanged: true, language: null });
       },
     };
   }
