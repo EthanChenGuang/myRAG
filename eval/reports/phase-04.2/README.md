@@ -5,7 +5,7 @@ Verdict: **FAIL** over off_identity, diversity, identifier, table, versions, dic
 | Gate | Decision | Verdict | Offenders |
 | --- | --- | --- | --- |
 | off_identity | D-37 | PASS | 0 |
-| diversity | D-22 | FAIL | 6 |
+| diversity | D-22 | FAIL | 1 |
 | identifier | D-32 | PASS | 0 |
 | table | ROADMAP-4.2-SC3 | PASS | 0 |
 | versions | ROADMAP-4.2-SC5 | PASS | 0 |
@@ -29,18 +29,13 @@ Runs: v2-diversity-collapse, v2-diversity-mmr, v2-default.
 | --- | --- |
 | v2-diversity-collapse.intent_coverage | 1.0000 |
 | v2-diversity-collapse.items | 6 |
-| v2-diversity-collapse.max_redundancy_over_limit | 0.0000 |
+| v2-diversity-collapse.max_redundancy_over_limit | 0.1250 |
 | v2-diversity-mmr.intent_coverage | 1.0000 |
 | v2-diversity-mmr.items | 6 |
 | v2-diversity-mmr.max_redundancy_over_limit | 0.0000 |
 
 Offenders:
-- v2-diversity-collapse: category:stale_version:recall_at_5 dropped beyond the noise band (0.8000 < 0.9800, v2-default 1.0000)
-- v2-diversity-collapse: category:stale_version:recall_at_10 dropped beyond the noise band (0.8000 < 0.9800, v2-default 1.0000)
-- v2-diversity-collapse: category:stale_version:mrr dropped beyond the noise band (0.4500 < 0.5300, v2-default 0.5500)
-- v2-diversity-mmr: category:stale_version:recall_at_5 dropped beyond the noise band (0.8000 < 0.9800, v2-default 1.0000)
-- v2-diversity-mmr: category:stale_version:recall_at_10 dropped beyond the noise band (0.8000 < 0.9800, v2-default 1.0000)
-- v2-diversity-mmr: category:stale_version:mrr dropped beyond the noise band (0.4500 < 0.5300, v2-default 0.5500)
+- v2-diversity-collapse: zh-duplicate-flood-002 topk_redundancy 0.2500 > 1/8 = 0.1250
 
 ## identifier (D-32)
 
@@ -120,8 +115,8 @@ Runs: v2-lexical-dict-on, v2-default.
 | off-ingest | ingest | 0.7790 | 0.6924 | `a48430c9ab66` |
 | v2-default | prechunked | 0.7211 | 0.6370 | `5db73f8fe8d5` |
 | v2-default-phase42-off | prechunked | 0.7211 | 0.6370 | `d3c0e87071dd` |
-| v2-diversity-collapse | prechunked | 0.7111 | 0.6320 | `2903b4e3b17f` |
-| v2-diversity-mmr | prechunked | 0.7161 | 0.6308 | `9e2ad503708b` |
+| v2-diversity-collapse | prechunked | 0.7211 | 0.6370 | `2903b4e3b17f` |
+| v2-diversity-mmr | prechunked | 0.7261 | 0.6359 | `9e2ad503708b` |
 | v2-identifier-on | prechunked | 0.8015 | 0.7107 | `687faee57136` |
 | v2-table-lookup-on | prechunked | 0.7211 | 0.6370 | `c24c3113c85e` |
 | v2-version-scope-on | prechunked | 0.7286 | 0.6370 | `c864ed9e5b74` |

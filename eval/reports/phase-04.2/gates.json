@@ -50,18 +50,13 @@
       "numbers": {
         "v2-diversity-collapse.intent_coverage": 1.0,
         "v2-diversity-collapse.items": 6,
-        "v2-diversity-collapse.max_redundancy_over_limit": 0.0,
+        "v2-diversity-collapse.max_redundancy_over_limit": 0.125,
         "v2-diversity-mmr.intent_coverage": 1.0,
         "v2-diversity-mmr.items": 6,
         "v2-diversity-mmr.max_redundancy_over_limit": 0.0
       },
       "offenders": [
-        "v2-diversity-collapse: category:stale_version:recall_at_5 dropped beyond the noise band (0.8000 < 0.9800, v2-default 1.0000)",
-        "v2-diversity-collapse: category:stale_version:recall_at_10 dropped beyond the noise band (0.8000 < 0.9800, v2-default 1.0000)",
-        "v2-diversity-collapse: category:stale_version:mrr dropped beyond the noise band (0.4500 < 0.5300, v2-default 0.5500)",
-        "v2-diversity-mmr: category:stale_version:recall_at_5 dropped beyond the noise band (0.8000 < 0.9800, v2-default 1.0000)",
-        "v2-diversity-mmr: category:stale_version:recall_at_10 dropped beyond the noise band (0.8000 < 0.9800, v2-default 1.0000)",
-        "v2-diversity-mmr: category:stale_version:mrr dropped beyond the noise band (0.4500 < 0.5300, v2-default 0.5500)"
+        "v2-diversity-collapse: zh-duplicate-flood-002 topk_redundancy 0.2500 > 1/8 = 0.1250"
       ],
       "passed": false,
       "runs": [
@@ -473,11 +468,11 @@
         },
         "mrr": {
           "n": 199,
-          "value": 0.6319932998324959
+          "value": 0.6370184254606365
         },
         "ndcg_at_context_k": {
           "n": 199,
-          "value": 0.644268492516001
+          "value": 0.650609495064458
         },
         "near_miss_leakage": {
           "n": 1,
@@ -485,15 +480,15 @@
         },
         "recall_at_10": {
           "n": 199,
-          "value": 0.7110552763819096
+          "value": 0.7211055276381909
         },
         "recall_at_5": {
           "n": 199,
-          "value": 0.7010050251256281
+          "value": 0.7110552763819096
         },
         "topk_redundancy": {
           "n": 178,
-          "value": 0.1272605671482076
+          "value": 0.1370920278223649
         }
       },
       "run_config_hash": "2903b4e3b17fa4d343d121c27f6b4b98bf0c860fe5e07905971e531fc63a3b68"
@@ -543,11 +538,11 @@
         },
         "mrr": {
           "n": 199,
-          "value": 0.6308267528116774
+          "value": 0.6358518784398182
         },
         "ndcg_at_context_k": {
           "n": 199,
-          "value": 0.6444875607330294
+          "value": 0.6508285632814862
         },
         "near_miss_leakage": {
           "n": 1,
@@ -555,15 +550,15 @@
         },
         "recall_at_10": {
           "n": 199,
-          "value": 0.7160804020100503
+          "value": 0.7261306532663316
         },
         "recall_at_5": {
           "n": 199,
-          "value": 0.7060301507537688
+          "value": 0.7160804020100503
         },
         "topk_redundancy": {
           "n": 178,
-          "value": 0.1272605671482076
+          "value": 0.13006955591225253
         }
       },
       "run_config_hash": "9e2ad503708b3067e6e25d088d7fb1ab96a443815923d54bcad0bfaef74de982"
