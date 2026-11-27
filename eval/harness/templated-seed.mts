@@ -154,15 +154,15 @@ export async function seedTemplatedTenant(options: {
   if (report.files.length === 0) return report;
   const signal = options.signal ?? new AbortController().signal;
 
-  // The fixture user becomes the tenant's admin the way the two-tenant tests do it: an admin_users row in single-tenant mode; in
-  // multi-tenant mode the personal workspace key already admits its owner.
+  // The fixture user becomes the tenant's admin the way the two-tenant tests do it: an admin_users row (rag_admin_tenant_keys admits
+  // s:default in single-tenant mode and the admin's personal key u:<id> in multi-tenant mode); multi-tenant builds already hold the user.
   if (options.deploymentMode === 'single-tenant') {
     await options.db.query('INSERT INTO auth.users (id, email) VALUES ($1, $2) ON CONFLICT (id) DO NOTHING', [
       options.fixtureUserId,
       'fixture-user@example.invalid',
     ]);
-    await options.db.query('INSERT INTO admin_users (id) VALUES ($1) ON CONFLICT (id) DO NOTHING', [options.fixtureUserId]);
   }
+  await options.db.query('INSERT INTO admin_users (id) VALUES ($1) ON CONFLICT (id) DO NOTHING', [options.fixtureUserId]);
 
   const { scopeKey } = await import('../../src/lib/rag/tenant/scope.ts');
   const tenantKey = scopeKey(options.scope).toLowerCase();

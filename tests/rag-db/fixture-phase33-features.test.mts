@@ -72,7 +72,10 @@ interface CaseResult {
   earlier?: { needsReview: boolean; reasons: unknown; chunks: number };
   fragmentCap?: number;
   sqlSha256?: Record<string, string>;
+  /** Distinct lexical versions of current chunks. */
   lexicalVersions?: number[];
+  /** Distinct lexical versions of superseded chunks (rag:relex rewrites current rows only). */
+  supersededLexicalVersions?: number[];
 }
 
 async function dumpOf(db: import('@electric-sql/pglite').PGlite): Promise<string> {
@@ -160,7 +163,12 @@ async function runCase(caseName: CaseName, mode: Mode): Promise<CaseResult> {
     });
     try {
       const db = inProcess.fixtureDb;
-      const versions = (await db.query<{ v: number }>('SELECT DISTINCT lexical_version AS v FROM document_chunks ORDER BY 1')).rows.map((row) => row.v);
+      const versionsOf = async (current: boolean): Promise<number[]> =>
+        (await db.query<{ v: number }>('SELECT DISTINCT lexical_version AS v FROM document_chunks WHERE is_current = $1 ORDER BY 1', [current])).rows.map(
+          (row) => row.v,
+        );
+      const versions = await versionsOf(true);
+      const supersededVersions = await versionsOf(false);
       return {
         corpusSha256: inProcess.corpusSha256,
         dumpSha256: await dumpOf(db),
@@ -168,6 +176,7 @@ async function runCase(caseName: CaseName, mode: Mode): Promise<CaseResult> {
         ...(plain ? { plain } : {}),
         sqlSha256: { ...inProcess.sqlSha256 },
         lexicalVersions: versions,
+        supersededLexicalVersions: supersededVersions,
       };
     } finally {
       await inProcess.close();
@@ -310,7 +319,7 @@ if (CASE !== undefined) {
         assert.equal(on.tables.rag_boilerplate_rules, 4);
         assert.equal(on.tables.rag_section_rule_sets, 1);
         assert.ok(on.tables.rag_staged_attributes > 0, 'the import staged the values of documents that did not exist yet');
-        assert.equal(on.adminUsers, mode === 'single-tenant' ? 1 : 0);
+        assert.equal(on.adminUsers, 1);
         assert.deepEqual(
           on.seedParts?.map((part) => part.split(':').slice(0, 2).join(':')),
           DATA_FILES.map((file) => `phase33_seed:${file}`),
@@ -383,6 +392,7 @@ if (CASE !== undefined) {
       const quantity = get('prechunked-quantity', 'single-tenant');
       const off = get('prechunked-off', 'single-tenant');
       assert.deepEqual(quantity.lexicalVersions, [6]);
+      assert.deepEqual(quantity.supersededLexicalVersions, off.supersededLexicalVersions, 'superseded chunks keep their version, as rag:relex leaves them');
       assert.ok(quantity.sqlSha256?.['lexical_effective_version:6']);
       assert.notEqual(quantity.dumpSha256, off.dumpSha256);
       assert.deepEqual(quantity.tables, zeroTables, 'no Phase 3.3 rule data is seeded in prechunked mode');
