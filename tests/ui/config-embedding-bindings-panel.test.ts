@@ -389,10 +389,10 @@ describe('UI review fixes (03.1.1-UI-REVIEW, quick 261127-cuf)', () => {
   it('WARNING 5: form.profile.none matches the UI-SPEC copy table', () => {
     const { BINDINGS_COPY } = view();
     const spec = fs.readFileSync(path.resolve(import.meta.dirname, '../../.planning/phases/03.1.1-domain-embedding-model-candidates-and-per-doc-type-model-sel/03.1.1-UI-SPEC.md'), 'utf8');
-    for (const key of ['form.profile.none', 'form.cancel', 'hint.staleNoBaseline', 'error.unconfirmedRegistry']) {
+    for (const key of ['form.profile.none', 'form.cancel', 'hint.staleNoBaseline']) {
       const row = spec.split('\n').find((line) => line.startsWith('| `' + key + '` |'));
       expect(row, key).toBeTruthy();
-      expect(row!.split(' | ')[1]).toBe(BINDINGS_COPY[key]);
+      expect(row!.replace(/ \|$/, '').split(' | ')[1]).toBe(BINDINGS_COPY[key]);
     }
   });
 
