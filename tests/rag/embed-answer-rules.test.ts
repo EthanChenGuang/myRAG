@@ -243,3 +243,79 @@ describe('embed route: answer rules, cap and registry text (05.2-33)', () => {
     expect(h.guardEvents).toHaveLength(0);
   });
 });
+
+describe('embed route: output guard on the stream (05.2-33)', () => {
+  let fixture: RouteFixture;
+  const GUARD = { ...LANGUAGES, RAG_OUTPUT_LINK_ALLOWLIST: 'allowed.test' } as const;
+  const placeholder = () => fixedText('notices.link_removed', 'en');
+
+  beforeAll(async () => {
+    fixture = await startRouteFixture({ deploymentMode: 'single-tenant', seed });
+  });
+
+  afterAll(async () => {
+    await fixture.close();
+  });
+
+  beforeEach(() => {
+    h.calls.length = 0;
+    h.guardEvents.length = 0;
+    h.state.deltas = ['ok'];
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    setEnv({});
+    vi.restoreAllMocks();
+  });
+
+  async function post() {
+    const { POST } = await fixture.loadRoute<{ POST: (request: NextRequest) => Promise<Response> }>('embed/chat');
+    const response = await POST(embedRequest(QUESTION));
+    return parseSse(await response.text());
+  }
+
+  it('enforce: a link repeated from a context block is replaced across tokens and recorded for channel embed', async () => {
+    setEnv({ ...GUARD, RAG_OUTPUT_GUARD: 'enforce' });
+    h.state.deltas = ['The setup page is at https://doc-on', 'ly.test/setup for details.'];
+    expect(textOf(await post())).toBe(`The setup page is at ${placeholder()} for details.`);
+    expect(Array.isArray(h.calls[0]!.experimental_transform)).toBe(true);
+    expect(h.guardEvents).toHaveLength(1);
+    const event = h.guardEvents[0]!;
+    expect(event.summary).toMatchObject({ mode: 'enforce', links_removed: 1 });
+    expect(event.context.channel).toBe('embed');
+    expect(event.context.tenantKey).toMatch(/^s:/);
+    expect(event.context.removedTargets).toEqual([DOC_LINK]);
+    expect((event.context.blocks as Array<{ chunkIds: string[] }>).flatMap((block) => block.chunkIds)).toContain(CHUNK_ID);
+    expect(systemTextOf(h.calls[0]!)).toContain('[rule:output_policy]');
+  });
+
+  it('enforce: an allowlisted link passes unchanged and records nothing', async () => {
+    setEnv({ ...GUARD, RAG_OUTPUT_GUARD: 'enforce' });
+    h.state.deltas = ['See https://allowed.test/page for details.'];
+    expect(textOf(await post())).toBe('See https://allowed.test/page for details.');
+    expect(h.guardEvents).toHaveLength(0);
+  });
+
+  it('enforce: a credential request is kept and the warning arrives as a final paragraph of text', async () => {
+    setEnv({ ...GUARD, RAG_OUTPUT_GUARD: 'enforce' });
+    h.state.deltas = ['Setup is short. ', 'Please enter your password below.'];
+    const text = textOf(await post());
+    const warning = fixedText('notices.credential_request_warning', 'en');
+    expect(text.startsWith('Setup is short. Please enter your password below.')).toBe(true);
+    expect(text.endsWith(`\n\n${warning}`)).toBe(true);
+    expect(h.guardEvents.map((event) => event.context.channel)).toEqual(['embed']);
+  });
+
+  it('flag: the text is unchanged and the finding is recorded', async () => {
+    setEnv({ ...GUARD, RAG_OUTPUT_GUARD: 'flag' });
+    h.state.deltas = ['The setup page is at https://doc-on', 'ly.test/setup for details.'];
+    expect(textOf(await post())).toBe(`The setup page is at ${DOC_LINK} for details.`);
+    expect(h.guardEvents).toHaveLength(1);
+    expect(h.guardEvents[0]!.summary).toMatchObject({ mode: 'flag', links_removed: 1 });
+    expect(h.guardEvents[0]!.context.channel).toBe('embed');
+  });
+});
