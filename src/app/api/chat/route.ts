@@ -4907,6 +4907,8 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
           const cacheTicket = retrievalResult?.cacheTicket;
           if (cacheTicket && ragTraceId && !turnAborted && !turnFailed) {
             // D-32/D-33: stored after the response, chained to this request's Phase 5 groundedness label
+            // D-16: a sentinel refusal is stored like the server-side refusal (refusal TTL, no sources or citations)
+            const refusedByModel = answerTurn.refusedByModel();
             scheduleCacheStore({
               scope,
               ticket: cacheTicket,
@@ -4916,11 +4918,11 @@ DO NOT jump straight to "I'll create a draft" without first presenting the data!
                 sourceImages: precomputedSourceImages.length > 0,
                 retrievalStatus: retrievalFailed ? 'degraded' : (retrievalResult?.status ?? 'error'),
                 answerText: responseText,
-                isRefusal: false,
+                isRefusal: refusedByModel,
                 toolsUsed: answerToolOutputUsed || webSearchResults.length > 0,
               },
-              citations: citationSession.fullRecords()?.citations ?? [],
-              sources: retrievalResult ? cacheSourcesFromResult(retrievalResult) : [],
+              citations: refusedByModel ? [] : (citationSession.fullRecords()?.citations ?? []),
+              sources: !refusedByModel && retrievalResult ? cacheSourcesFromResult(retrievalResult) : [],
               groundedness: groundednessHandle,
             });
           }
