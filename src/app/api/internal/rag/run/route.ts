@@ -22,6 +22,7 @@ import {
   finishTrace,
   groundednessEligibility,
   IDENTIFIER_NOT_FOUND,
+  contentIdentifierNorms,
   currentAttributeFilterMode,
   currentLexicalVersion,
   hashSystemPromptTemplate,
@@ -690,6 +691,10 @@ export async function POST(req: NextRequest) {
       effectiveConfig.generator_model = generatorModel;
       const redundancy = topkRedundancy(result.kept);
       const identifierTrace = identifierTraceOf(result);
+      // D-32: kept chunks carry their identifiers only while the identifier filter ran, so every other trace stays unchanged.
+      const keptIdentifiers = identifierTrace
+        ? await contentIdentifierNorms(scope, result.kept.map((chunk) => chunk.content), { signal: req.signal })
+        : null;
       const trace = {
         schema_version: 1 as const,
         item_id: itemId ?? null,
@@ -719,9 +724,10 @@ export async function POST(req: NextRequest) {
           ...(chunk.legs !== undefined ? { legs: chunk.legs } : {}),
           ...(chunk.language !== undefined ? { language: chunk.language } : {}),
         })),
-        kept: result.kept.map(({ dupClusterId, alsoIn: _alsoIn, ...chunk }) => ({
+        kept: result.kept.map(({ dupClusterId, alsoIn: _alsoIn, ...chunk }, index) => ({
           ...chunk,
           ...(dupClusterId ? { dup_cluster_id: dupClusterId } : {}),
+          ...(keptIdentifiers ? { identifiers_norm: keptIdentifiers[index] ?? [] } : {}),
         })),
         ...(redundancy !== null ? { topk_redundancy: redundancy } : {}),
         ...(identifierTrace ? { identifier: identifierTrace } : {}),
