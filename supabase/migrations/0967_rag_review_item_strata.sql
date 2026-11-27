@@ -3,7 +3,8 @@
 -- rag_review_item_strata keeps source (representative | pilot | drift_fill | historical), stratum code (cluster, language,
 -- channel) and sampling weight per review item, so Phase 5.1.1's rag_review_items keeps its column shape. Its tenant_key is tied
 -- to the item's by a composite foreign key; the row goes with its item. Service role only (RLS on, no policy).
--- rag_review_items: the reasons check is re-created with representative and re_review added to the Phase 5.1.1 list, and
+-- rag_review_items: the reasons check is re-created with representative and re_review added to the Phase 5.1.1 list (and the
+-- Phase 5.2 and 5.2.1 reasons of 0944 and 0950, so a database built in file order keeps them), and
 -- trace_id loses NOT NULL where a database still has it (items without a log row or a trace are allowed).
 -- rag_review_items_enqueue(p_tenant_key, p_source, p_rows): service role only, SECURITY INVOKER, empty search_path. It asserts the
 -- tenant key for this deployment mode first, stores every row under p_tenant_key (a tenant named in a row is ignored), refuses a
@@ -35,7 +36,7 @@ BEGIN
     ALTER TABLE public.rag_review_items ADD CONSTRAINT rag_review_items_reasons_check
       CHECK (reasons <@ ARRAY['feedback_negative', 'refusal_disputed', 'groundedness_flagged', 'refused_high_score', 'zero_results',
                               'low_score', 'no_source_opened', 'claim_unsupported', 'output_guard', 'version_conflict',
-                              'representative', 're_review']::text[])
+                              'representative', 're_review', 'calc_mismatch', 'calc_unverified']::text[])
   $sql$;
 
   IF EXISTS (

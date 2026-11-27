@@ -15,6 +15,7 @@ type Row = Record<string, unknown>;
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const MODES: DeploymentMode[] = ['single-tenant', 'multi-tenant'];
 const MIGRATION = 'supabase/migrations/0944_rag_review_reasons_phase52.sql';
+const LATER_REASONS_MIGRATION = 'supabase/migrations/0950_calc_review_reasons.sql';
 const GRANTS_MIGRATION = 'supabase/migrations/0410_security_definer_rpc_grants.sql';
 const SIGNATURE = 'rag_enqueue_review_item(text, text, jsonb, jsonb)';
 const CONFIG = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'config/rag/feedback-mining.json'), 'utf8')) as Row;
@@ -138,12 +139,13 @@ for (const mode of MODES) {
         await insertItem(db, [reason]);
       }
       await rejectsWith(() => insertItem(db, ['spam']), '23514');
-      await rejectsWith(() => insertItem(db, ['calc_mismatch']), '23514');
+      await rejectsWith(() => insertItem(db, ['calc_other']), '23514');
     });
 
-    test('applying 0944 a second time succeeds and leaves the catalog unchanged', async () => {
+    test('applying 0944 and the later 0950 a second time succeeds and leaves the catalog unchanged', async () => {
       const once = await catalog(db);
       await db.exec(fs.readFileSync(path.join(REPO_ROOT, MIGRATION), 'utf8'));
+      await db.exec(fs.readFileSync(path.join(REPO_ROOT, LATER_REASONS_MIGRATION), 'utf8'));
       assert.deepEqual(await catalog(db), once);
     });
 
@@ -197,7 +199,7 @@ for (const mode of MODES) {
       await rejectsWith(() => enqueue(db, source.tenantKey, 'output_guard', { chunk_ids: ['not-a-uuid'], document_ids: [] }), '22023');
       await rejectsWith(() => enqueue(db, source.tenantKey, 'output_guard', { chunk_ids: [], document_ids: [] }), '22023');
       await rejectsWith(() => enqueue(db, source.tenantKey, 'low_score', sourceOf(source)), '22023');
-      await rejectsWith(() => enqueue(db, source.tenantKey, 'calc_mismatch', sourceOf(source)), '22023');
+      await rejectsWith(() => enqueue(db, source.tenantKey, 'calc_other', sourceOf(source)), '22023');
       await rejectsWith(() => enqueue(db, 'bogus', 'output_guard', sourceOf(source)), '22023');
     });
 
