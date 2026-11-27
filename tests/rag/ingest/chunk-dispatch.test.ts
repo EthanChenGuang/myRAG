@@ -109,7 +109,7 @@ const RULE_MARKDOWN = ['1 Alpha', 'Zorvik plent masu.', '', '## Unlisted', 'Quor
 describe('rule_sections dispatch', () => {
   it('cuts the Markdown by the hit data and ignores Docling chunks', () => {
     const result = chunkDocument({ ...config('general'), kind: 'rule_sections', section_rules: SECTION_RULES }, { markdown: RULE_MARKDOWN, chunks: DOCLING_CHUNKS });
-    expect([...new Set(result.chunks.map((chunk) => chunk.section_path.join('/')))]).toEqual(['Alpha', 'Beta']);
+    expect([...new Set(result.chunks.map((chunk) => chunk.section_path.join('/')))]).toEqual(['1 Alpha', '2 Beta']);
     expect(result.chunks.some((chunk) => chunk.content.includes('## Unlisted'))).toBe(true);
     expect(result.chunks.every((chunk) => chunk.page_start === null && chunk.page_end === null)).toBe(true);
     expect(result.warnings).toEqual([]);

@@ -52,7 +52,7 @@ const BASIC = doc(
 describe('rule_sections: allowed headings only', () => {
   it('opens a section only at a hit line, with the hit name and level, and keeps a non-hit Markdown heading as body text', () => {
     const result = chunkRuleSections(BASIC, { ...OPTIONS, rules: rules(BASIC_HITS) });
-    expect(paths(result)).toEqual([[], ['Alpha'], ['Beta'], ['Beta', 'Gamma']]);
+    expect(paths(result)).toEqual([[], ['1 Alpha'], ['2 Beta'], ['2 Beta', '2.1 Gamma']]);
     expect(result.chunks[0]?.content).toBe('Plenk varo misu.');
     expect(result.chunks[2]?.content).toContain('## Unlisted heading');
     expect(result.chunks[2]?.content).toContain('Vesti pram olu.');
@@ -70,7 +70,7 @@ describe('rule_sections: allowed headings only', () => {
       ...OPTIONS,
       rules: rules({ '# 1 Alpha': { name: 'Alpha', level: 1 }, '2 Beta': { name: 'Beta', level: 1 } }),
     });
-    expect(paths(result)).toEqual([['Alpha'], ['Beta']]);
+    expect(paths(result)).toEqual([['1 Alpha'], ['2 Beta']]);
   });
 
   it('closes every open level at or below the level of a new hit', () => {
@@ -85,7 +85,7 @@ describe('rule_sections: allowed headings only', () => {
         '2.1 Sub': { name: 'SubTwo', level: 2 },
       }),
     });
-    expect(paths(result)).toEqual([['Alpha'], ['Alpha', 'SubOne'], ['Alpha', 'SubOne', 'Deep'], ['Beta'], ['Beta', 'SubTwo']]);
+    expect(paths(result)).toEqual([['1 Alpha'], ['1 Alpha', '1.1 Sub'], ['1 Alpha', '1.1 Sub', '1.1.1 Deep'], ['2 Beta'], ['2 Beta', '2.1 Sub']]);
   });
 
   it('never treats a fenced line or a table row as a heading, even when its trimmed text is a hit key', () => {
@@ -99,8 +99,8 @@ describe('rule_sections: allowed headings only', () => {
         '3 Gamma': { name: 'Gamma', level: 1 },
       }),
     });
-    expect([...new Set(paths(result).map((entry) => entry.join('/')))]).toEqual(['Alpha', 'Gamma']);
-    const alpha = result.chunks.filter((chunk) => chunk.section_path[0] === 'Alpha').map((chunk) => chunk.content).join('\n');
+    expect([...new Set(paths(result).map((entry) => entry.join('/')))]).toEqual(['1 Alpha', '3 Gamma']);
+    const alpha = result.chunks.filter((chunk) => chunk.section_path[0] === '1 Alpha').map((chunk) => chunk.content).join('\n');
     expect(alpha).toContain('2 Beta');
     expect(alpha).toContain('| 2 Beta |');
   });
@@ -110,7 +110,7 @@ describe('rule_sections: allowed headings only', () => {
     const scan = scanRuleSections(markdown, rules({ '1 Alpha': { name: 'Alpha', level: 1 } }));
     expect(scan.events.map((event) => event.text)).toEqual(['1 Alpha']);
     const result = chunkRuleSections(markdown, { ...OPTIONS, rules: rules({ '1 Alpha': { name: 'Alpha', level: 1 } }) });
-    expect(paths(result)).toEqual([['Alpha']]);
+    expect(paths(result)).toEqual([['1 Alpha']]);
     expect(result.chunks[0]?.content).toContain('constructor');
   });
 
@@ -155,18 +155,18 @@ describe('rule_sections: variants', () => {
     const result = chunkRuleSections(VARIANTS, { ...OPTIONS, rules: rules(VARIANT_HITS) });
     expect(paths(result)).toEqual([
       [],
-      ['Part North', 'Part'],
-      ['Part North', 'Part', 'Alpha'],
-      ['Part North', 'Part', 'Beta'],
-      ['Part South', 'Part', 'Alpha'],
-      ['Part South', 'Part', 'Beta'],
+      ['Part North'],
+      ['Part North', '1 Alpha'],
+      ['Part North', '2 Beta'],
+      ['Part South', '1 Alpha'],
+      ['Part South', '2 Beta'],
     ]);
     expect(result.chunks[0]?.metadata).toEqual({});
     expect(result.chunks.slice(1, 4).map((chunk) => chunk.metadata)).toEqual(
       Array(3).fill({ variant_index: 1, variant_label: 'Part North' }),
     );
     expect(result.chunks.slice(4).map((chunk) => chunk.metadata)).toEqual(Array(2).fill({ variant_index: 2, variant_label: 'Part South' }));
-    expect(result.chunks.find((chunk) => chunk.content.includes('Zorvik south'))?.section_path).toEqual(['Part South', 'Part', 'Alpha']);
+    expect(result.chunks.find((chunk) => chunk.content.includes('Zorvik south'))?.section_path).toEqual(['Part South', '1 Alpha']);
   });
 
   it('resets the heading stack at a restart occurrence, so no heading of the previous variant stays open', () => {
@@ -180,16 +180,16 @@ describe('rule_sections: variants', () => {
         '1.1 Deep': { name: 'Deep', level: 2 },
       }),
     });
-    expect(paths(result)).toEqual([['Part North', 'Alpha'], ['Part North', 'Alpha', 'Deep'], ['Part South', 'Part']]);
+    expect(paths(result)).toEqual([['Part North', '1 Alpha'], ['Part North', '1 Alpha', '1.1 Deep'], ['Part South']]);
   });
 
   it('adds no variant when the restart heading occurs once or never', () => {
     const once = doc('Part North', '1 Alpha', 'Zorvik.', '2 Beta', 'Quorel.');
     const result = chunkRuleSections(once, { ...OPTIONS, rules: rules(VARIANT_HITS) });
-    expect(paths(result)).toEqual([['Part', 'Alpha'], ['Part', 'Beta']]);
+    expect(paths(result)).toEqual([['Part North', '1 Alpha'], ['Part North', '2 Beta']]);
     for (const chunk of result.chunks) expect(chunk.metadata).toEqual({});
     const never = chunkRuleSections(doc('1 Alpha', 'Zorvik.'), { ...OPTIONS, rules: rules(VARIANT_HITS) });
-    expect(paths(never)).toEqual([['Alpha']]);
+    expect(paths(never)).toEqual([['1 Alpha']]);
     expect(never.chunks[0]?.metadata).toEqual({});
   });
 
@@ -231,12 +231,12 @@ describe('rule_sections: variants', () => {
     ]);
     expect(scan.sections.map((section) => [section.path, section.heading, section.variantIndex, section.variantLabel])).toEqual([
       [[], null, null, null],
-      [['Part North', 'Part'], 0, 1, 'Part North'],
-      [['Part North', 'Part', 'Alpha'], 1, 1, 'Part North'],
-      [['Part North', 'Part', 'Beta'], 2, 1, 'Part North'],
-      [['Part South', 'Part'], 3, 2, 'Part South'],
-      [['Part South', 'Part', 'Alpha'], 4, 2, 'Part South'],
-      [['Part South', 'Part', 'Beta'], 5, 2, 'Part South'],
+      [['Part North'], 0, 1, 'Part North'],
+      [['Part North', '1 Alpha'], 1, 1, 'Part North'],
+      [['Part North', '2 Beta'], 2, 1, 'Part North'],
+      [['Part South'], 3, 2, 'Part South'],
+      [['Part South', '1 Alpha'], 4, 2, 'Part South'],
+      [['Part South', '2 Beta'], 5, 2, 'Part South'],
     ]);
     expect(scan.sections[2]?.lines).toEqual(['Zorvik north.']);
   });
@@ -253,7 +253,7 @@ const TOC = doc('Contents', '', '1 Alpha', '2 Beta', '', '3 Gamma', '1 Alpha', '
 describe('rule_sections: table-of-contents runs', () => {
   it('skips a run of at least toc_min_run hit lines except its last line, which heads the body after it', () => {
     const result = chunkRuleSections(TOC, { ...OPTIONS, rules: rules(TOC_HITS) });
-    expect(paths(result)).toEqual([[], ['Alpha'], ['Beta'], ['Gamma']]);
+    expect(paths(result)).toEqual([[], ['1 Alpha'], ['2 Beta'], ['3 Gamma']]);
     expect(result.chunks[0]?.content).toBe('Contents');
     expect(result.chunks[1]?.content).toBe('Zorvik plent.');
     const scan = scanRuleSections(TOC, rules(TOC_HITS));
@@ -273,14 +273,14 @@ describe('rule_sections: table-of-contents runs', () => {
       '1.1.1 Deep': { name: 'Deep', level: 3 },
     };
     expect(scanRuleSections(chain, rules(chainHits)).events.some((event) => event.skippedAsToc)).toBe(false);
-    expect(paths(chunkRuleSections(chain, { ...OPTIONS, rules: rules(chainHits) }))).toEqual([['Alpha', 'Sub', 'Deep']]);
+    expect(paths(chunkRuleSections(chain, { ...OPTIONS, rules: rules(chainHits) }))).toEqual([['1 Alpha', '1.1 Sub', '1.1.1 Deep']]);
   });
 
   it('does not count a restart hit inside a skipped run as a variant occurrence', () => {
     const hits = { ...VARIANT_HITS, '3 Gamma': { name: 'Gamma', level: 2 } };
     const markdown = doc('Part North', 'Part South', '1 Alpha', 'Part North', 'Zorvik.', '2 Beta', 'Quorel.');
     const result = chunkRuleSections(markdown, { ...OPTIONS, rules: rules(hits) });
-    expect(paths(result)).toEqual([['Part'], ['Part', 'Beta']]);
+    expect(paths(result)).toEqual([['Part North'], ['Part North', '2 Beta']]);
     for (const chunk of result.chunks) expect(chunk.metadata).toEqual({});
   });
 });
@@ -293,8 +293,8 @@ describe('rule_sections: packing', () => {
     const markdown = doc('1 Alpha', sentences, '', '2 Beta', header, '|---|---|', ...rows);
     const options = { ...OPTIONS, maxTokens: 120 };
     const result = chunkRuleSections(markdown, { ...options, rules: rules(TOC_HITS) });
-    const alpha = result.chunks.filter((chunk) => chunk.section_path.join('/') === 'Alpha');
-    const beta = result.chunks.filter((chunk) => chunk.section_path.join('/') === 'Beta');
+    const alpha = result.chunks.filter((chunk) => chunk.section_path.join('/') === '1 Alpha');
+    const beta = result.chunks.filter((chunk) => chunk.section_path.join('/') === '2 Beta');
     expect(alpha.length).toBeGreaterThan(1);
     expect(beta.length).toBeGreaterThan(1);
     const seen: string[] = [];
@@ -359,10 +359,10 @@ describe('rule_sections under parent-child', () => {
     const profile: ParentChildProfile = { childTokens: 64, parentMode: 'structure', parentTokens: 1024 };
     const result = chunkParentChild(markdown, profile, chunker);
     expect(result.parents.map((parent) => parent.section_path)).toEqual([
-      ['Part North', 'Part', 'Alpha'],
-      ['Part North', 'Part', 'Beta'],
-      ['Part South', 'Part', 'Alpha'],
-      ['Part South', 'Part', 'Beta'],
+      ['Part North', '1 Alpha'],
+      ['Part North', '2 Beta'],
+      ['Part South', '1 Alpha'],
+      ['Part South', '2 Beta'],
     ]);
     expect(result.children.length).toBeGreaterThan(result.parents.length);
     for (const child of result.children) {
@@ -377,10 +377,10 @@ describe('rule_sections under parent-child', () => {
     const none = chunkParentChild(markdown, { childTokens: 64, parentMode: 'none', parentTokens: null }, chunker);
     expect(none.parents).toEqual([]);
     expect([...new Set(none.children.map((child) => child.section_path.join('/')))]).toEqual([
-      'Part North/Part/Alpha',
-      'Part North/Part/Beta',
-      'Part South/Part/Alpha',
-      'Part South/Part/Beta',
+      'Part North/1 Alpha',
+      'Part North/2 Beta',
+      'Part South/1 Alpha',
+      'Part South/2 Beta',
     ]);
     const fixed = chunkParentChild(markdown, { childTokens: 64, parentMode: 'fixed', parentTokens: 512 }, chunker);
     const sections: ChunkerConfig = { ...chunker, kind: 'markdown_sections', section_rules: undefined };
