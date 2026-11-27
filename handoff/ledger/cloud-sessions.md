@@ -860,3 +860,16 @@ Pending owner: train36 SQL (owner desk), then ask owner before deploying main 27
   - All of the above route to train 41.
 - 23:15Z The owner cannot top up OpenAI, so the api.openai.com credential form was denied. 06.2-42 Task 2 is blocked until there is an alternative route.
 - 23:15Z The owner re-ran the failed jobs of PR #136 (run 46077840057).
+- 23:30Z DONE and archived:
+  - quick-hide-auto-model (exec/quick-hide-auto-model 49f7aa28).
+  - quick-packing-budget-routes (42dcdf07; plan 23 needs no change).
+  - 03.2.1-02-t4 (exec/03.2.1-02-t4 4aab6cdc). The D-26 compare passed: min cos 0.99999316, max diff 3.68e-4, 15 calls. Operator, optional: add the DEEPINFRA_API_KEY repo secret for the nightly live check.
+  - All of these -> train 41.
+- 23:30Z VERIFY 4.2 human_needed (verify/04.2 32cb5cd44). 132/133 threats closed; T-117 still needs a live probe.
+  - W-2..W-6 -> quick-42-fixes.
+  - W-1 (post-hoc metric change, e05b77f90) -> OWNER decision: approve or re-register.
+  - G-1..G-4 are live owner items.
+- 23:30Z 3.1.1 audits: nyquist true; UI 16/24; UI-SPEC checker BLOCKED (verify/03.1.1-audits 67564c85). Fixes, plus the languages-panel walkthrough findings 1-3 -> quick-config-ui-fixes.
+- 23:30Z Walkthrough item 1 (terminology) PASS on EVAL, except dismiss (no candidates). Next: item 3.
+- 23:30Z Train 39 final at 3f4f5e71 (10 plans; includes t38 4d6a7c4a). Waits for #135. Builder is idle.
+- 23:30Z PR #135 red on a ts-vitest timeout (eval-corpus 120 s); commented. PR #136 re-run attempt 2 in progress (owner clicked).
