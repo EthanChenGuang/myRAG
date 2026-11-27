@@ -17531,7 +17531,7 @@
         "chunk_id": "7ebddc55-dba5-4909-b6f8-e194753d6c43",
         "document_id": "5918e1fa-03a9-457e-a7fb-7fd2b91741a1",
         "content": "Document: dup-solo.en.md. Chunk 1 of 3. Content: ## Hemlark lanterns\n\nThe hemlark lanterns burn with a pelvine glow.",
-        "similarity": 0.3033625517939253,
+        "similarity": 0.3033447709485784,
         "metadata": {
           "section": "Hemlark lanterns",
           "chunk_index": 0,
@@ -17540,14 +17540,14 @@
           "document_title": "dup-solo.en.md",
           "lexical_version": 2
         },
-        "rerankScore": 0.3033625517939253,
+        "rerankScore": 0.3033447709485784,
         "image_url": null
       },
       {
         "chunk_id": "3cf58269-2da7-4797-9d2c-964e0c490b79",
         "document_id": "5918e1fa-03a9-457e-a7fb-7fd2b91741a1",
         "content": "Document: dup-solo.en.md. Chunk 2 of 3. Content: ## Hemlark ferries\n\nThe hemlark ferries haul quindle stones across the moor.",
-        "similarity": 0.2892880640311306,
+        "similarity": 0.2892933215668676,
         "metadata": {
           "section": "Hemlark ferries",
           "chunk_index": 1,
@@ -17556,14 +17556,14 @@
           "document_title": "dup-solo.en.md",
           "lexical_version": 2
         },
-        "rerankScore": 0.2892880640311306,
+        "rerankScore": 0.2892933215668676,
         "image_url": null
       },
       {
         "chunk_id": "0fe52c80-31af-4b81-af88-2b6c2ce2eb47",
         "document_id": "a7021a0d-fa30-43e4-af93-d30570272342",
         "content": "Document: dup-passage-08.en.md. Chunk 3 of 4. Content: ## Thrennic bells\n\nThe thrennic bells of the vintermark ring in sequences of vosk. A corrowind keeper tunes them by ear.",
-        "similarity": -0.07231316399443957,
+        "similarity": -0.07236015145210346,
         "metadata": {
           "section": "Thrennic bells",
           "chunk_index": 2,
@@ -17572,14 +17572,14 @@
           "document_title": "dup-passage-08.en.md",
           "lexical_version": 2
         },
-        "rerankScore": -0.07231316399443957,
+        "rerankScore": -0.07236015145210346,
         "image_url": null
       },
       {
         "chunk_id": "15ec4c93-4a61-4212-bba0-853dd6ec2054",
         "document_id": "461ad3d6-2ef0-4d00-a775-a7dda5a5511f",
         "content": "Document: dup-passage-20.en.md. Chunk 3 of 4. Content: ## Thrennic bells\n\nThe thrennic bells of the vintermark ring in sequences of vosk. A corrowind keeper tunes them by ear.",
-        "similarity": -0.07231316399443957,
+        "similarity": -0.07236015145210346,
         "metadata": {
           "section": "Thrennic bells",
           "chunk_index": 2,
@@ -17588,7 +17588,7 @@
           "document_title": "dup-passage-20.en.md",
           "lexical_version": 2
         },
-        "rerankScore": -0.07231316399443957,
+        "rerankScore": -0.07236015145210346,
         "image_url": null
       }
     ],
