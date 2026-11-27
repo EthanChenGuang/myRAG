@@ -21,6 +21,7 @@ export function neutralizeCalcTags(text: string): { text: string; count: number 
 }
 
 /** True while a calculation switch is on (plan 05.2.1-02 adds both fields to the answer-config reader). */
-export function calcTagNeutralizationOn(config: { readonly calcTool?: boolean; readonly calcCheck?: boolean }): boolean {
-  return config.calcTool === true || config.calcCheck === true;
+export function calcTagNeutralizationOn(config: object): boolean {
+  const switches = config as { readonly calcTool?: unknown; readonly calcCheck?: unknown };
+  return switches.calcTool === true || switches.calcCheck === true;
 }
