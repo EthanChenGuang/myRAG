@@ -250,9 +250,9 @@ for (const mode of ['single-tenant', 'multi-tenant'] as DeploymentMode[]) {
       const changes = [
         `UPDATE documents SET doc_type = 'product_technical' WHERE id = '${doc}'`,
         `UPDATE documents SET scopes = ARRAY['region:south'] WHERE id = '${doc}'`,
-        `UPDATE documents SET status = 'quarantined' WHERE id = '${doc}'`,
-        `UPDATE documents SET status = 'ready', is_current = true WHERE id = '${doc}'`,
         `UPDATE document_chunks SET language = 'it' WHERE document_id = '${doc}'`,
+        `UPDATE document_chunks SET embedding = '${sparse(1536, [0, 1])}'::vector WHERE document_id = '${doc}'`,
+        `UPDATE documents SET status = 'quarantined' WHERE id = '${doc}'`,
       ];
       for (const sql of changes) {
         await rebuild(db, tenant, LEGACY);
@@ -260,15 +260,18 @@ for (const mode of ['single-tenant', 'multi-tenant'] as DeploymentMode[]) {
         await db.exec(sql);
         assert.equal(await centroidCount(db, tenant), 0, `cleared by: ${sql}`);
       }
-      await db.exec(`UPDATE documents SET doc_type = 'general', scopes = '{}' WHERE id = '${doc}'`);
+      await db.exec(`UPDATE documents SET doc_type = 'general', scopes = '{}', status = 'ready' WHERE id = '${doc}'`);
       await rebuild(db, tenant, LEGACY);
       await db.exec(`UPDATE documents SET metadata = '{"note":1}'::jsonb WHERE id = '${doc}'`);
       assert.ok((await centroidCount(db, tenant)) > 0, 'an unrelated column change keeps the rows');
-      await insertDoc(db, mode);
+      const empty = await insertDoc(db, mode);
       assert.equal(await centroidCount(db, tenant), 0, 'insert clears');
       await rebuild(db, tenant, LEGACY);
-      await db.exec(`DELETE FROM documents WHERE id = '${doc}'`);
-      assert.equal(await centroidCount(db, tenant), 0, 'delete clears');
+      await db.exec(`DELETE FROM documents WHERE id = '${empty}'`);
+      assert.equal(await centroidCount(db, tenant), 0, 'document delete clears');
+      await rebuild(db, tenant, LEGACY);
+      await db.exec(`DELETE FROM document_chunks WHERE document_id = '${doc}'`);
+      assert.equal(await centroidCount(db, tenant), 0, 'chunk delete clears');
     });
 
     test('a chunk_embeddings write clears only that profile', async () => {
