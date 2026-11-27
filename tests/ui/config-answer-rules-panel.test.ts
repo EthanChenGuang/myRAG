@@ -13,7 +13,11 @@ const ENDPOINT = '/api/config/answer-rules';
 let root: string;
 let server: http.Server;
 let port: number;
-let serverModule: { server: http.Server; answerRulesModelFamily: (id: string) => string | null };
+let serverModule: {
+  server: http.Server;
+  answerRulesModelFamily: (id: string) => string | null;
+  answerRulesTokenizerFamily: (id: string) => string | null;
+};
 
 interface Reply {
   status: number;
@@ -256,6 +260,13 @@ describe('GET /api/config/answer-rules endpoint (D-57, UI-SPEC 8.1)', () => {
     expect(((await getSummary()).budget as { unknownModels: number }).unknownModels).toBe(expected);
   });
 
+  it('derives tokenizer families like modelFamily() of model-window.ts', async () => {
+    const { modelFamily } = await import('@/lib/rag/context/model-window');
+    for (const id of ['anthropic/claude-sonnet-4.5', 'openai/gpt-5', 'meta-llama/llama-4-maverick', 'no-slash', '/leading', 'UPPER/x', 'a.b_c-d/m', '']) {
+      expect(serverModule.answerRulesTokenizerFamily(id), id).toBe(modelFamily(id));
+    }
+  });
+
   it('lists the families with a measured and a default factor by name only, never a factor value', async () => {
     fs.writeFileSync(
       dataPath('eval/config/tokenizer-calibration.json'),
@@ -273,11 +284,12 @@ describe('GET /api/config/answer-rules endpoint (D-57, UI-SPEC 8.1)', () => {
         { id: 'openai/gpt-5', contextLength: 400000 },
         { id: 'google/gemini-2.5-flash', contextLength: 1048576 },
         { id: 'openai/gpt-5-mini', contextLength: 400000 },
-        { id: 'mystery/thing' },
+        { id: 'vendor-z/model-q' },
+        { id: 'no-provider-prefix' },
       ])}`,
     ]);
     const summaryBody = await getSummary();
-    expect((summaryBody.budget as Record<string, unknown>).families).toEqual({ measured: ['anthropic'], defaulted: ['google', 'openai'] });
+    expect((summaryBody.budget as Record<string, unknown>).families).toEqual({ measured: ['anthropic'], defaulted: ['google', 'openai', 'vendor-z'] });
     const raw = JSON.stringify(summaryBody);
     for (const hidden of ['1.19', '1.37', 'run-a', 'factor', 'samples']) expect(raw).not.toContain(hidden);
   });

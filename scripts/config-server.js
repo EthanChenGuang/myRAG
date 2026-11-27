@@ -3397,11 +3397,22 @@ function answerRulesListedModels(values) {
   return Array.isArray(list) ? list.filter((entry) => entry && typeof entry.id === 'string' && entry.id.trim() !== '') : [];
 }
 
+const ANSWER_RULES_TOKENIZER_FAMILY = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+
+/** Mirrors modelFamily of src/lib/rag/context/model-window.ts: the provider prefix before the first slash, the calibration family. */
+function answerRulesTokenizerFamily(modelId) {
+  const id = String(modelId || '');
+  const slash = id.indexOf('/');
+  if (slash <= 0) return null;
+  const prefix = id.slice(0, slash);
+  return ANSWER_RULES_TOKENIZER_FAMILY.test(prefix) ? prefix : null;
+}
+
 /**
  * UI-SPEC 14.3 (D-80, D-81): the count of listed models without a known context window, the default window, and the model
  * families whose token estimate is measured or uses the default factor. Family names and counts only, never a factor value.
  */
-function answerRulesBudget(values, families) {
+function answerRulesBudget(values) {
   const config = readAnswerRulesFile(path.join('config', 'rag', 'prompt-budget.json'), 'budget');
   if (!config || !Number.isInteger(config.default_window) || config.default_window < 1) {
     throw new AnswerRulesSummaryError('answer_rules_budget_invalid', 'config/rag/prompt-budget.json does not match the prompt budget contract');
@@ -3416,7 +3427,7 @@ function answerRulesBudget(values, families) {
   const measured = new Set(cells.filter((cell) => cell.source === 'measured').map((cell) => cell.family));
   const defaulted = new Set(cells.filter((cell) => cell.source === 'default').map((cell) => cell.family));
   for (const entry of models) {
-    const family = answerRulesModelFamily(entry.id, families);
+    const family = answerRulesTokenizerFamily(entry.id);
     if (family !== null && !measured.has(family)) defaulted.add(family);
   }
   for (const family of measured) defaulted.delete(family);
@@ -3451,7 +3462,7 @@ function summarizeAnswerRules() {
     rulesVersion: guard.version,
     ruleCounts: guard.counts,
     calc: answerRulesCalc(),
-    budget: answerRulesBudget(values, families),
+    budget: answerRulesBudget(values),
   };
 }
 
@@ -5005,4 +5016,4 @@ if (require.main === module) {
   start();
 }
 
-module.exports = { app, server, start, HOST, PORT, validateLanguagesRequest, describeLanguageSettings, answerRulesModelFamily };
+module.exports = { app, server, start, HOST, PORT, validateLanguagesRequest, describeLanguageSettings, answerRulesModelFamily, answerRulesTokenizerFamily };
