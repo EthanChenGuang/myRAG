@@ -34,6 +34,11 @@ export interface VoiceTiming {
 
 export interface RAGClientOptions {
     timingTimeoutMs?: number;
+    contextLength?: number | null;
+}
+
+export function parseContextLength(_value: string | undefined): number | null {
+    return null;
 }
 
 export interface HistoryTurn {
@@ -121,7 +126,19 @@ export class RAGClient {
         }
     }
 
-    async query(userQuery: string, scopeToken?: string, userId?: string, history?: HistoryTurn[]): Promise<RAGQueryResult> {
+    calcFailureCount(): number {
+        return 0;
+    }
+
+    async executeCalc(_request: unknown, _question: string, _sources: unknown[], _scopeToken?: string): Promise<unknown> {
+        return null;
+    }
+
+    async checkCalc(_answerText: string, _traces: unknown[], _question: string, _sources: unknown[], _scopeToken?: string): Promise<unknown> {
+        return null;
+    }
+
+    async query(userQuery: string, scopeToken?: string, userId?: string, history?: HistoryTurn[], _historyTokens?: number): Promise<RAGQueryResult> {
         try {
             console.log(`[RAG] Querying internal API: "${userQuery}"`);
 
