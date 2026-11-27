@@ -871,3 +871,20 @@ def test_p52_offenders_reach_the_gate_markdown_and_exit_code(tmp_path):
     markdown = (tmp_path / "out" / "gate.md").read_text(encoding="utf-8")
     assert "## Phase 5.2 answer-rule gates" in markdown
     assert "| language:zh | mixed_versions_rate |" in markdown
+
+
+def test_p52_a_violating_run_reports_its_noise_band_movement_without_failing_on_it():
+    rules = _answer_rules(unsupported_addition_rate=_rule_metric(0.25))
+    report = _p52_report("fake/violating-partial-v1", answer_rules=rules).model_copy(
+        update={"overall": _report(overall=_slice_values(0.6, recall_at_5=0.3)).overall}
+    )
+    result = evaluate_gate(report, _baseline(), _noise())
+    assert result.passed, result.offenders
+    assert "overall:recall_at_5 (violating fake, report-only)" in result.skipped
+    plain = evaluate_gate(report.model_copy(update={"request_options": RULE_FOLLOWING_OPTIONS}), _baseline(), _noise())
+    assert [o.kind for o in plain.offenders if o.kind == "noise_band"] == ["noise_band"]
+
+
+RULE_FOLLOWING_OPTIONS = EvalReport.model_validate(
+    _report(request_options={"generator_model": RULE_FOLLOWING}).model_dump(mode="json")
+).request_options
