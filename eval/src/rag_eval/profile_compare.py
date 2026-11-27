@@ -9,6 +9,7 @@ from rag_sidecar.contracts.profiles import (
     PreMigrationSlice,
     ProfileComparisonEntry,
     ProfileMetricBlocks,
+    ServingModeMeasurement,
 )
 from rag_sidecar.contracts.report import EvalReport, ItemResult, SliceMetrics
 
@@ -18,6 +19,18 @@ from rag_eval.paired import item_metrics
 
 MULTILINGUAL_PROFILE_PREFIXES = ("voyage-", "qwen3-")
 METRICS = ("recall_at_5", "recall_at_10", "mrr", "correct_refusal_rate", "false_refusal_rate")
+BGE_M3_PROFILE = "bge-m3-1024"
+SERVING_MODES = ("hosted", "sidecar")
+NOT_MEASURED = "not measured"
+WIRING_PROOF_LABEL = (
+    "wiring proof: fixture embedder; the numbers prove the comparison runs, not how the profiles rank; no recommendation"
+)
+
+
+class FixtureEvidenceRefused(ValueError):
+    """A wiring-proof comparison never becomes activation evidence."""
+
+
 FAKE_EMBEDDER_NOTE = (
     "Fixture embedders are not multilingual; this run proves comparison and activation wiring only, not real ranking."
 )
@@ -127,6 +140,8 @@ def build_comparison(
     noise: NoiseConfig,
     pre_migration_items: list[ItemResult],
     backfill_run_id: str | None,
+    serving: dict[str, list[ServingModeMeasurement]] | None = None,
+    wiring_proof: bool = False,
 ) -> EmbeddingProfileComparison:
     active_gated, active_candidates = active_reports
     baseline_entry = ProfileComparisonEntry(
@@ -192,3 +207,6 @@ def comparison_to_activation_evidence(
         backfill_run_id=comparison.backfill_run_id,
         recorded_at=recorded_at,
     )
+
+def render_comparison(comparison: EmbeddingProfileComparison) -> str:
+    return ""

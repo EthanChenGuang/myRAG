@@ -3864,6 +3864,7 @@
       "backfill_run_id": "01234567-0123-4012-8012-0123456789ab",
       "baseline_profile": "openai-3-small-1536",
       "gate_passed": true,
+      "label": null,
       "notes": [
         "Fixture sample only."
       ],
@@ -4135,7 +4136,8 @@
               }
             }
           },
-          "profile_id": "openai-3-small-1536"
+          "profile_id": "openai-3-small-1536",
+          "serving": null
         },
         {
           "default_candidate": false,
@@ -4388,10 +4390,12 @@
               }
             }
           },
-          "profile_id": "voyage-4-large-2048"
+          "profile_id": "voyage-4-large-2048",
+          "serving": null
         }
       ],
-      "schema_version": 1
+      "schema_version": 1,
+      "wiring_proof": false
     },
     "EvalReport": {
       "by_category": {
