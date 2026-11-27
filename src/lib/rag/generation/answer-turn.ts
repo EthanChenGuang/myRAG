@@ -481,6 +481,8 @@ function createTurnGuard(input: TurnGuardInput) {
 
 export interface AnswerFinishFields {
   checks?: AnswerChecksInput;
+  /** D-22: the text part the sentence records point into; only with sentence records. */
+  checksText?: string;
   answerLanguage: string | null;
   textsSource: TextsSource;
   refusedByModel: boolean;
@@ -489,8 +491,10 @@ export interface AnswerFinishFields {
 /** The four answer-finish fields of a Phase 5.2 turn; the route spreads them only when a 5.2 switch is on (D-03). */
 export function answerFinishFields(turn: AnswerTurn, retrievalResult?: unknown): AnswerFinishFields {
   const checks = turn.checksInput(retrievalResult);
+  const checksText = checks?.sentences ? turn.collector()?.lastTextPart()?.text : undefined;
   return {
     ...(checks ? { checks } : {}),
+    ...(checksText !== undefined ? { checksText } : {}),
     answerLanguage: turn.answerLanguage,
     textsSource: turn.textsSource,
     refusedByModel: turn.refusedByModel(),
