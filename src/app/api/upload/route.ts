@@ -256,7 +256,15 @@ export async function POST(request: NextRequest) {
       const accessResult = await checkUploadAccessField(ingestScope, formData, sessionUser.id, request.signal);
       if ('response' in accessResult) return accessResult.response;
       uploadAccessKeys = accessResult.keys;
-    } else if (formData.get('attributes') !== null) {
+    } else if (processRag && formData.get('access') !== null) {
+      // D-16: the legacy image writer puts the checked label in its document insert (RESEARCH Pitfall 7).
+      const resolved = await resolveUploadScope(request, formData, sessionUser);
+      if ('response' in resolved) return resolved.response;
+      const accessResult = await checkUploadAccessField(resolved.scope, formData, sessionUser.id, request.signal);
+      if ('response' in accessResult) return accessResult.response;
+      uploadAccessKeys = accessResult.keys;
+    }
+    if (pipeline !== 'unified' && formData.get('attributes') !== null) {
       // D-22a: attributes count only where the unified pipeline ingests; elsewhere they are refused, never dropped.
       console.warn('[Ingest] upload attributes refused', { reason: 'attributes_not_enabled' });
       return NextResponse.json({ success: false, error: 'attributes_not_enabled' }, { status: 400 });
@@ -393,7 +401,8 @@ export async function POST(request: NextRequest) {
               image_url: result.downloadUrl,
               image_type: file.type,
               image_context: imageContext || undefined,
-              source_file_id: result.filePath
+              source_file_id: result.filePath,
+              ...(uploadAccessKeys ? { access_groups: uploadAccessKeys } : {})
             }).catch(err => {
               logger.error('Upload API', `Error in background image processing for ${file.name}:`, err);
             });
