@@ -13,7 +13,8 @@ from rag_sidecar.contracts.retrieval import _Contract
 from .languages import Language
 
 RuleId = Annotated[str, Field(pattern=r"^[a-z][a-z0-9_]{0,63}$")]
-SwitchName = Annotated[str, Field(pattern=r"^RAG_[A-Z0-9_]{1,64}$")]
+# 06.2-39: a list-valued switch is decided per added value (RAG_QUERY_VOICE_TRANSFORMS:translate, D-16).
+SwitchName = Annotated[str, Field(pattern=r"^RAG_[A-Z0-9_]{1,64}(?::[a-z][a-z0-9_]{0,31})?$")]
 SliceName = Annotated[str, Field(min_length=1, max_length=128)]
 D31Letter = Literal["a", "b", "c", "d", "e", "f", "g", "h", "i"]
 DECISION_TOOL = "rag_eval.compare query-additions"
