@@ -1,0 +1,241 @@
+{
+  "plan": "03.2-53",
+  "decision": "D-54",
+  "recorded_by": "executor, 2026-11-27",
+  "rule": "An item is done only when a person carried it out and reported the result; an item that was not done is never recorded as passed. Evidence holds counts, kinds, numbers and dates only: no document text, hidden spans or link targets.",
+  "dry_runs_without_credentials": [
+    {
+      "command": "npm run rag:reembed -- --recaption --dry-run",
+      "exit": 1,
+      "output": "SUPABASE_SERVICE_ROLE_KEY is required on the server (with a placeholder OPENAI_API_KEY; without it: OPENAI_API_KEY is required)",
+      "fixture_proof": "tests/rag-db/recaption.test.mts '--recaption --dry-run lists only image chunks whose caption language differs from the target, with a cost, and writes nothing'"
+    },
+    {
+      "command": "npm run rag:translate -- --tenant s:default --dry-run",
+      "exit": 1,
+      "output": "SUPABASE_SERVICE_ROLE_KEY is required on the server",
+      "fixture_proof": "tests/rag-db/translation-producer.test.mts 'rag:translate --dry-run prints chunks per target and a 4-decimal cost from integer tokens, writes nothing, exits 2'"
+    },
+    {
+      "command": "npm run rag:fingerprint -- backfill --dry-run",
+      "exit": 1,
+      "output": "[RAG Fingerprint] refused: set SUPABASE_SERVICE_ROLE_KEY",
+      "fixture_proof": "tests/rag-db/fingerprint-backfill.test.mts '--dry-run writes nothing and reports the per-tenant counts', 'the CLI prints counts per tenant on a dry run'"
+    },
+    {
+      "command": "npm run rag:rebuild -- status",
+      "exit": 1,
+      "output": "[RAG Rebuild] refused: set SUPABASE_SERVICE_ROLE_KEY",
+      "fixture_proof": "main(['status']) on the PGlite queued-ingest harness: exit 0, '[RAG Rebuild] no rebuild runs'"
+    },
+    {
+      "command": "npm run rag:rebuild -- rescan --check hidden_text --dry-run",
+      "exit": 1,
+      "output": "[RAG Rebuild] refused: set SUPABASE_SERVICE_ROLE_KEY",
+      "fixture_proof": "tests/rag-e2e/security-fixture-gates.test.mts 'a dry run reports the one affected document and writes nothing' (CLI exit 0)"
+    }
+  ],
+  "runbook": {
+    "live_services": [
+      "1. Real OCR: build the docling sidecar image, run `pytest -m real_docling` in it, then ingest 2-3 real scanned zh and it pages through the unified pipeline (Docling and LlamaParse routes) and both legacy LlamaParse call sites with the languages configured, and once more on the legacy sites with the languages unset (A1). Compare accents and Chinese characters by eye.",
+      "2. Quarantine and supersession: on a real tenant set both checks to flag, run the rescan dry runs, then the flag runs, review a sample in the Config UI Quarantine panel and count false positives per reason kind; with RAG_SUPERSESSION_DETECT=on review the candidates the same way.",
+      "3. Picker: in a real terminal, CI unset, both language variables removed from .env.local, run `npm run config`; answer once empty, once with a valid selection; check .env.local after each.",
+      "Report per item: done or not done, date, who, evidence (counts, reason kinds, observations) or reason. Never paste document text, hidden spans or link targets."
+    ],
+    "native_review": [
+      "1. Open the lines of category table_split with language zh and it in eval/fixtures/ingest/golden-ingest.jsonl (ids under the native_review_zh / native_review_it items), or print the 'Native review backlog' of the eval report.",
+      "2. For each item the native speaker approves it as is or gives a corrected question.",
+      "3. Report: approved ids, corrections, reviewer name or initials per language as they wish to be recorded, and the review date. The executor applies them, re-gates the slices and re-records the ingest baseline (plan 03.2-53 task 4)."
+    ]
+  },
+  "items": [
+    {
+      "status": "pending",
+      "date": "",
+      "by": "",
+      "evidence": "",
+      "reason": "",
+      "id": "real_ocr_docling",
+      "requirements": [
+        "DATA-05"
+      ],
+      "procedure": "In the sidecar image built with `docker build --target docling rag-sidecar` (docling extra and baked models, RAG_SIDECAR_DOCLING_ARTIFACTS set): `uv run --directory rag-sidecar --extra chunking pytest -q -m real_docling`. Then parse two or three real scanned pages in Chinese and in Italian through the unified pipeline on the Docling route (RAG_INGEST_PIPELINE=unified, RAG_SUPPORTED_LANGUAGES and RAG_PRIMARY_LANGUAGE set) and compare the text with the pages by eye: precomposed Italian accents, Chinese characters, full-width punctuation. Record observations only, never document text.",
+      "prerequisites": [
+        "Docker host for the docling image (~4 GB RAM, 2 CPUs)",
+        "real scanned zh and it pages (not committed)",
+        "a configured deployment with the languages set"
+      ],
+      "dry_run": {
+        "command": "uv run --directory rag-sidecar --extra chunking pytest -q --collect-only -m real_docling",
+        "exit": 0,
+        "result": "2 tests collected (tests/test_docling_adapter.py: text PDF and scanned PNG). tests/test_real_docling.py, which holds the scan fixture checks, skips at module level here: no docling extra and no RAG_SIDECAR_DOCLING_ARTIFACTS in this environment. It is collected in the sidecar image and in the nightly job."
+      }
+    },
+    {
+      "status": "pending",
+      "date": "",
+      "by": "",
+      "evidence": "",
+      "reason": "",
+      "id": "real_ocr_llamaparse_unified",
+      "requirements": [
+        "DATA-05"
+      ],
+      "procedure": "With LLAMA_CLOUD_API_KEY set and RAG_PARSER_ALLOW_CLOUD=true, ingest the same real scanned zh and it pages through the unified pipeline on the LlamaParse (premium) route. The v2 configuration carries processing_options.ocr_parameters.languages with the registry OCR codes. Compare accents and Chinese characters with the pages by eye.",
+      "prerequisites": [
+        "LLAMA_CLOUD_API_KEY",
+        "real scanned zh and it pages",
+        "languages configured"
+      ],
+      "dry_run": {
+        "command": "node --import tsx --test tests/rag-e2e/security-fixture-gates.test.mts (unified ingest on recorded LlamaParse and Docling parsers)",
+        "exit": 0,
+        "result": "11/11 pass; the request bodies with OCR codes are covered by tests/rag/ocr-language-requests.test.ts (plan 25)."
+      }
+    },
+    {
+      "status": "pending",
+      "date": "",
+      "by": "",
+      "evidence": "",
+      "reason": "",
+      "id": "real_ocr_llamaparse_legacy",
+      "requirements": [
+        "DATA-05"
+      ],
+      "research_assumption": "A1",
+      "procedure": "With RAG_INGEST_PIPELINE=legacy and LLAMA_CLOUD_API_KEY set, upload the same real scanned pages through the knowledge-base PDF upload (src/lib/document-processor.ts, /api/v1/parsing/upload) and through a temporary attachment (src/app/api/process-document/route.ts, /api/parsing/upload), once with the languages configured and once with them unset. Note per call site whether the output differs between the two runs (assumption A1: LlamaParse ignores language inside output_config and honours the top-level comma-separated language field).",
+      "prerequisites": [
+        "LLAMA_CLOUD_API_KEY",
+        "real scanned zh and it pages",
+        "a running app with a signed-in owner or admin"
+      ],
+      "dry_run": {
+        "command": "npx vitest run tests/rag/legacy-llamaparse-language.test.ts tests/rag/ocr-language-requests.test.ts",
+        "exit": 0,
+        "result": "2 files, 35 tests pass: both legacy multipart bodies (languages unset: byte for byte as before; configured: top-level language codes, output_config result_type only) and the unified OCR request bodies."
+      }
+    },
+    {
+      "status": "pending",
+      "date": "",
+      "by": "",
+      "evidence": "",
+      "reason": "",
+      "id": "quarantine_sample_review",
+      "requirements": [
+        "SEC-07",
+        "SEC-08"
+      ],
+      "procedure": "On a real tenant set RAG_HIDDEN_TEXT_CHECK=flag and RAG_INGEST_LINK_CHECK=flag, run `npm run rag:rebuild -- rescan --check hidden_text --tenant <key> --dry-run` and `... --check links ...`, then the same without --dry-run (flag mode records reports only), and read a sample of the flagged documents in the Config UI Quarantine panel. Count false positives per reason kind; note any threshold in config/rag/hidden-text-rules.json or config/rag/link-rules.json that should change. Record counts and reason kinds only, never spans or link targets.",
+      "prerequisites": [
+        "a tenant with real documents",
+        "NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY of that project",
+        "an admin for the Config UI"
+      ],
+      "dry_run": {
+        "command": "npm run rag:rebuild -- rescan --check hidden_text --dry-run",
+        "exit": 1,
+        "result": "without credentials it refuses with exit 1: '[RAG Rebuild] refused: set SUPABASE_SERVICE_ROLE_KEY'. On the PGlite fixture environment the dry run is proven by tests/rag-e2e/security-fixture-gates.test.mts 'a dry run reports the one affected document and writes nothing' (CLI exit 0, prints 'dry run' and the affected id). With the check off the CLI refuses with exit 3."
+      }
+    },
+    {
+      "status": "pending",
+      "date": "",
+      "by": "",
+      "evidence": "",
+      "reason": "",
+      "id": "supersession_sample_review",
+      "requirements": [
+        "DATA-19"
+      ],
+      "procedure": "On the same real tenant set RAG_SUPERSESSION_DETECT=on (unified pipeline), publish or re-publish a sample of documents, open the supersession candidates in the Config UI and count false candidates per reason kind. Candidates are never applied automatically; confirm or reject only as the admin judges.",
+      "prerequisites": [
+        "a tenant with real documents, including true newer versions",
+        "RAG_INGEST_PIPELINE=unified",
+        "an admin"
+      ],
+      "dry_run": {
+        "command": "(no CLI) detection runs after publish",
+        "exit": null,
+        "result": "covered by the plan 44/45 tests in the vitest and rag-db gates of plan 68."
+      }
+    },
+    {
+      "status": "pending",
+      "date": "",
+      "by": "",
+      "evidence": "",
+      "reason": "",
+      "id": "init_env_picker_terminal",
+      "requirements": [
+        "LANG-01"
+      ],
+      "procedure": "In a real terminal with CI unset and both language variables removed from .env.local, run `npm run config`. Answer once with an empty line, then (after removing the variables again) with a valid selection given out of registry order. Check .env.local after each.",
+      "prerequisites": [
+        "a real terminal (person)"
+      ],
+      "dry_run": {
+        "command": "python3 pty harness running node scripts/init-env.js with MYRAG_CONFIG_ROOT=<scratch copy of config/>",
+        "exit": 0,
+        "result": "piped stdin: no prompt; TTY with CI=true: no prompt; TTY empty answer: prompt shown, both variables stay empty; TTY answer 'it,zh' with primary 'zh': saved RAG_SUPPORTED_LANGUAGES=zh,it (registry order) and RAG_PRIMARY_LANGUAGE=zh; re-run on the saved file: no prompt."
+      }
+    },
+    {
+      "status": "pending",
+      "date": "",
+      "by": "",
+      "evidence": "",
+      "reason": "",
+      "id": "native_review_zh",
+      "requirements": [
+        "XLG-02",
+        "EVAL-18"
+      ],
+      "items": [
+        "ingest-table-split-zh-01",
+        "ingest-table-split-zh-02",
+        "ingest-table-split-zh-03",
+        "ingest-table-split-zh-04",
+        "ingest-table-split-zh-05"
+      ],
+      "procedure": "A native Chinese speaker reads each item (question, gold evidence quotes, expected answer) in eval/fixtures/ingest/golden-ingest.jsonl and approves it or gives a corrected question. The executor then applies corrections, sets native_review.status=approved with reviewer and reviewed_at exactly as reported, runs the golden validation, the paired comparison on all other items (every difference zero), re-records the ingest baseline and runs both smoke tiers. No script, model or test sets approved.",
+      "prerequisites": [
+        "a native Chinese speaker"
+      ],
+      "dry_run": {
+        "command": "python3 count of category table_split, language zh",
+        "exit": 0,
+        "result": "5 items, native_review origin llm_drafted, status pending."
+      }
+    },
+    {
+      "status": "pending",
+      "date": "",
+      "by": "",
+      "evidence": "",
+      "reason": "",
+      "id": "native_review_it",
+      "requirements": [
+        "XLG-02",
+        "EVAL-18"
+      ],
+      "items": [
+        "ingest-table-split-it-01",
+        "ingest-table-split-it-02",
+        "ingest-table-split-it-03",
+        "ingest-table-split-it-04",
+        "ingest-table-split-it-05"
+      ],
+      "procedure": "As native_review_zh, by a native Italian speaker.",
+      "prerequisites": [
+        "a native Italian speaker"
+      ],
+      "dry_run": {
+        "command": "python3 count of category table_split, language it",
+        "exit": 0,
+        "result": "5 items, native_review origin llm_drafted, status pending."
+      }
+    }
+  ]
+}
