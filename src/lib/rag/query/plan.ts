@@ -1,5 +1,6 @@
 import type { QueryPlan } from '@/lib/rag-eval/contracts.generated';
 import type { QueryFramework } from '../config';
+import type { RetrievalFilters } from '../backend/types';
 import type { QueryVariant } from '../types';
 import { denseDateSuffix } from './dates';
 import type { GateResult } from './rewrite-gate';
@@ -78,7 +79,9 @@ export function buildQueryPlan(input: BuildQueryPlanInput): QueryPlan {
   }
   const subQuestions = (input.subQuestions ?? []).slice(0, 4);
   subQuestions.forEach((text, index) => {
-    add({ text, language: gate.lang, kind: 'sub_question', sub_question_index: index, protected_ok: true });
+    // D-08: a sub-question whose narrowed spec kept a filter is searched with it; the field is absent otherwise (Phase 6 shape).
+    const filtered = input.subQuestionSpecs?.[index]?.filter ? { filter_applied: true } : {};
+    add({ text, language: gate.lang, kind: 'sub_question', sub_question_index: index, protected_ok: true, ...filtered });
   });
   return {
     original,
@@ -103,14 +106,41 @@ export function buildQueryPlan(input: BuildQueryPlanInput): QueryPlan {
  */
 export function planToVariants(plan: QueryPlan): QueryVariant[] {
   const suffix = plan.date_range ? denseDateSuffix(plan.date_range.from_date, plan.date_range.to_date) : null;
-  return (plan.variants ?? []).map((variant) => ({
-    text: variant.text,
-    language: variant.language,
-    kind: variant.kind,
-    legs: variant.kind === 'hyde' ? ('dense' as const) : ('both' as const),
-    ...(variant.sub_question_index !== null && variant.sub_question_index !== undefined
-      ? { subQuestionIndex: variant.sub_question_index }
-      : {}),
-    ...(suffix && (variant.kind === 'original' || variant.kind === 'condensed') ? { denseText: `${variant.text} ${suffix}` } : {}),
-  }));
+  return (plan.variants ?? []).map((variant) => {
+    const filters =
+      variant.kind === 'sub_question' && variant.filter_applied === true && typeof variant.sub_question_index === 'number'
+        ? specFilters(plan.sub_question_specs?.[variant.sub_question_index]?.filter ?? null)
+        : null;
+    return {
+      text: variant.text,
+      language: variant.language,
+      kind: variant.kind,
+      legs: variant.kind === 'hyde' ? ('dense' as const) : ('both' as const),
+      ...(variant.sub_question_index !== null && variant.sub_question_index !== undefined
+        ? { subQuestionIndex: variant.sub_question_index }
+        : {}),
+      ...(suffix && (variant.kind === 'original' || variant.kind === 'condensed') ? { denseText: `${variant.text} ${suffix}` } : {}),
+      ...(filters ? { filters, filterApplied: true } : {}),
+    };
+  });
+}
+
+type SpecFilter = NonNullable<NonNullable<QueryPlan['sub_question_specs']>[number]['filter']>;
+
+/**
+ * D-08: the narrowing fields of an applied spec (already intersected with the request filters by narrowFilters); the search stage
+ * intersects them again with the shared filters in force, which supply every other field. No tenant field exists in the contract.
+ */
+function specFilters(filter: SpecFilter | null): RetrievalFilters | null {
+  if (!filter) return null;
+  const out: { -readonly [K in keyof RetrievalFilters]: RetrievalFilters[K] } = { currentOnly: true };
+  if (filter.date_range) out.dateRange = { from: filter.date_range.from, to: filter.date_range.to };
+  if (filter.doc_types) out.docTypes = [...filter.doc_types];
+  if (filter.languages) out.languages = [...filter.languages];
+  if (filter.scopes) {
+    out.scopes = Object.entries(filter.scopes)
+      .flatMap(([dimension, slugs]) => slugs.map((slug) => `${dimension}:${slug}`))
+      .sort();
+  }
+  return Object.keys(out).length > 1 ? (out as RetrievalFilters) : null;
 }

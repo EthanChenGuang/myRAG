@@ -41,6 +41,7 @@ import { ATTRIBUTE_STATE_SKIPPED, type AttributeFilterHashStage, type RetrievalC
 import { hasTranslationWork, planTranslationLegs, translationHashFields, type TranslationLegsPlan } from './translation-legs';
 import type { SemanticCacheSeam } from '../query/run-layer';
 import { variantDenseTexts } from '../query/variants';
+import type { VariantFilterRetry } from './port';
 import { identifierSuggestionMessage } from '../generation/messages';
 
 export const V2_PROFILES = ['chat', 'embed', 'eval', 'voice'] as const;
@@ -112,6 +113,7 @@ export async function runV2Pipeline(
   let packing: RetrievalResult['packing'];
   let bindingPlan: BindingLegsPlan | null = null;
   let queryPlan: RetrievalResult['queryPlan'] | null = null;
+  let searchesCounted: number | undefined;
   let layerTranslate = false;
   let effectiveOn: string | undefined;
   let queryLayerHash: RetrievalConfigHashQueryLayer | undefined;
@@ -308,7 +310,16 @@ export async function runV2Pipeline(
       ...(queryLexical ? { lexical: queryLexical } : {}),
       ...(query.attributes ? { attributes: query.attributes } : {}),
       access,
+      // Phase 6.2 D-08, P-10: the layer's cap on searches; filter retries stay within it.
+      ...(query.queryLayer
+        ? {
+            maxSearches: effectiveQueryParams(profile, profile === 'eval' ? input.stageOverrides?.queryLayer?.queryParams : undefined)
+              .max_searches,
+          }
+        : {}),
     });
+    searchesCounted = search.searchesCounted;
+    if (queryPlan && search.filterRetries) queryPlan = withFilterRetries(queryPlan, search.filterRetries);
 
     // D-31, D-51: strict with no asked identifier in the tenant answers nothing; rank and context are not run for it.
     const searchIdentifiers = search.identifiers;
@@ -510,6 +521,7 @@ export async function runV2Pipeline(
     ...(bindingPlan ? { bindingHash: bindingHashFields(bindingPlan) } : {}),
     ...(translationPlan ? { translationHash: translationHashFields(translationPlan, params) } : {}),
     queryPlan,
+    ...(searchesCounted !== undefined ? { searchesCounted } : {}),
     ...(layerTranslate ? { layerTranslate } : {}),
     ...(effectiveOn ? { effectiveOn } : {}),
     ...(queryLayerHash ? { queryLayerHash } : {}),
@@ -520,6 +532,19 @@ export async function runV2Pipeline(
     ...(queryLexical ? { lexicalStamp: queryLexical.stamp } : {}),
     attributeFilter: attributeStage,
   });
+}
+
+/** Phase 6.2 D-08: the search stage's retry outcome on each filtered sub-question's filter_trace entry. */
+function withFilterRetries(plan: NonNullable<RetrievalResult['queryPlan']>, retries: readonly VariantFilterRetry[]): NonNullable<RetrievalResult['queryPlan']> {
+  if (!plan.filter_trace) return plan;
+  const byIndex = new Map(retries.map((entry) => [entry.subQuestionIndex, entry]));
+  return {
+    ...plan,
+    filter_trace: plan.filter_trace.map((entry) => {
+      const outcome = byIndex.get(entry.index);
+      return outcome ? { ...entry, retried: outcome.retried, retry_skipped_cap: outcome.retrySkippedCap } : entry;
+    }),
+  };
 }
 
 export function isV2RetrievalProfile(profile: Profile): boolean {

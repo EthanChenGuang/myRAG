@@ -80,6 +80,8 @@ export interface BuildV2ResultInput {
   translationHash?: TranslationHashField;
   /** The query layer's plan; absent while the layer is off, so the result stays identical to Phase 4. */
   queryPlan?: QueryPlan | null;
+  /** Phase 6.2 P-10: searches counted against max_searches; set only while the layer ran the search stage. */
+  searchesCounted?: number;
   /** True when the query layer served the translate stage (D-24): its record is then soft like the other layer stages. */
   layerTranslate?: boolean;
   /** D-44: the effective date the search used; absent while RAG_EFFECTIVE_DATES is off. */
@@ -362,6 +364,7 @@ export async function buildV2Result(ctx: BuildV2ResultInput): Promise<RetrievalR
     ...(identifiers?.notFound ? { identifierSuggestions: [...identifiers.suggestions] } : {}),
     ...(injection ? { injection } : {}),
     ...(queryPlan ? { queryPlan } : {}),
+    ...(ctx.searchesCounted !== undefined ? { searchesCounted: ctx.searchesCounted } : {}),
     ...(ctx.cacheTicket && profile !== 'voice' ? { cacheTicket: ctx.cacheTicket } : {}),
     ...(ctx.packing ? { packing: ctx.packing } : {}),
   };
