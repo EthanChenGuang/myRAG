@@ -14672,12 +14672,17 @@
             async refreshUploadPickerDefaults() {
                 if (typeof window.fetchUploadPickerDefault !== 'function') return;
                 const orgId = this.workspaces.isMultiTenant ? this.workspaces.currentSelection : null;
+                const accessOptions = window.AccessGroupsQueueControls
+                    ? window.AccessGroupsQueueControls.load(orgId).catch(() => null)
+                    : Promise.resolve(null);
                 const defaults = await window.fetchUploadPickerDefault(orgId);
+                this.uploadPicker.access = await accessOptions;
                 if (defaults.error) {
                     this.uploadPicker.enabled = false;
                     this.uploadPicker.tags = null;
                     this.uploadPicker.replaces = null;
                     this.uploadPicker.loaded = true;
+                    if (this.uploadPicker.access && this.uploadPicker.access.shown) this.updateQueueDisplay();
                     return;
                 }
                 this.uploadPicker.enabled = Boolean(defaults.enabled);
@@ -14930,9 +14935,9 @@
                 try {
                     let formData;
                     if (this.uploadPicker.enabled && typeof window.buildUploadForm === 'function') {
-                        formData = window.buildUploadForm(fileItem.file, fileItem.docType || this.uploadPicker.defaultType, true);
+                        formData = window.buildUploadForm(fileItem.file, fileItem.docType || this.uploadPicker.defaultType, true, fileItem, this.uploadPicker);
                     } else if (typeof window.buildUploadForm === 'function') {
-                        formData = window.buildUploadForm(fileItem.file, fileItem.docType, false);
+                        formData = window.buildUploadForm(fileItem.file, fileItem.docType, false, fileItem, this.uploadPicker);
                     } else {
                         formData = new FormData();
                         formData.append('file', fileItem.file);
@@ -15036,6 +15041,13 @@
                         if (queueControlError) {
                             if (errorMessage === 'unknown_scope_value') this.refreshUploadPickerDefaults();
                             errorMessage = queueControlError;
+                        }
+                        const accessControlError = window.AccessGroupsQueueControls
+                            ? window.AccessGroupsQueueControls.uploadErrorText(errorMessage, this.monitorUiLocale())
+                            : null;
+                        if (accessControlError) {
+                            this.refreshUploadPickerDefaults();
+                            errorMessage = accessControlError;
                         }
 
                         if (response.status === 401 && this.workspaces.isMultiTenant) {
@@ -15146,6 +15158,9 @@
                             organizationId: this.workspaces.isMultiTenant ? this.workspaces.currentSelection : null,
                         });
                     }
+                    if (window.AccessGroupsQueueControls) {
+                        window.AccessGroupsQueueControls.mount(queueItems, this.queue, this.uploadPicker);
+                    }
                 }
             }
 
@@ -15175,7 +15190,7 @@
                        </select>`
                     : '';
                 const picker = this.uploadPicker || {};
-                const extrasWanted = Boolean((picker.tags && picker.tags.enabled === true) || (picker.replaces && picker.replaces.enabled === true));
+                const extrasWanted = Boolean((picker.tags && picker.tags.enabled === true) || (picker.replaces && picker.replaces.enabled === true) || (picker.access && picker.access.shown === true));
                 const queueExtras = extrasWanted
                     ? `<div data-queue-extras="${this.escapeHtml(String(item.id))}" class="flex flex-wrap items-center gap-2 mt-2"></div>`
                     : '';

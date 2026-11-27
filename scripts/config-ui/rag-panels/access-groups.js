@@ -5013,6 +5013,345 @@ class AccessGroupsPanel {
   }
 }
 
+/*
+ * Upload queue control, stored-documents badge and Connectors notice (UI-SPEC 6.7, 6.8; D-16, D-20, D-22). Everything here is
+ * built with the rag-ui.js element builder and appended after the host's own markup is set; no value goes through a template string.
+ */
+
+const ACCESS_GROUPS_QUEUE_PAGES = 20;
+const ACCESS_GROUPS_QUEUE_PAGE_SIZE = 50;
+const ACCESS_GROUPS_UPLOAD_MAX_GROUPS = 50;
+const ACCESS_GROUPS_BADGE_IDS_MAX = 200;
+const ACCESS_GROUPS_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function accessGroupsDocOf(node) {
+  return (node && (node.ownerDocument || node.doc)) || (typeof document !== 'undefined' ? document : null);
+}
+
+/** The options the queue control needs from the groups answer: shown only with the switch on and at least one group (D-16). */
+function accessGroupsQueueOptions(body) {
+  const b = body && typeof body === 'object' ? body : {};
+  const enabled = b.enabled === true;
+  const groups = [];
+  const seen = new Set();
+  for (const group of Array.isArray(b.groups) ? b.groups : []) {
+    const id = group && accessGroupsText(group.id);
+    if (!id || !ACCESS_GROUPS_UUID_RE.test(id) || seen.has(id)) continue;
+    seen.add(id);
+    groups.push({ id, name: accessGroupsText(group.name) || accessGroupsText(group.key) || id });
+  }
+  const personal = b.personal === true;
+  return { enabled, personal, groups, shown: enabled && !personal && groups.length > 0 };
+}
+
+/** Every group of the workspace, page by page (the Config UI operator is an admin). Any failure hides the control. */
+async function accessGroupsLoadQueueOptions(organizationId) {
+  const ui = accessGroupsUiLib();
+  const hidden = { enabled: false, personal: false, groups: [], shown: false };
+  const all = [];
+  let first = null;
+  let cursor = null;
+  for (let page = 0; page < ACCESS_GROUPS_QUEUE_PAGES; page += 1) {
+    const params = new URLSearchParams();
+    if (organizationId) params.set('organizationId', String(organizationId));
+    params.set('limit', String(ACCESS_GROUPS_QUEUE_PAGE_SIZE));
+    if (cursor) params.set('cursor', cursor);
+    const result = await ui.ragUiRagRequest(ACCESS_GROUPS_PATH + '?' + params.toString(), { method: 'GET' });
+    if (!result || !result.ok || !result.body) return hidden;
+    if (!first) first = result.body;
+    if (Array.isArray(result.body.groups)) all.push(...result.body.groups);
+    cursor = accessGroupsText(result.body.nextCursor);
+    if (!cursor || first.enabled !== true || first.personal === true) break;
+  }
+  return accessGroupsQueueOptions({ ...first, groups: all });
+}
+
+/** The item's choice: untouched (nothing sent), everyone, or groups (ids of offered groups only). */
+function accessGroupsQueueValue(item, groups) {
+  const raw = item && item.accessChoice && typeof item.accessChoice === 'object' ? item.accessChoice : null;
+  if (!raw) return { mode: 'untouched', groupIds: [] };
+  if (raw.mode === 'everyone') return { mode: 'everyone', groupIds: [] };
+  if (raw.mode !== 'groups') return { mode: 'untouched', groupIds: [] };
+  const known = Array.isArray(groups) ? new Set(groups.map((g) => g.id)) : null;
+  const ids = [];
+  for (const id of Array.isArray(raw.groupIds) ? raw.groupIds : []) {
+    const value = accessGroupsText(id);
+    if (!value || ids.includes(value) || (known && !known.has(value))) continue;
+    ids.push(value);
+  }
+  return ids.length ? { mode: 'groups', groupIds: ids.slice(0, ACCESS_GROUPS_UPLOAD_MAX_GROUPS) } : { mode: 'untouched', groupIds: [] };
+}
+
+/**
+ * UI-SPEC 6.2.3: ticking Everyone unticks every group; ticking a group unticks Everyone; unticking the last group (or Everyone)
+ * returns to untouched; target 'clear' is Clear choice.
+ */
+function accessGroupsQueueToggle(value, target, checked) {
+  const current = value && typeof value === 'object' ? value : { mode: 'untouched', groupIds: [] };
+  if (target === 'clear') return { mode: 'untouched', groupIds: [] };
+  if (target === 'everyone') return checked ? { mode: 'everyone', groupIds: [] } : { mode: 'untouched', groupIds: [] };
+  const id = accessGroupsText(target);
+  if (!id) return current;
+  const ids = current.mode === 'groups' ? current.groupIds.filter((g) => g !== id) : [];
+  if (checked && ids.length < ACCESS_GROUPS_UPLOAD_MAX_GROUPS) ids.push(id);
+  return ids.length ? { mode: 'groups', groupIds: ids } : { mode: 'untouched', groupIds: [] };
+}
+
+/** The `access` form field (04.3-23): null while the control is hidden or the item is untouched, else the JSON of the choice. */
+function accessGroupsQueueUploadField(item, picker) {
+  const options = picker && picker.access;
+  if (!options || options.shown !== true) return null;
+  const value = accessGroupsQueueValue(item, options.groups);
+  if (value.mode === 'everyone') return JSON.stringify({ everyone: true });
+  if (value.mode === 'groups') return JSON.stringify({ groupIds: value.groupIds });
+  return null;
+}
+
+/** The upload refusal of a group the operator may not assign (UI-SPEC 8.2); null for every other answer. */
+function accessGroupsQueueErrorText(code, locale) {
+  return code === 'group_not_allowed' ? accessGroupsLabel('error.groupNotAllowed', accessGroupsLocale(locale)) : null;
+}
+
+function accessGroupsQueueTrigger(value, locale) {
+  if (value.mode === 'everyone') return { icon: 'people', text: accessGroupsLabel('picker.everyone', locale) };
+  if (value.mode === 'groups') return { icon: 'lock', text: accessGroupsLabel('picker.groups', locale, { n: accessGroupsUiLib().ragUiFormatNumber(value.groupIds.length, locale) }) };
+  return { icon: 'people', text: accessGroupsLabel('picker.trigger', locale) };
+}
+
+function accessGroupsQueueRender(doc, wrap, item, options, locale, focusKey) {
+  const ui = accessGroupsUiLib();
+  const el = (tag, opts, children) => ui.ragUiEl(doc, tag, opts, children);
+  const t = (key, vars) => accessGroupsLabel(key, locale, vars);
+  const file = accessGroupsText(item.name) || '';
+  const value = accessGroupsQueueValue(item, options.groups);
+  item.accessChoice = value.mode === 'untouched' ? null : value;
+  const wasOpen = Boolean(wrap.querySelector('details') && wrap.querySelector('details').open);
+  const rerender = (key) => accessGroupsQueueRender(doc, wrap, item, options, locale, key);
+  const change = (target, checked, key) => {
+    item.accessChoice = accessGroupsQueueToggle(accessGroupsQueueValue(item, options.groups), target, checked);
+    rerender(key);
+  };
+
+  const trigger = accessGroupsQueueTrigger(value, locale);
+  const summary = el('summary', { className: 'btn btn-outline btn-sm gap-1 font-normal', attrs: { 'data-access-groups-queue-trigger': value.mode } }, [
+    ui.ragUiIcon(doc, trigger.icon),
+    el('span', { text: trigger.text }),
+    el('span', { className: 'sr-only', text: ' ' + t('picker.aria', { file }) }),
+  ]);
+  const name = 'access-groups-queue-' + String(item.id);
+  const everyone = el('input', { className: 'checkbox checkbox-sm', attrs: { type: 'checkbox', name, value: 'everyone', autocomplete: 'off', 'data-access-groups-queue-option': 'everyone' } });
+  everyone.checked = value.mode === 'everyone';
+  everyone.addEventListener('change', () => change('everyone', everyone.checked, 'everyone'));
+  const full = value.mode === 'groups' && value.groupIds.length >= ACCESS_GROUPS_UPLOAD_MAX_GROUPS;
+  const groupItems = options.groups.map((group) => {
+    const box = el('input', { className: 'checkbox checkbox-sm', attrs: { type: 'checkbox', name, value: group.id, autocomplete: 'off', 'data-access-groups-queue-option': group.id } });
+    box.checked = value.mode === 'groups' && value.groupIds.includes(group.id);
+    if (full && !box.checked) box.disabled = true;
+    box.addEventListener('change', () => change(group.id, box.checked, group.id));
+    return el('label', { className: 'label cursor-pointer justify-start items-start gap-2 py-1 [content-visibility:auto] [contain-intrinsic-size:auto_2rem]' }, [
+      box,
+      el('span', { className: 'label-text break-words [overflow-wrap:anywhere] min-w-0', text: group.name, attrs: { translate: 'no' } }),
+    ]);
+  });
+  const menu = el('div', { className: 'dropdown-content z-[1] bg-base-100 rounded-box shadow p-4 w-72 max-h-72 overflow-y-auto' }, [
+    el('label', { className: 'label cursor-pointer justify-start gap-2 py-1' }, [everyone, el('span', { className: 'label-text', text: t('term.everyone') })]),
+    el('fieldset', { className: 'mt-2' }, [el('legend', { className: 'text-xs font-semibold', text: t('field.onlyGroups') }), ...groupItems]),
+    el('p', { className: 'text-xs text-base-content/70 mt-2', text: t('picker.note') }),
+  ]);
+  if (value.mode !== 'untouched') {
+    const clear = el('button', { className: 'btn btn-ghost btn-sm mt-2', text: t('picker.clear'), attrs: { type: 'button', 'data-access-groups-queue-option': 'clear' } });
+    clear.addEventListener('click', () => change('clear', false, 'trigger'));
+    menu.appendChild(clear);
+  }
+  const details = el('details', { className: 'dropdown', attrs: { 'data-access-groups-queue-menu': '' } }, [summary, menu]);
+  details.open = wasOpen && focusKey !== 'trigger';
+  details.addEventListener('keydown', (event) => {
+    if (event && event.key === 'Escape' && details.open) {
+      details.open = false;
+      summary.focus();
+    }
+  });
+
+  const nodes = [details];
+  if (value.mode === 'groups') {
+    const byId = new Map(options.groups.map((g) => [g.id, g.name]));
+    const chips = value.groupIds.map((id) => {
+      const name = byId.get(id) || id;
+      const remove = el('button', { className: 'btn btn-ghost btn-xs btn-circle min-h-0 h-5 w-5', attrs: { type: 'button', 'aria-label': t('action.removeGroupChip', { group: name }), 'data-access-groups-queue-chip-remove': id } }, [ui.ragUiIcon(doc, 'x')]);
+      remove.addEventListener('click', () => change(id, false, 'trigger'));
+      return el('span', { className: 'badge badge-outline badge-sm gap-1 h-auto max-w-full whitespace-normal', attrs: { 'data-access-groups-queue-chip': id } }, [el('span', { className: 'break-words [overflow-wrap:anywhere] min-w-0', text: name, attrs: { translate: 'no' } }), remove]);
+    });
+    nodes.push(el('div', { className: 'flex flex-wrap items-center gap-1 w-full min-w-0' }, [el('span', { className: 'text-xs', text: t('audience.label') }), ...chips]));
+  } else if (value.mode === 'everyone') {
+    nodes.push(el('p', { className: 'text-xs w-full', text: t('audience.everyone') }));
+  }
+  wrap.replaceChildren(...nodes);
+  if (focusKey === 'trigger') summary.focus();
+  else if (focusKey) {
+    const next = Array.from(wrap.querySelectorAll('[data-access-groups-queue-option]')).find((n) => n.getAttribute('data-access-groups-queue-option') === focusKey);
+    if (next) next.focus();
+  }
+}
+
+/** UI-SPEC 6.7: fills the Access control into each `[data-queue-extras]` host, after Replaces… (the host's scope-tag controls). */
+function accessGroupsMountQueueControls(container, queue, picker) {
+  if (!container || typeof container.querySelectorAll !== 'function') return;
+  const options = picker && picker.access;
+  if (!options || options.shown !== true) return;
+  const doc = accessGroupsDocOf(container);
+  const locale = accessGroupsUiLib().ragUiBrowserLocale();
+  for (const host of container.querySelectorAll('[data-queue-extras]')) {
+    const id = host.getAttribute('data-queue-extras');
+    const item = (Array.isArray(queue) ? queue : []).find((q) => q && String(q.id) === String(id));
+    if (!item) continue;
+    let wrap = Array.from(host.children || []).find((c) => c.hasAttribute && c.hasAttribute('data-access-groups-queue'));
+    if (!wrap) {
+      wrap = accessGroupsUiLib().ragUiEl(doc, 'div', { className: 'flex flex-wrap items-center gap-2 w-full min-w-0', attrs: { 'data-access-groups-queue': '', 'data-queue-extras-tail': '' } });
+      host.appendChild(wrap);
+    }
+    accessGroupsQueueRender(doc, wrap, item, options, locale, null);
+  }
+}
+
+const AccessGroupsQueueControls = {
+  load: accessGroupsLoadQueueOptions,
+  mount: accessGroupsMountQueueControls,
+  uploadField: accessGroupsQueueUploadField,
+  uploadErrorText: accessGroupsQueueErrorText,
+};
+
+/** UI-SPEC 6.8: the badge under a stored document's name; null for Everyone (and for anything unreadable). */
+function buildAccessGroupsTableBadgeView(audience, locale) {
+  const kind = audience && audience.kind;
+  if (kind === 'groups' && Array.isArray(audience.groups) && audience.groups.length > 0) {
+    return { kind: 'groups', icon: 'lock', text: accessGroupsLabel('badge.restricted', locale), hint: accessGroupsLabel('badge.restrictedHint', locale) };
+  }
+  if (kind === 'uploader_only' || kind === 'groups') {
+    return { kind: 'uploader_only', icon: 'shield-exclamation', text: accessGroupsLabel('audience.uploaderOnly', locale), hint: null };
+  }
+  return null;
+}
+
+function accessGroupsWorkspaceId(doc) {
+  const container = doc && doc.getElementById('workspace-selector-container');
+  const selector = doc && doc.getElementById('workspace-selector');
+  if (!container || !selector || container.classList.contains('hidden')) return null;
+  return accessGroupsText(selector.value);
+}
+
+/**
+ * Appends the badge to the name cell of each restricted row of the stored-documents table, and docs.manageHint under the table,
+ * while the switch is on. Rows are matched by their data-access-groups-doc id; a request that fails leaves the table as it is.
+ */
+async function accessGroupsApplyTableBadges(tableBody, organizationId) {
+  if (!tableBody || typeof tableBody.querySelectorAll !== 'function') return;
+  const ui = accessGroupsUiLib();
+  const doc = accessGroupsDocOf(tableBody);
+  const token = {};
+  tableBody.accessGroupsBadgeToken = token;
+  const rows = Array.from(tableBody.querySelectorAll('[data-access-groups-doc]'));
+  const ids = [...new Set(rows.map((r) => r.getAttribute('data-access-groups-doc')).filter((id) => id && ACCESS_GROUPS_UUID_RE.test(id)))];
+  const container = doc && doc.getElementById('documents-table-container');
+  const oldHint = container && container.querySelector('[data-access-groups-manage-hint]');
+  if (oldHint) oldHint.remove();
+  if (ids.length === 0) return;
+  const orgQuery = organizationId ? '&organizationId=' + encodeURIComponent(String(organizationId)) : '';
+  const status = await ui.ragUiRagRequest(ACCESS_GROUPS_PATH + '?limit=1' + orgQuery, { method: 'GET' });
+  if (tableBody.accessGroupsBadgeToken !== token) return;
+  if (!status || !status.ok || !status.body || status.body.enabled !== true || status.body.personal === true) return;
+  const audiences = new Map();
+  for (let i = 0; i < ids.length; i += ACCESS_GROUPS_BADGE_IDS_MAX) {
+    const chunk = ids.slice(i, i + ACCESS_GROUPS_BADGE_IDS_MAX);
+    const result = await ui.ragUiRagRequest(ACCESS_GROUPS_PATH + '/documents?ids=' + chunk.join(',') + orgQuery, { method: 'GET' });
+    if (tableBody.accessGroupsBadgeToken !== token) return;
+    if (!result || !result.ok || !result.body || !Array.isArray(result.body.audiences)) return;
+    for (const audience of result.body.audiences) {
+      const id = audience && accessGroupsText(audience.documentId);
+      if (id) audiences.set(id.toLowerCase(), audience);
+    }
+  }
+  const locale = ui.ragUiBrowserLocale();
+  const el = (tag, opts, children) => ui.ragUiEl(doc, tag, opts, children);
+  for (const row of rows) {
+    const id = (row.getAttribute('data-access-groups-doc') || '').toLowerCase();
+    const cell = row.children && row.children[0];
+    if (!cell) continue;
+    const previous = cell.querySelector('[data-access-groups-table-badge]');
+    if (previous) previous.remove();
+    const view = buildAccessGroupsTableBadgeView(audiences.get(id), locale);
+    if (!view) continue;
+    const tone = view.kind === 'groups' ? 'badge badge-outline badge-sm' : 'badge badge-warning badge-outline badge-sm text-base-content';
+    const badge = el('span', { className: tone + ' gap-1 h-auto max-w-full whitespace-normal text-left mt-1', attrs: { 'data-access-groups-table-badge': view.kind, title: view.hint } }, [
+      ui.ragUiIcon(doc, view.icon, view.kind === 'groups' ? null : 'text-warning'),
+      el('span', { className: 'break-words [overflow-wrap:anywhere] min-w-0' + (view.kind === 'groups' ? '' : ' text-base-content'), text: view.text }),
+    ]);
+    cell.appendChild(el('div', {}, [badge]));
+  }
+  if (container) container.appendChild(el('p', { className: 'text-xs text-base-content/70 mt-2', text: accessGroupsLabel('docs.manageHint', locale), attrs: { 'data-access-groups-manage-hint': '' } }));
+}
+
+/** The Connectors-card notice (UI-SPEC 6.8): null without fallen-back documents; the wording follows the switch (D-22). */
+function buildAccessGroupsConnectorNoticeView(count, enabled, locale) {
+  const n = Number.isInteger(count) && count > 0 ? count : 0;
+  if (n === 0) return null;
+  const key = enabled ? 'connector.failClosed' : 'connector.failClosedOff';
+  return { key, text: accessGroupsLabel(key, locale, { count: accessGroupsUiLib().ragUiFormatNumber(n, locale) }), action: accessGroupsLabel('action.openMapping', locale) };
+}
+
+/** Activates RAG administration through its menu link, selects Connector mapping, scrolls the panel into view and focuses its heading. */
+async function accessGroupsOpenConnectorMapping(doc) {
+  const link = doc.querySelector('[data-tab="rag-administration"]');
+  if (link && typeof link.click === 'function') link.click();
+  await Promise.resolve(initAccessGroupsPanel());
+  const section = doc.getElementById('rag-administration-access');
+  if (section && typeof section.scrollIntoView === 'function') {
+    const reduce = typeof window !== 'undefined' && typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    section.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+  }
+  if (accessGroupsPanelInstance) accessGroupsPanelInstance.selectMapping();
+}
+
+/**
+ * Appends the notice to each connected provider card whose connection has fallen-back documents. cards: [{ host, connectionId }],
+ * host being the card's `[data-connector-extras]` element. A request that fails leaves the cards as they are.
+ */
+async function accessGroupsApplyConnectorNotices(cards, organizationId) {
+  const list = (Array.isArray(cards) ? cards : []).filter((c) => c && c.host && accessGroupsText(c.connectionId));
+  for (const card of list) card.host.replaceChildren();
+  if (list.length === 0) return;
+  const ui = accessGroupsUiLib();
+  const doc = accessGroupsDocOf(list[0].host);
+  const orgQuery = organizationId ? '?organizationId=' + encodeURIComponent(String(organizationId)) : '';
+  const [status, counts] = await Promise.all([
+    ui.ragUiRagRequest(ACCESS_GROUPS_PATH + (orgQuery ? orgQuery + '&' : '?') + 'limit=1', { method: 'GET' }),
+    ui.ragUiRagRequest(ACCESS_GROUPS_PATH + '/connector-map/fail-closed' + orgQuery, { method: 'GET' }),
+  ]);
+  if (!counts || !counts.ok || !counts.body || !Array.isArray(counts.body.connections)) return;
+  const enabled = Boolean(status && status.ok && status.body && status.body.enabled === true);
+  const byConnection = new Map();
+  for (const row of counts.body.connections) {
+    const id = row && accessGroupsText(row.connectionId);
+    if (id) byConnection.set(id, Number(row.documents));
+  }
+  const locale = ui.ragUiBrowserLocale();
+  const el = (tag, opts, children) => ui.ragUiEl(doc, tag, opts, children);
+  for (const card of list) {
+    const view = buildAccessGroupsConnectorNoticeView(byConnection.get(accessGroupsText(card.connectionId)), enabled, locale);
+    if (!view) continue;
+    const open = el('button', { className: 'btn btn-sm', text: view.action, attrs: { type: 'button', 'data-access-groups-open-mapping': '' } });
+    open.addEventListener('click', () => accessGroupsOpenConnectorMapping(doc));
+    card.host.replaceChildren(
+      el('div', { className: 'alert alert-warning text-sm items-start mt-2', attrs: { 'data-access-groups-connector-notice': view.key } }, [
+        ui.ragUiIcon(doc, 'shield-exclamation'),
+        el('div', { className: 'flex flex-col items-start gap-2 min-w-0' }, [el('p', { className: 'break-words [overflow-wrap:anywhere]', text: view.text }), open]),
+      ]),
+    );
+  }
+}
+
+const AccessGroupsDocumentBadges = { apply: accessGroupsApplyTableBadges, workspaceId: accessGroupsWorkspaceId };
+const AccessGroupsConnectorNotices = { apply: accessGroupsApplyConnectorNotices, workspaceId: accessGroupsWorkspaceId };
+
 let accessGroupsPanelInstance = null;
 
 function initAccessGroupsPanel() {
@@ -5037,6 +5376,9 @@ function accessGroupsBindPanel() {
 
 if (typeof window !== 'undefined') {
   window.ACCESS_GROUPS_LABELS = ACCESS_GROUPS_LABELS;
+  window.AccessGroupsQueueControls = AccessGroupsQueueControls;
+  window.AccessGroupsDocumentBadges = AccessGroupsDocumentBadges;
+  window.AccessGroupsConnectorNotices = AccessGroupsConnectorNotices;
 }
 
 if (typeof window !== 'undefined' && typeof document !== 'undefined') {
@@ -5089,5 +5431,19 @@ if (typeof module !== 'undefined' && module.exports) {
     AccessGroupsAudienceField,
     AccessGroupsPanel,
     initAccessGroupsPanel,
+    accessGroupsQueueOptions,
+    accessGroupsLoadQueueOptions,
+    accessGroupsQueueValue,
+    accessGroupsQueueToggle,
+    accessGroupsQueueUploadField,
+    accessGroupsQueueErrorText,
+    accessGroupsMountQueueControls,
+    AccessGroupsQueueControls,
+    buildAccessGroupsTableBadgeView,
+    accessGroupsApplyTableBadges,
+    buildAccessGroupsConnectorNoticeView,
+    accessGroupsApplyConnectorNotices,
+    AccessGroupsDocumentBadges,
+    AccessGroupsConnectorNotices,
   };
 }
