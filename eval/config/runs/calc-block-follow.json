@@ -1,0 +1,9 @@
+{
+  "name": "calc-block-follow",
+  "env": {
+    "RAG_CALC_CHECK": "true",
+    "RAG_CALC_TOOL": "true"
+  },
+  "overrides": null,
+  "generator_model": "fake/calc-follow-block-v1"
+}
