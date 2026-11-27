@@ -1324,6 +1324,421 @@
       ],
       "trace_id": "0123456789abcdef0123456789abcdef"
     },
+    "CalcCheck": {
+      "origin": "tool",
+      "reason": null,
+      "recomputed": "22.3",
+      "stated": "22.3",
+      "stated_span": {
+        "end": 14,
+        "start": 10
+      },
+      "status": "verified",
+      "trace_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "unit": "units"
+    },
+    "CalcLimits": {
+      "max_bits": 4096,
+      "max_depth": 30,
+      "max_digits": 30,
+      "max_list_items": 200,
+      "max_operands": 50,
+      "max_round_places": 20,
+      "max_steps": 30,
+      "version": 1
+    },
+    "CalcRequest": {
+      "operands": [
+        {
+          "name": "item_a",
+          "source": {
+            "kind": "question"
+          },
+          "unit": "units",
+          "value": "12.5"
+        },
+        {
+          "name": "item_b",
+          "source": {
+            "alias": "S1",
+            "kind": "chunk"
+          },
+          "unit": "units",
+          "value": "7"
+        },
+        {
+          "name": "items",
+          "source": {
+            "alias": "S2",
+            "kind": "chunk"
+          },
+          "unit": "units",
+          "values": [
+            "3",
+            "8",
+            "5"
+          ]
+        },
+        {
+          "name": "cap",
+          "source": {
+            "alias": "S1",
+            "kind": "chunk"
+          },
+          "unit": "units",
+          "value": "4"
+        },
+        {
+          "name": "share",
+          "source": {
+            "kind": "question"
+          },
+          "unit": "%",
+          "value": "15"
+        },
+        {
+          "name": "start",
+          "source": {
+            "kind": "question"
+          },
+          "value": "2025-01-10"
+        },
+        {
+          "name": "end",
+          "source": {
+            "kind": "question"
+          },
+          "value": "2025-03-01"
+        }
+      ],
+      "result": "s_round",
+      "steps": [
+        {
+          "args": [
+            "item_a",
+            "item_b"
+          ],
+          "id": "s_add",
+          "op": "add"
+        },
+        {
+          "args": [
+            "s_add",
+            "item_b"
+          ],
+          "id": "s_sub",
+          "op": "subtract"
+        },
+        {
+          "args": [
+            "s_sub",
+            "item_a"
+          ],
+          "id": "s_mul",
+          "op": "multiply"
+        },
+        {
+          "args": [
+            "s_mul",
+            "item_b"
+          ],
+          "id": "s_div",
+          "op": "divide",
+          "rounding": {
+            "mode": "half_up",
+            "places": 2
+          }
+        },
+        {
+          "args": [
+            "item_a",
+            "item_b"
+          ],
+          "id": "s_min",
+          "op": "min"
+        },
+        {
+          "args": [
+            "item_a",
+            "item_b"
+          ],
+          "id": "s_max",
+          "op": "max"
+        },
+        {
+          "args": [
+            "items"
+          ],
+          "id": "s_sum",
+          "op": "sum"
+        },
+        {
+          "args": [
+            "items",
+            "cap"
+          ],
+          "id": "s_cap",
+          "label": "capped items",
+          "op": "cap_each"
+        },
+        {
+          "args": [
+            "s_sum",
+            "share"
+          ],
+          "id": "s_pct",
+          "op": "percentage"
+        },
+        {
+          "args": [
+            "s_div"
+          ],
+          "id": "s_round",
+          "op": "round",
+          "rounding": {
+            "mode": "half_even",
+            "places": 1
+          }
+        },
+        {
+          "args": [
+            "start",
+            "end"
+          ],
+          "date_unit": "days",
+          "id": "s_days",
+          "inclusive": true,
+          "op": "date_diff"
+        }
+      ]
+    },
+    "CalcResult": {
+      "reject_reason": null,
+      "status": "ok",
+      "steps": [
+        {
+          "display": "19.5",
+          "display_rounded": false,
+          "exact": "39/2",
+          "id": "s_add",
+          "inputs": [
+            "12.5",
+            "7"
+          ],
+          "op": "add"
+        },
+        {
+          "display": "22.3",
+          "display_rounded": true,
+          "exact": "223/10",
+          "id": "s_round",
+          "inputs": [
+            "22.32"
+          ],
+          "op": "round"
+        }
+      ],
+      "unit": "units",
+      "value": "22.3"
+    },
+    "CalcTrace": {
+      "anchor_offset": null,
+      "origin": "tool",
+      "request": {
+        "operands": [
+          {
+            "name": "item_a",
+            "source": {
+              "kind": "question"
+            },
+            "unit": "units",
+            "value": "12.5"
+          },
+          {
+            "name": "item_b",
+            "source": {
+              "alias": "S1",
+              "kind": "chunk"
+            },
+            "unit": "units",
+            "value": "7"
+          },
+          {
+            "name": "items",
+            "source": {
+              "alias": "S2",
+              "kind": "chunk"
+            },
+            "unit": "units",
+            "values": [
+              "3",
+              "8",
+              "5"
+            ]
+          },
+          {
+            "name": "cap",
+            "source": {
+              "alias": "S1",
+              "kind": "chunk"
+            },
+            "unit": "units",
+            "value": "4"
+          },
+          {
+            "name": "share",
+            "source": {
+              "kind": "question"
+            },
+            "unit": "%",
+            "value": "15"
+          },
+          {
+            "name": "start",
+            "source": {
+              "kind": "question"
+            },
+            "value": "2025-01-10"
+          },
+          {
+            "name": "end",
+            "source": {
+              "kind": "question"
+            },
+            "value": "2025-03-01"
+          }
+        ],
+        "result": "s_round",
+        "steps": [
+          {
+            "args": [
+              "item_a",
+              "item_b"
+            ],
+            "id": "s_add",
+            "op": "add"
+          },
+          {
+            "args": [
+              "s_add",
+              "item_b"
+            ],
+            "id": "s_sub",
+            "op": "subtract"
+          },
+          {
+            "args": [
+              "s_sub",
+              "item_a"
+            ],
+            "id": "s_mul",
+            "op": "multiply"
+          },
+          {
+            "args": [
+              "s_mul",
+              "item_b"
+            ],
+            "id": "s_div",
+            "op": "divide",
+            "rounding": {
+              "mode": "half_up",
+              "places": 2
+            }
+          },
+          {
+            "args": [
+              "item_a",
+              "item_b"
+            ],
+            "id": "s_min",
+            "op": "min"
+          },
+          {
+            "args": [
+              "item_a",
+              "item_b"
+            ],
+            "id": "s_max",
+            "op": "max"
+          },
+          {
+            "args": [
+              "items"
+            ],
+            "id": "s_sum",
+            "op": "sum"
+          },
+          {
+            "args": [
+              "items",
+              "cap"
+            ],
+            "id": "s_cap",
+            "label": "capped items",
+            "op": "cap_each"
+          },
+          {
+            "args": [
+              "s_sum",
+              "share"
+            ],
+            "id": "s_pct",
+            "op": "percentage"
+          },
+          {
+            "args": [
+              "s_div"
+            ],
+            "id": "s_round",
+            "op": "round",
+            "rounding": {
+              "mode": "half_even",
+              "places": 1
+            }
+          },
+          {
+            "args": [
+              "start",
+              "end"
+            ],
+            "date_unit": "days",
+            "id": "s_days",
+            "inclusive": true,
+            "op": "date_diff"
+          }
+        ]
+      },
+      "result": {
+        "reject_reason": null,
+        "status": "ok",
+        "steps": [
+          {
+            "display": "19.5",
+            "display_rounded": false,
+            "exact": "39/2",
+            "id": "s_add",
+            "inputs": [
+              "12.5",
+              "7"
+            ],
+            "op": "add"
+          },
+          {
+            "display": "22.3",
+            "display_rounded": true,
+            "exact": "223/10",
+            "id": "s_round",
+            "inputs": [
+              "22.32"
+            ],
+            "op": "round"
+          }
+        ],
+        "unit": "units",
+        "value": "22.3"
+      }
+    },
     "ChunkTranslation": {
       "content": "A neutral translated sentence."
     },
@@ -14503,6 +14918,45 @@
       ],
       "schema_version": 1
     },
+    "PromptBudgetConfig": {
+      "default_window": 8192,
+      "margin_ratio": 0.05,
+      "margin_tokens": 256,
+      "mcp_tool_reserve": 2000,
+      "near_limit_ratio": 0.9,
+      "refine_max_calls": 2,
+      "version": 1,
+      "voice_answer_reserve": 300,
+      "voice_document_budget": 1500,
+      "voice_system_reserve": 800
+    },
+    "PromptBudgetTrace": {
+      "context_length_unknown": true,
+      "dropped_documents": 3,
+      "dropped_history_turns": 4,
+      "estimated_raw_total": 8650,
+      "estimator": {
+        "encoding": "cl100k_base",
+        "factor": 1.25,
+        "factor_source": "default",
+        "family": "family-b"
+      },
+      "near_limit": true,
+      "overflow_mode": "truncate",
+      "parts": {
+        "documents": 7000,
+        "history": 0,
+        "question": 30,
+        "reserve": 800,
+        "rules": 120,
+        "system": 400,
+        "tools": 300
+      },
+      "standalone_kept": true,
+      "status": "exceeded",
+      "window": 8192,
+      "window_source": "default"
+    },
     "QualityCheckResult": {
       "pages": [
         {
@@ -15867,6 +16321,34 @@
       "row": 2,
       "severity": "warning"
     },
+    "TokenizerCalibration": {
+      "default_factor": 1.25,
+      "encoding": "cl100k_base",
+      "families": [
+        {
+          "computed_at": "2026-11-01T00:00:00Z",
+          "factor": 1.08,
+          "family": "family-a",
+          "quantile": 0.95,
+          "run_ids": [
+            "run-0001"
+          ],
+          "samples": 40,
+          "source": "measured"
+        },
+        {
+          "computed_at": null,
+          "factor": 1.25,
+          "family": "family-b",
+          "quantile": 0.95,
+          "run_ids": [],
+          "samples": 0,
+          "source": "default"
+        }
+      ],
+      "version": 1,
+      "written_by": "rag_eval.calibrate tokenizer"
+    },
     "TrainingNegative": {
       "chunk_id": "chunk-0003",
       "confirmed": false,
@@ -16184,6 +16666,72 @@
     }
   },
   "variants": {
+    "AnswerChecks:calc_and_budget": {
+      "model": "AnswerChecks",
+      "value": {
+        "calc": {
+          "origin": "trailing_block",
+          "reason": null,
+          "recomputed": "22.3",
+          "stated": "23",
+          "stated_span": {
+            "end": 12,
+            "start": 10
+          },
+          "status": "corrected",
+          "trace_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+          "unit": "units"
+        },
+        "calc_items": [
+          {
+            "origin": "trailing_block",
+            "reason": null,
+            "recomputed": "22.3",
+            "stated": "23",
+            "stated_span": {
+              "end": 12,
+              "start": 10
+            },
+            "status": "corrected",
+            "trace_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "unit": "units"
+          },
+          {
+            "origin": null,
+            "reason": "operand_not_located",
+            "recomputed": null,
+            "stated": null,
+            "stated_span": null,
+            "status": "not_verified",
+            "trace_hash": null,
+            "unit": null
+          }
+        ],
+        "claims": null,
+        "finish_reason": null,
+        "output_guard": null,
+        "prompt_budget": {
+          "dropped_documents": 3,
+          "dropped_history_turns": 4,
+          "near_limit": true,
+          "parts": {
+            "documents": 7000,
+            "history": 0,
+            "question": 30,
+            "reserve": 800,
+            "rules": 120,
+            "system": 400,
+            "tools": 300
+          },
+          "status": "exceeded",
+          "window": 8192
+        },
+        "sentences": [],
+        "text_language": null,
+        "truncated": false,
+        "version_conflict": null
+      }
+    },
     "AnswerChecks:empty": {
       "model": "AnswerChecks",
       "value": {
@@ -16501,6 +17049,81 @@
       "value": {
         "document_ids": null,
         "tenant_key": "s:default"
+      }
+    },
+    "CalcCheck:corrected": {
+      "model": "CalcCheck",
+      "value": {
+        "origin": "trailing_block",
+        "reason": null,
+        "recomputed": "22.3",
+        "stated": "23",
+        "stated_span": {
+          "end": 12,
+          "start": 10
+        },
+        "status": "corrected",
+        "trace_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "unit": "units"
+      }
+    },
+    "CalcCheck:not_verified": {
+      "model": "CalcCheck",
+      "value": {
+        "origin": null,
+        "reason": "operand_not_located",
+        "recomputed": null,
+        "stated": null,
+        "stated_span": null,
+        "status": "not_verified",
+        "trace_hash": null,
+        "unit": null
+      }
+    },
+    "CalcRequest:conversion_operand": {
+      "model": "CalcRequest",
+      "value": {
+        "operands": [
+          {
+            "name": "amount",
+            "source": {
+              "kind": "question"
+            },
+            "unit": "units",
+            "value": "40"
+          },
+          {
+            "name": "per_unit",
+            "source": {
+              "alias": "S3",
+              "kind": "chunk"
+            },
+            "unit_from": "units",
+            "unit_to": "parts",
+            "value": "0.5"
+          }
+        ],
+        "result": "converted",
+        "steps": [
+          {
+            "args": [
+              "amount",
+              "per_unit"
+            ],
+            "id": "converted",
+            "op": "multiply"
+          }
+        ]
+      }
+    },
+    "CalcResult:rejected": {
+      "model": "CalcResult",
+      "value": {
+        "reject_reason": "mixed_units",
+        "status": "rejected",
+        "steps": [],
+        "unit": null,
+        "value": null
       }
     },
     "CitationRecord:version_label": {
@@ -18794,6 +19417,53 @@
         "tags": []
       }
     },
+    "GoldenItem:context_overflow": {
+      "model": "GoldenItem",
+      "value": {
+        "answerable": true,
+        "attack": null,
+        "category": "context_overflow",
+        "conversation": [],
+        "evidence_language": null,
+        "expected_answer": "The total is 9 units.",
+        "gold_evidence": [
+          {
+            "document": "document-a.md",
+            "quote": "Item A takes 4 units.",
+            "section": "Section 1"
+          },
+          {
+            "document": "document-a.md",
+            "quote": "Item B takes 5 units.",
+            "section": "Section 2"
+          }
+        ],
+        "id": "p521-overflow-001",
+        "language": "en",
+        "overflow": {
+          "kind": "ranked_evidence",
+          "must_keep": [
+            {
+              "document": "document-a.md",
+              "quote": "Item A takes 4 units.",
+              "section": "Section 1"
+            },
+            {
+              "document": "document-a.md",
+              "quote": "Item B takes 5 units.",
+              "section": "Section 2"
+            }
+          ]
+        },
+        "pair_of": null,
+        "provenance": "synthetic_fixture",
+        "question": "What is the total for item A and item B?",
+        "retrieval_filters": null,
+        "review_status": "approved",
+        "split": "dev",
+        "tags": []
+      }
+    },
     "GoldenItem:cross_lingual": {
       "model": "GoldenItem",
       "value": {
@@ -18945,6 +19615,44 @@
         "pair_of": null,
         "provenance": "synthetic_fixture",
         "question": "How much does the synthetic widget cost?",
+        "retrieval_filters": null,
+        "review_status": "approved",
+        "split": "dev",
+        "tags": []
+      }
+    },
+    "GoldenItem:multi_step_calc": {
+      "model": "GoldenItem",
+      "value": {
+        "answerable": true,
+        "attack": null,
+        "calc": {
+          "expected_value": "9",
+          "paraphrase_group": "p521-calc-group-a",
+          "tolerance": "0",
+          "unit": "units"
+        },
+        "category": "multi_step_calc",
+        "conversation": [],
+        "evidence_language": null,
+        "expected_answer": "The total is 9 units.",
+        "gold_evidence": [
+          {
+            "document": "document-a.md",
+            "quote": "Item A takes 4 units.",
+            "section": "Section 1"
+          },
+          {
+            "document": "document-a.md",
+            "quote": "Item B takes 5 units.",
+            "section": "Section 2"
+          }
+        ],
+        "id": "p521-calc-001",
+        "language": "en",
+        "pair_of": null,
+        "provenance": "synthetic_fixture",
+        "question": "What is the total for item A and item B?",
         "retrieval_filters": null,
         "review_status": "approved",
         "split": "dev",
@@ -20247,6 +20955,190 @@
           "embed": "ok",
           "generation": "ok",
           "search": "ok"
+        },
+        "used_documents": [
+          {
+            "document_id": "doc-001",
+            "image_url": "https://example.invalid/image.png",
+            "name": "handbook.md",
+            "similarity": 0.82
+          }
+        ]
+      }
+    },
+    "RagTrace:calc_and_budget": {
+      "model": "RagTrace",
+      "value": {
+        "answer": "The total is 9 units. [S1]",
+        "answer_error": "context_length_exceeded",
+        "calc": [
+          {
+            "origin": null,
+            "reason": "operand_not_located",
+            "recomputed": null,
+            "stated": null,
+            "stated_span": null,
+            "status": "not_verified",
+            "trace_hash": null,
+            "unit": null
+          }
+        ],
+        "calc_observed": {
+          "origin": "trailing_block",
+          "stated": "9",
+          "steps_listed": true,
+          "tool_used": false
+        },
+        "candidates": [
+          {
+            "chunk_id": "chunk-001",
+            "content": "Employees receive twenty days of leave per year.",
+            "document_id": "doc-001",
+            "document_name": "handbook.md",
+            "final_score": 0.85,
+            "fused_score": null,
+            "has_image": false,
+            "language": null,
+            "legs": {},
+            "match_reason": "vector",
+            "rank": 1,
+            "rerank_score": null,
+            "similarity": 0.82
+          },
+          {
+            "chunk_id": "chunk-002",
+            "content": "Office hours are nine to five.",
+            "document_id": "doc-002",
+            "document_name": null,
+            "final_score": null,
+            "fused_score": null,
+            "has_image": false,
+            "language": null,
+            "legs": {},
+            "match_reason": null,
+            "rank": 2,
+            "rerank_score": null,
+            "similarity": 0.41
+          }
+        ],
+        "citation_strategy": "chunk-alias",
+        "citations": [
+          {
+            "alias": "S1",
+            "chunkIds": [
+              "chunk-001"
+            ],
+            "documentId": "doc-001",
+            "documentName": "handbook.md",
+            "documentVersion": null,
+            "n": 1,
+            "page": null,
+            "quote": "Employees receive twenty days of leave per year.",
+            "quoteHash": "8ce0aa222a8339916769a9552a8ffcc2834d2f6aa1101ab636571873bf2c7bb2",
+            "sectionPath": null,
+            "strategy": "chunk-alias"
+          }
+        ],
+        "config_hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "context": "Employees receive twenty days of leave per year.",
+        "context_tokens": null,
+        "effective_config": {
+          "deployment_mode": "single-tenant",
+          "embedding_model": "text-embedding-3-small",
+          "endpoint_version": "1",
+          "generator_model": null,
+          "rag_env": {
+            "RAG_BEHAVIOR_MODE": "strict"
+          },
+          "rag_prompt_sha256": {
+            "RAG_SYSTEM_PROMPT": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "security": null
+        },
+        "groundedness": null,
+        "injection": null,
+        "invalid_citations": 0,
+        "item_id": "en-general-001",
+        "kept": [
+          {
+            "chunk_id": "chunk-001",
+            "content": "Employees receive twenty days of leave per year.",
+            "document_id": "doc-001",
+            "document_name": "handbook.md",
+            "kept_by": "similarity",
+            "rank": 1,
+            "similarity": 0.82
+          }
+        ],
+        "prompt_budget": {
+          "context_length_unknown": true,
+          "dropped_documents": 0,
+          "dropped_history_turns": 4,
+          "estimated_raw_total": 8650,
+          "estimator": {
+            "encoding": "cl100k_base",
+            "factor": 1.25,
+            "factor_source": "default",
+            "family": "family-b"
+          },
+          "near_limit": false,
+          "overflow_mode": "truncate",
+          "parts": {
+            "documents": 7000,
+            "history": 0,
+            "question": 30,
+            "reserve": 800,
+            "rules": 120,
+            "system": 400,
+            "tools": 300
+          },
+          "standalone_kept": true,
+          "status": "ok",
+          "window": 8192,
+          "window_source": "default"
+        },
+        "query": "How many leave days do employees get?",
+        "query_context": {
+          "is_financial_query": false,
+          "is_temporal_query": false,
+          "required_precision": "medium",
+          "search_strategy": "semantic_only",
+          "suggested_threshold": 0.3
+        },
+        "query_language": null,
+        "query_plan": null,
+        "query_transforms": [
+          {
+            "kind": "rewrite",
+            "reason": null,
+            "status": null,
+            "text": "leave days per year",
+            "transform": null
+          }
+        ],
+        "refusal": null,
+        "refusal_reason": null,
+        "refused": false,
+        "retrieval_config_hash": null,
+        "retrieval_strategy": "standard",
+        "retrieval_versions": null,
+        "schema_version": 1,
+        "stage_counts": {},
+        "stage_latency_ms": {
+          "analyze": 1.5,
+          "embed": 4.0,
+          "generation": 0.0,
+          "search": 7.0
+        },
+        "stage_status": {
+          "analyze": "ok",
+          "embed": "ok",
+          "generation": "ok",
+          "search": "ok"
+        },
+        "usage": {
+          "input_tokens": 5200,
+          "output_tokens": 64
         },
         "used_documents": [
           {

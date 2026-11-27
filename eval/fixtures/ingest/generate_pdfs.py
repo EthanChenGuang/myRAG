@@ -27,6 +27,8 @@ from xml.sax.saxutils import escape
 MARGIN_X = 56.7
 MARGIN_TOP = 60.0
 MARGIN_BOTTOM = 60.0
+PAGE_LINE_BOTTOM_Y = 40.0
+PAGE_FOOTER_Y = 22.0
 HEADING_STYLES = {1: (20.0, 26.0), 2: (15.0, 20.0), 3: (12.5, 17.0)}
 BODY_STYLE = (10.5, 15.5)
 SCAN_DPI = 200
@@ -92,6 +94,7 @@ def build_digital(spec: Any) -> bytes:
     body = style("body", body_font, *BODY_STYLE)
     item = style("item", body_font, *BODY_STYLE, leftIndent=18)
     caption = style("caption", body_font, 9.0, 13.0, alignment=1)
+    page_line = style("page_line", body_font, 8.5, 11.0)
     headings = {level: style(f"h{level}", heading_font, size, leading) for level, (size, leading) in HEADING_STYLES.items()}
 
     buffer = io.BytesIO()
@@ -123,6 +126,14 @@ def build_digital(spec: Any) -> bytes:
             place(Paragraph(escape(block.text), body), 0.0, 6.0)
         elif isinstance(block, specs.ListItem):
             place(Paragraph(escape(block.marker + block.text), item), 0.0, 3.0)
+        elif isinstance(block, specs.PageLine):
+            line = Paragraph(escape(block.text), page_line)
+            if block.role in ("top", "fragment"):
+                place(line, 0.0, 6.0)
+            else:
+                # The bottom line and the footer sit in the bottom margin, below every flowed block of the page.
+                line.wrap(content_width, specs.PAGE_HEIGHT)
+                line.drawOn(pdf, MARGIN_X, PAGE_LINE_BOTTOM_Y if block.role == "bottom" else PAGE_FOOTER_Y)
         elif isinstance(block, specs.Table):
             size = 8.0 if len(block.rows) > 20 else 9.5
             widths = _column_widths(block.column_rows or block.rows, content_width)
@@ -246,7 +257,7 @@ def generate(out_dir: Path, text_dir: Path, cjk_font: Path | None, font_index: i
     out_dir.mkdir(parents=True, exist_ok=True)
     text_dir.mkdir(parents=True, exist_ok=True)
     written: dict[str, str] = {}
-    for spec in (*specs.all_specs(), *specs.long_table_specs()):
+    for spec in (*specs.all_specs(), *specs.long_table_specs(), *specs.templated_specs()):
         if spec.layer == "digital":
             data = build_digital(spec)
         elif cjk_font is not None:

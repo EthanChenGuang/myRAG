@@ -8112,12 +8112,56 @@
                                             </div>
                                             <div id="rag-answer-rules-events-actions" class="min-w-0"></div>
                                         </section>
-                                        <section aria-labelledby="rag-answer-rules-group-calc" data-answer-rules-group="calc" hidden>
+                                        <section aria-labelledby="rag-answer-rules-group-calc" data-answer-rules-group="calc">
                                             <h4 id="rag-answer-rules-group-calc" class="text-base font-semibold mt-6 mb-2 text-balance" data-rag-i18n="group.calc">Calculations</h4>
+                                            <div class="form-control mb-2">
+                                                <label class="label cursor-pointer justify-start gap-3">
+                                                    <input type="checkbox" id="RAG_CALC_TOOL" name="RAG_CALC_TOOL" class="checkbox checkbox-primary" aria-describedby="RAG_CALC_TOOL-help">
+                                                    <span class="label-text min-w-0 break-words" data-rag-i18n="RAG_CALC_TOOL">Offer the calculation tool for questions with numbers or dates</span>
+                                                </label>
+                                                <label class="label pl-8">
+                                                    <span id="RAG_CALC_TOOL-help" class="label-text-alt min-w-0 break-words text-base-content/70"><span data-rag-i18n="RAG_CALC_TOOL.help">The model passes the values and the rule; fixed code does the arithmetic. Models without tool support return the same steps in a block that is removed from the answer.</span> <code translate="no">RAG_CALC_TOOL</code></span>
+                                                </label>
+                                            </div>
+                                            <div class="form-control mb-2">
+                                                <label class="label cursor-pointer justify-start gap-3">
+                                                    <input type="checkbox" id="RAG_CALC_CHECK" name="RAG_CALC_CHECK" class="checkbox checkbox-primary" aria-describedby="RAG_CALC_CHECK-help">
+                                                    <span class="label-text min-w-0 break-words" data-rag-i18n="RAG_CALC_CHECK">Recompute every calculated number before the answer ends</span>
+                                                </label>
+                                                <label class="label pl-8">
+                                                    <span id="RAG_CALC_CHECK-help" class="label-text-alt min-w-0 break-words text-base-content/70"><span data-rag-i18n="RAG_CALC_CHECK.help">A different result adds a correction under the answer. A value that cannot be found in its source marks the answer “Calculation not verified”.</span> <code translate="no">RAG_CALC_CHECK</code></span>
+                                                </label>
+                                            </div>
+                                            <p id="rag-answer-rules-calc-limits" class="text-xs text-base-content/70 mt-1 max-w-prose break-words tabular-nums" data-answer-rules-readonly="calc.limits" aria-live="polite"></p>
                                             <div id="rag-answer-rules-calc" class="min-w-0"></div>
                                         </section>
-                                        <section aria-labelledby="rag-answer-rules-group-budget" data-answer-rules-group="budget" hidden>
+                                        <section aria-labelledby="rag-answer-rules-group-budget" data-answer-rules-group="budget">
                                             <h4 id="rag-answer-rules-group-budget" class="text-base font-semibold mt-6 mb-2 text-balance" data-rag-i18n="group.budget">Prompt size</h4>
+                                            <div class="form-control mb-2">
+                                                <label class="label cursor-pointer justify-start gap-3">
+                                                    <input type="checkbox" id="RAG_PROMPT_BUDGET" name="RAG_PROMPT_BUDGET" class="checkbox checkbox-primary" aria-describedby="RAG_PROMPT_BUDGET-help">
+                                                    <span class="label-text min-w-0 break-words" data-rag-i18n="RAG_PROMPT_BUDGET">Fit every request into the model’s context window</span>
+                                                </label>
+                                                <label class="label pl-8">
+                                                    <span id="RAG_PROMPT_BUDGET-help" class="label-text-alt min-w-0 break-words text-base-content/70"><span data-rag-i18n="RAG_PROMPT_BUDGET.help">Older conversation turns are dropped first, then the lowest-ranked documents. The question is always kept and always last.</span> <code translate="no">RAG_PROMPT_BUDGET</code></span>
+                                                </label>
+                                            </div>
+                                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <div class="form-control min-w-0">
+                                                    <label class="label" for="RAG_CONTEXT_OVERFLOW">
+                                                        <span class="label-text min-w-0 break-words" data-rag-i18n="RAG_CONTEXT_OVERFLOW">If the documents do not fit</span>
+                                                    </label>
+                                                    <select id="RAG_CONTEXT_OVERFLOW" name="RAG_CONTEXT_OVERFLOW" class="select select-bordered w-full" aria-describedby="RAG_CONTEXT_OVERFLOW-help">
+                                                        <option value="truncate" data-rag-i18n="overflow.truncate">Keep the highest-ranked documents</option>
+                                                        <option value="refine" data-rag-i18n="overflow.refine">Answer over several calls</option>
+                                                    </select>
+                                                    <label class="label">
+                                                        <span id="RAG_CONTEXT_OVERFLOW-help" class="label-text-alt min-w-0 break-words text-base-content/70"><span data-rag-i18n="RAG_CONTEXT_OVERFLOW.help">Read only while the prompt budget is on. Several calls apply to the web chat only.</span> <code translate="no">RAG_CONTEXT_OVERFLOW</code></span>
+                                                    </label>
+                                                </div>
+                                            </div>
+                                            <p id="rag-answer-rules-budget-unknown" class="text-xs text-base-content/70 mt-1 max-w-prose break-words tabular-nums" data-answer-rules-readonly="budget.unknownModels" aria-live="polite"></p>
+                                            <p id="rag-answer-rules-budget-estimate" class="text-xs text-base-content/70 mt-1 max-w-prose break-words" data-answer-rules-readonly="budget.estimate" aria-live="polite"></p>
                                             <div id="rag-answer-rules-budget" class="min-w-0"></div>
                                         </section>
                                         <script>
@@ -18752,29 +18796,29 @@ When messaging:
                     // Get defaults from the config manager if available
                     const defaultProvider = window.configManager?.config?.NEXT_PUBLIC_AI_PROVIDER || 'openrouter';
                     const defaultOpenAIModels = window.configManager?.config?.NEXT_PUBLIC_OPENAI_MODELS || JSON.stringify([
-                        { id: 'gpt-4.1-mini', displayName: 'GPT-4.1 Mini' },
-                        { id: 'gpt-4.1', displayName: 'GPT-4.1' },
-                        { id: 'o3', displayName: 'o3' },
-                        { id: 'o4-mini', displayName: 'o4 Mini' }
+                        { id: 'gpt-4.1-mini', displayName: 'GPT-4.1 Mini', contextLength: 1047576 },
+                        { id: 'gpt-4.1', displayName: 'GPT-4.1', contextLength: 1047576 },
+                        { id: 'o3', displayName: 'o3', contextLength: 200000 },
+                        { id: 'o4-mini', displayName: 'o4 Mini', contextLength: 200000 }
                     ]);
                     const defaultOpenRouterModels = window.configManager?.config?.NEXT_PUBLIC_OPENROUTER_MODELS || JSON.stringify([
-                        { id: 'anthropic/claude-sonnet-4.5', displayName: 'Claude Sonnet 4.5', isDefault: true },
-                        { id: 'openai/gpt-4.1-mini', displayName: 'GPT-4.1 Mini' },
-                        { id: 'openai/gpt-4.1', displayName: 'GPT-4.1' },
-                        { id: 'anthropic/claude-opus-4.1', displayName: 'Claude Opus 4.1' },
+                        { id: 'anthropic/claude-sonnet-4.5', displayName: 'Claude Sonnet 4.5', isDefault: true, contextLength: 1000000 },
+                        { id: 'openai/gpt-4.1-mini', displayName: 'GPT-4.1 Mini', contextLength: 1047576 },
+                        { id: 'openai/gpt-4.1', displayName: 'GPT-4.1', contextLength: 1047576 },
+                        { id: 'anthropic/claude-opus-4.1', displayName: 'Claude Opus 4.1', contextLength: 200000 },
                         { id: 'anthropic/claude-opus-5.5', displayName: 'Claude Opus 5.5', anthropicId: 'claude-opus-5-5', supportsReasoning: true, reasoningMethod: 'effort', contextLength: 1000000 },
                         { id: 'anthropic/claude-sonnet-5.5', displayName: 'Claude Sonnet 5.5', anthropicId: 'claude-sonnet-5-5', supportsReasoning: true, reasoningMethod: 'effort', contextLength: 1000000 },
                         { id: 'anthropic/claude-haiku-5.5', displayName: 'Claude Haiku 5.5', anthropicId: 'claude-haiku-5-5', supportsReasoning: true, reasoningMethod: 'effort', contextLength: 1000000 },
-                        { id: 'google/gemini-2.5-flash-lite', displayName: 'Gemini 2.5 Flash Lite' },
-                        { id: 'google/gemini-2.5-flash', displayName: 'Gemini 2.5 Flash' },
-                        { id: 'meta-llama/llama-4-maverick', displayName: 'Llama 4 Maverick', isOpenSource: true },
+                        { id: 'google/gemini-2.5-flash-lite', displayName: 'Gemini 2.5 Flash Lite', contextLength: 1048576 },
+                        { id: 'google/gemini-2.5-flash', displayName: 'Gemini 2.5 Flash', contextLength: 1048576 },
+                        { id: 'meta-llama/llama-4-maverick', displayName: 'Llama 4 Maverick', isOpenSource: true, contextLength: 524288 },
                         { id: 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free', displayName: 'Venice: Uncensored', isFree: true, isOpenSource: true, isUncensored: true }
                     ]);
                     const defaultGroqModels = window.configManager?.config?.NEXT_PUBLIC_GROQ_MODELS || JSON.stringify([
-                        { id: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B Versatile' },
-                        { id: 'openai/gpt-oss-120b', displayName: 'GPT-OSS 120B' },
-                        { id: 'groq/compound', displayName: 'Groq Compound' },
-                        { id: 'moonshotai/kimi-k2-instruct-0905', displayName: 'Kimi K2 Instruct' }
+                        { id: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B Versatile', contextLength: 131072 },
+                        { id: 'openai/gpt-oss-120b', displayName: 'GPT-OSS 120B', contextLength: 131072 },
+                        { id: 'groq/compound', displayName: 'Groq Compound', contextLength: 131072 },
+                        { id: 'moonshotai/kimi-k2-instruct-0905', displayName: 'Kimi K2 Instruct', contextLength: 262144 }
                     ]);
 
                     // Safe JSON parsing helper
@@ -18796,29 +18840,29 @@ When messaging:
                     modelConfig = {
                         provider: defaultProvider,
                         openaiModels: safeJsonParse(defaultOpenAIModels, [
-                            { id: 'gpt-4.1-mini', displayName: 'GPT-4.1 Mini' },
-                            { id: 'gpt-4.1', displayName: 'GPT-4.1' },
-                            { id: 'o3', displayName: 'o3' },
-                            { id: 'o4-mini', displayName: 'o4 Mini' }
+                            { id: 'gpt-4.1-mini', displayName: 'GPT-4.1 Mini', contextLength: 1047576 },
+                            { id: 'gpt-4.1', displayName: 'GPT-4.1', contextLength: 1047576 },
+                            { id: 'o3', displayName: 'o3', contextLength: 200000 },
+                            { id: 'o4-mini', displayName: 'o4 Mini', contextLength: 200000 }
                         ]),
                         openrouterModels: safeJsonParse(defaultOpenRouterModels, [
-                            { id: 'anthropic/claude-sonnet-4.5', displayName: 'Claude Sonnet 4.5', isDefault: true },
-                            { id: 'openai/gpt-4.1-mini', displayName: 'GPT-4.1 Mini' },
-                            { id: 'openai/gpt-4.1', displayName: 'GPT-4.1' },
-                            { id: 'anthropic/claude-opus-4.1', displayName: 'Claude Opus 4.1' },
+                            { id: 'anthropic/claude-sonnet-4.5', displayName: 'Claude Sonnet 4.5', isDefault: true, contextLength: 1000000 },
+                            { id: 'openai/gpt-4.1-mini', displayName: 'GPT-4.1 Mini', contextLength: 1047576 },
+                            { id: 'openai/gpt-4.1', displayName: 'GPT-4.1', contextLength: 1047576 },
+                            { id: 'anthropic/claude-opus-4.1', displayName: 'Claude Opus 4.1', contextLength: 200000 },
                             { id: 'anthropic/claude-opus-5.5', displayName: 'Claude Opus 5.5', anthropicId: 'claude-opus-5-5', supportsReasoning: true, reasoningMethod: 'effort', contextLength: 1000000 },
                             { id: 'anthropic/claude-sonnet-5.5', displayName: 'Claude Sonnet 5.5', anthropicId: 'claude-sonnet-5-5', supportsReasoning: true, reasoningMethod: 'effort', contextLength: 1000000 },
                             { id: 'anthropic/claude-haiku-5.5', displayName: 'Claude Haiku 5.5', anthropicId: 'claude-haiku-5-5', supportsReasoning: true, reasoningMethod: 'effort', contextLength: 1000000 },
-                            { id: 'google/gemini-2.5-flash-lite', displayName: 'Gemini 2.5 Flash Lite' },
-                            { id: 'google/gemini-2.5-flash', displayName: 'Gemini 2.5 Flash' },
-                            { id: 'meta-llama/llama-4-maverick', displayName: 'Llama 4 Maverick', isOpenSource: true },
+                            { id: 'google/gemini-2.5-flash-lite', displayName: 'Gemini 2.5 Flash Lite', contextLength: 1048576 },
+                            { id: 'google/gemini-2.5-flash', displayName: 'Gemini 2.5 Flash', contextLength: 1048576 },
+                            { id: 'meta-llama/llama-4-maverick', displayName: 'Llama 4 Maverick', isOpenSource: true, contextLength: 524288 },
                             { id: 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free', displayName: 'Venice: Uncensored', isFree: true, isOpenSource: true, isUncensored: true }
                         ]),
                         groqModels: safeJsonParse(defaultGroqModels, [
-                            { id: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B Versatile' },
-                            { id: 'openai/gpt-oss-120b', displayName: 'GPT-OSS 120B' },
-                            { id: 'groq/compound', displayName: 'Groq Compound' },
-                            { id: 'moonshotai/kimi-k2-instruct-0905', displayName: 'Kimi K2 Instruct' }
+                            { id: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B Versatile', contextLength: 131072 },
+                            { id: 'openai/gpt-oss-120b', displayName: 'GPT-OSS 120B', contextLength: 131072 },
+                            { id: 'groq/compound', displayName: 'Groq Compound', contextLength: 131072 },
+                            { id: 'moonshotai/kimi-k2-instruct-0905', displayName: 'Kimi K2 Instruct', contextLength: 262144 }
                         ])
                     };
                 } else {
@@ -18858,29 +18902,29 @@ When messaging:
                 modelConfig = {
                     provider: 'openrouter',
                     openaiModels: [
-                        { id: 'gpt-4.1-mini', displayName: 'GPT-4.1 Mini' },
-                        { id: 'gpt-4.1', displayName: 'GPT-4.1' },
-                        { id: 'o3', displayName: 'o3' },
-                        { id: 'o4-mini', displayName: 'o4 Mini' }
+                        { id: 'gpt-4.1-mini', displayName: 'GPT-4.1 Mini', contextLength: 1047576 },
+                        { id: 'gpt-4.1', displayName: 'GPT-4.1', contextLength: 1047576 },
+                        { id: 'o3', displayName: 'o3', contextLength: 200000 },
+                        { id: 'o4-mini', displayName: 'o4 Mini', contextLength: 200000 }
                     ],
                     openrouterModels: [
-                        { id: 'anthropic/claude-sonnet-4.5', displayName: 'Claude Sonnet 4.5', isDefault: true },
-                        { id: 'openai/gpt-4.1-mini', displayName: 'GPT-4.1 Mini' },
-                        { id: 'openai/gpt-4.1', displayName: 'GPT-4.1' },
-                        { id: 'anthropic/claude-opus-4.1', displayName: 'Claude Opus 4.1' },
+                        { id: 'anthropic/claude-sonnet-4.5', displayName: 'Claude Sonnet 4.5', isDefault: true, contextLength: 1000000 },
+                        { id: 'openai/gpt-4.1-mini', displayName: 'GPT-4.1 Mini', contextLength: 1047576 },
+                        { id: 'openai/gpt-4.1', displayName: 'GPT-4.1', contextLength: 1047576 },
+                        { id: 'anthropic/claude-opus-4.1', displayName: 'Claude Opus 4.1', contextLength: 200000 },
                         { id: 'anthropic/claude-opus-5.5', displayName: 'Claude Opus 5.5', anthropicId: 'claude-opus-5-5', supportsReasoning: true, reasoningMethod: 'effort', contextLength: 1000000 },
                         { id: 'anthropic/claude-sonnet-5.5', displayName: 'Claude Sonnet 5.5', anthropicId: 'claude-sonnet-5-5', supportsReasoning: true, reasoningMethod: 'effort', contextLength: 1000000 },
                         { id: 'anthropic/claude-haiku-5.5', displayName: 'Claude Haiku 5.5', anthropicId: 'claude-haiku-5-5', supportsReasoning: true, reasoningMethod: 'effort', contextLength: 1000000 },
-                        { id: 'google/gemini-2.5-flash-lite', displayName: 'Gemini 2.5 Flash Lite' },
-                        { id: 'google/gemini-2.5-flash', displayName: 'Gemini 2.5 Flash' },
-                        { id: 'meta-llama/llama-4-maverick', displayName: 'Llama 4 Maverick', isOpenSource: true },
+                        { id: 'google/gemini-2.5-flash-lite', displayName: 'Gemini 2.5 Flash Lite', contextLength: 1048576 },
+                        { id: 'google/gemini-2.5-flash', displayName: 'Gemini 2.5 Flash', contextLength: 1048576 },
+                        { id: 'meta-llama/llama-4-maverick', displayName: 'Llama 4 Maverick', isOpenSource: true, contextLength: 524288 },
                         { id: 'cognitivecomputations/dolphin-mistral-24b-venice-edition:free', displayName: 'Venice: Uncensored', isFree: true, isOpenSource: true, isUncensored: true }
                     ],
                     groqModels: [
-                        { id: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B Versatile' },
-                        { id: 'openai/gpt-oss-120b', displayName: 'GPT-OSS 120B' },
-                        { id: 'groq/compound', displayName: 'Groq Compound' },
-                        { id: 'moonshotai/kimi-k2-instruct-0905', displayName: 'Kimi K2 Instruct' }
+                        { id: 'llama-3.3-70b-versatile', displayName: 'Llama 3.3 70B Versatile', contextLength: 131072 },
+                        { id: 'openai/gpt-oss-120b', displayName: 'GPT-OSS 120B', contextLength: 131072 },
+                        { id: 'groq/compound', displayName: 'Groq Compound', contextLength: 131072 },
+                        { id: 'moonshotai/kimi-k2-instruct-0905', displayName: 'Kimi K2 Instruct', contextLength: 262144 }
                     ]
                 };
 

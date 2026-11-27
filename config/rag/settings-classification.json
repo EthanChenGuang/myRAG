@@ -43,6 +43,14 @@
       "side": "query"
     },
     {
+      "name": "RAG_CALC_CHECK",
+      "side": "query"
+    },
+    {
+      "name": "RAG_CALC_TOOL",
+      "side": "query"
+    },
+    {
       "name": "RAG_CAPTION_LANGUAGE",
       "side": "ingestion",
       "mechanism": "recaption"
@@ -81,6 +89,10 @@
     },
     {
       "name": "RAG_CONTEXT_EDGE_ORDER",
+      "side": "query"
+    },
+    {
+      "name": "RAG_CONTEXT_OVERFLOW",
       "side": "query"
     },
     {
@@ -597,6 +609,10 @@
     },
     {
       "name": "RAG_PRIMARY_LANGUAGE",
+      "side": "query"
+    },
+    {
+      "name": "RAG_PROMPT_BUDGET",
       "side": "query"
     },
     {

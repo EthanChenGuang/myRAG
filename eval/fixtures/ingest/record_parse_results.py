@@ -8,7 +8,8 @@ For every fixture it builds a DoclingDocument from the spec with docling-core, r
 (to_parse_result) with the options of the fixture's processing profile, and writes <id>.parse.json
 (the ParseResult), <id>.docling.json and the picture artifacts under recorded/. manifest.json maps each
 fixture to its PDF, its sha256, its recordings and the facts later plans assert; the long-table fixtures are listed
-under long_table_fixtures, apart from the fixtures the ingest fixture mode loads. Real Docling is not run
+under long_table_fixtures and the templated collection under templated_fixtures, apart from the fixtures the ingest fixture mode
+loads. Real Docling is not run
 here; the nightly real-Docling job compares real conversions with these recordings.
 """
 
@@ -37,7 +38,7 @@ from docling_core.types.doc import (
     TableCell,
     TableData,
 )
-from docling_core.types.doc.document import DocumentOrigin
+from docling_core.types.doc.document import ContentLayer, DocumentOrigin
 from PIL import Image
 
 from rag_sidecar.contracts import DoclingOptions, ParseJobRequest, ParseResult
@@ -54,6 +55,9 @@ BODY_LEADING = 15.5
 TABLE_ROW_HEIGHT = 13.6
 CHARS_PER_LINE = {"zh": 36, "en": 90, "it": 90}
 PICTURE_ARTIFACT = "picture-{number}.png"
+PAGE_LINE_HEIGHT = 11.0
+BOTTOM_LINE_TOP = 790.0
+FOOTER_LINE_TOP = 808.0
 
 
 def _specs() -> Any:
@@ -133,6 +137,17 @@ def build_document(spec: Any, binary_hash: int) -> DoclingDocument:
             height = _text_height(text, spec.language)
             doc.add_list_item(text, enumerated=False, parent=list_group, prov=_prov(block.page, top, height, left=MARGIN_X + 18, text_length=len(text)))
             cursor[block.page] = top + height + 3.0
+        elif isinstance(block, specs.PageLine):
+            if block.label == "page_footer":
+                # Docling's layout model labels it page footer and moves it to the furniture layer: not in the Markdown or the chunks.
+                prov = _prov(block.page, FOOTER_LINE_TOP, PAGE_LINE_HEIGHT, text_length=len(block.text))
+                doc.add_text(DocItemLabel.PAGE_FOOTER, block.text, prov=prov, content_layer=ContentLayer.FURNITURE)
+            elif block.role == "bottom":
+                doc.add_text(DocItemLabel.TEXT, block.text, prov=_prov(block.page, BOTTOM_LINE_TOP, PAGE_LINE_HEIGHT, text_length=len(block.text)))
+            else:
+                # The residue D-15 targets: a repeated line Docling labels as body text.
+                doc.add_text(DocItemLabel.TEXT, block.text, prov=_prov(block.page, top, PAGE_LINE_HEIGHT, text_length=len(block.text)))
+                cursor[block.page] = top + PAGE_LINE_HEIGHT + 6.0
         elif isinstance(block, specs.Table):
             slices = block.page_rows or (len(block.rows),)
             height = TABLE_ROW_HEIGHT * slices[0]
@@ -221,6 +236,7 @@ def build_all(pdf_dir: Path) -> dict[str, bytes]:
     files: dict[str, bytes] = {}
     entries = _record_entries(specs.all_specs(), pdf_dir, files, first_hash=2000)
     long_table_entries = _record_entries(specs.long_table_specs(), pdf_dir, files, first_hash=3000, header_repeat_variant=True)
+    templated_entries = _record_entries(specs.templated_specs(), pdf_dir, files, first_hash=4000)
     from importlib.metadata import version
 
     manifest = {
@@ -230,6 +246,7 @@ def build_all(pdf_dir: Path) -> dict[str, bytes]:
         "recorded_with": {"adapter": "rag_sidecar.parse.docling_adapter.to_parse_result", "docling_core": version("docling-core"), "tokenizer": "cl100k_base"},
         "fixtures": entries,
         "long_table_fixtures": long_table_entries,
+        "templated_fixtures": templated_entries,
     }
     files["manifest.json"] = _dump(manifest)
     return files

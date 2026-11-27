@@ -23,6 +23,8 @@ ReviewReason = Literal[
     "version_conflict",
     "representative",
     "re_review",
+    "calc_mismatch",
+    "calc_unverified",
 ]
 
 

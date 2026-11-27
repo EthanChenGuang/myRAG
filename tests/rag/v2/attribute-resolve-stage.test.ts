@@ -347,6 +347,7 @@ describe('attribute_resolve stage (03.3-19, D-29, D-30)', () => {
     expect(a.result.retrievalConfigHash).toBe(first.checks[0]!.retrievalConfigHash);
     expect(b.result.retrievalConfigHash).toBe(second.checks[0]!.retrievalConfigHash);
     const base: Omit<CacheKeyParts, 'retrievalConfigHash'> = {
+      accessGroupSetHash: 'off',
       answerLanguage: 'en',
       ragMode: 'strict',
       generatorModel: 'provider/model-a',

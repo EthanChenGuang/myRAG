@@ -67,6 +67,7 @@ describe('two-tenant canary: the semantic cache never crosses tenants, entry pro
     standalone: V2_CACHE_QUESTION,
     vector: embedText(V2_CACHE_QUESTION),
     embeddingProfileId: activeProfile,
+    accessGroupSetHash: 'off',
     answerLanguage: 'en',
     ragMode: 'strict',
     generatorModel: 'provider/model-a',

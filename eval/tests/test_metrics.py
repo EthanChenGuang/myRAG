@@ -1157,7 +1157,7 @@ def test_the_train_31_baselines_add_only_phase53_items_and_move_only_refusal_rat
     """Train 31: both baselines re-recorded on top of train 30 with the 05.3-15 items and its answers-on smoke harness.
     The added items are exactly the phase53_fixture items; an earlier item keeps its retrieval metrics, and only its
     refusal rates may move (answers-on scoring reads refusals from the answer, 05.3-15). Train 33 re-recorded them once more
-    with the 48 Phase 5.2 items of plan 05.2-29, which are the only other additions."""
+    with the 48 Phase 5.2 items of plan 05.2-29; train 36 adds the 03.3-20 templated items to the ingest baseline."""
     from pathlib import Path
 
     from rag_sidecar.contracts.baseline import Baseline
@@ -1182,7 +1182,17 @@ def test_the_train_31_baselines_add_only_phase53_items_and_move_only_refusal_rat
         if item.category in ("partial_answer", "stale_version", "off_topic_context") or "link_injection" in item.tags
     }
     assert len(phase53) == 25 and len(phase52) == 48
-    assert set(current.items) - set(previous.items) == phase53 | phase52
+    # Train 36: 03.3-20 re-recorded the ingest baseline with its templated collection (ids ingest-tpl-*), the only other addition there.
+    templated = (
+        {
+            json.loads(line)["id"]
+            for line in (root / "fixtures" / "ingest" / "golden-ingest.jsonl").read_text(encoding="utf-8").splitlines()
+            if line.strip() and json.loads(line)["id"].startswith("ingest-tpl-")
+        }
+        if name == "fixture-ingest-baseline"
+        else set()
+    )
+    assert set(current.items) - set(previous.items) == phase53 | phase52 | templated
     assert set(previous.items) <= set(current.items)
     for item_id, metrics in previous.items.items():
         for metric, values in metrics.items():

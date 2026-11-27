@@ -1,0 +1,107 @@
+{
+  "$defs": {
+    "TokenizerFamilyFactor": {
+      "additionalProperties": false,
+      "description": "One model family's estimate factor over `cl100k_base` counts, at the stated quantile of measured ratios.",
+      "properties": {
+        "computed_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Computed At"
+        },
+        "factor": {
+          "minimum": 0.5,
+          "title": "Factor",
+          "type": "number"
+        },
+        "family": {
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$",
+          "title": "Family",
+          "type": "string"
+        },
+        "quantile": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Quantile",
+          "type": "number"
+        },
+        "run_ids": {
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Run Ids",
+          "type": "array"
+        },
+        "samples": {
+          "minimum": 0,
+          "title": "Samples",
+          "type": "integer"
+        },
+        "source": {
+          "enum": [
+            "measured",
+            "default"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "family",
+        "factor",
+        "quantile",
+        "samples",
+        "source"
+      ],
+      "title": "TokenizerFamilyFactor",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "default_factor": {
+      "minimum": 1,
+      "title": "Default Factor",
+      "type": "number"
+    },
+    "encoding": {
+      "const": "cl100k_base",
+      "default": "cl100k_base",
+      "title": "Encoding",
+      "type": "string"
+    },
+    "families": {
+      "items": {
+        "$ref": "#/$defs/TokenizerFamilyFactor"
+      },
+      "title": "Families",
+      "type": "array"
+    },
+    "version": {
+      "minimum": 1,
+      "title": "Version",
+      "type": "integer"
+    },
+    "written_by": {
+      "maxLength": 120,
+      "minLength": 1,
+      "title": "Written By",
+      "type": "string"
+    }
+  },
+  "required": [
+    "version",
+    "default_factor",
+    "written_by"
+  ],
+  "title": "TokenizerCalibration",
+  "type": "object"
+}

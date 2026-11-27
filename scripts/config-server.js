@@ -164,9 +164,9 @@ Context:
 Based on the context provided, offer comprehensive and helpful answers. If specific information is missing, suggest how the user might rephrase their question or what additional information would be helpful.`;
 
 // Default model configurations
-const DEFAULT_OPENAI_MODELS = '[{"id":"gpt-4.1-mini","displayName":"GPT-4.1 Mini"},{"id":"gpt-4.1","displayName":"GPT-4.1"},{"id":"o3","displayName":"o3"},{"id":"o4-mini","displayName":"o4 Mini"}]';
+const DEFAULT_OPENAI_MODELS = '[{"id":"gpt-4.1-mini","displayName":"GPT-4.1 Mini","contextLength":1047576},{"id":"gpt-4.1","displayName":"GPT-4.1","contextLength":1047576},{"id":"o3","displayName":"o3","contextLength":200000},{"id":"o4-mini","displayName":"o4 Mini","contextLength":200000}]';
 
-const DEFAULT_OPENROUTER_MODELS = '[{"id":"anthropic/claude-sonnet-4.5","displayName":"Claude Sonnet 4.5","isDefault":true},{"id":"openai/gpt-5.2-chat","displayName":"GPT-5.2"},{"id":"openai/gpt-5-mini","displayName":"GPT-5 Mini"},{"id":"openai/gpt-5","displayName":"GPT-5"},{"id":"anthropic/claude-opus-4.1","displayName":"Claude Opus 4.1"},{"id":"anthropic/claude-opus-5.5","displayName":"Claude Opus 5.5","anthropicId":"claude-opus-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"anthropic/claude-sonnet-5.5","displayName":"Claude Sonnet 5.5","anthropicId":"claude-sonnet-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"anthropic/claude-haiku-5.5","displayName":"Claude Haiku 5.5","anthropicId":"claude-haiku-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"google/gemini-2.5-flash-lite","displayName":"Gemini 2.5 Flash Lite"},{"id":"google/gemini-2.5-flash","displayName":"Gemini 2.5 Flash"},{"id":"meta-llama/llama-4-maverick","displayName":"Llama 4 Maverick","isOpenSource":true},{"id":"cognitivecomputations/dolphin-mistral-24b-venice-edition:free","displayName":"Venice: Uncensored","isFree":true,"isOpenSource":true,"isUncensored":true}]';
+const DEFAULT_OPENROUTER_MODELS = '[{"id":"anthropic/claude-sonnet-4.5","displayName":"Claude Sonnet 4.5","isDefault":true,"contextLength":1000000},{"id":"openai/gpt-5.2-chat","displayName":"GPT-5.2"},{"id":"openai/gpt-5-mini","displayName":"GPT-5 Mini","contextLength":400000},{"id":"openai/gpt-5","displayName":"GPT-5","contextLength":400000},{"id":"anthropic/claude-opus-4.1","displayName":"Claude Opus 4.1","contextLength":200000},{"id":"anthropic/claude-opus-5.5","displayName":"Claude Opus 5.5","anthropicId":"claude-opus-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"anthropic/claude-sonnet-5.5","displayName":"Claude Sonnet 5.5","anthropicId":"claude-sonnet-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"anthropic/claude-haiku-5.5","displayName":"Claude Haiku 5.5","anthropicId":"claude-haiku-5-5","supportsReasoning":true,"reasoningMethod":"effort","contextLength":1000000},{"id":"google/gemini-2.5-flash-lite","displayName":"Gemini 2.5 Flash Lite","contextLength":1048576},{"id":"google/gemini-2.5-flash","displayName":"Gemini 2.5 Flash","contextLength":1048576},{"id":"meta-llama/llama-4-maverick","displayName":"Llama 4 Maverick","isOpenSource":true,"contextLength":524288},{"id":"cognitivecomputations/dolphin-mistral-24b-venice-edition:free","displayName":"Venice: Uncensored","isFree":true,"isOpenSource":true,"isUncensored":true}]';
 
 // API endpoint to get current .env values. Secret values are never returned; secretsSet lists which ones are set.
 app.get('/api/config', (req, res) => {
@@ -716,6 +716,10 @@ ${fullValues.RAG_SECURITY_EVENTS !== undefined ? `RAG_SECURITY_EVENTS=${fullValu
 ${fullValues.RAG_UPLOADER_ALERT_THRESHOLD !== undefined ? `RAG_UPLOADER_ALERT_THRESHOLD=${fullValues.RAG_UPLOADER_ALERT_THRESHOLD}` : 'RAG_UPLOADER_ALERT_THRESHOLD=0'}
 ${fullValues.RAG_UPLOADER_ALERT_WINDOW_HOURS !== undefined ? `RAG_UPLOADER_ALERT_WINDOW_HOURS=${fullValues.RAG_UPLOADER_ALERT_WINDOW_HOURS}` : 'RAG_UPLOADER_ALERT_WINDOW_HOURS=24'}
 ${fullValues.RAG_UPLOADER_HOLD !== undefined ? `RAG_UPLOADER_HOLD=${fullValues.RAG_UPLOADER_HOLD}` : 'RAG_UPLOADER_HOLD=off'}
+${fullValues.RAG_CALC_TOOL !== undefined ? `RAG_CALC_TOOL=${fullValues.RAG_CALC_TOOL}` : 'RAG_CALC_TOOL=false'}
+${fullValues.RAG_CALC_CHECK !== undefined ? `RAG_CALC_CHECK=${fullValues.RAG_CALC_CHECK}` : 'RAG_CALC_CHECK=false'}
+${fullValues.RAG_PROMPT_BUDGET !== undefined ? `RAG_PROMPT_BUDGET=${fullValues.RAG_PROMPT_BUDGET}` : 'RAG_PROMPT_BUDGET=false'}
+${fullValues.RAG_CONTEXT_OVERFLOW !== undefined ? `RAG_CONTEXT_OVERFLOW=${fullValues.RAG_CONTEXT_OVERFLOW}` : 'RAG_CONTEXT_OVERFLOW=truncate'}
 
 # Query layer
 ${fullValues.RAG_QUERY_LAYER !== undefined ? `RAG_QUERY_LAYER=${fullValues.RAG_QUERY_LAYER}` : 'RAG_QUERY_LAYER=false'}
@@ -1738,6 +1742,10 @@ RAG_SECURITY_EVENTS=${getEnvValue('RAG_SECURITY_EVENTS') || 'false'}
 RAG_UPLOADER_ALERT_THRESHOLD=${getEnvValue('RAG_UPLOADER_ALERT_THRESHOLD') || '0'}
 RAG_UPLOADER_ALERT_WINDOW_HOURS=${getEnvValue('RAG_UPLOADER_ALERT_WINDOW_HOURS') || '24'}
 RAG_UPLOADER_HOLD=${getEnvValue('RAG_UPLOADER_HOLD') || 'off'}
+RAG_CALC_TOOL=${getEnvValue('RAG_CALC_TOOL') || 'false'}
+RAG_CALC_CHECK=${getEnvValue('RAG_CALC_CHECK') || 'false'}
+RAG_PROMPT_BUDGET=${getEnvValue('RAG_PROMPT_BUDGET') || 'false'}
+RAG_CONTEXT_OVERFLOW=${getEnvValue('RAG_CONTEXT_OVERFLOW') || 'truncate'}
 # Query layer
 RAG_QUERY_LAYER=${getEnvValue('RAG_QUERY_LAYER') || 'false'}
 RAG_QUERY_FRAMEWORK=${getEnvValue('RAG_QUERY_FRAMEWORK') || 'llamaindex'}
@@ -2265,6 +2273,10 @@ RAG_SECURITY_EVENTS=${getEnvValue('RAG_SECURITY_EVENTS') || 'false'}
 RAG_UPLOADER_ALERT_THRESHOLD=${getEnvValue('RAG_UPLOADER_ALERT_THRESHOLD') || '0'}
 RAG_UPLOADER_ALERT_WINDOW_HOURS=${getEnvValue('RAG_UPLOADER_ALERT_WINDOW_HOURS') || '24'}
 RAG_UPLOADER_HOLD=${getEnvValue('RAG_UPLOADER_HOLD') || 'off'}
+RAG_CALC_TOOL=${getEnvValue('RAG_CALC_TOOL') || 'false'}
+RAG_CALC_CHECK=${getEnvValue('RAG_CALC_CHECK') || 'false'}
+RAG_PROMPT_BUDGET=${getEnvValue('RAG_PROMPT_BUDGET') || 'false'}
+RAG_CONTEXT_OVERFLOW=${getEnvValue('RAG_CONTEXT_OVERFLOW') || 'truncate'}
 # Query layer
 RAG_QUERY_LAYER=${getEnvValue('RAG_QUERY_LAYER') || 'false'}
 RAG_QUERY_FRAMEWORK=${getEnvValue('RAG_QUERY_FRAMEWORK') || 'llamaindex'}

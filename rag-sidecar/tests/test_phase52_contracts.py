@@ -498,7 +498,8 @@ def test_security_review_reasons_extended_by_three():
         "output_guard",
         "version_conflict",
     }
-    assert not {"calc_mismatch", "calc_unverified"} & set(get_args(ReviewReason))
+    # Phase 5.2.1 (D-55) adds the two calculation reasons next to them.
+    assert {"calc_mismatch", "calc_unverified"} <= set(get_args(ReviewReason))
 
 
 PHASE52_MODELS = [

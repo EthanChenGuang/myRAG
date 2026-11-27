@@ -324,6 +324,18 @@
       "ragAffecting": true
     },
     {
+      "name": "RAG_CALC_CHECK",
+      "status": "managed",
+      "knownGaps": [],
+      "ragAffecting": true
+    },
+    {
+      "name": "RAG_CALC_TOOL",
+      "status": "managed",
+      "knownGaps": [],
+      "ragAffecting": true
+    },
+    {
       "name": "RAG_CAPTION_LANGUAGE",
       "status": "managed",
       "knownGaps": [],
@@ -370,6 +382,12 @@
     },
     {
       "name": "RAG_CONTEXT_EDGE_ORDER",
+      "status": "managed",
+      "knownGaps": [],
+      "ragAffecting": true
+    },
+    {
+      "name": "RAG_CONTEXT_OVERFLOW",
       "status": "managed",
       "knownGaps": [],
       "ragAffecting": true
@@ -909,6 +927,12 @@
     },
     {
       "name": "RAG_PARTIAL_ANSWER_RULE",
+      "status": "managed",
+      "knownGaps": [],
+      "ragAffecting": true
+    },
+    {
+      "name": "RAG_PROMPT_BUDGET",
       "status": "managed",
       "knownGaps": [],
       "ragAffecting": true

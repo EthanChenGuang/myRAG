@@ -1,0 +1,1912 @@
+{
+  "body": {
+    "children": [
+      {
+        "$ref": "#/texts/0"
+      },
+      {
+        "$ref": "#/texts/1"
+      },
+      {
+        "$ref": "#/texts/2"
+      },
+      {
+        "$ref": "#/texts/3"
+      },
+      {
+        "$ref": "#/texts/4"
+      },
+      {
+        "$ref": "#/texts/5"
+      },
+      {
+        "$ref": "#/texts/6"
+      },
+      {
+        "$ref": "#/texts/7"
+      },
+      {
+        "$ref": "#/texts/8"
+      },
+      {
+        "$ref": "#/texts/9"
+      },
+      {
+        "$ref": "#/texts/10"
+      },
+      {
+        "$ref": "#/texts/11"
+      },
+      {
+        "$ref": "#/texts/12"
+      },
+      {
+        "$ref": "#/texts/13"
+      },
+      {
+        "$ref": "#/texts/14"
+      },
+      {
+        "$ref": "#/texts/15"
+      },
+      {
+        "$ref": "#/texts/16"
+      },
+      {
+        "$ref": "#/texts/17"
+      },
+      {
+        "$ref": "#/texts/18"
+      },
+      {
+        "$ref": "#/texts/19"
+      },
+      {
+        "$ref": "#/texts/20"
+      },
+      {
+        "$ref": "#/texts/21"
+      },
+      {
+        "$ref": "#/texts/22"
+      },
+      {
+        "$ref": "#/texts/23"
+      },
+      {
+        "$ref": "#/texts/24"
+      },
+      {
+        "$ref": "#/texts/25"
+      },
+      {
+        "$ref": "#/texts/26"
+      },
+      {
+        "$ref": "#/texts/27"
+      },
+      {
+        "$ref": "#/texts/28"
+      },
+      {
+        "$ref": "#/texts/29"
+      },
+      {
+        "$ref": "#/texts/30"
+      },
+      {
+        "$ref": "#/texts/31"
+      },
+      {
+        "$ref": "#/texts/32"
+      },
+      {
+        "$ref": "#/texts/33"
+      },
+      {
+        "$ref": "#/texts/34"
+      },
+      {
+        "$ref": "#/texts/35"
+      },
+      {
+        "$ref": "#/texts/36"
+      },
+      {
+        "$ref": "#/texts/37"
+      },
+      {
+        "$ref": "#/texts/38"
+      },
+      {
+        "$ref": "#/texts/39"
+      },
+      {
+        "$ref": "#/texts/40"
+      },
+      {
+        "$ref": "#/texts/41"
+      },
+      {
+        "$ref": "#/texts/42"
+      },
+      {
+        "$ref": "#/texts/43"
+      },
+      {
+        "$ref": "#/texts/44"
+      },
+      {
+        "$ref": "#/texts/45"
+      },
+      {
+        "$ref": "#/texts/46"
+      },
+      {
+        "$ref": "#/texts/47"
+      },
+      {
+        "$ref": "#/texts/48"
+      },
+      {
+        "$ref": "#/texts/49"
+      },
+      {
+        "$ref": "#/texts/50"
+      },
+      {
+        "$ref": "#/texts/51"
+      },
+      {
+        "$ref": "#/texts/52"
+      },
+      {
+        "$ref": "#/texts/53"
+      },
+      {
+        "$ref": "#/texts/54"
+      },
+      {
+        "$ref": "#/texts/55"
+      },
+      {
+        "$ref": "#/texts/56"
+      },
+      {
+        "$ref": "#/texts/57"
+      },
+      {
+        "$ref": "#/texts/58"
+      },
+      {
+        "$ref": "#/texts/59"
+      },
+      {
+        "$ref": "#/texts/60"
+      }
+    ],
+    "content_layer": "body",
+    "label": "unspecified",
+    "name": "_root_",
+    "self_ref": "#/body"
+  },
+  "form_items": [],
+  "furniture": {
+    "children": [],
+    "content_layer": "furniture",
+    "label": "unspecified",
+    "name": "_root_",
+    "self_ref": "#/furniture"
+  },
+  "groups": [],
+  "key_value_items": [],
+  "name": "tpl-variants-en",
+  "origin": {
+    "binary_hash": 4026,
+    "filename": "tpl-variants-en.pdf",
+    "mimetype": "application/pdf"
+  },
+  "pages": {
+    "1": {
+      "page_no": 1,
+      "size": {
+        "height": 841.89,
+        "width": 595.28
+      }
+    },
+    "2": {
+      "page_no": 2,
+      "size": {
+        "height": 841.89,
+        "width": 595.28
+      }
+    },
+    "3": {
+      "page_no": 3,
+      "size": {
+        "height": 841.89,
+        "width": 595.28
+      }
+    },
+    "4": {
+      "page_no": 4,
+      "size": {
+        "height": 841.89,
+        "width": 595.28
+      }
+    }
+  },
+  "pictures": [],
+  "schema_name": "DoclingDocument",
+  "tables": [],
+  "texts": [
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Kizqyz snevromb 1",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 71.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 60.0
+          },
+          "charspan": [
+            0,
+            17
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/0",
+      "text": "Kizqyz snevromb 1"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "section_header",
+      "level": 1,
+      "orig": "Gorkkarv Vrovux Bendplu",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 103.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 77.0
+          },
+          "charspan": [
+            0,
+            23
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/1",
+      "text": "Gorkkarv Vrovux Bendplu"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "1. Gryrkzluk",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 128.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 113.0
+          },
+          "charspan": [
+            0,
+            12
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/2",
+      "text": "1. Gryrkzluk"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "2. Brokbyx",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 150.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 134.5
+          },
+          "charspan": [
+            0,
+            10
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/3",
+      "text": "2. Brokbyx"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "3. Zaskvrynd",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 171.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 156.0
+          },
+          "charspan": [
+            0,
+            12
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/4",
+      "text": "3. Zaskvrynd"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "4. Zendtrax",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 193.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 177.5
+          },
+          "charspan": [
+            0,
+            11
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/5",
+      "text": "4. Zendtrax"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "5. Zorkbult",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 214.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 199.0
+          },
+          "charspan": [
+            0,
+            11
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/6",
+      "text": "5. Zorkbult"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Drikpland: Skavzluv Derkgov; pluxvromb ZQV-4120; fakgind Kivrurk; brukplaz gembge, venddomb, gexvand.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 251.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 220.5
+          },
+          "charspan": [
+            0,
+            101
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/7",
+      "text": "Drikpland: Skavzluv Derkgov; pluxvromb ZQV-4120; fakgind Kivrurk; brukplaz gembge, venddomb, gexvand."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Gravdrav of the snundvylt is juskdark and qunddiz.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 273.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 257.5
+          },
+          "charspan": [
+            0,
+            50
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/8",
+      "text": "Gravdrav of the snundvylt is juskdark and qunddiz."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Jezbark fivgri",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 290.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 279.0
+          },
+          "charspan": [
+            0,
+            14
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/9",
+      "text": "Jezbark fivgri"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Jymbky of the zlondburk is gyvskolt and birvtrurk.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 311.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 296.0
+          },
+          "charspan": [
+            0,
+            50
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/10",
+      "text": "Jymbky of the zlondburk is gyvskolt and birvtrurk."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Zlakgarv fezplu 1",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 801.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 790.0
+          },
+          "charspan": [
+            0,
+            17
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/11",
+      "text": "Zlakgarv fezplu 1"
+    },
+    {
+      "children": [],
+      "content_layer": "furniture",
+      "label": "page_footer",
+      "orig": "Traxplirk bufok 1",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 819.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 808.0
+          },
+          "charspan": [
+            0,
+            17
+          ],
+          "page_no": 1
+        }
+      ],
+      "self_ref": "#/texts/12",
+      "text": "Traxplirk bufok 1"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Kizqyz snevromb 2",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 71.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 60.0
+          },
+          "charspan": [
+            0,
+            17
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/13",
+      "text": "Kizqyz snevromb 2"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "section_header",
+      "level": 2,
+      "orig": "1. Gryrkzluk Trizzlind-11",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 103.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 77.0
+          },
+          "charspan": [
+            0,
+            25
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/14",
+      "text": "1. Gryrkzluk Trizzlind-11"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Trizzlind-11 is draltbru and zexkerv.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 128.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 113.0
+          },
+          "charspan": [
+            0,
+            37
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/15",
+      "text": "Trizzlind-11 is draltbru and zexkerv."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Vrandgruk of Trizzlind-11 has qysktri for the drixqyrv.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 150.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 134.5
+          },
+          "charspan": [
+            0,
+            55
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/16",
+      "text": "Vrandgruk of Trizzlind-11 has qysktri for the drixqyrv."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "section_header",
+      "level": 2,
+      "orig": "2. Brokbyx",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 182.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 156.0
+          },
+          "charspan": [
+            0,
+            10
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/17",
+      "text": "2. Brokbyx"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Grysksno of Trizzlind-11 has zyndfult for the bembdryrv.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 207.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 192.0
+          },
+          "charspan": [
+            0,
+            56
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/18",
+      "text": "Grysksno of Trizzlind-11 has zyndfult for the bembdryrv."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Jezbark fivgri",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 224.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 213.5
+          },
+          "charspan": [
+            0,
+            14
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/19",
+      "text": "Jezbark fivgri"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Jolttrav of the bandfamb is qoskplilt and skoskkriv.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 246.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 230.5
+          },
+          "charspan": [
+            0,
+            52
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/20",
+      "text": "Jolttrav of the bandfamb is qoskplilt and skoskkriv."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "section_header",
+      "level": 2,
+      "orig": "3. Zaskvrynd",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 278.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 252.0
+          },
+          "charspan": [
+            0,
+            12
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/21",
+      "text": "3. Zaskvrynd"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Jultskolt of Trizzlind-11 has plyskbro for the guxgrorv.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 303.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 288.0
+          },
+          "charspan": [
+            0,
+            56
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/22",
+      "text": "Jultskolt of Trizzlind-11 has plyskbro for the guxgrorv."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "section_header",
+      "level": 2,
+      "orig": "4. Zendtrax",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 335.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 309.5
+          },
+          "charspan": [
+            0,
+            11
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/23",
+      "text": "4. Zendtrax"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Krendjelt of Trizzlind-11 has zexga for the zixplamb.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 361.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 345.5
+          },
+          "charspan": [
+            0,
+            53
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/24",
+      "text": "Krendjelt of Trizzlind-11 has zexga for the zixplamb."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "section_header",
+      "level": 2,
+      "orig": "5. Zorkbult",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 393.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 367.0
+          },
+          "charspan": [
+            0,
+            11
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/25",
+      "text": "5. Zorkbult"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Brizkrylt of Trizzlind-11 has vuvolt for the zizplixqo.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 418.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 403.0
+          },
+          "charspan": [
+            0,
+            55
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/26",
+      "text": "Brizkrylt of Trizzlind-11 has vuvolt for the zizplixqo."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Zlakgarv fezplu 2",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 801.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 790.0
+          },
+          "charspan": [
+            0,
+            17
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/27",
+      "text": "Zlakgarv fezplu 2"
+    },
+    {
+      "children": [],
+      "content_layer": "furniture",
+      "label": "page_footer",
+      "orig": "Traxplirk bufok 2",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 819.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 808.0
+          },
+          "charspan": [
+            0,
+            17
+          ],
+          "page_no": 2
+        }
+      ],
+      "self_ref": "#/texts/28",
+      "text": "Traxplirk bufok 2"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Kizqyz snevromb 3",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 71.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 60.0
+          },
+          "charspan": [
+            0,
+            17
+          ],
+          "page_no": 3
+        }
+      ],
+      "self_ref": "#/texts/29",
+      "text": "Kizqyz snevromb 3"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "section_header",
+      "level": 2,
+      "orig": "1. Gryrkzluk Trizzlind-12",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 103.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 77.0
+          },
+          "charspan": [
+            0,
+            25
+          ],
+          "page_no": 3
+        }
+      ],
+      "self_ref": "#/texts/30",
+      "text": "1. Gryrkzluk Trizzlind-12"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Trizzlind-12 is draltbru and zexkerv.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 128.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 113.0
+          },
+          "charspan": [
+            0,
+            37
+          ],
+          "page_no": 3
+        }
+      ],
+      "self_ref": "#/texts/31",
+      "text": "Trizzlind-12 is draltbru and zexkerv."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Fyrvtrak of Trizzlind-12 has qirkjax for the duskbruz.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 150.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 134.5
+          },
+          "charspan": [
+            0,
+            54
+          ],
+          "page_no": 3
+        }
+      ],
+      "self_ref": "#/texts/32",
+      "text": "Fyrvtrak of Trizzlind-12 has qirkjax for the duskbruz."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "section_header",
+      "level": 2,
+      "orig": "2. Brokbyx",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 182.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 156.0
+          },
+          "charspan": [
+            0,
+            10
+          ],
+          "page_no": 3
+        }
+      ],
+      "self_ref": "#/texts/33",
+      "text": "2. Brokbyx"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Tryzfaz of Trizzlind-12 has snaxko for the tryvfoz.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 207.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 192.0
+          },
+          "charspan": [
+            0,
+            51
+          ],
+          "page_no": 3
+        }
+      ],
+      "self_ref": "#/texts/34",
+      "text": "Tryzfaz of Trizzlind-12 has snaxko for the tryvfoz."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Jezbark fivgri",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 224.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 213.5
+          },
+          "charspan": [
+            0,
+            14
+          ],
+          "page_no": 3
+        }
+      ],
+      "self_ref": "#/texts/35",
+      "text": "Jezbark fivgri"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Jolttrav of the bandfamb is qoskplilt and skoskkriv.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 246.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 230.5
+          },
+          "charspan": [
+            0,
+            52
+          ],
+          "page_no": 3
+        }
+      ],
+      "self_ref": "#/texts/36",
+      "text": "Jolttrav of the bandfamb is qoskplilt and skoskkriv."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "section_header",
+      "level": 2,
+      "orig": "3. Zaskvrynd",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 278.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 252.0
+          },
+          "charspan": [
+            0,
+            12
+          ],
+          "page_no": 3
+        }
+      ],
+      "self_ref": "#/texts/37",
+      "text": "3. Zaskvrynd"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Ferkdrerv of Trizzlind-12 has vizqex for the dyvzyxvo.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 303.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 288.0
+          },
+          "charspan": [
+            0,
+            54
+          ],
+          "page_no": 3
+        }
+      ],
+      "self_ref": "#/texts/38",
+      "text": "Ferkdrerv of Trizzlind-12 has vizqex for the dyvzyxvo."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "section_header",
+      "level": 2,
+      "orig": "4. Zendtrax",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 335.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 309.5
+          },
+          "charspan": [
+            0,
+            11
+          ],
+          "page_no": 3
+        }
+      ],
+      "self_ref": "#/texts/39",
+      "text": "4. Zendtrax"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Qurkje of Trizzlind-12 has fivqork for the vryltplax.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 361.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 345.5
+          },
+          "charspan": [
+            0,
+            53
+          ],
+          "page_no": 3
+        }
+      ],
+      "self_ref": "#/texts/40",
+      "text": "Qurkje of Trizzlind-12 has fivqork for the vryltplax."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "section_header",
+      "level": 2,
+      "orig": "5. Zorkbult",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 393.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 367.0
+          },
+          "charspan": [
+            0,
+            11
+          ],
+          "page_no": 3
+        }
+      ],
+      "self_ref": "#/texts/41",
+      "text": "5. Zorkbult"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Plytryz of Trizzlind-12 has ferkvuxbe for the brezgrand.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 418.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 403.0
+          },
+          "charspan": [
+            0,
+            56
+          ],
+          "page_no": 3
+        }
+      ],
+      "self_ref": "#/texts/42",
+      "text": "Plytryz of Trizzlind-12 has ferkvuxbe for the brezgrand."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Zlakgarv fezplu 3",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 801.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 790.0
+          },
+          "charspan": [
+            0,
+            17
+          ],
+          "page_no": 3
+        }
+      ],
+      "self_ref": "#/texts/43",
+      "text": "Zlakgarv fezplu 3"
+    },
+    {
+      "children": [],
+      "content_layer": "furniture",
+      "label": "page_footer",
+      "orig": "Traxplirk bufok 3",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 819.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 808.0
+          },
+          "charspan": [
+            0,
+            17
+          ],
+          "page_no": 3
+        }
+      ],
+      "self_ref": "#/texts/44",
+      "text": "Traxplirk bufok 3"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Kizqyz snevromb 4",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 71.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 60.0
+          },
+          "charspan": [
+            0,
+            17
+          ],
+          "page_no": 4
+        }
+      ],
+      "self_ref": "#/texts/45",
+      "text": "Kizqyz snevromb 4"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "section_header",
+      "level": 2,
+      "orig": "1. Gryrkzluk Trizzlind-13",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 103.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 77.0
+          },
+          "charspan": [
+            0,
+            25
+          ],
+          "page_no": 4
+        }
+      ],
+      "self_ref": "#/texts/46",
+      "text": "1. Gryrkzluk Trizzlind-13"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Trizzlind-13 is draltbru and zexkerv.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 128.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 113.0
+          },
+          "charspan": [
+            0,
+            37
+          ],
+          "page_no": 4
+        }
+      ],
+      "self_ref": "#/texts/47",
+      "text": "Trizzlind-13 is draltbru and zexkerv."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Fyrvvav of Trizzlind-13 has vrirkguk for the zlymbjelt.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 150.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 134.5
+          },
+          "charspan": [
+            0,
+            55
+          ],
+          "page_no": 4
+        }
+      ],
+      "self_ref": "#/texts/48",
+      "text": "Fyrvvav of Trizzlind-13 has vrirkguk for the zlymbjelt."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "section_header",
+      "level": 2,
+      "orig": "2. Brokbyx",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 182.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 156.0
+          },
+          "charspan": [
+            0,
+            10
+          ],
+          "page_no": 4
+        }
+      ],
+      "self_ref": "#/texts/49",
+      "text": "2. Brokbyx"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Snizvrumb of Trizzlind-13 has fozplesk for the zembvyx.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 207.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 192.0
+          },
+          "charspan": [
+            0,
+            55
+          ],
+          "page_no": 4
+        }
+      ],
+      "self_ref": "#/texts/50",
+      "text": "Snizvrumb of Trizzlind-13 has fozplesk for the zembvyx."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Jezbark fivgri",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 224.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 213.5
+          },
+          "charspan": [
+            0,
+            14
+          ],
+          "page_no": 4
+        }
+      ],
+      "self_ref": "#/texts/51",
+      "text": "Jezbark fivgri"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Jolttrav of the bandfamb is qoskplilt and skoskkriv.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 246.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 230.5
+          },
+          "charspan": [
+            0,
+            52
+          ],
+          "page_no": 4
+        }
+      ],
+      "self_ref": "#/texts/52",
+      "text": "Jolttrav of the bandfamb is qoskplilt and skoskkriv."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "section_header",
+      "level": 2,
+      "orig": "3. Zaskvrynd",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 278.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 252.0
+          },
+          "charspan": [
+            0,
+            12
+          ],
+          "page_no": 4
+        }
+      ],
+      "self_ref": "#/texts/53",
+      "text": "3. Zaskvrynd"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Gabozgamb of Trizzlind-13 has fervkrek for the kovtrok.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 303.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 288.0
+          },
+          "charspan": [
+            0,
+            55
+          ],
+          "page_no": 4
+        }
+      ],
+      "self_ref": "#/texts/54",
+      "text": "Gabozgamb of Trizzlind-13 has fervkrek for the kovtrok."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "section_header",
+      "level": 2,
+      "orig": "4. Zendtrax",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 335.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 309.5
+          },
+          "charspan": [
+            0,
+            11
+          ],
+          "page_no": 4
+        }
+      ],
+      "self_ref": "#/texts/55",
+      "text": "4. Zendtrax"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Kobrilt of Trizzlind-13 has gyktryv for the drovdix.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 361.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 345.5
+          },
+          "charspan": [
+            0,
+            52
+          ],
+          "page_no": 4
+        }
+      ],
+      "self_ref": "#/texts/56",
+      "text": "Kobrilt of Trizzlind-13 has gyktryv for the drovdix."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "section_header",
+      "level": 2,
+      "orig": "5. Zorkbult",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 393.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 367.0
+          },
+          "charspan": [
+            0,
+            11
+          ],
+          "page_no": 4
+        }
+      ],
+      "self_ref": "#/texts/57",
+      "text": "5. Zorkbult"
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Duvplork of Trizzlind-13 has qokgukqez for the karvskumb.",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 418.5,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 403.0
+          },
+          "charspan": [
+            0,
+            57
+          ],
+          "page_no": 4
+        }
+      ],
+      "self_ref": "#/texts/58",
+      "text": "Duvplork of Trizzlind-13 has qokgukqez for the karvskumb."
+    },
+    {
+      "children": [],
+      "content_layer": "body",
+      "label": "text",
+      "orig": "Zlakgarv fezplu 4",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 801.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 790.0
+          },
+          "charspan": [
+            0,
+            17
+          ],
+          "page_no": 4
+        }
+      ],
+      "self_ref": "#/texts/59",
+      "text": "Zlakgarv fezplu 4"
+    },
+    {
+      "children": [],
+      "content_layer": "furniture",
+      "label": "page_footer",
+      "orig": "Traxplirk bufok 4",
+      "parent": {
+        "$ref": "#/body"
+      },
+      "prov": [
+        {
+          "bbox": {
+            "b": 819.0,
+            "coord_origin": "TOPLEFT",
+            "l": 56.7,
+            "r": 538.5799999999999,
+            "t": 808.0
+          },
+          "charspan": [
+            0,
+            17
+          ],
+          "page_no": 4
+        }
+      ],
+      "self_ref": "#/texts/60",
+      "text": "Traxplirk bufok 4"
+    }
+  ],
+  "version": "1.11.0",
+  "x_rag_sidecar": {
+    "parser": "docling",
+    "parser_version": "docling-2.107.1"
+  }
+}

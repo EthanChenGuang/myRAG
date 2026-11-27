@@ -206,6 +206,7 @@ describe('the pgvector backend arguments', () => {
 
 describe('the scopes filter in the semantic-cache key (D-39, T-03.2-422)', () => {
   const BASE: CacheKeyParts = {
+    accessGroupSetHash: 'off',
     answerLanguage: 'en',
     ragMode: 'strict',
     generatorModel: 'provider/model-a',
@@ -214,8 +215,8 @@ describe('the scopes filter in the semantic-cache key (D-39, T-03.2-422)', () =>
     entryProfile: 'chat',
     systemPromptHash: 'b'.repeat(64),
   };
-  /** The key the BASE parts had before scope filters existed. */
-  const RECORDED_FILTER_FREE_KEY = 'fb53541beaa58b6af99961111e1e40dee4c9cfaaff8589eda0a31ede5985bcf6';
+  /** The key the BASE parts had before scope filters existed, with the 04.3-12 access part (off), which changed every key once. */
+  const RECORDED_FILTER_FREE_KEY = '4fb84af236bb3a6068b89d7cdba582967f568b0b991c374e9b071b5a892f5874';
   const keyFor = (filters: RetrievalFilters) => computeCacheKeyHash({ ...BASE, ...cacheKeyFilterParts(filters) });
 
   it('a filter-free request keeps the recorded key', () => {

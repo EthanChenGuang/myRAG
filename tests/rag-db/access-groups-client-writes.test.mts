@@ -7,6 +7,7 @@ import { createEmptyFixtureDatabase, type DeploymentMode } from '../../eval/harn
  * 0921 (Phase 4.3) adds access_groups CHECK constraints to documents and document_chunks. RLS still lets an owner write those rows as
  * `authenticated`, so the constraints must be evaluable by that role: they state the rule inline instead of calling the service_role-only
  * rag_access_keys_valid. Default arrays pass, invalid keys still violate the constraint, and the function itself stays service_role only.
+ * Since 0923 (04.3-04) a client cannot change documents.access_groups at all (access_groups_server_only); server writes set labels.
  */
 const MODES: DeploymentMode[] = ['single-tenant', 'multi-tenant'];
 const ZERO_VECTOR = `[${new Array(1536).fill(0).join(',')}]`;
@@ -84,23 +85,29 @@ for (const mode of MODES) {
       assert.deepEqual(stored.rows, [{ doc: ['all'], chunk: ['all'] }]);
     });
 
-    test('an owner sets a valid group key; invalid keys still violate the constraint', async () => {
+    test('an owner cannot set a label (0923 guard); a server write sets a valid group key and invalid keys still violate the constraint', async () => {
       await asOwner(db, async () => {
-        await db.query('UPDATE documents SET access_groups = $2 WHERE id = $1', [DOC, [GROUP_KEY]]);
-        for (const invalid of [[], ['everyone'], ['all', GROUP_KEY], ['G:00000000-0000-4000-8000-000009210f01'], [`${GROUP_KEY},all`]]) {
-          await violatesCheck(() => db.query('UPDATE documents SET access_groups = $2 WHERE id = $1', [DOC, invalid]), 'documents_access_groups_check');
-        }
-        await violatesCheck(
-          () => db.query("UPDATE documents SET access_groups = ARRAY['all', NULL]::text[] WHERE id = $1", [DOC]),
-          'documents_access_groups_check',
+        await assert.rejects(
+          () => db.query('UPDATE documents SET access_groups = $2 WHERE id = $1', [DOC, [GROUP_KEY]]),
+          /access_groups_server_only/,
         );
       });
-      // A chunk always takes its document's array (the 0921 trigger), so its constraint is checked through the shared rule text.
+      // Labels are written by the server roles only (04.3-04, D-06, D-16); the CHECK constraint applies to them as well.
+      await db.query('UPDATE documents SET access_groups = $2 WHERE id = $1', [DOC, [GROUP_KEY]]);
+      for (const invalid of [[], ['everyone'], ['all', GROUP_KEY], ['G:00000000-0000-4000-8000-000009210f01'], [`${GROUP_KEY},all`]]) {
+        await violatesCheck(() => db.query('UPDATE documents SET access_groups = $2 WHERE id = $1', [DOC, invalid]), 'documents_access_groups_check');
+      }
+      await violatesCheck(
+        () => db.query("UPDATE documents SET access_groups = ARRAY['all', NULL]::text[] WHERE id = $1", [DOC]),
+        'documents_access_groups_check',
+      );
+      // A chunk always takes its document's array (the 0921 copy trigger, the 0923 relabel propagation), so its constraint is checked
+      // through the shared rule text.
       const keys = await db.query<{ doc: string[]; chunk: string[] }>(
         'SELECT d.access_groups AS doc, c.access_groups AS chunk FROM documents d JOIN document_chunks c ON c.document_id = d.id WHERE d.id = $1',
         [DOC],
       );
-      assert.deepEqual(keys.rows, [{ doc: [GROUP_KEY], chunk: ['all'] }]);
+      assert.deepEqual(keys.rows, [{ doc: [GROUP_KEY], chunk: [GROUP_KEY] }]);
       await db.query('UPDATE document_chunks SET access_groups = $2 WHERE id = $1', [CHUNK, ['nobody']]);
       const chunk = await db.query<{ k: string[] }>('SELECT access_groups AS k FROM document_chunks WHERE id = $1', [CHUNK]);
       assert.deepEqual(chunk.rows, [{ k: [GROUP_KEY] }], 'the trigger replaces the written array with the document one');

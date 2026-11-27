@@ -187,7 +187,7 @@ for (const mode of MODES) {
       const columns = await columnTypes(db, 'rag_table_rows');
       assert.deepEqual(
         Object.keys(columns).sort(),
-        ['cell_norm', 'cell_tokens', 'cells', 'chunk_ids', 'chunking_profile_id', 'created_at', 'document_id', 'header', 'id', 'is_current', 'row_index', 'status', 'table_key', 'tenant_key', 'version'].sort(),
+        ['access_groups', 'cell_norm', 'cell_tokens', 'cells', 'chunk_ids', 'chunking_profile_id', 'created_at', 'document_id', 'header', 'id', 'is_current', 'row_index', 'status', 'table_key', 'tenant_key', 'version'].sort(),
       );
       assert.equal(columns.header, 'text[]');
       assert.equal(columns.cell_norm, 'text[]');
