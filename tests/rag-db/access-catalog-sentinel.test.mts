@@ -12,6 +12,7 @@ import { createFixtureDatabase, type DeploymentMode } from '../../eval/harness/p
  *   FILTERED: takes p_access_keys and p_access_all, has exactly one overload, its source names access_groups, and it raises
  *             access_scope_required when called without keys while enforcement is on.
  *   GUARDED:  a legacy content function no pipeline calls; it raises access_scope_required while enforcement is on.
+ *   PENDING:  a query-time leg whose file runs after the 0920 block; rag_access_readiness() names it until it filters.
  *   EXEMPT:   cannot return content to a retrieval caller, with the reason.
  * If this test names your new or redefined function: give it the access parameters, the guard and the predicate (see 0930 and 0933) and add
  * it to FILTERED, or add it to EXEMPT with a short reason a reviewer can check. Lists hold function names; a name that is absent in a mode
@@ -58,6 +59,14 @@ const GUARDED: Record<DeploymentMode, string[]> = {
     'get_documents_by_type_slug_workspace',
   ],
 };
+
+/**
+ * Query-time legs that are on trunk but cannot be filtered by the 0920 block, because their file runs after it: the 1008 attribute resolver
+ * (its value lexicon and document ids would let an outsider tell whether a restricted document carries a value). Until a later file gives
+ * each the access parameters, rag_access_readiness() must name it, so the switch cannot turn on; once it has them it must pass the FILTERED
+ * checks. Move a name to FILTERED when its fix lands.
+ */
+const PENDING = ['rag_attribute_filter_values', 'rag_attribute_documents'];
 
 const EXEMPT: ReadonlyArray<{ reason: string; functions: readonly string[] }> = [
   {
@@ -223,8 +232,8 @@ const EXEMPT: ReadonlyArray<{ reason: string; functions: readonly string[] }> = 
     functions: ['rag_cache_resolve_sources', 'rag_cache_sources_current'],
   },
   {
-    reason: 'Query-time helper whose result never reaches the caller: version labels of documents a filtered leg already returned, attribute values used to parse the query, and document ids that only narrow hybrid_search_chunks (which filters).',
-    functions: ['rag_document_versions', 'rag_attribute_filter_values', 'rag_attribute_documents'],
+    reason: 'Query-time helper: version labels of documents a filtered leg already returned; it takes only those ids and returns no content.',
+    functions: ['rag_document_versions'],
   },
   {
     reason: 'Account setup (multi-tenant): creates an organization and returns its row; the word documents appears only in a comment of its body.',
@@ -284,7 +293,7 @@ for (const mode of MODES) {
     }
 
     function unclassified(found: CatalogFunction[]): string[] {
-      const known = new Set([...FILTERED[mode], ...GUARDED[mode], ...exempt.keys()]);
+      const known = new Set([...FILTERED[mode], ...GUARDED[mode], ...PENDING, ...exempt.keys()]);
       return [...new Set(found.map((fn) => fn.name).filter((name) => !known.has(name)))].sort();
     }
 
@@ -333,6 +342,7 @@ for (const mode of MODES) {
       for (const [list, names] of [
         ['FILTERED', FILTERED[mode]],
         ['GUARDED', GUARDED[mode]],
+        ['PENDING', PENDING],
         ['EXEMPT', EXEMPT.flatMap((group) => group.functions)],
       ] as const) {
         for (const name of names) {
@@ -366,6 +376,28 @@ for (const mode of MODES) {
       }
       for (const required of ['hybrid_search_chunks', 'hybrid_search_translations', 'rag_table_lookup', 'rag_dup_cluster_sources', GUARDED[mode][0]!]) {
         assert.ok(checked.includes(required), `${required} was not found in the catalog`);
+      }
+    });
+
+    test('each PENDING function either passes the FILTERED checks or is named by rag_access_readiness', async () => {
+      const found = await candidates();
+      await db.exec('SET ROLE service_role');
+      let objects: string[];
+      try {
+        objects = (await db.query<{ objects: string[] }>('SELECT objects FROM public.rag_access_readiness()')).rows[0]!.objects;
+      } finally {
+        await db.exec('RESET ROLE');
+      }
+      for (const name of PENDING) {
+        const overloads = found.filter((fn) => fn.name === name);
+        if (overloads.length === 0) continue;
+        const filtered = overloads.length === 1 && overloads[0]!.arg_names?.includes('p_access_keys') === true;
+        if (filtered) {
+          assert.match(overloads[0]!.source, /access_groups/, name);
+          assert.match(await underEnforcement(nullCall(overloads[0]!)), /access_scope_required/, name);
+        } else {
+          assert.ok(objects.includes(name), `${name} does not filter and rag_access_readiness() does not name it`);
+        }
       }
     });
 

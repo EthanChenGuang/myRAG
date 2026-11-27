@@ -45,17 +45,25 @@ for (const mode of MODES) {
       }
     }
 
-    async function cacheCheckFiltered(): Promise<boolean> {
-      const result = await db.query<{ n: number }>(
-        `SELECT count(*)::int AS n FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-         WHERE n.nspname = 'public' AND p.proname = 'rag_cache_check' AND 'p_access_keys' = ANY (p.proargnames)`,
+    // Optional functions present on trunk that do not filter yet: rag_cache_check (plan 04.3-12, 0931) and 1008's attribute resolver
+    // (rag_attribute_filter_values, rag_attribute_documents; 1008 runs after 0933, so a later file must redefine them). Until each takes
+    // the access parameters it is an expected finding, and the complete-catalog case removes it (an absent optional function is not checked).
+    const PENDING = ['rag_attribute_documents', 'rag_attribute_filter_values', 'rag_cache_check'];
+
+    async function unfilteredPending(): Promise<string[]> {
+      const result = await db.query<{ name: string }>(
+        `SELECT DISTINCT p.proname AS name FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+         WHERE n.nspname = 'public' AND p.proname = ANY ($1::text[]) AND NOT ('p_access_keys' = ANY (COALESCE(p.proargnames, '{}'::text[])))
+         ORDER BY 1`,
+        [PENDING],
       );
-      return result.rows[0]!.n > 0;
+      return result.rows.map((row) => row.name);
     }
 
-    // rag_cache_check takes the access parameters in plan 04.3-12 (0931); until that lands it is the one expected finding, and the
-    // complete-catalog case removes it (an optional function that is absent is not checked).
-    const completeCatalog = async (): Promise<string> => ((await cacheCheckFiltered()) ? 'SELECT 1' : 'DROP FUNCTION public.rag_cache_check');
+    const completeCatalog = async (): Promise<string> => {
+      const names = await unfilteredPending();
+      return names.length === 0 ? 'SELECT 1' : names.map((name) => `DROP FUNCTION public.${name}`).join('; ');
+    };
 
     before(async () => {
       corpusDir = fs.mkdtempSync(path.join(os.tmpdir(), 'access-readiness-corpus-'));
@@ -67,14 +75,15 @@ for (const mode of MODES) {
       if (corpusDir) fs.rmSync(corpusDir, { recursive: true, force: true });
     });
 
-    test('the migrated catalog names only rag_cache_check until plan 04.3-12 gives it the access parameters', async () => {
+    test('the migrated catalog names only the pending functions that do not filter yet', async () => {
       const answer = await readiness();
-      if (await cacheCheckFiltered()) {
-        assert.deepEqual(answer, { ready: true, reasons: [], objects: [] });
-      } else {
-        assert.equal(answer.ready, false);
-        assert.deepEqual(pairs(answer), ['function_missing_access_parameters:rag_cache_check', 'function_missing_guard:rag_cache_check']);
-      }
+      const pending = await unfilteredPending();
+      assert.deepEqual(pending.filter((name) => !PENDING.includes(name)), []);
+      assert.equal(answer.ready, pending.length === 0);
+      assert.deepEqual(
+        pairs(answer).sort(),
+        pending.flatMap((name) => [`function_missing_access_parameters:${name}`, `function_missing_guard:${name}`]).sort(),
+      );
     });
 
     test('a complete catalog is ready with no reasons', async () => {

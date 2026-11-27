@@ -20,7 +20,8 @@
 -- (hybrid_search_chunks, rag_fetch_parents, rag_exact_id_documents, match_chunks_by_profile, rag_find_invoices and the mode's legacy search
 -- RPC: match_document_chunks in single-tenant, match_documents_by_workspace in multi-tenant) and every optional one that exists
 -- (hybrid_search_translations, rag_cache_check, rag_table_lookup, rag_identifier_resolve, rag_identifier_candidates,
--- rag_dup_cluster_sources, rag_bm25_search_chunks) has exactly one overload, both access parameters and the access_scope_required guard,
+-- rag_dup_cluster_sources, rag_bm25_search_chunks, and 1008's rag_attribute_filter_values and rag_attribute_documents, which this file
+-- cannot redefine because 1008 runs after it) has exactly one overload, both access parameters and the access_scope_required guard,
 -- and every labelled table that exists (documents, document_chunks, document_parents required; chunk_translations, rag_table_rows optional)
 -- has access_groups. reasons and objects are parallel arrays (reasons[i] is the code for objects[i]): function_missing,
 -- function_overloaded, function_missing_access_parameters, function_missing_guard, table_missing, table_missing_column. Phase 7's
@@ -702,7 +703,8 @@ DECLARE
   v_required text[];
   v_optional constant text[] := ARRAY[
     'hybrid_search_translations', 'rag_cache_check', 'rag_table_lookup', 'rag_identifier_resolve',
-    'rag_identifier_candidates', 'rag_dup_cluster_sources', 'rag_bm25_search_chunks'
+    'rag_identifier_candidates', 'rag_dup_cluster_sources', 'rag_bm25_search_chunks',
+    'rag_attribute_filter_values', 'rag_attribute_documents'
   ];
   v_required_tables constant text[] := ARRAY['documents', 'document_chunks', 'document_parents'];
   v_optional_tables constant text[] := ARRAY['chunk_translations', 'rag_table_rows'];
