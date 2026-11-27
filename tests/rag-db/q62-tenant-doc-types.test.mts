@@ -72,15 +72,17 @@ async function accessDocTypes(db: PGlite, tenantKey: string, keys: string[] | nu
   return Object.fromEntries(result.rows.map((row) => [row.doc_type, Number(row.docs)]));
 }
 
-async function failure(db: PGlite, run: () => Promise<unknown>): Promise<{ message: string; code: string } | null> {
+async function failure(db: PGlite, sql: string, params: unknown[]): Promise<{ message: string; code: string } | null> {
+  await db.exec('SET ROLE service_role');
   await db.exec('SAVEPOINT doc_types_case');
   try {
-    await run();
+    await db.query(sql, params);
     return null;
   } catch (error) {
     return { message: (error as Error).message, code: codeOf(error) };
   } finally {
     await db.exec('ROLLBACK TO SAVEPOINT doc_types_case');
+    await db.exec('RESET ROLE');
   }
 }
 
@@ -308,7 +310,7 @@ for (const mode of ['multi-tenant', 'single-tenant'] as DeploymentMode[]) {
       await db.exec('BEGIN');
       try {
         await db.query('UPDATE public.rag_access_group_settings SET enforced = true');
-        const failed = await failure(db, () => docTypes(db, tenant));
+        const failed = await failure(db, 'SELECT * FROM public.rag_tenant_doc_types($1)', [tenant]);
         assert.deepEqual(failed, { message: 'access_scope_required', code: '42501' });
         assert.deepEqual(await accessDocTypes(db, tenant, OUTSIDER_KEYS), { general: 1 });
       } finally {
@@ -317,7 +319,7 @@ for (const mode of ['multi-tenant', 'single-tenant'] as DeploymentMode[]) {
       for (const keys of [[], ['all', null]] as unknown as string[][]) {
         await db.exec('BEGIN');
         try {
-          assert.deepEqual(await failure(db, () => accessDocTypes(db, tenant, keys)), { message: 'access_keys_empty', code: '22023' });
+          assert.deepEqual(await failure(db, ACCESS_SQL, [tenant, keys, false]), { message: 'access_keys_empty', code: '22023' });
         } finally {
           await db.exec('ROLLBACK');
         }
