@@ -15,7 +15,7 @@ function row(chunkId: string, spec: RowSpec = {}): FusedHit {
   return {
     hit: hit(chunkId, {
       documentId,
-      content: spec.content ?? `zorvik ${chunkId} plenth ${chunkId}x`,
+      content: spec.content ?? (spec.cluster ? `zorvik plenth ${spec.cluster}` : `zorvik ${chunkId} plenth ${chunkId}x`),
       document: { filename: `${documentId}.txt`, createdAt: null, metadata: {}, contentPreview: '' },
       ...(spec.cluster ? { dupClusterId: spec.cluster } : {}),
     }),
@@ -169,5 +169,41 @@ describe('diversify (D-21, D-48)', () => {
     const tagless = diversify(flooded(), options({ subQuestionOf: () => [] }));
     expect(ids(tagless.hits)).toEqual(ids(untagged.hits));
     expect(tagless.alsoIn).toEqual(untagged.alsoIn);
+  });
+
+  it('keeps chunks of two documents in one cluster when their value tokens differ', () => {
+    const header = (file: string) => `Document: ${file}. Chunk 2 of 6. Content: `;
+    const input = descending([
+      row('v1', { cluster: 'V', doc: 'd-old', content: `${header('rules-v1.en.md')}Spectators stand at least 15 metres behind the pads.` }),
+      row('v2', { cluster: 'V', doc: 'd-new', content: `${header('rules-v2.en.md')}Spectators stand at least 20 metres behind the pads.` }),
+    ]);
+    for (const mode of ['collapse', 'mmr'] as const) {
+      const out = diversify(input, options({ mode, lambda: 1 }));
+      expect(ids(out.hits)).toEqual(['v1', 'v2']);
+      expect(out.alsoIn.size).toBe(0);
+      expect(out.counts.collapsed).toBe(0);
+    }
+  });
+
+  it('still collapses copies across documents whose value tokens are identical', () => {
+    const header = (file: string) => `Document: ${file}. Chunk 1 of 3. Content: `;
+    const body = 'Spectators stand at least 15 metres behind the pads.';
+    const input = descending([
+      row('c1', { cluster: 'C', doc: 'd-one', content: `${header('copy-one.md')}${body}` }),
+      row('c2', { cluster: 'C', doc: 'd-two', content: `${header('copy-two-7.md')}${body}` }),
+    ]);
+    const out = diversify(input, options());
+    expect(ids(out.hits)).toEqual(['c1']);
+    expect(out.alsoIn.get('c1')).toEqual([{ documentId: 'd-two', filename: 'd-two.txt', chunkId: 'c2' }]);
+  });
+
+  it('still collapses variants inside one document even when their value tokens differ', () => {
+    const input = descending([
+      row('s1', { cluster: 'S', doc: 'd-same', content: 'Spectators stand at least 15 metres behind the pads.' }),
+      row('s2', { cluster: 'S', doc: 'd-same', content: 'Spectators stand at least 20 metres behind the pads.' }),
+    ]);
+    const out = diversify(input, options());
+    expect(ids(out.hits)).toEqual(['s1']);
+    expect(out.counts.collapsed).toBe(1);
   });
 });
