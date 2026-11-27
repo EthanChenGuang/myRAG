@@ -6,7 +6,15 @@ import { DEFAULT_POST_CHECK_LIMITS, type PostCheckLimits } from './post-checks';
 import type { SearchDelegate } from './port-types';
 import type { CondensedQuery } from '@/lib/rag-eval/contracts.generated';
 import { finishCondense, llamaindexCondense, type CondenseInput, type CondenseResult } from './llamaindex/condense';
-import { finishDecompose, nativeDecompose, type DecomposeInput, type DecomposeResult, type FinishDecomposeInput } from './llamaindex/decompose';
+import {
+  finishDecompose,
+  nativeDecompose,
+  subqFilterAddendum,
+  type DecomposeInput,
+  type DecomposeResult,
+  type FinishDecomposeInput,
+  type SubqFilterContext,
+} from './llamaindex/decompose';
 import { finishExpand, nativeExpand, type ExpandInput, type ExpandResult, type FinishExpandInput } from './llamaindex/expand';
 import { finishHyde, nativeHyde, type FinishHydeInput, type HydeInput, type HydeResult } from './llamaindex/hyde';
 import {
@@ -130,6 +138,8 @@ export interface QueryTransformFinishers {
   hyde(input: FinishHydeInput, passage: string): HydeResult;
   /** Validates the raw SubQuestions output (wire bound) and applies the D-15 cut and checks. */
   decompose(input: FinishDecomposeInput, output: unknown): DecomposeResult;
+  /** D-07: the versioned addendum the decomposer prompt ends with while RAG_QUERY_SUBQ_FILTERS is effective. */
+  decomposeAddendum(context: SubqFilterContext): string;
   /** The translate calls to make: targets picked and the shared prompt rendered (research A-6). */
   translateRequests(input: TranslateRequestInput): TranslateRequest[];
   translate(input: TranslateRequestInput, outcomes: readonly TranslateCallOutcome[]): NativeTranslateResult;
@@ -142,6 +152,7 @@ export const QUERY_TRANSFORM_FINISHERS: QueryTransformFinishers = Object.freeze(
   expand: finishExpand,
   hyde: finishHyde,
   decompose: finishDecompose,
+  decomposeAddendum: subqFilterAddendum,
   translateRequests,
   translate: finishTranslate,
   defaultLimits: DEFAULT_POST_CHECK_LIMITS,
