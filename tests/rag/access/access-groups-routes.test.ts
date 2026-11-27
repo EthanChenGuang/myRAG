@@ -84,7 +84,12 @@ async function load() {
   vi.doMock('@/lib/supabase', () => ({ getSupabaseAdmin: () => fakeClient(), getSupabase: () => ({}) }));
   const root = await import('@/app/api/rag/access-groups/route');
   const mine = await import('@/app/api/rag/access-groups/mine/route');
-  return { root, mine };
+  const group = await import('@/app/api/rag/access-groups/[id]/route');
+  const impact = await import('@/app/api/rag/access-groups/[id]/impact/route');
+  const members = await import('@/app/api/rag/access-groups/[id]/members/route');
+  const member = await import('@/app/api/rag/access-groups/[id]/members/[userId]/route');
+  const candidates = await import('@/app/api/rag/access-groups/members/candidates/route');
+  return { root, mine, group, impact, members, member, candidates };
 }
 
 function req(url: string, init: { method?: string; authorization?: string; body?: unknown; rawBody?: string } = {}) {
@@ -370,6 +375,217 @@ describe('access group routes: GET /mine', () => {
     const loaded = await load();
     state.session = { id: MEMBER_A };
     expect(await (await mine(loaded)).json()).toEqual({ success: true, enabled: true, personal: true, isAdmin: false, ownGroups: [], assignableGroups: [] });
+    expect(accessCalls()).toEqual([]);
+  });
+});
+
+type Loaded = Awaited<ReturnType<typeof load>>;
+const idParams = (id: string) => ({ params: Promise.resolve({ id }) });
+const memberParams = (id: string, userId: string) => ({ params: Promise.resolve({ id, userId }) });
+const base = (path: string, org?: string) => `/api/rag/access-groups${path}${org ? `${path.includes('?') ? '&' : '?'}organizationId=${org}` : ''}`;
+
+describe('access group routes: rename, impact and counted delete', () => {
+  beforeEach(() => {
+    state.outcomes.rag_access_group_rename = (args) => ({ data: [groupRow(String(args.p_group_id), 'group-a', { name: args.p_name })], error: null });
+    state.outcomes.rag_access_group_impact = { data: [{ only_count: 4, shared_count: 2, member_count: 3, mapping_count: 1 }], error: null };
+    state.outcomes.rag_access_group_delete = (args) =>
+      args.p_expected_only_count === 4
+        ? { data: [{ fell_back: 4, relabelled: 2 }], error: null }
+        : { data: null, error: { code: 'P0001', message: 'count_required 4' } };
+  });
+
+  const patch = (l: Loaded, id: string, body: unknown, org?: string) => l.group.PATCH(req(base(`/${id}`, org), { method: 'PATCH', body }), idParams(id));
+  const remove = (l: Loaded, id: string, body: unknown, org?: string) => l.group.DELETE(req(base(`/${id}`, org), { method: 'DELETE', body }), idParams(id));
+
+  it('renames a group; the name is 1 to 200 characters and the actor is the verified admin', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    const response = await patch(loaded, GROUP_A, { name: 'Group A renamed' });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect((await response.json()).group).toMatchObject({ id: GROUP_A, key: 'group-a', name: 'Group A renamed' });
+    expect(state.rpcCalls).toContainEqual({ fn: 'rag_access_group_rename', args: { p_tenant_key: 's:default', p_group_id: GROUP_A, p_name: 'Group A renamed', p_actor: ADMIN_ID } });
+
+    state.rpcCalls = [];
+    for (const name of ['', 'x'.repeat(201)]) expect((await patch(loaded, GROUP_A, { name })).status).toBe(400);
+    expect((await patch(loaded, GROUP_A, { name: 'Group A', key: 'group-z' })).status).toBe(400);
+    expect((await patch(loaded, 'not-a-uuid', { name: 'Group A' })).status).toBe(400);
+    expect(accessCalls()).toEqual([]);
+  });
+
+  it('an id of another tenant answers 404 like an unknown id', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    state.outcomes.rag_access_group_rename = { data: null, error: { code: 'P0002', message: 'not_found' } };
+    const response = await patch(loaded, GROUP_B, { name: 'Group B' });
+    expect(response.status).toBe(404);
+    expect(await response.json()).toEqual({ success: false, error: 'not_found' });
+  });
+
+  it('impact returns the three counts and the mapping count', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    const response = await loaded.impact.GET(req(base(`/${GROUP_A}/impact`)), idParams(GROUP_A));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ success: true, impact: { onlyCount: 4, sharedCount: 2, memberCount: 3, mappingCount: 1 } });
+  });
+
+  it('delete requires expectedCount and answers 409 count_required with the current count when it is stale', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    const missing = await remove(loaded, GROUP_A, {});
+    expect(missing.status).toBe(400);
+    expect((await missing.json()).details[0].path).toBe('expectedCount');
+
+    const stale = await remove(loaded, GROUP_A, { expectedCount: 3 });
+    expect(stale.status).toBe(409);
+    expect(await stale.json()).toEqual({ success: false, error: 'count_required', count: 4 });
+
+    const done = await remove(loaded, GROUP_A, { expectedCount: 4 });
+    expect(done.status).toBe(200);
+    expect(await done.json()).toEqual({ success: true, fellBack: 4, relabelled: 2 });
+    expect(state.rpcCalls).toContainEqual({
+      fn: 'rag_access_group_delete',
+      args: { p_tenant_key: 's:default', p_group_id: GROUP_A, p_expected_only_count: 4, p_actor: ADMIN_ID },
+    });
+    expect((await remove(loaded, GROUP_A, { expectedCount: 4, actorId: MEMBER_A })).status).toBe(400);
+  });
+
+  it('every route refuses a member before any call', async () => {
+    const loaded = await load();
+    state.session = { id: MEMBER_A };
+    const responses = [
+      await patch(loaded, GROUP_A, { name: 'Group A' }),
+      await remove(loaded, GROUP_A, { expectedCount: 4 }),
+      await loaded.impact.GET(req(base(`/${GROUP_A}/impact`)), idParams(GROUP_A)),
+      await loaded.members.GET(req(base(`/${GROUP_A}/members`)), idParams(GROUP_A)),
+      await loaded.members.POST(req(base(`/${GROUP_A}/members`), { method: 'POST', body: { userId: MEMBER_B } }), idParams(GROUP_A)),
+      await loaded.member.DELETE(req(base(`/${GROUP_A}/members/${MEMBER_B}`), { method: 'DELETE' }), memberParams(GROUP_A, MEMBER_B)),
+      await loaded.candidates.GET(req(base(`/members/candidates?groupId=${GROUP_A}&q=me`))),
+    ];
+    for (const response of responses) {
+      expect(response.status).toBe(403);
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      expect(await response.json()).toEqual({ success: false, error: 'Admin access required' });
+    }
+    expect(accessCalls()).toEqual([]);
+  });
+});
+
+describe('access group routes: members and candidates', () => {
+  beforeEach(() => {
+    state.outcomes.rag_access_group_members_list = {
+      data: [{ user_id: MEMBER_A, display_name: 'Member A', email: 'member-a@example.org', added_at: '2026-11-27T09:00:00.000Z', source: 'manual' }],
+      error: null,
+    };
+    state.outcomes.rag_access_member_add = (args) => ({ data: [{ group_id: args.p_group_id, user_id: args.p_user_id, added_at: '2026-11-27T10:00:00.000Z' }], error: null });
+    state.outcomes.rag_access_member_remove = { data: true, error: null };
+    state.outcomes.rag_access_member_candidates = {
+      data: [
+        { user_id: MEMBER_A, display_name: 'Member A', email: 'member-a@example.org', already_member: true },
+        { user_id: MEMBER_B, display_name: 'Member B', email: 'member-b@example.org', already_member: false },
+      ],
+      error: null,
+    };
+  });
+
+  const add = (l: Loaded, id: string, body: unknown) => l.members.POST(req(base(`/${id}/members`), { method: 'POST', body }), idParams(id));
+  const drop = (l: Loaded, id: string, userId: string) => l.member.DELETE(req(base(`/${id}/members/${userId}`), { method: 'DELETE' }), memberParams(id, userId));
+  const search = (l: Loaded, q: string, groupId = GROUP_A) => l.candidates.GET(req(base(`/members/candidates?groupId=${groupId}&q=${encodeURIComponent(q)}`)));
+
+  it('lists members', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    const response = await loaded.members.GET(req(base(`/${GROUP_A}/members`)), idParams(GROUP_A));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      success: true,
+      members: [{ userId: MEMBER_A, displayName: 'Member A', email: 'member-a@example.org', addedAt: '2026-11-27T09:00:00.000Z', source: 'manual' }],
+    });
+  });
+
+  it('adds a member with the verified admin as actor and maps member_exists and not_a_workspace_member', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    const added = await add(loaded, GROUP_A, { userId: MEMBER_B });
+    expect(added.status).toBe(201);
+    expect(await added.json()).toEqual({ success: true, member: { groupId: GROUP_A, userId: MEMBER_B, addedAt: '2026-11-27T10:00:00.000Z' } });
+    expect(state.rpcCalls).toContainEqual({ fn: 'rag_access_member_add', args: { p_tenant_key: 's:default', p_group_id: GROUP_A, p_user_id: MEMBER_B, p_actor: ADMIN_ID } });
+
+    state.outcomes.rag_access_member_add = { data: null, error: { code: '23505', message: 'member_exists' } };
+    const repeated = await add(loaded, GROUP_A, { userId: MEMBER_B });
+    expect(repeated.status).toBe(409);
+    expect(await repeated.json()).toEqual({ success: false, error: 'member_exists' });
+
+    state.outcomes.rag_access_member_add = { data: null, error: { code: 'P0001', message: 'not_a_workspace_member' } };
+    const stranger = await add(loaded, GROUP_A, { userId: OUTSIDER });
+    expect(stranger.status).toBe(400);
+    expect(await stranger.json()).toEqual({ success: false, error: 'not_a_workspace_member' });
+
+    state.rpcCalls = [];
+    expect((await add(loaded, GROUP_A, { userId: 'member-b' })).status).toBe(400);
+    expect((await add(loaded, GROUP_A, { userId: MEMBER_B, actorId: MEMBER_A })).status).toBe(400);
+    expect(accessCalls()).toEqual([]);
+  });
+
+  it('removes a member; a user who is not a member answers 404', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    const removed = await drop(loaded, GROUP_A, MEMBER_A);
+    expect(removed.status).toBe(200);
+    expect(await removed.json()).toEqual({ success: true, removed: true });
+    expect(state.rpcCalls).toContainEqual({ fn: 'rag_access_member_remove', args: { p_tenant_key: 's:default', p_group_id: GROUP_A, p_user_id: MEMBER_A, p_actor: ADMIN_ID } });
+
+    state.outcomes.rag_access_member_remove = { data: false, error: null };
+    expect((await drop(loaded, GROUP_A, MEMBER_B)).status).toBe(404);
+    state.outcomes.rag_access_member_remove = { data: null, error: { code: 'P0002', message: 'not_found' } };
+    expect((await drop(loaded, GROUP_A, MEMBER_B)).status).toBe(404);
+    expect((await drop(loaded, GROUP_A, 'not-a-uuid')).status).toBe(400);
+  });
+
+  it('candidates: under 2 characters no database call; at most 20 results with already flags', async () => {
+    const loaded = await load();
+    state.session = { id: ADMIN_ID };
+    for (const q of ['', 'm', ' m ']) {
+      const short = await search(loaded, q);
+      expect(short.status).toBe(200);
+      expect(await short.json()).toEqual({ success: true, candidates: [] });
+    }
+    expect(state.rpcCalls.filter((call) => call.fn === 'rag_access_member_candidates')).toEqual([]);
+
+    const found = await search(loaded, 'member');
+    expect(found.status).toBe(200);
+    expect(await found.json()).toEqual({
+      success: true,
+      candidates: [
+        { userId: MEMBER_A, displayName: 'Member A', email: 'member-a@example.org', already: true },
+        { userId: MEMBER_B, displayName: 'Member B', email: 'member-b@example.org', already: false },
+      ],
+    });
+    const call = state.rpcCalls.find((entry) => entry.fn === 'rag_access_member_candidates');
+    expect(call?.args).toMatchObject({ p_tenant_key: 's:default', p_group_id: GROUP_A, p_query: 'member' });
+    expect(Number(call?.args.p_limit)).toBeLessThanOrEqual(20);
+
+    expect((await search(loaded, 'member', 'not-a-uuid')).status).toBe(400);
+    expect((await search(loaded, 'x'.repeat(201))).status).toBe(400);
+  });
+
+  it('an organization admin manages members of their organization only', async () => {
+    state.mode = 'multi-tenant';
+    state.tables.organization_members = [
+      { organization_id: ORG_O, user_id: ORG_ADMIN_ID, role: 'owner' },
+      { organization_id: ORG_P, user_id: OUTSIDER, role: 'owner' },
+    ];
+    const loaded = await load();
+    state.session = { id: ORG_ADMIN_ID };
+    const ok = await loaded.members.POST(req(base(`/${GROUP_A}/members`, ORG_O), { method: 'POST', body: { userId: MEMBER_B } }), idParams(GROUP_A));
+    expect(ok.status).toBe(201);
+    expect(state.rpcCalls.find((call) => call.fn === 'rag_access_member_add')?.args.p_tenant_key).toBe(`o:${ORG_O}`);
+
+    state.rpcCalls = [];
+    const other = await loaded.member.DELETE(req(base(`/${GROUP_A}/members/${MEMBER_B}`, ORG_P), { method: 'DELETE' }), memberParams(GROUP_A, MEMBER_B));
+    expect(other.status).toBe(403);
+    expect(await other.json()).toEqual({ success: false, error: 'Forbidden' });
     expect(accessCalls()).toEqual([]);
   });
 });
