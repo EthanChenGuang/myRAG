@@ -8,9 +8,9 @@ import {
   effectiveMaxOutputTokens,
   type AnswerLanguageOptions,
   type CalcTraceHolder,
+  type DecomposedAnswerInput,
   type OutputCapDecision,
 } from '@/lib/rag';
-import type { DecomposedAnswerInput } from '@/lib/rag/generation/decomposed-answer';
 import type { GroundednessRequest, GroundednessResult } from '@/lib/rag-eval/contracts.generated';
 
 export const EVAL_DEFAULT_SYSTEM_PROMPT = `You are a helpful AI assistant with access to a knowledge base. When answering questions:
