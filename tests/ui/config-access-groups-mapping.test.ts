@@ -33,7 +33,7 @@ interface MappingModule {
   buildAccessGroupsMappingRow: (row: Json) => MappingRow | null;
   buildAccessGroupsMappingList: (body: Json) => { personal: boolean; visibilityApplies: boolean; rows: MappingRow[]; total: number; nextOffset: number | null };
   accessGroupsMappingKindLabel: (row: Json, locale: string) => string;
-  accessGroupsMappingAction: (row: Json, selected: string) => string;
+  accessGroupsMappingAction: (row: MappingRow | Json, selected: string) => string;
   buildAccessGroupsRuleRow: (rule: Json) => Json | null;
   buildAccessGroupsRulesList: (body: Json) => { personal: boolean; rows: Json[] };
   accessGroupsRuleText: (rule: Json, locale: string) => string;
