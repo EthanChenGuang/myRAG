@@ -19,12 +19,15 @@ import type { TemporalQueryContext } from '../query/temporal-query-detector';
 import { isMultiTenant } from '@/lib/deployment-mode';
 import { getRagDeps } from '../deps';
 import type { SecurityConfig } from '../security/config';
+import { readAnswerConfig } from '../generation/answer-config';
 import {
   attributeFilterHashBlock,
   computeRetrievalConfigHash,
   lexicalScoringHashBlock,
   securityHashComponent,
+  answerRulesHashComponent,
   terminologyHashBlock,
+  type AnswerRulesHashConfig,
   type AttributeFilterHashStage,
   type RetrievalConfigHashQueryLayer,
   type TerminologyHashStage,
@@ -92,6 +95,8 @@ export interface BuildV2ResultInput {
 }
 
 export interface RequestConfigHashInput {
+  /** Phase 5.2 D-58: the answer switches; read from the environment when absent. */
+  answerConfig?: AnswerRulesHashConfig;
   input: RunRetrievalInput;
   config: RagConfig;
   profile: Profile;
@@ -146,6 +151,7 @@ export async function requestRetrievalConfigHash(ctx: RequestConfigHashInput): P
       ...(config.monolingual ? { monolingual: true as const } : {}),
     },
     security: securityHashComponent(security, { multiTenant: isMultiTenant() }),
+    answerRules: answerRulesHashComponent(ctx.answerConfig ?? readAnswerConfig()),
     tuning: tuningHashComponent(
       config,
       effectiveTuningParams(profile, config, evalTuningOverrides(profile, input.stageOverrides?.retrievalOverrides), { embeddingProfileId: ctx.embeddingProfileId }),
