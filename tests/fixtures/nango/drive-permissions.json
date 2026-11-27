@@ -1,0 +1,73 @@
+{
+  "_note": "Synthetic responses in the shape of Google Drive v3 permissions.list (fields=nextPageToken,permissions(id,type,role,emailAddress,domain,deleted,allowFileDiscovery,permissionDetails)). No real account, group or domain.",
+  "shared_with_group": [
+    {
+      "permissions": [
+        { "id": "perm-owner", "type": "user", "role": "owner", "emailAddress": "owner@example.org" },
+        { "id": "perm-group-1", "type": "group", "role": "reader", "emailAddress": " Source-Group-1@Example.org " },
+        { "id": "perm-member-1", "type": "user", "role": "writer", "emailAddress": "member-1@example.org" }
+      ]
+    }
+  ],
+  "unmapped_group": [
+    {
+      "permissions": [
+        { "id": "perm-owner", "type": "user", "role": "owner", "emailAddress": "owner@example.org" },
+        { "id": "perm-group-1", "type": "group", "role": "reader", "emailAddress": "source-group-1@example.org" },
+        { "id": "perm-group-2", "type": "group", "role": "reader", "emailAddress": "source-group-2@example.org" }
+      ]
+    }
+  ],
+  "two_pages": [
+    {
+      "nextPageToken": "page-2",
+      "permissions": [
+        { "id": "perm-owner", "type": "user", "role": "owner", "emailAddress": "owner@example.org" },
+        { "id": "perm-group-1", "type": "group", "role": "commenter", "emailAddress": "source-group-1@example.org" },
+        { "id": "perm-gone", "type": "user", "role": "reader", "emailAddress": "former-member@example.org", "deleted": true }
+      ]
+    },
+    {
+      "permissions": [
+        { "id": "perm-domain", "type": "domain", "role": "reader", "domain": "Example.org", "allowFileDiscovery": false },
+        { "id": "perm-anyone", "type": "anyone", "role": "reader", "allowFileDiscovery": false },
+        {
+          "id": "perm-inherited",
+          "type": "group",
+          "role": "fileOrganizer",
+          "emailAddress": "source-group-3@example.org",
+          "permissionDetails": [{ "permissionType": "member", "role": "fileOrganizer", "inherited": true, "inheritedFrom": "shared-drive-1" }]
+        }
+      ]
+    }
+  ],
+  "every_role": [
+    {
+      "permissions": [
+        { "id": "perm-r", "type": "group", "role": "reader", "emailAddress": "source-group-1@example.org" },
+        { "id": "perm-c", "type": "group", "role": "commenter", "emailAddress": "source-group-2@example.org" },
+        { "id": "perm-w", "type": "group", "role": "writer", "emailAddress": "source-group-3@example.org" },
+        { "id": "perm-o", "type": "user", "role": "owner", "emailAddress": "owner@example.org" }
+      ]
+    }
+  ],
+  "malformed": [
+    {
+      "permissions": [
+        { "id": "perm-owner", "type": "user", "role": "owner", "emailAddress": "owner@example.org" },
+        { "id": "perm-bad", "type": "group", "role": "reader" }
+      ]
+    }
+  ],
+  "missing_scope_error": {
+    "status": 403,
+    "data": {
+      "error": {
+        "code": 403,
+        "message": "Request had insufficient authentication scopes.",
+        "errors": [{ "reason": "insufficientPermissions", "domain": "global", "message": "Insufficient Permission" }],
+        "status": "PERMISSION_DENIED"
+      }
+    }
+  }
+}

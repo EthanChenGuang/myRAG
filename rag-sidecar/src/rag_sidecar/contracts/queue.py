@@ -51,6 +51,10 @@ _MAX_VLM_PAGES = 20
 WorkerId = Annotated[str, Field(min_length=1, max_length=128)]
 JobUuid = Annotated[str, Field(pattern=r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")]
 TenantKey = Annotated[str, Field(min_length=1, max_length=256)]
+AccessKey = Annotated[
+    str,
+    Field(pattern=r"^(all|[gu]:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"),
+]
 
 
 class OriginalRef(_Contract):
@@ -96,6 +100,8 @@ class JobSettingsSnapshot(_Contract):
     ocr_primary_language: Language | None = None
     # D-29: the language a job of kind translate produces; None (and left out of the wire) for every other kind.
     target_language: Language | None = None
+    # Phase 4.3 D-16: the access label a backfill batch applies to each document (all, or g:<group> keys); None leaves the label untouched.
+    access_keys: list[AccessKey] | None = Field(default=None, min_length=1, max_length=50)
 
     @model_validator(mode="after")
     def _tiers_are_ordered(self) -> JobSettingsSnapshot:

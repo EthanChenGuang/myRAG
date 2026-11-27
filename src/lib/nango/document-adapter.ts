@@ -34,6 +34,11 @@ export interface ProcessDocumentOptions {
   nangoConnectionId?: string;
   nangoFolderId?: string;
   mimeType?: string;
+  /**
+   * D-20: the label the copy is written with, u:<owner> for a connector file, so it is never wider than its source before the sharing
+   * step maps it. Unified: IngestInput.accessKeys (the whole lineage, right after begin); legacy: the document INSERT.
+   */
+  accessKeys?: readonly string[];
   signal?: AbortSignal;
 }
 
@@ -144,6 +149,7 @@ export async function processDocumentWithMetadata(
     source_provider: options.sourceProvider,
     source_file_id: options.sourceFileId,
     source_connection_id: options.sourceConnectionId,
+    ...(options.accessKeys ? { access_groups: [...options.accessKeys] } : {}),
   } as Parameters<typeof processDocument>[2];
   const documentId = await processDocument(filename, buffer, metadata);
 
@@ -167,6 +173,7 @@ async function ingestNangoDocument(filename: string, buffer: Buffer, options: Pr
     sourceKey: buildSourceKey('nango', { providerFileId: sourceFileId }),
     // The connection owner, from the server's connection record: the uploader of a synced item (D-37).
     uploaderId: options.userId,
+    ...(options.accessKeys ? { accessKeys: [...options.accessKeys] } : {}),
     file: buffer,
     filename: ingestFilename(filename, mimeType),
     mimeType,
